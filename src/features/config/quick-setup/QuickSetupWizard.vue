@@ -888,10 +888,27 @@ async function handleNext() {
   if (!validateCurrentStep()) return;
   if (currentStep.value.id === "llm" && !confirmUntestedLlmConnection()) return;
   try {
-    if (currentStep.value.id === "llm") applyLlmDraft();
-    if (currentStep.value.id === "style") await saveChatSettingsOnly();
-    if (currentStep.value.id === "identity") await saveIdentityStep();
-    if (currentStep.value.id === "workspace") applyWorkspaceDraft();
+    if (currentStep.value.id === "voice-theme") {
+      await saveConfigOnly();
+    }
+    if (currentStep.value.id === "llm") {
+      applyLlmDraft();
+      await saveConfigOnly();
+    }
+    if (currentStep.value.id === "style") {
+      await saveChatSettingsOnly();
+    }
+    if (currentStep.value.id === "identity") {
+      await saveIdentityStep();
+      await saveConfigOnly();
+    }
+    if (currentStep.value.id === "workspace") {
+      applyWorkspaceDraft();
+      await saveConfigOnly();
+    }
+    if (currentStep.value.id === "hotkey") {
+      await saveConfigOnly();
+    }
     if (currentStep.value.advanced) await saveAdvancedCurrentStep();
     if (isLastStep.value) {
       await finishBasicSetup();
@@ -1100,6 +1117,35 @@ async function finishBasicSetup() {
   }
 }
 
+async function persistCurrentStepBeforeWindowSwitch() {
+  if (currentStep.value.advanced) return;
+  if (currentStep.value.id === "voice-theme" || currentStep.value.id === "hotkey") {
+    await saveConfigOnly();
+    return;
+  }
+  if (currentStep.value.id === "llm") {
+    if (!llmDraft.baseUrl.trim() || !llmDraft.apiKey.trim() || !llmDraft.model.trim()) return;
+    applyLlmDraft();
+    await saveConfigOnly();
+    return;
+  }
+  if (currentStep.value.id === "style") {
+    await saveChatSettingsOnly();
+    return;
+  }
+  if (currentStep.value.id === "identity") {
+    if (!identityDraft.userAlias.trim() || !identityDraft.assistantName.trim() || !identityDraft.departmentName.trim()) return;
+    await saveIdentityStep();
+    await saveConfigOnly();
+    return;
+  }
+  if (currentStep.value.id === "workspace") {
+    if (!workspaceDraft.path.trim()) return;
+    applyWorkspaceDraft();
+    await saveConfigOnly();
+  }
+}
+
 async function pickWorkspacePath() {
   const picked = await open({ directory: true, multiple: false, defaultPath: workspaceDraft.path || undefined });
   if (!picked || Array.isArray(picked)) return;
@@ -1110,6 +1156,13 @@ async function pickWorkspacePath() {
 }
 
 async function openConfigWindow() {
+  errorText.value = "";
+  try {
+    await persistCurrentStepBeforeWindowSwitch();
+  } catch (error) {
+    errorText.value = String(error ?? "unknown");
+    return;
+  }
   await invokeTauri("show_main_window");
 }
 

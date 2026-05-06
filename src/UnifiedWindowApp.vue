@@ -4176,6 +4176,7 @@ const appBootstrap = useAppBootstrap({
           agentIds: Array.isArray(item.agentIds) ? [...item.agentIds] : [],
         }))
       : [];
+    lastSavedConfigJson.value = buildConfigSnapshotJson();
   },
   onToolReviewReportsUpdated: (payload) => {
     const payloadConversationId = String(payload?.conversationId || "").trim();
