@@ -235,7 +235,7 @@
                 :conversation-busy="conversationBusy"
                 :workspace-button-label="t('chat.allowedWorkspaceButton')"
                 :workspace-button-name="currentWorkspaceName"
-                :workspace-button-disabled="activeConversationSummary?.kind === 'remote_im_contact'"
+                :workspace-button-disabled="!activeConversationId || activeConversationSummary?.kind === 'remote_im_contact'"
                 :hide-menu-button="activeConversationSummary?.kind === 'remote_im_contact'"
                 :hide-workspace-button="activeConversationSummary?.kind === 'remote_im_contact'"
                 :mention-entries="mentionEntries"

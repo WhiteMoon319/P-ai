@@ -103,7 +103,7 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
     const apiConfigId = String(options.activeApiConfigId.value || "").trim();
     const agentId = String(options.activeAgentId.value || "").trim();
     const conversationId = String(options.activeConversationId.value || "").trim();
-    if (!apiConfigId || !agentId) {
+    if (!apiConfigId || !agentId || !conversationId) {
       chatWorkspaceName.value = DEFAULT_CHAT_WORKSPACE_NAME;
       chatWorkspacePath.value = "";
       chatWorkspaceRootPath.value = "";
@@ -134,6 +134,10 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
     const agentId = String(options.activeAgentId.value || "").trim();
     const conversationId = String(options.activeConversationId.value || "").trim();
     if (!apiConfigId || !agentId) return;
+    if (!conversationId) {
+      options.setStatus("当前会话未就绪，暂时不能设置工作目录");
+      return;
+    }
     const previousItems = [...chatWorkspaceItems.value];
     const previousName = chatWorkspaceName.value;
     const previousAutonomousMode = chatWorkspaceAutonomousMode.value;

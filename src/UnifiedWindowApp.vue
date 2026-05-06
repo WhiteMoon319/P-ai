@@ -1057,6 +1057,17 @@ function departmentOrderedApiConfigIds(
   ].filter(Boolean)));
 }
 
+function departmentConversationApiConfigId(
+  department?: { id?: string; isBuiltInAssistant?: boolean; apiConfigId?: string; apiConfigIds?: string[] } | null,
+): string {
+  const directId = departmentPrimaryApiConfigId(department);
+  if (directId) return directId;
+  if (department?.id === "assistant-department" || department?.isBuiltInAssistant) {
+    return String(config.assistantDepartmentApiConfigId || "").trim();
+  }
+  return "";
+}
+
 function applyDepartmentPrimaryApiConfigLocally(
   department: { id?: string; isBuiltInAssistant?: boolean; apiConfigId?: string; apiConfigIds?: string[]; updatedAt?: string } | null | undefined,
   apiConfigId: string,
@@ -1504,8 +1515,7 @@ const currentForegroundApiConfigId = computed(
         return temporaryApiConfigId;
       }
     }
-    return departmentPrimaryApiConfigId(currentForegroundDepartment.value)
-      || String(config.assistantDepartmentApiConfigId || "").trim();
+    return departmentConversationApiConfigId(currentForegroundDepartment.value);
   },
 );
 const currentForegroundApiConfig = computed(
@@ -1975,14 +1985,14 @@ const createConversationDepartmentOptions = computed(() =>
     .filter((department) => {
       const departmentId = String(department.id || "").trim();
       if (!departmentId) return false;
-      const apiConfigId = departmentPrimaryApiConfigId(department);
+      const apiConfigId = departmentConversationApiConfigId(department);
       if (!apiConfigId) return false;
       return config.apiConfigs.some((api) => api.id === apiConfigId && api.enableText);
     })
     .map((department) => {
       const ownerId = String((department.agentIds || [])[0] || "").trim();
       const owner = personas.value.find((persona) => String(persona.id || "").trim() === ownerId) ?? null;
-      const apiConfigId = departmentPrimaryApiConfigId(department);
+      const apiConfigId = departmentConversationApiConfigId(department);
       const apiConfig = config.apiConfigs.find((api) => api.id === apiConfigId) ?? null;
       return {
         id: String(department.id || "").trim(),
@@ -5271,7 +5281,7 @@ useAppLifecycle({
   afterRefreshData: () => {
     startupDataReady.value = true;
     if (viewMode.value === "chat" && !String(currentChatConversationId.value || "").trim()) {
-      void refreshChatUnarchivedConversations().catch((error) => {
+      return refreshChatUnarchivedConversations().catch((error) => {
         console.warn("[聊天追踪][前台会话] 启动数据就绪后恢复失败", error);
       });
     }
