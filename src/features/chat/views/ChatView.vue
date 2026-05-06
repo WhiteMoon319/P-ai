@@ -392,6 +392,8 @@
             :create-conversation-department-options="createConversationDepartmentOptions"
             :delegate-department-ids="delegateDepartmentIds"
             :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
+            :ide-context-groups="visibleIdeContextGroups"
+            :attached-ide-context-references="attachedIdeContextReferences"
             @update:chat-input="$emit('update:chatInput', $event)"
             @add-mention="$emit('addMention', $event)"
             @remove-mention="$emit('removeMention', $event)"
@@ -402,7 +404,9 @@
             @pick-attachments="$emit('pickAttachments')"
             @update:selected-chat-model-id="$emit('update:selectedChatModelId', $event)"
             @update:plan-mode-enabled="$emit('update:planModeEnabled', $event)"
-            @send-chat="$emit('sendChat')"
+            @attach-ide-context-reference="handleAttachIdeContextReference"
+            @remove-ide-context-reference="handleRemoveIdeContextReference"
+            @send-chat="handleSendChat"
             @stop-chat="$emit('stopChat')"
             @exit-selection-mode="exitMessageSelectionMode"
             @selection-action-copy="copySelectedMessages"
@@ -494,7 +498,7 @@ import { isDarkAppTheme } from "../../shell/composables/use-app-theme";
 import { ChevronsDown, History, ListTodo } from "lucide-vue-next";
 import "markstream-vue/index.css";
 import { invokeTauri } from "../../../services/tauri-api";
-import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ChatMessageBlock, ChatTodoItem, ConversationDelegateStatusSummary, PromptCommandPreset, ShellWorkspace } from "../../../types/app";
+import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ChatMessageBlock, ChatPersonaPresenceChip, ChatTodoItem, ConversationDelegateStatusSummary, IdeContextQueryResult, IdeContextReferenceItem, IdeContextWorkspaceGroup, IdeContextWorkspaceInput, PromptCommandPreset, ShellWorkspace } from "../../../types/app";
 import ChatMessageItem from "../components/ChatMessageItem.vue";
 import ChatApprovalPanel from "../components/ChatApprovalPanel.vue";
 import ChatComposerPanel from "../components/ChatComposerPanel.vue";
@@ -668,6 +672,8 @@ const props = defineProps<{
   createConversationDepartmentOptions: Array<{ id: string; name: string; ownerAgentId?: string; ownerName: string; providerName?: string; modelName?: string }>;
   delegateDepartmentIds: string[];
   defaultCreateConversationDepartmentId: string;
+  ideContextGroups: IdeContextWorkspaceGroup[];
+  attachedIdeContextReferences: IdeContextReferenceItem[];
   detachedChatWindow?: boolean;
   terminalApprovals?: TerminalApprovalConversationItem[];
   terminalApprovalResolving?: boolean;
@@ -691,6 +697,19 @@ const activeConversationSummary = computed(() => {
   ) || null;
   return matched;
 });
+const ideContextGroups = ref<IdeContextWorkspaceGroup[]>([]);
+const attachedIdeContextReferences = ref<IdeContextReferenceItem[]>([]);
+let ideContextRefreshTimer: ReturnType<typeof setInterval> | null = null;
+let ideContextRefreshSeq = 0;
+const visibleIdeContextGroups = computed<IdeContextWorkspaceGroup[]>(() => {
+  const attachedIds = new Set(attachedIdeContextReferences.value.map((item) => item.id));
+  return ideContextGroups.value
+    .map((group) => ({
+      ...group,
+      references: group.references.filter((item) => !attachedIds.has(item.id)),
+    }))
+    .filter((group) => group.references.length > 0);
+});
 const ephemeralBlockRenderIdMap = new WeakMap<ChatMessageBlock, string>();
 let ephemeralBlockRenderIdSeq = 0;
 
@@ -698,6 +717,72 @@ function isOrganizeContextToolCall(call: { name: string; argsText: string; statu
   const name = String(call.name || "").trim().toLowerCase();
   if (name === "organize_context" || name === "archive") return true;
   return false;
+}
+
+function normalizedIdeContextWorkspaceInputs(): IdeContextWorkspaceInput[] {
+  const sourceWorkspaces = Array.isArray(props.workspaces) ? props.workspaces : [];
+  const normalized = sourceWorkspaces
+    .map((workspace) => ({
+      path: String(workspace?.path || "").trim(),
+      name: String(workspace?.name || "").trim() || undefined,
+    }))
+    .filter((workspace) => !!workspace.path);
+  if (normalized.length > 0) return normalized;
+  const fallbackPath = String(props.currentWorkspaceRootPath || "").trim();
+  if (!fallbackPath) return [];
+  return [{
+    path: fallbackPath,
+    name: String(props.currentWorkspaceName || "").trim() || undefined,
+  }];
+}
+
+function cloneIdeContextReference(reference: IdeContextReferenceItem): IdeContextReferenceItem {
+  return {
+    ...reference,
+  };
+}
+
+async function refreshIdeContextGroups() {
+  const workspaces = normalizedIdeContextWorkspaceInputs();
+  if (workspaces.length === 0) {
+    ideContextGroups.value = [];
+    return;
+  }
+  const currentSeq = ++ideContextRefreshSeq;
+  try {
+    const result = await invokeTauri<IdeContextQueryResult>("query_ide_context_references", {
+      input: { workspaces },
+    });
+    if (currentSeq !== ideContextRefreshSeq) return;
+    ideContextGroups.value = Array.isArray(result?.groups) ? result.groups : [];
+  } catch (error) {
+    console.warn("[IDE 上下文] 查询引用失败", error);
+  }
+}
+
+function startIdeContextRefreshTimer() {
+  stopIdeContextRefreshTimer();
+  ideContextRefreshTimer = window.setInterval(() => {
+    void refreshIdeContextGroups();
+  }, 1500);
+}
+
+function stopIdeContextRefreshTimer() {
+  if (!ideContextRefreshTimer) return;
+  clearInterval(ideContextRefreshTimer);
+  ideContextRefreshTimer = null;
+}
+
+function handleAttachIdeContextReference(reference: IdeContextReferenceItem) {
+  if (attachedIdeContextReferences.value.some((item) => item.id === reference.id)) return;
+  attachedIdeContextReferences.value = [
+    ...attachedIdeContextReferences.value,
+    cloneIdeContextReference(reference),
+  ];
+}
+
+function handleRemoveIdeContextReference(referenceId: string) {
+  attachedIdeContextReferences.value = attachedIdeContextReferences.value.filter((item) => item.id !== referenceId);
 }
 
 function fileExtensionFromPath(path: string): string {
@@ -1050,7 +1135,7 @@ const emit = defineEmits<{
   (e: "pickAttachments"): void;
   (e: "update:selectedChatModelId", value: string): void;
   (e: "update:planModeEnabled", value: boolean): void;
-  (e: "sendChat"): void;
+  (e: "sendChat", payload?: { extraTextBlocks?: string[] }): void;
   (e: "stopChat"): void;
   (e: "forceArchive"): void;
   (e: "recallTurn", payload: { turnId: string }): void;
@@ -1094,6 +1179,12 @@ function handleDetachConversationRequest() {
     chatting: props.chatting,
   });
   emit("detachConversation");
+}
+
+function handleSendChat() {
+  const extraTextBlocks = attachedIdeContextReferences.value.map((item) => String(item.textBlock || "").trim()).filter(Boolean);
+  emit("sendChat", extraTextBlocks.length > 0 ? { extraTextBlocks } : undefined);
+  attachedIdeContextReferences.value = [];
 }
 
 function openBranchSelectionMenu() {
@@ -2232,6 +2323,22 @@ async function handleAssistantLinkClick(event: MouseEvent) {
   }
 }
 
+watch(
+  () => props.activeConversationId,
+  () => {
+    attachedIdeContextReferences.value = [];
+    void refreshIdeContextGroups();
+  },
+);
+
+watch(
+  () => normalizedIdeContextWorkspaceInputs().map((item) => `${item.path}\n${item.name || ""}`).join("|"),
+  () => {
+    void refreshIdeContextGroups();
+  },
+  { immediate: true },
+);
+
 onMounted(() => {
   void nextTick(updateChatScrollbarThumb);
   const scroller = scrollContainer.value;
@@ -2239,10 +2346,13 @@ onMounted(() => {
     chatScrollResizeObserver = new ResizeObserver(updateChatScrollbarThumb);
     chatScrollResizeObserver.observe(scroller);
   }
+  void refreshIdeContextGroups();
+  startIdeContextRefreshTimer();
 });
 
 onBeforeUnmount(() => {
   clearDelegateStatusesPollTimer();
+  stopIdeContextRefreshTimer();
   chatScrollResizeObserver?.disconnect();
   chatScrollResizeObserver = null;
   if (pendingMeasureFrame) {

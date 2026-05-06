@@ -157,6 +157,38 @@ export type ChatShellWorkspaceState = {
   autonomousMode?: boolean;
 };
 
+export type IdeContextWorkspaceInput = {
+  path: string;
+  name?: string;
+};
+
+export type IdeContextReferenceItem = {
+  id: string;
+  workspacePath: string;
+  workspaceName: string;
+  filePath: string;
+  fileName: string;
+  startLine?: number;
+  endLine?: number;
+  displayLabel: string;
+  content: string;
+  languageId?: string;
+  source: string;
+  capturedAt: string;
+  textBlock: string;
+};
+
+export type IdeContextWorkspaceGroup = {
+  workspacePath: string;
+  workspaceName: string;
+  references: IdeContextReferenceItem[];
+};
+
+export type IdeContextQueryResult = {
+  groups: IdeContextWorkspaceGroup[];
+  updatedAt: string;
+};
+
 export type McpToolPolicy = {
   toolName: string;
   enabled: boolean;

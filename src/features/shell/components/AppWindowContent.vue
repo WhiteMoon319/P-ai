@@ -176,6 +176,8 @@
         :create-conversation-department-options="createConversationDepartmentOptions"
         :delegate-department-ids="delegateDepartmentIds"
         :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
+        :ide-context-groups="[]"
+        :attached-ide-context-references="[]"
         :current-theme="currentTheme"
         :detached-chat-window="detachedChatWindow"
         @update:chat-input="updateChatInput"

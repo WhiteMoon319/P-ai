@@ -732,6 +732,8 @@ fn main() {
             get_default_chat_shell_workspace_path,
             get_chat_shell_workspace,
             update_chat_shell_workspace_layout,
+            upsert_ide_context_snapshot,
+            query_ide_context_references,
             task_list_tasks,
             task_get_task,
             task_create_task,

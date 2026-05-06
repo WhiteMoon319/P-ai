@@ -236,6 +236,39 @@
         </button>
       </div>
     </div>
+    <div v-if="attachedIdeContextReferences.length > 0 || ideContextGroups.length > 0" class="mb-2 flex flex-col gap-2">
+      <div v-if="attachedIdeContextReferences.length > 0" class="flex flex-wrap gap-1">
+        <button
+          v-for="item in attachedIdeContextReferences"
+          :key="item.id"
+          type="button"
+          class="badge badge-primary gap-1 py-3 max-w-full"
+          :disabled="chatting || frozen"
+          :title="item.displayLabel"
+          @click="emit('removeIdeContextReference', item.id)"
+        >
+          <Minus class="h-3.5 w-3.5" />
+          <span class="max-w-72 truncate text-[11px]">{{ item.displayLabel }}</span>
+        </button>
+      </div>
+      <div v-for="group in ideContextGroups" :key="group.workspacePath" class="flex flex-col gap-1">
+        <div v-if="showIdeWorkspaceGroupLabel" class="px-1 text-[11px] opacity-60">{{ group.workspaceName }}</div>
+        <div class="flex flex-wrap gap-1">
+          <button
+            v-for="item in group.references"
+            :key="item.id"
+            type="button"
+            class="badge badge-ghost gap-1 py-3 max-w-full"
+            :disabled="chatting || frozen"
+            :title="item.displayLabel"
+            @click="emit('attachIdeContextReference', item)"
+          >
+            <Plus class="h-3.5 w-3.5" />
+            <span class="max-w-72 truncate text-[11px]">{{ item.displayLabel }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
     <div ref="composerRootRef" class="flex flex-col">
       <div v-if="instructionPanelOpen" class="flex flex-wrap content-start gap-2 max-h-48 overflow-y-auto">
         <button
@@ -401,8 +434,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { FileText, Image as ImageIcon, Layers2, Mic, Paperclip, Send, Square, X } from "lucide-vue-next";
-import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, PromptCommandPreset, SkillListResult } from "../../../types/app";
+import { FileText, Image as ImageIcon, Layers2, Mic, Minus, Paperclip, Plus, Send, Square, X } from "lucide-vue-next";
+import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, SkillListResult } from "../../../types/app";
 import { invokeTauri } from "../../../services/tauri-api";
 import ChatQueuePreview from "./ChatQueuePreview.vue";
 import { useChatQueue } from "../composables/use-chat-queue";
@@ -463,6 +496,8 @@ const props = defineProps<{
   createConversationDepartmentOptions: ConversationDepartmentOption[];
   delegateDepartmentIds: string[];
   defaultCreateConversationDepartmentId: string;
+  ideContextGroups: IdeContextWorkspaceGroup[];
+  attachedIdeContextReferences: IdeContextReferenceItem[];
 }>();
 
 const emit = defineEmits<{
@@ -483,6 +518,8 @@ const emit = defineEmits<{
   (e: "pickAttachments"): void;
   (e: "update:selectedChatModelId", value: string): void;
   (e: "update:planModeEnabled", value: boolean): void;
+  (e: "attachIdeContextReference", value: IdeContextReferenceItem): void;
+  (e: "removeIdeContextReference", value: string): void;
   (e: "sendChat"): void;
   (e: "stopChat"): void;
 }>();
@@ -575,6 +612,7 @@ const normalizedChatModelOptions = computed(() =>
     }))
     .filter((item) => !!item.id && !!item.name),
 );
+const showIdeWorkspaceGroupLabel = computed(() => (props.ideContextGroups || []).length > 1);
 
 const showStopAction = computed(() =>
   props.chatting || ["queued", "waiting", "streaming"].includes(String(props.frontendRoundPhase || "idle")),

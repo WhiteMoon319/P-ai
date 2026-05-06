@@ -1,3 +1,29 @@
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct IdeContextReference {
+    id: String,
+    file_path: String,
+    #[serde(default)]
+    start_line: Option<u32>,
+    #[serde(default)]
+    end_line: Option<u32>,
+    content: String,
+    #[serde(default)]
+    language_id: Option<String>,
+    source: String,
+    captured_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct IdeContextSnapshot {
+    client_id: String,
+    editor: String,
+    workspace_roots: Vec<String>,
+    references: Vec<IdeContextReference>,
+    updated_at: String,
+}
+
 #[derive(Clone)]
 struct AppState {
     app_handle: Arc<Mutex<Option<AppHandle>>>,
@@ -79,6 +105,7 @@ struct AppState {
     hidden_skill_snapshot_cache: Arc<Mutex<String>>,
     preferred_release_source: Arc<Mutex<String>>,
     migration_preview_dirs: Arc<Mutex<std::collections::HashMap<String, String>>>,
+    ide_context_snapshots: Arc<Mutex<std::collections::HashMap<String, IdeContextSnapshot>>>,
     /// 当前活跃的委托线程 conversation_id 集合。
     /// 工具审批链路通过查表判断当前是否应跳过弹窗（有委托活跃 → 不弹窗，默认拒绝）。
     delegate_active_ids: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
@@ -306,6 +333,7 @@ impl AppState {
             hidden_skill_snapshot_cache: Arc::new(Mutex::new(String::new())),
             preferred_release_source: Arc::new(Mutex::new("github".to_string())),
             migration_preview_dirs: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            ide_context_snapshots: Arc::new(Mutex::new(std::collections::HashMap::new())),
             delegate_active_ids: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
         })
     }

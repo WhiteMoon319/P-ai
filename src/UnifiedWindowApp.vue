@@ -2693,7 +2693,7 @@ async function detachCurrentConversationToWindow() {
   }
 }
 
-async function sendChatFromCurrentWindow() {
+async function sendChatFromCurrentWindow(overrides?: { extraTextBlocks?: string[] }) {
   if (detachedChatWindow.value) {
     const temporaryApiConfigId = String(detachedTemporaryApiConfigId.value || "").trim();
     if (temporaryApiConfigId && !config.apiConfigs.some((item) => item.id === temporaryApiConfigId && item.enableText)) {
@@ -2701,7 +2701,7 @@ async function sendChatFromCurrentWindow() {
       return;
     }
   }
-  await chatFlow.sendChat();
+  await chatFlow.sendChat(overrides);
 }
 
 function freezeForegroundConversation(reason: string) {

@@ -1,4 +1,5 @@
 // ==================== 配置与人格命令 ====================
+include!("commands/ide_context.rs");
 include!("commands/config_and_persona.rs");
 
 // ==================== 工具审查命令 ====================
