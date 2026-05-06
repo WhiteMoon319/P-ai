@@ -1,5 +1,3 @@
-use std::path::{Path, PathBuf};
-
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct IdeContextReferenceInput {
@@ -87,7 +85,7 @@ fn ide_context_compare_key(raw: &str) -> String {
         return String::new();
     }
     let normalized = normalize_terminal_path_input_for_current_platform(trimmed);
-    let path = PathBuf::from(if normalized.is_empty() { trimmed } else { &normalized });
+    let path = std::path::PathBuf::from(if normalized.is_empty() { trimmed } else { &normalized });
     shell_workspace_display_path(&path)
         .replace('\\', "/")
         .trim_end_matches('/')
@@ -100,7 +98,7 @@ fn ide_context_display_path(raw: &str) -> String {
         return String::new();
     }
     let normalized = normalize_terminal_path_input_for_current_platform(trimmed);
-    let path = PathBuf::from(if normalized.is_empty() { trimmed } else { &normalized });
+    let path = std::path::PathBuf::from(if normalized.is_empty() { trimmed } else { &normalized });
     let resolved = path.canonicalize().unwrap_or(path);
     shell_workspace_display_path(&resolved).replace('\\', "/")
 }
@@ -111,7 +109,7 @@ fn ide_context_workspace_name(input: &IdeContextWorkspaceInput) -> String {
         return explicit.to_string();
     }
     let display_path = ide_context_display_path(&input.path);
-    Path::new(&display_path)
+    std::path::Path::new(&display_path)
         .file_name()
         .and_then(|value| value.to_str())
         .map(str::trim)
@@ -135,7 +133,7 @@ fn ide_context_relative_display_path(file_path: &str, workspace_path: &str) -> S
     let file_key = ide_context_compare_key(&file_display);
     let workspace_key = ide_context_compare_key(&workspace_display);
     if file_key == workspace_key {
-        return Path::new(&file_display)
+        return std::path::Path::new(&file_display)
             .file_name()
             .and_then(|value| value.to_str())
             .map(ToOwned::to_owned)
@@ -306,7 +304,7 @@ fn query_ide_context_references(
                     continue;
                 }
                 let file_path = ide_context_display_path(&reference.file_path);
-                let file_name = Path::new(&file_path)
+                let file_name = std::path::Path::new(&file_path)
                     .file_name()
                     .and_then(|value| value.to_str())
                     .map(ToOwned::to_owned)
