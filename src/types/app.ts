@@ -752,6 +752,7 @@ export type ConversationDelegateStatusSummary = {
 };
 
 export type AgentWorkSignalPayload = {
+  conversationId: string;
   agentId: string;
   delegateId: string;
 };

@@ -116,6 +116,7 @@ const AGENT_WORK_EVENT_STOP: &str = "easy-call:agent-work-stop";
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct AgentWorkSignalPayload {
+    conversation_id: String,
     agent_id: String,
     delegate_id: String,
 }
@@ -123,6 +124,7 @@ struct AgentWorkSignalPayload {
 fn emit_agent_work_signal(
     app_state: &AppState,
     event_name: &str,
+    conversation_id: &str,
     agent_id: &str,
     delegate_id: &str,
 ) -> Result<(), String> {
@@ -140,6 +142,7 @@ fn emit_agent_work_signal(
         .emit(
             event_name,
             AgentWorkSignalPayload {
+                conversation_id: conversation_id.to_string(),
                 agent_id: agent_id.to_string(),
                 delegate_id: delegate_id.to_string(),
             },
@@ -264,6 +267,7 @@ async fn delegate_run_thread_to_completion(
     if let Err(err) = emit_agent_work_signal(
         &app_state,
         AGENT_WORK_EVENT_START,
+        &delegate.conversation_id,
         &delegate.target_agent_id,
         &delegate.delegate_id,
     ) {
@@ -337,6 +341,7 @@ async fn delegate_run_thread_to_completion(
             if let Err(err) = emit_agent_work_signal(
                 &app_state,
                 AGENT_WORK_EVENT_STOP,
+                &delegate.conversation_id,
                 &delegate.target_agent_id,
                 &delegate.delegate_id,
             ) {
@@ -380,6 +385,7 @@ async fn delegate_run_thread_to_completion(
             if let Err(stop_err) = emit_agent_work_signal(
                 &app_state,
                 AGENT_WORK_EVENT_STOP,
+                &delegate.conversation_id,
                 &delegate.target_agent_id,
                 &delegate.delegate_id,
             ) {

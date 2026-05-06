@@ -1866,7 +1866,10 @@ const chatMentionEntries = computed<ChatMentionEntry[]>(() => {
     if (!agentId) continue;
     const agentName = String(persona.name || "").trim() || agentId;
     const avatarUrl = String(chatPersonaAvatarUrlMap.value[agentId] || "").trim() || undefined;
-    const backgroundTaskCount = agentWorkPresence.activeWorkCountForAgent(agentId);
+    const backgroundTaskCount = agentWorkPresence.activeWorkCountForAgent(
+      String(currentChatConversationId.value || "").trim(),
+      agentId,
+    );
     const boundDepartments = (departmentsByPersonaId.get(agentId) || [])
       .map((department) => ({
         departmentId: String(department.id || "").trim(),
@@ -4628,14 +4631,6 @@ onBeforeUnmount(() => {
   }
   cancelPendingRewindConfirm();
 });
-
-watch(
-  () => delegateConversations.value,
-  (items) => {
-    agentWorkPresence.seedFromDelegateConversations(items);
-  },
-  { deep: true, immediate: true },
-);
 
 watch(
   () => viewMode.value,

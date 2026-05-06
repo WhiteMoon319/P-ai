@@ -1,10 +1,10 @@
 import { computed, ref } from "vue";
-import type { AgentWorkSignalPayload, DelegateConversationSummary } from "../../../types/app";
+import type { AgentWorkSignalPayload } from "../../../types/app";
 
 const AGENT_WORK_TTL_MS = 10 * 60 * 1000;
 const AGENT_WORK_PRUNE_INTERVAL_MS = 30 * 1000;
 
-type AgentWorkRegistry = Record<string, Record<string, number>>;
+type AgentWorkRegistry = Record<string, Record<string, Record<string, number>>>;
 
 function trim_text(value: unknown): string {
   return String(value || "").trim();
@@ -12,16 +12,23 @@ function trim_text(value: unknown): string {
 
 function pruneExpiredRegistry(source: AgentWorkRegistry, now: number): AgentWorkRegistry {
   const next: AgentWorkRegistry = {};
-  for (const [agentId, jobs] of Object.entries(source)) {
-    const aliveJobs = Object.entries(jobs).filter(([, expiresAt]) => Number(expiresAt) > now);
-    if (aliveJobs.length <= 0) continue;
-    next[agentId] = Object.fromEntries(aliveJobs);
+  for (const [conversationId, agents] of Object.entries(source)) {
+    const nextAgents: Record<string, Record<string, number>> = {};
+    for (const [agentId, jobs] of Object.entries(agents)) {
+      const aliveJobs = Object.entries(jobs).filter(([, expiresAt]) => Number(expiresAt) > now);
+      if (aliveJobs.length <= 0) continue;
+      nextAgents[agentId] = Object.fromEntries(aliveJobs);
+    }
+    if (Object.keys(nextAgents).length <= 0) continue;
+    next[conversationId] = nextAgents;
   }
   return next;
 }
 
 function hasAnyActiveJob(source: AgentWorkRegistry): boolean {
-  return Object.values(source).some((jobs) => Object.keys(jobs).length > 0);
+  return Object.values(source).some((agents) =>
+    Object.values(agents).some((jobs) => Object.keys(jobs).length > 0),
+  );
 }
 
 export function useAgentWorkPresence() {
@@ -50,62 +57,59 @@ export function useAgentWorkPresence() {
   }
 
   function markAgentWorkStarted(payload: AgentWorkSignalPayload) {
+    const conversationId = trim_text(payload.conversationId);
     const agentId = trim_text(payload.agentId);
     const delegateId = trim_text(payload.delegateId);
-    if (!agentId || !delegateId) return;
+    if (!conversationId || !agentId || !delegateId) return;
     const now = Date.now();
     const next = pruneExpiredRegistry(workRegistry.value, now);
-    next[agentId] = {
-      ...(next[agentId] || {}),
+    next[conversationId] = next[conversationId] || {};
+    next[conversationId][agentId] = {
+      ...(next[conversationId][agentId] || {}),
       [delegateId]: now + AGENT_WORK_TTL_MS,
     };
     commitRegistry(next);
   }
 
   function markAgentWorkStopped(payload: AgentWorkSignalPayload) {
+    const conversationId = trim_text(payload.conversationId);
     const agentId = trim_text(payload.agentId);
     const delegateId = trim_text(payload.delegateId);
-    if (!agentId || !delegateId) return;
+    if (!conversationId || !agentId || !delegateId) return;
     const next = pruneExpiredRegistry(workRegistry.value, Date.now());
-    if (!next[agentId] || !(delegateId in next[agentId])) {
+    if (!next[conversationId] || !next[conversationId][agentId] || !(delegateId in next[conversationId][agentId])) {
       commitRegistry(next);
       return;
     }
-    delete next[agentId][delegateId];
-    if (Object.keys(next[agentId]).length <= 0) {
-      delete next[agentId];
+    delete next[conversationId][agentId][delegateId];
+    if (Object.keys(next[conversationId][agentId]).length <= 0) {
+      delete next[conversationId][agentId];
+    }
+    if (Object.keys(next[conversationId]).length <= 0) {
+      delete next[conversationId];
     }
     commitRegistry(next);
   }
 
-  function seedFromDelegateConversations(items: DelegateConversationSummary[]) {
-    if (!Array.isArray(items) || items.length <= 0) return;
-    const now = Date.now();
-    const next = pruneExpiredRegistry(workRegistry.value, now);
-    for (const item of items) {
-      if (trim_text(item.archivedAt)) continue;
-      const agentId = trim_text(item.agentId);
-      const delegateId = trim_text(item.delegateId || item.conversationId);
-      if (!agentId || !delegateId) continue;
-      next[agentId] = {
-        ...(next[agentId] || {}),
-        [delegateId]: now + AGENT_WORK_TTL_MS,
-      };
+  const activeWorkCountsByConversation = computed<Record<string, Record<string, number>>>(() => {
+    const out: Record<string, Record<string, number>> = {};
+    for (const [conversationId, agents] of Object.entries(workRegistry.value)) {
+      const conversationCounts: Record<string, number> = {};
+      for (const [agentId, jobs] of Object.entries(agents)) {
+        const count = Object.keys(jobs).length;
+        if (count > 0) conversationCounts[agentId] = count;
+      }
+      if (Object.keys(conversationCounts).length > 0) {
+        out[conversationId] = conversationCounts;
+      }
     }
-    commitRegistry(next);
-  }
-
-  const activeWorkCountsByAgent = computed<Record<string, number>>(() => {
-    const next: Record<string, number> = {};
-    for (const [agentId, jobs] of Object.entries(workRegistry.value)) {
-      const count = Object.keys(jobs).length;
-      if (count > 0) next[agentId] = count;
-    }
-    return next;
+    return out;
   });
 
-  function activeWorkCountForAgent(agentId: string): number {
-    return Math.max(0, Number(activeWorkCountsByAgent.value[trim_text(agentId)] || 0));
+  function activeWorkCountForAgent(conversationId: string, agentId: string): number {
+    const normalizedConversationId = trim_text(conversationId);
+    const normalizedAgentId = trim_text(agentId);
+    return Math.max(0, Number(activeWorkCountsByConversation.value[normalizedConversationId]?.[normalizedAgentId] || 0));
   }
 
   function cleanup() {
@@ -117,11 +121,10 @@ export function useAgentWorkPresence() {
   }
 
   return {
-    activeWorkCountsByAgent,
+    activeWorkCountsByConversation,
     activeWorkCountForAgent,
     markAgentWorkStarted,
     markAgentWorkStopped,
-    seedFromDelegateConversations,
     cleanup,
   };
 }
