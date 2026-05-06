@@ -1353,6 +1353,12 @@ fn release_conversation_processing_claim(
     Ok(())
 }
 
+fn has_normal_user_queue_event(events: &std::collections::VecDeque<ChatPendingEvent>) -> bool {
+    events.iter().any(|event| {
+        event.queue_mode == ChatQueueMode::Normal && matches!(event.source, ChatEventSource::User)
+    })
+}
+
 fn claim_queued_conversation_batches(
     state: &AppState,
 ) -> Result<Vec<(String, Vec<ChatPendingEvent>)>, String> {
@@ -1369,12 +1375,13 @@ fn claim_queued_conversation_batches(
     let mut eligible = slots
         .iter()
         .filter_map(|(conversation_id, slot)| {
+            let has_guided = slot
+                .pending_queue
+                .iter()
+                .any(|event| event.queue_mode == ChatQueueMode::Guided);
             if slot.state != MainSessionState::Idle
                 || slot.pending_queue.is_empty()
-                || slot
-                    .pending_queue
-                    .iter()
-                    .any(|event| event.queue_mode == ChatQueueMode::Guided)
+                || (has_guided && !has_normal_user_queue_event(&slot.pending_queue))
                 || claims.contains(conversation_id)
             {
                 return None;
