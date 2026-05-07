@@ -126,7 +126,6 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
   const toolReviewReportErrorText = ref("");
   const toolReviewReports = ref<ToolReviewReportRecord[]>([]);
   const toolReviewCurrentReportId = ref("");
-  const loadedConversationId = ref("");
 
   function formatToolReviewError(error: unknown): string {
     const message = error instanceof Error ? String(error.message || "").trim() : String(error);
@@ -247,19 +246,11 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
     if (!currentKey) return 0;
     return toolReviewBatches.value.find((batch) => batch.batchKey === currentKey)?.itemCount || 0;
   });
-  const toolReviewHasReviewableContent = computed(() =>
-    toolReviewBatches.value.some((batch) => Number(batch.itemCount || 0) > 0)
-  );
   const toolReviewButtonLabel = computed(() =>
     options.t("chat.toolReview.button", { count: toolReviewButtonCount.value })
   );
-  const toolReviewLoadedForCurrentConversation = computed(
-    () => String(loadedConversationId.value || "").trim() === String(options.activeConversationId.value || "").trim()
-  );
   const toolReviewButtonEnabled = computed(
-    () =>
-      !!String(options.activeConversationId.value || "").trim()
-      && (!toolReviewLoadedForCurrentConversation.value || toolReviewHasReviewableContent.value)
+    () => !!String(options.activeConversationId.value || "").trim()
   );
 
   async function refreshMessagesAfterReviewMutation(
@@ -295,7 +286,6 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
       toolReviewBatches.value = [];
       toolReviewCurrentBatchKey.value = "";
       toolReviewDetailMap.value = {};
-      loadedConversationId.value = "";
       return;
     }
     try {
@@ -305,9 +295,6 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
         },
       });
       toolReviewBatches.value = Array.isArray(result?.batches) ? result.batches : [];
-      if (!toolReviewBatches.value.some((batch) => Number(batch.itemCount || 0) > 0)) {
-        toolReviewPanelOpen.value = false;
-      }
       const currentKey = String(toolReviewCurrentBatchKey.value || "").trim();
       toolReviewCurrentBatchKey.value = currentKey
         ? resolveValidBatchKey(toolReviewBatches.value, currentKey)
@@ -316,7 +303,6 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
       toolReviewDetailMap.value = Object.fromEntries(
         Object.entries(toolReviewDetailMap.value).filter(([callId]) => validCallIds.has(callId))
       );
-      loadedConversationId.value = conversationId;
       toolReviewErrorText.value = "";
       await refreshToolReviewReports();
     } catch (error) {
@@ -448,7 +434,6 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
       toolReviewCurrentBatchKey.value = "";
       toolReviewReports.value = [];
       toolReviewCurrentReportId.value = "";
-      loadedConversationId.value = "";
       toolReviewErrorText.value = "";
       toolReviewReportErrorText.value = "";
       if (conversationId) {
