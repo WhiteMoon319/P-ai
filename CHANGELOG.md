@@ -2,6 +2,7 @@
 
 ## 进行中
 
+- 修复（remote-im-contact-conversation-binding-repair）：远程联系人会话列表改为按联系人强制确保专属会话存在；若 `bound_conversation_id` 丢失或失效，会优先复用同联系人旧会话并回写绑定，找不到时再新建专属会话，避免“联系人存在、消息能收发，但远程页不显示会话”的漂移状态。
 - 修复（onebot-single-connection-and-consumer-ownership）：OneBot v11 渠道改为单活动连接模型，WebSocket 握手成功后才尝试接管连接；若已有旧连接，新连接会发起替换并在短超时内接管，避免半开握手或旧 socket 抢占导致渠道长期离线；同时事件消费器改为按 manager 实例单例管理，不再误绑全局单例，补齐重启/停用时的旧消费器回收与相关回归测试。
 - 修复（mcp-windows-job-object-sidecar-coverage）：MCP 子进程树托管补齐到剩余旁路启动链路，前台工具目录预览与懒加载 `operate/read_file` 现在也会在 Windows 下挂入 `Job Object`，避免 dev/预览阶段残留 `node/cmd/npx` 后台进程。
 - 修复（chat-streaming-markdown-fade-remove）：聊天流式 Markdown 去掉前端额外淡入与 typewriter 渐显效果；正文仍按流式批次继续追加，但不再出现慢速显影，阅读观感更接近稳定文档。

@@ -2850,6 +2850,135 @@
     }
 
     #[test]
+    fn list_remote_im_contact_conversations_should_create_and_bind_missing_conversation() {
+        let state = test_chat_runtime_state();
+        write_config(&state.config_path, &AppConfig::default()).expect("write config");
+        let now = now_iso();
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(RemoteImContact {
+            id: "contact-a".to_string(),
+            channel_id: "channel-a".to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            remote_contact_type: "group".to_string(),
+            remote_contact_id: "remote-a".to_string(),
+            remote_contact_name: "测试群".to_string(),
+            remark_name: String::new(),
+            allow_send: false,
+            allow_send_files: false,
+            allow_receive: true,
+            activation_mode: "never".to_string(),
+            activation_keywords: Vec::new(),
+            patience_seconds: default_remote_im_contact_patience_seconds(),
+            activation_cooldown_seconds: 0,
+            route_mode: "dedicated_contact_conversation".to_string(),
+            bound_department_id: Some(REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID.to_string()),
+            bound_conversation_id: None,
+            processing_mode: "continuous".to_string(),
+            response_strategy: default_remote_im_contact_response_strategy(),
+            response_guidance: default_remote_im_contact_response_guidance(),
+            last_activated_at: None,
+            last_message_at: Some(now),
+            dingtalk_session_webhook: None,
+            dingtalk_session_webhook_expired_time: None,
+            shell_workspaces: Vec::new(),
+        });
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime state");
+
+        let items = conversation_service()
+            .list_remote_im_contact_conversations(&state)
+            .expect("list remote im contact conversations");
+
+        assert_eq!(items.len(), 1);
+        let updated_runtime = state_read_runtime_state_cached(&state).expect("read runtime state");
+        let contact = updated_runtime
+            .remote_im_contacts
+            .iter()
+            .find(|item| item.id == "contact-a")
+            .expect("contact exists");
+        let conversation_id = contact
+            .bound_conversation_id
+            .as_deref()
+            .expect("bound conversation id");
+        assert_eq!(items[0].conversation_id, conversation_id);
+        let conversation =
+            state_read_conversation_cached(&state, conversation_id).expect("read conversation");
+        assert!(conversation_is_remote_im_contact(&conversation));
+        let expected_key = remote_im_contact_conversation_key(contact);
+        assert_eq!(conversation.root_conversation_id.as_deref(), Some(expected_key.as_str()));
+    }
+
+    #[test]
+    fn list_remote_im_contact_conversations_should_reuse_existing_history_and_rebind_contact() {
+        let state = test_chat_runtime_state();
+        write_config(&state.config_path, &AppConfig::default()).expect("write config");
+        let now = now_iso();
+        let contact = RemoteImContact {
+            id: "contact-a".to_string(),
+            channel_id: "channel-a".to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            remote_contact_type: "group".to_string(),
+            remote_contact_id: "remote-a".to_string(),
+            remote_contact_name: "测试群".to_string(),
+            remark_name: String::new(),
+            allow_send: false,
+            allow_send_files: false,
+            allow_receive: true,
+            activation_mode: "never".to_string(),
+            activation_keywords: Vec::new(),
+            patience_seconds: default_remote_im_contact_patience_seconds(),
+            activation_cooldown_seconds: 0,
+            route_mode: "dedicated_contact_conversation".to_string(),
+            bound_department_id: Some(REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID.to_string()),
+            bound_conversation_id: None,
+            processing_mode: "continuous".to_string(),
+            response_strategy: default_remote_im_contact_response_strategy(),
+            response_guidance: default_remote_im_contact_response_guidance(),
+            last_activated_at: None,
+            last_message_at: Some(now.clone()),
+            dingtalk_session_webhook: None,
+            dingtalk_session_webhook_expired_time: None,
+            shell_workspaces: Vec::new(),
+        };
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact.clone());
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime state");
+
+        let mut conversation = build_conversation_record(
+            "",
+            "",
+            REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID,
+            "联系人 · 测试群",
+            CONVERSATION_KIND_REMOTE_IM_CONTACT,
+            Some(remote_im_contact_conversation_key(&contact)),
+            None,
+        );
+        conversation.id = "conversation-contact-old".to_string();
+        conversation.messages.push(test_text_message("user", "历史消息", &now));
+        conversation.updated_at = now.clone();
+        conversation.last_user_at = Some(now.clone());
+        state_schedule_conversation_persist(&state, &conversation, true)
+            .expect("persist conversation");
+
+        let items = conversation_service()
+            .list_remote_im_contact_conversations(&state)
+            .expect("list remote im contact conversations");
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].conversation_id, "conversation-contact-old");
+        assert_eq!(items[0].message_count, 1);
+        let updated_runtime = state_read_runtime_state_cached(&state).expect("read runtime state");
+        let updated_contact = updated_runtime
+            .remote_im_contacts
+            .iter()
+            .find(|item| item.id == "contact-a")
+            .expect("contact exists");
+        assert_eq!(
+            updated_contact.bound_conversation_id.as_deref(),
+            Some("conversation-contact-old")
+        );
+    }
+
+    #[test]
     fn scheduler_should_allow_two_conversations_to_run_in_parallel() {
         let state = test_chat_runtime_state();
         let ingress_a =

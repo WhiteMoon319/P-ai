@@ -7,58 +7,25 @@ impl ConversationService {
             .conversation_lock
             .lock()
             .map_err(|err| state_lock_error_with_panic(file!(), line!(), module_path!(), &err))?;
-        let runtime = state_read_runtime_state_cached(state)?;
+        let mut runtime = state_read_runtime_state_cached(state)?;
         let config = state_read_config_cached(state)?;
-        let mut unresolved_contact_ids = std::collections::HashSet::<String>::new();
         let mut resolved_pairs = Vec::<(RemoteImContact, String)>::new();
-        for contact in runtime.remote_im_contacts.iter() {
-            if let Some(conversation_id) = contact
+        let mut runtime_changed = false;
+        for contact in runtime.remote_im_contacts.iter_mut() {
+            let previous_bound_conversation_id = contact
                 .bound_conversation_id
                 .as_deref()
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
-            {
-                resolved_pairs.push((contact.clone(), conversation_id.to_string()));
-            } else {
-                unresolved_contact_ids.insert(contact.id.trim().to_string());
+                .map(ToOwned::to_owned);
+            let conversation_id = ensure_remote_im_contact_conversation_id(state, contact)?;
+            if previous_bound_conversation_id.as_deref() != Some(conversation_id.as_str()) {
+                runtime_changed = true;
             }
+            resolved_pairs.push((contact.clone(), conversation_id));
         }
-        if !unresolved_contact_ids.is_empty() {
-            let conversation_key_map = runtime
-                .remote_im_contacts
-                .iter()
-                .filter(|contact| unresolved_contact_ids.contains(contact.id.trim()))
-                .map(|contact| {
-                    (
-                        remote_im_contact_conversation_key(contact),
-                        contact.clone(),
-                    )
-                })
-                .collect::<std::collections::HashMap<_, _>>();
-            let chat_index = state_read_chat_index_cached(state)?;
-            let fallback_pairs = chat_index
-                .conversations
-                .iter()
-                .filter_map(|item| {
-                    let conversation =
-                        state_read_conversation_cached(state, item.id.as_str()).ok()?;
-                    if conversation.summary.trim().is_empty()
-                        || !conversation_is_remote_im_contact(&conversation)
-                    {
-                        return None;
-                    }
-                    let root_key = conversation
-                        .root_conversation_id
-                        .as_deref()
-                        .map(str::trim)
-                        .filter(|value| !value.is_empty())?;
-                    conversation_key_map
-                        .get(root_key)
-                        .cloned()
-                        .map(|contact| (contact, conversation.id))
-                })
-                .collect::<Vec<_>>();
-            resolved_pairs.extend(fallback_pairs);
+        if runtime_changed {
+            state_write_runtime_state_cached(state, &runtime)?;
         }
         let mut items = Vec::<RemoteImContactConversationSummary>::new();
         for (contact, conversation_id) in resolved_pairs {
