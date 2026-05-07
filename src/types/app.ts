@@ -168,6 +168,7 @@ export type IdeContextReferenceItem = {
   workspaceName: string;
   filePath: string;
   fileName: string;
+  relativePath: string;
   startLine?: number;
   endLine?: number;
   displayLabel: string;

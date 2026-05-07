@@ -236,34 +236,22 @@
         </button>
       </div>
     </div>
-    <div v-if="attachedIdeContextReferences.length > 0 || ideContextGroups.length > 0" class="mb-2 flex flex-col gap-2">
-      <div v-if="attachedIdeContextReferences.length > 0" class="flex flex-wrap gap-1">
-        <button
-          v-for="item in attachedIdeContextReferences"
-          :key="item.id"
-          type="button"
-          class="badge badge-primary gap-1 py-3 max-w-full"
-          :disabled="chatting || frozen"
-          :title="item.displayLabel"
-          @click="emit('removeIdeContextReference', item.id)"
-        >
-          <Minus class="h-3.5 w-3.5" />
-          <span class="max-w-72 truncate text-[11px]">{{ item.displayLabel }}</span>
-        </button>
-      </div>
-      <div v-for="group in ideContextGroups" :key="group.workspacePath" class="flex flex-col gap-1">
+    <div v-if="attachedIdeContextReferences.length > 0 || mergedIdeContextGroups.length > 0" class="mb-2 flex flex-col gap-2">
+      <div v-for="group in mergedIdeContextGroups" :key="group.workspacePath" class="flex flex-col gap-1">
         <div v-if="showIdeWorkspaceGroupLabel" class="px-1 text-[11px] opacity-60">{{ group.workspaceName }}</div>
         <div class="flex flex-wrap gap-1">
           <button
             v-for="item in group.references"
             :key="item.id"
             type="button"
-            class="badge badge-ghost gap-1 py-3 max-w-full"
+            class="gap-1 py-3 max-w-full"
+            :class="isIdeContextAttached(item.id) ? 'badge badge-primary' : 'badge badge-ghost'"
             :disabled="chatting || frozen"
-            :title="item.displayLabel"
-            @click="emit('attachIdeContextReference', item)"
+            :title="ideContextReferenceTitle(item)"
+            @click="toggleIdeContextReference(item)"
           >
-            <Plus class="h-3.5 w-3.5" />
+            <Minus v-if="isIdeContextAttached(item.id)" class="h-3.5 w-3.5" />
+            <Plus v-else class="h-3.5 w-3.5" />
             <span class="max-w-72 truncate text-[11px]">{{ item.displayLabel }}</span>
           </button>
         </div>
@@ -612,7 +600,75 @@ const normalizedChatModelOptions = computed(() =>
     }))
     .filter((item) => !!item.id && !!item.name),
 );
-const showIdeWorkspaceGroupLabel = computed(() => (props.ideContextGroups || []).length > 1);
+const showIdeWorkspaceGroupLabel = computed(() => mergedIdeContextGroups.value.length > 1);
+const attachedIdeContextReferenceIds = computed(() => new Set((props.attachedIdeContextReferences || []).map((item) => item.id)));
+const mergedIdeContextGroups = computed<IdeContextWorkspaceGroup[]>(() => {
+  const groupsMap = new Map<string, IdeContextWorkspaceGroup>();
+  for (const group of props.ideContextGroups || []) {
+    const workspacePath = String(group.workspacePath || "").trim();
+    const workspaceName = String(group.workspaceName || "").trim() || workspacePath;
+    const key = workspacePath || workspaceName || "__default__";
+    groupsMap.set(key, {
+      workspacePath,
+      workspaceName,
+      references: [...(group.references || [])],
+    });
+  }
+  for (const item of props.attachedIdeContextReferences || []) {
+    const workspacePath = String(item.workspacePath || "").trim();
+    const workspaceName = String(item.workspaceName || "").trim() || workspacePath;
+    const key = workspacePath || workspaceName || "__default__";
+    if (!groupsMap.has(key)) {
+      groupsMap.set(key, {
+        workspacePath,
+        workspaceName,
+        references: [],
+      });
+    }
+    const group = groupsMap.get(key);
+    if (!group) continue;
+    if (!group.references.some((reference) => reference.id === item.id)) {
+      group.references.unshift(item);
+    }
+  }
+  const attachedMap = new Map((props.attachedIdeContextReferences || []).map((item) => [item.id, item]));
+  return Array.from(groupsMap.values())
+    .map((group) => ({
+      ...group,
+      references: [...group.references].sort((left, right) => {
+        const leftAttached = attachedMap.has(left.id) ? 1 : 0;
+        const rightAttached = attachedMap.has(right.id) ? 1 : 0;
+        return rightAttached - leftAttached;
+      }),
+    }))
+    .filter((group) => group.references.length > 0);
+});
+
+function isIdeContextAttached(referenceId: string): boolean {
+  return attachedIdeContextReferenceIds.value.has(referenceId);
+}
+
+function toggleIdeContextReference(item: IdeContextReferenceItem) {
+  if (isIdeContextAttached(item.id)) {
+    emit("removeIdeContextReference", item.id);
+    return;
+  }
+  emit("attachIdeContextReference", item);
+}
+
+function ideContextReferenceTitle(item: IdeContextReferenceItem): string {
+  const relativePath = String(item.relativePath || "").trim();
+  const startLine = Number(item.startLine || 0);
+  const endLine = Number(item.endLine || 0);
+  if (!relativePath) return String(item.displayLabel || "").trim();
+  if (startLine > 0 && endLine > startLine) {
+    return `${relativePath}:${startLine}-${endLine}`;
+  }
+  if (startLine > 0) {
+    return `${relativePath}:${startLine}`;
+  }
+  return relativePath;
+}
 
 const showStopAction = computed(() =>
   props.chatting || ["queued", "waiting", "streaming"].includes(String(props.frontendRoundPhase || "idle")),

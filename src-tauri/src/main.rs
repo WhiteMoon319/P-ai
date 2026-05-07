@@ -386,6 +386,7 @@ fn main() {
             return;
         }
     };
+    start_ide_context_bridge_server(state.clone());
     init_last_panic_snapshot_slot(state.last_panic_snapshot.clone());
     {
         let panic_slot = state.last_panic_snapshot.clone();
