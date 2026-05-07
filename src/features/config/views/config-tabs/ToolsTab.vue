@@ -331,6 +331,121 @@ function definitionById(id: string): FrontendToolDefinition | undefined {
   return toolDefinitions.value.find((item) => item.function?.name === id);
 }
 
+type ToolSchemaShape = Record<string, unknown>;
+
+function asToolSchemaShape(value: unknown): ToolSchemaShape {
+  return value && typeof value === "object" ? (value as ToolSchemaShape) : {};
+}
+
+function toolSchemaTypeText(shape: ToolSchemaShape): string {
+  const typeValue = shape.type;
+  if (Array.isArray(typeValue)) {
+    return typeValue.map(String).join(" | ");
+  }
+  return String(typeValue || "any");
+}
+
+function toolSchemaSummaryLine(name: string, shape: ToolSchemaShape, required: boolean): string {
+  const requiredText = required ? "*" : "";
+  const enumValues = Array.isArray(shape.enum) ? ` [${shape.enum.map(String).join(", ")}]` : "";
+  const minText = shape.minimum !== undefined ? ` >= ${shape.minimum}` : "";
+  const maxText = shape.maximum !== undefined ? ` <= ${shape.maximum}` : "";
+  const desc = String(shape.description || "").trim();
+  const rangeText = `${enumValues}${minText}${maxText}`.trim();
+  const base = `${requiredText}${name}: ${toolSchemaTypeText(shape)}${rangeText ? ` ${rangeText}` : ""}`;
+  return desc ? `${base} (${desc})` : base;
+}
+
+function collectToolSchemaSummaryLines(
+  properties: ToolSchemaShape,
+  requiredRaw: string[],
+  prefix = "",
+): string[] {
+  const lines: string[] = [];
+  for (const [name, schema] of Object.entries(properties)) {
+    const shape = asToolSchemaShape(schema);
+    const path = prefix ? `${prefix}.${name}` : name;
+    lines.push(toolSchemaSummaryLine(path, shape, requiredRaw.includes(name)));
+
+    const nestedPropertiesRaw = shape.properties;
+    if (nestedPropertiesRaw && typeof nestedPropertiesRaw === "object") {
+      const nestedRequired = Array.isArray(shape.required) ? shape.required.map(String) : [];
+      lines.push(
+        ...collectToolSchemaSummaryLines(
+          nestedPropertiesRaw as ToolSchemaShape,
+          nestedRequired,
+          path,
+        ),
+      );
+    }
+
+    const itemsShape = asToolSchemaShape(shape.items);
+    const itemPropertiesRaw = itemsShape.properties;
+    if (itemPropertiesRaw && typeof itemPropertiesRaw === "object") {
+      const nestedRequired = Array.isArray(itemsShape.required) ? itemsShape.required.map(String) : [];
+      lines.push(
+        ...collectToolSchemaSummaryLines(
+          itemPropertiesRaw as ToolSchemaShape,
+          nestedRequired,
+          `${path}[]`,
+        ),
+      );
+    }
+  }
+  return lines;
+}
+
+function formatSchemaExample(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function collectToolSchemaExamples(
+  properties: ToolSchemaShape,
+  prefix = "",
+): string[] {
+  const examples: string[] = [];
+  for (const [name, schema] of Object.entries(properties)) {
+    const shape = asToolSchemaShape(schema);
+    const path = prefix ? `${prefix}.${name}` : name;
+
+    const singleExample = shape.example;
+    if (singleExample !== undefined && singleExample !== null) {
+      const text = formatSchemaExample(singleExample);
+      if (text) {
+        examples.push(`${path} 示例:\n${text}`);
+      }
+    }
+
+    const exampleList = Array.isArray(shape.examples) ? shape.examples : [];
+    for (const rawExample of exampleList) {
+      if (rawExample === undefined || rawExample === null) continue;
+      const text = formatSchemaExample(rawExample);
+      if (text) {
+        examples.push(`${path} 示例:\n${text}`);
+      }
+    }
+
+    const nestedPropertiesRaw = shape.properties;
+    if (nestedPropertiesRaw && typeof nestedPropertiesRaw === "object") {
+      examples.push(...collectToolSchemaExamples(nestedPropertiesRaw as ToolSchemaShape, path));
+    }
+
+    const itemsShape = asToolSchemaShape(shape.items);
+    const itemPropertiesRaw = itemsShape.properties;
+    if (itemPropertiesRaw && typeof itemPropertiesRaw === "object") {
+      examples.push(...collectToolSchemaExamples(itemPropertiesRaw as ToolSchemaShape, `${path}[]`));
+    }
+  }
+  return examples;
+}
+
 function toolParameterSummary(id: string): string[] {
   const definition = definitionById(id);
   const parameters = definition?.function?.parameters;
@@ -339,19 +454,10 @@ function toolParameterSummary(id: string): string[] {
   const propertiesRaw = root.properties;
   const requiredRaw = Array.isArray(root.required) ? root.required : [];
   if (!propertiesRaw || typeof propertiesRaw !== "object") return [];
-  const properties = propertiesRaw as Record<string, unknown>;
-  return Object.entries(properties).map(([name, schema]) => {
-    const shape = schema && typeof schema === "object" ? (schema as Record<string, unknown>) : {};
-    const typeValue = String(shape.type || "any");
-    const required = requiredRaw.includes(name) ? "*" : "";
-    const enumValues = Array.isArray(shape.enum) ? ` [${shape.enum.map(String).join(", ")}]` : "";
-    const minText = shape.minimum !== undefined ? ` >= ${shape.minimum}` : "";
-    const maxText = shape.maximum !== undefined ? ` <= ${shape.maximum}` : "";
-    const desc = String(shape.description || "").trim();
-    const rangeText = `${enumValues}${minText}${maxText}`.trim();
-    const base = `${required}${name}: ${typeValue}${rangeText ? ` ${rangeText}` : ""}`;
-    return desc ? `${base} (${desc})` : base;
-  });
+  return collectToolSchemaSummaryLines(
+    propertiesRaw as ToolSchemaShape,
+    requiredRaw.map(String),
+  );
 }
 
 function toolParameterExamples(id: string): string[] {
@@ -361,22 +467,7 @@ function toolParameterExamples(id: string): string[] {
   const root = parameters as Record<string, unknown>;
   const propertiesRaw = root.properties;
   if (!propertiesRaw || typeof propertiesRaw !== "object") return [];
-  const properties = propertiesRaw as Record<string, unknown>;
-  const examples: string[] = [];
-  for (const [name, schema] of Object.entries(properties)) {
-    const shape = schema && typeof schema === "object" ? (schema as Record<string, unknown>) : {};
-    const singleExample = shape.example;
-    if (typeof singleExample === "string" && singleExample.trim()) {
-      examples.push(`${name} 示例:\n${singleExample.trim()}`);
-    }
-    const exampleList = Array.isArray(shape.examples) ? shape.examples : [];
-    for (const rawExample of exampleList) {
-      if (typeof rawExample === "string" && rawExample.trim()) {
-        examples.push(`${name} 示例:\n${rawExample.trim()}`);
-      }
-    }
-  }
-  return Array.from(new Set(examples));
+  return Array.from(new Set(collectToolSchemaExamples(propertiesRaw as ToolSchemaShape)));
 }
 
 function openGitDownloadLink() {
