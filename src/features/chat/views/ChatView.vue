@@ -1254,16 +1254,21 @@ const assistantBubbleBackgroundHidden = ref(false);
 const olderHistoryRequestPending = ref(false);
 const LOAD_OLDER_HISTORY_THRESHOLD_PX = 96;
 const observedVirtualItemElements = new Map<string, HTMLElement>();
+const observedVirtualItemResizeElements = new Map<string, HTMLElement>();
 const measuredVirtualItemHeights = new Map<string, number>();
+const streamingVirtualItemViewportTop = new Map<string, number>();
 let pendingMeasureFrame = 0;
 let pendingPinToBottomFrame = 0;
+let pendingProgrammaticScrollPaginationResetFrame = 0;
 let lastConversationScrollTop = 0;
 const chatCanScroll = ref(false);
 const chatScrollbarVisible = ref(false);
 const chatScrollThumbHeight = ref(24);
 const chatScrollThumbTop = ref(0);
 let chatScrollResizeObserver: ResizeObserver | null = null;
+let virtualItemResizeObserver: ResizeObserver | null = null;
 const olderHistoryTriggerReady = ref(true);
+const suppressOlderHistoryPaginationOnce = ref(false);
 const pendingOlderHistoryAnchor = ref<{ messageId: string; edge: "top" | "bottom"; offset: number } | null>(null);
 const pendingOlderHistoryScrollRestore = ref<{ scrollTop: number; scrollHeight: number } | null>(null);
 
@@ -1322,7 +1327,16 @@ function hideChatScrollbar() {
 function refreshObservedVirtualItemElements() {
   const validIds = new Set(virtualRenderItems.value.map((item) => item.id));
   for (const [itemId] of observedVirtualItemElements.entries()) {
-    if (!validIds.has(itemId)) observedVirtualItemElements.delete(itemId);
+    if (!validIds.has(itemId)) {
+      const resizeElement = observedVirtualItemResizeElements.get(itemId);
+      if (resizeElement && virtualItemResizeObserver) {
+        virtualItemResizeObserver.unobserve(resizeElement);
+      }
+      observedVirtualItemResizeElements.delete(itemId);
+      observedVirtualItemElements.delete(itemId);
+      measuredVirtualItemHeights.delete(itemId);
+      streamingVirtualItemViewportTop.delete(itemId);
+    }
   }
 }
 
@@ -1393,6 +1407,13 @@ const renderItemChronologicalIndexMap = computed(() => {
   });
   return map;
 });
+const renderItemById = computed(() => {
+  const map = new Map<string, ChatRenderItem>();
+  chatRenderItems.value.forEach((item) => {
+    map.set(item.id, item);
+  });
+  return map;
+});
 const blockChronologicalIndexMap = computed(() => {
   const map = new Map<string, number>();
   props.messageBlocks.forEach((block, index) => {
@@ -1414,6 +1435,94 @@ const virtualEntries = computed(() => {
 });
 const totalVirtualSize = computed(() => virtualizer.value.getTotalSize());
 
+function isStreamingAssistantBlock(block: ChatMessageBlock): boolean {
+  return !!block.isStreaming && !isOwnMessage(block);
+}
+
+function renderItemContainsStreamingAssistant(item: ChatRenderItem | undefined): boolean {
+  if (!item) return false;
+  if (item.kind === "message") return isStreamingAssistantBlock(item.block);
+  if (item.kind === "group") return item.items.some((groupItem) => isStreamingAssistantBlock(groupItem.block));
+  return false;
+}
+
+function elementTopInScrollViewport(scrollEl: HTMLElement, element: HTMLElement): number {
+  const containerRect = scrollEl.getBoundingClientRect();
+  const rect = element.getBoundingClientRect();
+  return rect.top - containerRect.top;
+}
+
+function elementVisibleInScrollViewport(scrollEl: HTMLElement, element: HTMLElement): boolean {
+  const containerRect = scrollEl.getBoundingClientRect();
+  const rect = element.getBoundingClientRect();
+  return rect.bottom > containerRect.top + 1 && rect.top < containerRect.bottom - 1;
+}
+
+function isNearBottomForStability(scrollEl: HTMLElement): boolean {
+  const threshold = 24;
+  return scrollEl.scrollHeight - (scrollEl.scrollTop + scrollEl.clientHeight) <= threshold;
+}
+
+function updateStreamingVirtualItemViewportTop(itemId: string, element?: HTMLElement | null) {
+  const normalizedItemId = String(itemId || "").trim();
+  if (!normalizedItemId) return;
+  const scrollEl = scrollContainer.value;
+  const target = element || observedVirtualItemElements.get(normalizedItemId) || null;
+  const item = renderItemById.value.get(normalizedItemId);
+  if (!scrollEl || !target || !target.isConnected || !renderItemContainsStreamingAssistant(item) || !elementVisibleInScrollViewport(scrollEl, target)) {
+    streamingVirtualItemViewportTop.delete(normalizedItemId);
+    return;
+  }
+  streamingVirtualItemViewportTop.set(normalizedItemId, elementTopInScrollViewport(scrollEl, target));
+}
+
+function syncVisibleStreamingVirtualItemViewportTops() {
+  for (const [itemId, element] of observedVirtualItemElements.entries()) {
+    updateStreamingVirtualItemViewportTop(itemId, element);
+  }
+}
+
+function armProgrammaticScrollPaginationSuppression() {
+  suppressOlderHistoryPaginationOnce.value = true;
+  if (pendingProgrammaticScrollPaginationResetFrame) {
+    cancelAnimationFrame(pendingProgrammaticScrollPaginationResetFrame);
+    pendingProgrammaticScrollPaginationResetFrame = 0;
+  }
+  pendingProgrammaticScrollPaginationResetFrame = requestAnimationFrame(() => {
+    pendingProgrammaticScrollPaginationResetFrame = requestAnimationFrame(() => {
+      suppressOlderHistoryPaginationOnce.value = false;
+      pendingProgrammaticScrollPaginationResetFrame = 0;
+    });
+  });
+}
+
+function handleVirtualItemResize(element: HTMLElement) {
+  const itemId = String(element.getAttribute("data-render-item-id") || "").trim();
+  if (!itemId) return;
+  const scrollEl = scrollContainer.value;
+  const previousTop = streamingVirtualItemViewportTop.get(itemId);
+  virtualizer.value.measureElement(element);
+  const nextHeight = Math.round(element.getBoundingClientRect().height);
+  measuredVirtualItemHeights.set(itemId, nextHeight);
+  observedVirtualItemElements.set(itemId, element);
+  if (
+    scrollEl
+    && previousTop !== undefined
+    && !isNearBottomForStability(scrollEl)
+    && renderItemContainsStreamingAssistant(renderItemById.value.get(itemId))
+    && elementVisibleInScrollViewport(scrollEl, element)
+  ) {
+    const nextTop = elementTopInScrollViewport(scrollEl, element);
+    const delta = nextTop - previousTop;
+    if (Math.abs(delta) >= 1) {
+      armProgrammaticScrollPaginationSuppression();
+      scrollEl.scrollTop += delta;
+      onScroll();
+    }
+  }
+  updateStreamingVirtualItemViewportTop(itemId, element);
+}
+
 function scheduleVirtualMeasure() {
   if (pendingMeasureFrame) return;
   void nextTick(() => {
@@ -1421,7 +1530,9 @@ function scheduleVirtualMeasure() {
     pendingMeasureFrame = requestAnimationFrame(() => {
       pendingMeasureFrame = 0;
       refreshObservedVirtualItemElements();
+      syncVisibleStreamingVirtualItemViewportTops();
       virtualizer.value.measure();
+      syncVisibleStreamingVirtualItemViewportTops();
     });
   });
 }
@@ -1430,25 +1541,46 @@ function measureVirtualRow(itemId: string, element: Element | ComponentPublicIns
   const normalizedItemId = String(itemId || "").trim();
   if (!element) {
     if (normalizedItemId) {
+      const previousResizeElement = observedVirtualItemResizeElements.get(normalizedItemId);
+      if (previousResizeElement && virtualItemResizeObserver) {
+        virtualItemResizeObserver.unobserve(previousResizeElement);
+      }
+      observedVirtualItemResizeElements.delete(normalizedItemId);
       observedVirtualItemElements.delete(normalizedItemId);
       measuredVirtualItemHeights.delete(normalizedItemId);
+      streamingVirtualItemViewportTop.delete(normalizedItemId);
     }
     return;
   }
   const target = element instanceof Element ? element : ((element.$el as Element | undefined) ?? null);
   if (!target) {
     if (normalizedItemId) {
+      const previousResizeElement = observedVirtualItemResizeElements.get(normalizedItemId);
+      if (previousResizeElement && virtualItemResizeObserver) {
+        virtualItemResizeObserver.unobserve(previousResizeElement);
+      }
+      observedVirtualItemResizeElements.delete(normalizedItemId);
       observedVirtualItemElements.delete(normalizedItemId);
       measuredVirtualItemHeights.delete(normalizedItemId);
+      streamingVirtualItemViewportTop.delete(normalizedItemId);
     }
     return;
   }
   virtualizer.value.measureElement(target);
   const resolvedItemId = normalizedItemId || String(target.getAttribute("data-render-item-id") || "").trim();
   if (resolvedItemId && target instanceof HTMLElement) {
+    const previousResizeElement = observedVirtualItemResizeElements.get(resolvedItemId);
+    if (previousResizeElement && previousResizeElement !== target && virtualItemResizeObserver) {
+      virtualItemResizeObserver.unobserve(previousResizeElement);
+    }
+    if (virtualItemResizeObserver && previousResizeElement !== target) {
+      virtualItemResizeObserver.observe(target);
+    }
+    observedVirtualItemResizeElements.set(resolvedItemId, target);
     const nextHeight = Math.round(target.getBoundingClientRect().height);
     measuredVirtualItemHeights.set(resolvedItemId, nextHeight);
     observedVirtualItemElements.set(resolvedItemId, target);
+    updateStreamingVirtualItemViewportTop(resolvedItemId, target);
   }
 }
 
@@ -1554,10 +1686,19 @@ function onConversationScroll() {
   const scrollEl = scrollContainer.value;
   onScroll();
   revealChatScrollbar();
-  maybeRequestOlderHistory();
+  if (suppressOlderHistoryPaginationOnce.value) {
+    suppressOlderHistoryPaginationOnce.value = false;
+    if (pendingProgrammaticScrollPaginationResetFrame) {
+      cancelAnimationFrame(pendingProgrammaticScrollPaginationResetFrame);
+      pendingProgrammaticScrollPaginationResetFrame = 0;
+    }
+  } else {
+    maybeRequestOlderHistory();
+  }
   if (scrollEl) {
     lastConversationScrollTop = scrollEl.scrollTop;
   }
+  syncVisibleStreamingVirtualItemViewportTops();
 }
 
 function handleJumpToBottom() {
@@ -2356,6 +2497,19 @@ onMounted(() => {
     chatScrollResizeObserver = new ResizeObserver(updateChatScrollbarThumb);
     chatScrollResizeObserver.observe(scroller);
   }
+  if (typeof ResizeObserver !== "undefined") {
+    virtualItemResizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (!(entry.target instanceof HTMLElement)) continue;
+        handleVirtualItemResize(entry.target);
+      }
+    });
+    for (const element of observedVirtualItemResizeElements.values()) {
+      if (!element.isConnected) continue;
+      virtualItemResizeObserver.observe(element);
+    }
+    syncVisibleStreamingVirtualItemViewportTops();
+  }
   void refreshIdeContextGroups();
   void startIdeContextEventListener();
   startIdeContextRefreshTimer();
@@ -2367,6 +2521,8 @@ onBeforeUnmount(() => {
   stopIdeContextEventListener();
   chatScrollResizeObserver?.disconnect();
   chatScrollResizeObserver = null;
+  virtualItemResizeObserver?.disconnect();
+  virtualItemResizeObserver = null;
   if (pendingMeasureFrame) {
     cancelAnimationFrame(pendingMeasureFrame);
     pendingMeasureFrame = 0;
@@ -2375,7 +2531,14 @@ onBeforeUnmount(() => {
     cancelAnimationFrame(pendingPinToBottomFrame);
     pendingPinToBottomFrame = 0;
   }
+  if (pendingProgrammaticScrollPaginationResetFrame) {
+    cancelAnimationFrame(pendingProgrammaticScrollPaginationResetFrame);
+    pendingProgrammaticScrollPaginationResetFrame = 0;
+  }
   observedVirtualItemElements.clear();
+  observedVirtualItemResizeElements.clear();
+  measuredVirtualItemHeights.clear();
+  streamingVirtualItemViewportTop.clear();
   stopAudioPlayback();
 });
 
