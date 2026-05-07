@@ -126,10 +126,7 @@
                   :title="t('config.remoteIm.channelDetails')"
                   @click.stop="openContactConfigModal(item.id)"
                 >
-                  <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
+                  <Settings class="h-4 w-4" />
                 </button>
             </div>
           </li>
@@ -617,16 +614,26 @@
             联系人消息始终进入该联系人的独立会话；处理部门只决定后台处理消息的部门与模型。
           </div>
           </div>
-          <div class="mt-3 pt-3 border-t border-base-300 flex items-center justify-end gap-2 shrink-0">
+          <div class="mt-3 pt-3 border-t border-base-300 flex items-center justify-between gap-2 shrink-0">
+            <button
+              class="btn btn-ghost text-error"
+              :disabled="contactSaving || contactDeleting || !selectedContact"
+              @click="selectedContact && deleteContact(selectedContact)"
+            >
+              <Trash2 class="h-3.5 w-3.5" />
+              {{ t("common.delete") }}
+            </button>
+            <div class="flex items-center gap-2">
             <button class="btn btn-ghost" :disabled="!contactDraftDirty || contactSaving" @click="resetContactDraft">
               <RotateCcw class="h-3.5 w-3.5" />
               {{ t("common.reset") }}
             </button>
-            <button class="btn btn-primary" :disabled="!contactDraftDirty || contactSaving" @click="saveContactDraft">
+            <button class="btn btn-primary" :disabled="!contactDraftDirty || contactSaving || contactDeleting" @click="saveContactDraft">
               <Save v-if="!contactSaving" class="h-3.5 w-3.5" />
               <span v-else class="loading loading-spinner loading-xs"></span>
               {{ t("common.save") }}
             </button>
+            </div>
           </div>
         </div>
       </div>
@@ -637,7 +644,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Plus, RefreshCw, RotateCcw, Save, SquareTerminal, Trash2 } from "lucide-vue-next";
+import { Plus, RefreshCw, RotateCcw, Save, Settings, SquareTerminal, Trash2 } from "lucide-vue-next";
 import { invokeTauri } from "../../../../services/tauri-api";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { AppConfig, RemoteImChannelConfig, RemoteImContact, RemoteImPlatform, ShellWorkspace } from "../../../../types/app";
@@ -694,6 +701,7 @@ const channelConfigModalOpen = ref(false);
 const contactConfigModalOpen = ref(false);
 const selectedContactId = ref<string>("");
 const contactSaving = ref(false);
+const contactDeleting = ref(false);
 const channelRuntimeStates = ref<Record<string, ChannelConnectionStatus | null>>({});
 const weixinLoginStates = ref<Record<string, WeixinLoginStatus | null>>({});
 const weixinLoginBusy = ref(false);
@@ -1630,6 +1638,35 @@ function contactSecondaryText(item: RemoteImContact): string {
     return item.remoteContactType === "group" ? "微信群联系人" : "微信个人联系人";
   }
   return item.remoteContactId;
+}
+
+async function deleteContact(item: RemoteImContact) {
+  if (contactDeleting.value) return;
+  const displayName = contactSafeDisplayName(item);
+  const confirmed = window.confirm(`确定删除联系人“${displayName}”吗？\n仅删除联系人记录，不清理已有会话历史。`);
+  if (!confirmed) return;
+  contactDeleting.value = true;
+  try {
+    const removed = await invokeTauri<boolean>("remote_im_delete_contact", {
+      input: { contactId: item.id },
+    });
+    if (!removed) {
+      props.setStatusAction(`删除联系人失败：未找到 ${displayName}`);
+      return;
+    }
+    if (selectedContactId.value === item.id) {
+      contactConfigModalOpen.value = false;
+      selectedContactId.value = "";
+      contactDraft.value = null;
+      contactDraftSnapshot.value = "";
+    }
+    await refreshContacts();
+    props.setStatusAction(`已删除联系人：${displayName}。已有会话历史已保留。`);
+  } catch (error) {
+    props.setStatusAction(`删除联系人失败：${String(error)}`);
+  } finally {
+    contactDeleting.value = false;
+  }
 }
 
 function contactDepartmentLabel(item: RemoteImContact): string {
