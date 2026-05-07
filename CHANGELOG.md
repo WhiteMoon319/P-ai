@@ -2,6 +2,7 @@
 
 ## 进行中
 
+- 修复（chat-tool-loop-batch-collect-before-finish）：模型单轮返回多个工具调用时，后端保持顺序串行执行，但不再因首个 `organize_context`、`task complete`、`plan` 或引导闭口结果提前结束整轮；改为先收集本轮全部工具结果，再统一决定收口与续调，避免后续同批工具被跳过。
 - 修复（chat-stream-toolcall-explicit-completion）：流式工具状态改为按 `toolCallId` 精确同步开始与完成；前后端不再依赖“下一次工具启动”去推断上一次结束，`archive`、重试、切模型等纯状态提示也不再混入工具条目列表。
 - 优化（chat-reasoning-status-count-and-header-fix）：聊天流式气泡顶部状态修正为仅在真实执行中显示工具名，工具完成后继续思考时恢复“正在思考中”；思考折叠标题补充实时思维链字符数显示，便于观察 reasoning 增长。
 - 调整（config-department-single-assignee-ui-guard）：部门配置页暂时收回“多人格”入口；当前每个部门在前端只允许绑定 1 个人格，并显示“未来功能”提示。

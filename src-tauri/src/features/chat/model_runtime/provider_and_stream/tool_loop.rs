@@ -196,6 +196,92 @@ fn tool_loop_guided_close_reply(
     }
 }
 
+#[derive(Debug, Clone)]
+enum DeferredToolLoopOutcome {
+    OrganizeContext,
+    TaskComplete(String),
+    Plan(TerminalToolResultMessage),
+}
+
+fn deferred_tool_loop_outcome_from_result(
+    tool_name: &str,
+    tool_args: &str,
+    tool_result: &ProviderToolResult,
+) -> Option<DeferredToolLoopOutcome> {
+    let tool_result_text = tool_result.display_text.as_str();
+    if organize_context_succeeded(tool_name, tool_result_text) {
+        return Some(DeferredToolLoopOutcome::OrganizeContext);
+    }
+    if let Some(final_text) = terminal_task_complete_result(tool_name, tool_args, tool_result) {
+        return Some(DeferredToolLoopOutcome::TaskComplete(final_text));
+    }
+    terminal_plan_result(tool_name, tool_args, tool_result).map(DeferredToolLoopOutcome::Plan)
+}
+
+fn finalize_deferred_tool_loop_outcome(
+    outcome: DeferredToolLoopOutcome,
+    full_reasoning_standard: String,
+    tool_history_events: Vec<Value>,
+    trusted_input_tokens: Option<u64>,
+    auto_compaction_context: Option<&ToolLoopAutoCompactionContext>,
+) -> ModelReply {
+    match outcome {
+        DeferredToolLoopOutcome::OrganizeContext => ModelReply {
+            assistant_text: String::new(),
+            final_response_text: String::new(),
+            reasoning_standard: full_reasoning_standard,
+            reasoning_inline: String::new(),
+            assistant_provider_meta: None,
+            tool_history_events: tool_history_without_organize_context(tool_history_events),
+            suppress_assistant_message: true,
+            trusted_input_tokens: None,
+        },
+        DeferredToolLoopOutcome::TaskComplete(final_text) => ModelReply {
+            assistant_text: final_text.clone(),
+            final_response_text: final_text,
+            reasoning_standard: full_reasoning_standard,
+            reasoning_inline: String::new(),
+            assistant_provider_meta: None,
+            tool_history_events,
+            suppress_assistant_message: false,
+            trusted_input_tokens,
+        },
+        DeferredToolLoopOutcome::Plan(plan_result) => {
+            if plan_result
+                .provider_meta
+                .as_ref()
+                .and_then(|meta| meta.get("messageKind"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                == Some("plan_complete")
+            {
+                if let Some(context) = auto_compaction_context {
+                    if let Err(err) = message_store::active_plan_complete_latest_in_progress(
+                        &context.data_path,
+                        &context.conversation_id,
+                        plan_result.completion_text.as_deref(),
+                    ) {
+                        runtime_log_warn(format!(
+                            "[计划] 完成状态写入失败 conversation_id={} error={}",
+                            context.conversation_id, err
+                        ));
+                    }
+                }
+            }
+            ModelReply {
+                assistant_text: plan_result.assistant_text.clone(),
+                final_response_text: plan_result.assistant_text,
+                reasoning_standard: full_reasoning_standard,
+                reasoning_inline: String::new(),
+                assistant_provider_meta: plan_result.provider_meta,
+                tool_history_events,
+                suppress_assistant_message: false,
+                trusted_input_tokens,
+            }
+        }
+    }
+}
+
 fn send_text_delta_event(
     on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
     text: &str,
@@ -363,6 +449,7 @@ fn json_string_field(value: &Value, keys: &[&str]) -> Option<String> {
     })
 }
 
+#[derive(Debug, Clone)]
 struct TerminalToolResultMessage {
     assistant_text: String,
     completion_text: Option<String>,
@@ -1022,6 +1109,8 @@ async fn run_genai_tool_loop(
         assistant_message =
             assistant_message.with_reasoning_content(Some(turn_reasoning.trim().to_string()));
         messages.push(assistant_message);
+        let mut deferred_outcome = None::<DeferredToolLoopOutcome>;
+        let mut guided_close_requested = false;
 
         for tool_call in turn_tool_calls {
             let genai::chat::ToolCall {
@@ -1155,71 +1244,12 @@ async fn run_genai_tool_loop(
                     "[引导投送] 工具轮次完成后闭合当前调度: session={}, tool_name={}",
                     chat_session_key, tool_name
                 ));
-                return Ok(tool_loop_guided_close_reply(
-                    full_reasoning_standard,
-                    tool_history_events,
-                    trusted_input_tokens,
-                ));
+                guided_close_requested = true;
             }
 
-            if organize_context_succeeded(&tool_name, &tool_result_text) {
-                return Ok(ModelReply {
-                    assistant_text: String::new(),
-                    final_response_text: String::new(),
-                    reasoning_standard: full_reasoning_standard,
-                    reasoning_inline: String::new(),
-                    assistant_provider_meta: None,
-                    tool_history_events: tool_history_without_organize_context(tool_history_events),
-                    suppress_assistant_message: true,
-                    trusted_input_tokens: None,
-                });
-            }
-            if let Some(final_text) =
-                terminal_task_complete_result(&tool_name, &tool_args, &tool_result)
-            {
-                return Ok(ModelReply {
-                    assistant_text: final_text.clone(),
-                    final_response_text: final_text,
-                    reasoning_standard: full_reasoning_standard,
-                    reasoning_inline: String::new(),
-                    assistant_provider_meta: None,
-                    tool_history_events,
-                    suppress_assistant_message: false,
-                    trusted_input_tokens,
-                });
-            }
-            if let Some(plan_result) = terminal_plan_result(&tool_name, &tool_args, &tool_result) {
-                if plan_result
-                    .provider_meta
-                    .as_ref()
-                    .and_then(|meta| meta.get("messageKind"))
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    == Some("plan_complete")
-                {
-                    if let Some(context) = auto_compaction_context {
-                        if let Err(err) = message_store::active_plan_complete_latest_in_progress(
-                            &context.data_path,
-                            &context.conversation_id,
-                            plan_result.completion_text.as_deref(),
-                        ) {
-                            runtime_log_warn(format!(
-                                "[计划] 完成状态写入失败 conversation_id={} error={}",
-                                context.conversation_id, err
-                            ));
-                        }
-                    }
-                }
-                return Ok(ModelReply {
-                    assistant_text: plan_result.assistant_text.clone(),
-                    final_response_text: plan_result.assistant_text,
-                    reasoning_standard: full_reasoning_standard,
-                    reasoning_inline: String::new(),
-                    assistant_provider_meta: plan_result.provider_meta,
-                    tool_history_events,
-                    suppress_assistant_message: false,
-                    trusted_input_tokens,
-                });
+            if deferred_outcome.is_none() {
+                deferred_outcome =
+                    deferred_tool_loop_outcome_from_result(&tool_name, &tool_args, &tool_result);
             }
             if should_stop_after_contact_tool(&tool_name, &tool_result_text) {
                 stop_after_remote_im_done_in_turn = true;
@@ -1266,9 +1296,24 @@ async fn run_genai_tool_loop(
                     &tool_history_events,
                 );
             }
-            if stop_after_remote_im_done_in_turn {
-                break;
-            }
+        }
+
+        if guided_close_requested {
+            return Ok(tool_loop_guided_close_reply(
+                full_reasoning_standard,
+                tool_history_events,
+                trusted_input_tokens,
+            ));
+        }
+
+        if let Some(outcome) = deferred_outcome {
+            return Ok(finalize_deferred_tool_loop_outcome(
+                outcome,
+                full_reasoning_standard,
+                tool_history_events,
+                trusted_input_tokens,
+                auto_compaction_context,
+            ));
         }
 
         if stop_after_remote_im_done_in_turn {
@@ -1508,6 +1553,8 @@ async fn run_genai_tool_loop_non_stream(
         assistant_message =
             assistant_message.with_reasoning_content(Some(turn_reasoning.trim().to_string()));
         messages.push(assistant_message);
+        let mut deferred_outcome = None::<DeferredToolLoopOutcome>;
+        let mut guided_close_requested = false;
 
         for tool_call in turn_tool_calls {
             let genai::chat::ToolCall {
@@ -1640,71 +1687,12 @@ async fn run_genai_tool_loop_non_stream(
                     "[引导投送] 工具轮次完成后闭合当前非流式调度: session={}, tool_name={}",
                     chat_session_key, tool_name
                 ));
-                return Ok(tool_loop_guided_close_reply(
-                    full_reasoning_standard,
-                    tool_history_events,
-                    trusted_input_tokens,
-                ));
+                guided_close_requested = true;
             }
 
-            if organize_context_succeeded(&tool_name, &tool_result_text) {
-                return Ok(ModelReply {
-                    assistant_text: String::new(),
-                    final_response_text: String::new(),
-                    reasoning_standard: full_reasoning_standard,
-                    reasoning_inline: String::new(),
-                    assistant_provider_meta: None,
-                    tool_history_events: tool_history_without_organize_context(tool_history_events),
-                    suppress_assistant_message: true,
-                    trusted_input_tokens: None,
-                });
-            }
-            if let Some(final_text) =
-                terminal_task_complete_result(&tool_name, &tool_args, &tool_result)
-            {
-                return Ok(ModelReply {
-                    assistant_text: final_text.clone(),
-                    final_response_text: final_text,
-                    reasoning_standard: full_reasoning_standard,
-                    reasoning_inline: String::new(),
-                    assistant_provider_meta: None,
-                    tool_history_events,
-                    suppress_assistant_message: false,
-                    trusted_input_tokens,
-                });
-            }
-            if let Some(plan_result) = terminal_plan_result(&tool_name, &tool_args, &tool_result) {
-                if plan_result
-                    .provider_meta
-                    .as_ref()
-                    .and_then(|meta| meta.get("messageKind"))
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    == Some("plan_complete")
-                {
-                    if let Some(context) = auto_compaction_context {
-                        if let Err(err) = message_store::active_plan_complete_latest_in_progress(
-                            &context.data_path,
-                            &context.conversation_id,
-                            plan_result.completion_text.as_deref(),
-                        ) {
-                            runtime_log_warn(format!(
-                                "[计划] 完成状态写入失败 conversation_id={} error={}",
-                                context.conversation_id, err
-                            ));
-                        }
-                    }
-                }
-                return Ok(ModelReply {
-                    assistant_text: plan_result.assistant_text.clone(),
-                    final_response_text: plan_result.assistant_text,
-                    reasoning_standard: full_reasoning_standard,
-                    reasoning_inline: String::new(),
-                    assistant_provider_meta: plan_result.provider_meta,
-                    tool_history_events,
-                    suppress_assistant_message: false,
-                    trusted_input_tokens,
-                });
+            if deferred_outcome.is_none() {
+                deferred_outcome =
+                    deferred_tool_loop_outcome_from_result(&tool_name, &tool_args, &tool_result);
             }
             if should_stop_after_contact_tool(&tool_name, &tool_result_text) {
                 stop_after_remote_im_done_in_turn = true;
@@ -1751,9 +1739,24 @@ async fn run_genai_tool_loop_non_stream(
                     &tool_history_events,
                 );
             }
-            if stop_after_remote_im_done_in_turn {
-                break;
-            }
+        }
+
+        if guided_close_requested {
+            return Ok(tool_loop_guided_close_reply(
+                full_reasoning_standard,
+                tool_history_events,
+                trusted_input_tokens,
+            ));
+        }
+
+        if let Some(outcome) = deferred_outcome {
+            return Ok(finalize_deferred_tool_loop_outcome(
+                outcome,
+                full_reasoning_standard,
+                tool_history_events,
+                trusted_input_tokens,
+                auto_compaction_context,
+            ));
         }
 
         if stop_after_remote_im_done_in_turn {
@@ -1932,6 +1935,49 @@ mod tool_loop_tests {
         );
 
         assert_eq!(final_text, None);
+    }
+
+    #[test]
+    fn deferred_tool_loop_outcome_should_keep_first_terminal_signal_in_batch() {
+        let mut deferred = None::<DeferredToolLoopOutcome>;
+
+        let task_result = ProviderToolResult::text(
+            serde_json::json!({
+                "taskId": "task-1",
+                "completionState": "completed",
+                "completionConclusion": "先完成任务"
+            })
+            .to_string(),
+        );
+        if deferred.is_none() {
+            deferred = deferred_tool_loop_outcome_from_result(
+                "task",
+                r#"{"action":"complete","task_id":"task-1","completion_state":"completed"}"#,
+                &task_result,
+            );
+        }
+
+        let plan_result = ProviderToolResult::text(
+            serde_json::json!({
+                "action": "present",
+                "context": "后面又来了一个计划"
+            })
+            .to_string(),
+        );
+        if deferred.is_none() {
+            deferred = deferred_tool_loop_outcome_from_result(
+                "plan",
+                r#"{"action":"present","context":"后面又来了一个计划"}"#,
+                &plan_result,
+            );
+        }
+
+        match deferred {
+            Some(DeferredToolLoopOutcome::TaskComplete(text)) => {
+                assert_eq!(text, "先完成任务");
+            }
+            other => panic!("unexpected deferred outcome: {:?}", other),
+        }
     }
 
     #[test]
