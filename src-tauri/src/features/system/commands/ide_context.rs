@@ -158,22 +158,30 @@ fn ide_context_issue_bridge_token(runtime: &IdeContextRuntime) -> Result<String,
 fn ide_context_consume_bridge_token(
     runtime: &IdeContextRuntime,
     provided: &str,
-) -> Result<String, String> {
+) -> Result<String, (String, Option<String>)> {
     let provided = provided.trim();
     if provided.is_empty() {
-        return Err("authToken is required".to_string());
+        return Err(("authToken is required".to_string(), None));
     }
     let mut auth = runtime
         .bridge_auth
         .lock()
-        .map_err(|_| "Failed to lock ide context bridge auth".to_string())?;
+        .map_err(|_| ("Failed to lock ide context bridge auth".to_string(), None))?;
     let now = now_utc();
     ide_context_prune_expired_bridge_tokens(&mut auth, now);
     if auth.valid_tokens.is_empty() {
-        return Err("IDE context bridge token unavailable".to_string());
+        let refreshed_token = ide_context_generate_bridge_token();
+        auth.valid_tokens.insert(
+            refreshed_token.clone(),
+            now + time::Duration::seconds(IDE_CONTEXT_AUTH_TOKEN_TTL_SECS),
+        );
+        return Err((
+            "IDE context bridge token expired, discovery refreshed".to_string(),
+            Some(refreshed_token),
+        ));
     }
     if !auth.valid_tokens.contains_key(provided) {
-        return Err("invalid authToken".to_string());
+        return Err(("invalid authToken".to_string(), None));
     }
     let next_token = ide_context_generate_bridge_token();
     auth.valid_tokens.insert(
@@ -780,7 +788,17 @@ async fn ide_context_ws_handle_connection(
                                         eprintln!("[IDE 上下文桥] 轮换发现 token 失败: {}", err);
                                     }
                                 }
-                                Err(err) => {
+                                Err((err, refreshed_token)) => {
+                                    if let Some(refreshed_token) = refreshed_token.as_deref() {
+                                        if let Err(publish_err) =
+                                            publish_ide_context_bridge_discovery(port, refreshed_token)
+                                        {
+                                            eprintln!(
+                                                "[IDE 上下文桥] 过期后重写发现 token 失败: {}",
+                                                publish_err
+                                            );
+                                        }
+                                    }
                                     let _ = ws_sender
                                         .send(tokio_tungstenite::tungstenite::Message::Text(
                                             serde_json::json!({"type": "ack", "ok": false, "error": err})
@@ -868,6 +886,25 @@ mod ide_context_tests {
         let runtime = IdeContextRuntime::new();
         let _ = ide_context_issue_bridge_token(&runtime).expect("issue token");
         let err = ide_context_consume_bridge_token(&runtime, "bad-token").expect_err("invalid token");
-        assert!(err.contains("invalid authToken"));
+        assert!(err.0.contains("invalid authToken"));
+    }
+
+    #[test]
+    fn ide_context_bridge_tokens_reissue_when_cache_expired() {
+        let runtime = IdeContextRuntime::new();
+        {
+            let mut auth = runtime.bridge_auth.lock().expect("lock auth");
+            auth.valid_tokens.insert(
+                "expired-token".to_string(),
+                time::OffsetDateTime::now_utc() - time::Duration::seconds(1),
+            );
+        }
+
+        let err = ide_context_consume_bridge_token(&runtime, "expired-token")
+            .expect_err("expired token should refresh discovery");
+        assert!(err.0.contains("expired"));
+        let refreshed = err.1.expect("should issue refreshed token");
+        let auth = runtime.bridge_auth.lock().expect("lock auth");
+        assert!(auth.valid_tokens.contains_key(&refreshed));
     }
 }
