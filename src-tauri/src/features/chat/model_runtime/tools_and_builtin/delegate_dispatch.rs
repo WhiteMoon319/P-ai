@@ -315,6 +315,29 @@ fn spawn_delegate_task(
     });
 }
 
+async fn run_sync_delegate_on_child_task(
+    app_state: AppState,
+    delegate: DelegateEntry,
+    target_api_config_ids: Vec<String>,
+    parent_chat_session_key: String,
+) -> Result<SendChatResult, String> {
+    // 同步委托仍需等待结果，但不要把子会话整条发送链路直接压在当前工具调用栈上。
+    // 远程联系人路径会额外叠加一层上下文准备与 IM 规则处理，直接 await 容易把 tokio worker 栈顶爆。
+    let join = tokio::spawn(async move {
+        delegate_run_thread_to_completion(
+            app_state,
+            delegate,
+            target_api_config_ids,
+            Some(parent_chat_session_key),
+        )
+        .await
+    });
+    match join.await {
+        Ok(result) => result,
+        Err(err) => Err(format!("同步委托子任务异常结束: {err}")),
+    }
+}
+
 fn resolve_delegate_call_stack(
     current_thread: Option<&DelegateRuntimeThread>,
     source_department: &DepartmentConfig,
@@ -465,14 +488,13 @@ async fn delegate_execute_sync(
         call_stack,
     )?;
 
-    match delegate_run_thread_to_completion(
+    match run_sync_delegate_on_child_task(
         app_state.clone(),
         delegate.clone(),
         delegate_target_chat_api_config_ids(&preflight.config, &preflight.target_department),
-        Some(session_id.to_string()),
+        session_id.to_string(),
     )
-    .await
-    {
+    .await {
         Ok(run) => Ok(serde_json::json!({
             "ok": true,
             "status": "委托完成",
