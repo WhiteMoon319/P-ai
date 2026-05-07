@@ -2550,7 +2550,6 @@
             hidden_skill_snapshot_cache: Arc::new(Mutex::new(String::new())),
             preferred_release_source: Arc::new(Mutex::new("github".to_string())),
             migration_preview_dirs: Arc::new(Mutex::new(std::collections::HashMap::new())),
-            ide_context_snapshots: Arc::new(Mutex::new(std::collections::HashMap::new())),
             delegate_active_ids: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
         }
     }

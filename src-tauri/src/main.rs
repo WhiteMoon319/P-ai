@@ -264,6 +264,7 @@ async fn start_background_services_after_frontend_ready(
     app_handle: AppHandle,
     startup_state: AppState,
 ) {
+    let ide_context_runtime = app_handle.state::<IdeContextRuntime>().inner().clone();
     start_task_scheduler(startup_state.clone());
     tauri::async_runtime::spawn({
         let probe_state = startup_state.clone();
@@ -276,7 +277,7 @@ async fn start_background_services_after_frontend_ready(
         Err(err) => eprintln!("[工作区加载] 状态=失败，error={err}"),
     }
     start_remote_im_services_after_frontend_ready(app_handle).await;
-    start_ide_context_bridge_server(startup_state);
+    start_ide_context_bridge_server(startup_state, ide_context_runtime);
 }
 
 async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {
@@ -470,6 +471,8 @@ fn main() {
         }))
     };
 
+    let ide_context_runtime = IdeContextRuntime::new();
+
     builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -481,6 +484,7 @@ fn main() {
                 .build(),
         )
         .manage(state)
+        .manage(ide_context_runtime)
         .setup(|app| {
             let app_handle = app.handle().clone();
             match app_handle.state::<AppState>().app_handle.lock() {

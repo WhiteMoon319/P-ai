@@ -89,7 +89,28 @@ const IDE_CONTEXT_BRIDGE_MAX_PORT: u16 = 43139;
 const IDE_CONTEXT_BRIDGE_PATH: &str = "/ide-context";
 const IDE_CONTEXT_BRIDGE_DISCOVERY_FILE: &str = "p-ai-ide-context-bridge.json";
 const IDE_CONTEXT_SNAPSHOT_TTL_SECS: i64 = 30;
+const IDE_CONTEXT_AUTH_TOKEN_TTL_SECS: i64 = 120;
 static IDE_CONTEXT_BRIDGE_STARTED: AtomicBool = AtomicBool::new(false);
+
+#[derive(Debug, Clone)]
+struct IdeContextRuntime {
+    snapshots: Arc<Mutex<std::collections::HashMap<String, IdeContextSnapshot>>>,
+    bridge_auth: Arc<Mutex<IdeContextBridgeAuthRuntime>>,
+}
+
+#[derive(Debug, Default)]
+struct IdeContextBridgeAuthRuntime {
+    valid_tokens: std::collections::HashMap<String, OffsetDateTime>,
+}
+
+impl IdeContextRuntime {
+    fn new() -> Self {
+        Self {
+            snapshots: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            bridge_auth: Arc::new(Mutex::new(IdeContextBridgeAuthRuntime::default())),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -115,33 +136,50 @@ fn ide_context_generate_bridge_token() -> String {
     Uuid::new_v4().to_string()
 }
 
-fn ide_context_initialize_bridge_token(state: &AppState) -> Result<String, String> {
+fn ide_context_prune_expired_bridge_tokens(auth: &mut IdeContextBridgeAuthRuntime, now: OffsetDateTime) {
+    auth.valid_tokens.retain(|_, expires_at| *expires_at > now);
+}
+
+fn ide_context_issue_bridge_token(runtime: &IdeContextRuntime) -> Result<String, String> {
     let token = ide_context_generate_bridge_token();
-    let mut slot = state
-        .ide_context_bridge_token
+    let mut auth = runtime
+        .bridge_auth
         .lock()
-        .map_err(|_| "Failed to lock ide context bridge token".to_string())?;
-    *slot = token.clone();
+        .map_err(|_| "Failed to lock ide context bridge auth".to_string())?;
+    let now = now_utc();
+    ide_context_prune_expired_bridge_tokens(&mut auth, now);
+    auth.valid_tokens.insert(
+        token.clone(),
+        now + time::Duration::seconds(IDE_CONTEXT_AUTH_TOKEN_TTL_SECS),
+    );
     Ok(token)
 }
 
-fn ide_context_consume_bridge_token(state: &AppState, provided: &str) -> Result<String, String> {
+fn ide_context_consume_bridge_token(
+    runtime: &IdeContextRuntime,
+    provided: &str,
+) -> Result<String, String> {
     let provided = provided.trim();
     if provided.is_empty() {
         return Err("authToken is required".to_string());
     }
-    let mut slot = state
-        .ide_context_bridge_token
+    let mut auth = runtime
+        .bridge_auth
         .lock()
-        .map_err(|_| "Failed to lock ide context bridge token".to_string())?;
-    if slot.trim().is_empty() {
+        .map_err(|_| "Failed to lock ide context bridge auth".to_string())?;
+    let now = now_utc();
+    ide_context_prune_expired_bridge_tokens(&mut auth, now);
+    if auth.valid_tokens.is_empty() {
         return Err("IDE context bridge token unavailable".to_string());
     }
-    if slot.as_str() != provided {
+    if !auth.valid_tokens.contains_key(provided) {
         return Err("invalid authToken".to_string());
     }
     let next_token = ide_context_generate_bridge_token();
-    *slot = next_token.clone();
+    auth.valid_tokens.insert(
+        next_token.clone(),
+        now + time::Duration::seconds(IDE_CONTEXT_AUTH_TOKEN_TTL_SECS),
+    );
     Ok(next_token)
 }
 
@@ -446,7 +484,7 @@ async fn bind_ide_context_bridge_listener() -> Result<(tokio::net::TcpListener, 
 
 fn upsert_ide_context_snapshot_internal(
     input: UpsertIdeContextSnapshotInput,
-    state: &AppState,
+    runtime: &IdeContextRuntime,
 ) -> Result<(String, String), String> {
     let client_id = input.client_id.trim().to_string();
     if client_id.is_empty() {
@@ -507,8 +545,8 @@ fn upsert_ide_context_snapshot_internal(
             .collect(),
         updated_at: updated_at.clone(),
     };
-    let mut snapshots = state
-        .ide_context_snapshots
+    let mut snapshots = runtime
+        .snapshots
         .lock()
         .map_err(|_| "Failed to lock ide context snapshots".to_string())?;
     snapshots.insert(client_id.clone(), snapshot);
@@ -519,8 +557,10 @@ fn upsert_ide_context_snapshot_internal(
 fn upsert_ide_context_snapshot(
     input: UpsertIdeContextSnapshotInput,
     state: State<'_, AppState>,
+    ide_context_runtime: State<'_, IdeContextRuntime>,
 ) -> Result<(), String> {
-    let (client_id, updated_at) = upsert_ide_context_snapshot_internal(input, &state)?;
+    let (client_id, updated_at) =
+        upsert_ide_context_snapshot_internal(input, ide_context_runtime.inner())?;
     emit_ide_context_updated(&state, &client_id, &updated_at);
     Ok(())
 }
@@ -528,7 +568,7 @@ fn upsert_ide_context_snapshot(
 #[tauri::command]
 fn query_ide_context_references(
     input: IdeContextWorkspaceQueryInput,
-    state: State<'_, AppState>,
+    ide_context_runtime: State<'_, IdeContextRuntime>,
 ) -> Result<IdeContextQueryResultOutput, String> {
     let workspaces: Vec<IdeContextWorkspaceInput> = input
         .workspaces
@@ -542,8 +582,8 @@ fn query_ide_context_references(
         });
     }
 
-    let mut snapshots = state
-        .ide_context_snapshots
+    let mut snapshots = ide_context_runtime
+        .snapshots
         .lock()
         .map_err(|_| "Failed to lock ide context snapshots".to_string())?;
     ide_context_prune_expired_snapshots(&mut snapshots);
@@ -627,7 +667,7 @@ fn query_ide_context_references(
     })
 }
 
-fn start_ide_context_bridge_server(state: AppState) {
+fn start_ide_context_bridge_server(state: AppState, ide_context_runtime: IdeContextRuntime) {
     if IDE_CONTEXT_BRIDGE_STARTED
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
         .is_err()
@@ -645,7 +685,7 @@ fn start_ide_context_bridge_server(state: AppState) {
             }
         };
         let bridge_url = ide_context_bridge_url(port);
-        let token = match ide_context_initialize_bridge_token(&state) {
+        let token = match ide_context_issue_bridge_token(&ide_context_runtime) {
             Ok(token) => token,
             Err(err) => {
                 IDE_CONTEXT_BRIDGE_STARTED.store(false, Ordering::SeqCst);
@@ -670,8 +710,16 @@ fn start_ide_context_bridge_server(state: AppState) {
                 }
             };
             let state_clone = state.clone();
+            let ide_context_runtime_clone = ide_context_runtime.clone();
             tauri::async_runtime::spawn(async move {
-                ide_context_ws_handle_connection(stream, peer_addr, port, state_clone).await;
+                ide_context_ws_handle_connection(
+                    stream,
+                    peer_addr,
+                    port,
+                    state_clone,
+                    ide_context_runtime_clone,
+                )
+                .await;
             });
         }
     });
@@ -682,6 +730,7 @@ async fn ide_context_ws_handle_connection(
     peer_addr: std::net::SocketAddr,
     port: u16,
     state: AppState,
+    ide_context_runtime: IdeContextRuntime,
 ) {
     let path_holder = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
     let path_holder_clone = path_holder.clone();
@@ -722,7 +771,7 @@ async fn ide_context_ws_handle_connection(
                     Ok(input) => {
                         if !authenticated {
                             match ide_context_consume_bridge_token(
-                                &state,
+                                &ide_context_runtime,
                                 input.auth_token.as_deref().unwrap_or(""),
                             ) {
                                 Ok(next_token) => {
@@ -743,7 +792,7 @@ async fn ide_context_ws_handle_connection(
                                 }
                             }
                         }
-                        match upsert_ide_context_snapshot_internal(input, &state) {
+                        match upsert_ide_context_snapshot_internal(input, &ide_context_runtime) {
                             Ok((client_id, updated_at)) => {
                                 connected_client_id = client_id.clone();
                                 emit_ide_context_updated(&state, &client_id, &updated_at);
@@ -785,7 +834,7 @@ async fn ide_context_ws_handle_connection(
         }
     }
     if !connected_client_id.is_empty() {
-        match state.ide_context_snapshots.lock() {
+        match ide_context_runtime.snapshots.lock() {
             Ok(mut snapshots) => {
                 snapshots.remove(&connected_client_id);
             }
@@ -795,4 +844,30 @@ async fn ide_context_ws_handle_connection(
         }
     }
     eprintln!("[IDE 上下文桥] 客户端已断开: {}", peer_addr);
+}
+
+#[cfg(test)]
+mod ide_context_tests {
+    use super::*;
+
+    #[test]
+    fn ide_context_bridge_tokens_allow_concurrent_consumers_until_expiry() {
+        let runtime = IdeContextRuntime::new();
+        let token = ide_context_issue_bridge_token(&runtime).expect("issue token");
+
+        let next_token = ide_context_consume_bridge_token(&runtime, &token).expect("first consume");
+        assert_ne!(next_token, token);
+
+        let second_next =
+            ide_context_consume_bridge_token(&runtime, &token).expect("second consume with same token");
+        assert_ne!(second_next, token);
+    }
+
+    #[test]
+    fn ide_context_bridge_tokens_reject_unknown_token() {
+        let runtime = IdeContextRuntime::new();
+        let _ = ide_context_issue_bridge_token(&runtime).expect("issue token");
+        let err = ide_context_consume_bridge_token(&runtime, "bad-token").expect_err("invalid token");
+        assert!(err.contains("invalid authToken"));
+    }
 }
