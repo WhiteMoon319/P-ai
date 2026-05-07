@@ -267,6 +267,7 @@ async fn start_background_services_after_frontend_ready(
         Err(err) => eprintln!("[工作区加载] 状态=失败，error={err}"),
     }
     start_remote_im_services_after_frontend_ready(app_handle).await;
+    start_ide_context_bridge_server(startup_state);
 }
 
 async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {
@@ -386,7 +387,6 @@ fn main() {
             return;
         }
     };
-    start_ide_context_bridge_server(state.clone());
     init_last_panic_snapshot_slot(state.last_panic_snapshot.clone());
     {
         let panic_slot = state.last_panic_snapshot.clone();
