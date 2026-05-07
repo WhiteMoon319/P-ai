@@ -158,6 +158,10 @@ fn conversation_visible_in_foreground_lists(conversation: &Conversation) -> bool
         && !conversation_is_remote_im_contact(conversation)
 }
 
+fn conversation_is_unarchived(conversation: &Conversation) -> bool {
+    !conversation_is_archived(conversation)
+}
+
 fn conversation_is_archived(conversation: &Conversation) -> bool {
     if conversation.status.trim() == "archived" {
         return true;
@@ -175,8 +179,7 @@ fn conversation_is_archived(conversation: &Conversation) -> bool {
 }
 
 fn conversation_is_unarchived_foreground(conversation: &Conversation) -> bool {
-    !conversation_is_archived(conversation)
-        && conversation_visible_in_foreground_lists(conversation)
+    conversation_is_unarchived(conversation) && conversation_visible_in_foreground_lists(conversation)
 }
 
 const SUMMARY_CONTEXT_MESSAGE_SCHEMA_VERSION: u64 = 2;

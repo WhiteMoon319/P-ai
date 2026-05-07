@@ -180,7 +180,7 @@ impl ConversationService {
                     "Unarchived conversation not found: {normalized_conversation_id}: {err}"
                 )
             })?;
-        self.ensure_unarchived_foreground_conversation(&conversation, normalized_conversation_id)?;
+        self.ensure_unarchived_conversation(&conversation, normalized_conversation_id)?;
         let result = reader(&conversation)?;
         drop(guard);
         Ok(result)
@@ -221,13 +221,12 @@ impl ConversationService {
         Ok(result)
     }
 
-    fn ensure_unarchived_foreground_conversation(
+    fn ensure_unarchived_conversation(
         &self,
         conversation: &Conversation,
         conversation_id: &str,
     ) -> Result<(), String> {
-        if !conversation.summary.trim().is_empty()
-            || !conversation_visible_in_foreground_lists(conversation)
+        if !conversation_is_unarchived(conversation)
         {
             return Err(format!(
                 "Unarchived conversation not found: {}",
@@ -287,7 +286,7 @@ impl ConversationService {
                     "Unarchived conversation not found: {normalized_conversation_id}: {err}"
                 )
             })?;
-        self.ensure_unarchived_foreground_conversation(&conversation, normalized_conversation_id)?;
+        self.ensure_unarchived_conversation(&conversation, normalized_conversation_id)?;
         let result = reader(&conversation)?;
         drop(guard);
         Ok(result)
@@ -328,7 +327,7 @@ impl ConversationService {
     ) -> Result<Option<Conversation>, String> {
         Ok(self
             .try_read_persisted_conversation(state, conversation_id)?
-            .filter(|conversation| conversation.summary.trim().is_empty()))
+            .filter(conversation_is_unarchived))
     }
 
     fn resolve_latest_foreground_conversation_id(

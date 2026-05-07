@@ -2979,6 +2979,82 @@
     }
 
     #[test]
+    fn remote_im_contact_conversation_should_be_readable_and_writable_as_unarchived() {
+        let state = test_chat_runtime_state();
+        write_config(&state.config_path, &AppConfig::default()).expect("write config");
+        let now = now_iso();
+        let contact = RemoteImContact {
+            id: "contact-a".to_string(),
+            channel_id: "channel-a".to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            remote_contact_type: "group".to_string(),
+            remote_contact_id: "remote-a".to_string(),
+            remote_contact_name: "测试群".to_string(),
+            remark_name: String::new(),
+            allow_send: false,
+            allow_send_files: false,
+            allow_receive: true,
+            activation_mode: "never".to_string(),
+            activation_keywords: Vec::new(),
+            patience_seconds: default_remote_im_contact_patience_seconds(),
+            activation_cooldown_seconds: 0,
+            route_mode: "dedicated_contact_conversation".to_string(),
+            bound_department_id: Some(REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID.to_string()),
+            bound_conversation_id: Some("conversation-contact-old".to_string()),
+            processing_mode: "continuous".to_string(),
+            response_strategy: default_remote_im_contact_response_strategy(),
+            response_guidance: default_remote_im_contact_response_guidance(),
+            last_activated_at: None,
+            last_message_at: Some(now.clone()),
+            dingtalk_session_webhook: None,
+            dingtalk_session_webhook_expired_time: None,
+            shell_workspaces: Vec::new(),
+        };
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact.clone());
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime state");
+
+        let mut conversation = build_conversation_record(
+            "",
+            "",
+            REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID,
+            "联系人 · 测试群",
+            CONVERSATION_KIND_REMOTE_IM_CONTACT,
+            Some(remote_im_contact_conversation_key(&contact)),
+            None,
+        );
+        conversation.id = "conversation-contact-old".to_string();
+        conversation.messages.push(test_text_message("user", "历史消息", &now));
+        conversation.updated_at = now.clone();
+        conversation.last_user_at = Some(now.clone());
+        state_schedule_conversation_persist(&state, &conversation, true)
+            .expect("persist conversation");
+
+        let messages = conversation_service()
+            .read_unarchived_messages(&state, "conversation-contact-old")
+            .expect("read remote im contact conversation as unarchived");
+        assert_eq!(messages.len(), 1);
+        match &messages[0].parts[0] {
+            MessagePart::Text { text } => assert_eq!(text, "历史消息"),
+            _ => panic!("expected text message"),
+        }
+
+        conversation_service()
+            .update_unarchived_conversation_by_id(
+                &state,
+                "conversation-contact-old",
+                |conversation| {
+                    conversation.title = "联系人 · 已改名".to_string();
+                    Ok(())
+                },
+            )
+            .expect("update remote im contact conversation as unarchived");
+        let updated = state_read_conversation_cached(&state, "conversation-contact-old")
+            .expect("read updated conversation");
+        assert_eq!(updated.title, "联系人 · 已改名");
+    }
+
+    #[test]
     fn scheduler_should_allow_two_conversations_to_run_in_parallel() {
         let state = test_chat_runtime_state();
         let ingress_a =

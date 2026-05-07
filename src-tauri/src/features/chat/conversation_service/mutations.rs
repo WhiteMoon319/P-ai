@@ -14,7 +14,7 @@ impl ConversationService {
             .lock()
             .map_err(|err| format!("Failed to lock state mutex at {}:{} {}: {err}", file!(), line!(), module_path!()))?;
         let mut conversation = state_read_conversation_cached(state, normalized_conversation_id)?;
-        self.ensure_unarchived_foreground_conversation(&conversation, normalized_conversation_id)?;
+        self.ensure_unarchived_conversation(&conversation, normalized_conversation_id)?;
         let result = updater(&mut conversation)?;
         state_schedule_conversation_persist(state, &conversation, false)?;
         drop(guard);
@@ -602,7 +602,7 @@ impl ConversationService {
         ensure_unarchived_conversation_not_organizing(state, normalized_conversation_id)?;
 
         let mut conversation = state_read_conversation_cached(state, normalized_conversation_id)?;
-        self.ensure_unarchived_foreground_conversation(&conversation, normalized_conversation_id)
+        self.ensure_unarchived_conversation(&conversation, normalized_conversation_id)
             .map_err(|_| "未找到可改名的会话".to_string())?;
         if conversation.title.trim() == normalized_title {
             drop(guard);
