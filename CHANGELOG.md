@@ -2,6 +2,9 @@
 
 ## 进行中
 
+## 发布：v0.9.75
+
+- 发布（release-0.9.75）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.75`，纳入本轮远程联系人闭嘴机制、IDE bridge 鉴权与存活性修复、远程联系人会话与日志收口，以及流式滚动与工具状态稳定性修复。
 - 功能（remote-im-contact-mute-gate）：远程联系人新增“闭嘴词 / 张嘴词 / 闭嘴时长”配置，默认预设为 `闭嘴 / 张嘴 / 600 秒`；入站消息链路改为先过“闭嘴判定”再进入在场、回复策略与发信判定，命中闭嘴词会立即进入闭嘴并拦截后续流程，闭嘴期间命中张嘴词或在判定时发现已超时则自动解除并放行；前后端同时补齐关键词全角/半角逗号归一化、运行时 `mute_until` 门禁状态与相关回归测试。
 - 修复（chat-unarchived-semantic-separation）：未归档会话语义改为“不是归档会话”，不再误绑定“普通前台列表可见”；远程联系人会话虽然仍不进入普通会话列表，但现在可以被审查、委托和消息读取等未归档会话链路正确识别与处理。
 - 调整（remote-im-contact-log-entry-and-humanized-view）：渠道列表编辑按钮旁新增日志入口，联系人设置按钮前新增专属日志入口；后端支持按联系人过滤渠道日志，前端联系人日志改为只保留本会话相关记录，并将状态、收发结果和异常整理成更易读的人话格式。
@@ -16,7 +19,7 @@
 - 修复（chat-tool-loop-batch-collect-before-finish）：模型单轮返回多个工具调用时，后端保持顺序串行执行，但不再因首个 `organize_context`、`task complete`、`plan` 或引导闭口结果提前结束整轮；改为先收集本轮全部工具结果，再统一决定收口与续调，避免后续同批工具被跳过。
 - 修复（chat-stream-toolcall-explicit-completion）：流式工具状态改为按 `toolCallId` 精确同步开始与完成；前后端不再依赖“下一次工具启动”去推断上一次结束，`archive`、重试、切模型等纯状态提示也不再混入工具条目列表。
 - 优化（chat-reasoning-status-count-and-header-fix）：聊天流式气泡顶部状态修正为仅在真实执行中显示工具名，工具完成后继续思考时恢复“正在思考中”；思考折叠标题补充实时思维链字符数显示，便于观察 reasoning 增长。
-- 修复（vscode-ide-context-bridge-auth-and-liveness）：IDE 上下文 bridge discovery 补充一次性 token 鉴权与首连轮换，bridge 启动移到单实例 setup 后并修复启动失败复位；引用查询改为分别保留同文件的整文件/选区/可见范围三个维度，并按时间解析排序；前端查询失败时立即清空旧引用，插件端补充 URL/Token 分离自动发现与心跳续租，避免在线但静止的 IDE 客户端被误判过期。
+- 修复（vscode-ide-context-bridge-auth-and-liveness）：IDE 上下文 bridge 运行态收口为独立模块状态，不再把鉴权细节泄漏到全局 `AppState`；discovery 补充首连鉴权与空闲过期后自动补发 token，自愈重写发现文件；引用查询改为分别保留同文件的整文件/选区/可见范围三个维度，并按时间解析排序；前端查询失败时立即清空旧引用，插件端补充 URL/Token 分离自动发现与心跳续租，避免在线但静止或晚于 discovery 启动的 IDE 客户端被误判过期或永久失联。
 - 调整（config-department-single-assignee-ui-guard）：部门配置页暂时收回“多人格”入口；当前每个部门在前端只允许绑定 1 个人格，并显示“未来功能”提示。
 - 修复（chat-mention-async-delegate-cross-department）：用户通过 `@` 主动发起异步委托时，不再错误套用“必须直属下级部门”的工具委托限制；只要目标部门里确实有该人格，就允许创建委托计划。
 - 修复（chat-mention-avatar-background-task-indicator）：被 `@` 触发异步委托的人格在后台执行期间，聊天工具栏头像会显示三点工作提醒，便于观察谁正在处理委托。

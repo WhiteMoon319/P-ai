@@ -39,7 +39,7 @@ describe("theme generator", () => {
     expect(tokens.radiusField).toBe(tokens.radiusSelector);
   });
 
-  it("keeps dark mode base layers ascending from dim to bright", () => {
+  it("keeps dark mode base layers descending from bright to dim", () => {
     const tokens = generateGeneratedThemeTokens({
       ...DEFAULT_GENERATED_THEME_CONTROLS,
       mode: "dark",
@@ -48,8 +48,8 @@ describe("theme generator", () => {
       noiseEnabled: true,
     });
 
-    expect(readLightness(tokens.base100)).toBeLessThan(readLightness(tokens.base200));
-    expect(readLightness(tokens.base200)).toBeLessThan(readLightness(tokens.base300));
+    expect(readLightness(tokens.base100)).toBeGreaterThan(readLightness(tokens.base200));
+    expect(readLightness(tokens.base200)).toBeGreaterThan(readLightness(tokens.base300));
     expect(tokens.sizeField).toBe("0.32rem");
     expect(tokens.sizeSelector).toBe("0.32rem");
     expect(tokens.border).toBe("1.5px");
@@ -202,7 +202,7 @@ describe("theme generator", () => {
       contrast: 1,
     });
 
-    expect(readLightness(tokens.base300) - readLightness(tokens.base100)).toBeGreaterThanOrEqual(10);
+    expect(readLightness(tokens.base100) - readLightness(tokens.base300)).toBeGreaterThanOrEqual(10);
   });
 
   it("pushes light-mode base300 toward 50% lightness at max contrast", () => {
@@ -219,7 +219,7 @@ describe("theme generator", () => {
     expect(readLightness(tokens.base300)).toBeGreaterThanOrEqual(48);
   });
 
-  it("pushes dark-mode base300 toward 50% lightness at max contrast", () => {
+  it("pushes dark-mode base100 toward 50% lightness at max contrast", () => {
     const tokens = generateGeneratedThemeTokens({
       ...DEFAULT_GENERATED_THEME_CONTROLS,
       mode: "dark",
@@ -227,10 +227,10 @@ describe("theme generator", () => {
       contrast: 100,
     });
 
-    expect(readLightness(tokens.base100)).toBeLessThan(readLightness(tokens.base200));
-    expect(readLightness(tokens.base200)).toBeLessThan(readLightness(tokens.base300));
-    expect(readLightness(tokens.base300)).toBeLessThanOrEqual(52);
-    expect(readLightness(tokens.base300)).toBeGreaterThanOrEqual(48);
+    expect(readLightness(tokens.base100)).toBeGreaterThan(readLightness(tokens.base200));
+    expect(readLightness(tokens.base200)).toBeGreaterThan(readLightness(tokens.base300));
+    expect(readLightness(tokens.base100)).toBeLessThanOrEqual(52);
+    expect(readLightness(tokens.base100)).toBeGreaterThanOrEqual(48);
   });
 
   it("makes light-mode base100 lighter when brightness increases", () => {
@@ -280,7 +280,7 @@ describe("theme generator", () => {
     expect(readLightness(brightBase.base100)).toBeGreaterThanOrEqual(98);
   });
 
-  it("pushes dark-mode base100 from gray toward black at the brightness extremes", () => {
+  it("pushes dark-mode base300 from gray toward black at the brightness extremes", () => {
     const grayBase = generateGeneratedThemeTokens({
       ...DEFAULT_GENERATED_THEME_CONTROLS,
       mode: "dark",
@@ -292,8 +292,8 @@ describe("theme generator", () => {
       brightness: 100,
     });
 
-    expect(readLightness(grayBase.base100)).toBeLessThanOrEqual(30);
-    expect(readLightness(grayBase.base100)).toBeGreaterThanOrEqual(22);
-    expect(readLightness(darkBase.base100)).toBeLessThanOrEqual(2);
+    expect(readLightness(grayBase.base300)).toBeLessThanOrEqual(30);
+    expect(readLightness(grayBase.base300)).toBeGreaterThanOrEqual(22);
+    expect(readLightness(darkBase.base300)).toBeLessThanOrEqual(2);
   });
 });
