@@ -306,7 +306,10 @@ export type RemoteImContact = {
   allowReceive: boolean;
   activationMode: "always" | "never" | "keyword";
   activationKeywords: string[];
+  muteKeywords: string[];
+  unmuteKeywords: string[];
   patienceSeconds: number;
+  muteDurationSeconds: number;
   activationCooldownSeconds: number;
   responseStrategy?: "always_reply" | "smart_judge";
   responseGuidance?: string;

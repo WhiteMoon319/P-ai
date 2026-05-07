@@ -108,8 +108,14 @@ struct RemoteImContactActivationUpdateInput {
     activation_mode: String,
     #[serde(default)]
     activation_keywords: Vec<String>,
+    #[serde(default = "default_remote_im_contact_mute_keywords")]
+    mute_keywords: Vec<String>,
+    #[serde(default = "default_remote_im_contact_unmute_keywords")]
+    unmute_keywords: Vec<String>,
     #[serde(default = "default_remote_im_contact_patience_seconds")]
     patience_seconds: u64,
+    #[serde(default = "default_remote_im_contact_mute_duration_seconds")]
+    mute_duration_seconds: u64,
     #[serde(default)]
     activation_cooldown_seconds: u64,
     #[serde(default = "default_remote_im_contact_response_strategy")]
@@ -257,7 +263,10 @@ fn remote_im_upsert_contact_for_inbound(
         allow_receive: default_allow_receive,
         activation_mode: "never".to_string(),
         activation_keywords: Vec::new(),
+        mute_keywords: default_remote_im_contact_mute_keywords(),
+        unmute_keywords: default_remote_im_contact_unmute_keywords(),
         patience_seconds: default_remote_im_contact_patience_seconds(),
+        mute_duration_seconds: default_remote_im_contact_mute_duration_seconds(),
         activation_cooldown_seconds: 0,
         route_mode: "dedicated_contact_conversation".to_string(),
         bound_department_id: Some(REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID.to_string()),
@@ -291,19 +300,26 @@ fn normalize_contact_activation_mode(value: &str) -> String {
     }
 }
 
-fn normalize_contact_activation_keywords(values: &[String]) -> Vec<String> {
+fn normalize_contact_keyword_list(values: &[String]) -> Vec<String> {
     let mut out = Vec::<String>::new();
+    let mut seen = std::collections::HashSet::<String>::new();
     for value in values {
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
-            continue;
+        for segment in value.split(|ch| matches!(ch, ',' | '，' | '\n' | '\r')) {
+            let trimmed = segment.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if !seen.insert(trimmed.to_string()) {
+                continue;
+            }
+            out.push(trimmed.to_string());
         }
-        if out.iter().any(|item| item == trimmed) {
-            continue;
-        }
-        out.push(trimmed.to_string());
     }
     out
+}
+
+fn normalize_contact_activation_keywords(values: &[String]) -> Vec<String> {
+    normalize_contact_keyword_list(values)
 }
 
 fn normalize_contact_route_mode(value: &str) -> String {
@@ -424,13 +440,27 @@ fn remote_im_text_contains_keyword(text: &str, keyword: &str) -> bool {
         .contains(&keyword.to_ascii_lowercase())
 }
 
-fn remote_im_keyword_matched(contact: &RemoteImContact, message_text: &str) -> bool {
-    contact
-        .activation_keywords
+fn remote_im_find_matched_keyword<'a>(text: &str, keywords: &'a [String]) -> Option<&'a str> {
+    keywords
         .iter()
         .map(|item| item.trim())
         .filter(|item| !item.is_empty())
-        .any(|keyword| remote_im_text_contains_keyword(message_text, keyword))
+        .find(|keyword| remote_im_text_contains_keyword(text, keyword))
+}
+
+fn remote_im_keyword_matched(contact: &RemoteImContact, message_text: &str) -> bool {
+    remote_im_find_matched_keyword(message_text, &contact.activation_keywords).is_some()
+}
+
+fn remote_im_resolve_mute_until(now: time::OffsetDateTime, duration_seconds: u64) -> String {
+    normalize_time_for_utc_storage(
+        now + time::Duration::seconds(duration_seconds.min(i64::MAX as u64) as i64),
+    )
+    .unwrap_or_else(|_| now_iso())
+}
+
+fn remote_im_is_mute_expired(mute_until: &str, now: time::OffsetDateTime) -> bool {
+    parse_iso(mute_until).map(|value| value <= now).unwrap_or(true)
 }
 
 fn remote_im_patience_exhausted(
@@ -474,6 +504,86 @@ fn remote_im_prepare_enqueue_runtime_state(
     let previous_presence = runtime.presence_state;
     let previous_work = runtime.work_state;
     let previous_pending = runtime.has_pending;
+    let now = now_utc();
+    let mut mute_prefix = String::new();
+    if let Some(mute_until) = runtime.mute_until.clone() {
+        if remote_im_is_mute_expired(&mute_until, now) {
+            runtime.mute_until = None;
+            mute_prefix = format!("闭嘴超时自动解除(截止={mute_until})；");
+        }
+    }
+    if let Some(keyword) = remote_im_find_matched_keyword(message_text, &contact.mute_keywords) {
+        let mute_until = remote_im_resolve_mute_until(now, contact.mute_duration_seconds);
+        runtime.mute_until = Some(mute_until.clone());
+        let reason = format!(
+            "{}命中闭嘴词“{}”，进入闭嘴直到 {}，直接拦截后续判定",
+            mute_prefix, keyword, mute_until
+        );
+        eprintln!(
+            "[远程联系人状态机] 入站判定 完成: contact_id={}, presence={:?}, work={:?}, pending={}, activate_assistant={}, reason={}",
+            contact.id,
+            runtime.presence_state,
+            runtime.work_state,
+            runtime.has_pending,
+            false,
+            reason
+        );
+        remote_im_append_channel_log(
+            &contact.channel_id,
+            "info",
+            format!(
+                "[联系人状态] 入站判定: contact={}, presence={} -> {}, work={} -> {}, pending={} -> {}, activate={}, reason={}",
+                remote_im_contact_log_label(contact),
+                remote_im_presence_state_label(previous_presence),
+                remote_im_presence_state_label(runtime.presence_state),
+                remote_im_work_state_label(previous_work),
+                remote_im_work_state_label(runtime.work_state),
+                remote_im_yes_no(previous_pending),
+                remote_im_yes_no(runtime.has_pending),
+                remote_im_yes_no(false),
+                reason
+            ),
+        );
+        return Ok((false, reason));
+    }
+    if runtime.mute_until.is_some() {
+        if let Some(keyword) = remote_im_find_matched_keyword(message_text, &contact.unmute_keywords) {
+            runtime.mute_until = None;
+            mute_prefix.push_str(&format!("命中张嘴词“{}”，解除闭嘴；", keyword));
+        } else {
+            let mute_until = runtime.mute_until.clone().unwrap_or_default();
+            let reason = format!(
+                "{}当前仍处于闭嘴期(截止={})，未命中张嘴词，直接拦截后续判定",
+                mute_prefix, mute_until
+            );
+            eprintln!(
+                "[远程联系人状态机] 入站判定 完成: contact_id={}, presence={:?}, work={:?}, pending={}, activate_assistant={}, reason={}",
+                contact.id,
+                runtime.presence_state,
+                runtime.work_state,
+                runtime.has_pending,
+                false,
+                reason
+            );
+            remote_im_append_channel_log(
+                &contact.channel_id,
+                "info",
+                format!(
+                    "[联系人状态] 入站判定: contact={}, presence={} -> {}, work={} -> {}, pending={} -> {}, activate={}, reason={}",
+                    remote_im_contact_log_label(contact),
+                    remote_im_presence_state_label(previous_presence),
+                    remote_im_presence_state_label(runtime.presence_state),
+                    remote_im_work_state_label(previous_work),
+                    remote_im_work_state_label(runtime.work_state),
+                    remote_im_yes_no(previous_pending),
+                    remote_im_yes_no(runtime.has_pending),
+                    remote_im_yes_no(false),
+                    reason
+                ),
+            );
+            return Ok((false, reason));
+        }
+    }
     let (activate_assistant, reason) = match runtime.presence_state {
         RemoteImPresenceState::Away => {
             let (activate, reason) = remote_im_should_activate_while_away(contact, message_text);
@@ -482,7 +592,7 @@ fn remote_im_prepare_enqueue_runtime_state(
                 runtime.needs_boundary = true;
                 runtime.consecutive_no_reply_count = 0;
             }
-            (activate, reason)
+            (activate, format!("{mute_prefix}{reason}"))
         }
         RemoteImPresenceState::Present => {
             let keyword_mode = contact.activation_mode.trim().eq_ignore_ascii_case("keyword");
@@ -496,13 +606,16 @@ fn remote_im_prepare_enqueue_runtime_state(
                 runtime.has_pending = false;
                 (
                     false,
-                    "present + idle 未命中 keyword 且耐心耗尽，切换为离场".to_string(),
+                    format!("{mute_prefix}present + idle 未命中 keyword 且耐心耗尽，切换为离场"),
                 )
             } else if runtime.work_state == RemoteImWorkState::Busy {
                 runtime.has_pending = true;
-                (false, "present + busy，新消息标记待办，等待当前轮次收尾续跑".to_string())
+                (
+                    false,
+                    format!("{mute_prefix}present + busy，新消息标记待办，等待当前轮次收尾续跑"),
+                )
             } else {
-                (true, "present + idle，等待本轮调度".to_string())
+                (true, format!("{mute_prefix}present + idle，等待本轮调度"))
             }
         }
     };
@@ -1212,6 +1325,18 @@ fn remote_im_handle_persisted_event_after_history_flush_runtime(
     if activated_contacts_in_batch.contains(&contact.id) {
         return Ok(false);
     }
+    if !event.activate_assistant {
+        remote_im_append_channel_log(
+            &contact.channel_id,
+            "info",
+            format!(
+                "[联系人状态] 历史落地: contact={}, conversation_id={}, activate=否, reason=event_gate_blocked",
+                remote_im_contact_log_label(&contact),
+                conversation.id
+            ),
+        );
+        return Ok(false);
+    }
 
     let mut should_activate = false;
     let mut should_apply_boundary = false;
@@ -1330,6 +1455,9 @@ fn remote_im_handle_persisted_event_after_history_flush(
     let latest_message_id = remote_im_event_latest_message_id(event);
     remote_im_update_checkpoint_latest_seen(data, &contact.id, latest_message_id.as_deref(), now);
     if activated_contacts_in_batch.contains(&contact.id) {
+        return Ok(false);
+    }
+    if !event.activate_assistant {
         return Ok(false);
     }
 
@@ -2340,7 +2468,10 @@ fn remote_im_update_contact_activation(
         .ok_or_else(|| format!("未找到远程联系人：{}", input.contact_id))?;
     contact.activation_mode = normalize_contact_activation_mode(&input.activation_mode);
     contact.activation_keywords = normalize_contact_activation_keywords(&input.activation_keywords);
+    contact.mute_keywords = normalize_contact_keyword_list(&input.mute_keywords);
+    contact.unmute_keywords = normalize_contact_keyword_list(&input.unmute_keywords);
     contact.patience_seconds = input.patience_seconds;
+    contact.mute_duration_seconds = input.mute_duration_seconds;
     contact.activation_cooldown_seconds = input.activation_cooldown_seconds;
     contact.response_strategy = normalize_contact_response_strategy(&input.response_strategy);
     contact.response_guidance = normalize_contact_response_guidance(&input.response_guidance);

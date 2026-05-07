@@ -177,8 +177,14 @@ struct RemoteImContact {
     activation_mode: String,
     #[serde(default)]
     activation_keywords: Vec<String>,
+    #[serde(default = "default_remote_im_contact_mute_keywords")]
+    mute_keywords: Vec<String>,
+    #[serde(default = "default_remote_im_contact_unmute_keywords")]
+    unmute_keywords: Vec<String>,
     #[serde(default = "default_remote_im_contact_patience_seconds")]
     patience_seconds: u64,
+    #[serde(default = "default_remote_im_contact_mute_duration_seconds")]
+    mute_duration_seconds: u64,
     #[serde(default)]
     activation_cooldown_seconds: u64,
     #[serde(default = "default_remote_im_contact_route_mode")]
@@ -229,6 +235,18 @@ fn default_remote_im_contact_activation_mode() -> String {
 
 fn default_remote_im_contact_patience_seconds() -> u64 {
     60
+}
+
+fn default_remote_im_contact_mute_keywords() -> Vec<String> {
+    vec!["闭嘴".to_string()]
+}
+
+fn default_remote_im_contact_unmute_keywords() -> Vec<String> {
+    vec!["张嘴".to_string()]
+}
+
+fn default_remote_im_contact_mute_duration_seconds() -> u64 {
+    600
 }
 
 fn default_remote_im_contact_route_mode() -> String {

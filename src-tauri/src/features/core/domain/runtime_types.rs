@@ -126,6 +126,7 @@ struct RemoteImContactRuntimeState {
     work_state: RemoteImWorkState,
     has_pending: bool,
     last_success_reply_at: Option<String>,
+    mute_until: Option<String>,
     needs_boundary: bool,
     consecutive_no_reply_count: u32,
 }
@@ -137,6 +138,7 @@ impl Default for RemoteImContactRuntimeState {
             work_state: RemoteImWorkState::Idle,
             has_pending: false,
             last_success_reply_at: None,
+            mute_until: None,
             needs_boundary: false,
             consecutive_no_reply_count: 0,
         }

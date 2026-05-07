@@ -53,7 +53,7 @@ export function contactResponseStrategyHint(item: RemoteImContact): string {
   return "始终回复：一旦允许入场，就直接交给处理部门回复。";
 }
 
-export function parseActivationKeywords(raw: string): string[] {
+export function parseKeywordList(raw: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const item of String(raw || "").split(/[,\n，]/)) {
@@ -63,6 +63,10 @@ export function parseActivationKeywords(raw: string): string[] {
     out.push(keyword);
   }
   return out;
+}
+
+export function parseActivationKeywords(raw: string): string[] {
+  return parseKeywordList(raw);
 }
 
 export function formatLogTime(timestamp: string): string {

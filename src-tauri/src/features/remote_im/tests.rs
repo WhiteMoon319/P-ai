@@ -222,7 +222,10 @@
             allow_receive: true,
             activation_mode: "never".to_string(),
             activation_keywords: Vec::new(),
+            mute_keywords: default_remote_im_contact_mute_keywords(),
+            unmute_keywords: default_remote_im_contact_unmute_keywords(),
             patience_seconds: default_remote_im_contact_patience_seconds(),
+            mute_duration_seconds: default_remote_im_contact_mute_duration_seconds(),
             activation_cooldown_seconds: 0,
             route_mode: "dedicated_contact_conversation".to_string(),
             bound_department_id: None,
@@ -362,7 +365,10 @@
             allow_receive: true,
             activation_mode: "never".to_string(),
             activation_keywords: Vec::new(),
+            mute_keywords: default_remote_im_contact_mute_keywords(),
+            unmute_keywords: default_remote_im_contact_unmute_keywords(),
             patience_seconds: default_remote_im_contact_patience_seconds(),
+            mute_duration_seconds: default_remote_im_contact_mute_duration_seconds(),
             activation_cooldown_seconds: 0,
             route_mode: "dedicated_contact_conversation".to_string(),
             bound_department_id: None,
@@ -875,7 +881,10 @@
             allow_receive: true,
             activation_mode: "keyword".to_string(),
             activation_keywords: vec!["派".to_string()],
+            mute_keywords: default_remote_im_contact_mute_keywords(),
+            unmute_keywords: default_remote_im_contact_unmute_keywords(),
             patience_seconds: default_remote_im_contact_patience_seconds(),
+            mute_duration_seconds: default_remote_im_contact_mute_duration_seconds(),
             activation_cooldown_seconds: 0,
             route_mode: "dedicated_contact_conversation".to_string(),
             bound_department_id: Some(REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID.to_string()),
@@ -1221,6 +1230,7 @@
                             .format(&time::format_description::well_known::Rfc3339)
                             .expect("format old time"),
                     ),
+                    mute_until: None,
                     needs_boundary: false,
                     consecutive_no_reply_count: 0,
                 },
@@ -1256,6 +1266,7 @@
                     work_state: RemoteImWorkState::Busy,
                     has_pending: false,
                     last_success_reply_at: Some(now_iso()),
+                    mute_until: None,
                     needs_boundary: false,
                     consecutive_no_reply_count: 0,
                 },
@@ -1274,6 +1285,147 @@
         assert_eq!(runtime.presence_state, RemoteImPresenceState::Present);
         assert_eq!(runtime.work_state, RemoteImWorkState::Busy);
         assert!(runtime.has_pending);
+    }
+
+    #[test]
+    fn remote_im_prepare_enqueue_runtime_state_should_mute_and_block_when_mute_keyword_matched() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact("contact-a", "conversation-a");
+        contact.mute_keywords = vec!["闭嘴".to_string()];
+        contact.unmute_keywords = vec!["张嘴".to_string()];
+        contact.mute_duration_seconds = 600;
+
+        let (activate_assistant, reason) =
+            remote_im_prepare_enqueue_runtime_state(&state, &contact, "现在闭嘴")
+                .expect("prepare runtime state");
+
+        assert!(!activate_assistant);
+        assert!(reason.contains("闭嘴词"));
+        let runtime_states =
+            lock_remote_im_contact_runtime_states(&state).expect("lock runtime states");
+        let runtime = runtime_states.get("contact-a").expect("runtime exists");
+        assert!(runtime.mute_until.is_some());
+        assert_eq!(runtime.presence_state, RemoteImPresenceState::Away);
+    }
+
+    #[test]
+    fn remote_im_prepare_enqueue_runtime_state_should_block_normal_message_while_muted() {
+        let state = remote_im_test_state();
+        let contact = remote_im_test_contact("contact-a", "conversation-a");
+
+        {
+            let mut runtime_states =
+                lock_remote_im_contact_runtime_states(&state).expect("lock runtime states");
+            runtime_states.insert(
+                "contact-a".to_string(),
+                RemoteImContactRuntimeState {
+                    presence_state: RemoteImPresenceState::Present,
+                    work_state: RemoteImWorkState::Idle,
+                    has_pending: false,
+                    last_success_reply_at: Some(now_iso()),
+                    mute_until: Some(remote_im_resolve_mute_until(
+                        time::OffsetDateTime::now_utc(),
+                        600,
+                    )),
+                    needs_boundary: false,
+                    consecutive_no_reply_count: 0,
+                },
+            );
+        }
+
+        let (activate_assistant, reason) =
+            remote_im_prepare_enqueue_runtime_state(&state, &contact, "这是一条普通消息")
+                .expect("prepare runtime state");
+
+        assert!(!activate_assistant);
+        assert!(reason.contains("闭嘴期"));
+        let runtime_states =
+            lock_remote_im_contact_runtime_states(&state).expect("lock runtime states");
+        let runtime = runtime_states.get("contact-a").expect("runtime exists");
+        assert!(runtime.mute_until.is_some());
+        assert_eq!(runtime.presence_state, RemoteImPresenceState::Present);
+    }
+
+    #[test]
+    fn remote_im_prepare_enqueue_runtime_state_should_unmute_and_then_follow_original_gate() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact("contact-a", "conversation-a");
+        contact.activation_mode = "never".to_string();
+        contact.unmute_keywords = vec!["张嘴".to_string()];
+
+        {
+            let mut runtime_states =
+                lock_remote_im_contact_runtime_states(&state).expect("lock runtime states");
+            runtime_states.insert(
+                "contact-a".to_string(),
+                RemoteImContactRuntimeState {
+                    presence_state: RemoteImPresenceState::Away,
+                    work_state: RemoteImWorkState::Idle,
+                    has_pending: false,
+                    last_success_reply_at: None,
+                    mute_until: Some(remote_im_resolve_mute_until(
+                        time::OffsetDateTime::now_utc(),
+                        600,
+                    )),
+                    needs_boundary: false,
+                    consecutive_no_reply_count: 0,
+                },
+            );
+        }
+
+        let (activate_assistant, reason) =
+            remote_im_prepare_enqueue_runtime_state(&state, &contact, "张嘴")
+                .expect("prepare runtime state");
+
+        assert!(!activate_assistant);
+        assert!(reason.contains("张嘴词"));
+        assert!(reason.contains("never"));
+        let runtime_states =
+            lock_remote_im_contact_runtime_states(&state).expect("lock runtime states");
+        let runtime = runtime_states.get("contact-a").expect("runtime exists");
+        assert!(runtime.mute_until.is_none());
+        assert_eq!(runtime.presence_state, RemoteImPresenceState::Away);
+    }
+
+    #[test]
+    fn remote_im_prepare_enqueue_runtime_state_should_auto_unmute_on_timeout_and_pass_through() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact("contact-a", "conversation-a");
+        contact.activation_mode = "always".to_string();
+
+        {
+            let mut runtime_states =
+                lock_remote_im_contact_runtime_states(&state).expect("lock runtime states");
+            runtime_states.insert(
+                "contact-a".to_string(),
+                RemoteImContactRuntimeState {
+                    presence_state: RemoteImPresenceState::Away,
+                    work_state: RemoteImWorkState::Idle,
+                    has_pending: false,
+                    last_success_reply_at: None,
+                    mute_until: Some(
+                        (time::OffsetDateTime::now_utc() - time::Duration::seconds(5))
+                            .format(&time::format_description::well_known::Rfc3339)
+                            .expect("format old time"),
+                    ),
+                    needs_boundary: false,
+                    consecutive_no_reply_count: 0,
+                },
+            );
+        }
+
+        let (activate_assistant, reason) =
+            remote_im_prepare_enqueue_runtime_state(&state, &contact, "普通消息")
+                .expect("prepare runtime state");
+
+        assert!(activate_assistant);
+        assert!(reason.contains("闭嘴超时自动解除"));
+        assert!(reason.contains("always"));
+        let runtime_states =
+            lock_remote_im_contact_runtime_states(&state).expect("lock runtime states");
+        let runtime = runtime_states.get("contact-a").expect("runtime exists");
+        assert!(runtime.mute_until.is_none());
+        assert_eq!(runtime.presence_state, RemoteImPresenceState::Present);
     }
 
     #[test]
@@ -1298,6 +1450,7 @@
                             .format(&time::format_description::well_known::Rfc3339)
                             .expect("format old time"),
                     ),
+                    mute_until: None,
                     needs_boundary: false,
                     consecutive_no_reply_count: 0,
                 },
@@ -1344,6 +1497,7 @@
                     work_state: RemoteImWorkState::Busy,
                     has_pending: true,
                     last_success_reply_at: Some(now_iso()),
+                    mute_until: None,
                     needs_boundary: false,
                     consecutive_no_reply_count: 0,
                 },
@@ -1399,6 +1553,7 @@
                     work_state: RemoteImWorkState::Busy,
                     has_pending: false,
                     last_success_reply_at: Some(previous_success_at.clone()),
+                    mute_until: None,
                     needs_boundary: false,
                     consecutive_no_reply_count: 0,
                 },
@@ -1448,6 +1603,7 @@
                     work_state: RemoteImWorkState::Busy,
                     has_pending: false,
                     last_success_reply_at: Some(now_iso()),
+                    mute_until: None,
                     needs_boundary: false,
                     consecutive_no_reply_count: 0,
                 },
@@ -1528,6 +1684,7 @@
                     work_state: RemoteImWorkState::Idle,
                     has_pending: false,
                     last_success_reply_at: None,
+                    mute_until: None,
                     needs_boundary: true,
                     consecutive_no_reply_count: 0,
                 },
@@ -1601,4 +1758,91 @@
         let runtime = runtime_states.get("contact-a").expect("runtime exists");
         assert_eq!(runtime.work_state, RemoteImWorkState::Busy);
         assert!(!runtime.needs_boundary);
+    }
+
+    #[test]
+    fn remote_im_handle_persisted_event_after_history_flush_should_respect_event_gate_flag() {
+        let state = remote_im_test_state();
+        let mut data = AppData::default();
+        data.remote_im_contacts
+            .push(remote_im_test_contact("contact-a", "conversation-a"));
+        data.conversations
+            .push(remote_im_test_conversation("conversation-a"));
+        {
+            let mut runtime_states =
+                lock_remote_im_contact_runtime_states(&state).expect("lock runtime states");
+            runtime_states.insert(
+                "contact-a".to_string(),
+                RemoteImContactRuntimeState {
+                    presence_state: RemoteImPresenceState::Present,
+                    work_state: RemoteImWorkState::Idle,
+                    has_pending: false,
+                    last_success_reply_at: None,
+                    mute_until: Some(remote_im_resolve_mute_until(
+                        time::OffsetDateTime::now_utc(),
+                        600,
+                    )),
+                    needs_boundary: true,
+                    consecutive_no_reply_count: 0,
+                },
+            );
+        }
+
+        let event = ChatPendingEvent {
+            id: "event-muted".to_string(),
+            conversation_id: "conversation-a".to_string(),
+            created_at: now_iso(),
+            source: ChatEventSource::RemoteIm,
+            queue_mode: ChatQueueMode::Normal,
+            messages: vec![ChatMessage {
+                id: "incoming-muted".to_string(),
+                role: "user".to_string(),
+                created_at: now_iso(),
+                speaker_agent_id: None,
+                parts: vec![MessagePart::Text {
+                    text: "普通消息".to_string(),
+                }],
+                extra_text_blocks: Vec::new(),
+                provider_meta: None,
+                tool_call: None,
+                mcp_call: None,
+            }],
+            activate_assistant: false,
+            session_info: ChatSessionInfo {
+                department_id: REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID.to_string(),
+                agent_id: DEFAULT_AGENT_ID.to_string(),
+            },
+            runtime_context: None,
+            sender_info: Some(RemoteImMessageSource {
+                channel_id: "channel-a".to_string(),
+                platform: RemoteImPlatform::OnebotV11,
+                im_name: "qq".to_string(),
+                remote_contact_type: "private".to_string(),
+                remote_contact_id: "remote-a".to_string(),
+                remote_contact_name: "张三".to_string(),
+                sender_id: "remote-a".to_string(),
+                sender_name: "张三".to_string(),
+                sender_avatar_url: None,
+                platform_message_id: Some("msg-muted".to_string()),
+            }),
+        };
+
+        let mut activated_contacts = std::collections::HashSet::new();
+        let should_activate = remote_im_handle_persisted_event_after_history_flush(
+            &state,
+            &mut data,
+            "conversation-a",
+            &event,
+            &now_iso(),
+            &mut activated_contacts,
+        )
+        .expect("handle persisted event");
+
+        assert!(!should_activate);
+        assert!(activated_contacts.is_empty());
+        let runtime_states =
+            lock_remote_im_contact_runtime_states(&state).expect("lock runtime states");
+        let runtime = runtime_states.get("contact-a").expect("runtime exists");
+        assert_eq!(runtime.work_state, RemoteImWorkState::Idle);
+        assert!(runtime.needs_boundary);
     }

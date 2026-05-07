@@ -500,6 +500,49 @@
               </li>
 
               <li class="list-row flex items-start justify-between gap-3">
+                <div class="font-medium">闭嘴词</div>
+                <div class="flex w-64 flex-col gap-2">
+                  <input
+                    type="text"
+                    class="input input-bordered input-sm w-full"
+                    placeholder="例如：闭嘴，别说话"
+                    v-model="contactDraft.muteKeywordsText"
+                  />
+                  <span class="text-[11px] opacity-60">
+                    命中后立即进入闭嘴状态，并直接拦截后续在场、回复和发信判定。
+                  </span>
+                </div>
+              </li>
+
+              <li class="list-row flex items-start justify-between gap-3">
+                <div class="font-medium">张嘴词</div>
+                <div class="flex w-64 flex-col gap-2">
+                  <input
+                    type="text"
+                    class="input input-bordered input-sm w-full"
+                    placeholder="例如：张嘴，继续说"
+                    v-model="contactDraft.unmuteKeywordsText"
+                  />
+                  <span class="text-[11px] opacity-60">
+                    仅在闭嘴期间生效；命中后解除闭嘴，本条消息继续走后续正常判定。
+                  </span>
+                </div>
+              </li>
+
+              <li class="list-row flex items-center justify-between gap-3">
+                <div class="font-medium">闭嘴时长</div>
+                <div class="flex w-64 items-center gap-2">
+                  <input
+                    type="number"
+                    class="input input-bordered input-sm w-20"
+                    v-model.number="contactDraft.muteDurationSeconds"
+                    min="0"
+                  />
+                  <span class="opacity-60">{{ t("config.remoteIm.seconds") }}</span>
+                </div>
+              </li>
+
+              <li class="list-row flex items-start justify-between gap-3">
                 <div class="font-medium">应答策略</div>
                 <div class="flex w-64 flex-col gap-2">
                   <select
@@ -695,6 +738,7 @@ import {
   normalizeProcessingMode,
   normalizeResponseStrategy,
   parseActivationKeywords,
+  parseKeywordList,
   platformLabelOf,
   processingModeHint,
 } from "./remote-im/helpers";
@@ -884,9 +928,12 @@ type ContactEditDraft = {
   processingMode: "qa" | "continuous";
   activationMode: RemoteImContact["activationMode"];
   activationKeywordsText: string;
+  muteKeywordsText: string;
+  unmuteKeywordsText: string;
   responseStrategy: NonNullable<RemoteImContact["responseStrategy"]>;
   responseGuidance: string;
   patienceSeconds: number;
+  muteDurationSeconds: number;
   allowReceive: boolean;
   allowSend: boolean;
   allowSendFiles: boolean;
@@ -965,9 +1012,12 @@ function buildContactDraftFromContact(item: RemoteImContact): ContactEditDraft {
     processingMode: normalizeProcessingMode(item.processingMode),
     activationMode: normalizeActivationMode(item.activationMode || "never"),
     activationKeywordsText: item.activationKeywords.join(", "),
+    muteKeywordsText: (Array.isArray(item.muteKeywords) ? item.muteKeywords : ["闭嘴"]).join(", "),
+    unmuteKeywordsText: (Array.isArray(item.unmuteKeywords) ? item.unmuteKeywords : ["张嘴"]).join(", "),
     responseStrategy: normalizeResponseStrategy(item.responseStrategy),
     responseGuidance: String(item.responseGuidance || "").trim(),
     patienceSeconds: Math.max(0, Number(item.patienceSeconds || 60)),
+    muteDurationSeconds: Math.max(0, Number(item.muteDurationSeconds || 600)),
     allowReceive: !!item.allowReceive,
     allowSend: !!item.allowSend,
     allowSendFiles: !!item.allowSendFiles,
@@ -1290,7 +1340,10 @@ async function saveContactActivation(
       RemoteImContact,
       | "activationMode"
       | "activationKeywords"
+      | "muteKeywords"
+      | "unmuteKeywords"
       | "patienceSeconds"
+      | "muteDurationSeconds"
       | "activationCooldownSeconds"
       | "responseStrategy"
       | "responseGuidance"
@@ -1299,14 +1352,22 @@ async function saveContactActivation(
 ) {
   const oldMode = item.activationMode;
   const oldKeywords = [...item.activationKeywords];
+  const oldMuteKeywords = [...(Array.isArray(item.muteKeywords) ? item.muteKeywords : [])];
+  const oldUnmuteKeywords = [...(Array.isArray(item.unmuteKeywords) ? item.unmuteKeywords : [])];
   const oldPatience = item.patienceSeconds;
+  const oldMuteDuration = item.muteDurationSeconds;
   const oldCooldown = item.activationCooldownSeconds;
   const oldResponseStrategy = normalizeResponseStrategy(item.responseStrategy);
   const oldResponseGuidance = String(item.responseGuidance || "");
   if (patch?.activationMode) item.activationMode = patch.activationMode;
   if (patch?.activationKeywords) item.activationKeywords = [...patch.activationKeywords];
+  if (patch?.muteKeywords) item.muteKeywords = [...patch.muteKeywords];
+  if (patch?.unmuteKeywords) item.unmuteKeywords = [...patch.unmuteKeywords];
   if (typeof patch?.patienceSeconds === "number") {
     item.patienceSeconds = Math.max(0, Math.floor(patch.patienceSeconds));
+  }
+  if (typeof patch?.muteDurationSeconds === "number") {
+    item.muteDurationSeconds = Math.max(0, Math.floor(patch.muteDurationSeconds));
   }
   if (typeof patch?.activationCooldownSeconds === "number") {
     item.activationCooldownSeconds = Math.max(0, Math.floor(patch.activationCooldownSeconds));
@@ -1319,7 +1380,10 @@ async function saveContactActivation(
         contactId: item.id,
         activationMode: item.activationMode,
         activationKeywords: item.activationKeywords,
+        muteKeywords: item.muteKeywords,
+        unmuteKeywords: item.unmuteKeywords,
         patienceSeconds: item.patienceSeconds,
+        muteDurationSeconds: item.muteDurationSeconds,
         activationCooldownSeconds: item.activationCooldownSeconds,
         responseStrategy: normalizeResponseStrategy(item.responseStrategy),
         responseGuidance: String(item.responseGuidance || ""),
@@ -1329,7 +1393,10 @@ async function saveContactActivation(
   } catch (error) {
     item.activationMode = oldMode;
     item.activationKeywords = oldKeywords;
+    item.muteKeywords = oldMuteKeywords;
+    item.unmuteKeywords = oldUnmuteKeywords;
     item.patienceSeconds = oldPatience;
+    item.muteDurationSeconds = oldMuteDuration;
     item.activationCooldownSeconds = oldCooldown;
     item.responseStrategy = oldResponseStrategy;
     item.responseGuidance = oldResponseGuidance;
@@ -1462,8 +1529,16 @@ async function saveContactDraft() {
     }
 
     const nextKeywords = parseActivationKeywords(draft.activationKeywordsText);
+    const nextMuteKeywords = parseKeywordList(draft.muteKeywordsText);
+    const nextUnmuteKeywords = parseKeywordList(draft.unmuteKeywordsText);
     const currentKeywords = Array.isArray(item.activationKeywords) ? item.activationKeywords : [];
+    const currentMuteKeywords = Array.isArray(item.muteKeywords) ? item.muteKeywords : ["闭嘴"];
+    const currentUnmuteKeywords = Array.isArray(item.unmuteKeywords) ? item.unmuteKeywords : ["张嘴"];
     const keywordsChanged = JSON.stringify(nextKeywords) !== JSON.stringify(currentKeywords);
+    const muteKeywordsChanged =
+      JSON.stringify(nextMuteKeywords) !== JSON.stringify(currentMuteKeywords);
+    const unmuteKeywordsChanged =
+      JSON.stringify(nextUnmuteKeywords) !== JSON.stringify(currentUnmuteKeywords);
     const nextActivationMode = normalizeActivationMode(draft.activationMode);
     const modeChanged = nextActivationMode !== normalizeActivationMode(item.activationMode || "never");
     const nextResponseStrategy = normalizeResponseStrategy(draft.responseStrategy);
@@ -1474,11 +1549,26 @@ async function saveContactDraft() {
     const responseGuidanceChanged = nextResponseGuidance !== currentResponseGuidance;
     const nextPatience = Math.max(0, Math.floor(Number(draft.patienceSeconds) || 0));
     const patienceChanged = nextPatience !== Math.max(0, Math.floor(Number(item.patienceSeconds || 60)));
-    if (modeChanged || keywordsChanged || patienceChanged || responseStrategyChanged || responseGuidanceChanged) {
+    const nextMuteDuration = Math.max(0, Math.floor(Number(draft.muteDurationSeconds) || 0));
+    const muteDurationChanged =
+      nextMuteDuration !== Math.max(0, Math.floor(Number(item.muteDurationSeconds || 600)));
+    if (
+      modeChanged
+      || keywordsChanged
+      || muteKeywordsChanged
+      || unmuteKeywordsChanged
+      || patienceChanged
+      || muteDurationChanged
+      || responseStrategyChanged
+      || responseGuidanceChanged
+    ) {
       await saveContactActivation(item, {
         activationMode: nextActivationMode,
         activationKeywords: nextKeywords,
+        muteKeywords: nextMuteKeywords,
+        unmuteKeywords: nextUnmuteKeywords,
         patienceSeconds: nextPatience,
+        muteDurationSeconds: nextMuteDuration,
         responseStrategy: nextResponseStrategy,
         responseGuidance: nextResponseGuidance,
       });
@@ -1670,10 +1760,14 @@ async function refreshContacts() {
     for (const item of contacts.value) {
       item.activationMode = normalizeActivationMode(item.activationMode || "never");
       item.activationKeywords = Array.isArray(item.activationKeywords) ? item.activationKeywords : [];
+      item.muteKeywords = Array.isArray(item.muteKeywords) && item.muteKeywords.length > 0 ? item.muteKeywords : ["闭嘴"];
+      item.unmuteKeywords =
+        Array.isArray(item.unmuteKeywords) && item.unmuteKeywords.length > 0 ? item.unmuteKeywords : ["张嘴"];
       item.activationCooldownSeconds = Math.max(0, Number(item.activationCooldownSeconds || 0));
       item.processingMode = normalizeProcessingMode(item.processingMode);
       item.responseStrategy = normalizeResponseStrategy(item.responseStrategy);
       item.responseGuidance = String(item.responseGuidance || "").trim();
+      item.muteDurationSeconds = Math.max(0, Number(item.muteDurationSeconds || 600));
       item.allowSendFiles = !!item.allowSendFiles;
       contactKeywordDrafts.value[item.id] = item.activationKeywords.join(", ");
     }
