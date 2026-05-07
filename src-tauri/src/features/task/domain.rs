@@ -3,39 +3,51 @@ const TASK_STATE_ACTIVE: &str = "active";
 const TASK_STATE_COMPLETED: &str = "completed";
 const TASK_STATE_FAILED_COMPLETED: &str = "failed_completed";
 const TASK_SCHEDULER_INTERVAL_SECONDS: u64 = 30;
-const TASK_IMMEDIATE_RETRY_SECONDS: i64 = TASK_SCHEDULER_INTERVAL_SECONDS as i64;
 const TASK_MAX_BOARD_ITEMS: usize = 4;
 const TASK_TARGET_SCOPE_DESKTOP: &str = "desktop";
 const TASK_TARGET_SCOPE_CONTACT: &str = "contact";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct TaskTriggerInputLocal {
-    #[serde(default, alias = "runAt", alias = "run_at")]
-    run_at_local: Option<String>,
-    #[serde(default)]
-    every_minutes: Option<f64>,
-    #[serde(default, alias = "endAt", alias = "end_at")]
-    end_at_local: Option<String>,
+    #[serde(
+        default,
+        alias = "runAt",
+        alias = "runAtLocal",
+        alias = "run_at_local"
+    )]
+    run_at: Option<String>,
+    #[serde(default, alias = "cronExpression")]
+    cron_expression: Option<String>,
+    #[serde(
+        default,
+        alias = "endAt",
+        alias = "endAtLocal",
+        alias = "end_at_local"
+    )]
+    end_at: Option<String>,
+    #[serde(default, alias = "everyMinutes", alias = "every_minutes", skip_serializing)]
+    legacy_every_minutes: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct TaskTriggerView {
-    #[serde(default)]
-    run_at_local: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "runAt", alias = "runAtLocal")]
+    run_at: Option<String>,
+    #[serde(default, alias = "cronExpression")]
+    cron_expression: Option<String>,
+    #[serde(default, alias = "everyMinutes")]
     every_minutes: Option<f64>,
-    #[serde(default)]
-    end_at_local: Option<String>,
-    #[serde(default)]
-    next_run_at_local: Option<String>,
+    #[serde(default, alias = "endAt", alias = "endAtLocal")]
+    end_at: Option<String>,
+    #[serde(default, alias = "nextRunAt", alias = "nextRunAtLocal")]
+    next_run_at: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 struct TaskTriggerStored {
     run_at_utc: Option<String>,
-    every_minutes: Option<f64>,
+    cron_expression: Option<String>,
+    legacy_every_minutes: Option<f64>,
     end_at_utc: Option<String>,
     next_run_at_utc: Option<String>,
 }
@@ -197,29 +209,19 @@ struct TaskDispatchNowInput {
     task_id: String,
 }
 
-fn task_every_minutes_to_duration(every_minutes: f64) -> Option<time::Duration> {
-    if !every_minutes.is_finite() || every_minutes <= 0.0 {
-        return None;
-    }
-    let millis = (every_minutes * 60_000.0).round() as i64;
-    if millis <= 0 {
-        return None;
-    }
-    Some(time::Duration::milliseconds(millis))
-}
-
 fn task_trigger_view_from_stored(trigger: &TaskTriggerStored) -> TaskTriggerView {
     TaskTriggerView {
-        run_at_local: trigger
+        run_at: trigger
             .run_at_utc
             .as_deref()
             .map(format_utc_storage_time_to_local_rfc3339),
-        every_minutes: trigger.every_minutes,
-        end_at_local: trigger
+        cron_expression: trigger.cron_expression.clone(),
+        every_minutes: trigger.legacy_every_minutes,
+        end_at: trigger
             .end_at_utc
             .as_deref()
             .map(format_utc_storage_time_to_local_rfc3339),
-        next_run_at_local: trigger
+        next_run_at: trigger
             .next_run_at_utc
             .as_deref()
             .map(format_utc_storage_time_to_local_rfc3339),
@@ -231,6 +233,477 @@ fn task_progress_note_view_from_stored(note: &TaskProgressNoteStored) -> TaskPro
         at_local: format_utc_storage_time_to_local_rfc3339(&note.at_utc),
         note: note.note.clone(),
     }
+}
+
+fn task_weekday_number_from_local(dt: OffsetDateTime) -> u8 {
+    match dt.weekday() {
+        time::Weekday::Sunday => 0,
+        time::Weekday::Monday => 1,
+        time::Weekday::Tuesday => 2,
+        time::Weekday::Wednesday => 3,
+        time::Weekday::Thursday => 4,
+        time::Weekday::Friday => 5,
+        time::Weekday::Saturday => 6,
+    }
+}
+
+fn task_month_name_to_number(value: &str) -> Option<u8> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "jan" => Some(1),
+        "feb" => Some(2),
+        "mar" => Some(3),
+        "apr" => Some(4),
+        "may" => Some(5),
+        "jun" => Some(6),
+        "jul" => Some(7),
+        "aug" => Some(8),
+        "sep" => Some(9),
+        "oct" => Some(10),
+        "nov" => Some(11),
+        "dec" => Some(12),
+        _ => None,
+    }
+}
+
+fn task_weekday_name_to_number(value: &str) -> Option<u8> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "sun" => Some(0),
+        "mon" => Some(1),
+        "tue" => Some(2),
+        "wed" => Some(3),
+        "thu" => Some(4),
+        "fri" => Some(5),
+        "sat" => Some(6),
+        _ => None,
+    }
+}
+
+fn task_cron_field_value_from_token(
+    token: &str,
+    min: u8,
+    max: u8,
+    field_name: &str,
+    allow_names: bool,
+    is_weekday: bool,
+) -> Result<u8, String> {
+    let trimmed = token.trim();
+    if trimmed.is_empty() {
+        return Err(format!("task.trigger.{field_name} contains an empty cron token"));
+    }
+    let parsed = if allow_names {
+        if is_weekday {
+            task_weekday_name_to_number(trimmed)
+        } else {
+            task_month_name_to_number(trimmed)
+        }
+        .or_else(|| trimmed.parse::<u8>().ok())
+    } else {
+        trimmed.parse::<u8>().ok()
+    }
+    .ok_or_else(|| format!("task.trigger.{field_name} has invalid cron token: {trimmed}"))?;
+    let normalized = if is_weekday && parsed == 7 { 0 } else { parsed };
+    if normalized < min || normalized > max {
+        return Err(format!(
+            "task.trigger.{field_name} cron token out of range: {trimmed}"
+        ));
+    }
+    Ok(normalized)
+}
+
+fn task_cron_expand_part(
+    part: &str,
+    min: u8,
+    max: u8,
+    field_name: &str,
+    allow_names: bool,
+    is_weekday: bool,
+) -> Result<Vec<u8>, String> {
+    let trimmed = part.trim();
+    if trimmed.is_empty() {
+        return Err(format!("task.trigger.{field_name} contains an empty cron part"));
+    }
+    let (base_part, step) = if let Some((base, raw_step)) = trimmed.split_once('/') {
+        let parsed = raw_step
+            .trim()
+            .parse::<u8>()
+            .ok()
+            .filter(|value| *value > 0)
+            .ok_or_else(|| format!("task.trigger.{field_name} has invalid cron step: {trimmed}"))?;
+        (base.trim(), parsed)
+    } else {
+        (trimmed, 1)
+    };
+    let (start, end) = if base_part == "*" {
+        (min, max)
+    } else if let Some((raw_start, raw_end)) = base_part.split_once('-') {
+        let start = task_cron_field_value_from_token(
+            raw_start,
+            min,
+            max,
+            field_name,
+            allow_names,
+            is_weekday,
+        )?;
+        let end = task_cron_field_value_from_token(
+            raw_end,
+            min,
+            max,
+            field_name,
+            allow_names,
+            is_weekday,
+        )?;
+        if start > end {
+            return Err(format!(
+                "task.trigger.{field_name} has invalid cron range: {trimmed}"
+            ));
+        }
+        (start, end)
+    } else {
+        let start = task_cron_field_value_from_token(
+            base_part,
+            min,
+            max,
+            field_name,
+            allow_names,
+            is_weekday,
+        )?;
+        (start, if trimmed.contains('/') { max } else { start })
+    };
+    let mut values = Vec::new();
+    let mut current = start;
+    while current <= end {
+        values.push(current);
+        let next = current as u16 + step as u16;
+        if next > u8::MAX as u16 {
+            break;
+        }
+        current = next as u8;
+    }
+    if values.is_empty() {
+        return Err(format!(
+            "task.trigger.{field_name} has no effective cron values: {trimmed}"
+        ));
+    }
+    Ok(values)
+}
+
+fn task_cron_parse_field(
+    field: &str,
+    min: u8,
+    max: u8,
+    field_name: &str,
+    allow_names: bool,
+    is_weekday: bool,
+) -> Result<(Vec<bool>, bool), String> {
+    let trimmed = field.trim();
+    if trimmed.is_empty() {
+        return Err(format!("task.trigger.{field_name} must not be empty"));
+    }
+    let mut allowed = vec![false; max as usize + 1];
+    for part in trimmed.split(',') {
+        for value in task_cron_expand_part(
+            part,
+            min,
+            max,
+            field_name,
+            allow_names,
+            is_weekday,
+        )? {
+            allowed[value as usize] = true;
+        }
+    }
+    if !allowed.iter().skip(min as usize).any(|value| *value) {
+        return Err(format!(
+            "task.trigger.{field_name} has no usable cron values"
+        ));
+    }
+    let unrestricted = allowed
+        .iter()
+        .enumerate()
+        .skip(min as usize)
+        .take((max - min + 1) as usize)
+        .all(|(_, value)| *value);
+    Ok((allowed, unrestricted))
+}
+
+#[derive(Debug, Clone)]
+struct TaskCronSchedule {
+    minutes: Vec<bool>,
+    hours: Vec<bool>,
+    days_of_month: Vec<bool>,
+    months: Vec<bool>,
+    days_of_week: Vec<bool>,
+    dom_unrestricted: bool,
+    dow_unrestricted: bool,
+    normalized: String,
+}
+
+fn task_parse_cron_expression(expression: &str) -> Result<TaskCronSchedule, String> {
+    let normalized = expression.split_whitespace().collect::<Vec<_>>().join(" ");
+    let parts = normalized.split(' ').collect::<Vec<_>>();
+    if parts.len() != 5 {
+        return Err(
+            "task.trigger.cron_expression must be a standard 5-field Linux/Unix cron expression"
+                .to_string(),
+        );
+    }
+    let (minutes, minutes_unrestricted) =
+        task_cron_parse_field(parts[0], 0, 59, "cron_expression.minute", false, false)?;
+    let (hours, hours_unrestricted) =
+        task_cron_parse_field(parts[1], 0, 23, "cron_expression.hour", false, false)?;
+    let (days_of_month, dom_unrestricted) = task_cron_parse_field(
+        parts[2],
+        1,
+        31,
+        "cron_expression.day_of_month",
+        false,
+        false,
+    )?;
+    let (months, months_unrestricted) =
+        task_cron_parse_field(parts[3], 1, 12, "cron_expression.month", true, false)?;
+    let (days_of_week, dow_unrestricted) = task_cron_parse_field(
+        parts[4],
+        0,
+        6,
+        "cron_expression.day_of_week",
+        true,
+        true,
+    )?;
+    let _ = minutes_unrestricted;
+    let _ = hours_unrestricted;
+    let _ = months_unrestricted;
+    Ok(TaskCronSchedule {
+        minutes,
+        hours,
+        days_of_month,
+        months,
+        days_of_week,
+        dom_unrestricted,
+        dow_unrestricted,
+        normalized,
+    })
+}
+
+fn task_cron_matches_local(schedule: &TaskCronSchedule, local: OffsetDateTime) -> bool {
+    let minute = local.minute() as usize;
+    let hour = local.hour() as usize;
+    let day = local.day() as usize;
+    let month = local.month() as u8 as usize;
+    let weekday = task_weekday_number_from_local(local) as usize;
+    if !schedule.minutes.get(minute).copied().unwrap_or(false) {
+        return false;
+    }
+    if !schedule.hours.get(hour).copied().unwrap_or(false) {
+        return false;
+    }
+    if !schedule.months.get(month).copied().unwrap_or(false) {
+        return false;
+    }
+    let dom_match = schedule
+        .days_of_month
+        .get(day)
+        .copied()
+        .unwrap_or(false);
+    let dow_match = schedule
+        .days_of_week
+        .get(weekday)
+        .copied()
+        .unwrap_or(false);
+    if schedule.dom_unrestricted && schedule.dow_unrestricted {
+        return true;
+    }
+    if schedule.dom_unrestricted {
+        return dow_match;
+    }
+    if schedule.dow_unrestricted {
+        return dom_match;
+    }
+    dom_match || dow_match
+}
+
+fn task_cron_next_after_local(
+    base_local: OffsetDateTime,
+    schedule: &TaskCronSchedule,
+) -> Option<OffsetDateTime> {
+    let base = base_local
+        .replace_second(0)
+        .ok()?
+        .replace_nanosecond(0)
+        .ok()?;
+    let mut candidate = base + time::Duration::minutes(1);
+    let horizon = base + time::Duration::days(366 * 5);
+    while candidate <= horizon {
+        if task_cron_matches_local(schedule, candidate) {
+            return Some(candidate);
+        }
+        candidate += time::Duration::minutes(1);
+    }
+    None
+}
+
+fn task_normalize_cron_expression(value: &str) -> Result<String, String> {
+    Ok(task_parse_cron_expression(value)?.normalized)
+}
+
+fn task_legacy_every_minutes_normalized(value: f64) -> Option<f64> {
+    if !value.is_finite() || value <= 0.0 {
+        return None;
+    }
+    if value < 1.0 {
+        return Some(1.0);
+    }
+    Some(value)
+}
+
+fn task_exact_cron_expression_from_legacy_every_minutes(
+    run_at_utc: Option<&str>,
+    every_minutes: f64,
+) -> Option<String> {
+    let normalized_minutes = task_legacy_every_minutes_normalized(every_minutes)?.ceil() as u32;
+    let run_at_local = run_at_utc
+        .and_then(parse_rfc3339_time)
+        .map(to_local_datetime)
+        .unwrap_or_else(now_utc);
+    let start_minute = run_at_local.minute() as u32;
+    let start_hour = run_at_local.hour() as u32;
+    if normalized_minutes == 1 {
+        return Some("* * * * *".to_string());
+    }
+    if normalized_minutes < 60 && 60 % normalized_minutes == 0 {
+        let mut minutes = Vec::<String>::new();
+        let mut current = start_minute % normalized_minutes;
+        while current < 60 {
+            minutes.push(current.to_string());
+            current += normalized_minutes;
+        }
+        return Some(format!("{} * * * *", minutes.join(",")));
+    }
+    if normalized_minutes == 60 {
+        return Some(format!("{} * * * *", start_minute));
+    }
+    if normalized_minutes < 1440 && normalized_minutes % 60 == 0 {
+        let hours_step = normalized_minutes / 60;
+        if hours_step > 0 && 24 % hours_step == 0 {
+            let mut hours = Vec::<String>::new();
+            let mut current = start_hour % hours_step;
+            while current < 24 {
+                hours.push(current.to_string());
+                current += hours_step;
+            }
+            return Some(format!("{} {} * * *", start_minute, hours.join(",")));
+        }
+        return None;
+    }
+    if normalized_minutes == 1440 {
+        return Some(format!("{} {} * * *", start_minute, start_hour));
+    }
+    None
+}
+
+fn task_compute_next_run_at_from_legacy_every_minutes_raw(
+    run_at_utc: Option<&str>,
+    legacy_every_minutes: f64,
+    end_at_utc: Option<&str>,
+    last_triggered_at_utc: Option<&str>,
+    completion_state: &str,
+) -> Option<String> {
+    if completion_state != TASK_STATE_ACTIVE {
+        return None;
+    }
+    let run_at = run_at_utc.and_then(parse_rfc3339_time)?;
+    let end_at = end_at_utc.and_then(parse_rfc3339_time);
+    if let Some(end_at) = end_at {
+        if end_at <= run_at {
+            return None;
+        }
+    }
+    let normalized_minutes = task_legacy_every_minutes_normalized(legacy_every_minutes)?;
+    let next_dt = if let Some(last_triggered_at_utc) = last_triggered_at_utc {
+        let last_triggered = parse_rfc3339_time(last_triggered_at_utc)?;
+        let interval_ms = (normalized_minutes * 60_000.0).round() as i64;
+        if interval_ms <= 0 {
+            return None;
+        }
+        let candidate = last_triggered + time::Duration::milliseconds(interval_ms);
+        if candidate < run_at {
+            run_at
+        } else {
+            candidate
+        }
+    } else {
+        run_at
+    };
+    if let Some(end_at) = end_at {
+        if next_dt > end_at {
+            return None;
+        }
+    }
+    normalize_time_for_utc_storage(next_dt).ok()
+}
+
+fn task_compute_next_run_at_utc_raw(
+    run_at_utc: Option<&str>,
+    cron_expression: Option<&str>,
+    legacy_every_minutes: Option<f64>,
+    end_at_utc: Option<&str>,
+    last_triggered_at_utc: Option<&str>,
+    completion_state: &str,
+) -> Option<String> {
+    if completion_state != TASK_STATE_ACTIVE {
+        return None;
+    }
+    let run_at = run_at_utc.and_then(parse_rfc3339_time)?;
+    let end_at = end_at_utc.and_then(parse_rfc3339_time);
+    if let Some(end_at) = end_at {
+        if end_at <= run_at {
+            return None;
+        }
+    }
+    let normalized_cron = cron_expression
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if let Some(cron_expression) = normalized_cron {
+        if let Some(last_triggered_at_utc) = last_triggered_at_utc {
+            let last_triggered = parse_rfc3339_time(last_triggered_at_utc)?;
+            let schedule = task_parse_cron_expression(cron_expression).ok()?;
+            let next_local = task_cron_next_after_local(to_local_datetime(last_triggered), &schedule)?;
+            let next_utc = normalize_time_for_utc_storage(next_local).ok()?;
+            let next_dt = parse_rfc3339_time(&next_utc)?;
+            if next_dt < run_at {
+                return normalize_time_for_utc_storage(run_at).ok();
+            }
+            if let Some(end_at) = end_at {
+                if next_dt > end_at {
+                    return None;
+                }
+            }
+            return Some(next_utc);
+        }
+        if let Some(end_at) = end_at {
+            if run_at > end_at {
+                return None;
+            }
+        }
+        return normalize_time_for_utc_storage(run_at).ok();
+    }
+    if let Some(legacy_every_minutes) = legacy_every_minutes {
+        return task_compute_next_run_at_from_legacy_every_minutes_raw(
+            run_at_utc,
+            legacy_every_minutes,
+            end_at_utc,
+            last_triggered_at_utc,
+            completion_state,
+        );
+    }
+    if last_triggered_at_utc.is_some() {
+        return None;
+    }
+    if let Some(end_at) = end_at {
+        if run_at > end_at {
+            return None;
+        }
+    }
+    normalize_time_for_utc_storage(run_at).ok()
 }
 
 fn task_goal_from_legacy_fields(title: &str, goal: &str) -> String {

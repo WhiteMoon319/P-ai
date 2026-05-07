@@ -35,9 +35,10 @@
             why: String::new(),
             todo: "检查调度".to_string(),
             trigger: TaskTriggerInputLocal {
-                run_at_local: Some("2026-04-10T10:00:00+08:00".to_string()),
-                every_minutes: Some(30.0),
-                end_at_local: Some("2026-04-10T12:00:00+08:00".to_string()),
+                run_at: Some("2026-04-10T10:00:00+08:00".to_string()),
+                cron_expression: Some("0,30 * * * *".to_string()),
+                end_at: Some("2026-04-10T12:00:00+08:00".to_string()),
+                legacy_every_minutes: None,
             },
         };
 
@@ -60,9 +61,10 @@
             why: String::new(),
             todo: "等待空闲后继续".to_string(),
             trigger: TaskTriggerInputLocal {
-                run_at_local: Some("2026-04-10T10:00:00+08:00".to_string()),
-                every_minutes: Some(30.0),
-                end_at_local: Some("2099-04-10T12:00:00+08:00".to_string()),
+                run_at: Some("2026-04-10T10:00:00+08:00".to_string()),
+                cron_expression: Some("0,30 * * * *".to_string()),
+                end_at: Some("2099-04-10T12:00:00+08:00".to_string()),
+                legacy_every_minutes: None,
             },
         };
         let created = task_store_create_task(&data_path, &input).expect("create task");
@@ -80,7 +82,7 @@
             .as_deref()
             .and_then(parse_rfc3339_time)
             .expect("before next run");
-        assert_eq!(before_next, before_run + time::Duration::minutes(30));
+        assert_eq!(before_next, before_run);
 
         task_store_mark_skipped(&data_path, &created.task_id, "skipped", "busy skip")
             .expect("mark skipped");
@@ -97,13 +99,150 @@
             .as_deref()
             .and_then(parse_rfc3339_time)
             .expect("next run");
-        assert_eq!(next, last + time::Duration::minutes(30));
+        assert!(next > last);
+        let next_local = to_local_datetime(next);
+        assert!(matches!(next_local.minute(), 0 | 30));
         let logs = task_store_list_run_log_records(&data_path, Some(&created.task_id), 10)
             .expect("list logs");
         assert_eq!(logs.len(), 1);
         assert_eq!(logs[0].outcome, "skipped");
 
         let _ = fs::remove_dir_all(app_root_from_data_path(&data_path));
+    }
+
+    #[test]
+    fn task_store_migration_should_convert_subminute_legacy_interval_to_minute_cron() {
+        let data_path = test_task_data_path("migrate_subminute_legacy_interval");
+        let input = TaskCreateInput {
+            goal: "兼容旧调度".to_string(),
+            conversation_id: Some("conversation-a".to_string()),
+            target_scope: Some(TASK_TARGET_SCOPE_DESKTOP.to_string()),
+            why: String::new(),
+            todo: "迁移历史 every_minutes".to_string(),
+            trigger: TaskTriggerInputLocal {
+                run_at: Some("2026-04-10T10:00:00+08:00".to_string()),
+                cron_expression: None,
+                end_at: Some("2026-04-10T12:00:00+08:00".to_string()),
+                legacy_every_minutes: None,
+            },
+        };
+        let created = task_store_create_task(&data_path, &input).expect("create task");
+        let conn = task_store_open(&data_path).expect("open task db");
+        conn.execute(
+            "UPDATE task_record
+             SET cron_expression = NULL,
+                 every_minutes = 0.5,
+                 trigger_kind = 'legacy_immediate'
+             WHERE task_id = ?1",
+            params![created.task_id.as_str()],
+        )
+        .expect("seed legacy trigger");
+
+        task_store_apply_migrations(&conn).expect("apply task migrations");
+
+        let migrated = conn
+            .query_row(
+                "SELECT cron_expression, every_minutes, trigger_kind
+                 FROM task_record
+                 WHERE task_id = ?1",
+                params![created.task_id.as_str()],
+                |row| {
+                    Ok((
+                        row.get::<_, Option<String>>(0)?,
+                        row.get::<_, Option<f64>>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                },
+            )
+            .expect("read migrated task");
+        assert_eq!(migrated.0.as_deref(), Some("* * * * *"));
+        assert!(migrated.1.is_none());
+        assert_eq!(migrated.2, "cron");
+
+        let _ = fs::remove_dir_all(app_root_from_data_path(&data_path));
+    }
+
+    #[test]
+    fn task_store_migration_should_keep_unsupported_legacy_interval() {
+        let data_path = test_task_data_path("migrate_keep_legacy_interval");
+        let input = TaskCreateInput {
+            goal: "保留旧间隔".to_string(),
+            conversation_id: Some("conversation-a".to_string()),
+            target_scope: Some(TASK_TARGET_SCOPE_DESKTOP.to_string()),
+            why: String::new(),
+            todo: "不要硬转错 cron".to_string(),
+            trigger: TaskTriggerInputLocal {
+                run_at: Some("2026-04-10T10:00:00+08:00".to_string()),
+                cron_expression: None,
+                end_at: Some("2099-04-10T15:00:00+08:00".to_string()),
+                legacy_every_minutes: None,
+            },
+        };
+        let created = task_store_create_task(&data_path, &input).expect("create task");
+        let conn = task_store_open(&data_path).expect("open task db");
+        conn.execute(
+            "UPDATE task_record
+             SET cron_expression = NULL,
+                 every_minutes = 45,
+                 trigger_kind = 'legacy_immediate'
+             WHERE task_id = ?1",
+            params![created.task_id.as_str()],
+        )
+        .expect("seed legacy trigger");
+
+        task_store_apply_migrations(&conn).expect("apply task migrations");
+
+        let migrated = task_store_get_task_record(&data_path, &created.task_id).expect("read migrated task");
+        assert!(migrated.trigger.cron_expression.is_none());
+        assert_eq!(migrated.trigger.legacy_every_minutes, Some(45.0));
+        let next_run = migrated
+            .trigger
+            .next_run_at_utc
+            .as_deref()
+            .and_then(parse_rfc3339_time)
+            .expect("next run");
+        let next_run_local = to_local_datetime(next_run);
+        assert_eq!(next_run_local.hour(), 10);
+        assert_eq!(next_run_local.minute(), 0);
+
+        task_store_mark_skipped(&data_path, &created.task_id, "skipped", "legacy interval")
+            .expect("mark skipped");
+        let after = task_store_get_task_record(&data_path, &created.task_id).expect("read after");
+        let last_after_skip = after
+            .last_triggered_at_utc
+            .as_deref()
+            .and_then(parse_rfc3339_time)
+            .expect("last triggered after skip");
+        let next_after_skip = after
+            .trigger
+            .next_run_at_utc
+            .as_deref()
+            .and_then(parse_rfc3339_time)
+            .expect("next run after skip");
+        assert_eq!(
+            (next_after_skip - last_after_skip).whole_minutes(),
+            45,
+        );
+
+        let _ = fs::remove_dir_all(app_root_from_data_path(&data_path));
+    }
+
+    #[test]
+    fn task_cron_parse_field_should_treat_full_range_forms_as_unrestricted() {
+        let schedule = task_parse_cron_expression("0 9 */1 * 1").expect("parse cron");
+        assert!(schedule.dom_unrestricted);
+        assert!(!schedule.dow_unrestricted);
+
+        let monday = parse_rfc3339_time("2026-04-13T09:00:00+08:00").expect("parse monday");
+        let tuesday = parse_rfc3339_time("2026-04-14T09:00:00+08:00").expect("parse tuesday");
+        assert!(task_cron_matches_local(&schedule, monday));
+        assert!(!task_cron_matches_local(&schedule, tuesday));
+
+        let weekday_full_range = task_parse_cron_expression("0 9 * * 0-6").expect("parse full weekday range");
+        assert!(weekday_full_range.dow_unrestricted);
+
+        let dom_full_range = task_parse_cron_expression("0 9 1-31 * *").expect("parse full dom range");
+        assert!(dom_full_range.dom_unrestricted);
     }
 
     #[test]

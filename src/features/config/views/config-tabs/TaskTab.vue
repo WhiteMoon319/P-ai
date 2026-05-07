@@ -48,7 +48,7 @@
               <div class="mt-1 text-[11px] opacity-60 line-clamp-2">{{ task.todo || t("config.task.noTodo") }}</div>
               <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] opacity-50">
                 <span>#{{ task.orderIndex }}</span>
-                <span v-if="task.trigger.nextRunAtLocal">{{ formatTaskTime(task.trigger.nextRunAtLocal) }}</span>
+                <span v-if="task.trigger.next_run_at">{{ formatTaskTime(task.trigger.next_run_at) }}</span>
                 <span v-else>{{ formatTaskTime(task.updatedAtLocal) }}</span>
               </div>
             </div>
@@ -145,9 +145,10 @@ import {
 } from "./task-editor";
 
 type TaskTriggerInputLocalWire = {
-  runAtLocal?: string;
+  run_at?: string;
   everyMinutes?: number;
-  endAtLocal?: string;
+  cron_expression?: string;
+  end_at?: string;
 };
 
 type TaskCreateInputWire = {
@@ -317,23 +318,47 @@ function closeDiscardConfirmDialog(value: boolean) {
 }
 
 function buildTriggerInputFromForm(): TaskTriggerInputLocalWire | null {
-  const everyMinutesText = String(editorForm.value.everyMinutesText || "").trim();
-  let everyMinutes: number | undefined;
-  if (everyMinutesText) {
-    const parsed = Number(everyMinutesText);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      editorError.value = t("config.task.validation.everyMinutesPositive");
-      return null;
-    }
-    everyMinutes = parsed;
-  }
-  const runAtLocal = String(editorForm.value.runAtLocal || "").trim();
-  const endAtLocal = String(editorForm.value.endAtLocal || "").trim();
-  return {
-    runAtLocal: runAtLocal || undefined,
-    everyMinutes,
-    endAtLocal: endAtLocal || undefined,
+  const runAt = String(editorForm.value.runAt || "").trim();
+  const endAt = String(editorForm.value.endAt || "").trim();
+  const trigger: TaskTriggerInputLocalWire = {
+    run_at: runAt || undefined,
+    end_at: endAt || undefined,
   };
+  if (editorForm.value.scheduleMode !== "interval") {
+    return trigger;
+  }
+  const repeatWeeksRaw = String(editorForm.value.repeatWeeks || "0").trim() || "0";
+  const repeatDaysRaw = String(editorForm.value.repeatDays || "0").trim() || "0";
+  const repeatHoursRaw = String(editorForm.value.repeatHours || "0").trim() || "0";
+  const repeatWeeks = Number(repeatWeeksRaw);
+  const repeatDays = Number(repeatDaysRaw);
+  const repeatHours = Number(repeatHoursRaw);
+  if (
+    !Number.isInteger(repeatWeeks) || !Number.isInteger(repeatDays) || !Number.isInteger(repeatHours) ||
+    !Number.isFinite(repeatWeeks) || repeatWeeks < 0 ||
+    !Number.isFinite(repeatDays) || repeatDays < 0 ||
+    !Number.isFinite(repeatHours) || repeatHours < 0
+  ) {
+    editorError.value = t("config.task.validation.repeatIntervalInvalid");
+    return null;
+  }
+  const totalHours = repeatWeeks * 7 * 24 + repeatDays * 24 + repeatHours;
+  if (totalHours > 0) {
+    trigger.everyMinutes = totalHours * 60;
+    return trigger;
+  }
+  const preservedEveryMinutes = Number.parseFloat(String(editorForm.value.preservedEveryMinutes || "").trim());
+  if (Number.isFinite(preservedEveryMinutes) && preservedEveryMinutes > 0) {
+    trigger.everyMinutes = preservedEveryMinutes;
+    return trigger;
+  }
+  const preservedCronExpression = String(editorForm.value.preservedCronExpression || "").trim();
+  if (preservedCronExpression) {
+    trigger.cron_expression = preservedCronExpression;
+    return trigger;
+  }
+  editorError.value = t("config.task.validation.repeatIntervalRequired");
+  return null;
 }
 
 function editorCreatePayload(): TaskCreateInputWire | null {
