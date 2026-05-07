@@ -439,7 +439,7 @@ async fn call_lazy_operate_mcp_tool(
 ) -> Result<ProviderToolResult, String> {
     let timeout = std::time::Duration::from_secs(TOOL_RUNTIME_CHECK_TIMEOUT_SECS);
     let connect = tokio::time::timeout(timeout, connect_operate_mcp_tool()).await;
-    let (definition, client) = match connect {
+    let (definition, client, process_tree_guard) = match connect {
         Ok(Ok(value)) => value,
         Ok(Err(err)) => return Ok(tool_unavailable_error_result(MCP_OPERATE_TOOL_NAME, err)),
         Err(_) => {
@@ -464,6 +464,7 @@ async fn call_lazy_operate_mcp_tool(
         }
     };
     cancel_lazy_mcp_client(MCP_OPERATE_TOOL_NAME, client).await?;
+    drop(process_tree_guard);
     result
 }
 
@@ -479,7 +480,7 @@ async fn call_lazy_read_file_mcp_tool(
         connect_read_file_mcp_tool(&session_id, &api_config_id),
     )
     .await;
-    let (definition, client) = match connect {
+    let (definition, client, process_tree_guard) = match connect {
         Ok(Ok(value)) => value,
         Ok(Err(err)) => return Ok(tool_unavailable_error_result(MCP_READ_FILE_TOOL_NAME, err)),
         Err(_) => {
@@ -504,6 +505,7 @@ async fn call_lazy_read_file_mcp_tool(
         }
     };
     cancel_lazy_mcp_client(MCP_READ_FILE_TOOL_NAME, client).await?;
+    drop(process_tree_guard);
     result
 }
 
@@ -544,17 +546,23 @@ impl RuntimeToolDyn for LazyReadFileMcpTool {
 async fn connect_read_file_mcp_tool(
     tool_session_id: &str,
     api_config_id: &str,
-) -> Result<(rmcp::model::Tool, rmcp::service::RunningService<rmcp::RoleClient, ()>), String> {
+) -> Result<
+    (
+        rmcp::model::Tool,
+        rmcp::service::RunningService<rmcp::RoleClient, ()>,
+        Option<McpProcessTreeGuard>,
+    ),
+    String,
+> {
     let exe = std::env::current_exe()
         .map_err(|err| format!("Resolve current executable for MCP read_file failed: {err}"))?;
     let mut cmd = tokio::process::Command::new(exe);
     cmd.arg(MCP_READ_FILE_SERVER_FLAG);
     cmd.arg(MCP_READ_FILE_SESSION_FLAG).arg(tool_session_id);
     cmd.arg(MCP_READ_FILE_API_FLAG).arg(api_config_id);
-    let transport = rmcp::transport::TokioChildProcess::new(cmd)
-        .map_err(|err| format!("Start MCP read_file child process failed: {err}"))?;
+    let spawned = mcp_spawn_child_process(cmd, "MCP read_file")?;
 
-    let client = ().serve(transport).await.map_err(|err| {
+    let client = ().serve(spawned.transport).await.map_err(|err| {
         format!("Connect to MCP read_file server failed: {err}")
     })?;
     let defs = client
@@ -566,23 +574,29 @@ async fn connect_read_file_mcp_tool(
         if def.name.as_ref() != MCP_READ_FILE_TOOL_NAME {
             continue;
         }
-        return Ok((def, client));
+        return Ok((def, client, spawned.process_tree_guard));
     }
 
     Err("MCP read_file server did not expose read_file tool".to_string())
 }
 
 async fn connect_operate_mcp_tool(
-) -> Result<(rmcp::model::Tool, rmcp::service::RunningService<rmcp::RoleClient, ()>), String> {
+) -> Result<
+    (
+        rmcp::model::Tool,
+        rmcp::service::RunningService<rmcp::RoleClient, ()>,
+        Option<McpProcessTreeGuard>,
+    ),
+    String,
+> {
     let exe = std::env::current_exe()
         .map_err(|err| format!("Resolve current executable for MCP operate failed: {err}"))?;
     let mut cmd = tokio::process::Command::new(exe);
     cmd.arg(MCP_OPERATE_SERVER_FLAG);
-    let transport = rmcp::transport::TokioChildProcess::new(cmd)
-        .map_err(|err| format!("Start MCP operate child process failed: {err}"))?;
+    let spawned = mcp_spawn_child_process(cmd, "MCP operate")?;
 
     let client = ()
-        .serve(transport)
+        .serve(spawned.transport)
         .await
         .map_err(|err| format!("Connect to MCP operate server failed: {err}"))?;
     let defs = client
@@ -594,7 +608,7 @@ async fn connect_operate_mcp_tool(
         if def.name.as_ref() != MCP_OPERATE_TOOL_NAME {
             continue;
         }
-        return Ok((def, client));
+        return Ok((def, client, spawned.process_tree_guard));
     }
 
     Err("MCP operate server did not expose operate tool".to_string())

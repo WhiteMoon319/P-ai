@@ -66,10 +66,9 @@ async fn list_mcp_tool_definitions(
     cmd: tokio::process::Command,
     scene: &str,
 ) -> Result<Vec<rmcp::model::Tool>, String> {
-    let transport = rmcp::transport::TokioChildProcess::new(cmd)
-        .map_err(|err| format!("Start {scene} MCP child process failed: {err}"))?;
+    let spawned = mcp_spawn_child_process(cmd, scene)?;
     let client = ()
-        .serve(transport)
+        .serve(spawned.transport)
         .await
         .map_err(|err| format!("Connect to {scene} MCP server failed: {err}"))?;
     let defs = client
@@ -82,6 +81,7 @@ async fn list_mcp_tool_definitions(
             scene, err
         ));
     }
+    drop(spawned.process_tree_guard);
     Ok(defs)
 }
 

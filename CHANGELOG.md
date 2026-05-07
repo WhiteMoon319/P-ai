@@ -2,6 +2,7 @@
 
 ## 进行中
 
+- 修复（mcp-windows-job-object-sidecar-coverage）：MCP 子进程树托管补齐到剩余旁路启动链路，前台工具目录预览与懒加载 `operate/read_file` 现在也会在 Windows 下挂入 `Job Object`，避免 dev/预览阶段残留 `node/cmd/npx` 后台进程。
 - 修复（chat-streaming-markdown-fade-remove）：聊天流式 Markdown 去掉前端额外淡入与 typewriter 渐显效果；正文仍按流式批次继续追加，但不再出现慢速显影，阅读观感更接近稳定文档。
 - 修复（chat-loading-dots-left-alignment）：助理流式草稿的三点等待态改为按气泡左侧起笔对齐，不再在空白等待气泡内居中漂浮，和正式正文的阅读起点保持一致。
 - 修复（chat-streaming-scroll-stability-review-followup）：聊天流式气泡高度补偿继续收口；首屏已渲染的虚拟行在挂载后会补注册 `ResizeObserver`，程序化 `scrollTop` 纠偏也不再误触发向上分页加载，减少切入活跃流时的首波跳动与历史误加载。
