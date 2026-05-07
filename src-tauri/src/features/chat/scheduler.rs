@@ -705,6 +705,27 @@ fn stream_cache_has_visible_progress(cache: &ConversationStreamRuntimeCache) -> 
         || !cache.stream_tool_calls.is_empty()
 }
 
+fn event_tool_call_id(event: &AssistantDeltaEvent) -> Option<&str> {
+    event
+        .tool_call_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn find_stream_tool_call_cache_index(
+    calls: &[ConversationStreamToolCallRuntimeCache],
+    tool_call_id: &str,
+) -> Option<usize> {
+    calls.iter().position(|call| {
+        call.tool_call_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            == Some(tool_call_id)
+    })
+}
+
 fn reset_conversation_stream_runtime_cache(
     state: &AppState,
     conversation_id: &str,
@@ -777,24 +798,52 @@ fn update_conversation_stream_runtime_cache(
     match event.kind.as_deref() {
         Some("tool_status") => {
             let tool_name = event.tool_name.as_deref().map(str::trim).unwrap_or("");
-            if event.tool_status.as_deref() == Some("running") && !tool_name.is_empty() {
-                cache.stream_tool_call_count += 1;
-                cache.stream_last_tool_name = tool_name.to_string();
-                if let Some(last) = cache.stream_tool_calls.last_mut() {
-                    if last.status.as_deref() != Some("done") {
-                        last.status = Some("done".to_string());
+            let tool_status = event.tool_status.as_deref().unwrap_or("").trim();
+            let tool_args = event.tool_args.clone().unwrap_or_default();
+            let tool_call_id = event_tool_call_id(event);
+            if let Some(tool_call_id) = tool_call_id {
+                if tool_status == "running" && !tool_name.is_empty() {
+                    cache.stream_last_tool_name = tool_name.to_string();
+                    if let Some(index) =
+                        find_stream_tool_call_cache_index(&cache.stream_tool_calls, tool_call_id)
+                    {
+                        if let Some(call) = cache.stream_tool_calls.get_mut(index) {
+                            call.name = tool_name.to_string();
+                            call.args_text = tool_args.clone();
+                            call.tool_call_id = Some(tool_call_id.to_string());
+                            call.status = Some("doing".to_string());
+                        }
+                    } else {
+                        cache.stream_tool_call_count += 1;
+                        cache
+                            .stream_tool_calls
+                            .push(ConversationStreamToolCallRuntimeCache {
+                                name: tool_name.to_string(),
+                                args_text: tool_args.clone(),
+                                tool_call_id: Some(tool_call_id.to_string()),
+                                status: Some("doing".to_string()),
+                            });
+                    }
+                } else if (tool_status == "done" || tool_status == "failed")
+                    && !tool_name.is_empty()
+                {
+                    if let Some(index) =
+                        find_stream_tool_call_cache_index(&cache.stream_tool_calls, tool_call_id)
+                    {
+                        if let Some(call) = cache.stream_tool_calls.get_mut(index) {
+                            call.name = tool_name.to_string();
+                            if !tool_args.is_empty() {
+                                call.args_text = tool_args.clone();
+                            }
+                            call.tool_call_id = Some(tool_call_id.to_string());
+                            call.status = Some("done".to_string());
+                        }
                     }
                 }
-                cache.stream_tool_calls.push(ConversationStreamToolCallRuntimeCache {
-                    name: tool_name.to_string(),
-                    args_text: event.tool_args.clone().unwrap_or_default(),
-                    status: Some("doing".to_string()),
-                });
             }
             cache.tool_status_text = event.message.clone().unwrap_or_default();
-            let status = event.tool_status.as_deref().unwrap_or("").trim();
-            cache.tool_status_state = match status {
-                "running" | "done" | "failed" => status.to_string(),
+            cache.tool_status_state = match tool_status {
+                "running" | "done" | "failed" => tool_status.to_string(),
                 _ => String::new(),
             };
         }

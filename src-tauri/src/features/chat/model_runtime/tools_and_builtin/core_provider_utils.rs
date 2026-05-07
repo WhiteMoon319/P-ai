@@ -13,6 +13,7 @@ fn send_tool_status_event(
     tool_name: &str,
     tool_status: &str,
     tool_args: Option<&str>,
+    tool_call_id: Option<&str>,
     message: &str,
 ) {
     let send_result = on_delta.send(AssistantDeltaEvent {
@@ -23,6 +24,7 @@ fn send_tool_status_event(
         phase_id: None,
         reason: None,
         tool_name: Some(tool_name.to_string()),
+        tool_call_id: tool_call_id.map(|value| value.to_string()),
         tool_status: Some(tool_status.to_string()),
         tool_args: tool_args.map(|v| v.to_string()),
         message: Some(message.to_string()),
@@ -64,6 +66,7 @@ fn send_stream_rebind_required_event(
         phase_id: Some(phase_id.clone()),
         reason: Some(reason_text.clone()),
         tool_name: None,
+        tool_call_id: None,
         tool_status: None,
         tool_args: None,
         message: None,

@@ -740,7 +740,7 @@ function assistantStreamingHeaderStatus(block: ChatMessageBlock): string {
   };
   if (preStreamingStatusText) return withElapsed(preStreamingStatusText);
   const toolCalls = toolCallsForBlock(block);
-  const doingTool = toolCalls.find((call) => call.status === "doing") || toolCalls[toolCalls.length - 1];
+  const doingTool = toolCalls.find((call) => call.status === "doing");
   if (doingTool?.name) return withElapsed(`正在执行 ${doingTool.name} 中`);
   if (hasStreamingSpeechContent(block)) {
     return withElapsed(t("chat.statusSpeaking"));
@@ -1509,12 +1509,23 @@ function resolvedInlineReasoning(block: ChatMessageBlock): string {
   return splitThinkText(block.text).inline || block.reasoningInline || "";
 }
 
+function reasoningCharacterCount(block: ChatMessageBlock): number {
+  const standard = String(block.reasoningStandard || "");
+  const inline = String(resolvedInlineReasoning(block) || "");
+  return standard.length + inline.length;
+}
+
+function reasoningCharacterCountLabel(block: ChatMessageBlock): string {
+  const count = reasoningCharacterCount(block);
+  return count > 0 ? `（${count.toLocaleString("zh-CN")}）` : "";
+}
+
 function reasoningSummaryLabel(block: ChatMessageBlock): string {
-  if (block.isStreaming) return "正在思考中";
+  if (block.isStreaming) return `正在思考中${reasoningCharacterCountLabel(block)}`;
   const elapsedMs = Number((block as ChatMessageBlock & { reasoningElapsedMs?: number }).reasoningElapsedMs ?? 0);
-  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return "思考完成";
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return `思考完成${reasoningCharacterCountLabel(block)}`;
   const elapsedSeconds = Math.max(1, Math.round(elapsedMs / 1000));
-  return `思考了${elapsedSeconds}秒`;
+  return `思考了${elapsedSeconds}秒${reasoningCharacterCountLabel(block)}`;
 }
 
 function isImageMime(mime: string): boolean {

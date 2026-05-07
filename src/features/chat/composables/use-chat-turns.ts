@@ -7,18 +7,20 @@ import {
   projectMessageForDisplay,
 } from "../../../utils/chat-message-semantics";
 
-function streamToolCallsFromProviderMeta(meta: Record<string, unknown>): Array<{ name: string; argsText: string; status?: "doing" | "done" }> {
+function streamToolCallsFromProviderMeta(meta: Record<string, unknown>): Array<{ toolCallId?: string; name: string; argsText: string; status?: "doing" | "done" }> {
   if (!Array.isArray(meta._streamToolCalls)) return [];
   return (meta._streamToolCalls as unknown[])
     .map((item) => {
       const raw = item && typeof item === "object" ? item as Record<string, unknown> : null;
+      const toolCallId = String(raw?.toolCallId || "").trim();
       return {
+        toolCallId: toolCallId || undefined,
         name: String(raw?.name || "").trim(),
         argsText: String(raw?.argsText || ""),
         status: String(raw?.status || "") === "doing" ? "doing" as const : "done" as const,
       };
     })
-    .filter((item) => !!item.name);
+    .filter((item) => !!item.toolCallId && !!item.name);
 }
 
 function positiveNumberFromProviderMeta(meta: Record<string, unknown>, key: string): number | undefined {

@@ -16,6 +16,7 @@ export type AssistantDeltaEvent = {
   phaseId?: string;
   reason?: string;
   toolName?: string;
+  toolCallId?: string;
   toolStatus?: string;
   toolArgs?: string;
   message?: string;
@@ -75,7 +76,7 @@ type UseChatFlowOptions = {
   latestReasoningInlineText: Ref<string>;
   toolStatusText: Ref<string>;
   toolStatusState: Ref<"running" | "done" | "failed" | "">;
-  streamToolCalls?: Ref<Array<{ name: string; argsText: string; status?: "doing" | "done" }>>;
+  streamToolCalls?: Ref<StreamToolCallView[]>;
   chatErrorText: Ref<string>;
   allMessages: Ref<ChatMessage[]>;
   onOwnUserDraftInserted?: () => void;
@@ -197,12 +198,12 @@ type ConversationStreamCache = {
   reasoningInline: string;
   toolStatusText: string;
   toolStatusState: "running" | "done" | "failed" | "";
-  streamToolCalls: Array<{ name: string; argsText: string; status?: "doing" | "done" }>;
+  streamToolCalls: StreamToolCallView[];
   streamToolCallCount: number;
   streamLastToolName: string;
 };
 
-type StreamToolCallView = { name: string; argsText: string; status?: "doing" | "done" };
+type StreamToolCallView = { toolCallId?: string; name: string; argsText: string; status?: "doing" | "done" };
 
 export type ConversationRuntimeStreamCacheSnapshot = {
   activationId?: string;
@@ -214,7 +215,7 @@ export type ConversationRuntimeStreamCacheSnapshot = {
   reasoningInline?: string;
   toolStatusText?: string;
   toolStatusState?: "running" | "done" | "failed" | "" | string;
-  streamToolCalls?: Array<{ name?: string; argsText?: string; status?: "doing" | "done" | string }>;
+  streamToolCalls?: Array<{ toolCallId?: string; name?: string; argsText?: string; status?: "doing" | "done" | string }>;
   streamToolCallCount?: number;
   streamLastToolName?: string;
   hasVisibleProgress?: boolean;
@@ -243,7 +244,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     reasoningInline: string;
     toolStatusText: string;
     toolStatusState: "running" | "done" | "failed" | "";
-    streamToolCalls: Array<{ name: string; argsText: string; status?: "doing" | "done" }>;
+    streamToolCalls: StreamToolCallView[];
     streamToolCallCount: number;
     streamLastToolName: string;
     frontendDispatchStartedAtMs: number;
@@ -555,9 +556,11 @@ export function useChatFlow(options: UseChatFlowOptions) {
 
   function normalizeStreamToolCallView(item: unknown): StreamToolCallView | null {
     const raw = item && typeof item === "object" ? item as Record<string, unknown> : null;
+    const toolCallId = String(raw?.toolCallId || "").trim();
     const name = String(raw?.name || "").trim();
-    if (!name) return null;
+    if (!toolCallId || !name) return null;
     return {
+      toolCallId,
       name,
       argsText: String(raw?.argsText || ""),
       status: String(raw?.status || "") === "doing" ? "doing" : "done",
@@ -565,7 +568,65 @@ export function useChatFlow(options: UseChatFlowOptions) {
   }
 
   function sameStreamToolCallIdentity(left: StreamToolCallView, right: StreamToolCallView): boolean {
-    return left.name === right.name && left.argsText === right.argsText;
+    return !!left.toolCallId && !!right.toolCallId && left.toolCallId === right.toolCallId;
+  }
+
+  function findStreamToolCallViewIndex(
+    calls: StreamToolCallView[],
+    toolCallId: string | undefined,
+  ): number {
+    const normalizedToolCallId = String(toolCallId || "").trim();
+    if (!normalizedToolCallId) return -1;
+    return calls.findIndex((call) => String(call.toolCallId || "").trim() === normalizedToolCallId);
+  }
+
+  function applyToolStatusToStreamToolCalls(
+    currentCalls: StreamToolCallView[],
+    parsed: AssistantDeltaEvent,
+  ): { calls: StreamToolCallView[]; appended: boolean } {
+    const toolName = String(parsed.toolName || "").trim();
+    const toolArgs = String(parsed.toolArgs || "").trim();
+    const toolCallId = String(parsed.toolCallId || "").trim() || undefined;
+    const toolStatus = String(parsed.toolStatus || "").trim();
+    const next = currentCalls.map((item) => ({ ...item }));
+    if (!toolName || !toolStatus || !toolCallId) {
+      return { calls: next, appended: false };
+    }
+    const index = findStreamToolCallViewIndex(next, toolCallId);
+    if (toolStatus === "running") {
+      const item: StreamToolCallView = {
+        toolCallId,
+        name: toolName,
+        argsText: toolArgs,
+        status: "doing",
+      };
+      if (index >= 0) {
+        next[index] = item;
+        return { calls: next, appended: false };
+      }
+      next.push(item);
+      return { calls: next, appended: true };
+    }
+    if (toolStatus === "done" || toolStatus === "failed") {
+      if (index >= 0) {
+        next[index] = {
+          ...next[index],
+          toolCallId: toolCallId || next[index].toolCallId,
+          name: toolName,
+          argsText: toolArgs || next[index].argsText,
+          status: "done",
+        };
+        return { calls: next, appended: false };
+      }
+      next.push({
+        toolCallId,
+        name: toolName,
+        argsText: toolArgs,
+        status: "done",
+      });
+      return { calls: next, appended: true };
+    }
+    return { calls: next, appended: false };
   }
 
   function mergeStreamToolCallsForward(
@@ -582,7 +643,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
       && incoming.every((item, idx) => sameStreamToolCallIdentity(current[idx], item))
     ) {
       return current.map((item, idx) => {
-        return { ...item, status: incoming[idx].status };
+        return { ...item, ...incoming[idx], status: incoming[idx].status };
       });
     }
 
@@ -595,18 +656,11 @@ export function useChatFlow(options: UseChatFlowOptions) {
       if (!overlaps) continue;
       const merged = current.map((item, idx) => {
         if (idx < currentStart) return item;
-        return { ...item, status: incoming[idx - currentStart].status };
+        return { ...item, ...incoming[idx - currentStart], status: incoming[idx - currentStart].status };
       });
       const tail = incoming.slice(overlap);
       if (tail.length === 0) return merged;
-      return [
-        ...merged.map((item, idx) =>
-          idx === merged.length - 1 && item.status !== "done"
-            ? { ...item, status: "done" as const }
-            : item
-        ),
-        ...tail,
-      ];
+      return [...merged, ...tail];
     }
 
     if (incoming.length > current.length) {
@@ -616,15 +670,8 @@ export function useChatFlow(options: UseChatFlowOptions) {
     const latest = incoming[incoming.length - 1];
     const currentLast = current[current.length - 1];
     if (latest && !sameStreamToolCallIdentity(currentLast, latest)) {
-      return [
-        ...current.map((item, idx) =>
-          idx === current.length - 1 && item.status !== "done"
-            ? { ...item, status: "done" as const }
-            : item
-        ),
-        latest,
-      ];
-      }
+      return [...current, latest];
+    }
 
     return current;
   }
@@ -708,19 +755,15 @@ export function useChatFlow(options: UseChatFlowOptions) {
       const delta = readDeltaMessage(parsed);
       if (parsed.kind === "tool_status") {
         const toolName = String(parsed.toolName || "").trim();
-        if (parsed.toolStatus === "running" && toolName) {
-          next.streamToolCallCount += 1;
+        const statusUpdate = applyToolStatusToStreamToolCalls(next.streamToolCalls, parsed);
+        next.streamToolCalls = statusUpdate.calls;
+        if (parsed.toolStatus === "running" && toolName && parsed.toolCallId) {
           next.streamLastToolName = toolName;
-          next.streamToolCalls = next.streamToolCalls.map((call, idx, arr) => {
-            if (idx !== arr.length - 1) return call;
-            if (call.status === "done") return call;
-            return { ...call, status: "done" as const };
-          });
-          next.streamToolCalls.push({
-            name: toolName,
-            argsText: String(parsed.toolArgs || "").trim(),
-            status: "doing",
-          });
+          if (statusUpdate.appended) {
+            next.streamToolCallCount += 1;
+          }
+        } else if (statusUpdate.appended) {
+          next.streamToolCallCount = Math.max(next.streamToolCallCount, next.streamToolCalls.length);
         }
         next.toolStatusText = parsed.message || "";
         next.toolStatusState =
@@ -842,6 +885,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
       phaseId: typeof m.phaseId === "string" ? m.phaseId : undefined,
       reason: typeof m.reason === "string" ? m.reason : undefined,
       toolName: typeof m.toolName === "string" ? m.toolName : undefined,
+      toolCallId: typeof m.toolCallId === "string" ? m.toolCallId : undefined,
       toolStatus: typeof m.toolStatus === "string" ? m.toolStatus : undefined,
       toolArgs: typeof m.toolArgs === "string" ? m.toolArgs : undefined,
       message: typeof m.message === "string" ? m.message : undefined,
@@ -1979,25 +2023,22 @@ export function useChatFlow(options: UseChatFlowOptions) {
 
     if (parsed.kind === "tool_status") {
       const toolName = String(parsed.toolName || "").trim();
-      if (parsed.toolStatus === "running" && toolName) {
-        streamToolCallCount += 1;
+      if (options.streamToolCalls) {
+        const statusUpdate = applyToolStatusToStreamToolCalls(options.streamToolCalls.value, parsed);
+        options.streamToolCalls.value = statusUpdate.calls;
+        if (parsed.toolStatus === "running" && toolName && parsed.toolCallId) {
+          streamLastToolName = toolName;
+          if (statusUpdate.appended) {
+            streamToolCallCount += 1;
+          }
+        } else if (statusUpdate.appended) {
+          streamToolCallCount = Math.max(streamToolCallCount, options.streamToolCalls.value.length);
+        }
+      } else if (parsed.toolStatus === "running" && toolName && parsed.toolCallId) {
         streamLastToolName = toolName;
-        if (options.streamToolCalls) {
-          const next = options.streamToolCalls.value.map((call, idx, arr) => {
-            if (idx !== arr.length - 1) return call;
-            if (call.status === "done") return call;
-            return { ...call, status: "done" as const };
-          });
-          next.push({
-            name: toolName,
-            argsText: String(parsed.toolArgs || "").trim(),
-            status: "doing",
-          });
-          options.streamToolCalls.value = next;
-        }
-        if (currentRound.phase === "streaming") {
-          syncStreamToolCallsToDraft(currentRound.draftId);
-        }
+      }
+      if (currentRound.phase === "streaming") {
+        syncStreamToolCallsToDraft(currentRound.draftId);
       }
       options.toolStatusText.value = parsed.message || "";
       options.toolStatusState.value =

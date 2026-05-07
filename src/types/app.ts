@@ -590,7 +590,7 @@ export type ChatMessageBlock = {
   frontendDispatchElapsedMs?: number;
   toolCallCount: number;
   lastToolName: string;
-  toolCalls: Array<{ name: string; argsText: string; status?: "doing" | "done" }>;
+  toolCalls: Array<{ toolCallId?: string; name: string; argsText: string; status?: "doing" | "done" }>;
 };
 
 export type ChatPersonaPresenceChip = {

@@ -191,6 +191,8 @@ pub(crate) struct ConversationStreamToolCallRuntimeCache {
     name: String,
     args_text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    tool_call_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     status: Option<String>,
 }
 

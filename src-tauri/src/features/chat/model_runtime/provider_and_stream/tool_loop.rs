@@ -211,6 +211,7 @@ fn send_text_delta_event(
         phase_id: None,
         reason: None,
         tool_name: None,
+        tool_call_id: None,
         tool_status: None,
         tool_args: None,
         message: None,
@@ -716,6 +717,7 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
         phase_id: None,
         reason: None,
         tool_name: Some("archive".to_string()),
+        tool_call_id: None,
         tool_status: Some("running".to_string()),
         tool_args: None,
         message: Some("上下文接近上限，正在整理后继续执行...".to_string()),
@@ -744,6 +746,7 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
                 phase_id: None,
                 reason: None,
                 tool_name: Some("archive".to_string()),
+                tool_call_id: None,
                 tool_status: Some("failed".to_string()),
                 tool_args: None,
                 message: Some(format!("自动整理失败：{err}")),
@@ -783,6 +786,7 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
         phase_id: None,
         reason: None,
         tool_name: Some("archive".to_string()),
+        tool_call_id: None,
         tool_status: Some("done".to_string()),
         tool_args: None,
         message: Some("整理完成，正在重新开始当前调度...".to_string()),
@@ -905,6 +909,7 @@ async fn run_genai_tool_loop(
                                 phase_id: None,
                                 reason: None,
                                 tool_name: None,
+                                tool_call_id: None,
                                 tool_status: None,
                                 tool_args: None,
                                 message: None,
@@ -1041,6 +1046,7 @@ async fn run_genai_tool_loop(
                 &tool_name,
                 "running",
                 Some(tool_args.as_str()),
+                Some(tool_call_id.as_str()),
                 &format!("正在调用工具：{}", tool_name),
             );
 
@@ -1055,6 +1061,7 @@ async fn run_genai_tool_loop(
                     &tool_name,
                     "failed",
                     Some(tool_args.as_str()),
+                    Some(tool_call_id.as_str()),
                     &err_text,
                 );
                 return Ok(repeated_tool_call_block_reply(
@@ -1081,7 +1088,8 @@ async fn run_genai_tool_loop(
                             on_delta,
                             &tool_name,
                             if output.is_error { "failed" } else { "done" },
-                            None,
+                            Some(tool_args.as_str()),
+                            Some(tool_call_id.as_str()),
                             &status_message,
                         );
                         output
@@ -1099,7 +1107,8 @@ async fn run_genai_tool_loop(
                             on_delta,
                             &tool_name,
                             "failed",
-                            None,
+                            Some(tool_args.as_str()),
+                            Some(tool_call_id.as_str()),
                             &format!("工具调用失败：{} ({})", tool_name, err_text),
                         );
                         ProviderToolResult::error(tool_failure_result_json(&tool_name, &err_text))
@@ -1301,6 +1310,7 @@ async fn run_genai_tool_loop(
         "tools",
         "failed",
         None,
+        None,
         "工具循环触发内部安全上限，停止继续调用并立刻汇报。",
     );
     Ok(ModelReply {
@@ -1350,6 +1360,7 @@ async fn execute_genai_non_stream_round(
             phase_id: None,
             reason: None,
             tool_name: None,
+            tool_call_id: None,
             tool_status: None,
             tool_args: None,
             message: None,
@@ -1521,6 +1532,7 @@ async fn run_genai_tool_loop_non_stream(
                 &tool_name,
                 "running",
                 Some(tool_args.as_str()),
+                Some(tool_call_id.as_str()),
                 &format!("正在调用工具：{}", tool_name),
             );
 
@@ -1535,6 +1547,7 @@ async fn run_genai_tool_loop_non_stream(
                     &tool_name,
                     "failed",
                     Some(tool_args.as_str()),
+                    Some(tool_call_id.as_str()),
                     &err_text,
                 );
                 return Ok(repeated_tool_call_block_reply(
@@ -1561,7 +1574,8 @@ async fn run_genai_tool_loop_non_stream(
                             on_delta,
                             &tool_name,
                             if output.is_error { "failed" } else { "done" },
-                            None,
+                            Some(tool_args.as_str()),
+                            Some(tool_call_id.as_str()),
                             &status_message,
                         );
                         output
@@ -1579,7 +1593,8 @@ async fn run_genai_tool_loop_non_stream(
                             on_delta,
                             &tool_name,
                             "failed",
-                            None,
+                            Some(tool_args.as_str()),
+                            Some(tool_call_id.as_str()),
                             &format!("工具调用失败：{} ({})", tool_name, err_text),
                         );
                         ProviderToolResult::error(tool_failure_result_json(&tool_name, &err_text))
@@ -1779,6 +1794,7 @@ async fn run_genai_tool_loop_non_stream(
         on_delta,
         "tools",
         "failed",
+        None,
         None,
         "工具循环触发内部安全上限，停止继续调用并立刻汇报。",
     );

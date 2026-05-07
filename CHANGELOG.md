@@ -2,6 +2,8 @@
 
 ## 进行中
 
+- 修复（chat-stream-toolcall-explicit-completion）：流式工具状态改为按 `toolCallId` 精确同步开始与完成；前后端不再依赖“下一次工具启动”去推断上一次结束，`archive`、重试、切模型等纯状态提示也不再混入工具条目列表。
+- 优化（chat-reasoning-status-count-and-header-fix）：聊天流式气泡顶部状态修正为仅在真实执行中显示工具名，工具完成后继续思考时恢复“正在思考中”；思考折叠标题补充实时思维链字符数显示，便于观察 reasoning 增长。
 - 调整（config-department-single-assignee-ui-guard）：部门配置页暂时收回“多人格”入口；当前每个部门在前端只允许绑定 1 个人格，并显示“未来功能”提示。
 - 修复（chat-mention-async-delegate-cross-department）：用户通过 `@` 主动发起异步委托时，不再错误套用“必须直属下级部门”的工具委托限制；只要目标部门里确实有该人格，就允许创建委托计划。
 - 修复（chat-mention-avatar-background-task-indicator）：被 `@` 触发异步委托的人格在后台执行期间，聊天工具栏头像会显示三点工作提醒，便于观察谁正在处理委托。
