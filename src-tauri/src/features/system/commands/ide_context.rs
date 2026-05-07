@@ -20,6 +20,8 @@ struct IdeContextReferenceInput {
 struct UpsertIdeContextSnapshotInput {
     client_id: String,
     #[serde(default)]
+    auth_token: Option<String>,
+    #[serde(default)]
     editor: String,
     #[serde(default)]
     workspace_roots: Vec<String>,
@@ -86,6 +88,7 @@ const IDE_CONTEXT_BRIDGE_BASE_PORT: u16 = 43129;
 const IDE_CONTEXT_BRIDGE_MAX_PORT: u16 = 43139;
 const IDE_CONTEXT_BRIDGE_PATH: &str = "/ide-context";
 const IDE_CONTEXT_BRIDGE_DISCOVERY_FILE: &str = "p-ai-ide-context-bridge.json";
+const IDE_CONTEXT_SNAPSHOT_TTL_SECS: i64 = 30;
 static IDE_CONTEXT_BRIDGE_STARTED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, Serialize)]
@@ -105,6 +108,147 @@ struct IdeContextBridgeDiscovery {
     path: String,
     pid: u32,
     updated_at: String,
+    token: String,
+}
+
+fn ide_context_generate_bridge_token() -> String {
+    Uuid::new_v4().to_string()
+}
+
+fn ide_context_initialize_bridge_token(state: &AppState) -> Result<String, String> {
+    let token = ide_context_generate_bridge_token();
+    let mut slot = state
+        .ide_context_bridge_token
+        .lock()
+        .map_err(|_| "Failed to lock ide context bridge token".to_string())?;
+    *slot = token.clone();
+    Ok(token)
+}
+
+fn ide_context_consume_bridge_token(state: &AppState, provided: &str) -> Result<String, String> {
+    let provided = provided.trim();
+    if provided.is_empty() {
+        return Err("authToken is required".to_string());
+    }
+    let mut slot = state
+        .ide_context_bridge_token
+        .lock()
+        .map_err(|_| "Failed to lock ide context bridge token".to_string())?;
+    if slot.trim().is_empty() {
+        return Err("IDE context bridge token unavailable".to_string());
+    }
+    if slot.as_str() != provided {
+        return Err("invalid authToken".to_string());
+    }
+    let next_token = ide_context_generate_bridge_token();
+    *slot = next_token.clone();
+    Ok(next_token)
+}
+
+fn ide_context_normalize_time_or_now(field_name: &str, raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return now_iso();
+    }
+    match normalize_rfc3339_to_utc_storage(field_name, trimmed) {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!(
+                "[IDE 上下文桥] 时间字段非法，回退当前时间: field={}, value={}, error={}",
+                field_name, trimmed, err
+            );
+            now_iso()
+        }
+    }
+}
+
+fn ide_context_timestamp_compare_desc(left: &str, right: &str) -> std::cmp::Ordering {
+    match (parse_iso(left), parse_iso(right)) {
+        (Some(left_time), Some(right_time)) => right_time.cmp(&left_time),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => right.cmp(left),
+    }
+}
+
+fn ide_context_timestamp_is_newer(candidate: &str, current: &str) -> bool {
+    if current.trim().is_empty() {
+        return !candidate.trim().is_empty();
+    }
+    ide_context_timestamp_compare_desc(candidate, current) == std::cmp::Ordering::Less
+}
+
+fn ide_context_reference_dedup_key(item: &IdeContextReferenceItemOutput) -> String {
+    let file_key = ide_context_compare_key(&item.file_path);
+    let source_key = item.source.trim();
+    if file_key.is_empty() && source_key.is_empty() {
+        item.id.clone()
+    } else if file_key.is_empty() {
+        format!("{}|{}", item.id, source_key)
+    } else if source_key.is_empty() {
+        file_key
+    } else {
+        format!("{}|{}", file_key, source_key)
+    }
+}
+
+fn ide_context_reference_source_priority(source: &str) -> u8 {
+    match source.trim() {
+        "selection" => 3,
+        "visible_range" => 2,
+        "active_file" => 1,
+        _ => 0,
+    }
+}
+
+fn ide_context_should_replace_reference(
+    candidate: &IdeContextReferenceItemOutput,
+    existing: &IdeContextReferenceItemOutput,
+) -> bool {
+    if ide_context_timestamp_is_newer(&candidate.captured_at, &existing.captured_at) {
+        return true;
+    }
+    if ide_context_timestamp_is_newer(&existing.captured_at, &candidate.captured_at) {
+        return false;
+    }
+
+    let candidate_priority = ide_context_reference_source_priority(&candidate.source);
+    let existing_priority = ide_context_reference_source_priority(&existing.source);
+    if candidate_priority != existing_priority {
+        return candidate_priority > existing_priority;
+    }
+
+    let candidate_content_len = candidate.content.trim().chars().count();
+    let existing_content_len = existing.content.trim().chars().count();
+    if candidate_content_len != existing_content_len {
+        return candidate_content_len > existing_content_len;
+    }
+
+    candidate.display_label < existing.display_label
+}
+
+fn ide_context_snapshot_is_expired(snapshot: &IdeContextSnapshot, now: &OffsetDateTime) -> bool {
+    match parse_iso(&snapshot.updated_at) {
+        Some(updated_at) => updated_at < (*now - time::Duration::seconds(IDE_CONTEXT_SNAPSHOT_TTL_SECS)),
+        None => true,
+    }
+}
+
+fn ide_context_prune_expired_snapshots(
+    snapshots: &mut std::collections::HashMap<String, IdeContextSnapshot>,
+) {
+    let now = now_utc();
+    snapshots.retain(|client_id, snapshot| {
+        if ide_context_snapshot_is_expired(snapshot, &now) {
+            eprintln!(
+                "[IDE 上下文桥] 快照过期已清理: client_id={}, updated_at={}",
+                client_id, snapshot.updated_at
+            );
+            false
+        } else {
+            true
+        }
+    });
 }
 
 fn emit_ide_context_updated(state: &AppState, client_id: &str, updated_at: &str) {
@@ -244,7 +388,7 @@ fn ide_context_bridge_discovery_path() -> std::path::PathBuf {
     std::env::temp_dir().join(IDE_CONTEXT_BRIDGE_DISCOVERY_FILE)
 }
 
-fn publish_ide_context_bridge_discovery(port: u16) -> Result<(), String> {
+fn publish_ide_context_bridge_discovery(port: u16, token: &str) -> Result<(), String> {
     let url = ide_context_bridge_url(port);
     let payload = IdeContextBridgeDiscovery {
         url: url.clone(),
@@ -254,6 +398,7 @@ fn publish_ide_context_bridge_discovery(port: u16) -> Result<(), String> {
         path: IDE_CONTEXT_BRIDGE_PATH.to_string(),
         pid: std::process::id(),
         updated_at: now_iso(),
+        token: token.to_string(),
     };
     let path = ide_context_bridge_discovery_path();
     let text = serde_json::to_string_pretty(&payload)
@@ -312,7 +457,7 @@ fn upsert_ide_context_snapshot_internal(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
+        .map(|value| ide_context_normalize_time_or_now("updatedAt", value))
         .unwrap_or_else(now_iso);
     let snapshot = IdeContextSnapshot {
         client_id: client_id.clone(),
@@ -353,14 +498,10 @@ fn upsert_ide_context_snapshot_internal(
                         .map(|value| value.trim().to_string())
                         .filter(|value| !value.is_empty()),
                     source,
-                    captured_at: {
-                        let captured_at = reference.captured_at.trim();
-                        if captured_at.is_empty() {
-                            now_iso()
-                        } else {
-                            captured_at.to_string()
-                        }
-                    },
+                    captured_at: ide_context_normalize_time_or_now(
+                        "references[].capturedAt",
+                        &reference.captured_at,
+                    ),
                 })
             })
             .collect(),
@@ -401,10 +542,11 @@ fn query_ide_context_references(
         });
     }
 
-    let snapshots = state
+    let mut snapshots = state
         .ide_context_snapshots
         .lock()
         .map_err(|_| "Failed to lock ide context snapshots".to_string())?;
+    ide_context_prune_expired_snapshots(&mut snapshots);
 
     let mut groups = workspaces
         .iter()
@@ -417,7 +559,7 @@ fn query_ide_context_references(
     let mut latest_updated_at = String::new();
 
     for snapshot in snapshots.values() {
-        if latest_updated_at.is_empty() || snapshot.updated_at > latest_updated_at {
+        if ide_context_timestamp_is_newer(&snapshot.updated_at, &latest_updated_at) {
             latest_updated_at = snapshot.updated_at.clone();
         }
         for reference in &snapshot.references {
@@ -460,14 +602,22 @@ fn query_ide_context_references(
     }
 
     for group in &mut groups {
+        let mut latest_by_file = std::collections::HashMap::<String, IdeContextReferenceItemOutput>::new();
+        for item in group.references.drain(..) {
+            let key = ide_context_reference_dedup_key(&item);
+            let should_replace = latest_by_file
+                .get(&key)
+                .map(|existing| ide_context_should_replace_reference(&item, existing))
+                .unwrap_or(true);
+            if should_replace {
+                latest_by_file.insert(key, item);
+            }
+        }
+        group.references = latest_by_file.into_values().collect();
         group.references.sort_by(|left, right| {
-            right
-                .captured_at
-                .cmp(&left.captured_at)
+            ide_context_timestamp_compare_desc(&left.captured_at, &right.captured_at)
                 .then_with(|| left.display_label.cmp(&right.display_label))
         });
-        let mut seen = std::collections::HashSet::<String>::new();
-        group.references.retain(|item| seen.insert(item.id.clone()));
     }
     groups.retain(|group| !group.references.is_empty());
 
@@ -488,14 +638,27 @@ fn start_ide_context_bridge_server(state: AppState) {
         let (listener, port) = match bind_ide_context_bridge_listener().await {
             Ok(result) => result,
             Err(err) => {
+                IDE_CONTEXT_BRIDGE_STARTED.store(false, Ordering::SeqCst);
                 clear_ide_context_bridge_discovery();
                 eprintln!("[IDE 上下文桥] 监听失败: {}", err);
                 return;
             }
         };
         let bridge_url = ide_context_bridge_url(port);
-        if let Err(err) = publish_ide_context_bridge_discovery(port) {
+        let token = match ide_context_initialize_bridge_token(&state) {
+            Ok(token) => token,
+            Err(err) => {
+                IDE_CONTEXT_BRIDGE_STARTED.store(false, Ordering::SeqCst);
+                clear_ide_context_bridge_discovery();
+                eprintln!("[IDE 上下文桥] 初始化鉴权 token 失败: {}", err);
+                return;
+            }
+        };
+        if let Err(err) = publish_ide_context_bridge_discovery(port, &token) {
+            IDE_CONTEXT_BRIDGE_STARTED.store(false, Ordering::SeqCst);
+            clear_ide_context_bridge_discovery();
             eprintln!("[IDE 上下文桥] 写入发现文件失败: {}", err);
+            return;
         }
         eprintln!("[IDE 上下文桥] 已监听 {}", bridge_url);
         loop {
@@ -508,7 +671,7 @@ fn start_ide_context_bridge_server(state: AppState) {
             };
             let state_clone = state.clone();
             tauri::async_runtime::spawn(async move {
-                ide_context_ws_handle_connection(stream, peer_addr, state_clone).await;
+                ide_context_ws_handle_connection(stream, peer_addr, port, state_clone).await;
             });
         }
     });
@@ -517,6 +680,7 @@ fn start_ide_context_bridge_server(state: AppState) {
 async fn ide_context_ws_handle_connection(
     stream: tokio::net::TcpStream,
     peer_addr: std::net::SocketAddr,
+    port: u16,
     state: AppState,
 ) {
     let path_holder = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
@@ -543,33 +707,63 @@ async fn ide_context_ws_handle_connection(
     eprintln!("[IDE 上下文桥] 客户端已连接: {}", peer_addr);
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
     let mut connected_client_id = String::new();
+    let mut authenticated = false;
     let _ = ws_sender
         .send(tokio_tungstenite::tungstenite::Message::Text(
-            serde_json::json!({"type": "ready", "path": IDE_CONTEXT_BRIDGE_PATH}).to_string().into(),
+            serde_json::json!({"type": "ready", "path": IDE_CONTEXT_BRIDGE_PATH, "authRequired": true})
+                .to_string()
+                .into(),
         ))
         .await;
     while let Some(message) = ws_receiver.next().await {
         match message {
             Ok(tokio_tungstenite::tungstenite::Message::Text(text)) => {
                 match serde_json::from_str::<UpsertIdeContextSnapshotInput>(&text) {
-                    Ok(input) => match upsert_ide_context_snapshot_internal(input, &state) {
-                        Ok((client_id, updated_at)) => {
-                            connected_client_id = client_id.clone();
-                            emit_ide_context_updated(&state, &client_id, &updated_at);
-                            let _ = ws_sender
-                                .send(tokio_tungstenite::tungstenite::Message::Text(
-                                    serde_json::json!({"type": "ack", "ok": true}).to_string().into(),
-                                ))
-                                .await;
+                    Ok(input) => {
+                        if !authenticated {
+                            match ide_context_consume_bridge_token(
+                                &state,
+                                input.auth_token.as_deref().unwrap_or(""),
+                            ) {
+                                Ok(next_token) => {
+                                    authenticated = true;
+                                    if let Err(err) = publish_ide_context_bridge_discovery(port, &next_token) {
+                                        eprintln!("[IDE 上下文桥] 轮换发现 token 失败: {}", err);
+                                    }
+                                }
+                                Err(err) => {
+                                    let _ = ws_sender
+                                        .send(tokio_tungstenite::tungstenite::Message::Text(
+                                            serde_json::json!({"type": "ack", "ok": false, "error": err})
+                                                .to_string()
+                                                .into(),
+                                        ))
+                                        .await;
+                                    break;
+                                }
+                            }
                         }
-                        Err(err) => {
-                            let _ = ws_sender
-                                .send(tokio_tungstenite::tungstenite::Message::Text(
-                                    serde_json::json!({"type": "ack", "ok": false, "error": err}).to_string().into(),
-                                ))
-                                .await;
+                        match upsert_ide_context_snapshot_internal(input, &state) {
+                            Ok((client_id, updated_at)) => {
+                                connected_client_id = client_id.clone();
+                                emit_ide_context_updated(&state, &client_id, &updated_at);
+                                let _ = ws_sender
+                                    .send(tokio_tungstenite::tungstenite::Message::Text(
+                                        serde_json::json!({"type": "ack", "ok": true}).to_string().into(),
+                                    ))
+                                    .await;
+                            }
+                            Err(err) => {
+                                let _ = ws_sender
+                                    .send(tokio_tungstenite::tungstenite::Message::Text(
+                                        serde_json::json!({"type": "ack", "ok": false, "error": err})
+                                            .to_string()
+                                            .into(),
+                                    ))
+                                    .await;
+                            }
                         }
-                    },
+                    }
                     Err(err) => {
                         let _ = ws_sender
                             .send(tokio_tungstenite::tungstenite::Message::Text(

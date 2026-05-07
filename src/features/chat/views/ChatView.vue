@@ -750,6 +750,9 @@ async function refreshIdeContextGroups() {
     if (currentSeq !== ideContextRefreshSeq) return;
     ideContextGroups.value = Array.isArray(result?.groups) ? result.groups : [];
   } catch (error) {
+    if (currentSeq === ideContextRefreshSeq) {
+      ideContextGroups.value = [];
+    }
     console.warn("[IDE 上下文] 查询引用失败", error);
   }
 }
