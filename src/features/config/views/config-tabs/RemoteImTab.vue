@@ -41,14 +41,22 @@
                 @change.stop="(e) => toggleChannelEnabled(ch, (e.target as HTMLInputElement).checked)"
               />
             </div>
-            <div class="px-4 pb-2">
+            <div class="px-4 pb-2 flex items-center gap-2">
               <button
-                class="btn btn-sm w-full border"
+                class="btn btn-sm flex-1 border"
                 :class="selectedChannelId === ch.id ? 'btn-primary border-primary' : 'border-base-300 bg-base-300 text-base-content hover:bg-base-content/10'"
                 :title="t('config.remoteIm.channelDetails')"
                 @click.stop="openChannelConfigModal(ch.id)"
               >
                 编辑
+              </button>
+              <button
+                class="btn btn-sm btn-square border shrink-0"
+                :class="selectedChannelId === ch.id ? 'btn-primary border-primary' : 'border-base-300 bg-base-300 text-base-content hover:bg-base-content/10'"
+                :title="t('config.remoteIm.viewLogs')"
+                @click.stop="openChannelLogsModalForChannel(ch.id)"
+              >
+                <ScrollText class="h-4 w-4" />
               </button>
             </div>
           </div>
@@ -121,13 +129,22 @@
                     </span>
                   </div>
                 </div>
-                <button
-                  class="btn btn-ghost btn-square btn-sm hover:bg-base-300"
-                  :title="t('config.remoteIm.channelDetails')"
-                  @click.stop="openContactConfigModal(item.id)"
-                >
-                  <Settings class="h-4 w-4" />
-                </button>
+                <div class="flex items-center gap-1">
+                  <button
+                    class="btn btn-ghost btn-square btn-sm hover:bg-base-300"
+                    :title="t('config.remoteIm.viewLogs')"
+                    @click.stop="openContactLogsModal(item.id)"
+                  >
+                    <ScrollText class="h-4 w-4" />
+                  </button>
+                  <button
+                    class="btn btn-ghost btn-square btn-sm hover:bg-base-300"
+                    :title="t('config.remoteIm.channelDetails')"
+                    @click.stop="openContactConfigModal(item.id)"
+                  >
+                    <Settings class="h-4 w-4" />
+                  </button>
+                </div>
             </div>
           </li>
         </template>
@@ -177,6 +194,26 @@
         <div class="mt-3 max-h-[60vh] overflow-y-auto">
           <div v-if="channelLogs.length === 0" class="opacity-60 italic text-xs">{{ t("config.remoteIm.noLogs") }}</div>
           <pre v-else class="bg-base-200 rounded-box p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all m-0"><template v-for="(log, idx) in channelLogs" :key="idx"><span :class="log.level === 'error' ? 'text-error' : log.level === 'warn' ? 'text-warning' : ''"><span class="opacity-50">{{ formatLogTime(log.timestamp) }}</span> {{ log.message }}</span>{{ '\n' }}</template></pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal z-90" :class="{ 'modal-open': contactLogsModalOpen }" @click.self="closeContactLogsModal">
+      <div class="modal-box max-w-4xl">
+        <div class="flex items-center justify-between">
+          <div class="font-semibold">
+            联系人日志 · {{ contactLogsTitle }}
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="btn btn-sm btn-ghost" :title="t('common.refresh')" @click="refreshContactLogs">
+              <RefreshCw class="h-4 w-4" :class="contactLogsLoading ? 'animate-spin' : ''" />
+            </button>
+            <button class="btn btn-sm" @click="closeContactLogsModal">{{ t("common.close") }}</button>
+          </div>
+        </div>
+        <div class="mt-3 max-h-[60vh] overflow-y-auto">
+          <div v-if="contactLogs.length === 0" class="opacity-60 italic text-xs">暂无该联系人的相关日志</div>
+          <pre v-else class="bg-base-200 rounded-box p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all m-0"><template v-for="(line, idx) in contactLogDisplayLines" :key="`${idx}-${line}`"><span>{{ line }}</span>{{ '\n' }}</template></pre>
         </div>
       </div>
     </div>
@@ -644,7 +681,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Plus, RefreshCw, RotateCcw, Save, Settings, SquareTerminal, Trash2 } from "lucide-vue-next";
+import { Plus, RefreshCw, RotateCcw, Save, ScrollText, Settings, SquareTerminal, Trash2 } from "lucide-vue-next";
 import { invokeTauri } from "../../../../services/tauri-api";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { AppConfig, RemoteImChannelConfig, RemoteImContact, RemoteImPlatform, ShellWorkspace } from "../../../../types/app";
@@ -696,6 +733,10 @@ const channelStatus = ref<ChannelConnectionStatus | null>(null);
 const channelLogs = ref<ChannelLogEntry[]>([]);
 const channelLogsModalOpen = ref(false);
 const channelLogsLoading = ref(false);
+const contactLogs = ref<ChannelLogEntry[]>([]);
+const contactLogsModalOpen = ref(false);
+const contactLogsLoading = ref(false);
+const contactLogsContactId = ref("");
 const addChannelModalOpen = ref(false);
 const channelConfigModalOpen = ref(false);
 const contactConfigModalOpen = ref(false);
@@ -825,10 +866,18 @@ const currentChannelContacts = computed(() => {
 const selectedContact = computed(() =>
   currentChannelContacts.value.find((item) => item.id === selectedContactId.value) ?? null,
 );
+const contactLogsTarget = computed(() =>
+  contacts.value.find((item) => item.id === contactLogsContactId.value) ?? null,
+);
 const contactModalTitle = computed(() => {
   if (!selectedContact.value) return "-";
   if (selectedContact.value.platform === "weixin_oc") return "微信联系人";
   return contactDisplayName(selectedContact.value);
+});
+const contactLogsTitle = computed(() => {
+  const target = contactLogsTarget.value;
+  if (!target) return "-";
+  return contactSafeDisplayName(target);
 });
 type ContactEditDraft = {
   boundDepartmentId: string;
@@ -842,6 +891,14 @@ type ContactEditDraft = {
   allowSend: boolean;
   allowSendFiles: boolean;
   shellWorkspaces: ShellWorkspace[];
+};
+type ContactLogDisplayItem = {
+  timestamp: string;
+  level: string;
+  kind: string;
+  title: string;
+  summary: string;
+  detail?: string;
 };
 const contactDraft = ref<ContactEditDraft | null>(null);
 const contactDraftSnapshot = ref("");
@@ -876,6 +933,23 @@ const contactDraftResponseStrategyHint = computed(() => {
     responseStrategy: contactDraft.value.responseStrategy,
   } as RemoteImContact);
 });
+const contactLogDisplayItems = computed<ContactLogDisplayItem[]>(() =>
+  contactLogs.value
+    .map((log) => buildContactLogDisplayItem(log))
+    .filter((item): item is ContactLogDisplayItem => item !== null),
+);
+const contactLogDisplayLines = computed(() =>
+  contactLogDisplayItems.value.map((item) => {
+    const parts = [
+      formatLogTime(item.timestamp),
+      `[${item.kind}]`,
+      item.title,
+      item.summary,
+      item.detail,
+    ].filter((value) => String(value || "").trim().length > 0);
+    return parts.join("  ");
+  }),
+);
 
 const remoteImDepartmentOptions = computed(() =>
   (props.config.departments || [])
@@ -1607,6 +1681,11 @@ async function refreshContacts() {
       contactConfigModalOpen.value = false;
       selectedContactId.value = "";
     }
+    if (contactLogsContactId.value && !contacts.value.some((item) => item.id === contactLogsContactId.value)) {
+      contactLogsModalOpen.value = false;
+      contactLogsContactId.value = "";
+      contactLogs.value = [];
+    }
   } catch (error) {
     contactsError.value = String(error);
   } finally {
@@ -1638,6 +1717,200 @@ function contactSecondaryText(item: RemoteImContact): string {
     return item.remoteContactType === "group" ? "微信群联系人" : "微信个人联系人";
   }
   return item.remoteContactId;
+}
+
+function contactLogField(message: string, key: string): string {
+  const match = message.match(new RegExp(`${key}=([\\s\\S]*?)(?=, [a-z_]+=|$)`));
+  return String(match?.[1] || "").trim();
+}
+
+function contactLogTransitionLabel(value: string): string {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "";
+  const [fromRaw, toRaw] = normalized.split("->").map((item) => item.trim());
+  if (!toRaw) return normalized;
+  if (!fromRaw || fromRaw === toRaw) return toRaw;
+  return `${fromRaw} -> ${toRaw}`;
+}
+
+function contactLogCurrentStateLabel(value: string): string {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "";
+  const parts = normalized.split("->").map((item) => item.trim()).filter(Boolean);
+  return parts[parts.length - 1] || "";
+}
+
+function contactLogHumanName(value: string): string {
+  return String(value || "")
+    .trim()
+    .replace(/\(\d+\)\s*$/, "")
+    .trim();
+}
+
+function contactLogHumanId(value: string): string {
+  const match = String(value || "").trim().match(/\((\d+)\)\s*$/);
+  return String(match?.[1] || "").trim();
+}
+
+function contactLogBoolLabel(value: string): string {
+  return value === "是" || value.toLowerCase() === "true" ? "是" : "否";
+}
+
+function contactLogModeLabel(value: string): string {
+  if (value === "direct") return "直接入队";
+  if (value === "queued") return "排队入队";
+  if (value === "duplicate") return "重复消息";
+  return value || "-";
+}
+
+function contactLogDecisionLabel(value: string): string {
+  if (value === "reply" || value === "reply_async") return "已回复";
+  if (value === "send") return "已发送";
+  if (value === "send_files") return "已发送文件";
+  if (value === "no_reply") return "不回复";
+  if (value === "send_async") return "异步发送";
+  return value || "完成";
+}
+
+function contactLogStateSummary(message: string): string {
+  const presence = contactLogCurrentStateLabel(contactLogField(message, "presence"));
+  const work = contactLogCurrentStateLabel(contactLogField(message, "work"));
+  const activate = contactLogField(message, "activate");
+  const parts = [
+    presence,
+    work,
+    activate ? (contactLogBoolLabel(activate) === "是" ? "激活" : "不激活") : "",
+  ].filter(Boolean);
+  return parts.join("；");
+}
+
+function buildContactLogDisplayItem(log: ChannelLogEntry): ContactLogDisplayItem | null {
+  const message = String(log.message || "").trim();
+  if (message.startsWith("[联系人消息] 收到:")) {
+    const senderRaw = contactLogField(message, "sender");
+    const senderName = contactLogHumanName(senderRaw) || "对方";
+    const senderId = contactLogHumanId(senderRaw);
+    const preview = contactLogField(message, "preview") || "收到一条消息";
+    const imageCount = Number(contactLogField(message, "image_count") || 0);
+    const audioCount = Number(contactLogField(message, "audio_count") || 0);
+    const attachmentCount = Number(contactLogField(message, "attachment_count") || 0);
+    const extras = [
+      imageCount > 0 ? `图片 ${imageCount}` : "",
+      audioCount > 0 ? `音频 ${audioCount}` : "",
+      attachmentCount > 0 ? `附件 ${attachmentCount}` : "",
+    ].filter(Boolean);
+    return {
+      timestamp: log.timestamp,
+      level: log.level,
+      kind: "消息",
+      title: "",
+      summary: `${senderId ? `[${senderName}/${senderId}]` : `[${senderName}]`}${preview}`,
+      detail: extras.length > 0 ? extras.join("，") : undefined,
+    };
+  }
+  if (message.startsWith("[联系人消息] 去重跳过:")) {
+    return {
+      timestamp: log.timestamp,
+      level: log.level,
+      kind: "去重",
+      title: "重复消息已跳过",
+      summary: contactLogField(message, "preview") || "这条消息之前已经处理过",
+    };
+  }
+  if (message.startsWith("[联系人消息] 入队:")) {
+    return log.level === "warn" || log.level === "error"
+      ? {
+          timestamp: log.timestamp,
+          level: log.level,
+          kind: "系统",
+          title: "消息入队失败",
+          summary: contactLogField(message, "reason") || "消息没有成功进入处理链路",
+        }
+      : null;
+  }
+  if (message.startsWith("[联系人状态] 入站判定:")) {
+    const reason = contactLogField(message, "reason");
+    return {
+      timestamp: log.timestamp,
+      level: log.level,
+      kind: "状态",
+      title: contactLogStateSummary(message),
+      summary: reason ? `原因：${reason}` : "",
+    };
+  }
+  if (message.startsWith("[联系人状态] 历史落地:")) {
+    return log.level === "warn" || log.level === "error"
+      ? {
+          timestamp: log.timestamp,
+          level: log.level,
+          kind: "系统",
+          title: "消息写入历史失败",
+          summary: contactLogField(message, "reason") || "历史落地失败",
+        }
+      : null;
+  }
+  if (message.startsWith("[联系人消息] 发出失败:")) {
+    return {
+      timestamp: log.timestamp,
+      level: log.level,
+      kind: "发送",
+      title: "[发送失败]",
+      summary: contactLogField(message, "preview") || "发送内容已省略",
+      detail: contactLogField(message, "error") || undefined,
+    };
+  }
+  if (message.startsWith("[联系人消息] 发出跳过:")) {
+    return {
+      timestamp: log.timestamp,
+      level: log.level,
+      kind: "发送",
+      title: "[跳过发送]",
+      summary: contactLogField(message, "reason") || "本次没有对外发送",
+    };
+  }
+  if (message.startsWith("[联系人消息] 发出:")) {
+    return {
+      timestamp: log.timestamp,
+      level: log.level,
+      kind: "发送",
+      title: "",
+      summary: `[发送消息]${contactLogField(message, "preview") || "发送内容已省略"}`,
+    };
+  }
+  if (message.startsWith("[联系人状态] 轮次结束:")) {
+    const decision = contactLogDecisionLabel(contactLogField(message, "decision"));
+    const followUp = contactLogBoolLabel(contactLogField(message, "follow_up"));
+    return {
+      timestamp: log.timestamp,
+      level: log.level,
+      kind: "状态",
+      title: contactLogStateSummary(message),
+      summary: contactLogStateSummary(message),
+      detail: `本轮处理：${decision}；继续跟进：${followUp}`,
+    };
+  }
+  if (message.startsWith("[联系人状态] 轮次收尾失败:")) {
+    return {
+      timestamp: log.timestamp,
+      level: log.level,
+      kind: "状态",
+      title: contactLogStateSummary(message),
+      summary: contactLogStateSummary(message),
+      detail: contactLogField(message, "error") || undefined,
+    };
+  }
+  if (message.startsWith("[联系人状态] 异步发送收尾:")) {
+    return null;
+  }
+  return log.level === "warn" || log.level === "error"
+    ? {
+        timestamp: log.timestamp,
+        level: log.level,
+        kind: "系统",
+        title: "系统记录了一条异常日志",
+        summary: "这条日志还没有整理成人话格式，但因为它是异常，所以保留显示。",
+      }
+    : null;
 }
 
 async function deleteContact(item: RemoteImContact) {
@@ -1821,14 +2094,44 @@ async function refreshChannelLogs() {
   }
 }
 
+async function refreshContactLogs() {
+  if (!contactLogsContactId.value) return;
+  contactLogsLoading.value = true;
+  try {
+    contactLogs.value = await invokeTauri<ChannelLogEntry[]>("remote_im_get_contact_logs", {
+      input: { contactId: contactLogsContactId.value },
+    });
+  } catch {
+    contactLogs.value = [];
+  } finally {
+    contactLogsLoading.value = false;
+  }
+}
+
 function openChannelLogsModal() {
   if (!selectedChannel.value) return;
   channelLogsModalOpen.value = true;
   void refreshChannelLogs();
 }
 
+function openChannelLogsModalForChannel(channelId: string) {
+  selectedChannelId.value = channelId;
+  channelLogsModalOpen.value = true;
+  void refreshChannelLogs();
+}
+
 function closeChannelLogsModal() {
   channelLogsModalOpen.value = false;
+}
+
+function openContactLogsModal(contactId: string) {
+  contactLogsContactId.value = contactId;
+  contactLogsModalOpen.value = true;
+  void refreshContactLogs();
+}
+
+function closeContactLogsModal() {
+  contactLogsModalOpen.value = false;
 }
 
 function openChannelConfigModal(channelId: string) {

@@ -150,6 +150,17 @@ async fn remote_im_get_channel_logs(channel_id: String) -> Result<Vec<ChannelLog
 }
 
 #[tauri::command]
+async fn remote_im_get_contact_logs(
+    input: RemoteImContactLogsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<ChannelLogEntry>, String> {
+    let (channel_id, contact_marker) =
+        remote_im_resolve_contact_log_query(state.inner(), &input.contact_id)?;
+    let logs = get_channel_logs(channel_id).await?;
+    Ok(remote_im_filter_channel_logs_for_contact(logs, &contact_marker))
+}
+
+#[tauri::command]
 async fn remote_im_restart_channel(
     channel_id: String,
     state: State<'_, AppState>,
@@ -718,6 +729,7 @@ fn main() {
             remote_im_get_contact_conversation_block_page,
             remote_im_get_channel_status,
             remote_im_get_channel_logs,
+            remote_im_get_contact_logs,
             remote_im_restart_channel,
             frontend_ready_start_remote_im_services,
             remote_im_weixin_oc_start_login,

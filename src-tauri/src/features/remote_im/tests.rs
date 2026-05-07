@@ -86,6 +86,32 @@
     }
 
     #[test]
+    fn remote_im_filter_channel_logs_for_contact_should_only_keep_matching_contact() {
+        let logs = vec![
+            ChannelLogEntry {
+                timestamp: chrono::Utc::now(),
+                level: "info".to_string(),
+                message: "[联系人消息] 收到: contact=甲[group:10001], preview=hello".to_string(),
+            },
+            ChannelLogEntry {
+                timestamp: chrono::Utc::now(),
+                level: "info".to_string(),
+                message: "[联系人消息] 收到: contact=乙[group:10002], preview=world".to_string(),
+            },
+            ChannelLogEntry {
+                timestamp: chrono::Utc::now(),
+                level: "info".to_string(),
+                message: "事件消费器已启动".to_string(),
+            },
+        ];
+
+        let filtered = remote_im_filter_channel_logs_for_contact(logs, "[group:10001]");
+
+        assert_eq!(filtered.len(), 1);
+        assert!(filtered[0].message.contains("[group:10001]"));
+    }
+
+    #[test]
     fn resolve_conversation_id_should_route_remote_im_to_contact_conversation() {
         let state = remote_im_test_state();
         let mut runtime = RuntimeStateFile::default();

@@ -2,6 +2,7 @@
 
 ## 进行中
 
+- 调整（remote-im-contact-log-entry-and-humanized-view）：渠道列表编辑按钮旁新增日志入口，联系人设置按钮前新增专属日志入口；后端支持按联系人过滤渠道日志，前端联系人日志改为只保留本会话相关记录，并将状态、收发结果和异常整理成更易读的人话格式。
 - 修复（chat-message-store-ready-fallback-rewrite）：会话消息存储在 `ready/jsonl` 状态下不再盲目强制增量写入；当旧索引没有 block 基线、旧 block 文件缺失，或 ready 快照完整性已损坏时，自动回退为全量重写并重建有效 blocks/index，避免远程会话“消息已收发但归档与会话列表始终不更新”。
 - 调整（remote-im-contact-delete-entry-after-settings）：远程联系人删除入口收回到“联系人设置”弹窗内，联系人列表仅保留设置按钮，降低误触删除风险；删除联系人时仍只删除联系人记录，不清理已有会话历史。
 - 修复（remote-im-contact-conversation-binding-repair）：远程联系人会话列表改为按联系人强制确保专属会话存在；若 `bound_conversation_id` 丢失或失效，会优先复用同联系人旧会话并回写绑定，找不到时再新建专属会话，避免“联系人存在、消息能收发，但远程页不显示会话”的漂移状态。

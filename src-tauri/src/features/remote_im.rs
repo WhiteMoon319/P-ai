@@ -156,6 +156,12 @@ struct RemoteImContactDeleteInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct RemoteImContactLogsInput {
+    contact_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RemoteImContactWorkspaceUpdateInput {
     contact_id: String,
     #[serde(default)]
@@ -1615,6 +1621,14 @@ fn remote_im_contact_log_label(contact: &RemoteImContact) -> String {
     )
 }
 
+fn remote_im_contact_log_marker(contact: &RemoteImContact) -> String {
+    format!(
+        "[{}:{}]",
+        contact.remote_contact_type.trim(),
+        contact.remote_contact_id.trim()
+    )
+}
+
 fn remote_im_activation_source_log_label(source: &RemoteImActivationSource) -> String {
     let display_name = source.remote_contact_name.trim();
     let name = if display_name.is_empty() {
@@ -1732,6 +1746,39 @@ async fn remote_im_append_channel_log_async(channel_id: &str, level: &str, messa
 #[cfg(test)]
 async fn remote_im_append_channel_log_async(channel_id: &str, level: &str, message: String) {
     let _ = (channel_id, level, message);
+}
+
+fn remote_im_resolve_contact_log_query(
+    state: &AppState,
+    contact_id: &str,
+) -> Result<(String, String), String> {
+    let normalized_contact_id = contact_id.trim();
+    if normalized_contact_id.is_empty() {
+        return Err("contact_id 为必填项。".to_string());
+    }
+    let runtime = state_read_runtime_state_cached(state)?;
+    let contact = runtime
+        .remote_im_contacts
+        .iter()
+        .find(|item| item.id == normalized_contact_id)
+        .ok_or_else(|| format!("未找到远程联系人：{normalized_contact_id}"))?;
+    Ok((
+        contact.channel_id.trim().to_string(),
+        remote_im_contact_log_marker(contact),
+    ))
+}
+
+fn remote_im_filter_channel_logs_for_contact(
+    logs: Vec<ChannelLogEntry>,
+    contact_marker: &str,
+) -> Vec<ChannelLogEntry> {
+    let normalized_marker = contact_marker.trim();
+    if normalized_marker.is_empty() {
+        return Vec::new();
+    }
+    logs.into_iter()
+        .filter(|entry| entry.message.contains(normalized_marker))
+        .collect()
 }
 
 fn remote_im_resolve_effective_route_mode(
