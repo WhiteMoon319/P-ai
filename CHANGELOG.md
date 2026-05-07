@@ -2,6 +2,7 @@
 
 ## 进行中
 
+- 修复（chat-streaming-markdown-fade-remove）：聊天流式 Markdown 去掉前端额外淡入与 typewriter 渐显效果；正文仍按流式批次继续追加，但不再出现慢速显影，阅读观感更接近稳定文档。
 - 修复（chat-loading-dots-left-alignment）：助理流式草稿的三点等待态改为按气泡左侧起笔对齐，不再在空白等待气泡内居中漂浮，和正式正文的阅读起点保持一致。
 - 修复（chat-streaming-scroll-stability-review-followup）：聊天流式气泡高度补偿继续收口；首屏已渲染的虚拟行在挂载后会补注册 `ResizeObserver`，程序化 `scrollTop` 纠偏也不再误触发向上分页加载，减少切入活跃流时的首波跳动与历史误加载。
 - 修复（chat-tool-loop-batch-collect-before-finish）：模型单轮返回多个工具调用时，后端保持顺序串行执行，但不再因首个 `organize_context`、`task complete`、`plan` 或引导闭口结果提前结束整轮；改为先收集本轮全部工具结果，再统一决定收口与续调，避免后续同批工具被跳过。

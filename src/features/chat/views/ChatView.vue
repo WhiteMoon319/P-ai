@@ -2628,52 +2628,6 @@ onBeforeUnmount(() => {
   transform-origin: right center;
 }
 
-.ecall-stream-block-enter {
-  animation: ecall-stream-block-fade 140ms ease-out;
-}
-
-.ecall-stream-segments {
-  display: block;
-}
-
-.ecall-stream-segment {
-  display: block;
-  margin: 0;
-}
-
-.ecall-stream-tail {
-  opacity: 1;
-}
-
-.ecall-stream-content {
-  opacity: 0;
-  animation: ecall-stream-fade-in 1s ease-out forwards;
-}
-
-.ecall-stream-content-done {
-  opacity: 1;
-}
-
-@keyframes ecall-stream-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes ecall-stream-block-fade {
-  from {
-    opacity: 0;
-    transform: translateY(2px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 :deep(.chat-bubble) {
   min-width: 0;
   min-height: 0;

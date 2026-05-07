@@ -299,7 +299,7 @@
             :render-batch-budget-ms="block.isStreaming ? STREAM_RENDER_BATCH_BUDGET_MS : 0"
             :code-block-props="markdownCodeBlockProps"
             :mermaid-props="markdownMermaidProps"
-            :typewriter="true"
+            :typewriter="false"
             @click="emit('assistantLinkClick', $event)"
           />
         </div>
@@ -1834,19 +1834,6 @@ function openResolvedImagePreview(
   font-family: inherit;
   font-size: inherit;
   line-height: inherit;
-}
-
-.assistant-markdown :deep(.markstream-vue .typewriter-enter-from) {
-  opacity: 0;
-}
-
-.assistant-markdown :deep(.markstream-vue .typewriter-enter-active) {
-  transition: opacity 1000ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: opacity;
-}
-
-.assistant-markdown :deep(.markstream-vue .typewriter-enter-to) {
-  opacity: 1;
 }
 
 .assistant-markdown :deep(.ecall-markdown-content .code-block-container),
