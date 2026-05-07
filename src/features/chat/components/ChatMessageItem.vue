@@ -2011,7 +2011,7 @@ function openResolvedImagePreview(
   min-height: 2.25rem;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   padding-inline: 0.9rem;
 }
 
