@@ -187,12 +187,10 @@ async fn remote_im_restart_channel(
     );
 
     if channel.enabled && channel.platform == RemoteImPlatform::OnebotV11 {
-        // 重启事件消费循环
-        let state_clone = state.inner().clone();
-        let cid = channel_id.clone();
-        tauri::async_runtime::spawn(async move {
-            napcat_start_event_consumer(cid, state_clone).await;
-        });
+        manager
+            .start_event_consumer(channel_id.clone(), state.inner().clone())
+            .await
+            .map_err(|err| format!("重启事件消费器失败: {}", err))?;
     } else if channel.enabled && channel.platform == RemoteImPlatform::Dingtalk {
         let state_clone = state.inner().clone();
         let manager = dingtalk_stream_manager();
@@ -297,9 +295,15 @@ async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {
     for channel in napcat_channels {
         let channel_id = channel.id.clone();
         let state_clone = event_state.clone();
-        tauri::async_runtime::spawn(async move {
-            napcat_start_event_consumer(channel_id, state_clone).await;
-        });
+        if let Err(err) = onebot_v11_ws_manager()
+            .start_event_consumer(channel_id.clone(), state_clone)
+            .await
+        {
+            eprintln!(
+                "[启动] 前端就绪后启动 OneBot v11 事件消费器失败: channel_id={}, error={}",
+                channel_id, err
+            );
+        }
     }
 
     let dingtalk_channels: Vec<_> = config

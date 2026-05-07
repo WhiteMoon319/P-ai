@@ -131,23 +131,39 @@ async fn parse_and_enqueue_onebot_event(
     remote_im_enqueue_message_internal(input, state)
 }
 
-/// 启动 OneBot v11 事件消费循环
-pub(crate) async fn napcat_start_event_consumer(
+async fn napcat_run_event_consumer_loop(
+    manager: OnebotV11WsManager,
     channel_id: String,
     state: AppState,
+    mut stop_rx: tokio::sync::watch::Receiver<bool>,
 ) {
-    let manager = onebot_v11_ws_manager();
-
     loop {
         // 等待连接建立后才能订阅事件
         let (mut event_rx, mut shutdown_rx) = loop {
+            if *stop_rx.borrow() {
+                manager.add_log(&channel_id, "info", "事件消费器收到停止信号").await;
+                return;
+            }
             if let Some(rx) = manager.subscribe_events(&channel_id).await {
                 if let Some(srx) = manager.subscribe_shutdown(&channel_id).await {
                     break (rx, srx);
                 }
             }
             // 连接尚未建立或渠道已停止，按节流间隔重试
-            tokio::time::sleep(Duration::from_secs(NAPCAT_RECONNECT_INTERVAL_SECS)).await;
+            tokio::select! {
+                changed = stop_rx.changed() => {
+                    match changed {
+                        Ok(()) => {
+                            if *stop_rx.borrow() {
+                                manager.add_log(&channel_id, "info", "事件消费器收到停止信号").await;
+                                return;
+                            }
+                        }
+                        Err(_) => return,
+                    }
+                }
+                _ = tokio::time::sleep(Duration::from_secs(NAPCAT_RECONNECT_INTERVAL_SECS)) => {}
+            }
         };
 
         eprintln!("[远程IM][OneBot v11 事件] 渠道 {} 开始消费事件", channel_id);
@@ -186,6 +202,18 @@ pub(crate) async fn napcat_start_event_consumer(
                         }
                     }
                 }
+                changed = stop_rx.changed() => {
+                    match changed {
+                        Ok(()) => {
+                            if *stop_rx.borrow() {
+                                eprintln!("[远程IM][OneBot v11 事件] 渠道 {} 收到消费器停止信号", channel_id);
+                                manager.add_log(&channel_id, "info", "事件消费器已停止").await;
+                                return;
+                            }
+                        }
+                        Err(_) => return,
+                    }
+                }
                 _ = shutdown_rx.recv() => {
                     eprintln!("[远程IM][OneBot v11 事件] 渠道 {} 收到关闭信号，停止事件消费", channel_id);
                     manager.add_log(&channel_id, "info", "事件消费器已停止").await;
@@ -196,7 +224,82 @@ pub(crate) async fn napcat_start_event_consumer(
 
         // 事件通道关闭（客户端断开），按节流间隔等待重连
         eprintln!("[远程IM][OneBot v11 事件] 渠道 {} 等待重新连接...", channel_id);
-        tokio::time::sleep(Duration::from_secs(NAPCAT_RECONNECT_INTERVAL_SECS)).await;
+        tokio::select! {
+            changed = stop_rx.changed() => {
+                match changed {
+                    Ok(()) => {
+                        if *stop_rx.borrow() {
+                            manager.add_log(&channel_id, "info", "事件消费器已停止").await;
+                            return;
+                        }
+                    }
+                    Err(_) => return,
+                }
+            }
+            _ = tokio::time::sleep(Duration::from_secs(NAPCAT_RECONNECT_INTERVAL_SECS)) => {}
+        }
+    }
+}
+
+impl OnebotV11WsManager {
+    async fn stop_event_consumer_inner(&self, channel_id: &str) -> Result<(), String> {
+        let stop_sender = {
+            self.event_consumer_stop_senders
+                .write()
+                .await
+                .remove(channel_id)
+        };
+        if let Some(tx) = stop_sender {
+            let _ = tx.send(true);
+        }
+        let handle = { self.event_consumer_tasks.write().await.remove(channel_id) };
+        if let Some(handle) = handle {
+            let mut handle = handle;
+            match tokio::time::timeout(Duration::from_secs(5), &mut handle).await {
+                Ok(join_result) => {
+                    if let Err(err) = join_result {
+                        return Err(format!("停止事件消费器失败: {}", err));
+                    }
+                }
+                Err(_) => {
+                    handle.abort();
+                    let _ = handle.await;
+                    eprintln!(
+                        "[远程IM][OneBot v11 事件] 停止消费器超时，已强制中止: {}",
+                        channel_id
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn start_event_consumer(
+        &self,
+        channel_id: String,
+        state: AppState,
+    ) -> Result<(), String> {
+        let _guard = self.channel_lifecycle_guard(&channel_id).await;
+        self.stop_event_consumer_inner(&channel_id).await?;
+        let (stop_tx, stop_rx) = tokio::sync::watch::channel(false);
+        self.event_consumer_stop_senders
+            .write()
+            .await
+            .insert(channel_id.clone(), stop_tx);
+        let tasks = self.event_consumer_tasks.clone();
+        let stop_senders = self.event_consumer_stop_senders.clone();
+        let task_channel_id = channel_id.clone();
+        let manager = self.clone();
+        let handle = tokio::spawn(async move {
+            napcat_run_event_consumer_loop(manager, task_channel_id.clone(), state, stop_rx).await;
+            stop_senders.write().await.remove(&task_channel_id);
+            tasks.write().await.remove(&task_channel_id);
+        });
+        self.event_consumer_tasks
+            .write()
+            .await
+            .insert(channel_id, handle);
+        Ok(())
     }
 }
 

@@ -750,8 +750,89 @@
             hidden_skill_snapshot_cache: Arc::new(Mutex::new(String::new())),
             preferred_release_source: Arc::new(Mutex::new("github".to_string())),
             migration_preview_dirs: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            ide_context_snapshots: Arc::new(Mutex::new(std::collections::HashMap::new())),
             delegate_active_ids: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
         }
+    }
+
+    #[tokio::test]
+    async fn onebot_event_consumer_should_remain_singleton_per_channel() {
+        let manager = OnebotV11WsManager::new();
+        let state = remote_im_test_state();
+
+        manager
+            .start_event_consumer("channel-a".to_string(), state.clone())
+            .await
+            .expect("start consumer 1");
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert_eq!(manager.event_consumer_tasks.read().await.len(), 1);
+        assert_eq!(manager.event_consumer_stop_senders.read().await.len(), 1);
+
+        manager
+            .start_event_consumer("channel-a".to_string(), state)
+            .await
+            .expect("start consumer 2");
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert_eq!(manager.event_consumer_tasks.read().await.len(), 1);
+        assert_eq!(manager.event_consumer_stop_senders.read().await.len(), 1);
+
+        manager
+            .stop_channel("channel-a")
+            .await
+            .expect("stop channel");
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert!(manager.event_consumer_tasks.read().await.is_empty());
+        assert!(manager.event_consumer_stop_senders.read().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn onebot_channel_should_replace_existing_connection_on_second_handshake() {
+        let manager = OnebotV11WsManager::new();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind temp listener");
+        let port = listener.local_addr().expect("local addr").port();
+        drop(listener);
+
+        manager
+            .start(
+                "channel-a".to_string(),
+                OnebotV11WsCredentials {
+                    ws_host: "127.0.0.1".to_string(),
+                    ws_port: port,
+                    ws_token: None,
+                },
+            )
+            .await
+            .expect("start onebot channel");
+
+        let url = format!("ws://127.0.0.1:{port}");
+        let (mut first, _) = tokio_tungstenite::connect_async(url.as_str())
+            .await
+            .expect("first connection");
+        tokio::time::sleep(Duration::from_millis(80)).await;
+
+        let (mut second, _) = tokio_tungstenite::connect_async(url.as_str())
+            .await
+            .expect("second connection");
+        tokio::time::sleep(Duration::from_millis(120)).await;
+
+        let status = manager.get_connection_status("channel-a").await;
+        assert!(status.connected);
+        let logs = manager.get_logs("channel-a").await;
+        assert!(
+            logs.iter()
+                .any(|entry| entry.message.contains("新连接已接管旧连接")),
+            "second connection should replace the old one"
+        );
+        assert_eq!(manager.connections.read().await.len(), 1);
+        assert_eq!(manager.connection_stop_senders.read().await.len(), 1);
+
+        let _ = first.close(None).await;
+        let _ = second.close(None).await;
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        manager
+            .stop_channel("channel-a")
+            .await
+            .expect("stop onebot channel");
     }
 
     fn remote_im_test_contact(contact_id: &str, conversation_id: &str) -> RemoteImContact {

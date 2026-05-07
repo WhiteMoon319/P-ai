@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::SinkExt;
 use tokio::net::TcpListener;
-use tokio::sync::{broadcast, oneshot, RwLock};
+use tokio::sync::{broadcast, oneshot, watch, RwLock};
 use tokio_tungstenite::accept_hdr_async;
 use tokio_tungstenite::tungstenite::handshake::server::{Request, Response};
 use tokio_tungstenite::tungstenite::http::Response as HttpResponse;
@@ -70,6 +70,8 @@ fn default_ws_port() -> u16 {
 
 const NAPCAT_RECONNECT_INTERVAL_SECS: u64 = 30;
 const NAPCAT_MAX_MEDIA_DOWNLOAD_SIZE_BYTES: u64 = 20 * 1024 * 1024;
+const NAPCAT_WS_HANDSHAKE_TIMEOUT_SECS: u64 = 5;
+const NAPCAT_ACTIVE_CONNECTION_REPLACE_TIMEOUT_MS: u64 = 1500;
 
 impl OnebotV11WsCredentials {
     pub fn from_credentials(credentials: &Value) -> Self {
@@ -121,9 +123,12 @@ struct WsConnection {
 }
 
 /// OneBot v11 WebSocket 服务器管理器
+#[derive(Clone)]
 pub struct OnebotV11WsManager {
     /// 活跃连接: channel_id -> 连接信息
     connections: Arc<RwLock<HashMap<String, WsConnection>>>,
+    /// 活跃连接停止信号: channel_id -> stop sender
+    connection_stop_senders: Arc<RwLock<HashMap<String, watch::Sender<bool>>>>,
     /// 每个渠道独立的关闭信号: channel_id -> shutdown sender
     channel_shutdowns: Arc<RwLock<HashMap<String, broadcast::Sender<()>>>>,
     /// 渠道日志: channel_id -> 日志条目列表
@@ -132,6 +137,10 @@ pub struct OnebotV11WsManager {
     listen_addrs: Arc<RwLock<HashMap<String, String>>>,
     /// 渠道 accept 循环的 JoinHandle，用于 stop 时等待旧服务器释放端口
     channel_tasks: Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>>,
+    /// OneBot 事件消费器停止信号: channel_id -> stop sender
+    event_consumer_stop_senders: Arc<RwLock<HashMap<String, watch::Sender<bool>>>>,
+    /// OneBot 事件消费器任务: channel_id -> JoinHandle
+    event_consumer_tasks: Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>>,
     /// 渠道生命周期锁，确保同一 channel 的 start/stop/reconcile 串行化
     lifecycle_locks: Arc<tokio::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>>,
 }

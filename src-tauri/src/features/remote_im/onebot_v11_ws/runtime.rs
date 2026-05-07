@@ -2,10 +2,13 @@ impl OnebotV11WsManager {
     pub fn new() -> Self {
         Self {
             connections: Arc::new(RwLock::new(HashMap::new())),
+            connection_stop_senders: Arc::new(RwLock::new(HashMap::new())),
             channel_shutdowns: Arc::new(RwLock::new(HashMap::new())),
             channel_logs: Arc::new(RwLock::new(HashMap::new())),
             listen_addrs: Arc::new(RwLock::new(HashMap::new())),
             channel_tasks: Arc::new(RwLock::new(HashMap::new())),
+            event_consumer_stop_senders: Arc::new(RwLock::new(HashMap::new())),
+            event_consumer_tasks: Arc::new(RwLock::new(HashMap::new())),
             lifecycle_locks: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         }
     }
@@ -46,13 +49,52 @@ impl OnebotV11WsManager {
         self.stop_channel_inner(channel_id).await
     }
 
+    async fn stop_onebot_connection_inner(&self, channel_id: &str) -> Result<(), String> {
+        let stop_sender = {
+            self.connection_stop_senders
+                .write()
+                .await
+                .remove(channel_id)
+        };
+        if let Some(tx) = stop_sender {
+            let _ = tx.send(true);
+        }
+        let stopped = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let has_connection = self.connections.read().await.contains_key(channel_id);
+                let has_stop_sender = self
+                    .connection_stop_senders
+                    .read()
+                    .await
+                    .contains_key(channel_id);
+                if !has_connection && !has_stop_sender {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        })
+        .await;
+        if stopped.is_err() {
+            eprintln!(
+                "[远程IM][OneBot v11 WS] 停止渠道连接超时，连接可能仍在退出中: {}",
+                channel_id
+            );
+        }
+        self.connections.write().await.remove(channel_id);
+        Ok(())
+    }
+
     async fn stop_channel_inner(&self, channel_id: &str) -> Result<(), String> {
+        self.stop_event_consumer_inner(channel_id).await?;
+        self.stop_onebot_connection_inner(channel_id).await?;
         // 发送关闭信号给该渠道的 accept 循环
-        if let Some(tx) = self.channel_shutdowns.write().await.remove(channel_id) {
+        let shutdown_tx = { self.channel_shutdowns.write().await.remove(channel_id) };
+        if let Some(tx) = shutdown_tx {
             let _ = tx.send(());
         }
         // 等待旧的 accept 循环任务退出，确保端口被释放
-        if let Some(handle) = self.channel_tasks.write().await.remove(channel_id) {
+        let handle = { self.channel_tasks.write().await.remove(channel_id) };
+        if let Some(handle) = handle {
             let mut handle = handle;
             match tokio::time::timeout(Duration::from_secs(8), &mut handle).await {
                 Ok(join_result) => {
@@ -69,6 +111,7 @@ impl OnebotV11WsManager {
         }
         // 清除连接和监听地址
         self.connections.write().await.remove(channel_id);
+        self.connection_stop_senders.write().await.remove(channel_id);
         self.listen_addrs.write().await.remove(channel_id);
         self.add_log(channel_id, "info", "渠道服务器已停止").await;
         Ok(())
@@ -162,7 +205,9 @@ impl OnebotV11WsManager {
         self.add_log(&channel_id, "info", &format!("服务器启动，监听 {}", listen_addr)).await;
 
         let connections = self.connections.clone();
+        let connection_stop_senders = self.connection_stop_senders.clone();
         let channel_logs = self.channel_logs.clone();
+        let active_connection_gate = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
         // 创建 per-channel 的关闭信号
         let (shutdown_tx, _) = broadcast::channel::<()>(1);
@@ -199,20 +244,25 @@ impl OnebotV11WsManager {
                                 let pending_responses = pending_responses.clone();
                                 let event_tx = event_tx.clone();
                                 let connections = connections.clone();
+                                let connection_stop_senders = connection_stop_senders.clone();
                                 let channel_logs = channel_logs.clone();
-
+                                let active_connection_gate = active_connection_gate.clone();
+                                let channel_id_for_task = channel_id.clone();
                                 tokio::spawn(async move {
                                     Self::handle_connection(
                                         stream,
                                         peer_addr,
-                                        channel_id.clone(),
+                                        channel_id_for_task,
                                         expected_token,
                                         conn_tx,
                                         pending_responses,
                                         event_tx,
                                         connections,
+                                        connection_stop_senders,
                                         channel_logs,
-                                    ).await;
+                                        active_connection_gate,
+                                    )
+                                    .await;
                                 });
                             }
                             Err(e) => {
@@ -246,21 +296,26 @@ impl OnebotV11WsManager {
         pending_responses: Arc<RwLock<HashMap<String, oneshot::Sender<OneBotApiResponse>>>>,
         event_tx: broadcast::Sender<Value>,
         connections: Arc<RwLock<HashMap<String, WsConnection>>>,
+        connection_stop_senders: Arc<RwLock<HashMap<String, tokio::sync::watch::Sender<bool>>>>,
         channel_logs: Arc<RwLock<HashMap<String, Vec<ChannelLogEntry>>>>,
+        active_connection_gate: Arc<std::sync::atomic::AtomicBool>,
     ) {
         let expected_for_closure = expected_token.clone();
-        let ws_result = accept_hdr_async(stream, move |req: &Request, response: Response| {
-            if let Err(mut err_response) = validate_ws_token(req, expected_for_closure.as_deref()) {
-                *err_response.headers_mut() = response.headers().clone();
-                return Err(err_response);
-            }
-            Ok(response)
-        })
+        let ws_result = tokio::time::timeout(
+            Duration::from_secs(NAPCAT_WS_HANDSHAKE_TIMEOUT_SECS),
+            accept_hdr_async(stream, move |req: &Request, response: Response| {
+                if let Err(mut err_response) = validate_ws_token(req, expected_for_closure.as_deref()) {
+                    *err_response.headers_mut() = response.headers().clone();
+                    return Err(err_response);
+                }
+                Ok(response)
+            }),
+        )
         .await;
 
         let ws_stream = match ws_result {
-            Ok(ws) => ws,
-            Err(e) => {
+            Ok(Ok(ws)) => ws,
+            Ok(Err(e)) => {
                 eprintln!("[远程IM][OneBot v11 WS] WebSocket 握手失败 {}: {}", peer_addr, e);
                 append_channel_log(
                     &channel_logs,
@@ -271,7 +326,98 @@ impl OnebotV11WsManager {
                 .await;
                 return;
             }
+            Err(_) => {
+                eprintln!(
+                    "[远程IM][OneBot v11 WS] WebSocket 握手超时 {}: timeout={}s",
+                    peer_addr, NAPCAT_WS_HANDSHAKE_TIMEOUT_SECS
+                );
+                append_channel_log(
+                    &channel_logs,
+                    &channel_id,
+                    "warn",
+                    format!(
+                        "WebSocket 握手超时 {}: timeout={}s",
+                        peer_addr, NAPCAT_WS_HANDSHAKE_TIMEOUT_SECS
+                    ),
+                )
+                .await;
+                return;
+            }
         };
+
+        let mut ws_stream = ws_stream;
+        if active_connection_gate
+            .compare_exchange(
+                false,
+                true,
+                std::sync::atomic::Ordering::SeqCst,
+                std::sync::atomic::Ordering::SeqCst,
+            )
+            .is_err()
+        {
+            eprintln!(
+                "[远程IM][OneBot v11 WS] 渠道 {} 检测到已有连接，正在尝试替换: {}",
+                channel_id, peer_addr
+            );
+            let existing_sender = {
+                connection_stop_senders
+                    .read()
+                    .await
+                    .get(&channel_id)
+                    .cloned()
+            };
+            if let Some(sender) = existing_sender {
+                let _ = sender.send(true);
+            }
+            let replaced = tokio::time::timeout(
+                Duration::from_millis(NAPCAT_ACTIVE_CONNECTION_REPLACE_TIMEOUT_MS),
+                async {
+                    loop {
+                        if active_connection_gate
+                            .compare_exchange(
+                                false,
+                                true,
+                                std::sync::atomic::Ordering::SeqCst,
+                                std::sync::atomic::Ordering::SeqCst,
+                            )
+                            .is_ok()
+                        {
+                            break;
+                        }
+                        tokio::time::sleep(Duration::from_millis(25)).await;
+                    }
+                },
+            )
+            .await;
+            if replaced.is_err() {
+                eprintln!(
+                    "[远程IM][OneBot v11 WS] 渠道 {} 替换旧连接超时，拒绝新连接: {}",
+                    channel_id, peer_addr
+                );
+                append_channel_log(
+                    &channel_logs,
+                    &channel_id,
+                    "warn",
+                    format!("替换旧连接超时，拒绝新连接: {}", peer_addr),
+                )
+                .await;
+                let _ = ws_stream.close(None).await;
+                return;
+            }
+            append_channel_log(
+                &channel_logs,
+                &channel_id,
+                "info",
+                format!("新连接已接管旧连接: {}", peer_addr),
+            )
+            .await;
+        }
+
+        let (connection_stop_tx, connection_stop_rx) = tokio::sync::watch::channel(false);
+        connection_stop_senders
+            .write()
+            .await
+            .insert(channel_id.clone(), connection_stop_tx);
 
         let peer_addr_str = peer_addr.to_string();
         eprintln!("[远程IM][OneBot v11 WS] 渠道 {} 客户端已连接: {}", channel_id, peer_addr_str);
@@ -298,17 +444,21 @@ impl OnebotV11WsManager {
 
         let (ws_sender, ws_receiver) = ws_stream.split();
         let cmd_rx = conn_tx.subscribe();
+        let channel_id_for_loop = channel_id.clone();
         run_message_loop(
             ws_sender,
             ws_receiver,
             cmd_rx,
+            connection_stop_rx,
             pending_responses,
             event_tx,
             connections,
             channel_logs,
-            channel_id,
+            channel_id_for_loop,
             peer_addr_str,
         )
         .await;
+        connection_stop_senders.write().await.remove(&channel_id);
+        active_connection_gate.store(false, std::sync::atomic::Ordering::SeqCst);
     }
 }

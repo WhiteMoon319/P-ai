@@ -66,6 +66,7 @@ async fn run_message_loop(
     mut ws_sender: WsSender,
     mut ws_receiver: WsReceiver,
     mut cmd_rx: broadcast::Receiver<String>,
+    mut stop_rx: tokio::sync::watch::Receiver<bool>,
     pending_responses: Arc<RwLock<HashMap<String, oneshot::Sender<OneBotApiResponse>>>>,
     event_tx: broadcast::Sender<Value>,
     connections: Arc<RwLock<HashMap<String, WsConnection>>>,
@@ -89,6 +90,23 @@ async fn run_message_loop(
                     Err(_) => {
                         disconnect_level = "warn".to_string();
                         disconnect_message = "命令广播通道已关闭".to_string();
+                        break;
+                    }
+                }
+            }
+            changed = stop_rx.changed() => {
+                match changed {
+                    Ok(()) => {
+                        if *stop_rx.borrow() {
+                            let _ = ws_sender.send(Message::Close(None)).await;
+                            disconnect_level = "info".to_string();
+                            disconnect_message = format!("收到连接停止信号: {}", peer_addr_str);
+                            break;
+                        }
+                    }
+                    Err(_) => {
+                        disconnect_level = "warn".to_string();
+                        disconnect_message = "连接停止通道已关闭".to_string();
                         break;
                     }
                 }
