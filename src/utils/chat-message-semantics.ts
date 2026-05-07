@@ -191,10 +191,12 @@ function resolveTaskTrigger(message: ChatMessage): TaskTriggerMessageCard | unde
     goal,
     why: String(card.why || card.cause || "").trim() || undefined,
     todo: String(card.how || "").trim() || undefined,
-    runAtLocal: String(card.runAtLocal || card.runAt || "").trim() || undefined,
-    endAtLocal: String(card.endAtLocal || card.endAt || "").trim() || undefined,
-    nextRunAtLocal: String(card.nextRunAtLocal || card.nextRunAt || "").trim() || undefined,
-    everyMinutes: Number.isFinite(Number(card.everyMinutes)) ? Number(card.everyMinutes) : undefined,
+    runAt: String(card.run_at || card.runAt || card.runAtLocal || "").trim() || undefined,
+    cronExpression:
+      String(card.cron_expression || card.cronExpression || card.every_minutes || card.everyMinutes || "").trim()
+      || undefined,
+    endAt: String(card.end_at || card.endAt || card.endAtLocal || "").trim() || undefined,
+    nextRunAt: String(card.next_run_at || card.nextRunAt || card.nextRunAtLocal || "").trim() || undefined,
   };
 }
 

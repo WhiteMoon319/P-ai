@@ -1,10 +1,11 @@
 export type TaskFilter = "" | "active" | "completed";
 
 export type TaskTrigger = {
-  runAtLocal?: string;
-  endAtLocal?: string;
-  everyMinutes?: number;
-  nextRunAtLocal?: string;
+  run_at?: string;
+  cron_expression?: string;
+  every_minutes?: number;
+  end_at?: string;
+  next_run_at?: string;
 };
 
 export type TaskProgressNote = {
@@ -38,18 +39,98 @@ export type TaskRunLogEntry = {
 };
 
 export type TaskEditorMode = "create" | "edit";
+export type TaskScheduleMode = "once" | "interval";
 
 export type TaskEditorForm = {
   taskId: string;
   goal: string;
   why: string;
   todo: string;
-  runAtLocal: string;
-  everyMinutesText: string;
-  endAtLocal: string;
+  runAt: string;
+  scheduleMode: TaskScheduleMode;
+  repeatWeeks: string;
+  repeatDays: string;
+  repeatHours: string;
+  preservedEveryMinutes: string;
+  preservedCronExpression: string;
+  endAt: string;
   completionState: "completed" | "failed_completed";
   completionConclusion: string;
 };
+
+const HOURS_PER_DAY = 24;
+const HOURS_PER_WEEK = 24 * 7;
+const MINUTES_PER_HOUR = 60;
+
+function buildIntervalPartsFromHours(totalHours: number): {
+  repeatWeeks: string;
+  repeatDays: string;
+  repeatHours: string;
+} {
+  let remainingHours = Math.max(0, Math.floor(totalHours));
+  const weeks = Math.floor(remainingHours / HOURS_PER_WEEK);
+  remainingHours -= weeks * HOURS_PER_WEEK;
+  const days = Math.floor(remainingHours / HOURS_PER_DAY);
+  remainingHours -= days * HOURS_PER_DAY;
+  return {
+    repeatWeeks: String(weeks),
+    repeatDays: String(days),
+    repeatHours: String(remainingHours),
+  };
+}
+
+function buildSupportedIntervalFromEveryMinutes(value: number): {
+  repeatWeeks: string;
+  repeatDays: string;
+  repeatHours: string;
+} | null {
+  if (!Number.isFinite(value) || value <= 0 || value % MINUTES_PER_HOUR !== 0) {
+    return null;
+  }
+  const totalHours = value / MINUTES_PER_HOUR;
+  if (totalHours < 1) {
+    return null;
+  }
+  return buildIntervalPartsFromHours(totalHours);
+}
+
+function inferSupportedIntervalFromCron(cronExpression: string): {
+  repeatWeeks: string;
+  repeatDays: string;
+  repeatHours: string;
+} | null {
+  const normalized = String(cronExpression || "").trim();
+  if (!normalized) return null;
+  let match = normalized.match(/^(\d{1,2}) \* \* \* \*$/);
+  if (match) {
+    return buildIntervalPartsFromHours(1);
+  }
+  match = normalized.match(/^(\d{1,2}) (\d{1,2}) \* \* \*$/);
+  if (match) {
+    return buildIntervalPartsFromHours(HOURS_PER_DAY);
+  }
+  match = normalized.match(/^(\d{1,2}) (\d+(?:,\d+)*) \* \* \*$/);
+  if (!match) {
+    return null;
+  }
+  const hours = match[2]
+    .split(",")
+    .map((value) => Number.parseInt(value, 10))
+    .filter((value) => Number.isFinite(value))
+    .sort((left, right) => left - right);
+  if (hours.length < 2) {
+    return null;
+  }
+  const diffs = hours.map((value, index) => {
+    const next = index === hours.length - 1 ? hours[0] + HOURS_PER_DAY : hours[index + 1];
+    return next - value;
+  });
+  const firstDiff = diffs[0];
+  if (firstDiff <= 0 || !diffs.every((value) => value === firstDiff)) {
+    return null;
+  }
+  return buildIntervalPartsFromHours(firstDiff);
+}
 
 export function createEmptyTaskEditorForm(): TaskEditorForm {
   return {
@@ -57,26 +138,41 @@ export function createEmptyTaskEditorForm(): TaskEditorForm {
     goal: "",
     why: "",
     todo: "",
-    runAtLocal: "",
-    everyMinutesText: "",
-    endAtLocal: "",
+    runAt: "",
+    scheduleMode: "once",
+    repeatWeeks: "0",
+    repeatDays: "0",
+    repeatHours: "0",
+    preservedEveryMinutes: "",
+    preservedCronExpression: "",
+    endAt: "",
     completionState: "completed",
     completionConclusion: "",
   };
 }
 
 export function taskEditorFormFromEntry(task: TaskEntry): TaskEditorForm {
+  const legacyEveryMinutes = typeof task.trigger.every_minutes === "number" ? task.trigger.every_minutes : NaN;
+  const supportedLegacyInterval = Number.isFinite(legacyEveryMinutes)
+    ? buildSupportedIntervalFromEveryMinutes(legacyEveryMinutes)
+    : null;
+  const cronExpression = String(task.trigger.cron_expression || "").trim();
+  const supportedCronInterval = cronExpression ? inferSupportedIntervalFromCron(cronExpression) : null;
+  const intervalParts = supportedLegacyInterval || supportedCronInterval;
+  const hasExistingRecurringSchedule = Number.isFinite(legacyEveryMinutes) || !!cronExpression;
   return {
     taskId: task.taskId,
     goal: task.goal || "",
     why: task.why || "",
     todo: task.todo || "",
-    runAtLocal: task.trigger.runAtLocal || "",
-    everyMinutesText:
-      typeof task.trigger.everyMinutes === "number" && Number.isFinite(task.trigger.everyMinutes)
-        ? String(task.trigger.everyMinutes)
-        : "",
-    endAtLocal: task.trigger.endAtLocal || "",
+    runAt: task.trigger.run_at || "",
+    scheduleMode: hasExistingRecurringSchedule ? "interval" : "once",
+    repeatWeeks: intervalParts?.repeatWeeks || "0",
+    repeatDays: intervalParts?.repeatDays || "0",
+    repeatHours: intervalParts?.repeatHours || "0",
+    preservedEveryMinutes: Number.isFinite(legacyEveryMinutes) ? String(legacyEveryMinutes) : "",
+    preservedCronExpression: cronExpression,
+    endAt: task.trigger.end_at || "",
     completionState: "completed",
     completionConclusion: task.completionConclusion || "",
   };
@@ -88,9 +184,14 @@ export function taskEditorSnapshot(form: TaskEditorForm): string {
     goal: String(form.goal || "").trim(),
     why: String(form.why || "").trim(),
     todo: String(form.todo || "").trim(),
-    runAtLocal: String(form.runAtLocal || "").trim(),
-    everyMinutesText: String(form.everyMinutesText || "").trim(),
-    endAtLocal: String(form.endAtLocal || "").trim(),
+    runAt: String(form.runAt || "").trim(),
+    scheduleMode: form.scheduleMode === "interval" ? "interval" : "once",
+    repeatWeeks: String(form.repeatWeeks || "").trim(),
+    repeatDays: String(form.repeatDays || "").trim(),
+    repeatHours: String(form.repeatHours || "").trim(),
+    preservedEveryMinutes: String(form.preservedEveryMinutes || "").trim(),
+    preservedCronExpression: String(form.preservedCronExpression || "").trim(),
+    endAt: String(form.endAt || "").trim(),
     completionState:
       String(form.completionState || "").trim() === "failed_completed" ? "failed_completed" : "completed",
     completionConclusion: String(form.completionConclusion || "").trim(),

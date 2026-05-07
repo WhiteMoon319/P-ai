@@ -503,10 +503,10 @@ export type TaskTriggerMessageCard = {
   goal: string;
   why?: string;
   todo?: string;
-  runAtLocal?: string;
-  endAtLocal?: string;
-  nextRunAtLocal?: string;
-  everyMinutes?: number;
+  runAt?: string;
+  cronExpression?: string;
+  endAt?: string;
+  nextRunAt?: string;
 };
 
 export type PlanMessageCard = {

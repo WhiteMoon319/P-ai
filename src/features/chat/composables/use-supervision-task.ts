@@ -140,8 +140,8 @@ export function useSupervisionTask(options: UseSupervisionTaskOptions) {
     if (String(task.completionState || "").trim() !== "active") return false;
     if (String(task.conversationId || "").trim() !== conversationId) return false;
     if (!String(task.goal || "").trim().startsWith(SUPERVISION_TASK_GOAL_PREFIX)) return false;
-    const runAt = parseTaskTime(task.trigger?.runAtLocal);
-    const endAt = parseTaskTime(task.trigger?.endAtLocal);
+    const runAt = parseTaskTime(task.trigger?.run_at);
+    const endAt = parseTaskTime(task.trigger?.end_at);
     if (!endAt) return false;
     const now = new Date();
     if (runAt) {
@@ -151,7 +151,7 @@ export function useSupervisionTask(options: UseSupervisionTaskOptions) {
   }
 
   function activeSupervisionTaskFromEntry(task: TaskEntry): ActiveSupervisionTaskSummary {
-    const endAt = parseTaskTime(task.trigger?.endAtLocal);
+    const endAt = parseTaskTime(task.trigger?.end_at);
     const remainingHours = endAt
       ? Math.min(24, Math.max(1, Math.ceil((endAt.getTime() - Date.now()) / 3_600_000)))
       : 1;
@@ -160,7 +160,7 @@ export function useSupervisionTask(options: UseSupervisionTaskOptions) {
       goal: stripSupervisionGoalPrefix(task.goal),
       why: String(task.why || "").trim(),
       todo: String(task.todo || "").trim(),
-      endAtLocal: String(task.trigger?.endAtLocal || "").trim(),
+      endAtLocal: String(task.trigger?.end_at || "").trim(),
       remainingHours,
     };
   }
@@ -232,9 +232,9 @@ export function useSupervisionTask(options: UseSupervisionTaskOptions) {
       now.setSeconds(0, 0);
       const endAt = new Date(now.getTime() + payload.durationHours * 3_600_000);
       const trigger = {
-        runAtLocal: formatDateToLocalRfc3339(now),
-        everyMinutes: 0.1,
-        endAtLocal: formatDateToLocalRfc3339(endAt),
+        run_at: formatDateToLocalRfc3339(now),
+        cron_expression: "* * * * *",
+        end_at: formatDateToLocalRfc3339(endAt),
       };
       let taskId = "";
       if (activeSupervisionTask.value?.taskId) {

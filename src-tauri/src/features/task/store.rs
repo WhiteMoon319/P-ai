@@ -14,58 +14,6 @@ fn task_store_open(data_path: &PathBuf) -> Result<Connection, String> {
     Ok(conn)
 }
 
-fn task_store_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool, String> {
-    let sql = format!("PRAGMA table_info({table})");
-    let mut stmt = conn
-        .prepare(&sql)
-        .map_err(|err| format!("Prepare table info failed: {table}, {err}"))?;
-    let rows = stmt
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|err| format!("Read table info failed: {table}, {err}"))?;
-    for row in rows {
-        let name = row.map_err(|err| format!("Read table info row failed: {table}, {err}"))?;
-        if name == column {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
-fn task_store_rename_column_if_needed(
-    conn: &Connection,
-    table: &str,
-    legacy_column: &str,
-    next_column: &str,
-) -> Result<(), String> {
-    if !task_store_has_column(conn, table, legacy_column)? || task_store_has_column(conn, table, next_column)? {
-        return Ok(());
-    }
-    conn.execute(
-        &format!("ALTER TABLE {table} RENAME COLUMN {legacy_column} TO {next_column}"),
-        [],
-    )
-    .map_err(|err| {
-        format!(
-            "Rename task column failed: table={table}, from={legacy_column}, to={next_column}, {err}"
-        )
-    })?;
-    Ok(())
-}
-
-fn task_store_add_column_if_missing(
-    conn: &Connection,
-    table: &str,
-    definition: &str,
-    column: &str,
-) -> Result<(), String> {
-    if task_store_has_column(conn, table, column)? {
-        return Ok(());
-    }
-    conn.execute(&format!("ALTER TABLE {table} ADD COLUMN {definition}"), [])
-        .map_err(|err| format!("Add task column failed: table={table}, column={column}, {err}"))?;
-    Ok(())
-}
-
 fn task_store_init(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(
         "BEGIN;
@@ -87,6 +35,7 @@ fn task_store_init(conn: &Connection) -> Result<(), String> {
             stage_updated_at_utc TEXT,
             trigger_kind TEXT NOT NULL,
             run_at_utc TEXT,
+            cron_expression TEXT,
             every_minutes INTEGER,
             end_at_utc TEXT,
             created_at_utc TEXT NOT NULL,
@@ -109,97 +58,91 @@ fn task_store_init(conn: &Connection) -> Result<(), String> {
         COMMIT;",
     )
     .map_err(|err| format!("Init task db failed: {err}"))?;
-
-    conn.execute_batch("BEGIN IMMEDIATE;")
-        .map_err(|err| format!("Begin task migration transaction failed: {err}"))?;
-
-    let migration_result = (|| -> Result<(), String> {
-        task_store_add_column_if_missing(conn, "task_record", "conversation_id TEXT", "conversation_id")?;
-        task_store_add_column_if_missing(
-            conn,
-            "task_record",
-            "target_scope TEXT NOT NULL DEFAULT 'desktop'",
-            "target_scope",
-        )?;
-        task_store_rename_column_if_needed(conn, "task_record", "stage_updated_at", "stage_updated_at_utc")?;
-        task_store_rename_column_if_needed(conn, "task_record", "run_at", "run_at_utc")?;
-        task_store_rename_column_if_needed(conn, "task_record", "end_at", "end_at_utc")?;
-        task_store_rename_column_if_needed(conn, "task_record", "created_at", "created_at_utc")?;
-        task_store_rename_column_if_needed(conn, "task_record", "updated_at", "updated_at_utc")?;
-        task_store_rename_column_if_needed(conn, "task_record", "last_triggered_at", "last_triggered_at_utc")?;
-        task_store_rename_column_if_needed(conn, "task_record", "completed_at", "completed_at_utc")?;
-        task_store_rename_column_if_needed(conn, "task_runtime_state", "updated_at", "updated_at_utc")?;
-        task_store_rename_column_if_needed(conn, "task_run_log", "triggered_at", "triggered_at_utc")?;
-        Ok(())
-    })();
-
-    match migration_result {
-        Ok(()) => conn
-            .execute_batch("COMMIT;")
-            .map_err(|err| format!("Commit task migration transaction failed: {err}"))?,
-        Err(err) => {
-            let _ = conn.execute_batch("ROLLBACK;");
-            return Err(err);
-        }
-    }
-
-    Ok(())
+    task_store_apply_migrations(conn)
 }
 
-fn task_normalize_run_at_local(value: &str) -> Result<String, String> {
-    normalize_rfc3339_to_utc_storage("task.trigger.runAtLocal", value)
+fn task_normalize_run_at(value: &str) -> Result<String, String> {
+    normalize_rfc3339_to_utc_storage("task.trigger.run_at", value)
 }
 
-fn task_normalize_end_at_local(value: &str) -> Result<String, String> {
-    normalize_rfc3339_to_utc_storage("task.trigger.endAtLocal", value)
+fn task_normalize_end_at(value: &str) -> Result<String, String> {
+    normalize_rfc3339_to_utc_storage("task.trigger.end_at", value)
 }
 
 // ========== 任务时间边界：输入 local，入库 utc ==========
 fn task_trigger_from_local_input(input: &TaskTriggerInputLocal) -> Result<TaskTriggerStored, String> {
-    let run_at_local = input
-        .run_at_local
+    let run_at = input
+        .run_at
         .as_deref()
         .map(str::trim)
         .unwrap_or("");
-    let every_minutes = input.every_minutes.unwrap_or(0.0);
-    let end_at_local = input
-        .end_at_local
+    let cron_expression = input
+        .cron_expression
         .as_deref()
         .map(str::trim)
         .unwrap_or("");
-    if run_at_local.is_empty() {
-        return Err("task.trigger.runAtLocal is required".to_string());
+    let end_at = input
+        .end_at
+        .as_deref()
+        .map(str::trim)
+        .unwrap_or("");
+    if run_at.is_empty() {
+        return Err("task.trigger.run_at is required".to_string());
     }
-    if !every_minutes.is_finite() || every_minutes <= 0.0 {
-        return Err("task.trigger.everyMinutes must be a positive number".to_string());
-    }
-    let normalized_run_at_utc = task_normalize_run_at_local(run_at_local)?;
-    if end_at_local.is_empty() {
-        return Err("task.trigger.endAtLocal is required".to_string());
-    }
-    let normalized_end_at_utc = task_normalize_end_at_local(end_at_local)?;
+    let normalized_run_at_utc = task_normalize_run_at(run_at)?;
+    let normalized_cron_expression = if !cron_expression.is_empty() {
+        Some(task_normalize_cron_expression(cron_expression)?)
+    } else if let Some(legacy_every_minutes) = input.legacy_every_minutes {
+        task_exact_cron_expression_from_legacy_every_minutes(
+            Some(normalized_run_at_utc.as_str()),
+            legacy_every_minutes,
+        )
+    } else {
+        None
+    };
+    let normalized_legacy_every_minutes = if normalized_cron_expression.is_some() {
+        None
+    } else {
+        input
+            .legacy_every_minutes
+            .and_then(task_legacy_every_minutes_normalized)
+    };
+    let normalized_end_at_utc = if end_at.is_empty() {
+        None
+    } else {
+        Some(task_normalize_end_at(end_at)?)
+    };
     let run_dt = parse_rfc3339_time(&normalized_run_at_utc)
-        .ok_or_else(|| "task.trigger.runAtLocal normalization failed".to_string())?;
-    let end_dt = parse_rfc3339_time(&normalized_end_at_utc)
-        .ok_or_else(|| "task.trigger.endAtLocal normalization failed".to_string())?;
-    if end_dt <= run_dt {
-        return Err("task.trigger.endAtLocal must be later than task.trigger.runAtLocal".to_string());
+        .ok_or_else(|| "task.trigger.run_at normalization failed".to_string())?;
+    if let Some(normalized_end_at_utc) = normalized_end_at_utc.as_deref() {
+        let end_dt = parse_rfc3339_time(normalized_end_at_utc)
+            .ok_or_else(|| "task.trigger.end_at normalization failed".to_string())?;
+        if end_dt <= run_dt {
+            return Err("task.trigger.end_at must be later than task.trigger.run_at".to_string());
+        }
     }
     Ok(TaskTriggerStored {
         run_at_utc: Some(normalized_run_at_utc),
-        every_minutes: Some(every_minutes),
-        end_at_utc: Some(normalized_end_at_utc),
+        cron_expression: normalized_cron_expression,
+        legacy_every_minutes: normalized_legacy_every_minutes,
+        end_at_utc: normalized_end_at_utc,
         next_run_at_utc: None,
     })
 }
 
-fn task_trigger_kind_from_fields(run_at_utc: Option<&str>, every_minutes: Option<f64>) -> &'static str {
+fn task_trigger_kind_from_fields(
+    run_at_utc: Option<&str>,
+    cron_expression: Option<&str>,
+    legacy_every_minutes: Option<f64>,
+) -> &'static str {
     if run_at_utc.is_none() {
-        "immediate"
-    } else if every_minutes.unwrap_or(0.0) > 0.0 {
-        "every"
+        "legacy_immediate"
+    } else if cron_expression.map(str::trim).filter(|value| !value.is_empty()).is_some() {
+        "cron"
+    } else if legacy_every_minutes.is_some() {
+        "legacy_every_minutes"
     } else {
-        "start"
+        "once"
     }
 }
 
@@ -227,41 +170,23 @@ fn task_notes_from_json(raw: &str) -> Vec<TaskProgressNoteStored> {
     serde_json::from_str(raw).unwrap_or_default()
 }
 
-fn task_compute_next_run_at_utc_raw(
-    run_at_utc: Option<&str>,
-    every_minutes: Option<f64>,
-    end_at_utc: Option<&str>,
-    last_triggered_at_utc: Option<&str>,
-    completion_state: &str,
-) -> Option<String> {
-    if completion_state != TASK_STATE_ACTIVE {
-        return None;
-    }
-    let base = if let Some(last) = last_triggered_at_utc.and_then(parse_rfc3339_time) {
-        last
-    } else if let Some(start) = run_at_utc.and_then(parse_rfc3339_time) {
-        start
-    } else {
-        return None;
-    };
-    let Some(every) = every_minutes.and_then(task_every_minutes_to_duration) else {
-        return None;
-    };
-    let next = base + every;
-    if let Some(end_dt) = end_at_utc.and_then(parse_rfc3339_time) {
-        if next > end_dt {
-            return None;
-        }
-    }
-    normalize_time_for_utc_storage(next).ok()
-}
-
 fn task_row_to_record_stored(row: &rusqlite::Row<'_>) -> rusqlite::Result<TaskRecordStored> {
     let completion_state: String = row.get("completion_state")?;
     let run_at_utc: Option<String> = row.get("run_at_utc")?;
+    let cron_expression: Option<String> = row.get("cron_expression")?;
     let every_minutes: Option<f64> = row.get("every_minutes")?;
     let end_at_utc: Option<String> = row.get("end_at_utc")?;
     let last_triggered_at_utc: Option<String> = row.get("last_triggered_at_utc")?;
+    let normalized_cron_expression = cron_expression
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            every_minutes.and_then(|value| {
+                task_exact_cron_expression_from_legacy_every_minutes(run_at_utc.as_deref(), value)
+            })
+        });
     Ok(TaskRecordStored {
         task_id: row.get("task_id")?,
         conversation_id: row.get("conversation_id")?,
@@ -280,11 +205,13 @@ fn task_row_to_record_stored(row: &rusqlite::Row<'_>) -> rusqlite::Result<TaskRe
         stage_updated_at_utc: row.get("stage_updated_at_utc")?,
         trigger: TaskTriggerStored {
             run_at_utc: run_at_utc.clone(),
-            every_minutes,
+            cron_expression: normalized_cron_expression.clone(),
+            legacy_every_minutes: every_minutes.and_then(task_legacy_every_minutes_normalized),
             end_at_utc: end_at_utc.clone(),
             next_run_at_utc: task_compute_next_run_at_utc_raw(
                 run_at_utc.as_deref(),
-                every_minutes,
+                normalized_cron_expression.as_deref(),
+                every_minutes.and_then(task_legacy_every_minutes_normalized),
                 end_at_utc.as_deref(),
                 last_triggered_at_utc.as_deref(),
                 &completion_state,
@@ -370,9 +297,9 @@ fn task_store_create_task(data_path: &PathBuf, input: &TaskCreateInput) -> Resul
         "INSERT INTO task_record (
             task_id, conversation_id, target_scope, order_index, title, cause, goal, flow, todos_json, status_summary,
             completion_state, completion_conclusion, progress_notes_json, stage_key, stage_updated_at_utc,
-            trigger_kind, run_at_utc, every_minutes, end_at_utc, created_at_utc, updated_at_utc,
+            trigger_kind, run_at_utc, cron_expression, every_minutes, end_at_utc, created_at_utc, updated_at_utc,
             last_triggered_at_utc, completed_at_utc
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, '', ?12, '', NULL, ?13, ?14, ?15, ?16, ?17, ?18, NULL, NULL)",
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, '', ?12, '', NULL, ?13, ?14, ?15, ?16, ?17, ?18, ?19, NULL, NULL)",
         params![
             task_id,
             conversation_id,
@@ -386,9 +313,14 @@ fn task_store_create_task(data_path: &PathBuf, input: &TaskCreateInput) -> Resul
             task_legacy_status_summary_from_todo(&input.todo),
             TASK_STATE_ACTIVE,
             task_notes_to_json(&Vec::<TaskProgressNoteStored>::new())?,
-            task_trigger_kind_from_fields(trigger.run_at_utc.as_deref(), trigger.every_minutes),
+            task_trigger_kind_from_fields(
+                trigger.run_at_utc.as_deref(),
+                trigger.cron_expression.as_deref(),
+                trigger.legacy_every_minutes,
+            ),
             trigger.run_at_utc.as_deref(),
-            trigger.every_minutes,
+            trigger.cron_expression.as_deref(),
+            trigger.legacy_every_minutes,
             trigger.end_at_utc.as_deref(),
             now_utc,
             now_utc,
@@ -462,9 +394,10 @@ fn task_store_update_task(data_path: &PathBuf, input: &TaskUpdateInput) -> Resul
             stage_updated_at_utc = ?12,
             trigger_kind = ?13,
             run_at_utc = ?14,
-            every_minutes = ?15,
-            end_at_utc = ?16,
-            updated_at_utc = ?17
+            cron_expression = ?15,
+            every_minutes = ?16,
+            end_at_utc = ?17,
+            updated_at_utc = ?18
          WHERE task_id = ?1",
         params![
             input.task_id,
@@ -479,9 +412,14 @@ fn task_store_update_task(data_path: &PathBuf, input: &TaskUpdateInput) -> Resul
             existing_notes_json,
             existing_stage_key,
             existing_stage_updated_at_utc,
-            task_trigger_kind_from_fields(trigger.run_at_utc.as_deref(), trigger.every_minutes),
+            task_trigger_kind_from_fields(
+                trigger.run_at_utc.as_deref(),
+                trigger.cron_expression.as_deref(),
+                trigger.legacy_every_minutes,
+            ),
             trigger.run_at_utc.as_deref(),
-            trigger.every_minutes,
+            trigger.cron_expression.as_deref(),
+            trigger.legacy_every_minutes,
             trigger.end_at_utc.as_deref(),
             now_utc_rfc3339(),
         ],

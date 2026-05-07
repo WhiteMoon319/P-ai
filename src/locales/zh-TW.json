@@ -724,9 +724,17 @@
       },
         "validation": {
           "goalRequired": "任務目標不能為空。",
-          "everyMinutesPositive": "間隔分鐘必須是大於 0 的數字。"
+          "everyMinutesPositive": "間隔分鐘必須是大於 0 的數字。",
+          "repeatIntervalRequired": "定時任務至少要填寫一個大於 0 的週、天或小時。",
+          "repeatIntervalInvalid": "週、天、小時必須填寫 0 或更大的整數。"
         },
         "todoPlaceholder": "寫當前下一步要做什麼",
+        "scheduleModes": {
+          "once": "一次性",
+          "interval": "定時"
+        },
+        "scheduleIntervalHint": "從首次觸發時間開始，按週、天、小時累加後的總時長循環觸發。",
+        "scheduleUnsupportedHint": "當前任務的舊調度無法完整映射到這個簡化編輯器。不改週/天/小時就會按原調度保留；要修改的話，直接重新設定即可。",
       "filters": {
         "active": "進行中",
         "completed": "已完成",
@@ -735,8 +743,12 @@
         "fields": {
           "taskId": "任務ID",
           "triggerKind": "觸發器",
-          "runAt": "開始時間",
-          "everyMinutes": "間隔分鐘",
+          "runAt": "首次觸發時間",
+          "scheduleMode": "調度方式",
+          "repeatWeeks": "每幾週",
+          "repeatDays": "每幾天",
+          "repeatHours": "每幾小時",
+          "cronExpression": "Cron 表達式",
           "goal": "目標",
           "why": "為什麼做",
           "todo": "當前待辦",

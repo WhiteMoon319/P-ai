@@ -724,9 +724,17 @@
       },
         "validation": {
           "goalRequired": "Task goal is required.",
-          "everyMinutesPositive": "Every Minutes must be a number greater than 0."
+          "everyMinutesPositive": "Every Minutes must be a number greater than 0.",
+          "repeatIntervalRequired": "Recurring tasks need at least one value greater than 0 for weeks, days, or hours.",
+          "repeatIntervalInvalid": "Weeks, days, and hours must be integers greater than or equal to 0."
         },
         "todoPlaceholder": "Describe the current next step",
+        "scheduleModes": {
+          "once": "One-time",
+          "interval": "Recurring"
+        },
+        "scheduleIntervalHint": "Starting from the first run time, this task repeats by the combined interval of weeks, days, and hours.",
+        "scheduleUnsupportedHint": "This task uses an older schedule that the simplified editor cannot fully map. If you leave weeks/days/hours unchanged, the original schedule will be preserved.",
       "filters": {
         "active": "Active",
         "completed": "Completed",
@@ -735,8 +743,12 @@
         "fields": {
           "taskId": "Task ID",
           "triggerKind": "Trigger",
-          "runAt": "Start Time",
-          "everyMinutes": "Every Minutes",
+          "runAt": "First Run At",
+          "scheduleMode": "Schedule",
+          "repeatWeeks": "Every N Weeks",
+          "repeatDays": "Every N Days",
+          "repeatHours": "Every N Hours",
+          "cronExpression": "Cron Expression",
           "goal": "Goal",
           "why": "Why",
           "todo": "Current To-do",

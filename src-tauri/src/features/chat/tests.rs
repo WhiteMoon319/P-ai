@@ -3339,7 +3339,8 @@
             stage_updated_at_utc: None,
             trigger: TaskTriggerStored {
                 run_at_utc: None,
-                every_minutes: None,
+                cron_expression: None,
+                legacy_every_minutes: None,
                 end_at_utc: None,
                 next_run_at_utc: None,
             },
@@ -3381,7 +3382,8 @@
             stage_updated_at_utc: None,
             trigger: TaskTriggerStored {
                 run_at_utc: None,
-                every_minutes: None,
+                cron_expression: None,
+                legacy_every_minutes: None,
                 end_at_utc: None,
                 next_run_at_utc: None,
             },
@@ -3464,7 +3466,8 @@
             stage_updated_at_utc: None,
             trigger: TaskTriggerStored {
                 run_at_utc: None,
-                every_minutes: None,
+                cron_expression: None,
+                legacy_every_minutes: None,
                 end_at_utc: None,
                 next_run_at_utc: None,
             },
@@ -3549,9 +3552,10 @@
                 why: String::new(),
                 todo: String::new(),
                 trigger: TaskTriggerInputLocal {
-                    run_at_local: Some("2026-04-10T10:00:00+08:00".to_string()),
-                    every_minutes: Some(30.0),
-                    end_at_local: Some("2099-04-10T12:00:00+08:00".to_string()),
+                    run_at: Some("2026-04-10T10:00:00+08:00".to_string()),
+                    cron_expression: Some("0,30 * * * *".to_string()),
+                    end_at: Some("2099-04-10T12:00:00+08:00".to_string()),
+                    legacy_every_minutes: None,
                 },
             })
             .expect("create task")
@@ -3591,9 +3595,10 @@
             why: String::new(),
             todo: String::new(),
             trigger: TaskTriggerInputLocal {
-                run_at_local: Some("2026-04-10T10:00:00+08:00".to_string()),
-                every_minutes: Some(30.0),
-                end_at_local: Some("2099-04-10T12:00:00+08:00".to_string()),
+                run_at: Some("2026-04-10T10:00:00+08:00".to_string()),
+                cron_expression: Some("0,30 * * * *".to_string()),
+                end_at: Some("2099-04-10T12:00:00+08:00".to_string()),
+                legacy_every_minutes: None,
             },
         })
         .expect("create busy task");

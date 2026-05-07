@@ -56,20 +56,47 @@
               <label class="block space-y-2">
                 <span class="block text-sm font-medium">{{ t("config.task.fields.runAt") }}</span>
                 <TaskDateTimeInput
-                  v-model="form.runAtLocal"
+                  v-model="form.runAt"
                   :disabled="!editable || saving"
                 />
               </label>
 
               <label class="block space-y-2">
-                <span class="block text-sm font-medium">{{ t("config.task.fields.everyMinutes") }}</span>
-                <input v-model="form.everyMinutesText" class="input input-bordered w-full" type="number" min="0.1" step="0.1" :disabled="!editable || saving" />
+                <span class="block text-sm font-medium">{{ t("config.task.fields.scheduleMode") }}</span>
+                <select v-model="form.scheduleMode" class="select select-bordered w-full" :disabled="!editable || saving">
+                  <option value="once">{{ t("config.task.scheduleModes.once") }}</option>
+                  <option value="interval">{{ t("config.task.scheduleModes.interval") }}</option>
+                </select>
               </label>
+
+              <div v-if="form.scheduleMode === 'interval'" class="space-y-3">
+                <div class="grid gap-3 md:grid-cols-3">
+                  <label class="block space-y-2">
+                    <span class="block text-sm font-medium">{{ t("config.task.fields.repeatWeeks") }}</span>
+                    <input v-model="form.repeatWeeks" class="input input-bordered w-full" type="number" min="0" step="1" :disabled="!editable || saving" />
+                  </label>
+                  <label class="block space-y-2">
+                    <span class="block text-sm font-medium">{{ t("config.task.fields.repeatDays") }}</span>
+                    <input v-model="form.repeatDays" class="input input-bordered w-full" type="number" min="0" step="1" :disabled="!editable || saving" />
+                  </label>
+                  <label class="block space-y-2">
+                    <span class="block text-sm font-medium">{{ t("config.task.fields.repeatHours") }}</span>
+                    <input v-model="form.repeatHours" class="input input-bordered w-full" type="number" min="0" step="1" :disabled="!editable || saving" />
+                  </label>
+                </div>
+                <div class="text-xs opacity-60">{{ t("config.task.scheduleIntervalHint") }}</div>
+              </div>
+
+              <div v-if="showLegacyScheduleHint" class="rounded-box border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning-content">
+                <div>{{ t("config.task.scheduleUnsupportedHint") }}</div>
+                <div v-if="form.preservedEveryMinutes" class="mt-1 font-mono opacity-80">everyMinutes: {{ form.preservedEveryMinutes }}</div>
+                <div v-else-if="form.preservedCronExpression" class="mt-1 font-mono opacity-80">cron: {{ form.preservedCronExpression }}</div>
+              </div>
 
               <label class="block space-y-2">
                 <span class="block text-sm font-medium">{{ t("config.task.fields.endAt") }}</span>
                 <TaskDateTimeInput
-                  v-model="form.endAtLocal"
+                  v-model="form.endAt"
                   :disabled="!editable || saving"
                 />
               </label>
@@ -107,7 +134,7 @@
                 <div v-if="task?.completionState"><span class="font-medium">{{ t("config.task.fields.completionState") }}:</span> {{ completionStateLabel(task.completionState) }}</div>
                 <div v-if="task"><span class="font-medium">{{ t("config.task.fields.updatedAt") }}:</span> {{ formatTaskTime(task.updatedAtLocal) }}</div>
                 <div v-if="task?.createdAtLocal"><span class="font-medium">{{ t("config.task.createdAt") }}:</span> {{ formatTaskTime(task.createdAtLocal) }}</div>
-                <div v-if="task?.trigger.nextRunAtLocal"><span class="font-medium">{{ t("config.task.fields.nextRunAt") }}:</span> {{ formatTaskTime(task.trigger.nextRunAtLocal) }}</div>
+                <div v-if="task?.trigger.next_run_at"><span class="font-medium">{{ t("config.task.fields.nextRunAt") }}:</span> {{ formatTaskTime(task.trigger.next_run_at) }}</div>
                 <div v-if="task?.lastTriggeredAtLocal"><span class="font-medium">{{ t("config.task.lastTriggeredAt") }}:</span> {{ formatTaskTime(task.lastTriggeredAtLocal) }}</div>
                 <div v-if="task?.completedAtLocal"><span class="font-medium">{{ t("config.task.completedAt") }}:</span> {{ formatTaskTime(task.completedAtLocal) }}</div>
               </div>
@@ -202,6 +229,12 @@ const { t } = useI18n();
 const accordionName = "task-editor-accordion";
 
 const showLoadError = computed(() => props.mode === "edit" && !props.loading && !!props.errorText && !props.task);
+const showLegacyScheduleHint = computed(() => {
+  if (props.form.scheduleMode !== "once" && (props.form.repeatWeeks !== "0" || props.form.repeatDays !== "0" || props.form.repeatHours !== "0")) {
+    return false;
+  }
+  return !!String(props.form.preservedEveryMinutes || "").trim() || !!String(props.form.preservedCronExpression || "").trim();
+});
 
 function formatTaskTime(value?: string | null): string {
   return formatIsoToLocalDateTime(value, "-");

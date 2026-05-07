@@ -631,23 +631,24 @@ impl RuntimeToolMetadata for BuiltinTaskTool {
     fn provider_tool_definition(&self) -> ProviderToolDefinition {
         ProviderToolDefinition::new(
             "task",
-            "管理持久化任务板。支持 list、get、create、update、complete 五种动作。任务主字段统一使用 goal / how / why：goal 是任务目标与标题，how 是当前下一步或执行方式，why 用来防止后续推进走偏。旧字段 todo 仍兼容，但不再推荐。所有任务都必须同时提供 trigger.runAtLocal、trigger.everyMinutes、trigger.endAtLocal；即时任务只是代表从当前时刻开始，因此应把 trigger.runAtLocal 写成当前本地时间。trigger.everyMinutes 支持浮点数，例如 0.5 表示 30 秒，0.1 表示 6 秒。trigger.runAtLocal 与 trigger.endAtLocal 必须使用当前提示中提供的本地 RFC3339 时间格式，保留时区偏移与秒级精度，不要包含毫秒；系统会在数据层自动转成 UTC 真实时间存储与调度。",
+            "创建和管理会在未来自动触发、并回到会话继续推进的持久化任务。",
             serde_json::json!({
               "type": "object",
               "properties": {
-                "action": { "type": "string", "enum": ["list", "get", "create", "update", "complete"] },
-                "task_id": { "type": "string" },
+                "action": { "type": "string", "enum": ["list", "get", "create", "update", "complete"], "description": "要执行的动作。" },
+                "task_id": { "type": "string", "description": "任务 ID。get、update、complete 时必填。" },
                 "goal": { "type": "string", "description": "任务目标，也是列表标题。" },
-                "how": { "type": "string", "description": "当前下一步要做什么，或准备如何推进；可以写短计划，但重点是下一步。" },
-                "why": { "type": "string", "description": "为什么要做这件事，用来避免后续推进时走偏。" },
-                "completion_state": { "type": "string", "enum": ["completed", "failed_completed"] },
-                "completion_conclusion": { "type": "string" },
+                "how": { "type": "string", "description": "当前下一步要做什么，或准备如何推进；重点写下一步。" },
+                "why": { "type": "string", "description": "为什么要做这件事，用来避免后续推进走偏。" },
+                "completion_state": { "type": "string", "enum": ["completed", "failed_completed"], "description": "complete 时必填。completed 表示完成，failed_completed 表示结束但失败。" },
+                "completion_conclusion": { "type": "string", "description": "complete 时填写最终结果、失败原因或阻塞点。" },
                 "trigger": {
                   "type": "object",
+                  "description": "任务触发时间设置。",
                   "properties": {
-                    "runAtLocal": { "type": "string", "description": "必填。本地 RFC3339 开始时间；即时任务请直接写当前本地时间，需保留时区偏移与秒级精度，不要包含毫秒" },
-                    "everyMinutes": { "type": "number", "exclusiveMinimum": 0, "description": "必填。按分钟重复执行间隔，支持浮点数；例如 0.5 表示 30 秒，0.1 表示 6 秒" },
-                    "endAtLocal": { "type": "string", "description": "必填。任务停止时间，且必须晚于 trigger.runAtLocal" }
+                    "run_at": { "type": "string", "description": "必填。首次触发时间。RFC3339，保留时区和秒，不要毫秒，例如 2026-05-07T20:00:00+08:00。" },
+                    "cron_expression": { "type": "string", "description": "可选。标准 Linux/Unix 5 段 cron。留空表示只触发一次，例如 * * * * * 表示每分钟一次。" },
+                    "end_at": { "type": "string", "description": "可选。停止时间。RFC3339，保留时区和秒，不要毫秒，例如 2026-05-08T08:00:00+08:00；必须晚于 run_at。" }
                   }
                 }
               },

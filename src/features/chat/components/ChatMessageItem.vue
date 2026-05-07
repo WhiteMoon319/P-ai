@@ -134,22 +134,22 @@
           <div class="text-[11px] opacity-55">{{ t("config.task.fields.todo") }}</div>
           <div class="text-sm leading-6 whitespace-pre-wrap">{{ block.taskTrigger.todo }}</div>
         </div>
-        <div v-if="block.taskTrigger.runAtLocal || block.taskTrigger.endAtLocal || block.taskTrigger.nextRunAtLocal || block.taskTrigger.everyMinutes" class="grid gap-1 text-sm leading-6">
-          <div v-if="block.taskTrigger.runAtLocal">
+        <div v-if="block.taskTrigger.runAt || block.taskTrigger.endAt || block.taskTrigger.nextRunAt || block.taskTrigger.cronExpression" class="grid gap-1 text-sm leading-6">
+          <div v-if="block.taskTrigger.runAt">
             <span class="text-[11px] opacity-55">{{ t("config.task.fields.runAt") }}</span>
-            <span class="ml-2">{{ formattedBlockTime(block.taskTrigger.runAtLocal) }}</span>
+            <span class="ml-2">{{ formattedBlockTime(block.taskTrigger.runAt) }}</span>
           </div>
-          <div v-if="block.taskTrigger.nextRunAtLocal">
+          <div v-if="block.taskTrigger.nextRunAt">
             <span class="text-[11px] opacity-55">{{ t("config.task.fields.nextRunAt") }}</span>
-            <span class="ml-2">{{ formattedBlockTime(block.taskTrigger.nextRunAtLocal) }}</span>
+            <span class="ml-2">{{ formattedBlockTime(block.taskTrigger.nextRunAt) }}</span>
           </div>
-          <div v-if="block.taskTrigger.endAtLocal">
+          <div v-if="block.taskTrigger.endAt">
             <span class="text-[11px] opacity-55">{{ t("config.task.fields.endAt") }}</span>
-            <span class="ml-2">{{ formattedBlockTime(block.taskTrigger.endAtLocal) }}</span>
+            <span class="ml-2">{{ formattedBlockTime(block.taskTrigger.endAt) }}</span>
           </div>
-          <div v-if="block.taskTrigger.everyMinutes">
-            <span class="text-[11px] opacity-55">{{ t("config.task.fields.everyMinutes") }}</span>
-            <span class="ml-2">{{ block.taskTrigger.everyMinutes }}</span>
+          <div v-if="block.taskTrigger.cronExpression">
+            <span class="text-[11px] opacity-55">{{ t("config.task.fields.cronExpression") }}</span>
+            <span class="ml-2">{{ block.taskTrigger.cronExpression }}</span>
           </div>
         </div>
       </div>
@@ -917,9 +917,23 @@ function taskTriggerSummary(value: unknown): string {
   if (typeof value !== "object" || value === null) return "";
   const obj = value as Record<string, unknown>;
   return joinNonEmpty([
-    safeStringValue(obj, "runAtLocal"),
-    obj.everyMinutes !== undefined ? toolTimelineText("everyMinutes", { minutes: String(obj.everyMinutes) }) : "",
-    safeStringValue(obj, "endAtLocal") ? toolTimelineText("until", { time: safeStringValue(obj, "endAtLocal") }) : "",
+    safeStringValue(obj, "run_at") || safeStringValue(obj, "runAt") || safeStringValue(obj, "runAtLocal"),
+    safeStringValue(obj, "cron_expression")
+      ? toolTimelineNameValue("cron", safeStringValue(obj, "cron_expression"))
+      : (safeStringValue(obj, "cronExpression")
+        ? toolTimelineNameValue("cron", safeStringValue(obj, "cronExpression"))
+        : (safeStringValue(obj, "every_minutes")
+          ? toolTimelineNameValue("everyMinutes", safeStringValue(obj, "every_minutes"))
+          : (safeStringValue(obj, "everyMinutes")
+            ? toolTimelineNameValue("everyMinutes", safeStringValue(obj, "everyMinutes"))
+            : ""))),
+    safeStringValue(obj, "end_at")
+      ? toolTimelineText("until", { time: safeStringValue(obj, "end_at") })
+      : (safeStringValue(obj, "endAt")
+        ? toolTimelineText("until", { time: safeStringValue(obj, "endAt") })
+        : (safeStringValue(obj, "endAtLocal")
+          ? toolTimelineText("until", { time: safeStringValue(obj, "endAtLocal") })
+          : "")),
   ]);
 }
 

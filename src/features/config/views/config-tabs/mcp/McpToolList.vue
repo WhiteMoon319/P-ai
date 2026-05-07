@@ -92,10 +92,8 @@ function toolSchemaSummaryLine(name: string, shape: ToolSchemaShape, required: b
   const enumValues = Array.isArray(shape.enum) ? ` [${shape.enum.map(String).join(", ")}]` : "";
   const minText = shape.minimum !== undefined ? ` >= ${shape.minimum}` : "";
   const maxText = shape.maximum !== undefined ? ` <= ${shape.maximum}` : "";
-  const desc = String(shape.description || "").trim();
   const rangeText = `${enumValues}${minText}${maxText}`.trim();
-  const base = `${requiredText}${name}: ${toolSchemaTypeText(shape)}${rangeText ? ` ${rangeText}` : ""}`;
-  return desc ? `${base} (${desc})` : base;
+  return `${requiredText}${name}: ${toolSchemaTypeText(shape)}${rangeText ? ` ${rangeText}` : ""}`;
 }
 
 function collectToolSchemaSummaryLines(

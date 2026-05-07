@@ -34,7 +34,7 @@ struct TaskDispatchSkipContext {
     trigger_label: String,
     todo_count: usize,
     has_run_at: bool,
-    every_minutes: f64,
+    cron_expression: String,
     duration_ms: u128,
     target_scope: String,
     fallback_to_main: bool,
@@ -241,10 +241,17 @@ fn task_dispatch_block_reason(
 }
 
 fn task_trigger_label(task: &TaskRecordStored) -> &'static str {
-    if task.trigger.run_at_utc.is_none() {
-        "immediate"
-    } else if task.trigger.every_minutes.unwrap_or(0.0) > 0.0 {
-        "repeat"
+    if task
+        .trigger
+        .cron_expression
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_some()
+    {
+        "cron"
+    } else if task.trigger.legacy_every_minutes.is_some() {
+        "legacy_every_minutes"
     } else {
         "once"
     }
@@ -265,7 +272,7 @@ fn task_mark_dispatch_skipped(
         &task.task_id,
         "skipped",
         &format!(
-            "任务已跳过，requestId={}，dispatchId={}，goal={}，conversationId={}，trigger={}，todoCount={}，hasRunAt={}，everyMinutes={}，durationMs={}，targetScope={}，fallbackToMain={}，reason={}",
+            "任务已跳过，requestId={}，dispatchId={}，goal={}，conversationId={}，trigger={}，todoCount={}，hasRunAt={}，cronExpression={}，durationMs={}，targetScope={}，fallbackToMain={}，reason={}",
             context.request_id,
             context.dispatch_id,
             context.task_goal.trim(),
@@ -273,7 +280,7 @@ fn task_mark_dispatch_skipped(
             context.trigger_label,
             context.todo_count,
             context.has_run_at,
-            context.every_minutes,
+            context.cron_expression,
             context.duration_ms,
             context.target_scope,
             context.fallback_to_main,
@@ -328,52 +335,13 @@ fn task_is_due(entry: &TaskRecordStored, now: OffsetDateTime) -> bool {
     if entry.completion_state != TASK_STATE_ACTIVE {
         return false;
     }
-    if entry.trigger.run_at_utc.is_none() {
-        if let Some(end_at_utc) = entry.trigger.end_at_utc.as_deref().and_then(parse_rfc3339_time) {
-            if now > end_at_utc {
-                return false;
-            }
-        }
-        return if let Some(last) = entry.last_triggered_at_utc.as_deref().and_then(parse_rfc3339_time) {
-            now >= last + time::Duration::seconds(TASK_IMMEDIATE_RETRY_SECONDS)
-        } else {
-            true
-        };
-    }
-    if entry.trigger.every_minutes.unwrap_or(0.0) <= 0.0 {
-        return entry
-            .trigger
-            .run_at_utc
-            .as_deref()
-            .and_then(parse_rfc3339_time)
-            .map(|run_at_utc| now >= run_at_utc && entry.last_triggered_at_utc.is_none())
-            .unwrap_or(false);
-    }
-    let Some(run_at_utc) = entry.trigger.run_at_utc.as_deref().and_then(parse_rfc3339_time) else {
-        return false;
-    };
-    if now < run_at_utc {
-        return false;
-    }
-    let Some(end_at_utc) = entry.trigger.end_at_utc.as_deref().and_then(parse_rfc3339_time) else {
-        return false;
-    };
-    if now > end_at_utc {
-        return false;
-    }
-    let Some(every) = entry
+    entry
         .trigger
-        .every_minutes
-        .and_then(task_every_minutes_to_duration)
-    else {
-        return false;
-    };
-    if let Some(last) = entry.last_triggered_at_utc.as_deref().and_then(parse_rfc3339_time) {
-        let next = last + every;
-        next <= end_at_utc && now >= next
-    } else {
-        true
-    }
+        .next_run_at_utc
+        .as_deref()
+        .and_then(parse_rfc3339_time)
+        .map(|next_run_at| now >= next_run_at)
+        .unwrap_or(false)
 }
 
 fn task_build_board_snapshot(data_path: &PathBuf) -> Result<TaskBoardSnapshot, String> {
@@ -394,7 +362,7 @@ fn build_hidden_task_board_block(state: &AppState) -> Option<String> {
     }
     let mut lines = Vec::<String>::new();
     lines.push(format!("currentLocalTime: {}", now_local_rfc3339()));
-    lines.push("timeFormatNote: all task times below use local RFC3339 with timezone offset; copy the same format directly when writing runAtLocal".to_string());
+    lines.push("timeFormatNote: all task times below use local RFC3339 with timezone offset; copy the same format directly when writing run_at or end_at".to_string());
     lines.push(format!("activeTaskCount: {}", snapshot.tasks.len()));
     for (idx, task) in snapshot.tasks.iter().enumerate() {
         let task_no = idx + 1;
@@ -406,14 +374,17 @@ fn build_hidden_task_board_block(state: &AppState) -> Option<String> {
         if !task.why.trim().is_empty() {
             lines.push(format!("task[{task_no}].why: {}", task.why.trim()));
         }
-        if let Some(run_at_local) = task.trigger.run_at_local.as_deref() {
-            lines.push(format!("task[{task_no}].runAtLocal: {}", run_at_local));
+        if let Some(run_at) = task.trigger.run_at.as_deref() {
+            lines.push(format!("task[{task_no}].run_at: {}", run_at));
         }
-        if let Some(end_at_local) = task.trigger.end_at_local.as_deref() {
-            lines.push(format!("task[{task_no}].endAtLocal: {}", end_at_local));
+        if let Some(cron_expression) = task.trigger.cron_expression.as_deref() {
+            lines.push(format!("task[{task_no}].cron_expression: {}", cron_expression));
         }
-        if let Some(next_run_at_local) = task.trigger.next_run_at_local.as_deref() {
-            lines.push(format!("task[{task_no}].nextRunAtLocal: {}", next_run_at_local));
+        if let Some(end_at) = task.trigger.end_at.as_deref() {
+            lines.push(format!("task[{task_no}].end_at: {}", end_at));
+        }
+        if let Some(next_run_at) = task.trigger.next_run_at.as_deref() {
+            lines.push(format!("task[{task_no}].next_run_at: {}", next_run_at));
         }
     }
     Some(prompt_xml_block("task board", lines.join("\n")))
@@ -434,18 +405,24 @@ fn build_task_trigger_hidden_prompt(task: &TaskRecordStored) -> String {
     }
     if let Some(run_at_utc) = task.trigger.run_at_utc.as_deref() {
         lines.push(format!(
-            "start_at: {}",
+            "run_at: {}",
             format_utc_storage_time_to_local_rfc3339(run_at_utc)
         ));
+    }
+    if let Some(cron_expression) = task
+        .trigger
+        .cron_expression
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        lines.push(format!("cron_expression: {}", cron_expression));
     }
     if let Some(end_at_utc) = task.trigger.end_at_utc.as_deref() {
         lines.push(format!(
             "end_at: {}",
             format_utc_storage_time_to_local_rfc3339(end_at_utc)
         ));
-    }
-    if let Some(every_minutes) = task.trigger.every_minutes.filter(|value| *value > 0.0) {
-        lines.push(format!("every: {}", every_minutes));
     }
     lines.push(String::new());
     lines.push("请立刻继续推进这个任务，直到任务全部成功或者明确无法完成。".to_string());
@@ -474,10 +451,10 @@ fn build_task_trigger_provider_meta(task: &TaskRecordStored) -> Value {
             "goal": goal.trim(),
             "how": todo.trim(),
             "why": why.trim(),
-            "runAtLocal": trigger_view.run_at_local,
-            "endAtLocal": trigger_view.end_at_local,
-            "nextRunAtLocal": trigger_view.next_run_at_local,
-            "everyMinutes": trigger_view.every_minutes,
+            "run_at": trigger_view.run_at,
+            "cron_expression": trigger_view.cron_expression,
+            "end_at": trigger_view.end_at,
+            "next_run_at": trigger_view.next_run_at,
         }
     })
 }
@@ -583,7 +560,7 @@ async fn task_dispatch_due_task(
                 &task.task_id,
                 "sent",
                 &format!(
-                    "{}，requestId={}，dispatchId={}，goal={}，conversationId={}，trigger={}，todoCount={}，hasRunAt={}，everyMinutes={}，durationMs={}，targetScope={}，fallbackToMain={}",
+                    "{}，requestId={}，dispatchId={}，goal={}，conversationId={}，trigger={}，todoCount={}，hasRunAt={}，cronExpression={}，durationMs={}，targetScope={}，fallbackToMain={}",
                     "任务已发送",
                     request_id,
                     event_id,
@@ -592,7 +569,7 @@ async fn task_dispatch_due_task(
                     trigger_label,
                     todo_count,
                     task.trigger.run_at_utc.is_some(),
-                    task.trigger.every_minutes.unwrap_or(0.0),
+                    task.trigger.cron_expression.as_deref().unwrap_or(""),
                     duration_ms
                     ,
                     session.target_scope,
@@ -611,7 +588,7 @@ async fn task_dispatch_due_task(
                 trigger_label: trigger_label.to_string(),
                 todo_count,
                 has_run_at: task.trigger.run_at_utc.is_some(),
-                every_minutes: task.trigger.every_minutes.unwrap_or(0.0),
+                cron_expression: task.trigger.cron_expression.clone().unwrap_or_default(),
                 duration_ms,
                 target_scope: session.target_scope.clone(),
                 fallback_to_main: session.fallback_to_main,
@@ -633,7 +610,7 @@ fn task_skip_context_for_candidate_filter(
         trigger_label: task_trigger_label(task).to_string(),
         todo_count: task_dispatch_todo_count(task),
         has_run_at: task.trigger.run_at_utc.is_some(),
-        every_minutes: task.trigger.every_minutes.unwrap_or(0.0),
+        cron_expression: task.trigger.cron_expression.clone().unwrap_or_default(),
         duration_ms: 0,
         target_scope: session.target_scope.clone(),
         fallback_to_main: session.fallback_to_main,
@@ -713,5 +690,3 @@ fn start_task_scheduler(state: AppState) {
         }
     });
 }
-
-

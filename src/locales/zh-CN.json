@@ -719,9 +719,17 @@
       },
         "validation": {
           "goalRequired": "任务目标不能为空。",
-          "everyMinutesPositive": "间隔分钟必须是大于 0 的数字。"
+          "everyMinutesPositive": "间隔分钟必须是大于 0 的数字。",
+          "repeatIntervalRequired": "定时任务至少要填写一个大于 0 的周、天或小时。",
+          "repeatIntervalInvalid": "周、天、小时必须填写 0 或更大的整数。"
         },
         "todoPlaceholder": "写当前下一步要做什么",
+        "scheduleModes": {
+          "once": "一次性",
+          "interval": "定时"
+        },
+        "scheduleIntervalHint": "从首次触发时间开始，按周、天、小时累加后的总时长循环触发。",
+        "scheduleUnsupportedHint": "当前任务的旧调度无法完整映射到这个简化编辑器。不改周/天/小时就会按原调度保留；要修改的话，直接重新设置即可。",
       "filters": {
         "active": "进行中",
         "completed": "已完成",
@@ -730,8 +738,12 @@
         "fields": {
           "taskId": "任务ID",
           "triggerKind": "触发器",
-          "runAt": "开始时间",
-          "everyMinutes": "间隔分钟",
+          "runAt": "首次触发时间",
+          "scheduleMode": "调度方式",
+          "repeatWeeks": "每几周",
+          "repeatDays": "每几天",
+          "repeatHours": "每几小时",
+          "cronExpression": "Cron 表达式",
           "goal": "目标",
           "why": "为什么做",
           "todo": "当前待办",

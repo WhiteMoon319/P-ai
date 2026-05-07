@@ -1403,34 +1403,44 @@ fn render_message_content_for_model(message: &ChatMessage) -> String {
             {
                 lines.push(format!("taskId: {}", task_id));
             }
-            if let Some(run_at_local) = task_trigger
-                .get("runAtLocal")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-            {
-                lines.push(format!("runAtLocal: {}", run_at_local));
-            }
             if let Some(next_run_at_local) = task_trigger
-                .get("nextRunAtLocal")
+                .get("next_run_at")
+                .or_else(|| task_trigger.get("nextRunAt"))
+                .or_else(|| task_trigger.get("nextRunAtLocal"))
                 .and_then(Value::as_str)
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
             {
-                lines.push(format!("nextRunAtLocal: {}", next_run_at_local));
+                lines.push(format!("next_run_at: {}", next_run_at_local));
+            }
+            if let Some(run_at_local) = task_trigger
+                .get("run_at")
+                .or_else(|| task_trigger.get("runAt"))
+                .or_else(|| task_trigger.get("runAtLocal"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                lines.push(format!("run_at: {}", run_at_local));
+            }
+            if let Some(cron_expression) = task_trigger
+                .get("cron_expression")
+                .or_else(|| task_trigger.get("cronExpression"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                lines.push(format!("cron_expression: {}", cron_expression));
             }
             if let Some(end_at_local) = task_trigger
-                .get("endAtLocal")
+                .get("end_at")
+                .or_else(|| task_trigger.get("endAt"))
+                .or_else(|| task_trigger.get("endAtLocal"))
                 .and_then(Value::as_str)
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
             {
-                lines.push(format!("endAtLocal: {}", end_at_local));
-            }
-            if let Some(every_minutes) = task_trigger.get("everyMinutes").and_then(Value::as_i64) {
-                if every_minutes > 0 {
-                    lines.push(format!("everyMinutes: {}", every_minutes));
-                }
+                lines.push(format!("end_at: {}", end_at_local));
             }
             if !lines.is_empty() {
                 chunks.push(lines.join("\n"));
@@ -2241,10 +2251,10 @@ fn build_builtin_tool_rule_block(tool_id: &str) -> Option<String> {
         ),
         "task" => (
             "task tool rule",
-            "何时必须用：task 只用于非即时、长期、跨会话追踪的任务。到点后系统会自动提示你要执行某个任务，并在任务追踪中持续提供执行该任务所需的上下文。\n\
-             何时不要用：如果事情只在当前会话内推进和完成，不要使用 task，而应使用 todo。\n\
-             如何使用：只有在确实需要未来触发、长期提醒、跨会话延续时才创建或更新 task，并明确 goal、how、why 以及触发条件。\n\
-             为什么：task 是长期任务机制，不是当前会话的临时步骤板。",
+            "何时必须用：task 用于把一件事持久化下来，让系统在未来自动触发，并回到会话继续推进。\n\
+             何时不要用：当前会话里立刻做完的事，不要用 task。\n\
+             如何使用：只有在确实需要延后执行、循环提醒或跨会话续跑时才使用。\n\
+             为什么：task 是自动续跑机制，不是临时记事板。",
         ),
         "exec" => (
             "exec tool rule",
