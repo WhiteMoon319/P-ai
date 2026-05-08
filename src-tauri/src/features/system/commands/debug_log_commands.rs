@@ -500,6 +500,9 @@ fn log_entry_tool_call_count(entry: &LlmRoundLogEntry) -> usize {
     let Some(response) = entry.response.as_ref() else {
         return 0;
     };
+    if let Some(tool_calls) = response.get("toolCalls").and_then(Value::as_array) {
+        return tool_calls.len();
+    }
     let Some(events) = response
         .get("toolHistoryEvents")
         .and_then(Value::as_array)

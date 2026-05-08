@@ -332,7 +332,13 @@ function topSlowStages(entry: LlmRoundLogEntry) {
 }
 
 function toolCallCountForEntry(entry: LlmRoundLogEntry): number {
-  const response = entry.response as { toolHistoryEvents?: Array<{ tool_calls?: unknown[] }> } | null | undefined;
+  const response = entry.response as {
+    toolCalls?: unknown[];
+    toolHistoryEvents?: Array<{ tool_calls?: unknown[] }>;
+  } | null | undefined;
+  if (Array.isArray(response?.toolCalls)) {
+    return response.toolCalls.length;
+  }
   return (response?.toolHistoryEvents ?? []).reduce((total, item) => {
     return total + (Array.isArray(item?.tool_calls) ? item.tool_calls.length : 0);
   }, 0);

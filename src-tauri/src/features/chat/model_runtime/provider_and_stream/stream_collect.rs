@@ -113,5 +113,6 @@ where
         tool_history_events: Vec::new(),
         suppress_assistant_message: false,
         trusted_input_tokens,
+        round_logs_recorded_internally: false,
     })
 }

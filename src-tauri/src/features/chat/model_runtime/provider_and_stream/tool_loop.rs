@@ -120,7 +120,74 @@ fn repeated_tool_call_block_reply(
         tool_history_events,
         suppress_assistant_message: false,
         trusted_input_tokens,
+        round_logs_recorded_internally: true,
     }
+}
+
+fn tool_loop_round_tool_calls_json(tool_calls: &[genai::chat::ToolCall]) -> Vec<Value> {
+    tool_calls
+        .iter()
+        .map(|tool_call| {
+            serde_json::json!({
+                "id": tool_call.call_id.clone(),
+                "call_id": tool_call.call_id.clone(),
+                "type": "function",
+                "function": {
+                    "name": tool_call.fn_name.clone(),
+                    "arguments": match &tool_call.fn_arguments {
+                        Value::String(raw) => raw.clone(),
+                        other => other.to_string(),
+                    }
+                }
+            })
+        })
+        .collect::<Vec<_>>()
+}
+
+fn tool_loop_round_response_value(
+    turn_text: &str,
+    turn_reasoning: &str,
+    turn_tool_calls: &[genai::chat::ToolCall],
+) -> Value {
+    serde_json::json!({
+        "assistantText": turn_text,
+        "reasoningStandard": turn_reasoning,
+        "reasoningInline": "",
+        "toolCalls": tool_loop_round_tool_calls_json(turn_tool_calls)
+    })
+}
+
+fn push_tool_loop_round_log(
+    state: Option<&AppState>,
+    chat_session_key: &str,
+    selected_api: &ApiConfig,
+    api_config: &ResolvedApiConfig,
+    model_name: &str,
+    tool_assembly: &RuntimeToolAssembly,
+    response: Value,
+    elapsed_ms: u64,
+) {
+    let timeline = Some(vec![LlmRoundLogStage {
+        stage: "model_round_total".to_string(),
+        elapsed_ms,
+        since_prev_ms: elapsed_ms,
+    }]);
+    push_llm_round_log(
+        state,
+        Some(format!("round-{chat_session_key}")),
+        Some(chat_session_key.to_string()),
+        "chat",
+        selected_api.request_format,
+        &selected_api.name,
+        model_name,
+        &api_config.base_url,
+        masked_auth_headers(&api_config.api_key),
+        Some(Value::Array(tool_assembly.tool_manifest.clone())),
+        Some(response),
+        None,
+        elapsed_ms,
+        timeline,
+    );
 }
 
 #[derive(Debug, Clone)]
@@ -192,6 +259,7 @@ fn tool_loop_guided_close_reply(
         tool_history_events,
         suppress_assistant_message: false,
         trusted_input_tokens,
+        round_logs_recorded_internally: true,
     }
 }
 
@@ -234,6 +302,7 @@ fn finalize_deferred_tool_loop_outcome(
             tool_history_events: tool_history_without_organize_context(tool_history_events),
             suppress_assistant_message: true,
             trusted_input_tokens: None,
+            round_logs_recorded_internally: true,
         },
         DeferredToolLoopOutcome::TaskComplete(final_text) => ModelReply {
             assistant_text: final_text.clone(),
@@ -244,6 +313,7 @@ fn finalize_deferred_tool_loop_outcome(
             tool_history_events,
             suppress_assistant_message: false,
             trusted_input_tokens,
+            round_logs_recorded_internally: true,
         },
         DeferredToolLoopOutcome::PlanPresent(plan_result) => {
             ModelReply {
@@ -255,6 +325,7 @@ fn finalize_deferred_tool_loop_outcome(
                 tool_history_events,
                 suppress_assistant_message: false,
                 trusted_input_tokens,
+                round_logs_recorded_internally: true,
             }
         }
     }
@@ -924,6 +995,7 @@ async fn run_genai_tool_loop(
     let mut tool_repeat_guard = ToolRepeatGuard::default();
     let mut final_assistant_provider_meta_override = None::<Value>;
     for round_index in 0..INTERNAL_MAX_TOOL_LOOP_ROUNDS {
+        let round_started_at = std::time::Instant::now();
         let mut emit_text_boundary_before_next_chunk = !full_assistant_text.trim().is_empty();
         if round_index > 0 && !auto_compaction_applied {
             auto_compaction_applied = maybe_apply_auto_compaction_before_tool_continue_genai(
@@ -1050,7 +1122,6 @@ async fn run_genai_tool_loop(
                     Err(err) => return Err(format!("GenAI 流式处理失败：{err}")),
                 }
             }
-
             Ok::<GenaiToolLoopRoundOutput, String>(GenaiToolLoopRoundOutput {
                 turn_text,
                 turn_reasoning,
@@ -1065,7 +1136,21 @@ async fn run_genai_tool_loop(
             turn_tool_calls,
             trusted_input_tokens: round_trusted_input_tokens,
         } = round_output;
+        let round_elapsed_ms = round_started_at
+            .elapsed()
+            .as_millis()
+            .min(u128::from(u64::MAX)) as u64;
         trusted_input_tokens = round_trusted_input_tokens;
+        push_tool_loop_round_log(
+            tool_abort_state,
+            chat_session_key,
+            selected_api,
+            &api_config,
+            model_name,
+            &tool_assembly,
+            tool_loop_round_response_value(&turn_text, &turn_reasoning, &turn_tool_calls),
+            round_elapsed_ms,
+        );
 
         if let Some(context) = auto_compaction_context {
             conversation_prompt_service().refresh_shared_trusted_prompt_usage(
@@ -1094,6 +1179,7 @@ async fn run_genai_tool_loop(
                 tool_history_events,
                 suppress_assistant_message: false,
                 trusted_input_tokens,
+                round_logs_recorded_internally: true,
             });
         }
 
@@ -1355,6 +1441,7 @@ async fn run_genai_tool_loop(
                 tool_history_events,
                 suppress_assistant_message: false,
                 trusted_input_tokens,
+                round_logs_recorded_internally: true,
             });
         }
     }
@@ -1376,6 +1463,7 @@ async fn run_genai_tool_loop(
         tool_history_events,
         suppress_assistant_message: false,
         trusted_input_tokens,
+        round_logs_recorded_internally: true,
     })
 }
 
@@ -1480,6 +1568,7 @@ async fn run_genai_tool_loop_non_stream(
     let mut tool_repeat_guard = ToolRepeatGuard::default();
     let mut final_assistant_provider_meta_override = None::<Value>;
     for round_index in 0..INTERNAL_MAX_TOOL_LOOP_ROUNDS {
+        let round_started_at = std::time::Instant::now();
         if round_index > 0 && !auto_compaction_applied {
             auto_compaction_applied = maybe_apply_auto_compaction_before_tool_continue_genai(
                 tool_abort_state,
@@ -1525,10 +1614,25 @@ async fn run_genai_tool_loop_non_stream(
         };
         let turn_text = round.turn_text;
         let turn_reasoning = round.turn_reasoning;
-        let turn_tool_calls = reorder_turn_tool_calls_for_contact_tail(round.turn_tool_calls);
+        let raw_turn_tool_calls = round.turn_tool_calls;
+        let round_elapsed_ms = round_started_at
+            .elapsed()
+            .as_millis()
+            .min(u128::from(u64::MAX)) as u64;
         if let Some(value) = round.trusted_input_tokens {
             trusted_input_tokens = Some(value);
         }
+        push_tool_loop_round_log(
+            tool_abort_state,
+            chat_session_key,
+            selected_api,
+            &api_config,
+            model_name,
+            &tool_assembly,
+            tool_loop_round_response_value(&turn_text, &turn_reasoning, &raw_turn_tool_calls),
+            round_elapsed_ms,
+        );
+        let turn_tool_calls = reorder_turn_tool_calls_for_contact_tail(raw_turn_tool_calls);
         if !turn_reasoning.is_empty() {
             full_reasoning_standard.push_str(&turn_reasoning);
         }
@@ -1550,6 +1654,7 @@ async fn run_genai_tool_loop_non_stream(
                 tool_history_events,
                 suppress_assistant_message: false,
                 trusted_input_tokens,
+                round_logs_recorded_internally: true,
             });
         }
 
@@ -1810,6 +1915,7 @@ async fn run_genai_tool_loop_non_stream(
                 tool_history_events,
                 suppress_assistant_message: false,
                 trusted_input_tokens,
+                round_logs_recorded_internally: true,
             });
         }
     }
@@ -1831,6 +1937,7 @@ async fn run_genai_tool_loop_non_stream(
         tool_history_events,
         suppress_assistant_message: false,
         trusted_input_tokens,
+        round_logs_recorded_internally: true,
     })
 }
 

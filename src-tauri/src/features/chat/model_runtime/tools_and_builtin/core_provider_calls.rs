@@ -8,6 +8,7 @@ struct ModelReply {
     tool_history_events: Vec<Value>,
     suppress_assistant_message: bool,
     trusted_input_tokens: Option<u64>,
+    round_logs_recorded_internally: bool,
 }
 
 #[allow(dead_code)]
@@ -636,6 +637,7 @@ async fn call_model_openai_non_stream(
         tool_history_events: Vec::new(),
         suppress_assistant_message: false,
         trusted_input_tokens,
+        round_logs_recorded_internally: false,
     })
 }
 
@@ -722,6 +724,7 @@ async fn call_model_gemini(
             .prompt_tokens
             .and_then(|value| u64::try_from(value).ok())
             .filter(|value| *value > 0),
+        round_logs_recorded_internally: false,
     })
 }
 

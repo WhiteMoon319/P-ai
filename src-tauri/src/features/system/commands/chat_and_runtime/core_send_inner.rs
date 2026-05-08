@@ -2725,7 +2725,13 @@ async fn send_chat_message_inner(
                 &chat_round_execution.result,
                 Err(error) if error == CHAT_DISPATCH_RESTART_AFTER_COMPACTION
             );
-            if !restart_after_compaction {
+            let round_logs_recorded_internally = chat_round_execution
+                .result
+                .as_ref()
+                .ok()
+                .map(|reply| reply.round_logs_recorded_internally)
+                .unwrap_or(false);
+            if !restart_after_compaction && !round_logs_recorded_internally {
                 let ModelCallLogParts {
                     scene,
                     request_format,
