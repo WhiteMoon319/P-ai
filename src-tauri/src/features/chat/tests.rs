@@ -1240,8 +1240,128 @@
                 message.role == "assistant"
                     && message.text == "我已经完成了工具阶段"
                     && message.reasoning_content.as_deref() == Some("整轮累计思考A。整轮累计思考A。整轮累计思考A。")
-            })
+                })
         );
+    }
+
+    #[test]
+    fn build_prompt_should_replay_persisted_real_tool_message_into_request_preview_shape() {
+        let agent = default_agent();
+        let raw: Value = serde_json::from_str(
+            r#"{
+                "kind":"message",
+                "message":{
+                    "id":"926b767d-c730-4e20-bfba-e57a84ee40b9",
+                    "role":"assistant",
+                    "createdAt":"2026-05-08T11:44:08Z",
+                    "speakerAgentId":"persona-1776445616370",
+                    "parts":[
+                        {
+                            "type":"text",
+                            "text":"这是一张你发来的截图，显示的是我们的聊天界面和刚才查询终端版本的对话内容。看起来你想让我看什么？\n\n让我再仔细看看截图内容——它展示的就是我们刚刚这段对话：你问我终端版本，我执行了 `pwsh --version`，返回了 PowerShell 7.5.4 的信息。\n\n你想确认什么？还是截错了？"
+                        }
+                    ],
+                    "extraTextBlocks":[],
+                    "providerMeta":{
+                        "reasoningInline":"",
+                        "reasoningStandard":"用户想让我调用一次终端命令，查看版本信息。这应该是指操作系统的终端信息，比如 PowerShell 版本之类的。"
+                    },
+                    "toolCall":[
+                        {
+                            "content":null,
+                            "reasoning_content":"用户想让我调用一次终端命令，查看版本信息。这应该是指操作系统的终端信息，比如 PowerShell 版本之类的。",
+                            "role":"assistant",
+                            "tool_calls":[
+                                {
+                                    "call_id":"call_915742b663134f368df81c7d",
+                                    "function":{
+                                        "arguments":"{\"command\":\"pwsh --version; Write-Host \\\"---\\\"; $PSVersionTable; Write-Host \\\"---\\\"; [System.Environment]::OSVersion.VersionString\"}",
+                                        "name":"exec"
+                                    },
+                                    "id":"call_915742b663134f368df81c7d",
+                                    "type":"function"
+                                }
+                            ]
+                        },
+                        {
+                            "content":"{\"durationMs\":764,\"exitCode\":0,\"ok\":true,\"stderr\":\"\",\"stderrTruncated\":false,\"stdout\":\"PowerShell 7.5.4\\r\\n---\\r\\nPSVersion 7.5.4\\r\\n---\\r\\nMicrosoft Windows NT 10.0.26200.0\\r\\n\",\"stdoutTruncated\":false,\"timedOut\":false,\"truncated\":false}",
+                            "role":"tool",
+                            "tool_call_id":"call_915742b663134f368df81c7d"
+                        }
+                    ],
+                    "mcpCall":null
+                }
+            }"#,
+        )
+        .expect("real stored message json should parse");
+        let mut assistant: ChatMessage = serde_json::from_value(raw["message"].clone())
+            .expect("chat message should deserialize from stored json");
+        assistant.speaker_agent_id = Some(agent.id.clone());
+
+        let messages = vec![
+            test_text_message("user", "你先调用一次工具，看看终端版本，然后告诉我是什么", "2026-05-08T11:43:52Z"),
+            assistant,
+            test_text_message("user", "继续", "2026-05-08T11:45:00Z"),
+        ];
+        let conv = test_active_conversation_with_messages(messages, Some("2026-05-08T11:45:00Z".to_string()));
+
+        let prepared = build_prompt(
+            &conv,
+            &agent,
+            &[agent.clone(), default_user_persona()],
+            &[],
+            "用户",
+            "我是...",
+            DEFAULT_RESPONSE_STYLE_ID,
+            "zh-CN",
+            None,
+            None,
+            None,
+            false,
+        );
+
+        assert!(prepared.history_messages.iter().any(|message| {
+            message.role == "assistant"
+                && message
+                    .tool_calls
+                    .as_ref()
+                    .map(|calls| calls.len() == 1)
+                    .unwrap_or(false)
+                && message.reasoning_content.as_deref() == Some("用户想让我调用一次终端命令，查看版本信息。这应该是指操作系统的终端信息，比如 PowerShell 版本之类的。")
+        }));
+        assert!(prepared.history_messages.iter().any(|message| {
+            message.role == "tool"
+                && message.tool_call_id.as_deref() == Some("call_915742b663134f368df81c7d")
+                && message.text.contains("PowerShell 7.5.4")
+        }));
+        assert!(prepared.history_messages.iter().any(|message| {
+            message.role == "assistant"
+                && message.text.contains("这是一张你发来的截图")
+                && message.reasoning_content.as_deref() == Some("用户想让我调用一次终端命令，查看版本信息。这应该是指操作系统的终端信息，比如 PowerShell 版本之类的。")
+        }));
+
+        let request_messages = prepared_prompt_to_messages_json(&prepared);
+        assert!(request_messages.iter().any(|message| {
+            message.get("role").and_then(Value::as_str) == Some("assistant")
+                && message
+                    .get("tool_calls")
+                    .and_then(Value::as_array)
+                    .map(|calls| calls.len() == 1)
+                    .unwrap_or(false)
+                && message
+                    .get("reasoning_content")
+                    .and_then(Value::as_str)
+                    == Some("用户想让我调用一次终端命令，查看版本信息。这应该是指操作系统的终端信息，比如 PowerShell 版本之类的。")
+        }));
+        assert!(request_messages.iter().any(|message| {
+            message.get("role").and_then(Value::as_str) == Some("tool")
+                && message.get("tool_call_id").and_then(Value::as_str)
+                    == Some("call_915742b663134f368df81c7d")
+        }));
+        assert!(request_messages.iter().any(|message| {
+            message.get("role").and_then(Value::as_str) == Some("assistant")
+                && message.get("content").and_then(Value::as_str).is_some_and(|text| text.contains("这是一张你发来的截图"))
+        }));
     }
 
     #[test]
@@ -1284,6 +1404,291 @@
         assert_eq!(messages.len(), 3);
         assert_eq!(messages[1].get("role").and_then(Value::as_str), Some("user"));
         assert_eq!(messages[2].get("role").and_then(Value::as_str), Some("assistant"));
+    }
+
+    #[test]
+    fn build_prompt_should_prefer_conversation_bound_agent_over_passed_agent() {
+        let now = now_iso();
+        let agent = default_agent();
+        let mut wrong_agent = default_agent();
+        wrong_agent.id = "another-agent".to_string();
+        wrong_agent.name = "另一个人格".to_string();
+        let mut assistant = test_text_message("assistant", "我本来是一条助手消息", &now);
+        assistant.speaker_agent_id = Some(agent.id.clone());
+        assistant.tool_call = Some(vec![
+            serde_json::json!({
+                "role": "assistant",
+                "content": Value::Null,
+                "reasoning_content": "先调用工具",
+                "tool_calls": [{
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "exec",
+                        "arguments": "{\"command\":\"pwsh --version\"}"
+                    }
+                }]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": "PowerShell 7.5.4"
+            }),
+        ]);
+        let messages = vec![
+            test_text_message("user", "上一轮", &now),
+            assistant,
+            test_text_message("user", "继续", &now),
+        ];
+        let mut conv = test_active_conversation_with_messages(messages, Some(now));
+        conv.agent_id = agent.id.clone();
+        conv.department_id = "dept-a".to_string();
+
+        let prepared = build_prompt(
+            &conv,
+            &wrong_agent,
+            &[agent.clone(), wrong_agent.clone(), default_user_persona()],
+            &[DepartmentConfig {
+                id: "dept-a".to_string(),
+                name: "部门 A".to_string(),
+                summary: String::new(),
+                guide: String::new(),
+                api_config_ids: vec!["provider-a".to_string()],
+                api_config_id: "provider-a".to_string(),
+                agent_ids: vec![agent.id.clone()],
+                child_department_ids: Vec::new(),
+                created_at: now_utc_rfc3339(),
+                updated_at: now_utc_rfc3339(),
+                order_index: 1,
+                is_built_in_assistant: false,
+                is_deputy: false,
+                source: "main_config".to_string(),
+                scope: "global".to_string(),
+                permission_control: DepartmentPermissionControl::default(),
+            }],
+            "用户",
+            "我是...",
+            DEFAULT_RESPONSE_STYLE_ID,
+            "zh-CN",
+            None,
+            None,
+            None,
+            false,
+        );
+
+        assert!(prepared.history_messages.iter().any(|message| {
+            message.role == "assistant"
+                && message
+                    .tool_calls
+                    .as_ref()
+                    .map(|calls| !calls.is_empty())
+                    .unwrap_or(false)
+                && message.reasoning_content.as_deref() == Some("先调用工具")
+        }));
+        assert!(prepared.history_messages.iter().all(|message| {
+            !(message.role == "user" && message.text == "我本来是一条助手消息")
+        }));
+    }
+
+    #[test]
+    fn resolve_conversation_bound_agent_should_fallback_to_department_when_agent_missing() {
+        let now = now_iso();
+        let agent = default_agent();
+        let mut conv = test_active_conversation_with_messages(Vec::new(), Some(now));
+        conv.agent_id = "missing-agent".to_string();
+        conv.department_id = "dept-a".to_string();
+        let agents = vec![agent.clone(), default_user_persona()];
+        let departments = vec![DepartmentConfig {
+            id: "dept-a".to_string(),
+            name: "部门 A".to_string(),
+            summary: String::new(),
+            guide: String::new(),
+            api_config_ids: vec!["provider-a".to_string()],
+            api_config_id: "provider-a".to_string(),
+            agent_ids: vec![agent.id.clone()],
+            child_department_ids: Vec::new(),
+            created_at: now_utc_rfc3339(),
+            updated_at: now_utc_rfc3339(),
+            order_index: 1,
+            is_built_in_assistant: false,
+            is_deputy: false,
+            source: "main_config".to_string(),
+            scope: "global".to_string(),
+            permission_control: DepartmentPermissionControl::default(),
+        }];
+
+        let resolved = resolve_conversation_bound_agent(&conv, &agents, &departments)
+            .expect("department fallback should resolve bound agent");
+
+        assert_eq!(resolved.id, agent.id);
+    }
+
+    #[test]
+    fn resolve_conversation_bound_agent_should_error_when_agent_and_department_missing() {
+        let now = now_iso();
+        let agent = default_agent();
+        let mut conv = test_active_conversation_with_messages(Vec::new(), Some(now));
+        conv.agent_id = "missing-agent".to_string();
+        conv.department_id = String::new();
+
+        let err = resolve_conversation_bound_agent(
+            &conv,
+            &[agent, default_user_persona()],
+            &[],
+        )
+        .expect_err("missing agent and department should fail");
+
+        assert!(err.contains("会话缺少有效人格绑定"));
+    }
+
+    #[test]
+    fn build_stop_chat_partial_assistant_message_should_keep_final_reasoning_separate_from_tool_round_reasoning(
+    ) {
+        let message = build_stop_chat_partial_assistant_message(
+            "agent-a",
+            "终端版本是 PowerShell 7.5.4。",
+            "先调用终端工具查看 PowerShell 版本。我已经拿到工具结果，现在直接回答用户终端版本。",
+            "",
+            &[
+                serde_json::json!({
+                    "role": "assistant",
+                    "content": Value::Null,
+                    "reasoning_content": "先调用终端工具查看 PowerShell 版本。",
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "exec",
+                            "arguments": "{\"command\":\"pwsh --version\"}"
+                        }
+                    }]
+                }),
+                serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": "call_1",
+                    "content": "PowerShell 7.5.4"
+                }),
+            ],
+        );
+
+        assert_eq!(
+            message
+                .provider_meta
+                .as_ref()
+                .and_then(|meta| meta.get("reasoningStandard"))
+                .and_then(Value::as_str),
+            Some("我已经拿到工具结果，现在直接回答用户终端版本。")
+        );
+        assert_eq!(
+            message
+                .tool_call
+                .as_ref()
+                .and_then(|events| events.first())
+                .and_then(|event| event.get("reasoning_content"))
+                .and_then(Value::as_str),
+            Some("先调用终端工具查看 PowerShell 版本。")
+        );
+    }
+
+    #[test]
+    fn build_stop_chat_partial_assistant_message_should_not_promote_tool_reasoning_when_final_text_missing(
+    ) {
+        let message = build_stop_chat_partial_assistant_message(
+            "agent-a",
+            "",
+            "第1轮先调用工具",
+            "",
+            &[
+                serde_json::json!({
+                    "role": "assistant",
+                    "content": Value::Null,
+                    "reasoning_content": "第1轮先调用工具",
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "read_file",
+                            "arguments": "{\"path\":\"README.md\"}"
+                        }
+                    }]
+                }),
+                serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": "call_1",
+                    "content": "{\"ok\":true}"
+                }),
+            ],
+        );
+
+        assert!(
+            message
+                .provider_meta
+                .as_ref()
+                .and_then(|meta| meta.get("reasoningStandard"))
+                .is_none()
+        );
+        assert_eq!(
+            message
+                .tool_call
+                .as_ref()
+                .and_then(|events| events.first())
+                .and_then(|event| event.get("reasoning_content"))
+                .and_then(Value::as_str),
+            Some("第1轮先调用工具")
+        );
+    }
+
+    #[test]
+    fn build_stop_chat_partial_assistant_message_should_keep_reasoning_only_final_turn_when_text_not_arrived_yet(
+    ) {
+        let message = build_stop_chat_partial_assistant_message(
+            "agent-a",
+            "",
+            "第1轮先调用工具\n\n我已经拿到结果，准备组织最终答复。",
+            "",
+            &[
+                serde_json::json!({
+                    "role": "assistant",
+                    "content": Value::Null,
+                    "reasoning_content": "第1轮先调用工具",
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "read_file",
+                            "arguments": "{\"path\":\"README.md\"}"
+                        }
+                    }]
+                }),
+                serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": "call_1",
+                    "content": "{\"ok\":true}"
+                }),
+            ],
+        );
+
+        assert_eq!(
+            message
+                .provider_meta
+                .as_ref()
+                .and_then(|meta| meta.get("reasoningStandard"))
+                .and_then(Value::as_str),
+            Some("我已经拿到结果，准备组织最终答复。")
+        );
+        match message.parts.first() {
+            Some(MessagePart::Text { text }) => assert!(text.is_empty()),
+            other => panic!("unexpected message part: {:?}", other),
+        }
+        assert_eq!(
+            message
+                .tool_call
+                .as_ref()
+                .and_then(|events| events.first())
+                .and_then(|event| event.get("reasoning_content"))
+                .and_then(Value::as_str),
+            Some("第1轮先调用工具")
+        );
     }
 
     #[test]

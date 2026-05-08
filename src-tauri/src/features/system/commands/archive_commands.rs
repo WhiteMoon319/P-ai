@@ -26,83 +26,23 @@ async fn get_prompt_preview(
 
     let mut data = state_read_agents_runtime_snapshot(&state)?;
     merge_private_organization_into_runtime_data(&state.data_path, &mut app_config, &mut data)?;
-    let requested_agent_id = input.agent_id.trim();
-    let effective_agent_id = if !requested_agent_id.is_empty()
-        && data
-            .agents
-            .iter()
-            .any(|a| a.id == requested_agent_id && !a.is_built_in_user)
-    {
-        requested_agent_id.to_string()
-    } else if data
-        .agents
-        .iter()
-        .any(|a| a.id == data.assistant_department_agent_id && !a.is_built_in_user)
-    {
-        data.assistant_department_agent_id.clone()
-    } else {
-        data.agents
-            .iter()
-            .find(|a| !a.is_built_in_user)
-            .map(|a| a.id.clone())
-            .ok_or_else(|| "Selected agent not found.".to_string())?
-    };
-
-    let agent = data
-        .agents
-        .iter()
-        .find(|a| a.id == effective_agent_id)
-        .cloned()
-        .ok_or_else(|| "Selected agent not found.".to_string())?;
     let preview_mode = parse_prompt_preview_mode(preview_mode.as_deref());
-
-    let mut conversation = input
+    let requested_conversation_id = input
         .conversation_id
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .and_then(|conversation_id| state_read_conversation_cached(&state, conversation_id).ok())
-        .filter(|conversation| {
-            conversation.summary.trim().is_empty() && !conversation_is_delegate(conversation)
-        })
-        .or_else(|| {
-            conversation_service()
-                .resolve_latest_foreground_conversation_id(&state, &effective_agent_id)
-                .ok()
-                .flatten()
-                .and_then(|conversation_id| state_read_conversation_cached(&state, &conversation_id).ok())
-        })
-        .unwrap_or_else(|| Conversation {
-            id: "preview".to_string(),
-            title: "Preview".to_string(),
-            agent_id: effective_agent_id.to_string(),
-            department_id: ASSISTANT_DEPARTMENT_ID.to_string(),
-            bound_conversation_id: None,
-            parent_conversation_id: None,
-            child_conversation_ids: Vec::new(),
-            fork_message_cursor: None,
-            unread_count: 0,
-            conversation_kind: CONVERSATION_KIND_CHAT.to_string(),
-            root_conversation_id: None,
-            delegate_id: None,
-            created_at: now_iso(),
-            updated_at: now_iso(),
-            last_user_at: None,
-            last_assistant_at: None,
-            status: "active".to_string(),
-            summary: String::new(),
-            user_profile_snapshot: String::new(),
-            shell_workspace_path: None,
-            shell_workspaces: Vec::new(),
-            shell_autonomous_mode: false,
-            archived_at: None,
-            messages: Vec::new(),
-            current_todos: Vec::new(),
-            memory_recall_table: Vec::new(),
-            plan_mode_enabled: false,
-        });
+        .ok_or_else(|| "conversationId is required.".to_string())?;
+    let mut conversation = state_read_conversation_cached(&state, requested_conversation_id)
+        .map_err(|_| format!("指定会话不存在或不可用：{requested_conversation_id}"))?;
+    if !conversation.summary.trim().is_empty() || conversation_is_delegate(&conversation) {
+        return Err(format!("指定会话不存在或不可用：{requested_conversation_id}"));
+    }
+    let agent =
+        resolve_conversation_bound_agent(&conversation, &data.agents, &app_config.departments)?
+            .clone();
     let latest_user_message = conversation.messages.iter().rev().find(|message| {
-        prompt_role_for_message(message, &effective_agent_id).as_deref() == Some("user")
+        prompt_role_for_message(message, &agent.id).as_deref() == Some("user")
     });
     let latest_user_message_id = latest_user_message
         .map(|message| message.id.clone())
@@ -133,7 +73,7 @@ async fn get_prompt_preview(
         preview_mode,
         input.conversation_id,
         conversation.id,
-        effective_agent_id,
+        agent.id,
         latest_user_message_id,
         latest_user_retrieved_memory_ids
     );

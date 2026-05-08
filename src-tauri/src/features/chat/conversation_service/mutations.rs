@@ -1165,32 +1165,20 @@ fn build_stop_chat_partial_assistant_message(
     partial_reasoning_inline: &str,
     completed_tool_history: &[Value],
 ) -> ChatMessage {
-    let provider_meta = if partial_reasoning_standard.is_empty() && partial_reasoning_inline.is_empty() {
-        None
-    } else {
-        Some(serde_json::json!({
-            "reasoningStandard": partial_reasoning_standard,
-            "reasoningInline": partial_reasoning_inline
-        }))
-    };
     let now = now_iso();
-    ChatMessage {
-        id: Uuid::new_v4().to_string(),
-        role: "assistant".to_string(),
-        created_at: now,
-        speaker_agent_id: Some(agent_id.to_string()),
-        parts: vec![MessagePart::Text {
-            text: partial_assistant_text.to_string(),
-        }],
-        extra_text_blocks: Vec::new(),
-        provider_meta,
-        tool_call: if completed_tool_history.is_empty() {
-            None
-        } else {
-            Some(completed_tool_history.to_vec())
-        },
-        mcp_call: None,
-    }
+    let request_messages = assistant_request_sequence_from_tool_history(
+        completed_tool_history,
+        partial_assistant_text,
+        partial_reasoning_standard,
+    );
+    build_assistant_message_from_request_sequence(
+        Uuid::new_v4().to_string(),
+        agent_id,
+        now,
+        &request_messages,
+        partial_reasoning_inline,
+        None,
+    )
 }
 
 fn apply_stop_chat_partial_message(

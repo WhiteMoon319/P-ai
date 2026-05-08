@@ -768,6 +768,166 @@ async fn call_model_anthropic(
 mod openai_responses_genai_request_tests {
     use super::*;
 
+    fn prepared_prompt_from_aggregated_assistant(message: &ChatMessage) -> PreparedPrompt {
+        let mut history_messages = vec![PreparedHistoryMessage {
+            role: "user".to_string(),
+            text: "查一下 PowerShell 版本".to_string(),
+            extra_text_blocks: Vec::new(),
+            user_time_text: None,
+            images: Vec::new(),
+            audios: Vec::new(),
+            tool_calls: None,
+            tool_call_id: None,
+            reasoning_content: None,
+        }];
+        history_messages.extend(build_prepared_history_messages_from_tool_history(
+            message,
+            MessageToolHistoryView::PromptReplay,
+        ));
+        history_messages.push(PreparedHistoryMessage {
+            role: "assistant".to_string(),
+            text: render_prompt_message_text(message),
+            extra_text_blocks: Vec::new(),
+            user_time_text: None,
+            images: Vec::new(),
+            audios: Vec::new(),
+            tool_calls: None,
+            tool_call_id: None,
+            reasoning_content: message_reasoning_standard_fallback(message),
+        });
+        PreparedPrompt {
+            preamble: "sys".to_string(),
+            history_messages,
+            latest_user_text: "继续".to_string(),
+            latest_user_meta_text: String::new(),
+            latest_user_extra_text: String::new(),
+            latest_user_extra_blocks: Vec::new(),
+            latest_images: Vec::new(),
+            latest_audios: Vec::new(),
+        }
+    }
+
+    fn canonical_preview_assistant_and_tool_messages(messages: &[Value]) -> Vec<Value> {
+        let mut invocation_to_provider = std::collections::HashMap::<String, Value>::new();
+        let mut canonical = Vec::<Value>::new();
+        for message in messages {
+            let Some(role) = message.get("role").and_then(Value::as_str) else {
+                continue;
+            };
+            match role {
+                "assistant" => {
+                    let tool_calls = message
+                        .get("tool_calls")
+                        .and_then(Value::as_array)
+                        .cloned()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|call| {
+                            let provider_tool_call_id = call
+                                .get("call_id")
+                                .or_else(|| call.get("id"))
+                                .cloned()
+                                .unwrap_or(Value::Null);
+                            if let Some(invocation_id) =
+                                call.get("id").and_then(Value::as_str).map(ToOwned::to_owned)
+                            {
+                                invocation_to_provider
+                                    .insert(invocation_id, provider_tool_call_id.clone());
+                            }
+                            serde_json::json!({
+                                "tool_call_id": provider_tool_call_id,
+                                "function_name": call
+                                    .get("function")
+                                    .and_then(|func| func.get("name"))
+                                    .cloned()
+                                    .unwrap_or(Value::Null),
+                                "arguments": normalize_tool_call_arguments(
+                                    call.get("function").and_then(|func| func.get("arguments"))
+                                ).0,
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    canonical.push(serde_json::json!({
+                        "role": "assistant",
+                        "content": message.get("content").cloned().unwrap_or(Value::Null),
+                        "reasoning_content": message.get("reasoning_content").cloned().unwrap_or(Value::Null),
+                        "tool_calls": Value::Array(tool_calls),
+                    }));
+                }
+                "tool" => {
+                    let raw_tool_call_id = message.get("tool_call_id").and_then(Value::as_str);
+                    let tool_call_id = raw_tool_call_id
+                        .and_then(|value| invocation_to_provider.get(value).cloned())
+                        .or_else(|| message.get("tool_call_id").cloned())
+                        .unwrap_or(Value::Null);
+                    canonical.push(serde_json::json!({
+                        "role": "tool",
+                        "tool_call_id": tool_call_id,
+                        "content": message.get("content").cloned().unwrap_or(Value::Null),
+                    }));
+                }
+                _ => {}
+            }
+        }
+        canonical
+    }
+
+    fn canonical_provider_assistant_and_tool_messages(
+        request: &genai::chat::ChatRequest,
+    ) -> Vec<Value> {
+        request
+            .messages
+            .iter()
+            .filter_map(|message| match message.role {
+                genai::chat::ChatRole::Assistant => Some(serde_json::json!({
+                    "role": "assistant",
+                    "content": message
+                        .content
+                        .texts()
+                        .first()
+                        .map(|text| Value::String((*text).to_string()))
+                        .unwrap_or(Value::Null),
+                    "reasoning_content": message
+                        .content
+                        .reasoning_contents()
+                        .first()
+                        .map(|text| Value::String((*text).to_string()))
+                        .unwrap_or(Value::Null),
+                    "tool_calls": Value::Array(
+                        message
+                            .content
+                            .tool_calls()
+                            .into_iter()
+                            .map(|call| {
+                                serde_json::json!({
+                                    "tool_call_id": call.call_id,
+                                    "function_name": call.fn_name,
+                                    "arguments": call.fn_arguments,
+                                })
+                            })
+                            .collect()
+                    ),
+                })),
+                genai::chat::ChatRole::Tool => Some(serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": message
+                        .content
+                        .tool_responses()
+                        .first()
+                        .map(|response| Value::String(response.call_id.clone()))
+                        .unwrap_or(Value::Null),
+                    "content": message
+                        .content
+                        .tool_responses()
+                        .first()
+                        .map(|response| Value::String(response.content.clone()))
+                        .unwrap_or(Value::Null),
+                })),
+                _ => None,
+            })
+            .collect()
+    }
+
     #[test]
     fn build_genai_chat_request_should_keep_system_at_top_level() {
         let prepared = PreparedPrompt {
@@ -1049,6 +1209,70 @@ mod openai_responses_genai_request_tests {
         assert_eq!(
             request.messages[1].content.texts(),
             vec!["工具结果 (local_call_1):\n晴天"]
+        );
+    }
+
+    #[test]
+    fn build_genai_chat_request_should_align_preview_and_provider_request_for_shared_tool_fixture() {
+        let assistant = ChatMessage {
+            id: "assistant-tool-fixture".to_string(),
+            role: "assistant".to_string(),
+            created_at: "2026-05-08T12:00:00Z".to_string(),
+            speaker_agent_id: Some("agent-a".to_string()),
+            parts: vec![MessagePart::Text {
+                text: "终端版本是 PowerShell 7.5.4。".to_string(),
+            }],
+            extra_text_blocks: Vec::new(),
+            provider_meta: Some(serde_json::json!({
+                "reasoningStandard": "我已经拿到工具结果，现在直接回答用户终端版本。"
+            })),
+            tool_call: Some(vec![
+                serde_json::json!({
+                    "role": "assistant",
+                    "content": Value::Null,
+                    "reasoning_content": "先调用终端工具查看 PowerShell 版本。",
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "call_id": "provider_call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "exec",
+                            "arguments": "{\"command\":\"pwsh --version\"}"
+                        }
+                    }]
+                }),
+                serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": "call_1",
+                    "content": "PowerShell 7.5.4"
+                }),
+            ]),
+            mcp_call: None,
+        };
+        let prepared = prepared_prompt_from_aggregated_assistant(&assistant);
+
+        let preview_messages = prepared_prompt_to_messages_json(&prepared);
+        let provider_request = build_provider_genai_request(&prepared)
+            .expect("build_provider_genai_request should succeed");
+        let preview_canonical =
+            canonical_preview_assistant_and_tool_messages(&preview_messages);
+        let provider_canonical =
+            canonical_provider_assistant_and_tool_messages(&provider_request);
+
+        assert_eq!(preview_canonical, provider_canonical);
+        assert_eq!(
+            preview_canonical
+                .last()
+                .and_then(|message| message.get("reasoning_content"))
+                .and_then(Value::as_str),
+            Some("我已经拿到工具结果，现在直接回答用户终端版本。")
+        );
+        assert_eq!(
+            preview_canonical
+                .first()
+                .and_then(|message| message.get("reasoning_content"))
+                .and_then(Value::as_str),
+            Some("先调用终端工具查看 PowerShell 版本。")
         );
     }
 

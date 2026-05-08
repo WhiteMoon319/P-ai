@@ -2281,6 +2281,7 @@ mod tool_loop_tests {
             serde_json::json!({
                 "role": "assistant",
                 "content": Value::Null,
+                "reasoning_content": "先看当前窗口列表",
                 "tool_calls": [{
                     "id": "call_1",
                     "type": "function",
@@ -2302,10 +2303,94 @@ mod tool_loop_tests {
         assert_eq!(prepared.history_messages.len(), 2);
         assert_eq!(prepared.history_messages[0].role, "assistant");
         assert!(prepared.history_messages[0].tool_calls.is_some());
+        assert_eq!(
+            prepared.history_messages[0].reasoning_content.as_deref(),
+            Some("先看当前窗口列表")
+        );
         assert_eq!(prepared.history_messages[1].role, "tool");
         assert_eq!(
             prepared.history_messages[1].tool_call_id.as_deref(),
             Some("call_1")
+        );
+    }
+
+    #[test]
+    fn append_tool_loop_transient_history_to_prepared_should_keep_reasoning_when_continuing_request(
+    ) {
+        let mut prepared = PreparedPrompt {
+            preamble: "sys".to_string(),
+            history_messages: vec![PreparedHistoryMessage {
+                role: "user".to_string(),
+                text: "继续".to_string(),
+                extra_text_blocks: Vec::new(),
+                user_time_text: None,
+                images: Vec::new(),
+                audios: Vec::new(),
+                tool_calls: None,
+                tool_call_id: None,
+                reasoning_content: None,
+            }],
+            latest_user_text: "再继续".to_string(),
+            latest_user_meta_text: String::new(),
+            latest_user_extra_text: String::new(),
+            latest_user_extra_blocks: Vec::new(),
+            latest_images: Vec::new(),
+            latest_audios: Vec::new(),
+        };
+        let events = vec![
+            serde_json::json!({
+                "role": "assistant",
+                "content": Value::Null,
+                "reasoning_content": "第1轮先看窗口",
+                "tool_calls": [{
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "xcap",
+                        "arguments": "{\"method\":\"list_windows\"}"
+                    }
+                }]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": "{\"ok\":true,\"windows\":3}"
+            }),
+            serde_json::json!({
+                "role": "assistant",
+                "content": Value::Null,
+                "reasoning_content": "第2轮再截图确认",
+                "tool_calls": [{
+                    "id": "call_2",
+                    "type": "function",
+                    "function": {
+                        "name": "xcap",
+                        "arguments": "{\"method\":\"capture_active\"}"
+                    }
+                }]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call_2",
+                "content": "{\"ok\":true,\"image\":\"cached\"}"
+            }),
+        ];
+
+        append_tool_loop_transient_history_to_prepared(&mut prepared, &events);
+        let request = build_genai_chat_request(&prepared)
+            .expect("build_genai_chat_request should succeed");
+
+        let assistant_reasonings = request
+            .messages
+            .iter()
+            .filter(|message| matches!(message.role, genai::chat::ChatRole::Assistant))
+            .flat_map(|message| message.content.reasoning_contents().into_iter())
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            assistant_reasonings,
+            vec!["第1轮先看窗口".to_string(), "第2轮再截图确认".to_string()]
         );
     }
 }

@@ -66,6 +66,60 @@ fn resolved_foreground_department_id_for_conversation(
         .unwrap_or_else(fallback_foreground_department_id)
 }
 
+fn resolve_conversation_bound_agent<'a>(
+    conversation: &Conversation,
+    agents: &'a [AgentProfile],
+    departments: &[DepartmentConfig],
+) -> Result<&'a AgentProfile, String> {
+    let conversation_id = conversation.id.trim();
+    let bound_agent_id = conversation.agent_id.trim();
+    if !bound_agent_id.is_empty() {
+        if let Some(agent) = agents
+            .iter()
+            .find(|agent| agent.id == bound_agent_id && !agent.is_built_in_user)
+        {
+            return Ok(agent);
+        }
+    }
+
+    let department_id = conversation.department_id.trim();
+    if department_id.is_empty() {
+        return Err(format!(
+            "会话缺少有效人格绑定，且未绑定部门: conversation_id={}",
+            conversation_id
+        ));
+    }
+    let Some(department) = departments
+        .iter()
+        .find(|department| department.id.trim() == department_id)
+    else {
+        return Err(format!(
+            "会话绑定部门不存在: conversation_id={}, department_id={}",
+            conversation_id, department_id
+        ));
+    };
+    let Some(department_agent_id) = department
+        .agent_ids
+        .iter()
+        .map(|item| item.trim())
+        .find(|item| !item.is_empty())
+    else {
+        return Err(format!(
+            "会话绑定部门未配置人格: conversation_id={}, department_id={}",
+            conversation_id, department_id
+        ));
+    };
+    agents
+        .iter()
+        .find(|agent| agent.id == department_agent_id && !agent.is_built_in_user)
+        .ok_or_else(|| {
+            format!(
+                "会话绑定部门的人格不存在或不可用: conversation_id={}, department_id={}, agent_id={}",
+                conversation_id, department_id, department_agent_id
+            )
+        })
+}
+
 fn main_conversation_index(data: &AppData, _agent_id: &str) -> Option<usize> {
     let target_id = data
         .main_conversation_id
@@ -2910,8 +2964,20 @@ fn build_prompt_with_mode(
     _resolved_api: Option<&ResolvedApiConfig>,
     enable_pdf_images: bool,
 ) -> PreparedPrompt {
-    let source_messages = match find_last_context_compaction_index(&conversation.messages, &agent.id)
-    {
+    let prompt_agent = match resolve_conversation_bound_agent(conversation, agents, departments) {
+        Ok(bound_agent) => bound_agent,
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[提示词] 会话绑定人格解析失败，回退到调用方人格: conversation_id={}, fallback_agent_id={}, error={}",
+                conversation.id, agent.id, err
+            ));
+            agent
+        }
+    };
+    let source_messages = match find_last_context_compaction_index(
+        &conversation.messages,
+        &prompt_agent.id,
+    ) {
         Some(boundary) => &conversation.messages[boundary..],
         None => conversation.messages.as_slice(),
     };
@@ -3045,14 +3111,14 @@ fn build_prompt_with_mode(
         data_path.and_then(|path| match memory_store_list_memories_by_ids_visible_for_agent(
             path,
             &recall_memory_ids,
-            &agent.id,
-            agent.private_memory_enabled,
+            &prompt_agent.id,
+            prompt_agent.private_memory_enabled,
         ) {
             Ok(memories) => Some(memories),
             Err(err) => {
                 runtime_log_error(format!(
                     "[提示词] 读取召回记忆失败: agent_id={}, recall_ids={:?}, error={:?}",
-                    agent.id, recall_memory_ids, err
+                    prompt_agent.id, recall_memory_ids, err
                 ));
                 None
             }
@@ -3061,7 +3127,7 @@ fn build_prompt_with_mode(
 
     let prompt_user_name = user_profile.map(|(user_name, _)| user_name).unwrap_or("");
     let last_compaction_index =
-        find_last_context_compaction_index(&enriched_conversation.messages, &agent.id);
+        find_last_context_compaction_index(&enriched_conversation.messages, &prompt_agent.id);
     let mut latest_user_index = None;
     for (idx, message) in enriched_conversation.messages.iter().enumerate().rev() {
         if let Some(boundary) = last_compaction_index {
@@ -3072,7 +3138,7 @@ fn build_prompt_with_mode(
         if is_tool_review_report_message(message) {
             continue;
         }
-        let Some(role) = prompt_role_for_message(message, &agent.id) else {
+        let Some(role) = prompt_role_for_message(message, &prompt_agent.id) else {
             continue;
         };
         if is_context_compaction_message(message, role.as_str()) {
@@ -3086,7 +3152,7 @@ fn build_prompt_with_mode(
 
     let preamble = build_core_system_prompt_text(
         &enriched_conversation,
-        agent,
+        prompt_agent,
         departments,
         user_profile,
         response_style_id,
@@ -3099,7 +3165,7 @@ fn build_prompt_with_mode(
     let conversation_payload = conversation_prompt_service().build_conversation_payload(
         &enriched_conversation,
         conversation,
-        agent,
+        prompt_agent,
         agents,
         state,
         data_path,

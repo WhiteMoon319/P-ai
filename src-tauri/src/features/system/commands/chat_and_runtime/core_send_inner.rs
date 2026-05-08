@@ -1361,7 +1361,6 @@ async fn send_chat_message_inner(
 
     #[derive(Clone)]
     struct ConversationPrepareSnapshot {
-        current_agent: AgentProfile,
         agents: Vec<AgentProfile>,
         response_style_id: String,
         user_name: String,
@@ -1429,11 +1428,6 @@ async fn send_chat_message_inner(
         selected_api: &ApiConfig,
         effective_agent_id: &str,
     | -> Result<Option<ConversationPrepareSnapshot>, String> {
-        let current_agent = runtime_agents
-            .iter()
-            .find(|a| a.id == effective_agent_id)
-            .cloned()
-            .ok_or_else(|| "Selected agent not found.".to_string())?;
         let Some(resolved) =
             conversation_service().resolve_prompt_prepare_conversation_from_data_read_only(
                 data,
@@ -1448,7 +1442,6 @@ async fn send_chat_message_inner(
             return Ok(None);
         };
         Ok(Some(ConversationPrepareSnapshot {
-            current_agent,
             agents: runtime_agents.to_vec(),
             response_style_id: resolved.response_style_id,
             user_name: resolved.user_name,
@@ -1881,6 +1874,9 @@ async fn send_chat_message_inner(
     let requested_conversation_id_for_failure_persist = requested_conversation_id.clone();
     let requested_department_id_for_failure_persist = requested_department_id.clone();
     let effective_agent_id_for_failure_persist = effective_agent_id.clone();
+    let failure_persist_target =
+        std::sync::Arc::new(std::sync::Mutex::new(None::<(String, String)>));
+    let failure_persist_target_for_run = failure_persist_target.clone();
     let state_for_run = state.clone();
     let stage_timeline_for_run = stage_timeline.clone();
     let run = async move {
@@ -2100,6 +2096,12 @@ async fn send_chat_message_inner(
         log_run_stage("prepare_context.archive_summary_ready");
         log_run_stage("prepare_context.prompt_conversation_ready");
         log_run_stage("prepare_context.base_context_ready");
+        let current_agent = resolve_conversation_bound_agent(
+            &snapshot.prompt_conversation_before,
+            &snapshot.agents,
+            &app_config.departments,
+        )?
+        .clone();
         let is_delegate_conversation =
             snapshot.prompt_conversation_before.conversation_kind.trim() == CONVERSATION_KIND_DELEGATE;
         let requested_plan_mode_enabled = get_conversation_plan_mode_enabled(
@@ -2117,7 +2119,7 @@ async fn send_chat_message_inner(
                 .speaker_agent_id
                 .as_deref()
                 .map(str::trim)
-                == Some(effective_agent_id.as_str())
+                == Some(current_agent.id.as_str())
             {
                 return Err("当前最后一条消息来自助理自身，无需重复激活。".to_string());
             }
@@ -2199,7 +2201,7 @@ async fn send_chat_message_inner(
                     collect_recall_payload_for_user_message(
                         &state.data_path,
                         &snapshot.agents,
-                        &effective_agent_id,
+                        &current_agent.id,
                         &draft_message,
                     )
                 })?
@@ -2307,7 +2309,7 @@ async fn send_chat_message_inner(
                     .iter()
                     .rev()
                     .find(|message| {
-                        prompt_role_for_message(message, &effective_agent_id).as_deref()
+                        prompt_role_for_message(message, &current_agent.id).as_deref()
                             == Some("user")
                     })
                     .map(render_message_content_for_model)
@@ -2325,7 +2327,7 @@ async fn send_chat_message_inner(
                         .iter()
                         .rev()
                         .find(|message| {
-                            prompt_role_for_message(message, &effective_agent_id).as_deref()
+                            prompt_role_for_message(message, &current_agent.id).as_deref()
                                 == Some("user")
                         })
                         .ok_or_else(|| "当前对话没有可供发送的用户消息。".to_string())?;
@@ -2338,9 +2340,9 @@ async fn send_chat_message_inner(
                 &prepared_audios,
             )?
         };
-        let current_department = department_for_agent_id(&app_config, &snapshot.current_agent.id);
+        let current_department = department_for_agent_id(&app_config, &current_agent.id);
         let todo_enabled =
-            tool_enabled(&selected_api, &snapshot.current_agent, current_department, "todo");
+            tool_enabled(&selected_api, &current_agent, current_department, "todo");
         let attachment_relative_paths = normalize_payload_attachments(input.payload.attachments.as_ref())
             .into_iter()
             .filter_map(|item| {
@@ -2376,7 +2378,7 @@ async fn send_chat_message_inner(
         let mut prepared_prompt = build_prepared_prompt_for_mode_with_stage_logger(
             prompt_mode,
             &conversation,
-            &snapshot.current_agent,
+            &current_agent,
             &snapshot.agents,
             &app_config.departments,
             &snapshot.user_name,
@@ -2394,7 +2396,7 @@ async fn send_chat_message_inner(
             Some(snapshot.enable_pdf_images),
         );
         if requested_plan_mode_enabled
-            && !conversation_latest_user_has_plan_mode_block(&conversation, &effective_agent_id)
+            && !conversation_latest_user_has_plan_mode_block(&conversation, &current_agent.id)
         {
             let plan_block = plan_mode_prompt_block().trim();
             let existing_meta = prepared_prompt.latest_user_meta_text.trim();
@@ -2417,7 +2419,7 @@ async fn send_chat_message_inner(
                     .filter(|value| !value.is_empty())
                     .map(ToOwned::to_owned),
                 prompt_mode,
-                agent: snapshot.current_agent.clone(),
+                agent: current_agent.clone(),
                 agents: snapshot.agents.clone(),
                 departments: app_config.departments.clone(),
                 user_name: snapshot.user_name.clone(),
@@ -2440,10 +2442,13 @@ async fn send_chat_message_inner(
             model_name
         };
         let conversation_id = conversation.id.clone();
+        if let Ok(mut guard) = failure_persist_target_for_run.lock() {
+            *guard = Some((conversation_id.clone(), current_agent.id.clone()));
+        }
         let usage_resolution = conversation_prompt_service().resolve_prompt_usage(
             &prepared_prompt,
             &selected_api,
-            &snapshot.current_agent,
+            &current_agent,
             &conversation,
         );
         if usage_resolution.estimated_prompt_tokens.is_some() {
@@ -2455,7 +2460,7 @@ async fn send_chat_message_inner(
             prepared_prompt,
             conversation_id,
             latest_user_text,
-            snapshot.current_agent,
+            current_agent,
             usage_resolution.estimated_prompt_tokens,
             snapshot.is_remote_im_contact_conversation,
             snapshot.remote_im_contact_processing_mode,
@@ -2481,6 +2486,7 @@ async fn send_chat_message_inner(
         ));
     }
     let conversation_for_compaction = prepared_context.9.clone();
+    let current_agent_id_for_compaction = prepared_context.4.id.clone();
     let estimated_prompt_tokens_before_send = prepared_context.5;
     let is_runtime_conversation = prepared_context.10;
     if is_runtime_conversation {
@@ -2543,7 +2549,7 @@ async fn send_chat_message_inner(
                 &selected_api,
                 &resolved_api,
                 &conversation_for_compaction,
-                &effective_agent_id,
+                &current_agent_id_for_compaction,
                 &decision.reason,
                 "COMPACTION-AUTO",
                 false,
@@ -2952,7 +2958,14 @@ async fn send_chat_message_inner(
         effective_prompt_tokens as f64 / f64::from(active_selected_api.context_window_tokens.max(1));
     let context_usage_percent = context_usage_ratio.mul_add(100.0, 0.0).round().clamp(0.0, 100.0) as u32;
 
-    let assistant_text_for_storage = assistant_text.clone();
+    let assistant_request_messages = assistant_request_sequence_from_tool_history(
+        &tool_history_events,
+        &assistant_text,
+        &reasoning_standard,
+    );
+    let folded_assistant =
+        fold_request_messages_to_assistant_content(&assistant_request_messages);
+    let assistant_text_for_storage = folded_assistant.assistant_text.clone();
     let remote_im_conversation_kind = if is_remote_im_contact_conversation {
         "remote_im_contact"
     } else {
@@ -2963,7 +2976,11 @@ async fn send_chat_message_inner(
         .as_millis()
         .min(u128::from(u64::MAX)) as u64;
     let mut provider_meta = {
-        let standard = reasoning_standard.trim();
+        let standard = folded_assistant
+            .reasoning_standard
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or("");
         let inline = reasoning_inline.trim();
         if !should_create_assistant_provider_meta(
             &active_selected_api.request_format,
@@ -3049,23 +3066,14 @@ async fn send_chat_message_inner(
                 }
                 let now = now_iso();
                 if !suppress_assistant_message {
-                    let assistant_message = ChatMessage {
-                        id: assistant_message_id.clone(),
-                        role: "assistant".to_string(),
-                        created_at: now.clone(),
-                        speaker_agent_id: Some(effective_agent_id.clone()),
-                        parts: vec![MessagePart::Text {
-                            text: assistant_text_for_storage.clone(),
-                        }],
-                        extra_text_blocks: Vec::new(),
+                    let assistant_message = build_assistant_message_from_request_sequence(
+                        assistant_message_id.clone(),
+                        &current_agent.id,
+                        now.clone(),
+                        &assistant_request_messages,
+                        &reasoning_inline,
                         provider_meta,
-                        tool_call: if tool_history_events.is_empty() {
-                            None
-                        } else {
-                            Some(tool_history_events)
-                        },
-                        mcp_call: None,
-                    };
+                    );
                     conversation.messages.push(assistant_message.clone());
                     increment_conversation_unread_count(&mut conversation, 1);
                     persisted_assistant_message = Some(assistant_message);
@@ -3084,23 +3092,14 @@ async fn send_chat_message_inner(
                 {
                     let now = now_iso();
                     if !suppress_assistant_message {
-                        let assistant_message = ChatMessage {
-                            id: assistant_message_id.clone(),
-                            role: "assistant".to_string(),
-                            created_at: now.clone(),
-                            speaker_agent_id: Some(effective_agent_id.clone()),
-                            parts: vec![MessagePart::Text {
-                                text: assistant_text_for_storage.clone(),
-                            }],
-                            extra_text_blocks: Vec::new(),
+                        let assistant_message = build_assistant_message_from_request_sequence(
+                            assistant_message_id.clone(),
+                            &current_agent.id,
+                            now.clone(),
+                            &assistant_request_messages,
+                            &reasoning_inline,
                             provider_meta,
-                            tool_call: if tool_history_events.is_empty() {
-                                None
-                            } else {
-                                Some(tool_history_events)
-                            },
-                            mcp_call: None,
-                        };
+                        );
                         conversation.messages.push(assistant_message.clone());
                         increment_conversation_unread_count(&mut conversation, 1);
                         persisted_assistant_message = Some(assistant_message);
@@ -3185,11 +3184,23 @@ async fn send_chat_message_inner(
         .unwrap_or(true);
     if let Err(err) = final_result.as_ref() {
         if err != CHAT_ABORTED_BY_USER_ERROR {
+            let failure_persist_target = failure_persist_target
+                .lock()
+                .ok()
+                .and_then(|guard| guard.clone());
+            let failure_persist_conversation_id = failure_persist_target
+                .as_ref()
+                .map(|(conversation_id, _)| conversation_id.as_str())
+                .or(requested_conversation_id_for_failure_persist.as_deref());
+            let failure_persist_agent_id = failure_persist_target
+                .as_ref()
+                .map(|(_, agent_id)| agent_id.as_str())
+                .unwrap_or(effective_agent_id_for_failure_persist.as_str());
             match persist_failed_chat_completed_tool_history(
                 state,
-                requested_conversation_id_for_failure_persist.as_deref(),
+                failure_persist_conversation_id,
                 requested_department_id_for_failure_persist.as_deref(),
-                &effective_agent_id_for_failure_persist,
+                failure_persist_agent_id,
                 &chat_key,
                 err,
             ) {

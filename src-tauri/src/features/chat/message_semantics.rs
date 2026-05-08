@@ -237,6 +237,212 @@ fn build_prepared_history_messages_from_tool_history(
     history_messages
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct FoldedAssistantRequestMessages {
+    assistant_text: String,
+    reasoning_standard: Option<String>,
+    tool_history_events: Vec<Value>,
+}
+
+fn final_assistant_reasoning_from_request_sequence(
+    cumulative_reasoning: &str,
+    tool_history_events: &[Value],
+) -> String {
+    let trimmed = cumulative_reasoning.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let tool_reasoning_rounds = tool_history_events
+        .iter()
+        .filter(|event| {
+            event
+                .get("role")
+                .and_then(Value::as_str)
+                .is_some_and(|role| role.eq_ignore_ascii_case("assistant"))
+        })
+        .filter_map(|event| event.get("reasoning_content").and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|reasoning| !reasoning.is_empty())
+        .collect::<Vec<_>>();
+    if tool_reasoning_rounds.is_empty() {
+        return trimmed.to_string();
+    }
+
+    let mut remaining = trimmed;
+    for round_reasoning in tool_reasoning_rounds {
+        let round_aligned = remaining.trim_start();
+        let Some(stripped) = round_aligned.strip_prefix(round_reasoning) else {
+            return trimmed.to_string();
+        };
+        remaining = stripped;
+    }
+    remaining.trim().to_string()
+}
+
+fn assistant_request_sequence_from_tool_history(
+    tool_history_events: &[Value],
+    assistant_text: &str,
+    cumulative_reasoning_standard: &str,
+) -> Vec<Value> {
+    let mut request_messages = tool_history_events.to_vec();
+    let final_reasoning =
+        final_assistant_reasoning_from_request_sequence(cumulative_reasoning_standard, tool_history_events);
+    let should_append_final_assistant =
+        !assistant_text.trim().is_empty() || !final_reasoning.is_empty();
+    if !should_append_final_assistant {
+        return request_messages;
+    }
+
+    let mut assistant_message = serde_json::Map::new();
+    assistant_message.insert("role".to_string(), Value::String("assistant".to_string()));
+    if assistant_text.trim().is_empty() {
+        assistant_message.insert("content".to_string(), Value::Null);
+    } else {
+        assistant_message.insert(
+            "content".to_string(),
+            Value::String(assistant_text.to_string()),
+        );
+    }
+    if !final_reasoning.is_empty() {
+        assistant_message.insert(
+            "reasoning_content".to_string(),
+            Value::String(final_reasoning),
+        );
+    }
+    request_messages.push(Value::Object(assistant_message));
+    request_messages
+}
+
+fn request_message_has_tool_calls(message: &Value) -> bool {
+    message
+        .get("tool_calls")
+        .and_then(Value::as_array)
+        .is_some_and(|calls| !calls.is_empty())
+}
+
+fn request_message_text_content(message: &Value) -> String {
+    match message.get("content") {
+        Some(Value::String(text)) => text.clone(),
+        Some(Value::Null) | None => String::new(),
+        Some(other) => other.to_string(),
+    }
+}
+
+fn fold_request_messages_to_assistant_content(
+    request_messages: &[Value],
+) -> FoldedAssistantRequestMessages {
+    let final_assistant_index = request_messages
+        .iter()
+        .enumerate()
+        .rev()
+        .find_map(|(idx, message)| {
+            let role = message
+                .get("role")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .unwrap_or_default();
+            (role.eq_ignore_ascii_case("assistant") && !request_message_has_tool_calls(message))
+                .then_some(idx)
+        });
+
+    let mut assistant_text = String::new();
+    let mut reasoning_standard = None::<String>;
+    let mut tool_history_events = Vec::<Value>::new();
+    for (idx, message) in request_messages.iter().enumerate() {
+        if Some(idx) == final_assistant_index {
+            assistant_text = request_message_text_content(message);
+            reasoning_standard = message
+                .get("reasoning_content")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned);
+            continue;
+        }
+        tool_history_events.push(message.clone());
+    }
+
+    FoldedAssistantRequestMessages {
+        assistant_text,
+        reasoning_standard,
+        tool_history_events,
+    }
+}
+
+fn merge_assistant_reasoning_into_provider_meta(
+    provider_meta: Option<Value>,
+    reasoning_standard: Option<&str>,
+    reasoning_inline: &str,
+) -> Option<Value> {
+    let final_reasoning_standard = reasoning_standard
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let final_reasoning_inline = reasoning_inline.trim();
+    if provider_meta.is_none() && final_reasoning_standard.is_none() && final_reasoning_inline.is_empty() {
+        return None;
+    }
+
+    let mut merged = provider_meta.unwrap_or_else(|| serde_json::json!({}));
+    if !merged.is_object() {
+        let raw_provider_meta = std::mem::replace(&mut merged, serde_json::json!({}));
+        merged = serde_json::json!({
+            "_raw_provider_meta": raw_provider_meta,
+        });
+    }
+    let Some(obj) = merged.as_object_mut() else {
+        return Some(merged);
+    };
+    if let Some(reasoning_standard) = final_reasoning_standard {
+        obj.insert(
+            "reasoningStandard".to_string(),
+            Value::String(reasoning_standard.to_string()),
+        );
+    } else {
+        obj.remove("reasoningStandard");
+    }
+    if !final_reasoning_inline.is_empty() {
+        obj.insert(
+            "reasoningInline".to_string(),
+            Value::String(final_reasoning_inline.to_string()),
+        );
+    } else {
+        obj.remove("reasoningInline");
+    }
+    Some(merged)
+}
+
+fn build_assistant_message_from_request_sequence(
+    id: String,
+    agent_id: &str,
+    created_at: String,
+    request_messages: &[Value],
+    reasoning_inline: &str,
+    provider_meta: Option<Value>,
+) -> ChatMessage {
+    let folded = fold_request_messages_to_assistant_content(request_messages);
+    ChatMessage {
+        id,
+        role: "assistant".to_string(),
+        created_at,
+        speaker_agent_id: Some(agent_id.to_string()),
+        parts: vec![MessagePart::Text {
+            text: folded.assistant_text,
+        }],
+        extra_text_blocks: Vec::new(),
+        provider_meta: merge_assistant_reasoning_into_provider_meta(
+            provider_meta,
+            folded.reasoning_standard.as_deref(),
+            reasoning_inline,
+        ),
+        tool_call: if folded.tool_history_events.is_empty() {
+            None
+        } else {
+            Some(folded.tool_history_events)
+        },
+        mcp_call: None,
+    }
+}
+
 fn tool_history_markdown_lines_from_message(message: &ChatMessage) -> Vec<String> {
     let mut out = Vec::<String>::new();
     for event in normalize_message_tool_history_events(message, MessageToolHistoryView::Display) {
@@ -452,5 +658,285 @@ mod message_semantics_tests {
         assert_eq!(history[0].reasoning_content.as_deref(), Some("第一次工具思考"));
         assert_eq!(history[2].role, "assistant");
         assert_eq!(history[2].reasoning_content.as_deref(), Some("第二次工具思考"));
+    }
+
+    #[test]
+    fn assistant_request_sequence_from_tool_history_should_keep_only_final_reasoning_on_last_assistant(
+    ) {
+        let tool_history_events = vec![
+            serde_json::json!({
+                "role": "assistant",
+                "content": Value::Null,
+                "reasoning_content": "先调用终端工具查看 PowerShell 版本。",
+                "tool_calls": [{
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "exec",
+                        "arguments": "{\"command\":\"pwsh --version\"}"
+                    }
+                }]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": "PowerShell 7.5.4"
+            }),
+        ];
+
+        let request_messages = assistant_request_sequence_from_tool_history(
+            &tool_history_events,
+            "终端版本是 PowerShell 7.5.4。",
+            "先调用终端工具查看 PowerShell 版本。我已经拿到工具结果，现在直接回答用户终端版本。",
+        );
+        let folded = fold_request_messages_to_assistant_content(&request_messages);
+
+        assert_eq!(request_messages.len(), 3);
+        assert_eq!(request_messages[2]["role"], "assistant");
+        assert_eq!(
+            request_messages[2]["reasoning_content"].as_str(),
+            Some("我已经拿到工具结果，现在直接回答用户终端版本。")
+        );
+        assert_eq!(folded.assistant_text, "终端版本是 PowerShell 7.5.4。");
+        assert_eq!(
+            folded.reasoning_standard.as_deref(),
+            Some("我已经拿到工具结果，现在直接回答用户终端版本。")
+        );
+        assert_eq!(
+            folded.tool_history_events[0]["reasoning_content"].as_str(),
+            Some("先调用终端工具查看 PowerShell 版本。")
+        );
+    }
+
+    #[test]
+    fn assistant_request_sequence_from_tool_history_should_strip_tool_reasoning_prefix_with_inter_round_newlines(
+    ) {
+        let tool_history_events = vec![
+            serde_json::json!({
+                "role": "assistant",
+                "content": Value::Null,
+                "reasoning_content": "第1轮先搜版本",
+                "tool_calls": [{
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "search",
+                        "arguments": "{\"q\":\"PowerShell version\"}"
+                    }
+                }]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": "{\"ok\":true}"
+            }),
+            serde_json::json!({
+                "role": "assistant",
+                "content": Value::Null,
+                "reasoning_content": "第2轮再核对发布时间",
+                "tool_calls": [{
+                    "id": "call_2",
+                    "type": "function",
+                    "function": {
+                        "name": "search",
+                        "arguments": "{\"q\":\"PowerShell 7.5.4 release date\"}"
+                    }
+                }]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call_2",
+                "content": "{\"ok\":true}"
+            }),
+        ];
+
+        let request_messages = assistant_request_sequence_from_tool_history(
+            &tool_history_events,
+            "PowerShell 7.5.4 已发布。",
+            "第1轮先搜版本\n\n第2轮再核对发布时间\n\n现在可以直接回答用户。",
+        );
+
+        assert_eq!(request_messages.len(), 5);
+        assert_eq!(
+            request_messages[4]["reasoning_content"].as_str(),
+            Some("现在可以直接回答用户。")
+        );
+    }
+
+    #[test]
+    fn assistant_request_sequence_from_tool_history_should_not_persist_tool_reasoning_as_final_reasoning_when_no_final_text(
+    ) {
+        let tool_history_events = vec![
+            serde_json::json!({
+                "role": "assistant",
+                "content": Value::Null,
+                "reasoning_content": "第1轮思考",
+                "tool_calls": [{
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "arguments": "{\"path\":\"README.md\"}"
+                    }
+                }]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": "{\"ok\":true}"
+            }),
+        ];
+
+        let request_messages = assistant_request_sequence_from_tool_history(
+            &tool_history_events,
+            "",
+            "第1轮思考",
+        );
+        let message = build_assistant_message_from_request_sequence(
+            "assistant-stop".to_string(),
+            "agent-a",
+            "2026-05-08T12:00:00Z".to_string(),
+            &request_messages,
+            "",
+            None,
+        );
+
+        assert_eq!(request_messages, tool_history_events);
+        assert!(message.provider_meta.is_none());
+        assert_eq!(
+            message
+                .tool_call
+                .as_ref()
+                .and_then(|events| events.first())
+                .and_then(|event| event.get("reasoning_content"))
+                .and_then(Value::as_str),
+            Some("第1轮思考")
+        );
+    }
+
+    #[test]
+    fn assistant_request_sequence_from_tool_history_should_append_reasoning_only_final_assistant_when_interrupted_after_tool_rounds(
+    ) {
+        let tool_history_events = vec![
+            serde_json::json!({
+                "role": "assistant",
+                "content": Value::Null,
+                "reasoning_content": "第1轮先调用工具",
+                "tool_calls": [{
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "arguments": "{\"path\":\"README.md\"}"
+                    }
+                }]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": "{\"ok\":true}"
+            }),
+        ];
+
+        let request_messages = assistant_request_sequence_from_tool_history(
+            &tool_history_events,
+            "",
+            "第1轮先调用工具\n\n我已经拿到结果，准备组织最终答复。",
+        );
+        let message = build_assistant_message_from_request_sequence(
+            "assistant-stop".to_string(),
+            "agent-a",
+            "2026-05-08T12:00:00Z".to_string(),
+            &request_messages,
+            "",
+            None,
+        );
+
+        assert_eq!(request_messages.len(), 3);
+        assert!(request_messages[2]["content"].is_null());
+        assert_eq!(
+            request_messages[2]["reasoning_content"].as_str(),
+            Some("我已经拿到结果，准备组织最终答复。")
+        );
+        assert_eq!(
+            message
+                .provider_meta
+                .as_ref()
+                .and_then(|meta| meta.get("reasoningStandard"))
+                .and_then(Value::as_str),
+            Some("我已经拿到结果，准备组织最终答复。")
+        );
+    }
+
+    #[test]
+    fn build_assistant_message_from_request_sequence_should_keep_tool_reasoning_separate_from_provider_meta(
+    ) {
+        let request_messages = vec![
+            serde_json::json!({
+                "role": "assistant",
+                "content": Value::Null,
+                "reasoning_content": "先检查上下文",
+                "tool_calls": [{
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "grep",
+                        "arguments": "{\"pattern\":\"quest\"}"
+                    }
+                }]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": "{\"ok\":true}"
+            }),
+            serde_json::json!({
+                "role": "assistant",
+                "content": "最终答案",
+                "reasoning_content": "我已经拿到结果，现在直接回答。"
+            }),
+        ];
+
+        let message = build_assistant_message_from_request_sequence(
+            "assistant-final".to_string(),
+            "agent-a",
+            "2026-05-08T12:00:00Z".to_string(),
+            &request_messages,
+            "inline",
+            Some(serde_json::json!({
+                "dispatchElapsedMs": 1234
+            })),
+        );
+
+        assert_eq!(message.parts.len(), 1);
+        match &message.parts[0] {
+            MessagePart::Text { text } => assert_eq!(text, "最终答案"),
+            other => panic!("unexpected message part: {:?}", other),
+        }
+        assert_eq!(
+            message
+                .provider_meta
+                .as_ref()
+                .and_then(|meta| meta.get("reasoningStandard"))
+                .and_then(Value::as_str),
+            Some("我已经拿到结果，现在直接回答。")
+        );
+        assert_eq!(
+            message
+                .provider_meta
+                .as_ref()
+                .and_then(|meta| meta.get("reasoningInline"))
+                .and_then(Value::as_str),
+            Some("inline")
+        );
+        assert_eq!(
+            message
+                .tool_call
+                .as_ref()
+                .and_then(|events| events.first())
+                .and_then(|event| event.get("reasoning_content"))
+                .and_then(Value::as_str),
+            Some("先检查上下文")
+        );
     }
 }

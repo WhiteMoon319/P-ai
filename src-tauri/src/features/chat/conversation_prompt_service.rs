@@ -746,12 +746,13 @@ impl ConversationPromptService {
         overrides: &ChatPromptOverrides,
         prepared: &PreparedPrompt,
         stage_logger: Option<&dyn Fn(&str)>,
-    ) -> (String, String, Vec<String>) {
+    ) -> (String, String, Vec<String>, LatestUserExtraBlocksMode) {
         let Some(intent) = overrides.latest_user_intent.as_ref() else {
             return (
                 prepared.latest_user_text.clone(),
                 prepared.latest_user_meta_text.clone(),
                 prepared.latest_user_extra_blocks.clone(),
+                LatestUserExtraBlocksMode::ReplaceIfNonEmpty,
             );
         };
         match intent {
@@ -814,6 +815,7 @@ impl ConversationPromptService {
                     latest_user_text,
                     prepared.latest_user_meta_text.clone(),
                     extra_blocks,
+                    LatestUserExtraBlocksMode::Append,
                 )
             }
             LatestUserPayloadIntent::SummaryContext {
@@ -836,6 +838,7 @@ impl ConversationPromptService {
                         current_user_profile,
                     ),
                     extra_blocks,
+                    LatestUserExtraBlocksMode::ReplaceIfNonEmpty,
                 )
             }
             LatestUserPayloadIntent::Explicit {
@@ -846,6 +849,7 @@ impl ConversationPromptService {
                 text.clone(),
                 meta_text.clone(),
                 extra_blocks.clone(),
+                LatestUserExtraBlocksMode::ReplaceIfNonEmpty,
             ),
         }
     }
@@ -1034,7 +1038,12 @@ impl ConversationPromptService {
                 if let Some(log_stage) = stage_logger {
                     log_stage("prepare_context.prompt_system_finalize_ready");
                 }
-                let (latest_user_text, latest_user_meta_text, latest_user_extra_blocks) =
+                let (
+                    latest_user_text,
+                    latest_user_meta_text,
+                    latest_user_extra_blocks,
+                    latest_user_extra_blocks_mode,
+                ) =
                     self.build_latest_user_payload(
                         PromptBuildMode::Chat,
                         state,
@@ -1049,6 +1058,7 @@ impl ConversationPromptService {
                     latest_user_text,
                     latest_user_meta_text,
                     &latest_user_extra_blocks,
+                    latest_user_extra_blocks_mode,
                     overrides.latest_images,
                     overrides.latest_audios,
                 );
@@ -1087,7 +1097,12 @@ impl ConversationPromptService {
                 if let Some(log_stage) = stage_logger {
                     log_stage("prepare_context.prompt_system_finalize_ready");
                 }
-                let (latest_user_text, latest_user_meta_text, latest_user_extra_blocks) =
+                let (
+                    latest_user_text,
+                    latest_user_meta_text,
+                    latest_user_extra_blocks,
+                    latest_user_extra_blocks_mode,
+                ) =
                     self.build_latest_user_payload(
                         PromptBuildMode::Delegate,
                         state,
@@ -1102,6 +1117,7 @@ impl ConversationPromptService {
                     latest_user_text,
                     latest_user_meta_text,
                     &latest_user_extra_blocks,
+                    latest_user_extra_blocks_mode,
                     overrides.latest_images,
                     overrides.latest_audios,
                 );
@@ -1148,7 +1164,12 @@ impl ConversationPromptService {
                 if let Some(log_stage) = stage_logger {
                     log_stage("prepare_context.prompt_system_finalize_ready");
                 }
-                let (latest_user_text, latest_user_meta_text, latest_user_extra_blocks) =
+                let (
+                    latest_user_text,
+                    latest_user_meta_text,
+                    latest_user_extra_blocks,
+                    latest_user_extra_blocks_mode,
+                ) =
                     self.build_latest_user_payload(
                         PromptBuildMode::SummaryContext,
                         state,
@@ -1163,6 +1184,7 @@ impl ConversationPromptService {
                     latest_user_text,
                     latest_user_meta_text,
                     &latest_user_extra_blocks,
+                    latest_user_extra_blocks_mode,
                     overrides.latest_images,
                     overrides.latest_audios,
                 );

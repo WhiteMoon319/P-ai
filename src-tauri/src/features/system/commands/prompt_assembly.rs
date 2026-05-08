@@ -378,18 +378,35 @@ fn apply_chat_latest_user_payload(
     latest_user_text: String,
     latest_user_meta_text: String,
     latest_user_extra_blocks: &[String],
+    latest_user_extra_blocks_mode: LatestUserExtraBlocksMode,
     latest_images: Option<Vec<PreparedBinaryPayload>>,
     latest_audios: Option<Vec<PreparedBinaryPayload>>,
 ) {
     prepared.latest_user_text = latest_user_text;
     prepared.latest_user_meta_text = latest_user_meta_text;
-    prepared_prompt_append_latest_user_extra_blocks(prepared, latest_user_extra_blocks);
+    let normalized_extra_blocks = normalize_prepared_prompt_extra_blocks(latest_user_extra_blocks);
+    match latest_user_extra_blocks_mode {
+        LatestUserExtraBlocksMode::Append => {
+            prepared_prompt_append_latest_user_extra_blocks(prepared, &normalized_extra_blocks);
+        }
+        LatestUserExtraBlocksMode::ReplaceIfNonEmpty => {
+            if !normalized_extra_blocks.is_empty() {
+                prepared_prompt_set_latest_user_extra_blocks(prepared, normalized_extra_blocks);
+            }
+        }
+    }
     if let Some(images) = latest_images {
         prepared.latest_images = images;
     }
     if let Some(audios) = latest_audios {
         prepared.latest_audios = audios;
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LatestUserExtraBlocksMode {
+    Append,
+    ReplaceIfNonEmpty,
 }
 
 #[cfg(test)]
@@ -751,6 +768,68 @@ mod prompt_assembly_tests {
         assert!(prepared.preamble.contains("当前 shell: PowerShell"));
         assert!(!prepared.preamble.contains("这一句只属于用户消息"));
         assert_eq!(prepared.latest_user_text, "这一句只属于用户消息");
+    }
+
+    #[test]
+    fn apply_chat_latest_user_payload_should_replace_full_snapshot_extra_blocks_without_duplication() {
+        let memory_block =
+            "<memory_context>\n<id:959>\n记忆 A\n> 无\n</id:959>\n</memory_context>".to_string();
+        let mut prepared = PreparedPrompt {
+            preamble: String::new(),
+            history_messages: Vec::new(),
+            latest_user_text: "我有发截图吗？".to_string(),
+            latest_user_meta_text: String::new(),
+            latest_user_extra_text: memory_block.clone(),
+            latest_user_extra_blocks: vec![memory_block.clone()],
+            latest_images: Vec::new(),
+            latest_audios: Vec::new(),
+        };
+
+        apply_chat_latest_user_payload(
+            &mut prepared,
+            "我有发截图吗？".to_string(),
+            String::new(),
+            &[memory_block.clone()],
+            LatestUserExtraBlocksMode::ReplaceIfNonEmpty,
+            None,
+            None,
+        );
+
+        assert_eq!(prepared.latest_user_extra_blocks.len(), 1);
+        assert_eq!(prepared.latest_user_extra_blocks[0], memory_block);
+        assert_eq!(prepared.latest_user_extra_text.matches("<memory_context>").count(), 1);
+    }
+
+    #[test]
+    fn apply_chat_latest_user_payload_should_append_incremental_extra_blocks_after_memory_block() {
+        let memory_block =
+            "<memory_context>\n<id:959>\n记忆 A\n> 无\n</id:959>\n</memory_context>".to_string();
+        let task_block = "<task_board>\n待办一项\n</task_board>".to_string();
+        let mut prepared = PreparedPrompt {
+            preamble: String::new(),
+            history_messages: Vec::new(),
+            latest_user_text: "我有发截图吗？".to_string(),
+            latest_user_meta_text: String::new(),
+            latest_user_extra_text: memory_block.clone(),
+            latest_user_extra_blocks: vec![memory_block.clone()],
+            latest_images: Vec::new(),
+            latest_audios: Vec::new(),
+        };
+
+        apply_chat_latest_user_payload(
+            &mut prepared,
+            "我有发截图吗？".to_string(),
+            String::new(),
+            &[task_block.clone()],
+            LatestUserExtraBlocksMode::Append,
+            None,
+            None,
+        );
+
+        assert_eq!(prepared.latest_user_extra_blocks.len(), 2);
+        assert_eq!(prepared.latest_user_extra_blocks[0], memory_block);
+        assert_eq!(prepared.latest_user_extra_blocks[1], task_block);
+        assert_eq!(prepared.latest_user_extra_text.matches("<memory_context>").count(), 1);
     }
 
     #[test]

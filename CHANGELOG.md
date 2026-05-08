@@ -2,6 +2,8 @@
 
 ## 进行中
 
+- 修复（chat-preview-conversation-binding-and-message-flow）：提示词预览改为强制传入 `conversationId` 并按会话主人格判定消息角色，缺参直接报错；最新用户附加块改为“无则追加、有则替换”以避免重复记忆块；同时收口工具轮与最终思维链的聚合/展开入口，并补齐预览、发送、停止写回相关回归测试。
+
 ## 发布：v0.9.75
 
 - 发布（release-0.9.75）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.75`，纳入本轮远程联系人闭嘴机制、IDE bridge 鉴权与存活性修复、远程联系人会话与日志收口，以及流式滚动与工具状态稳定性修复。

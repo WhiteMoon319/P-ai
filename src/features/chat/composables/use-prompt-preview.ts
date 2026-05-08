@@ -64,10 +64,13 @@ export function usePromptPreview(options: UsePromptPreviewOptions) {
 
   function buildPreviewSessionInput(apiConfigId: string, agentId: string) {
     const conversationId = String(promptPreviewConversationId.value || "").trim();
+    if (!conversationId) {
+      throw new Error("conversationId is required.");
+    }
     return {
       apiConfigId,
       agentId,
-      conversationId: conversationId || undefined,
+      conversationId,
     };
   }
 
