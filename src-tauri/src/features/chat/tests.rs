@@ -3560,6 +3560,173 @@
     }
 
     #[test]
+    fn mark_queue_event_guided_should_force_activation_and_guided_dispatch_reason() {
+        let state = test_chat_runtime_state();
+        set_conversation_runtime_state(&state, "conversation-a", MainSessionState::AssistantStreaming)
+            .expect("set streaming state");
+        let mut event = test_pending_event("conversation-a");
+        event.activate_assistant = false;
+        event.runtime_context = Some(runtime_context_new("user_message", "user_send"));
+
+        let ingress = ingress_chat_event(&state, event).expect("queue event");
+        let event_id = match ingress {
+            ChatEventIngress::Queued { event_id } => event_id,
+            _ => panic!("expected queued guided candidate"),
+        };
+
+        let updated_conversation_id =
+            mark_queue_event_guided(&state, &event_id).expect("mark guided");
+        assert_eq!(updated_conversation_id.as_deref(), Some("conversation-a"));
+
+        let slots = state
+            .conversation_runtime_slots
+            .lock()
+            .expect("lock slots");
+        let slot = slots.get("conversation-a").expect("conversation slot");
+        let queued = slot
+            .pending_queue
+            .iter()
+            .find(|item| item.id == event_id)
+            .expect("guided event still queued");
+        assert_eq!(queued.queue_mode, ChatQueueMode::Guided);
+        assert!(queued.activate_assistant);
+        assert_eq!(
+            queued
+                .runtime_context
+                .as_ref()
+                .and_then(|ctx| ctx.dispatch_reason.as_deref()),
+            Some("guided_queue")
+        );
+    }
+
+    #[test]
+    fn claim_guided_queue_events_for_conversation_should_remove_guided_and_keep_normal_events() {
+        let state = test_chat_runtime_state();
+        set_conversation_runtime_state(&state, "conversation-a", MainSessionState::AssistantStreaming)
+            .expect("set streaming state");
+
+        let guided_ingress =
+            ingress_chat_event(&state, test_pending_event("conversation-a")).expect("queue guided");
+        let guided_event_id = match guided_ingress {
+            ChatEventIngress::Queued { event_id } => event_id,
+            _ => panic!("expected first event queued"),
+        };
+        let normal_ingress =
+            ingress_chat_event(&state, test_pending_event("conversation-a")).expect("queue normal");
+        let normal_event_id = match normal_ingress {
+            ChatEventIngress::Queued { event_id } => event_id,
+            _ => panic!("expected second event queued"),
+        };
+
+        mark_queue_event_guided(&state, &guided_event_id).expect("mark guided");
+        set_conversation_runtime_state(&state, "conversation-a", MainSessionState::Idle)
+            .expect("restore idle");
+
+        let guided_events =
+            claim_guided_queue_events_for_conversation(&state, "conversation-a").expect("claim guided");
+
+        assert_eq!(guided_events.len(), 1);
+        assert_eq!(guided_events[0].id, guided_event_id);
+        assert_eq!(guided_events[0].queue_mode, ChatQueueMode::Guided);
+        assert!(guided_events[0].activate_assistant);
+        assert_eq!(
+            guided_events[0]
+                .runtime_context
+                .as_ref()
+                .and_then(|ctx| ctx.dispatch_reason.as_deref()),
+            Some("guided_queue")
+        );
+
+        let slots = state
+            .conversation_runtime_slots
+            .lock()
+            .expect("lock slots");
+        let slot = slots.get("conversation-a").expect("conversation slot");
+        assert_eq!(slot.state, MainSessionState::OrganizingContext);
+        assert_eq!(slot.pending_queue.len(), 1);
+        assert_eq!(slot.pending_queue[0].id, normal_event_id);
+        drop(slots);
+
+        let claims = state
+            .conversation_processing_claims
+            .lock()
+            .expect("lock claims");
+        assert!(claims.contains("conversation-a"));
+    }
+
+    #[test]
+    fn process_guided_queue_when_idle_should_remove_claimed_guided_event_after_failure() {
+        let state = test_chat_runtime_state();
+        set_conversation_runtime_state(&state, "conversation-a", MainSessionState::AssistantStreaming)
+            .expect("set streaming state");
+        let ingress =
+            ingress_chat_event(&state, test_pending_event("conversation-a")).expect("queue event");
+        let event_id = match ingress {
+            ChatEventIngress::Queued { event_id } => event_id,
+            _ => panic!("expected queued event"),
+        };
+        mark_queue_event_guided(&state, &event_id).expect("mark guided");
+        set_conversation_runtime_state(&state, "conversation-a", MainSessionState::Idle)
+            .expect("restore idle");
+
+        let err = test_runtime()
+            .block_on(process_guided_queue_when_idle(&state, "conversation-a"))
+            .expect_err("guided processing should fail without conversation");
+        assert!(err.contains("目标会话不存在"));
+        assert_eq!(total_queue_len(&state).expect("queue len"), 0);
+        assert_eq!(
+            get_conversation_runtime_state(&state, "conversation-a")
+                .expect("runtime state"),
+            MainSessionState::Idle
+        );
+        let claims = state
+            .conversation_processing_claims
+            .lock()
+            .expect("lock claims");
+        assert!(!claims.contains("conversation-a"));
+    }
+
+    #[test]
+    fn guided_batch_should_fail_when_history_flushed_without_activation() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let conversation = test_chat_conversation("conversation-guided-no-activation", "active", &now);
+        write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
+        write_chat_index_shard(
+            &state.data_path,
+            &ChatIndexFile {
+                conversations: vec![build_chat_index_item(&conversation)],
+            },
+        )
+        .expect("write chat index");
+
+        let mut guided_event = test_pending_event("conversation-guided-no-activation");
+        guided_event.queue_mode = ChatQueueMode::Guided;
+        guided_event.activate_assistant = false;
+        guided_event.runtime_context = Some(runtime_context_new("user_message", "guided_queue"));
+
+        let err = test_runtime()
+            .block_on(process_conversation_batch(
+                &state,
+                "conversation-guided-no-activation",
+                vec![guided_event],
+            ))
+            .expect_err("guided batch should fail");
+        assert_eq!(err, "引导消息未能触发助理回复");
+
+        let updated = state_read_conversation_cached(&state, "conversation-guided-no-activation")
+            .expect("read updated conversation");
+        assert!(updated.messages.len() >= 1);
+        assert_eq!(
+            updated
+                .messages
+                .last()
+                .map(|message| message.role.as_str()),
+            Some("user")
+        );
+    }
+
+    #[test]
     fn scheduler_should_allow_eight_conversations_and_queue_the_ninth() {
         let state = test_chat_runtime_state();
         for idx in 0..8 {

@@ -32,7 +32,7 @@ export function useChatQueue() {
   const queueEvents = ref<ChatQueueEvent[]>([]);
   const sessionState = ref<MainSessionState>("idle");
   const polling = ref(false);
-  let unlisten: UnlistenFn | null = null;
+  const unlisteners: UnlistenFn[] = [];
 
   async function refreshQueue() {
     try {
@@ -86,22 +86,32 @@ export function useChatQueue() {
     try {
       await refreshQueue();
       await refreshSessionState();
-      unlisten = await listen<ChatQueueSnapshotPush>("easy-call:chat-queue-snapshot", (event) => {
+      unlisteners.push(await listen<ChatQueueSnapshotPush>("easy-call:chat-queue-snapshot", (event) => {
         const payload = event.payload;
         queueEvents.value = Array.isArray(payload?.queueEvents) ? payload.queueEvents : [];
         sessionState.value = isMainSessionState(payload?.sessionState) ? payload.sessionState : "idle";
-      });
+      }));
+      const refreshRuntimeSnapshot = () => {
+        void refreshQueue();
+        void refreshSessionState();
+      };
+      unlisteners.push(await listen("easy-call:round-started", refreshRuntimeSnapshot));
+      unlisteners.push(await listen("easy-call:round-completed", refreshRuntimeSnapshot));
+      unlisteners.push(await listen("easy-call:round-failed", refreshRuntimeSnapshot));
     } catch (error) {
       polling.value = false;
-      unlisten = null;
+      while (unlisteners.length > 0) {
+        const stop = unlisteners.pop();
+        stop?.();
+      }
       throw error;
     }
   }
 
   function stopPolling() {
-    if (unlisten) {
-      unlisten();
-      unlisten = null;
+    while (unlisteners.length > 0) {
+      const stop = unlisteners.pop();
+      stop?.();
     }
     polling.value = false;
   }

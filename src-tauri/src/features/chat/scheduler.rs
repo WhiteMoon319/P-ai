@@ -1,30 +1,41 @@
-// ==================== 群聊消息队列与主助理串行调度系统 ====================
+// ==================== 群聊消息调度与主助理串行系统 ====================
 //
 // 这是当前项目最核心、也最容易被误改的业务边界之一。
 //
-// 我们实现的不是传统“用户发一句 -> 助理立刻回一句”的线性聊天，
+// 这里必须先分清两个概念：
+//
+// 1. 队列（queue）
+//    语义是：等当前这一轮 LLM 调度完整结束后，再把下一批消息送进去。
+//    它不会改变当前轮次的收口时机，只会决定“下一轮什么时候开始”。
+//
+// 2. 引导（guided）
+//    语义是：当前这一轮只要完成一次工具执行，就允许立刻截断当前调度，
+//    把引导消息插进去，然后重新发起一轮新的调度。
+//    它不是普通队列换个标签，而是会改变“当前轮次什么时候被截断”。
+//
+// 因此，这里实现的不是传统“用户发一句 -> 助理立刻回一句”的线性聊天，
 // 而是一个面向未来跨进程协作的“单主助理消息流”：
 //
-// 1. 队列是入口层
+// 1. 新消息先进入调度层
 //    所有新消息，无论来自用户、任务、委托、系统，未来甚至来自其他进程，
-//    都必须先入队，不能直接写进正式历史。
+//    都必须先进入调度层，不能直接写进正式历史。
 //
-// 2. 历史是唯一生效层
-//    一条消息只有在批量出队、写入 conversation.messages 之后，才算正式生效。
+// 2. 正式历史是唯一生效层
+//    一条消息只有在批量写入 conversation.messages 之后，才算正式生效。
 //    因此消息的业务时间应以“刷入历史的时间”为准，而不是入队时间。
 //
-// 3. 激活信号决定是否开启下一轮主助理
-//    批次写入历史后，只有当本批次存在 activate_assistant=true 的事件，
-//    才允许开启新的主助理轮次；否则只更新历史，不启动流式。
+// 3. 主助理永远只有一个前台轮次
+//    当主助理正在流式，或者正在整理上下文时，普通队列消息不能插入当前轮次。
+//    只有引导才允许在“工具执行完成”这个切点提前截断并重启调度。
 //
-// 4. 主助理永远只有一个前台轮次
-//    当主助理正在流式，或者正在整理上下文时，新的消息只能继续排队，
-//    绝不能插入当前轮次，也不能抢占当前流式显示。
+// 4. 调度器负责两种不同切点
+//    - 队列：本轮完美结束 -> 下一轮开始
+//    - 引导：一次工具执行完成 -> 立刻截断 -> 插入消息 -> 重启调度
 //
 // 这套设计保证了：
 // - 无论同一时刻涌入多少消息、来自多少个来源，都能稳定收敛；
-// - 批量消息总是先统一进入历史，再决定是否开启下一轮；
-// - 前后端都能围绕“队列 -> 历史 -> 激活新轮次”的固定节奏工作。
+// - 正式历史和运行态切点分离，不把“已持久化”误当成“已完成调度”；
+// - 前后端都围绕同一套“何时落历史、何时截断、何时重启”的语义工作。
 
 // ==================== 数据结构定义 ====================
 
@@ -403,6 +414,12 @@ pub(crate) fn mark_queue_event_guided(
                 break;
             }
             event.queue_mode = ChatQueueMode::Guided;
+            event.activate_assistant = true;
+            if let Some(runtime_context) = event.runtime_context.as_mut() {
+                runtime_context.dispatch_reason = Some("guided_queue".to_string());
+            } else {
+                event.runtime_context = Some(runtime_context_new("user_message", "guided_queue"));
+            }
             updated_conversation_id = Some(event.conversation_id.clone());
             break;
         }
@@ -454,7 +471,7 @@ pub(crate) fn clear_conversation_queue(
     Ok(removed_count)
 }
 
-fn clone_guided_queue_events_for_conversation(
+fn claim_guided_queue_events_for_conversation(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<Vec<ChatPendingEvent>, String> {
@@ -462,17 +479,51 @@ fn clone_guided_queue_events_for_conversation(
         .dequeue_lock
         .lock()
         .map_err(|_| "Failed to lock dequeue lock".to_string())?;
-    let slots = lock_conversation_runtime_slots(state)?;
-    Ok(slots
-        .get(conversation_id)
-        .map(|slot| {
-            slot.pending_queue
-                .iter()
-                .filter(|event| event.queue_mode == ChatQueueMode::Guided)
-                .cloned()
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default())
+    let mut claims = lock_conversation_processing_claims(state)?;
+    let mut slots = lock_conversation_runtime_slots(state)?;
+    let trimmed_conversation_id = conversation_id.trim();
+    let slot = conversation_slot_mut(&mut slots, trimmed_conversation_id);
+    let has_guided = slot
+        .pending_queue
+        .iter()
+        .any(|event| event.queue_mode == ChatQueueMode::Guided);
+    if (slot.state != MainSessionState::Idle && slot.state != MainSessionState::OrganizingContext)
+        || !has_guided
+        || claims.contains(trimmed_conversation_id)
+        || claims.len() >= CHAT_CONCURRENCY_LIMIT
+    {
+        return Ok(Vec::new());
+    }
+
+    claims.insert(trimmed_conversation_id.to_string());
+    slot.state = MainSessionState::OrganizingContext;
+    slot.last_activity_at = now_iso();
+
+    let mut guided_events = Vec::<ChatPendingEvent>::new();
+    let mut remaining_queue = std::collections::VecDeque::<ChatPendingEvent>::new();
+    while let Some(mut event) = slot.pending_queue.pop_front() {
+        if event.queue_mode == ChatQueueMode::Guided {
+            event.activate_assistant = true;
+            if let Some(runtime_context) = event.runtime_context.as_mut() {
+                runtime_context.dispatch_reason = Some("guided_queue".to_string());
+            } else {
+                event.runtime_context = Some(runtime_context_new("user_message", "guided_queue"));
+            }
+            guided_events.push(event);
+        } else {
+            remaining_queue.push_back(event);
+        }
+    }
+    slot.pending_queue = remaining_queue;
+
+    if guided_events.is_empty() {
+        claims.remove(trimmed_conversation_id);
+        if slot.pending_queue.is_empty() {
+            slot.state = MainSessionState::Idle;
+        }
+    }
+
+    Ok(guided_events)
 }
 
 fn remove_queue_events_by_ids(
@@ -520,6 +571,9 @@ fn tool_loop_should_close_for_guided_queue(
     state: Option<&AppState>,
     context: Option<&ToolLoopAutoCompactionContext>,
 ) -> bool {
+    // 注意：这里判断的不是“当前轮次是否已经完整结束”，
+    // 而是“在一次工具执行完成之后，是否存在待插入的引导消息”。
+    // 一旦为 true，当前调度应在这个工具切点收口，并把后续回复让位给引导重启的新轮次。
     let Some(state) = state else {
         return false;
     };
@@ -1061,8 +1115,8 @@ fn resolve_activation_reason(runtime_context: &RuntimeContext) -> String {
 async fn process_guided_queue_after_round(
     state: &AppState,
     conversation_id: &str,
+    guided_events: Vec<ChatPendingEvent>,
 ) -> Result<bool, String> {
-    let guided_events = clone_guided_queue_events_for_conversation(state, conversation_id)?;
     if guided_events.is_empty() {
         return Ok(false);
     }
@@ -1087,45 +1141,37 @@ async fn process_guided_queue_when_idle(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<(), String> {
-    let should_process = {
-        let _dequeue_guard = state
-            .dequeue_lock
-            .lock()
-            .map_err(|_| "Failed to lock dequeue lock".to_string())?;
-        let mut claims = lock_conversation_processing_claims(state)?;
-        let mut slots = lock_conversation_runtime_slots(state)?;
-        let slot = conversation_slot_mut(&mut slots, conversation_id);
-        let has_guided = slot
-            .pending_queue
-            .iter()
-            .any(|event| event.queue_mode == ChatQueueMode::Guided);
-        if slot.state != MainSessionState::Idle
-            && slot.state != MainSessionState::OrganizingContext
-            || !has_guided
-            || claims.contains(conversation_id)
-            || claims.len() >= CHAT_CONCURRENCY_LIMIT
-        {
-            false
-        } else {
-            claims.insert(conversation_id.to_string());
-            slot.state = MainSessionState::OrganizingContext;
-            slot.last_activity_at = now_iso();
-            true
-        }
-    };
-    if !should_process {
+    let guided_events = claim_guided_queue_events_for_conversation(state, conversation_id)?;
+    if guided_events.is_empty() {
         return Ok(());
     }
+    emit_chat_queue_snapshot(state);
 
-    let result = process_guided_queue_after_round(state, conversation_id).await;
+    let result = process_guided_queue_after_round(state, conversation_id, guided_events).await;
     if let Err(release_err) = release_conversation_processing_claim(state, conversation_id) {
         runtime_log_warn(format!(
             "[引导投送] 失败，任务=release_guided_claim，conversation_id={}，error={}",
             conversation_id, release_err
         ));
     }
+    let next_state = if conversation_has_guided_queue_events(state, conversation_id).unwrap_or(false)
+    {
+        MainSessionState::OrganizingContext
+    } else {
+        MainSessionState::Idle
+    };
+    if let Err(state_err) = set_conversation_runtime_state(state, conversation_id, next_state) {
+        runtime_log_warn(format!(
+            "[引导投送] 失败，任务=restore_guided_runtime_state，conversation_id={}，error={}",
+            conversation_id, state_err
+        ));
+    }
     emit_chat_queue_snapshot(state);
-    trigger_chat_queue_processing(state);
+    if conversation_has_guided_queue_events(state, conversation_id).unwrap_or(false) {
+        trigger_guided_queue_processing(state, conversation_id);
+    } else {
+        trigger_chat_queue_processing(state);
+    }
     result.map(|_| ())
 }
 
@@ -2055,6 +2101,11 @@ async fn process_conversation_batch(
     } else {
         set_conversation_remote_im_activation_sources(state, conversation_id, Vec::new())?;
         set_conversation_remote_im_assistant_context(state, conversation_id, None)?;
+        if !guided_event_ids.is_empty() {
+            let error_text = "引导消息未能触发助理回复";
+            complete_pending_chat_events_with_error(state, &event_ids, error_text)?;
+            return Err(error_text.to_string());
+        }
         // 不激活时，本批消息依然已经是正式历史的一部分。
         // 这里只回传一个“已落地但未开启新轮次”的结果，前端应刷新历史，
         // 但不应启动新的主助理流式显示。
