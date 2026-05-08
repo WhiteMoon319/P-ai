@@ -3,6 +3,10 @@
     <!-- 人格选择器 -->
     <div class="card bg-base-100 border border-base-300">
       <div class="card-body p-4">
+        <div class="mb-3">
+          <h3 class="card-title text-base">{{ t("config.persona.title") }}</h3>
+          <p class="mt-1 text-xs opacity-60">{{ t("config.persona.hint") }}</p>
+        </div>
         <div class="flex gap-1">
           <select :value="personaEditorId" class="select select-bordered select-sm flex-1" @change="$emit('update:personaEditorId', ($event.target as HTMLSelectElement).value)">
             <option v-for="p in sortedPersonas" :key="p.id" :value="p.id">
