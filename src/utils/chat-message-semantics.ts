@@ -178,6 +178,23 @@ export function summarizeToolActivityForDisplay(
   };
 }
 
+function appendReasoningSection(sections: string[], value: unknown) {
+  const text = String(value || "").trim();
+  if (!text) return;
+  if (sections[sections.length - 1] === text) return;
+  sections.push(text);
+}
+
+function collectReasoningStandardForDisplay(message: ChatMessage, finalReasoning: string): string {
+  const sections: string[] = [];
+  for (const event of normalizeMessageToolHistoryEvents(message, "display")) {
+    if (event.role !== "assistant" || event.toolCalls.length === 0) continue;
+    appendReasoningSection(sections, event.reasoningContent);
+  }
+  appendReasoningSection(sections, finalReasoning);
+  return sections.join("\n\n");
+}
+
 function resolveTaskTrigger(message: ChatMessage): TaskTriggerMessageCard | undefined {
   const meta = (message.providerMeta || {}) as Record<string, unknown>;
   if (String(meta.messageKind || "").trim() !== "task_trigger") return undefined;
@@ -307,6 +324,7 @@ export function projectMessageForDisplay(message: ChatMessage): ChatMessageDispl
   const parsed = parseAssistantStoredText(rendered);
   const meta = (message.providerMeta || {}) as Record<string, unknown>;
   const toolSummary = summarizeToolActivityForDisplay(message);
+  const finalReasoningStandard = parsed.reasoningStandard || String(meta.reasoningStandard || "").trim();
   const taskTrigger = resolveTaskTrigger(message);
   const planCard = resolvePlanCard(message);
   const memeSegments = resolveMemeSegments(message);
@@ -342,7 +360,7 @@ export function projectMessageForDisplay(message: ChatMessage): ChatMessageDispl
           contactId,
         }
         : undefined,
-    reasoningStandard: parsed.reasoningStandard || String(meta.reasoningStandard || "").trim(),
+    reasoningStandard: collectReasoningStandardForDisplay(message, finalReasoningStandard),
     reasoningInline: parsed.reasoningInline || String(meta.reasoningInline || "").trim(),
     toolCallCount: toolSummary.count,
     lastToolName: toolSummary.lastToolName,

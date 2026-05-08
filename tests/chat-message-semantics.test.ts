@@ -86,6 +86,42 @@ describe("chat-message semantics", () => {
     expect(normalizeMessageToolHistoryEvents(message, "prompt")).toHaveLength(0);
   });
 
+  it("stitches tool round reasoning with final answer reasoning for display only", () => {
+    const message: ChatMessage = {
+      ...textMessage("a-4", "assistant", "终端版本是 PowerShell 7.5.4"),
+      providerMeta: {
+        reasoningStandard: "我已经拿到工具结果，现在直接回答用户终端版本。",
+      },
+      toolCall: [
+        {
+          role: "assistant",
+          reasoning_content: "先调用终端工具查看 PowerShell 版本。",
+          tool_calls: [{
+            id: "fc_3",
+            type: "function",
+            function: {
+              name: "shell_command",
+              arguments: "{\"command\":\"$PSVersionTable.PSVersion\"}",
+            },
+          }],
+        },
+        {
+          role: "tool",
+          tool_call_id: "fc_3",
+          content: "7.5.4",
+        },
+      ],
+    };
+
+    const projection = projectMessageForDisplay(message);
+
+    expect(projection.reasoningStandard).toBe([
+      "先调用终端工具查看 PowerShell 版本。",
+      "我已经拿到工具结果，现在直接回答用户终端版本。",
+    ].join("\n\n"));
+    expect(message.providerMeta?.reasoningStandard).toBe("我已经拿到工具结果，现在直接回答用户终端版本。");
+  });
+
   it("inspects undoable patch calls through normalized tool history", () => {
     const messages: ChatMessage[] = [
       textMessage("u-1", "user", "请改一下文件"),

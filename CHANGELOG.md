@@ -2,6 +2,7 @@
 
 ## 进行中
 
+- 修复（chat-reasoning-display-stitching）：前端展示层按工具调用轮次 `reasoning_content` 与最终答复 `reasoningStandard` 拼接完整思维链，不再要求后端把整轮思维链聚合进最终消息；流式思维链在工具状态边界后自动另起段落，并避免绑定流与普通事件重复写入导致内容重复。
 - 修复（chat-preview-conversation-binding-and-message-flow）：提示词预览改为强制传入 `conversationId` 并按会话主人格判定消息角色，缺参直接报错；最新用户附加块改为“无则追加、有则替换”以避免重复记忆块；同时收口工具轮与最终思维链的聚合/展开入口，并补齐预览、发送、停止写回相关回归测试。
 
 ## 发布：v0.9.75

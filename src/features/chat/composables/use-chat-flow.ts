@@ -195,6 +195,7 @@ type ConversationStreamCache = {
   frontendDispatchElapsedMs?: number;
   assistantText: string;
   reasoningStandard: string;
+  pendingReasoningStandardBreak: boolean;
   reasoningInline: string;
   toolStatusText: string;
   toolStatusState: "running" | "done" | "failed" | "";
@@ -259,6 +260,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
   // ── 流式统计 ──
   let streamToolCallCount = 0;
   let streamLastToolName = "";
+  let pendingReasoningStandardBreak = false;
   let activeHistoryMessageCount = 0;
   const conversationStreamCache = new Map<string, ConversationStreamCache>();
 
@@ -411,6 +413,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
       frontendDispatchElapsedMs: 0,
       assistantText: "",
       reasoningStandard: "",
+      pendingReasoningStandardBreak: false,
       reasoningInline: "",
       toolStatusText: "",
       toolStatusState: "",
@@ -447,6 +450,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
       frontendDispatchElapsedMs: positiveRoundedNumber(cache.frontendDispatchElapsedMs),
       assistantText: cache.assistantText,
       reasoningStandard: cache.reasoningStandard,
+      pendingReasoningStandardBreak: !!cache.pendingReasoningStandardBreak,
       reasoningInline: cache.reasoningInline,
       toolStatusText: cache.toolStatusText,
       toolStatusState: cache.toolStatusState,
@@ -501,6 +505,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
       frontendDispatchStartedAtMs,
       frontendDispatchElapsedMs: currentFrontendDispatchElapsedMs(),
       reasoningStandard: String(options.latestReasoningStandardText.value || ""),
+      pendingReasoningStandardBreak,
       reasoningInline: String(options.latestReasoningInlineText.value || ""),
       toolStatusText: String(options.toolStatusText.value || ""),
       toolStatusState: options.toolStatusState.value,
@@ -525,6 +530,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     if (cache.reasoningStandard || !options.latestReasoningStandardText.value) {
       options.latestReasoningStandardText.value = cache.reasoningStandard;
     }
+    pendingReasoningStandardBreak = !!cache.pendingReasoningStandardBreak;
     if (cache.reasoningInline || !options.latestReasoningInlineText.value) {
       options.latestReasoningInlineText.value = cache.reasoningInline;
     }
@@ -721,6 +727,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
       frontendDispatchElapsedMs: positiveRoundedNumber(snapshot.frontendDispatchElapsedMs || current.frontendDispatchElapsedMs),
       assistantText: String(snapshot.assistantText || ""),
       reasoningStandard: String(snapshot.reasoningStandard || ""),
+      pendingReasoningStandardBreak: current.pendingReasoningStandardBreak,
       reasoningInline: String(snapshot.reasoningInline || ""),
       toolStatusText: String(snapshot.toolStatusText || ""),
       toolStatusState: normalizeToolStatusState(snapshot.toolStatusState),
@@ -756,6 +763,9 @@ export function useChatFlow(options: UseChatFlowOptions) {
       if (parsed.kind === "tool_status") {
         const toolName = String(parsed.toolName || "").trim();
         const statusUpdate = applyToolStatusToStreamToolCalls(next.streamToolCalls, parsed);
+        if (String(next.reasoningStandard || "").trim()) {
+          next.pendingReasoningStandardBreak = true;
+        }
         next.streamToolCalls = statusUpdate.calls;
         if (parsed.toolStatus === "running" && toolName && parsed.toolCallId) {
           next.streamLastToolName = toolName;
@@ -773,7 +783,14 @@ export function useChatFlow(options: UseChatFlowOptions) {
         return next;
       }
       if (parsed.kind === "reasoning_standard" && delta) {
-        next.reasoningStandard += delta;
+        next.reasoningStandard = appendReasoningStandardDelta(
+          next.reasoningStandard,
+          delta,
+          next.pendingReasoningStandardBreak,
+        );
+        if (delta.trim()) {
+          next.pendingReasoningStandardBreak = false;
+        }
         changed = true;
         return next;
       }
@@ -872,6 +889,17 @@ export function useChatFlow(options: UseChatFlowOptions) {
       return typeof value === "string" ? value : "";
     }
     return "";
+  }
+
+  function appendReasoningStandardDelta(current: string, delta: string, shouldStartNewSection: boolean): string {
+    if (!delta) return current;
+    if (!shouldStartNewSection || !current.trim() || !delta.trim()) return `${current}${delta}`;
+    const separator = current.endsWith("\n\n") || current.endsWith("\r\n\r\n")
+      ? ""
+      : current.endsWith("\n") || current.endsWith("\r\n")
+        ? "\n"
+        : "\n\n";
+    return `${current}${separator}${delta.trimStart()}`;
   }
 
   function readAssistantEvent(message: unknown): AssistantDeltaEvent {
@@ -1333,6 +1361,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
 
     if (typeof result.reasoningStandard === "string") {
       options.latestReasoningStandardText.value = result.reasoningStandard;
+      pendingReasoningStandardBreak = false;
     }
     if (typeof result.reasoningInline === "string") {
       options.latestReasoningInlineText.value = result.reasoningInline;
@@ -1391,6 +1420,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     options.latestAssistantText.value = "";
     options.latestReasoningStandardText.value = "";
     options.latestReasoningInlineText.value = "";
+    pendingReasoningStandardBreak = false;
     options.chatErrorText.value = options.formatRequestFailed(error);
     if (!options.toolStatusText.value) {
       options.toolStatusState.value = "failed";
@@ -1425,6 +1455,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     options.latestAssistantText.value = "";
     options.latestReasoningStandardText.value = "";
     options.latestReasoningInlineText.value = "";
+    pendingReasoningStandardBreak = false;
     options.toolStatusText.value = "";
     options.toolStatusState.value = "";
     if (options.streamToolCalls) options.streamToolCalls.value = [];
@@ -1642,6 +1673,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
       options.latestAssistantText.value = readMessagePlainText(existingDraft);
       options.latestReasoningStandardText.value = String(existingDraftMeta.reasoningStandard || "");
       options.latestReasoningInlineText.value = String(existingDraftMeta.reasoningInline || "");
+      pendingReasoningStandardBreak = false;
     }
     activeHistoryMessageCount = formalizeMessages(options.allMessages.value).length;
     const draftId = existingDraftId || insertDraft(gen);
@@ -1709,6 +1741,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
       options.latestAssistantText.value = readMessagePlainText(existingDraft);
       options.latestReasoningStandardText.value = String(existingDraftMeta.reasoningStandard || "");
       options.latestReasoningInlineText.value = String(existingDraftMeta.reasoningInline || "");
+      pendingReasoningStandardBreak = false;
     }
     activeHistoryMessageCount = formalizeMessages(options.allMessages.value).length;
     const draftId = existingDraftId || insertDraft(gen);
@@ -1942,6 +1975,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     options.latestAssistantText.value = "";
     options.latestReasoningStandardText.value = "";
     options.latestReasoningInlineText.value = "";
+    pendingReasoningStandardBreak = false;
     options.chatErrorText.value = options.formatRequestFailed(error);
     if (!options.toolStatusText.value) {
       options.toolStatusState.value = "failed";
@@ -2022,6 +2056,9 @@ export function useChatFlow(options: UseChatFlowOptions) {
     }
 
     if (parsed.kind === "tool_status") {
+      if (String(options.latestReasoningStandardText.value || "").trim()) {
+        pendingReasoningStandardBreak = true;
+      }
       const toolName = String(parsed.toolName || "").trim();
       if (options.streamToolCalls) {
         const statusUpdate = applyToolStatusToStreamToolCalls(options.streamToolCalls.value, parsed);
@@ -2053,7 +2090,12 @@ export function useChatFlow(options: UseChatFlowOptions) {
     if (parsed.kind === "reasoning_standard") {
       const dt = readDeltaMessage(parsed);
       if (dt && reasoningStartedAtMs.value === 0) reasoningStartedAtMs.value = Date.now();
-      options.latestReasoningStandardText.value += dt;
+      options.latestReasoningStandardText.value = appendReasoningStandardDelta(
+        options.latestReasoningStandardText.value,
+        dt,
+        pendingReasoningStandardBreak,
+      );
+      if (dt.trim()) pendingReasoningStandardBreak = false;
       syncCurrentDisplayStateToConversationStreamCache();
       if (currentRound.phase === "streaming") {
         updateDraftText(currentRound.draftId);
@@ -2324,14 +2366,17 @@ export function useChatFlow(options: UseChatFlowOptions) {
     if (activeActivationId && eventActivationId && eventActivationId !== activeActivationId) {
       return;
     }
-    if (cacheConversationId) {
-      applyAssistantEventToConversationStreamCache(cacheConversationId, parsed);
-    }
     if (currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId) {
+      if (cacheConversationId) {
+        applyAssistantEventToConversationStreamCache(cacheConversationId, parsed);
+      }
       return;
     }
     if (parsed.kind !== "tool_status" && assistantEventHasVisibleProgress(parsed) && hasActiveBoundDeltaChannel(cacheConversationId)) {
       return;
+    }
+    if (cacheConversationId) {
+      applyAssistantEventToConversationStreamCache(cacheConversationId, parsed);
     }
     const shouldProjectFromAppEvent =
       parsed.kind === "tool_status"
