@@ -2,6 +2,7 @@
 
 ## 进行中
 
+- 优化（settings-layout-unification）：配置页右侧内容统一走 `SettingsStickyLayout` 尺寸与滚动框架；没有固定头部的页面不再额外占位，避免不同设置页高度和滚动行为不一致。
 - 优化（settings-segmented-control）：抽取配置页通用分段单选控件，并统一外观字重、浅深色、界面尺寸、任务筛选、对话风格、PDF 阅读方式、后台截图范围与人格记忆模式等单选入口的交互样式。
 - 优化（workspace-copy-tightening）：工具设置页的自我目录文案改为只描述 PAI 自我目录的共用资料夹用途，移除终端下拉框冗余说明；会话目录选择器提示改为说明“希望 AI 看到的文件夹”和“工具执行根目录”。
 - 修复（chat-reasoning-display-stitching）：前端展示层按工具调用轮次 `reasoning_content` 与最终答复 `reasoningStandard` 拼接完整思维链，不再要求后端把整轮思维链聚合进最终消息；流式思维链在工具状态边界后自动另起段落，并避免绑定流与普通事件重复写入导致内容重复。

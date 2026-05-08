@@ -62,10 +62,7 @@
       </ul>
     </div>
 
-    <div
-      class="flex-1 min-w-0"
-      :class="props.configTab === 'api' || props.configTab === 'department' || props.configTab === 'departmentTree' || props.configTab === 'demo' ? 'flex min-h-0 flex-col overflow-hidden' : 'overflow-y-auto scrollbar-gutter-stable'"
-    >
+    <div class="flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden">
       <div v-if="props.configTab === 'api'" class="flex-1 min-h-0">
         <ApiTab
           :config="config"
@@ -116,146 +113,146 @@
         />
       </div>
 
-      <SettingsContentContainer v-else>
-        <WelcomeTab
-          v-if="props.configTab === 'welcome'"
-          :config="config"
-          :personas="personas"
-          @jump="$emit('update:configTab', $event)"
-        />
+      <SettingsStickyLayout v-else>
+          <WelcomeTab
+            v-if="props.configTab === 'welcome'"
+            :config="config"
+            :personas="personas"
+            @jump="$emit('update:configTab', $event)"
+          />
 
-        <HotkeyTab
-          v-else-if="props.configTab === 'hotkey'"
-          :config="config"
-          :hotkey-test-recording="hotkeyTestRecording"
-          :hotkey-test-recording-ms="hotkeyTestRecordingMs"
-          :hotkey-test-audio-ready="hotkeyTestAudioReady"
-          @start-hotkey-record-test="$emit('startHotkeyRecordTest')"
-          @stop-hotkey-record-test="$emit('stopHotkeyRecordTest')"
-          @play-hotkey-record-test="$emit('playHotkeyRecordTest')"
-          @capture-hotkey="$emit('captureHotkey', $event)"
-          @summon-chat-now="$emit('summonChatNow')"
-          @update:record-hotkey="onRecordHotkeyChanged"
-          @update:record-background-wake-enabled="onRecordBackgroundWakeChanged"
-          @update:min-record-seconds="onMinRecordSecondsChanged"
-          @update:max-record-seconds="onMaxRecordSecondsChanged"
-        />
+          <HotkeyTab
+            v-else-if="props.configTab === 'hotkey'"
+            :config="config"
+            :hotkey-test-recording="hotkeyTestRecording"
+            :hotkey-test-recording-ms="hotkeyTestRecordingMs"
+            :hotkey-test-audio-ready="hotkeyTestAudioReady"
+            @start-hotkey-record-test="$emit('startHotkeyRecordTest')"
+            @stop-hotkey-record-test="$emit('stopHotkeyRecordTest')"
+            @play-hotkey-record-test="$emit('playHotkeyRecordTest')"
+            @capture-hotkey="$emit('captureHotkey', $event)"
+            @summon-chat-now="$emit('summonChatNow')"
+            @update:record-hotkey="onRecordHotkeyChanged"
+            @update:record-background-wake-enabled="onRecordBackgroundWakeChanged"
+            @update:min-record-seconds="onMinRecordSecondsChanged"
+            @update:max-record-seconds="onMaxRecordSecondsChanged"
+          />
 
-        <ToolsTab
-          v-else-if="props.configTab === 'tools'"
-          :config="config"
-          :personas="assistantPersonas"
-          :tool-api-config="toolApiConfig"
-          :tool-statuses="toolStatuses"
-          :saving-config="savingConfig"
-          @save-api-config="onSaveToolsConfig"
-        />
-        <McpTab
-          v-else-if="props.configTab === 'mcp'"
-        />
-        <SkillTab
-          v-else-if="props.configTab === 'skill'"
-        />
+          <ToolsTab
+            v-else-if="props.configTab === 'tools'"
+            :config="config"
+            :personas="assistantPersonas"
+            :tool-api-config="toolApiConfig"
+            :tool-statuses="toolStatuses"
+            :saving-config="savingConfig"
+            @save-api-config="onSaveToolsConfig"
+          />
+          <McpTab
+            v-else-if="props.configTab === 'mcp'"
+          />
+          <SkillTab
+            v-else-if="props.configTab === 'skill'"
+          />
 
-        <PersonaTab
-          v-else-if="props.configTab === 'persona'"
-          :personas="personas"
-          :assistant-personas="assistantPersonas"
-          :persona-editor-id="personaEditorId"
-          :selected-persona="selectedPersona"
-          :selected-persona-avatar-url="selectedPersonaAvatarUrl"
-          :avatar-saving="avatarSaving"
-          :avatar-error="avatarError"
-          :persona-saving="personaSaving"
-          :persona-dirty="personaDirty"
-          @update:persona-editor-id="$emit('update:personaEditorId', $event)"
-          @add-persona="$emit('addPersona')"
-          @remove-selected-persona="$emit('removeSelectedPersona')"
-          @reset-personas="$emit('resetPersonas')"
-          @open-avatar-editor="openAvatarEditorForSelected"
-          @import-persona-memories="$emit('importPersonaMemories', $event)"
-          @save-personas="$emit('savePersonas')"
-        />
+          <PersonaTab
+            v-else-if="props.configTab === 'persona'"
+            :personas="personas"
+            :assistant-personas="assistantPersonas"
+            :persona-editor-id="personaEditorId"
+            :selected-persona="selectedPersona"
+            :selected-persona-avatar-url="selectedPersonaAvatarUrl"
+            :avatar-saving="avatarSaving"
+            :avatar-error="avatarError"
+            :persona-saving="personaSaving"
+            :persona-dirty="personaDirty"
+            @update:persona-editor-id="$emit('update:personaEditorId', $event)"
+            @add-persona="$emit('addPersona')"
+            @remove-selected-persona="$emit('removeSelectedPersona')"
+            @reset-personas="$emit('resetPersonas')"
+            @open-avatar-editor="openAvatarEditorForSelected"
+            @import-persona-memories="$emit('importPersonaMemories', $event)"
+            @save-personas="$emit('savePersonas')"
+          />
 
-        <ChatSettingsTab
-          v-else-if="props.configTab === 'chatSettings'"
-          :config="config"
-          :text-capable-api-configs="textCapableApiConfigs"
-          :image-capable-api-configs="imageCapableApiConfigs"
-          :stt-capable-api-configs="sttCapableApiConfigs"
-          :response-style-options="responseStyleOptions"
-          :response-style-id="responseStyleId"
-          :pdf-read-mode="pdfReadMode"
-          :background-voice-screenshot-keywords="backgroundVoiceScreenshotKeywords"
-          :background-voice-screenshot-mode="backgroundVoiceScreenshotMode"
-          :instruction-presets="instructionPresets"
-          :cache-stats="cacheStats"
-          :cache-stats-loading="cacheStatsLoading"
-          @update:response-style-id="$emit('update:responseStyleId', $event)"
-          @update:pdf-read-mode="$emit('update:pdfReadMode', $event)"
-          @update:background-voice-screenshot-keywords="$emit('update:backgroundVoiceScreenshotKeywords', $event)"
-          @update:background-voice-screenshot-mode="$emit('update:backgroundVoiceScreenshotMode', $event)"
-          @update:instruction-presets="$emit('update:instructionPresets', $event)"
-          @patch-conversation-api-settings="$emit('patchConversationApiSettings', $event)"
-          @patch-chat-settings="$emit('patchChatSettings', $event)"
-          @open-current-history="$emit('openCurrentHistory')"
-          @open-prompt-preview="$emit('openPromptPreview')"
-          @open-system-prompt-preview="$emit('openSystemPromptPreview')"
-          @refresh-image-cache-stats="$emit('refreshImageCacheStats')"
-          @clear-image-cache="$emit('clearImageCache')"
-        />
-        <RemoteImTab
-          v-else-if="props.configTab === 'remoteIm'"
-          :config="config"
-          :save-config-action="saveConfigAction"
-          :set-status-action="setStatusAction"
-        />
+          <ChatSettingsTab
+            v-else-if="props.configTab === 'chatSettings'"
+            :config="config"
+            :text-capable-api-configs="textCapableApiConfigs"
+            :image-capable-api-configs="imageCapableApiConfigs"
+            :stt-capable-api-configs="sttCapableApiConfigs"
+            :response-style-options="responseStyleOptions"
+            :response-style-id="responseStyleId"
+            :pdf-read-mode="pdfReadMode"
+            :background-voice-screenshot-keywords="backgroundVoiceScreenshotKeywords"
+            :background-voice-screenshot-mode="backgroundVoiceScreenshotMode"
+            :instruction-presets="instructionPresets"
+            :cache-stats="cacheStats"
+            :cache-stats-loading="cacheStatsLoading"
+            @update:response-style-id="$emit('update:responseStyleId', $event)"
+            @update:pdf-read-mode="$emit('update:pdfReadMode', $event)"
+            @update:background-voice-screenshot-keywords="$emit('update:backgroundVoiceScreenshotKeywords', $event)"
+            @update:background-voice-screenshot-mode="$emit('update:backgroundVoiceScreenshotMode', $event)"
+            @update:instruction-presets="$emit('update:instructionPresets', $event)"
+            @patch-conversation-api-settings="$emit('patchConversationApiSettings', $event)"
+            @patch-chat-settings="$emit('patchChatSettings', $event)"
+            @open-current-history="$emit('openCurrentHistory')"
+            @open-prompt-preview="$emit('openPromptPreview')"
+            @open-system-prompt-preview="$emit('openSystemPromptPreview')"
+            @refresh-image-cache-stats="$emit('refreshImageCacheStats')"
+            @clear-image-cache="$emit('clearImageCache')"
+          />
+          <RemoteImTab
+            v-else-if="props.configTab === 'remoteIm'"
+            :config="config"
+            :save-config-action="saveConfigAction"
+            :set-status-action="setStatusAction"
+          />
 
-        <MemoryTab
-          v-else-if="props.configTab === 'memory'"
-          :sync-locked="memorySyncLocked"
-          @sync-lock-change="onMemorySyncLockChange"
-        />
+          <MemoryTab
+            v-else-if="props.configTab === 'memory'"
+            :sync-locked="memorySyncLocked"
+            @sync-lock-change="onMemorySyncLockChange"
+          />
 
-        <TaskTab
-          v-else-if="props.configTab === 'task'"
-        />
+          <TaskTab
+            v-else-if="props.configTab === 'task'"
+          />
 
-        <LogTab
-          v-else-if="props.configTab === 'logs'"
-          :config="config"
-          :open-runtime-logs="() => $emit('openRuntimeLogs')"
-        />
+          <LogTab
+            v-else-if="props.configTab === 'logs'"
+            :config="config"
+            :open-runtime-logs="() => $emit('openRuntimeLogs')"
+          />
 
-        <AppearanceTab
-          v-else-if="props.configTab === 'appearance'"
-          :ui-language="uiLanguage"
-          :locale-options="localeOptions"
-          :current-theme="currentTheme"
-          :generated-theme-controls="generatedThemeControls"
-          :generated-theme-tokens="generatedThemeTokens"
-          :webview-zoom-percent="webviewZoomPercent"
-          @update:ui-language="$emit('update:uiLanguage', $event)"
-          @update:webview-zoom-percent="$emit('update:webviewZoomPercent', $event)"
-          @set-theme="$emit('setTheme', $event)"
-          @activate-generated-theme="$emit('activateGeneratedTheme')"
-          @update-generated-theme-controls="$emit('updateGeneratedThemeControls', $event)"
-          @reset-generated-theme="$emit('resetGeneratedTheme')"
-        />
+          <AppearanceTab
+            v-else-if="props.configTab === 'appearance'"
+            :ui-language="uiLanguage"
+            :locale-options="localeOptions"
+            :current-theme="currentTheme"
+            :generated-theme-controls="generatedThemeControls"
+            :generated-theme-tokens="generatedThemeTokens"
+            :webview-zoom-percent="webviewZoomPercent"
+            @update:ui-language="$emit('update:uiLanguage', $event)"
+            @update:webview-zoom-percent="$emit('update:webviewZoomPercent', $event)"
+            @set-theme="$emit('setTheme', $event)"
+            @activate-generated-theme="$emit('activateGeneratedTheme')"
+            @update-generated-theme-controls="$emit('updateGeneratedThemeControls', $event)"
+            @reset-generated-theme="$emit('resetGeneratedTheme')"
+          />
 
-        <MigrationTab
-          v-else-if="props.configTab === 'migration'"
-        />
+          <MigrationTab
+            v-else-if="props.configTab === 'migration'"
+          />
 
-        <AboutTab
-          v-else-if="props.configTab === 'about'"
-          :github-update-method="props.config.githubUpdateMethod || 'auto'"
-          :checking-update="checkingUpdate"
-          @update:github-update-method="$emit('update:githubUpdateMethod', $event)"
-          @check-update="$emit('checkUpdate')"
-          @open-github="$emit('openGithub')"
-        />
-      </SettingsContentContainer>
+          <AboutTab
+            v-else-if="props.configTab === 'about'"
+            :github-update-method="props.config.githubUpdateMethod || 'auto'"
+            :checking-update="checkingUpdate"
+            @update:github-update-method="$emit('update:githubUpdateMethod', $event)"
+            @check-update="$emit('checkUpdate')"
+            @open-github="$emit('openGithub')"
+          />
+      </SettingsStickyLayout>
     </div>
 
     <!-- Dialogs -->
@@ -371,7 +368,7 @@ import { useI18n } from "vue-i18n";
 import type { ApiConfigItem, AppConfig, ChatSettingsPatch, ConversationApiSettingsPatch, ImageTextCacheStats, PersonaProfile, PromptCommandPreset, ResponseStyleOption, ToolLoadStatus } from "../../../types/app";
 import type { GeneratedThemeControls, GeneratedThemeTokens } from "../../shell/theme/theme-types";
 import Cropper from "cropperjs";
-import SettingsContentContainer from "../components/SettingsContentContainer.vue";
+import SettingsStickyLayout from "../components/SettingsStickyLayout.vue";
 import WelcomeTab from "./config-tabs/WelcomeTab.vue";
 import HotkeyTab from "./config-tabs/HotkeyTab.vue";
 import ApiTab from "./config-tabs/ApiTab.vue";
@@ -967,9 +964,3 @@ onBeforeUnmount(() => {
   destroyCropper();
 });
 </script>
-
-<style scoped>
-.scrollbar-gutter-stable {
-  scrollbar-gutter: stable;
-}
-</style>

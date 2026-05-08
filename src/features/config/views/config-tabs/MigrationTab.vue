@@ -6,7 +6,7 @@
       <div class="card bg-base-100 border border-base-300 shadow-sm">
         <div class="card-body flex flex-col gap-5">
           <div class="flex items-start gap-4">
-            <div class="flex items-center justify-center rounded-box bg-sky-100 p-3 text-sky-700">
+            <div class="flex items-center justify-center rounded-box bg-info/15 p-3 text-info">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 0-4 4m4-4 4 4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
               </svg>
@@ -17,9 +17,9 @@
             </div>
           </div>
 
-          <div class="rounded-box border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          <div class="rounded-box border border-info/25 bg-info/10 px-4 py-3 text-sm text-base-content">
             <div class="flex items-center gap-3">
-              <div class="flex items-center justify-center rounded-full bg-sky-200/80 px-2 py-1 text-sm font-bold">i</div>
+              <div class="flex items-center justify-center rounded-full bg-info/20 px-2 py-1 text-sm font-bold text-info">i</div>
               <span>{{ t("config.migration.exportNotice") }}</span>
             </div>
           </div>
@@ -59,7 +59,7 @@
       <div class="card bg-base-100 border border-base-300 shadow-sm">
         <div class="card-body flex flex-col gap-5">
           <div class="flex items-start gap-4">
-            <div class="flex items-center justify-center rounded-box bg-teal-100 p-3 text-teal-700">
+            <div class="flex items-center justify-center rounded-box bg-success/15 p-3 text-success">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v12m0 0 4-4m-4 4-4-4M4 9V6a2 2 0 0 1 2-2h4m10 5V6a2 2 0 0 0-2-2h-4" />
               </svg>
@@ -70,16 +70,16 @@
             </div>
           </div>
 
-          <div class="rounded-box border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          <div class="rounded-box border border-info/25 bg-info/10 px-4 py-3 text-sm text-base-content">
             <div class="flex items-center gap-3">
-              <div class="flex items-center justify-center rounded-full bg-sky-200/80 px-2 py-1 text-sm font-bold">i</div>
+              <div class="flex items-center justify-center rounded-full bg-info/20 px-2 py-1 text-sm font-bold text-info">i</div>
               <span>{{ t("config.migration.importNotice") }}</span>
             </div>
           </div>
 
           <button
             type="button"
-            class="flex w-full flex-col items-center justify-center rounded-box border-2 border-dashed border-base-300 bg-base-100 px-6 py-8 text-center transition hover:border-teal-300 hover:bg-teal-50/40"
+            class="flex w-full flex-col items-center justify-center rounded-box border-2 border-dashed border-base-300 bg-base-100 px-6 py-8 text-center transition hover:border-primary/50 hover:bg-primary/5"
             :disabled="busy"
             @click="handleSelectImportPackage"
           >
