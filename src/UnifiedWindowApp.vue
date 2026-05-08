@@ -204,7 +204,10 @@
       :prompt-preview-latest-user-text="promptPreviewLatestUserText"
       :prompt-preview-latest-images="promptPreviewLatestImages"
       :prompt-preview-latest-audios="promptPreviewLatestAudios"
+      :prompt-preview-conversation-id="promptPreviewConversationId"
+      :prompt-preview-conversation-options="promptPreviewConversationOptions"
       :load-prompt-preview="loadPromptPreview"
+      :select-prompt-preview-conversation="selectPromptPreviewConversation"
       :set-memory-dialog-ref="setMemoryDialogRef"
       :set-prompt-preview-dialog-ref="setPromptPreviewDialogRef"
       :set-status="setStatus"
@@ -848,23 +851,6 @@ const updateToLatestTitle = computed(() => {
 });
 
 const {
-  promptPreviewDialog,
-  promptPreviewLoading,
-  promptPreviewText,
-  promptPreviewLatestUserText,
-  promptPreviewLatestImages,
-  promptPreviewLatestAudios,
-  promptPreviewMode,
-  loadPromptPreview,
-  openPromptPreview: openPromptPreviewDialog,
-  openSystemPromptPreview: openSystemPromptPreviewDialog,
-  closePromptPreview,
-} = usePromptPreview({
-  t: tr,
-  currentConversationId: currentChatConversationId,
-});
-
-const {
   archives,
   archiveBlocks,
   archiveMessages,
@@ -910,6 +896,27 @@ const {
   t: tr,
   setStatus,
   setStatusError,
+});
+
+const {
+  promptPreviewDialog,
+  promptPreviewLoading,
+  promptPreviewText,
+  promptPreviewLatestUserText,
+  promptPreviewLatestImages,
+  promptPreviewLatestAudios,
+  promptPreviewMode,
+  promptPreviewConversationId,
+  promptPreviewConversationOptions,
+  loadPromptPreview,
+  openPromptPreview: openPromptPreviewDialog,
+  openSystemPromptPreview: openSystemPromptPreviewDialog,
+  selectPromptPreviewConversation,
+  closePromptPreview,
+} = usePromptPreview({
+  t: tr,
+  currentConversationId: currentChatConversationId,
+  localConversations: computed(() => unarchivedConversations.value),
 });
 
 const {

@@ -312,6 +312,9 @@
         :chat-text="'对话'"
         :compaction-text="'压缩'"
         :archive-text="'归档'"
+        :conversation-text="'会话'"
+        :selected-conversation-id="promptPreviewConversationId"
+        :conversation-options="promptPreviewConversationOptions"
         :latest-input-length-text="t('prompt.latestInputLength')"
         :images-text="t('prompt.images')"
         :audios-text="t('prompt.audios')"
@@ -321,6 +324,7 @@
         :latest-audios="promptPreviewLatestAudios"
         :text="promptPreviewText"
         @select-mode="loadPromptPreview"
+        @select-conversation="selectPromptPreviewConversation"
         @close="closePromptPreview"
       />
     </dialog>
@@ -563,7 +567,10 @@ const props = defineProps<{
   promptPreviewLatestUserText: string;
   promptPreviewLatestImages: number;
   promptPreviewLatestAudios: number;
+  promptPreviewConversationId: string;
+  promptPreviewConversationOptions: Array<{ conversationId: string; title: string }>;
   loadPromptPreview: (mode: "chat" | "compaction" | "archive") => void;
+  selectPromptPreviewConversation: (conversationId: string) => void;
   setMemoryDialogRef: (el: Element | null) => void;
   setPromptPreviewDialogRef: (el: Element | null) => void;
   updateConfigTab: (value: "hotkey" | "api" | "tools" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "remoteIm" | "memory" | "task" | "logs" | "appearance" | "about") => void;

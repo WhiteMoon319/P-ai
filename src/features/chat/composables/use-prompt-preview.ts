@@ -1,7 +1,8 @@
-import { ref } from "vue";
-import type { Ref } from "vue";
+import { computed, ref, watch } from "vue";
+import type { ComputedRef, Ref } from "vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import { formatI18nError } from "../../../utils/error";
+import type { UnarchivedConversationSummary } from "../../../types/app";
 
 type TrFn = (key: string, params?: Record<string, unknown>) => string;
 
@@ -22,6 +23,7 @@ type SystemPromptPreviewResult = {
 type UsePromptPreviewOptions = {
   t: TrFn;
   currentConversationId: Ref<string>;
+  localConversations: ComputedRef<UnarchivedConversationSummary[]>;
 };
 
 export function usePromptPreview(options: UsePromptPreviewOptions) {
@@ -34,14 +36,47 @@ export function usePromptPreview(options: UsePromptPreviewOptions) {
   const promptPreviewMode = ref<RequestPreviewMode | "system" | null>(null);
   const promptPreviewApiConfigId = ref("");
   const promptPreviewAgentId = ref("");
+  const promptPreviewConversationId = ref("");
+  const promptPreviewConversationOptions = ref<Array<{ conversationId: string; title: string }>>([]);
+
+  function localConversationOptionsFromSource(source: UnarchivedConversationSummary[]) {
+    return (source || [])
+      .map((item) => ({
+        conversationId: String(item.conversationId || "").trim(),
+        title: String(item.title || "").trim(),
+      }))
+      .filter((item) => !!item.conversationId);
+  }
+
+  async function ensurePromptPreviewConversationOptions() {
+    const cached = localConversationOptionsFromSource(options.localConversations.value || []);
+    if (cached.length > 0) {
+      promptPreviewConversationOptions.value = cached;
+      return;
+    }
+    try {
+      const fetched = await invokeTauri<UnarchivedConversationSummary[]>("list_unarchived_conversations");
+      promptPreviewConversationOptions.value = localConversationOptionsFromSource(Array.isArray(fetched) ? fetched : []);
+    } catch {
+      promptPreviewConversationOptions.value = [];
+    }
+  }
 
   function buildPreviewSessionInput(apiConfigId: string, agentId: string) {
-    const conversationId = String(options.currentConversationId.value || "").trim();
+    const conversationId = String(promptPreviewConversationId.value || "").trim();
     return {
       apiConfigId,
       agentId,
       conversationId: conversationId || undefined,
     };
+  }
+
+  function resolveInitialPromptPreviewConversationId() {
+    const currentConversationId = String(options.currentConversationId.value || "").trim();
+    if (currentConversationId && promptPreviewConversationOptions.value.some((item) => item.conversationId === currentConversationId)) {
+      return currentConversationId;
+    }
+    return String(promptPreviewConversationOptions.value[0]?.conversationId || "").trim();
   }
 
   function resetPromptPreviewState(mode: RequestPreviewMode | "system" | null) {
@@ -51,6 +86,7 @@ export function usePromptPreview(options: UsePromptPreviewOptions) {
     promptPreviewLatestUserText.value = "";
     promptPreviewLatestImages.value = 0;
     promptPreviewLatestAudios.value = 0;
+    promptPreviewConversationId.value = resolveInitialPromptPreviewConversationId();
     promptPreviewDialog.value?.showModal();
   }
 
@@ -58,6 +94,7 @@ export function usePromptPreview(options: UsePromptPreviewOptions) {
     if (!apiConfigId || !agentId) return;
     promptPreviewApiConfigId.value = apiConfigId;
     promptPreviewAgentId.value = agentId;
+    await ensurePromptPreviewConversationOptions();
     resetPromptPreviewState(null);
   }
 
@@ -85,15 +122,14 @@ export function usePromptPreview(options: UsePromptPreviewOptions) {
     }
   }
 
-  async function openSystemPromptPreview(apiConfigId: string, agentId: string) {
-    if (!apiConfigId || !agentId) return;
-    promptPreviewApiConfigId.value = apiConfigId;
-    promptPreviewAgentId.value = agentId;
-    resetPromptPreviewState("system");
+  async function loadSystemPromptPreview() {
+    if (!promptPreviewApiConfigId.value || !promptPreviewAgentId.value) return;
+    promptPreviewMode.value = "system";
     promptPreviewLoading.value = true;
+    promptPreviewText.value = "";
     try {
       const preview = await invokeTauri<SystemPromptPreviewResult>("get_system_prompt_preview", {
-        input: buildPreviewSessionInput(apiConfigId, agentId),
+        input: buildPreviewSessionInput(promptPreviewApiConfigId.value, promptPreviewAgentId.value),
       });
       promptPreviewText.value = preview.systemPrompt || "";
     } catch (e) {
@@ -103,9 +139,43 @@ export function usePromptPreview(options: UsePromptPreviewOptions) {
     }
   }
 
+  async function openSystemPromptPreview(apiConfigId: string, agentId: string) {
+    if (!apiConfigId || !agentId) return;
+    promptPreviewApiConfigId.value = apiConfigId;
+    promptPreviewAgentId.value = agentId;
+    await ensurePromptPreviewConversationOptions();
+    resetPromptPreviewState("system");
+    await loadSystemPromptPreview();
+  }
+
   function closePromptPreview() {
     promptPreviewDialog.value?.close();
   }
+
+  async function selectPromptPreviewConversation(conversationId: string) {
+    promptPreviewConversationId.value = String(conversationId || "").trim();
+    if (promptPreviewMode.value === "system") {
+      await loadSystemPromptPreview();
+      return;
+    }
+    if (promptPreviewMode.value) {
+      await loadPromptPreview(promptPreviewMode.value);
+    }
+  }
+
+  watch(
+    () => options.localConversations.value,
+    (value) => {
+      const next = localConversationOptionsFromSource(value || []);
+      if (next.length > 0) {
+        promptPreviewConversationOptions.value = next;
+        if (!promptPreviewConversationId.value) {
+          promptPreviewConversationId.value = resolveInitialPromptPreviewConversationId();
+        }
+      }
+    },
+    { deep: true },
+  );
 
   return {
     promptPreviewDialog,
@@ -115,9 +185,12 @@ export function usePromptPreview(options: UsePromptPreviewOptions) {
     promptPreviewLatestImages,
     promptPreviewLatestAudios,
     promptPreviewMode,
+    promptPreviewConversationId,
+    promptPreviewConversationOptions,
     loadPromptPreview,
     openPromptPreview,
     openSystemPromptPreview,
+    selectPromptPreviewConversation,
     closePromptPreview,
   };
 }
