@@ -67,6 +67,20 @@ async fn handle_weixin_oc_inbound_message(
     let creds = WeixinOcCredentials::from_value(&channel.credentials);
     let client = build_weixin_oc_http_client(creds.normalized_api_timeout_ms())?;
     let media = weixin_oc_collect_media(state, &client, &creds, &item_list).await?;
+    let final_text = {
+        let mut chunks = Vec::<String>::new();
+        if !text.trim().is_empty() {
+            chunks.push(text.trim().to_string());
+        }
+        chunks.extend(
+            media
+                .notices
+                .iter()
+                .map(|item| item.trim().to_string())
+                .filter(|item| !item.is_empty()),
+        );
+        chunks.join("\n")
+    };
     let runtime = state_read_runtime_state_cached(state)?;
     let display_name = weixin_oc_contact_display_name(&runtime, channel, from_user_id);
     let message_id = msg
@@ -96,8 +110,16 @@ async fn handle_weixin_oc_inbound_message(
                 agent_id: String::new(),
             },
             payload: ChatInputPayload {
-                text: if text.is_empty() { None } else { Some(text.clone()) },
-                display_text: if text.is_empty() { None } else { Some(text) },
+                text: if final_text.is_empty() {
+                    None
+                } else {
+                    Some(final_text.clone())
+                },
+                display_text: if final_text.is_empty() {
+                    None
+                } else {
+                    Some(final_text)
+                },
                 images: if media.images.is_empty() {
                     None
                 } else {

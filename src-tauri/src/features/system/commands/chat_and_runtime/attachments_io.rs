@@ -65,6 +65,7 @@ fn media_mime_from_path(path: &std::path::Path) -> Option<&'static str> {
         "jpg" | "jpeg" => Some("image/jpeg"),
         "gif" => Some("image/gif"),
         "webp" => Some("image/webp"),
+        "bmp" => Some("image/bmp"),
         "heic" => Some("image/heic"),
         "heif" => Some("image/heif"),
         "svg" => Some("image/svg+xml"),
@@ -86,6 +87,7 @@ fn media_extension_from_mime_for_download(mime: &str) -> &'static str {
         "image/jpeg" => "jpg",
         "image/gif" => "gif",
         "image/webp" => "webp",
+        "image/bmp" => "bmp",
         "image/heic" => "heic",
         "image/heif" => "heif",
         "image/svg+xml" => "svg",
@@ -258,9 +260,10 @@ fn workspace_relative_path(state: &AppState, absolute: &std::path::Path) -> Stri
         .unwrap_or_else(|| absolute.to_string_lossy().replace('\\', "/"))
 }
 
-fn build_attachment_notice_text(file_name: &str, relative_path: &str) -> String {
+fn build_attachment_notice_text(_file_name: &str, relative_path: &str) -> String {
     format!(
-        "用户本次上传了一个附件：{file_name}\n保存到了你工作区的downloads文件夹内（路径：{relative_path}）\n如果需要，请使用 shell 工具读取该文件内容。"
+        "用户发送了一个附件，位于 {{Self Directory}}/{}",
+        relative_path
     )
 }
 
@@ -294,6 +297,7 @@ fn queue_attachment_from_raw(
             | "image/jpeg"
             | "image/gif"
             | "image/webp"
+            | "image/bmp"
     ) && raw.len() <= MAX_MULTIMODAL_BYTES;
 
     // 入队即落盘：附件进入队列后立刻可在 downloads 查看与复查。
@@ -484,4 +488,3 @@ fn queue_inline_file_attachment(
         &raw,
     )
 }
-

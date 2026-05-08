@@ -786,6 +786,19 @@
         }
     }
 
+    fn remote_im_test_png(width: u32, height: u32) -> Vec<u8> {
+        let image = image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            width,
+            height,
+            image::Rgba([12, 34, 56, 255]),
+        ));
+        let mut cursor = std::io::Cursor::new(Vec::<u8>::new());
+        image
+            .write_to(&mut cursor, image::ImageFormat::Png)
+            .expect("encode png");
+        cursor.into_inner()
+    }
+
     #[tokio::test]
     async fn onebot_event_consumer_should_remain_singleton_per_channel() {
         let manager = OnebotV11WsManager::new();
@@ -897,6 +910,65 @@
             dingtalk_session_webhook_expired_time: None,
             shell_workspaces: Vec::new(),
         }
+    }
+
+    #[test]
+    fn dingtalk_push_normalized_image_or_attachment_should_fallback_to_attachment_on_oversized_image() {
+        let state = remote_im_test_state();
+        let raw = remote_im_test_png(10_001, 8);
+        let mut images = Vec::<BinaryPart>::new();
+        let mut attachments = Vec::<AttachmentMetaInput>::new();
+
+        let notice = dingtalk_push_normalized_image_or_attachment(
+            &state,
+            &raw,
+            "image/png",
+            "dingtalk-oversized.png",
+            &mut images,
+            &mut attachments,
+            "",
+        );
+
+        assert!(images.is_empty());
+        assert_eq!(attachments.len(), 1);
+        assert_eq!(attachments[0].mime, "image/png");
+        assert!(notice.unwrap_or_default().contains("用户发送了一个附件，位于 {Self Directory}/"));
+        assert!(
+            state
+                .llm_workspace_path
+                .join(&attachments[0].relative_path)
+                .exists()
+        );
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn weixin_oc_push_normalized_image_and_attachment_should_fallback_to_attachment_on_oversized_image() {
+        let state = remote_im_test_state();
+        let raw = remote_im_test_png(10_001, 8);
+        let mut images = Vec::<BinaryPart>::new();
+        let mut attachments = Vec::<AttachmentMetaInput>::new();
+
+        let notice = weixin_oc_push_normalized_image_and_attachment(
+            &state,
+            "weixin-oversized.png",
+            &raw,
+            "image/png",
+            &mut images,
+            &mut attachments,
+        );
+
+        assert!(images.is_empty());
+        assert_eq!(attachments.len(), 1);
+        assert_eq!(attachments[0].mime, "image/png");
+        assert!(notice.unwrap_or_default().contains("用户发送了一个附件，位于 {Self Directory}/"));
+        assert!(
+            state
+                .llm_workspace_path
+                .join(&attachments[0].relative_path)
+                .exists()
+        );
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
     }
 
     fn remote_im_test_conversation(conversation_id: &str) -> Conversation {

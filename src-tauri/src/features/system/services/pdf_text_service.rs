@@ -201,23 +201,14 @@ fn encode_rgba_page_to_webp(
     height: u32,
     rgba: Vec<u8>,
 ) -> Result<PdfRenderedImage, String> {
-    let rgba_image = image::RgbaImage::from_raw(width, height, rgba).ok_or_else(|| {
-        format!(
-            "build rgba image failed(page={}): width={}, height={}",
-            page_index, width, height
-        )
-    })?;
-    let dyn_img = image::DynamicImage::ImageRgba8(rgba_image);
-    let encoder = webp::Encoder::from_image(&dyn_img)
-        .map_err(|err| format!("webp encoder init failed(page={}): {}", page_index, err))?;
-    let webp = encoder.encode(50.0);
-    let webp_bytes: &[u8] = webp.as_ref();
+    let normalized = normalize_rgba_image_for_llm_request(&rgba, width, height)
+        .map_err(|err| format!("pdf page normalize failed(page={}): {}", page_index, err))?;
     Ok(PdfRenderedImage {
         page_index,
-        width,
-        height,
-        bytes_base64: B64.encode(webp_bytes),
-        mime: "image/webp".to_string(),
+        width: normalized.output_width,
+        height: normalized.output_height,
+        bytes_base64: B64.encode(&normalized.bytes),
+        mime: normalized.mime,
     })
 }
 

@@ -2047,75 +2047,6 @@ async fn send_chat_message_inner(
     }
     log_run_stage("attachments_processed");
 
-    let effective_user_parts = if trigger_only {
-        Vec::new()
-    } else {
-        build_user_parts(&effective_payload, &selected_api)?
-    };
-    let effective_user_text = effective_user_parts
-        .iter()
-        .map(|part| match part {
-            MessagePart::Text { text } => text.clone(),
-            MessagePart::Image { mime, .. } => {
-                if mime.trim().eq_ignore_ascii_case("application/pdf") {
-                    "[pdf]".to_string()
-                } else {
-                    "[image]".to_string()
-                }
-            }
-            MessagePart::Audio { .. } => "[audio]".to_string(),
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    let image_saved_paths = effective_payload
-        .images
-        .as_ref()
-        .map(|items| {
-            items.iter()
-                .map(|item| item.saved_path.clone())
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let audio_saved_paths = effective_payload
-        .audios
-        .as_ref()
-        .map(|items| {
-            items.iter()
-                .map(|item| item.saved_path.clone())
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let effective_images = effective_user_parts
-        .iter()
-        .filter_map(|part| match part {
-            MessagePart::Image {
-                mime, bytes_base64, ..
-            } => Some((mime.clone(), bytes_base64.clone())),
-            _ => None,
-        })
-        .enumerate()
-        .map(|(index, (mime, bytes_base64))| PreparedBinaryPayload {
-            mime,
-            content: bytes_base64,
-            saved_path: image_saved_paths.get(index).cloned().flatten(),
-        })
-        .collect::<Vec<_>>();
-    let effective_audios = effective_user_parts
-        .iter()
-        .filter_map(|part| match part {
-            MessagePart::Audio {
-                mime, bytes_base64, ..
-            } => Some((mime.clone(), bytes_base64.clone())),
-            _ => None,
-        })
-        .enumerate()
-        .map(|(index, (mime, bytes_base64))| PreparedBinaryPayload {
-            mime: mime.clone(),
-            content: bytes_base64.clone(),
-            saved_path: audio_saved_paths.get(index).cloned().flatten(),
-        })
-        .collect::<Vec<_>>();
-
     let mut archived_before_send_any = false;
     let mut compaction_restart_count = 0usize;
     let mut persist_user_message_on_next_prepare = true;
@@ -2125,6 +2056,10 @@ async fn send_chat_message_inner(
 
     let mut prepare_request_context = |persist_user_message: bool| -> Result<_, String> {
         log_run_stage("prepare_context.begin");
+        let mut normalized_storage_media_for_prompt: Option<(
+            Vec<PreparedBinaryPayload>,
+            Vec<PreparedBinaryPayload>,
+        )> = None;
         let snapshot = if let Some(snapshot) = preloaded_prepare_snapshot.take() {
             log_run_stage("prepare_context.foreground_conversation_ready");
             snapshot
@@ -2198,6 +2133,33 @@ async fn send_chat_message_inner(
                 storage_payload.text = Some(display_text.trim().to_string());
             }
             let mut user_parts = build_user_parts(&storage_payload, &storage_api)?;
+            let storage_image_saved_paths = storage_payload
+                .images
+                .as_ref()
+                .map(|items| {
+                    items
+                        .iter()
+                        .map(|item| item.saved_path.clone())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let storage_audio_saved_paths = storage_payload
+                .audios
+                .as_ref()
+                .map(|items| {
+                    items
+                        .iter()
+                        .map(|item| item.saved_path.clone())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            normalized_storage_media_for_prompt = Some(
+                build_prepared_binary_payloads_from_message_parts(
+                    &user_parts,
+                    &storage_image_saved_paths,
+                    &storage_audio_saved_paths,
+                ),
+            );
             externalize_message_parts_to_media_refs(&mut user_parts, &state.data_path)?;
             let attachment_meta = normalize_payload_attachments(input.payload.attachments.as_ref());
             let mut user_provider_meta = merge_provider_meta_with_attachments(
@@ -2338,16 +2300,43 @@ async fn send_chat_message_inner(
             }
         }
         let conversation = trim_conversation_for_prompt_request(&storage_conversation);
-        let latest_user_text = if trigger_only {
-            conversation
-                .messages
-                .iter()
-                .rev()
-                .find(|message| prompt_role_for_message(message, &effective_agent_id).as_deref() == Some("user"))
-                .map(render_message_content_for_model)
-                .unwrap_or_default()
+        let (latest_user_text, effective_images, effective_audios) = if trigger_only {
+            (
+                conversation
+                    .messages
+                    .iter()
+                    .rev()
+                    .find(|message| {
+                        prompt_role_for_message(message, &effective_agent_id).as_deref()
+                            == Some("user")
+                    })
+                    .map(render_message_content_for_model)
+                    .unwrap_or_default(),
+                Vec::new(),
+                Vec::new(),
+            )
         } else {
-            effective_user_text.clone()
+            let (prepared_images, prepared_audios) =
+                if let Some(prepared_media) = normalized_storage_media_for_prompt.take() {
+                    prepared_media
+                } else {
+                    let latest_user_message = storage_conversation
+                        .messages
+                        .iter()
+                        .rev()
+                        .find(|message| {
+                            prompt_role_for_message(message, &effective_agent_id).as_deref()
+                                == Some("user")
+                        })
+                        .ok_or_else(|| "当前对话没有可供发送的用户消息。".to_string())?;
+                    collect_prompt_media_parts(latest_user_message, Some(&state.data_path))
+                };
+            build_effective_prompt_media_from_prepared(
+                &effective_payload,
+                &selected_api,
+                &prepared_images,
+                &prepared_audios,
+            )?
         };
         let current_department = department_for_agent_id(&app_config, &snapshot.current_agent.id);
         let todo_enabled =
@@ -3396,6 +3385,46 @@ mod core_send_inner_tests {
             0,
             false,
         ));
+    }
+
+    #[test]
+    fn build_effective_prompt_media_from_prepared_should_reuse_normalized_images() {
+        let api = test_chat_api("vision-a", true);
+        let payload = ChatInputPayload {
+            text: Some("看这张图".to_string()),
+            display_text: None,
+            images: Some(vec![BinaryPart {
+                mime: "image/png".to_string(),
+                bytes_base64: B64.encode(b"source-png"),
+                saved_path: Some("downloads/source.png".to_string()),
+            }]),
+            audios: None,
+            attachments: None,
+            model: None,
+            extra_text_blocks: None,
+            mentions: None,
+            provider_meta: None,
+        };
+        let prepared_images = vec![PreparedBinaryPayload {
+            mime: "image/webp".to_string(),
+            content: B64.encode(b"normalized-webp"),
+            saved_path: None,
+        }];
+
+        let (latest_user_text, images, audios) = build_effective_prompt_media_from_prepared(
+            &payload,
+            &api,
+            &prepared_images,
+            &[],
+        )
+        .expect("reuse prepared image payload");
+
+        assert_eq!(latest_user_text, "看这张图\n[image]");
+        assert!(audios.is_empty());
+        assert_eq!(images.len(), 1);
+        assert_eq!(images[0].mime, "image/webp");
+        assert_eq!(images[0].content, B64.encode(b"normalized-webp"));
+        assert_eq!(images[0].saved_path.as_deref(), Some("downloads/source.png"));
     }
 }
 fn error_indicates_image_input_unsupported(error: &str) -> bool {

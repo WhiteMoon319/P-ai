@@ -1,5 +1,4 @@
 const READ_FILE_TEXT_LIMIT_CHARS: usize = 30_000;
-const READ_FILE_MAX_IMAGE_BYTES: usize = 10 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReadFileDetectedType {
@@ -81,8 +80,8 @@ fn detect_read_file_type(path: &std::path::Path) -> ReadFileDetectedType {
         "txt" | "md" | "rs" | "ts" | "tsx" | "js" | "jsx" | "json" | "toml" | "yaml" | "yml"
         | "vue" | "html" | "css" | "scss" | "less" | "xml" | "csv" | "log" | "ini" | "conf"
         | "bat" | "cmd" | "ps1" | "sh" | "sql" | "py" | "java" | "kt" | "go" | "c" | "cpp"
-        | "h" | "hpp" | "cs" | "swift" | "rb" | "php" => ReadFileDetectedType::Text,
-        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" => ReadFileDetectedType::Image,
+        | "h" | "hpp" | "cs" | "swift" | "rb" | "php" | "svg" => ReadFileDetectedType::Text,
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" => ReadFileDetectedType::Image,
         "pdf" => ReadFileDetectedType::Pdf,
         "doc" => ReadFileDetectedType::Doc,
         "docx" => ReadFileDetectedType::Docx,
@@ -353,15 +352,24 @@ async fn read_image_file_result(
     let bytes = tokio::fs::read(&path)
         .await
         .map_err(|err| format!("读取图片文件失败: {err}"))?;
-    if bytes.len() > READ_FILE_MAX_IMAGE_BYTES {
-        return Err(format!(
-            "图片文件过大，当前限制 {} MB",
-            READ_FILE_MAX_IMAGE_BYTES / 1024 / 1024
-        ));
-    }
     let mime = media_mime_from_path(&path)
         .unwrap_or("application/octet-stream")
         .to_string();
+    let normalized = match normalize_image_bytes_for_llm_request(&bytes, Some(&mime)) {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!(
+                "[read_file] 图片规范化失败，降级为文本提示，session_id={}，api_config_id={}，{}，err={}",
+                session_id,
+                api_config_id,
+                read_file_log_target(&path),
+                err
+            );
+            return Ok(build_image_read_fallback_text_result(
+                &path, detected, request, &mime, &err,
+            ));
+        }
+    };
 
     let app_config = state_read_config_cached(state)?;
     let selected_api = resolve_selected_api_config(&app_config, Some(api_config_id))
@@ -369,7 +377,15 @@ async fn read_image_file_result(
         .ok_or_else(|| "当前未找到可用聊天模型配置。".to_string())?;
 
     if selected_api.enable_image {
-        return read_image_direct(state, session_id, &path, detected, &mime, bytes, api_config_id).await;
+        return read_image_direct(
+            state,
+            session_id,
+            &path,
+            detected,
+            &normalized,
+            api_config_id,
+        )
+        .await;
     }
 
     eprintln!(
@@ -378,7 +394,35 @@ async fn read_image_file_result(
         api_config_id,
         detected.as_str()
     );
-    read_image_via_vision(state, session_id, &path, request, detected, &mime, bytes, &app_config).await
+    match read_image_via_vision(
+        state,
+        session_id,
+        &path,
+        request,
+        detected,
+        &normalized,
+        &app_config,
+    )
+    .await
+    {
+        Ok(value) => Ok(value),
+        Err(err) => {
+            eprintln!(
+                "[read_file] 图片视觉回退失败，降级为文本提示，session_id={}，api_config_id={}，{}，err={}",
+                session_id,
+                api_config_id,
+                read_file_log_target(&path),
+                err
+            );
+            Ok(build_image_read_fallback_text_result(
+                &path,
+                detected,
+                request,
+                &normalized.mime,
+                &err,
+            ))
+        }
+    }
 }
 
 fn build_direct_image_read_result(
@@ -387,6 +431,10 @@ fn build_direct_image_read_result(
     mime: &str,
     image_base64: String,
     byte_size: u64,
+    original_width: u32,
+    original_height: u32,
+    output_width: u32,
+    output_height: u32,
 ) -> Value {
     let file_name = path.file_name().and_then(|v| v.to_str()).unwrap_or_default();
     serde_json::json!({
@@ -405,13 +453,49 @@ fn build_direct_image_read_result(
             "readerKind": "image_direct",
             "imageMime": mime,
             "fileName": file_name,
-            "byteSize": byte_size
+            "byteSize": byte_size,
+            "originalWidth": original_width,
+            "originalHeight": original_height,
+            "outputWidth": output_width,
+            "outputHeight": output_height
         },
         "metadata": {
             "fileName": file_name,
-            "byteSize": byte_size
+            "byteSize": byte_size,
+            "originalWidth": original_width,
+            "originalHeight": original_height,
+            "outputWidth": output_width,
+            "outputHeight": output_height
         }
     })
+}
+
+fn build_image_read_fallback_text_result(
+    path: &std::path::Path,
+    detected: ReadFileDetectedType,
+    request: &ReadFileRequest,
+    mime: &str,
+    reason: &str,
+) -> Value {
+    let text = format!(
+        "该文件被识别为图片，但本次未能作为图片输入直接提供给模型。\n原因：{}\n文件路径：{}\n原始 MIME：{}\n请按普通附件理解该文件；如需继续处理，可用 shell 或后续 read_file 查看相关信息。",
+        reason.trim(),
+        path.display(),
+        mime.trim()
+    );
+    build_text_read_result(
+        path,
+        detected,
+        "image_fallback_notice",
+        &text,
+        request.start,
+        request.count,
+        serde_json::json!({
+            "imageDeliveredAsTextNotice": true,
+            "imageMime": mime,
+            "reason": reason.trim(),
+        }),
+    )
 }
 
 async fn read_image_direct(
@@ -419,12 +503,10 @@ async fn read_image_direct(
     session_id: &str,
     path: &std::path::Path,
     detected: ReadFileDetectedType,
-    mime: &str,
-    bytes: Vec<u8>,
+    normalized: &LlmRequestNormalizedImage,
     api_config_id: &str,
 ) -> Result<Value, String> {
-    let metadata = tokio::fs::metadata(path).await.ok();
-    let byte_size = metadata.map(|v| v.len()).unwrap_or(bytes.len() as u64);
+    let byte_size = normalized.bytes.len() as u64;
     eprintln!(
         "[read_file] 完成，任务=read_image_file，session_id={}，api_config_id={}，reader=image_direct，detected_type={}，action=直接返回图片，byte_size={}",
         session_id,
@@ -435,9 +517,13 @@ async fn read_image_direct(
     Ok(build_direct_image_read_result(
         path,
         detected,
-        mime,
-        B64.encode(bytes),
+        &normalized.mime,
+        B64.encode(&normalized.bytes),
         byte_size,
+        normalized.original_width,
+        normalized.original_height,
+        normalized.output_width,
+        normalized.output_height,
     ))
 }
 
@@ -447,8 +533,7 @@ async fn read_image_via_vision(
     path: &std::path::Path,
     request: &ReadFileRequest,
     detected: ReadFileDetectedType,
-    mime: &str,
-    bytes: Vec<u8>,
+    normalized: &LlmRequestNormalizedImage,
     app_config: &AppConfig,
 ) -> Result<Value, String> {
     let vision_api = resolve_vision_api_config(&app_config).map_err(|_| {
@@ -470,8 +555,8 @@ async fn read_image_via_vision(
         detected.as_str()
     );
     let image = BinaryPart {
-        mime: mime.to_string(),
-        bytes_base64: B64.encode(&bytes),
+        mime: normalized.mime.clone(),
+        bytes_base64: B64.encode(&normalized.bytes),
         saved_path: None,
     };
     let hash = compute_image_hash_hex(&image)?;
@@ -594,12 +679,52 @@ impl ReadFileReader for PdfFileReader {
         let path = ensure_absolute_file_path(request)?;
         let conversation_id = read_file_conversation_cache_key(session_id);
         let include_images = resolve_pdf_image_mode(state, api_config_id)?;
-        let structured = get_or_extract_pdf_structured(
+        let structured = match get_or_extract_pdf_structured(
             state,
             &conversation_id,
             &path.to_string_lossy(),
             include_images,
-        )?;
+        ) {
+            Ok(value) => value,
+            Err(err) if include_images && !is_pdf_page_limit_exceeded_error(&err) => {
+                eprintln!(
+                    "[read_file] PDF 页图提取失败，降级为文本读取，file={}，err={}",
+                    path.display(),
+                    err
+                );
+                let mut fallback = get_or_extract_pdf_structured(
+                    state,
+                    &conversation_id,
+                    &path.to_string_lossy(),
+                    false,
+                )?;
+                if let Some(first_page) = fallback.pages.first_mut() {
+                    if first_page.text.trim().is_empty() {
+                        first_page.text = format!(
+                            "[系统提示] PDF 页图未能成功提供给模型，已自动回退为文本读取。\n原因：{}",
+                            err.trim()
+                        );
+                    } else {
+                        first_page.text = format!(
+                            "[系统提示] PDF 页图未能成功提供给模型，已自动回退为文本读取。\n原因：{}\n\n{}",
+                            err.trim(),
+                            first_page.text
+                        );
+                    }
+                } else {
+                    fallback.pages.push(PdfPageExtractBlock {
+                        page_index: 0,
+                        text: format!(
+                            "[系统提示] PDF 页图未能成功提供给模型，已自动回退为文本读取。\n原因：{}",
+                            err.trim()
+                        ),
+                        images: Vec::new(),
+                    });
+                }
+                fallback
+            }
+            Err(err) => return Err(err),
+        };
         if include_images {
             return Ok(build_pdf_image_read_result(
                 &path,
@@ -893,6 +1018,10 @@ fn detect_read_file_type_should_classify_common_formats() {
             ReadFileDetectedType::Text
         );
         assert_eq!(
+            detect_read_file_type(std::path::Path::new("a.svg")),
+            ReadFileDetectedType::Text
+        );
+        assert_eq!(
             detect_read_file_type(std::path::Path::new("a.pdf")),
             ReadFileDetectedType::Pdf
         );
@@ -955,10 +1084,15 @@ fn builtin_read_file_should_return_root_image_payload_when_model_supports_image(
         let root = std::env::temp_dir().join(format!("eca-read-file-image-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).expect("create temp dir");
         let file = root.join("sample.png");
-        let png_1x1_red = B64
-            .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO9WfXkAAAAASUVORK5CYII=")
-            .expect("decode png");
-        std::fs::write(&file, png_1x1_red).expect("write sample image");
+        let mut cursor = std::io::Cursor::new(Vec::<u8>::new());
+        image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            1,
+            1,
+            image::Rgba([255, 0, 0, 255]),
+        ))
+        .write_to(&mut cursor, image::ImageFormat::Png)
+        .expect("encode png");
+        std::fs::write(&file, cursor.into_inner()).expect("write sample image");
         let state = test_read_file_state();
         let config = AppConfig {
             selected_api_config_id: "vision-a".to_string(),
@@ -1011,9 +1145,75 @@ fn builtin_read_file_should_return_root_image_payload_when_model_supports_image(
             .expect("read image");
 
         assert_eq!(value.get("readerKind").and_then(Value::as_str), Some("image_direct"));
-        assert_eq!(value.get("imageMime").and_then(Value::as_str), Some("image/png"));
+        assert_eq!(value.get("imageMime").and_then(Value::as_str), Some("image/webp"));
         assert!(value.get("imageBase64").and_then(Value::as_str).is_some());
         assert!(value.get("content").is_none());
+    }
+
+#[cfg(test)]
+#[test]
+fn builtin_read_file_should_downgrade_bad_image_to_text_notice() {
+        let root = std::env::temp_dir().join(format!("eca-read-file-image-bad-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create temp dir");
+        let file = root.join("sample.png");
+        std::fs::write(&file, b"not-a-real-png").expect("write bad image");
+        let state = test_read_file_state();
+        let config = AppConfig {
+            selected_api_config_id: "vision-a".to_string(),
+            assistant_department_api_config_id: "vision-a".to_string(),
+            api_configs: vec![ApiConfig {
+                id: "vision-a".to_string(),
+                name: "vision-a".to_string(),
+                request_format: RequestFormat::OpenAI,
+                allow_concurrent_requests: false,
+                enable_text: true,
+                enable_image: true,
+                enable_audio: false,
+                enable_tools: true,
+                tools: vec![],
+                base_url: "https://example.com/v1".to_string(),
+                api_key: "k".to_string(),
+                codex_auth_mode: default_codex_auth_mode(),
+                codex_local_auth_path: default_codex_local_auth_path(),
+                model: "gpt-image".to_string(),
+                reasoning_effort: default_reasoning_effort(),
+                temperature: 0.7,
+                custom_temperature_enabled: false,
+                context_window_tokens: 128_000,
+                max_output_tokens: 4_096,
+                custom_max_output_tokens_enabled: false,
+                failure_retry_count: 0,
+            }],
+            ..AppConfig::default()
+        };
+        state_write_config_cached(&state, &config).expect("write config");
+
+        let value = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("build tokio runtime")
+        .block_on(builtin_read_file(
+            &state,
+            "assistant::conversation-a",
+            "vision-a",
+            ReadFileRequest {
+                absolute_path: file.to_string_lossy().to_string(),
+                start: None,
+                count: None,
+            },
+        ))
+        .expect("read image fallback");
+
+        assert_eq!(
+            value.get("readerKind").and_then(Value::as_str),
+            Some("image_fallback_notice")
+        );
+        assert!(
+            value.get("content")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .contains("未能作为图片输入直接提供给模型")
+        );
     }
 
 #[cfg(test)]

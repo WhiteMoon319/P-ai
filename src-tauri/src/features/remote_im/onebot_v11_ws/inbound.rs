@@ -87,9 +87,17 @@ async fn parse_and_enqueue_onebot_event(
         }
         media_refs.extend(nested_media_refs);
     }
-    let (images, attachments) =
+    let (images, attachments, notices) =
         onebot_resolve_inbound_media(manager, channel_id, group_id, Some(user_id_for_media), state, &media_refs)
             .await;
+    if !notices.is_empty() {
+        let notice_text = notices.join("\n");
+        text = if text.trim().is_empty() {
+            notice_text
+        } else {
+            format!("{}\n{}", text.trim(), notice_text)
+        };
+    }
     if text.trim().is_empty() && images.is_empty() && attachments.is_empty() {
         return Err(format!(
             "消息内容为空，跳过 (message_type={}, user_id={}, message_field_type={})",

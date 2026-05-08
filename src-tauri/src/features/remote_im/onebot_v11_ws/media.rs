@@ -341,9 +341,10 @@ async fn onebot_resolve_inbound_media(
     user_id: Option<u64>,
     state: &AppState,
     media_refs: &[OnebotInboundMediaRef],
-) -> (Vec<BinaryPart>, Vec<AttachmentMetaInput>) {
+) -> (Vec<BinaryPart>, Vec<AttachmentMetaInput>, Vec<String>) {
     let mut images = Vec::<BinaryPart>::new();
     let mut attachments = Vec::<AttachmentMetaInput>::new();
+    let mut notices = Vec::<String>::new();
     for (idx, item) in media_refs.iter().enumerate() {
         let fallback_name = match item.kind {
             OnebotInboundMediaKind::Image => format!("onebot-image-{}.png", idx + 1),
@@ -407,9 +408,44 @@ async fn onebot_resolve_inbound_media(
 
         match item.kind {
             OnebotInboundMediaKind::Image => {
+                let normalized = match normalize_image_bytes_for_llm_request(&raw, Some(&mime)) {
+                    Ok(value) => value,
+                    Err(err) => {
+                        eprintln!(
+                            "[远程IM][OneBot v11 事件] 图片规范化失败，改按附件入队，name={}，mime={}，err={}",
+                            file_name, mime, err
+                        );
+                        match persist_raw_attachment_to_downloads(state, &file_name, &mime, &raw) {
+                            Ok(saved) => {
+                                let relative_path = workspace_relative_path(state, &saved);
+                                attachments.push(AttachmentMetaInput {
+                                    file_name: file_name.clone(),
+                                    relative_path: relative_path.clone(),
+                                    mime: mime.clone(),
+                                });
+                                notices.push(format!(
+                                    "用户发送了一个附件，位于 {{Self Directory}}/{}",
+                                    relative_path
+                                ));
+                            }
+                            Err(save_err) => {
+                                eprintln!(
+                                    "[远程IM][OneBot v11 事件] 图片降级附件落盘失败，改仅保留文字提示，name={}，err={}",
+                                    file_name, save_err
+                                );
+                                notices.push(format!(
+                                    "[系统提示] 收到一张图片，但未能作为图片输入提供给模型，原因：{}。同时附件保存也失败：{}。",
+                                    err.trim(),
+                                    save_err.trim()
+                                ));
+                            }
+                        }
+                        continue;
+                    }
+                };
                 images.push(BinaryPart {
-                    mime,
-                    bytes_base64: B64.encode(raw),
+                    mime: normalized.mime,
+                    bytes_base64: B64.encode(normalized.bytes),
                     saved_path: None,
                 });
             }
@@ -433,5 +469,5 @@ async fn onebot_resolve_inbound_media(
             }
         }
     }
-    (images, attachments)
+    (images, attachments, notices)
 }

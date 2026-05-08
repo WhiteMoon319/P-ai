@@ -1239,41 +1239,30 @@ fn archive_conversation_now(
     Some(archive_id)
 }
 
-const CHAT_UPLOAD_IMAGE_MAX_EDGE: u32 = 1280;
-const CHAT_UPLOAD_IMAGE_WEBP_QUALITY: f32 = 75.0;
-
-fn normalize_image_for_chat_upload(bytes: &[u8]) -> Result<Vec<u8>, String> {
-    let image =
-        image::load_from_memory(bytes).map_err(|err| format!("Decode image failed: {err}"))?;
-    let width = image.width();
-    let height = image.height();
-    let normalized = if width.max(height) > CHAT_UPLOAD_IMAGE_MAX_EDGE {
-        image.resize(
-            CHAT_UPLOAD_IMAGE_MAX_EDGE,
-            CHAT_UPLOAD_IMAGE_MAX_EDGE,
-            image::imageops::FilterType::Lanczos3,
-        )
-    } else {
-        image
-    };
-    let encoder = webp::Encoder::from_image(&normalized)
-        .map_err(|err| format!("Init WebP encoder failed: {err}"))?;
-    let webp = encoder.encode(CHAT_UPLOAD_IMAGE_WEBP_QUALITY);
-    let webp_bytes: &[u8] = webp.as_ref();
-    Ok(webp_bytes.to_vec())
+fn normalize_image_for_chat_upload(bytes: &[u8]) -> Result<LlmRequestNormalizedImage, String> {
+    normalize_image_bytes_for_llm_request(bytes, None)
 }
 
 fn is_supported_image_upload_mime(mime: &str) -> bool {
-    matches!(
-        mime.trim().to_ascii_lowercase().as_str(),
-        "image/jpeg"
-            | "image/jpg"
-            | "image/png"
-            | "image/gif"
-            | "image/webp"
-            | "image/heic"
-            | "image/heif"
-            | "image/svg+xml"
+    llm_request_image_supported_raster_mime(mime)
+}
+
+fn build_llm_image_input_fallback_notice(
+    label: &str,
+    reason: &str,
+    saved_path: Option<&str>,
+) -> String {
+    let trimmed_reason = reason.trim();
+    let trimmed_path = saved_path
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if let Some(path) = trimmed_path {
+        return format!(
+            "用户发送了一个附件，位于 {{Self Directory}}/{path}"
+        );
+    }
+    format!(
+        "[系统提示] {label} 未能作为图片输入提供给模型，原因：{trimmed_reason}。\n请按普通附件处理该文件，必要时改用 shell 或 read_file 读取。"
     )
 }
 
@@ -1303,25 +1292,51 @@ fn build_user_parts(
             return Err("Current API config has image disabled.".to_string());
         }
 
-        for image in images {
+        for (index, image) in images.iter().enumerate() {
             let mime = image.mime.trim().to_ascii_lowercase();
             if !is_supported_image_upload_mime(&mime) {
-                return Err(format!(
-                    "Unsupported attachment mime type: '{}'.",
-                    image.mime.trim()
-                ));
+                parts.push(MessagePart::Text {
+                    text: build_llm_image_input_fallback_notice(
+                        &format!("第 {} 张图片", index + 1),
+                        &format!("不支持的图片 MIME：{}", image.mime.trim()),
+                        image.saved_path.as_deref(),
+                    ),
+                });
+                continue;
             }
             let bytes_base64 = image.bytes_base64.trim();
-            let raw = B64
-                .decode(bytes_base64)
-                .map_err(|err| format!("Decode image base64 failed: {err}"))?;
-            let webp = normalize_image_for_chat_upload(&raw)?;
-            total_binary += webp.len();
+            let raw = match B64.decode(bytes_base64) {
+                Ok(value) => value,
+                Err(err) => {
+                    parts.push(MessagePart::Text {
+                        text: build_llm_image_input_fallback_notice(
+                            &format!("第 {} 张图片", index + 1),
+                            &format!("图片内容解码失败：{err}"),
+                            image.saved_path.as_deref(),
+                        ),
+                    });
+                    continue;
+                }
+            };
+            let normalized = match normalize_image_for_chat_upload(&raw) {
+                Ok(value) => value,
+                Err(err) => {
+                    parts.push(MessagePart::Text {
+                        text: build_llm_image_input_fallback_notice(
+                            &format!("第 {} 张图片", index + 1),
+                            &err,
+                            image.saved_path.as_deref(),
+                        ),
+                    });
+                    continue;
+                }
+            };
+            total_binary += normalized.bytes.len();
             parts.push(MessagePart::Image {
-                mime: "image/webp".to_string(),
-                bytes_base64: B64.encode(webp),
+                mime: normalized.mime,
+                bytes_base64: B64.encode(normalized.bytes),
                 name: None,
-                compressed: true,
+                compressed: !normalized.reused_original,
             });
         }
     }
@@ -1358,6 +1373,117 @@ fn build_user_parts(
     }
 
     Ok(parts)
+}
+
+fn build_prepared_binary_payloads_from_message_parts(
+    parts: &[MessagePart],
+    image_saved_paths: &[Option<String>],
+    audio_saved_paths: &[Option<String>],
+) -> (Vec<PreparedBinaryPayload>, Vec<PreparedBinaryPayload>) {
+    let images = parts
+        .iter()
+        .filter_map(|part| match part {
+            MessagePart::Image {
+                mime, bytes_base64, ..
+            } => Some((mime.clone(), bytes_base64.clone())),
+            _ => None,
+        })
+        .enumerate()
+        .map(|(index, (mime, bytes_base64))| PreparedBinaryPayload {
+            mime,
+            content: bytes_base64,
+            saved_path: image_saved_paths.get(index).cloned().flatten(),
+        })
+        .collect::<Vec<_>>();
+    let audios = parts
+        .iter()
+        .filter_map(|part| match part {
+            MessagePart::Audio {
+                mime, bytes_base64, ..
+            } => Some((mime.clone(), bytes_base64.clone())),
+            _ => None,
+        })
+        .enumerate()
+        .map(|(index, (mime, bytes_base64))| PreparedBinaryPayload {
+            mime,
+            content: bytes_base64,
+            saved_path: audio_saved_paths.get(index).cloned().flatten(),
+        })
+        .collect::<Vec<_>>();
+    (images, audios)
+}
+
+fn build_effective_prompt_media_from_prepared(
+    payload: &ChatInputPayload,
+    api_config: &ApiConfig,
+    prepared_images: &[PreparedBinaryPayload],
+    prepared_audios: &[PreparedBinaryPayload],
+) -> Result<(String, Vec<PreparedBinaryPayload>, Vec<PreparedBinaryPayload>), String> {
+    let mut chunks = Vec::<String>::new();
+
+    if let Some(text) = payload
+        .text
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        if !api_config.enable_text {
+            return Err("Current API config has text disabled.".to_string());
+        }
+        chunks.push(text.to_string());
+    }
+
+    let mut images = Vec::<PreparedBinaryPayload>::new();
+    if let Some(requested_images) = &payload.images {
+        if !requested_images.is_empty() && !api_config.enable_image {
+            return Err("Current API config has image disabled.".to_string());
+        }
+        if requested_images.len() > prepared_images.len() {
+            return Err("Prepared image payload count is smaller than effective payload.".to_string());
+        }
+        for (index, requested) in requested_images.iter().enumerate() {
+            let mut prepared = prepared_images
+                .get(index)
+                .cloned()
+                .ok_or_else(|| "Prepared image payload is missing.".to_string())?;
+            if prepared.saved_path.is_none() {
+                prepared.saved_path = requested.saved_path.clone();
+            }
+            if prepared.mime.trim().eq_ignore_ascii_case("application/pdf") {
+                chunks.push("[pdf]".to_string());
+            } else {
+                chunks.push("[image]".to_string());
+            }
+            images.push(prepared);
+        }
+    }
+
+    let mut audios = Vec::<PreparedBinaryPayload>::new();
+    if let Some(requested_audios) = &payload.audios {
+        if !requested_audios.is_empty() && !api_config.enable_audio {
+            return Err("Current API config has audio disabled.".to_string());
+        }
+        if requested_audios.len() > prepared_audios.len() {
+            return Err("Prepared audio payload count is smaller than effective payload.".to_string());
+        }
+        for (index, requested) in requested_audios.iter().enumerate() {
+            let mut prepared = prepared_audios
+                .get(index)
+                .cloned()
+                .ok_or_else(|| "Prepared audio payload is missing.".to_string())?;
+            if prepared.saved_path.is_none() {
+                prepared.saved_path = requested.saved_path.clone();
+            }
+            chunks.push("[audio]".to_string());
+            audios.push(prepared);
+        }
+    }
+
+    if chunks.is_empty() {
+        return Err("Request payload is empty. Provide text, image, or audio.".to_string());
+    }
+
+    Ok((chunks.join("\n"), images, audios))
 }
 
 fn render_message_content_for_model(message: &ChatMessage) -> String {

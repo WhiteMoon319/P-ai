@@ -35,7 +35,7 @@ genai = { git = "https://github.com/jeremychone/rust-genai", rev = "50c9d655dc6b
 base64 = "0.22"
 aes = "0.8"
 md5 = "0.8"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
 uuid = { version = "1", features = ["v4"] }
 once_cell = "1"
 scraper = "0.20"

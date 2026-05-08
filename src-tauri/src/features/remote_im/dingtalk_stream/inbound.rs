@@ -1,3 +1,62 @@
+fn dingtalk_push_normalized_image_or_attachment(
+    state: &AppState,
+    raw: &[u8],
+    mime: &str,
+    suggested_name: &str,
+    images: &mut Vec<BinaryPart>,
+    attachments: &mut Vec<AttachmentMetaInput>,
+    log_label: &str,
+) -> Option<String> {
+    match normalize_image_bytes_for_llm_request(raw, Some(mime)) {
+        Ok(normalized) => {
+            images.push(BinaryPart {
+                mime: normalized.mime,
+                bytes_base64: B64.encode(normalized.bytes),
+                saved_path: None,
+            });
+            None
+        }
+        Err(err) => {
+            eprintln!(
+                "[远程IM][钉钉事件] {}图片规范化失败，改按附件入队，mime={}，err={}",
+                log_label, mime, err
+            );
+            match persist_raw_attachment_to_downloads(state, suggested_name, mime, raw) {
+                Ok(saved) => {
+                    let relative_path = workspace_relative_path(state, &saved);
+                    let file_name = saved
+                        .file_name()
+                        .and_then(|value| value.to_str())
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .unwrap_or(suggested_name)
+                        .to_string();
+                    attachments.push(AttachmentMetaInput {
+                        file_name,
+                        relative_path: relative_path.clone(),
+                        mime: mime.to_string(),
+                    });
+                    Some(format!(
+                        "用户发送了一个附件，位于 {{Self Directory}}/{}",
+                        relative_path
+                    ))
+                }
+                Err(save_err) => {
+                    eprintln!(
+                        "[远程IM][钉钉事件] {}图片降级附件落盘失败，改仅保留文字提示，mime={}，err={}",
+                        log_label, mime, save_err
+                    );
+                    Some(format!(
+                        "[系统提示] 收到一张图片，但未能作为图片输入提供给模型，原因：{}。同时附件保存也失败：{}。",
+                        err.trim(),
+                        save_err.trim()
+                    ))
+                }
+            }
+        }
+    }
+}
+
 async fn parse_and_enqueue_dingtalk_callback(
     channel: &RemoteImChannelConfig,
     callback_payload: &Value,
@@ -74,11 +133,17 @@ async fn parse_and_enqueue_dingtalk_callback(
         }
         let (raw, mime) = dingtalk_download_file_by_code(channel, download_code, &robot_code).await?;
         let mime = normalize_dingtalk_image_mime(&raw, &mime);
-        images.push(BinaryPart {
-            mime,
-            bytes_base64: B64.encode(raw),
-            saved_path: None,
-        });
+        if let Some(notice) = dingtalk_push_normalized_image_or_attachment(
+            state,
+            &raw,
+            &mime,
+            &format!("dingtalk-picture-{}", Uuid::new_v4()),
+            &mut images,
+            &mut attachments,
+            "",
+        ) {
+            text_chunks.push(notice);
+        }
     } else if msg_type == "richText" {
         let items = callback_payload
             .get("content")
@@ -107,11 +172,17 @@ async fn parse_and_enqueue_dingtalk_callback(
                 let (raw, mime) =
                     dingtalk_download_file_by_code(channel, download_code, &robot_code).await?;
                 let mime = normalize_dingtalk_image_mime(&raw, &mime);
-                images.push(BinaryPart {
-                    mime,
-                    bytes_base64: B64.encode(raw),
-                    saved_path: None,
-                });
+                if let Some(notice) = dingtalk_push_normalized_image_or_attachment(
+                    state,
+                    &raw,
+                    &mime,
+                    &format!("dingtalk-rich-picture-{}", Uuid::new_v4()),
+                    &mut images,
+                    &mut attachments,
+                    "richText ",
+                ) {
+                    text_chunks.push(notice);
+                }
             }
         }
     } else if msg_type == "audio" || msg_type == "voice" {

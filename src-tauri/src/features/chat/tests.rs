@@ -4572,11 +4572,49 @@
             normalize_image_for_chat_upload(&cursor.into_inner()).expect("normalize image");
 
         assert_eq!(
-            image::guess_format(&normalized).expect("guess format"),
+            image::guess_format(&normalized.bytes).expect("guess format"),
             image::ImageFormat::WebP
         );
 
-        let decoded = image::load_from_memory(&normalized).expect("decode webp");
-        assert_eq!(decoded.width(), CHAT_UPLOAD_IMAGE_MAX_EDGE);
-        assert_eq!(decoded.height(), 640);
+        let decoded = image::load_from_memory(&normalized.bytes).expect("decode webp");
+        assert_eq!(decoded.width(), normalized.output_width);
+        assert_eq!(decoded.height(), normalized.output_height);
+        assert!(
+            u64::from(decoded.width()) * u64::from(decoded.height())
+                <= IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_PIXEL_BUDGET
+        );
+    }
+
+    #[test]
+    fn build_user_parts_should_downgrade_bad_image_to_text_notice() {
+        let payload = ChatInputPayload {
+            text: None,
+            display_text: None,
+            images: Some(vec![BinaryPart {
+                mime: "image/png".to_string(),
+                bytes_base64: "%%%bad-base64%%%".to_string(),
+                saved_path: Some("downloads/bad-image.png".to_string()),
+            }]),
+            audios: None,
+            attachments: None,
+            model: None,
+            extra_text_blocks: None,
+            mentions: None,
+            provider_meta: None,
+        };
+
+        let api = ApiConfig {
+            enable_image: true,
+            ..ApiConfig::default()
+        };
+        let parts = build_user_parts(&payload, &api).expect("build parts");
+
+        assert_eq!(parts.len(), 1);
+        match &parts[0] {
+            MessagePart::Text { text } => {
+                assert!(text.contains("用户发送了一个附件，位于 {Self Directory}/"));
+                assert!(text.contains("downloads/bad-image.png"));
+            }
+            other => panic!("expected text fallback, got {other:?}"),
+        }
     }

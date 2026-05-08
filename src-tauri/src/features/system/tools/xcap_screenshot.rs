@@ -75,33 +75,22 @@ fn build_output_path(input: &ScreenshotRequest) -> DesktopToolResult<std::path::
     default_screenshot_path()
 }
 
-fn maybe_save_from_base64(
+fn maybe_save_screenshot_bytes(
     input: &ScreenshotRequest,
-    image_base64: &str,
+    image_bytes: &[u8],
 ) -> DesktopToolResult<(Option<String>, Option<u64>)> {
     if input.save_path.is_none() {
         return Ok((None, None));
     }
     let started = Instant::now();
     let output_path = build_output_path(input)?;
-    let bytes = B64
-        .decode(image_base64)
-        .map_err(|err| DesktopToolError::internal_error(format!("decode base64 failed: {err}")))?;
-    std::fs::write(&output_path, bytes).map_err(|err| {
+    std::fs::write(&output_path, image_bytes).map_err(|err| {
         DesktopToolError::internal_error(format!("write screenshot file failed: {err}"))
     })?;
     Ok((
         Some(output_path.to_string_lossy().to_string()),
         Some(started.elapsed().as_millis() as u64),
     ))
-}
-
-fn rgba_to_rgb(bytes: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity((bytes.len() / 4) * 3);
-    for px in bytes.chunks_exact(4) {
-        out.extend_from_slice(&[px[0], px[1], px[2]]);
-    }
-    out
 }
 
 fn normalize_region_crop(
@@ -258,22 +247,43 @@ fn encode_screenshot_response(
     capture_ms: u64,
     started: Instant,
 ) -> DesktopToolResult<ScreenshotResponse> {
+    if width > IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_MAX_DIMENSION
+        || height > IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_MAX_DIMENSION
+    {
+        return Err(DesktopToolError::invalid_params(format!(
+            "截图分辨率过大（{}x{}），当前最多支持 {}x{}，请缩小截图区域后重试。",
+            width,
+            height,
+            IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_MAX_DIMENSION,
+            IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_MAX_DIMENSION
+        )));
+    }
     let encode_started = Instant::now();
-    let rgb = rgba_to_rgb(rgba);
-    let webp = webp::Encoder::from_rgb(&rgb, width, height).encode(input.webp_quality);
-    let webp_bytes: &[u8] = webp.as_ref();
-    let image_base64 = B64.encode(webp_bytes);
+    let normalized = normalize_rgba_image_for_llm_request_with_options(
+        rgba,
+        width,
+        height,
+        LlmRequestImageNormalizeOptions {
+            target_pixel_budget: u64::from(width) * u64::from(height),
+            webp_quality: input.webp_quality,
+            reuse_max_bytes: 0,
+            max_source_bytes: u64::MAX,
+            max_dimension: IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_MAX_DIMENSION,
+        },
+    )
+    .map_err(DesktopToolError::internal_error)?;
+    let image_base64 = B64.encode(&normalized.bytes);
     let encode_ms = encode_started.elapsed().as_millis() as u64;
 
-    let (path, save_ms) = maybe_save_from_base64(input, &image_base64)?;
+    let (path, save_ms) = maybe_save_screenshot_bytes(input, &normalized.bytes)?;
 
     Ok(ScreenshotResponse {
         ok: true,
         path,
-        image_mime: "image/webp".to_string(),
+        image_mime: normalized.mime,
         image_base64,
-        width,
-        height,
+        width: normalized.output_width,
+        height: normalized.output_height,
         bounds,
         elapsed_ms: started.elapsed().as_millis() as u64,
         capture_ms,
@@ -446,4 +456,37 @@ async fn run_screenshot_tool(input: ScreenshotRequest) -> DesktopToolResult<Scre
 
     let (rgba, width, height, bounds, capture_ms) = capture_once_xcap(&input)?;
     encode_screenshot_response(&input, &rgba, width, height, bounds, capture_ms, started)
+}
+
+#[cfg(test)]
+#[test]
+fn encode_screenshot_response_should_reject_over_10k_capture() {
+    let input = ScreenshotRequest {
+        mode: ScreenshotMode::Desktop,
+        monitor_id: None,
+        region: None,
+        save_path: None,
+        webp_quality: 75.0,
+    };
+    let width = 10_001u32;
+    let height = 8u32;
+    let rgba = vec![0u8; (width as usize) * (height as usize) * 4];
+    let err = encode_screenshot_response(
+        &input,
+        &rgba,
+        width,
+        height,
+        ScreenBounds {
+            x: 0,
+            y: 0,
+            width,
+            height,
+        },
+        0,
+        Instant::now(),
+    )
+    .expect_err("oversized screenshot should be rejected");
+
+    assert!(matches!(err.code, DesktopToolErrorCode::InvalidParams));
+    assert!(err.message.contains("10000x10000"));
 }
