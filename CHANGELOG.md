@@ -2,6 +2,9 @@
 
 ## 进行中
 
+## 发布：v0.9.76
+
+- 发布（release-0.9.76）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.76`，纳入本轮聊天消息流转断言、思维链展示拼接、配置页分段单选与布局收口，以及设置页文案与主题色修复。
 - 优化（chat-and-config-copy-polish）：聊天输入框占位文案改为“向 PAI 说话吧”；部门与人格设置页说明改为更直接描述“如何办事”和“自我认知”配置含义。
 - 优化（settings-layout-unification）：配置页右侧内容统一走 `SettingsStickyLayout` 尺寸与滚动框架；没有固定头部的页面不再额外占位，避免不同设置页高度和滚动行为不一致。
 - 优化（settings-segmented-control）：抽取配置页通用分段单选控件，并统一外观字重、浅深色、界面尺寸、任务筛选、对话风格、PDF 阅读方式、后台截图范围与人格记忆模式等单选入口的交互样式。
