@@ -271,7 +271,7 @@ async function resetShellWorkspacePath() {
     if (!Array.isArray(props.config.shellWorkspaces) || props.config.shellWorkspaces.length === 0) {
       props.config.shellWorkspaces = [{
         id: "system-workspace",
-        name: defaultWorkspaceNameFromPath(defaultPath) || "默认工作空间",
+        name: defaultWorkspaceNameFromPath(defaultPath) || "默认会话目录",
         path: defaultPath,
         level: "system",
         access: "full_access",
@@ -284,7 +284,7 @@ async function resetShellWorkspacePath() {
       target.level = "system";
       target.access = "full_access";
       if (!String(target.name || "").trim()) {
-        target.name = defaultWorkspaceNameFromPath(defaultPath) || "默认工作空间";
+        target.name = defaultWorkspaceNameFromPath(defaultPath) || "默认会话目录";
       }
       target.builtIn = true;
     }

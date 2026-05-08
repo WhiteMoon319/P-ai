@@ -487,11 +487,23 @@ impl ConversationPromptService {
         let current_department = department_for_agent_id(&department_config, &agent.id);
         let mut tool_rule_blocks = Vec::<String>::new();
         tool_rule_blocks.push(build_memory_rag_rule_block());
+        let mut deferred_tool_blocks = Vec::<String>::new();
+        let mut task_block = None;
+        for block in department_snapshot.department_tool_rule_blocks.iter().cloned() {
+            if block.contains("<task tool rule>") {
+                task_block = Some(block);
+            } else {
+                deferred_tool_blocks.push(block);
+            }
+        }
+        if let Some(task_block) = task_block {
+            tool_rule_blocks.push(task_block);
+        }
+        tool_rule_blocks.push(build_question_and_planning_rule_block());
         if let Some(todo_block) = build_builtin_tool_rule_block("todo") {
             tool_rule_blocks.push(todo_block);
         }
-        tool_rule_blocks.extend(department_snapshot.department_tool_rule_blocks.iter().cloned());
-        tool_rule_blocks.push(build_question_and_planning_rule_block());
+        tool_rule_blocks.extend(deferred_tool_blocks);
         if department_builtin_tool_enabled(&department_config, current_department, "meme") {
             if let Some(meme_block) = meme_prompt_rule_block(state).as_deref() {
                 tool_rule_blocks.push(meme_block.trim().to_string());
@@ -788,10 +800,7 @@ impl ConversationPromptService {
                     if trimmed.is_empty() {
                         continue;
                     }
-                    extra_blocks.push(format!(
-                        "用户上传了附件，文件位于你工作区的 downloads 目录（路径：{}）。\n你可以先用 shell 工具定位或查看基础文件信息；具体解析方式应按文件类型选择合适 skill 或在线检索正确方法。\n仅当用户明确要求处理该附件时再处理；若用户未明确要求，请先询问用户想如何处理。",
-                        trimmed
-                    ));
+                    extra_blocks.push(build_attachment_notice_text("", trimmed));
                 }
                 if let Some(log_stage) = stage_logger {
                     log_stage("prepare_context.attachment_hints_ready");

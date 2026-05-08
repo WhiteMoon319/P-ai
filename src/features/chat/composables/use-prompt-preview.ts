@@ -1,4 +1,5 @@
 import { ref } from "vue";
+import type { Ref } from "vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import { formatI18nError } from "../../../utils/error";
 
@@ -20,6 +21,7 @@ type SystemPromptPreviewResult = {
 
 type UsePromptPreviewOptions = {
   t: TrFn;
+  currentConversationId: Ref<string>;
 };
 
 export function usePromptPreview(options: UsePromptPreviewOptions) {
@@ -32,6 +34,15 @@ export function usePromptPreview(options: UsePromptPreviewOptions) {
   const promptPreviewMode = ref<RequestPreviewMode | "system" | null>(null);
   const promptPreviewApiConfigId = ref("");
   const promptPreviewAgentId = ref("");
+
+  function buildPreviewSessionInput(apiConfigId: string, agentId: string) {
+    const conversationId = String(options.currentConversationId.value || "").trim();
+    return {
+      apiConfigId,
+      agentId,
+      conversationId: conversationId || undefined,
+    };
+  }
 
   function resetPromptPreviewState(mode: RequestPreviewMode | "system" | null) {
     promptPreviewMode.value = mode;
@@ -60,7 +71,7 @@ export function usePromptPreview(options: UsePromptPreviewOptions) {
     promptPreviewLatestAudios.value = 0;
     try {
       const preview = await invokeTauri<PromptPreviewResult>("get_prompt_preview", {
-        input: { apiConfigId: promptPreviewApiConfigId.value, agentId: promptPreviewAgentId.value },
+        input: buildPreviewSessionInput(promptPreviewApiConfigId.value, promptPreviewAgentId.value),
         previewMode: mode,
       });
       promptPreviewText.value = preview.requestBodyJson || "";
@@ -82,7 +93,7 @@ export function usePromptPreview(options: UsePromptPreviewOptions) {
     promptPreviewLoading.value = true;
     try {
       const preview = await invokeTauri<SystemPromptPreviewResult>("get_system_prompt_preview", {
-        input: { apiConfigId, agentId },
+        input: buildPreviewSessionInput(apiConfigId, agentId),
       });
       promptPreviewText.value = preview.systemPrompt || "";
     } catch (e) {
@@ -110,4 +121,3 @@ export function usePromptPreview(options: UsePromptPreviewOptions) {
     closePromptPreview,
   };
 }
-

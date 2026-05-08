@@ -332,7 +332,7 @@ fn ensure_default_shell_workspace_in_config(config: &mut AppConfig, state: &AppS
             {
                 workspace.path = default_path.clone();
                 runtime_log_info(format!(
-                    "[终端工作空间迁移] 助理私人目录路径已更新: '{}' -> '{}'",
+                    "[终端工作空间迁移] 自我目录路径已更新: '{}' -> '{}'",
                     candidate.display(),
                     workspace.path
                 ));
@@ -621,7 +621,7 @@ fn terminal_allowed_workspaces_for_conversation_canonical(
         .find(|workspace| workspace.level == SHELL_WORKSPACE_LEVEL_SYSTEM)
         .cloned()
         .or_else(|| config_workspaces.first().cloned())
-        .ok_or_else(|| "No assistant private workspace available".to_string())?;
+        .ok_or_else(|| "No self directory available".to_string())?;
 
     // 判断是否为联系人会话，若是则使用联系人配置的工作区，系统目录降为 read_only
     let is_contact_conversation = conversation
@@ -759,7 +759,7 @@ fn terminal_system_workspace_resolved(state: &AppState) -> Result<TerminalWorksp
     terminal_config_allowed_workspaces_canonical(state)?
         .into_iter()
         .find(|workspace| workspace.level == SHELL_WORKSPACE_LEVEL_SYSTEM)
-        .ok_or_else(|| "No assistant private workspace available".to_string())
+        .ok_or_else(|| "No self directory available".to_string())
 }
 
 fn terminal_default_workspace_resolved(state: &AppState) -> Result<TerminalWorkspaceResolved, String> {
@@ -862,44 +862,60 @@ fn terminal_prompt_trusted_roots_block(
         .ok();
     let runtime_shell = terminal_shell_for_state(state);
 
+    let shell_title = match runtime_shell.kind.as_str() {
+        "powershell7" => "PowerShell 7",
+        "powershell5" => "Windows PowerShell 5.1",
+        "git-bash" => "Git Bash",
+        "missing-terminal-shell" => "Unavailable",
+        other => other,
+    };
     let mut lines = Vec::<String>::new();
     lines.push(format!("当前操作系统: {}", std::env::consts::OS));
-    lines.push(format!("当前 shell: {}", terminal_shell_runtime_label(&runtime_shell)));
+    lines.push(format!("当前 shell: {}", shell_title));
     if terminal_conversation_shell_autonomous_mode(conversation) {
         lines.push("当前会话已开启“给予本会话最大权限”：终端与补丁工具可访问任意目录，并跳过目录权限、智能评估与人工审批。".to_string());
     }
+    let mut workspace_order = Vec::<String>::new();
+    let mut workspace_roles = std::collections::HashMap::<String, (Vec<String>, String)>::new();
+    let mut record_workspace =
+        |workspace: &TerminalWorkspaceResolved, role_label: Option<&str>| {
+            let path = terminal_path_for_user(&workspace.path);
+            let entry = workspace_roles
+                .entry(path.clone())
+                .or_insert_with(|| {
+                    workspace_order.push(path.clone());
+                    (Vec::new(), workspace.access.clone())
+                });
+            if let Some(role_label) = role_label {
+                if !entry.0.iter().any(|value| value == role_label) {
+                    entry.0.push(role_label.to_string());
+                }
+            }
+        };
     if let Some(system) = &system_workspace {
-        lines.push(format!(
-            "助理私人目录: {} [{} / {}] {}",
-            system.name,
-            system.level,
-            system.access,
-            terminal_path_for_user(&system.path)
-        ));
+        record_workspace(system, Some("自我目录（Self Directory）"));
     }
     if let Some(default_workspace) = &default_workspace {
-        lines.push(format!(
-            "Shell 默认启动/执行目录: {} [{} / {}] {}",
-            default_workspace.name,
-            default_workspace.level,
-            default_workspace.access,
-            terminal_path_for_user(&default_workspace.path)
-        ));
+        record_workspace(
+            default_workspace,
+            Some("Shell 启动目录（Session Working Directory）"),
+        );
     }
-    if !workspaces.is_empty() {
-        lines.push("当前允许的工作目录：".to_string());
-        for workspace in &workspaces {
-            lines.push(format!(
-                "- {} [{} / {}] {}",
-                workspace.name,
-                workspace.level,
-                workspace.access,
-                terminal_path_for_user(&workspace.path)
-            ));
+    for workspace in &workspaces {
+        record_workspace(workspace, None);
+    }
+    for path in workspace_order {
+        if let Some((roles, access)) = workspace_roles.remove(&path) {
+            if roles.is_empty() {
+                lines.push(format!("{path}：访问权限：{access}"));
+            } else {
+                lines.push(format!(
+                    "{path}：{}，访问权限：{access}",
+                    roles.join(" / ")
+                ));
+            }
         }
     }
-    lines.push("显式绝对路径可用于读取；若绝对路径未命中任何已配置工作目录，则禁止写入。".to_string());
-    lines.push("审批只用于 apply_patch 与明确写文件的终端命令；python/py 只有 full_access 才允许。".to_string());
     Some(prompt_xml_block("shell workspace", lines.join("\n")))
 }
 

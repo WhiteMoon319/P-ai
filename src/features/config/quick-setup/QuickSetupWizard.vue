@@ -637,7 +637,7 @@ function applySnapshot(snapshot: AppBootstrapSnapshot) {
   identityDraft.assistantName = String(assistantAgent?.name || "派师傅").trim() || "派师傅";
   identityDraft.departmentName = String(assistantDepartment()?.name || "助理部门").trim() || "助理部门";
   const workspace = config.shellWorkspaces?.[0];
-  workspaceDraft.name = String(workspace?.name || "默认工作空间").trim() || "默认工作空间";
+  workspaceDraft.name = String(workspace?.name || "默认会话目录").trim() || "默认会话目录";
   workspaceDraft.path = String(workspace?.path || "").trim();
   const existing = findQuickLlmConfig() || (config.apiConfigs || []).find(isUsableTextLlmConfig);
   if (existing) {
@@ -1021,7 +1021,7 @@ function applyLlmDraft() {
 function applyWorkspaceDraft() {
   config.shellWorkspaces = [{
     id: "system-workspace",
-    name: workspaceDraft.name.trim() || "默认工作空间",
+    name: workspaceDraft.name.trim() || "默认会话目录",
     path: workspaceDraft.path.trim(),
     level: "system",
     access: "full_access",
@@ -1151,7 +1151,7 @@ async function pickWorkspacePath() {
   if (!picked || Array.isArray(picked)) return;
   workspaceDraft.path = String(picked);
   if (!workspaceDraft.name.trim()) {
-    workspaceDraft.name = picked.replace(/\\/g, "/").split("/").filter(Boolean).pop() || "默认工作空间";
+    workspaceDraft.name = picked.replace(/\\/g, "/").split("/").filter(Boolean).pop() || "默认会话目录";
   }
 }
 

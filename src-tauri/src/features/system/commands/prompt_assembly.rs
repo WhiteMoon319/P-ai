@@ -1157,13 +1157,17 @@ mod prompt_assembly_tests {
         );
 
         let fixed_index = prompt.find("固定系统块").expect("fixed block");
+        let task_index = prompt.find("<task tool rule>").expect("task tool rule");
         let plan_index = prompt.find("提问之法").expect("plan tool rule");
+        let todo_index = prompt.find("<todo tool rule>").expect("todo tool rule");
         let runtime_index = prompt.find("运行环境块").expect("runtime block");
         let remote_contact_index = prompt
             .find("联系人是特殊用户")
             .expect("remote im contact rules");
 
         assert!(fixed_index < plan_index);
+        assert!(task_index < plan_index);
+        assert!(plan_index < todo_index);
         assert!(plan_index < runtime_index);
         assert!(runtime_index < remote_contact_index);
         assert!(!prompt.contains("技能索引块"));

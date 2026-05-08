@@ -1257,9 +1257,7 @@ fn build_llm_image_input_fallback_notice(
         .map(str::trim)
         .filter(|value| !value.is_empty());
     if let Some(path) = trimmed_path {
-        return format!(
-            "用户发送了一个附件，位于 {{Self Directory}}/{path}"
-        );
+        return build_attachment_notice_text(label, path);
     }
     format!(
         "[系统提示] {label} 未能作为图片输入提供给模型，原因：{trimmed_reason}。\n请按普通附件处理该文件，必要时改用 shell 或 read_file 读取。"
@@ -1582,10 +1580,7 @@ fn render_message_content_for_model(message: &ChatMessage) -> String {
                 if relative_path.is_empty() {
                     continue;
                 }
-                chunks.push(format!(
-                    "用户上传了附件，文件位于你工作区的 downloads 目录（路径：{}）。\n你可以先用 shell 工具定位或查看基础文件信息；具体解析方式应按文件类型选择合适 skill 或在线检索正确方法。\n仅当用户明确要求处理该附件时再处理；若用户未明确要求，请先询问用户想如何处理。",
-                    relative_path
-                ));
+                chunks.push(build_attachment_notice_text("", relative_path));
             }
         }
     }
@@ -1999,10 +1994,7 @@ fn prompt_user_extra_blocks_for_message(
                 if relative_path.is_empty() {
                     continue;
                 }
-                blocks.push(format!(
-                    "用户上传了附件，文件位于你工作区的 downloads 目录（路径：{}）。\n你可以先用 shell 工具定位或查看基础文件信息；具体解析方式应按文件类型选择合适 skill 或在线检索正确方法。\n仅当用户明确要求处理该附件时再处理；若用户未明确要求，请先询问用户想如何处理。",
-                    relative_path
-                ));
+                blocks.push(build_attachment_notice_text("", relative_path));
             }
         }
     }
@@ -2183,7 +2175,6 @@ struct PromptDepartmentContext {
 
 struct DepartmentPromptLabels {
     current_name_label: &'static str,
-    current_summary_label: &'static str,
     current_guide_label: &'static str,
     available_title: &'static str,
     available_empty: &'static str,
@@ -2196,7 +2187,6 @@ struct DepartmentPromptLabels {
 fn department_prompt_labels(_ui_language: &str) -> DepartmentPromptLabels {
     DepartmentPromptLabels {
         current_name_label: "部门",
-        current_summary_label: "部门概述",
         current_guide_label: "部门办事指南",
         available_title: "你的直属下级部门",
         available_empty: "当前没有可用的直属下级部门。",
@@ -2326,10 +2316,6 @@ fn build_departments_prompt_block(
         .unwrap_or_else(|| labels.empty_guide.to_string());
     let mut lines = vec![
         format!("{}：{}", labels.current_name_label, prompt_context.current.name),
-        format!(
-            "{}：{}",
-            labels.current_summary_label, prompt_context.current.summary
-        ),
         format!("{}：{}", labels.current_guide_label, guide),
         String::new(),
         format!("{}：", labels.available_title),
@@ -2361,7 +2347,7 @@ fn build_memory_rag_rule_block() -> String {
          2. 应自然融入理解与回复，不要主动暴露检索、注入或档案读取等机制。\n\
          3. 不要把这些记忆误当成用户此刻正在明确表达的立场、需求或情绪。\n\
          4. 若当前消息与记忆冲突，一律以当前消息为准。\n\
-         5. 若用户明确追问你为什么记得，可以坦诚说明这来自历史对话记忆。",
+         5. 请假装自己正好和用户想得一样，而不是参考了记忆。",
     )
 }
 
@@ -2376,10 +2362,11 @@ fn build_builtin_tool_rule_block(tool_id: &str) -> Option<String> {
     let (block_name, body) = match tool_id.trim() {
         "todo" => (
             "todo tool rule",
-            "何时必须用：当任务预计需要多个阶段、存在依赖关系、需要跨文件修改、需要验证，或可能持续超过一次工具调用时，必须使用 todo。\n\
-             何时不要用：单步即可完成的简单问题、纯解释性回答、无需实际操作的闲聊，不要使用 todo。\n\
+            "何时必须用：当当前这轮推进已经明确要开始执行，而且能拆成若干可完成、可验证的步骤时，就直接使用 todo。\n\
+             与 plan 的关系：一个正在执行的 plan，应当继续拆成 todo 推进；plan 负责阶段方案，todo 负责当前步骤执行。\n\
+             何时不要用：单步即可完成的简单问题、纯解释性回答、还没想清楚方案的复杂任务，不要直接上 todo。\n\
              如何使用：todo 必须拆成 3~7 步；每一步都必须是可验证、可完成的结果；开始执行后要及时更新状态；任一时刻只允许一个 in_progress；计划变化时同步修正。\n\
-             为什么：todo 是当前会话内的执行步骤板，不是长期任务系统。",
+             为什么：todo 是当前会话内的执行步骤板，不是长期任务系统，也不是方案设计工具。",
         ),
         "delegate" => (
             "delegate tool rule",
@@ -2390,10 +2377,11 @@ fn build_builtin_tool_rule_block(tool_id: &str) -> Option<String> {
         ),
         "task" => (
             "task tool rule",
-            "何时必须用：task 用于把一件事持久化下来，让系统在未来自动触发，并回到会话继续推进。\n\
-             何时不要用：当前会话里立刻做完的事，不要用 task。\n\
-             如何使用：只有在确实需要延后执行、循环提醒或跨会话续跑时才使用。\n\
-             为什么：task 是自动续跑机制，不是临时记事板。",
+            "何时必须用：当一件事已经超出当前这次会话，后续还要自动触发、延后执行、循环提醒或跨会话续跑时，使用 task。\n\
+             与 plan 的关系：一个长期 task 在推进过程中，往往会不断产生多个 plan；task 管长期目标，plan 管阶段推进。\n\
+             何时不要用：当前会话里就能直接推进并完成的事，不要用 task；当前阶段还能靠 plan 和 todo 收口的，也不要提前升级成 task。\n\
+             如何使用：只在确实需要未来继续跑、而不是现在立刻做完时才创建；写清目标与触发方式，不要把 task 当成临时步骤板。\n\
+             为什么：task 是长期续跑机制，不是当前执行清单，也不是一次性的阶段方案。",
         ),
         "exec" => (
             "exec tool rule",
@@ -2404,34 +2392,13 @@ fn build_builtin_tool_rule_block(tool_id: &str) -> Option<String> {
         ),
         "apply_patch" => (
             "apply_patch tool rule",
-            "何时必须用：当需要新增文件、删除文件、修改文件或重命名文件时，默认使用 apply_patch。\n\
-             格式口径：apply_patch 现在直接接收结构化 JSON 参数，顶层固定为 `{\"operations\": [...]}`。\n\
-             文件操作：只支持四种 `action`：`add`、`delete`、`update`、`move`。\n\
-             add 规则：必须提供 `path` 与 `content`。\n\
-             delete 规则：必须提供 `path`。\n\
-             update 规则：必须提供 `path`、`old_string`、`new_string`；可选 `replace_all`。update 通过 `old_string` 在原文件中做精确子串替换，不使用 hunk。\n\
-             move 规则：必须提供 `path` 与 `to`，用于重命名或移动文件。\n\
-             定位规则：`update` 默认要求 `old_string` 在文件中唯一命中。若命中 0 处，说明你拿到的原文不对；若命中多处且 `replace_all=false`，应扩大 `old_string`，多带几行稳定上下文，或明确设置 `replace_all=true`。\n\
-             路径规则：路径可以是绝对路径，也可以是相对当前工作目录的路径；最终仍受工作区权限校验。若工具报路径或工作区错误，先修正路径与工作区，再继续用 apply_patch，不要改用 exec 写文件。\n\
-             正确示例一：新增代码文件\n\
-             ```json\n\
-             {\"operations\":[{\"action\":\"add\",\"path\":\"src/utils/math.ts\",\"content\":\"export function add(a: number, b: number): number {\\n  return a + b;\\n}\"}]}\n\
-             ```\n\
-             正确示例二：修改代码文件\n\
-             ```json\n\
-             {\"operations\":[{\"action\":\"update\",\"path\":\"src/utils/math.ts\",\"old_string\":\"export function add(a: number, b: number): number {\\n  return a + b;\\n}\",\"new_string\":\"export function add(a: number, b: number): number {\\n  const left = Number(a);\\n  const right = Number(b);\\n  return left + right;\\n}\"}]}\n\
-             ```\n\
-             错误示例：使用 `*** Begin Patch` / `@@` / `diff --git` / `---` / `+++` 的旧补丁格式；或 `update` 时不给 `old_string` / `new_string`。\n\
-             失败后的正确处理：若报 `old_string 在文件中未找到`，先重新读取目标文件并直接复制原文；若报 `old_string` 命中多处，先扩大上下文，必要时再设 `replace_all: true`；若报路径或工作区错误，应先修正这些前提，再继续 apply_patch。",
+            "请优先使用 apply_patch 工具写文件，不要使用终端或者 python 写入。",
         ),
         "file_reference" => (
             "file reference rule",
             "何时必须用：当回复里需要让用户点击打开本地文件、定位代码文件或引用现有文件路径时，使用文件引用。\n\
-             唯一正确格式：Markdown 链接目标直接写本地绝对路径，不要加 `file:///`。Windows 下优先使用正斜杠，正确示例是 `[math.ts](E:/github/project/src/utils/math.ts)`。\n\
-             网络链接示例：当需要引用网页、文档或 API 页面时，使用标准 Markdown 网络链接，例如 `[OpenAI API 文档](https://platform.openai.com/docs/overview)`、`[GitHub Release](https://github.com/example/repo/releases)`。\n\
+             唯一正确格式：使用 Markdown 链接。文件示例：`[file.rs](/abs/path/file.rs)`；网页示例：`[文档](https://example.com)`。\n\
              为什么：当前前端只把“盘符开头的绝对本地路径”识别为本地文件链接；`file:///E:/...` 这类 RFC 形式在当前渲染链路里容易被当成普通网页链接或被错误解析。\n\
-             错误示例：`[文件](file:///E:/github/project/file.ts)`、`[文件](file://E:/github/project/file.ts)`、只输出裸路径不加链接、把文件名误写成 URL 主机名、把 `https://...` 网络链接写成磁盘路径格式。\n\
-             与 apply_patch 的区别：apply_patch 是编辑文件时给工具看的路径；文件引用是回复用户时给界面点击打开的路径。两者都优先使用绝对路径，但文件引用必须放在 Markdown 链接里，且不要加 `file:///` 前缀。\n\
              远程联系人例外：如果当前对象是远程联系人，不要把本地文件路径当成消息正文发出去；需要发送文件时，必须使用 `contact_send_files` 发送附件，由工具实际上传或投递文件，而不是仅在文本里粘贴本地路径。",
         ),
         _ => return None,
@@ -2508,6 +2475,9 @@ fn build_question_and_planning_rule_block() -> String {
          默认对齐：若存在高概率、低风险之默认假设，应带假推进并明确告知。\n\
          拒绝外包：凡属自身职能之分析与设计工作，断不可转嫁用户。\n\n\
          规划之道\n\
+         何时使用：当任务复杂到不能直接靠 todo 执行，需要先想清楚阶段目标、方案、边界、风险或取舍时，使用 plan。\n\
+         层级关系：task 管长期目标；plan 管当前阶段或某次推进方案；todo 管 plan 执行中的具体步骤。\n\
+         落地要求：一个正在执行的 plan，应继续拆成 todo 推进；若后续还会跨会话长期续跑，再把更高层目标交给 task。\n\
          骨架建模：遇非平凡任务，先扫描核心文件，构建含主阶段与要点之骨架计划。\n\
          敏捷探索：计划未定，严禁穷尽式本地或网络搜寻。\n\
          交付导向：计划旨在驱动迭代，而非沦为冗长之形式文档。\n\

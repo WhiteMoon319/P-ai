@@ -861,6 +861,7 @@ const {
   closePromptPreview,
 } = usePromptPreview({
   t: tr,
+  currentConversationId: currentChatConversationId,
 });
 
 const {
@@ -1687,7 +1688,7 @@ const chatUnarchivedConversationItems = computed(() => {
       departmentName: String(item.departmentName || "").trim(),
       parentConversationId: String(item.parentConversationId || "").trim() || undefined,
       forkMessageCursor: String(item.forkMessageCursor || "").trim() || undefined,
-      workspaceLabel: String(item.workspaceLabel || "").trim() || "默认工作空间",
+      workspaceLabel: String(item.workspaceLabel || "").trim() || "默认会话目录",
       isActive: !!item.isActive,
       isMainConversation: !!item.isMainConversation,
       isPinned: !!item.isPinned,
@@ -3634,7 +3635,7 @@ async function recoverForegroundConversationFromOverview(reason: string, preferr
 function syncCurrentConversationWorkspaceLabel() {
   const currentConversationId = String(currentChatConversationId.value || "").trim();
   if (!currentConversationId) return;
-  const nextLabel = String(chatWorkspaceName.value || "").trim() || "默认工作空间";
+  const nextLabel = String(chatWorkspaceName.value || "").trim() || "默认会话目录";
   let changed = false;
   const nextItems = unarchivedConversations.value.map((item) => {
     if (String(item.conversationId || "").trim() !== currentConversationId) {

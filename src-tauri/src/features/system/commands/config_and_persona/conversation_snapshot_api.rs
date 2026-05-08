@@ -817,7 +817,7 @@ mod conversation_snapshot_api_tests {
             department_name: "部门A".to_string(),
             parent_conversation_id: parent_conversation_id.map(ToOwned::to_owned),
             fork_message_cursor: None,
-            workspace_label: "默认工作空间".to_string(),
+            workspace_label: "默认会话目录".to_string(),
             is_active: false,
             is_main_conversation: false,
             is_pinned: false,

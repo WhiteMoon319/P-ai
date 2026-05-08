@@ -3980,6 +3980,8 @@
         let mut parent = default_assistant_department("api-a");
         parent.id = "dept-parent".to_string();
         parent.name = "父部门".to_string();
+        parent.summary = "当任务需要总控时叫我".to_string();
+        parent.guide = "你负责统筹和推进".to_string();
         parent.is_built_in_assistant = false;
         parent.agent_ids = vec![agent.id.clone()];
         parent.child_department_ids = vec!["dept-child".to_string()];
@@ -3987,6 +3989,7 @@
         let mut child = default_assistant_department("api-a");
         child.id = "dept-child".to_string();
         child.name = "同人格子部门".to_string();
+        child.summary = "当任务需要专项摸底时叫我".to_string();
         child.is_built_in_assistant = false;
         child.agent_ids = vec![agent.id.clone()];
 
@@ -3997,7 +4000,11 @@
             "zh-CN",
         );
 
+        assert!(block.contains("部门：父部门"));
+        assert!(block.contains("部门办事指南：你负责统筹和推进"));
+        assert!(!block.contains("部门概述：当任务需要总控时叫我"));
         assert!(block.contains("同人格子部门"));
+        assert!(block.contains("概述：当任务需要专项摸底时叫我"));
     }
 
     #[test]

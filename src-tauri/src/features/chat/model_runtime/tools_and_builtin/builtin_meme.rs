@@ -834,7 +834,7 @@ impl RuntimeToolMetadata for BuiltinMemeTool {
         ProviderToolDefinition::new(
             "meme",
             format!(
-                "把当前看到的图片偷进助理私人目录 `.meme` 贴纸库。当前可用表情分类：{}。不要用本工具查询列表；如果需要在回答中使用贴纸，直接输出 `:分类名:`。只有在需要新增贴纸库存时才调用本工具。",
+                "把当前看到的图片偷进自我目录（Self Directory）下的 `.meme` 贴纸库。当前可用表情分类：{}。不要用本工具查询列表；如果需要在回答中使用贴纸，直接输出 `:分类名:`。只有在需要新增贴纸库存时才调用本工具。",
                 categories
             ),
             serde_json::json!({

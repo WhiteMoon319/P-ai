@@ -6,13 +6,19 @@ const LEGACY_SYSTEM_NAMES = [
   "系統工作目錄",
   "助理私人目录",
   "助理私人目錄",
+  "自我目录",
+  "自我目錄",
   "assistant private workspace",
+  "self directory",
 ];
 
 const LEGACY_MAIN_NAMES = [
   "shell directory",
   "终端目录",
   "終端目錄",
+  "会话工作目录",
+  "會話工作目錄",
+  "session working directory",
   "main workspace",
   "主要工作目录",
   "主要工作目錄",

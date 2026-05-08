@@ -36,10 +36,7 @@ fn dingtalk_push_normalized_image_or_attachment(
                         relative_path: relative_path.clone(),
                         mime: mime.to_string(),
                     });
-                    Some(format!(
-                        "用户发送了一个附件，位于 {{Self Directory}}/{}",
-                        relative_path
-                    ))
+                    Some(build_attachment_notice_text("", &relative_path))
                 }
                 Err(save_err) => {
                     eprintln!(
