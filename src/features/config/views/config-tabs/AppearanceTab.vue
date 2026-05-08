@@ -25,24 +25,11 @@
             <p class="mt-1 text-xs text-base-content/60">{{ t("appearance.markdownFontScaleHint") }}</p>
           </div>
         </div>
-        <div class="tabs tabs-box bg-base-200 p-1">
-          <button
-            type="button"
-            class="tab flex-1 rounded-btn"
-            :class="markdownFontScale < 1 ? 'tab-active' : ''"
-            @click="setMarkdownFontScale(0)"
-          >
-            {{ t("appearance.markdownFontScaleLight") }}
-          </button>
-          <button
-            type="button"
-            class="tab flex-1 rounded-btn"
-            :class="markdownFontScale >= 1 ? 'tab-active' : ''"
-            @click="setMarkdownFontScale(1)"
-          >
-            {{ t("appearance.markdownFontScaleHeavy") }}
-          </button>
-        </div>
+        <SegmentedControl
+          :model-value="markdownFontScale < 1 ? 0 : 1"
+          :options="markdownFontScaleOptions"
+          @change="setMarkdownFontScale"
+        />
       </div>
     </div>
 
@@ -116,6 +103,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import SegmentedControl from "../../components/SegmentedControl.vue";
 import ThemePreviewGrid from "../../components/ThemePreviewGrid.vue";
 import GeneratedThemeEditor from "../../components/GeneratedThemeEditor.vue";
 import {
@@ -152,6 +140,10 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const activeTab = ref<"preset" | "generated">("generated");
 const webviewZoomMarks = [80, 90, 100, 110, 120, 150] as const;
+const markdownFontScaleOptions = computed(() => [
+  { value: 0, label: t("appearance.markdownFontScaleLight") },
+  { value: 1, label: t("appearance.markdownFontScaleHeavy") },
+]);
 const lightThemes = computed(() => APP_THEMES.filter((theme) => !DARK_APP_THEMES.has(theme)));
 const darkThemes = computed(() => APP_THEMES.filter((theme) => DARK_APP_THEMES.has(theme)));
 const normalizedWebviewZoomPercent = computed(() => {

@@ -9,23 +9,22 @@
     </div>
 
     <div class="overflow-hidden rounded-box border border-base-300 bg-base-100">
-      <div class="grid grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-base-300/70 px-3 py-2">
-        <div class="font-medium">
-          {{ t("config.task.title") }}
-          <span v-if="filteredTasks.length">（{{ filteredTasks.length }}）</span>
-        </div>
-        <div class="flex justify-center">
-          <form class="filter" @reset.prevent="resetFilter">
-            <input class="btn btn-sm btn-square" type="reset" value="×" :aria-label="t('common.reset')" :title="t('common.reset')" />
-            <input class="btn btn-sm" type="radio" name="task-filter" value="active" :checked="filter === 'active'" :aria-label="t('config.task.filters.active')" @change="setFilter('active')" />
-            <input class="btn btn-sm" type="radio" name="task-filter" value="completed" :checked="filter === 'completed'" :aria-label="t('config.task.filters.completed')" @change="setFilter('completed')" />
-          </form>
-        </div>
-        <div class="flex items-center justify-end gap-2">
+      <div class="border-b border-base-300/70 px-3 py-2">
+        <div class="flex items-center justify-between gap-2">
+          <div class="font-medium">
+            {{ t("config.task.title") }}
+            <span v-if="filteredTasks.length">（{{ filteredTasks.length }}）</span>
+          </div>
           <button class="btn btn-sm btn-ghost" :disabled="listLoading" @click="loadTasks()">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
           </button>
         </div>
+        <SegmentedControl
+          v-model="filter"
+          class="mt-2"
+          :options="taskFilterOptions"
+          size="sm"
+        />
       </div>
 
       <div v-if="listLoading && !tasks.length" class="py-8 text-center text-sm opacity-60">{{ t("common.loading") }}</div>
@@ -131,6 +130,7 @@ import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../../services/tauri-api";
 import { formatIsoToLocalDateTime } from "../../../../utils/time";
+import SegmentedControl from "../../components/SegmentedControl.vue";
 import TaskEditorCard from "./TaskEditorCard.vue";
 import {
   createEmptyTaskEditorForm,
@@ -188,6 +188,10 @@ const runLogs = ref<TaskRunLogEntry[]>([]);
 const selectedTaskId = ref("");
 const filter = ref<TaskFilter>("active");
 const page = ref(1);
+const taskFilterOptions = computed(() => [
+  { value: "active" as const, label: t("config.task.filters.active") },
+  { value: "completed" as const, label: t("config.task.filters.completed") },
+]);
 
 const editorDialog = ref<HTMLDialogElement | null>(null);
 const discardConfirmDialog = ref<HTMLDialogElement | null>(null);
@@ -257,14 +261,6 @@ function completionStateLabel(value: string): string {
   if (value === "failed_completed") return t("config.task.completionStates.failedCompleted");
   if (value === "active") return t("config.task.filters.active");
   return value || "-";
-}
-
-function resetFilter() {
-  filter.value = "";
-}
-
-function setFilter(value: Exclude<TaskFilter, "">) {
-  filter.value = value;
 }
 
 function resetEditorForm(mode: TaskEditorMode, task: TaskEntry | null) {

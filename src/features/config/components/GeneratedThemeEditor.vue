@@ -35,24 +35,11 @@
 
       <div class="grid gap-4">
         <div class="space-y-2">
-          <div class="join w-full">
-            <button
-              type="button"
-              class="btn join-item flex-1"
-              :class="props.controls.mode === 'light' ? 'btn-primary' : 'border-base-300 bg-base-200 hover:bg-base-300'"
-              @click="patchControls({ mode: 'light' })"
-            >
-              {{ t("appearance.modeOptions.light") }}
-            </button>
-            <button
-              type="button"
-              class="btn join-item flex-1"
-              :class="props.controls.mode === 'dark' ? 'btn-primary' : 'border-base-300 bg-base-200 hover:bg-base-300'"
-              @click="patchControls({ mode: 'dark' })"
-            >
-              {{ t("appearance.modeOptions.dark") }}
-            </button>
-          </div>
+          <SegmentedControl
+            :model-value="props.controls.mode"
+            :options="modeOptions"
+            @change="patchMode"
+          />
         </div>
 
         <label class="grid gap-2">
@@ -156,18 +143,11 @@
             <span>{{ t("appearance.uiSizePreset") }}</span>
             <span class="text-xs text-base-content/65">{{ sizePresetLabel }}</span>
           </div>
-          <div class="join w-full">
-            <button
-              v-for="preset in sizePresets"
-              :key="preset"
-              type="button"
-              class="btn join-item flex-1"
-              :class="props.controls.uiSizePreset === preset ? 'btn-primary' : 'border-base-300 bg-base-200 hover:bg-base-300'"
-              @click="patchControls({ uiSizePreset: preset })"
-            >
-              {{ t(`appearance.sizePresets.${preset}`) }}
-            </button>
-          </div>
+          <SegmentedControl
+            :model-value="props.controls.uiSizePreset"
+            :options="sizePresetOptions"
+            @change="patchUiSizePreset"
+          />
         </div>
 
         <div class="grid gap-2 md:grid-cols-2">
@@ -198,6 +178,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import SegmentedControl from "./SegmentedControl.vue";
 import {
   GENERATED_THEME_NAME,
   generatedThemeTokensToCssVariables,
@@ -224,12 +205,30 @@ const sizePresets: GeneratedUiSizePreset[] = ["compact", "default", "comfortable
 
 const previewStyle = computed(() => generatedThemeTokensToCssVariables(props.tokens));
 const sizePresetLabel = computed(() => t(`appearance.sizePresets.${props.controls.uiSizePreset}`));
+const modeOptions = computed(() => [
+  { value: "light" as const, label: t("appearance.modeOptions.light") },
+  { value: "dark" as const, label: t("appearance.modeOptions.dark") },
+]);
+const sizePresetOptions = computed(() =>
+  sizePresets.map((preset) => ({
+    value: preset,
+    label: t(`appearance.sizePresets.${preset}`),
+  })),
+);
 const brightnessLabel = computed(() =>
   props.controls.mode === "dark" ? t("appearance.darkness") : t("appearance.brightness"),
 );
 
 function patchControls(patch: Partial<GeneratedThemeControls>) {
   emit("updateControls", patch);
+}
+
+function patchMode(mode: "light" | "dark") {
+  patchControls({ mode });
+}
+
+function patchUiSizePreset(uiSizePreset: GeneratedUiSizePreset) {
+  patchControls({ uiSizePreset });
 }
 
 function patchSlider(key: "themeHue" | "contrast" | "brightness" | "tint" | "tone" | "radius", event: Event) {

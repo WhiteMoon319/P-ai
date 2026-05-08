@@ -50,17 +50,12 @@
     <div class="card bg-base-100 border border-base-300">
       <div class="card-body p-4">
         <h3 class="card-title text-base mb-3">{{ t("config.chatSettings.responseStyle") }}</h3>
-        <div class="join w-full">
-          <button
-            v-for="style in responseStyleOptions"
-            :key="style.id"
-            class="btn btn-sm join-item flex-1"
-            :class="responseStyleId === style.id ? 'btn-primary' : 'bg-base-200'"
-            @click="onResponseStyleChange(style.id)"
-          >
-            {{ t(`responseStyle.${style.id}`) }}
-          </button>
-        </div>
+        <SegmentedControl
+          :model-value="responseStyleId"
+          :options="responseStyleSegmentOptions"
+          size="sm"
+          @change="onResponseStyleChange"
+        />
       </div>
     </div>
 
@@ -68,22 +63,12 @@
     <div class="card bg-base-100 border border-base-300">
       <div class="card-body p-4">
         <h3 class="card-title text-base mb-3">{{ t("config.chatSettings.pdfReadMode") }}</h3>
-        <div class="join w-full">
-          <button
-            class="btn btn-sm join-item flex-1"
-            :class="pdfReadMode === 'text' ? 'btn-primary' : 'bg-base-200'"
-            @click="onPdfReadModeChange('text')"
-          >
-            {{ t("config.chatSettings.pdfReadModeText") }}
-          </button>
-          <button
-            class="btn btn-sm join-item flex-1"
-            :class="pdfReadMode === 'image' ? 'btn-primary' : 'bg-base-200'"
-            @click="onPdfReadModeChange('image')"
-          >
-            {{ t("config.chatSettings.pdfReadModeImage") }}
-          </button>
-        </div>
+        <SegmentedControl
+          :model-value="pdfReadMode"
+          :options="pdfReadModeOptions"
+          size="sm"
+          @change="onPdfReadModeChange"
+        />
         <div class="mt-3 text-xs opacity-70">{{ t("config.chatSettings.pdfReadModeHint") }}</div>
       </div>
     </div>
@@ -109,22 +94,12 @@
     <div class="card bg-base-100 border border-base-300">
       <div class="card-body p-4">
         <h3 class="card-title text-base mb-3">{{ t("config.chatSettings.backgroundVoiceScreenshotMode") }}</h3>
-        <div class="join w-full">
-          <button
-            class="btn btn-sm join-item flex-1"
-            :class="backgroundVoiceScreenshotMode === 'desktop' ? 'btn-primary' : 'bg-base-200'"
-            @click="onBackgroundVoiceScreenshotModeChange('desktop')"
-          >
-            {{ t("config.chatSettings.backgroundVoiceScreenshotModeDesktop") }}
-          </button>
-          <button
-            class="btn btn-sm join-item flex-1"
-            :class="backgroundVoiceScreenshotMode === 'focused_window' ? 'btn-primary' : 'bg-base-200'"
-            @click="onBackgroundVoiceScreenshotModeChange('focused_window')"
-          >
-            {{ t("config.chatSettings.backgroundVoiceScreenshotModeFocusedWindow") }}
-          </button>
-        </div>
+        <SegmentedControl
+          :model-value="backgroundVoiceScreenshotMode"
+          :options="backgroundVoiceScreenshotModeOptions"
+          size="sm"
+          @change="onBackgroundVoiceScreenshotModeChange"
+        />
         <div class="mt-3 text-xs opacity-70">{{ t("config.chatSettings.backgroundVoiceScreenshotModeHint") }}</div>
       </div>
     </div>
@@ -195,6 +170,7 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { Plus, Trash2 } from "lucide-vue-next";
+import SegmentedControl from "../../components/SegmentedControl.vue";
 import type { AppConfig, ApiConfigItem, ChatSettingsPatch, ConversationApiSettingsPatch, ImageTextCacheStats, PromptCommandPreset, ResponseStyleOption } from "../../../../types/app";
 
 const props = defineProps<{
@@ -213,6 +189,20 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
+const responseStyleSegmentOptions = computed(() =>
+  props.responseStyleOptions.map((style) => ({
+    value: style.id,
+    label: t(`responseStyle.${style.id}`),
+  })),
+);
+const pdfReadModeOptions = computed(() => [
+  { value: "text" as const, label: t("config.chatSettings.pdfReadModeText") },
+  { value: "image" as const, label: t("config.chatSettings.pdfReadModeImage") },
+]);
+const backgroundVoiceScreenshotModeOptions = computed(() => [
+  { value: "desktop" as const, label: t("config.chatSettings.backgroundVoiceScreenshotModeDesktop") },
+  { value: "focused_window" as const, label: t("config.chatSettings.backgroundVoiceScreenshotModeFocusedWindow") },
+]);
 const emit = defineEmits<{
   (e: "update:responseStyleId", value: string): void;
   (e: "update:pdfReadMode", value: "text" | "image"): void;

@@ -105,24 +105,14 @@
                 {{ t('config.persona.currentStatus') }}{{ selectedPersona.privateMemoryEnabled ? t('config.persona.private') : t('config.persona.public') }}
               </div>
             </div>
-            <div class="flex gap-1">
-              <button
-                class="badge badge-sm cursor-pointer"
-                :class="!selectedPersona.privateMemoryEnabled ? 'badge-primary' : 'badge-ghost'"
-                :disabled="privateMemoryCounting || privateMemorySwitching"
-                @click="setPrivateMemoryMode(false)"
-              >
-                {{ t('config.persona.global') }}
-              </button>
-              <button
-                class="badge badge-sm cursor-pointer"
-                :class="selectedPersona.privateMemoryEnabled ? 'badge-primary' : 'badge-ghost'"
-                :disabled="privateMemoryCounting || privateMemorySwitching"
-                @click="setPrivateMemoryMode(true)"
-              >
-                {{ t('config.persona.private') }}
-              </button>
-            </div>
+            <SegmentedControl
+              class="min-w-40"
+              :model-value="!!selectedPersona.privateMemoryEnabled"
+              :options="privateMemoryModeOptions"
+              :disabled="privateMemoryCounting || privateMemorySwitching"
+              size="sm"
+              @change="setPrivateMemoryMode"
+            />
           </div>
           <div class="flex justify-end">
             <button class="btn btn-sm btn-ghost" @click="triggerPersonaMemoryImport" :title="t('config.persona.import')">
@@ -190,6 +180,7 @@ import { useI18n } from "vue-i18n";
 import { Plus, RotateCcw, Save, Trash2 } from "lucide-vue-next";
 import type { PersonaProfile } from "../../../../types/app";
 import { invokeTauri } from "../../../../services/tauri-api";
+import SegmentedControl from "../../components/SegmentedControl.vue";
 
 const props = defineProps<{
   personas: PersonaProfile[];
@@ -214,6 +205,10 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const privateMemoryModeOptions = computed(() => [
+  { value: false, label: t("config.persona.global") },
+  { value: true, label: t("config.persona.private") },
+]);
 const personaMemoryImportInput = ref<HTMLInputElement | null>(null);
 const privateMemoryDialog = ref<HTMLDialogElement | null>(null);
 const privateMemoryCounting = ref(false);
