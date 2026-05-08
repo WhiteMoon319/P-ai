@@ -36,7 +36,7 @@
               {{ item.label }}
             </option>
           </select>
-          <div class="text-[11px] opacity-70">
+          <div v-if="t('config.tools.terminalRuntimeHint')" class="text-[11px] opacity-70">
             {{ t("config.tools.terminalRuntimeHint") }}
           </div>
           <div v-if="showGitInstallHintInWorkspace" class="text-[11px] bg-warning/10 text-base-content rounded px-2 py-1 flex items-center gap-2">
