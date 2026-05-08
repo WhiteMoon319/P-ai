@@ -164,8 +164,18 @@ fn build_user_profile_snapshot_block(
     agent: &AgentProfile,
     limit: usize,
 ) -> Result<Option<String>, String> {
-    let memories = memory_store_list_profile_memories_visible_for_agent(
+    build_user_profile_snapshot_block_for_user(data_path, agent, "0", limit)
+}
+
+fn build_user_profile_snapshot_block_for_user(
+    data_path: &PathBuf,
+    agent: &AgentProfile,
+    user_id: &str,
+    limit: usize,
+) -> Result<Option<String>, String> {
+    let memories = memory_store_list_profile_memories_by_user_id_visible_for_agent(
         data_path,
+        user_id,
         &agent.id,
         agent.private_memory_enabled,
         limit,
@@ -177,12 +187,22 @@ fn build_user_profile_snapshot_block(
     ))
 }
 
+#[allow(dead_code)]
 fn build_user_profile_memory_board(
     data_path: &PathBuf,
     agent: &AgentProfile,
 ) -> Result<Option<String>, String> {
-    let memories = memory_store_list_profile_memories_visible_for_agent(
+    build_user_profile_memory_board_for_user(data_path, agent, "0")
+}
+
+fn build_user_profile_memory_board_for_user(
+    data_path: &PathBuf,
+    agent: &AgentProfile,
+    user_id: &str,
+) -> Result<Option<String>, String> {
+    let memories = memory_store_list_profile_memories_by_user_id_visible_for_agent(
         data_path,
+        user_id,
         &agent.id,
         agent.private_memory_enabled,
         0,
@@ -191,6 +211,40 @@ fn build_user_profile_memory_board(
         &memories,
         "user profile memory board",
         "以下内容是完整用户画像记忆（含ID），用于合并、纠错和去除过期画像记忆。",
+    ))
+}
+
+fn build_transient_user_profile_snapshot_block_for_user(
+    data_path: &PathBuf,
+    agent: &AgentProfile,
+    user_id: &str,
+    display_name: &str,
+    limit: usize,
+) -> Result<Option<String>, String> {
+    let memories = memory_store_list_profile_memories_by_user_id_visible_for_agent(
+        data_path,
+        user_id,
+        &agent.id,
+        agent.private_memory_enabled,
+        limit,
+    )?;
+    let label = display_name.trim();
+    let intro = if label.is_empty() {
+        format!(
+            "以下内容是本轮相关用户的长期稳定画像。对象 user_id={}。请把它们视为背景，不要当成本轮即时消息。",
+            user_id.trim()
+        )
+    } else {
+        format!(
+            "以下内容是本轮相关用户的长期稳定画像。对象：{}；user_id={}。请把它们视为背景，不要当成本轮即时消息。",
+            label,
+            user_id.trim()
+        )
+    };
+    Ok(render_user_profile_memory_block(
+        &memories,
+        "user profile snapshot",
+        &intro,
     ))
 }
 
@@ -359,19 +413,68 @@ mod prompt_assembly_tests {
             memory_type: "knowledge".to_string(),
             judgment: "用户当前长期在深圳生活".to_string(),
             reasoning: "本轮明确说明".to_string(),
-            tags: vec!["深圳".to_string(), "居住地".to_string()],
+            tags: vec![
+                "profile".to_string(),
+                "user_id:0".to_string(),
+                "profile_attr:fact".to_string(),
+                "深圳".to_string(),
+                "居住地".to_string(),
+            ],
             owner_agent_id: None,
         }];
-        let (saved, _) = memory_store_upsert_drafts(&data_path, &drafts).expect("seed memories");
-        let memory_id = saved[0].id.clone().expect("memory id");
-        memory_store_upsert_profile_memory_links(&data_path, &vec![memory_id], "auto")
-            .expect("link profile memory");
+        memory_store_upsert_drafts(&data_path, &drafts).expect("seed memories");
 
-        let block = build_user_profile_memory_board(&data_path, &default_agent())
+        let block = build_user_profile_memory_board_for_user(&data_path, &default_agent(), "0")
             .expect("build profile board")
             .expect("profile board should exist");
         assert!(block.contains("用户画像记忆"));
         assert!(block.contains("用户当前长期在深圳生活"));
+    }
+
+    #[test]
+    fn transient_profile_snapshot_should_match_complex_user_id_exactly() {
+        let data_path = temp_data_path("prompt_profile_complex_user_id");
+        let drafts = vec![
+            MemoryDraftInput {
+                memory_type: "knowledge".to_string(),
+                judgment: "微信用户长期使用简洁回复".to_string(),
+                reasoning: "本轮明确说明".to_string(),
+                tags: vec![
+                    "profile".to_string(),
+                    "user_id:o9cq80-MfLBeC-BBD-hStiFtlJSk@im.wechat".to_string(),
+                    "profile_attr:preference".to_string(),
+                    "简洁".to_string(),
+                ],
+                owner_agent_id: None,
+            },
+            MemoryDraftInput {
+                memory_type: "knowledge".to_string(),
+                judgment: "本地用户长期在深圳".to_string(),
+                reasoning: "历史画像".to_string(),
+                tags: vec![
+                    "profile".to_string(),
+                    "user_id:0".to_string(),
+                    "profile_attr:fact".to_string(),
+                    "深圳".to_string(),
+                ],
+                owner_agent_id: None,
+            },
+        ];
+        memory_store_upsert_drafts(&data_path, &drafts).expect("seed memories");
+
+        let block = build_transient_user_profile_snapshot_block_for_user(
+            &data_path,
+            &default_agent(),
+            "o9cq80-MfLBeC-BBD-hStiFtlJSk@im.wechat",
+            "遥酱",
+            4,
+        )
+        .expect("build transient profile block")
+        .expect("transient profile block should exist");
+        assert!(block.contains("遥酱"));
+        assert!(block.contains("o9cq80-MfLBeC-BBD-hStiFtlJSk@im.wechat"));
+        assert!(block.contains("微信用户长期使用简洁回复"));
+        assert!(!block.contains("本地用户长期在深圳"));
     }
 
     #[test]
@@ -882,8 +985,8 @@ mod prompt_assembly_tests {
 
         assert_eq!(first, second);
         let cache = cache_lock_recover("system_prompt_text_cache", system_prompt_text_cache());
-        assert_eq!(cache.len(), 1);
-        assert!(cache.contains_key(&cache_key));
+        let entry = cache.get(&cache_key).expect("cache entry should exist");
+        assert_eq!(entry.text, first);
     }
 
     #[test]

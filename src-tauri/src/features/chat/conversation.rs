@@ -1591,8 +1591,11 @@ fn build_prompt_user_meta_text(
         (false, false) => String::new(),
     };
     let mut tags = Vec::<String>::new();
-    if include_remote_identity {
-        if let Some(origin) = remote_im_origin_from_message(message) {
+    if let Some(origin) = remote_im_origin_from_message(message) {
+        if let Some(user_id) = remote_im_origin_canonical_user_id(origin) {
+            tags.push(format!("user_id={}", user_id));
+        }
+        if include_remote_identity {
             let channel_id = remote_im_origin_string(origin, "channel_id").unwrap_or("");
             let contact_id = remote_im_origin_string(origin, "contact_id").unwrap_or("");
             if !channel_id.is_empty() {
@@ -1744,6 +1747,16 @@ fn remote_im_origin_string<'a>(origin: &'a Value, key: &str) -> Option<&'a str> 
         .as_str()
         .map(str::trim)
         .filter(|value| !value.is_empty())
+}
+
+fn remote_im_origin_canonical_user_id<'a>(origin: &'a Value) -> Option<&'a str> {
+    remote_im_origin_string(origin, "sender_id")
+        .or_else(|| remote_im_origin_string(origin, "contact_id"))
+}
+
+fn remote_im_message_canonical_user_id(message: &ChatMessage) -> Option<String> {
+    let origin = remote_im_origin_from_message(message)?;
+    remote_im_origin_canonical_user_id(origin).map(ToOwned::to_owned)
 }
 
 fn remote_im_contact_key_from_message(message: &ChatMessage) -> Option<String> {

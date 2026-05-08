@@ -197,11 +197,16 @@ async fn get_prompt_preview(
                             SummaryContextScene::Archive
                         },
                         user_alias: user_name.clone(),
-                        current_user_profile: build_user_profile_memory_board(
-                            &state.data_path,
-                            &owner_agent,
-                        )?
-                        .unwrap_or_else(|| "（无）".to_string()),
+                        current_user_profile: if conversation_is_local_normal_chat(&conversation) {
+                            build_user_profile_memory_board_for_user(
+                                &state.data_path,
+                                &owner_agent,
+                                "0",
+                            )?
+                            .unwrap_or_else(|| "（无）".to_string())
+                        } else {
+                            "（无）".to_string()
+                        },
                         include_todo_block: build_summary_context_todo_block(&conversation)
                             .is_some(),
                     }),

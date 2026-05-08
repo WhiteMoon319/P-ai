@@ -1,7 +1,24 @@
 fn normalize_memory_keywords(raw: &[String]) -> Vec<String> {
     let mut out = Vec::<String>::new();
     for item in raw {
-        let v = item.trim().to_lowercase();
+        let trimmed = item.trim();
+        let v = if let Some((_, raw_user_id)) = trimmed.split_once(':') {
+            if trimmed
+                .get(..8)
+                .map(|prefix| prefix.eq_ignore_ascii_case("user_id:"))
+                .unwrap_or(false)
+            {
+                let user_id = raw_user_id.trim();
+                if user_id.is_empty() {
+                    continue;
+                }
+                format!("user_id:{}", user_id)
+            } else {
+                trimmed.to_lowercase()
+            }
+        } else {
+            trimmed.to_lowercase()
+        };
         if v.chars().count() < 2 {
             continue;
         }
@@ -86,6 +103,28 @@ fn parse_memory_save_draft(
         reasoning: clean_text(reasoning),
         tags,
     })
+}
+
+#[cfg(test)]
+mod builtin_memory_tests {
+    use super::*;
+
+    #[test]
+    fn normalize_memory_keywords_should_preserve_user_id_payload() {
+        let tags = normalize_memory_keywords(&vec![
+            " Profile ".to_string(),
+            "USER_ID:o9cq80-MfLBeC-BBD-hStiFtlJSk@im.wechat".to_string(),
+            "PROFILE_ATTR:Fact".to_string(),
+        ]);
+        assert_eq!(
+            tags,
+            vec![
+                "profile".to_string(),
+                "user_id:o9cq80-MfLBeC-BBD-hStiFtlJSk@im.wechat".to_string(),
+                "profile_attr:fact".to_string(),
+            ]
+        );
+    }
 }
 
 #[derive(Debug, Clone)]

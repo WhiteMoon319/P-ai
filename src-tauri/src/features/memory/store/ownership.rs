@@ -109,6 +109,274 @@ fn memory_entry_allowed_for_profile(memory: &MemoryEntry) -> bool {
     )
 }
 
+fn profile_user_id_tag(user_id: &str) -> Option<String> {
+    let trimmed = user_id.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(format!("user_id:{}", trimmed))
+    }
+}
+
+fn memory_has_profile_shape_tags(memory: &MemoryEntry) -> bool {
+    let has_profile = memory.tags.iter().any(|tag| tag == "profile");
+    let has_user_id = memory.tags.iter().any(|tag| {
+        tag.strip_prefix("user_id:")
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_some()
+    });
+    let has_profile_attr = memory.tags.iter().any(|tag| {
+        tag.strip_prefix("profile_attr:")
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_some()
+    });
+    has_profile && has_user_id && has_profile_attr
+}
+
+fn memory_entry_is_profile_memory(memory: &MemoryEntry) -> bool {
+    memory_entry_allowed_for_profile(memory) && memory_has_profile_shape_tags(memory)
+}
+
+fn legacy_profile_attr_tag_for_memory(memory: &MemoryEntry) -> &'static str {
+    match memory.memory_type.trim().to_ascii_lowercase().as_str() {
+        "skill" => "profile_attr:skill",
+        _ => "profile_attr:fact",
+    }
+}
+
+fn memory_store_backfill_local_profile_tags_from_legacy_links(
+    data_path: &PathBuf,
+) -> Result<usize, String> {
+    let conn = memory_store_open(data_path)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT mr.id, mr.memory_type
+             FROM profile_memory_link link
+             JOIN memory_record mr ON mr.id = link.memory_id
+             ORDER BY link.updated_at DESC, link.created_at DESC",
+        )
+        .map_err(|err| format!("Prepare backfill legacy profile links failed: {err}"))?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+            ))
+        })
+        .map_err(|err| format!("Query backfill legacy profile links failed: {err}"))?;
+    let mut legacy_items = Vec::<(String, String)>::new();
+    for row in rows {
+        legacy_items.push(
+            row.map_err(|err| format!("Read backfill legacy profile link row failed: {err}"))?,
+        );
+    }
+    if legacy_items.is_empty() {
+        return Ok(0);
+    }
+
+    let existing = memory_store_list_memories_by_ids(
+        data_path,
+        &legacy_items
+            .iter()
+            .map(|(memory_id, _)| memory_id.clone())
+            .collect::<Vec<_>>(),
+    )?
+    .into_iter()
+    .map(|memory| (memory.id.clone(), memory))
+    .collect::<HashMap<String, MemoryEntry>>();
+
+    let mut conn = memory_store_open(data_path)?;
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|err| format!("Begin backfill legacy profile tags transaction failed: {err}"))?;
+    let mut updated = 0usize;
+    for (memory_id, memory_type) in legacy_items {
+        let Some(memory) = existing.get(&memory_id) else {
+            continue;
+        };
+        if !memory_entry_allowed_for_profile(memory) || memory_entry_is_profile_memory(memory) {
+            continue;
+        }
+        let mut next_tags = memory.tags.clone();
+        if !next_tags.iter().any(|tag| tag == "profile") {
+            next_tags.push("profile".to_string());
+        }
+        if !next_tags.iter().any(|tag| tag.starts_with("user_id:")) {
+            next_tags.push("user_id:0".to_string());
+        }
+        if !next_tags.iter().any(|tag| tag.starts_with("profile_attr:")) {
+            let attr = match memory_type.trim().to_ascii_lowercase().as_str() {
+                "skill" => "profile_attr:skill",
+                _ => legacy_profile_attr_tag_for_memory(memory),
+            };
+            next_tags.push(attr.to_string());
+        }
+        let normalized = normalize_memory_keywords(&next_tags);
+        memory_store_sync_tags(&tx, &memory_id, &normalized)?;
+        memory_store_sync_memory_fts(&tx, &memory_id)?;
+        updated += 1;
+    }
+    tx.commit()
+        .map_err(|err| format!("Commit backfill legacy profile tags transaction failed: {err}"))?;
+    if updated > 0 {
+        invalidate_memory_matcher_cache();
+    }
+    Ok(updated)
+}
+
+fn memory_store_list_profile_memories_by_user_id_visible_for_agent(
+    data_path: &PathBuf,
+    user_id: &str,
+    agent_id: &str,
+    private_memory_enabled: bool,
+    limit: usize,
+) -> Result<Vec<MemoryEntry>, String> {
+    let started_at = std::time::Instant::now();
+    if user_id.trim() == "0" {
+        let _ = memory_store_backfill_local_profile_tags_from_legacy_links(data_path);
+    }
+    let Some(user_id_tag) = profile_user_id_tag(user_id) else {
+        runtime_log_info(format!(
+            "[用户画像] 跳过，任务=fast_profile_lookup，user_id={}，agent_id={}，private_memory_enabled={}，requested_limit={}，reason=empty_user_id，elapsed_ms={}",
+            user_id.trim(),
+            agent_id.trim(),
+            private_memory_enabled,
+            limit,
+            started_at.elapsed().as_millis()
+        ));
+        return Ok(Vec::new());
+    };
+    let conn = memory_store_open(data_path)?;
+    let max_items = if limit == 0 { i64::MAX } else { limit as i64 };
+    let target = agent_id.trim();
+    let use_private_scope = if target.is_empty() || !private_memory_enabled {
+        0i64
+    } else {
+        1i64
+    };
+    let sql = if target.is_empty() {
+        "SELECT mr.id
+         FROM memory_record mr
+         WHERE EXISTS (
+             SELECT 1
+             FROM memory_tag_rel rel
+             JOIN global_tag tag ON tag.id = rel.tag_id
+             WHERE rel.memory_id = mr.id AND tag.name = 'profile'
+         )
+         AND EXISTS (
+             SELECT 1
+             FROM memory_tag_rel rel
+             JOIN global_tag tag ON tag.id = rel.tag_id
+             WHERE rel.memory_id = mr.id AND tag.name = ?1
+         )
+         AND EXISTS (
+             SELECT 1
+             FROM memory_tag_rel rel
+             JOIN global_tag tag ON tag.id = rel.tag_id
+             WHERE rel.memory_id = mr.id AND tag.name LIKE 'profile_attr:%'
+         )
+         ORDER BY mr.updated_at DESC
+         LIMIT ?2"
+    } else {
+        "SELECT mr.id
+         FROM memory_record mr
+         WHERE EXISTS (
+             SELECT 1
+             FROM memory_tag_rel rel
+             JOIN global_tag tag ON tag.id = rel.tag_id
+             WHERE rel.memory_id = mr.id AND tag.name = 'profile'
+         )
+         AND EXISTS (
+             SELECT 1
+             FROM memory_tag_rel rel
+             JOIN global_tag tag ON tag.id = rel.tag_id
+             WHERE rel.memory_id = mr.id AND tag.name = ?1
+         )
+         AND EXISTS (
+             SELECT 1
+             FROM memory_tag_rel rel
+             JOIN global_tag tag ON tag.id = rel.tag_id
+             WHERE rel.memory_id = mr.id AND tag.name LIKE 'profile_attr:%'
+         )
+         AND (
+             mr.owner_agent_id IS NULL
+             OR (?2 = 1 AND mr.owner_agent_id = ?3)
+         )
+         ORDER BY mr.updated_at DESC
+         LIMIT ?4"
+    };
+    let mut stmt = conn
+        .prepare(sql)
+        .map_err(|err| format!("Prepare list profile memories by user_id failed: {err}"))?;
+    let mut ids = Vec::<String>::new();
+    if target.is_empty() {
+        let rows = stmt
+            .query_map(params![user_id_tag, max_items], |row| row.get::<_, String>(0))
+            .map_err(|err| format!("Query list profile memories by user_id failed: {err}"))?;
+        for row in rows {
+            ids.push(
+                row.map_err(|err| {
+                    format!("Read profile memory by user_id row failed: {err}")
+                })?,
+            );
+        }
+    } else {
+        let rows = stmt
+            .query_map(params![user_id_tag, use_private_scope, target, max_items], |row| {
+                row.get::<_, String>(0)
+            })
+            .map_err(|err| format!("Query list profile memories by user_id failed: {err}"))?;
+        for row in rows {
+            ids.push(
+                row.map_err(|err| {
+                    format!("Read profile memory by user_id row failed: {err}")
+                })?,
+            );
+        }
+    }
+    if ids.is_empty() {
+        runtime_log_info(format!(
+            "[用户画像] 完成，任务=fast_profile_lookup，user_id={}，agent_id={}，private_memory_enabled={}，requested_limit={}，result_count=0，elapsed_ms={}",
+            user_id.trim(),
+            agent_id.trim(),
+            private_memory_enabled,
+            limit,
+            started_at.elapsed().as_millis()
+        ));
+        return Ok(Vec::new());
+    }
+    let mut memories =
+        memory_store_list_memories_by_ids_visible_for_agent(data_path, &ids, agent_id, private_memory_enabled)?;
+    memories.retain(memory_entry_is_profile_memory);
+    let order = ids
+        .into_iter()
+        .enumerate()
+        .map(|(idx, id)| (id, idx))
+        .collect::<HashMap<String, usize>>();
+    memories.sort_by_key(|memory| {
+        order
+            .get(memory.id.as_str())
+            .copied()
+            .unwrap_or(usize::MAX)
+    });
+    if limit != 0 && memories.len() > limit {
+        memories.truncate(limit);
+    }
+    runtime_log_info(format!(
+        "[用户画像] 完成，任务=fast_profile_lookup，user_id={}，agent_id={}，private_memory_enabled={}，requested_limit={}，result_count={}，elapsed_ms={}",
+        user_id.trim(),
+        agent_id.trim(),
+        private_memory_enabled,
+        limit,
+        memories.len(),
+        started_at.elapsed().as_millis()
+    ));
+    Ok(memories)
+}
+
+#[allow(dead_code)]
 fn memory_store_upsert_profile_memory_links(
     data_path: &PathBuf,
     memory_ids: &[String],
@@ -159,53 +427,20 @@ fn memory_store_upsert_profile_memory_links(
     Ok(linked_count)
 }
 
+#[allow(dead_code)]
 fn memory_store_list_profile_memories_visible_for_agent(
     data_path: &PathBuf,
     agent_id: &str,
     private_memory_enabled: bool,
     limit: usize,
 ) -> Result<Vec<MemoryEntry>, String> {
-    let visible_memories =
-        memory_store_list_memories_visible_for_agent(data_path, agent_id, private_memory_enabled)?;
-    if visible_memories.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let conn = memory_store_open(data_path)?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT memory_id
-             FROM profile_memory_link
-             ORDER BY updated_at DESC, created_at DESC",
-        )
-        .map_err(|err| format!("Prepare list profile memory links failed: {err}"))?;
-    let rows = stmt
-        .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|err| format!("Query profile memory links failed: {err}"))?;
-    let mut ordered_ids = Vec::<String>::new();
-    for row in rows {
-        ordered_ids.push(row.map_err(|err| format!("Read profile memory link failed: {err}"))?);
-    }
-    if ordered_ids.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let memory_map = visible_memories
-        .into_iter()
-        .filter(memory_entry_allowed_for_profile)
-        .map(|memory| (memory.id.clone(), memory))
-        .collect::<HashMap<String, MemoryEntry>>();
-    let max_items = if limit == 0 { usize::MAX } else { limit };
-    let mut out = Vec::<MemoryEntry>::new();
-    for memory_id in ordered_ids {
-        if let Some(memory) = memory_map.get(&memory_id) {
-            out.push(memory.clone());
-        }
-        if out.len() >= max_items {
-            break;
-        }
-    }
-    Ok(out)
+    memory_store_list_profile_memories_by_user_id_visible_for_agent(
+        data_path,
+        "0",
+        agent_id,
+        private_memory_enabled,
+        limit,
+    )
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

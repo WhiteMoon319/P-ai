@@ -29,92 +29,189 @@ fn mark_tasks_as_session_lost(data_path: &PathBuf, conversation_id: &str) {
     }
 }
 
-fn upsert_memories_into_store_with_ids(
-    data_path: &PathBuf,
-    drafts: &[ArchiveMemoryDraft],
+#[derive(Debug, Clone, Default)]
+struct PreparedArchiveMemoryDraft {
+    input: Option<MemoryDraftInput>,
+    is_profile: bool,
+    skipped_profile: bool,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct AppliedArchiveMemoryStats {
+    merged_memories: usize,
+    merged_groups: usize,
+    applied_profile_memories: usize,
+    skipped_profile_memories: usize,
+}
+
+fn archive_profile_tag_contains_forbidden_identifier(tag: &str) -> bool {
+    tag.chars().any(|ch| ch.is_ascii_digit()) || tag.contains('@')
+}
+
+fn archive_profile_draft_user_id(tags: &[String]) -> Option<String> {
+    tags.iter().find_map(|tag| {
+        tag.strip_prefix("user_id:")
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+    })
+}
+
+fn archive_profile_draft_has_attr(tags: &[String]) -> bool {
+    tags.iter().any(|tag| {
+        tag.strip_prefix("profile_attr:")
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_some()
+    })
+}
+
+fn archive_memory_draft_is_profile_candidate(tags: &[String]) -> bool {
+    tags.iter().any(|tag| {
+        tag == "profile"
+            || tag
+                .get(..8)
+                .map(|prefix| prefix.eq_ignore_ascii_case("user_id:"))
+                .unwrap_or(false)
+            || tag.starts_with("profile_attr:")
+    })
+}
+
+fn prepare_archive_memory_draft(
+    draft: &ArchiveMemoryDraft,
     owner_agent_id: Option<&str>,
-) -> Result<Vec<String>, String> {
-    let mut inputs = Vec::<MemoryDraftInput>::new();
-    for d in drafts {
-        let judgment = clean_text(d.judgment.trim());
-        if judgment.is_empty() {
-            continue;
+) -> PreparedArchiveMemoryDraft {
+    let judgment = clean_text(draft.judgment.trim());
+    if judgment.is_empty() {
+        return PreparedArchiveMemoryDraft::default();
+    }
+    let tags = normalize_memory_keywords(&draft.tags);
+    if tags.is_empty() {
+        return PreparedArchiveMemoryDraft::default();
+    }
+    let is_profile_candidate = archive_memory_draft_is_profile_candidate(&tags);
+    if is_profile_candidate {
+        let user_id = archive_profile_draft_user_id(&tags);
+        let has_profile = tags.iter().any(|tag| tag == "profile");
+        let has_profile_attr = archive_profile_draft_has_attr(&tags);
+        let has_invalid_semantic_tag = tags.iter().any(|tag| {
+            !tag.starts_with("user_id:") && archive_profile_tag_contains_forbidden_identifier(tag)
+        });
+        if !has_profile
+            || user_id.is_none()
+            || !has_profile_attr
+            || !archive_profile_memory_type_allowed(&draft.memory_type)
+            || has_invalid_semantic_tag
+        {
+            return PreparedArchiveMemoryDraft {
+                input: None,
+                is_profile: false,
+                skipped_profile: true,
+            };
         }
-        let tags = normalize_memory_keywords(&d.tags);
-        if tags.is_empty() {
-            continue;
-        }
-        inputs.push(MemoryDraftInput {
-            memory_type: d.memory_type.clone(),
+    }
+    PreparedArchiveMemoryDraft {
+        input: Some(MemoryDraftInput {
+            memory_type: draft.memory_type.clone(),
             judgment,
-            reasoning: clean_text(d.reasoning.trim()),
+            reasoning: clean_text(draft.reasoning.trim()),
             tags,
             owner_agent_id: owner_agent_id
                 .map(str::trim)
                 .filter(|v| !v.is_empty())
                 .map(ToOwned::to_owned),
-        });
+        }),
+        is_profile: is_profile_candidate,
+        skipped_profile: false,
     }
-    let (results, _) = memory_store_upsert_drafts(data_path, &inputs)?;
-    Ok(results.into_iter().filter_map(|r| r.id).collect::<Vec<_>>())
 }
 
-fn merge_memories_into_store(
+fn upsert_archive_memory_draft_with_ids(
     data_path: &PathBuf,
-    drafts: &[ArchiveMemoryDraft],
+    draft: &ArchiveMemoryDraft,
     owner_agent_id: Option<&str>,
-) -> Result<usize, String> {
-    Ok(upsert_memories_into_store_with_ids(data_path, drafts, owner_agent_id)?.len())
+) -> Result<(Vec<String>, bool, bool), String> {
+    let prepared = prepare_archive_memory_draft(draft, owner_agent_id);
+    if prepared.skipped_profile {
+        return Ok((Vec::new(), false, true));
+    }
+    let Some(input) = prepared.input else {
+        return Ok((Vec::new(), false, false));
+    };
+    let (results, _) = memory_store_upsert_drafts(data_path, &[input])?;
+    Ok((
+        results.into_iter().filter_map(|r| r.id).collect::<Vec<_>>(),
+        prepared.is_profile,
+        false,
+    ))
 }
 
-fn merge_memory_groups_into_store(
+fn apply_memory_actions_into_store(
     data_path: &PathBuf,
-    groups: &[ArchiveMergeGroupDraft],
+    actions: &[ArchiveMemoryActionDraft],
     owner_agent_id: Option<&str>,
-) -> Result<usize, String> {
-    let mut merged_groups = 0usize;
-    for group in groups {
-        let source_ids = group
-            .source_ids
-            .iter()
-            .map(|id| id.trim())
-            .filter(|id| !id.is_empty())
-            .map(ToOwned::to_owned)
-            .collect::<Vec<_>>();
-        if source_ids.len() < 2 {
-            continue;
-        }
-        let upserted_ids = upsert_memories_into_store_with_ids(
-            data_path,
-            &[group.target.clone()],
-            owner_agent_id,
-        )?;
-        let retained = upserted_ids
-            .iter()
-            .map(|id| id.as_str())
-            .collect::<HashSet<_>>();
-        let mut deleted_any = false;
-        for source_id in source_ids {
-            if retained.contains(source_id.as_str()) {
-                continue;
-            }
-            match memory_store_delete_memory(data_path, &source_id) {
-                Ok(_) => {
-                    deleted_any = true;
+) -> Result<AppliedArchiveMemoryStats, String> {
+    let mut stats = AppliedArchiveMemoryStats::default();
+    let mut applied_memories = 0usize;
+    for action in actions {
+        match action.action {
+            ArchiveMemoryActionKind::Create => {
+                let (upserted_ids, is_profile, skipped_profile) =
+                    upsert_archive_memory_draft_with_ids(data_path, &action.memory, owner_agent_id)?;
+                if skipped_profile {
+                    stats.skipped_profile_memories += 1;
+                    continue;
                 }
-                Err(err) => {
-                    eprintln!(
-                        "[ARCHIVE-PIPELINE] delete merged source memory failed: id={}, err={}",
-                        source_id, err
-                    );
+                applied_memories += upserted_ids.len();
+                if is_profile {
+                    stats.applied_profile_memories += upserted_ids.len();
                 }
             }
-        }
-        if deleted_any {
-            merged_groups += 1;
+            ArchiveMemoryActionKind::Update | ArchiveMemoryActionKind::Merge => {
+                let source_ids = action
+                    .source_memory_ids
+                    .iter()
+                    .map(|id| id.trim())
+                    .filter(|id| !id.is_empty())
+                    .map(ToOwned::to_owned)
+                    .collect::<Vec<_>>();
+                if source_ids.is_empty() {
+                    continue;
+                }
+                let (upserted_ids, is_profile, skipped_profile) =
+                    upsert_archive_memory_draft_with_ids(data_path, &action.memory, owner_agent_id)?;
+                if skipped_profile {
+                    stats.skipped_profile_memories += 1;
+                    continue;
+                }
+                if upserted_ids.is_empty() {
+                    continue;
+                }
+                applied_memories += upserted_ids.len();
+                if is_profile {
+                    stats.applied_profile_memories += upserted_ids.len();
+                }
+                let retained = upserted_ids
+                    .iter()
+                    .map(|id| id.as_str())
+                    .collect::<HashSet<_>>();
+                for source_id in source_ids {
+                    if retained.contains(source_id.as_str()) {
+                        continue;
+                    }
+                    if let Err(err) = memory_store_delete_memory(data_path, &source_id) {
+                        eprintln!(
+                            "[ARCHIVE-PIPELINE] delete merged source memory failed: id={}, err={}",
+                            source_id, err
+                        );
+                    }
+                }
+                stats.merged_groups += 1;
+            }
         }
     }
-    Ok(merged_groups)
+    stats.merged_memories = applied_memories;
+    Ok(stats)
 }
 
 fn resolve_archive_owner_context(
@@ -147,73 +244,6 @@ fn archive_profile_memory_type_allowed(raw: &str) -> bool {
         raw.trim().to_ascii_lowercase().as_str(),
         "knowledge" | "skill" | "event"
     )
-}
-
-fn apply_profile_memories_into_store(
-    data_path: &PathBuf,
-    drafts: &[ArchiveProfileMemoryDraft],
-    owner_agent_id: Option<&str>,
-) -> Result<(usize, usize, usize), String> {
-    let started_at = std::time::Instant::now();
-    runtime_log_info(format!(
-        "[用户画像] 开始，任务=apply_profile_memories_into_store，items={}",
-        drafts.len()
-    ));
-    let mut memory_ids = Vec::<String>::new();
-    let mut created_count = 0usize;
-    let mut skipped_count = 0usize;
-    let memory_map = memory_store_list_memories(data_path)?
-        .into_iter()
-        .map(|memory| (memory.id.clone(), memory))
-        .collect::<HashMap<String, MemoryEntry>>();
-
-    for item in drafts {
-        let existing_id = item
-            .memory_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty());
-        if let Some(memory_id) = existing_id {
-            if let Some(found) = memory_map.get(memory_id) {
-                if memory_entry_allowed_for_profile(found) {
-                    memory_ids.push(memory_id.to_string());
-                } else {
-                    skipped_count += 1;
-                }
-            } else {
-                skipped_count += 1;
-            }
-            continue;
-        }
-
-        if let Some(memory) = item.memory.as_ref() {
-            if !archive_profile_memory_type_allowed(&memory.memory_type) {
-                skipped_count += 1;
-                continue;
-            }
-            let inserted_ids =
-                upsert_memories_into_store_with_ids(data_path, &[memory.clone()], owner_agent_id)?;
-            if inserted_ids.is_empty() {
-                skipped_count += 1;
-                continue;
-            }
-            created_count += inserted_ids.len();
-            memory_ids.extend(inserted_ids);
-            continue;
-        }
-
-        skipped_count += 1;
-    }
-
-    let linked_count = memory_store_upsert_profile_memory_links(data_path, &memory_ids, "auto")?;
-    runtime_log_info(format!(
-        "[用户画像] 完成，任务=apply_profile_memories_into_store，linked_count={}，created_count={}，skipped_count={}，elapsed_ms={}",
-        linked_count,
-        created_count,
-        skipped_count,
-        started_at.elapsed().as_millis()
-    ));
-    Ok((linked_count, created_count, skipped_count))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -603,8 +633,12 @@ async fn summarize_archived_conversation_with_model_v2(
     _recall_table: &[String],
 ) -> Result<MemoryCurationDraft, String> {
     let app_config = state_read_config_cached(state)?;
-    let current_user_profile = build_user_profile_memory_board(&state.data_path, agent)?
-        .unwrap_or_else(|| "（无）".to_string());
+    let current_user_profile = if conversation_is_local_normal_chat(source_conversation) {
+        build_user_profile_memory_board_for_user(&state.data_path, agent, "0")?
+            .unwrap_or_else(|| "（无）".to_string())
+    } else {
+        "（无）".to_string()
+    };
     let agents = state_read_agents_cached(state)?;
     let mut prepared = build_prepared_prompt_for_mode(
         PromptBuildMode::SummaryContext,
@@ -655,7 +689,14 @@ async fn summarize_archived_conversation_with_model_v2(
             reply.assistant_text.chars().take(240).collect::<String>()
         )
     })?;
-    let summary = clean_text(parsed.summary.trim());
+    let open_loops = parsed
+        .open_loops
+        .iter()
+        .map(|item| clean_text(item.trim()))
+        .filter(|item| !item.is_empty())
+        .take(7)
+        .collect::<Vec<_>>();
+    let summary = compose_summary_context_summary(&parsed.summary, &open_loops, scene);
     if summary.is_empty() {
         return Err("SummaryContext summary is empty".to_string());
     }
@@ -663,23 +704,10 @@ async fn summarize_archived_conversation_with_model_v2(
     Ok(MemoryCurationDraft {
         title: normalize_summary_context_title(&parsed.title).unwrap_or_default(),
         summary,
+        open_loops,
         useful_memory_ids: resolve_memory_curation_ids(&parsed.useful_memory_ids, &id_alias_map),
-        new_memories: parsed.new_memories.into_iter().take(7).collect::<Vec<_>>(),
-        merge_groups: parsed
-            .merge_groups
-            .into_iter()
-            .take(7)
-            .map(|group| ArchiveMergeGroupDraft {
-                source_ids: resolve_memory_curation_ids(&group.source_ids, &id_alias_map),
-                target: group.target,
-            })
-            .collect::<Vec<_>>(),
-        profile_memories: resolve_profile_memory_drafts(
-            &parsed
-                .profile_memories
-                .into_iter()
-                .take(7)
-                .collect::<Vec<_>>(),
+        memory_actions: resolve_memory_action_drafts(
+            &parsed.memory_actions.into_iter().take(7).collect::<Vec<_>>(),
             &id_alias_map,
         ),
     })
@@ -701,13 +729,13 @@ fn build_summary_context_requirement_block(scene: SummaryContextScene) -> String
              summary 请直接按下面顺序自然书写，不要额外发明字段名：\n\
              第一，先写当前进展，以及已经做出的关键决策。\n\
              第二，再写重要上下文、约束条件、用户偏好。\n\
-             第三，再写剩余待办事项，给出清晰的下一步。\n\
-             第四，补充后续工作需要回看的文件片段、网页片段、日志片段或引用材料。\n\
+             第三，补充后续工作需要回看的文件片段、网页片段、日志片段或引用材料。\n\
              - 只有在后续续跑明显还会用到时，才补充这部分\n\
              - 优先保留最近刚读到、后续还要回看的片段\n\
              - 每条尽量包含可回看的定位信息（如文件路径、行号、页面名、日志来源）\n\
              - 每条都尽量附上短原文摘录，避免只写意译；若定位信息已足够，则摘录保持最短必要长度\n\
              - 推荐格式：- `定位信息` 为什么重要\\n  原文：摘录\n\
+             openLoops 单独填写剩余待办、未闭环事项与清晰下一步；没有则输出 []。\n\
              请保持内容简洁、结构化，并专注于帮助下一个语言模型无缝继续当前工作。"
                 .to_string()
         }
@@ -719,7 +747,7 @@ fn build_summary_context_requirement_block(scene: SummaryContextScene) -> String
              summary 必须包含：\n\
              - 本轮最终结论与明确产出\n\
              - 已确认的关键决定、限制条件与责任分工\n\
-             - 如果仍有遗留项，只保留确实影响后续工作的部分\n\
+             如果仍有确实影响后续的遗留项，请写入 openLoops；否则 openLoops 保持 []。\n\
              请以可直接投放、可直接回看的完整汇报口吻输出，重点是结论而不是过程流水账。"
                 .to_string()
         }
@@ -733,28 +761,31 @@ fn build_summary_context_memory_block(
     current_user_profile: &str,
 ) -> String {
     let instruction = build_memory_generation_instruction(agent, user_alias);
+    let current_user_profile = current_user_profile.trim();
+    let profile_block = if current_user_profile.is_empty() || current_user_profile == "（无）" {
+        String::new()
+    } else {
+        format!("\n\n【当前完整用户画像（带ID）】\n{}", current_user_profile)
+    };
     prompt_xml_block(
         "memory_curation_context",
-        format!(
-            "{}\n\n【当前完整用户画像（带ID）】\n{}",
-            instruction, current_user_profile
-        ),
+        format!("{}{}", instruction, profile_block),
     )
 }
 
 fn build_summary_context_json_contract_block(scene: SummaryContextScene) -> String {
     let summary_rule = match scene {
         SummaryContextScene::Compaction => {
-            "summary 表示本次上下文检查点压缩的交接摘要，必须方便下一个模型继续当前任务直接使用；“关键证据”如果需要出现，也只能作为 summary 正文最后的小节，绝不能成为独立 JSON 字段。"
+            "summary 表示本次上下文检查点压缩的交接摘要，必须方便下一个模型继续当前任务直接使用；剩余待办、下一步与未闭环事项请写入 openLoops，不要再在 summary 里单独造字段。"
         }
         SummaryContextScene::Archive => {
-            "summary 表示本次会话归档结论汇报，必须能够让后续阅读者直接知道这轮最终得出了什么结论。"
+            "summary 表示本次会话归档结论汇报，必须能够让后续阅读者直接知道这轮最终得出了什么结论；若仍有确实影响后续的遗留项，再写入 openLoops，否则保持 []."
         }
     };
     prompt_xml_block(
         "json_contract",
         format!(
-            "你必须输出合法 JSON，且只能包含以下六个字段：title/summary/usefulMemoryIds/newMemories/mergeGroups/profileMemories。\n\
+            "你必须输出合法 JSON，且只能包含以下五个字段：title/summary/openLoops/usefulMemoryIds/memoryActions。\n\
              不得输出 markdown、代码块、解释性前后缀。\n\
              title 必须是当前会话标题，只输出一句短标题，尽量控制在 10 个汉字以内，本地最多接受 20 个字。\n\
              {}\n\
@@ -916,27 +947,44 @@ fn resolve_memory_curation_ids(
     out
 }
 
-fn resolve_profile_memory_drafts(
-    drafts: &[ArchiveProfileMemoryDraft],
+fn resolve_memory_action_drafts(
+    drafts: &[ArchiveMemoryActionDraft],
     id_alias_map: &HashMap<String, String>,
-) -> Vec<ArchiveProfileMemoryDraft> {
+) -> Vec<ArchiveMemoryActionDraft> {
     drafts
         .iter()
-        .map(|item| ArchiveProfileMemoryDraft {
-            memory_id: item
-                .memory_id
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(|value| {
-                    id_alias_map
-                        .get(value)
-                        .cloned()
-                        .unwrap_or_else(|| value.to_string())
-                }),
+        .map(|item| ArchiveMemoryActionDraft {
+            action: item.action.clone(),
+            source_memory_ids: resolve_memory_curation_ids(&item.source_memory_ids, id_alias_map),
             memory: item.memory.clone(),
         })
         .collect::<Vec<_>>()
+}
+
+fn compose_summary_context_summary(
+    summary: &str,
+    open_loops: &[String],
+    scene: SummaryContextScene,
+) -> String {
+    let summary = clean_text(summary.trim());
+    if open_loops.is_empty() {
+        return summary;
+    }
+    let open_loop_lines = open_loops
+        .iter()
+        .enumerate()
+        .map(|(idx, item)| format!("{}. {}", idx + 1, item))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let section_title = match scene {
+        SummaryContextScene::Compaction => "未完事项",
+        SummaryContextScene::Archive => "遗留事项",
+    };
+    if summary.is_empty() {
+        format!("{}：\n{}", section_title, open_loop_lines)
+    } else {
+        format!("{}\n\n{}：\n{}", summary, section_title, open_loop_lines)
+    }
 }
 
 fn build_archive_summary_from_last_three_rounds(source: &Conversation) -> String {
@@ -1211,8 +1259,7 @@ fn build_initial_summary_context_message(
 struct SummaryContextApplyReport {
     merged_memories: usize,
     merged_groups: usize,
-    linked_profile_memories: usize,
-    created_profile_memories: usize,
+    applied_profile_memories: usize,
     skipped_profile_memories: usize,
     memory_feedback: MemoryArchiveFeedbackReport,
 }
@@ -1230,18 +1277,13 @@ fn apply_summary_context_result(
     };
     let memory_feedback =
         memory_store_apply_archive_feedback(data_path, recall_ids, &draft.useful_memory_ids)?;
-    let merged_memories =
-        merge_memories_into_store(data_path, &draft.new_memories, owner_agent_id)?;
-    let merged_groups =
-        merge_memory_groups_into_store(data_path, &draft.merge_groups, owner_agent_id)?;
-    let (linked_profile_memories, created_profile_memories, skipped_profile_memories) =
-        apply_profile_memories_into_store(data_path, &draft.profile_memories, owner_agent_id)?;
+    let memory_stats =
+        apply_memory_actions_into_store(data_path, &draft.memory_actions, owner_agent_id)?;
     Ok(SummaryContextApplyReport {
-        merged_memories,
-        merged_groups,
-        linked_profile_memories,
-        created_profile_memories,
-        skipped_profile_memories,
+        merged_memories: memory_stats.merged_memories,
+        merged_groups: memory_stats.merged_groups,
+        applied_profile_memories: memory_stats.applied_profile_memories,
+        skipped_profile_memories: memory_stats.skipped_profile_memories,
         memory_feedback,
     })
 }
@@ -1303,10 +1345,9 @@ async fn summarize_archive_summary_with_fallback(
             MemoryCurationDraft {
                 title: String::new(),
                 summary: build_archive_summary_from_last_three_rounds(reporting_source),
+                open_loops: Vec::new(),
                 useful_memory_ids: Vec::new(),
-                new_memories: Vec::new(),
-                merge_groups: Vec::new(),
-                profile_memories: Vec::new(),
+                memory_actions: Vec::new(),
             },
             Some(format!(
                 "SummaryContext 归档失败，已使用最后三轮正文对话降级摘要：{}",
@@ -1341,10 +1382,9 @@ async fn summarize_compaction_with_fallback(
                     MemoryCurationDraft {
                         title: String::new(),
                         summary: String::new(),
+                        open_loops: Vec::new(),
                         useful_memory_ids: Vec::new(),
-                        new_memories: Vec::new(),
-                        merge_groups: Vec::new(),
-                        profile_memories: Vec::new(),
+                        memory_actions: Vec::new(),
                     },
                     Some(format!(
                         "SummaryContext 读取可见记忆失败，压缩摘要留空：{}",
@@ -1393,10 +1433,9 @@ async fn summarize_compaction_with_fallback(
         MemoryCurationDraft {
             title: String::new(),
             summary: String::new(),
+            open_loops: Vec::new(),
             useful_memory_ids: Vec::new(),
-            new_memories: Vec::new(),
-            merge_groups: Vec::new(),
-            profile_memories: Vec::new(),
+            memory_actions: Vec::new(),
         },
         Some(format!(
             "SummaryContext 上下文整理失败（已重试{}次），压缩摘要留空：{}",
@@ -1860,13 +1899,12 @@ async fn run_context_compaction_pipeline_inner(
     emit_compaction_history_flushed_event(state, &source.id, &compression_message, activate_after_flush);
 
     eprintln!(
-        "[SummaryContext] 完成，场景=compaction，trace_id={}，conversation_id={}，merged_memories={}，merged_groups={}，profile_linked={}，profile_created={}，profile_skipped={}，useful_accept={}，penalized={}，natural_decay={}",
+        "[SummaryContext] 完成，场景=compaction，trace_id={}，conversation_id={}，merged_memories={}，merged_groups={}，profile_applied={}，profile_skipped={}，useful_accept={}，penalized={}，natural_decay={}",
         trace_id,
         source.id,
         applied_report.merged_memories,
         applied_report.merged_groups,
-        applied_report.linked_profile_memories,
-        applied_report.created_profile_memories,
+        applied_report.applied_profile_memories,
         applied_report.skipped_profile_memories,
         applied_report.memory_feedback.useful_accepted_count,
         applied_report.memory_feedback.penalized_count,
@@ -2131,13 +2169,12 @@ async fn run_archive_pipeline_inner(
     }
 
     eprintln!(
-        "[SummaryContext] 完成，场景=archive，trace_id={}，conversation_id={}，merged_memories={}，merged_groups={}，profile_linked={}，profile_created={}，profile_skipped={}，useful_accept={}，penalized={}，natural_decay={}",
+        "[SummaryContext] 完成，场景=archive，trace_id={}，conversation_id={}，merged_memories={}，merged_groups={}，profile_applied={}，profile_skipped={}，useful_accept={}，penalized={}，natural_decay={}",
         trace_id,
         source.id,
         applied_report.merged_memories,
         applied_report.merged_groups,
-        applied_report.linked_profile_memories,
-        applied_report.created_profile_memories,
+        applied_report.applied_profile_memories,
         applied_report.skipped_profile_memories,
         applied_report.memory_feedback.useful_accepted_count,
         applied_report.memory_feedback.penalized_count,
@@ -2227,5 +2264,18 @@ mod archive_pipeline_tests {
             .collect::<Vec<_>>();
         assert_eq!(ids, vec!["m3", "m4"]);
         assert_eq!(archive_report_scope_label(&source), "post_fork_discussion");
+    }
+
+    #[test]
+    fn compose_summary_context_summary_should_append_open_loops() {
+        let summary = compose_summary_context_summary(
+            "已完成前端任务编辑器重构",
+            &vec!["继续改 archive pipeline".to_string(), "补充 JSON 契约测试".to_string()],
+            SummaryContextScene::Compaction,
+        );
+        assert!(summary.contains("已完成前端任务编辑器重构"));
+        assert!(summary.contains("未完事项"));
+        assert!(summary.contains("1. 继续改 archive pipeline"));
+        assert!(summary.contains("2. 补充 JSON 契约测试"));
     }
 }
