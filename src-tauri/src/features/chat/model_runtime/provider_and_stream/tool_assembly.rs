@@ -23,6 +23,8 @@ fn tool_schema_definition_to_manifest_item(definition: &ProviderToolDefinition) 
     tool_manifest_item("schema_cache", &definition.name, true, true, None)
 }
 
+const TOOL_RUNTIME_CHECK_TIMEOUT_SECS: u64 = 8;
+
 fn operate_provider_tool_definition() -> ProviderToolDefinition {
     ProviderToolDefinition::new(
         MCP_OPERATE_TOOL_NAME,
@@ -293,9 +295,7 @@ fn push_runtime_tool_executors(
         app_state: state.clone(),
         memory_context,
     }));
-    tools.push(Box::new(LazyOperateMcpTool {
-        app_state: state.clone(),
-    }));
+    tools.push(Box::new(BuiltinOperateTool));
     tools.push(Box::new(BuiltinReloadTool { app_state: state.clone() }));
     tools.push(Box::new(BuiltinOrganizeContextTool {
         app_state: state.clone(),
@@ -304,7 +304,7 @@ fn push_runtime_tool_executors(
         agent_id: agent.id.to_string(),
     }));
     tools.push(Box::new(BuiltinWaitTool));
-    tools.push(Box::new(LazyReadFileMcpTool {
+    tools.push(Box::new(BuiltinReadFileTool {
         app_state: state.clone(),
         session_id: tool_session_id.to_string(),
         api_config_id: api_config_id.to_string(),
@@ -379,237 +379,94 @@ fn push_cached_mcp_runtime_tools(tools: &mut Vec<Box<dyn RuntimeToolDyn>>, state
 }
 
 #[derive(Debug, Clone)]
-struct LazyOperateMcpTool {
-    app_state: AppState,
-}
+struct BuiltinOperateTool;
 
 #[derive(Debug, Clone)]
-struct LazyReadFileMcpTool {
+struct BuiltinReadFileTool {
     app_state: AppState,
     session_id: String,
     api_config_id: String,
 }
 
-const TOOL_RUNTIME_CHECK_TIMEOUT_SECS: u64 = 8;
-const MCP_TOOL_RUNTIME_EXEC_TIMEOUT_SECS: u64 = 300;
-
-fn tool_unavailable_timeout_result(tool_name: &str) -> ProviderToolResult {
-    ProviderToolResult::error(format!(
-        "工具 `{tool_name}` 当前不可用：可用性检查超时。请先调用 reload 重建工具缓存后再试。"
-    ))
-}
-
-fn tool_unavailable_error_result(tool_name: &str, err: String) -> ProviderToolResult {
-    ProviderToolResult::error(format!(
-        "工具 `{tool_name}` 当前不可用：{err}。请先调用 reload 重建工具缓存后再试。"
-    ))
-}
-
-fn tool_execution_timeout_result(tool_name: &str) -> ProviderToolResult {
-    ProviderToolResult::error(format!("工具 `{tool_name}` 执行超时，已取消本次调用。"))
-}
-
-async fn cancel_lazy_mcp_client(
-    tool_name: &str,
-    client: rmcp::service::RunningService<rmcp::RoleClient, ()>,
-) -> Result<(), String> {
-    client.cancel().await.map(|_| ()).map_err(|err| {
-        let message = format!("取消 MCP 工具 `{tool_name}` 连接失败: {err}");
-        runtime_log_warn(format!("[工具执行] {message}"));
-        message
-    })
-}
-
-fn trigger_tool_schema_reload_after_timeout(app_state: AppState, tool_name: &'static str) {
-    tokio::spawn(async move {
-        runtime_log_warn(format!(
-            "[工具Schema缓存] 工具检验超时，开始后台 reload: tool={tool_name}"
-        ));
-        if let Err(err) = builtin_reload(&app_state).await {
-            runtime_log_warn(format!(
-                "[工具Schema缓存] 工具检验超时后的后台 reload 失败: tool={tool_name}, error={err}"
-            ));
-        }
-    });
-}
-
-async fn call_lazy_operate_mcp_tool(
-    app_state: AppState,
-    args_json: String,
-) -> Result<ProviderToolResult, String> {
-    let timeout = std::time::Duration::from_secs(TOOL_RUNTIME_CHECK_TIMEOUT_SECS);
-    let connect = tokio::time::timeout(timeout, connect_operate_mcp_tool()).await;
-    let (definition, client, process_tree_guard) = match connect {
-        Ok(Ok(value)) => value,
-        Ok(Err(err)) => return Ok(tool_unavailable_error_result(MCP_OPERATE_TOOL_NAME, err)),
-        Err(_) => {
-            trigger_tool_schema_reload_after_timeout(app_state, MCP_OPERATE_TOOL_NAME);
-            return Ok(tool_unavailable_timeout_result(MCP_OPERATE_TOOL_NAME));
-        }
-    };
-    let tool = McpRuntimeTool {
-        definition,
-        client: client.peer().clone(),
-    };
-    let execute_timeout = std::time::Duration::from_secs(MCP_TOOL_RUNTIME_EXEC_TIMEOUT_SECS);
-    let result = match tokio::time::timeout(execute_timeout, tool.call_json(args_json)).await {
-        Ok(result) => result,
-        Err(_) => {
-            runtime_log_warn(format!(
-                "[工具执行] MCP 工具执行超时: tool={}, timeout_ms={}",
-                MCP_OPERATE_TOOL_NAME,
-                execute_timeout.as_millis()
-            ));
-            Ok(tool_execution_timeout_result(MCP_OPERATE_TOOL_NAME))
-        }
-    };
-    cancel_lazy_mcp_client(MCP_OPERATE_TOOL_NAME, client).await?;
-    drop(process_tree_guard);
-    result
-}
-
-async fn call_lazy_read_file_mcp_tool(
-    app_state: AppState,
-    session_id: String,
-    api_config_id: String,
-    args_json: String,
-) -> Result<ProviderToolResult, String> {
-    let timeout = std::time::Duration::from_secs(TOOL_RUNTIME_CHECK_TIMEOUT_SECS);
-    let connect = tokio::time::timeout(
-        timeout,
-        connect_read_file_mcp_tool(&session_id, &api_config_id),
-    )
-    .await;
-    let (definition, client, process_tree_guard) = match connect {
-        Ok(Ok(value)) => value,
-        Ok(Err(err)) => return Ok(tool_unavailable_error_result(MCP_READ_FILE_TOOL_NAME, err)),
-        Err(_) => {
-            trigger_tool_schema_reload_after_timeout(app_state, MCP_READ_FILE_TOOL_NAME);
-            return Ok(tool_unavailable_timeout_result(MCP_READ_FILE_TOOL_NAME));
-        }
-    };
-    let tool = McpRuntimeTool {
-        definition,
-        client: client.peer().clone(),
-    };
-    let execute_timeout = std::time::Duration::from_secs(MCP_TOOL_RUNTIME_EXEC_TIMEOUT_SECS);
-    let result = match tokio::time::timeout(execute_timeout, tool.call_json(args_json)).await {
-        Ok(result) => result,
-        Err(_) => {
-            runtime_log_warn(format!(
-                "[工具执行] MCP 工具执行超时: tool={}, timeout_ms={}",
-                MCP_READ_FILE_TOOL_NAME,
-                execute_timeout.as_millis()
-            ));
-            Ok(tool_execution_timeout_result(MCP_READ_FILE_TOOL_NAME))
-        }
-    };
-    cancel_lazy_mcp_client(MCP_READ_FILE_TOOL_NAME, client).await?;
-    drop(process_tree_guard);
-    result
-}
-
-impl RuntimeToolDyn for LazyOperateMcpTool {
-    fn name(&self) -> String {
-        MCP_OPERATE_TOOL_NAME.to_string()
-    }
-
-    fn is_mcp_tool(&self) -> bool {
-        true
-    }
-
-    fn call_json(&self, args_json: String) -> RuntimeToolCallFuture<'_> {
-        let app_state = self.app_state.clone();
-        Box::pin(async move { call_lazy_operate_mcp_tool(app_state, args_json).await })
+impl RuntimeToolMetadata for BuiltinOperateTool {
+    fn provider_tool_definition(&self) -> ProviderToolDefinition {
+        operate_provider_tool_definition()
     }
 }
 
-impl RuntimeToolDyn for LazyReadFileMcpTool {
-    fn name(&self) -> String {
-        MCP_READ_FILE_TOOL_NAME.to_string()
+impl RuntimeJsonTool for BuiltinOperateTool {
+    const NAME: &'static str = MCP_OPERATE_TOOL_NAME;
+    type Args = OperateRequest;
+    type Error = ToolInvokeError;
+
+    fn timeout_override(_args_json: &str) -> Option<std::time::Duration> {
+        Some(std::time::Duration::from_secs(300))
     }
 
-    fn is_mcp_tool(&self) -> bool {
-        true
-    }
-
-    fn call_json(&self, args_json: String) -> RuntimeToolCallFuture<'_> {
-        let app_state = self.app_state.clone();
-        let session_id = self.session_id.clone();
-        let api_config_id = self.api_config_id.clone();
+    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
-            call_lazy_read_file_mcp_tool(app_state, session_id, api_config_id, args_json).await
+            let args_value = serde_json::to_value(&args).unwrap_or(Value::Null);
+            runtime_log_debug(format!(
+                "[TOOL-DEBUG] execute_builtin_tool.start name=operate args={}",
+                debug_value_snippet(&args_value, 240)
+            ));
+            let result = run_operate_tool(args)
+                .await
+                .map_err(|err| ToolInvokeError::from(err.message))
+                .and_then(|output| {
+                    serde_json::to_value(output)
+                        .map_err(|err| ToolInvokeError::from(format!("Serialize operate output failed: {err}")))
+                });
+            match &result {
+                Ok(v) => runtime_log_debug(format!(
+                    "[TOOL-DEBUG] execute_builtin_tool.ok name=operate result={}",
+                    debug_value_snippet(v, 240)
+                )),
+                Err(err) => eprintln!("[工具执行] 内置工具 operate 执行失败: 错误={err}"),
+            }
+            result
         })
     }
 }
 
-async fn connect_read_file_mcp_tool(
-    tool_session_id: &str,
-    api_config_id: &str,
-) -> Result<
-    (
-        rmcp::model::Tool,
-        rmcp::service::RunningService<rmcp::RoleClient, ()>,
-        Option<McpProcessTreeGuard>,
-    ),
-    String,
-> {
-    let exe = std::env::current_exe()
-        .map_err(|err| format!("Resolve current executable for MCP read_file failed: {err}"))?;
-    let mut cmd = tokio::process::Command::new(exe);
-    cmd.arg(MCP_READ_FILE_SERVER_FLAG);
-    cmd.arg(MCP_READ_FILE_SESSION_FLAG).arg(tool_session_id);
-    cmd.arg(MCP_READ_FILE_API_FLAG).arg(api_config_id);
-    let spawned = mcp_spawn_child_process(cmd, "MCP read_file")?;
-
-    let client = ().serve(spawned.transport).await.map_err(|err| {
-        format!("Connect to MCP read_file server failed: {err}")
-    })?;
-    let defs = client
-        .list_all_tools()
-        .await
-        .map_err(|err| format!("List MCP read_file tools failed: {err}"))?;
-
-    for def in defs {
-        if def.name.as_ref() != MCP_READ_FILE_TOOL_NAME {
-            continue;
-        }
-        return Ok((def, client, spawned.process_tree_guard));
+impl RuntimeToolMetadata for BuiltinReadFileTool {
+    fn provider_tool_definition(&self) -> ProviderToolDefinition {
+        read_file_provider_tool_definition()
     }
-
-    Err("MCP read_file server did not expose read_file tool".to_string())
 }
 
-async fn connect_operate_mcp_tool(
-) -> Result<
-    (
-        rmcp::model::Tool,
-        rmcp::service::RunningService<rmcp::RoleClient, ()>,
-        Option<McpProcessTreeGuard>,
-    ),
-    String,
-> {
-    let exe = std::env::current_exe()
-        .map_err(|err| format!("Resolve current executable for MCP operate failed: {err}"))?;
-    let mut cmd = tokio::process::Command::new(exe);
-    cmd.arg(MCP_OPERATE_SERVER_FLAG);
-    let spawned = mcp_spawn_child_process(cmd, "MCP operate")?;
+impl RuntimeJsonTool for BuiltinReadFileTool {
+    const NAME: &'static str = MCP_READ_FILE_TOOL_NAME;
+    type Args = ReadFileRequest;
+    type Error = ToolInvokeError;
 
-    let client = ()
-        .serve(spawned.transport)
-        .await
-        .map_err(|err| format!("Connect to MCP operate server failed: {err}"))?;
-    let defs = client
-        .list_all_tools()
-        .await
-        .map_err(|err| format!("List MCP operate tools failed: {err}"))?;
-
-    for def in defs {
-        if def.name.as_ref() != MCP_OPERATE_TOOL_NAME {
-            continue;
-        }
-        return Ok((def, client, spawned.process_tree_guard));
+    fn timeout_override(_args_json: &str) -> Option<std::time::Duration> {
+        Some(std::time::Duration::from_secs(300))
     }
 
-    Err("MCP operate server did not expose operate tool".to_string())
+    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+        Box::pin(async move {
+            let args_value = serde_json::to_value(&args).unwrap_or(Value::Null);
+            runtime_log_debug(format!(
+                "[TOOL-DEBUG] execute_builtin_tool.start name=read_file args={}",
+                debug_value_snippet(&args_value, 240)
+            ));
+            let result = builtin_read_file(
+                &self.app_state,
+                &self.session_id,
+                &self.api_config_id,
+                args,
+            )
+            .await
+            .map_err(ToolInvokeError::from);
+            match &result {
+                Ok(v) => runtime_log_debug(format!(
+                    "[TOOL-DEBUG] execute_builtin_tool.ok name=read_file result={}",
+                    debug_value_snippet(v, 240)
+                )),
+                Err(err) => eprintln!("[工具执行] 内置工具 read_file 执行失败: 错误={err}"),
+            }
+            result
+        })
+    }
 }

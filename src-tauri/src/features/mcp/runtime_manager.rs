@@ -11,11 +11,6 @@ struct CachedMcpClient {
     process_tree_guard: Option<McpProcessTreeGuard>,
 }
 
-struct McpSpawnedChildProcess {
-    transport: rmcp::transport::TokioChildProcess,
-    process_tree_guard: Option<McpProcessTreeGuard>,
-}
-
 #[cfg(target_os = "windows")]
 struct McpProcessTreeGuard(windows_sys::Win32::Foundation::HANDLE);
 
@@ -155,26 +150,6 @@ fn mcp_try_attach_windows_process_tree_guard_for_label(
     _command_label: &str,
 ) -> Option<McpProcessTreeGuard> {
     None
-}
-
-fn mcp_spawn_child_process(
-    mut cmd: tokio::process::Command,
-    scene: &str,
-) -> Result<McpSpawnedChildProcess, String> {
-    #[cfg(target_os = "windows")]
-    {
-        // 0x08000000 = CREATE_NO_WINDOW, keep helper MCP child processes headless.
-        cmd.creation_flags(0x08000000);
-    }
-
-    let transport = rmcp::transport::TokioChildProcess::new(cmd)
-        .map_err(|err| format!("Start {scene} MCP child process failed: {err}"))?;
-    let process_tree_guard =
-        mcp_try_attach_windows_process_tree_guard_for_label(&transport, scene);
-    Ok(McpSpawnedChildProcess {
-        transport,
-        process_tree_guard,
-    })
 }
 
 #[derive(Clone)]
