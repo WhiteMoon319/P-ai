@@ -511,7 +511,8 @@ export type TaskTriggerMessageCard = {
 
 export type PlanMessageCard = {
   action: "present" | "complete";
-  context: string;
+  path: string;
+  context?: string;
 };
 
 export type MemeMessageSegment =

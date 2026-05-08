@@ -338,6 +338,9 @@ function asToolSchemaShape(value: unknown): ToolSchemaShape {
 }
 
 function toolSchemaTypeText(shape: ToolSchemaShape): string {
+  if (shape.const !== undefined && shape.const !== null) {
+    return String(shape.const);
+  }
   const typeValue = shape.type;
   if (Array.isArray(typeValue)) {
     return typeValue.map(String).join(" | ");
@@ -351,7 +354,8 @@ function toolSchemaSummaryLine(name: string, shape: ToolSchemaShape, required: b
   const minText = shape.minimum !== undefined ? ` >= ${shape.minimum}` : "";
   const maxText = shape.maximum !== undefined ? ` <= ${shape.maximum}` : "";
   const rangeText = `${enumValues}${minText}${maxText}`.trim();
-  return `${requiredText}${name}: ${toolSchemaTypeText(shape)}${rangeText ? ` ${rangeText}` : ""}`;
+  const descriptionText = typeof shape.description === "string" ? shape.description.trim() : "";
+  return `${requiredText}${name}: ${toolSchemaTypeText(shape)}${rangeText ? ` ${rangeText}` : ""}${descriptionText ? ` - ${descriptionText}` : ""}`;
 }
 
 function collectToolSchemaSummaryLines(
@@ -449,6 +453,21 @@ function toolParameterSummary(id: string): string[] {
   const parameters = definition?.function?.parameters;
   if (!parameters || typeof parameters !== "object") return [];
   const root = parameters as Record<string, unknown>;
+  const branches = Array.isArray(root.oneOf) ? root.oneOf : [];
+  if (branches.length) {
+    return Array.from(new Set(
+      branches.flatMap((branch) => {
+        const shape = asToolSchemaShape(branch);
+        const propertiesRaw = shape.properties;
+        const requiredRaw = Array.isArray(shape.required) ? shape.required : [];
+        if (!propertiesRaw || typeof propertiesRaw !== "object") return [];
+        return collectToolSchemaSummaryLines(
+          propertiesRaw as ToolSchemaShape,
+          requiredRaw.map(String),
+        );
+      }),
+    ));
+  }
   const propertiesRaw = root.properties;
   const requiredRaw = Array.isArray(root.required) ? root.required : [];
   if (!propertiesRaw || typeof propertiesRaw !== "object") return [];
@@ -463,6 +482,17 @@ function toolParameterExamples(id: string): string[] {
   const parameters = definition?.function?.parameters;
   if (!parameters || typeof parameters !== "object") return [];
   const root = parameters as Record<string, unknown>;
+  const branches = Array.isArray(root.oneOf) ? root.oneOf : [];
+  if (branches.length) {
+    return Array.from(new Set(
+      branches.flatMap((branch) => {
+        const shape = asToolSchemaShape(branch);
+        const propertiesRaw = shape.properties;
+        if (!propertiesRaw || typeof propertiesRaw !== "object") return [];
+        return collectToolSchemaExamples(propertiesRaw as ToolSchemaShape);
+      }),
+    ));
+  }
   const propertiesRaw = root.properties;
   if (!propertiesRaw || typeof propertiesRaw !== "object") return [];
   return Array.from(new Set(collectToolSchemaExamples(propertiesRaw as ToolSchemaShape)));

@@ -2410,7 +2410,6 @@ async fn send_chat_message_inner(
         } else {
             Some(ToolLoopAutoCompactionContext {
                 conversation_id: conversation.id.clone(),
-                data_path: state.data_path.clone(),
                 request_id: runtime_context
                     .request_id
                     .as_deref()

@@ -538,7 +538,10 @@ impl RuntimeJsonTool for BuiltinApplyPatchTool {
 
 
 #[derive(Debug, Clone)]
-struct BuiltinPlanTool;
+struct BuiltinPlanTool {
+    app_state: AppState,
+    session_id: String,
+}
 
 #[derive(Debug, Clone)]
 struct BuiltinTaskTool {
@@ -593,10 +596,17 @@ impl RuntimeToolMetadata for BuiltinPlanTool {
             serde_json::json!({
               "type": "object",
               "properties": {
-                "action": { "type": "string", "enum": ["present", "complete"] },
-                "context": { "type": "string", "description": "当 action=present 时表示计划内容；当 action=complete 时表示完成说明，可省略" }
+                "action": {
+                  "type": "string",
+                  "enum": ["present", "complete"],
+                  "description": "present 表示提交计划；complete 表示标记该计划已完成"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "计划 Markdown 文件路径"
+                }
               },
-              "required": ["action"],
+              "required": ["action", "path"],
               "additionalProperties": false
             }),
         )
@@ -614,7 +624,8 @@ impl RuntimeJsonTool for BuiltinPlanTool {
             "[TOOL-DEBUG] execute_builtin_tool.start name=plan args={}",
             debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
         ));
-        let result = builtin_plan(args).map_err(ToolInvokeError::from);
+        let result = builtin_plan(&self.app_state, &self.session_id, args)
+            .map_err(ToolInvokeError::from);
         match &result {
             Ok(v) => runtime_log_debug(format!(
                 "[TOOL-DEBUG] execute_builtin_tool.ok name=plan result={}",

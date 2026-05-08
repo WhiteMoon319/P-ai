@@ -126,7 +126,6 @@ fn repeated_tool_call_block_reply(
 #[derive(Debug, Clone)]
 struct ToolLoopAutoCompactionContext {
     conversation_id: String,
-    data_path: PathBuf,
     request_id: Option<String>,
     prompt_mode: PromptBuildMode,
     agent: AgentProfile,
@@ -200,7 +199,7 @@ fn tool_loop_guided_close_reply(
 enum DeferredToolLoopOutcome {
     OrganizeContext,
     TaskComplete(String),
-    Plan(TerminalToolResultMessage),
+    PlanPresent(TerminalToolResultMessage),
 }
 
 fn deferred_tool_loop_outcome_from_result(
@@ -215,7 +214,8 @@ fn deferred_tool_loop_outcome_from_result(
     if let Some(final_text) = terminal_task_complete_result(tool_name, tool_args, tool_result) {
         return Some(DeferredToolLoopOutcome::TaskComplete(final_text));
     }
-    terminal_plan_result(tool_name, tool_args, tool_result).map(DeferredToolLoopOutcome::Plan)
+    terminal_plan_present_result(tool_name, tool_args, tool_result)
+        .map(DeferredToolLoopOutcome::PlanPresent)
 }
 
 fn finalize_deferred_tool_loop_outcome(
@@ -223,7 +223,6 @@ fn finalize_deferred_tool_loop_outcome(
     full_reasoning_standard: String,
     tool_history_events: Vec<Value>,
     trusted_input_tokens: Option<u64>,
-    auto_compaction_context: Option<&ToolLoopAutoCompactionContext>,
 ) -> ModelReply {
     match outcome {
         DeferredToolLoopOutcome::OrganizeContext => ModelReply {
@@ -246,28 +245,7 @@ fn finalize_deferred_tool_loop_outcome(
             suppress_assistant_message: false,
             trusted_input_tokens,
         },
-        DeferredToolLoopOutcome::Plan(plan_result) => {
-            if plan_result
-                .provider_meta
-                .as_ref()
-                .and_then(|meta| meta.get("messageKind"))
-                .and_then(Value::as_str)
-                .map(str::trim)
-                == Some("plan_complete")
-            {
-                if let Some(context) = auto_compaction_context {
-                    if let Err(err) = message_store::active_plan_complete_latest_in_progress(
-                        &context.data_path,
-                        &context.conversation_id,
-                        plan_result.completion_text.as_deref(),
-                    ) {
-                        runtime_log_warn(format!(
-                            "[计划] 完成状态写入失败 conversation_id={} error={}",
-                            context.conversation_id, err
-                        ));
-                    }
-                }
-            }
+        DeferredToolLoopOutcome::PlanPresent(plan_result) => {
             ModelReply {
                 assistant_text: plan_result.assistant_text.clone(),
                 final_response_text: plan_result.assistant_text,
@@ -449,11 +427,22 @@ fn json_string_field(value: &Value, keys: &[&str]) -> Option<String> {
     })
 }
 
+fn json_bool_field(value: &Value, keys: &[&str]) -> Option<bool> {
+    keys.iter()
+        .find_map(|key| value.get(*key).and_then(Value::as_bool))
+}
+
 #[derive(Debug, Clone)]
 struct TerminalToolResultMessage {
     assistant_text: String,
-    completion_text: Option<String>,
     provider_meta: Option<Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PlanToolResultState {
+    action: String,
+    path: String,
+    stop_tool_loop: bool,
 }
 
 fn terminal_task_complete_result(tool_name: &str, tool_args: &str, tool_result: &ProviderToolResult) -> Option<String> {
@@ -499,11 +488,11 @@ fn terminal_task_complete_result(tool_name: &str, tool_args: &str, tool_result: 
     }))
 }
 
-fn terminal_plan_result(
+fn plan_tool_result_state(
     tool_name: &str,
     tool_args: &str,
     tool_result: &ProviderToolResult,
-) -> Option<TerminalToolResultMessage> {
+) -> Option<PlanToolResultState> {
     if tool_name != "plan" || tool_result.is_error {
         return None;
     }
@@ -515,33 +504,41 @@ fn terminal_plan_result(
         .and_then(|value| json_string_field(value, &["action"]))
         .or_else(|| result_value.as_ref().and_then(|value| json_string_field(value, &["action"])))?;
     let normalized_action = action.to_ascii_lowercase();
-    let context = args_value
+    let path = args_value
         .as_ref()
-        .and_then(|value| json_string_field(value, &["context"]))
-        .or_else(|| result_value.as_ref().and_then(|value| json_string_field(value, &["context"])))
-        .unwrap_or_else(|| "计划已完成。".to_string());
+        .and_then(|value| json_string_field(value, &["path"]))
+        .or_else(|| result_value.as_ref().and_then(|value| json_string_field(value, &["path"])))?;
+    let stop_tool_loop = result_value
+        .as_ref()
+        .and_then(|value| json_bool_field(value, &["should_stop_tool_loop", "stop_tool_loop"]))
+        .unwrap_or(normalized_action == "present");
 
-    let message_kind = match normalized_action.as_str() {
-        "present" => "plan_present",
-        "complete" => "plan_complete",
-        _ => return None,
-    };
+    Some(PlanToolResultState {
+        action,
+        path,
+        stop_tool_loop,
+    })
+}
 
+fn terminal_plan_present_result(
+    tool_name: &str,
+    tool_args: &str,
+    tool_result: &ProviderToolResult,
+) -> Option<TerminalToolResultMessage> {
+    let plan_state = plan_tool_result_state(tool_name, tool_args, tool_result)?;
+    if !plan_state.action.eq_ignore_ascii_case("present") || !plan_state.stop_tool_loop {
+        return None;
+    }
     Some(TerminalToolResultMessage {
         assistant_text: String::new(),
-        completion_text: if normalized_action == "complete" {
-            Some(context.clone())
-        } else {
-            None
-        },
         provider_meta: Some(serde_json::json!({
-            "messageKind": message_kind,
+            "messageKind": "plan_present",
             "planCard": {
-                "action": action,
-                "context": context,
+                "action": plan_state.action,
+                "path": plan_state.path,
             },
             "message_meta": {
-                "kind": message_kind,
+                "kind": "plan_present",
             }
         })),
     })
@@ -925,6 +922,7 @@ async fn run_genai_tool_loop(
 
     let mut auto_compaction_applied = false;
     let mut tool_repeat_guard = ToolRepeatGuard::default();
+    let mut final_assistant_provider_meta_override = None::<Value>;
     for round_index in 0..INTERNAL_MAX_TOOL_LOOP_ROUNDS {
         let mut emit_text_boundary_before_next_chunk = !full_assistant_text.trim().is_empty();
         if round_index > 0 && !auto_compaction_applied {
@@ -1092,7 +1090,7 @@ async fn run_genai_tool_loop(
                 final_response_text: turn_text,
                 reasoning_standard: full_reasoning_standard,
                 reasoning_inline: String::new(),
-                assistant_provider_meta: None,
+                assistant_provider_meta: final_assistant_provider_meta_override.clone(),
                 tool_history_events,
                 suppress_assistant_message: false,
                 trusted_input_tokens,
@@ -1251,6 +1249,18 @@ async fn run_genai_tool_loop(
                 deferred_outcome =
                     deferred_tool_loop_outcome_from_result(&tool_name, &tool_args, &tool_result);
             }
+            if let Some(plan_state) =
+                plan_tool_result_state(&tool_name, &tool_args, &tool_result)
+            {
+                if plan_state.action.eq_ignore_ascii_case("complete") {
+                    final_assistant_provider_meta_override = Some(serde_json::json!({
+                        "messageKind": "plan_complete",
+                        "message_meta": {
+                            "kind": "plan_complete",
+                        }
+                    }));
+                }
+            }
             if should_stop_after_contact_tool(&tool_name, &tool_result_text) {
                 stop_after_remote_im_done_in_turn = true;
             }
@@ -1312,7 +1322,6 @@ async fn run_genai_tool_loop(
                 full_reasoning_standard,
                 tool_history_events,
                 trusted_input_tokens,
-                auto_compaction_context,
             ));
         }
 
@@ -1342,7 +1351,7 @@ async fn run_genai_tool_loop(
                 final_response_text: final_text,
                 reasoning_standard: full_reasoning_standard,
                 reasoning_inline: String::new(),
-                assistant_provider_meta: None,
+                assistant_provider_meta: final_assistant_provider_meta_override.clone(),
                 tool_history_events,
                 suppress_assistant_message: false,
                 trusted_input_tokens,
@@ -1363,7 +1372,7 @@ async fn run_genai_tool_loop(
         final_response_text: String::new(),
         reasoning_standard: full_reasoning_standard,
         reasoning_inline: String::new(),
-        assistant_provider_meta: None,
+        assistant_provider_meta: final_assistant_provider_meta_override,
         tool_history_events,
         suppress_assistant_message: false,
         trusted_input_tokens,
@@ -1469,6 +1478,7 @@ async fn run_genai_tool_loop_non_stream(
 
     let mut auto_compaction_applied = false;
     let mut tool_repeat_guard = ToolRepeatGuard::default();
+    let mut final_assistant_provider_meta_override = None::<Value>;
     for round_index in 0..INTERNAL_MAX_TOOL_LOOP_ROUNDS {
         if round_index > 0 && !auto_compaction_applied {
             auto_compaction_applied = maybe_apply_auto_compaction_before_tool_continue_genai(
@@ -1536,7 +1546,7 @@ async fn run_genai_tool_loop_non_stream(
                 final_response_text: turn_text,
                 reasoning_standard: full_reasoning_standard,
                 reasoning_inline: String::new(),
-                assistant_provider_meta: None,
+                assistant_provider_meta: final_assistant_provider_meta_override.clone(),
                 tool_history_events,
                 suppress_assistant_message: false,
                 trusted_input_tokens,
@@ -1694,6 +1704,18 @@ async fn run_genai_tool_loop_non_stream(
                 deferred_outcome =
                     deferred_tool_loop_outcome_from_result(&tool_name, &tool_args, &tool_result);
             }
+            if let Some(plan_state) =
+                plan_tool_result_state(&tool_name, &tool_args, &tool_result)
+            {
+                if plan_state.action.eq_ignore_ascii_case("complete") {
+                    final_assistant_provider_meta_override = Some(serde_json::json!({
+                        "messageKind": "plan_complete",
+                        "message_meta": {
+                            "kind": "plan_complete",
+                        }
+                    }));
+                }
+            }
             if should_stop_after_contact_tool(&tool_name, &tool_result_text) {
                 stop_after_remote_im_done_in_turn = true;
             }
@@ -1755,7 +1777,6 @@ async fn run_genai_tool_loop_non_stream(
                 full_reasoning_standard,
                 tool_history_events,
                 trusted_input_tokens,
-                auto_compaction_context,
             ));
         }
 
@@ -1785,7 +1806,7 @@ async fn run_genai_tool_loop_non_stream(
                 final_response_text: final_text,
                 reasoning_standard: full_reasoning_standard,
                 reasoning_inline: String::new(),
-                assistant_provider_meta: None,
+                assistant_provider_meta: final_assistant_provider_meta_override.clone(),
                 tool_history_events,
                 suppress_assistant_message: false,
                 trusted_input_tokens,
@@ -1806,7 +1827,7 @@ async fn run_genai_tool_loop_non_stream(
         final_response_text: String::new(),
         reasoning_standard: full_reasoning_standard,
         reasoning_inline: String::new(),
-        assistant_provider_meta: None,
+        assistant_provider_meta: final_assistant_provider_meta_override,
         tool_history_events,
         suppress_assistant_message: false,
         trusted_input_tokens,
@@ -1960,14 +1981,14 @@ mod tool_loop_tests {
         let plan_result = ProviderToolResult::text(
             serde_json::json!({
                 "action": "present",
-                "context": "后面又来了一个计划"
+                "path": "E:\\\\demo\\\\.pai\\\\plan\\\\plan.md"
             })
             .to_string(),
         );
         if deferred.is_none() {
             deferred = deferred_tool_loop_outcome_from_result(
                 "plan",
-                r#"{"action":"present","context":"后面又来了一个计划"}"#,
+                r#"{"action":"present","path":"E:\\demo\\.pai\\plan\\plan.md"}"#,
                 &plan_result,
             );
         }
@@ -1978,6 +1999,48 @@ mod tool_loop_tests {
             }
             other => panic!("unexpected deferred outcome: {:?}", other),
         }
+    }
+
+    #[test]
+    fn plan_complete_should_not_become_terminal_outcome() {
+        let tool_result = ProviderToolResult::text(
+            serde_json::json!({
+                "action": "complete",
+                "path": "E:\\\\demo\\\\.pai\\\\plan\\\\plan.md",
+                "should_stop_tool_loop": false,
+                "active_plan_completed": true
+            })
+            .to_string(),
+        );
+
+        let deferred = deferred_tool_loop_outcome_from_result(
+            "plan",
+            r#"{"action":"complete","path":"E:\\demo\\.pai\\plan\\plan.md"}"#,
+            &tool_result,
+        );
+
+        assert!(deferred.is_none());
+    }
+
+    #[test]
+    fn auto_approved_plan_present_should_not_become_terminal_outcome() {
+        let tool_result = ProviderToolResult::text(
+            serde_json::json!({
+                "action": "present",
+                "path": "E:\\\\demo\\\\.pai\\\\plan\\\\plan.md",
+                "should_stop_tool_loop": false,
+                "auto_approved": true
+            })
+            .to_string(),
+        );
+
+        let deferred = deferred_tool_loop_outcome_from_result(
+            "plan",
+            r#"{"action":"present","path":"E:\\demo\\.pai\\plan\\plan.md"}"#,
+            &tool_result,
+        );
+
+        assert!(deferred.is_none());
     }
 
     #[test]
@@ -2000,14 +2063,12 @@ mod tool_loop_tests {
             ),
             None
         );
-        assert!(
-            terminal_plan_result(
-                "exec",
-                r#"{"command":"echo hi > E:\\outside.txt"}"#,
-                &tool_result,
-            )
-            .is_none()
-        );
+        assert!(terminal_plan_present_result(
+            "exec",
+            r#"{"command":"echo hi > E:\\outside.txt"}"#,
+            &tool_result,
+        )
+        .is_none());
 
         let history_content = sanitize_tool_result_for_history("exec", &tool_result.display_text);
         assert!(history_content.contains("\"approved\":false"));

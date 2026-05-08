@@ -673,6 +673,7 @@ fn main() {
             import_archives_from_json,
             open_external_url,
             open_workspace_file,
+            read_plan_file_content,
             confirm_plan_and_continue,
             send_chat_message,
             send_user_mention_message,

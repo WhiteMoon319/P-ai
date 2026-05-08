@@ -146,6 +146,7 @@
                     :style="entry.item.id === latestOwnElasticItemId ? { minHeight: `${latestOwnElasticMinHeight}px` } : undefined"
                   >
                     <ChatMessageItem
+                      :active-conversation-id="activeConversationId"
                       :block="entry.item.block"
                       :selection-key="entry.item.renderId"
                       :selection-mode-enabled="messageSelectionModeEnabled"
@@ -191,6 +192,7 @@
                     <template v-for="groupItem in entry.item.items" :key="groupItem.renderId">
                       <ChatMessageItem
                         v-memo="messageMemoKey(groupItem.block, groupItem.renderId, groupItem.blockIndex, groupItem.compactWithPrevious)"
+                        :active-conversation-id="activeConversationId"
                         :block="groupItem.block"
                         :selection-key="groupItem.renderId"
                         :selection-mode-enabled="messageSelectionModeEnabled"
@@ -2173,6 +2175,7 @@ function blockSizeDependencies(block: ChatMessageBlock): unknown[] {
     block.toolCalls.length,
     Array.isArray(block.memeSegments) ? block.memeSegments.length : 0,
     block.planCard?.action || "",
+    block.planCard?.path || "",
     String(block.taskTrigger ? JSON.stringify(block.taskTrigger) : ""),
   ];
 }

@@ -207,11 +207,13 @@ function resolvePlanCard(message: ChatMessage): PlanMessageCard | undefined {
   const card = raw as Record<string, unknown>;
   const action = String(card.action || "").trim().toLowerCase();
   if (action !== "present" && action !== "complete") return undefined;
+  const path = String(card.path || "").trim();
+  if (!path) return undefined;
   const context = String(card.context || "").trim();
-  if (!context) return undefined;
   return {
     action,
-    context,
+    path,
+    context: context || undefined,
   };
 }
 

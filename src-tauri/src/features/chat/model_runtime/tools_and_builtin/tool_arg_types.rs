@@ -172,8 +172,8 @@ struct TaskToolArgsWire {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 struct PlanToolArgs {
     action: String,
-    #[serde(default)]
-    context: String,
+    path: String,
 }

@@ -101,7 +101,39 @@
                   {{ block.planCard.action === "complete" ? t("chat.plan.completeBadge") : t("chat.plan.badge") }}
                 </span>
               </div>
-              <div class="whitespace-pre-wrap text-sm leading-6">{{ block.planCard.context }}</div>
+              <div class="font-mono text-[11px] leading-5 break-all text-base-content/55">{{ block.planCard.path }}</div>
+              <div v-if="block.planCard.action === 'present'" class="space-y-2">
+                <div
+                  v-if="planMarkdownLoading"
+                  class="flex items-center gap-2 text-sm leading-6 text-base-content/65"
+                >
+                  <span class="loading loading-spinner loading-xs"></span>
+                  <span>正在读取计划文件</span>
+                </div>
+                <div
+                  v-else-if="planMarkdownError"
+                  class="whitespace-pre-wrap text-sm leading-6 text-warning"
+                >{{ planMarkdownError }}</div>
+                <div v-else-if="planMarkdownText" ref="markdownContainerRef">
+                  <MarkdownRender
+                    class="ecall-markdown-content max-w-none"
+                    custom-id="chat-markstream"
+                    :nodes="markdownNodesForPlanCard(block)"
+                    :is-dark="markdownIsDark"
+                    :final="true"
+                    :max-live-nodes="0"
+                    :batch-rendering="false"
+                    :initial-render-batch-size="0"
+                    :render-batch-size="0"
+                    :render-batch-delay="0"
+                    :render-batch-budget-ms="0"
+                    :code-block-props="markdownCodeBlockProps"
+                    :mermaid-props="markdownMermaidProps"
+                    :typewriter="false"
+                    @click="emit('assistantLinkClick', $event)"
+                  />
+                </div>
+              </div>
               <div v-if="block.planCard.action === 'present'" class="space-y-2">
                 <button
                   type="button"
@@ -545,7 +577,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watchEffect, watchPostEffect } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch, watchEffect, watchPostEffect } from "vue";
 import { useI18n } from "vue-i18n";
 import { CircleCheckBig, Copy, Eye, EyeOff, FileText, Pause, Play, RotateCcw, Undo2 } from "lucide-vue-next";
 import MarkdownRender, { enableKatex, enableMermaid, getMarkdown, parseMarkdownToStructure } from "markstream-vue";
@@ -593,6 +625,7 @@ const imageDataUrlCache = new Map<string, string>();
 const imageDataUrlPromiseCache = new Map<string, Promise<string>>();
 
 const props = defineProps<{
+  activeConversationId: string;
   block: ChatMessageBlock;
   selectionKey: string;
   selectionModeEnabled: boolean;
@@ -636,7 +669,50 @@ const markdownContainerRef = ref<HTMLElement | null>(null);
 const reasoningStandardExpanded = ref(false);
 const inlineReasoningExpanded = ref(false);
 const toolCallsExpanded = ref(false);
+const planMarkdownText = ref("");
+const planMarkdownError = ref("");
+const planMarkdownLoading = ref(false);
 let disposed = false;
+
+watch(
+  () => ({
+    conversationId: String(props.activeConversationId || "").trim(),
+    action: String(props.block.planCard?.action || "").trim(),
+    path: String(props.block.planCard?.path || "").trim(),
+    blockId: String(props.block.id || "").trim(),
+  }),
+  async (snapshot, _previous, onCleanup) => {
+    let cancelled = false;
+    onCleanup(() => {
+      cancelled = true;
+    });
+    planMarkdownText.value = "";
+    planMarkdownError.value = "";
+    planMarkdownLoading.value = false;
+    if (snapshot.action !== "present" || !snapshot.path || !snapshot.conversationId) {
+      return;
+    }
+    planMarkdownLoading.value = true;
+    try {
+      const content = await invokeTauri<string>("read_plan_file_content", {
+        conversationId: snapshot.conversationId,
+        path: snapshot.path,
+      });
+      if (cancelled || disposed) return;
+      planMarkdownText.value = String(content || "");
+    } catch (error) {
+      if (cancelled || disposed) return;
+      const message =
+        error instanceof Error ? error.message : String(error || "读取计划文件失败");
+      planMarkdownError.value = message;
+    } finally {
+      if (!cancelled && !disposed) {
+        planMarkdownLoading.value = false;
+      }
+    }
+  },
+  { immediate: true },
+);
 
 const displayName = computed(() => messageName(props.block));
 const avatarUrl = computed(() => messageAvatarUrl(props.block));
@@ -1490,6 +1566,10 @@ function markdownNodesForText(
 
 function markdownNodesForBlock(block: ChatMessageBlock): any[] {
   return markdownNodesForText(block, block.text, !block.isStreaming, "main");
+}
+
+function markdownNodesForPlanCard(block: ChatMessageBlock): any[] {
+  return markdownNodesForText(block, planMarkdownText.value, true, "plan-card");
 }
 
 function normalizeRenderedLocalLinks() {

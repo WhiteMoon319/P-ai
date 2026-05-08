@@ -7,7 +7,7 @@ struct ActivePlanRecord {
     plan_id: String,
     source_message_id: String,
     status: String,
-    context: String,
+    path: String,
     created_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     completed_at: Option<String>,
@@ -101,14 +101,14 @@ pub(super) fn active_plan_append_in_progress(
     data_path: &PathBuf,
     conversation_id: &str,
     source_message_id: &str,
-    context: &str,
+    path: &str,
 ) -> Result<(), String> {
     let paths = message_store_paths(data_path, conversation_id)?;
     let record = ActivePlanRecord {
         plan_id: Uuid::new_v4().to_string(),
         source_message_id: source_message_id.trim().to_string(),
         status: ACTIVE_PLAN_STATUS_IN_PROGRESS.to_string(),
-        context: context.trim().to_string(),
+        path: path.trim().to_string(),
         created_at: now_iso(),
         completed_at: None,
         completion_text: None,
@@ -116,23 +116,31 @@ pub(super) fn active_plan_append_in_progress(
     if record.source_message_id.is_empty() {
         return Err("sourceMessageId 为空，无法写入执行中计划。".to_string());
     }
-    if record.context.is_empty() {
-        return Err("计划内容为空，无法写入执行中计划。".to_string());
+    if record.path.is_empty() {
+        return Err("计划路径为空，无法写入执行中计划。".to_string());
     }
     append_active_plan_record(&paths.active_plans_file, &record)?;
     Ok(())
 }
 
-pub(super) fn active_plan_complete_latest_in_progress(
+pub(super) fn active_plan_complete_by_path(
     data_path: &PathBuf,
     conversation_id: &str,
+    path: &str,
     completion_text: Option<&str>,
 ) -> Result<bool, String> {
+    let normalized_path = path.trim();
+    if normalized_path.is_empty() {
+        return Err("计划路径为空，无法完成执行中计划。".to_string());
+    }
     let paths = message_store_paths(data_path, conversation_id)?;
     let mut records = read_active_plan_records(&paths.active_plans_file)?;
     let Some(index) = records
         .iter()
-        .rposition(|record| record.status.trim() == ACTIVE_PLAN_STATUS_IN_PROGRESS)
+        .rposition(|record| {
+            record.status.trim() == ACTIVE_PLAN_STATUS_IN_PROGRESS
+                && record.path.trim().eq_ignore_ascii_case(normalized_path)
+        })
     else {
         return Ok(false);
     };
@@ -156,10 +164,10 @@ pub(super) fn active_plan_prompt_block(
     }
     let mut lines = Vec::<String>::new();
     lines.push("<active_plans>".to_string());
-    lines.push("以下为用户已同意且正在执行的计划。它们必须持续纳入上下文；完成后调用 plan(action=complete) 结束最新进行中计划。".to_string());
+    lines.push("以下为用户已同意且正在执行的计划文件。它们必须持续纳入上下文；完成后调用 plan(action=complete) 并传入对应 path。".to_string());
     for (index, record) in records.iter().enumerate() {
         lines.push(format!("<active_plan index=\"{}\">", index + 1));
-        lines.push(record.context.trim().to_string());
+        lines.push(record.path.trim().to_string());
         lines.push("</active_plan>".to_string());
     }
     lines.push("</active_plans>".to_string());

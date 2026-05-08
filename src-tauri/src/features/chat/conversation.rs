@@ -2464,10 +2464,19 @@ fn build_system_tools_rule_blocks(
     blocks
 }
 
-fn build_question_and_planning_rule_block() -> String {
+fn build_question_and_planning_rule_block(
+    state: Option<&AppState>,
+    conversation: &Conversation,
+) -> String {
+    let preferred_plan_dir = state
+        .and_then(|app_state| {
+            plan_preferred_directory_display_for_conversation(app_state, Some(conversation)).ok()
+        })
+        .unwrap_or_else(|| "{会话工作目录或自我目录}\\.pai\\plan".to_string());
     prompt_xml_block(
         "plan tool rule",
-        "提问之法\n\
+        &format!(
+            "提问之法\n\
          价值锚定：唯当缺失信息重创方向、风险、成本或产出时，方可求询。\n\
          前置分析：提问前必先检索上下文，形成初步逻辑模型。\n\
          高频克制：首轮提问须精准且低通量，严禁堆砌问题清单。\n\
@@ -2478,6 +2487,9 @@ fn build_question_and_planning_rule_block() -> String {
          何时使用：当任务复杂到不能直接靠 todo 执行，需要先想清楚阶段目标、方案、边界、风险或取舍时，使用 plan。\n\
          层级关系：task 管长期目标；plan 管当前阶段或某次推进方案；todo 管 plan 执行中的具体步骤。\n\
          落地要求：一个正在执行的 plan，应继续拆成 todo 推进；若后续还会跨会话长期续跑，再把更高层目标交给 task。\n\
+         计划文件：先把计划写成 Markdown 文件，再调用 plan。优先写到以下目录：{preferred_plan_dir}\n\
+         提交方式：plan.present 只提交 path；plan.complete 也只提交同一份 path。\n\
+         局部修改：如果只改计划的一部分，优先直接补丁修改现有计划文件，不要整份重写。\n\
          骨架建模：遇非平凡任务，先扫描核心文件，构建含主阶段与要点之骨架计划。\n\
          敏捷探索：计划未定，严禁穷尽式本地或网络搜寻。\n\
          交付导向：计划旨在驱动迭代，而非沦为冗长之形式文档。\n\
@@ -2486,7 +2498,8 @@ fn build_question_and_planning_rule_block() -> String {
          二者逻辑\n\
          提问乃为破除当前计划之核心不确定性。\n\
          计划乃是将当前认知转化为可执行路径。\n\
-         严禁在无初步计划时盲目索取，亦不可在关键因子未明时伪称架构稳定。",
+         严禁在无初步计划时盲目索取，亦不可在关键因子未明时伪称架构稳定。"
+        ),
     )
 }
 

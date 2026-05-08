@@ -112,17 +112,29 @@ struct ConfirmPlanAndContinueInput {
     agent_id: Option<String>,
 }
 
-fn plan_context_from_message_provider_meta(message: &ChatMessage) -> Option<String> {
+fn plan_path_from_message_provider_meta(message: &ChatMessage) -> Option<String> {
     message
         .provider_meta
         .as_ref()
         .and_then(|meta| meta.get("planCard"))
         .and_then(Value::as_object)
-        .and_then(|card| card.get("context"))
+        .and_then(|card| card.get("path"))
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
+}
+
+fn resolve_plan_file_for_conversation_id(
+    state: &AppState,
+    conversation_id: &str,
+    raw_path: &str,
+) -> Result<ResolvedPlanFilePath, String> {
+    let conversation = state_read_conversation_cached(state, conversation_id)?;
+    let base_root = terminal_default_workspace_for_conversation_resolved(state, Some(&conversation))
+        .map(|workspace| workspace.path)
+        .or_else(|_| plan_self_directory_canonical(state))?;
+    resolve_plan_file_for_conversation(&base_root, raw_path)
 }
 
 fn plan_continue_confirmation_message() -> ChatMessage {
@@ -153,10 +165,9 @@ fn plan_confirm_context_usage_ratio(source: &Conversation, selected_api: &ApiCon
         .unwrap_or(0.0)
 }
 
-#[tauri::command]
-async fn confirm_plan_and_continue(
-    input: ConfirmPlanAndContinueInput,
-    state: State<'_, AppState>,
+async fn confirm_plan_and_continue_inner(
+    state: &AppState,
+    input: &ConfirmPlanAndContinueInput,
 ) -> Result<bool, String> {
     let conversation_id = input.conversation_id.trim();
     if conversation_id.is_empty() {
@@ -167,19 +178,21 @@ async fn confirm_plan_and_continue(
         return Err("planMessageId is required.".to_string());
     }
     let plan_message = conversation_service().read_message_by_id(
-        state.inner(),
+        state,
         conversation_id,
         plan_message_id,
     )?;
-    let plan_context = plan_context_from_message_provider_meta(&plan_message)
+    let plan_path = plan_path_from_message_provider_meta(&plan_message)
         .ok_or_else(|| "指定消息不是可执行计划。".to_string())?;
+    let resolved_plan_path =
+        resolve_plan_file_for_conversation_id(state, conversation_id, &plan_path)?;
     message_store::active_plan_append_in_progress(
-        &state.inner().data_path,
+        &state.data_path,
         conversation_id,
         plan_message_id,
-        &plan_context,
+        &resolved_plan_path.display_path,
     )?;
-    let conversation = state_read_conversation_cached(state.inner(), conversation_id)?;
+    let conversation = state_read_conversation_cached(state, conversation_id)?;
     let requested_agent_id = input
         .agent_id
         .as_deref()
@@ -201,7 +214,7 @@ async fn confirm_plan_and_continue(
             (!department_id.is_empty()).then(|| department_id.to_string())
         });
     let (selected_api, resolved_api, department_id, agent_id) = {
-        let app_config = state_read_config_cached(state.inner())?;
+        let app_config = state_read_config_cached(state)?;
         let department = requested_department_id
             .as_deref()
             .and_then(|department_id| department_by_id(&app_config, department_id))
@@ -223,12 +236,12 @@ async fn confirm_plan_and_continue(
         )
     };
     let continue_event_id = format!("confirm-plan-continue-{}", Uuid::new_v4());
-    let preview = build_force_compaction_preview_result(state.inner(), &selected_api, &conversation)?;
+    let preview = build_force_compaction_preview_result(state, &selected_api, &conversation)?;
     let should_compact_before_continue =
         preview.can_compact && plan_confirm_context_usage_ratio(&conversation, &selected_api) >= 0.60;
     if should_compact_before_continue {
         dispatch_assistant_delta_to_active_view(
-            state.inner(),
+            state,
             conversation_id,
             &AssistantDeltaEvent {
                 delta: String::new(),
@@ -245,7 +258,7 @@ async fn confirm_plan_and_continue(
             },
         );
         let compaction_result = run_context_compaction_pipeline(
-            state.inner(),
+            state,
             &selected_api,
             &resolved_api,
             &conversation,
@@ -267,7 +280,7 @@ async fn confirm_plan_and_continue(
                         format!("已完成压缩，更新记忆 {} 条。", result.merged_memories)
                     });
                 dispatch_assistant_delta_to_active_view(
-                    state.inner(),
+                    state,
                     conversation_id,
                     &AssistantDeltaEvent {
                         delta: String::new(),
@@ -286,7 +299,7 @@ async fn confirm_plan_and_continue(
             }
             Err(err) => {
                 dispatch_assistant_delta_to_active_view(
-                    state.inner(),
+                    state,
                     conversation_id,
                     &AssistantDeltaEvent {
                         delta: String::new(),
@@ -330,9 +343,9 @@ async fn confirm_plan_and_continue(
         runtime_context: Some(runtime_context),
         sender_info: None,
     };
-    match ingress_chat_event(state.inner(), event)? {
+    match ingress_chat_event(state, event)? {
         ChatEventIngress::Direct(event) => {
-            trigger_chat_event_after_ingress(state.inner(), ChatEventIngress::Direct(event));
+            trigger_chat_event_after_ingress(state, ChatEventIngress::Direct(event));
         }
         ChatEventIngress::Queued { event_id } => {
             runtime_log_info(format!(
@@ -347,8 +360,34 @@ async fn confirm_plan_and_continue(
             ));
         }
     }
-    trigger_chat_queue_processing(state.inner());
+    trigger_chat_queue_processing(state);
     Ok(true)
+}
+
+#[tauri::command]
+async fn confirm_plan_and_continue(
+    input: ConfirmPlanAndContinueInput,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    confirm_plan_and_continue_inner(state.inner(), &input).await
+}
+
+#[tauri::command]
+fn read_plan_file_content(
+    conversation_id: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let normalized_conversation_id = conversation_id.trim();
+    if normalized_conversation_id.is_empty() {
+        return Err("conversationId is required.".to_string());
+    }
+    let resolved = resolve_plan_file_for_conversation_id(
+        state.inner(),
+        normalized_conversation_id,
+        path.trim(),
+    )?;
+    read_plan_markdown_file(&resolved.canonical_path)
 }
 
 #[derive(Debug, Clone)]

@@ -499,7 +499,7 @@ impl ConversationPromptService {
         if let Some(task_block) = task_block {
             tool_rule_blocks.push(task_block);
         }
-        tool_rule_blocks.push(build_question_and_planning_rule_block());
+        tool_rule_blocks.push(build_question_and_planning_rule_block(state, conversation));
         if let Some(todo_block) = build_builtin_tool_rule_block("todo") {
             tool_rule_blocks.push(todo_block);
         }
