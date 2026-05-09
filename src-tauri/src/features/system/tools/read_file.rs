@@ -352,7 +352,8 @@ async fn read_image_file_result(
     let bytes = tokio::fs::read(&path)
         .await
         .map_err(|err| format!("读取图片文件失败: {err}"))?;
-    let mime = media_mime_from_path(&path)
+    let mime = image_mime_from_bytes(&bytes)
+        .or_else(|| media_mime_from_path(&path))
         .unwrap_or("application/octet-stream")
         .to_string();
     let normalized = match normalize_image_bytes_for_llm_request(&bytes, Some(&mime)) {
@@ -1037,6 +1038,20 @@ fn detect_read_file_type_should_classify_common_formats() {
             detect_read_file_type(std::path::Path::new("a.ppt")),
             ReadFileDetectedType::Ppt
         );
+    }
+
+#[cfg(test)]
+#[test]
+fn image_mime_from_bytes_should_detect_common_images_without_extension() {
+        assert_eq!(
+            image_mime_from_bytes(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]),
+            Some("image/png")
+        );
+        assert_eq!(
+            image_mime_from_bytes(&[0xff, 0xd8, 0xff, 0xe0, 0, 0x10, b'J', b'F', b'I', b'F', 0]),
+            Some("image/jpeg")
+        );
+        assert_eq!(image_mime_from_bytes(b"hello world"), None);
     }
 
 #[cfg(test)]

@@ -113,22 +113,17 @@ fn mime_from_name_fallback(file_name: &str) -> String {
 }
 
 fn normalize_dingtalk_image_mime(raw: &[u8], mime: &str) -> String {
+    if let Some(detected) = image_mime_from_bytes(raw) {
+        return detected.to_string();
+    }
     let trimmed = mime.trim();
     if trimmed.starts_with("image/") {
         return trimmed.to_string();
     }
-    match image::guess_format(raw) {
-        Ok(image::ImageFormat::Png) => "image/png".to_string(),
-        Ok(image::ImageFormat::Jpeg) => "image/jpeg".to_string(),
-        Ok(image::ImageFormat::Gif) => "image/gif".to_string(),
-        Ok(image::ImageFormat::WebP) => "image/webp".to_string(),
-        _ => {
-            if trimmed.is_empty() {
-                "image/png".to_string()
-            } else {
-                trimmed.to_string()
-            }
-        }
+    if trimmed.is_empty() {
+        "image/png".to_string()
+    } else {
+        trimmed.to_string()
     }
 }
 

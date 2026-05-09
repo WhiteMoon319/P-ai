@@ -73,6 +73,12 @@ fn media_mime_from_path(path: &std::path::Path) -> Option<&'static str> {
     }
 }
 
+fn image_mime_from_bytes(raw: &[u8]) -> Option<&'static str> {
+    infer::get(raw)
+        .map(|kind| kind.mime_type())
+        .filter(|mime| mime.starts_with("image/"))
+}
+
 fn workspace_downloads_dir(state: &AppState) -> PathBuf {
     // downloads 是用户与 LLM 共用的附件落地区；允许 LLM 后续自行清理和管理空间占用。
     configured_workspace_root_path(state)

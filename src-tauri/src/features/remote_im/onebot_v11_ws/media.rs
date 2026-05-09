@@ -399,12 +399,14 @@ async fn onebot_resolve_inbound_media(
             );
             continue;
         };
-        let mime = mime_from_name_or_hint(
-            &file_name,
-            resolved_mime
-                .as_deref()
-                .or(item.mime_hint.as_deref()),
-        );
+        let hint = resolved_mime.as_deref().or(item.mime_hint.as_deref());
+        let mime = if matches!(item.kind, OnebotInboundMediaKind::Image) {
+            image_mime_from_bytes(&raw)
+                .map(ToOwned::to_owned)
+                .unwrap_or_else(|| mime_from_name_or_hint(&file_name, hint))
+        } else {
+            mime_from_name_or_hint(&file_name, hint)
+        };
 
         match item.kind {
             OnebotInboundMediaKind::Image => {

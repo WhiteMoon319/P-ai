@@ -186,13 +186,7 @@ async fn weixin_oc_download_image_bytes(
 }
 
 fn weixin_oc_normalize_image_mime(raw: &[u8]) -> String {
-    match image::guess_format(raw) {
-        Ok(image::ImageFormat::Png) => "image/png".to_string(),
-        Ok(image::ImageFormat::Jpeg) => "image/jpeg".to_string(),
-        Ok(image::ImageFormat::Gif) => "image/gif".to_string(),
-        Ok(image::ImageFormat::WebP) => "image/webp".to_string(),
-        _ => "image/jpeg".to_string(),
-    }
+    image_mime_from_bytes(raw).unwrap_or("image/jpeg").to_string()
 }
 
 fn weixin_oc_guess_attachment_mime(file_name: &str, fallback: &str) -> String {

@@ -2085,6 +2085,7 @@ dependencies = [
  "hayro",
  "httpmock",
  "image 0.25.9",
+ "infer",
  "litchi",
  "md5",
  "once_cell",

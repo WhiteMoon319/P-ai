@@ -2,6 +2,8 @@
 
 ## 进行中
 
+- 优化（image-mime-byte-detection）：引入 `infer` 只对图片字节做 MIME 识别，OneBot v11、个人微信、钉钉图片以及 `read_file` 图片读取优先按内容判断格式，避免图片缺少后缀或后缀不准时被错误降级；普通文件类型仍保持原有后缀判断。
+
 ## 发布：v0.9.78
 
 - 发布（release-0.9.78）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.78`，纳入本轮会话已读状态持久化与 OneBot v11 渠道连接任务收割修复。
