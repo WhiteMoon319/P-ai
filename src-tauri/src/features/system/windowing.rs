@@ -242,6 +242,16 @@ fn open_file_reader_window(app: &AppHandle, path: String) -> Result<String, Stri
     Ok(FILE_READER_WINDOW_LABEL.to_string())
 }
 
+fn show_file_reader_window(app: &AppHandle) -> Result<String, String> {
+    if app.get_webview_window(FILE_READER_WINDOW_LABEL).is_some() {
+        focus_file_reader_window(app)?;
+        return Ok(FILE_READER_WINDOW_LABEL.to_string());
+    }
+
+    schedule_file_reader_window_creation(app, String::new())?;
+    Ok(FILE_READER_WINDOW_LABEL.to_string())
+}
+
 fn schedule_file_reader_window_creation(app: &AppHandle, path: String) -> Result<(), String> {
     let app_handle = app.clone();
     std::thread::Builder::new()
@@ -833,14 +843,14 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
         .map_err(|err| format!("Create tray menu item failed: {err}"))?;
     let chat = MenuItem::with_id(app, "chat", "对话", true, None::<&str>)
         .map_err(|err| format!("Create tray menu item failed: {err}"))?;
-    let quick_setup = MenuItem::with_id(app, "quick-setup", "快速设置", true, None::<&str>)
+    let file_reader = MenuItem::with_id(app, "file-reader", "文件浏览器", true, None::<&str>)
         .map_err(|err| format!("Create tray menu item failed: {err}"))?;
     let archives = MenuItem::with_id(app, "archives", "归档", true, None::<&str>)
         .map_err(|err| format!("Create tray menu item failed: {err}"))?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)
         .map_err(|err| format!("Create tray menu item failed: {err}"))?;
 
-    let menu = Menu::with_items(app, &[&config, &chat, &quick_setup, &archives, &quit])
+    let menu = Menu::with_items(app, &[&config, &chat, &file_reader, &archives, &quit])
         .map_err(|err| format!("Create tray menu failed: {err}"))?;
 
     let mut tray = TrayIconBuilder::with_id(MAIN_TRAY_ID).menu(&menu);
@@ -866,8 +876,8 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
                 let _ = show_window(app, "main");
             } else if id == "chat" {
                 let _ = show_chat_entry_window(app);
-            } else if id == "quick-setup" {
-                let _ = show_window(app, "quick-setup");
+            } else if id == "file-reader" {
+                let _ = show_file_reader_window(app);
             } else if id == "archives" {
                 let _ = show_window(app, "archives");
             } else if id == "quit" {
