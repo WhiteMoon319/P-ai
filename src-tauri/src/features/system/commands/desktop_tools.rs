@@ -6,46 +6,6 @@ async fn desktop_screenshot(input: ScreenshotRequest) -> Result<ScreenshotRespon
 }
 
 #[tauri::command]
-fn open_local_file_default(path: String) -> Result<(), String> {
-    let raw_path = path.trim();
-    if raw_path.is_empty() {
-        return Err("path is required".to_string());
-    }
-    let file_path = PathBuf::from(raw_path);
-    if !file_path.is_file() {
-        return Err(format!("目标文件不存在：{raw_path}"));
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let resolved_path = file_path.canonicalize().unwrap_or_else(|_| file_path.clone());
-        std::process::Command::new("explorer")
-            .arg(resolved_path.as_os_str())
-            .spawn()
-            .map_err(|err| format!("打开文件失败: {err}"))?;
-        return Ok(());
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(file_path.as_os_str())
-            .spawn()
-            .map_err(|err| format!("打开文件失败: {err}"))?;
-        return Ok(());
-    }
-
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(file_path.as_os_str())
-            .spawn()
-            .map_err(|err| format!("打开文件失败: {err}"))?;
-        return Ok(());
-    }
-}
-
-#[tauri::command]
 async fn desktop_wait(input: WaitRequest) -> Result<WaitResponse, String> {
     run_wait_tool(input)
         .await
@@ -1211,7 +1171,33 @@ struct FileReaderFilePayload {
     content: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileReaderDirectoryEntry {
+    path: String,
+    name: String,
+    is_directory: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileReaderDirectoryPayload {
+    path: String,
+    name: String,
+    entries: Vec<FileReaderDirectoryEntry>,
+}
+
 const FILE_READER_MAX_BYTES: u64 = 2 * 1024 * 1024;
+const FILE_READER_READ_BURST_WINDOW_MS: u64 = 100;
+
+#[derive(Debug, Clone)]
+struct FileReaderReadTrace {
+    at: std::time::Instant,
+    window_label: String,
+    path: String,
+}
+
+static FILE_READER_READ_TRACES: OnceLock<Mutex<Vec<FileReaderReadTrace>>> = OnceLock::new();
 
 fn file_reader_file_kind(extension: &str) -> &'static str {
     match extension {
@@ -1220,12 +1206,51 @@ fn file_reader_file_kind(extension: &str) -> &'static str {
     }
 }
 
+fn log_file_reader_read_burst(window_label: &str, path: &str) {
+    let now = std::time::Instant::now();
+    let traces = FILE_READER_READ_TRACES.get_or_init(|| Mutex::new(Vec::new()));
+    let mut traces = traces.lock().unwrap_or_else(|poison| poison.into_inner());
+    traces.retain(|item| {
+        now.saturating_duration_since(item.at).as_millis()
+            <= u128::from(FILE_READER_READ_BURST_WINDOW_MS)
+    });
+    traces.push(FileReaderReadTrace {
+        at: now,
+        window_label: window_label.to_string(),
+        path: path.to_string(),
+    });
+    if traces.len() <= 2 {
+        return;
+    }
+
+    let recent = traces
+        .iter()
+        .map(|item| {
+            format!(
+                "{{窗口={}, 距今={}ms, 路径={}}}",
+                item.window_label,
+                now.saturating_duration_since(item.at).as_millis(),
+                item.path
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("；");
+    eprintln!(
+        "[文件阅读窗口] 高频读取，任务=read_file_reader_file，窗口={}，100ms内次数={}，当前路径={}，最近读取=[{}]",
+        window_label,
+        traces.len(),
+        path,
+        recent
+    );
+}
+
 #[tauri::command]
-fn read_file_reader_file(path: String) -> Result<FileReaderFilePayload, String> {
+fn read_file_reader_file(window: tauri::Window, path: String) -> Result<FileReaderFilePayload, String> {
     let raw_path = path.trim();
     if raw_path.is_empty() {
         return Err("path is required".to_string());
     }
+    log_file_reader_read_burst(window.label(), raw_path);
     let file_path = PathBuf::from(raw_path);
     if !file_path.exists() {
         return Err(format!("文件不存在：{raw_path}"));
@@ -1265,6 +1290,64 @@ fn read_file_reader_file(path: String) -> Result<FileReaderFilePayload, String> 
         extension: file_key.clone(),
         kind: file_reader_file_kind(&file_key).to_string(),
         content,
+    })
+}
+
+#[tauri::command]
+fn list_file_reader_directory(path: String) -> Result<FileReaderDirectoryPayload, String> {
+    let raw_path = path.trim();
+    if raw_path.is_empty() {
+        return Err("path is required".to_string());
+    }
+    let directory_path = PathBuf::from(raw_path);
+    if !directory_path.exists() {
+        return Err(format!("目录不存在：{raw_path}"));
+    }
+    if !directory_path.is_dir() {
+        return Err(format!("目标不是目录：{raw_path}"));
+    }
+
+    let resolved_path = directory_path
+        .canonicalize()
+        .unwrap_or_else(|_| directory_path.clone());
+    let mut entries = Vec::new();
+    let read_dir = fs::read_dir(&directory_path).map_err(|err| format!("读取目录失败：{err}"))?;
+    for entry in read_dir {
+        let entry = entry.map_err(|err| format!("读取目录项失败：{err}"))?;
+        let entry_path = entry.path();
+        let file_type = entry
+            .file_type()
+            .map_err(|err| format!("读取目录项类型失败：{err}"))?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.trim().is_empty() {
+            continue;
+        }
+        entries.push(FileReaderDirectoryEntry {
+            path: entry_path
+                .canonicalize()
+                .unwrap_or(entry_path)
+                .to_string_lossy()
+                .replace('\\', "/"),
+            name,
+            is_directory: file_type.is_dir(),
+        });
+    }
+    entries.sort_by(|a, b| {
+        b.is_directory
+            .cmp(&a.is_directory)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+            .then_with(|| a.name.cmp(&b.name))
+    });
+
+    let name = resolved_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_else(|| raw_path.trim_end_matches(['/', '\\']))
+        .to_string();
+    Ok(FileReaderDirectoryPayload {
+        path: resolved_path.to_string_lossy().replace('\\', "/"),
+        name,
+        entries,
     })
 }
 

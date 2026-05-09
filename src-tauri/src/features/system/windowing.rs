@@ -278,6 +278,7 @@ fn schedule_file_reader_window_creation(app: &AppHandle, path: String) -> Result
             .resizable(true)
             .decorations(false)
             .shadow(true)
+            .drag_and_drop(true)
             .visible(false)
             .build()
             {
