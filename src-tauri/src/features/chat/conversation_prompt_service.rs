@@ -825,6 +825,7 @@ impl ConversationPromptService {
                 user_alias,
             } => {
                 let mut prompt_blocks = vec![
+                    build_summary_context_system_remind_block(*scene),
                     build_summary_context_requirement_block(*scene),
                     build_summary_context_memory_block(*scene, agent, user_alias),
                 ];

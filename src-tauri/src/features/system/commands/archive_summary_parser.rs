@@ -133,13 +133,18 @@ fn parse_memory_curation_draft(raw: &str) -> Option<MemoryCurationDraft> {
             return Some(parsed);
         }
     }
-    let start = trimmed.find('{')?;
-    let end = trimmed.rfind('}')?;
-    if end <= start {
-        return None;
-    }
-    let snippet = &trimmed[start..=end];
-    let parsed_value = serde_json::from_str::<serde_json::Value>(snippet).ok()?;
+    let parsed_value = extract_best_json_object_value(
+        trimmed,
+        "---JSON---",
+        &[],
+        &[
+            "title",
+            "summary",
+            "openLoops",
+            "usefulMemoryIds",
+            "memoryActions",
+        ],
+    )?;
     parse_memory_curation_draft_from_value(parsed_value)
 }
 
@@ -321,22 +326,42 @@ mod archive_summary_parser_tests {
 
     #[test]
     fn parse_memory_curation_should_extract_json_from_wrapped_text() {
-        let raw = r#"下面是整理结果：
+        let fence = "```";
+        let raw = format!(r#"下面是整理结果：
 
-```json
-{
+{}json
+{{
   "summary": "归档摘要",
   "openLoops": ["补 archive 测试"],
   "usefulMemoryIds": ["12"],
   "memoryActions": []
-}
-```
+}}
+{}
 
-请查收。"#;
-        let parsed = parse_memory_curation_draft(raw).expect("extract wrapped json");
+请查收。"#, fence, fence);
+        let parsed = parse_memory_curation_draft(&raw).expect("extract wrapped json");
         assert_eq!(parsed.summary, "归档摘要".to_string());
         assert_eq!(parsed.open_loops, vec!["补 archive 测试".to_string()]);
         assert_eq!(parsed.useful_memory_ids, vec!["12".to_string()]);
+    }
+
+    #[test]
+    fn parse_memory_curation_should_extract_last_json_object() {
+        let raw = r#"EXAMPLE JSON OUTPUT:
+{
+  "summary": "示例摘要",
+  "memoryActions": []
+}
+
+最终输出：
+{
+  "summary": "真实摘要",
+  "openLoops": ["继续修解析"],
+  "memoryActions": []
+}"#;
+        let parsed = parse_memory_curation_draft(raw).expect("extract last json");
+        assert_eq!(parsed.summary, "真实摘要".to_string());
+        assert_eq!(parsed.open_loops, vec!["继续修解析".to_string()]);
     }
 
     #[test]

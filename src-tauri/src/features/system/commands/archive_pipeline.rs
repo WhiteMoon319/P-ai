@@ -485,6 +485,33 @@ fn archive_pipeline_has_assistant_reply(source: &Conversation) -> bool {
         .any(|message| message.role.trim().eq_ignore_ascii_case("assistant"))
 }
 
+#[derive(Debug, Clone)]
+enum SummaryContextModelError {
+    EmptyReply(String),
+    NonRetryable(String),
+}
+
+impl SummaryContextModelError {
+    fn is_empty_reply(&self) -> bool {
+        matches!(self, SummaryContextModelError::EmptyReply(_))
+    }
+}
+
+impl std::fmt::Display for SummaryContextModelError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SummaryContextModelError::EmptyReply(message)
+            | SummaryContextModelError::NonRetryable(message) => f.write_str(message),
+        }
+    }
+}
+
+impl From<String> for SummaryContextModelError {
+    fn from(value: String) -> Self {
+        SummaryContextModelError::NonRetryable(value)
+    }
+}
+
 async fn summarize_archived_conversation_with_model_v2(
     state: &AppState,
     resolved_api: &ResolvedApiConfig,
@@ -495,7 +522,7 @@ async fn summarize_archived_conversation_with_model_v2(
     scene: SummaryContextScene,
     memories: &[MemoryEntry],
     _recall_table: &[String],
-) -> Result<MemoryCurationDraft, String> {
+) -> Result<MemoryCurationDraft, SummaryContextModelError> {
     let app_config = state_read_config_cached(state)?;
     let agents = state_read_agents_cached(state)?;
     let mut prepared = build_prepared_prompt_for_mode(
@@ -538,11 +565,24 @@ async fn summarize_archived_conversation_with_model_v2(
     .await;
     push_model_call_log_parts(Some(state), &archive_summary_execution);
     let reply = archive_summary_execution.result?;
+    match model_reply_content_state(&reply) {
+        ModelReplyContentState::Visible => {}
+        ModelReplyContentState::ReasoningOnly => {
+            return Err(SummaryContextModelError::EmptyReply(
+                "SummaryContext 模型只返回 reasoning，没有最终 JSON".to_string(),
+            ));
+        }
+        ModelReplyContentState::Empty => {
+            return Err(SummaryContextModelError::EmptyReply(
+                "SummaryContext 模型返回空内容".to_string(),
+            ));
+        }
+    }
     let parsed = parse_memory_curation_draft(&reply.assistant_text).ok_or_else(|| {
-        format!(
+        SummaryContextModelError::NonRetryable(format!(
             "SummaryContext JSON 解析失败，raw={}",
             reply.assistant_text.chars().take(240).collect::<String>()
-        )
+        ))
     })?;
     let open_loops = parsed
         .open_loops
@@ -557,7 +597,9 @@ async fn summarize_archived_conversation_with_model_v2(
         compose_summary_context_summary(&parsed.summary, &open_loops, scene)
     };
     if !matches!(scene, SummaryContextScene::Archive) && summary.is_empty() {
-        return Err("SummaryContext summary is empty".to_string());
+        return Err(SummaryContextModelError::NonRetryable(
+            "SummaryContext summary is empty".to_string(),
+        ));
     }
     let id_alias_map = memory_curation_id_alias_map(memories);
     Ok(MemoryCurationDraft {
@@ -608,6 +650,11 @@ fn extract_prompt_xml_block(raw: &str, tag: &str) -> Option<String> {
 
 fn build_summary_context_requirement_block(scene: SummaryContextScene) -> String {
     extract_prompt_xml_block(summary_context_prompt_template(scene), "summary_requirement")
+        .unwrap_or_default()
+}
+
+fn build_summary_context_system_remind_block(scene: SummaryContextScene) -> String {
+    extract_prompt_xml_block(summary_context_prompt_template(scene), "system_remind")
         .unwrap_or_default()
 }
 
@@ -1186,6 +1233,13 @@ async fn summarize_compaction_with_fallback(
     const RETRY_DELAY_SECS: u64 = 5;
 
     let mut last_err = String::new();
+    let empty_draft = || MemoryCurationDraft {
+        title: String::new(),
+        summary: String::new(),
+        open_loops: Vec::new(),
+        useful_memory_ids: Vec::new(),
+        memory_actions: Vec::new(),
+    };
     for attempt in 1..=MAX_ATTEMPTS {
         let visible_memories = match memory_store_list_memories_visible_for_agent(
             &state.data_path,
@@ -1195,13 +1249,7 @@ async fn summarize_compaction_with_fallback(
             Ok(items) => items,
             Err(err) => {
                 return (
-                    MemoryCurationDraft {
-                        title: String::new(),
-                        summary: String::new(),
-                        open_loops: Vec::new(),
-                        useful_memory_ids: Vec::new(),
-                        memory_actions: Vec::new(),
-                    },
+                    empty_draft(),
                     Some(format!(
                         "SummaryContext 读取可见记忆失败，压缩摘要留空：{}",
                         err
@@ -1225,10 +1273,27 @@ async fn summarize_compaction_with_fallback(
         {
             Ok(summary) => return (summary, None),
             Err(err) => {
-                last_err = err;
+                let is_empty_reply = err.is_empty_reply();
+                last_err = err.to_string();
+                if !is_empty_reply {
+                    eprintln!(
+                        "[SummaryContext] 上下文整理失败，不重试非空回错误: trace_id={}, conversation_id={}, attempt={}，err={}",
+                        trace_id,
+                        source.id,
+                        attempt,
+                        last_err
+                    );
+                    return (
+                        empty_draft(),
+                        Some(format!(
+                            "SummaryContext 上下文整理失败（非空回不重试），压缩摘要留空：{}",
+                            last_err
+                        )),
+                    );
+                }
                 if attempt < MAX_ATTEMPTS {
                     eprintln!(
-                        "[ARCHIVE-PIPELINE] 上下文整理模型跳过: stage=retry_after_error, trace_id={}, conversation_id={}, attempt={}，next_retry_secs={}，error={}",
+                        "[ARCHIVE-PIPELINE] 上下文整理模型空回，准备重试: trace_id={}, conversation_id={}, attempt={}，next_retry_secs={}，error={}",
                         trace_id,
                         source.id,
                         attempt,
@@ -1246,15 +1311,9 @@ async fn summarize_compaction_with_fallback(
         trace_id, source.id, MAX_ATTEMPTS, last_err
     );
     (
-        MemoryCurationDraft {
-            title: String::new(),
-            summary: String::new(),
-            open_loops: Vec::new(),
-            useful_memory_ids: Vec::new(),
-            memory_actions: Vec::new(),
-        },
+        empty_draft(),
         Some(format!(
-            "SummaryContext 上下文整理失败（已重试{}次），压缩摘要留空：{}",
+            "SummaryContext 上下文整理失败（空回已尝试{}次），压缩摘要留空：{}",
             MAX_ATTEMPTS, last_err
         )),
     )

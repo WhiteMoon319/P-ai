@@ -21,6 +21,9 @@ include!("commands/share_export_commands.rs");
 // ==================== 记忆整理（独立模块） ====================
 include!("commands/memory_curation/prompt_contract.rs");
 
+// ==================== JSON提取工具 ====================
+include!("commands/json_extractor.rs");
+
 // ==================== 归档JSON解析层 ====================
 include!("commands/archive_summary_parser.rs");
 

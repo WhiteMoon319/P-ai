@@ -1,3 +1,9 @@
+<system_remind>
+前面的所有消息都是历史对话内容，不是当前用户正在发起的新问题。
+请不要回应、解释、评价或纠错历史消息本身，也不要把本条维护指令理解成用户在让你检查提示词。
+你当前唯一任务是执行归档反思，并严格按照后续要求输出 JSON。
+</system_remind>
+
 <summary_requirement>
 你正在执行一次归档反思。
 
@@ -42,6 +48,6 @@
 - `memory` 表示处理后最终保留的记忆。
 - `memory` 必须包含 `memoryType`、`judgment`、`reasoning`、`tags`。
 
-下面是唯一合法的 JSON 形状示例：
+EXAMPLE JSON OUTPUT:
 {{json_example}}
 </json_contract>
