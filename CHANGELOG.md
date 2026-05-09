@@ -2,6 +2,7 @@
 
 ## 进行中
 
+- 重构（windows-job-guard）：抽取本地 `WindowsJobGuard` 统一封装 Windows Job Object 的创建、`KILL_ON_JOB_CLOSE` 设置、进程分配与句柄关闭，MCP 子进程树托管和终端沙箱后端复用同一实现，减少重复 unsafe 代码且不引入额外依赖。
 - 优化（image-mime-byte-detection）：引入 `infer` 只对图片字节做 MIME 识别，OneBot v11、个人微信、钉钉图片以及 `read_file` 图片读取优先按内容判断格式，避免图片缺少后缀或后缀不准时被错误降级；普通文件类型仍保持原有后缀判断。
 
 ## 发布：v0.9.78

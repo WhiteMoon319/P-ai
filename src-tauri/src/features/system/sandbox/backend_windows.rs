@@ -35,24 +35,7 @@ fn sandbox_run_with_windows_job_backend_blocking(
     use std::os::windows::io::AsRawHandle as _;
     use std::os::windows::process::CommandExt as _;
 
-    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
-    use windows_sys::Win32::System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject,
-        JobObjectExtendedLimitInformation, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-    };
     use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
-
-    struct JobGuard(HANDLE);
-    impl Drop for JobGuard {
-        fn drop(&mut self) {
-            if !self.0.is_null() {
-                unsafe {
-                    let _ = CloseHandle(self.0);
-                }
-            }
-        }
-    }
 
     let mut command_builder = std::process::Command::new(&shell.path);
     let cwd = sandbox_windows_process_compatible_path(&request.cwd);
@@ -72,32 +55,13 @@ fn sandbox_run_with_windows_job_backend_blocking(
         .spawn()
         .map_err(|err| format!("terminal_exec windows command backend spawn failed: {err}"))?;
 
-    let job = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
-    if job.is_null() {
-        return Err("CreateJobObjectW failed.".to_string());
-    }
-    let job = JobGuard(job);
-
-    let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { std::mem::zeroed() };
     // Keep process tree cleanup on timeout/exit, but do not cap child process count:
     // Git Bash bootstrap may spawn helper processes during startup.
-    info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-    let set_ok = unsafe {
-        SetInformationJobObject(
-            job.0,
-            JobObjectExtendedLimitInformation,
-            &info as *const _ as *const std::ffi::c_void,
-            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
-        )
-    };
-    if set_ok == 0 {
-        return Err("SetInformationJobObject failed.".to_string());
-    }
-
-    let assign_ok = unsafe { AssignProcessToJobObject(job.0, child.as_raw_handle() as HANDLE) };
-    if assign_ok == 0 {
-        return Err("AssignProcessToJobObject failed.".to_string());
-    }
+    let job = WindowsJobGuard::create_kill_on_close()?;
+    job.assign_raw_process_handle(
+        child.as_raw_handle() as windows_sys::Win32::Foundation::HANDLE,
+    )
+    .map_err(|err| format!("{}: pid={}", err, child.id()))?;
 
     let mut stdout_pipe = child
         .stdout
