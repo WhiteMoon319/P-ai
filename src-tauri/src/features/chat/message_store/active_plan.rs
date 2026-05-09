@@ -7,6 +7,7 @@ struct ActivePlanRecord {
     plan_id: String,
     source_message_id: String,
     status: String,
+    #[serde(default)]
     path: String,
     created_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -44,6 +45,9 @@ fn read_active_plan_records(path: &PathBuf) -> Result<Vec<ActivePlanRecord>, Str
                 index + 1
             )
         })?;
+        if record.path.trim().is_empty() {
+            continue;
+        }
         records.push(record);
     }
     Ok(records)
@@ -93,6 +97,7 @@ fn active_plan_records_in_progress(
     let paths = message_store_paths(data_path, conversation_id)?;
     Ok(read_active_plan_records(&paths.active_plans_file)?
         .into_iter()
+        .rev()
         .filter(|record| record.status.trim() == ACTIVE_PLAN_STATUS_IN_PROGRESS)
         .collect())
 }
@@ -172,4 +177,54 @@ pub(super) fn active_plan_prompt_block(
     }
     lines.push("</active_plans>".to_string());
     Ok(Some(lines.join("\n")))
+}
+
+#[cfg(test)]
+#[test]
+fn read_active_plan_records_should_skip_legacy_record_without_path() {
+    let root = std::env::temp_dir().join(format!("eca-active-plan-{}", Uuid::new_v4()));
+    fs::create_dir_all(&root).expect("create temp dir");
+    let file = root.join("active_plans.jsonl");
+    fs::write(
+        &file,
+        concat!(
+            "{\"planId\":\"legacy\",\"sourceMessageId\":\"msg-1\",\"status\":\"in_progress\",\"createdAt\":\"2026-01-01T00:00:00Z\"}\n",
+            "{\"planId\":\"valid\",\"sourceMessageId\":\"msg-2\",\"status\":\"in_progress\",\"path\":\"C:/plan.md\",\"createdAt\":\"2026-01-01T00:00:00Z\"}\n"
+        ),
+    )
+    .expect("write active plans");
+
+    let records = read_active_plan_records(&file).expect("read active plans");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].plan_id, "valid");
+    assert_eq!(records[0].path, "C:/plan.md");
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[cfg(test)]
+#[test]
+fn active_plan_records_in_progress_should_return_newest_first() {
+    let root = std::env::temp_dir().join(format!("eca-active-plan-order-{}", Uuid::new_v4()));
+    let conversation_id = "conv-active-plan-order";
+    let paths = message_store_paths(&root, conversation_id).expect("message store paths");
+    fs::create_dir_all(paths.active_plans_file.parent().expect("active plans dir"))
+        .expect("create active plans dir");
+    fs::write(
+        &paths.active_plans_file,
+        concat!(
+            "{\"planId\":\"old\",\"sourceMessageId\":\"msg-1\",\"status\":\"in_progress\",\"path\":\"C:/old.md\",\"createdAt\":\"2026-01-01T00:00:00Z\"}\n",
+            "{\"planId\":\"done\",\"sourceMessageId\":\"msg-2\",\"status\":\"completed\",\"path\":\"C:/done.md\",\"createdAt\":\"2026-01-01T00:00:01Z\"}\n",
+            "{\"planId\":\"new\",\"sourceMessageId\":\"msg-3\",\"status\":\"in_progress\",\"path\":\"C:/new.md\",\"createdAt\":\"2026-01-01T00:00:02Z\"}\n"
+        ),
+    )
+    .expect("write active plans");
+
+    let records =
+        active_plan_records_in_progress(&root, conversation_id).expect("read active plans");
+    assert_eq!(records.len(), 2);
+    assert_eq!(records[0].plan_id, "new");
+    assert_eq!(records[1].plan_id, "old");
+
+    let _ = fs::remove_dir_all(root);
 }
