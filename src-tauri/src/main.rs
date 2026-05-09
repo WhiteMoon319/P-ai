@@ -610,6 +610,7 @@ fn main() {
             set_active_unarchived_conversation,
             switch_active_conversation_snapshot,
             get_foreground_conversation_light_snapshot,
+            mark_conversation_read,
             set_conversation_plan_mode,
             create_unarchived_conversation,
             branch_unarchived_conversation_from_selection,

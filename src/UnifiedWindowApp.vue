@@ -1404,6 +1404,8 @@ async function switchRemoteImContactConversation(contactId: string) {
     conversationForegroundSyncing.value = true;
     if (previousConversationId) {
       cacheConversationMessages(previousConversationId, allMessages.value);
+      clearConversationBadge(previousConversationId);
+      markConversationReadPersisted(previousConversationId);
     }
     chatFlow.freezeForegroundRoundState();
     currentChatConversationId.value = conversationId;
@@ -1422,6 +1424,7 @@ async function switchRemoteImContactConversation(contactId: string) {
     cacheConversationMessages(conversationId, nextMessages);
     hasMoreBackendHistory.value = nextMessages.length >= FOREGROUND_SNAPSHOT_RECENT_LIMIT;
     clearConversationBadge(conversationId);
+    markConversationReadPersisted(conversationId);
     scheduleConversationScrollToBottomFallback(conversationId);
   } catch (error) {
     setStatusError("status.loadMessagesFailed", error);
@@ -2987,6 +2990,19 @@ function clearConversationBadge(conversationId: string) {
   }
 }
 
+function markConversationReadPersisted(conversationId: string) {
+  const cid = String(conversationId || "").trim();
+  if (!cid) return;
+  void invokeTauri<boolean>("mark_conversation_read", {
+    input: { conversationId: cid },
+  }).catch((error) => {
+    console.warn("[会话已读] 持久化失败", {
+      conversationId: cid,
+      error,
+    });
+  });
+}
+
 function applyConversationOverviewAppendedMessage(
   conversationId: string,
   message: ChatMessage,
@@ -3682,6 +3698,8 @@ async function switchUnarchivedConversation(conversationId: string) {
     conversationForegroundSyncing.value = true;
     if (previousConversationId) {
       cacheConversationMessages(previousConversationId, allMessages.value);
+      clearConversationBadge(previousConversationId);
+      markConversationReadPersisted(previousConversationId);
     }
     chatFlow.freezeForegroundRoundState();
     currentChatConversationId.value = cid;
@@ -3694,6 +3712,7 @@ async function switchUnarchivedConversation(conversationId: string) {
     maybeResumeForegroundStreamingDraft(cid, "switch_cached_display");
     void resumeForegroundRuntimeFromBackend(cid, "switch_cached_display");
     clearConversationBadge(cid);
+    markConversationReadPersisted(cid);
     const trace = beginForegroundPaintTrace(cid);
     await nextTick();
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));

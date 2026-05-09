@@ -78,6 +78,27 @@ fn get_foreground_conversation_light_snapshot(
     })
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MarkConversationReadInput {
+    conversation_id: String,
+}
+
+#[tauri::command]
+fn mark_conversation_read(
+    input: MarkConversationReadInput,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    let conversation_id = input.conversation_id.trim();
+    if conversation_id.is_empty() {
+        return Ok(false);
+    }
+    Ok(conversation_service()
+        .mark_conversation_read(state.inner(), conversation_id)?
+        .conversation
+        .is_some())
+}
+
 #[tauri::command]
 fn set_conversation_plan_mode(
     input: SetConversationPlanModeInput,
