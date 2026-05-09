@@ -408,7 +408,8 @@ impl ConversationService {
                     "Target user message not found in active conversation.".to_string()
                 })?;
             if conversation.summary.trim().is_empty()
-                && conversation_visible_in_foreground_lists(&conversation)
+                && (conversation_visible_in_foreground_lists(&conversation)
+                    || conversation_is_remote_im_contact(&conversation))
             {
                 conversation.id
             } else {
@@ -422,11 +423,13 @@ impl ConversationService {
         let mut conversation = state_read_conversation_cached(state, &conversation_id)
             .map_err(|_| "Target user message not found in active conversation.".to_string())?;
         if !conversation.summary.trim().is_empty()
-            || !conversation_visible_in_foreground_lists(&conversation)
+            || (!conversation_visible_in_foreground_lists(&conversation)
+                && !conversation_is_remote_im_contact(&conversation))
         {
             drop(guard);
             return Err("Target user message not found in active conversation.".to_string());
         }
+        hydrate_rewind_conversation_messages_from_store(state, &mut conversation)?;
         let result = execute_rewind_conversation_mutation_on_conversation(
             state,
             &mut conversation,
@@ -990,6 +993,18 @@ impl ConversationService {
         })
     }
 
+}
+
+fn hydrate_rewind_conversation_messages_from_store(
+    state: &AppState,
+    conversation: &mut Conversation,
+) -> Result<(), String> {
+    let store_paths = message_store::message_store_paths(&state.data_path, &conversation.id)?;
+    let Some(messages) = message_store::read_ready_message_store_all_messages(&store_paths)? else {
+        return Ok(());
+    };
+    conversation.messages = messages;
+    Ok(())
 }
 
 enum StopChatConversationTarget {

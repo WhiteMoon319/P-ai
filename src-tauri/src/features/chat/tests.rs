@@ -3481,6 +3481,88 @@
     }
 
     #[test]
+    fn rewind_remote_im_contact_conversation_should_hydrate_messages_from_store() {
+        let state = test_chat_runtime_state();
+        write_config(&state.config_path, &AppConfig::default()).expect("write config");
+        let now = now_iso();
+        let mut first_user = test_text_message("user", "第一句", &now);
+        first_user.id = "user-1".to_string();
+        let mut first_assistant = test_text_message("assistant", "第一句回复", &now);
+        first_assistant.id = "assistant-1".to_string();
+        let mut recalled_user = test_text_message("user", "需要撤回", &now);
+        recalled_user.id = "user-2".to_string();
+        let mut trailing_assistant = test_text_message("assistant", "后续回复", &now);
+        trailing_assistant.id = "assistant-2".to_string();
+        let mut conversation = build_conversation_record(
+            "",
+            DEFAULT_AGENT_ID,
+            REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID,
+            "联系人 · 测试群",
+            CONVERSATION_KIND_REMOTE_IM_CONTACT,
+            Some("remote_im_contact:channel-a:group:remote-a".to_string()),
+            None,
+        );
+        conversation.id = "conversation-contact-rewind".to_string();
+        conversation.status = "inactive".to_string();
+        conversation.messages = vec![
+            first_user,
+            first_assistant,
+            recalled_user.clone(),
+            trailing_assistant,
+        ];
+        state_schedule_conversation_persist(&state, &conversation, true)
+            .expect("persist full conversation");
+        let store_paths =
+            message_store::message_store_paths(&state.data_path, &conversation.id)
+                .expect("message store paths");
+        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
+            .expect("write message store");
+        conversation.messages = Vec::new();
+        state_schedule_conversation_persist(&state, &conversation, true)
+            .expect("persist slim conversation");
+
+        let input = RewindConversationInput {
+            session: SessionSelector {
+                api_config_id: None,
+                department_id: Some(REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID.to_string()),
+                agent_id: DEFAULT_AGENT_ID.to_string(),
+                conversation_id: Some(conversation.id.clone()),
+            },
+            message_id: recalled_user.id.clone(),
+            undo_apply_patch: false,
+        };
+        let result = conversation_service()
+            .rewind_conversation_from_message(
+                &state,
+                &input,
+                DEFAULT_AGENT_ID,
+                &recalled_user.id,
+                &std::time::Instant::now(),
+            )
+            .expect("rewind remote im contact conversation");
+
+        assert_eq!(result.removed_count, 2);
+        assert_eq!(result.remaining_count, 2);
+        assert_eq!(
+            result
+                .recalled_user_message
+                .as_ref()
+                .map(|message| message.id.as_str()),
+            Some("user-2")
+        );
+        let stored = message_store::read_ready_message_store_all_messages(&store_paths)
+            .expect("read truncated message store")
+            .expect("message store exists");
+        assert_eq!(
+            stored
+                .iter()
+                .map(|message| message.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["user-1", "assistant-1"]
+        );
+    }
+
+    #[test]
     fn scheduler_should_allow_two_conversations_to_run_in_parallel() {
         let state = test_chat_runtime_state();
         let ingress_a =
