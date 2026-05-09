@@ -3313,6 +3313,8 @@
         let conversation =
             state_read_conversation_cached(&state, conversation_id).expect("read conversation");
         assert!(conversation_is_remote_im_contact(&conversation));
+        assert_eq!(conversation.department_id, REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID);
+        assert_eq!(conversation.agent_id, DEFAULT_AGENT_ID);
         let expected_key = remote_im_contact_conversation_key(contact);
         assert_eq!(conversation.root_conversation_id.as_deref(), Some(expected_key.as_str()));
     }
@@ -3389,6 +3391,14 @@
             updated_contact.bound_conversation_id.as_deref(),
             Some("conversation-contact-old")
         );
+        let updated_conversation =
+            state_read_conversation_cached(&state, "conversation-contact-old")
+                .expect("read rebound conversation");
+        assert_eq!(
+            updated_conversation.department_id,
+            REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID
+        );
+        assert_eq!(updated_conversation.agent_id, DEFAULT_AGENT_ID);
     }
 
     #[test]

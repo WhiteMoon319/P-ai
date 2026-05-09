@@ -2191,6 +2191,21 @@ fn ensure_remote_im_contact_conversation_id(
     state: &AppState,
     contact: &mut RemoteImContact,
 ) -> Result<String, String> {
+    let config = state_read_config_cached(state)?;
+    let binding_pair = match resolve_department_agent_pair(
+        contact.bound_department_id.as_deref(),
+        None,
+        &config,
+    ) {
+        Ok(pair) => Some(pair),
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[远程IM] 跳过，任务=同步联系人会话绑定，contact_id={}，原因={}",
+                contact.id, err
+            ));
+            None
+        }
+    };
     if let Some(bound_conversation_id) = contact
         .bound_conversation_id
         .as_deref()
@@ -2207,6 +2222,15 @@ fn ensure_remote_im_contact_conversation_id(
         })
     {
         contact.bound_conversation_id = Some(bound_conversation_id.clone());
+        if let Some((department_id, agent_id)) = binding_pair.as_ref() {
+            sync_remote_im_contact_conversation_binding(
+                state,
+                contact,
+                &bound_conversation_id,
+                department_id,
+                agent_id,
+            )?;
+        }
         return Ok(bound_conversation_id);
     }
 
@@ -2224,13 +2248,23 @@ fn ensure_remote_im_contact_conversation_id(
         .map(|conversation| conversation.id)
     {
         contact.bound_conversation_id = Some(found_id.clone());
+        if let Some((department_id, agent_id)) = binding_pair.as_ref() {
+            sync_remote_im_contact_conversation_binding(
+                state,
+                contact,
+                &found_id,
+                department_id,
+                agent_id,
+            )?;
+        }
         return Ok(found_id);
     }
 
+    let (department_id, agent_id) = binding_pair.unwrap_or_default();
     let mut conversation = build_conversation_record(
         "",
-        "",
-        "",
+        &agent_id,
+        &department_id,
         &remote_im_contact_conversation_title(contact),
         CONVERSATION_KIND_REMOTE_IM_CONTACT,
         Some(target_key),
@@ -2241,6 +2275,38 @@ fn ensure_remote_im_contact_conversation_id(
     state_schedule_conversation_persist(state, &conversation, true)?;
     contact.bound_conversation_id = Some(conversation_id.clone());
     Ok(conversation_id)
+}
+
+fn sync_remote_im_contact_conversation_binding(
+    state: &AppState,
+    contact: &RemoteImContact,
+    conversation_id: &str,
+    department_id: &str,
+    agent_id: &str,
+) -> Result<(), String> {
+    let mut conversation = state_read_conversation_cached(state, conversation_id)?;
+    if !conversation.summary.trim().is_empty() || !conversation_is_remote_im_contact(&conversation)
+    {
+        return Ok(());
+    }
+    let target_key = remote_im_contact_conversation_key(contact);
+    let mut changed = false;
+    if conversation.department_id.trim() != department_id {
+        conversation.department_id = department_id.trim().to_string();
+        changed = true;
+    }
+    if conversation.agent_id.trim() != agent_id {
+        conversation.agent_id = agent_id.trim().to_string();
+        changed = true;
+    }
+    if conversation.root_conversation_id.as_deref().map(str::trim) != Some(target_key.as_str()) {
+        conversation.root_conversation_id = Some(target_key);
+        changed = true;
+    }
+    if changed {
+        state_schedule_conversation_persist(state, &conversation, true)?;
+    }
+    Ok(())
 }
 
 fn resolve_contact_session_target(
@@ -2549,8 +2615,23 @@ fn remote_im_update_contact_department_binding(
     }
     contact.bound_department_id = next_department_id;
     contact.route_mode = remote_im_resolve_effective_route_mode(&config, contact);
+    let conversation_id = ensure_remote_im_contact_conversation_id(state.inner(), contact)?;
     let output = contact.clone();
     state_write_runtime_state_cached(&state, &runtime)?;
+    eprintln!(
+        "[远程IM] 完成，任务=更新联系人处理部门，contact_id={}，conversation_id={}，department_id={}，agent_id={}",
+        output.id,
+        conversation_id,
+        output
+            .bound_department_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(""),
+        state_read_conversation_cached(state.inner(), &conversation_id)
+            .map(|conversation| conversation.agent_id)
+            .unwrap_or_default()
+    );
     Ok(output)
 }
 
