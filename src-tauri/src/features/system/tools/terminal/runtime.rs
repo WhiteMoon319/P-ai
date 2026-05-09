@@ -533,9 +533,9 @@ fn terminal_shell_runtime_label(shell: &TerminalShellProfile) -> String {
     format!("{title} ({})", shell.path.trim())
 }
 
-    fn terminal_exec_tool_description(shell: &TerminalShellProfile) -> String {
-        format!(
-            "在当前 shell 工作区根目录中执行命令。运行时 shell：{}。",
-            terminal_shell_runtime_label(shell)
-        )
-    }
+fn terminal_exec_tool_description(shell: &TerminalShellProfile) -> String {
+    format!(
+        "在当前 shell 工作区根目录中执行命令。运行时 shell：{}。",
+        terminal_shell_runtime_label(shell)
+    )
+}
