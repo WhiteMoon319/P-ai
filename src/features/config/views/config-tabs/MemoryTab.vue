@@ -170,7 +170,7 @@
                           <span class="badge badge-sm badge-outline">
                             {{ memory.ownerAgentId ? t('config.memory.ownerPrivate', { owner: ownerAgentName(memory.ownerAgentId) }) : t('config.memory.globalTag') }}
                           </span>
-                          <span class="opacity-50">{{ formatMemoryTime(memory.updatedAt || memory.createdAt) }}</span>
+                          <span class="opacity-50">{{ formatMemoryTime(memory.createdAt || memory.updatedAt) }}</span>
                           <span v-for="(kw, idx) in memory.tags" :key="`${memory.id}-${idx}`" class="badge badge-sm badge-neutral opacity-80">
                             {{ kw }}
                           </span>
@@ -309,10 +309,10 @@ const sortedMemories = computed(() => {
     return [...memoryList.value].sort((a, b) => (b.finalScore ?? 0) - (a.finalScore ?? 0));
   }
   return [...memoryList.value].sort((a, b) => {
-    const ta = Date.parse(a.updatedAt || a.createdAt || "");
-    const tb = Date.parse(b.updatedAt || b.createdAt || "");
+    const ta = Date.parse(a.createdAt || a.updatedAt || "");
+    const tb = Date.parse(b.createdAt || b.updatedAt || "");
     if (Number.isFinite(ta) && Number.isFinite(tb)) return tb - ta;
-    return (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || "");
+    return (b.createdAt || b.updatedAt || "").localeCompare(a.createdAt || a.updatedAt || "");
   });
 });
 

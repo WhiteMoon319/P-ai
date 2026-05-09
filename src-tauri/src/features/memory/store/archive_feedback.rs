@@ -109,33 +109,40 @@ fn apply_useless_penalty(
 // ========== apply_natural_decay ==========
 fn apply_natural_decay(
     tx: &rusqlite::Transaction,
+    decay_candidates: &[String],
+    useful_accepted_set: &HashSet<String>,
     now: &str,
     now_dt: OffsetDateTime,
 ) -> Result<usize, String> {
     let mut natural_decay_count = 0usize;
     let cycle_seconds = (MEMORY_DECAY_CYCLE_TIER0_DAYS.max(1) as i128) * 86_400i128;
-    let mut t0_stmt = tx
-        .prepare(
-            "SELECT id, strength, created_at, last_recalled_at, last_decay_at
-             FROM memory_record
-             WHERE useful_score < ?1 AND strength > 0",
-        )
-        .map_err(|err| format!("Prepare T0 natural decay query failed: {err}"))?;
-    let t0_rows = t0_stmt
-        .query_map(params![MEMORY_DECAY_TIER0_THRESHOLD], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, i64>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, Option<String>>(3)?,
-                row.get::<_, Option<String>>(4)?,
-            ))
-        })
-        .map_err(|err| format!("Query T0 natural decay rows failed: {err}"))?;
-
-    for row in t0_rows {
+    for memory_id in decay_candidates {
+        if useful_accepted_set.contains(memory_id) {
+            continue;
+        }
+        let row = tx
+            .query_row(
+                "SELECT id, strength, created_at, last_recalled_at, last_decay_at
+                 FROM memory_record
+                 WHERE id=?1 AND useful_score < ?2 AND strength > 0",
+                params![memory_id, MEMORY_DECAY_TIER0_THRESHOLD],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, Option<String>>(4)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|err| format!("Query T0 natural decay row failed: {err}"))?;
+        let Some(row) = row else {
+            continue;
+        };
         let (memory_id, strength, created_at, last_recalled_at, last_decay_at) =
-            row.map_err(|err| format!("Read T0 natural decay row failed: {err}"))?;
+            row;
         let created = memory_decay_parse_time_or_epoch(Some(created_at.as_str()));
         let recalled = memory_decay_parse_time_or_epoch(last_recalled_at.as_deref());
         let decayed = memory_decay_parse_time_or_epoch(last_decay_at.as_deref());
@@ -236,7 +243,13 @@ fn memory_store_apply_archive_feedback(
     let useful_rejected_count = useful_requested_count.saturating_sub(useful_accepted.len());
     let boosted_count = apply_useful_boost(&tx, &useful_accepted, &now)?;
     let penalized_count = apply_useless_penalty(&tx, &recalled_existing, &useful_accepted_set, &now)?;
-    let natural_decay_count = apply_natural_decay(&tx, &now, OffsetDateTime::now_utc())?;
+    let natural_decay_count = apply_natural_decay(
+        &tx,
+        &recalled_existing,
+        &useful_accepted_set,
+        &now,
+        OffsetDateTime::now_utc(),
+    )?;
 
     tx.commit()
         .map_err(|err| format!("Commit archive feedback transaction failed: {err}"))?;

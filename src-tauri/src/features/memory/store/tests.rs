@@ -439,6 +439,88 @@ mod memory_store_tests {
     }
 
     #[test]
+    fn archive_feedback_natural_decay_should_only_touch_recalled_noise() {
+        let data_path = temp_data_path("archive_feedback_recalled_noise_only");
+        let drafts = vec![
+            MemoryDraftInput {
+                memory_type: "knowledge".to_string(),
+                judgment: "A".to_string(),
+                reasoning: "".to_string(),
+                tags: vec!["a".to_string()],
+                owner_agent_id: None,
+            },
+            MemoryDraftInput {
+                memory_type: "knowledge".to_string(),
+                judgment: "B".to_string(),
+                reasoning: "".to_string(),
+                tags: vec!["b".to_string()],
+                owner_agent_id: None,
+            },
+            MemoryDraftInput {
+                memory_type: "knowledge".to_string(),
+                judgment: "C".to_string(),
+                reasoning: "".to_string(),
+                tags: vec!["c".to_string()],
+                owner_agent_id: None,
+            },
+        ];
+        let (saved, _) = memory_store_upsert_drafts(&data_path, &drafts).expect("seed");
+        let recalled_noise_id = saved[0].id.clone().expect("id a");
+        let unrecalled_id = saved[1].id.clone().expect("id b");
+        let useful_id = saved[2].id.clone().expect("id c");
+        let old = "2026-01-01T00:00:00Z";
+
+        let conn = memory_store_open(&data_path).expect("open");
+        for memory_id in [&recalled_noise_id, &unrecalled_id, &useful_id] {
+            conn.execute(
+                "UPDATE memory_record
+                 SET strength=2, useful_score=0.0, created_at=?1, updated_at=?1, last_recalled_at=NULL, last_decay_at=NULL
+                 WHERE id=?2",
+                params![old, memory_id],
+            )
+            .expect("seed old t0");
+        }
+
+        let report = memory_store_apply_archive_feedback(
+            &data_path,
+            &vec![recalled_noise_id.clone(), useful_id.clone()],
+            &vec![useful_id.clone()],
+        )
+        .expect("apply feedback");
+        assert_eq!(report.natural_decay_count, 1);
+
+        let conn = memory_store_open(&data_path).expect("open verify");
+        let recalled_noise: (i64, Option<String>) = conn
+            .query_row(
+                "SELECT strength, last_decay_at FROM memory_record WHERE id=?1",
+                params![recalled_noise_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read recalled noise");
+        let unrecalled: (i64, Option<String>) = conn
+            .query_row(
+                "SELECT strength, last_decay_at FROM memory_record WHERE id=?1",
+                params![unrecalled_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read unrecalled");
+        let useful: (i64, Option<String>) = conn
+            .query_row(
+                "SELECT strength, last_decay_at FROM memory_record WHERE id=?1",
+                params![useful_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read useful");
+
+        assert_eq!(recalled_noise.0, 0);
+        assert!(recalled_noise.1.is_some());
+        assert_eq!(unrecalled.0, 2, "unrecalled memory must not decay");
+        assert!(unrecalled.1.is_none(), "unrecalled memory must not get decay timestamp");
+        assert_eq!(useful.0, 3, "useful recalled memory should be boosted, not decayed");
+        assert!(useful.1.is_none(), "useful recalled memory must not get decay timestamp");
+    }
+
+    #[test]
     fn profile_memory_lookup_should_use_user_id_and_chinese_attribute_tags() {
         let data_path = temp_data_path("profile_memory_lookup");
         let (saved, _) = memory_store_upsert_drafts(
