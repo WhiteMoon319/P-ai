@@ -2,6 +2,12 @@
 
 ## 进行中
 
+## 发布：v0.9.78
+
+- 发布（release-0.9.78）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.78`，纳入本轮会话已读状态持久化与 OneBot v11 渠道连接任务收割修复。
+- 修复（chat-conversation-read-persist）：切换普通会话或远程联系人会话时，会将正在阅读/离开的会话持久化标记为已读，避免本地徽标清零后刷新又恢复未读计数。
+- 修复（onebot-channel-connection-task-tracker）：OneBot v11 渠道引入 `tokio-util` 的 `CancellationToken` 与 `TaskTracker`，停用或重启渠道时统一取消并等待连接任务退出，减少旧 WebSocket/TCP 连接残留。
+
 ## 发布：v0.9.77
 
 - 发布（release-0.9.77）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.77`，纳入本轮远程联系人会话部门人格绑定同步、联系人会话撤回支持，以及统一会话人格绑定解析计划。
