@@ -1121,6 +1121,7 @@
       "websearch": "联网搜索",
       "operate": "桌面操作",
       "exec": "终端",
+      "read": "读取文件",
       "read_file": "读取文件",
       "apply_patch": "应用文件补丁",
       "reload": "重新加载智能体配置",

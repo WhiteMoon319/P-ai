@@ -722,7 +722,10 @@ async fn call_runtime_tool_by_name(
 ) -> Result<ProviderToolResult, String> {
     const BUILTIN_TOOL_RUNTIME_EXEC_TIMEOUT_SECS: u64 = 30;
     const MCP_TOOL_RUNTIME_EXEC_TIMEOUT_SECS: u64 = 300;
-    let Some(tool) = tools.iter().find(|tool| tool.name() == tool_name) else {
+    let Some(tool) = tools.iter().find(|tool| {
+        let name = tool.name();
+        name == tool_name || (tool_name == "read_file" && name == READ_TOOL_NAME)
+    }) else {
         return Err(format!("未找到工具：{tool_name}"));
     };
     let timeout = tool.timeout_override(tool_args).unwrap_or_else(|| {

@@ -873,6 +873,7 @@ const internalToolNames = new Set<string>([
   "apply_patch",
   "exec",
   "shell_exec",
+  "read",
   "read_file",
   "write_file",
   "append_text",
@@ -1245,12 +1246,12 @@ function summarizeReadFileTool(args: unknown): string {
   }
   const obj = args as Record<string, unknown>;
   const path = safeTextFromRecord(obj, ["absolute_path", "absolutePath", "path", "file"]);
-  const start = obj.start;
-  const count = obj.count;
+  const offset = obj.offset ?? obj.start;
+  const limit = obj.limit ?? obj.count;
   return joinNonEmpty([
     path,
-    start !== undefined && start !== null ? `start: ${String(start)}` : "",
-    count !== undefined && count !== null ? `count: ${String(count)}` : "",
+    offset !== undefined && offset !== null ? `offset: ${String(offset)}` : "",
+    limit !== undefined && limit !== null ? `limit: ${String(limit)}` : "",
   ]) || toCompactValue(obj) || toolTimelineText("missingArgs");
 }
 
@@ -1349,7 +1350,7 @@ function summarizeOperateTool(args: unknown): string {
 }
 
 function summarizeBuiltinTool(toolName: string, args: unknown): string {
-  if (toolName === "read_file") return summarizeReadFileTool(args);
+  if (toolName === "read" || toolName === "read_file") return summarizeReadFileTool(args);
   if (toolName === "todo") return summarizeTodoTool(args);
   if (toolName === "task") return summarizeTaskTool(args);
   if (toolName === "plan") return summarizePlanTool(args);
@@ -1389,7 +1390,7 @@ function toolCallSummaryText(toolCall: { name: string; argsText: string; status?
   const args = normalizeToolCallArgs(toolCall.argsText);
 
   if (internalToolNames.has(toolName)) {
-    if (toolName === "read_file") {
+    if (toolName === "read" || toolName === "read_file") {
       return summarizeReadFileTool(args);
     }
     if (toolName === "apply_patch") return summarizeApplyPatchTool(args);
@@ -1412,6 +1413,7 @@ function toolCallTitle(toolCall: { name: string }, index: number): string {
 
 function toolCallDisplayName(toolName: string): string {
   if (toolName === "shell_exec") return "exec";
+  if (toolName === "read_file") return "read";
   if (toolName === "read_dir") return "read_dir";
   if (toolName === "list_dir") return "list_dir";
   return String(toolName || toolTimelineText("unknownTool")).trim() || toolTimelineText("unknownTool");
@@ -1433,7 +1435,7 @@ function toolNamesLabel(block: ChatMessageBlock): string {
   const counts = new Map<string, number>();
   const order: string[] = [];
   for (const call of calls) {
-    const name = String(call.name || "").trim() || toolTimelineText("unknownTool");
+    const name = toolCallDisplayName(String(call.name || "").trim()) || toolTimelineText("unknownTool");
     if (!counts.has(name)) {
       counts.set(name, 0);
       order.push(name);

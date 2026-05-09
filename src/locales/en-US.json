@@ -1126,6 +1126,7 @@
       "websearch": "web search",
       "operate": "desktop action",
       "exec": "terminal",
+      "read": "read file",
       "read_file": "read file",
       "apply_patch": "apply file patch",
       "reload": "reload agent config",

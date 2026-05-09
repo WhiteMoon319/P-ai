@@ -5,7 +5,7 @@ const BUILTIN_TOOL_DEFAULTS: ReadonlyArray<Readonly<ApiToolItem>> = [
   { id: "websearch", command: "npx", args: ["-y", "bing-cn-mcp"], enabled: true, values: {} },
   { id: "operate", command: "builtin", args: ["operate"], enabled: true, values: {} },
   { id: "exec", command: "builtin", args: ["exec"], enabled: true, values: {} },
-  { id: "read_file", command: "builtin", args: ["read_file"], enabled: true, values: {} },
+  { id: "read", command: "builtin", args: ["read"], enabled: true, values: {} },
   { id: "apply_patch", command: "builtin", args: ["apply_patch"], enabled: true, values: {} },
   { id: "reload", command: "builtin", args: ["reload"], enabled: true, values: {} },
   { id: "organize_context", command: "builtin", args: ["organize_context"], enabled: true, values: {} },
@@ -30,11 +30,11 @@ export function normalizeToolBindings(
 ): ApiToolItem[] {
   const items = Array.isArray(current) ? current : [];
   return defaultToolBindings().map((tool) => {
-    const found = items.find((item) => item.id === tool.id);
+    const found = items.find((item) => item.id === tool.id || (tool.id === "read" && item.id === "read_file"));
     return {
       id: tool.id,
       command: found?.command || tool.command,
-      args: Array.isArray(found?.args) ? [...found.args] : [...tool.args],
+      args: Array.isArray(found?.args) && found?.id !== "read_file" ? [...found.args] : [...tool.args],
       enabled: typeof found?.enabled === "boolean" ? found.enabled : tool.enabled,
       values: { ...((found?.values as Record<string, unknown> | undefined) ?? (tool.values as Record<string, unknown>)) },
     };

@@ -402,7 +402,7 @@ fn builtin_tool_visible_in_department_permissions(tool_id: &str) -> bool {
 }
 
 fn deputy_department_builtin_tool_allowed(tool_id: &str) -> bool {
-    matches!(tool_id.trim(), "fetch" | "websearch" | "exec" | "read_file")
+    matches!(tool_id.trim(), "fetch" | "websearch" | "exec" | "read" | "read_file")
 }
 
 fn workspace_preset_skill_name(name: &str) -> bool {
@@ -741,7 +741,7 @@ mod types_storage_tests {
         assert!(department_permission_allows_any_name(
             Some(&deputy),
             DepartmentPermissionCategory::BuiltinTool,
-            &["read_file"],
+            &["read"],
         ));
         assert!(!department_permission_allows_any_name(
             Some(&deputy),

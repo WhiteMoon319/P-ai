@@ -65,7 +65,7 @@ async fn builtin_tool_definitions_for_frontend(
             .provider_tool_definition(),
         ),
         frontend_tool_definition(BuiltinWaitTool.provider_tool_definition()),
-        frontend_tool_definition(read_file_provider_tool_definition()),
+        frontend_tool_definition(read_provider_tool_definition()),
         frontend_tool_definition(
             BuiltinPlanTool {
                 app_state: state.clone(),
@@ -239,18 +239,18 @@ mod tool_catalog_tests {
             "frontend catalog operate definition drifted from builtin definition"
         );
 
-        let read_file_catalog = tokio::runtime::Builder::new_current_thread()
+        let read_catalog = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .expect("build tokio runtime for tool catalog tests should succeed")
-            .block_on(catalog_tool_definition_by_name(MCP_READ_FILE_TOOL_NAME))
-            .expect("load read_file definition from frontend catalog should succeed");
-        let read_file_runtime =
-            frontend_tool_definition(read_file_provider_tool_definition());
+            .block_on(catalog_tool_definition_by_name(READ_TOOL_NAME))
+            .expect("load read definition from frontend catalog should succeed");
+        let read_runtime =
+            frontend_tool_definition(read_provider_tool_definition());
         assert_eq!(
-            frontend_definition_json(&read_file_catalog),
-            frontend_definition_json(&read_file_runtime),
-            "frontend catalog read_file definition drifted from builtin definition"
+            frontend_definition_json(&read_catalog),
+            frontend_definition_json(&read_runtime),
+            "frontend catalog read definition drifted from builtin definition"
         );
 
         let todo_catalog = tokio::runtime::Builder::new_current_thread()

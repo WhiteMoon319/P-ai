@@ -87,7 +87,10 @@ fn normalize_agent_tools(agent: &mut AgentProfile) -> bool {
     let defaults = default_agent_tools();
     let mut next = Vec::<ApiToolConfig>::new();
     for default in defaults {
-        if let Some(found) = agent.tools.iter().find(|tool| tool.id == default.id) {
+        let found = agent.tools.iter().find(|tool| {
+            tool.id == default.id || (default.id == "read" && tool.id == "read_file")
+        });
+        if let Some(found) = found {
             next.push(ApiToolConfig {
                 id: default.id.clone(),
                 command: if found.command.trim().is_empty() {
@@ -96,6 +99,8 @@ fn normalize_agent_tools(agent: &mut AgentProfile) -> bool {
                     found.command.clone()
                 },
                 args: if found.args.is_empty() {
+                    default.args.clone()
+                } else if default.id == "read" && found.id == "read_file" {
                     default.args.clone()
                 } else {
                     found.args.clone()

@@ -128,7 +128,7 @@ fn check_tools_status(
                 "loaded".to_string(),
                 "表情偷图工具可用".to_string(),
             ),
-            "read_file" => (
+            "read" | "read_file" => (
                 "loaded".to_string(),
                 "本地文件读取工具可用（文本/图片/PDF/Office）".to_string(),
             ),

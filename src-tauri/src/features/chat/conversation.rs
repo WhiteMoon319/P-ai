@@ -1306,7 +1306,7 @@ fn build_llm_image_input_fallback_notice(
         return build_attachment_notice_text(label, path);
     }
     format!(
-        "[系统提示] {label} 未能作为图片输入提供给模型，原因：{trimmed_reason}。\n请按普通附件处理该文件，必要时改用 shell 或 read_file 读取。"
+        "[系统提示] {label} 未能作为图片输入提供给模型，原因：{trimmed_reason}。\n请按普通附件处理该文件，必要时改用 shell 或 read 读取。"
     )
 }
 
@@ -2495,7 +2495,7 @@ fn build_system_tools_rule_blocks(
             }
         }
     }
-    if ["exec", "read_file", "apply_patch"]
+    if ["exec", "read", "read_file", "apply_patch"]
         .into_iter()
         .any(|tool_id| department_builtin_tool_enabled(&department_config, current_department, tool_id))
     {

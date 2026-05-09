@@ -11,5 +11,4 @@ include!("tools/terminal.rs");
 include!("tools/patch.rs");
 include!("tools/patch_rewind.rs");
 include!("tools/read_file.rs");
-include!("tools/read_file_mcp.rs");
 include!("tools/todo_mcp.rs");

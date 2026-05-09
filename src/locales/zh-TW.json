@@ -1120,6 +1120,7 @@
       "websearch": "連網搜尋",
       "operate": "桌面操作",
       "exec": "終端",
+      "read": "讀取檔案",
       "read_file": "讀取檔案",
       "apply_patch": "套用檔案補丁",
       "reload": "重新載入智慧體設定",

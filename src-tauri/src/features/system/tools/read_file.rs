@@ -1,4 +1,5 @@
 const READ_FILE_TEXT_LIMIT_CHARS: usize = 30_000;
+const READ_TOOL_NAME: &str = "read";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReadFileDetectedType {
@@ -46,13 +47,15 @@ impl ReadFileDetectedType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct ReadFileRequest {
-    absolute_path: String,
+    #[serde(alias = "absolute_path", alias = "absolutePath")]
+    path: String,
     #[serde(default)]
-    start: Option<usize>,
+    #[serde(alias = "start")]
+    offset: Option<usize>,
     #[serde(default)]
-    count: Option<usize>,
+    #[serde(alias = "count")]
+    limit: Option<usize>,
 }
 
 trait ReadFileReader {
@@ -131,13 +134,16 @@ fn read_file_log_target(path: &std::path::Path) -> String {
 }
 
 fn ensure_absolute_file_path(request: &ReadFileRequest) -> Result<std::path::PathBuf, String> {
-    let trimmed = request.absolute_path.trim();
+    let trimmed = request.path.trim();
     if trimmed.is_empty() {
-        return Err("absolute_path 不能为空".to_string());
+        return Err("path 不能为空".to_string());
+    }
+    if matches!(request.limit, Some(0)) {
+        return Err("limit 必须大于等于 1".to_string());
     }
     let path = std::path::PathBuf::from(trimmed);
     if !path.is_absolute() {
-        return Err("absolute_path 必须是绝对路径".to_string());
+        return Err("path 必须是绝对路径".to_string());
     }
     if !path.exists() {
         return Err(format!("文件不存在：{}", path.display()));
@@ -214,44 +220,44 @@ fn build_text_read_result(
     detected: ReadFileDetectedType,
     reader_kind: &str,
     text: &str,
-    start: Option<usize>,
-    count: Option<usize>,
+    offset: Option<usize>,
+    limit: Option<usize>,
     extra_metadata: Value,
 ) -> Value {
     let lines = text.replace('\r', "").split('\n').map(|v| v.to_string()).collect::<Vec<_>>();
-    let applied_start = start.unwrap_or(0);
-    let (selected_lines, next_start_by_lines) = paginate_lines(&lines, applied_start, count);
+    let applied_offset = offset.unwrap_or(0);
+    let (selected_lines, next_offset_by_lines) = paginate_lines(&lines, applied_offset, limit);
     let joined = selected_lines.join("\n");
     let (truncated_text, char_truncated) = truncate_text_for_read_file(&joined);
-    let next_start = if char_truncated {
-        next_start_by_lines.or(Some(applied_start + selected_lines.len()))
+    let next_offset = if char_truncated {
+        next_offset_by_lines.or(Some(applied_offset + selected_lines.len()))
     } else {
-        next_start_by_lines
+        next_offset_by_lines
     };
     let mut output = String::new();
     if char_truncated {
-        let continue_start = next_start.unwrap_or(applied_start + selected_lines.len());
+        let continue_offset = next_offset.unwrap_or(applied_offset + selected_lines.len());
         output.push_str("Content was truncated to fit within 30000 character limit.\n");
         output.push_str(&format!(
-            "To continue reading, use start={} in the next read_file call.\n\n",
-            continue_start
+            "To continue reading, use offset={} in the next read call.\n\n",
+            continue_offset
         ));
     }
     output.push_str(&truncated_text);
     serde_json::json!({
         "ok": true,
-        "absolutePath": path.to_string_lossy().to_string(),
+        "path": path.to_string_lossy().to_string(),
         "detectedType": detected.as_str(),
         "readerKind": reader_kind,
         "truncated": char_truncated,
-        "nextStart": next_start,
+        "nextOffset": next_offset,
         "content": output,
         "metadata": {
             "kind": "text",
-            "lineStart": applied_start,
-            "lineCount": count,
-            "returnedLineCount": selected_lines.len(),
-            "totalLineCount": lines.len(),
+            "offset": applied_offset,
+            "limit": limit,
+            "returnedCount": selected_lines.len(),
+            "totalCount": lines.len(),
             "returnedCharCount": joined.chars().count().min(READ_FILE_TEXT_LIMIT_CHARS),
             "charLimit": READ_FILE_TEXT_LIMIT_CHARS,
             "fileName": path.file_name().and_then(|v| v.to_str()).unwrap_or_default(),
@@ -273,12 +279,12 @@ fn build_pdf_image_read_result(
     path: &std::path::Path,
     detected: ReadFileDetectedType,
     structured: &PdfExtractStructuredResult,
-    start: Option<usize>,
-    count: Option<usize>,
+    offset: Option<usize>,
+    limit: Option<usize>,
 ) -> Value {
-    let applied_start = start.unwrap_or(0);
+    let applied_offset = offset.unwrap_or(0);
     let total_pages = structured.total_pages as usize;
-    let (window_start, end, next_start) = paginate_window(total_pages, applied_start, count);
+    let (window_start, end, next_offset) = paginate_window(total_pages, applied_offset, limit);
     let selected_pages = if window_start >= total_pages {
         Vec::new()
     } else {
@@ -302,30 +308,30 @@ fn build_pdf_image_read_result(
         .collect::<Vec<_>>();
     serde_json::json!({
         "ok": true,
-        "absolutePath": path.to_string_lossy().to_string(),
+        "path": path.to_string_lossy().to_string(),
         "detectedType": detected.as_str(),
         "readerKind": "pdf_image_direct",
         "truncated": false,
-        "nextStart": next_start,
+        "nextOffset": next_offset,
         "parts": parts,
         "response": {
             "ok": true,
-            "absolutePath": path.to_string_lossy().to_string(),
+            "path": path.to_string_lossy().to_string(),
             "detectedType": detected.as_str(),
             "readerKind": "pdf_image_direct",
             "fileName": structured.file_name,
-            "pageStart": applied_start,
-            "pageCount": count,
+            "offset": applied_offset,
+            "limit": limit,
             "returnedPageCount": selected_pages.len(),
             "returnedImageCount": selected_pages.iter().map(|page| page.images.len()).sum::<usize>(),
             "totalPages": structured.total_pages,
-            "nextStart": next_start
+            "nextOffset": next_offset
         },
         "metadata": {
             "kind": "image",
             "fileName": structured.file_name,
-            "pageStart": applied_start,
-            "pageCount": count,
+            "offset": applied_offset,
+            "limit": limit,
             "returnedPageCount": selected_pages.len(),
             "returnedImageCount": selected_pages.iter().map(|page| page.images.len()).sum::<usize>(),
             "totalPages": structured.total_pages,
@@ -343,7 +349,7 @@ async fn read_image_file_result(
 ) -> Result<Value, String> {
     let path = ensure_absolute_file_path(request)?;
     eprintln!(
-        "[read_file] 开始，任务=read_image_file，session_id={}，api_config_id={}，{}，detected_type={}",
+        "[read] 开始，任务=read_image_file，session_id={}，api_config_id={}，{}，detected_type={}",
         session_id,
         api_config_id,
         read_file_log_target(&path),
@@ -360,7 +366,7 @@ async fn read_image_file_result(
         Ok(value) => value,
         Err(err) => {
             eprintln!(
-                "[read_file] 图片规范化失败，降级为文本提示，session_id={}，api_config_id={}，{}，err={}",
+                "[read] 图片规范化失败，降级为文本提示，session_id={}，api_config_id={}，{}，err={}",
                 session_id,
                 api_config_id,
                 read_file_log_target(&path),
@@ -390,7 +396,7 @@ async fn read_image_file_result(
     }
 
     eprintln!(
-        "[read_file] 完成，任务=read_image_file，session_id={}，api_config_id={}，reader=image_vision_fallback，detected_type={}，action=使用图转文回退",
+        "[read] 完成，任务=read_image_file，session_id={}，api_config_id={}，reader=image_vision_fallback，detected_type={}，action=使用图转文回退",
         session_id,
         api_config_id,
         detected.as_str()
@@ -409,7 +415,7 @@ async fn read_image_file_result(
         Ok(value) => Ok(value),
         Err(err) => {
             eprintln!(
-                "[read_file] 图片视觉回退失败，降级为文本提示，session_id={}，api_config_id={}，{}，err={}",
+                "[read] 图片视觉回退失败，降级为文本提示，session_id={}，api_config_id={}，{}，err={}",
                 session_id,
                 api_config_id,
                 read_file_log_target(&path),
@@ -440,16 +446,16 @@ fn build_direct_image_read_result(
     let file_name = path.file_name().and_then(|v| v.to_str()).unwrap_or_default();
     serde_json::json!({
         "ok": true,
-        "absolutePath": path.to_string_lossy().to_string(),
+        "path": path.to_string_lossy().to_string(),
         "detectedType": detected.as_str(),
         "readerKind": "image_direct",
         "truncated": false,
-        "nextStart": Value::Null,
+        "nextOffset": Value::Null,
         "imageMime": mime,
         "imageBase64": image_base64,
         "response": {
             "ok": true,
-            "absolutePath": path.to_string_lossy().to_string(),
+            "path": path.to_string_lossy().to_string(),
             "detectedType": detected.as_str(),
             "readerKind": "image_direct",
             "imageMime": mime,
@@ -479,7 +485,7 @@ fn build_image_read_fallback_text_result(
     reason: &str,
 ) -> Value {
     let text = format!(
-        "该文件被识别为图片，但本次未能作为图片输入直接提供给模型。\n原因：{}\n文件路径：{}\n原始 MIME：{}\n请按普通附件理解该文件；如需继续处理，可用 shell 或后续 read_file 查看相关信息。",
+        "该文件被识别为图片，但本次未能作为图片输入直接提供给模型。\n原因：{}\n文件路径：{}\n原始 MIME：{}\n请按普通附件理解该文件；如需继续处理，可用 shell 或后续 read 查看相关信息。",
         reason.trim(),
         path.display(),
         mime.trim()
@@ -489,8 +495,8 @@ fn build_image_read_fallback_text_result(
         detected,
         "image_fallback_notice",
         &text,
-        request.start,
-        request.count,
+        request.offset,
+        request.limit,
         serde_json::json!({
             "imageDeliveredAsTextNotice": true,
             "imageMime": mime,
@@ -509,7 +515,7 @@ async fn read_image_direct(
 ) -> Result<Value, String> {
     let byte_size = normalized.bytes.len() as u64;
     eprintln!(
-        "[read_file] 完成，任务=read_image_file，session_id={}，api_config_id={}，reader=image_direct，detected_type={}，action=直接返回图片，byte_size={}",
+        "[read] 完成，任务=read_image_file，session_id={}，api_config_id={}，reader=image_direct，detected_type={}，action=直接返回图片，byte_size={}",
         session_id,
         api_config_id,
         detected.as_str(),
@@ -549,7 +555,7 @@ async fn read_image_via_vision(
     }
 
     eprintln!(
-        "[read_file] 开始，任务=read_image_via_vision，session_id={}，vision_api_id={}，{}，detected_type={}",
+        "[read] 开始，任务=read_image_via_vision，session_id={}，vision_api_id={}，{}，detected_type={}",
         session_id,
         vision_api.id,
         read_file_log_target(path),
@@ -614,8 +620,8 @@ async fn read_image_via_vision(
         detected,
         "image_vision_fallback",
         &described,
-        request.start,
-        request.count,
+        request.offset,
+        request.limit,
         serde_json::json!({
             "imageConvertedToText": true,
             "visionApiId": vision_api.id,
@@ -651,8 +657,8 @@ impl ReadFileReader for TextFileReader {
             detected,
             self.reader_kind(),
             &text,
-            request.start,
-            request.count,
+            request.offset,
+            request.limit,
             serde_json::json!({}),
         ))
     }
@@ -689,7 +695,7 @@ impl ReadFileReader for PdfFileReader {
             Ok(value) => value,
             Err(err) if include_images && !is_pdf_page_limit_exceeded_error(&err) => {
                 eprintln!(
-                    "[read_file] PDF 页图提取失败，降级为文本读取，file={}，err={}",
+                    "[read] PDF 页图提取失败，降级为文本读取，file={}，err={}",
                     path.display(),
                     err
                 );
@@ -731,8 +737,8 @@ impl ReadFileReader for PdfFileReader {
                 &path,
                 detected,
                 &structured,
-                request.start,
-                request.count,
+                request.offset,
+                request.limit,
             ));
         }
         let text = structured
@@ -746,8 +752,8 @@ impl ReadFileReader for PdfFileReader {
             detected,
             self.reader_kind(),
             &text,
-            request.start,
-            request.count,
+            request.offset,
+            request.limit,
             serde_json::json!({
                 "totalPages": structured.total_pages,
                 "includeImages": structured.include_images
@@ -844,8 +850,8 @@ impl ReadFileReader for OfficeLitchiReader {
             detected,
             self.reader_kind(),
             &text,
-            request.start,
-            request.count,
+            request.offset,
+            request.limit,
             serde_json::json!({
                 "experimental": true
             }),
@@ -863,7 +869,7 @@ async fn builtin_read_file(
     let path = ensure_absolute_file_path(&request)?;
     let detected = detect_read_file_type(&path);
     eprintln!(
-        "[read_file] 开始，任务=read_file，session_id={}，api_config_id={}，{}，detected_type={}",
+        "[read] 开始，任务=read，session_id={}，api_config_id={}，{}，detected_type={}",
         session_id,
         api_config_id,
         read_file_log_target(&path),
@@ -880,7 +886,7 @@ async fn builtin_read_file(
         let elapsed_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
         match &result {
             Ok(value) => eprintln!(
-                "[read_file] 完成，任务=read_file，session_id={}，api_config_id={}，reader={}，detected_type={}，elapsed_ms={}",
+                "[read] 完成，任务=read，session_id={}，api_config_id={}，reader={}，detected_type={}，elapsed_ms={}",
                 session_id,
                 api_config_id,
                 value.get("readerKind").and_then(Value::as_str).unwrap_or("image"),
@@ -888,7 +894,7 @@ async fn builtin_read_file(
                 elapsed_ms
             ),
             Err(err) => eprintln!(
-                "[read_file] 失败，任务=read_file，session_id={}，api_config_id={}，detected_type={}，elapsed_ms={}，error={}",
+                "[read] 失败，任务=read，session_id={}，api_config_id={}，detected_type={}，elapsed_ms={}，error={}",
                 session_id,
                 api_config_id,
                 detected.as_str(),
@@ -911,7 +917,7 @@ async fn builtin_read_file(
     let elapsed_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
     match &result {
         Ok(_) => eprintln!(
-            "[read_file] 完成，任务=read_file，session_id={}，api_config_id={}，reader={}，detected_type={}，elapsed_ms={}",
+            "[read] 完成，任务=read，session_id={}，api_config_id={}，reader={}，detected_type={}，elapsed_ms={}",
             session_id,
             api_config_id,
             reader.reader_kind(),
@@ -919,7 +925,7 @@ async fn builtin_read_file(
             elapsed_ms
         ),
         Err(err) => eprintln!(
-            "[read_file] 失败，任务=read_file，session_id={}，api_config_id={}，reader={}，detected_type={}，elapsed_ms={}，error={}",
+            "[read] 失败，任务=read，session_id={}，api_config_id={}，reader={}，detected_type={}，elapsed_ms={}，error={}",
             session_id,
             api_config_id,
             reader.reader_kind(),
@@ -1013,6 +1019,26 @@ fn test_read_file_state() -> AppState {
 
 #[cfg(test)]
 #[test]
+fn read_file_request_should_accept_new_and_legacy_argument_names() {
+        let current: ReadFileRequest = serde_json::from_str(
+            r#"{"path":"E:\\docs\\a.md","offset":2,"limit":5}"#,
+        )
+        .expect("parse current read args");
+        assert_eq!(current.path, "E:\\docs\\a.md");
+        assert_eq!(current.offset, Some(2));
+        assert_eq!(current.limit, Some(5));
+
+        let legacy: ReadFileRequest = serde_json::from_str(
+            r#"{"absolute_path":"E:\\docs\\b.md","start":3,"count":7}"#,
+        )
+        .expect("parse legacy read_file args");
+        assert_eq!(legacy.path, "E:\\docs\\b.md");
+        assert_eq!(legacy.offset, Some(3));
+        assert_eq!(legacy.limit, Some(7));
+}
+
+#[cfg(test)]
+#[test]
 fn detect_read_file_type_should_classify_common_formats() {
         assert_eq!(
             detect_read_file_type(std::path::Path::new("a.txt")),
@@ -1079,9 +1105,9 @@ fn builtin_read_file_should_paginate_text_file() {
             "chat::conv-1",
             "__frontend_tool_preview__",
             ReadFileRequest {
-                absolute_path: file.to_string_lossy().to_string(),
-                start: Some(1),
-                count: Some(2),
+                path: file.to_string_lossy().to_string(),
+                offset: Some(1),
+                limit: Some(2),
             },
         ))
         .expect("read text");
@@ -1090,7 +1116,7 @@ fn builtin_read_file_should_paginate_text_file() {
             value.get("content").and_then(Value::as_str),
             Some("line2\nline3")
         );
-        assert_eq!(value.get("nextStart").and_then(Value::as_u64), Some(3));
+        assert_eq!(value.get("nextOffset").and_then(Value::as_u64), Some(3));
 }
 
 #[cfg(test)]
@@ -1150,9 +1176,9 @@ fn builtin_read_file_should_return_root_image_payload_when_model_supports_image(
                     "assistant::conversation-a",
                     "vision-a",
                     ReadFileRequest {
-                        absolute_path: file.to_string_lossy().to_string(),
-                        start: None,
-                        count: None,
+                        path: file.to_string_lossy().to_string(),
+                        offset: None,
+                        limit: None,
                     },
                 )
                 .await
@@ -1212,9 +1238,9 @@ fn builtin_read_file_should_downgrade_bad_image_to_text_notice() {
             "assistant::conversation-a",
             "vision-a",
             ReadFileRequest {
-                absolute_path: file.to_string_lossy().to_string(),
-                start: None,
-                count: None,
+                path: file.to_string_lossy().to_string(),
+                offset: None,
+                limit: None,
             },
         ))
         .expect("read image fallback");
@@ -1249,14 +1275,14 @@ fn builtin_read_file_should_prefix_truncation_notice_only_when_truncated() {
             "chat::conv-1",
             "__frontend_tool_preview__",
             ReadFileRequest {
-                absolute_path: file.to_string_lossy().to_string(),
-                start: None,
-                count: None,
+                path: file.to_string_lossy().to_string(),
+                offset: None,
+                limit: None,
             },
         ))
         .expect("read truncated text");
         let text = value.get("content").and_then(Value::as_str).unwrap_or_default();
-        assert!(text.starts_with("Content was truncated to fit within 30000 character limit.\nTo continue reading, use start="));
+        assert!(text.starts_with("Content was truncated to fit within 30000 character limit.\nTo continue reading, use offset="));
     }
 
 #[cfg(test)]
@@ -1313,7 +1339,7 @@ fn build_pdf_image_read_result_should_paginate_by_page_start() {
         );
 
         assert_eq!(value.get("readerKind").and_then(Value::as_str), Some("pdf_image_direct"));
-        assert_eq!(value.get("nextStart").and_then(Value::as_u64), Some(2));
+        assert_eq!(value.get("nextOffset").and_then(Value::as_u64), Some(2));
         let parts = value.get("parts").and_then(Value::as_array).expect("parts");
         assert_eq!(parts.len(), 1);
         assert_eq!(parts[0].get("pageIndex").and_then(Value::as_u64), Some(1));

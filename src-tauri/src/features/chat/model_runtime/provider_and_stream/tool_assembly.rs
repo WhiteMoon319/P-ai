@@ -42,29 +42,29 @@ fn operate_provider_tool_definition() -> ProviderToolDefinition {
     )
 }
 
-fn read_file_provider_tool_definition() -> ProviderToolDefinition {
+fn read_provider_tool_definition() -> ProviderToolDefinition {
     ProviderToolDefinition::new(
-        MCP_READ_FILE_TOOL_NAME,
-        "读取本地文件内容。自动识别文本、图片、PDF 与 Office 文件；absolute_path 必须是绝对路径；分页统一使用 start/count：对文本、代码、Office 等非 PDF 内容，start 表示起始行，count 表示返回行数；对 PDF，start 表示起始页，count 表示返回页数。搜索工具若返回命中行号，可直接把该行号附近换算成 start 继续读取。",
+        READ_TOOL_NAME,
+        "读取本地文件内容。自动识别文本、图片、PDF 与 Office 文件；path 必须是绝对路径；对文本、代码、Office 等非 PDF 内容，offset 表示跳过行，limit 表示返回行数；对 PDF 则代表页。",
         serde_json::json!({
             "type": "object",
             "properties": {
-                "absolute_path": {
+                "path": {
                     "type": "string",
                     "description": "要读取的本地文件绝对路径。"
                 },
-                "start": {
+                "offset": {
                     "type": "integer",
                     "minimum": 0,
-                    "description": "分页起点。对文本、Office 等非 PDF 内容按行计数；对 PDF 按页计数。默认从 0 开始。"
+                    "description": "跳过数，默认从 0 开始。"
                 },
-                "count": {
+                "limit": {
                     "type": "integer",
-                    "minimum": 0,
-                    "description": "分页大小。对文本、Office 等非 PDF 内容表示返回多少行；对 PDF 表示返回多少页。"
+                    "minimum": 1,
+                    "description": "返回数。"
                 }
             },
-            "required": ["absolute_path"]
+            "required": ["path"]
         }),
     )
 }
@@ -102,7 +102,7 @@ fn build_global_tool_schema_cache(state: &AppState) -> Vec<ProviderToolDefinitio
         }
         .provider_tool_definition(),
         BuiltinWaitTool.provider_tool_definition(),
-        read_file_provider_tool_definition(),
+        read_provider_tool_definition(),
         BuiltinTerminalExecTool {
             app_state: state.clone(),
             session_id: preview_session_id.clone(),
@@ -438,12 +438,12 @@ impl RuntimeJsonTool for BuiltinOperateTool {
 
 impl RuntimeToolMetadata for BuiltinReadFileTool {
     fn provider_tool_definition(&self) -> ProviderToolDefinition {
-        read_file_provider_tool_definition()
+        read_provider_tool_definition()
     }
 }
 
 impl RuntimeJsonTool for BuiltinReadFileTool {
-    const NAME: &'static str = MCP_READ_FILE_TOOL_NAME;
+    const NAME: &'static str = READ_TOOL_NAME;
     type Args = ReadFileRequest;
     type Error = ToolInvokeError;
 
@@ -455,7 +455,7 @@ impl RuntimeJsonTool for BuiltinReadFileTool {
         Box::pin(async move {
             let args_value = serde_json::to_value(&args).unwrap_or(Value::Null);
             runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.start name=read_file args={}",
+                "[TOOL-DEBUG] execute_builtin_tool.start name=read args={}",
                 debug_value_snippet(&args_value, 240)
             ));
             let result = builtin_read_file(
@@ -468,10 +468,10 @@ impl RuntimeJsonTool for BuiltinReadFileTool {
             .map_err(ToolInvokeError::from);
             match &result {
                 Ok(v) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.ok name=read_file result={}",
+                    "[TOOL-DEBUG] execute_builtin_tool.ok name=read result={}",
                     debug_value_snippet(v, 240)
                 )),
-                Err(err) => eprintln!("[工具执行] 内置工具 read_file 执行失败: 错误={err}"),
+                Err(err) => eprintln!("[工具执行] 内置工具 read 执行失败: 错误={err}"),
             }
             result
         })
