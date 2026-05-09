@@ -2798,20 +2798,45 @@ async fn send_chat_message_inner(
             }
 
             let (reason_text, final_error_text) = match chat_round_execution.result {
-                Ok(reply) => {
-                    if model_reply_has_visible_content(&reply) {
+                Ok(reply) => match model_reply_content_state(&reply) {
+                    ModelReplyContentState::Visible => {
                         active_selected_api = candidate_selected_api.clone();
                         active_resolved_api = candidate_resolved_api.clone();
                         model_reply = Some(reply);
                         candidate_final_error = None;
                         break;
                     }
-                    (
-                        "模型权限/套餐不支持（上游返回空响应）".to_string(),
-                        "模型权限/套餐不支持（上游返回空响应），已停止重试，请检查当前 API Key 是否支持该模型，或切换模型。"
-                            .to_string(),
-                    )
-                }
+                    ModelReplyContentState::ReasoningOnly => {
+                        runtime_log_warn(format!(
+                            "[聊天] 模型返回思维链但缺少最终回答，按空回重试: conversation_id={}，api_config_id={}，model={}，attempt={}，reasoning_standard_len={}，reasoning_inline_len={}",
+                            conversation_id,
+                            candidate_selected_api.id,
+                            candidate_selected_api.model,
+                            attempt + 1,
+                            reply.reasoning_standard.chars().count(),
+                            reply.reasoning_inline.chars().count()
+                        ));
+                        (
+                            "模型只返回了思维链但没有最终回答".to_string(),
+                            "模型只返回了思维链但没有最终回答，已停止重试；请稍后重试或切换模型。"
+                                .to_string(),
+                        )
+                    }
+                    ModelReplyContentState::Empty => {
+                        runtime_log_warn(format!(
+                            "[聊天] 模型返回空响应，按空回重试: conversation_id={}，api_config_id={}，model={}，attempt={}",
+                            conversation_id,
+                            candidate_selected_api.id,
+                            candidate_selected_api.model,
+                            attempt + 1
+                        ));
+                        (
+                            "模型权限/套餐不支持（上游返回空响应）".to_string(),
+                            "模型权限/套餐不支持（上游返回空响应），已停止重试，请检查当前 API Key 是否支持该模型，或切换模型。"
+                                .to_string(),
+                        )
+                    }
+                },
                 Err(error) => {
                     if candidate_selected_api.enable_image
                         && error_indicates_image_input_unsupported(&error)
@@ -3379,6 +3404,53 @@ mod core_send_inner_tests {
         assert_eq!(candidate_api_ids, vec!["text-a".to_string()]);
         assert!(non_chat_err.contains("不是聊天文本模型"));
         assert!(missing_err.contains("模型不存在"));
+    }
+
+    fn test_model_reply(
+        assistant_text: &str,
+        final_response_text: &str,
+        reasoning_standard: &str,
+    ) -> ModelReply {
+        ModelReply {
+            assistant_text: assistant_text.to_string(),
+            final_response_text: final_response_text.to_string(),
+            reasoning_standard: reasoning_standard.to_string(),
+            reasoning_inline: String::new(),
+            assistant_provider_meta: None,
+            tool_history_events: Vec::new(),
+            suppress_assistant_message: false,
+            trusted_input_tokens: None,
+            round_logs_recorded_internally: false,
+        }
+    }
+
+    #[test]
+    fn model_reply_content_state_should_classify_empty_reply_variants() {
+        assert_eq!(
+            model_reply_content_state(&test_model_reply("", "", "")),
+            ModelReplyContentState::Empty
+        );
+        assert_eq!(
+            model_reply_content_state(&test_model_reply("", "", "只有思维链，没有最终回答")),
+            ModelReplyContentState::ReasoningOnly
+        );
+        assert_eq!(
+            model_reply_content_state(&test_model_reply("正文", "", "思维链")),
+            ModelReplyContentState::Visible
+        );
+    }
+
+    #[test]
+    fn model_reply_content_state_should_keep_provider_meta_visible() {
+        let mut reply = test_model_reply("", "", "只有思维链");
+        reply.assistant_provider_meta = Some(serde_json::json!({
+            "messageKind": "plan_present"
+        }));
+
+        assert_eq!(
+            model_reply_content_state(&reply),
+            ModelReplyContentState::Visible
+        );
     }
 
     #[test]

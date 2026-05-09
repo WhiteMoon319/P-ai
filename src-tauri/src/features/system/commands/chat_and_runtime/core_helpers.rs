@@ -132,13 +132,30 @@ fn abort_delegate_runtime_descendants_by_parent_session(
     Ok(aborted_count)
 }
 
-fn model_reply_has_visible_content(reply: &ModelReply) -> bool {
-    !reply.assistant_text.trim().is_empty()
-        || !reply.reasoning_standard.trim().is_empty()
-        || !reply.reasoning_inline.trim().is_empty()
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ModelReplyContentState {
+    Visible,
+    ReasoningOnly,
+    Empty,
+}
+
+fn model_reply_content_state(reply: &ModelReply) -> ModelReplyContentState {
+    if !reply.assistant_text.trim().is_empty()
+        || !reply.final_response_text.trim().is_empty()
         || reply.assistant_provider_meta.is_some()
         || !reply.tool_history_events.is_empty()
         || reply.suppress_assistant_message
+    {
+        return ModelReplyContentState::Visible;
+    }
+    if !reply.reasoning_standard.trim().is_empty() || !reply.reasoning_inline.trim().is_empty() {
+        return ModelReplyContentState::ReasoningOnly;
+    }
+    ModelReplyContentState::Empty
+}
+
+fn model_reply_has_visible_content(reply: &ModelReply) -> bool {
+    model_reply_content_state(reply) == ModelReplyContentState::Visible
 }
 
 fn effective_prompt_tokens_from_provider(
@@ -155,4 +172,3 @@ fn effective_prompt_tokens_from_provider(
     }
     (provider, "provider")
 }
-
