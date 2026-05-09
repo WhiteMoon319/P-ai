@@ -2199,7 +2199,10 @@ mod tool_loop_tests {
             Some(12),
         );
 
-        assert!(model_reply_has_visible_content(&reply));
+        assert_eq!(
+            model_reply_content_state(&reply),
+            ModelReplyContentState::Visible
+        );
         assert!(reply.assistant_text.is_empty());
         assert_eq!(reply.tool_history_events.len(), 1);
         assert_eq!(reply.trusted_input_tokens, Some(12));

@@ -154,10 +154,6 @@ fn model_reply_content_state(reply: &ModelReply) -> ModelReplyContentState {
     ModelReplyContentState::Empty
 }
 
-fn model_reply_has_visible_content(reply: &ModelReply) -> bool {
-    model_reply_content_state(reply) == ModelReplyContentState::Visible
-}
-
 fn effective_prompt_tokens_from_provider(
     estimated_prompt_tokens: u64,
     trusted_input_tokens: Option<u64>,
