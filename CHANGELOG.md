@@ -2,6 +2,13 @@
 
 ## 进行中
 
+## 发布：v0.9.77
+
+- 发布（release-0.9.77）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.77`，纳入本轮远程联系人会话部门人格绑定同步、联系人会话撤回支持，以及统一会话人格绑定解析计划。
+- 修复（remote-im-contact-conversation-agent-binding）：远程联系人会话创建、复用和处理部门保存时同步修正会话 `department_id / agent_id`；联系人列表修复保持软失败，避免单个联系人绑定异常拖垮全部联系人会话显示。
+- 修复（remote-im-contact-conversation-rewind）：远程联系人会话支持撤回；撤回前会从 ready JSONL 消息仓库补齐完整消息，再返回可回填用户消息并截断消息仓库。
+- 计划（conversation-agent-binding-resolution）：新增统一会话人格绑定解析计划，明确只读解析、可写修复、发送硬失败与列表软失败边界。
+
 ## 发布：v0.9.76
 
 - 发布（release-0.9.76）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.76`，纳入本轮聊天消息流转断言、思维链展示拼接、配置页分段单选与布局收口，以及设置页文案与主题色修复。
