@@ -73,11 +73,18 @@ async fn run_message_loop(
     channel_logs: Arc<RwLock<HashMap<String, Vec<ChannelLogEntry>>>>,
     channel_id: String,
     peer_addr_str: String,
+    cancel: CancellationToken,
 ) {
     let mut disconnect_level = "info".to_string();
     let mut disconnect_message = format!("客户端断开: {}", peer_addr_str);
     loop {
         tokio::select! {
+            _ = cancel.cancelled() => {
+                let _ = ws_sender.send(Message::Close(None)).await;
+                disconnect_level = "info".to_string();
+                disconnect_message = format!("收到渠道取消信号: {}", peer_addr_str);
+                break;
+            }
             cmd = cmd_rx.recv() => {
                 match cmd {
                     Ok(payload) => {

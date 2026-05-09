@@ -9,6 +9,8 @@ use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::SinkExt;
 use tokio::net::TcpListener;
 use tokio::sync::{broadcast, oneshot, watch, RwLock};
+use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 use tokio_tungstenite::accept_hdr_async;
 use tokio_tungstenite::tungstenite::handshake::server::{Request, Response};
 use tokio_tungstenite::tungstenite::http::Response as HttpResponse;
@@ -122,6 +124,12 @@ struct WsConnection {
     connected_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Clone)]
+struct OnebotChannelRuntime {
+    cancel: CancellationToken,
+    tasks: TaskTracker,
+}
+
 /// OneBot v11 WebSocket 服务器管理器
 #[derive(Clone)]
 pub struct OnebotV11WsManager {
@@ -137,6 +145,8 @@ pub struct OnebotV11WsManager {
     listen_addrs: Arc<RwLock<HashMap<String, String>>>,
     /// 渠道 accept 循环的 JoinHandle，用于 stop 时等待旧服务器释放端口
     channel_tasks: Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>>,
+    /// 渠道派生任务组，用于 stop 时收割所有连接任务
+    channel_runtimes: Arc<RwLock<HashMap<String, OnebotChannelRuntime>>>,
     /// OneBot 事件消费器停止信号: channel_id -> stop sender
     event_consumer_stop_senders: Arc<RwLock<HashMap<String, watch::Sender<bool>>>>,
     /// OneBot 事件消费器任务: channel_id -> JoinHandle

@@ -869,6 +869,7 @@
         );
         assert_eq!(manager.connections.read().await.len(), 1);
         assert_eq!(manager.connection_stop_senders.read().await.len(), 1);
+        assert_eq!(manager.channel_runtimes.read().await.len(), 1);
 
         let _ = first.close(None).await;
         let _ = second.close(None).await;
@@ -877,6 +878,46 @@
             .stop_channel("channel-a")
             .await
             .expect("stop onebot channel");
+        assert!(manager.channel_runtimes.read().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn onebot_stop_channel_should_cancel_active_connection_task() {
+        let manager = OnebotV11WsManager::new();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind temp listener");
+        let port = listener.local_addr().expect("local addr").port();
+        drop(listener);
+
+        manager
+            .start(
+                "channel-a".to_string(),
+                OnebotV11WsCredentials {
+                    ws_host: "127.0.0.1".to_string(),
+                    ws_port: port,
+                    ws_token: None,
+                },
+            )
+            .await
+            .expect("start onebot channel");
+
+        let url = format!("ws://127.0.0.1:{port}");
+        let (_client, _) = tokio_tungstenite::connect_async(url.as_str())
+            .await
+            .expect("connect client");
+        tokio::time::sleep(Duration::from_millis(80)).await;
+
+        assert_eq!(manager.connections.read().await.len(), 1);
+        assert_eq!(manager.channel_runtimes.read().await.len(), 1);
+
+        manager
+            .stop_channel("channel-a")
+            .await
+            .expect("stop onebot channel");
+        tokio::time::sleep(Duration::from_millis(80)).await;
+
+        assert!(manager.connections.read().await.is_empty());
+        assert!(manager.connection_stop_senders.read().await.is_empty());
+        assert!(manager.channel_runtimes.read().await.is_empty());
     }
 
     fn remote_im_test_contact(contact_id: &str, conversation_id: &str) -> RemoteImContact {
