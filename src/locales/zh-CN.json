@@ -207,6 +207,13 @@
           "action": "去看工具",
           "install": "安装 Node.js"
         },
+        "ripgrep": {
+          "title": "ripgrep（rg）",
+          "summary": "rg 是编程场景常用的高速代码搜索工具，大项目里搜文件、搜文本会更快。",
+          "currentOk": "已检测到 rg。",
+          "currentMissing": "未检测到 rg。可以直接问 PAI：怎么安装 rg？",
+          "action": "去看工具"
+        },
         "textModel": {
           "title": "可用文本模型",
           "summary": "文本模型是 PAI 的「大脑」。有了它，PAI 才能读你的消息、思考问题、给你回复。建议顺便准备一个支持图片的多模态模型，截图也能直接发给它看。",

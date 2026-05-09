@@ -207,6 +207,13 @@
           "action": "Open Tools",
           "install": "Install Node.js"
         },
+        "ripgrep": {
+          "title": "ripgrep (rg)",
+          "summary": "rg is a fast code search tool commonly used in programming workflows. It makes file and text search faster in large projects.",
+          "currentOk": "rg was detected.",
+          "currentMissing": "rg was not detected. You can ask PAI how to install rg.",
+          "action": "Open Tools"
+        },
         "textModel": {
           "title": "Available Text Model",
           "summary": "The app needs at least one working text model. A multimodal one is recommended.",

@@ -223,6 +223,7 @@ struct TerminalSelfCheckStepResult {
 struct HostRuntimePrerequisites {
     git_installed: bool,
     node_installed: bool,
+    rg_installed: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -313,6 +314,7 @@ fn host_runtime_prerequisite_installed(kind: &str) -> Result<bool, String> {
                 Ok(false)
             }
         }
+        "rg" | "ripgrep" => Ok(command_exists_in_path("rg")),
         other => Err(format!("不支持的运行时依赖：{other}")),
     }
 }
@@ -322,6 +324,7 @@ fn get_host_runtime_prerequisites() -> HostRuntimePrerequisites {
     HostRuntimePrerequisites {
         git_installed: host_runtime_prerequisite_installed("git").unwrap_or(false),
         node_installed: host_runtime_prerequisite_installed("node").unwrap_or(false),
+        rg_installed: host_runtime_prerequisite_installed("rg").unwrap_or(false),
     }
 }
 

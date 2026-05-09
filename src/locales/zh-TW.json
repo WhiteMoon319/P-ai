@@ -207,6 +207,13 @@
           "action": "去看工具",
           "install": "安裝 Node.js"
         },
+        "ripgrep": {
+          "title": "ripgrep（rg）",
+          "summary": "rg 是程式開發常用的高速程式碼搜尋工具，大專案裡搜檔案、搜文字會更快。",
+          "currentOk": "已偵測到 rg。",
+          "currentMissing": "未偵測到 rg。可以直接問 PAI：怎麼安裝 rg？",
+          "action": "去看工具"
+        },
         "textModel": {
           "title": "可用文字模型",
           "summary": "系統至少需要一個可用的文字模型，建議優先準備一個同時支援圖片的多模態模型。",

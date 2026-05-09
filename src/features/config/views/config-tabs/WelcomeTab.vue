@@ -152,6 +152,7 @@ type SkillListResult = {
 type HostRuntimePrerequisites = {
   gitInstalled?: boolean;
   nodeInstalled?: boolean;
+  rgInstalled?: boolean;
 };
 type HostRuntimePrerequisiteInstallResult = {
   kind: HostRuntimePrerequisiteKind;
@@ -261,6 +262,7 @@ const cards = computed(() => {
 
   const gitInstalled = !!hostRuntimePrerequisites.value.gitInstalled;
   const nodeInstalled = !!hostRuntimePrerequisites.value.nodeInstalled;
+  const rgInstalled = !!hostRuntimePrerequisites.value.rgInstalled;
 
   return [
     {
@@ -332,30 +334,6 @@ const cards = computed(() => {
       targetTab: "api" as ConfigTab,
     },
     {
-      id: "embedding",
-      title: t("config.welcome.cards.embedding.title"),
-      level: "optional" as WelcomeCardLevel,
-      ok: !!embeddingModel,
-      summary: t("config.welcome.cards.embedding.summary"),
-      current: embeddingModel
-        ? t("config.welcome.cards.embedding.currentOk", { name: embeddingModel.name })
-        : t("config.welcome.cards.embedding.currentMissing"),
-      action: t("config.welcome.cards.embedding.action"),
-      targetTab: "api" as ConfigTab,
-    },
-    {
-      id: "voice",
-      title: t("config.welcome.cards.voice.title"),
-      level: "optional" as WelcomeCardLevel,
-      ok: !!sttModel,
-      summary: t("config.welcome.cards.voice.summary"),
-      current: sttModel
-        ? t("config.welcome.cards.voice.currentOk", { name: sttModel.name })
-        : t("config.welcome.cards.voice.currentMissing"),
-      action: t("config.welcome.cards.voice.action"),
-      targetTab: "api" as ConfigTab,
-    },
-    {
       id: "memory",
       title: t("config.welcome.cards.memory.title"),
       level: "strong" as WelcomeCardLevel,
@@ -382,6 +360,30 @@ const cards = computed(() => {
       targetTab: "persona" as ConfigTab,
     },
     {
+      id: "embedding",
+      title: t("config.welcome.cards.embedding.title"),
+      level: "optional" as WelcomeCardLevel,
+      ok: !!embeddingModel,
+      summary: t("config.welcome.cards.embedding.summary"),
+      current: embeddingModel
+        ? t("config.welcome.cards.embedding.currentOk", { name: embeddingModel.name })
+        : t("config.welcome.cards.embedding.currentMissing"),
+      action: t("config.welcome.cards.embedding.action"),
+      targetTab: "api" as ConfigTab,
+    },
+    {
+      id: "voice",
+      title: t("config.welcome.cards.voice.title"),
+      level: "optional" as WelcomeCardLevel,
+      ok: !!sttModel,
+      summary: t("config.welcome.cards.voice.summary"),
+      current: sttModel
+        ? t("config.welcome.cards.voice.currentOk", { name: sttModel.name })
+        : t("config.welcome.cards.voice.currentMissing"),
+      action: t("config.welcome.cards.voice.action"),
+      targetTab: "api" as ConfigTab,
+    },
+    {
       id: "department",
       title: t("config.welcome.cards.department.title"),
       level: "optional" as WelcomeCardLevel,
@@ -392,6 +394,18 @@ const cards = computed(() => {
         : t("config.welcome.cards.department.currentMissing"),
       action: t("config.welcome.cards.department.action"),
       targetTab: "department" as ConfigTab,
+    },
+    {
+      id: "ripgrep-runtime",
+      title: t("config.welcome.cards.ripgrep.title"),
+      level: "optional" as WelcomeCardLevel,
+      ok: rgInstalled,
+      summary: t("config.welcome.cards.ripgrep.summary"),
+      current: rgInstalled
+        ? t("config.welcome.cards.ripgrep.currentOk")
+        : t("config.welcome.cards.ripgrep.currentMissing"),
+      action: t("config.welcome.cards.ripgrep.action"),
+      targetTab: "tools" as ConfigTab,
     },
     {
       id: "skill",
