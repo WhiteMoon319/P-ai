@@ -32,7 +32,6 @@ impl ConversationService {
         ))
         .ok();
 
-        let last_archive_summary = scheduler_last_archive_summary_cached(state)?;
         let persisted_batch_messages = write_persisted_message_batch(
             self,
             state,
@@ -43,7 +42,6 @@ impl ConversationService {
             history_flush_time,
             should_seed_summary_context,
             seeded_profile_snapshot,
-            last_archive_summary.as_deref(),
         );
         let (event_activate_flags, _activated_contacts) = handle_remote_im_activations(
             state,
@@ -68,20 +66,6 @@ impl ConversationService {
     }
 }
 
-fn scheduler_last_archive_summary_cached(state: &AppState) -> Result<Option<String>, String> {
-    let chat_index = state_read_chat_index_cached(state)?;
-    Ok(chat_index
-        .conversations
-        .iter()
-        .rev()
-        .filter(|item| !item.summary.trim().is_empty())
-        .filter_map(|item| state_read_conversation_cached(state, item.id.as_str()).ok())
-        .find(|conversation| {
-            !conversation_is_delegate(&conversation) && !conversation.summary.trim().is_empty()
-        })
-        .map(|conversation| conversation.summary))
-}
-
 fn write_persisted_message_batch(
     service: &ConversationService,
     state: &AppState,
@@ -92,7 +76,6 @@ fn write_persisted_message_batch(
     history_flush_time: &str,
     should_seed_summary_context: bool,
     seeded_profile_snapshot: Option<&str>,
-    last_archive_summary: Option<&str>,
 ) -> Vec<ChatMessage> {
     let mut persisted_batch_messages = Vec::<ChatMessage>::new();
     let has_summary_context = conversation
@@ -110,7 +93,6 @@ fn write_persisted_message_batch(
             }
         }
         let summary_message = build_initial_summary_context_message(
-            last_archive_summary,
             Some(conversation.user_profile_snapshot.as_str()),
             Some(&conversation.current_todos),
             None,

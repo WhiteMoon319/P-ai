@@ -300,11 +300,11 @@ fn memory_store_list_memories(data_path: &PathBuf) -> Result<Vec<MemoryEntry>, S
             row.map_err(|err| format!("Read memory row failed: {err}"))?;
         let mut tag_stmt = conn
             .prepare(
-                "SELECT t.name
+            "SELECT t.name
                  FROM memory_tag_rel r
                  JOIN global_tag t ON t.id=r.tag_id
                  WHERE r.memory_id=?1
-                 ORDER BY t.name ASC",
+                 ORDER BY r.rowid ASC",
             )
             .map_err(|err| format!("Prepare list tags failed: {err}"))?;
         let tags_iter = tag_stmt
@@ -381,11 +381,11 @@ fn memory_store_list_memories_by_ids(
             row.map_err(|err| format!("Read memory row by ids failed: {err}"))?;
         let mut tag_stmt = conn
             .prepare(
-                "SELECT t.name
+            "SELECT t.name
                  FROM memory_tag_rel r
                  JOIN global_tag t ON t.id=r.tag_id
                  WHERE r.memory_id=?1
-                 ORDER BY t.name ASC",
+                 ORDER BY r.rowid ASC",
             )
             .map_err(|err| format!("Prepare list tags by ids failed: {err}"))?;
         let tags_iter = tag_stmt

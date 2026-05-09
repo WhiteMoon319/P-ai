@@ -411,8 +411,8 @@
             })
             .expect("compaction text");
 
-        assert!(text.contains("当前会话标题："));
-        assert!(text.contains("当前标题"));
+        assert!(!text.contains("当前会话标题："));
+        assert!(!text.contains("当前标题"));
         assert!(text.contains("用户画像："));
         assert!(text.contains("摘要说明："));
         assert!(text.contains("摘要正文："));

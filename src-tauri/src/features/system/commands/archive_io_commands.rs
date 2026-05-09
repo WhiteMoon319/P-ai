@@ -337,12 +337,6 @@ fn export_archive_to_file(
 
     let archive = state_read_conversation_cached(&state, input.archive_id.trim())
         .map_err(|err| format!("读取归档会话失败，archive_id={}，error={}", input.archive_id.trim(), err))?;
-    if archive.summary.trim().is_empty() {
-        return Err(format!(
-            "归档摘要为空，无法导出，archive_id={}",
-            input.archive_id.trim()
-        ));
-    }
     let mut archive = conversation_to_archive(&archive);
     if export_format == "json" {
         materialize_chat_message_parts_from_media_refs(
@@ -407,5 +401,4 @@ fn import_archives_from_json(
         selected_archive_id: result.selected_archive_id,
     })
 }
-
 

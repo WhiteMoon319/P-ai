@@ -395,7 +395,6 @@ fn build_branch_conversation_record_from_selection(
             .push(clone_chat_message_for_copied_conversation(message));
     } else {
         conversation.messages.push(build_initial_summary_context_message(
-            None,
             user_profile_snapshot.as_deref(),
             Some(&conversation.current_todos),
             None,
@@ -2120,7 +2119,7 @@ mod unarchived_conversations_tests {
         let mut source = build_test_conversation();
         source.messages.insert(
             0,
-            build_initial_summary_context_message(Some("历史摘要"), None, None, None),
+            build_initial_summary_context_message(None, None, None),
         );
         let (selected, first_selected_ordinal) = collect_selected_messages_for_branch(
             &source,

@@ -490,7 +490,7 @@ fn build_archive_replacement_conversation(
     agents: &[AgentProfile],
     assistant_department_agent_id: &str,
     selected_api: &ApiConfig,
-    source: &Conversation,
+    _source: &Conversation,
 ) -> Result<Conversation, String> {
     let mut conversation = build_conversation_record(
         &selected_api.id,
@@ -519,7 +519,6 @@ fn build_archive_replacement_conversation(
         conversation.user_profile_snapshot = snapshot;
     }
     let summary_message = build_initial_summary_context_message(
-        Some(source.summary.as_str()),
         option_str_or_none(conversation.user_profile_snapshot.as_str()),
         Some(&conversation.current_todos),
         None,

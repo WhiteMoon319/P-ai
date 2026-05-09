@@ -44,37 +44,8 @@ struct AppliedArchiveMemoryStats {
     skipped_profile_memories: usize,
 }
 
-fn archive_profile_tag_contains_forbidden_identifier(tag: &str) -> bool {
-    tag.chars().any(|ch| ch.is_ascii_digit()) || tag.contains('@')
-}
-
-fn archive_profile_draft_user_id(tags: &[String]) -> Option<String> {
-    tags.iter().find_map(|tag| {
-        tag.strip_prefix("user_id:")
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned)
-    })
-}
-
-fn archive_profile_draft_has_attr(tags: &[String]) -> bool {
-    tags.iter().any(|tag| {
-        tag.strip_prefix("profile_attr:")
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .is_some()
-    })
-}
-
 fn archive_memory_draft_is_profile_candidate(tags: &[String]) -> bool {
-    tags.iter().any(|tag| {
-        tag == "profile"
-            || tag
-                .get(..8)
-                .map(|prefix| prefix.eq_ignore_ascii_case("user_id:"))
-                .unwrap_or(false)
-            || tag.starts_with("profile_attr:")
-    })
+    tags.iter().any(|tag| memory_tag_is_user_profile_category_tag(tag))
 }
 
 fn prepare_archive_memory_draft(
@@ -91,17 +62,7 @@ fn prepare_archive_memory_draft(
     }
     let is_profile_candidate = archive_memory_draft_is_profile_candidate(&tags);
     if is_profile_candidate {
-        let user_id = archive_profile_draft_user_id(&tags);
-        let has_profile = tags.iter().any(|tag| tag == "profile");
-        let has_profile_attr = archive_profile_draft_has_attr(&tags);
-        let has_invalid_semantic_tag = tags.iter().any(|tag| {
-            !tag.starts_with("user_id:") && archive_profile_tag_contains_forbidden_identifier(tag)
-        });
-        if !has_profile
-            || user_id.is_none()
-            || !has_profile_attr
-            || !archive_profile_memory_type_allowed(&draft.memory_type)
-            || has_invalid_semantic_tag
+        if tags.len() < 3 || !archive_profile_memory_type_allowed(&draft.memory_type)
         {
             return PreparedArchiveMemoryDraft {
                 input: None,
@@ -422,27 +383,6 @@ struct ForceCompactionPreviewResult {
 
 const SHORT_CONVERSATION_DELETE_THRESHOLD: usize = 3;
 
-fn archive_report_scope_label(source: &Conversation) -> &'static str {
-    let has_valid_fork_cursor = source
-        .fork_message_cursor
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .and_then(|cursor| {
-            source
-                .messages
-                .iter()
-                .any(|message| message.id.trim() == cursor)
-                .then_some(())
-        })
-        .is_some();
-    if has_valid_fork_cursor {
-        "post_fork_discussion"
-    } else {
-        "full_conversation"
-    }
-}
-
 fn build_archive_reporting_conversation(
     source: &Conversation,
 ) -> std::borrow::Cow<'_, Conversation> {
@@ -469,82 +409,6 @@ fn build_archive_reporting_conversation(
         .cloned()
         .collect();
     std::borrow::Cow::Owned(reporting)
-}
-
-fn build_archive_delivery_message(
-    source: &Conversation,
-    archive_id: &str,
-    summary: &str,
-) -> ChatMessage {
-    let source_title = if !source.title.trim().is_empty() {
-        source.title.trim().to_string()
-    } else if let Some(summary_title) = conversation_latest_summary_title(source) {
-        summary_title
-    } else {
-        conversation_preview_title(source)
-    };
-    let text = format!(
-        "[归档汇报]\n来源会话：{}\n\n{}",
-        clean_text(source_title.trim()),
-        clean_text(summary.trim())
-    );
-    ChatMessage {
-        id: Uuid::new_v4().to_string(),
-        role: "assistant".to_string(),
-        created_at: now_iso(),
-        speaker_agent_id: Some(SYSTEM_PERSONA_ID.to_string()),
-        parts: vec![MessagePart::Text { text }],
-        extra_text_blocks: Vec::new(),
-        provider_meta: Some(serde_json::json!({
-            "message_meta": {
-                "kind": "archive_report_delivery",
-                "scene": "archive_delivery",
-            },
-            "archiveReport": {
-                "archiveId": archive_id,
-                "sourceConversationId": source.id,
-                "scope": archive_report_scope_label(source),
-            }
-        })),
-        tool_call: None,
-        mcp_call: None,
-    }
-}
-
-fn append_archive_delivery_message_to_conversation(
-    state: &AppState,
-    target_conversation_id: &str,
-    source: &Conversation,
-    archive_id: &str,
-    summary: &str,
-) -> Result<(), String> {
-    let target_conversation_id = target_conversation_id.trim();
-    if target_conversation_id.is_empty() {
-        return Ok(());
-    }
-    if target_conversation_id == source.id.trim() {
-        return Err("归档投放目标不能与来源会话相同".to_string());
-    }
-    let message = build_archive_delivery_message(source, archive_id, summary);
-    let mut target = state_read_conversation_cached(state, target_conversation_id)?
-        .clone();
-    if !target.summary.trim().is_empty() || !conversation_visible_in_foreground_lists(&target) {
-        return Err(format!(
-            "归档投放目标会话不符合投放条件：{target_conversation_id}"
-        ));
-    }
-    target.messages.push(message.clone());
-    target.updated_at = message.created_at.clone();
-    target.last_assistant_at = Some(message.created_at.clone());
-    state_schedule_conversation_persist(state, &target, true)?;
-    emit_conversation_message_appended_event(state, target_conversation_id, &message);
-    if let Err(err) = emit_unarchived_conversation_overview_updated_from_state(state) {
-        runtime_log_warn(format!(
-            "[归档投放] 警告，任务=emit_unarchived_overview_after_delivery，target_conversation_id={}，error={}",
-            target_conversation_id, err
-        ));
-    }
-    Ok(())
 }
 
 fn resolve_archive_target_conversation(
@@ -633,12 +497,6 @@ async fn summarize_archived_conversation_with_model_v2(
     _recall_table: &[String],
 ) -> Result<MemoryCurationDraft, String> {
     let app_config = state_read_config_cached(state)?;
-    let current_user_profile = if conversation_is_local_normal_chat(source_conversation) {
-        build_user_profile_memory_board_for_user(&state.data_path, agent, "0")?
-            .unwrap_or_else(|| "（无）".to_string())
-    } else {
-        "（无）".to_string()
-    };
     let agents = state_read_agents_cached(state)?;
     let mut prepared = build_prepared_prompt_for_mode(
         PromptBuildMode::SummaryContext,
@@ -657,9 +515,6 @@ async fn summarize_archived_conversation_with_model_v2(
             latest_user_intent: Some(LatestUserPayloadIntent::SummaryContext {
                 scene,
                 user_alias: user_alias.to_string(),
-                current_user_profile: current_user_profile.clone(),
-                include_todo_block: build_summary_context_todo_block(source_conversation)
-                    .is_some(),
             }),
             latest_images: Some(Vec::new()),
             latest_audios: Some(Vec::new()),
@@ -696,15 +551,27 @@ async fn summarize_archived_conversation_with_model_v2(
         .filter(|item| !item.is_empty())
         .take(7)
         .collect::<Vec<_>>();
-    let summary = compose_summary_context_summary(&parsed.summary, &open_loops, scene);
-    if summary.is_empty() {
+    let summary = if matches!(scene, SummaryContextScene::Archive) {
+        String::new()
+    } else {
+        compose_summary_context_summary(&parsed.summary, &open_loops, scene)
+    };
+    if !matches!(scene, SummaryContextScene::Archive) && summary.is_empty() {
         return Err("SummaryContext summary is empty".to_string());
     }
     let id_alias_map = memory_curation_id_alias_map(memories);
     Ok(MemoryCurationDraft {
-        title: normalize_summary_context_title(&parsed.title).unwrap_or_default(),
+        title: if matches!(scene, SummaryContextScene::Archive) {
+            String::new()
+        } else {
+            normalize_summary_context_title(&parsed.title).unwrap_or_default()
+        },
         summary,
-        open_loops,
+        open_loops: if matches!(scene, SummaryContextScene::Archive) {
+            Vec::new()
+        } else {
+            open_loops
+        },
         useful_memory_ids: resolve_memory_curation_ids(&parsed.useful_memory_ids, &id_alias_map),
         memory_actions: resolve_memory_action_drafts(
             &parsed.memory_actions.into_iter().take(7).collect::<Vec<_>>(),
@@ -719,81 +586,51 @@ enum SummaryContextScene {
     Archive,
 }
 
-fn build_summary_context_requirement_block(scene: SummaryContextScene) -> String {
-    let body = match scene {
+fn summary_context_prompt_template(scene: SummaryContextScene) -> &'static str {
+    match scene {
         SummaryContextScene::Compaction => {
-            "你正在执行一次“上下文检查点压缩（Context Checkpoint Compaction）”。\n\
-             请为另一个将继续当前任务的语言模型生成一份交接摘要。\n\
-             你的工具都已经被禁用，你只能生成 JSON 完成任务。\n\
-             title 表示“当前会话标题”，应概括本轮主题，尽量控制在 10 个汉字以内。\n\
-             summary 请直接按下面顺序自然书写，不要额外发明字段名：\n\
-             第一，先写当前进展，以及已经做出的关键决策。\n\
-             第二，再写重要上下文、约束条件、用户偏好。\n\
-             第三，补充后续工作需要回看的文件片段、网页片段、日志片段或引用材料。\n\
-             - 只有在后续续跑明显还会用到时，才补充这部分\n\
-             - 优先保留最近刚读到、后续还要回看的片段\n\
-             - 每条尽量包含可回看的定位信息（如文件路径、行号、页面名、日志来源）\n\
-             - 每条都尽量附上短原文摘录，避免只写意译；若定位信息已足够，则摘录保持最短必要长度\n\
-             - 推荐格式：- `定位信息` 为什么重要\\n  原文：摘录\n\
-             openLoops 单独填写剩余待办、未闭环事项与清晰下一步；没有则输出 []。\n\
-             请保持内容简洁、结构化，并专注于帮助下一个语言模型无缝继续当前工作。"
-                .to_string()
+            include_str!("../../../../resources/prompts/summary-context.md")
         }
         SummaryContextScene::Archive => {
-            "你现在正在执行一次正式归档。\n\
-             你的工具都已经被禁用，你只能生成 JSON 完成任务。\n\
-             title 表示“当前会话标题”，应概括本轮主题，尽量控制在 10 个汉字以内。\n\
-             请不要复述完整过程，而是输出一份面向后续回看的结论汇报，核心回答：我们最终得出了什么结论。\n\
-             summary 必须包含：\n\
-             - 本轮最终结论与明确产出\n\
-             - 已确认的关键决定、限制条件与责任分工\n\
-             如果仍有确实影响后续的遗留项，请写入 openLoops；否则 openLoops 保持 []。\n\
-             请以可直接投放、可直接回看的完整汇报口吻输出，重点是结论而不是过程流水账。"
-                .to_string()
+            include_str!("../../../../resources/prompts/archive-reflection.md")
         }
-    };
-    prompt_xml_block("summary_requirement", body)
+    }
+}
+
+fn extract_prompt_xml_block(raw: &str, tag: &str) -> Option<String> {
+    let open = format!("<{}>", tag);
+    let close = format!("</{}>", tag);
+    let start = raw.find(&open)?;
+    let body_start = start + open.len();
+    let end = raw[body_start..].find(&close)? + body_start;
+    Some(raw[start..end + close.len()].trim().to_string())
+}
+
+fn build_summary_context_requirement_block(scene: SummaryContextScene) -> String {
+    extract_prompt_xml_block(summary_context_prompt_template(scene), "summary_requirement")
+        .unwrap_or_default()
 }
 
 fn build_summary_context_memory_block(
+    scene: SummaryContextScene,
     agent: &AgentProfile,
     user_alias: &str,
-    current_user_profile: &str,
 ) -> String {
-    let instruction = build_memory_generation_instruction(agent, user_alias);
-    let current_user_profile = current_user_profile.trim();
-    let profile_block = if current_user_profile.is_empty() || current_user_profile == "（无）" {
-        String::new()
-    } else {
-        format!("\n\n【当前完整用户画像（带ID）】\n{}", current_user_profile)
-    };
-    prompt_xml_block(
-        "memory_curation_context",
-        format!("{}{}", instruction, profile_block),
-    )
+    extract_prompt_xml_block(summary_context_prompt_template(scene), "memory_curation_context")
+        .unwrap_or_default()
+        .replace("{{assistant_name}}", agent.name.trim())
+        .replace("{{user_name}}", user_alias.trim())
+        .replace("{{memory_generation_rules}}", memory_generation_rules_body())
 }
 
 fn build_summary_context_json_contract_block(scene: SummaryContextScene) -> String {
-    let summary_rule = match scene {
-        SummaryContextScene::Compaction => {
-            "summary 表示本次上下文检查点压缩的交接摘要，必须方便下一个模型继续当前任务直接使用；剩余待办、下一步与未闭环事项请写入 openLoops，不要再在 summary 里单独造字段。"
-        }
-        SummaryContextScene::Archive => {
-            "summary 表示本次会话归档结论汇报，必须能够让后续阅读者直接知道这轮最终得出了什么结论；若仍有确实影响后续的遗留项，再写入 openLoops，否则保持 []."
-        }
+    let json_example = match scene {
+        SummaryContextScene::Compaction => memory_curation_example_output_block(),
+        SummaryContextScene::Archive => archive_reflection_example_output_block(),
     };
-    prompt_xml_block(
-        "json_contract",
-        format!(
-            "你必须输出合法 JSON，且只能包含以下五个字段：title/summary/openLoops/usefulMemoryIds/memoryActions。\n\
-             不得输出 markdown、代码块、解释性前后缀。\n\
-             title 必须是当前会话标题，只输出一句短标题，尽量控制在 10 个汉字以内，本地最多接受 20 个字。\n\
-             {}\n\
-             下面是唯一合法的 JSON 形状示例：\n{}",
-            summary_rule,
-            memory_curation_example_output_block()
-        ),
-    )
+    extract_prompt_xml_block(summary_context_prompt_template(scene), "json_contract")
+        .unwrap_or_default()
+        .replace("{{json_example}}", json_example)
 }
 
 fn archive_pipeline_message_plain_text(message: &ChatMessage) -> String {
@@ -813,32 +650,6 @@ fn archive_pipeline_message_plain_text(message: &ChatMessage) -> String {
         }
     }
     clean_text(blocks.join("\n").trim())
-}
-
-fn archive_pipeline_recent_user_assistant_messages(
-    source: &Conversation,
-    max_messages: usize,
-) -> Vec<(String, String)> {
-    let mut recent = Vec::<(String, String)>::new();
-    for message in source.messages.iter().rev() {
-        let role = message.role.trim();
-        if role != "user" && role != "assistant" {
-            continue;
-        }
-        if archive_pipeline_is_context_compaction_message(message) {
-            continue;
-        }
-        let text = archive_pipeline_message_plain_text(message);
-        if text.is_empty() {
-            continue;
-        }
-        recent.push((role.to_string(), text));
-        if recent.len() >= max_messages {
-            break;
-        }
-    }
-    recent.reverse();
-    recent
 }
 
 fn archive_pipeline_recent_user_assistant_messages_by_token_budget(
@@ -976,30 +787,13 @@ fn compose_summary_context_summary(
         .map(|(idx, item)| format!("{}. {}", idx + 1, item))
         .collect::<Vec<_>>()
         .join("\n");
-    let section_title = match scene {
-        SummaryContextScene::Compaction => "未完事项",
-        SummaryContextScene::Archive => "遗留事项",
-    };
+    let _ = scene;
+    let section_title = "未完事项";
     if summary.is_empty() {
         format!("{}：\n{}", section_title, open_loop_lines)
     } else {
         format!("{}\n\n{}：\n{}", summary, section_title, open_loop_lines)
     }
-}
-
-fn build_archive_summary_from_last_three_rounds(source: &Conversation) -> String {
-    let recent = archive_pipeline_recent_user_assistant_messages(source, 6);
-    if recent.is_empty() {
-        return "归档降级摘要：最近对话暂无可用正文。".to_string();
-    }
-    let mut lines = Vec::<String>::new();
-    lines.push("归档降级摘要（最后三轮正文对话）：".to_string());
-    for (idx, (role, text)) in recent.iter().enumerate() {
-        let speaker = if role == "user" { "用户" } else { "助理" };
-        let snippet = text.chars().take(240).collect::<String>();
-        lines.push(format!("{}. {}：{}", idx + 1, speaker, snippet));
-    }
-    lines.join("\n")
 }
 
 fn emit_archive_history_flushed_event(
@@ -1176,18 +970,14 @@ fn build_compaction_message(
         .filter(|value| !value.is_empty())
         .map(normalize_multiline_block)
         .unwrap_or_else(|| "（暂无保留对话）".to_string());
-    let normalized_title = title.and_then(normalize_summary_context_title);
-    let title_text = normalized_title
-        .clone()
-        .unwrap_or_else(|| "（当前会话标题暂未生成）".to_string());
     let text = format!(
-        "[上下文整理]\n\n当前会话标题：\n{}\n\n用户画像：\n{}\n\n摘要说明：\n{}\n\n摘要正文：\n{}\n\n保留对话：\n{}",
-        title_text,
+        "[上下文整理]\n\n用户画像：\n{}\n\n摘要说明：\n{}\n\n摘要正文：\n{}\n\n保留对话：\n{}",
         user_profile_block,
         clean_text(summary_note.trim()),
         clean_compaction_summary_text(summary),
         preserved_dialogue_text
     );
+    let normalized_title = title.and_then(normalize_summary_context_title);
     ChatMessage {
         id: Uuid::new_v4().to_string(),
         role: "user".to_string(),
@@ -1232,27 +1022,48 @@ fn clean_compaction_summary_text(input: &str) -> String {
 }
 
 fn build_initial_summary_context_message(
-    last_archive_summary: Option<&str>,
     user_profile_snapshot: Option<&str>,
     current_todos: Option<&[ConversationTodoItem]>,
     title: Option<&str>,
 ) -> ChatMessage {
-    let summary = last_archive_summary
+    let now = now_iso();
+    let profile_snapshot = user_profile_snapshot
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .unwrap_or("（暂无历史归档摘要）");
-    let mut message =
-        build_compaction_message(summary, title, "", user_profile_snapshot, current_todos, None);
+        .map(clean_text)
+        .unwrap_or_else(|| "（暂无用户画像）".to_string());
+    let todo_snapshot = current_todos
+        .and_then(todo_markdown_block)
+        .map(|value| clean_text(&value))
+        .unwrap_or_default();
+    let user_profile_block = if todo_snapshot.is_empty() {
+        profile_snapshot
+    } else {
+        format!("{}\n\n{}", profile_snapshot, todo_snapshot)
+    };
     let normalized_title = title.and_then(normalize_summary_context_title);
-    message.provider_meta = Some(serde_json::json!({
-        "message_meta": {
-            "kind": "summary_context_seed",
-            "scene": "seed",
-            "schemaVersion": SUMMARY_CONTEXT_MESSAGE_SCHEMA_VERSION,
-            "title": normalized_title,
-        }
-    }));
-    message
+    let text = format!(
+        "[上下文整理]\n\n用户画像：\n{}\n\n摘要说明：\n这是新会话的初始背景，不包含历史对话摘要。",
+        user_profile_block
+    );
+    ChatMessage {
+        id: Uuid::new_v4().to_string(),
+        role: "user".to_string(),
+        created_at: now,
+        speaker_agent_id: Some(SYSTEM_PERSONA_ID.to_string()),
+        parts: vec![MessagePart::Text { text }],
+        extra_text_blocks: Vec::new(),
+        provider_meta: Some(serde_json::json!({
+            "message_meta": {
+                "kind": "summary_context_seed",
+                "scene": "seed",
+                "schemaVersion": SUMMARY_CONTEXT_MESSAGE_SCHEMA_VERSION,
+                "title": normalized_title,
+            }
+        })),
+        tool_call: None,
+        mcp_call: None,
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1340,17 +1151,22 @@ async fn summarize_archive_summary_with_fallback(
     )
     .await
     {
-        Ok(draft) => (draft, None),
+        Ok(mut draft) => {
+            draft.title.clear();
+            draft.summary.clear();
+            draft.open_loops.clear();
+            (draft, None)
+        }
         Err(err) => (
             MemoryCurationDraft {
                 title: String::new(),
-                summary: build_archive_summary_from_last_three_rounds(reporting_source),
+                summary: String::new(),
                 open_loops: Vec::new(),
                 useful_memory_ids: Vec::new(),
                 memory_actions: Vec::new(),
             },
             Some(format!(
-                "SummaryContext 归档失败，已使用最后三轮正文对话降级摘要：{}",
+                "SummaryContext 归档反思失败，已跳过本轮记忆整理：{}",
                 err
             )),
         ),
@@ -1449,6 +1265,15 @@ async fn force_archive_current(
     input: ForceArchiveCurrentInput,
     state: State<'_, AppState>,
 ) -> Result<ForceArchiveResult, String> {
+    if input
+        .target_conversation_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_some()
+    {
+        return Err("归档目标投放已停用：归档只保留原会话正文，并在归档反思中处理记忆。".to_string());
+    }
     let (selected_api, resolved_api, source, effective_agent_id) =
         resolve_archive_target_conversation(state.inner(), &input.session)?;
     let runtime = state_read_runtime_state_cached(state.inner())?;
@@ -1474,12 +1299,6 @@ async fn force_archive_current(
     let source_cloned = source.clone();
     let effective_agent_id_cloned = effective_agent_id.clone();
     let active_conversation_id_for_background = active_conversation_id.clone();
-    let target_conversation_id = input
-        .target_conversation_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned);
     tauri::async_runtime::spawn(async move {
         let panic_safe_task = std::panic::AssertUnwindSafe(async {
             let result = run_archive_pipeline(
@@ -1489,7 +1308,7 @@ async fn force_archive_current(
                 &source_cloned,
                 &effective_agent_id_cloned,
                 Some(active_conversation_id_for_background.as_str()),
-                target_conversation_id.as_deref(),
+                None,
                 "manual_force_archive",
                 "ARCHIVE-FORCE",
             )
@@ -1638,7 +1457,7 @@ pub(crate) async fn run_archive_pipeline(
     source: &Conversation,
     effective_agent_id: &str,
     prepared_active_conversation_id: Option<&str>,
-    target_conversation_id: Option<&str>,
+    _target_conversation_id: Option<&str>,
     archive_reason: &str,
     trace_tag: &str,
 ) -> Result<ForceArchiveResult, String> {
@@ -1667,7 +1486,7 @@ pub(crate) async fn run_archive_pipeline(
         source,
         effective_agent_id,
         prepared_active_conversation_id,
-        target_conversation_id,
+        None,
         archive_reason,
         trace_tag,
         started_at,
@@ -1933,7 +1752,7 @@ async fn run_archive_pipeline_inner(
     source: &Conversation,
     _effective_agent_id: &str,
     prepared_active_conversation_id: Option<&str>,
-    target_conversation_id: Option<&str>,
+    _target_conversation_id: Option<&str>,
     archive_reason: &str,
     trace_tag: &str,
     started_at: std::time::Instant,
@@ -2056,7 +1875,7 @@ async fn run_archive_pipeline_inner(
     );
 
     let reporting_source = build_archive_reporting_conversation(source);
-    let (summary_draft, archive_warning_main) = summarize_archive_summary_with_fallback(
+    let (summary_draft, archive_warning) = summarize_archive_summary_with_fallback(
         state,
         resolved_api,
         selected_api,
@@ -2066,7 +1885,6 @@ async fn run_archive_pipeline_inner(
         &memories,
     )
     .await;
-    let mut archive_warning = archive_warning_main;
     let deduped_recall = archive_pipeline_dedup_recall_table(&source.memory_recall_table);
     let applied_report = apply_summary_context_result(
         &state.data_path,
@@ -2083,16 +1901,15 @@ async fn run_archive_pipeline_inner(
     let previous_status = archived_conversation.status.clone();
     let now = now_iso();
     archived_conversation.status = "archived".to_string();
-    archived_conversation.summary = summary_draft.summary.clone();
+    archived_conversation.summary.clear();
     archived_conversation.archived_at = Some(now.clone());
     archived_conversation.updated_at = now;
     let archive_id = archived_conversation.id.clone();
     eprintln!(
-        "[会话] 已归档: conversation_id={}, previous_status={}, reason=\"{}\", summary=\"{}\"",
+        "[会话] 已归档: conversation_id={}, previous_status={}, reason=\"{}\"",
         archived_conversation.id,
         previous_status,
-        archive_reason,
-        summary_draft.summary
+        archive_reason
     );
     clear_screenshot_artifact_cache();
     if !is_main_conversation {
@@ -2143,31 +1960,6 @@ async fn run_archive_pipeline_inner(
         archive_reason,
     );
 
-    if let Some(target_conversation_id) = target_conversation_id
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        if let Err(err) = append_archive_delivery_message_to_conversation(
-            state,
-            target_conversation_id,
-            source,
-            &archive_id,
-            &summary_draft.summary,
-        ) {
-            runtime_log_warn(format!(
-                "[归档投放] 警告，任务=append_archive_delivery_message，source_conversation_id={}，target_conversation_id={}，archive_id={}，error={}",
-                source.id, target_conversation_id, archive_id, err
-            ));
-            let next_warning = format!("归档汇报投放失败：{}", err);
-            archive_warning = Some(match archive_warning {
-                Some(existing) if !existing.trim().is_empty() => {
-                    format!("{}\n{}", existing, next_warning)
-                }
-                _ => next_warning,
-            });
-        }
-    }
-
     eprintln!(
         "[SummaryContext] 完成，场景=archive，trace_id={}，conversation_id={}，merged_memories={}，merged_groups={}，profile_applied={}，profile_skipped={}，useful_accept={}，penalized={}，natural_decay={}",
         trace_id,
@@ -2186,7 +1978,7 @@ async fn run_archive_pipeline_inner(
         archive_id: Some(archive_id),
         active_conversation_id: Some(active_conversation_id),
         compaction_message: None,
-        summary: summary_draft.summary,
+        summary: String::new(),
         merged_memories: applied_report.merged_memories,
         warning: archive_warning,
         reason_code: None,
@@ -2263,7 +2055,6 @@ mod archive_pipeline_tests {
             .map(|message| message.id.as_str())
             .collect::<Vec<_>>();
         assert_eq!(ids, vec!["m3", "m4"]);
-        assert_eq!(archive_report_scope_label(&source), "post_fork_discussion");
     }
 
     #[test]

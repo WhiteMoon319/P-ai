@@ -509,9 +509,7 @@ fn parse_angel_memory_payload(payload: &str) -> Result<Vec<AngelNormalizedMemory
             continue;
         }
         let internal_type = memory_angel_type_to_internal(&item.memory_type)?;
-        let mut tags = tags_by_memory.remove(item.id.trim()).unwrap_or_default();
-        tags.sort();
-        tags.dedup();
+        let tags = tags_by_memory.remove(item.id.trim()).unwrap_or_default();
         let normalized_tags = normalize_memory_keywords(&tags);
         if normalized_tags.is_empty() {
             runtime_log_info(format!(

@@ -560,11 +560,13 @@ impl ConversationPromptService {
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty()),
         );
-        if let Some(profile_block) = user_profile_memory_block
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            department_blocks.push(profile_block.to_string());
+        if mode_label.trim() != "summary_context" {
+            if let Some(profile_block) = user_profile_memory_block
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                department_blocks.push(profile_block.to_string());
+            }
         }
         let department_prompt = flatten_system_prompt_blocks(&department_blocks);
         let environment_prompt = flatten_system_prompt_blocks(
@@ -821,23 +823,21 @@ impl ConversationPromptService {
             LatestUserPayloadIntent::SummaryContext {
                 scene,
                 user_alias,
-                current_user_profile,
-                include_todo_block,
             } => {
-                let mut extra_blocks = vec![build_summary_context_json_contract_block(*scene)];
-                if *include_todo_block {
-                    if let Some(todo_block) = build_summary_context_todo_block(conversation) {
-                        extra_blocks.push(todo_block);
-                    }
-                }
-                (
+                let mut prompt_blocks = vec![
                     build_summary_context_requirement_block(*scene),
-                    build_summary_context_memory_block(
-                        agent,
-                        user_alias,
-                        current_user_profile,
-                    ),
-                    extra_blocks,
+                    build_summary_context_memory_block(*scene, agent, user_alias),
+                ];
+                prompt_blocks.push(build_summary_context_json_contract_block(*scene));
+                (
+                    prompt_blocks
+                        .into_iter()
+                        .map(|block| block.trim().to_string())
+                        .filter(|block| !block.is_empty())
+                        .collect::<Vec<_>>()
+                        .join("\n\n"),
+                    String::new(),
+                    Vec::new(),
                     LatestUserExtraBlocksMode::ReplaceIfNonEmpty,
                 )
             }
@@ -1143,6 +1143,9 @@ impl ConversationPromptService {
                     message.images.clear();
                     message.audios.clear();
                 }
+                prepared.latest_user_meta_text.clear();
+                prepared.latest_user_extra_text.clear();
+                prepared.latest_user_extra_blocks.clear();
                 prepared.latest_images.clear();
                 prepared.latest_audios.clear();
                 let overrides = chat_overrides.unwrap_or_default();

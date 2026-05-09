@@ -108,6 +108,11 @@ pub(crate) fn ensure_workspace_skills_layout_at_root(workspace_root: &Path) -> R
         "code-review",
         include_str!("../../../resources/preset-skills/code-review/SKILL.md"),
     )?;
+    sync_workspace_preset_skill(
+        &skills_root,
+        "memory-generation",
+        include_str!("../../../resources/preset-skills/memory-generation/SKILL.md"),
+    )?;
 
     Ok(())
 }

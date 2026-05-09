@@ -332,16 +332,9 @@ fn build_prompt_prepare_conversation_before(
 }
 
 fn prompt_prepare_last_archive_summary(
-    data: &AppData,
-    conversation_before: &Conversation,
-    is_runtime_conversation: bool,
+    _data: &AppData,
+    _conversation_before: &Conversation,
+    _is_runtime_conversation: bool,
 ) -> Option<String> {
-    if is_runtime_conversation || conversation_is_delegate(conversation_before) {
-        return None;
-    }
-    data.conversations
-        .iter()
-        .rev()
-        .find(|conversation| !conversation_is_delegate(conversation) && !conversation.summary.trim().is_empty())
-        .map(|conversation| conversation.summary.clone())
+    None
 }

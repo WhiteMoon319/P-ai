@@ -308,9 +308,9 @@ mod memory_store_tests {
         let drafts = vec![
             MemoryDraftInput {
                 memory_type: "knowledge".to_string(),
-                judgment: "我最喜欢的角色是遥酱，她的语气很温柔。".to_string(),
+                judgment: "我最喜欢的角色是测试角色，她的语气很温柔。".to_string(),
                 reasoning: "".to_string(),
-                tags: vec!["遥酱".to_string(), "偏好".to_string()],
+                tags: vec!["测试角色".to_string(), "偏好".to_string()],
                 owner_agent_id: None,
             },
             MemoryDraftInput {
@@ -325,7 +325,7 @@ mod memory_store_tests {
         assert_eq!(total, 2);
         assert!(saved.iter().all(|s| s.saved));
 
-        let hits = memory_store_search_fts_bm25(&data_path, "遥酱", 10).expect("search");
+        let hits = memory_store_search_fts_bm25(&data_path, "测试角色", 10).expect("search");
         assert!(
             !hits.is_empty(),
             "expected bm25 hit for exact chinese fragment, got empty"
@@ -439,38 +439,44 @@ mod memory_store_tests {
     }
 
     #[test]
-    fn profile_memory_links_should_store_and_filter_visible_types() {
-        let data_path = temp_data_path("profile_memory_links");
+    fn profile_memory_lookup_should_use_user_id_and_chinese_attribute_tags() {
+        let data_path = temp_data_path("profile_memory_lookup");
         let (saved, _) = memory_store_upsert_drafts(
             &data_path,
             &vec![
                 MemoryDraftInput {
                     memory_type: "knowledge".to_string(),
-                    judgment: "用户常驻深圳".to_string(),
+                    judgment: "本地用户（0）常驻深圳".to_string(),
                     reasoning: "明确说明".to_string(),
-                    tags: vec!["深圳".to_string(), "居住地".to_string()],
+                    tags: vec![
+                        "本地用户".to_string(),
+                        "0".to_string(),
+                        "事实属性".to_string(),
+                    ],
                     owner_agent_id: None,
                 },
                 MemoryDraftInput {
                     memory_type: "emotion".to_string(),
-                    judgment: "用户今天很开心".to_string(),
+                    judgment: "本地用户（0）今天很开心".to_string(),
                     reasoning: "语气积极".to_string(),
-                    tags: vec!["开心".to_string()],
+                    tags: vec![
+                        "本地用户".to_string(),
+                        "0".to_string(),
+                        "事实属性".to_string(),
+                    ],
+                    owner_agent_id: None,
+                },
+                MemoryDraftInput {
+                    memory_type: "knowledge".to_string(),
+                    judgment: "普通带人名记忆".to_string(),
+                    reasoning: "没有画像属性标签".to_string(),
+                    tags: vec!["本地用户".to_string(), "0".to_string()],
                     owner_agent_id: None,
                 },
             ],
         )
         .expect("seed profile memories");
         let knowledge_id = saved[0].id.clone().expect("knowledge id");
-        let emotion_id = saved[1].id.clone().expect("emotion id");
-
-        let linked = memory_store_upsert_profile_memory_links(
-            &data_path,
-            &vec![knowledge_id.clone(), emotion_id],
-            "auto",
-        )
-        .expect("link profile memories");
-        assert_eq!(linked, 2);
 
         let profile_memories = memory_store_list_profile_memories_visible_for_agent(
             &data_path,

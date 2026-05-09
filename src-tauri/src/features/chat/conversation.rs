@@ -423,7 +423,6 @@ fn conversation_ensure_summary_context_seed(conversation: &mut Conversation) -> 
         return false;
     }
     let mut summary_message = build_initial_summary_context_message(
-        None,
         if conversation.user_profile_snapshot.trim().is_empty() {
             None
         } else {
@@ -872,14 +871,7 @@ fn build_foreground_chat_conversation_record(
     if let Some(snapshot) = user_profile_snapshot.clone() {
         conversation.user_profile_snapshot = snapshot;
     }
-    let last_archive_summary = data
-        .conversations
-        .iter()
-        .rev()
-        .find(|item| !conversation_is_delegate(item) && !item.summary.trim().is_empty())
-        .map(|item| item.summary.as_str());
     let summary_message = build_initial_summary_context_message(
-        last_archive_summary,
         user_profile_snapshot.as_deref(),
         Some(&conversation.current_todos),
         None,

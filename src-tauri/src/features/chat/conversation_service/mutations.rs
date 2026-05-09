@@ -1239,7 +1239,7 @@ fn build_unarchived_conversation_record_from_runtime(
     data_path: &PathBuf,
     agents: &[AgentProfile],
     assistant_department_agent_id: &str,
-    last_archive_summary: Option<String>,
+    _last_archive_summary: Option<String>,
     api_config_id: &str,
     agent_id: &str,
     department_id: &str,
@@ -1276,7 +1276,6 @@ fn build_unarchived_conversation_record_from_runtime(
         conversation.user_profile_snapshot = snapshot;
     }
     let summary_message = build_initial_summary_context_message(
-        last_archive_summary.as_deref(),
         user_profile_snapshot.as_deref(),
         Some(&conversation.current_todos),
         None,
@@ -1369,7 +1368,6 @@ fn build_branch_conversation_record_from_selection_runtime(
             .push(clone_chat_message_for_copied_conversation(message));
     } else {
         conversation.messages.push(build_initial_summary_context_message(
-            None,
             user_profile_snapshot.as_deref(),
             Some(&conversation.current_todos),
             None,

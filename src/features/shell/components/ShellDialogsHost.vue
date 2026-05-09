@@ -253,7 +253,7 @@ function handleConfirmDeleteConversationFromArchiveDialog() {
         </div>
         <div class="mt-3 rounded-box border border-base-300 bg-base-200/40 px-3 py-3 text-sm">
           <div class="font-medium">归档</div>
-          <div class="mt-1 opacity-80">生成结论汇报并提炼记忆，保留为归档记录。</div>
+          <div class="mt-1 opacity-80">执行记忆反思并保留正文对话，不生成摘要。</div>
           <div class="mt-2 text-xs opacity-70">适合这段会话已经结束，准备沉淀为历史记录时使用。</div>
           <div
             v-if="forceArchivePreview?.archiveDisabledReason"

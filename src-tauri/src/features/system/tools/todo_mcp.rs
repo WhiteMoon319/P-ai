@@ -165,11 +165,6 @@ fn build_todo_guide_block() -> String {
     )
 }
 
-fn build_summary_context_todo_block(conversation: &Conversation) -> Option<String> {
-    todo_markdown_block(&conversation.current_todos)
-        .map(|block| prompt_xml_block("current todo list", block))
-}
-
 fn todo_target_conversation_id(session_id: &str) -> Result<String, String> {
     let (_, _, conversation_id) = delegate_parse_session_parts(session_id);
     conversation_id
@@ -227,5 +222,4 @@ fn conversation_todo_replace(
     conversation_service().persist_conversation_with_chat_index(state, &conversation)?;
     Ok(stored)
 }
-
 

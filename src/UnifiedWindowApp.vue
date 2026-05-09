@@ -2553,7 +2553,6 @@ async function handleConfirmForceArchiveAction() {
           agentId,
           conversationId,
         },
-        targetConversationId: null,
       },
     }).catch((error) => {
       console.error("[独立聊天窗口] 后台归档会话失败", error);

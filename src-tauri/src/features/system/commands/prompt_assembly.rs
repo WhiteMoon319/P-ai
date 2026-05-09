@@ -28,8 +28,6 @@ enum LatestUserPayloadIntent {
     SummaryContext {
         scene: SummaryContextScene,
         user_alias: String,
-        current_user_profile: String,
-        include_todo_block: bool,
     },
     Explicit {
         text: String,
@@ -159,6 +157,14 @@ fn render_user_profile_memory_block(
     }
 }
 
+fn render_user_profile_memory_context_block(memories: &[MemoryEntry]) -> Option<String> {
+    let recall_ids = memories
+        .iter()
+        .map(|memory| memory.id.clone())
+        .collect::<Vec<_>>();
+    build_memory_board_xml_from_recall_ids(memories, &recall_ids)
+}
+
 fn build_user_profile_snapshot_block(
     data_path: &PathBuf,
     agent: &AgentProfile,
@@ -180,11 +186,7 @@ fn build_user_profile_snapshot_block_for_user(
         agent.private_memory_enabled,
         limit,
     )?;
-    Ok(render_user_profile_memory_block(
-        &memories,
-        "user profile snapshot",
-        "以下内容是用户画像快照，不是本轮即时上下文。请把它们视为用户长期稳定背景。",
-    ))
+    Ok(render_user_profile_memory_context_block(&memories))
 }
 
 #[allow(dead_code)]
@@ -228,24 +230,8 @@ fn build_transient_user_profile_snapshot_block_for_user(
         agent.private_memory_enabled,
         limit,
     )?;
-    let label = display_name.trim();
-    let intro = if label.is_empty() {
-        format!(
-            "以下内容是本轮相关用户的长期稳定画像。对象 user_id={}。请把它们视为背景，不要当成本轮即时消息。",
-            user_id.trim()
-        )
-    } else {
-        format!(
-            "以下内容是本轮相关用户的长期稳定画像。对象：{}；user_id={}。请把它们视为背景，不要当成本轮即时消息。",
-            label,
-            user_id.trim()
-        )
-    };
-    Ok(render_user_profile_memory_block(
-        &memories,
-        "user profile snapshot",
-        &intro,
-    ))
+    let _ = display_name;
+    Ok(render_user_profile_memory_context_block(&memories))
 }
 
 fn conversation_user_main_workspace_root(conversation: &Conversation, state: &AppState) -> Option<PathBuf> {
@@ -428,14 +414,12 @@ mod prompt_assembly_tests {
         let data_path = temp_data_path("prompt_profile_board");
         let drafts = vec![MemoryDraftInput {
             memory_type: "knowledge".to_string(),
-            judgment: "用户当前长期在深圳生活".to_string(),
+            judgment: "本地用户（0）当前长期在深圳生活".to_string(),
             reasoning: "本轮明确说明".to_string(),
             tags: vec![
-                "profile".to_string(),
-                "user_id:0".to_string(),
-                "profile_attr:fact".to_string(),
-                "深圳".to_string(),
-                "居住地".to_string(),
+                "本地用户".to_string(),
+                "0".to_string(),
+                "事实属性".to_string(),
             ],
             owner_agent_id: None,
         }];
@@ -445,34 +429,33 @@ mod prompt_assembly_tests {
             .expect("build profile board")
             .expect("profile board should exist");
         assert!(block.contains("用户画像记忆"));
-        assert!(block.contains("用户当前长期在深圳生活"));
+        assert!(block.contains("本地用户（0）当前长期在深圳生活"));
     }
 
     #[test]
     fn transient_profile_snapshot_should_match_complex_user_id_exactly() {
         let data_path = temp_data_path("prompt_profile_complex_user_id");
+        let remote_user_id = "remote-user-Alpha@im.test";
         let drafts = vec![
             MemoryDraftInput {
                 memory_type: "knowledge".to_string(),
-                judgment: "微信用户长期使用简洁回复".to_string(),
+                judgment: "远程用户（remote-user-Alpha@im.test）长期使用简洁回复".to_string(),
                 reasoning: "本轮明确说明".to_string(),
                 tags: vec![
-                    "profile".to_string(),
-                    "user_id:o9cq80-MfLBeC-BBD-hStiFtlJSk@im.wechat".to_string(),
-                    "profile_attr:preference".to_string(),
-                    "简洁".to_string(),
+                    "远程用户".to_string(),
+                    remote_user_id.to_string(),
+                    "用户要求".to_string(),
                 ],
                 owner_agent_id: None,
             },
             MemoryDraftInput {
                 memory_type: "knowledge".to_string(),
-                judgment: "本地用户长期在深圳".to_string(),
+                judgment: "本地用户（0）长期在深圳".to_string(),
                 reasoning: "历史画像".to_string(),
                 tags: vec![
-                    "profile".to_string(),
-                    "user_id:0".to_string(),
-                    "profile_attr:fact".to_string(),
-                    "深圳".to_string(),
+                    "本地用户".to_string(),
+                    "0".to_string(),
+                    "事实属性".to_string(),
                 ],
                 owner_agent_id: None,
             },
@@ -482,15 +465,17 @@ mod prompt_assembly_tests {
         let block = build_transient_user_profile_snapshot_block_for_user(
             &data_path,
             &default_agent(),
-            "o9cq80-MfLBeC-BBD-hStiFtlJSk@im.wechat",
-            "遥酱",
+            remote_user_id,
+            "远程用户",
             4,
         )
         .expect("build transient profile block")
         .expect("transient profile block should exist");
-        assert!(block.contains("遥酱"));
-        assert!(block.contains("o9cq80-MfLBeC-BBD-hStiFtlJSk@im.wechat"));
-        assert!(block.contains("微信用户长期使用简洁回复"));
+        assert!(block.starts_with("<memory_context>"));
+        assert!(!block.contains("<user profile snapshot>"));
+        assert!(block.contains("远程用户"));
+        assert!(block.contains(remote_user_id));
+        assert!(block.contains("远程用户（remote-user-Alpha@im.test）长期使用简洁回复"));
         assert!(!block.contains("本地用户长期在深圳"));
     }
 

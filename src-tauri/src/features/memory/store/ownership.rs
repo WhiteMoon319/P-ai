@@ -109,121 +109,34 @@ fn memory_entry_allowed_for_profile(memory: &MemoryEntry) -> bool {
     )
 }
 
+const USER_PROFILE_ATTR_TAGS: [&str; 6] = [
+    "用户别名",
+    "事实属性",
+    "技能树",
+    "关系图谱",
+    "活跃项目",
+    "用户要求",
+];
+
+fn memory_tag_is_user_profile_category_tag(tag: &str) -> bool {
+    USER_PROFILE_ATTR_TAGS.iter().any(|item| *item == tag.trim())
+}
+
 fn profile_user_id_tag(user_id: &str) -> Option<String> {
     let trimmed = user_id.trim();
     if trimmed.is_empty() {
         None
     } else {
-        Some(format!("user_id:{}", trimmed))
+        Some(trimmed.to_string())
     }
 }
 
 fn memory_has_profile_shape_tags(memory: &MemoryEntry) -> bool {
-    let has_profile = memory.tags.iter().any(|tag| tag == "profile");
-    let has_user_id = memory.tags.iter().any(|tag| {
-        tag.strip_prefix("user_id:")
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .is_some()
-    });
-    let has_profile_attr = memory.tags.iter().any(|tag| {
-        tag.strip_prefix("profile_attr:")
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .is_some()
-    });
-    has_profile && has_user_id && has_profile_attr
+    memory.tags.iter().any(|tag| memory_tag_is_user_profile_category_tag(tag))
 }
 
 fn memory_entry_is_profile_memory(memory: &MemoryEntry) -> bool {
     memory_entry_allowed_for_profile(memory) && memory_has_profile_shape_tags(memory)
-}
-
-fn legacy_profile_attr_tag_for_memory(memory: &MemoryEntry) -> &'static str {
-    match memory.memory_type.trim().to_ascii_lowercase().as_str() {
-        "skill" => "profile_attr:skill",
-        _ => "profile_attr:fact",
-    }
-}
-
-fn memory_store_backfill_local_profile_tags_from_legacy_links(
-    data_path: &PathBuf,
-) -> Result<usize, String> {
-    let conn = memory_store_open(data_path)?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT mr.id, mr.memory_type
-             FROM profile_memory_link link
-             JOIN memory_record mr ON mr.id = link.memory_id
-             ORDER BY link.updated_at DESC, link.created_at DESC",
-        )
-        .map_err(|err| format!("Prepare backfill legacy profile links failed: {err}"))?;
-    let rows = stmt
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-            ))
-        })
-        .map_err(|err| format!("Query backfill legacy profile links failed: {err}"))?;
-    let mut legacy_items = Vec::<(String, String)>::new();
-    for row in rows {
-        legacy_items.push(
-            row.map_err(|err| format!("Read backfill legacy profile link row failed: {err}"))?,
-        );
-    }
-    if legacy_items.is_empty() {
-        return Ok(0);
-    }
-
-    let existing = memory_store_list_memories_by_ids(
-        data_path,
-        &legacy_items
-            .iter()
-            .map(|(memory_id, _)| memory_id.clone())
-            .collect::<Vec<_>>(),
-    )?
-    .into_iter()
-    .map(|memory| (memory.id.clone(), memory))
-    .collect::<HashMap<String, MemoryEntry>>();
-
-    let mut conn = memory_store_open(data_path)?;
-    let tx = conn
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(|err| format!("Begin backfill legacy profile tags transaction failed: {err}"))?;
-    let mut updated = 0usize;
-    for (memory_id, memory_type) in legacy_items {
-        let Some(memory) = existing.get(&memory_id) else {
-            continue;
-        };
-        if !memory_entry_allowed_for_profile(memory) || memory_entry_is_profile_memory(memory) {
-            continue;
-        }
-        let mut next_tags = memory.tags.clone();
-        if !next_tags.iter().any(|tag| tag == "profile") {
-            next_tags.push("profile".to_string());
-        }
-        if !next_tags.iter().any(|tag| tag.starts_with("user_id:")) {
-            next_tags.push("user_id:0".to_string());
-        }
-        if !next_tags.iter().any(|tag| tag.starts_with("profile_attr:")) {
-            let attr = match memory_type.trim().to_ascii_lowercase().as_str() {
-                "skill" => "profile_attr:skill",
-                _ => legacy_profile_attr_tag_for_memory(memory),
-            };
-            next_tags.push(attr.to_string());
-        }
-        let normalized = normalize_memory_keywords(&next_tags);
-        memory_store_sync_tags(&tx, &memory_id, &normalized)?;
-        memory_store_sync_memory_fts(&tx, &memory_id)?;
-        updated += 1;
-    }
-    tx.commit()
-        .map_err(|err| format!("Commit backfill legacy profile tags transaction failed: {err}"))?;
-    if updated > 0 {
-        invalidate_memory_matcher_cache();
-    }
-    Ok(updated)
 }
 
 fn memory_store_list_profile_memories_by_user_id_visible_for_agent(
@@ -234,9 +147,6 @@ fn memory_store_list_profile_memories_by_user_id_visible_for_agent(
     limit: usize,
 ) -> Result<Vec<MemoryEntry>, String> {
     let started_at = std::time::Instant::now();
-    if user_id.trim() == "0" {
-        let _ = memory_store_backfill_local_profile_tags_from_legacy_links(data_path);
-    }
     let Some(user_id_tag) = profile_user_id_tag(user_id) else {
         runtime_log_info(format!(
             "[用户画像] 跳过，任务=fast_profile_lookup，user_id={}，agent_id={}，private_memory_enabled={}，requested_limit={}，reason=empty_user_id，elapsed_ms={}",
@@ -263,19 +173,13 @@ fn memory_store_list_profile_memories_by_user_id_visible_for_agent(
              SELECT 1
              FROM memory_tag_rel rel
              JOIN global_tag tag ON tag.id = rel.tag_id
-             WHERE rel.memory_id = mr.id AND tag.name = 'profile'
-         )
-         AND EXISTS (
-             SELECT 1
-             FROM memory_tag_rel rel
-             JOIN global_tag tag ON tag.id = rel.tag_id
              WHERE rel.memory_id = mr.id AND tag.name = ?1
          )
          AND EXISTS (
              SELECT 1
              FROM memory_tag_rel rel
              JOIN global_tag tag ON tag.id = rel.tag_id
-             WHERE rel.memory_id = mr.id AND tag.name LIKE 'profile_attr:%'
+             WHERE rel.memory_id = mr.id AND tag.name IN ('用户别名', '事实属性', '技能树', '关系图谱', '活跃项目', '用户要求')
          )
          ORDER BY mr.updated_at DESC
          LIMIT ?2"
@@ -286,19 +190,13 @@ fn memory_store_list_profile_memories_by_user_id_visible_for_agent(
              SELECT 1
              FROM memory_tag_rel rel
              JOIN global_tag tag ON tag.id = rel.tag_id
-             WHERE rel.memory_id = mr.id AND tag.name = 'profile'
-         )
-         AND EXISTS (
-             SELECT 1
-             FROM memory_tag_rel rel
-             JOIN global_tag tag ON tag.id = rel.tag_id
              WHERE rel.memory_id = mr.id AND tag.name = ?1
          )
          AND EXISTS (
              SELECT 1
              FROM memory_tag_rel rel
              JOIN global_tag tag ON tag.id = rel.tag_id
-             WHERE rel.memory_id = mr.id AND tag.name LIKE 'profile_attr:%'
+             WHERE rel.memory_id = mr.id AND tag.name IN ('用户别名', '事实属性', '技能树', '关系图谱', '活跃项目', '用户要求')
          )
          AND (
              mr.owner_agent_id IS NULL
@@ -374,57 +272,6 @@ fn memory_store_list_profile_memories_by_user_id_visible_for_agent(
         started_at.elapsed().as_millis()
     ));
     Ok(memories)
-}
-
-#[allow(dead_code)]
-fn memory_store_upsert_profile_memory_links(
-    data_path: &PathBuf,
-    memory_ids: &[String],
-    source: &str,
-) -> Result<usize, String> {
-    let mut conn = memory_store_open(data_path)?;
-    let tx = conn
-        .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(|err| format!("Begin profile memory link transaction failed: {err}"))?;
-    let now = now_iso();
-    let normalized_source = if source.trim().eq_ignore_ascii_case("manual") {
-        "manual"
-    } else {
-        "auto"
-    };
-    let mut linked_count = 0usize;
-    for memory_id in memory_ids
-        .iter()
-        .map(|item| item.trim())
-        .filter(|item| !item.is_empty())
-    {
-        let exists = tx
-            .query_row(
-                "SELECT 1 FROM memory_record WHERE id=?1 LIMIT 1",
-                params![memory_id],
-                |_| Ok(1i64),
-            )
-            .optional()
-            .map_err(|err| format!("Check profile memory existence failed: {err}"))?
-            .is_some();
-        if !exists {
-            continue;
-        }
-        let changed = tx
-            .execute(
-                "INSERT INTO profile_memory_link(id, memory_id, source, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5)
-                 ON CONFLICT(memory_id) DO UPDATE SET source=excluded.source, updated_at=excluded.updated_at",
-                params![Uuid::new_v4().to_string(), memory_id, normalized_source, now, now],
-            )
-            .map_err(|err| format!("Upsert profile_memory_link failed: {err}"))?;
-        if changed > 0 {
-            linked_count += 1;
-        }
-    }
-    tx.commit()
-        .map_err(|err| format!("Commit profile memory link transaction failed: {err}"))?;
-    Ok(linked_count)
 }
 
 #[allow(dead_code)]

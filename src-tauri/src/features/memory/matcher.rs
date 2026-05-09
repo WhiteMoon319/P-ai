@@ -260,7 +260,6 @@ fn memory_extract_query_tags_from_text(memories: &[MemoryEntry], latest_user_tex
         .iter()
         .flat_map(|memory| memory.tags.iter())
         .map(|tag| tag.trim())
-        .filter(|tag| tag.chars().count() >= 2)
         .filter(|tag| lowered.contains(&tag.to_lowercase()))
         .filter(|tag| seen_lower.insert(tag.to_lowercase()))
         .map(ToOwned::to_owned)

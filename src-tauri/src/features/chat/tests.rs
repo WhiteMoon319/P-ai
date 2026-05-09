@@ -650,7 +650,7 @@
                     role: "user".to_string(),
                     text: "你好".to_string(),
                     extra_text_blocks: Vec::new(),
-                    user_time_text: Some("[遥酱] 2026-03-18T12:18".to_string()),
+                    user_time_text: Some("[测试用户] 2026-03-18T12:18".to_string()),
                     images: Vec::new(),
                     audios: Vec::new(),
                     tool_calls: None,
@@ -710,7 +710,7 @@
                             && arr[0].get("text").and_then(Value::as_str) == Some("你好")
                             && arr[1].get("type").and_then(Value::as_str) == Some("text")
                             && arr[1].get("text").and_then(Value::as_str)
-                                == Some("[遥酱] 2026-03-18T12:18")
+                                == Some("[测试用户] 2026-03-18T12:18")
                     })
                     .unwrap_or(false)
         }));

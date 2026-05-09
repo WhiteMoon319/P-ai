@@ -61,7 +61,6 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
 
   async function runConversationMaintenance(
     action: ConversationMaintenanceAction,
-    targetConversationId?: string,
   ) {
     const apiConfigId = String(options.activeChatApiConfigId.value || "").trim();
     const agentId = String(options.assistantDepartmentAgentId.value || "").trim();
@@ -99,7 +98,6 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
       }
     }
     try {
-      const normalizedTargetConversationId = String(targetConversationId || "").trim();
       const result = await invokeTauri<ForceArchiveResult>(action.command, {
         input: action.command === "force_archive_current"
           ? {
@@ -108,7 +106,6 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
               agentId,
               conversationId: sourceConversationId,
             },
-            targetConversationId: normalizedTargetConversationId || null,
           }
           : {
             apiConfigId,
@@ -184,7 +181,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
     }
   }
 
-  async function forceArchiveNow(targetConversationId?: string) {
+  async function forceArchiveNow() {
     await runConversationMaintenance({
       command: "force_archive_current",
       runningKey: "status.forceArchiveRunning",
@@ -193,7 +190,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
       failedKey: "status.forceArchiveFailed",
       isDone: (result) => result.archived,
       lockForeground: true,
-    }, targetConversationId);
+    });
   }
 
   async function forceCompactNow() {

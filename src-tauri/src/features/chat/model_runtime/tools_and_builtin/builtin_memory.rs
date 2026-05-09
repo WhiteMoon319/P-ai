@@ -2,31 +2,12 @@ fn normalize_memory_keywords(raw: &[String]) -> Vec<String> {
     let mut out = Vec::<String>::new();
     for item in raw {
         let trimmed = item.trim();
-        let v = if let Some((_, raw_user_id)) = trimmed.split_once(':') {
-            if trimmed
-                .get(..8)
-                .map(|prefix| prefix.eq_ignore_ascii_case("user_id:"))
-                .unwrap_or(false)
-            {
-                let user_id = raw_user_id.trim();
-                if user_id.is_empty() {
-                    continue;
-                }
-                format!("user_id:{}", user_id)
-            } else {
-                trimmed.to_lowercase()
-            }
-        } else {
-            trimmed.to_lowercase()
-        };
-        if v.chars().count() < 2 {
+        if trimmed.is_empty() {
             continue;
         }
+        let v = trimmed.to_string();
         if !out.iter().any(|x| x == &v) {
             out.push(v);
-        }
-        if out.len() >= 12 {
-            break;
         }
     }
     out
@@ -110,18 +91,39 @@ mod builtin_memory_tests {
     use super::*;
 
     #[test]
-    fn normalize_memory_keywords_should_preserve_user_id_payload() {
+    fn normalize_memory_keywords_should_preserve_search_anchor_text() {
         let tags = normalize_memory_keywords(&vec![
-            " Profile ".to_string(),
-            "USER_ID:o9cq80-MfLBeC-BBD-hStiFtlJSk@im.wechat".to_string(),
-            "PROFILE_ATTR:Fact".to_string(),
+            " 用户昵称 ".to_string(),
+            "0".to_string(),
+            "remote-user-Alpha@im.test".to_string(),
+            "用户要求".to_string(),
+            " ".to_string(),
+            "额外标签一".to_string(),
+            "额外标签二".to_string(),
+            "额外标签三".to_string(),
+            "额外标签四".to_string(),
+            "额外标签五".to_string(),
+            "额外标签六".to_string(),
+            "额外标签七".to_string(),
+            "额外标签八".to_string(),
+            "额外标签九".to_string(),
         ]);
         assert_eq!(
             tags,
             vec![
-                "profile".to_string(),
-                "user_id:o9cq80-MfLBeC-BBD-hStiFtlJSk@im.wechat".to_string(),
-                "profile_attr:fact".to_string(),
+                "用户昵称".to_string(),
+                "0".to_string(),
+                "remote-user-Alpha@im.test".to_string(),
+                "用户要求".to_string(),
+                "额外标签一".to_string(),
+                "额外标签二".to_string(),
+                "额外标签三".to_string(),
+                "额外标签四".to_string(),
+                "额外标签五".to_string(),
+                "额外标签六".to_string(),
+                "额外标签七".to_string(),
+                "额外标签八".to_string(),
+                "额外标签九".to_string(),
             ]
         );
     }

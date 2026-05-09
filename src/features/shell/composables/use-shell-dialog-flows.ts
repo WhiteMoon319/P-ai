@@ -42,7 +42,7 @@ type UseShellDialogFlowsOptions = {
   setStatus: (message: string) => void;
   setStatusError: (key: string, error: unknown) => void;
   forceCompactNow: () => Promise<void>;
-  forceArchiveNow: (targetConversationId?: string) => Promise<void>;
+  forceArchiveNow: () => Promise<void>;
   deleteUnarchivedConversationFromArchives: (conversationId: string) => Promise<void>;
 };
 
@@ -192,11 +192,10 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
     await options.forceCompactNow();
   }
 
-  async function confirmForceArchiveAction(targetConversationId?: string) {
+  async function confirmForceArchiveAction() {
     if (!forceArchivePreview.value?.canArchive) return;
-    const normalizedTargetConversationId = String(targetConversationId || "").trim();
     closeForceArchiveActionDialog();
-    await options.forceArchiveNow(normalizedTargetConversationId);
+    await options.forceArchiveNow();
   }
 
   async function confirmDeleteConversationFromArchiveDialog() {

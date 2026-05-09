@@ -202,6 +202,35 @@ mod archive_summary_parser_tests {
     }
 
     #[test]
+    fn parse_memory_curation_should_support_archive_reflection_shape() {
+        let raw = r#"{
+          "usefulMemoryIds": ["mem-1"],
+          "memoryActions": []
+        }"#;
+        let parsed = parse_memory_curation_draft(raw).expect("parse archive reflection");
+        assert_eq!(parsed.title, "");
+        assert_eq!(parsed.summary, "");
+        assert!(parsed.open_loops.is_empty());
+        assert_eq!(parsed.useful_memory_ids, vec!["mem-1".to_string()]);
+    }
+
+    #[test]
+    fn parse_memory_curation_should_keep_compat_extra_archive_fields() {
+        let raw = r#"{
+          "title": "旧格式标题",
+          "summary": "旧格式摘要",
+          "openLoops": ["旧格式待办"],
+          "usefulMemoryIds": ["mem-1"],
+          "memoryActions": []
+        }"#;
+        let parsed = parse_memory_curation_draft(raw).expect("parse compatible archive reflection");
+        assert_eq!(parsed.title, "旧格式标题");
+        assert_eq!(parsed.summary, "旧格式摘要");
+        assert_eq!(parsed.open_loops, vec!["旧格式待办".to_string()]);
+        assert_eq!(parsed.useful_memory_ids, vec!["mem-1".to_string()]);
+    }
+
+    #[test]
     fn parse_memory_curation_should_accept_numeric_short_ids() {
         let raw = r#"{
           "summary": "归档摘要",
@@ -252,11 +281,11 @@ mod archive_summary_parser_tests {
           "profileActions": [
             {
               "action": "create",
-              "memory": {
+                "memory": {
                 "memoryType": "knowledge",
                 "judgment": "旧画像结构",
                 "reasoning": "",
-                "tags": ["profile", "user_id:0", "profile_attr:fact"]
+                "tags": ["旧"]
               }
             }
           ]
