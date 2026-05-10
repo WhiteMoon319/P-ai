@@ -32,6 +32,7 @@ struct ResolvedApiConfig {
     provider_key_cursor: usize,
     request_format: RequestFormat,
     allow_concurrent_requests: bool,
+    max_concurrent_requests: Option<u32>,
     base_url: String,
     api_key: String,
     model: String,
@@ -41,6 +42,11 @@ struct ResolvedApiConfig {
     prompt_cache_key: Option<String>,
     extra_headers: Vec<(String, String)>,
     codex_auth: Option<CodexRuntimeAuth>,
+}
+
+struct ProviderRequestGate {
+    limit: usize,
+    semaphore: std::sync::Arc<tokio::sync::Semaphore>,
 }
 
 #[derive(Debug, Clone)]

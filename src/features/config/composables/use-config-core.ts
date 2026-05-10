@@ -61,6 +61,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
       name: `API Provider ${options.config.apiProviders.length + 1}`,
       requestFormat: "openai",
       allowConcurrentRequests: false,
+      maxConcurrentRequests: null,
       enableText: true,
       enableImage: true,
       enableAudio: false,
@@ -85,6 +86,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
       name: `${provider.name}/${model.model}`,
       requestFormat: normalizeApiRequestFormat(provider.requestFormat),
       allowConcurrentRequests: !!provider.allowConcurrentRequests,
+      maxConcurrentRequests: provider.maxConcurrentRequests ?? null,
       enableText: provider.enableText,
       enableImage: model.enableImage,
       enableAudio: provider.enableAudio,
@@ -116,6 +118,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
           name: api.name,
           requestFormat: normalizeApiRequestFormat(api.requestFormat),
           allowConcurrentRequests: !!api.allowConcurrentRequests,
+          maxConcurrentRequests: api.maxConcurrentRequests ?? null,
           enableText: !!api.enableText,
           enableImage: !!api.enableImage,
           enableAudio: !!api.enableAudio,
@@ -165,6 +168,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
         provider.name = String(provider.name || "").trim() || provider.id;
         provider.requestFormat = normalizeApiRequestFormat(draft.requestFormat);
         provider.allowConcurrentRequests = !!draft.allowConcurrentRequests;
+        provider.maxConcurrentRequests = draft.maxConcurrentRequests ?? null;
         provider.enableText = !!draft.enableText;
         provider.enableAudio = !!draft.enableAudio;
         provider.baseUrl = String(draft.baseUrl || "").trim();
@@ -205,6 +209,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
           name: `${providerName}/${modelValue}`,
           requestFormat: normalizeApiRequestFormat(provider.requestFormat),
           allowConcurrentRequests: !!provider.allowConcurrentRequests,
+          maxConcurrentRequests: provider.maxConcurrentRequests ?? null,
           enableText: !!provider.enableText,
           enableImage: !!model.enableImage,
           enableAudio: !!provider.enableAudio,
@@ -236,6 +241,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
         name: `${provider.name}/${model.model}`,
         requestFormat: normalizeApiRequestFormat(provider.requestFormat),
         allowConcurrentRequests: !!provider.allowConcurrentRequests,
+        maxConcurrentRequests: provider.maxConcurrentRequests ?? null,
         enableText: !!provider.enableText,
         enableImage: !!model.enableImage,
         enableAudio: !!provider.enableAudio,
@@ -309,6 +315,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
         name: provider.name,
         requestFormat: normalizeApiRequestFormat(provider.requestFormat),
         allowConcurrentRequests: !!provider.allowConcurrentRequests,
+        maxConcurrentRequests: provider.maxConcurrentRequests ?? null,
         enableText: !!provider.enableText,
         enableImage: (provider.models || []).some((model) => !!model.enableImage),
         enableAudio: !!provider.enableAudio,
@@ -347,6 +354,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
         name: a.name,
         requestFormat: normalizeApiRequestFormat(a.requestFormat),
         allowConcurrentRequests: !!a.allowConcurrentRequests,
+        maxConcurrentRequests: a.maxConcurrentRequests ?? null,
         enableText: !!a.enableText,
         enableImage: !!a.enableImage,
         enableAudio: !!a.enableAudio,
