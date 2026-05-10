@@ -2,6 +2,8 @@
 
 ## 进行中
 
+- 修复（gemini-tool-schema-sanitize）：Gemini / Vertex 工具调用请求在发送前复用 Gemini schema 过滤器，移除 `$schema`、`examples`、`additionalProperties` 等 Gemini 不接受的 JSON Schema 字段，避免官方 Gemini 返回 `Invalid JSON payload received. Unknown name "$schema"`。
+
 - 修复（chat-floating-scrollbar-and-manual-bottom-transaction）：抽取通用可拖动悬浮滚动条并接入聊天消息区、会话列表；滚到最下改为用户点击触发的有限事务，明确禁止流式长消息自动贴底，避免内容持续上移导致阅读困难。
 
 - 优化（terminal-exec-schema-simplify）：终端 `exec` 工具对模型可见参数收敛为 `command` 与 `timeout_ms`，隐藏旧 `action` 字段；后端继续兼容旧 `run/list/close` 入参，避免历史上下文或旧调用失效。

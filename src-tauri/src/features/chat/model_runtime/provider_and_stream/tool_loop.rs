@@ -701,6 +701,7 @@ where
 
 async fn runtime_tool_definitions_for_genai(
     definitions: &[ProviderToolDefinition],
+    adapter_kind: genai::adapter::AdapterKind,
 ) -> Result<Vec<genai::chat::Tool>, String> {
     let mut out = Vec::<genai::chat::Tool>::new();
     for definition in definitions {
@@ -708,7 +709,10 @@ async fn runtime_tool_definitions_for_genai(
         if !definition.description.trim().is_empty() {
             genai_tool = genai_tool.with_description(definition.description.clone());
         }
-        let parameters = definition.parameters.clone();
+        let mut parameters = definition.parameters.clone();
+        if matches!(adapter_kind, genai::adapter::AdapterKind::Gemini | genai::adapter::AdapterKind::Vertex) {
+            gemini_to_openapi_schema(&mut parameters);
+        }
         genai_tool = genai_tool.with_schema(parameters);
         out.push(genai_tool);
     }
@@ -987,7 +991,7 @@ async fn run_genai_tool_loop(
         true,
     );
 
-    let genai_tools = runtime_tool_definitions_for_genai(&tool_assembly.tool_definitions).await?;
+    let genai_tools = runtime_tool_definitions_for_genai(&tool_assembly.tool_definitions, adapter_kind).await?;
     let mut full_assistant_text = String::new();
     let mut full_reasoning_standard = String::new();
     let mut tool_history_events = Vec::<Value>::new();
@@ -1560,7 +1564,7 @@ async fn run_genai_tool_loop_non_stream(
         true,
     );
 
-    let genai_tools = runtime_tool_definitions_for_genai(&tool_assembly.tool_definitions).await?;
+    let genai_tools = runtime_tool_definitions_for_genai(&tool_assembly.tool_definitions, adapter_kind).await?;
     let mut full_assistant_text = String::new();
     let mut full_reasoning_standard = String::new();
     let mut tool_history_events = Vec::<Value>::new();

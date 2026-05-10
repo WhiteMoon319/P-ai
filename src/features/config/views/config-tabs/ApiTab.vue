@@ -304,6 +304,19 @@
                         </div>
                       </label>
 
+                      <label v-if="showGeminiReasoningEffort(modelCard)" class="flex flex-col gap-1">
+                        <span class="text-sm font-medium">Google 思维强度</span>
+                        <select
+                          :value="geminiReasoningEffortValue(modelCard)"
+                          class="select select-bordered select-sm"
+                          @change="setGeminiReasoningEffort(modelCard, ($event.target as HTMLSelectElement).value)"
+                        >
+                          <option v-for="item in geminiReasoningEffortOptions" :key="item.value" :value="item.value">
+                            {{ item.label }}
+                          </option>
+                        </select>
+                      </label>
+
                       <label v-if="modelCard.customTemperatureEnabled" class="flex flex-col gap-1">
                         <span class="text-sm font-medium">{{ t("config.api.temperature") }}</span>
                         <div class="flex items-center gap-2">
@@ -393,6 +406,11 @@ const DEFAULT_CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
 const DEFAULT_CODEX_AUTH_MODE: CodexAuthMode = "read_local";
 const DEFAULT_CODEX_LOCAL_AUTH_PATH = "~/.codex/auth.json";
 const DEFAULT_REASONING_EFFORT = "medium";
+const DEFAULT_GEMINI_REASONING_EFFORT = "high";
+const geminiReasoningEffortOptions = [
+  { value: "low", label: "低" },
+  { value: "high", label: "高" },
+];
 
 const props = defineProps<{
   config: AppConfig;
@@ -634,6 +652,29 @@ const currentProviderDirty = computed(() => {
   return JSON.stringify(normalizeProviderForCompare(provider)) !== JSON.stringify(normalizeProviderForCompare(savedProvider));
 });
 
+function normalizeGeminiReasoningEffort(model: ApiModelConfigItem) {
+  if (!["low", "high"].includes(String(model.reasoningEffort || "").trim().toLowerCase())) {
+    model.reasoningEffort = DEFAULT_GEMINI_REASONING_EFFORT;
+  }
+}
+
+function isGoogleModelAdapter(adapter: string | undefined): boolean {
+  return String(adapter || "").trim().toLowerCase() === "gemini";
+}
+
+function showGeminiReasoningEffort(modelCard: ApiModelConfigItem): boolean {
+  if (selectedProtocol.value === "gemini") return true;
+  return selectedProtocol.value === "auto" && isGoogleModelAdapter(resolvedAdapterByModelId.value[modelCard.id]);
+}
+
+function geminiReasoningEffortValue(modelCard: ApiModelConfigItem): string {
+  return String(modelCard.reasoningEffort || "").trim().toLowerCase() === "low" ? "low" : DEFAULT_GEMINI_REASONING_EFFORT;
+}
+
+function setGeminiReasoningEffort(modelCard: ApiModelConfigItem, value: string) {
+  modelCard.reasoningEffort = value === "low" ? "low" : DEFAULT_GEMINI_REASONING_EFFORT;
+}
+
 function capabilityFromRequestFormat(format: ApiRequestFormat | string): ApiCapability {
   const normalized = String(format || "").trim().toLowerCase();
   if (normalized === "openai_stt" || normalized === "openai_tts" || normalized === "stt" || normalized === "tts") {
@@ -721,7 +762,7 @@ function cloneProvider(provider: ApiProviderConfigItem): ApiProviderConfigItem {
         model: String(model.model || "").trim(),
         enableImage: !!model.enableImage,
         enableTools: model.enableTools !== false,
-        reasoningEffort: String(model.reasoningEffort || DEFAULT_REASONING_EFFORT).trim() || DEFAULT_REASONING_EFFORT,
+        reasoningEffort: normalizedModelReasoningEffort(provider, model),
         temperature: Number(model.temperature ?? 1),
         customTemperatureEnabled: !!model.customTemperatureEnabled,
         contextWindowTokens: Math.round(Number(model.contextWindowTokens ?? 128000)),
@@ -731,6 +772,14 @@ function cloneProvider(provider: ApiProviderConfigItem): ApiProviderConfigItem {
       : [],
     failureRetryCount: Math.max(0, Math.round(Number(provider.failureRetryCount ?? 0))),
   };
+}
+
+function normalizedModelReasoningEffort(provider: ApiProviderConfigItem, model: ApiModelConfigItem): string {
+  const value = String(model.reasoningEffort || "").trim().toLowerCase();
+  if (provider.requestFormat === "gemini") {
+    return value === "low" ? "low" : DEFAULT_GEMINI_REASONING_EFFORT;
+  }
+  return value || DEFAULT_REASONING_EFFORT;
 }
 
 function normalizeProviderForCompare(provider: ApiProviderConfigItem) {
@@ -766,7 +815,7 @@ function normalizeProviderForCompare(provider: ApiProviderConfigItem) {
         model: String(model.model || "").trim(),
         enableImage: !!model.enableImage,
         enableTools: model.enableTools !== false,
-        reasoningEffort: String(model.reasoningEffort || DEFAULT_REASONING_EFFORT).trim() || DEFAULT_REASONING_EFFORT,
+        reasoningEffort: normalizedModelReasoningEffort(provider, model),
         temperature: Number(model.temperature ?? 1),
         customTemperatureEnabled: !!model.customTemperatureEnabled,
         contextWindowTokens: Math.round(Number(model.contextWindowTokens ?? 128000)),
@@ -1096,12 +1145,15 @@ async function syncModelMetadata(modelCard: ApiModelConfigItem) {
       const adapter = await invokeTauri<string>("resolve_model_adapter_kind", {
         modelName: model,
       });
-      if (adapter) {
-        resolvedAdapterByModelId.value = {
-          ...resolvedAdapterByModelId.value,
-          [modelCard.id]: adapter,
-        };
+      resolvedAdapterByModelId.value = {
+        ...resolvedAdapterByModelId.value,
+        [modelCard.id]: adapter,
+      };
+      if (isGoogleModelAdapter(adapter)) {
+        normalizeGeminiReasoningEffort(modelCard);
       }
+    } else if (provider.requestFormat === "gemini") {
+      normalizeGeminiReasoningEffort(modelCard);
     }
     const metadata = await invokeTauri<FetchModelMetadataResult>("fetch_model_metadata", {
       input: {

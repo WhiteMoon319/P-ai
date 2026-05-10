@@ -390,6 +390,44 @@ fn is_codex_spark_model(model_id: &str) -> bool {
         || normalized.contains("-codex-spark")
 }
 
+fn strip_model_namespace_for_request_format(value: &str) -> &str {
+    value
+        .split(['/', ':'])
+        .last()
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .unwrap_or(value)
+}
+
+fn request_format_uses_gemini_reasoning_effort(request_format: RequestFormat, model: &str) -> bool {
+    if request_format.is_gemini() {
+        return true;
+    }
+    if !request_format.is_auto() {
+        return false;
+    }
+    matches!(
+        genai::adapter::AdapterKind::from_model(strip_model_namespace_for_request_format(model)),
+        Ok(genai::adapter::AdapterKind::Gemini)
+    )
+}
+
+fn normalize_gemini_reasoning_effort(value: &str) -> String {
+    if value.trim().eq_ignore_ascii_case("low") {
+        "low".to_string()
+    } else {
+        "high".to_string()
+    }
+}
+
+fn selected_reasoning_effort_for_runtime(selected: &ApiConfig) -> Option<String> {
+    if selected.request_format.is_codex() {
+        return Some(normalize_reasoning_effort(&selected.reasoning_effort));
+    }
+    request_format_uses_gemini_reasoning_effort(selected.request_format, &selected.model)
+        .then(|| normalize_gemini_reasoning_effort(&selected.reasoning_effort))
+}
+
 fn normalize_api_tools(config: &mut AppConfig) {
     for provider in &mut config.api_providers {
         provider.enable_audio = false;
@@ -1647,10 +1685,7 @@ fn resolve_api_config(
         base_url: selected.base_url.trim().to_string(),
         api_key: selected_api_key,
         model: selected.model.trim().to_string(),
-        reasoning_effort: selected
-            .request_format
-            .is_codex()
-            .then(|| normalize_reasoning_effort(&selected.reasoning_effort)),
+        reasoning_effort: selected_reasoning_effort_for_runtime(&selected),
         temperature: selected
             .custom_temperature_enabled
             .then_some(selected.temperature.clamp(0.0, 2.0))

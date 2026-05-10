@@ -403,16 +403,13 @@ fn build_provider_genai_service_target(
     }
 }
 
-fn strip_model_namespace<'a>(model_name: &'a str) -> &'a str {
-    for sep in ['/', ':'] {
-        if let Some((_, suffix)) = model_name.split_once(sep) {
-            let suffix = suffix.trim();
-            if !suffix.is_empty() {
-                return suffix;
-            }
-        }
-    }
+fn strip_model_namespace(model_name: &str) -> &str {
     model_name
+        .split(['/', ':'])
+        .last()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(model_name)
 }
 
 fn resolve_model_adapter_for_auto(model_name: &str) -> genai::adapter::AdapterKind {
