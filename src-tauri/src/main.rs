@@ -766,6 +766,7 @@ fn main() {
             open_file_reader_window_command,
             read_file_reader_file,
             list_file_reader_directory,
+            open_file_reader_directory_shell,
             open_local_file_directory,
             mcp_list_servers,
             mcp_validate_definition,

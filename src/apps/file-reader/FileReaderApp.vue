@@ -55,6 +55,16 @@
           <template v-for="segment in activePathSegments" :key="segment.key">
             <span v-if="segment.index > 0" class="shrink-0 text-base-content/35">›</span>
             <button
+              v-if="segment.index === 0"
+              type="button"
+              class="btn btn-ghost btn-xs h-6 min-h-6 w-6 shrink-0 px-0"
+              :class="directoryTreeRoot ? 'text-primary' : ''"
+              :title="directoryTreeRoot ? '收起文件树' : `展开文件树：${activeDirectoryPath}`"
+              @click="toggleDirectoryTree"
+            >
+              <FolderOpen class="h-4 w-4" />
+            </button>
+            <button
               type="button"
               class="inline-flex shrink-0 items-center rounded px-1.5 py-1 hover:bg-base-200 hover:text-base-content"
               :title="`浏览目录：${segment.path}`"
@@ -102,12 +112,34 @@
         v-if="directoryTreeRoot"
         class="flex w-72 shrink-0 flex-col border-r border-base-300 bg-base-200/35"
       >
-        <div class="flex h-9 shrink-0 items-center gap-2 border-b border-base-300 px-3 text-sm">
-          <FolderOpen class="h-4 w-4 shrink-0 text-primary" />
+        <div class="flex h-9 shrink-0 items-center gap-1.5 border-b border-base-300 px-3 text-sm">
           <div class="min-w-0 flex-1 truncate font-medium" :title="directoryTreeRoot.path">{{ directoryTreeRoot.name }}</div>
-          <button class="btn btn-ghost btn-xs h-6 min-h-6 w-6 px-0" type="button" title="关闭目录树" @click="closeDirectoryTree">
-            <X class="h-3.5 w-3.5" />
+          <button
+            class="btn btn-ghost btn-xs h-7 min-h-7 w-7 shrink-0 px-0"
+            type="button"
+            :disabled="directoryTreeRoot.loading"
+            title="在当前目录打开 Shell"
+            @click="openShellAtDirectoryTreeRoot"
+          >
+            <SquareTerminal class="h-4 w-4" />
           </button>
+          <button
+            class="btn btn-ghost btn-xs h-7 min-h-7 w-7 shrink-0 px-0"
+            type="button"
+            :class="directoryTreeSearchVisible ? 'text-primary' : ''"
+            title="展开或收起搜索栏"
+            @click="toggleDirectoryTreeSearch"
+          >
+            <Search class="h-4 w-4" />
+          </button>
+        </div>
+        <div v-if="directoryTreeSearchVisible" class="border-b border-base-300 p-2">
+          <input
+            v-model="directoryTreeFilter"
+            class="input input-bordered input-xs w-full"
+            type="search"
+            placeholder="过滤文件"
+          />
         </div>
         <div class="min-h-0 flex-1 overflow-auto py-1 text-sm">
           <div v-if="directoryTreeRoot.loading" class="flex items-center gap-2 px-3 py-2 text-xs opacity-65">
@@ -118,7 +150,7 @@
             {{ directoryTreeRoot.error }}
           </div>
           <div v-else-if="visibleTreeRows.length === 0" class="px-3 py-2 text-xs opacity-60">
-            空目录
+            {{ directoryTreeFilter.trim() ? "没有匹配项" : "空目录" }}
           </div>
           <template v-else>
             <div
@@ -220,7 +252,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ChevronDown, ChevronRight, Code2, Eye, FilePlus, FileText, Folder, FolderOpen, Minus, RefreshCw, Square, X } from "lucide-vue-next";
+import { ChevronDown, ChevronRight, Code2, Eye, FilePlus, FileText, Folder, FolderOpen, Minus, RefreshCw, Search, Square, SquareTerminal, X } from "lucide-vue-next";
 import MarkdownRender, { enableKatex, enableMermaid, getMarkdown, parseMarkdownToStructure } from "markstream-vue";
 import { bundledLanguagesInfo, codeToHtml } from "shiki";
 import "markstream-vue/index.css";
@@ -400,6 +432,8 @@ const activePath = ref("");
 const actionErrorMessage = ref("");
 const highlightedCodeHtmlByPath = ref<Record<string, string>>({});
 const directoryRootPath = ref("");
+const directoryTreeFilter = ref("");
+const directoryTreeSearchVisible = ref(false);
 const directoryNodes = ref<Record<string, DirectoryNode>>({});
 const markdownIsDark = computed(() => currentTheme.value !== "light");
 const appWindow = getCurrentWindow();
@@ -459,7 +493,7 @@ const addressScrollbarThumbStyle = computed(() => {
 const visibleTreeRows = computed<TreeRow[]>(() => {
   const root = directoryTreeRoot.value;
   if (!root || root.loading || root.error) return [];
-  return flattenDirectoryEntries(root.entries, 0);
+  return flattenDirectoryEntries(root.entries, 0, directoryTreeFilter.value);
 });
 
 const activePathSegments = computed(() => {
@@ -482,6 +516,8 @@ const activePathSegments = computed(() => {
     };
   });
 });
+
+const activeDirectoryPath = computed(() => activePathSegments.value[activePathSegments.value.length - 1]?.path || "");
 
 function updateAddressScrollState() {
   const el = addressScroller.value;
@@ -623,10 +659,16 @@ function isTreeDirectoryExpanded(path: string) {
   return !!treeDirectoryNode(path)?.expanded;
 }
 
-function flattenDirectoryEntries(entries: FileReaderDirectoryEntry[], depth: number): TreeRow[] {
+function flattenDirectoryEntries(entries: FileReaderDirectoryEntry[], depth: number, filter = ""): TreeRow[] {
+  const normalizedFilter = filter.trim().toLowerCase();
   const rows: TreeRow[] = [];
   for (const entry of entries) {
     const normalizedPath = normalizePath(entry.path);
+    const childRows = entry.isDirectory ? flattenDirectoryEntries(treeDirectoryNode(normalizedPath)?.entries || [], depth + 1, filter) : [];
+    const matchesFilter = !normalizedFilter || entry.name.toLowerCase().includes(normalizedFilter);
+    if (normalizedFilter && !matchesFilter && childRows.length === 0) {
+      continue;
+    }
     rows.push({
       kind: "entry",
       key: `entry:${normalizedPath}`,
@@ -636,6 +678,10 @@ function flattenDirectoryEntries(entries: FileReaderDirectoryEntry[], depth: num
         path: normalizedPath,
       },
     });
+    if (normalizedFilter) {
+      rows.push(...childRows);
+      continue;
+    }
     if (!entry.isDirectory || !isTreeDirectoryExpanded(normalizedPath)) {
       continue;
     }
@@ -977,7 +1023,37 @@ async function openDirectoryTree(path: string) {
 
 function closeDirectoryTree() {
   directoryRootPath.value = "";
+  directoryTreeFilter.value = "";
+  directoryTreeSearchVisible.value = false;
   persistFileReaderSession();
+}
+
+async function toggleDirectoryTree() {
+  if (directoryTreeRoot.value) {
+    closeDirectoryTree();
+    return;
+  }
+  const path = activeDirectoryPath.value;
+  if (path) {
+    await openDirectoryTree(path);
+  }
+}
+
+function toggleDirectoryTreeSearch() {
+  directoryTreeSearchVisible.value = !directoryTreeSearchVisible.value;
+  if (!directoryTreeSearchVisible.value) {
+    directoryTreeFilter.value = "";
+  }
+}
+
+async function openShellAtDirectoryTreeRoot() {
+  const root = directoryTreeRoot.value;
+  if (!root) return;
+  try {
+    await invokeTauri("open_file_reader_directory_shell", { path: root.path });
+  } catch (error) {
+    reportFileReaderActionFailure("打开 Shell", root.path, error);
+  }
 }
 
 async function toggleTreeDirectory(entry: FileReaderDirectoryEntry) {

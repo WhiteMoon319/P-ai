@@ -859,6 +859,75 @@ fn open_shell_path_in_file_manager(path: &Path) -> Result<(), String> {
     Err("Open in file manager is not supported on this platform".to_string())
 }
 
+fn open_shell_terminal_at_path(state: &AppState, path: &Path) -> Result<(), String> {
+    let canonical = path
+        .canonicalize()
+        .map_err(|err| format!("解析目录失败 ({}): {err}", path.display()))?;
+    if !canonical.is_dir() {
+        return Err(format!("不是目录：{}", canonical.display()));
+    }
+    let shell = terminal_shell_for_state(state);
+    if shell.kind == "missing-terminal-shell" || shell.path.trim().is_empty() {
+        return Err("未检测到可用 Shell，请先在设置中配置终端 Shell。".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let cwd = terminal_strip_windows_verbatim_prefix(&canonical.to_string_lossy());
+        let title = terminal_powershell_escape_literal("PAI Shell");
+        let shell_path = terminal_powershell_escape_literal(&shell.path);
+        let cwd_text = terminal_powershell_escape_literal(&cwd);
+        let args = if shell.kind == "git-bash" {
+            format!("@('--login','-i')")
+        } else if matches!(shell.kind.as_str(), "powershell7" | "powershell5") {
+            format!("@('-NoLogo','-NoExit','-Command','Set-Location -LiteralPath ''{cwd_text}''')")
+        } else {
+            "@()".to_string()
+        };
+        let script = format!(
+            "Start-Process -FilePath '{shell_path}' -WorkingDirectory '{cwd_text}' -WindowStyle Normal -ArgumentList {args} -Verb Open -PassThru | Out-Null; $host.UI.RawUI.WindowTitle = '{title}'"
+        );
+        let mut command = std::process::Command::new("powershell");
+        command.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script]);
+        terminal_apply_windows_utf8_env(&mut command);
+        command
+            .spawn()
+            .map_err(|err| format!("打开 Shell 失败：{err}"))?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let cwd = canonical.to_string_lossy().replace('\\', "\\\\").replace('"', "\\\"");
+        let script = format!("tell application \"Terminal\" to do script \"cd \\\"{cwd}\\\" && exec \\\"{}\\\"\"", shell.path.replace('"', "\\\""));
+        std::process::Command::new("osascript")
+            .args(["-e", &script])
+            .spawn()
+            .map_err(|err| format!("打开 Shell 失败：{err}"))?;
+        return Ok(());
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        for terminal in ["x-terminal-emulator", "gnome-terminal", "konsole", "xfce4-terminal", "xterm"] {
+            let mut command = std::process::Command::new(terminal);
+            command.current_dir(&canonical);
+            if terminal == "xterm" {
+                command.args(["-e", &shell.path]);
+            } else {
+                command.args(["--", &shell.path]);
+            }
+            if command.spawn().is_ok() {
+                return Ok(());
+            }
+        }
+        return Err("未检测到可用图形终端。".to_string());
+    }
+
+    #[allow(unreachable_code)]
+    Err("当前平台不支持打开 Shell。".to_string())
+}
+
 fn resolve_requested_shell_workspace_root(
     state: &AppState,
     requested: Option<&str>,
@@ -1467,6 +1536,15 @@ fn list_file_reader_directory(path: String) -> Result<FileReaderDirectoryPayload
         name,
         entries,
     })
+}
+
+#[tauri::command]
+fn open_file_reader_directory_shell(path: String, state: State<'_, AppState>) -> Result<(), String> {
+    let raw_path = path.trim();
+    if raw_path.is_empty() {
+        return Err("path is required".to_string());
+    }
+    open_shell_terminal_at_path(&state, &PathBuf::from(raw_path))
 }
 
 #[tauri::command]
