@@ -317,6 +317,32 @@
                         </select>
                       </label>
 
+                      <label v-if="showOpenaiReasoningEffort(modelCard)" class="flex flex-col gap-1">
+                        <span class="text-sm font-medium">思维强度</span>
+                        <select
+                          :value="openaiReasoningEffortValue(modelCard)"
+                          class="select select-bordered select-sm"
+                          @change="setOpenaiReasoningEffort(modelCard, ($event.target as HTMLSelectElement).value)"
+                        >
+                          <option v-for="item in openaiReasoningEffortOptions" :key="item.value" :value="item.value">
+                            {{ item.label }}
+                          </option>
+                        </select>
+                      </label>
+
+                      <label v-if="showDeepSeekReasoningEffort(modelCard)" class="flex flex-col gap-1">
+                        <span class="text-sm font-medium">思维强度</span>
+                        <select
+                          :value="deepseekReasoningEffortValue(modelCard)"
+                          class="select select-bordered select-sm"
+                          @change="setDeepSeekReasoningEffort(modelCard, ($event.target as HTMLSelectElement).value)"
+                        >
+                          <option v-for="item in deepseekReasoningEffortOptions" :key="item.value" :value="item.value">
+                            {{ item.label }}
+                          </option>
+                        </select>
+                      </label>
+
                       <label v-if="modelCard.customTemperatureEnabled" class="flex flex-col gap-1">
                         <span class="text-sm font-medium">{{ t("config.api.temperature") }}</span>
                         <div class="flex items-center gap-2">
@@ -407,6 +433,18 @@ const DEFAULT_CODEX_AUTH_MODE: CodexAuthMode = "read_local";
 const DEFAULT_CODEX_LOCAL_AUTH_PATH = "~/.codex/auth.json";
 const DEFAULT_REASONING_EFFORT = "medium";
 const DEFAULT_GEMINI_REASONING_EFFORT = "high";
+const DEFAULT_OPENAI_REASONING_EFFORT = "high";
+const DEFAULT_DEEPSEEK_REASONING_EFFORT = "high";
+const openaiReasoningEffortOptions = [
+  { value: "low", label: "低" },
+  { value: "medium", label: "中" },
+  { value: "high", label: "高" },
+  { value: "xhigh", label: "极高" },
+];
+const deepseekReasoningEffortOptions = [
+  { value: "high", label: "高" },
+  { value: "xhigh", label: "极高" },
+];
 const geminiReasoningEffortOptions = [
   { value: "low", label: "低" },
   { value: "high", label: "高" },
@@ -514,7 +552,7 @@ const reasoningEffortOptions = [
   { value: "low", label: "低" },
   { value: "medium", label: "中" },
   { value: "high", label: "高" },
-  { value: "xhigh", label: "超高" },
+  { value: "xhigh", label: "极高" },
 ];
 const codexAuthModeOptions: Array<{ value: CodexAuthMode; label: string }> = [
   { value: "read_local", label: "读取本地" },
@@ -658,6 +696,18 @@ function normalizeGeminiReasoningEffort(model: ApiModelConfigItem) {
   }
 }
 
+function normalizeOpenaiReasoningEffort(model: ApiModelConfigItem) {
+  if (!openaiReasoningEffortOptions.some((item) => item.value === String(model.reasoningEffort || "").trim().toLowerCase())) {
+    model.reasoningEffort = DEFAULT_OPENAI_REASONING_EFFORT;
+  }
+}
+
+function normalizeDeepSeekReasoningEffort(model: ApiModelConfigItem) {
+  if (!deepseekReasoningEffortOptions.some((item) => item.value === String(model.reasoningEffort || "").trim().toLowerCase())) {
+    model.reasoningEffort = DEFAULT_DEEPSEEK_REASONING_EFFORT;
+  }
+}
+
 function isGoogleModelAdapter(adapter: string | undefined): boolean {
   return String(adapter || "").trim().toLowerCase() === "gemini";
 }
@@ -673,6 +723,44 @@ function geminiReasoningEffortValue(modelCard: ApiModelConfigItem): string {
 
 function setGeminiReasoningEffort(modelCard: ApiModelConfigItem, value: string) {
   modelCard.reasoningEffort = value === "low" ? "low" : DEFAULT_GEMINI_REASONING_EFFORT;
+}
+
+function showOpenaiReasoningEffort(modelCard: ApiModelConfigItem): boolean {
+  if (selectedProtocol.value === "openai" || selectedProtocol.value === "openai_responses") return true;
+  return selectedProtocol.value === "auto" && isOpenaiModelAdapter(resolvedAdapterByModelId.value[modelCard.id]);
+}
+
+function showDeepSeekReasoningEffort(modelCard: ApiModelConfigItem): boolean {
+  if (selectedProtocol.value === "deepseek") return true;
+  return selectedProtocol.value === "auto" && isDeepSeekModelAdapter(resolvedAdapterByModelId.value[modelCard.id]);
+}
+
+function isOpenaiModelAdapter(adapter: string | undefined): boolean {
+  return String(adapter || "").trim().toLowerCase() === "openai";
+}
+
+function isDeepSeekModelAdapter(adapter: string | undefined): boolean {
+  return String(adapter || "").trim().toLowerCase() === "deepseek";
+}
+
+function openaiReasoningEffortValue(modelCard: ApiModelConfigItem): string {
+  return openaiReasoningEffortOptions.some((item) => item.value === String(modelCard.reasoningEffort || "").trim().toLowerCase())
+    ? String(modelCard.reasoningEffort || "").trim().toLowerCase()
+    : DEFAULT_OPENAI_REASONING_EFFORT;
+}
+
+function setOpenaiReasoningEffort(modelCard: ApiModelConfigItem, value: string) {
+  modelCard.reasoningEffort = openaiReasoningEffortOptions.some((item) => item.value === value) ? value : DEFAULT_OPENAI_REASONING_EFFORT;
+}
+
+function deepseekReasoningEffortValue(modelCard: ApiModelConfigItem): string {
+  return deepseekReasoningEffortOptions.some((item) => item.value === String(modelCard.reasoningEffort || "").trim().toLowerCase())
+    ? String(modelCard.reasoningEffort || "").trim().toLowerCase()
+    : DEFAULT_DEEPSEEK_REASONING_EFFORT;
+}
+
+function setDeepSeekReasoningEffort(modelCard: ApiModelConfigItem, value: string) {
+  modelCard.reasoningEffort = deepseekReasoningEffortOptions.some((item) => item.value === value) ? value : DEFAULT_DEEPSEEK_REASONING_EFFORT;
 }
 
 function capabilityFromRequestFormat(format: ApiRequestFormat | string): ApiCapability {
@@ -778,6 +866,12 @@ function normalizedModelReasoningEffort(provider: ApiProviderConfigItem, model: 
   const value = String(model.reasoningEffort || "").trim().toLowerCase();
   if (provider.requestFormat === "gemini") {
     return value === "low" ? "low" : DEFAULT_GEMINI_REASONING_EFFORT;
+  }
+  if (provider.requestFormat === "deepseek") {
+    return deepseekReasoningEffortOptions.some((item) => item.value === value) ? value : DEFAULT_DEEPSEEK_REASONING_EFFORT;
+  }
+  if (provider.requestFormat === "openai" || provider.requestFormat === "openai_responses") {
+    return openaiReasoningEffortOptions.some((item) => item.value === value) ? value : DEFAULT_OPENAI_REASONING_EFFORT;
   }
   return value || DEFAULT_REASONING_EFFORT;
 }
@@ -1151,9 +1245,17 @@ async function syncModelMetadata(modelCard: ApiModelConfigItem) {
       };
       if (isGoogleModelAdapter(adapter)) {
         normalizeGeminiReasoningEffort(modelCard);
+      } else if (isDeepSeekModelAdapter(adapter)) {
+        normalizeDeepSeekReasoningEffort(modelCard);
+      } else if (isOpenaiModelAdapter(adapter)) {
+        normalizeOpenaiReasoningEffort(modelCard);
       }
     } else if (provider.requestFormat === "gemini") {
       normalizeGeminiReasoningEffort(modelCard);
+    } else if (provider.requestFormat === "deepseek") {
+      normalizeDeepSeekReasoningEffort(modelCard);
+    } else if (provider.requestFormat === "openai" || provider.requestFormat === "openai_responses") {
+      normalizeOpenaiReasoningEffort(modelCard);
     }
     const metadata = await invokeTauri<FetchModelMetadataResult>("fetch_model_metadata", {
       input: {

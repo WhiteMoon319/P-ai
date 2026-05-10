@@ -243,7 +243,7 @@ const reasoningEffortOptions = [
   { value: "low", label: "低" },
   { value: "medium", label: "中" },
   { value: "high", label: "高" },
-  { value: "xhigh", label: "超高" },
+  { value: "xhigh", label: "极高" },
 ];
 const codexAuthModeOptions: Array<{ value: CodexAuthMode; label: string }> = [
   { value: "read_local", label: "读取本地" },

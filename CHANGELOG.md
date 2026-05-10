@@ -2,6 +2,10 @@
 
 ## 进行中
 
+- 优化（gemini-reasoning-effort-low-high-only）：Gemini / Vertex 思维强度收口为「低 / 高」两档，默认高；Auto 协议下识别到 Google 模型时才展示 Gemini 思维强度下拉，避免在非 Gemini 模型上误导。
+
+- 优化（openai-deepseek-reasoning-effort-ui）：普通模型卡新增思维强度入口；GPT / OpenAI Responses 收口为「低 / 中 / 高 / 极高」四档，DeepSeek 收口为「高 / 极高」两档，并统一按供应商归一保存值，避免混入不支持档位。
+
 - 修复（gemini-tool-schema-sanitize）：Gemini / Vertex 工具调用请求在发送前复用 Gemini schema 过滤器，移除 `$schema`、`examples`、`additionalProperties` 等 Gemini 不接受的 JSON Schema 字段，避免官方 Gemini 返回 `Invalid JSON payload received. Unknown name "$schema"`。
 
 - 修复（chat-floating-scrollbar-and-manual-bottom-transaction）：抽取通用可拖动悬浮滚动条并接入聊天消息区、会话列表；滚到最下改为用户点击触发的有限事务，明确禁止流式长消息自动贴底，避免内容持续上移导致阅读困难。
