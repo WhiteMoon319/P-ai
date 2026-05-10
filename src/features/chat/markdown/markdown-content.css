@@ -4,8 +4,11 @@
   --ecall-md-strong-weight: var(--ecall-md-strong-weight-setting, 700);
   --ecall-md-code-weight: var(--ecall-md-code-weight-setting, 550);
   --ecall-md-table-heading-weight: var(--ecall-md-table-heading-weight-setting, 650);
-  --ecall-md-blockquote-opacity: 0.92;
   color: inherit;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
+  font-family: inherit;
   font-weight: var(--ecall-md-body-weight);
   font-variation-settings: "wght" var(--ecall-md-body-weight);
   text-rendering: optimizeLegibility;
@@ -36,13 +39,34 @@
 .ecall-markdown-content .node-content,
 .ecall-markdown-content .text-node,
 .ecall-markdown-content .paragraph-node,
+.ecall-markdown-content .heading-node,
 .ecall-markdown-content .list-node,
 .ecall-markdown-content .list-item,
 .ecall-markdown-content .blockquote,
 .ecall-markdown-content .link-node,
+.ecall-markdown-content .strong-node,
+.ecall-markdown-content .inline-code,
 .ecall-markdown-content .table-node-wrapper,
 .ecall-markdown-content .hr-node {
+  color: inherit;
+  font-family: inherit;
   font-weight: inherit;
+}
+
+.ecall-markdown-content.markdown-renderer,
+.ecall-markdown-content .code-block-container,
+.ecall-markdown-content ._mermaid {
+  content-visibility: visible;
+  contain: none;
+  contain-intrinsic-size: auto;
+}
+
+.ecall-markdown-content > :first-child {
+  margin-top: 0;
+}
+
+.ecall-markdown-content > :last-child {
+  margin-bottom: 0;
 }
 
 .ecall-markdown-content :where(h1,h2,h3,h4,.heading-node) {
@@ -52,20 +76,81 @@
 }
 
 .ecall-markdown-content :where(strong,.strong-node) {
+  color: inherit;
   font-weight: var(--ecall-md-strong-weight);
   font-variation-settings: "wght" var(--ecall-md-strong-weight);
 }
 
-.ecall-markdown-content :where(blockquote,.blockquote) {
-  opacity: var(--ecall-md-blockquote-opacity);
+.ecall-markdown-content :where(a,.link-node) {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  text-decoration-color: color-mix(in srgb, var(--color-base-content) 28%, transparent);
 }
 
-.ecall-markdown-content :where(:not(pre) > code,.inline-code) {
+.ecall-markdown-content :where(a,.link-node):hover {
+  text-decoration-color: color-mix(in srgb, var(--color-base-content) 50%, transparent);
+}
+
+.ecall-markdown-content :where(blockquote,.blockquote) {
+  border-left: 3px solid color-mix(in srgb, var(--color-base-content) 16%, transparent);
+  padding-left: 0.72rem;
+  color: color-mix(in srgb, var(--color-base-content) 82%, transparent);
+}
+
+.ecall-markdown-content :where(hr,.hr-node) {
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--color-base-content) 14%, transparent);
+}
+
+.ecall-markdown-content :where(:not(pre) > code,.inline-code,.inline-code-node) {
+  color: inherit;
+  border: 1px solid color-mix(in srgb, var(--color-base-content) 12%, transparent);
+  background: var(--color-base-200);
+  border-radius: 0.4rem;
+  padding: 0.08rem 0.3rem;
+  font-family: var(
+    --ms-font-mono,
+    ui-monospace,
+    "SFMono-Regular",
+    "SF Mono",
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    "Courier New",
+    monospace
+  );
   font-weight: var(--ecall-md-code-weight);
   font-variation-settings: "wght" var(--ecall-md-code-weight);
 }
 
+.ecall-markdown-content .table-node-wrapper {
+  overflow-x: auto;
+}
+
+.ecall-markdown-content :where(table,.table-node) {
+  width: 100%;
+  border-collapse: collapse;
+  color: inherit;
+}
+
 .ecall-markdown-content :where(th,.table-node th) {
+  color: inherit;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-base-content) 16%, transparent);
+  padding: 0.38rem 0.52rem;
+  text-align: left;
   font-weight: var(--ecall-md-table-heading-weight);
   font-variation-settings: "wght" var(--ecall-md-table-heading-weight);
+}
+
+.ecall-markdown-content :where(td,.table-node td) {
+  color: inherit;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-base-content) 10%, transparent);
+  padding: 0.36rem 0.52rem;
+  vertical-align: top;
+}
+
+.ecall-markdown-content ._mermaid {
+  width: 100%;
 }

@@ -1220,7 +1220,6 @@ function reportExpandedText(report: ToolReviewReportRecord) {
 .assistant-markdown :deep(.ecall-markdown-content .inline-code),
 .assistant-markdown :deep(.ecall-markdown-content .table-node-wrapper),
 .assistant-markdown :deep(.ecall-markdown-content .hr-node) {
-  font-family: inherit;
   font-size: inherit;
   line-height: inherit;
 }
@@ -1235,7 +1234,6 @@ function reportExpandedText(report: ToolReviewReportRecord) {
 .assistant-markdown :deep(.ecall-markdown-content .node-slot),
 .assistant-markdown :deep(.ecall-markdown-content .node-content),
 .assistant-markdown :deep(.ecall-markdown-content .text-node) {
-  font-family: inherit;
   font-size: inherit;
   line-height: inherit;
 }
@@ -1263,9 +1261,7 @@ function reportExpandedText(report: ToolReviewReportRecord) {
 .assistant-markdown :deep(.ecall-markdown-content :where(h1,h2,h3,h4,.heading-node)) {
   margin-top: 0.7rem;
   margin-bottom: 0.32rem;
-  font-weight: var(--ecall-md-heading-weight);
   line-height: 1.5;
-  letter-spacing: 0;
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(h1,.heading-node.heading-1)) {
@@ -1298,24 +1294,8 @@ function reportExpandedText(report: ToolReviewReportRecord) {
   margin-bottom: 0.16rem;
 }
 
-.assistant-markdown :deep(.ecall-markdown-content :where(a,.link-node)) {
-  text-decoration: underline;
-  text-underline-offset: 0.18em;
-  text-decoration-color: color-mix(in srgb, var(--color-base-content) 28%, transparent);
-}
-
-.assistant-markdown :deep(.ecall-markdown-content :where(a,.link-node):hover) {
-  text-decoration-color: color-mix(in srgb, var(--color-base-content) 50%, transparent);
-}
-
-.assistant-markdown :deep(.ecall-markdown-content :where(strong,.strong-node)) {
-  font-weight: var(--ecall-md-strong-weight);
-}
-
 .assistant-markdown :deep(.ecall-markdown-content :where(blockquote,.blockquote)) {
-  border-left: 3px solid color-mix(in srgb, var(--color-base-content) 16%, transparent);
   padding-left: 0.68rem;
-  color: color-mix(in srgb, var(--color-base-content) 82%, transparent);
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(blockquote,.blockquote) .markdown-renderer),
@@ -1325,48 +1305,15 @@ function reportExpandedText(report: ToolReviewReportRecord) {
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(hr,.hr-node)) {
-  border: 0;
-  border-top: 1px solid color-mix(in srgb, var(--color-base-content) 14%, transparent);
   margin: 0.65rem 0;
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(:not(pre) > code,.inline-code)) {
-  border: 1px solid color-mix(in srgb, var(--color-base-content) 12%, transparent);
-  background: var(--color-base-200);
-  border-radius: 0.4rem;
-  padding: 0.08rem 0.3rem;
-  font-family: var(
-    --ms-font-mono,
-    ui-monospace,
-    "SFMono-Regular",
-    "SF Mono",
-    Menlo,
-    Monaco,
-    Consolas,
-    "Liberation Mono",
-    "Courier New",
-    monospace
-  );
   font-size: 0.86em;
-  font-weight: var(--ecall-md-code-weight);
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(table,.table-node)) {
-  width: 100%;
-  border-collapse: collapse;
   font-size: 0.9rem;
-}
-
-.assistant-markdown :deep(.ecall-markdown-content :where(th,.table-node th)) {
-  border-bottom: 1px solid color-mix(in srgb, var(--color-base-content) 16%, transparent);
-  padding: 0.36rem 0.5rem;
-  text-align: left;
-  font-weight: var(--ecall-md-table-heading-weight);
-}
-
-.assistant-markdown :deep(.ecall-markdown-content :where(td,.table-node td)) {
-  border-bottom: 1px solid color-mix(in srgb, var(--color-base-content) 10%, transparent);
-  padding: 0.34rem 0.5rem;
 }
 
 .assistant-markdown :deep(.ecall-markdown-content ._mermaid) {

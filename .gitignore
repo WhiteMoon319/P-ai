@@ -19,6 +19,7 @@ yarn-error.log*
 .idea/
 .vscode/
 .claude/
+.pai/
 *.swp
 *.swo
 .DS_Store

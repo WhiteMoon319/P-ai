@@ -209,7 +209,7 @@
         <div v-else-if="activeTab.kind === 'markdown'" class="file-reader-content mx-auto w-full max-w-300 px-4 py-4">
           <MarkdownRender
             class="ecall-markdown-content max-w-none"
-            custom-id="chat-markstream"
+            custom-id="file-reader-markstream"
             :nodes="activeMarkdownNodes"
             :is-dark="markdownIsDark"
             :final="true"
@@ -257,7 +257,7 @@ import MarkdownRender, { enableKatex, enableMermaid, getMarkdown, parseMarkdownT
 import { bundledLanguagesInfo, codeToHtml } from "shiki";
 import "markstream-vue/index.css";
 import { invokeTauri } from "../../services/tauri-api";
-import { registerChatMarkstreamComponents } from "../../features/chat/markdown/register-chat-markstream";
+import { registerFileReaderMarkstreamComponents } from "./register-file-reader-markstream";
 import { type AppThemeState, type GeneratedThemeControls } from "../../features/shell/theme/theme-types";
 import { useAppTheme } from "../../features/shell/composables/use-app-theme";
 import { buildGeneratedThemeStyleText, generateGeneratedThemeTokens, GENERATED_THEME_NAME } from "../../features/shell/theme/theme-generator";
@@ -265,7 +265,7 @@ import Win10ResizeHandles from "../../features/shell/components/Win10ResizeHandl
 
 enableMermaid();
 enableKatex();
-registerChatMarkstreamComponents();
+registerFileReaderMarkstreamComponents();
 
 type FileReaderFilePayload = {
   path: string;
@@ -1178,6 +1178,49 @@ onBeforeUnmount(() => {
 .file-reader-content :deep(.markdown-body),
 .file-reader-content :deep(.markstream-body) {
   max-width: none;
+}
+
+.file-reader-content :deep(.ecall-markdown-content) {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+  color: inherit;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+
+.file-reader-content :deep(.ecall-markdown-content :where(blockquote,.blockquote)) {
+  border-left-color: color-mix(in srgb, var(--color-base-content) 16%, transparent);
+  background: transparent;
+  padding-left: 0.75rem;
+}
+
+.file-reader-content :deep(.ecall-markdown-content :where(hr,.hr-node)) {
+  margin: 0.75rem 0;
+}
+
+.file-reader-content :deep(.ecall-markdown-content :where(:not(pre) > code,.inline-code,.inline-code-node)) {
+  background: color-mix(in srgb, var(--color-base-200) 72%, transparent);
+  color: var(--color-base-content);
+  font-size: 0.86em;
+}
+
+.file-reader-content :deep(.ecall-markdown-content :where(table,.table-node)) {
+  width: 100%;
+  font-size: 0.92rem;
+}
+
+.file-reader-content :deep(.ecall-markdown-content :where(th,.table-node th)) {
+  background: color-mix(in srgb, var(--color-base-200) 78%, transparent);
+}
+
+.file-reader-content :deep(.ecall-markdown-content :where(tbody tr:nth-child(even),.table-node tbody tr:nth-child(even))) {
+  background: color-mix(in srgb, var(--color-base-200) 42%, transparent);
+}
+
+.file-reader-content :deep(.ecall-markdown-content :where(tbody tr:hover,.table-node tbody tr:hover)) {
+  background: color-mix(in srgb, var(--color-base-200) 62%, transparent);
 }
 
 .file-reader-code-main {

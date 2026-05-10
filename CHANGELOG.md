@@ -2,6 +2,8 @@
 
 ## 进行中
 
+- 修复（markdown-style-and-file-reader-codeblock）：Markdown 共享样式统一收敛链接、引用、行内代码与表格等语义覆盖；文件阅读器 Markdown 改用独立 `file-reader-markstream` 与文档场景代码块组件，避免复用聊天气泡代码块导致主题和边框错位，并补充 Markdown 覆盖维护说明。
+
 ## 发布：v0.9.83
 
 - 发布（release-0.9.83）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.83`，纳入本轮本地会话原生通知、通知设置页与多语言兜底修复。
