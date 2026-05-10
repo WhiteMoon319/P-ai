@@ -85,143 +85,214 @@
     <div class="card bg-base-100 min-h-70">
       <div class="card-body p-3 min-h-0 flex flex-col gap-3">
         <!-- 标题 + 操作 -->
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between gap-3">
           <span class="text-sm font-medium">{{ t('config.memory.list') }}</span>
-          <div class="join">
-            <button class="btn btn-sm join-item btn-ghost" :disabled="loading" @click="refreshMemories" title="刷新">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
-            </button>
-            <MemoryExportCard class="join-item" @exported="handleMemoryExportDone" />
-            <MemoryImportCard class="join-item" @imported="handleMemoryImportDone" />
+          <div class="flex items-center gap-2">
+            <div class="join">
+              <button class="btn btn-sm join-item btn-ghost" :disabled="loading" @click="refreshMemories" title="刷新">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+              </button>
+              <MemoryExportCard class="join-item" @exported="handleMemoryExportDone" />
+              <MemoryImportCard class="join-item" @imported="handleMemoryImportDone" />
+            </div>
           </div>
         </div>
-
-        <!-- 搜索栏 -->
-        <div class="join">
-          <div class="flex-auto">
-            <input
-              v-model.trim="searchQuery"
-              class="input input-bordered input-sm join-item w-full"
-              :placeholder="t('config.memory.searchPlaceholder')"
-              @keyup.enter="searchMemories"
-            />
-          </div>
-          <div class="indicator">
-            <span v-if="isSearchMode" class="indicator-item badge badge-secondary badge-sm">结果</span>
+        <div class="sticky top-0 z-10 space-y-2 bg-base-100/95 py-2 backdrop-blur">
+          <div class="flex items-center gap-3">
             <button
-              class="btn btn-sm join-item"
-              :class="searchQuery ? 'btn-primary' : 'bg-base-200'"
-              :disabled="loading || !searchQuery"
-              @click="searchMemories"
+              class="btn btn-sm bg-base-200 hover:bg-base-300 shrink-0"
+              :disabled="loading"
+              :title="memoryViewMode === 'detailed' ? '切换到简要' : '切换到详细'"
+              @click="toggleMemoryViewMode"
             >
-              {{ t('config.memory.search') }}
+              <LayoutList v-if="memoryViewMode === 'detailed'" class="h-3.5 w-3.5" />
+              <List v-else class="h-3.5 w-3.5" />
             </button>
+            <button
+              class="btn btn-sm bg-base-200 hover:bg-base-300 shrink-0"
+              :class="{ 'text-primary': filterPanelOpen }"
+              :disabled="loading"
+              title="筛选"
+              @click="toggleFilterPanel"
+            >
+              <SlidersHorizontal class="h-3.5 w-3.5" />
+            </button>
+            <div class="join min-w-0 flex-1">
+              <div class="flex-auto min-w-0">
+                <input
+                  v-model.trim="searchQuery"
+                  class="input input-bordered input-sm join-item w-full"
+                  :placeholder="t('config.memory.searchPlaceholder')"
+                  @keyup.enter="searchMemories"
+                />
+              </div>
+              <div class="indicator">
+                <span v-if="isSearchMode" class="indicator-item badge badge-secondary badge-sm">结果</span>
+                <button
+                  class="btn btn-sm join-item"
+                  :class="searchQuery ? 'btn-primary' : 'bg-base-200'"
+                  :disabled="loading || !searchQuery"
+                  @click="searchMemories"
+                >
+                  {{ t('config.memory.search') }}
+                </button>
+              </div>
+            </div>
+            <div v-if="sortedMemories.length > 0" class="flex shrink-0 items-center gap-2">
+              <button
+                class="btn btn-sm bg-base-200 hover:bg-base-300"
+                :disabled="memoryPage <= 1"
+                @click="memoryPage--"
+              >
+                ‹
+              </button>
+              <div class="min-w-0 text-center text-sm font-medium tabular-nums">
+                {{ memoryPage }} / {{ memoryPageCount }}
+              </div>
+              <button
+                class="btn btn-sm bg-base-200 hover:bg-base-300"
+                :disabled="memoryPage >= memoryPageCount"
+                @click="memoryPage++"
+              >
+                ›
+              </button>
+            </div>
           </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <button
-            v-if="isSearchMode"
-            class="btn btn-sm bg-base-200"
-            :disabled="loading"
-            @click="clearSearch"
-          >
-            {{ t('config.memory.clear') }}
-          </button>
-          <span v-if="loading" class="text-sm opacity-70">
-            <span class="loading loading-spinner loading-sm"></span>
-            {{ t('config.memory.searching') }}
-          </span>
-        </div>
-
-        <!-- 搜索结果信息 -->
-        <div v-if="isSearchMode && memoryList.length > 0" class="text-sm opacity-70 flex items-center gap-2">
-          <span class="badge badge-sm badge-ghost">{{ t('config.memory.searchResults') }}</span>
-          <span>{{ t('config.memory.matchesCount', { count: memoryList.length }) }}</span>
+          <div v-if="filterPanelOpen" class="flex flex-wrap items-center gap-2">
+            <select
+              v-model="selectedOwnerFilter"
+              class="select select-bordered select-sm w-32"
+              @change="resetMemoryPage"
+            >
+              <option value="">全人格</option>
+              <option value="__global__">全局</option>
+              <option v-for="option in ownerFilterOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+            <select
+              v-model="selectedProfileTagFilter"
+              class="select select-bordered select-sm w-32"
+              @change="resetMemoryPage"
+            >
+              <option value="">画像属性</option>
+              <option v-for="tag in PROFILE_ATTRIBUTE_TAGS" :key="tag" :value="tag">
+                {{ tag }}
+              </option>
+            </select>
+            <select
+              v-model="selectedMemoryTypeFilter"
+              class="select select-bordered select-sm w-32"
+              @change="resetMemoryPage"
+            >
+              <option value="">记忆类型</option>
+              <option v-for="option in memoryTypeFilterOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              v-if="isSearchMode"
+              class="btn btn-sm bg-base-200"
+              :disabled="loading"
+              @click="clearSearch"
+            >
+              {{ t('config.memory.clear') }}
+            </button>
+            <span v-if="loading" class="text-sm opacity-70">
+              <span class="loading loading-spinner loading-sm"></span>
+              {{ t('config.memory.searching') }}
+            </span>
+            <div v-if="isSearchMode && sortedMemories.length > 0" class="text-sm opacity-70 flex items-center gap-2">
+              <span class="badge badge-sm badge-ghost">{{ t('config.memory.searchResults') }}</span>
+              <span>{{ t('config.memory.matchesCount', { count: sortedMemories.length }) }}</span>
+            </div>
+          </div>
         </div>
 
                 <!-- 记忆列表 -->
-                <div v-if="memoryList.length === 0" class="flex-1 flex items-center justify-center text-sm opacity-50">
+                <div v-if="sortedMemories.length === 0" class="flex-1 flex items-center justify-center text-sm opacity-50">
                   {{ t("memory.empty") }}
                 </div>
-                <div v-else class="min-h-0 flex-1 overflow-auto gap-2 flex flex-col">
-                  <div
-                    v-for="memory in pagedMemories"
-                    :key="memory.id"
-                    class="card bg-base-200 card-border border-base-300 card-sm"
-                  >
-                    <div class="card-body gap-2 p-3">
-                      <!-- 内容 -->
-                      <div class="whitespace-pre-wrap wrap-break-word leading-relaxed text-sm font-bold">{{ memory.judgment }}</div>
-
-                      <!-- 推理 -->
-                      <div v-if="memory.reasoning" class="py-2">
-                        <div class="pl-2 border-l-2 border-base-300 opacity-70 whitespace-pre-wrap wrap-break-word italic text-sm">
-                          {{ memory.reasoning }}
-                        </div>
-                      </div>
-
-                      <!-- 标签行：类型 + 时间 + 标签 + 删除 -->
-                      <h2 class="flex items-center justify-between m-0 p-0">
-                        <span class="flex flex-wrap items-center gap-2 font-semibold text-sm">
-                          <span
-                            class="badge badge-sm"
-                            :class="memoryTypeBadgeClass(memory.memoryType)"
-                          >{{ memoryTypeLabel(memory.memoryType) }}</span>
-                          <span class="badge badge-sm badge-outline">
-                            {{ memory.ownerAgentId ? t('config.memory.ownerPrivate', { owner: ownerAgentName(memory.ownerAgentId) }) : t('config.memory.globalTag') }}
-                          </span>
-                          <span class="opacity-50">{{ formatMemoryTime(memory.createdAt || memory.updatedAt) }}</span>
-                          <span v-for="(kw, idx) in memory.tags" :key="`${memory.id}-${idx}`" class="badge badge-sm badge-neutral opacity-80">
-                            {{ kw }}
-                          </span>
-                          <span v-if="!memory.tags.length" class="opacity-40 text-[11px]">{{ t('config.memory.noTags') }}</span>
-                        </span>
-                        <button
-                          class="btn btn-sm btn-ghost btn-circle"
-                          @click="deleteMemory(memory.id)"
+                <div v-else class="min-h-0 flex-1 overflow-auto">
+                  <div class="flex flex-col gap-2">
+                    <div
+                      v-for="memory in pagedMemories"
+                      :key="memory.id"
+                      class="card bg-base-200 card-border border-base-300 card-sm"
+                    >
+                      <div class="card-body gap-2 p-3">
+                        <!-- 内容 -->
+                        <div
+                          class="whitespace-pre-wrap wrap-break-word leading-relaxed"
+                          :class="memoryViewMode === 'compact' ? 'text-xs font-normal' : 'text-sm font-bold'"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                        </button>
-                      </h2>
-
-                      <!-- 搜索分数 -->
-                      <div v-if="isSearchMode" class="pt-2">
-                        <div class="flex flex-wrap gap-3 text-[11px] opacity-60">
-                          <span>BM25: {{ (memory.bm25Score ?? 0).toFixed(3) }}</span>
-                          <span>向量: {{ (memory.vectorScore ?? 0).toFixed(3) }}</span>
-                          <span class="text-primary font-medium">综合: {{ (memory.finalScore ?? 0).toFixed(3) }}</span>
+                          {{ memory.judgment }}
                         </div>
-                        <div class="mt-1.5 h-1.5 bg-base-300 rounded-full overflow-hidden">
-                          <div
-                            class="h-full bg-primary rounded-full transition-all"
-                            :style="{ width: `${Math.min(100, (memory.finalScore ?? 0) * 100)}%` }"
-                          ></div>
+
+                        <!-- 推理 -->
+                        <div v-if="showMemoryReasoning && memory.reasoning" class="py-2">
+                          <div class="pl-2 border-l-2 border-base-300 opacity-70 whitespace-pre-wrap wrap-break-word italic text-sm">
+                            {{ memory.reasoning }}
+                          </div>
+                        </div>
+
+                        <!-- 标签行：类型 + 时间 + 标签 + 删除 -->
+                        <h2 class="flex items-center justify-between m-0 p-0">
+                          <span class="flex flex-wrap items-center gap-2 font-semibold text-sm">
+                            <span
+                              class="badge badge-sm"
+                              :class="memoryTypeBadgeClass(memory.memoryType)"
+                            >{{ memoryTypeLabel(memory.memoryType) }}</span>
+                            <span class="badge badge-sm badge-outline">
+                              {{ memory.ownerAgentId ? t('config.memory.ownerPrivate', { owner: ownerAgentName(memory.ownerAgentId) }) : t('config.memory.globalTag') }}
+                            </span>
+                            <span class="opacity-50">{{ formatMemoryTime(memory.createdAt || memory.updatedAt) }}</span>
+                            <span
+                              v-for="(kw, idx) in showMemoryTags ? memory.tags : []"
+                              :key="`${memory.id}-${idx}`"
+                              class="badge badge-sm badge-neutral opacity-80"
+                            >
+                              {{ kw }}
+                            </span>
+                            <span v-if="showMemoryTags && !memory.tags.length" class="opacity-40 text-[11px]">{{ t('config.memory.noTags') }}</span>
+                          </span>
+                          <button
+                            class="btn btn-sm btn-ghost btn-circle"
+                            @click="deleteMemory(memory.id)"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                          </button>
+                        </h2>
+
+                        <!-- 搜索分数 -->
+                        <div v-if="isSearchMode" class="pt-2">
+                          <div class="flex flex-wrap gap-3 text-[11px] opacity-60">
+                            <span>BM25: {{ (memory.bm25Score ?? 0).toFixed(3) }}</span>
+                            <span>向量: {{ (memory.vectorScore ?? 0).toFixed(3) }}</span>
+                            <span class="text-primary font-medium">综合: {{ (memory.finalScore ?? 0).toFixed(3) }}</span>
+                          </div>
+                          <div class="mt-1.5 h-1.5 bg-base-300 rounded-full overflow-hidden">
+                            <div
+                              class="h-full bg-primary rounded-full transition-all"
+                              :style="{ width: `${Math.min(100, (memory.finalScore ?? 0) * 100)}%` }"
+                            ></div>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
-        <!-- 分页 -->
-        <div v-if="memoryList.length > 0" class="flex justify-center border-t border-base-300 pt-3">
-          <div class="join">
-            <button class="btn btn-sm join-item bg-base-200" :disabled="memoryPage <= 1" @click="memoryPage--">
-              ‹
-            </button>
-            <button class="btn btn-sm join-item btn-active">{{ memoryPage }} / {{ memoryPageCount }}</button>
-            <button class="btn btn-sm join-item bg-base-200" :disabled="memoryPage >= memoryPageCount" @click="memoryPage++">
-              ›
-            </button>
-        </div>
-          </div>
-        </div>
       </div>
-
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { LayoutList, List, SlidersHorizontal } from "lucide-vue-next";
 import { invokeTauri } from "../../../../services/tauri-api";
 import MemoryExportCard from "../../components/MemoryExportCard.vue";
 import MemoryImportCard from "../../components/MemoryImportCard.vue";
@@ -277,11 +348,19 @@ const props = withDefaults(defineProps<{ syncLocked?: boolean }>(), {
 const emit = defineEmits<{
   (e: "sync-lock-change", value: boolean): void;
 }>();
-const MEMORY_PAGE_SIZE = 10;
+const MEMORY_VIEW_MODE_STORAGE_KEY = "easy_call.memory.view_mode.v1";
+const DETAILED_MEMORY_PAGE_SIZE = 10;
+const COMPACT_MEMORY_PAGE_SIZE = 20;
+const PROFILE_ATTRIBUTE_TAGS = ["用户别名", "事实属性", "技能树", "关系图谱", "活跃项目", "用户要求"] as const;
 const loading = ref(false);
 const opMessage = ref("");
 const memoryList = ref<MemoryEntry[]>([]);
 const memoryPage = ref(1);
+const memoryViewMode = ref<"detailed" | "compact">("detailed");
+const filterPanelOpen = ref(false);
+const selectedOwnerFilter = ref("");
+const selectedProfileTagFilter = ref("");
+const selectedMemoryTypeFilter = ref("");
 const searchQuery = ref("");
 const isSearchMode = ref(false);
 const embeddingApiConfigId = ref("");
@@ -303,12 +382,51 @@ const syncProgressText = computed(() => {
   if (syncProgressTotal.value <= 0) return t('config.memory.progressStatus', { status: syncProgressStatus.value });
   return t('config.memory.progressBatch', { done: syncProgressDone.value, total: syncProgressTotal.value, percent: syncProgressPercent.value });
 });
+const memoryPageSize = computed(() => (
+  memoryViewMode.value === "compact" ? COMPACT_MEMORY_PAGE_SIZE : DETAILED_MEMORY_PAGE_SIZE
+));
+const showMemoryReasoning = computed(() => memoryViewMode.value === "detailed");
+const showMemoryTags = computed(() => memoryViewMode.value === "detailed");
+const ownerFilterOptions = computed(() => {
+  const seen = new Set<string>();
+  const options: Array<{ value: string; label: string }> = [];
+  for (const memory of memoryList.value) {
+    const ownerId = String(memory.ownerAgentId || "").trim();
+    if (!ownerId || seen.has(ownerId)) continue;
+    seen.add(ownerId);
+    options.push({
+      value: ownerId,
+      label: ownerAgentName(ownerId),
+    });
+  }
+  return options.sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
+});
+const memoryTypeFilterOptions = computed(() => ([
+  { value: "knowledge", label: memoryTypeLabel("knowledge") },
+  { value: "skill", label: memoryTypeLabel("skill") },
+  { value: "emotion", label: memoryTypeLabel("emotion") },
+  { value: "event", label: memoryTypeLabel("event") },
+]));
+const filteredMemories = computed(() => memoryList.value.filter((memory) => {
+  if (selectedOwnerFilter.value === "__global__" && memory.ownerAgentId) return false;
+  if (selectedOwnerFilter.value && selectedOwnerFilter.value !== "__global__" && String(memory.ownerAgentId || "").trim() !== selectedOwnerFilter.value) {
+    return false;
+  }
+  if (selectedProfileTagFilter.value && !memory.tags.includes(selectedProfileTagFilter.value)) {
+    return false;
+  }
+  if (selectedMemoryTypeFilter.value && memory.memoryType !== selectedMemoryTypeFilter.value) {
+    return false;
+  }
+  return true;
+}));
 
 const sortedMemories = computed(() => {
+  const base = filteredMemories.value;
   if (isSearchMode.value) {
-    return [...memoryList.value].sort((a, b) => (b.finalScore ?? 0) - (a.finalScore ?? 0));
+    return [...base].sort((a, b) => (b.finalScore ?? 0) - (a.finalScore ?? 0));
   }
-  return [...memoryList.value].sort((a, b) => {
+  return [...base].sort((a, b) => {
     const ta = Date.parse(a.createdAt || a.updatedAt || "");
     const tb = Date.parse(b.createdAt || b.updatedAt || "");
     if (Number.isFinite(ta) && Number.isFinite(tb)) return tb - ta;
@@ -316,7 +434,7 @@ const sortedMemories = computed(() => {
   });
 });
 
-const memoryPageCount = computed(() => Math.max(1, Math.ceil(sortedMemories.value.length / MEMORY_PAGE_SIZE)));
+const memoryPageCount = computed(() => Math.max(1, Math.ceil(sortedMemories.value.length / memoryPageSize.value)));
 const embeddingApiConfigs = computed(() =>
   apiConfigs.value.filter((api) =>
     api.requestFormat === "openai_embedding"
@@ -351,9 +469,28 @@ const rerankReadyToSave = computed(
 
 const pagedMemories = computed(() => {
   const page = Math.max(1, Math.min(memoryPage.value, memoryPageCount.value));
-  const start = (page - 1) * MEMORY_PAGE_SIZE;
-  return sortedMemories.value.slice(start, start + MEMORY_PAGE_SIZE);
+  const start = (page - 1) * memoryPageSize.value;
+  return sortedMemories.value.slice(start, start + memoryPageSize.value);
 });
+
+function setMemoryViewMode(mode: "detailed" | "compact"): void {
+  if (memoryViewMode.value === mode) return;
+  memoryViewMode.value = mode;
+  memoryPage.value = 1;
+  persistMemoryViewMode(mode);
+}
+
+function toggleMemoryViewMode(): void {
+  setMemoryViewMode(memoryViewMode.value === "detailed" ? "compact" : "detailed");
+}
+
+function toggleFilterPanel(): void {
+  filterPanelOpen.value = !filterPanelOpen.value;
+}
+
+function resetMemoryPage(): void {
+  memoryPage.value = 1;
+}
 
 function memoryTypeBadgeClass(type: string): string {
   const classes: Record<string, string> = {
@@ -427,7 +564,8 @@ async function deleteMemory(memoryId: string) {
     invokeTauri<{ status: string }>("delete_memory", { input: { memoryId } }),
   );
   if (!result) return;
-  await refreshMemories();
+  memoryList.value = memoryList.value.filter((memory) => memory.id !== memoryId);
+  memoryPage.value = Math.max(1, Math.min(memoryPage.value, memoryPageCount.value));
   opMessage.value = t('config.memory.memoryDeleted');
 }
 
@@ -491,6 +629,27 @@ async function handleMemoryImportDone(result: {
 
 function handleMemoryExportDone(result: { count: number }) {
   opMessage.value = t("config.memory.exportedCount", { count: result.count });
+}
+
+function loadMemoryViewModePreference(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const stored = window.localStorage.getItem(MEMORY_VIEW_MODE_STORAGE_KEY);
+    if (stored === "detailed" || stored === "compact") {
+      memoryViewMode.value = stored;
+    }
+  } catch {
+    // Ignore storage errors and keep default mode.
+  }
+}
+
+function persistMemoryViewMode(mode: "detailed" | "compact"): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(MEMORY_VIEW_MODE_STORAGE_KEY, mode);
+  } catch {
+    // Ignore storage errors and keep UI functional.
+  }
 }
 
 async function testEmbeddingProvider() {
@@ -630,6 +789,7 @@ async function loadBindings() {
 }
 
 onMounted(() => {
+  loadMemoryViewModePreference();
   void loadPersonaNames();
   void loadApiConfigs();
   void loadBindings();
