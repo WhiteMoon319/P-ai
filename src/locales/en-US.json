@@ -1334,6 +1334,7 @@
     "darkness": "Darkness",
     "tint": "Tint",
     "tone": "Saturation",
+    "textStrength": "Text Strength",
     "radius": "Unified Radius",
     "uiSizePreset": "UI Size",
     "sizePresets": {

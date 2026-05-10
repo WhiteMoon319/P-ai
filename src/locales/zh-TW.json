@@ -1348,6 +1348,7 @@
     "darkness": "暗度",
     "tint": "透色",
     "tone": "飽和度",
+    "textStrength": "文字強度",
     "radius": "統一圓角",
     "uiSizePreset": "介面尺寸",
     "sizePresets": {

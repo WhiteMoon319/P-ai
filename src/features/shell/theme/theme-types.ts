@@ -9,6 +9,7 @@ export type GeneratedThemeControls = {
   brightness: number;
   tint: number;
   tone: number;
+  textStrength: number;
   radius: number;
   uiSizePreset: GeneratedUiSizePreset;
   depthEnabled: boolean;

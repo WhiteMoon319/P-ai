@@ -85,6 +85,7 @@ export const LIGHT_GENERATED_THEME_CONTROLS: GeneratedThemeControls = {
   brightness: 100,
   tint: 0,
   tone: 90,
+  textStrength: 88,
   radius: 16,
   uiSizePreset: "default",
   depthEnabled: false,
@@ -98,6 +99,7 @@ export const DARK_GENERATED_THEME_CONTROLS: GeneratedThemeControls = {
   brightness: 25,
   tint: 100,
   tone: 90,
+  textStrength: 88,
   radius: 16,
   uiSizePreset: "default",
   depthEnabled: false,
@@ -121,6 +123,7 @@ const LEGACY_GENERATED_THEME_CONTROLS: GeneratedThemeControls = {
   brightness: 52,
   tint: 100,
   tone: 58,
+  textStrength: 88,
   radius: 16,
   uiSizePreset: "default",
   depthEnabled: false,
@@ -235,6 +238,21 @@ function bestReadableContent(background: OklchColor): OklchColor {
   return contrastRatio(darkText, background) >= contrastRatio(lightText, background) ? darkText : lightText;
 }
 
+function softenBaseContent(content: OklchColor, background: OklchColor, strengthPercent: number): OklchColor {
+  const strength = clamp(Number.isFinite(strengthPercent) ? strengthPercent : 88, 55, 100) / 100;
+  if (strength >= 0.999) {
+    return content;
+  }
+  const softness = (1 - strength) * 0.45;
+  const seeded = createOklch(
+    content.l + (background.l - content.l) * softness,
+    content.c + (background.c - content.c) * softness * 0.7,
+    content.h,
+  );
+  const direction = content.l >= background.l ? "lighter" : "darker";
+  return adjustForContrast(seeded, background, 4.8, direction);
+}
+
 function sizePresetTokens(preset: GeneratedUiSizePreset): SizePresetTokens {
   return UI_SIZE_PRESET_MAP[preset] || UI_SIZE_PRESET_MAP.default;
 }
@@ -302,6 +320,11 @@ export function normalizeGeneratedThemeControls(
     tone: clamp(
       Math.round(normalizePercent(Number(input?.tone ?? fallbackControls.tone ?? legacyControls.tone))),
       30,
+      100,
+    ),
+    textStrength: clamp(
+      Math.round(normalizePercent(Number(input?.textStrength ?? fallbackControls.textStrength ?? legacyControls.textStrength))),
+      55,
       100,
     ),
     radius: clamp(
@@ -379,7 +402,7 @@ export function generateGeneratedThemeTokens(controlsInput: GeneratedThemeContro
   );
   const [base100, base300] =
     controls.mode === "dark" ? [rawBase300, rawBase100] : [rawBase100, rawBase300];
-  const baseContent = bestReadableContent(base100);
+  const baseContent = softenBaseContent(bestReadableContent(base100), base100, controls.textStrength);
   const secondaryHue = resolveSecondaryHue(controls.themeHue, [
     32,
     255,

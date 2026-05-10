@@ -124,6 +124,22 @@
 
         <label class="grid gap-2">
           <div class="flex items-center justify-between gap-3 text-sm">
+            <span>{{ t("appearance.textStrength") }}</span>
+            <span class="font-mono text-xs text-base-content/65">{{ props.controls.textStrength }}</span>
+          </div>
+          <input
+            class="range range-warning w-full"
+            type="range"
+            min="55"
+            max="100"
+            step="1"
+            :value="props.controls.textStrength"
+            @input="patchSlider('textStrength', $event)"
+          />
+        </label>
+
+        <label class="grid gap-2">
+          <div class="flex items-center justify-between gap-3 text-sm">
             <span>{{ t("appearance.radius") }}</span>
             <span class="font-mono text-xs text-base-content/65">{{ props.controls.radius }}px</span>
           </div>
@@ -231,7 +247,7 @@ function patchUiSizePreset(uiSizePreset: GeneratedUiSizePreset) {
   patchControls({ uiSizePreset });
 }
 
-function patchSlider(key: "themeHue" | "contrast" | "brightness" | "tint" | "tone" | "radius", event: Event) {
+function patchSlider(key: "themeHue" | "contrast" | "brightness" | "tint" | "tone" | "textStrength" | "radius", event: Event) {
   const nextValue = Number((event.target as HTMLInputElement).value || 0);
   patchControls({ [key]: nextValue } as Partial<GeneratedThemeControls>);
 }
