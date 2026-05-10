@@ -6,7 +6,6 @@ type UseChatScrollLayoutOptions = {
   busy: Ref<boolean>;
   frozen: Ref<boolean>;
   messageBlockCount: Ref<number>;
-  conversationScrollToBottomRequest: Ref<number>;
   onReachedBottom: () => void;
   focusComposerInput: (options?: FocusOptions) => void;
 };
@@ -33,20 +32,6 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
   const jumpToBottomStyle = computed(() => ({
     bottom: `${jumpToBottomOffset.value}px`,
   }));
-
-  function scrollToBottom(behavior: ScrollBehavior = "smooth") {
-    const el = scrollContainer.value;
-    if (!el) return;
-    const targetTop = Math.max(0, el.scrollHeight - el.clientHeight);
-    const distance = Math.abs(targetTop - el.scrollTop);
-    const finalBehavior: ScrollBehavior =
-      behavior === "smooth" && distance > el.clientHeight * 3 ? "auto" : behavior;
-    el.scrollTo({ top: targetTop, behavior: finalBehavior });
-  }
-
-  function jumpToBottom() {
-    scrollToBottom("smooth");
-  }
 
   function syncConversationLayoutMode() {
     const el = chatLayoutRoot.value;
@@ -213,24 +198,6 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
     },
   );
 
-  watch(
-    options.conversationScrollToBottomRequest,
-    (nextValue, prevValue) => {
-      if (!nextValue || nextValue === prevValue) return;
-      nextTick(() => {
-        requestAnimationFrame(() => {
-          scrollToBottom("auto");
-          const el = scrollContainer.value;
-          if (el) {
-            lastBottomState.value = isNearBottom(el);
-            lastScrollTop.value = el.scrollTop;
-            userScrollingDown.value = false;
-          }
-        });
-      });
-    },
-  );
-
   return {
     scrollContainer,
     composerContainer,
@@ -241,6 +208,5 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
     jumpToBottomStyle,
     showSideConversationList,
     onScroll,
-    jumpToBottom,
   };
 }

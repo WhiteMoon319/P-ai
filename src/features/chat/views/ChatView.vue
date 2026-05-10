@@ -30,7 +30,7 @@
           </div>
         </div>
 
-        <div class="relative flex min-h-0 flex-1 overflow-hidden" @mouseenter="revealChatScrollbar" @mouseleave="hideChatScrollbar">
+        <div class="relative flex min-h-0 flex-1 overflow-hidden" @mouseenter="chatScrollbarRef?.reveal()" @mouseleave="chatScrollbarRef?.hide()">
           <div
             ref="scrollContainer"
             class="ecall-chat-scroll-container relative flex flex-1 min-h-0 flex-col overflow-x-hidden overflow-y-auto px-0 py-3"
@@ -282,13 +282,7 @@
             </div>
           </div>
           </div>
-          <div v-if="chatCanScroll" class="pointer-events-none absolute bottom-1 right-1 top-1 z-20 w-1.5">
-            <div
-              class="absolute right-0 w-1.5 rounded-full bg-base-content/30"
-              :class="chatScrollbarVisible ? 'opacity-100' : 'opacity-0'"
-              :style="chatScrollThumbStyle"
-            ></div>
-          </div>
+          <FloatingScrollbar ref="chatScrollbarRef" :target="scrollContainer" />
         </div>
         <div
           v-if="conversationSummaryCard.visible"
@@ -505,6 +499,7 @@ import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, Cha
 import ChatMessageItem from "../components/ChatMessageItem.vue";
 import ChatApprovalPanel from "../components/ChatApprovalPanel.vue";
 import ChatComposerPanel from "../components/ChatComposerPanel.vue";
+import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import ChatConversationSidebar from "../components/ChatConversationSidebar.vue";
 import ChatWorkspaceToolbar from "../components/ChatWorkspaceToolbar.vue";
 import ToolReviewSidebar from "../components/ToolReviewSidebar.vue";
@@ -1183,6 +1178,7 @@ const emit = defineEmits<{
 }>();
 const { t } = useI18n();
 const toolReviewSidebarRef = ref<ComponentPublicInstance<{ setCommitOptions: (items: ToolReviewCommitOption[], loading?: boolean, total?: number, page?: number, pageSize?: number) => void }> | null>(null);
+const chatScrollbarRef = ref<InstanceType<typeof FloatingScrollbar> | null>(null);
 
 function handleDetachConversationRequest() {
   console.info("[独立聊天窗口][前端链路] ChatView 收到 detachConversation，继续派发到窗口容器", {
@@ -1264,13 +1260,10 @@ const measuredVirtualItemHeights = new Map<string, number>();
 const streamingVirtualItemViewportTop = new Map<string, number>();
 let pendingMeasureFrame = 0;
 let pendingPinToBottomFrame = 0;
+let activeJumpToBottomRequest = 0;
+let pendingJumpToBottomFrame = 0;
 let pendingProgrammaticScrollPaginationResetFrame = 0;
 let lastConversationScrollTop = 0;
-const chatCanScroll = ref(false);
-const chatScrollbarVisible = ref(false);
-const chatScrollThumbHeight = ref(24);
-const chatScrollThumbTop = ref(0);
-let chatScrollResizeObserver: ResizeObserver | null = null;
 let virtualItemResizeObserver: ResizeObserver | null = null;
 const olderHistoryTriggerReady = ref(true);
 const suppressOlderHistoryPaginationOnce = ref(false);
@@ -1293,41 +1286,9 @@ const {
   busy: toRef(props, "conversationBusy"),
   frozen: toRef(props, "frozen"),
   messageBlockCount: computed(() => props.messageBlocks.length),
-  conversationScrollToBottomRequest: toRef(props, "conversationScrollToBottomRequest"),
   onReachedBottom: () => emit("reachedBottom"),
   focusComposerInput: (options) => composerPanelRef.value?.focusInput(options),
 });
-
-const chatScrollThumbStyle = computed(() => ({
-  height: `${chatScrollThumbHeight.value}px`,
-  transform: `translateY(${chatScrollThumbTop.value}px)`,
-}));
-
-function updateChatScrollbarThumb() {
-  const scroller = scrollContainer.value;
-  if (!scroller) return;
-  const { clientHeight, scrollHeight, scrollTop } = scroller;
-  const scrollable = scrollHeight > clientHeight + 1;
-  chatCanScroll.value = scrollable;
-  if (!scrollable) return;
-  const trackHeight = Math.max(clientHeight - 8, 0);
-  const height = Math.max(24, Math.round((clientHeight / scrollHeight) * trackHeight));
-  const maxTop = Math.max(trackHeight - height, 0);
-  chatScrollThumbHeight.value = height;
-  chatScrollThumbTop.value = maxTop === 0
-    ? 0
-    : Math.round((scrollTop / (scrollHeight - clientHeight)) * maxTop);
-}
-
-function revealChatScrollbar() {
-  updateChatScrollbarThumb();
-  if (!chatCanScroll.value) return;
-  chatScrollbarVisible.value = true;
-}
-
-function hideChatScrollbar() {
-  chatScrollbarVisible.value = false;
-}
 
 function refreshObservedVirtualItemElements() {
   const validIds = new Set(virtualRenderItems.value.map((item) => item.id));
@@ -1538,6 +1499,7 @@ function scheduleVirtualMeasure() {
       syncVisibleStreamingVirtualItemViewportTops();
       virtualizer.value.measure();
       syncVisibleStreamingVirtualItemViewportTops();
+      if (activeJumpToBottomRequest) scrollConversationToBottomOnce();
     });
   });
 }
@@ -1589,7 +1551,47 @@ function measureVirtualRow(itemId: string, element: Element | ComponentPublicIns
   }
 }
 
+function scrollConversationToBottomOnce() {
+  const scrollEl = scrollContainer.value;
+  if (!scrollEl) return;
+  scrollEl.scrollTop = scrollEl.scrollHeight;
+  onScroll();
+  chatScrollbarRef.value?.updateThumb();
+}
+
+function scheduleJumpToBottomStep(requestId: number, remainingFrames: number) {
+  if (activeJumpToBottomRequest !== requestId) return;
+  if (pendingJumpToBottomFrame) {
+    cancelAnimationFrame(pendingJumpToBottomFrame);
+    pendingJumpToBottomFrame = 0;
+  }
+  pendingJumpToBottomFrame = requestAnimationFrame(() => {
+    pendingJumpToBottomFrame = 0;
+    if (activeJumpToBottomRequest !== requestId) return;
+    scheduleVirtualMeasure();
+    scrollConversationToBottomOnce();
+    if (remainingFrames > 0) {
+      scheduleJumpToBottomStep(requestId, remainingFrames - 1);
+      return;
+    }
+    activeJumpToBottomRequest = 0;
+  });
+}
+
+function startJumpToBottomTransaction() {
+  // 禁止流式自动贴底：只有用户点击“滚到最下”才创建这个有限事务。
+  // 事务只覆盖当前点击后的短暂布局/虚拟测量窗口；后续流式内容继续长高时不追底，避免长消息持续上移导致用户看不清。
+  const requestId = activeJumpToBottomRequest + 1;
+  activeJumpToBottomRequest = requestId;
+  armProgrammaticScrollPaginationSuppression();
+  pendingOlderHistoryAnchor.value = null;
+  pendingOlderHistoryScrollRestore.value = null;
+  scrollConversationToBottomOnce();
+  void nextTick(() => scheduleJumpToBottomStep(requestId, 3));
+}
+
 function pinToBottomOnNextLayout(smooth = false, reason = "unknown") {
+  if (props.chatting && reason !== "activeConversationChanged") return;
   if (pendingPinToBottomFrame) {
     cancelAnimationFrame(pendingPinToBottomFrame);
     pendingPinToBottomFrame = 0;
@@ -1601,6 +1603,7 @@ function pinToBottomOnNextLayout(smooth = false, reason = "unknown") {
       const scrollEl = scrollContainer.value;
       if (!scrollEl) return;
       requestAnimationFrame(() => {
+        if (activeJumpToBottomRequest) return;
         scrollEl.scrollTo({
           top: scrollEl.scrollHeight,
           behavior: smooth ? "smooth" : "auto",
@@ -1631,7 +1634,7 @@ function alignLatestOwnMessageToTop(behavior: ScrollBehavior = "smooth") {
 
 function syncViewportMetrics() {
   scheduleVirtualMeasure();
-  void nextTick(updateChatScrollbarThumb);
+  void nextTick(() => chatScrollbarRef.value?.updateThumb());
 }
 
 function findRenderedMessageElement(messageId: string): HTMLElement | null {
@@ -1690,7 +1693,7 @@ function captureVisibleAnchor(edge: "top" | "bottom"): { messageId: string; edge
 function onConversationScroll() {
   const scrollEl = scrollContainer.value;
   onScroll();
-  revealChatScrollbar();
+  chatScrollbarRef.value?.updateThumb();
   if (suppressOlderHistoryPaginationOnce.value) {
     suppressOlderHistoryPaginationOnce.value = false;
     if (pendingProgrammaticScrollPaginationResetFrame) {
@@ -1707,6 +1710,7 @@ function onConversationScroll() {
 }
 
 function handleJumpToBottom() {
+  startJumpToBottomTransaction();
   emit("jumpToConversationBottom");
 }
 
@@ -1752,7 +1756,7 @@ watch(
   () => String(props.activeConversationId || "").trim(),
   () => {
     exitMessageSelectionMode();
-    chatScrollbarVisible.value = false;
+    chatScrollbarRef.value?.hide();
     pinToBottomOnNextLayout(false, "activeConversationChanged");
     olderHistoryRequestPending.value = false;
     lastConversationScrollTop = 0;
@@ -1767,7 +1771,7 @@ watch(
   () => props.conversationScrollToBottomRequest,
   (nextValue, prevValue) => {
     if (!nextValue || nextValue === prevValue) return;
-    pinToBottomOnNextLayout(false, "externalScrollRequest");
+    startJumpToBottomTransaction();
   },
 );
 
@@ -1801,7 +1805,7 @@ watch(
   () => props.messageBlocks.length,
   () => {
     refreshObservedVirtualItemElements();
-    void nextTick(updateChatScrollbarThumb);
+    void nextTick(() => chatScrollbarRef.value?.updateThumb());
   },
 );
 
@@ -2497,12 +2501,7 @@ watch(
 );
 
 onMounted(() => {
-  void nextTick(updateChatScrollbarThumb);
-  const scroller = scrollContainer.value;
-  if (typeof ResizeObserver !== "undefined" && scroller) {
-    chatScrollResizeObserver = new ResizeObserver(updateChatScrollbarThumb);
-    chatScrollResizeObserver.observe(scroller);
-  }
+  void nextTick(() => chatScrollbarRef.value?.updateThumb());
   if (typeof ResizeObserver !== "undefined") {
     virtualItemResizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -2525,8 +2524,6 @@ onBeforeUnmount(() => {
   clearDelegateStatusesPollTimer();
   stopIdeContextRefreshTimer();
   stopIdeContextEventListener();
-  chatScrollResizeObserver?.disconnect();
-  chatScrollResizeObserver = null;
   virtualItemResizeObserver?.disconnect();
   virtualItemResizeObserver = null;
   if (pendingMeasureFrame) {
@@ -2537,6 +2534,11 @@ onBeforeUnmount(() => {
     cancelAnimationFrame(pendingPinToBottomFrame);
     pendingPinToBottomFrame = 0;
   }
+  if (pendingJumpToBottomFrame) {
+    cancelAnimationFrame(pendingJumpToBottomFrame);
+    pendingJumpToBottomFrame = 0;
+  }
+  activeJumpToBottomRequest = 0;
   if (pendingProgrammaticScrollPaginationResetFrame) {
     cancelAnimationFrame(pendingProgrammaticScrollPaginationResetFrame);
     pendingProgrammaticScrollPaginationResetFrame = 0;

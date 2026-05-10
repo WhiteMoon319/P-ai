@@ -2,6 +2,8 @@
 
 ## 进行中
 
+- 修复（chat-floating-scrollbar-and-manual-bottom-transaction）：抽取通用可拖动悬浮滚动条并接入聊天消息区、会话列表；滚到最下改为用户点击触发的有限事务，明确禁止流式长消息自动贴底，避免内容持续上移导致阅读困难。
+
 - 优化（terminal-exec-schema-simplify）：终端 `exec` 工具对模型可见参数收敛为 `command` 与 `timeout_ms`，隐藏旧 `action` 字段；后端继续兼容旧 `run/list/close` 入参，避免历史上下文或旧调用失效。
 
 - 优化（terminal-exec-one-shot-runner）：终端 `exec run` 默认切换为一次性受控进程执行，保留 Windows UTF-8 包装与 Job Object 进程树回收；旧 live shell 仅保留 `list/close` 诊断清理入口，并为关闭等待增加二次超时，避免卡死命令阻塞后续执行。
