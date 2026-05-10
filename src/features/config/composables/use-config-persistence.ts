@@ -317,6 +317,12 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
           name: String((provider as { name?: unknown }).name || "").trim(),
           requestFormat: normalizeApiRequestFormat((provider as { requestFormat?: unknown }).requestFormat),
           allowConcurrentRequests: !!(provider as { allowConcurrentRequests?: unknown }).allowConcurrentRequests,
+          maxConcurrentRequests: (() => {
+            const raw = (provider as { maxConcurrentRequests?: unknown }).maxConcurrentRequests;
+            if (raw == null) return null;
+            const parsed = Math.round(Number(raw));
+            return Number.isFinite(parsed) && parsed >= 1 ? parsed : null;
+          })(),
           enableText: !!(provider as { enableText?: unknown }).enableText,
           enableImage: !!(provider as { enableImage?: unknown }).enableImage,
           enableAudio: !!(provider as { enableAudio?: unknown }).enableAudio,
