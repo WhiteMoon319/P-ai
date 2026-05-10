@@ -258,7 +258,9 @@ import { bundledLanguagesInfo, codeToHtml } from "shiki";
 import "markstream-vue/index.css";
 import { invokeTauri } from "../../services/tauri-api";
 import { registerChatMarkstreamComponents } from "../../features/chat/markdown/register-chat-markstream";
+import { type AppThemeState, type GeneratedThemeControls } from "../../features/shell/theme/theme-types";
 import { useAppTheme } from "../../features/shell/composables/use-app-theme";
+import { buildGeneratedThemeStyleText, generateGeneratedThemeTokens, GENERATED_THEME_NAME } from "../../features/shell/theme/theme-generator";
 import Win10ResizeHandles from "../../features/shell/components/Win10ResizeHandles.vue";
 
 enableMermaid();
@@ -448,6 +450,7 @@ const addressScrollState = ref({
 });
 let unlistenOpenPath: UnlistenFn | null = null;
 let unlistenFileDrop: UnlistenFn | null = null;
+let unlistenThemeChanged: UnlistenFn | null = null;
 
 const activeTab = computed(() => tabs.value.find((tab) => tab.path === activePath.value) || tabs.value[0] || null);
 
@@ -1094,6 +1097,27 @@ async function closeWindow() {
 
 onMounted(() => {
   restoreThemeFromStorage();
+  void listen<AppThemeState>("easy-call:theme-changed", (event) => {
+    const state = event.payload;
+    if (state.kind === "preset" && state.name) {
+      document.documentElement.setAttribute("data-theme", state.name);
+    } else if (state.kind === "generated" && state.controls) {
+      const tokens = generateGeneratedThemeTokens(state.controls as GeneratedThemeControls);
+      const styleText = buildGeneratedThemeStyleText(tokens);
+      const existing = document.getElementById("easy-call-generated-theme-style");
+      if (existing instanceof HTMLStyleElement) {
+        existing.textContent = styleText;
+      } else {
+        const element = document.createElement("style");
+        element.id = "easy-call-generated-theme-style";
+        element.textContent = styleText;
+        document.head.appendChild(element);
+      }
+      document.documentElement.setAttribute("data-theme", GENERATED_THEME_NAME);
+    }
+  }).then((unlisten) => {
+    unlistenThemeChanged = unlisten;
+  });
   void syncWindowState();
   window.addEventListener("resize", updateAddressScrollState);
   const path = new URLSearchParams(window.location.search).get("path") || "";
@@ -1128,6 +1152,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("resize", updateAddressScrollState);
   unlistenOpenPath?.();
   unlistenFileDrop?.();
+  unlistenThemeChanged?.();
 });
 </script>
 
