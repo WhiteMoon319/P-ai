@@ -470,6 +470,7 @@ fn main() {
 
     builder
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -740,6 +741,7 @@ fn main() {
             desktop_screenshot,
             xcap,
             desktop_wait,
+            demo_send_native_notification,
             get_host_runtime_prerequisites,
             install_host_runtime_prerequisite,
             terminal_self_check,

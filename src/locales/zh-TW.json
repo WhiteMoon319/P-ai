@@ -37,6 +37,7 @@
       "departmentTree": "部門樹",
       "demo": "Demo",
       "chatSettings": "对话",
+      "notification": "通知",
       "remoteIm": "聯絡人",
       "memory": "记忆",
       "task": "任務",
@@ -86,6 +87,14 @@
       "theme": "主题",
       "lightTheme": "浅色模式",
       "darkTheme": "深色模式"
+    },
+    "notification": {
+      "title": "訊息通知",
+      "summary": "控制本地會話在背景調度完成或失敗時的系統通知與提示音。",
+      "enableLabel": "是否通知",
+      "enableHint": "關閉後，背景本地會話完成或失敗時不再彈出系統通知。",
+      "soundLabel": "是否聲音",
+      "soundHint": "開啟後，Windows 原生通知會使用系統預設提示音。"
     },
     "api": {
       "saving": "保存中...",

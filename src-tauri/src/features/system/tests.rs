@@ -556,3 +556,12 @@
         assert!(!preserved.contains(&long_middle));
         assert!(!preserved.contains("旧摘要"));
     }
+
+    #[test]
+    fn native_notification_text_excerpt_should_trim_blank_lines_and_limit_length() {
+        let text = "\n  第一行  \n\n 第二行 \n";
+        assert_eq!(native_notification_text_excerpt(text, 80), "第一行\n第二行");
+
+        let truncated = native_notification_text_excerpt("123456", 4);
+        assert_eq!(truncated, "1234...");
+    }

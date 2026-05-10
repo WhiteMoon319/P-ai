@@ -263,6 +263,8 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
     options.config.minRecordSeconds = normalizedConfigNumbers.minRecordSeconds;
     options.config.maxRecordSeconds = normalizedConfigNumbers.maxRecordSeconds;
     options.config.llmRoundLogCapacity = normalizeLlmRoundLogCapacity((cfg as AppConfig).llmRoundLogCapacity);
+    options.config.messageNotificationEnabled = (cfg as { messageNotificationEnabled?: unknown }).messageNotificationEnabled !== false;
+    options.config.messageNotificationSoundEnabled = (cfg as { messageNotificationSoundEnabled?: unknown }).messageNotificationSoundEnabled === true;
     options.config.selectedApiConfigId = cfg.selectedApiConfigId;
     options.config.assistantDepartmentApiConfigId = cfg.assistantDepartmentApiConfigId;
     options.config.visionApiConfigId = cfg.visionApiConfigId ?? undefined;
@@ -478,6 +480,8 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
       options.config.minRecordSeconds = normalizedConfigNumbers.minRecordSeconds;
       options.config.maxRecordSeconds = normalizedConfigNumbers.maxRecordSeconds;
       options.config.llmRoundLogCapacity = normalizeLlmRoundLogCapacity((saved as AppConfig).llmRoundLogCapacity);
+      options.config.messageNotificationEnabled = (saved as { messageNotificationEnabled?: unknown }).messageNotificationEnabled !== false;
+      options.config.messageNotificationSoundEnabled = (saved as { messageNotificationSoundEnabled?: unknown }).messageNotificationSoundEnabled === true;
       options.config.selectedApiConfigId = saved.selectedApiConfigId;
       options.config.assistantDepartmentApiConfigId = saved.assistantDepartmentApiConfigId;
       options.config.visionApiConfigId = saved.visionApiConfigId ?? undefined;

@@ -530,6 +530,14 @@ fn default_record_background_wake_enabled() -> bool {
     true
 }
 
+fn default_message_notification_enabled() -> bool {
+    true
+}
+
+fn default_message_notification_sound_enabled() -> bool {
+    false
+}
+
 fn default_ui_language() -> String {
     "zh-CN".to_string()
 }
@@ -712,6 +720,10 @@ struct AppConfig {
     tool_max_iterations: u32,
     #[serde(default = "default_llm_round_log_capacity")]
     llm_round_log_capacity: u32,
+    #[serde(default = "default_message_notification_enabled")]
+    message_notification_enabled: bool,
+    #[serde(default = "default_message_notification_sound_enabled")]
+    message_notification_sound_enabled: bool,
     selected_api_config_id: String,
     #[serde(default, alias = "chatApiConfigId")]
     assistant_department_api_config_id: String,
@@ -756,6 +768,8 @@ impl Default for AppConfig {
             max_record_seconds: default_max_record_seconds(),
             tool_max_iterations: default_tool_max_iterations(),
             llm_round_log_capacity: default_llm_round_log_capacity(),
+            message_notification_enabled: default_message_notification_enabled(),
+            message_notification_sound_enabled: default_message_notification_sound_enabled(),
             selected_api_config_id: api_config.id.clone(),
             assistant_department_api_config_id: api_config.id.clone(),
             vision_api_config_id: None,

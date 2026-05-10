@@ -20,6 +20,7 @@
     "dialog:allow-open",
     "dialog:allow-save",
     "dialog:allow-message",
+    "notification:default",
     "updater:default"
   ]
 }

@@ -37,6 +37,7 @@
       "departmentTree": "部门树",
       "demo": "Demo",
       "chatSettings": "对话",
+      "notification": "通知",
       "remoteIm": "联系人",
       "memory": "记忆",
       "task": "任务",
@@ -86,6 +87,14 @@
       "theme": "主题",
       "lightTheme": "浅色模式",
       "darkTheme": "深色模式"
+    },
+    "notification": {
+      "title": "消息通知",
+      "summary": "控制本地会话在后台调度完成或失败时的系统通知与提示音。",
+      "enableLabel": "是否通知",
+      "enableHint": "关闭后，后台本地会话完成或失败时不再弹出系统通知。",
+      "soundLabel": "是否声音",
+      "soundHint": "开启后，Windows 原生通知会使用系统默认提示音。"
     },
     "api": {
       "saving": "保存中...",

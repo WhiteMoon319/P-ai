@@ -6,6 +6,9 @@
           <a :class="{ 'active': props.configTab === 'welcome', 'menu-active': props.configTab === 'welcome', 'opacity-50 pointer-events-none': memorySyncLocked }" @click="requestTabChange('welcome')">{{ t("config.tabs.welcome") }}</a>
         </li>
         <li>
+          <a :class="{ 'active': props.configTab === 'notification', 'menu-active': props.configTab === 'notification', 'opacity-50 pointer-events-none': memorySyncLocked }" @click="requestTabChange('notification')">{{ t("config.tabs.notification") }}</a>
+        </li>
+        <li>
           <a :class="{ 'active': props.configTab === 'hotkey', 'menu-active': props.configTab === 'hotkey', 'opacity-50 pointer-events-none': memorySyncLocked }" @click="requestTabChange('hotkey')">{{ t("config.tabs.hotkey") }}</a>
         </li>
         <li>
@@ -28,9 +31,6 @@
         </li>
         <li>
           <a :class="{ 'active': props.configTab === 'departmentTree', 'menu-active': props.configTab === 'departmentTree', 'opacity-50 pointer-events-none': memorySyncLocked }" @click="requestTabChange('departmentTree')">{{ t("config.tabs.departmentTree") }}</a>
-        </li>
-        <li v-if="SHOW_DEV_DEMO_TAB">
-          <a :class="{ 'active': props.configTab === 'demo', 'menu-active': props.configTab === 'demo', 'opacity-50 pointer-events-none': memorySyncLocked }" @click="requestTabChange('demo')">{{ t("config.tabs.demo") }}</a>
         </li>
         <li>
           <a :class="{ 'active': props.configTab === 'chatSettings', 'menu-active': props.configTab === 'chatSettings', 'opacity-50 pointer-events-none': memorySyncLocked }" @click="requestTabChange('chatSettings')">{{ t("config.tabs.chatSettings") }}</a>
@@ -58,6 +58,9 @@
             <span>{{ t("config.tabs.about") }}</span>
             <span v-if="props.hasAvailableUpdate" class="ml-2 inline-flex h-2.5 w-2.5 rounded-full bg-error shrink-0" :title="t('about.updateAvailableBadge')"></span>
           </a>
+        </li>
+        <li v-if="SHOW_DEV_DEMO_TAB">
+          <a :class="{ 'active': props.configTab === 'demo', 'menu-active': props.configTab === 'demo', 'opacity-50 pointer-events-none': memorySyncLocked }" @click="requestTabChange('demo')">{{ t("config.tabs.demo") }}</a>
         </li>
       </ul>
     </div>
@@ -200,6 +203,13 @@
             @open-system-prompt-preview="$emit('openSystemPromptPreview')"
             @refresh-image-cache-stats="$emit('refreshImageCacheStats')"
             @clear-image-cache="$emit('clearImageCache')"
+          />
+          <NotificationTab
+            v-else-if="props.configTab === 'notification'"
+            :config="config"
+            :saving-config="savingConfig"
+            :save-config-action="saveConfigAction"
+            :last-saved-config-json="lastSavedConfigJson"
           />
           <RemoteImTab
             v-else-if="props.configTab === 'remoteIm'"
@@ -380,6 +390,7 @@ import DepartmentTab from "./config-tabs/DepartmentTab.vue";
 import DepartmentTreeTab from "./config-tabs/DepartmentTreeTab.vue";
 import DemoTab from "./config-tabs/DemoTab.vue";
 import ChatSettingsTab from "./config-tabs/ChatSettingsTab.vue";
+import NotificationTab from "./config-tabs/NotificationTab.vue";
 import RemoteImTab from "./config-tabs/RemoteImTab.vue";
 import MemoryTab from "./config-tabs/MemoryTab.vue";
 import TaskTab from "./config-tabs/TaskTab.vue";
@@ -391,7 +402,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invokeTauri } from "../../../services/tauri-api";
 import { toErrorMessage } from "../../../utils/error";
 
-type ConfigTab = "welcome" | "hotkey" | "api" | "tools" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "remoteIm" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
+type ConfigTab = "welcome" | "hotkey" | "api" | "tools" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "remoteIm" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
 type AvatarTarget = { agentId: string };
 const SHOW_DEV_DEMO_TAB = import.meta.env.DEV;
 

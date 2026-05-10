@@ -2271,6 +2271,8 @@ fn departments_only_config(departments: &[DepartmentConfig]) -> AppConfig {
         max_record_seconds: 0,
         tool_max_iterations: 0,
         llm_round_log_capacity: default_llm_round_log_capacity(),
+        message_notification_enabled: default_message_notification_enabled(),
+        message_notification_sound_enabled: default_message_notification_sound_enabled(),
         selected_api_config_id: String::new(),
         assistant_department_api_config_id: String::new(),
         vision_api_config_id: None,

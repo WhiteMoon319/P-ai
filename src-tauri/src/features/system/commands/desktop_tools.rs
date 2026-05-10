@@ -12,6 +12,124 @@ async fn desktop_wait(input: WaitRequest) -> Result<WaitResponse, String> {
         .map_err(|err| to_tool_err_string(&err))
 }
 
+const NATIVE_NOTIFICATION_BODY_MAX_CHARS: usize = 180;
+#[cfg(target_os = "windows")]
+const NATIVE_NOTIFICATION_SOUND_DEFAULT: &str = "Default";
+
+fn native_notification_text_excerpt(raw: &str, max_chars: usize) -> String {
+    let normalized = raw
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let trimmed = normalized.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let mut out = String::new();
+    for (idx, ch) in trimmed.chars().enumerate() {
+        if idx >= max_chars {
+            out.push_str("...");
+            break;
+        }
+        out.push(ch);
+    }
+    out
+}
+
+fn send_native_notification(
+    app: &AppHandle,
+    title: &str,
+    body: &str,
+    play_sound: bool,
+) -> Result<(), String> {
+    use tauri_plugin_notification::{NotificationExt, PermissionState};
+
+    let normalized_title = title.trim();
+    let normalized_body = body.trim();
+    if normalized_title.is_empty() {
+        return Err("通知标题不能为空".to_string());
+    }
+    if normalized_body.is_empty() {
+        return Err("通知正文不能为空".to_string());
+    }
+
+    let notifications = app.notification();
+    let permission_before = notifications
+        .permission_state()
+        .map_err(|err| format!("读取通知权限失败：{err}"))?;
+    let permission_after = match permission_before {
+        PermissionState::Prompt | PermissionState::PromptWithRationale => notifications
+            .request_permission()
+            .map_err(|err| format!("请求通知权限失败：{err}"))?,
+        state => state,
+    };
+
+    if permission_after == PermissionState::Denied {
+        return Err("系统通知权限已被拒绝，请先在系统设置里允许通知。".to_string());
+    }
+
+    let mut builder = notifications
+        .builder()
+        .title(normalized_title)
+        .body(normalized_body);
+
+    #[cfg(target_os = "windows")]
+    {
+        if play_sound {
+            builder = builder.sound(NATIVE_NOTIFICATION_SOUND_DEFAULT);
+        }
+    }
+
+    builder
+        .show()
+        .map_err(|err| format!("发送原生通知失败：{err}"))
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeNotificationDemoResult {
+    permission_before: String,
+    permission_after: String,
+    title: String,
+    body: String,
+    sent_at: String,
+}
+
+#[tauri::command]
+fn demo_send_native_notification(app: AppHandle) -> Result<NativeNotificationDemoResult, String> {
+    use tauri_plugin_notification::NotificationExt;
+
+    let sent_at = now_local_rfc3339();
+    let title = "PAI Demo 原生通知".to_string();
+    let body = format!("这是从 Demo 页发出的测试通知。时间：{sent_at}");
+    let permission_before = app
+        .notification()
+        .permission_state()
+        .map_err(|err| format!("读取通知权限失败：{err}"))?;
+    send_native_notification(&app, &title, &body, true)?;
+    let permission_after = app
+        .notification()
+        .permission_state()
+        .map_err(|err| format!("读取通知权限失败：{err}"))?;
+
+    eprintln!(
+        "[通知Demo] 完成，permission_before={}，permission_after={}，sent_at={}",
+        permission_before,
+        permission_after,
+        sent_at
+    );
+
+    Ok(NativeNotificationDemoResult {
+        permission_before: permission_before.to_string(),
+        permission_after: permission_after.to_string(),
+        title,
+        body,
+        sent_at,
+    })
+}
+
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -37,6 +37,7 @@
       "departmentTree": "Department Tree",
       "demo": "Demo",
       "chatSettings": "Chat",
+      "notification": "Notification",
       "remoteIm": "Contacts",
       "memory": "Memory",
       "task": "Task",
@@ -86,6 +87,14 @@
       "theme": "Theme",
       "lightTheme": "Light",
       "darkTheme": "Dark"
+    },
+    "notification": {
+      "title": "Message Notifications",
+      "summary": "Control system notifications and sounds when local chats finish or fail in the background.",
+      "enableLabel": "Enable notifications",
+      "enableHint": "When off, no system notification is shown for background local chat completion or failure.",
+      "soundLabel": "Enable sound",
+      "soundHint": "When on, Windows native notifications use the system default sound."
     },
     "api": {
       "saving": "Saving...",

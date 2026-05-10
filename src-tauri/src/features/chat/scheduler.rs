@@ -714,6 +714,39 @@ fn prune_failed_active_chat_view_bindings(state: &AppState, window_labels: &[Str
     }
 }
 
+fn conversation_has_focused_chat_view(state: &AppState, conversation_id: &str) -> bool {
+    let app_handle = match state.app_handle.lock() {
+        Ok(guard) => guard.as_ref().cloned(),
+        Err(_) => None,
+    };
+    let Some(app_handle) = app_handle else {
+        return false;
+    };
+    let focused_window_labels = match state.active_chat_view_bindings.lock() {
+        Ok(bindings) => bindings
+            .iter()
+            .filter_map(|(window_label, binding)| {
+                if binding.conversation_id.trim() != conversation_id.trim() {
+                    return None;
+                }
+                Some(window_label.clone())
+            })
+            .collect::<Vec<_>>(),
+        Err(_) => return false,
+    };
+    if focused_window_labels.is_empty() {
+        return false;
+    }
+    focused_window_labels.iter().any(|window_label| {
+        let Some(window) = app_handle.get_webview_window(window_label) else {
+            return false;
+        };
+        let is_visible = window.is_visible().unwrap_or(false);
+        let is_focused = window.is_focused().unwrap_or(false);
+        is_visible && is_focused
+    })
+}
+
 fn emit_assistant_delta_app_event(
     state: &AppState,
     conversation_id: &str,
@@ -2499,6 +2532,7 @@ fn emit_round_completed_event(
     activation_id: Option<&str>,
     request_id: Option<&str>,
 ) {
+    notify_local_chat_round_completed(state, conversation_id, &result.assistant_text);
     let app_handle = match state.app_handle.lock() {
         Ok(guard) => guard.as_ref().cloned(),
         Err(_) => None,
@@ -2526,6 +2560,168 @@ fn emit_round_completed_event(
             "[聊天推送] emit round_completed 失败: conversation_id={}, error={}",
             conversation_id, err
         ),
+    }
+}
+
+fn notify_local_chat_round_completed(
+    state: &AppState,
+    conversation_id: &str,
+    assistant_text: &str,
+) {
+    let conversation = match state_read_conversation_cached(state, conversation_id) {
+        Ok(conversation) => conversation,
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[通知] 跳过，任务=读取本地会话完成通知上下文，conversation_id={}，error={}",
+                conversation_id, err
+            ));
+            return;
+        }
+    };
+    if !conversation_is_local_normal_chat(&conversation) {
+        return;
+    }
+    if conversation_has_focused_chat_view(state, conversation_id) {
+        runtime_log_debug(format!(
+            "[通知] 跳过，任务=本地会话完成通知，conversation_id={}，reason=chat_view_focused",
+            conversation_id
+        ));
+        return;
+    }
+    let notification_settings = local_chat_notification_settings(state, conversation_id);
+    if !notification_settings.enabled {
+        runtime_log_debug(format!(
+            "[通知] 跳过，任务=本地会话完成通知，conversation_id={}，reason=notification_disabled",
+            conversation_id
+        ));
+        return;
+    }
+    let app_handle = match state.app_handle.lock() {
+        Ok(guard) => guard.as_ref().cloned(),
+        Err(_) => None,
+    };
+    let Some(app_handle) = app_handle else {
+        runtime_log_warn(format!(
+            "[通知] 跳过，任务=发送本地会话完成通知，conversation_id={}，reason=app_handle_unavailable",
+            conversation_id
+        ));
+        return;
+    };
+    let speaker_name = notification_speaker_name_for_conversation(
+        state,
+        &conversation,
+        notification_settings.ui_language,
+    );
+    let body = native_notification_text_excerpt(
+        assistant_text,
+        NATIVE_NOTIFICATION_BODY_MAX_CHARS,
+    );
+    let final_body = if body.trim().is_empty() {
+        local_chat_notification_text(
+            notification_settings.ui_language,
+            "已完成本轮回复。",
+            "已完成本輪回覆。",
+            "Finished this reply.",
+        )
+    } else {
+        body
+    };
+    if let Err(err) = send_native_notification(
+        &app_handle,
+        &speaker_name,
+        &final_body,
+        notification_settings.sound_enabled,
+    ) {
+        runtime_log_warn(format!(
+            "[通知] 失败，任务=发送本地会话完成通知，conversation_id={}，error={}",
+            conversation_id, err
+        ));
+    }
+}
+
+fn local_chat_notification_text(
+    ui_language: &str,
+    zh_cn: &str,
+    zh_tw: &str,
+    en_us: &str,
+) -> String {
+    match ui_language.trim() {
+        "en-US" => en_us.to_string(),
+        "zh-TW" => zh_tw.to_string(),
+        _ => zh_cn.to_string(),
+    }
+}
+
+fn notification_speaker_name_for_conversation(
+    state: &AppState,
+    conversation: &Conversation,
+    ui_language: &str,
+) -> String {
+    let agent_id = conversation.agent_id.trim();
+    if agent_id.is_empty() {
+        return local_chat_notification_text(
+            ui_language,
+            "当前人格",
+            "當前人格",
+            "Current persona",
+        );
+    }
+    match state_read_agents_cached(state) {
+        Ok(agents) => agents
+            .iter()
+            .find(|agent| agent.id.trim() == agent_id)
+            .map(|agent| agent.name.trim())
+            .filter(|name| !name.is_empty())
+            .unwrap_or(agent_id)
+            .to_string(),
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[通知] 跳过，任务=读取人格名称失败后回退ID，conversation_id={}，agent_id={}，error={}",
+                conversation.id, agent_id, err
+            ));
+            agent_id.to_string()
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct LocalChatNotificationSettings {
+    enabled: bool,
+    sound_enabled: bool,
+    ui_language: &'static str,
+}
+
+impl Default for LocalChatNotificationSettings {
+    fn default() -> Self {
+        Self {
+            enabled: default_message_notification_enabled(),
+            sound_enabled: default_message_notification_sound_enabled(),
+            ui_language: "zh-CN",
+        }
+    }
+}
+
+fn local_chat_notification_settings(
+    state: &AppState,
+    conversation_id: &str,
+) -> LocalChatNotificationSettings {
+    match state_read_config_cached(state) {
+        Ok(config) => LocalChatNotificationSettings {
+            enabled: config.message_notification_enabled,
+            sound_enabled: config.message_notification_sound_enabled,
+            ui_language: match config.ui_language.trim() {
+                "en-US" => "en-US",
+                "zh-TW" => "zh-TW",
+                _ => "zh-CN",
+            },
+        },
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[通知] 跳过，任务=读取通知设置失败后回退默认值，conversation_id={}，error={}",
+                conversation_id, err
+            ));
+            LocalChatNotificationSettings::default()
+        }
     }
 }
 
@@ -2569,6 +2765,7 @@ fn emit_round_failed_event(
     activation_id: Option<&str>,
     request_id: Option<&str>,
 ) {
+    notify_local_chat_round_failed(state, conversation_id, error_text);
     let app_handle = match state.app_handle.lock() {
         Ok(guard) => guard.as_ref().cloned(),
         Err(_) => None,
@@ -2592,6 +2789,83 @@ fn emit_round_failed_event(
             "[聊天推送] emit round_failed 失败: conversation_id={}, error={}",
             conversation_id, err
         ),
+    }
+}
+
+fn notify_local_chat_round_failed(state: &AppState, conversation_id: &str, error_text: &str) {
+    let conversation = match state_read_conversation_cached(state, conversation_id) {
+        Ok(conversation) => conversation,
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[通知] 跳过，任务=读取本地会话失败通知上下文，conversation_id={}，error={}",
+                conversation_id, err
+            ));
+            return;
+        }
+    };
+    if !conversation_is_local_normal_chat(&conversation) {
+        return;
+    }
+    if conversation_has_focused_chat_view(state, conversation_id) {
+        runtime_log_debug(format!(
+            "[通知] 跳过，任务=本地会话失败通知，conversation_id={}，reason=chat_view_focused",
+            conversation_id
+        ));
+        return;
+    }
+    let notification_settings = local_chat_notification_settings(state, conversation_id);
+    if !notification_settings.enabled {
+        runtime_log_debug(format!(
+            "[通知] 跳过，任务=本地会话失败通知，conversation_id={}，reason=notification_disabled",
+            conversation_id
+        ));
+        return;
+    }
+    let app_handle = match state.app_handle.lock() {
+        Ok(guard) => guard.as_ref().cloned(),
+        Err(_) => None,
+    };
+    let Some(app_handle) = app_handle else {
+        runtime_log_warn(format!(
+            "[通知] 跳过，任务=发送本地会话失败通知，conversation_id={}，reason=app_handle_unavailable",
+            conversation_id
+        ));
+        return;
+    };
+    let speaker_name = notification_speaker_name_for_conversation(
+        state,
+        &conversation,
+        notification_settings.ui_language,
+    );
+    let body = native_notification_text_excerpt(
+        error_text,
+        NATIVE_NOTIFICATION_BODY_MAX_CHARS,
+    );
+    let final_body = if body.trim().is_empty() {
+        local_chat_notification_text(
+            notification_settings.ui_language,
+            "本轮调度失败。",
+            "本輪調度失敗。",
+            "This round failed.",
+        )
+    } else {
+        body
+    };
+    let title = match notification_settings.ui_language {
+        "en-US" => format!("{speaker_name} response failed"),
+        "zh-TW" => format!("{speaker_name} 調度失敗"),
+        _ => format!("{speaker_name} 调度失败"),
+    };
+    if let Err(err) = send_native_notification(
+        &app_handle,
+        &title,
+        &final_body,
+        notification_settings.sound_enabled,
+    ) {
+        runtime_log_warn(format!(
+            "[通知] 失败，任务=发送本地会话失败通知，conversation_id={}，error={}",
+            conversation_id, err
+        ));
     }
 }
 

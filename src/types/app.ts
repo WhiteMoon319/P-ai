@@ -264,6 +264,8 @@ export type AppConfig = {
   minRecordSeconds: number;
   maxRecordSeconds: number;
   llmRoundLogCapacity: 1 | 3 | 10;
+  messageNotificationEnabled: boolean;
+  messageNotificationSoundEnabled: boolean;
   selectedApiConfigId: string;
   // Active chat LLM provider config id (kept as legacy key name for storage compatibility).
   assistantDepartmentApiConfigId: string;

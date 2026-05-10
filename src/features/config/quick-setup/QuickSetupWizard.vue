@@ -600,6 +600,8 @@ function defaultConfig(): AppConfig {
     minRecordSeconds: 1,
     maxRecordSeconds: 60,
     llmRoundLogCapacity: 3,
+    messageNotificationEnabled: true,
+    messageNotificationSoundEnabled: false,
     selectedApiConfigId: "",
     assistantDepartmentApiConfigId: "",
     sttAutoSend: false,

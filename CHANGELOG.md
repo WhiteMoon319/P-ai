@@ -2,6 +2,8 @@
 
 ## 进行中
 
+- 功能（local-chat-native-notification-and-settings）：接入 `tauri-plugin-notification` 原生通知能力；本地普通会话在后台调度完成或失败时由后端直接发送系统通知，当前对话窗可见且聚焦时自动跳过。配置页新增“通知”页签，提供“是否通知 / 是否声音”开关并持久化，默认通知开启、声音关闭；同时补齐通知文案的中英繁兜底本地化，并保留 Demo 页测试按钮。
+
 ## 发布：v0.9.82
 
 - 发布（release-0.9.82）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.82`，纳入本轮记忆页筛选/分页交互优化与外观自定义文字强度调节。
