@@ -880,13 +880,8 @@ async fn tool_review_exec_git_readonly(
     command: &str,
     timeout_ms: u64,
 ) -> Result<String, String> {
-    let runtime_shell = terminal_shell_for_state(state);
     let session_id = format!("tool-review-code::{}", conversation_id.trim());
-    let execution = if terminal_live_session_supported(&runtime_shell) {
-        terminal_live_exec_command(state, &session_id, cwd, command, timeout_ms).await
-    } else {
-        sandbox_execute_command(state, &session_id, command, cwd, timeout_ms).await
-    }?;
+    let execution = sandbox_execute_command(state, &session_id, command, cwd, timeout_ms).await?;
     let stdout = terminal_decode_output_bytes(&execution.stdout);
     let stderr = terminal_decode_output_bytes(&execution.stderr);
     if !execution.ok {

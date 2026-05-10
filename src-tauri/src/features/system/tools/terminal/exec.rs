@@ -1,130 +1,3 @@
-fn terminal_decode_live_line(bytes: &[u8]) -> String {
-    terminal_decode_output_bytes(bytes)
-}
-
-async fn terminal_live_exec_command(
-    state: &AppState,
-    session_id: &str,
-    cwd: &Path,
-    command: &str,
-    timeout_ms: u64,
-) -> Result<SandboxExecutionResult, String> {
-    let session = terminal_live_session_for(state, session_id, cwd).await?;
-    let runtime_shell = terminal_shell_for_state(state);
-    let _session_guard = session.exec_lock.lock().await;
-    let marker = format!("__ECA_DONE__{}", Uuid::new_v4());
-    let wrapped = terminal_live_compose_command(&runtime_shell, cwd, command, &marker);
-    {
-        let mut stdin = session.stdin.lock().await;
-        stdin
-            .write_all(wrapped.as_bytes())
-            .await
-            .map_err(|err| format!("write live shell stdin failed: {err}"))?;
-        stdin
-            .write_all(b"\n")
-            .await
-            .map_err(|err| format!("write live shell stdin failed: {err}"))?;
-        stdin
-            .flush()
-            .await
-            .map_err(|err| format!("flush live shell stdin failed: {err}"))?;
-    }
-
-    let started = std::time::Instant::now();
-    let mut stdout_reader = session.stdout.lock().await;
-    let mut stderr_reader = session.stderr.lock().await;
-    let mut stdout_text = String::new();
-    let mut stderr_text = String::new();
-    let mut exit_code = 0i32;
-
-    loop {
-        let elapsed = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
-        if elapsed >= timeout_ms {
-            let _ = terminal_live_close_session(state, session_id).await;
-            return Err(format!("terminal_exec timed out after {}ms", timeout_ms));
-        }
-        let remain = timeout_ms.saturating_sub(elapsed).max(1);
-        let mut out_line = Vec::<u8>::new();
-        let mut err_line = Vec::<u8>::new();
-        let selected = tokio::time::timeout(
-            std::time::Duration::from_millis(remain),
-            async {
-                tokio::select! {
-                    out = stdout_reader.read_until(b'\n', &mut out_line) => ("stdout", out.map(|n| n as i64), out_line),
-                    err = stderr_reader.read_until(b'\n', &mut err_line) => ("stderr", err.map(|n| n as i64), err_line),
-                }
-            },
-        )
-        .await;
-        let (stream, read_res, line) = match selected {
-            Ok(value) => value,
-            Err(_) => {
-                let _ = terminal_live_close_session(state, session_id).await;
-                return Err(format!("terminal_exec timed out after {}ms", timeout_ms));
-            }
-        };
-        let n = read_res.map_err(|err| format!("read live shell output failed: {err}"))?;
-        if n == 0 {
-            let _ = terminal_live_close_session(state, session_id).await;
-            return Err("live shell closed unexpectedly".to_string());
-        }
-        let line = terminal_decode_live_line(&line);
-        let trimmed = line.trim_end_matches(['\r', '\n']);
-        // Some commands (for example `cat`/`head` on files without trailing newline)
-        // may print payload and marker in the same line. Detect marker anywhere in stdout.
-        if stream == "stdout" && trimmed.contains(&marker) {
-            if let Some(marker_pos) = trimmed.find(&marker) {
-                let prefix = &trimmed[..marker_pos];
-                if !prefix.is_empty() {
-                    stdout_text.push_str(prefix);
-                }
-                let suffix = &trimmed[marker_pos + marker.len()..];
-                let suffix = suffix.strip_prefix(':').unwrap_or(suffix).trim();
-                exit_code = suffix.parse::<i32>().unwrap_or(0);
-            }
-            loop {
-                let drain_elapsed = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
-                if drain_elapsed >= timeout_ms {
-                    break;
-                }
-                let drain_remain = timeout_ms.saturating_sub(drain_elapsed).max(1).min(50);
-                let mut drain_err_line = Vec::<u8>::new();
-                let drained = tokio::time::timeout(
-                    std::time::Duration::from_millis(drain_remain),
-                    stderr_reader.read_until(b'\n', &mut drain_err_line),
-                )
-                .await;
-                let drain_n = match drained {
-                    Ok(result) => result.map_err(|err| format!("read live shell output failed: {err}"))?,
-                    Err(_) => break,
-                };
-                if drain_n == 0 {
-                    break;
-                }
-                stderr_text.push_str(&terminal_decode_live_line(&drain_err_line));
-            }
-            break;
-        }
-        if stream == "stdout" {
-            stdout_text.push_str(&line);
-        } else {
-            stderr_text.push_str(&line);
-        }
-    }
-
-    *session.last_used_at.lock().await = now_iso();
-
-    Ok(SandboxExecutionResult {
-        ok: exit_code == 0,
-        exit_code,
-        stdout: stdout_text.into_bytes(),
-        stderr: stderr_text.into_bytes(),
-        duration_ms: started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
-        shell_kind: session.shell_kind.clone(),
-        shell_path: session.shell_path.clone(),
-    })
-}
-
 fn terminal_workspace_access_rank(access: &str) -> i32 {
     match access {
         SHELL_WORKSPACE_ACCESS_READ_ONLY => 3,
@@ -961,10 +834,10 @@ async fn builtin_shell_exec(
         }));
     }
     if action != "run" {
-        return Err(format!("shell_exec.action must be run|list|close, got: {action}"));
+        return Err(format!("exec.action is deprecated; only run is supported, got: {action}"));
     }
     if cmd.is_empty() {
-        return Err("shell_exec.command is empty".to_string());
+        return Err("exec.command is empty".to_string());
     }
     let autonomous_mode = terminal_session_shell_autonomous_mode(state, &normalized_session)?;
     if !autonomous_mode {
@@ -1606,11 +1479,7 @@ async fn builtin_shell_exec(
         }
     }
 
-    let execution_result = if terminal_live_session_supported(&runtime_shell) {
-        terminal_live_exec_command(state, &normalized_session, &execution_cwd, cmd, timeout_ms).await
-    } else {
-        sandbox_execute_command(state, &normalized_session, cmd, &execution_cwd, timeout_ms).await
-    };
+    let execution_result = sandbox_execute_command(state, &normalized_session, cmd, &execution_cwd, timeout_ms).await;
     let execution = match execution_result {
         Ok(execution) => execution,
         Err(err) if terminal_is_timeout_error(&err) => {

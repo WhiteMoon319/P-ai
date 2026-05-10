@@ -2,6 +2,10 @@
 
 ## 进行中
 
+- 优化（terminal-exec-schema-simplify）：终端 `exec` 工具对模型可见参数收敛为 `command` 与 `timeout_ms`，隐藏旧 `action` 字段；后端继续兼容旧 `run/list/close` 入参，避免历史上下文或旧调用失效。
+
+- 优化（terminal-exec-one-shot-runner）：终端 `exec run` 默认切换为一次性受控进程执行，保留 Windows UTF-8 包装与 Job Object 进程树回收；旧 live shell 仅保留 `list/close` 诊断清理入口，并为关闭等待增加二次超时，避免卡死命令阻塞后续执行。
+
 - 修复（markdown-style-and-file-reader-codeblock）：Markdown 共享样式统一收敛链接、引用、行内代码与表格等语义覆盖；文件阅读器 Markdown 改用独立 `file-reader-markstream` 与文档场景代码块组件，避免复用聊天气泡代码块导致主题和边框错位，并补充 Markdown 覆盖维护说明。
 
 ## 发布：v0.9.83

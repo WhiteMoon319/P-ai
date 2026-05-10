@@ -385,11 +385,11 @@ impl RuntimeToolMetadata for BuiltinTerminalExecTool {
             serde_json::json!({
               "type": "object",
               "properties": {
-                "action": { "type": "string", "enum": ["run", "list", "close"], "default": "run" },
-                "command": { "type": "string", "description": "action=run 时要执行的 shell 命令" },
-                "timeout_ms": { "type": "integer", "minimum": 1, "maximum": 120000, "default": 20000, "description": "命令超时时间，单位毫秒" }
+                "command": { "type": "string", "description": "要执行的一次性 shell 命令。" },
+                "timeout_ms": { "type": "integer", "minimum": 1, "maximum": 120000, "default": 20000, "description": "命令超时时间，单位毫秒；超时后回收本次进程树。" }
               },
-              "required": []
+              "required": ["command"],
+              "additionalProperties": false
             }),
         )
     }
@@ -422,9 +422,7 @@ impl RuntimeJsonTool for BuiltinTerminalExecTool {
             .unwrap_or("run");
         let resolved_command = args.command.as_deref().map(str::trim).unwrap_or("");
         if resolved_action == "run" && resolved_command.is_empty() {
-            return Err(ToolInvokeError::from(
-                "shell_exec.command is required when action=run".to_string(),
-            ));
+            return Err(ToolInvokeError::from("exec.command is required".to_string()));
         }
         let result = builtin_shell_exec(
             &self.app_state,

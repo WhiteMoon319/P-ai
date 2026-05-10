@@ -45,40 +45,34 @@ struct TerminalLiveShellSession {
     created_at: String,
     last_used_at: tokio::sync::Mutex<String>,
     child: tokio::sync::Mutex<tokio::process::Child>,
-    stdin: tokio::sync::Mutex<tokio::process::ChildStdin>,
-    stdout: tokio::sync::Mutex<tokio::io::BufReader<tokio::process::ChildStdout>>,
-    stderr: tokio::sync::Mutex<tokio::io::BufReader<tokio::process::ChildStderr>>,
-    exec_lock: tokio::sync::Mutex<()>,
 }
 
 type TerminalLiveShellSessionHandle = std::sync::Arc<TerminalLiveShellSession>;
 
-fn terminal_live_session_supported(shell: &TerminalShellProfile) -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        return matches!(shell.kind.as_str(), "powershell7" | "powershell5" | "git-bash");
-    }
-    #[cfg(target_os = "macos")]
-    {
-        return matches!(shell.kind.as_str(), "zsh" | "bash" | "sh");
-    }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        return matches!(shell.kind.as_str(), "bash" | "zsh" | "sh");
-    }
-    #[cfg(not(any(target_os = "windows", unix)))]
-    {
-        false
-    }
-}
+const TERMINAL_LIVE_CLOSE_WAIT_MS: u64 = 2_000;
 
-fn terminal_powershell_escape_literal(input: &str) -> String {
-    input.replace('\'', "''")
+async fn terminal_live_kill_child_with_timeout(
+    child: &mut tokio::process::Child,
+    context: &str,
+) {
+    let _ = child.kill().await;
+    match tokio::time::timeout(
+        std::time::Duration::from_millis(TERMINAL_LIVE_CLOSE_WAIT_MS),
+        child.wait(),
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(_) => eprintln!(
+            "[终端] live shell 关闭等待超时: context={}, timeout_ms={}",
+            context, TERMINAL_LIVE_CLOSE_WAIT_MS
+        ),
+    }
 }
 
 #[cfg(target_os = "windows")]
-fn terminal_bash_escape_literal(input: &str) -> String {
-    input.replace('\'', "'\"'\"'")
+fn terminal_powershell_escape_literal(input: &str) -> String {
+    input.replace('\'', "''")
 }
 
 #[cfg(target_os = "windows")]
@@ -105,149 +99,6 @@ fn terminal_path_for_user(path: &Path) -> String {
     }
 }
 
-#[cfg(target_os = "windows")]
-fn terminal_windows_path_to_bash(path: &Path) -> String {
-    let normalized = terminal_strip_windows_verbatim_prefix(&path.to_string_lossy());
-    let raw = normalized.replace('\\', "/");
-    let bytes = raw.as_bytes();
-    if bytes.len() >= 3 && bytes[1] == b':' && bytes[2] == b'/' && bytes[0].is_ascii_alphabetic() {
-        let drive = (bytes[0] as char).to_ascii_lowercase();
-        let rest = raw[3..].trim_start_matches('/');
-        if rest.is_empty() {
-            return format!("/{drive}");
-        }
-        return format!("/{drive}/{rest}");
-    }
-    raw
-}
-
-fn terminal_live_compose_command(shell: &TerminalShellProfile, cwd: &Path, command: &str, marker: &str) -> String {
-    if matches!(shell.kind.as_str(), "powershell7" | "powershell5") {
-        #[cfg(target_os = "windows")]
-        let cwd_raw = terminal_strip_windows_verbatim_prefix(&cwd.to_string_lossy());
-        #[cfg(not(target_os = "windows"))]
-        let cwd_raw = cwd.to_string_lossy().to_string();
-        let cwd_text = terminal_powershell_escape_literal(&cwd_raw);
-        return format!(
-            "$ErrorActionPreference='Continue'; try {{ [Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false); [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [Console]::OutputEncoding; chcp.com 65001 > $null; $env:PYTHONUTF8='1'; $env:PYTHONIOENCODING='utf-8'; Set-Location -LiteralPath '{cwd_text}'; {command} }} catch {{ Write-Error $_; $global:LASTEXITCODE = 1 }}; $ecaExit = if ($null -eq $LASTEXITCODE) {{ 0 }} else {{ $LASTEXITCODE }}; Write-Output \"{marker}:$ecaExit\""
-        );
-    }
-    if shell.kind == "git-bash" {
-        #[cfg(target_os = "windows")]
-        {
-            let cwd_text = terminal_bash_escape_literal(&terminal_windows_path_to_bash(cwd));
-            return format!(
-                "chcp.com 65001 > /dev/null 2>&1; export LANG=en_US.UTF-8; export LC_ALL=en_US.UTF-8; export PYTHONUTF8=1; export PYTHONIOENCODING=utf-8; cd '{cwd_text}' || exit 1; {command}; printf '%s:%s\\n' '{marker}' \"$?\""
-            );
-        }
-    }
-    format!("{command}\nprintf '%s:%s\\n' '{marker}' \"$?\"")
-}
-
-async fn terminal_live_create_session(
-    state: &AppState,
-    _session_id: &str,
-    cwd: &Path,
-) -> Result<TerminalLiveShellSessionHandle, String> {
-    let shell = terminal_shell_for_state(state);
-    if !terminal_live_session_supported(&shell) {
-        return Err("live shell session is unsupported for current shell".to_string());
-    }
-    let mut command_builder = tokio::process::Command::new(&shell.path);
-    #[cfg(target_os = "windows")]
-    let process_cwd = std::path::PathBuf::from(terminal_strip_windows_verbatim_prefix(
-        &cwd.to_string_lossy(),
-    ));
-    #[cfg(not(target_os = "windows"))]
-    let process_cwd = cwd.to_path_buf();
-    command_builder.current_dir(process_cwd);
-    command_builder.stdin(std::process::Stdio::piped());
-    command_builder.stdout(std::process::Stdio::piped());
-    command_builder.stderr(std::process::Stdio::piped());
-    #[cfg(target_os = "windows")]
-    {
-        // 0x08000000 = CREATE_NO_WINDOW, keep shell sessions headless on Windows.
-        command_builder.creation_flags(0x08000000);
-        terminal_apply_windows_utf8_env(&mut command_builder);
-    }
-    if matches!(shell.kind.as_str(), "powershell7" | "powershell5") {
-        command_builder.arg("-NoLogo");
-        command_builder.arg("-NoProfile");
-        command_builder.arg("-ExecutionPolicy");
-        command_builder.arg("Bypass");
-        command_builder.arg("-Command");
-        command_builder.arg("-");
-    } else if shell.kind == "git-bash" {
-        command_builder.arg("--noprofile");
-        command_builder.arg("--norc");
-    } else if shell.kind == "bash" {
-        command_builder.arg("--noprofile");
-        command_builder.arg("--norc");
-    } else if shell.kind == "zsh" {
-        command_builder.arg("-f");
-    } else {
-        // For live sessions, avoid one-shot flags like -lc/-c.
-        // Keep shell interactive and feed commands via stdin.
-    }
-    let mut child = command_builder
-        .spawn()
-        .map_err(|err| format!("spawn live shell failed: {err}"))?;
-    let stdin = child
-        .stdin
-        .take()
-        .ok_or_else(|| "capture live shell stdin failed".to_string())?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "capture live shell stdout failed".to_string())?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| "capture live shell stderr failed".to_string())?;
-
-    Ok(std::sync::Arc::new(TerminalLiveShellSession {
-        shell_kind: shell.kind.clone(),
-        shell_path: shell.path.clone(),
-        created_at: now_iso(),
-        last_used_at: tokio::sync::Mutex::new(now_iso()),
-        child: tokio::sync::Mutex::new(child),
-        stdin: tokio::sync::Mutex::new(stdin),
-        stdout: tokio::sync::Mutex::new(tokio::io::BufReader::new(stdout)),
-        stderr: tokio::sync::Mutex::new(tokio::io::BufReader::new(stderr)),
-        exec_lock: tokio::sync::Mutex::new(()),
-    }))
-}
-
-async fn terminal_live_session_for(
-    state: &AppState,
-    session_id: &str,
-    cwd: &Path,
-) -> Result<TerminalLiveShellSessionHandle, String> {
-    let normalized = normalize_terminal_tool_session_id(session_id);
-    let runtime_shell = terminal_shell_for_state(state);
-    {
-        let mut sessions = state.terminal_live_sessions.lock().await;
-        if let Some(existing) = sessions.get(&normalized).cloned() {
-            let shell_changed = existing.shell_kind != runtime_shell.kind
-                || existing.shell_path != runtime_shell.path;
-            if !shell_changed {
-                return Ok(existing);
-            }
-            sessions.remove(&normalized);
-            drop(sessions);
-            let mut child = existing.child.lock().await;
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-        }
-    }
-    let created = terminal_live_create_session(state, &normalized, cwd).await?;
-    let mut sessions = state.terminal_live_sessions.lock().await;
-    Ok(sessions
-        .entry(normalized)
-        .or_insert_with(|| created.clone())
-        .clone())
-}
-
 async fn terminal_live_close_session(state: &AppState, session_id: &str) -> Result<bool, String> {
     let normalized = normalize_terminal_tool_session_id(session_id);
     let removed = {
@@ -258,8 +109,7 @@ async fn terminal_live_close_session(state: &AppState, session_id: &str) -> Resu
         return Ok(false);
     };
     let mut child = handle.child.lock().await;
-    let _ = child.kill().await;
-    let _ = child.wait().await;
+    terminal_live_kill_child_with_timeout(&mut child, "close_session").await;
     Ok(true)
 }
 
@@ -535,7 +385,7 @@ fn terminal_shell_runtime_label(shell: &TerminalShellProfile) -> String {
 
 fn terminal_exec_tool_description(shell: &TerminalShellProfile) -> String {
     format!(
-        "在当前 shell 工作区根目录中执行命令。运行时 shell：{}。",
+        "在当前 shell 工作区根目录中执行一次性命令。运行时 shell：{}。命令结束、失败或超时后，本次进程树会被回收。",
         terminal_shell_runtime_label(shell)
     )
 }

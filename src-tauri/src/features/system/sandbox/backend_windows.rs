@@ -93,8 +93,19 @@ fn sandbox_run_with_windows_job_backend_blocking(
             break;
         }
         if started.elapsed().as_millis() >= timeout_ms as u128 {
+            drop(job);
             let _ = child.kill();
-            let _ = child.wait();
+            let cleanup_started = std::time::Instant::now();
+            while cleanup_started.elapsed().as_millis() < 2_000 {
+                if child
+                    .try_wait()
+                    .map_err(|err| format!("terminal_exec cleanup try_wait failed: {err}"))?
+                    .is_some()
+                {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(15));
+            }
             return Err(format!(
                 "terminal_exec timed out after {}ms",
                 timeout_ms
