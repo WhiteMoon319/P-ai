@@ -1019,16 +1019,20 @@ const TEXT_REQUEST_FORMATS = new Set<ApiRequestFormat>([
   "together",
   "groq",
   "mimo",
+  "moonshot",
   "nebius",
   "xai",
   "zai",
   "bigmodel",
   "aliyun",
+  "baidu",
   "cohere",
   "ollama",
   "ollama_cloud",
   "vertex",
   "github_copilot",
+  "opencode_go",
+  "bedrock_api",
 ]);
 
 function isTextRequestFormat(format: string): boolean {

@@ -151,6 +151,8 @@ enum RequestFormat {
     Groq,
     #[serde(rename = "mimo")]
     Mimo,
+    #[serde(rename = "moonshot")]
+    Moonshot,
     #[serde(rename = "nebius")]
     Nebius,
     #[serde(rename = "xai")]
@@ -161,6 +163,8 @@ enum RequestFormat {
     BigModel,
     #[serde(rename = "aliyun")]
     Aliyun,
+    #[serde(rename = "baidu")]
+    Baidu,
     #[serde(rename = "cohere")]
     Cohere,
     #[serde(rename = "ollama")]
@@ -171,6 +175,10 @@ enum RequestFormat {
     Vertex,
     #[serde(rename = "github_copilot")]
     GithubCopilot,
+    #[serde(rename = "opencode_go")]
+    OpenCodeGo,
+    #[serde(rename = "bedrock_api")]
+    BedrockApi,
     #[serde(rename = "openai_tts")]
     OpenAITts,
     #[serde(rename = "openai_stt")]
@@ -200,16 +208,20 @@ impl RequestFormat {
             "together" => Some(Self::Together),
             "groq" => Some(Self::Groq),
             "mimo" => Some(Self::Mimo),
+            "moonshot" => Some(Self::Moonshot),
             "nebius" => Some(Self::Nebius),
             "xai" => Some(Self::Xai),
             "zai" => Some(Self::Zai),
             "bigmodel" => Some(Self::BigModel),
             "aliyun" => Some(Self::Aliyun),
+            "baidu" => Some(Self::Baidu),
             "cohere" => Some(Self::Cohere),
             "ollama" => Some(Self::Ollama),
             "ollama_cloud" => Some(Self::OllamaCloud),
             "vertex" => Some(Self::Vertex),
             "github_copilot" => Some(Self::GithubCopilot),
+            "opencode_go" => Some(Self::OpenCodeGo),
+            "bedrock_api" => Some(Self::BedrockApi),
             "openai_tts" => Some(Self::OpenAITts),
             "openai_stt" => Some(Self::OpenAIStt),
             "openai_embedding" => Some(Self::OpenAIEmbedding),
@@ -221,11 +233,15 @@ impl RequestFormat {
                     Some(Self::OpenAI)
                 }
                 "deepseek_kimi" => Some(Self::DeepSeekKimi),
+                "kimi" | "moonshot_kimi" => Some(Self::Moonshot),
                 "openai_responses" | "responses" => Some(Self::OpenAIResponses),
                 "claude" => Some(Self::Anthropic),
                 "google" | "google_gemini" => Some(Self::Gemini),
                 "ollama_cloud" => Some(Self::OllamaCloud),
                 "github_copilot" => Some(Self::GithubCopilot),
+                "baidu_qianfan" | "qianfan" => Some(Self::Baidu),
+                "opencode_go" | "opencodego" => Some(Self::OpenCodeGo),
+                "bedrock_api" | "bedrock" => Some(Self::BedrockApi),
                 "stt" | "openai_stt" => Some(Self::OpenAIStt),
                 "tts" | "openai_tts" => Some(Self::OpenAITts),
                 "embedding" | "embeddings" | "openai_embedding" => Some(Self::OpenAIEmbedding),
@@ -250,16 +266,20 @@ impl RequestFormat {
             Self::Together => "together",
             Self::Groq => "groq",
             Self::Mimo => "mimo",
+            Self::Moonshot => "moonshot",
             Self::Nebius => "nebius",
             Self::Xai => "xai",
             Self::Zai => "zai",
             Self::BigModel => "bigmodel",
             Self::Aliyun => "aliyun",
+            Self::Baidu => "baidu",
             Self::Cohere => "cohere",
             Self::Ollama => "ollama",
             Self::OllamaCloud => "ollama_cloud",
             Self::Vertex => "vertex",
             Self::GithubCopilot => "github_copilot",
+            Self::OpenCodeGo => "opencode_go",
+            Self::BedrockApi => "bedrock_api",
             Self::OpenAITts => "openai_tts",
             Self::OpenAIStt => "openai_stt",
             Self::OpenAIEmbedding => "openai_embedding",
@@ -283,7 +303,8 @@ impl RequestFormat {
     fn genai_adapter_kind(self) -> Option<genai::adapter::AdapterKind> {
         match self {
             Self::OpenAI => Some(genai::adapter::AdapterKind::OpenAI),
-            Self::DeepSeek | Self::DeepSeekKimi => Some(genai::adapter::AdapterKind::DeepSeek),
+            Self::DeepSeek => Some(genai::adapter::AdapterKind::DeepSeek),
+            Self::DeepSeekKimi => Some(genai::adapter::AdapterKind::Moonshot),
             Self::OpenAIResponses | Self::Codex => Some(genai::adapter::AdapterKind::OpenAIResp),
             Self::Gemini => Some(genai::adapter::AdapterKind::Gemini),
             Self::Anthropic => Some(genai::adapter::AdapterKind::Anthropic),
@@ -291,16 +312,20 @@ impl RequestFormat {
             Self::Together => Some(genai::adapter::AdapterKind::Together),
             Self::Groq => Some(genai::adapter::AdapterKind::Groq),
             Self::Mimo => Some(genai::adapter::AdapterKind::Mimo),
+            Self::Moonshot => Some(genai::adapter::AdapterKind::Moonshot),
             Self::Nebius => Some(genai::adapter::AdapterKind::Nebius),
             Self::Xai => Some(genai::adapter::AdapterKind::Xai),
             Self::Zai => Some(genai::adapter::AdapterKind::Zai),
             Self::BigModel => Some(genai::adapter::AdapterKind::BigModel),
             Self::Aliyun => Some(genai::adapter::AdapterKind::Aliyun),
+            Self::Baidu => Some(genai::adapter::AdapterKind::Baidu),
             Self::Cohere => Some(genai::adapter::AdapterKind::Cohere),
             Self::Ollama => Some(genai::adapter::AdapterKind::Ollama),
             Self::OllamaCloud => Some(genai::adapter::AdapterKind::OllamaCloud),
             Self::Vertex => Some(genai::adapter::AdapterKind::Vertex),
             Self::GithubCopilot => Some(genai::adapter::AdapterKind::GithubCopilot),
+            Self::OpenCodeGo => Some(genai::adapter::AdapterKind::OpenCodeGo),
+            Self::BedrockApi => Some(genai::adapter::AdapterKind::BedrockApi),
             Self::Auto
             | Self::OpenAITts
             | Self::OpenAIStt

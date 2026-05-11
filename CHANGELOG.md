@@ -6,6 +6,8 @@
 
 - 升级（genai-0.6.0-beta.20）：将 genai 从 `0.6.0-beta.19-WIP` 升级至 `0.6.0-beta.20-WIP`，获取上游 Gemini reasoning effort 重构、extra_body 透传、Bedrock/Moonshot/Baidu 新适配器等改进。
 
+- 功能（genai-provider-formats-ui）：补齐 Moonshot/Kimi、Baidu 千帆、OpenCode Go、Bedrock API 等 genai provider 格式在前后端类型、配置页协议选择、供应商预设、快速设置、部门校验与模型列表刷新里的显示与归一化。
+
 - 优化（gemini-reasoning-effort-low-high-only）：Gemini / Vertex 思维强度收口为「低 / 高」两档，默认高；Auto 协议下识别到 Google 模型时才展示 Gemini 思维强度下拉，避免在非 Gemini 模型上误导。
 
 - 优化（openai-deepseek-reasoning-effort-ui）：普通模型卡新增思维强度入口；GPT / OpenAI Responses 收口为「低 / 中 / 高 / 极高」四档，DeepSeek 收口为「高 / 极高」两档，并统一按供应商归一保存值，避免混入不支持档位。

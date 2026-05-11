@@ -360,7 +360,7 @@ type StepItem = { id: StepId; title: string; summary: string; advanced?: boolean
 type AdvancedDraft = { name: string; requestFormat: AppConfig["apiProviders"][number]["requestFormat"]; baseUrl: string; apiKey: string; model: string };
 type AdvancedPresetId = "siliconflow" | "google";
 type AdvancedProviderPreset = AdvancedDraft & { id: AdvancedPresetId; label: string };
-type QuickProviderId = "deepseek" | "kimi" | "zai" | "gemini" | "openai" | "openrouter" | "custom";
+type QuickProviderId = "deepseek" | "kimi" | "baidu" | "zai" | "gemini" | "openai" | "openrouter" | "custom";
 type QuickProviderPreset = {
   id: QuickProviderId;
   label: string;
@@ -373,7 +373,8 @@ type QuickProviderPreset = {
 const responseStyleOptions = (responseStylesJson as ResponseStyleOption[]).filter((style) => style.id !== "abstract");
 const providerOptions: QuickProviderPreset[] = [
   { id: "deepseek", label: "DeepSeek", requestFormat: "deepseek", baseUrl: "https://api.deepseek.com/v1", keyUrl: "https://platform.deepseek.com/api_keys", defaultModel: "deepseek-v4-flash" },
-  { id: "kimi", label: "Kimi", requestFormat: "deepseek/kimi", baseUrl: "https://api.moonshot.cn/v1", keyUrl: "https://www.kimi.com/membership/subscription", defaultModel: "kimi" },
+  { id: "kimi", label: "Kimi", requestFormat: "moonshot", baseUrl: "https://api.moonshot.cn/v1", keyUrl: "https://platform.moonshot.cn/console/api-keys", defaultModel: "kimi-k2.5" },
+  { id: "baidu", label: "百度千帆", requestFormat: "baidu", baseUrl: "https://qianfan.baidubce.com/v2", keyUrl: "https://console.bce.baidu.com/iam/#/iam/apikey/list", defaultModel: "ERNIE-4.0-8K-Latest" },
   { id: "zai", label: "Zai", requestFormat: "zai", baseUrl: "https://api.z.ai/api/paas/v4", keyUrl: "https://bigmodel.cn/glm-coding", defaultModel: "glm-4.7" },
   { id: "gemini", label: "Gemini", requestFormat: "gemini", baseUrl: "https://generativelanguage.googleapis.com", keyUrl: "https://aistudio.google.com/api-keys", defaultModel: "gemini-2.5-flash" },
   { id: "openai", label: "OpenAI", requestFormat: "openai", baseUrl: "https://api.openai.com/v1", keyUrl: "https://platform.openai.com", defaultModel: "gpt-4o-mini" },

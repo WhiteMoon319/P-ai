@@ -15,16 +15,20 @@ const TEXT_REQUEST_FORMATS = new Set([
   "together",
   "groq",
   "mimo",
+  "moonshot",
   "nebius",
   "xai",
   "zai",
   "bigmodel",
   "aliyun",
+  "baidu",
   "cohere",
   "ollama",
   "ollama_cloud",
   "vertex",
   "github_copilot",
+  "opencode_go",
+  "bedrock_api",
 ]);
 
 function textCapableApiIds(apiConfigs: ApiConfigItem[]): Set<string> {

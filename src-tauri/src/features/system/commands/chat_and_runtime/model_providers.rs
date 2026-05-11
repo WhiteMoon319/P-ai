@@ -230,6 +230,7 @@ enum ModelRefreshStrategy {
     GeminiNative,
     AnthropicNative,
     CodexBuiltin,
+    GenaiAdapter(genai::adapter::AdapterKind),
 }
 
 fn codex_builtin_models() -> Vec<String> {
@@ -284,6 +285,11 @@ fn model_refresh_strategies(input: &RefreshModelsInput) -> Vec<ModelRefreshStrat
         RequestFormat::Codex => {
             push_unique_refresh_strategy(&mut strategies, ModelRefreshStrategy::CodexBuiltin);
         }
+        RequestFormat::Baidu | RequestFormat::BedrockApi | RequestFormat::OpenCodeGo => {
+            if let Some(adapter_kind) = input.request_format.genai_adapter_kind() {
+                push_unique_refresh_strategy(&mut strategies, ModelRefreshStrategy::GenaiAdapter(adapter_kind));
+            }
+        }
         RequestFormat::Auto => {
             if let Some(strategy) = inferred {
                 push_unique_refresh_strategy(&mut strategies, strategy);
@@ -299,6 +305,9 @@ fn model_refresh_strategies(input: &RefreshModelsInput) -> Vec<ModelRefreshStrat
         ModelRefreshStrategy::AnthropicNative,
     ] {
         push_unique_refresh_strategy(&mut strategies, strategy);
+    }
+    if let Some(adapter_kind) = input.request_format.genai_adapter_kind() {
+        push_unique_refresh_strategy(&mut strategies, ModelRefreshStrategy::GenaiAdapter(adapter_kind));
     }
     if matches!(input.request_format, RequestFormat::Codex)
         || matches!(inferred, Some(ModelRefreshStrategy::CodexBuiltin))
@@ -317,7 +326,36 @@ async fn fetch_models_with_strategy(
         ModelRefreshStrategy::GeminiNative => fetch_models_gemini_native(input).await,
         ModelRefreshStrategy::AnthropicNative => fetch_models_anthropic(input).await,
         ModelRefreshStrategy::CodexBuiltin => Ok(codex_builtin_models()),
+        ModelRefreshStrategy::GenaiAdapter(adapter_kind) => fetch_models_genai(input, adapter_kind).await,
     }
+}
+
+async fn fetch_models_genai(
+    input: &RefreshModelsInput,
+    adapter_kind: genai::adapter::AdapterKind,
+) -> Result<Vec<String>, String> {
+    let api_key = input.api_key.trim().to_string();
+    if api_key.contains('\r') || api_key.contains('\n') {
+        return Err("API key contains newline characters. Please paste a single-line token.".to_string());
+    }
+    if matches!(api_key.as_str(), "..." | "***" | "•••" | "···") {
+        return Err("API key is still a placeholder ('...' / '***'). Please paste the real token.".to_string());
+    }
+    let client = genai::Client::builder()
+        .with_auth_resolver_fn(move |_model: genai::ModelIden| {
+            Ok(Some(genai::resolver::AuthData::from_single(api_key.clone())))
+        })
+        .build();
+    let mut models = tokio::time::timeout(
+        std::time::Duration::from_secs(20),
+        client.all_model_names(adapter_kind),
+    )
+    .await
+    .map_err(|_| format!("Fetch genai model list timed out: {adapter_kind}"))?
+    .map_err(|err| format!("Fetch genai model list failed ({adapter_kind}): {err}"))?;
+    models.sort();
+    models.dedup();
+    Ok(models)
 }
 
 fn model_id_exact_match(requested_model: &str, candidate_model: &str) -> bool {
