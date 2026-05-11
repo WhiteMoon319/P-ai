@@ -2,6 +2,10 @@
 
 ## 进行中
 
+## 发布：v0.9.85
+
+- 发布（release-0.9.85）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.85`，纳入本轮文本工具自动编码、聊天滚底、本地记忆 recall/remember、MCP 非阻塞监督、终端执行超时与 schema 收口、Gemini/OpenAI reasoning effort 调整等改动。
+
 - 功能（text-tool-auto-encoding）：文本工具读写新增内部自动编码处理，按 BOM、严格 UTF-8、`chardetng` 检测的优先级读取现有文件，并在 `read`、文件阅读窗口与 `apply_patch update/撤回` 中按原编码写回；新建文件仍默认 UTF-8，工具参数不暴露编码选择，遇到原编码无法表示的新字符时拒绝写入。
 
 - 修复（chat-jump-bottom-streaming-local-only）：聊天窗口点击“滚到最下”时，若当前正在流式、忙碌或冻结，只执行本地滚底，不再触发补齐后端尾部消息，避免流式气泡期间按钮滚底后被异步历史同步拉回其它位置。
