@@ -64,7 +64,6 @@ async fn builtin_tool_definitions_for_frontend(
             }
             .provider_tool_definition(),
         ),
-        frontend_tool_definition(BuiltinWaitTool.provider_tool_definition()),
         frontend_tool_definition(read_provider_tool_definition()),
         frontend_tool_definition(
             BuiltinPlanTool {

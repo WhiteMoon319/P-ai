@@ -27,11 +27,6 @@ struct RecallToolArgs {
 struct EmptyToolArgs {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-struct WaitToolArgs {
-    ms: u64,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
 struct TerminalExecToolArgs {
     #[serde(default)]
     action: Option<String>,

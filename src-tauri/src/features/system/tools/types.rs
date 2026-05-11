@@ -98,32 +98,3 @@ struct ScreenshotResponse {
     save_ms: Option<u64>,
     timestamp: String,
 }
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum WaitMode {
-    Sleep,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct WaitRequest {
-    #[serde(default = "default_wait_mode")]
-    mode: WaitMode,
-    ms: u64,
-}
-
-fn default_wait_mode() -> WaitMode {
-    WaitMode::Sleep
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct WaitResponse {
-    ok: bool,
-    waited_ms: u64,
-    elapsed_ms: u64,
-    elapsed_seconds: u64,
-    started_at_local: String,
-    finished_at_local: String,
-}

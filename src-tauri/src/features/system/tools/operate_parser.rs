@@ -9,6 +9,11 @@ struct OperateRequest {
         example = operate_script_example()
     )]
     script: String,
+    #[serde(default)]
+    #[schemars(
+        description = "本次桌面脚本工具调用的超时时间，单位毫秒；未指定时默认 300000ms。长时间 wait 或自动化脚本应显式传入足够大的值。"
+    )]
+    timeout_ms: Option<u64>,
 }
 
 fn operate_script_example() -> String {
@@ -24,6 +29,7 @@ screenshot"#
 fn operate_request_example() -> OperateRequest {
     OperateRequest {
         script: operate_script_example(),
+        timeout_ms: None,
     }
 }
 

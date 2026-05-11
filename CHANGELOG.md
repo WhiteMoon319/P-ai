@@ -8,6 +8,10 @@
 
 - 功能（genai-provider-formats-ui）：补齐 Moonshot/Kimi、Baidu 千帆、OpenCode Go、Bedrock API 等 genai provider 格式在前后端类型、配置页协议选择、供应商预设、快速设置、部门校验与模型列表刷新里的显示与归一化。
 
+- 修复（terminal-exec-timeout-override）：终端 `exec` 工具默认超时调整为 300 秒，并移除显式 `timeout_ms` 的 120 秒硬上限；长耗时 `cargo build` / 构建检查可由模型按需传入更长超时，不再被静默截断。
+
+- 调整（operate-wait-consolidation）：删除独立 `wait` 工具入口与默认配置，旧 `wait` / `desktop-wait` 配置会被移除；等待能力统一使用 `operate` 脚本中的 `wait <seconds>` 动作，并为 `operate` 新增可选 `timeout_ms`，未指定默认 300 秒，显式传入时按调用方指定时长等待。
+
 - 优化（gemini-reasoning-effort-low-high-only）：Gemini / Vertex 思维强度收口为「低 / 高」两档，默认高；Auto 协议下识别到 Google 模型时才展示 Gemini 思维强度下拉，避免在非 Gemini 模型上误导。
 
 - 优化（openai-deepseek-reasoning-effort-ui）：普通模型卡新增思维强度入口；GPT / OpenAI Responses 收口为「低 / 中 / 高 / 极高」四档，DeepSeek 收口为「高 / 极高」两档，并统一按供应商归一保存值，避免混入不支持档位。

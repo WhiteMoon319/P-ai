@@ -119,7 +119,10 @@ fn check_tools_status(
             "operate" => ("loaded".to_string(), "桌面输入工具可用（鼠标/键盘/文本）".to_string()),
             "reload" => ("loaded".to_string(), "刷新工作区 MCP 与技能工具可用".to_string()),
             "organize_context" => ("loaded".to_string(), "整理当前活跃对话上下文工具可用".to_string()),
-            "wait" => ("loaded".to_string(), "等待毫秒工具可用".to_string()),
+            "wait" => (
+                "unavailable".to_string(),
+                "wait 工具已删除；请改用 operate 脚本中的 wait 动作。".to_string(),
+            ),
             "plan" => ("loaded".to_string(), "计划协议工具可用".to_string()),
             "task" => ("loaded".to_string(), "任务工具可用".to_string()),
             "todo" => ("loaded".to_string(), "会话内 Todo 步骤追踪工具可用".to_string()),

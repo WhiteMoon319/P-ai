@@ -33,6 +33,12 @@ fn operate_provider_tool_definition() -> ProviderToolDefinition {
                 "script": {
                     "type": "string",
                     "description": "桌面脚本文本，一行一个动作。"
+                },
+                "timeout_ms": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 300000,
+                    "description": "本次桌面脚本工具调用的超时时间，单位毫秒；未指定时默认 300000ms。长时间 wait 或自动化脚本应显式传入足够大的值。"
                 }
             },
             "required": ["script"]
@@ -67,6 +73,17 @@ fn read_provider_tool_definition() -> ProviderToolDefinition {
     )
 }
 
+const OPERATE_TOOL_DEFAULT_TIMEOUT_MS: u64 = 300_000;
+
+fn operate_tool_timeout_override(args_json: &str) -> std::time::Duration {
+    let timeout_ms = parse_runtime_tool_args::<OperateRequest>(args_json)
+        .ok()
+        .and_then(|args| args.timeout_ms)
+        .unwrap_or(OPERATE_TOOL_DEFAULT_TIMEOUT_MS)
+        .max(1);
+    std::time::Duration::from_millis(timeout_ms)
+}
+
 fn build_global_tool_schema_cache(state: &AppState) -> Vec<ProviderToolDefinition> {
     let preview_session_id = "__tool_schema_cache__".to_string();
     let preview_api_id = "__tool_schema_cache__".to_string();
@@ -99,7 +116,6 @@ fn build_global_tool_schema_cache(state: &AppState) -> Vec<ProviderToolDefinitio
             agent_id: preview_agent_id,
         }
         .provider_tool_definition(),
-        BuiltinWaitTool.provider_tool_definition(),
         read_provider_tool_definition(),
         BuiltinTerminalExecTool {
             app_state: state.clone(),
@@ -305,7 +321,6 @@ fn push_runtime_tool_executors(
         api_config_id: api_config_id.to_string(),
         agent_id: agent.id.to_string(),
     }));
-    tools.push(Box::new(BuiltinWaitTool));
     tools.push(Box::new(BuiltinReadFileTool {
         app_state: state.clone(),
         session_id: tool_session_id.to_string(),
@@ -404,8 +419,8 @@ impl RuntimeJsonTool for BuiltinOperateTool {
     type Args = OperateRequest;
     type Error = ToolInvokeError;
 
-    fn timeout_override(_args_json: &str) -> Option<std::time::Duration> {
-        Some(std::time::Duration::from_secs(300))
+    fn timeout_override(args_json: &str) -> Option<std::time::Duration> {
+        Some(operate_tool_timeout_override(args_json))
     }
 
     fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {

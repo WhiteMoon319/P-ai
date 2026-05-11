@@ -165,7 +165,7 @@ mod operate_tool_tests {
     use super::*;
 
     fn parse_single(script: &str) -> DesktopScriptAction {
-        parse_script(&OperateRequest { script: script.to_string() })
+        parse_script(&OperateRequest { script: script.to_string(), timeout_ms: None })
             .unwrap()
             .into_iter()
             .next()
@@ -190,21 +190,21 @@ mod operate_tool_tests {
 
     #[test]
     fn parse_text_requires_quotes() {
-        let err = parse_script(&OperateRequest { script: "text hello".to_string() }).unwrap_err();
+        let err = parse_script(&OperateRequest { script: "text hello".to_string(), timeout_ms: None }).unwrap_err();
         assert!(err.message.contains("第 1 行 text"));
         assert!(err.message.contains("双引号"));
     }
 
     #[test]
     fn screenshot_save_requires_absolute_path() {
-        let err = parse_script(&OperateRequest { script: r#"screenshot save="tmp/shot.webp""#.to_string() }).unwrap_err();
+        let err = parse_script(&OperateRequest { script: r#"screenshot save="tmp/shot.webp""#.to_string(), timeout_ms: None }).unwrap_err();
         assert!(err.message.contains("第 1 行 screenshot"));
         assert!(err.message.contains("绝对路径"));
     }
 
     #[test]
     fn mouse_coordinates_must_be_normalized() {
-        let err = parse_script(&OperateRequest { script: "mouse left click @1.2,0.5".to_string() }).unwrap_err();
+        let err = parse_script(&OperateRequest { script: "mouse left click @1.2,0.5".to_string(), timeout_ms: None }).unwrap_err();
         assert!(err.message.contains("第 1 行 mouse"));
         assert!(err.message.contains("0.0~1.0"));
     }

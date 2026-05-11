@@ -338,8 +338,8 @@ fn normalize_tools_list(
             "desktop-screenshot" | "screenshot" => {
                 tool.id = "__merged_into_operate__".to_string();
             }
-            "desktop-wait" => {
-                tool.id = "wait".to_string();
+            "desktop-wait" | "wait" => {
+                tool.id = "__merged_into_operate__".to_string();
             }
             "command" => {
                 tool.id = "__legacy_command__".to_string();
@@ -376,7 +376,7 @@ fn normalize_tools_list(
         }
     }
     if legacy_command_enabled {
-        for tool_id in ["reload", "organize_context", "wait"] {
+        for tool_id in ["reload", "organize_context"] {
             if let Some(tool) = tools.iter_mut().find(|tool| tool.id == tool_id) {
                 tool.enabled = true;
             }

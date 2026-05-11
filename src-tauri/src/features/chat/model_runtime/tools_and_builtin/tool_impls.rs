@@ -232,9 +232,6 @@ struct BuiltinOrganizeContextTool {
     agent_id: String,
 }
 
-#[derive(Debug, Clone)]
-struct BuiltinWaitTool;
-
 impl RuntimeJsonTool for BuiltinReloadTool {
     const NAME: &'static str = "reload";
     type Args = EmptyToolArgs;
@@ -320,57 +317,6 @@ impl RuntimeToolMetadata for BuiltinOrganizeContextTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinWaitTool {
-    const NAME: &'static str = "wait";
-    type Args = WaitToolArgs;
-    type Error = ToolInvokeError;
-
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
-        Box::pin(async move {
-            runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.start name=wait args={}",
-                debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
-            ));
-            if !(1..=120_000).contains(&args.ms) {
-                return Err(ToolInvokeError::from(format!(
-                    "wait.ms 超出范围，要求 1~120000，当前收到：{}",
-                    args.ms
-                )));
-            }
-            let result = builtin_desktop_wait(args.ms)
-                .await
-                .map_err(ToolInvokeError::from);
-            match &result {
-                Ok(v) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.ok name=wait result={}",
-                    debug_value_snippet(v, 240)
-                )),
-                Err(err) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.err name=wait err={err}"
-                )),
-            }
-            result
-        })
-    }
-}
-
-impl RuntimeToolMetadata for BuiltinWaitTool {
-    fn provider_tool_definition(&self) -> ProviderToolDefinition {
-        ProviderToolDefinition::new(
-            "wait",
-            "等待指定毫秒数（1~120000）。",
-            serde_json::json!({
-              "type": "object",
-              "properties": {
-                "ms": { "type": "integer", "minimum": 1, "maximum": 120000, "description": "等待毫秒数" }
-              },
-              "required": ["ms"],
-              "additionalProperties": false
-            }),
-        )
-    }
-}
-
 #[derive(Debug, Clone)]
 struct BuiltinTerminalExecTool {
     app_state: AppState,
@@ -386,7 +332,7 @@ impl RuntimeToolMetadata for BuiltinTerminalExecTool {
               "type": "object",
               "properties": {
                 "command": { "type": "string", "description": "要执行的一次性 shell 命令。" },
-                "timeout_ms": { "type": "integer", "minimum": 1, "maximum": 120000, "default": 20000, "description": "命令超时时间，单位毫秒；超时后回收本次进程树。" }
+                "timeout_ms": { "type": "integer", "minimum": 1, "default": 300000, "description": "命令超时时间，单位毫秒；未指定时默认 300000ms，超时后回收本次进程树。长耗时检查/构建应显式传入足够大的值。" }
               },
               "required": ["command"],
               "additionalProperties": false

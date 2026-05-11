@@ -128,7 +128,7 @@ fn terminal_session_conversation(state: &AppState, session_id: &str) -> Result<O
 
 fn normalize_terminal_timeout_ms(timeout_ms: Option<u64>) -> u64 {
     let value = timeout_ms.unwrap_or(TERMINAL_DEFAULT_TIMEOUT_MS);
-    value.clamp(1, TERMINAL_MAX_TIMEOUT_MS)
+    value.max(1)
 }
 
 fn normalize_terminal_path_for_compare(path: &Path) -> String {

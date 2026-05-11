@@ -5,13 +5,6 @@ async fn desktop_screenshot(input: ScreenshotRequest) -> Result<ScreenshotRespon
         .map_err(|err| to_tool_err_string(&err))
 }
 
-#[tauri::command]
-async fn desktop_wait(input: WaitRequest) -> Result<WaitResponse, String> {
-    run_wait_tool(input)
-        .await
-        .map_err(|err| to_tool_err_string(&err))
-}
-
 const NATIVE_NOTIFICATION_BODY_MAX_CHARS: usize = 180;
 #[cfg(target_os = "windows")]
 const NATIVE_NOTIFICATION_SOUND_DEFAULT: &str = "Default";

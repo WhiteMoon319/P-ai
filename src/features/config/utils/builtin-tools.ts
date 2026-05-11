@@ -9,7 +9,6 @@ const BUILTIN_TOOL_DEFAULTS: ReadonlyArray<Readonly<ApiToolItem>> = [
   { id: "apply_patch", command: "builtin", args: ["apply_patch"], enabled: true, values: {} },
   { id: "reload", command: "builtin", args: ["reload"], enabled: true, values: {} },
   { id: "organize_context", command: "builtin", args: ["organize_context"], enabled: true, values: {} },
-  { id: "wait", command: "builtin", args: ["wait"], enabled: true, values: {} },
   { id: "task", command: "builtin", args: ["task"], enabled: true, values: {} },
   { id: "delegate", command: "builtin", args: ["delegate"], enabled: true, values: {} },
   { id: "meme", command: "builtin", args: ["meme"], enabled: true, values: {} },

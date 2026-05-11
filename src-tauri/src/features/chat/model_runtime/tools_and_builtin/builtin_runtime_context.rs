@@ -1,14 +1,3 @@
-async fn builtin_desktop_wait(ms: u64) -> Result<Value, String> {
-    let res = run_wait_tool(WaitRequest {
-        mode: WaitMode::Sleep,
-        ms,
-    })
-    .await
-    .map_err(|err| to_tool_err_string(&err))?;
-    serde_json::to_value(res).map_err(|err| format!("序列化桌面等待结果失败：{err}"))
-}
-
-
 async fn builtin_reload(app_state: &AppState) -> Result<Value, String> {
     let result = reload_workspace(app_state).await?;
     serde_json::to_value(result).map_err(|err| format!("序列化刷新结果失败：{err}"))

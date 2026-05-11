@@ -593,7 +593,7 @@ fn tool_restricted_by_department(
     if !is_assistant
         && matches!(
             tool_id,
-            "reload" | "organize_context" | "wait" | "screenshot" | "operate" | "task"
+            "reload" | "organize_context" | "screenshot" | "operate" | "task"
         )
     {
         let department_name = department.name.trim();

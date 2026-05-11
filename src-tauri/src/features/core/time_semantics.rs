@@ -80,10 +80,6 @@ fn now_local_rfc3339() -> String {
     format_offset_datetime_to_local_rfc3339(now_utc())
 }
 
-fn now_local_text_seconds() -> String {
-    format_offset_datetime_to_local_text(now_utc())
-}
-
 fn format_utc_storage_time_to_local_rfc3339(raw: &str) -> String {
     let trimmed = raw.trim();
     if trimmed.is_empty() {

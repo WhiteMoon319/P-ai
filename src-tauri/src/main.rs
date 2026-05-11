@@ -740,7 +740,6 @@ fn main() {
             remote_im_weixin_oc_logout,
             desktop_screenshot,
             xcap,
-            desktop_wait,
             demo_send_native_notification,
             get_host_runtime_prerequisites,
             install_host_runtime_prerequisite,
