@@ -2,6 +2,8 @@
 
 ## 进行中
 
+- 修复（meme-segment-invalid-colon-preserve）：表情贴纸分段扫描将扫描游标与文本输出游标分离，遇到 Markdown 表格对齐符或普通冒号时不再吞掉前文，避免含表情回复完成后只显示后半段内容。
+
 - 修复（apply-patch-diagnostics-partial）：`apply_patch` 的 `old_string` 多命中错误会返回命中行范围，未命中错误会返回最相似候选行范围；批量操作改为按顺序逐条执行，前序成功后遇到失败会返回 `ok=false`、`partial`、`changed` 与具体失败操作信息，并保留已成功操作的撤回记录。
 
 - 修复（mcp-nonblocking-supervisor）：MCP 启动与部署改为后台非阻塞探测，启动期不再等待外部 MCP 子进程完成；连接、工具枚举与工具调用超时统一收口到 MCP runtime 内部，并避免 policy-only 工具以空 schema 暴露给模型、旧后台探测覆盖新配置。

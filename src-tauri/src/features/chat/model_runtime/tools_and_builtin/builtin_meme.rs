@@ -671,31 +671,32 @@ fn resolve_text_to_persisted_meme_segments(
         return Ok(None);
     }
     let mut segments = Vec::<PersistedMemeSegment>::new();
-    let mut cursor = 0usize;
+    let mut scan_cursor = 0usize;
+    let mut text_cursor = 0usize;
     let mut token_index = 0usize;
     let mut matched_any = false;
 
-    while cursor < text.len() {
-        let Some(start_rel) = text[cursor..].find(':') else {
+    while scan_cursor < text.len() {
+        let Some(start_rel) = text[scan_cursor..].find(':') else {
             break;
         };
-        let start = cursor + start_rel;
+        let start = scan_cursor + start_rel;
         let Some(end_rel) = text[start + 1..].find(':') else {
             break;
         };
         let end = start + 1 + end_rel;
         let category = &text[start + 1..end];
         if !meme_token_is_valid(category) {
-            cursor = start + 1;
+            scan_cursor = start + 1;
             continue;
         }
         let Some(candidates) = grouped.get(category) else {
-            cursor = start + 1;
+            scan_cursor = start + 1;
             continue;
         };
-        if start > cursor {
+        if start > text_cursor {
             segments.push(PersistedMemeSegment::Text {
-                text: text[cursor..start].to_string(),
+                text: text[text_cursor..start].to_string(),
             });
         }
         let chosen = &candidates[choose_meme_variant_index(
@@ -719,15 +720,16 @@ fn resolve_text_to_persisted_meme_segments(
         });
         matched_any = true;
         token_index += 1;
-        cursor = end + 1;
+        scan_cursor = end + 1;
+        text_cursor = end + 1;
     }
 
     if !matched_any {
         return Ok(None);
     }
-    if cursor < text.len() {
+    if text_cursor < text.len() {
         segments.push(PersistedMemeSegment::Text {
-            text: text[cursor..].to_string(),
+            text: text[text_cursor..].to_string(),
         });
     }
     Ok(Some(segments))
@@ -1014,6 +1016,31 @@ mod builtin_meme_tests {
         persist_meme_segments_into_provider_meta(&mut meta, Some(&segments));
         let parsed = provider_meta_meme_segments(meta.as_ref()).expect("parse meme segments");
         assert_eq!(parsed, segments);
+    }
+
+    #[test]
+    fn resolve_text_to_persisted_meme_segments_should_preserve_text_before_invalid_colons() {
+        let state = meme_test_state();
+        let existing = meme_workspace_root(&state)
+            .join("坏笑粉毛")
+            .join("贴纸A__1.png");
+        write_test_png(&existing);
+        let text = "| 指标 | 数值 |\n|:---|:---|\n| MA5 | 1373 |\n收尾:坏笑粉毛:";
+
+        let segments = resolve_text_to_persisted_meme_segments(&state, text, "seed")
+            .expect("resolve meme segments")
+            .expect("segments");
+
+        assert_eq!(
+            segments.first(),
+            Some(&PersistedMemeSegment::Text {
+                text: "| 指标 | 数值 |\n|:---|:---|\n| MA5 | 1373 |\n收尾".to_string(),
+            }),
+        );
+        assert!(matches!(
+            segments.get(1),
+            Some(PersistedMemeSegment::Meme { category, .. }) if category == "坏笑粉毛"
+        ));
     }
 
     #[test]
