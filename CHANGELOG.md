@@ -2,6 +2,8 @@
 
 ## 进行中
 
+- 修复（chat-jump-bottom-streaming-local-only）：聊天窗口点击“滚到最下”时，若当前正在流式、忙碌或冻结，只执行本地滚底，不再触发补齐后端尾部消息，避免流式气泡期间按钮滚底后被异步历史同步拉回其它位置。
+
 - 功能（remember-action-update-merge）：`remember` 工具改为唯一 `action + sourceMemoryIds + memory` 入参结构，`sourceMemoryIds` 使用 recall 记忆板短编号；更新单条或合并多条时会写入目标记忆并删除被替换源记忆，减少即时记忆重复堆积，且工具结果不暴露内部 ID。
 
 - 功能（recall-time-pagination）：`recall` 工具新增可选 `query`、`time`、`offset`、`limit`；支持先按查询过滤或使用全部可见记忆，再用 `YYYY` / `YYYY-MM` / `YYYY-MM-DD` 过滤年/月/日，并用 offset 跳过结果、limit 控制返回数量。

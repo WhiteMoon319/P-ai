@@ -1711,6 +1711,7 @@ function onConversationScroll() {
 
 function handleJumpToBottom() {
   startJumpToBottomTransaction();
+  if (props.chatting || props.conversationBusy || props.frozen) return;
   emit("jumpToConversationBottom");
 }
 
