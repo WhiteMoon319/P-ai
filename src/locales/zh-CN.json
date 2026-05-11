@@ -1153,7 +1153,16 @@
       "contact_reply": "联系人回复",
       "contact_send_files": "联系人发送文件",
       "contact_no_reply": "联系人不回复"
-    }
+    },
+    "planStartedDivider": "计划开始执行",
+    "codeReviewNoConversation": "当前没有活跃会话，无法发起代码审查。",
+    "codeReviewNoDepartment": "当前没有可用部门，无法发起代码审查。",
+    "codeReviewRetryNoConversation": "当前没有活跃会话，无法重新生成代码审查报告。",
+    "codeReviewRetryNoDepartment": "当前没有可直属下级部门，无法重新生成代码审查任务。",
+    "codeReviewRetryUnsupportedScope": "不支持重新生成该代码审查范围：{scope}",
+    "codeReviewDeleteFailed": "删除代码审查报告失败",
+    "delegateArchiveOpenFailed": "打开委托归档失败：{err}",
+    "delegateStatusLoadFailed": "委托状态加载失败：{err}"
   },
   "memory": {
     "title": "记忆列表",

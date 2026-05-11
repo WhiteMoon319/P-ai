@@ -1158,7 +1158,16 @@
       "contact_reply": "contact reply",
       "contact_send_files": "send files",
       "contact_no_reply": "no reply"
-    }
+    },
+    "planStartedDivider": "Plan started",
+    "codeReviewNoConversation": "No active conversation to start a code review.",
+    "codeReviewNoDepartment": "No available department to start a code review.",
+    "codeReviewRetryNoConversation": "No active conversation to regenerate the code review report.",
+    "codeReviewRetryNoDepartment": "No subordinate department available to retry the code review.",
+    "codeReviewRetryUnsupportedScope": "Unsupported code review scope for retry: {scope}",
+    "codeReviewDeleteFailed": "Failed to delete code review report",
+    "delegateArchiveOpenFailed": "Failed to open delegate archive: {err}",
+    "delegateStatusLoadFailed": "Failed to load delegate status: {err}"
   },
   "memory": {
     "title": "Memories",

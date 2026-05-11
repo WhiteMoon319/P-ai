@@ -1152,7 +1152,16 @@
       "contact_reply": "聯絡人回覆",
       "contact_send_files": "聯絡人發送檔案",
       "contact_no_reply": "聯絡人不回覆"
-    }
+    },
+    "planStartedDivider": "計劃開始執行",
+    "codeReviewNoConversation": "目前沒有活躍會話，無法發起程式碼審查。",
+    "codeReviewNoDepartment": "目前沒有可用部門，無法發起程式碼審查。",
+    "codeReviewRetryNoConversation": "目前沒有活躍會話，無法重新產生程式碼審查報告。",
+    "codeReviewRetryNoDepartment": "目前沒有可直屬下級部門，無法重新產生程式碼審查任務。",
+    "codeReviewRetryUnsupportedScope": "不支援重新產生該程式碼審查範圍：{scope}",
+    "codeReviewDeleteFailed": "刪除程式碼審查報告失敗",
+    "delegateArchiveOpenFailed": "開啟委託歸檔失敗：{err}",
+    "delegateStatusLoadFailed": "委託狀態載入失敗：{err}"
   },
   "memory": {
     "title": "记忆列表",

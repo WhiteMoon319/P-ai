@@ -133,7 +133,7 @@
                   class="mt-4 flex items-center gap-3 text-[11px] text-base-content/45"
                 >
                   <div class="h-px flex-1 bg-base-300/80"></div>
-                  <span class="shrink-0 rounded-full border border-base-300/80 bg-base-100 px-3 py-1 text-base-content/55">计划开始执行</span>
+                  <span class="shrink-0 rounded-full border border-base-300/80 bg-base-100 px-3 py-1 text-base-content/55">{{ t("chat.planStartedDivider") }}</span>
                   <div class="h-px flex-1 bg-base-300/80"></div>
                 </div>
 
@@ -489,13 +489,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch, type ComponentPublicInstance } from "vue";
 import { useVirtualizer } from "@tanstack/vue-virtual";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useI18n } from "vue-i18n";
 import { isDarkAppTheme } from "../../shell/composables/use-app-theme";
 import { ChevronsDown, History, ListTodo } from "lucide-vue-next";
 import "markstream-vue/index.css";
 import { invokeTauri } from "../../../services/tauri-api";
-import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ChatMessageBlock, ChatPersonaPresenceChip, ChatTodoItem, ConversationDelegateStatusSummary, IdeContextQueryResult, IdeContextReferenceItem, IdeContextWorkspaceGroup, IdeContextWorkspaceInput, PromptCommandPreset, ShellWorkspace } from "../../../types/app";
+import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ChatMessageBlock, ChatPersonaPresenceChip, ChatTodoItem, ConversationDelegateStatusSummary, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, ShellWorkspace } from "../../../types/app";
 import ChatMessageItem from "../components/ChatMessageItem.vue";
 import ChatApprovalPanel from "../components/ChatApprovalPanel.vue";
 import ChatComposerPanel from "../components/ChatComposerPanel.vue";
@@ -512,84 +511,13 @@ import { useChatToolReview, type ToolReviewCodeReviewScope, type ToolReviewCommi
 import { resolveRetryToolReviewDepartmentId } from "../utils/tool-review-department";
 import type { TerminalApprovalConversationItem } from "../../shell/composables/use-terminal-approval";
 import { isAbsoluteLocalPath, normalizeLocalLinkHref } from "../utils/local-link";
+import { type ChatRenderItem, isRightAlignedMessage } from "../utils/chat-render";
+import { canOpenInFileReader } from "../utils/chat-render";
+import { useIdeContext } from "../composables/use-ide-context";
+import { useDelegateStatus } from "../composables/use-delegate-status";
+import { useBubbleBackground } from "../composables/use-bubble-background";
+import { useChatVirtualList, blockRenderId, blockGroupRenderId, estimateChatRenderItemHeight } from "../composables/use-chat-virtual-list";
 
-type ChatRenderItem =
-  | { kind: "compaction"; id: string; renderId: string; block: ChatMessageBlock; blockIndex: number }
-  | { kind: "plan_started"; id: string; renderId: string; block: ChatMessageBlock; blockIndex: number }
-  | { kind: "message"; id: string; renderId: string; block: ChatMessageBlock; blockIndex: number; compactWithPrevious: boolean }
-  | { kind: "group"; id: string; groupId: string; items: Array<{ renderId: string; block: ChatMessageBlock; blockIndex: number; compactWithPrevious: boolean }> };
-
-const MAX_GROUP_ITEM_COUNT = 2;
-const ARCHIVE_FOCUS_REQUEST_STORAGE_KEY = "easy_call.archives.focus_request.v1";
-const USER_BUBBLE_BACKGROUND_HIDDEN_STORAGE_KEY = "easy_call.user_bubble_background_hidden.v1";
-const ASSISTANT_BUBBLE_BACKGROUND_HIDDEN_STORAGE_KEY = "easy_call.assistant_bubble_background_hidden.v1";
-const FILE_READER_EXTENSIONS = new Set([
-  "md",
-  "markdown",
-  "mdx",
-  "ts",
-  "tsx",
-  "c",
-  "cc",
-  "cpp",
-  "cxx",
-  "h",
-  "hpp",
-  "cs",
-  "java",
-  "kt",
-  "kts",
-  "go",
-  "js",
-  "jsx",
-  "vue",
-  "rs",
-  "py",
-  "rb",
-  "php",
-  "swift",
-  "scala",
-  "dart",
-  "lua",
-  "r",
-  "m",
-  "mm",
-  "pl",
-  "pm",
-  "json",
-  "jsonc",
-  "json5",
-  "toml",
-  "yaml",
-  "yml",
-  "css",
-  "scss",
-  "sass",
-  "less",
-  "html",
-  "htm",
-  "xml",
-  "svg",
-  "sql",
-  "sh",
-  "bash",
-  "zsh",
-  "fish",
-  "ps1",
-  "bat",
-  "cmd",
-  "dockerfile",
-  "ini",
-  "env",
-  "gitignore",
-  "gitattributes",
-  "editorconfig",
-  "lock",
-  "csv",
-  "tsv",
-  "txt",
-  "log",
-]);
 
 const props = defineProps<{
   userAlias: string;
@@ -695,120 +623,25 @@ const activeConversationSummary = computed(() => {
   ) || null;
   return matched;
 });
-const ideContextGroups = ref<IdeContextWorkspaceGroup[]>([]);
-const attachedIdeContextReferences = ref<IdeContextReferenceItem[]>([]);
-let ideContextRefreshTimer: ReturnType<typeof setInterval> | null = null;
-let ideContextEventUnlisten: UnlistenFn | null = null;
-let ideContextRefreshSeq = 0;
-const visibleIdeContextGroups = computed<IdeContextWorkspaceGroup[]>(() => ideContextGroups.value);
-const ephemeralBlockRenderIdMap = new WeakMap<ChatMessageBlock, string>();
-let ephemeralBlockRenderIdSeq = 0;
-
+const {
+  visibleIdeContextGroups,
+  attachedIdeContextReferences,
+  attachReference: handleAttachIdeContextReference,
+  removeReference: handleRemoveIdeContextReference,
+  clearAttachedReferences: clearAttachedIdeContextReferences,
+} = useIdeContext({
+  activeConversationId: toRef(props, "activeConversationId"),
+  workspaces: toRef(props, "workspaces"),
+  currentWorkspaceRootPath: toRef(props, "currentWorkspaceRootPath"),
+  currentWorkspaceName: toRef(props, "currentWorkspaceName"),
+});
 function isOrganizeContextToolCall(call: { name: string; argsText: string; status?: "doing" | "done" }): boolean {
   const name = String(call.name || "").trim().toLowerCase();
   if (name === "organize_context" || name === "archive") return true;
   return false;
 }
 
-function normalizedIdeContextWorkspaceInputs(): IdeContextWorkspaceInput[] {
-  const sourceWorkspaces = Array.isArray(props.workspaces) ? props.workspaces : [];
-  const normalized = sourceWorkspaces
-    .map((workspace) => ({
-      path: String(workspace?.path || "").trim(),
-      name: String(workspace?.name || "").trim() || undefined,
-    }))
-    .filter((workspace) => !!workspace.path);
-  if (normalized.length > 0) return normalized;
-  const fallbackPath = String(props.currentWorkspaceRootPath || "").trim();
-  if (!fallbackPath) return [];
-  return [{
-    path: fallbackPath,
-    name: String(props.currentWorkspaceName || "").trim() || undefined,
-  }];
-}
 
-function cloneIdeContextReference(reference: IdeContextReferenceItem): IdeContextReferenceItem {
-  return {
-    ...reference,
-  };
-}
-
-async function refreshIdeContextGroups() {
-  const workspaces = normalizedIdeContextWorkspaceInputs();
-  if (workspaces.length === 0) {
-    ideContextGroups.value = [];
-    return;
-  }
-  const currentSeq = ++ideContextRefreshSeq;
-  try {
-    const result = await invokeTauri<IdeContextQueryResult>("query_ide_context_references", {
-      input: { workspaces },
-    });
-    if (currentSeq !== ideContextRefreshSeq) return;
-    ideContextGroups.value = Array.isArray(result?.groups) ? result.groups : [];
-  } catch (error) {
-    if (currentSeq === ideContextRefreshSeq) {
-      ideContextGroups.value = [];
-    }
-    console.warn("[IDE 上下文] 查询引用失败", error);
-  }
-}
-
-function startIdeContextRefreshTimer() {
-  stopIdeContextRefreshTimer();
-  ideContextRefreshTimer = window.setInterval(() => {
-    void refreshIdeContextGroups();
-  }, 5000);
-}
-
-function stopIdeContextRefreshTimer() {
-  if (!ideContextRefreshTimer) return;
-  clearInterval(ideContextRefreshTimer);
-  ideContextRefreshTimer = null;
-}
-
-async function startIdeContextEventListener() {
-  stopIdeContextEventListener();
-  try {
-    ideContextEventUnlisten = await listen("ide-context-updated", () => {
-      void refreshIdeContextGroups();
-    });
-  } catch (error) {
-    console.warn("[IDE 上下文] 监听更新事件失败", error);
-  }
-}
-
-function stopIdeContextEventListener() {
-  if (!ideContextEventUnlisten) return;
-  ideContextEventUnlisten();
-  ideContextEventUnlisten = null;
-}
-function handleAttachIdeContextReference(reference: IdeContextReferenceItem) {
-  if (attachedIdeContextReferences.value.some((item) => item.id === reference.id)) return;
-  attachedIdeContextReferences.value = [
-    ...attachedIdeContextReferences.value,
-    cloneIdeContextReference(reference),
-  ];
-}
-
-function handleRemoveIdeContextReference(referenceId: string) {
-  attachedIdeContextReferences.value = attachedIdeContextReferences.value.filter((item) => item.id !== referenceId);
-}
-
-function fileExtensionFromPath(path: string): string {
-  const normalizedPath = String(path || "").trim().replace(/\\/g, "/");
-  const fileName = normalizedPath.split("/").filter(Boolean).pop() || "";
-  const normalizedFileName = fileName.startsWith(".") ? fileName.slice(1) : fileName;
-  const lowerFileName = normalizedFileName.toLowerCase();
-  if (FILE_READER_EXTENSIONS.has(lowerFileName)) return lowerFileName;
-  const dotIndex = normalizedFileName.lastIndexOf(".");
-  if (dotIndex <= 0 || dotIndex === normalizedFileName.length - 1) return "";
-  return normalizedFileName.slice(dotIndex + 1).toLowerCase();
-}
-
-function canOpenInFileReader(path: string): boolean {
-  return FILE_READER_EXTENSIONS.has(fileExtensionFromPath(path));
-}
 
 async function handlePickCommitReview(page = 1) {
   const conversationId = String(props.activeConversationId || "").trim();
@@ -840,7 +673,7 @@ async function handleDeleteToolReviewReport(report: ToolReviewReportRecord) {
       reportId,
       error,
     });
-    toolReviewErrorText.value = t("chat.toolReview.loadFailed", { err: detail || "删除代码审查报告失败" });
+    toolReviewErrorText.value = t("chat.toolReview.loadFailed", { err: detail || t("chat.codeReviewDeleteFailed") });
   }
 }
 
@@ -850,11 +683,11 @@ function handleToolReviewCode(input: { scope: ToolReviewCodeReviewScope; target?
   const normalizedTarget = String(input.target || "").trim();
   const departmentId = String(input.departmentId || props.currentDepartmentId || "").trim();
   if (!conversationId) {
-    toolReviewErrorText.value = "当前没有活跃会话，无法发起代码审查。";
+    toolReviewErrorText.value = t("chat.codeReviewNoConversation");
     return;
   }
   if (!departmentId) {
-    toolReviewErrorText.value = "当前没有可用部门，无法发起代码审查。";
+    toolReviewErrorText.value = t("chat.codeReviewNoDepartment");
     return;
   }
   console.info("[工具审查][前端] 发起代码审查任务", {
@@ -877,7 +710,7 @@ async function handleRetryToolReviewReport(report: ToolReviewReportRecord) {
   const conversationId = String(props.activeConversationId || "").trim();
   const reportId = String(report.id || "").trim();
   if (!conversationId || !reportId) {
-    toolReviewErrorText.value = "当前没有活跃会话，无法重新生成代码审查报告。";
+    toolReviewErrorText.value = t("chat.codeReviewRetryNoConversation");
     return;
   }
   const retryCodeReviewDepartmentId = resolveRetryToolReviewDepartmentId({
@@ -887,7 +720,7 @@ async function handleRetryToolReviewReport(report: ToolReviewReportRecord) {
   });
   if (scope === "commit" || scope === "main" || scope === "uncommitted" || scope === "custom") {
     if (!retryCodeReviewDepartmentId) {
-      toolReviewErrorText.value = "当前没有可用直属下级部门，无法重新生成代码审查任务。";
+      toolReviewErrorText.value = t("chat.codeReviewRetryNoDepartment");
       return;
     }
     console.info("[工具审查][前端] 重新生成代码审查", {
@@ -922,7 +755,7 @@ async function handleRetryToolReviewReport(report: ToolReviewReportRecord) {
     }
     return;
   }
-  toolReviewErrorText.value = `不支持重新生成该代码审查范围：${scope || "空"}`;
+  toolReviewErrorText.value = t("chat.codeReviewRetryUnsupportedScope", { scope: scope || "" });
 }
 
 function handleViewApprovalDetail() {
@@ -1051,61 +884,6 @@ const chatStatusBanner = computed<null | { text: string; tone: "default" | "erro
   return null;
 });
 
-const chatRenderItems = computed<ChatRenderItem[]>(() => {
-  const items: ChatRenderItem[] = [];
-  let currentGroup: Extract<ChatRenderItem, { kind: "group" }> | null = null;
-  let previousMessageBlock: ChatMessageBlock | null = null;
-
-  const flushGroup = () => {
-    if (!currentGroup) return;
-    items.push(currentGroup);
-    currentGroup = null;
-  };
-
-  props.messageBlocks.forEach((block, blockIndex) => {
-    const renderId = blockRenderId(block);
-    if (block.dividerKind === "plan_started") {
-      flushGroup();
-      previousMessageBlock = null;
-      items.push({ kind: "plan_started", id: `plan-started-${renderId}`, renderId, block, blockIndex });
-      return;
-    }
-    if (isCompactionBlock(block)) {
-      flushGroup();
-      previousMessageBlock = null;
-      items.push({ kind: "compaction", id: `compaction-${renderId}`, renderId, block, blockIndex });
-      return;
-    }
-    const compactWithPrevious = isCompactUserContinuation(block, previousMessageBlock);
-    if (isRightAlignedMessage(block)) {
-      flushGroup();
-      const groupId = blockGroupRenderId(block);
-      currentGroup = {
-        kind: "group",
-        id: `group-${groupId}`,
-        groupId,
-        items: [{ renderId, block, blockIndex, compactWithPrevious }],
-      };
-      previousMessageBlock = block;
-      return;
-    }
-    if (currentGroup) {
-      if (currentGroup.items.length >= MAX_GROUP_ITEM_COUNT) {
-        flushGroup();
-        items.push({ kind: "message", id: `message-${renderId}`, renderId, block, blockIndex, compactWithPrevious });
-        previousMessageBlock = block;
-        return;
-      }
-      currentGroup.items.push({ renderId, block, blockIndex, compactWithPrevious });
-      previousMessageBlock = block;
-      return;
-    }
-    items.push({ kind: "message", id: `message-${renderId}`, renderId, block, blockIndex, compactWithPrevious });
-    previousMessageBlock = block;
-  });
-  flushGroup();
-  return items;
-});
 const selectedMentionKeys = computed(() =>
   (Array.isArray(props.selectedMentions) ? props.selectedMentions : [])
     .map((item) => {
@@ -1195,7 +973,7 @@ function handleDetachConversationRequest() {
 function handleSendChat() {
   const extraTextBlocks = attachedIdeContextReferences.value.map((item) => String(item.textBlock || "").trim()).filter(Boolean);
   emit("sendChat", extraTextBlocks.length > 0 ? { extraTextBlocks } : undefined);
-  attachedIdeContextReferences.value = [];
+  clearAttachedIdeContextReferences();
 }
 
 function openBranchSelectionMenu() {
@@ -1250,8 +1028,6 @@ const composerPanelRef = ref<{
 } | null>(null);
 const messageSelectionModeEnabled = ref(false);
 const selectedMessageRenderIds = ref<string[]>([]);
-const userBubbleBackgroundHidden = ref(false);
-const assistantBubbleBackgroundHidden = ref(false);
 const olderHistoryRequestPending = ref(false);
 const LOAD_OLDER_HISTORY_THRESHOLD_PX = 96;
 const observedVirtualItemElements = new Map<string, HTMLElement>();
@@ -1305,6 +1081,39 @@ function refreshObservedVirtualItemElements() {
     }
   }
 }
+
+const {
+  playingAudioId,
+  copyMessage,
+  stopAudioPlayback,
+  toggleAudioPlayback,
+} = useChatMessageActions();
+const {
+  isHidden: isBubbleBackgroundHidden,
+  canToggle: canToggleBubbleBackground,
+  toggle: toggleBubbleBackground,
+} = useBubbleBackground(toRef(props, "activeConversationId"));
+
+const selectedMessageRenderIdSet = computed(() => new Set(selectedMessageRenderIds.value));
+
+const { chatRenderItems, messageMemoKey } = useChatVirtualList({
+  messageBlocks: toRef(props, "messageBlocks"),
+  markdownIsDark,
+  playingAudioId,
+  userAlias: toRef(props, "userAlias"),
+  userAvatarUrl: toRef(props, "userAvatarUrl"),
+  personaNameMap: toRef(props, "personaNameMap"),
+  personaAvatarUrlMap: toRef(props, "personaAvatarUrlMap"),
+  chatting: toRef(props, "chatting"),
+  conversationBusy: toRef(props, "conversationBusy"),
+  frozen: toRef(props, "frozen"),
+  messageSelectionModeEnabled,
+  selectedMessageRenderIdSet,
+  isBubbleBackgroundHidden,
+  canToggleBubbleBackground,
+  canRegenerateBlock,
+  canConfirmPlan,
+});
 
 const virtualRenderItems = computed<ChatRenderItem[]>(() => [...chatRenderItems.value]);
 
@@ -1579,17 +1388,19 @@ function scheduleJumpToBottomStep(requestId: number, remainingFrames: number) {
 }
 
 function startJumpToBottomTransaction() {
-  // 禁止流式自动贴底：只有用户点击“滚到最下”才创建这个有限事务。
-  // 事务只覆盖当前点击后的短暂布局/虚拟测量窗口；后续流式内容继续长高时不追底，避免长消息持续上移导致用户看不清。
-  const requestId = activeJumpToBottomRequest + 1;
-  activeJumpToBottomRequest = requestId;
+  activeJumpToBottomRequest += 1;
   armProgrammaticScrollPaginationSuppression();
   pendingOlderHistoryAnchor.value = null;
   pendingOlderHistoryScrollRestore.value = null;
-  scrollConversationToBottomOnce();
-  void nextTick(() => scheduleJumpToBottomStep(requestId, 3));
+  scheduleVirtualMeasure();
+  void nextTick(() => {
+    scrollConversationToBottomOnce();
+    requestAnimationFrame(() => {
+      scrollConversationToBottomOnce();
+      activeJumpToBottomRequest = 0;
+    });
+  });
 }
-
 function pinToBottomOnNextLayout(smooth = false, reason = "unknown") {
   if (props.chatting && reason !== "activeConversationChanged") return;
   if (pendingPinToBottomFrame) {
@@ -1869,13 +1680,6 @@ const {
   onPreviewPointerMove,
   onPreviewPointerUp,
 } = useChatImagePreview();
-const {
-  playingAudioId,
-  copyMessage,
-  stopAudioPlayback,
-  toggleAudioPlayback,
-} = useChatMessageActions();
-const selectedMessageRenderIdSet = computed(() => new Set(selectedMessageRenderIds.value));
 const renderedMessageItems = computed(() =>
   chatRenderItems.value.flatMap((item) => {
     if (item.kind === "message") {
@@ -1937,305 +1741,18 @@ const {
   t,
   onRefreshMessage: (payload) => emit("refreshToolReviewMessage", payload),
 });
-const delegateStatuses = ref<ConversationDelegateStatusSummary[]>([]);
-const delegateStatusesLoading = ref(false);
-const delegateStatusesErrorText = ref("");
-let delegateStatusesPollTimer: number | null = null;
-let delegateStatusesRequestSeq = 0;
-
-async function refreshDelegateStatuses() {
-  const conversationId = String(props.activeConversationId || "").trim();
-  if (!conversationId || !toolReviewPanelOpen.value) {
-    delegateStatuses.value = [];
-    delegateStatusesErrorText.value = "";
-    return;
-  }
-  const requestSeq = ++delegateStatusesRequestSeq;
-  delegateStatusesLoading.value = true;
-  try {
-    const statuses = await invokeTauri<ConversationDelegateStatusSummary[]>("list_conversation_delegate_statuses", {
-      input: { conversationId },
-    });
-    if (requestSeq !== delegateStatusesRequestSeq) return;
-    delegateStatuses.value = statuses;
-    delegateStatusesErrorText.value = "";
-  } catch (error) {
-    if (requestSeq !== delegateStatusesRequestSeq) return;
-    delegateStatusesErrorText.value = `委托状态加载失败：${String(error)}`;
-  } finally {
-    if (requestSeq === delegateStatusesRequestSeq) {
-      delegateStatusesLoading.value = false;
-    }
-  }
-}
-
-function clearDelegateStatusesPollTimer() {
-  if (delegateStatusesPollTimer === null) return;
-  window.clearInterval(delegateStatusesPollTimer);
-  delegateStatusesPollTimer = null;
-}
-
-function syncDelegateStatusesPolling() {
-  clearDelegateStatusesPollTimer();
-  if (!toolReviewPanelOpen.value || !String(props.activeConversationId || "").trim()) return;
-  void refreshDelegateStatuses();
-  delegateStatusesPollTimer = window.setInterval(() => {
-    void refreshDelegateStatuses();
-  }, 2000);
-}
-
-async function openDelegateArchiveDetail(status: ConversationDelegateStatusSummary) {
-  const conversationId = String(status?.conversationId || status?.delegateId || "").trim();
-  if (!conversationId) return;
-  try {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(ARCHIVE_FOCUS_REQUEST_STORAGE_KEY, JSON.stringify({
-        conversationId,
-        viewMode: "delegate",
-        createdAt: Date.now(),
-      }));
-    }
-    await invokeTauri("show_archives_window");
-  } catch (error) {
-    delegateStatusesErrorText.value = `打开委托归档失败：${String(error)}`;
-  }
-}
-
-watch(
-  () => [toolReviewPanelOpen.value, String(props.activeConversationId || "").trim()],
-  () => {
-    syncDelegateStatusesPolling();
-  },
-  { immediate: true },
-);
+const {
+  delegateStatuses,
+  delegateStatusesLoading,
+  delegateStatusesErrorText,
+  openDelegateArchiveDetail,
+} = useDelegateStatus({
+  activeConversationId: toRef(props, "activeConversationId"),
+  panelOpen: toolReviewPanelOpen,
+});
 
 function isOwnMessage(block: ChatMessageBlock): boolean {
   return isRightAlignedMessage(block);
-}
-
-function isRightAlignedMessage(block: ChatMessageBlock): boolean {
-  if (block.remoteImOrigin) return false;
-  if (block.role === "user") return true;
-  const id = String(block.speakerAgentId || "").trim();
-  return id === "user-persona";
-}
-
-function isCompactUserContinuation(block: ChatMessageBlock, previousBlock: ChatMessageBlock | null): boolean {
-  if (!previousBlock) return false;
-  if (!isRightAlignedMessage(block) || !isRightAlignedMessage(previousBlock)) return false;
-  if (block.dividerKind || previousBlock.dividerKind) return false;
-  if (block.isExtraTextBlock || previousBlock.isExtraTextBlock) return false;
-  return true;
-}
-
-function getEphemeralBlockRenderId(block: ChatMessageBlock): string {
-  const cached = ephemeralBlockRenderIdMap.get(block);
-  if (cached) return cached;
-  ephemeralBlockRenderIdSeq += 1;
-  const nextId = `block-ephemeral-${ephemeralBlockRenderIdSeq}`;
-  ephemeralBlockRenderIdMap.set(block, nextId);
-  return nextId;
-}
-
-function readBooleanLocalStorage(key: string): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(key) === "1";
-}
-
-function writeBooleanLocalStorage(key: string, enabled: boolean) {
-  if (typeof window === "undefined") return;
-  if (enabled) {
-    window.localStorage.setItem(key, "1");
-    return;
-  }
-  window.localStorage.removeItem(key);
-}
-
-function isAssistantBubbleBlock(block: ChatMessageBlock): boolean {
-  return String(block.role || "").trim() === "assistant";
-}
-
-function isUserBubbleBlock(block: ChatMessageBlock): boolean {
-  return String(block.role || "").trim() === "user";
-}
-
-function canToggleBubbleBackground(block: ChatMessageBlock): boolean {
-  if (block.isStreaming || block.dividerKind || block.isExtraTextBlock) return false;
-  return isUserBubbleBlock(block) || isAssistantBubbleBlock(block);
-}
-
-function isBubbleBackgroundHidden(block: ChatMessageBlock): boolean {
-  if (isUserBubbleBlock(block)) return userBubbleBackgroundHidden.value;
-  if (isAssistantBubbleBlock(block)) return assistantBubbleBackgroundHidden.value;
-  return false;
-}
-
-function toggleBubbleBackground(block: ChatMessageBlock) {
-  if (!canToggleBubbleBackground(block)) return;
-  if (isUserBubbleBlock(block)) {
-    const next = !userBubbleBackgroundHidden.value;
-    userBubbleBackgroundHidden.value = next;
-    writeBooleanLocalStorage(USER_BUBBLE_BACKGROUND_HIDDEN_STORAGE_KEY, next);
-    return;
-  }
-  if (isAssistantBubbleBlock(block)) {
-    const next = !assistantBubbleBackgroundHidden.value;
-    assistantBubbleBackgroundHidden.value = next;
-    writeBooleanLocalStorage(ASSISTANT_BUBBLE_BACKGROUND_HIDDEN_STORAGE_KEY, next);
-  }
-}
-
-function loadBubbleBackgroundHiddenPreferences() {
-  userBubbleBackgroundHidden.value = readBooleanLocalStorage(USER_BUBBLE_BACKGROUND_HIDDEN_STORAGE_KEY);
-  assistantBubbleBackgroundHidden.value = readBooleanLocalStorage(ASSISTANT_BUBBLE_BACKGROUND_HIDDEN_STORAGE_KEY);
-}
-
-watch(
-  () => props.activeConversationId,
-  () => {
-    loadBubbleBackgroundHiddenPreferences();
-  },
-  { immediate: true },
-);
-
-function blockRenderId(block: ChatMessageBlock): string {
-  const rawId = String(block.id || "").trim();
-  if (rawId) return rawId;
-  const sourceMessageId = String(block.sourceMessageId || "").trim();
-  if (sourceMessageId) {
-    return block.isExtraTextBlock ? `${sourceMessageId}::extra` : sourceMessageId;
-  }
-  const createdAt = String(block.createdAt || "").trim();
-  const speakerAgentId = String(block.speakerAgentId || "").trim();
-  const role = String(block.role || "").trim();
-  const textPreview = String(block.text || "").trim().slice(0, 64);
-  if (createdAt || speakerAgentId || role || textPreview) {
-    return [
-      "block-stable",
-      role || "no-role",
-      speakerAgentId || "no-speaker",
-      createdAt || "no-time",
-      block.isExtraTextBlock ? "extra" : "base",
-      textPreview || "no-text",
-    ].join(":");
-  }
-  return getEphemeralBlockRenderId(block);
-}
-
-function blockGroupRenderId(block: ChatMessageBlock) {
-  const createdAt = String(block.createdAt || "").trim();
-  const textPreview = String(block.text || "").trim().slice(0, 48);
-  const renderId = blockRenderId(block);
-  if (createdAt || textPreview) {
-    return `${renderId}:${createdAt || "no-time"}:${textPreview || "no-text"}`;
-  }
-  return `group-${renderId}`;
-}
-
-function messageMemoKey(block: ChatMessageBlock, renderId: string, blockIndex: number, compactWithPrevious = false) {
-  const selected = selectedMessageRenderIdSet.value.has(renderId);
-  const canRegenerate = canRegenerateBlock(block, blockIndex);
-  const canConfirm = canConfirmPlan(block);
-  const requiresInteractionState = canRegenerate || canConfirm;
-  return [
-    block,
-    markdownIsDark.value,
-    playingAudioId.value,
-    props.userAlias,
-    props.userAvatarUrl,
-    props.personaNameMap,
-    props.personaAvatarUrlMap,
-    props.conversationBusy,
-    messageSelectionModeEnabled.value,
-    selected,
-    canRegenerate,
-    canConfirm,
-    isBubbleBackgroundHidden(block),
-    canToggleBubbleBackground(block),
-    compactWithPrevious,
-    requiresInteractionState ? props.chatting : false,
-    requiresInteractionState ? props.conversationBusy : false,
-    requiresInteractionState ? props.frozen : false,
-  ];
-}
-
-function estimateChatRenderItemHeight(item: ChatRenderItem): number {
-  if (item.kind === "compaction" || item.kind === "plan_started") return 44;
-  if (item.kind === "message") {
-    return estimateMessageBlockHeight(item.block) + 8;
-  }
-  return item.items.reduce((total, groupItem) => total + estimateMessageBlockHeight(groupItem.block) + 8, 0) + 8;
-}
-
-function blockSizeDependencies(block: ChatMessageBlock): unknown[] {
-  return [
-    String(block.id || ""),
-    String(block.sourceMessageId || ""),
-    String(block.text || ""),
-    String(block.reasoningInline || ""),
-    String(block.reasoningStandard || ""),
-    block.images.length,
-    block.audios.length,
-    block.attachmentFiles.length,
-    block.toolCalls.length,
-    Array.isArray(block.memeSegments) ? block.memeSegments.length : 0,
-    block.planCard?.action || "",
-    block.planCard?.path || "",
-    String(block.taskTrigger ? JSON.stringify(block.taskTrigger) : ""),
-  ];
-}
-
-function virtualItemSizeDependencies(item: ChatRenderItem): unknown[] {
-  if (item.kind === "compaction" || item.kind === "plan_started") {
-    return [item.id, item.kind];
-  }
-  if (item.kind === "message") {
-    return [item.id, ...blockSizeDependencies(item.block)];
-  }
-  return [
-    item.id,
-    ...item.items.flatMap((groupItem) => [groupItem.renderId, ...blockSizeDependencies(groupItem.block)]),
-  ];
-}
-
-function estimateMessageBlockHeight(block: ChatMessageBlock): number {
-  let estimate = isOwnMessage(block) ? 78 : 108;
-  const text = String(block.text || "");
-  const inlineReasoning = String(block.reasoningInline || "");
-  const standardReasoning = String(block.reasoningStandard || "");
-  const combinedTextLength = text.length + inlineReasoning.length + standardReasoning.length;
-  estimate += Math.min(920, Math.ceil(combinedTextLength / 28) * 9);
-
-  const codeFenceCount = countFenceMatches(text, /```[\w-]*\s*[\r\n]/g);
-  const mermaidFenceCount = countFenceMatches(text, /```(?:\s*)mermaid\b/gi);
-  estimate += codeFenceCount * 180;
-  estimate += mermaidFenceCount * 120;
-
-  if (block.planCard) estimate += 84;
-  if (block.taskTrigger) estimate += 120;
-  if (standardReasoning.trim()) estimate += Math.min(240, Math.ceil(standardReasoning.length / 36) * 12);
-  if (inlineReasoning.trim()) estimate += Math.min(180, Math.ceil(inlineReasoning.length / 36) * 10);
-  if (block.toolCalls.length > 0) estimate += block.toolCalls.length * 56 + 36;
-  if (Array.isArray(block.memeSegments) && block.memeSegments.length > 0) {
-    estimate += block.memeSegments.length * 42;
-  }
-  estimate += block.images.length * 120;
-  estimate += block.audios.length * 42;
-  estimate += block.attachmentFiles.length * 34;
-  return Math.max(64, estimate);
-}
-
-function countFenceMatches(text: string, pattern: RegExp): number {
-  if (!text) return 0;
-  return Array.from(text.matchAll(pattern)).length;
-}
-
-function isCompactionBlock(block: ChatMessageBlock): boolean {
-  if (block.remoteImOrigin) return false;
-  const meta = (block.providerMeta || {}) as Record<string, unknown>;
-  const messageMeta = ((meta.message_meta || meta.messageMeta || {}) as Record<string, unknown>);
-  const kind = String(messageMeta.kind || "").trim();
-  return kind === "context_compaction" || kind === "summary_context_seed";
 }
 
 function canRegenerateBlock(block: ChatMessageBlock, blockIndex: number): boolean {
@@ -2485,21 +2002,6 @@ async function handleAssistantLinkClick(event: MouseEvent) {
   }
 }
 
-watch(
-  () => props.activeConversationId,
-  () => {
-    attachedIdeContextReferences.value = [];
-    void refreshIdeContextGroups();
-  },
-);
-
-watch(
-  () => normalizedIdeContextWorkspaceInputs().map((item) => `${item.path}\n${item.name || ""}`).join("|"),
-  () => {
-    void refreshIdeContextGroups();
-  },
-  { immediate: true },
-);
 
 onMounted(() => {
   void nextTick(() => chatScrollbarRef.value?.updateThumb());
@@ -2516,15 +2018,9 @@ onMounted(() => {
     }
     syncVisibleStreamingVirtualItemViewportTops();
   }
-  void refreshIdeContextGroups();
-  void startIdeContextEventListener();
-  startIdeContextRefreshTimer();
 });
 
 onBeforeUnmount(() => {
-  clearDelegateStatusesPollTimer();
-  stopIdeContextRefreshTimer();
-  stopIdeContextEventListener();
   virtualItemResizeObserver?.disconnect();
   virtualItemResizeObserver = null;
   if (pendingMeasureFrame) {
