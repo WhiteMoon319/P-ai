@@ -673,13 +673,13 @@ impl ReadFileReader for TextFileReader {
         detected: ReadFileDetectedType,
     ) -> Result<Value, String> {
         let path = ensure_absolute_file_path(request)?;
-        let text = std::fs::read_to_string(&path)
-            .map_err(|err| format!("读取文本文件失败（仅支持 UTF-8 文本）: {err}"))?;
+        let decoded = decode_text_file_from_path(&path)
+            .map_err(|err| format!("读取文本文件失败：{err}"))?;
         Ok(build_text_read_result(
             &path,
             detected,
             self.reader_kind(),
-            &text,
+            &decoded.text,
             request.offset,
             request.limit,
             serde_json::json!({}),
@@ -1192,6 +1192,32 @@ fn builtin_read_file_should_paginate_text_file() {
             Some("line2\nline3")
         );
         assert_eq!(value.get("nextOffset").and_then(Value::as_u64), Some(3));
+}
+
+#[cfg(test)]
+#[test]
+fn builtin_read_file_should_decode_gbk_text_file() {
+        let root = std::env::temp_dir().join(format!("eca-read-file-gbk-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create temp dir");
+        let file = root.join("sample.txt");
+        std::fs::write(&file, [0xd6, 0xd0, 0xce, 0xc4, b'\n']).expect("write gbk text");
+        let state = test_read_file_state();
+        let value = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("build tokio runtime")
+        .block_on(builtin_read_file(
+            &state,
+            "chat::conv-1",
+            "__frontend_tool_preview__",
+            ReadFileRequest {
+                path: file.to_string_lossy().to_string(),
+                offset: None,
+                limit: None,
+            },
+        ))
+        .expect("read gbk text");
+        assert_eq!(value.get("content").and_then(Value::as_str), Some("中文\n"));
 }
 
 #[cfg(test)]

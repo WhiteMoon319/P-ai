@@ -1448,7 +1448,9 @@ fn read_file_reader_file(window: tauri::Window, path: String) -> Result<FileRead
             FILE_READER_MAX_BYTES
         ));
     }
-    let content = fs::read_to_string(&file_path).map_err(|err| format!("读取文本文件失败：{err}"))?;
+    let content = decode_text_file_from_path(&file_path)
+        .map_err(|err| format!("读取文本文件失败：{err}"))?
+        .text;
     let resolved_path = file_path.canonicalize().unwrap_or_else(|_| file_path.clone());
     let extension = file_path
         .extension()

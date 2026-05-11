@@ -181,7 +181,7 @@ fn execute_inverse_apply_patch_ops(ops: &[ApplyPatchUndoResolvedOp]) -> Result<u
                 if !metadata.is_file() {
                     return Err(format!("撤回失败：目标不是文件 {}", terminal_path_for_user(path)));
                 }
-                let current_content = apply_patch_read_utf8_file(path)?;
+                let current_content = apply_patch_read_text_file(path)?;
                 if &current_content != expected_content {
                     return Err(format!(
                         "撤回失败：文件已变更，无法安全删除 {}",
@@ -194,11 +194,14 @@ fn execute_inverse_apply_patch_ops(ops: &[ApplyPatchUndoResolvedOp]) -> Result<u
                 applied = applied.saturating_add(1);
             }
             ApplyPatchUndoResolvedOp::Update { from, to, old_string, new_string, replace_all } => {
-                let old_content = apply_patch_read_utf8_file(from)?;
-                let restored_content = apply_patch_apply_update(&old_content, old_string, new_string, *replace_all).map_err(|err| {
+                let decoded = decode_text_file_from_path(from)?;
+                let restored_content = apply_patch_apply_update(&decoded.text, old_string, new_string, *replace_all).map_err(|err| {
                     format!("撤回失败：反向更新应用失败 {}: {err}", terminal_path_for_user(from))
                 })?;
-                std::fs::write(from, restored_content.as_bytes()).map_err(|err| {
+                let restored_bytes = decoded.encode_like_original(&restored_content).map_err(|err| {
+                    format!("撤回失败：反向更新编码失败 {}: {err}", terminal_path_for_user(from))
+                })?;
+                std::fs::write(from, restored_bytes).map_err(|err| {
                     format!("撤回失败：写入文件失败 {}: {err}", terminal_path_for_user(from))
                 })?;
                 if let Some(dest) = to {

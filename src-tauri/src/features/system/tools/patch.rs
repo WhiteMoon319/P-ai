@@ -222,8 +222,9 @@ fn apply_patch_prepare_backup_entry(
             }
             let raw = std::fs::read(from)
                 .map_err(|_| format!("Update 操作失败，文件不存在：{}", from.to_string_lossy()))?;
-            let old_content = String::from_utf8(raw.clone())
-                .map_err(|_| format!("Update 操作失败，文件不是 UTF-8 文本：{}", from.to_string_lossy()))?;
+            let old_content = decode_text_file_bytes(&raw)
+                .map_err(|err| format!("Update 操作失败，{}：{}", err, from.to_string_lossy()))?
+                .text;
             let new_content =
                 apply_patch_apply_update_with_line_ending_fallback(&old_content, old_string, new_string, *replace_all)?;
             let blob_file = format!("{}.bin", Uuid::new_v4());
@@ -333,11 +334,8 @@ fn apply_patch_take_latest_backup_record(
     Ok(matches.pop())
 }
 
-fn apply_patch_read_utf8_file(path: &Path) -> Result<String, String> {
-    let raw = std::fs::read(path)
-        .map_err(|err| format!("读取文件失败（{}）：{err}", terminal_path_for_user(path)))?;
-    String::from_utf8(raw)
-        .map_err(|_| format!("文件不是 UTF-8 文本：{}", terminal_path_for_user(path)))
+fn apply_patch_read_text_file(path: &Path) -> Result<String, String> {
+    decode_text_file_from_path(path).map(|decoded| decoded.text)
 }
 
 fn apply_patch_write_parent_dir(path: &Path) -> Result<(), String> {
@@ -360,7 +358,7 @@ fn apply_patch_restore_backup_record(
                 if !path.exists() {
                     return Err(format!("撤回失败：目标文件不存在 {}", terminal_path_for_user(&path)));
                 }
-                let current = apply_patch_read_utf8_file(&path)?;
+                let current = apply_patch_read_text_file(&path)?;
                 let expected = entry.expected_current_content.as_deref().unwrap_or_default();
                 if current != expected {
                     return Err(format!(
@@ -398,7 +396,7 @@ fn apply_patch_restore_backup_record(
                 if !path.exists() {
                     return Err(format!("撤回失败：目标文件不存在 {}", terminal_path_for_user(&path)));
                 }
-                let current = apply_patch_read_utf8_file(&path)?;
+                let current = apply_patch_read_text_file(&path)?;
                 let expected = entry.expected_current_content.as_deref().unwrap_or_default();
                 if current != expected {
                     return Err(format!(
@@ -435,7 +433,7 @@ fn apply_patch_restore_backup_record(
                         terminal_path_for_user(&from_path)
                     ));
                 }
-                let current = apply_patch_read_utf8_file(&to_path)?;
+                let current = apply_patch_read_text_file(&to_path)?;
                 let expected = entry.expected_current_content.as_deref().unwrap_or_default();
                 if current != expected {
                     return Err(format!(
@@ -1242,8 +1240,8 @@ async fn apply_patch_execute_single_op(op: &ApplyPatchResolvedOp) -> Result<Valu
                 if let Some(dest) = to {
                     let raw_move = tokio::fs::read(from).await
                         .map_err(|_| format!("Move 操作失败，文件不存在：{}", from.to_string_lossy()))?;
-                    let _ = String::from_utf8(raw_move)
-                        .map_err(|_| format!("Move 操作失败，文件不是 UTF-8 文本：{}", from.to_string_lossy()))?;
+                    let _ = decode_text_file_bytes(&raw_move)
+                        .map_err(|err| format!("Move 操作失败，{}：{}", err, from.to_string_lossy()))?;
                     if let Some(parent) = dest.parent() {
                         tokio::fs::create_dir_all(parent)
                             .await
@@ -1261,11 +1259,14 @@ async fn apply_patch_execute_single_op(op: &ApplyPatchResolvedOp) -> Result<Valu
             let raw = tokio::fs::read(from)
                 .await
                 .map_err(|_| format!("Update 操作失败，文件不存在：{}", from.to_string_lossy()))?;
-            let old_content = String::from_utf8(raw)
-                .map_err(|_| format!("Update 操作失败，文件不是 UTF-8 文本：{}", from.to_string_lossy()))?;
+            let decoded = decode_text_file_bytes(&raw)
+                .map_err(|err| format!("Update 操作失败，{}：{}", err, from.to_string_lossy()))?;
             let new_content =
-                apply_patch_apply_update_with_line_ending_fallback(&old_content, old_string, new_string, *replace_all)?;
-            tokio::fs::write(from, new_content.as_bytes())
+                apply_patch_apply_update_with_line_ending_fallback(&decoded.text, old_string, new_string, *replace_all)?;
+            let encoded = decoded
+                .encode_like_original(&new_content)
+                .map_err(|err| format!("Update 操作失败，{}：{}", err, from.to_string_lossy()))?;
+            tokio::fs::write(from, encoded)
                 .await
                 .map_err(|err| format!("更新文件失败（{}）：{err}", from.to_string_lossy()))?;
             Ok(serde_json::json!({ "op": "update", "path": terminal_path_for_user(from) }))
@@ -2011,6 +2012,35 @@ mod apply_patch_tool_tests {
         assert_eq!(failure.op, "update");
         assert!(failure.message.contains("old_string 在文件中未找到"));
         assert!(failure.message.contains("最相似候选行范围"));
+    }
+
+    #[tokio::test]
+    async fn execute_ops_should_update_gbk_file_without_converting_to_utf8() {
+        let data_path = make_temp_data_path("apply-patch-gbk");
+        let cwd = app_root_from_data_path(&data_path).join("workspace");
+        std::fs::create_dir_all(&cwd).expect("create cwd");
+        let file = cwd.join("gbk.txt");
+        std::fs::write(&file, [0xd6, 0xd0, 0xce, 0xc4, b'\n', b'o', b'l', b'd', b'\n'])
+            .expect("seed gbk file");
+        let ops = vec![ApplyPatchResolvedOp::Update {
+            from: file.clone(),
+            to: None,
+            old_string: "old".to_string(),
+            new_string: "new".to_string(),
+            replace_all: false,
+        }];
+        let mut record = apply_patch_empty_backup_record(&data_path, "s1", &cwd, "raw")
+            .expect("empty record");
+
+        let outcome = apply_patch_execute_ops(&data_path, &mut record, &ops)
+            .await
+            .expect("execute");
+
+        assert!(outcome.failure.is_none());
+        assert_eq!(
+            std::fs::read(&file).expect("read updated gbk"),
+            vec![0xd6, 0xd0, 0xce, 0xc4, b'\n', b'n', b'e', b'w', b'\n']
+        );
     }
 
     #[test]

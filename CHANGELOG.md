@@ -2,6 +2,8 @@
 
 ## 进行中
 
+- 功能（text-tool-auto-encoding）：文本工具读写新增内部自动编码处理，按 BOM、严格 UTF-8、`chardetng` 检测的优先级读取现有文件，并在 `read`、文件阅读窗口与 `apply_patch update/撤回` 中按原编码写回；新建文件仍默认 UTF-8，工具参数不暴露编码选择，遇到原编码无法表示的新字符时拒绝写入。
+
 - 修复（chat-jump-bottom-streaming-local-only）：聊天窗口点击“滚到最下”时，若当前正在流式、忙碌或冻结，只执行本地滚底，不再触发补齐后端尾部消息，避免流式气泡期间按钮滚底后被异步历史同步拉回其它位置。
 
 - 功能（remember-action-update-merge）：`remember` 工具改为唯一 `action + sourceMemoryIds + memory` 入参结构，`sourceMemoryIds` 使用 recall 记忆板短编号；更新单条或合并多条时会写入目标记忆并删除被替换源记忆，减少即时记忆重复堆积，且工具结果不暴露内部 ID。

@@ -7,6 +7,7 @@ include!("tools/operate_runner.rs");
 include!("tools/operate_mcp.rs");
 include!("tools/screenshot_mcp.rs");
 include!("tools/terminal.rs");
+include!("tools/text_codec.rs");
 include!("tools/patch.rs");
 include!("tools/patch_rewind.rs");
 include!("tools/read_file.rs");
