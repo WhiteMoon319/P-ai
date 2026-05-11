@@ -189,8 +189,26 @@ fn truncate_text_for_read_file(text: &str) -> (String, bool) {
     )
 }
 
+fn detect_read_file_line_ending(text: &str) -> &'static str {
+    let has_crlf = text.contains("\r\n");
+    let without_crlf = text.replace("\r\n", "");
+    let has_cr = without_crlf.contains('\r');
+    let has_lf = without_crlf.contains('\n') || has_crlf;
+    match (has_crlf, has_cr, has_lf) {
+        (true, false, true) if !without_crlf.contains('\n') => "crlf",
+        (false, false, true) => "lf",
+        (false, true, false) => "cr",
+        (false, false, false) => "none",
+        _ => "mixed",
+    }
+}
+
+fn normalize_text_line_endings_for_read_file(text: &str) -> String {
+    text.replace("\r\n", "\n").replace('\r', "\n")
+}
+
 fn normalize_office_text_for_read_file(input: &str) -> String {
-    let normalized = input.replace('\r', "");
+    let normalized = normalize_text_line_endings_for_read_file(input);
     let mut out = String::with_capacity(normalized.len());
     let mut last_was_newline = false;
     for ch in normalized.chars() {
@@ -224,7 +242,9 @@ fn build_text_read_result(
     limit: Option<usize>,
     extra_metadata: Value,
 ) -> Value {
-    let lines = text.replace('\r', "").split('\n').map(|v| v.to_string()).collect::<Vec<_>>();
+    let source_line_ending = detect_read_file_line_ending(text);
+    let normalized_text = normalize_text_line_endings_for_read_file(text);
+    let lines = normalized_text.split('\n').map(|v| v.to_string()).collect::<Vec<_>>();
     let applied_offset = offset.unwrap_or(0);
     let (selected_lines, next_offset_by_lines) = paginate_lines(&lines, applied_offset, limit);
     let joined = selected_lines.join("\n");
@@ -260,6 +280,9 @@ fn build_text_read_result(
             "totalCount": lines.len(),
             "returnedCharCount": joined.chars().count().min(READ_FILE_TEXT_LIMIT_CHARS),
             "charLimit": READ_FILE_TEXT_LIMIT_CHARS,
+            "sourceLineEnding": source_line_ending,
+            "contentLineEnding": "lf",
+            "lineEndingNote": "content 已统一使用 LF(\\n) 返回；apply_patch 可用该内容作为 old_string，工具会兼容目标文件的 CRLF/LF。",
             "fileName": path.file_name().and_then(|v| v.to_str()).unwrap_or_default(),
             "extra": extra_metadata
         }
@@ -1086,6 +1109,58 @@ fn normalize_office_text_should_drop_control_chars() {
         let input = "a\u{0001}b\r\n\r\nc\t\u{0004}d";
         let output = normalize_office_text_for_read_file(input);
         assert_eq!(output, "ab\nc\td");
+    }
+
+#[cfg(test)]
+#[test]
+fn build_text_read_result_should_normalize_crlf_to_lf_and_report_source_line_ending() {
+        let path = std::path::Path::new("sample.txt");
+        let value = build_text_read_result(
+            path,
+            ReadFileDetectedType::Text,
+            "text",
+            "line1\r\nline2\r\n",
+            None,
+            None,
+            serde_json::json!({}),
+        );
+        assert_eq!(
+            value.get("content").and_then(Value::as_str),
+            Some("line1\nline2\n")
+        );
+        let metadata = value.get("metadata").expect("metadata");
+        assert_eq!(
+            metadata.get("sourceLineEnding").and_then(Value::as_str),
+            Some("crlf")
+        );
+        assert_eq!(
+            metadata.get("contentLineEnding").and_then(Value::as_str),
+            Some("lf")
+        );
+    }
+
+#[cfg(test)]
+#[test]
+fn build_text_read_result_should_normalize_lone_cr_to_lf() {
+        let path = std::path::Path::new("sample.txt");
+        let value = build_text_read_result(
+            path,
+            ReadFileDetectedType::Text,
+            "text",
+            "line1\rline2\r",
+            None,
+            None,
+            serde_json::json!({}),
+        );
+        assert_eq!(
+            value.get("content").and_then(Value::as_str),
+            Some("line1\nline2\n")
+        );
+        let metadata = value.get("metadata").expect("metadata");
+        assert_eq!(
+            metadata.get("sourceLineEnding").and_then(Value::as_str),
+            Some("cr")
+        );
     }
 
 #[cfg(test)]

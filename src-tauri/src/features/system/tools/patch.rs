@@ -41,6 +41,20 @@ enum ApplyPatchResolvedOp {
     Update { from: PathBuf, to: Option<PathBuf>, old_string: String, new_string: String, replace_all: bool },
 }
 
+#[derive(Debug, Clone)]
+struct ApplyPatchExecutionFailure {
+    index: usize,
+    op: String,
+    path: Option<String>,
+    message: String,
+}
+
+#[derive(Debug, Clone)]
+struct ApplyPatchExecutionOutcome {
+    changed: Vec<Value>,
+    failure: Option<ApplyPatchExecutionFailure>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 enum ApplyPatchBackupKind {
@@ -124,81 +138,7 @@ fn apply_patch_prepare_backup_record(
     let record_id = Uuid::new_v4().to_string();
     let mut entries = Vec::<ApplyPatchBackupEntry>::new();
     for op in ops {
-        match op {
-            ApplyPatchResolvedOp::Add { path, content } => {
-                entries.push(ApplyPatchBackupEntry {
-                    kind: ApplyPatchBackupKind::Add,
-                    path: path.to_string_lossy().to_string(),
-                    from_path: None,
-                    to_path: None,
-                    expected_current_content: Some(content.clone()),
-                    backup_blob_file: None,
-                });
-            }
-            ApplyPatchResolvedOp::Delete { path } => {
-                let raw = std::fs::read(path).map_err(|_| {
-                    format!("Delete File 失败，文件不存在：{}", path.to_string_lossy())
-                })?;
-                let metadata = std::fs::metadata(path).map_err(|_| {
-                    format!("Delete File 失败，文件不存在：{}", path.to_string_lossy())
-                })?;
-                if !metadata.is_file() {
-                    return Err(format!("Delete File 失败，目标不是文件：{}", path.to_string_lossy()));
-                }
-                let blob_file = format!("{}.bin", Uuid::new_v4());
-                std::fs::write(apply_patch_blob_path(data_path, &blob_file), raw)
-                    .map_err(|err| format!("写入删除备份失败（{}）：{err}", path.to_string_lossy()))?;
-                entries.push(ApplyPatchBackupEntry {
-                    kind: ApplyPatchBackupKind::Delete,
-                    path: path.to_string_lossy().to_string(),
-                    from_path: None,
-                    to_path: None,
-                    expected_current_content: None,
-                    backup_blob_file: Some(blob_file),
-                });
-            }
-            ApplyPatchResolvedOp::Update { from, to, old_string, new_string, replace_all } => {
-                if old_string.is_empty() && new_string.is_empty() {
-                    let raw = std::fs::read(from).map_err(|_| {
-                        format!("Move 操作失败，文件不存在：{}", from.to_string_lossy())
-                    })?;
-                    let blob_file = format!("{}.bin", Uuid::new_v4());
-                    std::fs::write(apply_patch_blob_path(data_path, &blob_file), raw)
-                        .map_err(|err| format!("写入移动备份失败（{}）：{err}", from.to_string_lossy()))?;
-                    entries.push(ApplyPatchBackupEntry {
-                        kind: ApplyPatchBackupKind::MoveUpdate,
-                        path: to.as_ref().unwrap_or(from).to_string_lossy().to_string(),
-                        from_path: to.as_ref().map(|_| from.to_string_lossy().to_string()),
-                        to_path: to.as_ref().map(|dest| dest.to_string_lossy().to_string()),
-                        expected_current_content: Some(String::new()),
-                        backup_blob_file: Some(blob_file),
-                    });
-                    continue;
-                }
-                let raw = std::fs::read(from).map_err(|_| {
-                    format!("Update 操作失败，文件不存在：{}", from.to_string_lossy())
-                })?;
-                let old_content = String::from_utf8(raw.clone()).map_err(|_| {
-                    format!("Update 操作失败，文件不是 UTF-8 文本：{}", from.to_string_lossy())
-                })?;
-                let new_content = apply_patch_apply_update(&old_content, old_string, new_string, *replace_all)?;
-                let blob_file = format!("{}.bin", Uuid::new_v4());
-                std::fs::write(apply_patch_blob_path(data_path, &blob_file), raw)
-                    .map_err(|err| format!("写入修改备份失败（{}）：{err}", from.to_string_lossy()))?;
-                entries.push(ApplyPatchBackupEntry {
-                    kind: if to.is_some() {
-                        ApplyPatchBackupKind::MoveUpdate
-                    } else {
-                        ApplyPatchBackupKind::Update
-                    },
-                    path: to.as_ref().unwrap_or(from).to_string_lossy().to_string(),
-                    from_path: to.as_ref().map(|_| from.to_string_lossy().to_string()),
-                    to_path: to.as_ref().map(|dest| dest.to_string_lossy().to_string()),
-                    expected_current_content: Some(new_content),
-                    backup_blob_file: Some(blob_file),
-                });
-            }
-        }
+        entries.push(apply_patch_prepare_backup_entry(data_path, op)?);
     }
 
     Ok(ApplyPatchBackupRecord {
@@ -209,6 +149,100 @@ fn apply_patch_prepare_backup_record(
         created_at: now_iso(),
         entries,
     })
+}
+
+fn apply_patch_empty_backup_record(
+    data_path: &PathBuf,
+    session_id: &str,
+    cwd: &Path,
+    input: &str,
+) -> Result<ApplyPatchBackupRecord, String> {
+    std::fs::create_dir_all(apply_patch_temp_records_dir(data_path))
+        .map_err(|err| format!("创建 apply_patch 记录目录失败：{err}"))?;
+    std::fs::create_dir_all(apply_patch_temp_blobs_dir(data_path))
+        .map_err(|err| format!("创建 apply_patch 备份目录失败：{err}"))?;
+    Ok(ApplyPatchBackupRecord {
+        record_id: Uuid::new_v4().to_string(),
+        session_id: session_id.to_string(),
+        cwd: cwd.to_string_lossy().to_string(),
+        fingerprint: apply_patch_fingerprint(session_id, cwd, input),
+        created_at: now_iso(),
+        entries: Vec::new(),
+    })
+}
+
+fn apply_patch_prepare_backup_entry(
+    data_path: &PathBuf,
+    op: &ApplyPatchResolvedOp,
+) -> Result<ApplyPatchBackupEntry, String> {
+    match op {
+        ApplyPatchResolvedOp::Add { path, content } => Ok(ApplyPatchBackupEntry {
+            kind: ApplyPatchBackupKind::Add,
+            path: path.to_string_lossy().to_string(),
+            from_path: None,
+            to_path: None,
+            expected_current_content: Some(content.clone()),
+            backup_blob_file: None,
+        }),
+        ApplyPatchResolvedOp::Delete { path } => {
+            let raw = std::fs::read(path)
+                .map_err(|_| format!("Delete File 失败，文件不存在：{}", path.to_string_lossy()))?;
+            let metadata = std::fs::metadata(path)
+                .map_err(|_| format!("Delete File 失败，文件不存在：{}", path.to_string_lossy()))?;
+            if !metadata.is_file() {
+                return Err(format!("Delete File 失败，目标不是文件：{}", path.to_string_lossy()));
+            }
+            let blob_file = format!("{}.bin", Uuid::new_v4());
+            std::fs::write(apply_patch_blob_path(data_path, &blob_file), raw)
+                .map_err(|err| format!("写入删除备份失败（{}）：{err}", path.to_string_lossy()))?;
+            Ok(ApplyPatchBackupEntry {
+                kind: ApplyPatchBackupKind::Delete,
+                path: path.to_string_lossy().to_string(),
+                from_path: None,
+                to_path: None,
+                expected_current_content: None,
+                backup_blob_file: Some(blob_file),
+            })
+        }
+        ApplyPatchResolvedOp::Update { from, to, old_string, new_string, replace_all } => {
+            if old_string.is_empty() && new_string.is_empty() {
+                let raw = std::fs::read(from)
+                    .map_err(|_| format!("Move 操作失败，文件不存在：{}", from.to_string_lossy()))?;
+                let blob_file = format!("{}.bin", Uuid::new_v4());
+                std::fs::write(apply_patch_blob_path(data_path, &blob_file), raw)
+                    .map_err(|err| format!("写入移动备份失败（{}）：{err}", from.to_string_lossy()))?;
+                return Ok(ApplyPatchBackupEntry {
+                    kind: ApplyPatchBackupKind::MoveUpdate,
+                    path: to.as_ref().unwrap_or(from).to_string_lossy().to_string(),
+                    from_path: to.as_ref().map(|_| from.to_string_lossy().to_string()),
+                    to_path: to.as_ref().map(|dest| dest.to_string_lossy().to_string()),
+                    expected_current_content: Some(String::new()),
+                    backup_blob_file: Some(blob_file),
+                });
+            }
+            let raw = std::fs::read(from)
+                .map_err(|_| format!("Update 操作失败，文件不存在：{}", from.to_string_lossy()))?;
+            let old_content = String::from_utf8(raw.clone())
+                .map_err(|_| format!("Update 操作失败，文件不是 UTF-8 文本：{}", from.to_string_lossy()))?;
+            let new_content =
+                apply_patch_apply_update_with_line_ending_fallback(&old_content, old_string, new_string, *replace_all)?;
+            let blob_file = format!("{}.bin", Uuid::new_v4());
+            std::fs::write(apply_patch_blob_path(data_path, &blob_file), raw)
+                .map_err(|err| format!("写入修改备份失败（{}）：{err}", from.to_string_lossy()))?;
+            Ok(ApplyPatchBackupEntry {
+                kind: if to.is_some() {
+                    ApplyPatchBackupKind::MoveUpdate
+                } else {
+                    ApplyPatchBackupKind::Update
+                },
+                path: to.as_ref().unwrap_or(from).to_string_lossy().to_string(),
+                from_path: to.as_ref().map(|_| from.to_string_lossy().to_string()),
+                to_path: to.as_ref().map(|dest| dest.to_string_lossy().to_string()),
+                expected_current_content: Some(new_content),
+                backup_blob_file: Some(blob_file),
+            })
+        }
+    }
 }
 
 fn apply_patch_store_backup_record(
@@ -243,6 +277,21 @@ fn apply_patch_cleanup_backup_record_by_value(
         std::fs::remove_file(&record_path).map_err(|err| {
             format!("清理 apply_patch 恢复记录失败（{}）：{err}", record_path.to_string_lossy())
         })?;
+    }
+    Ok(())
+}
+
+fn apply_patch_cleanup_backup_entry(
+    data_path: &PathBuf,
+    entry: &ApplyPatchBackupEntry,
+) -> Result<(), String> {
+    if let Some(blob_file) = entry.backup_blob_file.as_deref() {
+        let blob_path = apply_patch_blob_path(data_path, blob_file);
+        if blob_path.exists() {
+            std::fs::remove_file(&blob_path).map_err(|err| {
+                format!("清理 apply_patch 备份文件失败（{}）：{err}", blob_path.to_string_lossy())
+            })?;
+        }
     }
     Ok(())
 }
@@ -849,8 +898,26 @@ fn apply_patch_apply_update(
     }
     let old_preview = apply_patch_preview_text(old_string, 300);
     if !content.contains(old_string) {
+        let similar = apply_patch_similar_line_ranges(content, old_string, 1);
+        let similar_hint = if similar.is_empty() {
+            "最相似候选：未找到可用候选。".to_string()
+        } else {
+            let rows = similar
+                .into_iter()
+                .map(|(start, end, summary)| {
+                    format!(
+                        "- {}，摘要：{}",
+                        apply_patch_format_line_range((start, end)),
+                        summary
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            format!("最相似候选行范围：\n{rows}")
+        };
         return Err(format!(
-            "apply_patch update 失败：old_string 在文件中未找到。\n请先重新读取目标文件，直接复制文件中的原文作为 old_string。\n如果你原本想提交标准 git diff，请改成 JSON update 操作。\n最小 update 示例：{}\nold_string 预览（前 300 字符）：\n{}",
+            "apply_patch update 失败：old_string 在文件中未找到。\n{}\n请先重新读取目标文件，直接复制文件中的原文作为 old_string。\n如果你原本想提交标准 git diff，请改成 JSON update 操作。\n最小 update 示例：{}\nold_string 预览（前 300 字符）：\n{}",
+            similar_hint,
             apply_patch_operation_example("update"),
             old_preview
         ));
@@ -858,9 +925,14 @@ fn apply_patch_apply_update(
     if !replace_all {
         let count = content.matches(old_string).count();
         if count > 1 {
+            let ranges = apply_patch_format_ranges_limited(
+                apply_patch_exact_match_ranges(content, old_string),
+                12,
+            );
             return Err(format!(
-                "apply_patch update 失败：old_string 在文件中出现了 {} 次，但 replace_all 为 false。\n请改用以下两种方式之一：\n1. 扩大 old_string，上下多带几行稳定上下文，使其只命中 1 处。\n2. 如果你确实要全部替换，再设置 replace_all: true。\n最小 update 示例：{}\nold_string 预览（前 300 字符）：\n{}",
+                "apply_patch update 失败：old_string 在文件中出现了 {} 次，但 replace_all 为 false。\n命中行范围：{}\n请改用以下两种方式之一：\n1. 扩大 old_string，上下多带几行稳定上下文，使其只命中 1 处。\n2. 如果你确实要全部替换，再设置 replace_all: true。\n最小 update 示例：{}\nold_string 预览（前 300 字符）：\n{}",
                 count,
+                ranges,
                 apply_patch_operation_example("update"),
                 old_preview
             ));
@@ -875,6 +947,220 @@ fn apply_patch_apply_update(
         return Err("apply_patch update 失败：替换后文件内容未变化。".to_string());
     }
     Ok(result)
+}
+
+fn apply_patch_apply_update_with_line_ending_fallback(
+    content: &str,
+    old_string: &str,
+    new_string: &str,
+    replace_all: bool,
+) -> Result<String, String> {
+    match apply_patch_apply_update(content, old_string, new_string, replace_all) {
+        Ok(value) => Ok(value),
+        Err(original_err) => {
+            let Some((normalized_content, normalized_old, normalized_new, newline)) =
+                apply_patch_prepare_line_ending_fallback(content, old_string, new_string)
+            else {
+                return Err(original_err);
+            };
+            apply_patch_apply_update(&normalized_content, &normalized_old, &normalized_new, replace_all)
+                .map(|value| apply_patch_normalized_lf_to_newline(&value, newline))
+                .map_err(|_| original_err)
+        }
+    }
+}
+
+fn apply_patch_prepare_line_ending_fallback(
+    content: &str,
+    old_string: &str,
+    new_string: &str,
+) -> Option<(String, String, String, &'static str)> {
+    let newline = if content.contains("\r\n") {
+        "\r\n"
+    } else if content.contains('\r') {
+        "\r"
+    } else if old_string.contains('\r') || new_string.contains('\r') {
+        "\n"
+    } else {
+        return None;
+    };
+    let normalized_content = apply_patch_normalize_to_lf(content);
+    let normalized_old = apply_patch_normalize_to_lf(old_string);
+    if normalized_old == old_string && normalized_content == content {
+        return None;
+    }
+    Some((
+        normalized_content,
+        normalized_old,
+        apply_patch_normalize_to_lf(new_string),
+        newline,
+    ))
+}
+
+fn apply_patch_normalize_to_lf(value: &str) -> String {
+    value.replace("\r\n", "\n").replace('\r', "\n")
+}
+
+fn apply_patch_normalized_lf_to_newline(value: &str, newline: &str) -> String {
+    if newline == "\n" {
+        value.to_string()
+    } else {
+        value.replace('\n', newline)
+    }
+}
+
+fn apply_patch_line_number_at_byte(content: &str, offset: usize) -> usize {
+    content
+        .as_bytes()
+        .get(..offset.min(content.len()))
+        .unwrap_or_default()
+        .iter()
+        .filter(|byte| **byte == b'\n')
+        .count()
+        .saturating_add(1)
+}
+
+fn apply_patch_match_line_range(content: &str, start: usize, len: usize) -> (usize, usize) {
+    let end = start.saturating_add(len).min(content.len());
+    let adjusted_end = if end > start && content.as_bytes().get(end.saturating_sub(1)) == Some(&b'\n') {
+        end.saturating_sub(1)
+    } else {
+        end
+    };
+    (
+        apply_patch_line_number_at_byte(content, start),
+        apply_patch_line_number_at_byte(content, adjusted_end),
+    )
+}
+
+fn apply_patch_format_line_range((start, end): (usize, usize)) -> String {
+    if start == end {
+        format!("line {start}")
+    } else {
+        format!("lines {start}-{end}")
+    }
+}
+
+fn apply_patch_exact_match_ranges(content: &str, needle: &str) -> Vec<(usize, usize)> {
+    content
+        .match_indices(needle)
+        .map(|(start, _)| apply_patch_match_line_range(content, start, needle.len()))
+        .collect()
+}
+
+fn apply_patch_format_ranges_limited(ranges: Vec<(usize, usize)>, limit: usize) -> String {
+    let total = ranges.len();
+    let mut out = ranges
+        .into_iter()
+        .take(limit)
+        .map(apply_patch_format_line_range)
+        .collect::<Vec<_>>()
+        .join(", ");
+    if total > limit {
+        out.push_str(&format!(" ... 另有 {} 处", total - limit));
+    }
+    out
+}
+
+fn apply_patch_compact_line_summary(value: &str, limit: usize) -> String {
+    let compact = value
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if compact.is_empty() {
+        return "<空行>".to_string();
+    }
+    apply_patch_preview_text(&compact, limit)
+}
+
+fn apply_patch_normalize_for_similarity(value: &str) -> String {
+    value
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+        .to_lowercase()
+}
+
+fn apply_patch_levenshtein_distance(left: &str, right: &str) -> usize {
+    let left_chars = left.chars().collect::<Vec<_>>();
+    let right_chars = right.chars().collect::<Vec<_>>();
+    if left_chars.is_empty() {
+        return right_chars.len();
+    }
+    if right_chars.is_empty() {
+        return left_chars.len();
+    }
+    let mut prev = (0..=right_chars.len()).collect::<Vec<_>>();
+    let mut curr = vec![0usize; right_chars.len() + 1];
+    for (i, left_ch) in left_chars.iter().enumerate() {
+        curr[0] = i + 1;
+        for (j, right_ch) in right_chars.iter().enumerate() {
+            let cost = usize::from(left_ch != right_ch);
+            curr[j + 1] = (curr[j] + 1).min(prev[j + 1] + 1).min(prev[j] + cost);
+        }
+        std::mem::swap(&mut prev, &mut curr);
+    }
+    prev[right_chars.len()]
+}
+
+fn apply_patch_similarity_score(left: &str, right: &str) -> f64 {
+    let left = apply_patch_normalize_for_similarity(left);
+    let right = apply_patch_normalize_for_similarity(right);
+    let max_len = left.chars().count().max(right.chars().count());
+    if max_len == 0 {
+        return 1.0;
+    }
+    let distance = apply_patch_levenshtein_distance(&left, &right);
+    1.0 - (distance as f64 / max_len as f64)
+}
+
+fn apply_patch_similar_line_ranges(content: &str, old_string: &str, limit: usize) -> Vec<(usize, usize, String)> {
+    const MAX_FILE_LINES_FOR_SIMILARITY: usize = 5000;
+    const MIN_LINE_OVERLAP_RATIO: f64 = 0.9;
+
+    let lines = content.lines().collect::<Vec<_>>();
+    if lines.is_empty() || lines.len() > MAX_FILE_LINES_FOR_SIMILARITY {
+        return Vec::new();
+    }
+    let old_line_count = old_string.lines().count().max(1);
+    let old_lines_set: std::collections::HashSet<&str> = old_string.lines().collect();
+    let min_overlap = ((old_line_count as f64) * MIN_LINE_OVERLAP_RATIO).ceil() as usize;
+    let mut candidates = Vec::<(f64, usize, usize, String)>::new();
+    for window_len in [
+        old_line_count.saturating_sub(1).max(1),
+        old_line_count,
+        old_line_count.saturating_add(1),
+    ] {
+        if window_len > lines.len() {
+            continue;
+        }
+        for start in 0..=lines.len() - window_len {
+            let window = &lines[start..start + window_len];
+            let overlap = window.iter().filter(|l| old_lines_set.contains(*l)).count();
+            if overlap < min_overlap {
+                continue;
+            }
+            let preview = window.join("\n");
+            let score = apply_patch_similarity_score(old_string, &preview);
+            candidates.push((score, start + 1, start + window_len, preview));
+        }
+    }
+    candidates.sort_by(|left, right| {
+        right
+            .0
+            .partial_cmp(&left.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| left.1.cmp(&right.1))
+            .then_with(|| left.2.cmp(&right.2))
+    });
+    candidates.dedup_by(|left, right| left.1 == right.1 && left.2 == right.2);
+    candidates
+        .into_iter()
+        .take(limit)
+        .map(|(_, start, end, preview)| (start, end, apply_patch_compact_line_summary(&preview, 80)))
+        .collect()
 }
 
 fn apply_patch_build_preview(ops: &[ApplyPatchResolvedOp]) -> Result<String, String> {
@@ -895,73 +1181,143 @@ fn apply_patch_build_preview(ops: &[ApplyPatchResolvedOp]) -> Result<String, Str
     Ok(lines.join("\n"))
 }
 
-async fn apply_patch_execute_ops(ops: &[ApplyPatchResolvedOp]) -> Result<Vec<Value>, String> {
-    let mut changed = Vec::<Value>::new();
-    for op in ops {
-        match op {
-            ApplyPatchResolvedOp::Add { path, content } => {
-                if path.exists() {
-                    return Err(format!("Add File 失败，文件已存在：{}", path.to_string_lossy()));
-                }
-                if let Some(parent) = path.parent() {
-                    tokio::fs::create_dir_all(parent)
-                        .await
-                        .map_err(|err| format!("创建目录失败（{}）：{err}", parent.to_string_lossy()))?;
-                }
-                tokio::fs::write(path, content.as_bytes())
-                    .await
-                    .map_err(|err| format!("写入文件失败（{}）：{err}", path.to_string_lossy()))?;
-                changed.push(serde_json::json!({
-                    "op": "add",
-                    "path": terminal_path_for_user(path),
-                }));
-            }
-            ApplyPatchResolvedOp::Delete { path } => {
-                let metadata = tokio::fs::metadata(path)
-                    .await
-                    .map_err(|_| format!("Delete File 失败，文件不存在：{}", path.to_string_lossy()))?;
-                if !metadata.is_file() {
-                    return Err(format!("Delete File 失败，目标不是文件：{}", path.to_string_lossy()));
-                }
-                tokio::fs::remove_file(path)
-                    .await
-                    .map_err(|err| format!("删除文件失败（{}）：{err}", path.to_string_lossy()))?;
-                changed.push(serde_json::json!({
-                    "op": "delete",
-                    "path": terminal_path_for_user(path),
-                }));
-            }
-            ApplyPatchResolvedOp::Update { from, to, old_string, new_string, replace_all } => {
-                if old_string.is_empty() && new_string.is_empty() {
-                    if let Some(dest) = to {
-                        let raw_move = tokio::fs::read(from).await
-                            .map_err(|_| format!("Move 操作失败，文件不存在：{}", from.to_string_lossy()))?;
-                        let _ = String::from_utf8(raw_move)
-                            .map_err(|_| format!("Move 操作失败，文件不是 UTF-8 文本：{}", from.to_string_lossy()))?;
-                        if let Some(p) = dest.parent() { tokio::fs::create_dir_all(p).await.map_err(|e| format!("{}", e))?; }
-                        if dest.exists() && terminal_normalize_for_access_check(dest) != terminal_normalize_for_access_check(from) {
-                            return Err(format!("重命名目标已存在：{}", dest.to_string_lossy()));
-                        }
-                        tokio::fs::rename(from, dest).await
-                            .map_err(|e| format!("重命名失败（{} -> {}）：{e}", from.to_string_lossy(), dest.to_string_lossy()))?;
-                        changed.push(serde_json::json!({ "op": "move", "from": terminal_path_for_user(from), "to": terminal_path_for_user(dest) }));
-                    }
-                    continue;
-                }
-                let raw = tokio::fs::read(from)
-                    .await
-                    .map_err(|_| format!("Update 操作失败，文件不存在：{}", from.to_string_lossy()))?;
-                let old_content = String::from_utf8(raw)
-                    .map_err(|_| format!("Update 操作失败，文件不是 UTF-8 文本：{}", from.to_string_lossy()))?;
-                let new_content = apply_patch_apply_update(&old_content, old_string, new_string, *replace_all)?;
-                tokio::fs::write(from, new_content.as_bytes())
-                    .await
-                    .map_err(|err| format!("更新文件失败（{}）：{err}", from.to_string_lossy()))?;
-                changed.push(serde_json::json!({ "op": "update", "path": terminal_path_for_user(from) }));
+fn apply_patch_op_name(op: &ApplyPatchResolvedOp) -> &'static str {
+    match op {
+        ApplyPatchResolvedOp::Add { .. } => "add",
+        ApplyPatchResolvedOp::Delete { .. } => "delete",
+        ApplyPatchResolvedOp::Update { old_string, new_string, to, .. } => {
+            if old_string.is_empty() && new_string.is_empty() && to.is_some() {
+                "move"
+            } else {
+                "update"
             }
         }
     }
-    Ok(changed)
+}
+
+fn apply_patch_op_path(op: &ApplyPatchResolvedOp) -> Option<String> {
+    match op {
+        ApplyPatchResolvedOp::Add { path, .. } => Some(terminal_path_for_user(path)),
+        ApplyPatchResolvedOp::Delete { path } => Some(terminal_path_for_user(path)),
+        ApplyPatchResolvedOp::Update { from, .. } => Some(terminal_path_for_user(from)),
+    }
+}
+
+async fn apply_patch_execute_single_op(op: &ApplyPatchResolvedOp) -> Result<Value, String> {
+    match op {
+        ApplyPatchResolvedOp::Add { path, content } => {
+            if path.exists() {
+                return Err(format!("Add File 失败，文件已存在：{}", path.to_string_lossy()));
+            }
+            if let Some(parent) = path.parent() {
+                tokio::fs::create_dir_all(parent)
+                    .await
+                    .map_err(|err| format!("创建目录失败（{}）：{err}", parent.to_string_lossy()))?;
+            }
+            tokio::fs::write(path, content.as_bytes())
+                .await
+                .map_err(|err| format!("写入文件失败（{}）：{err}", path.to_string_lossy()))?;
+            Ok(serde_json::json!({
+                "op": "add",
+                "path": terminal_path_for_user(path),
+            }))
+        }
+        ApplyPatchResolvedOp::Delete { path } => {
+            let metadata = tokio::fs::metadata(path)
+                .await
+                .map_err(|_| format!("Delete File 失败，文件不存在：{}", path.to_string_lossy()))?;
+            if !metadata.is_file() {
+                return Err(format!("Delete File 失败，目标不是文件：{}", path.to_string_lossy()));
+            }
+            tokio::fs::remove_file(path)
+                .await
+                .map_err(|err| format!("删除文件失败（{}）：{err}", path.to_string_lossy()))?;
+            Ok(serde_json::json!({
+                "op": "delete",
+                "path": terminal_path_for_user(path),
+            }))
+        }
+        ApplyPatchResolvedOp::Update { from, to, old_string, new_string, replace_all } => {
+            if old_string.is_empty() && new_string.is_empty() {
+                if let Some(dest) = to {
+                    let raw_move = tokio::fs::read(from).await
+                        .map_err(|_| format!("Move 操作失败，文件不存在：{}", from.to_string_lossy()))?;
+                    let _ = String::from_utf8(raw_move)
+                        .map_err(|_| format!("Move 操作失败，文件不是 UTF-8 文本：{}", from.to_string_lossy()))?;
+                    if let Some(parent) = dest.parent() {
+                        tokio::fs::create_dir_all(parent)
+                            .await
+                            .map_err(|err| format!("创建目录失败（{}）：{err}", parent.to_string_lossy()))?;
+                    }
+                    if dest.exists() && terminal_normalize_for_access_check(dest) != terminal_normalize_for_access_check(from) {
+                        return Err(format!("重命名目标已存在：{}", dest.to_string_lossy()));
+                    }
+                    tokio::fs::rename(from, dest).await
+                        .map_err(|err| format!("重命名失败（{} -> {}）：{err}", from.to_string_lossy(), dest.to_string_lossy()))?;
+                    return Ok(serde_json::json!({ "op": "move", "from": terminal_path_for_user(from), "to": terminal_path_for_user(dest) }));
+                }
+                return Ok(serde_json::json!({ "op": "move", "path": terminal_path_for_user(from), "skipped": true }));
+            }
+            let raw = tokio::fs::read(from)
+                .await
+                .map_err(|_| format!("Update 操作失败，文件不存在：{}", from.to_string_lossy()))?;
+            let old_content = String::from_utf8(raw)
+                .map_err(|_| format!("Update 操作失败，文件不是 UTF-8 文本：{}", from.to_string_lossy()))?;
+            let new_content =
+                apply_patch_apply_update_with_line_ending_fallback(&old_content, old_string, new_string, *replace_all)?;
+            tokio::fs::write(from, new_content.as_bytes())
+                .await
+                .map_err(|err| format!("更新文件失败（{}）：{err}", from.to_string_lossy()))?;
+            Ok(serde_json::json!({ "op": "update", "path": terminal_path_for_user(from) }))
+        }
+    }
+}
+
+async fn apply_patch_execute_ops(
+    data_path: &PathBuf,
+    record: &mut ApplyPatchBackupRecord,
+    ops: &[ApplyPatchResolvedOp],
+) -> Result<ApplyPatchExecutionOutcome, String> {
+    let mut changed = Vec::<Value>::new();
+    for (index, op) in ops.iter().enumerate() {
+        let entry = match apply_patch_prepare_backup_entry(data_path, op) {
+            Ok(value) => value,
+            Err(message) => {
+                // prepare_backup_entry 返回 Err 有两种情况：
+                // 1. 操作级失败（文件不存在等）：此时无 blob 被创建，changed 为空
+                // 2. 系统级故障（写 blob I/O 失败）：部分 blob 可能已写入
+                // 两种情况都返回 Ok(failure)，调用方根据 changed/entries 是否为空决定是否保留备份
+                return Ok(ApplyPatchExecutionOutcome {
+                    changed,
+                    failure: Some(ApplyPatchExecutionFailure {
+                        index,
+                        op: apply_patch_op_name(op).to_string(),
+                        path: apply_patch_op_path(op),
+                        message,
+                    }),
+                });
+            }
+        };
+        match apply_patch_execute_single_op(op).await {
+            Ok(value) => {
+                record.entries.push(entry);
+                changed.push(value);
+            }
+            Err(message) => {
+                let _ = apply_patch_cleanup_backup_entry(data_path, &entry);
+                return Ok(ApplyPatchExecutionOutcome {
+                    changed,
+                    failure: Some(ApplyPatchExecutionFailure {
+                        index,
+                        op: apply_patch_op_name(op).to_string(),
+                        path: apply_patch_op_path(op),
+                        message,
+                    }),
+                });
+            }
+        }
+    }
+    Ok(ApplyPatchExecutionOutcome { changed, failure: None })
 }
 
 async fn builtin_apply_patch(
@@ -1269,33 +1625,65 @@ async fn builtin_apply_patch(
         }
     }
 
-    let backup_record = apply_patch_prepare_backup_record(
+    let mut backup_record = apply_patch_empty_backup_record(
         &state.data_path,
         &normalized_session,
         &cwd,
         &raw_input,
-        &resolved,
     )?;
     let started = std::time::Instant::now();
-    let changed = match apply_patch_execute_ops(&resolved).await {
+    let outcome = match apply_patch_execute_ops(&state.data_path, &mut backup_record, &resolved).await {
         Ok(value) => value,
         Err(err) => {
             let _ = apply_patch_cleanup_backup_record_by_value(&state.data_path, &backup_record);
             return Err(err);
         }
     };
-    let record_path = match apply_patch_store_backup_record(state, &backup_record) {
-        Ok(path) => path,
-        Err(err) => {
-            let _ = apply_patch_cleanup_backup_record_by_value(&state.data_path, &backup_record);
-            return Err(err);
+    let record_path = if backup_record.entries.is_empty() {
+        None
+    } else {
+        match apply_patch_store_backup_record(state, &backup_record) {
+            Ok(path) => Some(path),
+            Err(err) => {
+                let _ = apply_patch_cleanup_backup_record_by_value(&state.data_path, &backup_record);
+                return Err(err);
+            }
         }
     };
     let elapsed_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
+    if let Some(failure) = outcome.failure {
+        eprintln!(
+            "[补丁执行] 失败 task=apply_patch session={} changed={} failed_index={} elapsed_ms={} record_id={}",
+            normalized_session,
+            outcome.changed.len(),
+            failure.index,
+            elapsed_ms,
+            backup_record.record_id
+        );
+        return Ok(serde_json::json!({
+            "ok": false,
+            "approved": true,
+            "partial": !outcome.changed.is_empty(),
+            "toolReview": smart_review_history,
+            "cwd": terminal_path_for_user(&cwd),
+            "changed": outcome.changed,
+            "changedCount": outcome.changed.len(),
+            "failed": {
+                "index": failure.index,
+                "op": failure.op,
+                "path": failure.path,
+                "message": failure.message,
+            },
+            "elapsedMs": elapsed_ms,
+            "backupRecordId": record_path.as_ref().map(|_| backup_record.record_id.clone()),
+            "backupFingerprint": record_path.as_ref().map(|_| backup_record.fingerprint.clone()),
+            "backupRecordPath": record_path.as_ref().map(|path| terminal_path_for_user(path)),
+        }));
+    }
     eprintln!(
         "[补丁执行] 完成 task=apply_patch session={} changed={} elapsed_ms={} record_id={}",
         normalized_session,
-        changed.len(),
+        outcome.changed.len(),
         elapsed_ms,
         backup_record.record_id
     );
@@ -1304,12 +1692,12 @@ async fn builtin_apply_patch(
         "approved": true,
         "toolReview": smart_review_history,
         "cwd": terminal_path_for_user(&cwd),
-        "changed": changed,
-        "changedCount": changed.len(),
+        "changed": outcome.changed,
+        "changedCount": outcome.changed.len(),
         "elapsedMs": elapsed_ms,
-        "backupRecordId": backup_record.record_id,
-        "backupFingerprint": backup_record.fingerprint,
-        "backupRecordPath": terminal_path_for_user(&record_path),
+        "backupRecordId": record_path.as_ref().map(|_| backup_record.record_id.clone()),
+        "backupFingerprint": record_path.as_ref().map(|_| backup_record.fingerprint.clone()),
+        "backupRecordPath": record_path.as_ref().map(|path| terminal_path_for_user(path)),
     }))
 }
 
@@ -1501,9 +1889,11 @@ mod apply_patch_tool_tests {
 
     #[test]
     fn apply_update_should_explain_not_found() {
-        let err = apply_patch_apply_update("a\nb\nc\n", "missing", "x", false).expect_err("not found should fail");
+        let err = apply_patch_apply_update("a\nb\nc\n", "b\nmissing", "x", false).expect_err("not found should fail");
         assert!(err.contains("old_string 在文件中未找到"));
-        assert!(err.contains("missing"));
+        assert!(err.contains("最相似候选行范围"));
+        assert!(err.contains("line ") || err.contains("lines "));
+        assert!(err.contains("b"));
         assert!(err.contains("先重新读取目标文件"));
         assert!(err.contains("最小 update 示例"));
     }
@@ -1533,8 +1923,19 @@ mod apply_patch_tool_tests {
             .expect_err("ambiguous match should fail");
         assert!(err.contains("replace_all"));
         assert!(err.contains("2 次"));
+        assert!(err.contains("命中行范围：line 1, line 3"));
         assert!(err.contains("扩大 old_string"));
         assert!(err.contains("全部替换"));
+    }
+
+    #[test]
+    fn apply_update_should_limit_many_match_ranges() {
+        let content = (0..20).map(|_| "target\n").collect::<String>();
+        let err = apply_patch_apply_update(&content, "target", "changed", false)
+            .expect_err("ambiguous match should fail");
+        assert!(err.contains("出现了 20 次"));
+        assert!(err.contains("另有 8 处"));
+        assert!(!err.contains("line 20"));
     }
 
     #[test]
@@ -1542,6 +1943,74 @@ mod apply_patch_tool_tests {
         let updated = apply_patch_apply_update("target\nkeep\ntarget\nkeep\n", "target", "changed", true)
             .expect("replace_all apply");
         assert_eq!(updated, "changed\nkeep\nchanged\nkeep\n");
+    }
+
+    #[test]
+    fn apply_update_should_match_lf_old_string_against_crlf_file() {
+        let updated = apply_patch_apply_update_with_line_ending_fallback(
+            "a\r\nold\r\nvalue\r\nc\r\n",
+            "old\nvalue",
+            "new\nvalue",
+            false,
+        )
+        .expect("line ending fallback should apply");
+        assert_eq!(updated, "a\r\nnew\r\nvalue\r\nc\r\n");
+    }
+
+    #[test]
+    fn apply_update_should_match_crlf_old_string_against_lf_file() {
+        let updated = apply_patch_apply_update_with_line_ending_fallback(
+            "a\nold\nvalue\nc\n",
+            "old\r\nvalue",
+            "new\r\nvalue",
+            false,
+        )
+        .expect("line ending fallback should apply");
+        assert_eq!(updated, "a\nnew\nvalue\nc\n");
+    }
+
+    #[tokio::test]
+    async fn execute_ops_should_keep_prior_success_and_return_failed_operation() {
+        let data_path = make_temp_data_path("apply-patch-partial");
+        let cwd = app_root_from_data_path(&data_path).join("workspace");
+        std::fs::create_dir_all(&cwd).expect("create cwd");
+        let first = cwd.join("first.txt");
+        let second = cwd.join("second.txt");
+        std::fs::write(&first, "old\n").expect("seed first");
+        std::fs::write(&second, "still old\n").expect("seed second");
+
+        let ops = vec![
+            ApplyPatchResolvedOp::Update {
+                from: first.clone(),
+                to: None,
+                old_string: "old".to_string(),
+                new_string: "new".to_string(),
+                replace_all: false,
+            },
+            ApplyPatchResolvedOp::Update {
+                from: second.clone(),
+                to: None,
+                old_string: "missing".to_string(),
+                new_string: "new".to_string(),
+                replace_all: false,
+            },
+        ];
+        let mut record = apply_patch_empty_backup_record(&data_path, "s1", &cwd, "raw")
+            .expect("empty record");
+
+        let outcome = apply_patch_execute_ops(&data_path, &mut record, &ops)
+            .await
+            .expect("execute should return structured outcome");
+
+        assert_eq!(std::fs::read_to_string(&first).expect("read first"), "new\n");
+        assert_eq!(std::fs::read_to_string(&second).expect("read second"), "still old\n");
+        assert_eq!(outcome.changed.len(), 1);
+        assert_eq!(record.entries.len(), 1);
+        let failure = outcome.failure.expect("second op should fail");
+        assert_eq!(failure.index, 1);
+        assert_eq!(failure.op, "update");
+        assert!(failure.message.contains("old_string 在文件中未找到"));
+        assert!(failure.message.contains("最相似候选行范围"));
     }
 
     #[test]

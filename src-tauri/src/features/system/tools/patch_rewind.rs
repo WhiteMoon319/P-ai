@@ -27,17 +27,33 @@ fn parse_apply_patch_tool_args(raw_args: &str) -> Option<ApplyPatchToolArgs> {
         return None;
     }
     if trimmed.starts_with('{') {
-        return serde_json::from_str::<ApplyPatchToolArgs>(trimmed).ok();
+        if let Ok(args) = serde_json::from_str::<ApplyPatchToolArgs>(trimmed) {
+            return Some(args);
+        }
+        let value = serde_json::from_str::<Value>(trimmed).ok()?;
+        let input = value.get("input").and_then(Value::as_str)?.trim();
+        return serde_json::from_str::<ApplyPatchToolArgs>(input).ok();
     }
     None
 }
 
-fn apply_patch_tool_result_is_success(content: &str) -> bool {
+fn apply_patch_tool_result_is_undo_eligible(content: &str) -> bool {
     let Ok(value) = serde_json::from_str::<Value>(content) else {
         return false;
     };
-    value.get("ok").and_then(Value::as_bool).unwrap_or(false)
-        && value.get("approved").and_then(Value::as_bool).unwrap_or(true)
+    let ok = value.get("ok").and_then(Value::as_bool).unwrap_or(false);
+    let approved = value.get("approved").and_then(Value::as_bool).unwrap_or(true);
+    if ok && approved {
+        return true;
+    }
+    // partial failure：部分操作成功，有备份记录，也需要撤回
+    let partial = value.get("partial").and_then(Value::as_bool).unwrap_or(false);
+    let changed_count = value.get("changedCount").and_then(Value::as_u64).unwrap_or(0);
+    let has_backup = value
+        .get("backupRecordId")
+        .and_then(Value::as_str)
+        .is_some_and(|s| !s.is_empty());
+    partial && changed_count > 0 && has_backup
 }
 
 fn collect_rewind_apply_patch_records(removed_messages: &[ChatMessage]) -> Vec<RewindApplyPatchRecord> {
@@ -110,7 +126,7 @@ fn collect_rewind_apply_patch_records(removed_messages: &[ChatMessage]) -> Vec<R
                     .and_then(Value::as_str)
                     .map(str::trim)
                     .unwrap_or_default();
-                if !apply_patch_tool_result_is_success(content) {
+                if !apply_patch_tool_result_is_undo_eligible(content) {
                     continue;
                 }
                 out.push(RewindApplyPatchRecord {
