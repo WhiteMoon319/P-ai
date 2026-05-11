@@ -109,26 +109,43 @@ impl RuntimeToolMetadata for BuiltinRememberTool {
             serde_json::json!({
               "type": "object",
               "properties": {
-                "memory_type": {
+                "action": {
                   "type": "string",
-                  "enum": ["knowledge", "skill", "emotion", "event"],
-                  "description": "记忆类型。knowledge=稳定认知或事实，skill=做事方法或能力，emotion=稳定情绪偏好或态度，event=发生过的事件。"
+                  "enum": ["create", "update", "merge"],
+                  "description": "记忆动作。create=新增一条记忆；update=更新一条已有记忆；merge=把多条旧记忆合并为一条新记忆。"
                 },
-                "judgment": {
-                  "type": "string",
-                  "description": "记忆本体。用一句独立、清楚、可检索的判断句写出真正要记住的内容。"
-                },
-                "reasoning": {
-                  "type": "string",
-                  "description": "支撑 judgment 的依据或背景，可为空。只写理由、证据、来源，不要写流程话术。"
-                },
-                "tags": {
+                "sourceMemoryIds": {
                   "type": "array",
                   "items": { "type": "string" },
-                  "description": "检索锚点列表，用于后续命中提示板。每一项都必须是独立、紧凑、稳定、可检索的词元，例如人名、项目名、偏好词、主题词、技能词、物品名；不要写整句，不要写短语拼接，不要把多个语义塞进同一个 tag。"
+                  "description": "源记忆 ID，使用 recall 记忆板里的短编号。create 必须传空数组或省略；update 必须正好 1 个；merge 至少 2 个。"
+                },
+                "memory": {
+                  "type": "object",
+                  "description": "目标记忆内容。create 时是新记忆；update 时是 sourceMemoryIds[0] 的新版本；merge 时是多条源记忆合并后的结果。",
+                  "properties": {
+                    "memoryType": {
+                      "type": "string",
+                      "enum": ["knowledge", "skill", "emotion", "event"],
+                      "description": "记忆类型。knowledge=稳定认知或事实，skill=做事方法或能力，emotion=稳定情绪偏好或态度，event=发生过的事件。"
+                    },
+                    "judgment": {
+                      "type": "string",
+                      "description": "记忆本体。用一句独立、清楚、可检索的判断句写出真正要记住的内容。"
+                    },
+                    "reasoning": {
+                      "type": "string",
+                      "description": "支撑 judgment 的依据或背景，可为空。只写理由、证据、来源，不要写流程话术。"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": { "type": "string" },
+                      "description": "检索锚点列表，用于后续命中提示板。每一项都必须是独立、紧凑、稳定、可检索的词元；不要写整句，不要写短语拼接，不要把多个语义塞进同一个 tag。"
+                    }
+                  },
+                  "required": ["memoryType", "judgment", "tags"]
                 }
               },
-              "required": ["memory_type", "judgment", "tags"]
+              "required": ["action", "memory"]
             }),
         )
     }
@@ -146,10 +163,9 @@ impl RuntimeJsonTool for BuiltinRememberTool {
     fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
         let args_json = serde_json::json!({
-            "memoryType": args.memory_type,
-            "judgment": args.judgment,
-            "reasoning": args.reasoning.unwrap_or_default(),
-            "tags": args.tags,
+            "action": args.action,
+            "sourceMemoryIds": args.source_memory_ids,
+            "memory": args.memory,
         });
         runtime_log_debug(format!(
             "[TOOL-DEBUG] execute_builtin_tool.start name=remember args={}",
@@ -181,13 +197,15 @@ impl RuntimeToolMetadata for BuiltinRecallTool {
     fn provider_tool_definition(&self) -> ProviderToolDefinition {
         ProviderToolDefinition::new(
             "recall",
-            "按查询回忆相关记忆，并返回可直接注入提示词的记忆板。",
+            "回忆记忆，并返回可直接注入提示词的记忆板。query 和 time 可选；结果应用 offset/limit 分页。",
             serde_json::json!({
               "type": "object",
               "properties": {
-                "query": { "type": "string", "description": "回忆查询文本" }
-              },
-              "required": ["query"]
+                "query": { "type": "string", "description": "可选的回忆查询文本；不传或为空时返回全部可见记忆。传入时先按 query 过滤相关记忆。" },
+                "time": { "type": "string", "description": "可选的时间过滤。传 YYYY 表示该年，传 YYYY-MM 表示该月，传 YYYY-MM-DD 表示该日。" },
+                "offset": { "type": "integer", "minimum": 0, "description": "跳过多少条结果。默认 0。" },
+                "limit": { "type": "integer", "minimum": 1, "maximum": 50, "description": "返回多少条结果。默认 7，最大 50。" }
+              }
             }),
         )
     }
@@ -205,7 +223,14 @@ impl RuntimeJsonTool for BuiltinRecallTool {
             "[TOOL-DEBUG] execute_builtin_tool.start name=recall args={}",
             debug_value_snippet(&args_json, 240)
         ));
-        let result = builtin_recall(&self.app_state, &self.memory_context, &args.query)
+        let result = builtin_recall(
+            &self.app_state,
+            &self.memory_context,
+            args.query.as_deref().unwrap_or(""),
+            args.time.as_deref(),
+            args.offset,
+            args.limit,
+        )
             .map_err(ToolInvokeError::from);
         match &result {
             Ok(v) => runtime_log_debug(format!(

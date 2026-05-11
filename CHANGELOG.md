@@ -2,6 +2,10 @@
 
 ## 进行中
 
+- 功能（remember-action-update-merge）：`remember` 工具改为唯一 `action + sourceMemoryIds + memory` 入参结构，`sourceMemoryIds` 使用 recall 记忆板短编号；更新单条或合并多条时会写入目标记忆并删除被替换源记忆，减少即时记忆重复堆积，且工具结果不暴露内部 ID。
+
+- 功能（recall-time-pagination）：`recall` 工具新增可选 `query`、`time`、`offset`、`limit`；支持先按查询过滤或使用全部可见记忆，再用 `YYYY` / `YYYY-MM` / `YYYY-MM-DD` 过滤年/月/日，并用 offset 跳过结果、limit 控制返回数量。
+
 - 修复（meme-segment-invalid-colon-preserve）：表情贴纸分段扫描将扫描游标与文本输出游标分离，遇到 Markdown 表格对齐符或普通冒号时不再吞掉前文，避免含表情回复完成后只显示后半段内容。
 
 - 修复（apply-patch-diagnostics-partial）：`apply_patch` 的 `old_string` 多命中错误会返回命中行范围，未命中错误会返回最相似候选行范围；批量操作改为按顺序逐条执行，前序成功后遇到失败会返回 `ok=false`、`partial`、`changed` 与具体失败操作信息，并保留已成功操作的撤回记录。

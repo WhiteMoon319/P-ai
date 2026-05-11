@@ -11,16 +11,35 @@ struct BingSearchToolArgs {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 struct MemorySaveToolArgs {
+    action: String,
+    #[serde(default, rename = "sourceMemoryIds")]
+    source_memory_ids: Vec<String>,
+    memory: MemorySaveToolMemoryArgs,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct MemorySaveToolMemoryArgs {
+    #[serde(rename = "memoryType")]
     memory_type: String,
     judgment: String,
+    #[serde(default)]
     reasoning: Option<String>,
     tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct RecallToolArgs {
-    query: String,
+    #[serde(default)]
+    query: Option<String>,
+    #[serde(default)]
+    time: Option<String>,
+    #[serde(default)]
+    offset: Option<usize>,
+    #[serde(default)]
+    limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

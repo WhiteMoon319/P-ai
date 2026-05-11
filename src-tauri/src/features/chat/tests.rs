@@ -511,7 +511,7 @@
         )
         .expect("seed memories");
 
-        let result = builtin_recall(&state, &worker_memory_context, "共享线索")
+        let result = builtin_recall(&state, &worker_memory_context, "共享线索", None, None, None)
             .expect("recall current agent memories");
         let memory_board = result
             .get("memoryBoard")
@@ -550,7 +550,7 @@
 
         assert_eq!(save_result.get("saved").and_then(Value::as_bool), Some(true));
 
-        let recall_result = builtin_recall(&state, &deputy_memory_context, "副手回归")
+        let recall_result = builtin_recall(&state, &deputy_memory_context, "副手回归", None, None, None)
             .expect("recall deputy memory");
         let memory_board = recall_result
             .get("memoryBoard")
@@ -597,7 +597,7 @@
 
         assert_eq!(save_result.get("saved").and_then(Value::as_bool), Some(true));
 
-        let recall_result = builtin_recall(&state, &private_worker_memory_context, "私有回归")
+        let recall_result = builtin_recall(&state, &private_worker_memory_context, "私有回归", None, None, None)
             .expect("recall private workspace memory");
         let memory_board = recall_result
             .get("memoryBoard")
