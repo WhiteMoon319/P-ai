@@ -1,5 +1,9 @@
 type DynamicMcpClient = rmcp::service::RunningService<rmcp::RoleClient, ()>;
 
+const MCP_CONNECT_TIMEOUT_SECS: u64 = 30;
+const MCP_REQUEST_TIMEOUT_SECS: u64 = 60;
+const MCP_TOOL_CALL_TIMEOUT_SECS: u64 = 300;
+
 struct McpConnectedClient {
     client: DynamicMcpClient,
     process_tree_guard: Option<McpProcessTreeGuard>,
@@ -204,11 +208,20 @@ impl RuntimeToolDyn for McpRuntimeTool {
                 serde_json::from_str::<serde_json::Map<String, Value>>(&args_json)
                     .map_err(|err| format!("Parse MCP tool args failed: {err}"))?
             };
-            let result = self
-                .client
-                .call_tool(rmcp::model::CallToolRequestParams::new(name.clone()).with_arguments(arguments))
-                .await
-                .map_err(|err| format!("Call MCP tool '{}' failed: {err}", name.as_ref()))?;
+            let result = tokio::time::timeout(
+                std::time::Duration::from_secs(MCP_TOOL_CALL_TIMEOUT_SECS),
+                self.client
+                    .call_tool(rmcp::model::CallToolRequestParams::new(name.clone()).with_arguments(arguments)),
+            )
+            .await
+            .map_err(|_| {
+                format!(
+                    "Call MCP tool '{}' timed out after {}s",
+                    name.as_ref(),
+                    MCP_TOOL_CALL_TIMEOUT_SECS
+                )
+            })?
+            .map_err(|err| format!("Call MCP tool '{}' failed: {err}", name.as_ref()))?;
             Ok(provider_tool_result_from_mcp_call(name.as_ref(), result))
         })
     }
@@ -760,7 +773,8 @@ async fn mcp_connect_client(parsed: &ParsedMcpServerDefinition) -> Result<McpCon
                     headers.insert(name, value);
                 }
             }
-            let mut client_builder = reqwest::Client::builder().timeout(std::time::Duration::from_secs(30));
+            let mut client_builder =
+                reqwest::Client::builder().timeout(std::time::Duration::from_secs(MCP_REQUEST_TIMEOUT_SECS));
             if !headers.is_empty() {
                 client_builder = client_builder.default_headers(headers);
             }
@@ -821,7 +835,17 @@ async fn mcp_get_or_connect_client(server: &McpServerConfig) -> Result<(), Strin
     }
 
     let parsed = parse_mcp_server_definition_from_config(server)?;
-    let connected = mcp_connect_client(&parsed).await?;
+    let connected = tokio::time::timeout(
+        std::time::Duration::from_secs(MCP_CONNECT_TIMEOUT_SECS),
+        mcp_connect_client(&parsed),
+    )
+    .await
+    .map_err(|_| {
+        format!(
+            "Connect MCP server '{}' timed out after {}s",
+            server.id, MCP_CONNECT_TIMEOUT_SECS
+        )
+    })??;
     let mut old_cached: Option<CachedMcpClient> = None;
 
     let cache = mcp_client_cache();
@@ -869,6 +893,29 @@ async fn mcp_disconnect_cached_client(server_id: &str) {
     }
 }
 
+async fn mcp_disconnect_cached_client_if_definition(server_id: &str, definition_json: &str) {
+    let mut old_cached: Option<CachedMcpClient> = None;
+    let cache = mcp_client_cache();
+    let mut guard = cache.lock().await;
+    if guard
+        .get(server_id)
+        .map(|cached| cached.definition_json == definition_json)
+        .unwrap_or(false)
+    {
+        old_cached = guard.remove(server_id);
+    }
+    drop(guard);
+    if let Some(old) = old_cached {
+        let CachedMcpClient {
+            client,
+            process_tree_guard,
+            ..
+        } = old;
+        let _ = client.cancel().await;
+        drop(process_tree_guard);
+    }
+}
+
 async fn mcp_list_tools_with_peer(
     server: &McpServerConfig,
 ) -> Result<(rmcp::service::Peer<rmcp::RoleClient>, Vec<rmcp::model::Tool>), String> {
@@ -881,10 +928,18 @@ async fn mcp_list_tools_with_peer(
             .ok_or_else(|| format!("MCP runtime cache missing server '{}'", server.id))?;
         cached.client.peer().clone()
     };
-    let tools = peer
-        .list_all_tools()
-        .await
-        .map_err(|err| format!("List MCP tools failed: {err}"))?;
+    let tools = tokio::time::timeout(
+        std::time::Duration::from_secs(MCP_REQUEST_TIMEOUT_SECS),
+        peer.list_all_tools(),
+    )
+    .await
+    .map_err(|_| {
+        format!(
+            "List MCP tools timed out after {}s for server '{}'",
+            MCP_REQUEST_TIMEOUT_SECS, server.id
+        )
+    })?
+    .map_err(|err| format!("List MCP tools failed: {err}"))?;
     Ok((peer, tools))
 }
 

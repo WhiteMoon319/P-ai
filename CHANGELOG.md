@@ -2,6 +2,8 @@
 
 ## 进行中
 
+- 修复（mcp-nonblocking-supervisor）：MCP 启动与部署改为后台非阻塞探测，启动期不再等待外部 MCP 子进程完成；连接、工具枚举与工具调用超时统一收口到 MCP runtime 内部，并避免 policy-only 工具以空 schema 暴露给模型、旧后台探测覆盖新配置。
+
 - 升级（genai-0.6.0-beta.20）：将 genai 从 `0.6.0-beta.19-WIP` 升级至 `0.6.0-beta.20-WIP`，获取上游 Gemini reasoning effort 重构、extra_body 透传、Bedrock/Moonshot/Baidu 新适配器等改进。
 
 - 优化（gemini-reasoning-effort-low-high-only）：Gemini / Vertex 思维强度收口为「低 / 高」两档，默认高；Auto 协议下识别到 Google 模型时才展示 Gemini 思维强度下拉，避免在非 Gemini 模型上误导。

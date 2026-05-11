@@ -23,8 +23,6 @@ fn tool_schema_definition_to_manifest_item(definition: &ProviderToolDefinition) 
     tool_manifest_item("schema_cache", &definition.name, true, true, None)
 }
 
-const TOOL_RUNTIME_CHECK_TIMEOUT_SECS: u64 = 8;
-
 fn operate_provider_tool_definition() -> ProviderToolDefinition {
     ProviderToolDefinition::new(
         MCP_OPERATE_TOOL_NAME,
@@ -150,7 +148,7 @@ fn build_global_tool_schema_cache(state: &AppState) -> Vec<ProviderToolDefinitio
     match load_workspace_mcp_servers(state) {
         Ok(servers) => {
             for server in servers.into_iter().filter(|server| server.enabled) {
-                for tool in list_tools_from_runtime_or_policy(&server) {
+                for tool in list_tools_from_runtime(&server) {
                     definitions.push(ProviderToolDefinition::new(
                         tool.tool_name,
                         tool.description,
@@ -364,7 +362,7 @@ fn push_cached_mcp_runtime_tools(tools: &mut Vec<Box<dyn RuntimeToolDyn>>, state
     let existing_names = tools.iter().map(|tool| tool.name()).collect::<HashSet<_>>();
     let mut added_names = HashSet::<String>::new();
     for server in servers.into_iter().filter(|server| server.enabled) {
-        for descriptor in list_tools_from_runtime_or_policy(&server).into_iter().filter(|tool| tool.enabled) {
+        for descriptor in list_tools_from_runtime(&server).into_iter().filter(|tool| tool.enabled) {
             if existing_names.contains(&descriptor.tool_name) || !added_names.insert(descriptor.tool_name.clone()) {
                 continue;
             }

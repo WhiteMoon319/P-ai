@@ -56,16 +56,9 @@ fn load_server_by_id(state: &AppState, server_id: &str) -> Result<McpServerConfi
 }
 
 fn list_tools_from_runtime_or_policy(server: &McpServerConfig) -> Vec<McpToolDescriptor> {
-    if let Some(runtime) = mcp_runtime_state_get(&server.id) {
-        return runtime
-            .tools
-            .into_iter()
-            .map(|tool| {
-                let enabled = mcp_policy_enabled_for_tool(server, &tool.tool_name)
-                    && mcp_tool_allowed_by_definition(server, &tool.tool_name);
-                McpToolDescriptor { enabled, ..tool }
-            })
-            .collect();
+    let runtime_tools = list_tools_from_runtime(server);
+    if !runtime_tools.is_empty() {
+        return runtime_tools;
     }
     server
         .tool_policies
@@ -79,69 +72,226 @@ fn list_tools_from_runtime_or_policy(server: &McpServerConfig) -> Vec<McpToolDes
         .collect()
 }
 
-async fn mcp_redeploy_all_from_policy(state: &AppState) -> Result<Vec<WorkspaceLoadError>, String> {
-    let servers = load_workspace_mcp_servers(state)?;
-
-    for server in &servers {
-        mcp_disconnect_cached_client(&server.id).await;
-        mcp_runtime_state_set(&server.id, false, "stopped", "", Vec::new());
-    }
-
-    let mut deploy_errors = Vec::<WorkspaceLoadError>::new();
-    for server in servers.into_iter().filter(|s| s.enabled) {
-        mcp_runtime_state_set(&server.id, false, "deploying", "", Vec::new());
-        let tools = match tokio::time::timeout(
-            std::time::Duration::from_secs(TOOL_RUNTIME_CHECK_TIMEOUT_SECS),
-            mcp_list_server_tools_runtime(&server),
-        )
-        .await
-        {
-            Ok(Ok(tools)) => tools,
-            Ok(Err(err)) => {
-                mcp_runtime_state_set(&server.id, false, "failed", &err, Vec::new());
-                deploy_errors.push(WorkspaceLoadError {
-                    item: server.id.clone(),
-                    error: err,
-                });
-                continue;
-            }
-            Err(_) => {
-                let err = format!("MCP 工具检验超时: server_id={}, server_name={}", server.id, server.name);
-                runtime_log_warn(format!(
-                    "[MCP] reload 期间工具检验超时: server_id={}, server_name={}",
-                    server.id, server.name
-                ));
-                mcp_runtime_state_set(&server.id, false, "failed", &err, Vec::new());
-                deploy_errors.push(WorkspaceLoadError {
-                    item: server.id.clone(),
-                    error: err,
-                });
-                continue;
-            }
-        };
-
-        let discovered_names = tools
-            .iter()
-            .map(|t| t.tool_name.clone())
-            .collect::<Vec<_>>();
-        let merged_policies =
-            merge_workspace_mcp_tool_policies_with_new_tools(state, &server.id, &discovered_names)?;
-
-        let mut server_with_policies = server.clone();
-        server_with_policies.tool_policies = merged_policies;
-        let final_tools = tools
+fn list_tools_from_runtime(server: &McpServerConfig) -> Vec<McpToolDescriptor> {
+    if let Some(runtime) = mcp_runtime_state_get(&server.id) {
+        return runtime
+            .tools
             .into_iter()
             .map(|tool| {
-                let enabled = mcp_policy_enabled_for_tool(&server_with_policies, &tool.tool_name)
-                    && mcp_tool_allowed_by_definition(&server_with_policies, &tool.tool_name);
+                let enabled = mcp_policy_enabled_for_tool(server, &tool.tool_name)
+                    && mcp_tool_allowed_by_definition(server, &tool.tool_name);
                 McpToolDescriptor { enabled, ..tool }
             })
-            .collect::<Vec<_>>();
-
-        mcp_runtime_state_set(&server.id, true, "deployed", "", final_tools);
+            .collect();
     }
+    Vec::new()
+}
 
-    Ok(deploy_errors)
+const MCP_SUPERVISOR_STDIO_CONCURRENCY: usize = 3;
+const MCP_SUPERVISOR_REMOTE_CONCURRENCY: usize = 20;
+
+fn mcp_supervisor_stdio_semaphore() -> Arc<tokio::sync::Semaphore> {
+    static SEMAPHORE: OnceLock<Arc<tokio::sync::Semaphore>> = OnceLock::new();
+    SEMAPHORE
+        .get_or_init(|| Arc::new(tokio::sync::Semaphore::new(MCP_SUPERVISOR_STDIO_CONCURRENCY)))
+        .clone()
+}
+
+fn mcp_supervisor_remote_semaphore() -> Arc<tokio::sync::Semaphore> {
+    static SEMAPHORE: OnceLock<Arc<tokio::sync::Semaphore>> = OnceLock::new();
+    SEMAPHORE
+        .get_or_init(|| Arc::new(tokio::sync::Semaphore::new(MCP_SUPERVISOR_REMOTE_CONCURRENCY)))
+        .clone()
+}
+
+fn mcp_supervisor_semaphore_for_server(server: &McpServerConfig) -> Arc<tokio::sync::Semaphore> {
+    match parse_mcp_server_definition_from_config(server).map(|parsed| parsed.transport) {
+        Ok(McpTransportKind::Stdio) | Err(_) => mcp_supervisor_stdio_semaphore(),
+        Ok(McpTransportKind::StreamableHttp) => mcp_supervisor_remote_semaphore(),
+    }
+}
+
+fn mcp_runtime_state_mark_starting(server: &McpServerConfig) {
+    let cached_tools = list_tools_from_runtime(server);
+    mcp_runtime_state_set(&server.id, true, "starting", "", cached_tools);
+}
+
+fn mcp_runtime_state_mark_probe_failure(server: &McpServerConfig, status: &str, error: &str) {
+    let cached_tools = list_tools_from_runtime(server);
+    let effective_status = if cached_tools.is_empty() { status } else { "stale" };
+    mcp_runtime_state_set(&server.id, true, effective_status, error, cached_tools);
+}
+
+fn mcp_current_server_matches_probe(
+    state: &AppState,
+    probe_server: &McpServerConfig,
+    trigger: &str,
+) -> Option<McpServerConfig> {
+    match load_server_by_id(state, &probe_server.id) {
+        Ok(current) => {
+            if !current.enabled {
+                runtime_log_info(format!(
+                    "[MCP Supervisor] 跳过提交 server_id={} trigger={} reason=disabled",
+                    probe_server.id, trigger
+                ));
+                return None;
+            }
+            if current.definition_json != probe_server.definition_json {
+                runtime_log_info(format!(
+                    "[MCP Supervisor] 跳过提交 server_id={} trigger={} reason=definition_changed",
+                    probe_server.id, trigger
+                ));
+                return None;
+            }
+            Some(current)
+        }
+        Err(err) => {
+            runtime_log_info(format!(
+                "[MCP Supervisor] 跳过提交 server_id={} trigger={} reason=missing error={}",
+                probe_server.id, trigger, err
+            ));
+            None
+        }
+    }
+}
+
+fn mcp_status_from_runtime_error(error: &str) -> &'static str {
+    if error.to_ascii_lowercase().contains("timed out") || error.contains("超时") {
+        "timeout"
+    } else {
+        "failed"
+    }
+}
+
+fn mcp_start_supervisor_probe_for_server(state: AppState, server: McpServerConfig, trigger: &'static str) {
+    let semaphore = mcp_supervisor_semaphore_for_server(&server);
+    tauri::async_runtime::spawn(async move {
+        let permit = match semaphore.acquire_owned().await {
+            Ok(permit) => permit,
+            Err(err) => {
+                runtime_log_warn(format!(
+                    "[MCP Supervisor] 跳过 server_id={} trigger={} reason=semaphore_closed error={}",
+                    server.id, trigger, err
+                ));
+                return;
+            }
+        };
+        let _permit = permit;
+        mcp_probe_server_tools_background(state, server, trigger).await;
+    });
+}
+
+fn mcp_start_supervisor_probe_all_from_policy(state: AppState, trigger: &'static str) -> Result<(), String> {
+    let servers = load_workspace_mcp_servers(&state)?;
+    let mut started = 0usize;
+    for server in servers.into_iter() {
+        if server.enabled {
+            mcp_runtime_state_mark_starting(&server);
+            mcp_start_supervisor_probe_for_server(state.clone(), server, trigger);
+            started += 1;
+        } else {
+            mcp_runtime_state_set(&server.id, false, "disabled", "", Vec::new());
+        }
+    }
+    runtime_log_info(format!(
+        "[MCP Supervisor] 开始 trigger={} enabled_servers={} stdio_concurrency={} remote_concurrency={}",
+        trigger,
+        started,
+        MCP_SUPERVISOR_STDIO_CONCURRENCY,
+        MCP_SUPERVISOR_REMOTE_CONCURRENCY
+    ));
+    Ok(())
+}
+
+async fn mcp_probe_server_tools_background(
+    state: AppState,
+    server: McpServerConfig,
+    trigger: &'static str,
+) {
+    let started = std::time::Instant::now();
+    runtime_log_info(format!(
+        "[MCP Supervisor] 开始 server_id={} trigger={}",
+        server.id, trigger
+    ));
+    let tools_res = mcp_list_server_tools_runtime(&server).await;
+
+    let tools = match tools_res {
+        Ok(tools) => tools,
+        Err(err) => {
+            let Some(current_server) = mcp_current_server_matches_probe(&state, &server, trigger) else {
+                mcp_disconnect_cached_client_if_definition(&server.id, &server.definition_json).await;
+                return;
+            };
+            let status = mcp_status_from_runtime_error(&err);
+            mcp_runtime_state_mark_probe_failure(&current_server, status, &err);
+            let label = if status == "timeout" { "超时" } else { "失败" };
+            runtime_log_warn(format!(
+                "[MCP Supervisor] {} server_id={} trigger={} duration_ms={} error={}",
+                label,
+                server.id,
+                trigger,
+                started.elapsed().as_millis(),
+                err
+            ));
+            return;
+        }
+    };
+
+    let Some(current_server) = mcp_current_server_matches_probe(&state, &server, trigger) else {
+        mcp_disconnect_cached_client_if_definition(&server.id, &server.definition_json).await;
+        return;
+    };
+    let discovered_names = tools
+        .iter()
+        .map(|t| t.tool_name.clone())
+        .collect::<Vec<_>>();
+    let merged_policies = match merge_workspace_mcp_tool_policies_with_new_tools(
+        &state,
+        &current_server.id,
+        &discovered_names,
+    ) {
+        Ok(policies) => policies,
+        Err(err) => {
+            let Some(current_server) = mcp_current_server_matches_probe(&state, &server, trigger) else {
+                mcp_disconnect_cached_client_if_definition(&server.id, &server.definition_json).await;
+                return;
+            };
+            mcp_runtime_state_mark_probe_failure(&current_server, "failed", &err);
+            runtime_log_warn(format!(
+                "[MCP Supervisor] 失败 server_id={} trigger={} stage=merge_policy duration_ms={} error={}",
+                server.id,
+                trigger,
+                started.elapsed().as_millis(),
+                err
+            ));
+            return;
+        }
+    };
+
+    let Some(mut server_with_policies) = mcp_current_server_matches_probe(&state, &server, trigger) else {
+        mcp_disconnect_cached_client_if_definition(&server.id, &server.definition_json).await;
+        return;
+    };
+    server_with_policies.tool_policies = merged_policies;
+    let final_tools = tools
+        .into_iter()
+        .map(|tool| {
+            let enabled = mcp_policy_enabled_for_tool(&server_with_policies, &tool.tool_name)
+                && mcp_tool_allowed_by_definition(&server_with_policies, &tool.tool_name);
+            McpToolDescriptor { enabled, ..tool }
+        })
+        .collect::<Vec<_>>();
+    let tool_count = final_tools.len();
+    mcp_runtime_state_set(&server_with_policies.id, true, "ready", "", final_tools);
+    refresh_global_tool_schema_cache(&state);
+    mark_prompt_cache_rebuild_for_all_final_system_sources(&state);
+    runtime_log_info(format!(
+        "[MCP Supervisor] 完成 server_id={} trigger={} tools={} duration_ms={}",
+        server.id,
+        trigger,
+        tool_count,
+        started.elapsed().as_millis()
+    ));
 }
 
 #[tauri::command]
@@ -235,11 +385,39 @@ async fn mcp_list_server_tools(
     };
 
     let started = std::time::Instant::now();
-    let tools = mcp_list_server_tools_runtime(&server).await?;
+    mcp_runtime_state_mark_starting(&server);
+    let tools = match mcp_list_server_tools_runtime(&server).await {
+        Ok(tools) => tools,
+        Err(err) => {
+            let status = mcp_status_from_runtime_error(&err);
+            mcp_runtime_state_mark_probe_failure(&server, status, &err);
+            return Err(err);
+        }
+    };
+
+    let discovered_names = tools
+        .iter()
+        .map(|t| t.tool_name.clone())
+        .collect::<Vec<_>>();
+    let merged_policies =
+        merge_workspace_mcp_tool_policies_with_new_tools(&state, &server.id, &discovered_names)?;
+    let mut server_with_policies = server.clone();
+    server_with_policies.tool_policies = merged_policies;
+    let final_tools = tools
+        .into_iter()
+        .map(|tool| {
+            let enabled = mcp_policy_enabled_for_tool(&server_with_policies, &tool.tool_name)
+                && mcp_tool_allowed_by_definition(&server_with_policies, &tool.tool_name);
+            McpToolDescriptor { enabled, ..tool }
+        })
+        .collect::<Vec<_>>();
+    mcp_runtime_state_set(&server.id, true, "ready", "", final_tools.clone());
+    refresh_global_tool_schema_cache(&state);
+    mark_prompt_cache_rebuild_for_all_final_system_sources(&state);
 
     Ok(McpListServerToolsResult {
         server_id: server.id,
-        tools,
+        tools: final_tools,
         elapsed_ms: started.elapsed().as_millis() as u64,
     })
 }
@@ -285,39 +463,10 @@ async fn mcp_deploy_server(
         server
     };
 
-    mcp_runtime_state_set(server_id, false, "deploying", "", Vec::new());
     let started = std::time::Instant::now();
-    let tools_res = mcp_list_server_tools_runtime(&server).await;
-
-    let tools = match tools_res {
-        Ok(tools) => tools,
-        Err(err) => {
-            mcp_runtime_state_set(server_id, false, "failed", &err, Vec::new());
-            return Err(err);
-        }
-    };
-
-    let discovered_names = tools
-        .iter()
-        .map(|t| t.tool_name.clone())
-        .collect::<Vec<_>>();
-    let merged_policies = {
-        let policies = merge_workspace_mcp_tool_policies_with_new_tools(&state, server_id, &discovered_names)?;
-        policies
-    };
-
-    let mut server_with_policies = server.clone();
-    server_with_policies.tool_policies = merged_policies;
-    let final_tools = tools
-        .into_iter()
-        .map(|tool| {
-            let enabled = mcp_policy_enabled_for_tool(&server_with_policies, &tool.tool_name)
-                && mcp_tool_allowed_by_definition(&server_with_policies, &tool.tool_name);
-            McpToolDescriptor { enabled, ..tool }
-        })
-        .collect::<Vec<_>>();
-
-    mcp_runtime_state_set(server_id, true, "deployed", "", final_tools.clone());
+    mcp_runtime_state_mark_starting(&server);
+    mcp_start_supervisor_probe_for_server(state.inner().clone(), server.clone(), "manual_deploy");
+    let final_tools = list_tools_from_runtime_or_policy(&server);
     Ok(McpListServerToolsResult {
         server_id: server.id,
         tools: final_tools,
@@ -388,4 +537,3 @@ fn mcp_set_tool_enabled(
 fn mcp_open_workspace_dir(state: State<'_, AppState>) -> Result<String, String> {
     open_mcp_workspace_dir(&state)
 }
-

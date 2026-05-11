@@ -601,15 +601,11 @@ async fn disconnect_workspace_mcp_runtime_clients(state: &AppState) {
 pub(crate) async fn load_workspace(state: &AppState) -> Result<RefreshMcpAndSkillsResult, String> {
     let (mut result, servers, merged_agents, merged_departments) =
         collect_workspace_load_snapshot(state)?;
-    match mcp_redeploy_all_from_policy(state).await {
-        Ok(deploy_errors) => {
-            if !deploy_errors.is_empty() {
-                result.mcp_failed.extend(deploy_errors);
-            }
-        }
+    match mcp_start_supervisor_probe_all_from_policy(state.clone(), "workspace_load") {
+        Ok(()) => {}
         Err(err) => {
             result.mcp_failed.push(WorkspaceLoadError {
-                item: "mcp_redeploy_all_from_policy".to_string(),
+                item: "mcp_supervisor_start".to_string(),
                 error: err,
             });
         }

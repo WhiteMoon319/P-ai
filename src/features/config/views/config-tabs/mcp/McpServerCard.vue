@@ -37,9 +37,12 @@
       <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-2 text-[11px]">
           <span class="opacity-70">{{ t('config.mcpServerCard.status') }}</span>
-          <span v-if="draft.lastStatus === 'deployed'" class="badge badge-sm badge-success">已部署</span>
+          <span v-if="draft.lastStatus === 'ready' || draft.lastStatus === 'deployed'" class="badge badge-sm badge-success">已就绪</span>
           <span v-else-if="draft.lastStatus === 'stopped'" class="badge badge-sm badge-neutral">已停止</span>
-          <span v-else-if="draft.lastStatus === 'deploying'" class="badge badge-sm badge-warning">部署中</span>
+          <span v-else-if="draft.lastStatus === 'starting' || draft.lastStatus === 'deploying'" class="badge badge-sm badge-warning">后台启动中</span>
+          <span v-else-if="draft.lastStatus === 'stale'" class="badge badge-sm badge-warning">使用旧缓存</span>
+          <span v-else-if="draft.lastStatus === 'timeout'" class="badge badge-sm badge-error">超时</span>
+          <span v-else-if="draft.lastStatus === 'disabled'" class="badge badge-sm badge-neutral">未启用</span>
           <span v-else-if="draft.lastStatus === 'failed'" class="badge badge-sm badge-error">失败</span>
           <span v-else class="badge badge-sm badge-ghost">{{ draft.lastStatus || "-" }}</span>
           <span v-if="draft.lastError" class="text-error truncate max-w-50" :title="draft.lastError"> | {{ draft.lastError }}</span>
