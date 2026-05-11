@@ -375,6 +375,7 @@
       @set-access="setChatWorkspaceAccess"
       @set-autonomous-mode="setChatWorkspaceAutonomousMode"
       @remove-workspace="removeChatWorkspace"
+      @open-dir="openChatWorkspaceDir"
       @save="saveChatWorkspacePicker"
     />
     <div
@@ -1801,6 +1802,7 @@ const {
   setChatWorkspaceAccess,
   setChatWorkspaceAutonomousMode,
   removeChatWorkspace,
+  openChatWorkspaceDir,
   saveChatWorkspacePicker,
 } = useChatWorkspacePickerFlow({
   chatWorkspaceChoices,

@@ -826,8 +826,10 @@ fn build_chat_shell_workspace_output(
 fn open_shell_path_in_file_manager(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
+        let resolved = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let explorer_path = resolved.to_string_lossy().replace('/', "\\");
         std::process::Command::new("explorer")
-            .arg(path)
+            .arg(explorer_path.as_str())
             .status()
             .map_err(|err| format!("Open in explorer failed: {err}"))?;
         return Ok(());
@@ -1586,4 +1588,42 @@ fn open_local_file_directory(path: String) -> Result<(), String> {
 
     open_shell_path_in_file_manager(&file_path)?;
     Ok(())
+}
+
+#[tauri::command]
+fn open_file_with_default_program(path: String) -> Result<(), String> {
+    let raw_path = path.trim();
+    if raw_path.is_empty() {
+        return Err("path is required".to_string());
+    }
+    let file_path = PathBuf::from(raw_path);
+    if !file_path.exists() {
+        return Err(format!("File not found: {raw_path}"));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", raw_path])
+            .status()
+            .map_err(|err| format!("Failed to open file: {err}"))?;
+        return Ok(());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(raw_path)
+            .status()
+            .map_err(|err| format!("Failed to open file: {err}"))?;
+        return Ok(());
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(raw_path)
+            .status()
+            .map_err(|err| format!("Failed to open file: {err}"))?;
+        return Ok(());
+    }
+    #[allow(unreachable_code)]
+    Err("Open file is not supported on this platform".to_string())
 }

@@ -1,5 +1,7 @@
 import { ref, type Ref } from "vue";
 import { open } from "@tauri-apps/plugin-dialog";
+import { invokeTauri } from "../../../services/tauri-api";
+import { toErrorMessage } from "../../../utils/error";
 import type { ChatWorkspaceChoice } from "./use-chat-workspace";
 
 type UseChatWorkspacePickerFlowOptions = {
@@ -120,6 +122,20 @@ export function useChatWorkspacePickerFlow(options: UseChatWorkspacePickerFlowOp
     chatWorkspaceDraftAutonomousMode.value = Boolean(enabled);
   }
 
+  async function openChatWorkspaceDir(workspaceId: string) {
+    const draft = cloneChatWorkspaceChoices(chatWorkspaceDraftChoices.value);
+    const target = draft.find((item) => item.id === workspaceId);
+    if (!target?.path) return;
+    try {
+      const opened = await invokeTauri<string>("open_chat_shell_workspace_dir", {
+        input: { workspacePath: target.path },
+      });
+      options.setStatus(`已打开目录: ${opened}`);
+    } catch (error) {
+      options.setStatusError("config.tools.openDirFailed", error);
+    }
+  }
+
   async function saveChatWorkspacePicker() {
     if (chatWorkspacePickerSaving.value) return;
     chatWorkspacePickerSaving.value = true;
@@ -144,6 +160,7 @@ export function useChatWorkspacePickerFlow(options: UseChatWorkspacePickerFlowOp
     setChatWorkspaceAccess,
     setChatWorkspaceAutonomousMode,
     removeChatWorkspace,
+    openChatWorkspaceDir,
     saveChatWorkspacePicker,
   };
 }

@@ -41,7 +41,13 @@
             <div class="flex items-center gap-3">
               <div class="min-w-0 flex-1 text-left">
                 <div class="flex flex-wrap items-center gap-2">
-                  <span class="inline-block w-40 truncate font-medium align-middle" :title="item.path">{{ item.name }}</span>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-ghost bg-base-200/50 hover:bg-base-300 max-w-40 truncate"
+                    :title="item.path"
+                    :disabled="saving"
+                    @click="emit('openDir', item.id)"
+                  >{{ item.name }}</button>
                   <span v-if="levelLabel(item.level)" class="badge" :class="levelClass(item.level)">{{ levelLabel(item.level) }}</span>
                   <span class="badge" :class="accessClass(item.access)">{{ accessLabel(item.access) }}</span>
                 </div>
@@ -130,6 +136,7 @@ const emit = defineEmits<{
   (e: "setAccess", workspaceId: string, access: ChatWorkspaceChoice["access"]): void;
   (e: "setAutonomousMode", enabled: boolean): void;
   (e: "removeWorkspace", workspaceId: string): void;
+  (e: "openDir", workspaceId: string): void;
   (e: "save"): void;
 }>();
 

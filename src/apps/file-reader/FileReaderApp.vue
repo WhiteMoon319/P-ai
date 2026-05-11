@@ -91,7 +91,16 @@
           ></div>
         </div>
       </div>
-      <button class="btn btn-ghost btn-xs ml-1 shrink-0" type="button" :disabled="!activeTab" title="刷新" @click.stop="refreshActiveTab">
+      <button
+        class="btn btn-ghost btn-xs shrink-0"
+        type="button"
+        :disabled="!activeTab"
+        title="用默认程序打开"
+        @click.stop="openWithDefaultProgram"
+      >
+        <ExternalLink class="h-4 w-4" />
+      </button>
+      <button class="btn btn-ghost btn-xs shrink-0" type="button" :disabled="!activeTab" title="刷新" @click.stop="refreshActiveTab">
         <RefreshCw class="h-4 w-4" />
       </button>
       <button
@@ -113,7 +122,12 @@
         class="flex w-72 shrink-0 flex-col border-r border-base-300 bg-base-200/35"
       >
         <div class="flex h-9 shrink-0 items-center gap-1.5 border-b border-base-300 px-3 text-sm">
-          <div class="min-w-0 flex-1 truncate font-medium" :title="directoryTreeRoot.path">{{ directoryTreeRoot.name }}</div>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs min-w-0 flex-1 truncate justify-start font-medium"
+            :title="directoryTreeRoot.path"
+            @click="openDirectoryInFileManager(directoryTreeRoot.path)"
+          >{{ directoryTreeRoot.name }}</button>
           <button
             class="btn btn-ghost btn-xs h-7 min-h-7 w-7 shrink-0 px-0"
             type="button"
@@ -252,7 +266,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ChevronDown, ChevronRight, Code2, Eye, FilePlus, FileText, Folder, FolderOpen, Minus, RefreshCw, Search, Square, SquareTerminal, X } from "lucide-vue-next";
+import { ChevronDown, ChevronRight, Code2, Eye, ExternalLink, FilePlus, FileText, Folder, FolderOpen, Minus, RefreshCw, Search, Square, SquareTerminal, X } from "lucide-vue-next";
 import MarkdownRender, { enableKatex, enableMermaid, getMarkdown, parseMarkdownToStructure } from "markstream-vue";
 import { bundledLanguagesInfo, codeToHtml } from "shiki";
 import "markstream-vue/index.css";
@@ -973,6 +987,16 @@ function refreshActiveTab() {
   void openPath(tab.path);
 }
 
+async function openWithDefaultProgram() {
+  const tab = activeTab.value;
+  if (!tab) return;
+  try {
+    await invokeTauri("open_file_with_default_program", { path: tab.path });
+  } catch (error) {
+    reportFileReaderActionFailure("用默认程序打开", tab.path, error);
+  }
+}
+
 async function pickFile() {
   const picked = await open({
     multiple: false,
@@ -1056,6 +1080,16 @@ async function openShellAtDirectoryTreeRoot() {
     await invokeTauri("open_file_reader_directory_shell", { path: root.path });
   } catch (error) {
     reportFileReaderActionFailure("打开 Shell", root.path, error);
+  }
+}
+
+async function openDirectoryInFileManager(path: string) {
+  const normalizedPath = normalizePath(path);
+  if (!normalizedPath) return;
+  try {
+    await invokeTauri("open_local_file_directory", { path: normalizedPath });
+  } catch (error) {
+    reportFileReaderActionFailure("打开目录", normalizedPath, error);
   }
 }
 
