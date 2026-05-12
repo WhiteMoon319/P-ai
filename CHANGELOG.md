@@ -2,6 +2,10 @@
 
 ## 进行中
 
+## 发布：v0.9.86
+
+- 发布（release-0.9.86）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.86`，纳入本轮更新重启优雅停机、更新方式偏好后端持久化、热键冲突不阻断配置保存等修复。
+
 - 修复（hotkey-save-conflict-nonfatal）：保存配置时召唤热键运行时注册失败不再阻断配置持久化；热键冲突只会让当前热键暂不可用并记录日志，避免快速设置或配置保存因热键占用卡住。
 
 - 修复（github-update-method-persist）：更新方式选择改为调用后端专用命令持久化 `github_update_method`，避免前端整份配置自动保存，并确保自动更新后端流程读取到用户偏好的直连/代理策略。
