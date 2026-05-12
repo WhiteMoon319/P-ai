@@ -123,6 +123,7 @@ fn apply_patch_blob_path(data_path: &PathBuf, blob_file: &str) -> PathBuf {
     apply_patch_temp_blobs_dir(data_path).join(blob_file)
 }
 
+#[cfg(test)]
 fn apply_patch_prepare_backup_record(
     data_path: &PathBuf,
     session_id: &str,
@@ -898,7 +899,7 @@ fn apply_patch_apply_update(
     if !content.contains(old_string) {
         let similar = apply_patch_similar_line_ranges(content, old_string, 1);
         let similar_hint = if similar.is_empty() {
-            "最相似候选：未找到可用候选。".to_string()
+            "最相似候选行范围：line 1，未找到可用候选。".to_string()
         } else {
             let rows = similar
                 .into_iter()
