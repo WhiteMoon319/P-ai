@@ -750,6 +750,7 @@ fn main() {
             fetch_project_changelog_markdown,
             get_app_version,
             get_project_repository_url,
+            set_github_update_method,
             load_config,
             check_message_store_migration,
             run_message_store_migration,

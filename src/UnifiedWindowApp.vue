@@ -4316,7 +4316,18 @@ function updateWebviewZoomPercent(value: unknown) {
 
 function updateGithubUpdateMethod(value: unknown) {
   const normalized = String(value || "").trim();
-  config.githubUpdateMethod = normalized === "direct" || normalized === "proxy" ? normalized : "auto";
+  const nextMethod = normalized === "direct" || normalized === "proxy" ? normalized : "auto";
+  if (config.githubUpdateMethod === nextMethod) return;
+  const previousMethod = config.githubUpdateMethod || "auto";
+  config.githubUpdateMethod = nextMethod;
+  void invokeTauri<AppConfig>("set_github_update_method", { updateMethod: nextMethod })
+    .then((saved) => {
+      config.githubUpdateMethod = saved.githubUpdateMethod || "auto";
+    })
+    .catch((error) => {
+      config.githubUpdateMethod = previousMethod;
+      setStatusError("status.saveConfigFailed", error);
+    });
 }
 
 function webviewZoomOptionIndex(percent: unknown) {

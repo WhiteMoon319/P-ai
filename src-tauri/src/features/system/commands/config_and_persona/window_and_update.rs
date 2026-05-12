@@ -355,6 +355,26 @@ fn get_project_repository_url(_state: State<'_, AppState>) -> String {
 }
 
 #[tauri::command]
+fn set_github_update_method(
+    update_method: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<AppConfig, String> {
+    let normalized = normalize_github_update_method(&update_method);
+    let mut config = state_read_config_cached(&state)?;
+    normalize_app_config(&mut config);
+    if config.github_update_method != normalized {
+        config.github_update_method = normalized.clone();
+        state_write_config_cached(&state, &config)?;
+        eprintln!("[自动更新] 更新方式偏好已保存：method={normalized}");
+    }
+    let data = state_read_agents_runtime_snapshot(&state)?;
+    let runtime_config = runtime_config_with_private_organization(&state, &config, &data)?;
+    let _ = app.emit("easy-call:config-updated", &runtime_config);
+    Ok(runtime_config)
+}
+
+#[tauri::command]
 fn load_config(state: State<'_, AppState>) -> Result<AppConfig, String> {
     let mut result = state_read_config_cached(&state)?;
     normalize_app_config(&mut result);
