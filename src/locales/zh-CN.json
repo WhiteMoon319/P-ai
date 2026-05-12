@@ -1067,6 +1067,9 @@
     "mentionUnavailableNoModel": "目标部门未配置可用文本模型",
     "todoIntentionWithPersona": "{name} 打算{todo}",
     "todoIntention": "打算{todo}",
+    "timeDivider": {
+      "minutesAgo": "{count} 分钟前"
+    },
     "loadMore": "加载更多...",
     "copy": "复制",
     "regenerate": "重新生成",

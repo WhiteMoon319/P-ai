@@ -5,6 +5,7 @@ import type { ChatMessageBlock } from "../../../types/app";
 export type ChatRenderItem =
   | { kind: "compaction"; id: string; renderId: string; block: ChatMessageBlock; blockIndex: number }
   | { kind: "plan_started"; id: string; renderId: string; block: ChatMessageBlock; blockIndex: number }
+  | { kind: "time_divider"; id: string; createdAt: string }
   | { kind: "message"; id: string; renderId: string; block: ChatMessageBlock; blockIndex: number; compactWithPrevious: boolean }
   | { kind: "group"; id: string; groupId: string; items: Array<{ renderId: string; block: ChatMessageBlock; blockIndex: number; compactWithPrevious: boolean }> };
 

@@ -1067,6 +1067,9 @@
     "mentionUnavailableNoModel": "The target department has no available text model",
     "todoIntentionWithPersona": "{name} plans to {todo}",
     "todoIntention": "Plans to {todo}",
+    "timeDivider": {
+      "minutesAgo": "{count}m ago"
+    },
     "loadMore": "Load more...",
     "stop": "Stop",
     "stopReplying": "Stop Replying",

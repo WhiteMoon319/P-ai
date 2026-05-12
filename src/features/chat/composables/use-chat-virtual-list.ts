@@ -10,6 +10,7 @@ import {
 } from "../utils/chat-render";
 
 const MAX_GROUP_ITEM_COUNT = 2;
+const TIME_DIVIDER_GAP_MS = 10 * 60 * 1000;
 
 interface UseChatVirtualListOptions {
   messageBlocks: Ref<ChatMessageBlock[]>;
@@ -67,13 +68,13 @@ export function blockGroupRenderId(block: ChatMessageBlock, ephemeralMap?: WeakM
 // ==================== 高度估算 ====================
 
 export function estimateChatRenderItemHeight(item: ChatRenderItem): number {
-  if (item.kind === "compaction" || item.kind === "plan_started") return 44;
+  if (item.kind === "compaction" || item.kind === "plan_started" || item.kind === "time_divider") return 44;
   if (item.kind === "message") return estimateMessageBlockHeight(item.block, isRightAlignedMessage(item.block)) + 8;
   return item.items.reduce((total, g) => total + estimateMessageBlockHeight(g.block, isRightAlignedMessage(g.block)) + 8, 0) + 8;
 }
 
 export function virtualItemSizeDependencies(item: ChatRenderItem): unknown[] {
-  if (item.kind === "compaction" || item.kind === "plan_started") return [item.id, item.kind];
+  if (item.kind === "compaction" || item.kind === "plan_started" || item.kind === "time_divider") return [item.id, item.kind];
   if (item.kind === "message") return [item.id, ...blockSizeDependencies(item.block)];
   return [item.id, ...item.items.flatMap((g) => [g.renderId, ...blockSizeDependencies(g.block)])];
 }
@@ -97,6 +98,7 @@ export function useChatVirtualList(options: UseChatVirtualListOptions) {
     const items: ChatRenderItem[] = [];
     let currentGroup: Extract<ChatRenderItem, { kind: "group" }> | null = null;
     let previousMessageBlock: ChatMessageBlock | null = null;
+    let previousMessageTimeMs = 0;
 
     const flushGroup = () => {
       if (!currentGroup) return;
@@ -104,20 +106,46 @@ export function useChatVirtualList(options: UseChatVirtualListOptions) {
       currentGroup = null;
     };
 
+    const blockTimeMs = (block: ChatMessageBlock): number => {
+      const raw = String(block.createdAt || "").trim();
+      if (!raw) return 0;
+      const timestamp = new Date(raw).getTime();
+      return Number.isFinite(timestamp) ? timestamp : 0;
+    };
+
+    const maybePushTimeDivider = (block: ChatMessageBlock, renderId: string) => {
+      const currentTimeMs = blockTimeMs(block);
+      if (previousMessageTimeMs > 0 && currentTimeMs > 0 && currentTimeMs - previousMessageTimeMs >= TIME_DIVIDER_GAP_MS) {
+        flushGroup();
+        previousMessageBlock = null;
+        items.push({
+          kind: "time_divider",
+          id: `time-divider-${renderId}-${String(block.createdAt || "").trim()}`,
+          createdAt: String(block.createdAt || "").trim(),
+        });
+      }
+      if (currentTimeMs > 0) {
+        previousMessageTimeMs = currentTimeMs;
+      }
+    };
+
     messageBlocks.value.forEach((block, blockIndex) => {
       const renderId = rid(block);
       if (block.dividerKind === "plan_started") {
         flushGroup();
         previousMessageBlock = null;
+        previousMessageTimeMs = 0;
         items.push({ kind: "plan_started", id: `plan-started-${renderId}`, renderId, block, blockIndex });
         return;
       }
       if (isCompactionBlock(block)) {
         flushGroup();
         previousMessageBlock = null;
+        previousMessageTimeMs = 0;
         items.push({ kind: "compaction", id: `compaction-${renderId}`, renderId, block, blockIndex });
         return;
       }
+      maybePushTimeDivider(block, renderId);
       const compactWithPrevious = isCompactUserContinuation(block, previousMessageBlock);
       if (isRightAlignedMessage(block)) {
         flushGroup();
