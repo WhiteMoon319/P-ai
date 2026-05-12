@@ -757,6 +757,7 @@ fn main() {
             load_app_bootstrap_snapshot,
             list_system_fonts,
             set_webview_zoom_percent,
+            set_chat_side_panels_window_expanded,
             save_config,
             load_agents,
             save_agents,

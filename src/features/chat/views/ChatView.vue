@@ -4,20 +4,40 @@
     class="h-full min-h-0"
     :class="showSideConversationList && !detachedChatWindow ? 'flex flex-row overflow-hidden' : 'flex flex-col relative'"
   >
-    <ChatConversationSidebar
+    <div
       v-if="showSideConversationList && !detachedChatWindow"
-      :items="conversationItems || unarchivedConversationItems"
-      :active-conversation-id="activeConversationId"
-      :user-alias="userAlias"
-      :user-avatar-url="userAvatarUrl"
-      :persona-name-map="personaNameMap"
-      :persona-avatar-url-map="personaAvatarUrlMap"
-      @select="handleConversationListSelect"
-      @rename="handleConversationRename"
-      @toggle-pin-conversation="handleConversationPinToggle"
-      @archive-conversation="handleConversationArchive"
-      @delete-conversation="handleConversationDelete"
-    />
+      class="flex h-full min-h-0 shrink-0"
+      :style="{ width: `${leftSidebarWidth}px` }"
+    >
+      <ChatConversationSidebar
+        :items="conversationItems || unarchivedConversationItems"
+        :active-conversation-id="activeConversationId"
+        :user-alias="userAlias"
+        :user-avatar-url="userAvatarUrl"
+        :persona-name-map="personaNameMap"
+        :persona-avatar-url-map="personaAvatarUrlMap"
+        @select="handleConversationListSelect"
+        @rename="handleConversationRename"
+        @toggle-pin-conversation="handleConversationPinToggle"
+        @archive-conversation="handleConversationArchive"
+        @delete-conversation="handleConversationDelete"
+      />
+    </div>
+
+    <div
+      v-if="showSideConversationList && !detachedChatWindow"
+      class="ecall-pane-splitter ecall-pane-splitter-left"
+      :class="{ 'ecall-pane-splitter-active': activePaneResizeSide === 'left' }"
+      role="separator"
+      tabindex="0"
+      aria-orientation="vertical"
+      :aria-valuemin="PANE_WIDTH_LIMITS.left.min"
+      :aria-valuemax="PANE_WIDTH_LIMITS.left.max"
+      :aria-valuenow="leftSidebarWidth"
+      @pointerdown="startPaneResize('left', $event)"
+      @keydown.left.prevent="adjustPaneWidthByKeyboard('left', -24)"
+      @keydown.right.prevent="adjustPaneWidthByKeyboard('left', 24)"
+    ></div>
 
     <div class="flex min-h-0 min-w-0 flex-1 overflow-hidden">
       <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
@@ -446,42 +466,62 @@
         />
       </div>
 
-      <ToolReviewSidebar
-        ref="toolReviewSidebarRef"
+      <div
         v-if="toolReviewPanelOpen"
-        class="w-104 max-w-[42vw] shrink-0 border-l border-base-300 bg-base-100 pt-2"
-        :batches="toolReviewBatches"
-        :current-batch-key="toolReviewCurrentBatchKey"
-        :detail-map="toolReviewDetailMap"
-        :detail-loading-call-id="toolReviewDetailLoadingCallId"
-        :reviewing-call-id="toolReviewReviewingCallId"
-        :batch-reviewing-key="toolReviewBatchReviewingKey"
-        :submitting-batch-key="toolReviewSubmittingBatchKey"
-        :error-text="toolReviewErrorText"
-        :report-error-text="toolReviewReportErrorText"
-        :reports="toolReviewReports"
-        :current-report-id="toolReviewCurrentReportId"
-        :markdown-is-dark="markdownIsDark"
-        :current-workspace-name="currentWorkspaceName"
-        :current-workspace-root-path="currentWorkspaceRootPath"
-        :workspaces="workspaces"
-        :current-department-id="currentDepartmentId"
-        :department-options="toolReviewDepartmentOptions"
-        :delegate-statuses="delegateStatuses"
-        :delegate-loading="delegateStatusesLoading"
-        :delegate-error-text="delegateStatusesErrorText"
-        @select-batch="setToolReviewCurrentBatchKey"
-        @load-item-detail="loadToolReviewItemDetail"
-        @review-item="runToolReviewForCall"
-        @review-batch="runToolReviewForBatch"
-        @pick-commit-review="handlePickCommitReview"
-        @review-code="handleToolReviewCode"
-        @retry-report="handleRetryToolReviewReport"
-        @delete-report="handleDeleteToolReviewReport"
-        @copy-report="copyToolReviewReport"
-        @attach-report="$emit('attachToolReviewReport', $event)"
-        @open-delegate-detail="openDelegateArchiveDetail"
-      />
+        class="ecall-pane-splitter ecall-pane-splitter-right"
+        :class="{ 'ecall-pane-splitter-active': activePaneResizeSide === 'right' }"
+        role="separator"
+        tabindex="0"
+        aria-orientation="vertical"
+        :aria-valuemin="PANE_WIDTH_LIMITS.right.min"
+        :aria-valuemax="PANE_WIDTH_LIMITS.right.max"
+        :aria-valuenow="rightSidebarWidth"
+        @pointerdown="startPaneResize('right', $event)"
+        @keydown.left.prevent="adjustPaneWidthByKeyboard('right', 24)"
+        @keydown.right.prevent="adjustPaneWidthByKeyboard('right', -24)"
+      ></div>
+
+      <div
+        v-if="toolReviewPanelOpen"
+        class="flex h-full min-h-0 shrink-0 border-l border-base-300 bg-base-100 pt-2"
+        :style="{ width: `${rightSidebarWidth}px` }"
+      >
+        <ToolReviewSidebar
+          ref="toolReviewSidebarRef"
+          class="w-full"
+          :batches="toolReviewBatches"
+          :current-batch-key="toolReviewCurrentBatchKey"
+          :detail-map="toolReviewDetailMap"
+          :detail-loading-call-id="toolReviewDetailLoadingCallId"
+          :reviewing-call-id="toolReviewReviewingCallId"
+          :batch-reviewing-key="toolReviewBatchReviewingKey"
+          :submitting-batch-key="toolReviewSubmittingBatchKey"
+          :error-text="toolReviewErrorText"
+          :report-error-text="toolReviewReportErrorText"
+          :reports="toolReviewReports"
+          :current-report-id="toolReviewCurrentReportId"
+          :markdown-is-dark="markdownIsDark"
+          :current-workspace-name="currentWorkspaceName"
+          :current-workspace-root-path="currentWorkspaceRootPath"
+          :workspaces="workspaces"
+          :current-department-id="currentDepartmentId"
+          :department-options="toolReviewDepartmentOptions"
+          :delegate-statuses="delegateStatuses"
+          :delegate-loading="delegateStatusesLoading"
+          :delegate-error-text="delegateStatusesErrorText"
+          @select-batch="setToolReviewCurrentBatchKey"
+          @load-item-detail="loadToolReviewItemDetail"
+          @review-item="runToolReviewForCall"
+          @review-batch="runToolReviewForBatch"
+          @pick-commit-review="handlePickCommitReview"
+          @review-code="handleToolReviewCode"
+          @retry-report="handleRetryToolReviewReport"
+          @delete-report="handleDeleteToolReviewReport"
+          @copy-report="copyToolReviewReport"
+          @attach-report="$emit('attachToolReviewReport', $event)"
+          @open-delegate-detail="openDelegateArchiveDetail"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -595,6 +635,7 @@ const props = defineProps<{
   currentTheme: string;
   unarchivedConversationItems: ChatConversationOverviewItem[];
   conversationItems?: ChatConversationOverviewItem[];
+  sideConversationListVisible: boolean;
   createConversationDepartmentOptions: Array<{ id: string; name: string; ownerAgentId?: string; ownerName: string; providerName?: string; modelName?: string }>;
   delegateDepartmentIds: string[];
   defaultCreateConversationDepartmentId: string;
@@ -916,6 +957,9 @@ const emit = defineEmits<{
   (e: "addMention", value: ChatMentionTarget): void;
   (e: "removeMention", value: string | { agentId: string; departmentId?: string }): void;
   (e: "sideConversationListVisibleChange", value: boolean): void;
+  (e: "toolReviewPanelOpenChange", value: boolean): void;
+  (e: "sidePanelWidthsChange", value: { leftWidth: number; rightWidth: number }): void;
+  (e: "sidePanelWidthsCommit", value: { leftWidth: number; rightWidth: number }): void;
   (e: "removeClipboardImage", index: number): void;
   (e: "removeQueuedAttachmentNotice", index: number): void;
   (e: "startRecording"): void;
@@ -957,6 +1001,122 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const toolReviewSidebarRef = ref<ComponentPublicInstance<{ setCommitOptions: (items: ToolReviewCommitOption[], loading?: boolean, total?: number, page?: number, pageSize?: number) => void }> | null>(null);
 const chatScrollbarRef = ref<InstanceType<typeof FloatingScrollbar> | null>(null);
+
+type PaneResizeSide = "left" | "right";
+
+const PANE_WIDTH_LIMITS = {
+  left: { min: 240, max: 560, default: 320 },
+  right: { min: 280, max: 680, default: 320 },
+} as const;
+const PANE_CENTER_MIN_WIDTH = 360;
+const PANE_WIDTH_STORAGE_KEYS = {
+  left: "easy-call.chat.left-sidebar-width",
+  right: "easy-call.chat.right-sidebar-width",
+} as const;
+
+const leftSidebarWidth = ref(loadStoredPaneWidth("left"));
+const rightSidebarWidth = ref(loadStoredPaneWidth("right"));
+const activePaneResizeSide = ref<PaneResizeSide | null>(null);
+let paneResizeStartX = 0;
+let paneResizeStartWidth = 0;
+let paneResizePreviousBodyCursor = "";
+let paneResizePreviousBodyUserSelect = "";
+
+function loadStoredPaneWidth(side: PaneResizeSide): number {
+  if (typeof window === "undefined") return PANE_WIDTH_LIMITS[side].default;
+  const rawValue = window.localStorage.getItem(PANE_WIDTH_STORAGE_KEYS[side]);
+  const parsedValue = Number(rawValue);
+  if (!Number.isFinite(parsedValue)) return PANE_WIDTH_LIMITS[side].default;
+  const limits = PANE_WIDTH_LIMITS[side];
+  return Math.round(Math.min(limits.max, Math.max(limits.min, parsedValue)));
+}
+
+function storePaneWidth(side: PaneResizeSide, width: number) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(PANE_WIDTH_STORAGE_KEYS[side], String(Math.round(width)));
+}
+
+function clampPaneWidth(side: PaneResizeSide, width: number): number {
+  const limits = PANE_WIDTH_LIMITS[side];
+  const layoutWidth = chatLayoutRoot.value?.getBoundingClientRect().width || 0;
+  const otherPaneWidth =
+    side === "left"
+      ? (toolReviewPanelOpen.value ? rightSidebarWidth.value : 0)
+      : (showSideConversationList.value && !props.detachedChatWindow ? leftSidebarWidth.value : 0);
+  const layoutMax = layoutWidth > 0 ? layoutWidth - otherPaneWidth - PANE_CENTER_MIN_WIDTH : limits.max;
+  const effectiveMax = Math.max(limits.min, Math.min(limits.max, layoutMax));
+  return Math.round(Math.min(effectiveMax, Math.max(limits.min, width)));
+}
+
+function setPaneWidth(side: PaneResizeSide, width: number, persist = false) {
+  const nextWidth = clampPaneWidth(side, width);
+  if (side === "left") {
+    leftSidebarWidth.value = nextWidth;
+  } else {
+    rightSidebarWidth.value = nextWidth;
+  }
+  if (persist) {
+    storePaneWidth(side, nextWidth);
+  }
+  void nextTick(() => syncViewportMetrics());
+}
+
+function startPaneResize(side: PaneResizeSide, event: PointerEvent) {
+  if (event.button !== 0) return;
+  event.preventDefault();
+  activePaneResizeSide.value = side;
+  paneResizeStartX = event.clientX;
+  paneResizeStartWidth = side === "left" ? leftSidebarWidth.value : rightSidebarWidth.value;
+  paneResizePreviousBodyCursor = document.body.style.cursor;
+  paneResizePreviousBodyUserSelect = document.body.style.userSelect;
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+  window.addEventListener("pointermove", handlePaneResizeMove);
+  window.addEventListener("pointerup", stopPaneResize, { once: true });
+  window.addEventListener("pointercancel", stopPaneResize, { once: true });
+}
+
+function handlePaneResizeMove(event: PointerEvent) {
+  const side = activePaneResizeSide.value;
+  if (!side) return;
+  const pointerDelta = event.clientX - paneResizeStartX;
+  const nextWidth = side === "left" ? paneResizeStartWidth + pointerDelta : paneResizeStartWidth - pointerDelta;
+  setPaneWidth(side, nextWidth);
+}
+
+function stopPaneResize() {
+  const side = activePaneResizeSide.value;
+  window.removeEventListener("pointermove", handlePaneResizeMove);
+  window.removeEventListener("pointerup", stopPaneResize);
+  window.removeEventListener("pointercancel", stopPaneResize);
+  document.body.style.cursor = paneResizePreviousBodyCursor;
+  document.body.style.userSelect = paneResizePreviousBodyUserSelect;
+  activePaneResizeSide.value = null;
+  if (side) {
+    storePaneWidth(side, side === "left" ? leftSidebarWidth.value : rightSidebarWidth.value);
+    emit("sidePanelWidthsCommit", {
+      leftWidth: leftSidebarWidth.value,
+      rightWidth: rightSidebarWidth.value,
+    });
+  }
+}
+
+function adjustPaneWidthByKeyboard(side: PaneResizeSide, delta: number) {
+  const currentWidth = side === "left" ? leftSidebarWidth.value : rightSidebarWidth.value;
+  setPaneWidth(side, currentWidth + delta, true);
+  emit("sidePanelWidthsCommit", {
+    leftWidth: leftSidebarWidth.value,
+    rightWidth: rightSidebarWidth.value,
+  });
+}
+
+watch(
+  [leftSidebarWidth, rightSidebarWidth],
+  ([leftWidth, rightWidth]) => {
+    emit("sidePanelWidthsChange", { leftWidth, rightWidth });
+  },
+  { immediate: true },
+);
 
 function handleDetachConversationRequest() {
   console.info("[独立聊天窗口][前端链路] ChatView 收到 detachConversation，继续派发到窗口容器", {
@@ -1054,7 +1214,6 @@ const {
   latestOwnElasticMinHeight,
   showJumpToBottom,
   jumpToBottomStyle,
-  showSideConversationList,
   onScroll,
 } = useChatScrollLayout({
   activeConversationId: toRef(props, "activeConversationId"),
@@ -1065,6 +1224,7 @@ const {
   onReachedBottom: () => emit("reachedBottom"),
   focusComposerInput: (options) => composerPanelRef.value?.focusInput(options),
 });
+const showSideConversationList = computed(() => !!props.sideConversationListVisible);
 
 function refreshObservedVirtualItemElements() {
   const validIds = new Set(virtualRenderItems.value.map((item) => item.id));
@@ -1544,14 +1704,7 @@ function maybeRequestOlderHistory() {
   emit("loadOlderHistory");
 }
 
-watch(
-  showSideConversationList,
-  (value) => {
-    emit("sideConversationListVisibleChange", value);
-    syncViewportMetrics();
-  },
-  { immediate: true },
-);
+watch(showSideConversationList, () => syncViewportMetrics(), { immediate: true });
 
 function handleConversationPinToggle(conversationId: string) {
   emit("togglePinConversation", String(conversationId || "").trim());
@@ -1741,6 +1894,14 @@ const {
   t,
   onRefreshMessage: (payload) => emit("refreshToolReviewMessage", payload),
 });
+watch(
+  toolReviewPanelOpen,
+  (value) => {
+    emit("toolReviewPanelOpenChange", value);
+    syncViewportMetrics();
+  },
+  { immediate: true },
+);
 const {
   delegateStatuses,
   delegateStatusesLoading,
@@ -2021,6 +2182,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  stopPaneResize();
   virtualItemResizeObserver?.disconnect();
   virtualItemResizeObserver = null;
   if (pendingMeasureFrame) {
@@ -2061,6 +2223,42 @@ onBeforeUnmount(() => {
 
 .conversation-tray-scroll-hidden::-webkit-scrollbar {
   display: none;
+}
+
+.ecall-pane-splitter {
+  position: relative;
+  z-index: 20;
+  width: 6px;
+  flex: 0 0 6px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.ecall-pane-splitter::after {
+  content: "";
+  position: absolute;
+  inset: 0 2px;
+  border-radius: 999px;
+  background: transparent;
+  transition: background-color 120ms ease, inset 120ms ease;
+}
+
+.ecall-pane-splitter:hover::after,
+.ecall-pane-splitter:focus-visible::after,
+.ecall-pane-splitter-active::after {
+  inset: 8px 1px;
+  background: hsl(var(--bc) / 0.18);
+}
+
+.ecall-pane-splitter-left {
+  margin-left: -3px;
+  margin-right: -3px;
+}
+
+.ecall-pane-splitter-right {
+  margin-left: -3px;
+  margin-right: -3px;
 }
 
 .ecall-chat-scroll-container {

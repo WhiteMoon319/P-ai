@@ -424,7 +424,6 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
   watch(
     () => String(options.activeConversationId.value || "").trim(),
     (conversationId) => {
-      toolReviewPanelOpen.value = false;
       toolReviewBatches.value = [];
       toolReviewDetailMap.value = {};
       toolReviewDetailLoadingCallId.value = "";
@@ -438,6 +437,8 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
       toolReviewReportErrorText.value = "";
       if (conversationId) {
         void refreshToolReviewBatches();
+      } else {
+        toolReviewPanelOpen.value = false;
       }
     },
     { immediate: true },

@@ -180,11 +180,15 @@
         :attached-ide-context-references="[]"
         :current-theme="currentTheme"
         :detached-chat-window="detachedChatWindow"
+        :side-conversation-list-visible="sideConversationListVisible"
         @update:chat-input="updateChatInput"
         @update:selected-instruction-prompts="updateSelectedInstructionPrompts"
         @add-mention="addChatMention"
         @remove-mention="removeChatMention"
         @side-conversation-list-visible-change="setSideConversationListVisible"
+        @tool-review-panel-open-change="setToolReviewPanelOpen"
+        @side-panel-widths-change="setChatSidePanelWidths"
+        @side-panel-widths-commit="commitChatSidePanelWidths"
         @remove-clipboard-image="removeClipboardImage"
         @remove-queued-attachment-notice="removeQueuedAttachmentNotice"
         @pick-attachments="pickAttachments"
@@ -403,6 +407,7 @@ const props = defineProps<{
   t: (key: string, params?: Record<string, unknown>) => string;
   viewMode: "chat" | "archives" | "config";
   detachedChatWindow?: boolean;
+  sideConversationListVisible: boolean;
   config: AppConfig;
   configTab: "welcome" | "hotkey" | "api" | "tools" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "remoteIm" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
   localeOptions: Array<{ value: "zh-CN" | "en-US" | "zh-TW"; label: string }>;
@@ -625,6 +630,8 @@ const props = defineProps<{
   updateSelectedChatModelId: (value: string) => void;
   updatePlanModeEnabled: (value: boolean) => void;
   setSideConversationListVisible: (value: boolean) => void;
+  setToolReviewPanelOpen: (value: boolean) => void;
+  setChatSidePanelWidths: (value: { leftWidth: number; rightWidth: number }, options?: { syncWindow?: boolean }) => void;
   removeClipboardImage: (index: number) => void;
   removeQueuedAttachmentNotice: (index: number) => void;
   pickAttachments: () => void;
@@ -687,6 +694,10 @@ const promptPreviewDialogVNodeRef: VNodeRef = (el) => {
 };
 
 const chatViewRef = ref<{ exitMessageSelectionMode: () => void } | null>(null);
+
+function commitChatSidePanelWidths(value: { leftWidth: number; rightWidth: number }) {
+  props.setChatSidePanelWidths(value, { syncWindow: true });
+}
 
 function handleDetachConversation() {
   console.info("[独立聊天窗口][前端链路] AppWindowContent 收到 detachConversation，调用顶层处理函数", {

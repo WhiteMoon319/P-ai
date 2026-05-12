@@ -3,7 +3,6 @@
     <ChatConversationListHeader
       v-model:search-query="conversationSearchQuery"
       v-model:active-tab="activeConversationTab"
-      v-model:compact-list="compactConversationList"
       :search-placeholder="t('chat.conversationSearchPlaceholder')"
       :local-label="t('chat.localConversationTab')"
       :contact-label="t('chat.contactConversationTab')"
@@ -145,8 +144,8 @@
                 </div>
 
                 <div class="mt-1 flex items-center justify-between gap-2 text-xs">
-                  <span class="min-w-0 truncate" :class="compactConversationList ? 'opacity-60' : 'font-medium'">
-                    {{ compactConversationList ? latestPreviewLine(item) : workspaceDepartmentLabel(item) }}
+                  <span class="min-w-0 truncate opacity-60">
+                    {{ latestPreviewLine(item) }}
                   </span>
                   <div class="flex shrink-0 items-center gap-2">
                     <span v-if="item.runtimeState" class="text-[11px] text-base-content/60">
@@ -162,21 +161,6 @@
                 </div>
               </div>
             </div>
-              <div v-if="!compactConversationList" class="space-y-1 px-2 pb-2">
-              <div
-                v-for="preview in normalizedPreviewMessages(item).slice(0, 2)"
-                :key="preview.messageId"
-                class="flex items-start gap-1.5 text-xs"
-              >
-                <span class="shrink-0 font-medium">
-                  {{ speakerLabel(preview) }}:
-                </span>
-                <span class="truncate opacity-80">{{ previewText(preview) }}</span>
-              </div>
-              <div v-if="normalizedPreviewMessages(item).length === 0" class="px-1 text-xs opacity-60">
-                {{ t("chat.conversationNoPreview") }}
-              </div>
-              </div>
             </div>
 
           </div>
@@ -203,7 +187,6 @@ import ChatConversationFloatingScroll from "./ChatConversationFloatingScroll.vue
 import ChatConversationListHeader from "./ChatConversationListHeader.vue";
 
 const CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY = "easy_call.chat_conversation_list_tab.v1";
-const CHAT_CONVERSATION_LIST_COMPACT_STORAGE_KEY = "easy_call.chat_conversation_list_compact.v1";
 
 const props = defineProps<{
   items: ChatConversationOverviewItem[];
@@ -228,7 +211,6 @@ const editingConversationId = ref("");
 const editingTitleDraft = ref("");
 const conversationSearchQuery = ref("");
 const activeConversationTab = ref<"local" | "contact">(readStoredConversationTab());
-const compactConversationList = ref(readStoredCompactConversationList());
 
 function readStoredConversationTab(): "local" | "contact" {
   if (typeof window === "undefined") return "local";
@@ -236,15 +218,9 @@ function readStoredConversationTab(): "local" | "contact" {
   return stored === "contact" ? "contact" : "local";
 }
 
-function readStoredCompactConversationList(): boolean {
-  if (typeof window === "undefined") return false;
-  return String(window.localStorage.getItem(CHAT_CONVERSATION_LIST_COMPACT_STORAGE_KEY) || "").trim() === "1";
-}
-
 watchEffect(() => {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY, activeConversationTab.value);
-  window.localStorage.setItem(CHAT_CONVERSATION_LIST_COMPACT_STORAGE_KEY, compactConversationList.value ? "1" : "0");
 });
 
 const conversationPreviewCache = computed(() => new Map(
@@ -345,17 +321,6 @@ function conversationItemTitle(item: ChatConversationOverviewItem): string {
     return t("chat.organizingContextDisabled");
   }
   return item.workspaceLabel || t("chat.defaultWorkspace");
-}
-
-function workspaceDepartmentLabel(item: ChatConversationOverviewItem): string {
-  if (item.kind === "remote_im_contact") {
-    const departmentName = String(item.departmentName || "").trim();
-    return departmentName || t("chat.contactConversationTab");
-  }
-  const workspaceLabel = String(item.workspaceLabel || "").trim() || t("chat.defaultWorkspace");
-  const departmentName = String(item.departmentName || "").trim();
-  if (!departmentName) return workspaceLabel;
-  return `${workspaceLabel}（${departmentName}）`;
 }
 
 function handleConversationCardClick(item: ChatConversationOverviewItem) {

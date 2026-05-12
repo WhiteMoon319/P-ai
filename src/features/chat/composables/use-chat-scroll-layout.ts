@@ -17,7 +17,6 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
   const chatLayoutRoot = ref<HTMLElement | null>(null);
   const latestOwnElasticMinHeight = ref(0);
   const jumpToBottomOffset = ref(96);
-  const showSideConversationList = ref(false);
   const lastBottomState = ref(false);
   const lastScrollTop = ref(0);
   const userScrollingDown = ref(false);
@@ -26,21 +25,10 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
   let pendingComposerResizeFrame = 0;
   let pendingChatLayoutResizeFrame = 0;
 
-  const CHAT_SIDE_LIST_RATIO_THRESHOLD = 1.5;
-
   const showJumpToBottom = computed(() => !lastBottomState.value && userScrollingDown.value);
   const jumpToBottomStyle = computed(() => ({
     bottom: `${jumpToBottomOffset.value}px`,
   }));
-
-  function syncConversationLayoutMode() {
-    const el = chatLayoutRoot.value;
-    if (!el) return;
-    const width = el.clientWidth;
-    const height = el.clientHeight;
-    if (width <= 0 || height <= 0) return;
-    showSideConversationList.value = width > height * CHAT_SIDE_LIST_RATIO_THRESHOLD;
-  }
 
   function updateJumpToBottomOffset() {
     const composerHeight = composerContainer.value?.offsetHeight ?? 0;
@@ -85,7 +73,6 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
 
   onMounted(() => {
     nextTick(() => {
-      syncConversationLayoutMode();
       updateJumpToBottomOffset();
       updateLatestOwnElasticMinHeight();
       if (composerContainer.value && typeof ResizeObserver !== "undefined") {
@@ -107,7 +94,6 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
       if (chatLayoutRoot.value && typeof ResizeObserver !== "undefined") {
         chatLayoutResizeObserver = new ResizeObserver(() => {
           if (typeof window === "undefined") {
-            syncConversationLayoutMode();
             updateJumpToBottomOffset();
             updateLatestOwnElasticMinHeight();
             return;
@@ -115,7 +101,6 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
           if (pendingChatLayoutResizeFrame) return;
           pendingChatLayoutResizeFrame = window.requestAnimationFrame(() => {
             pendingChatLayoutResizeFrame = 0;
-            syncConversationLayoutMode();
             updateJumpToBottomOffset();
             updateLatestOwnElasticMinHeight();
           });
@@ -176,13 +161,6 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
     { immediate: true },
   );
 
-  watch(showSideConversationList, () => {
-    nextTick(() => {
-      updateJumpToBottomOffset();
-      updateLatestOwnElasticMinHeight();
-    });
-  });
-
   watch(
     options.messageBlockCount,
     () => {
@@ -206,7 +184,6 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
     latestOwnElasticMinHeight,
     showJumpToBottom,
     jumpToBottomStyle,
-    showSideConversationList,
     onScroll,
   };
 }

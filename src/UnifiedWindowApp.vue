@@ -39,6 +39,7 @@
       @update:config-search-query="updateConfigSearchQuery"
       @select-config-search-result="handleSelectConfigSearchResult"
       @update-to-latest="triggerUpdateToLatest"
+      @toggle-side-conversation-list="toggleSideConversationList"
       @switch-conversation="switchChatConversation"
       @rename-conversation="renameCurrentConversation"
       @toggle-pin-conversation="toggleConversationPin"
@@ -54,6 +55,7 @@
       :t="tr"
       :view-mode="viewMode"
       :detached-chat-window="detachedChatWindow"
+      :side-conversation-list-visible="sideConversationListVisible"
       :config="config"
       :config-tab="configTab"
       :locale-options="localeOptions"
@@ -263,6 +265,8 @@
       :update-selected-chat-model-id="updateAssistantDepartmentApiConfigId"
       :update-plan-mode-enabled="updatePlanModeEnabled"
       :set-side-conversation-list-visible="handleSideConversationListVisibleChange"
+      :set-tool-review-panel-open="handleToolReviewPanelOpenChange"
+      :set-chat-side-panel-widths="handleChatSidePanelWidthsChange"
       :remove-clipboard-image="removeClipboardImage"
       :remove-queued-attachment-notice="removeQueuedAttachmentNotice"
       :pick-attachments="pickChatAttachments"
@@ -666,6 +670,8 @@ const selectedChatMentions = ref<ChatMentionTarget[]>([]);
 const chatInput = ref("");
 const currentChatConversationId = ref("");
 const sideConversationListVisible = ref(false);
+const toolReviewPanelOpenVisible = ref(false);
+const chatSidePanelWidths = ref(loadStoredChatSidePanelWidths());
 const conversationForegroundSyncing = ref(false);
 const backgroundConversationBadgeMap = ref<Record<string, BackgroundConversationBadgeState>>({});
 const conversationMessageCache = ref<Record<string, ChatMessage[]>>({});
@@ -748,6 +754,56 @@ async function updatePlanModeEnabled(value: boolean) {
 
 function handleSideConversationListVisibleChange(value: boolean) {
   sideConversationListVisible.value = value;
+  void syncChatSidePanelsWindowExpansion();
+}
+
+function handleToolReviewPanelOpenChange(value: boolean) {
+  toolReviewPanelOpenVisible.value = value;
+  void syncChatSidePanelsWindowExpansion();
+}
+
+function loadStoredChatSidePanelWidths(): { leftWidth: number; rightWidth: number } {
+  if (typeof window === "undefined") {
+    return { leftWidth: 320, rightWidth: 320 };
+  }
+  const leftWidth = Number(window.localStorage.getItem("easy-call.chat.left-sidebar-width"));
+  const rightWidth = Number(window.localStorage.getItem("easy-call.chat.right-sidebar-width"));
+  return {
+    leftWidth: Number.isFinite(leftWidth) ? leftWidth : 320,
+    rightWidth: Number.isFinite(rightWidth) ? rightWidth : 320,
+  };
+}
+
+function handleChatSidePanelWidthsChange(value: { leftWidth: number; rightWidth: number }, options?: { syncWindow?: boolean }) {
+  const leftWidth = Number(value.leftWidth);
+  const rightWidth = Number(value.rightWidth);
+  chatSidePanelWidths.value = {
+    leftWidth: Number.isFinite(leftWidth) ? leftWidth : 320,
+    rightWidth: Number.isFinite(rightWidth) ? rightWidth : 320,
+  };
+  if (options?.syncWindow) {
+    void syncChatSidePanelsWindowExpansion();
+  }
+}
+
+async function syncChatSidePanelsWindowExpansion(leftVisible = sideConversationListVisible.value, rightVisible = toolReviewPanelOpenVisible.value) {
+  if (viewMode.value !== "chat" || detachedChatWindow.value) return;
+  await invokeTauri<boolean>("set_chat_side_panels_window_expanded", {
+    leftExpanded: leftVisible,
+    rightExpanded: rightVisible,
+    leftWidth: chatSidePanelWidths.value.leftWidth,
+    rightWidth: chatSidePanelWidths.value.rightWidth,
+  });
+}
+
+async function toggleSideConversationList() {
+  const nextVisible = !sideConversationListVisible.value;
+  try {
+    await syncChatSidePanelsWindowExpansion(nextVisible, toolReviewPanelOpenVisible.value);
+  } catch (error) {
+    console.warn("[会话栏] 调整聊天窗口尺寸失败，继续切换侧栏", error);
+  }
+  sideConversationListVisible.value = nextVisible;
 }
 
 const allMessages = shallowRef<ChatMessage[]>([]);

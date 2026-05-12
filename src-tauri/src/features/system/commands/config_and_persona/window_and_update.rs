@@ -33,6 +33,24 @@ struct WebviewZoomUpdatedPayload {
     percent: u32,
 }
 
+#[derive(Debug, Clone)]
+struct ChatSidePanelWindowSnapshot {
+    x: i32,
+    y: i32,
+    width: f64,
+    height: f64,
+    left_expanded: bool,
+    right_expanded: bool,
+}
+
+static CHAT_SIDE_PANEL_WINDOW_SNAPSHOT: OnceLock<
+    Mutex<Option<ChatSidePanelWindowSnapshot>>,
+> = OnceLock::new();
+
+fn chat_side_panel_window_snapshot() -> &'static Mutex<Option<ChatSidePanelWindowSnapshot>> {
+    CHAT_SIDE_PANEL_WINDOW_SNAPSHOT.get_or_init(|| Mutex::new(None))
+}
+
 fn emit_webview_zoom_percent_updated(app: &AppHandle, percent: u32) {
     let _ = app.emit(
         "easy-call:webview-zoom-updated",
@@ -60,6 +78,142 @@ fn set_webview_zoom_percent(percent: u32, app: AppHandle) -> Result<u32, String>
     let normalized = apply_webview_zoom_percent(&app, percent)?;
     emit_webview_zoom_percent_updated(&app, normalized);
     Ok(normalized)
+}
+
+fn apply_chat_side_panel_window_expansion(
+    window: tauri::Window,
+    left_expanded: bool,
+    right_expanded: bool,
+    left_width: f64,
+    right_width: f64,
+) -> Result<bool, String> {
+    let label = window.label().trim().to_string();
+    if label != "chat" {
+        return Ok(false);
+    }
+    if window.is_maximized().unwrap_or(false) || window.is_fullscreen().unwrap_or(false) {
+        if let Ok(mut slot) = chat_side_panel_window_snapshot().lock() {
+            *slot = None;
+        }
+        return Ok(false);
+    }
+
+    const DEFAULT_SIDE_WIDTH_LOGICAL: f64 = 320.0;
+    const MIN_SIDE_WIDTH_LOGICAL: f64 = 160.0;
+    const MAX_SIDE_WIDTH_LOGICAL: f64 = 800.0;
+    const MIN_COLLAPSED_WIDTH_LOGICAL: f64 = 520.0;
+    let normalized_left_width = if left_width.is_finite() {
+        left_width.clamp(MIN_SIDE_WIDTH_LOGICAL, MAX_SIDE_WIDTH_LOGICAL)
+    } else {
+        DEFAULT_SIDE_WIDTH_LOGICAL
+    };
+    let normalized_right_width = if right_width.is_finite() {
+        right_width.clamp(MIN_SIDE_WIDTH_LOGICAL, MAX_SIDE_WIDTH_LOGICAL)
+    } else {
+        DEFAULT_SIDE_WIDTH_LOGICAL
+    };
+
+    let mut snapshot_slot = chat_side_panel_window_snapshot()
+        .lock()
+        .map_err(|_| "锁定侧栏窗口快照失败".to_string())?;
+    if !left_expanded && !right_expanded {
+        let Some(snapshot) = snapshot_slot.take() else {
+            return Ok(false);
+        };
+        window
+            .set_size(tauri::Size::Logical(tauri::LogicalSize::new(
+                snapshot.width.max(MIN_COLLAPSED_WIDTH_LOGICAL),
+                snapshot.height,
+            )))
+            .map_err(|err| format!("恢复侧栏窗口尺寸失败：{err}"))?;
+        window
+            .set_position(Position::Physical(PhysicalPosition::new(snapshot.x, snapshot.y)))
+            .map_err(|err| format!("恢复侧栏窗口位置失败：{err}"))?;
+        return Ok(true);
+    }
+
+    let scale_factor = window
+        .scale_factor()
+        .map_err(|err| format!("读取窗口缩放比例失败：{err}"))?
+        .max(0.1);
+    let position = window
+        .outer_position()
+        .map_err(|err| format!("读取窗口位置失败：{err}"))?;
+    let size = window
+        .outer_size()
+        .map_err(|err| format!("读取窗口尺寸失败：{err}"))?;
+    let size_logical = size.to_logical::<f64>(scale_factor);
+    if snapshot_slot.is_none() {
+        *snapshot_slot = Some(ChatSidePanelWindowSnapshot {
+            x: position.x,
+            y: position.y,
+            width: size_logical.width,
+            height: size_logical.height,
+            left_expanded,
+            right_expanded,
+        });
+    }
+    let snapshot = snapshot_slot
+        .as_mut()
+        .ok_or_else(|| "侧栏窗口快照缺失".to_string())?;
+    snapshot.left_expanded = left_expanded;
+    snapshot.right_expanded = right_expanded;
+
+    let expanded_width = if left_expanded {
+        normalized_left_width
+    } else {
+        0.0
+    } + if right_expanded {
+        normalized_right_width
+    } else {
+        0.0
+    };
+    let desired_width_without_clamp = snapshot.width + expanded_width;
+    let monitor = window.current_monitor().ok().flatten();
+    let monitor_logical_width = monitor
+        .as_ref()
+        .map(|item| item.size().to_logical::<f64>(item.scale_factor().max(0.1)).width)
+        .filter(|value| value.is_finite() && *value > 1.0);
+    let desired_width = monitor_logical_width
+        .map(|max_width| desired_width_without_clamp.min(max_width))
+        .unwrap_or(desired_width_without_clamp);
+    let left_delta_physical = if left_expanded {
+        (normalized_left_width * scale_factor).round() as i32
+    } else {
+        0
+    };
+    let mut desired_x = snapshot.x.saturating_sub(left_delta_physical);
+    if let Some(monitor) = monitor.as_ref() {
+        desired_x = desired_x.max(monitor.position().x);
+    }
+
+    window
+        .set_position(Position::Physical(PhysicalPosition::new(desired_x, snapshot.y)))
+        .map_err(|err| format!("调整侧栏窗口位置失败：{err}"))?;
+    window
+        .set_size(tauri::Size::Logical(tauri::LogicalSize::new(
+            desired_width,
+            snapshot.height,
+        )))
+        .map_err(|err| format!("调整侧栏窗口尺寸失败：{err}"))?;
+    Ok(true)
+}
+
+#[tauri::command]
+fn set_chat_side_panels_window_expanded(
+    left_expanded: bool,
+    right_expanded: bool,
+    left_width: Option<f64>,
+    right_width: Option<f64>,
+    window: tauri::Window,
+) -> Result<bool, String> {
+    apply_chat_side_panel_window_expansion(
+        window,
+        left_expanded,
+        right_expanded,
+        left_width.unwrap_or(320.0),
+        right_width.unwrap_or(320.0),
+    )
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -8,11 +8,10 @@
       data-tauri-drag-region
       class="absolute inset-0 cursor-move"
       aria-hidden="true"
-      @mousedown="emit('startDrag')"
     ></div>
 
     <div v-if="viewMode === 'chat'" class="relative z-10 flex min-w-0 flex-none items-center gap-1" @mousedown.stop>
-      <div v-if="!detachedChatWindow" ref="conversationListPopoverRef" class="relative">
+      <div v-if="!detachedChatWindow" class="relative">
         <div class="indicator">
           <span
             v-if="conversationUnreadTotal > 0"
@@ -21,27 +20,12 @@
           ></span>
           <button
             class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
+            :class="sideConversationListVisible ? 'btn-active' : ''"
             :title="t('chat.conversationList')"
-            :disabled="sideConversationListVisible"
-            @click.stop="toggleConversationList"
+            @click.stop="emit('toggle-side-conversation-list')"
           >
             <TextAlignJustify class="h-3.5 w-3.5" />
           </button>
-        </div>
-        <div v-if="conversationListOpen" class="absolute left-0 top-full z-50 mt-2">
-          <ChatConversationListCard
-            :items="conversationItems"
-            :active-conversation-id="activeConversationId"
-            :user-alias="userAlias"
-            :persona-name-map="personaNameMap"
-            :persona-avatar-url-map="personaAvatarUrlMap"
-            :user-avatar-url="userAvatarUrl"
-            @select-conversation="handleConversationListSelect"
-            @rename-conversation="handleConversationRename"
-            @toggle-pin-conversation="handleConversationPinToggle"
-            @archive-conversation="handleConversationArchive"
-            @delete-conversation="handleConversationDelete"
-          />
         </div>
       </div>
 
@@ -101,7 +85,6 @@
       data-tauri-drag-region
       class="min-w-0 flex-1 self-stretch cursor-move"
       aria-hidden="true"
-      @mousedown="emit('startDrag')"
     ></div>
 
     <div
@@ -344,7 +327,6 @@ import { invokeTauri } from "../../../services/tauri-api";
 import MarkdownRender, { enableKatex, enableMermaid, getMarkdown, parseMarkdownToStructure } from "markstream-vue";
 import { Download, FoldVertical, History, Minus, ScrollText, Search, Settings, Square, SquarePen, TextAlignJustify, X } from "lucide-vue-next";
 import type { ChatConversationOverviewItem } from "../../../types/app";
-import ChatConversationListCard from "../../chat/components/ChatConversationListCard.vue";
 import { resolveConversationDisplayTitle } from "../../chat/utils/conversation-title";
 import { registerChatMarkstreamComponents } from "../../chat/markdown/register-chat-markstream";
 import type { ConfigSearchResult, ConfigSearchTab } from "../../config/search/config-search";
@@ -439,6 +421,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "open-config"): void;
   (e: "open-archives"): void;
+  (e: "toggle-side-conversation-list"): void;
   (e: "minimize-window"): void;
   (e: "toggle-maximize-window"): void;
   (e: "switch-conversation", payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }): void;
@@ -456,7 +439,6 @@ const emit = defineEmits<{
 }>();
 
 const { t, locale } = useI18n();
-const conversationListOpen = ref(false);
 
 const circumference = RING_CIRCUMFERENCE;
 
@@ -513,7 +495,6 @@ watch(
   (conversationId) => markConversationRead(conversationId),
   { immediate: true },
 );
-const conversationListPopoverRef = ref<HTMLElement | null>(null);
 const configSearchPopoverRef = ref<HTMLElement | null>(null);
 const configSearchInputRef = ref<HTMLInputElement | null>(null);
 const createConversationInputRef = ref<HTMLInputElement | null>(null);
@@ -570,50 +551,8 @@ function pushRecentConversationTopic(rawText: string) {
   saveRecentConversationTopics();
 }
 
-function closeConversationList() {
-  conversationListOpen.value = false;
-}
-
-function toggleConversationList() {
-  conversationListOpen.value = !conversationListOpen.value;
-}
-
-function handleConversationListSelect(payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }) {
-  closeConversationList();
-  emit("switch-conversation", {
-    conversationId: String(payload?.conversationId || "").trim(),
-    kind: payload?.kind,
-    remoteContactId: String(payload?.remoteContactId || "").trim() || undefined,
-  });
-}
-
-function handleConversationRename(payload: { conversationId: string; title: string }) {
-  emit("rename-conversation", {
-    conversationId: String(payload?.conversationId || "").trim(),
-    title: String(payload?.title || "").trim(),
-  });
-}
-
-function handleConversationPinToggle(conversationId: string) {
-  emit("toggle-pin-conversation", String(conversationId || "").trim());
-}
-
-function handleConversationArchive(conversationId: string) {
-  closeConversationList();
-  emit("archive-conversation", String(conversationId || "").trim());
-}
-
-function handleConversationDelete(conversationId: string) {
-  closeConversationList();
-  emit("delete-conversation", String(conversationId || "").trim());
-}
-
 function handleDocumentPointerDown(event: PointerEvent) {
   const target = event.target as Node | null;
-  const conversationRoot = conversationListPopoverRef.value;
-  if (conversationListOpen.value && conversationRoot && target && !conversationRoot.contains(target)) {
-    closeConversationList();
-  }
   const searchRoot = configSearchPopoverRef.value;
   if (configSearchOpen.value && searchRoot && target && !searchRoot.contains(target)) {
     configSearchOpen.value = false;
@@ -621,9 +560,6 @@ function handleDocumentPointerDown(event: PointerEvent) {
 }
 
 function handleWindowKeydown(event: KeyboardEvent) {
-  if (event.key === "Escape" && conversationListOpen.value) {
-    closeConversationList();
-  }
   if (event.key === "Escape" && configSearchOpen.value) {
     configSearchOpen.value = false;
   }
@@ -661,7 +597,6 @@ function handleConfigSearchKeydown(event: KeyboardEvent) {
 }
 
 function handleCreateConversation() {
-  closeConversationList();
   createConversationTitle.value = "";
   const activeConversation = props.conversationItems.find(
     (item) => String(item.conversationId || "").trim() === String(props.activeConversationId || "").trim(),
