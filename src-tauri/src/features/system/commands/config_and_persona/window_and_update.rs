@@ -483,7 +483,13 @@ fn save_config(
             state_write_runtime_state_cached(&state, &build_runtime_state_file(&data))?;
         }
     }
-    register_hotkey_from_config(&app, &main_config)?;
+    if let Err(err) = register_hotkey_from_config(&app, &main_config) {
+        eprintln!(
+            "[热键] 召唤热键运行时注册失败，配置已保存但该热键暂不可用：hotkey={}, err={}",
+            main_config.hotkey,
+            err
+        );
+    }
     match apply_webview_zoom_percent(&app, main_config.webview_zoom_percent) {
         Ok(percent) => emit_webview_zoom_percent_updated(&app, percent),
         Err(err) => eprintln!("[外观] 应用界面缩放失败：{}", err),
