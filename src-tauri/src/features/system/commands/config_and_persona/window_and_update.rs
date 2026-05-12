@@ -480,21 +480,25 @@ fn save_config(
     if let Some(agent_id) = assistant_department_agent_id(&config) {
         if data.assistant_department_agent_id != agent_id {
             data.assistant_department_agent_id = agent_id;
-            state_write_runtime_state_cached(&state, &build_runtime_state_file(&data))?;
+            state_write_runtime_state_cached(&state, &build_runtime_state_file(&data))
+                .map_err(|err| format!("配置已保存，但运行状态保存失败：{err}"))?;
         }
     }
-    if let Err(err) = register_hotkey_from_config(&app, &main_config) {
-        eprintln!(
-            "[热键] 召唤热键运行时注册失败，配置已保存但该热键暂不可用：hotkey={}, err={}",
-            main_config.hotkey,
-            err
-        );
+    if base_config.hotkey != main_config.hotkey {
+        if let Err(err) = register_hotkey_from_config(&app, &main_config) {
+            eprintln!(
+                "[热键] 召唤热键运行时注册失败，配置已保存但该热键暂不可用：hotkey={}, err={}",
+                main_config.hotkey,
+                err
+            );
+        }
     }
     match apply_webview_zoom_percent(&app, main_config.webview_zoom_percent) {
         Ok(percent) => emit_webview_zoom_percent_updated(&app, percent),
         Err(err) => eprintln!("[外观] 应用界面缩放失败：{}", err),
     }
-    let runtime_config = runtime_config_with_private_organization(&state, &main_config, &data)?;
+    let runtime_config = runtime_config_with_private_organization(&state, &main_config, &data)
+        .map_err(|err| format!("配置已保存，但运行时配置刷新失败：{err}"))?;
     let _ = app.emit("easy-call:config-updated", &runtime_config);
     Ok(runtime_config)
 }
