@@ -2,6 +2,8 @@
 
 ## 进行中
 
+- 修复（graceful-shutdown-update-restart）：更新重启、便携版退出替换、托盘退出与迁移包导入重启统一先执行后台服务优雅停机；退出前并发停止远程 IM 渠道、断开 MCP 缓存连接，并等待并发退出请求共享同一次停机结果，降低 MCP 子进程和远程联系人运行态在重启时残留的风险。
+
 ## 发布：v0.9.85
 
 - 发布（release-0.9.85）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.85`，纳入本轮文本工具自动编码、聊天滚底、本地记忆 recall/remember、MCP 非阻塞监督、终端执行超时与 schema 收口、Gemini/OpenAI reasoning effort 调整等改动。

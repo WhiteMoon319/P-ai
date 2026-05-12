@@ -881,7 +881,7 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
             } else if id == "archives" {
                 let _ = show_window(app, "archives");
             } else if id == "quit" {
-                app.exit(0);
+                graceful_exit_app(app, 0);
             }
         })
         .build(app)

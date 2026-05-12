@@ -9,7 +9,7 @@ use std::{
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use directories::ProjectDirs;
-use futures_util::{future::AbortHandle, StreamExt};
+use futures_util::{future::AbortHandle, future::join_all, future::BoxFuture, StreamExt};
 use image::ImageFormat;
 use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use rmcp::{schemars, ServiceExt};
@@ -359,6 +359,180 @@ async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {
             }
         });
     }
+}
+
+const APP_SHUTDOWN_STATE_IDLE: u8 = 0;
+const APP_SHUTDOWN_STATE_RUNNING: u8 = 1;
+const APP_SHUTDOWN_STATE_DONE: u8 = 2;
+
+static APP_SHUTDOWN_STATE: std::sync::atomic::AtomicU8 =
+    std::sync::atomic::AtomicU8::new(APP_SHUTDOWN_STATE_IDLE);
+
+async fn graceful_shutdown_background_services(app: &AppHandle) {
+    let shutdown_started = APP_SHUTDOWN_STATE.compare_exchange(
+        APP_SHUTDOWN_STATE_IDLE,
+        APP_SHUTDOWN_STATE_RUNNING,
+        std::sync::atomic::Ordering::SeqCst,
+        std::sync::atomic::Ordering::SeqCst,
+    );
+    if shutdown_started.is_err() {
+        while APP_SHUTDOWN_STATE.load(std::sync::atomic::Ordering::SeqCst)
+            == APP_SHUTDOWN_STATE_RUNNING
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+        eprintln!("[退出] 已等待进行中的后台服务优雅停机完成");
+        return;
+    }
+
+    let state = app.state::<AppState>().inner().clone();
+    let started_at = std::time::Instant::now();
+    eprintln!("[退出] 开始优雅停机后台服务");
+
+    let config = match state_read_config_cached(&state) {
+        Ok(config) => Some(config),
+        Err(err) => {
+            eprintln!("[退出] 读取配置失败，继续按兜底方式停机: {err}");
+            None
+        }
+    };
+
+    if let Some(config) = config.as_ref() {
+        let mut shutdown_futures = Vec::<BoxFuture<'static, ()>>::new();
+        for channel in &config.remote_im_channels {
+            let channel_id = channel.id.trim().to_string();
+            if channel_id.is_empty() {
+                continue;
+            }
+            match channel.platform {
+                RemoteImPlatform::OnebotV11 => shutdown_futures.push(Box::pin(async move {
+                    let stop_started = std::time::Instant::now();
+                    match tokio::time::timeout(
+                        std::time::Duration::from_secs(10),
+                        onebot_v11_ws_manager().stop_channel(&channel_id),
+                    )
+                    .await
+                    {
+                        Ok(Ok(())) => eprintln!(
+                            "[退出] OneBot 渠道已停止: channel_id={}，duration_ms={}",
+                            channel_id,
+                            stop_started.elapsed().as_millis()
+                        ),
+                        Ok(Err(err)) => eprintln!(
+                            "[退出] OneBot 渠道停止失败: channel_id={}，duration_ms={}，error={}",
+                            channel_id,
+                            stop_started.elapsed().as_millis(),
+                            err
+                        ),
+                        Err(_) => eprintln!(
+                            "[退出] OneBot 渠道停止超时: channel_id={}，timeout_ms=10000",
+                            channel_id
+                        ),
+                    }
+                })),
+                RemoteImPlatform::Dingtalk => shutdown_futures.push(Box::pin(async move {
+                    let stop_started = std::time::Instant::now();
+                    match tokio::time::timeout(
+                        std::time::Duration::from_secs(10),
+                        dingtalk_stream_manager().stop_channel(&channel_id),
+                    )
+                    .await
+                    {
+                        Ok(()) => eprintln!(
+                            "[退出] 钉钉渠道已停止: channel_id={}，duration_ms={}",
+                            channel_id,
+                            stop_started.elapsed().as_millis()
+                        ),
+                        Err(_) => eprintln!(
+                            "[退出] 钉钉渠道停止超时: channel_id={}，timeout_ms=10000",
+                            channel_id
+                        ),
+                    }
+                })),
+                RemoteImPlatform::WeixinOc => shutdown_futures.push(Box::pin(async move {
+                    let stop_started = std::time::Instant::now();
+                    match tokio::time::timeout(
+                        std::time::Duration::from_secs(10),
+                        weixin_oc_manager().stop_channel(&channel_id),
+                    )
+                    .await
+                    {
+                        Ok(()) => eprintln!(
+                            "[退出] 个人微信渠道已停止: channel_id={}，duration_ms={}",
+                            channel_id,
+                            stop_started.elapsed().as_millis()
+                        ),
+                        Err(_) => eprintln!(
+                            "[退出] 个人微信渠道停止超时: channel_id={}，timeout_ms=10000",
+                            channel_id
+                        ),
+                    }
+                })),
+                RemoteImPlatform::Feishu => {}
+            }
+        }
+        join_all(shutdown_futures).await;
+    }
+
+    // 兜底广播关闭，确保仍持有 shutdown receiver 的旧渠道尽快退出 accept 循环。
+    onebot_v11_ws_manager().shutdown().await;
+
+    match load_workspace_mcp_servers(&state) {
+        Ok(servers) => {
+            let shutdown_futures = servers
+                .into_iter()
+                .filter_map(|server| {
+                    let server_id = server.id.trim().to_string();
+                    if server_id.is_empty() {
+                        return None;
+                    }
+                    Some(Box::pin(async move {
+                        let disconnect_started = std::time::Instant::now();
+                        match tokio::time::timeout(
+                            std::time::Duration::from_secs(10),
+                            mcp_disconnect_cached_client(&server_id),
+                        )
+                        .await
+                        {
+                            Ok(()) => eprintln!(
+                                "[退出] MCP 已断开: server_id={}，duration_ms={}",
+                                server_id,
+                                disconnect_started.elapsed().as_millis()
+                            ),
+                            Err(_) => eprintln!(
+                                "[退出] MCP 断开超时: server_id={}，timeout_ms=10000",
+                                server_id
+                            ),
+                        }
+                    }) as BoxFuture<'static, ()>)
+                })
+                .collect::<Vec<BoxFuture<'static, ()>>>();
+            join_all(shutdown_futures).await;
+        }
+        Err(err) => {
+            eprintln!("[退出] 读取 MCP 工作区失败，跳过逐个断开: {err}");
+        }
+    }
+
+    eprintln!(
+        "[退出] 后台服务优雅停机完成: duration_ms={}",
+        started_at.elapsed().as_millis()
+    );
+    APP_SHUTDOWN_STATE.store(APP_SHUTDOWN_STATE_DONE, std::sync::atomic::Ordering::SeqCst);
+}
+
+fn graceful_shutdown_background_services_blocking(app: &AppHandle) {
+    tauri::async_runtime::block_on(graceful_shutdown_background_services(app));
+}
+
+fn graceful_exit_app(app: &AppHandle, code: i32) {
+    graceful_shutdown_background_services_blocking(app);
+    app.exit(code);
+}
+
+fn graceful_restart_app(app: &AppHandle) {
+    graceful_shutdown_background_services_blocking(app);
+    app.restart();
 }
 
 fn main() {

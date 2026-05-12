@@ -1162,6 +1162,7 @@ async fn apply_prepared_github_update(app: AppHandle) -> Result<(), String> {
                     None,
                 ),
             );
+            graceful_shutdown_background_services(&app).await;
             app.restart()
         }
         PreparedGithubUpdate::Portable(prepared) => {
@@ -1202,6 +1203,7 @@ async fn apply_prepared_github_update(app: AppHandle) -> Result<(), String> {
                     None,
                 ),
             );
+            graceful_shutdown_background_services(&app).await;
             app.exit(0);
             Ok(())
         }

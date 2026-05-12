@@ -912,7 +912,7 @@ fn apply_import_config_migration_package(
     let app_handle = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(300));
-        app_handle.restart();
+        graceful_restart_app(&app_handle);
     });
 
     Ok(result)
