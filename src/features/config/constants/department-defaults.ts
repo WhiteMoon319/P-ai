@@ -9,7 +9,7 @@ export const EXPLORER_DEPARTMENT_DEFAULT: DepartmentDefaultSeed = {
 };
 
 export const REMOTE_CUSTOMER_SERVICE_DEPARTMENT_DEFAULT: DepartmentDefaultSeed = {
-  name: "远程客服",
+  name: "remote customer service",
   summary: "当用户不满意时，请把当前语境和想要怎么回答的难题对我提问。",
   guide: `行为准则
 

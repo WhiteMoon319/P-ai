@@ -854,7 +854,9 @@ const activeConversationTodoDisplay = computed(() => {
   const todo = activeConversationTodo.value;
   if (!todo) return "";
   const personaName = String(props.personaName || "").trim();
-  return personaName ? `${personaName} 打算${todo}` : `打算${todo}`;
+  return personaName
+    ? t("chat.todoIntentionWithPersona", { name: personaName, todo })
+    : t("chat.todoIntention", { todo });
 });
 
 const activeConversationTerminalApprovals = computed(() => {

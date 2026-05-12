@@ -4,25 +4,25 @@
       <div class="card-body p-4">
         <div class="flex flex-col gap-3">
           <div class="flex items-center justify-between">
-            <div class="text-sm font-medium">调用日志（内存）</div>
+            <div class="text-sm font-medium">{{ t("config.logs.title") }}</div>
             <div class="join">
               <button class="btn btn-sm bg-base-200 join-item" @click="props.openRuntimeLogs">
-                后台日志
+                {{ t("config.logs.backendLogs") }}
               </button>
               <button class="btn btn-sm bg-base-200 join-item" :disabled="loading" @click="reload">
-                刷新
+                {{ t("common.refresh") }}
               </button>
               <button
                 class="btn btn-sm bg-base-200 join-item"
                 :disabled="loading || logs.length === 0"
                 @click="clearAll"
               >
-                清空
+                {{ t("common.clear") }}
               </button>
             </div>
           </div>
           <div class="flex flex-wrap items-center gap-2 text-sm">
-            <span class="opacity-70">缓存数量</span>
+            <span class="opacity-70">{{ t("config.logs.cacheSize") }}</span>
             <div class="join">
               <button
                 v-for="option in logCapacityOptions"
@@ -32,23 +32,23 @@
                 type="button"
                 @click="setLogCapacity(option)"
               >
-                {{ option }} 次
+                {{ t("config.logs.times", { count: option }) }}
               </button>
             </div>
           </div>
           <div class="text-sm opacity-60">
-            仅保留最近 {{ props.config.llmRoundLogCapacity }} 次调度日志；单次调度内的多轮 chat 会聚合到所属 pipeline 中，进程退出后自动清空。
+            {{ t("config.logs.capacityHint", { count: props.config.llmRoundLogCapacity }) }}
           </div>
         </div>
       </div>
     </div>
 
-    <div v-if="loading" class="text-sm opacity-70">加载中...</div>
-    <div v-else-if="logs.length === 0" class="text-sm opacity-50">暂无日志</div>
+    <div v-if="loading" class="text-sm opacity-70">{{ t("common.loading") }}</div>
+    <div v-else-if="logs.length === 0" class="text-sm opacity-50">{{ t("config.logs.noLogs") }}</div>
 
     <div v-else class="space-y-4">
       <div v-if="pipelineLogs.length" class="space-y-3">
-        <div class="text-sm font-medium opacity-80">调度日志</div>
+        <div class="text-sm font-medium opacity-80">{{ t("config.logs.pipelineLogs") }}</div>
         <div
           v-for="entry in pipelineLogs"
           :key="entry.id"
@@ -58,7 +58,7 @@
             <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div class="space-y-2">
                 <div class="flex items-center gap-2 flex-wrap">
-                  <div class="badge badge-primary badge-outline">本次调度</div>
+                  <div class="badge badge-primary badge-outline">{{ t("config.logs.currentPipeline") }}</div>
                   <div class="text-sm font-medium break-all">
                     {{ entry.createdAt }} | {{ entry.provider }} | {{ entry.requestFormat }} | {{ entry.model }}
                   </div>
@@ -69,25 +69,25 @@
                 </div>
               </div>
               <div class="badge" :class="entry.success ? 'badge-success' : 'badge-error'">
-                {{ entry.success ? "成功" : "失败" }}
+                {{ entry.success ? t("common.success") : t("common.failed") }}
               </div>
             </div>
 
             <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <div class="rounded-box border border-base-300 bg-base-200/70 px-3 py-2">
-                <div class="text-xs opacity-60">总耗时</div>
+                <div class="text-xs opacity-60">{{ t("config.logs.totalElapsed") }}</div>
                 <div class="text-sm font-medium">{{ entry.elapsedMs }}ms</div>
               </div>
               <div class="rounded-box border border-base-300 bg-base-200/70 px-3 py-2">
-                <div class="text-xs opacity-60">模型轮次</div>
+                <div class="text-xs opacity-60">{{ t("config.logs.modelRounds") }}</div>
                 <div class="text-sm font-medium">{{ entry.roundCount ?? (entry.rounds?.length ?? 0) }}</div>
               </div>
               <div class="rounded-box border border-base-300 bg-base-200/70 px-3 py-2">
-                <div class="text-xs opacity-60">工具调用</div>
+                <div class="text-xs opacity-60">{{ t("config.logs.toolCalls") }}</div>
                 <div class="text-sm font-medium">{{ entry.toolCallCount ?? totalToolCallsForRounds(entry.rounds) }}</div>
               </div>
               <div class="rounded-box border border-base-300 bg-base-200/70 px-3 py-2">
-                <div class="text-xs opacity-60">失败摘要</div>
+                <div class="text-xs opacity-60">{{ t("config.logs.errorSummary") }}</div>
                 <div class="text-sm font-medium break-all">{{ entry.error?.trim() || "-" }}</div>
               </div>
             </div>
@@ -97,11 +97,11 @@
               class="collapse collapse-arrow bg-base-200 border border-base-300"
             >
               <summary class="collapse-title text-sm py-2 min-h-0">
-                调度 Timeline（{{ entry.timeline.length }} 阶段）
+                {{ t("config.logs.pipelineTimeline", { count: entry.timeline.length }) }}
               </summary>
               <div class="collapse-content text-sm space-y-2">
                 <div class="opacity-70 break-all">
-                  慢阶段：
+                  {{ t("config.logs.slowStages") }}
                   {{ topSlowStages(entry).map((item) => `${item.stage} +${item.sincePrevMs}ms`).join(" | ") || "-" }}
                 </div>
                 <pre class="whitespace-pre-wrap break-all">{{ toPretty(entry.timeline) }}</pre>
@@ -109,7 +109,7 @@
             </details>
 
             <details class="collapse collapse-arrow bg-base-200 border border-base-300">
-              <summary class="collapse-title text-sm py-2 min-h-0">调度响应</summary>
+              <summary class="collapse-title text-sm py-2 min-h-0">{{ t("config.logs.pipelineResponse") }}</summary>
               <div class="collapse-content text-sm">
                 <pre class="whitespace-pre-wrap break-all">{{ toPretty(entry.response ?? null) }}</pre>
               </div>
@@ -117,9 +117,9 @@
 
             <div class="rounded-box border border-base-300 bg-base-200/60 p-3 space-y-3">
               <div class="flex items-center justify-between gap-2">
-                <div class="text-sm font-medium">轮次（{{ entry.rounds?.length ?? 0 }}）</div>
+                <div class="text-sm font-medium">{{ t("config.logs.roundsTitle", { count: entry.rounds?.length ?? 0 }) }}</div>
                 <div class="text-xs opacity-60">
-                  点击某一轮查看 Response / Tools / Headers / Error
+                  {{ t("config.logs.roundsHint") }}
                 </div>
               </div>
               <div v-if="entry.rounds?.length" class="space-y-2">
@@ -132,30 +132,30 @@
                   <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div class="space-y-1">
                       <div class="text-sm font-medium">
-                        第 {{ index + 1 }} 轮 | {{ round.provider }} | {{ round.model }}
+                        {{ t("config.logs.roundTitle", { index: index + 1 }) }} | {{ round.provider }} | {{ round.model }}
                       </div>
                       <div class="text-xs opacity-60 break-all">{{ round.baseUrl || "-" }}</div>
                     </div>
                     <div class="flex items-center gap-2 flex-wrap">
                       <div class="badge badge-sm badge-outline">{{ round.elapsedMs }}ms</div>
                       <div class="badge badge-sm badge-outline">
-                        工具 {{ toolCallCountForEntry(round) }}
+                        {{ t("config.logs.toolCount", { count: toolCallCountForEntry(round) }) }}
                       </div>
                       <div class="badge badge-sm" :class="round.success ? 'badge-success' : 'badge-error'">
-                        {{ round.success ? "成功" : "失败" }}
+                        {{ round.success ? t("common.success") : t("common.failed") }}
                       </div>
                     </div>
                   </div>
                 </button>
               </div>
-              <div v-else class="text-sm opacity-60">当前调度没有可展开的轮次明细。</div>
+              <div v-else class="text-sm opacity-60">{{ t("config.logs.noRoundDetails") }}</div>
             </div>
           </div>
         </div>
       </div>
 
       <div v-if="otherLogs.length" class="space-y-2">
-        <div class="text-sm font-medium opacity-80">其他请求</div>
+        <div class="text-sm font-medium opacity-80">{{ t("config.logs.otherRequests") }}</div>
         <div
           v-for="entry in otherLogs"
           :key="entry.id"
@@ -167,11 +167,11 @@
                 {{ entry.createdAt }} | {{ entry.scene }} | {{ entry.provider }} | {{ entry.requestFormat }} | {{ entry.model }}
               </div>
               <div class="badge badge-sm" :class="entry.success ? 'badge-success' : 'badge-error'">
-                {{ entry.success ? "成功" : "失败" }}
+                {{ entry.success ? t("common.success") : t("common.failed") }}
               </div>
             </div>
 
-            <div class="text-sm opacity-70">耗时 {{ entry.elapsedMs }}ms | {{ entry.baseUrl || "-" }}</div>
+            <div class="text-sm opacity-70">{{ t("config.logs.elapsed", { ms: entry.elapsedMs }) }} | {{ entry.baseUrl || "-" }}</div>
             <div v-if="entry.traceId" class="text-xs opacity-60 break-all">trace: {{ entry.traceId }}</div>
 
             <details
@@ -179,11 +179,11 @@
               class="collapse collapse-arrow bg-base-200 border border-base-300"
             >
               <summary class="collapse-title text-sm py-2 min-h-0">
-                Timeline（{{ entry.timeline.length }} 阶段）
+                {{ t("config.logs.timeline", { count: entry.timeline.length }) }}
               </summary>
               <div class="collapse-content text-sm space-y-2">
                 <div class="opacity-70 break-all">
-                  慢阶段：
+                  {{ t("config.logs.slowStages") }}
                   {{ topSlowStages(entry).map((item) => `${item.stage} +${item.sincePrevMs}ms`).join(" | ") || "-" }}
                 </div>
                 <pre class="whitespace-pre-wrap break-all">{{ toPretty(entry.timeline) }}</pre>
@@ -222,7 +222,7 @@
         <div class="flex items-start justify-between gap-3">
           <div class="space-y-1">
             <div class="text-lg font-semibold">
-              {{ selectedRound ? `第 ${selectedRound.index + 1} 轮模型调用` : "轮次详情" }}
+              {{ selectedRound ? t("config.logs.roundCallTitle", { index: selectedRound.index + 1 }) : t("config.logs.roundDetails") }}
             </div>
             <div v-if="selectedRound" class="text-sm opacity-70 break-all">
               {{ selectedRound.round.provider }} | {{ selectedRound.round.requestFormat }} | {{ selectedRound.round.model }}
@@ -231,21 +231,21 @@
               trace: {{ selectedRound.round.traceId }}
             </div>
           </div>
-          <button class="btn btn-sm btn-ghost" @click="closeRound">关闭</button>
+          <button class="btn btn-sm btn-ghost" @click="closeRound">{{ t("common.close") }}</button>
         </div>
 
         <div v-if="selectedRound" class="grid gap-2 sm:grid-cols-3">
           <div class="rounded-box border border-base-300 bg-base-200/70 px-3 py-2">
-            <div class="text-xs opacity-60">本轮耗时</div>
+            <div class="text-xs opacity-60">{{ t("config.logs.roundElapsed") }}</div>
             <div class="text-sm font-medium">{{ selectedRound.round.elapsedMs }}ms</div>
           </div>
           <div class="rounded-box border border-base-300 bg-base-200/70 px-3 py-2">
-            <div class="text-xs opacity-60">工具调用</div>
+            <div class="text-xs opacity-60">{{ t("config.logs.toolCalls") }}</div>
             <div class="text-sm font-medium">{{ toolCallCountForEntry(selectedRound.round) }}</div>
           </div>
           <div class="rounded-box border border-base-300 bg-base-200/70 px-3 py-2">
-            <div class="text-xs opacity-60">状态</div>
-            <div class="text-sm font-medium">{{ selectedRound.round.success ? "成功" : "失败" }}</div>
+            <div class="text-xs opacity-60">{{ t("config.logs.status") }}</div>
+            <div class="text-sm font-medium">{{ selectedRound.round.success ? t("common.success") : t("common.failed") }}</div>
           </div>
         </div>
 
@@ -267,7 +267,7 @@
             class="whitespace-pre-wrap break-all text-sm"
           >{{ roundTabContent(selectedRound.round, activeRoundTab) }}</pre>
           <div v-else class="text-sm break-all" :class="selectedRound.round.error ? 'text-error' : 'opacity-60'">
-            {{ selectedRound.round.error?.trim() || "无错误" }}
+            {{ selectedRound.round.error?.trim() || t("config.logs.noError") }}
           </div>
         </div>
       </div>
@@ -280,6 +280,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../../services/tauri-api";
 import type { AppConfig, LlmRoundLogEntry } from "../../../../types/app";
 import { toErrorMessage } from "../../../../utils/error";
@@ -289,6 +290,7 @@ const props = defineProps<{
   openRuntimeLogs: () => void;
 }>();
 
+const { t } = useI18n();
 const loading = ref(false);
 const logs = ref<LlmRoundLogEntry[]>([]);
 const logCapacityOptions = [1, 3, 10] as const;

@@ -24,25 +24,25 @@
           <li v-if="!busy">
             <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openDelegateSelection')">
               <ClipboardList class="h-4 w-4 shrink-0" />
-              <span class="leading-5">发起委托</span>
+              <span class="leading-5">{{ t("chat.conversationMenu.startDelegate") }}</span>
             </button>
           </li>
           <li v-if="!busy">
             <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openBranchSelection')">
               <GitBranchPlus class="h-4 w-4 shrink-0" />
-              <span class="leading-5">会话分支</span>
+              <span class="leading-5">{{ t("chat.conversationMenu.branchConversation") }}</span>
             </button>
           </li>
           <li v-if="!busy">
             <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openForwardSelection')">
               <Package class="h-4 w-4 shrink-0" />
-              <span class="leading-5">会话转发</span>
+              <span class="leading-5">{{ t("chat.conversationMenu.forwardConversation") }}</span>
             </button>
           </li>
           <li v-if="!busy">
             <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openShareSelection')">
               <ExternalLink class="h-4 w-4 shrink-0" />
-              <span class="leading-5">分享会话</span>
+              <span class="leading-5">{{ t("chat.conversationMenu.shareConversation") }}</span>
             </button>
           </li>
           <li>
@@ -125,7 +125,7 @@
             v-if="props.selectedMentionKeys.length > 0 && entry.isFrontSpeaking"
             class="indicator-item indicator-top indicator-start inline-flex h-4 w-4 -translate-x-1/4 -translate-y-1/4 items-center justify-center rounded-full bg-base-300 text-[9px] font-bold text-base-content"
           >
-            禁
+            {{ t("chat.mentionMutedBadge") }}
           </span>
           <div class="avatar">
             <div class="w-7 rounded-full">
@@ -184,7 +184,7 @@
               <div class="min-w-0 flex-1 pr-0.5">
                 <div class="truncate text-sm leading-5">@{{ entry.agentName }}</div>
                 <div class="truncate text-[11px] leading-4 text-base-content/60">
-                  {{ entry.departmentName || '默认' }}
+                  {{ entry.departmentName || t("chat.defaultDepartment") }}
                 </div>
               </div>
             </button>

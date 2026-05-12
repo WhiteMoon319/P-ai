@@ -115,7 +115,7 @@ function countTerminalApprovalPatchDelta(lines: string[]) {
 }
 
 const terminalApprovalDialogTitle = computed(() => {
-  return String(props.payload?.title || "终端审批");
+  return String(props.payload?.title || t("terminalApproval.title"));
 });
 
 const terminalApprovalPatchBlocks = computed(() => {
@@ -303,14 +303,14 @@ watch(terminalApprovalPatchBlocks, clampTerminalApprovalPatchIndex);
           :disabled="resolving"
           @click="handleClose"
         >
-          拒绝
+          {{ t("terminalApproval.deny") }}
         </button>
         <button
           class="btn btn-sm btn-primary text-primary-content min-w-24"
           :disabled="resolving"
           @click="handleApprove"
         >
-          批准
+          {{ t("terminalApproval.approve") }}
         </button>
       </div>
     </div>

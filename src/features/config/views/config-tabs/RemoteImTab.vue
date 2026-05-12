@@ -28,7 +28,7 @@
                   {{ ch.name || t('config.remoteIm.channelName') }}
                 </div>
                 <div class="mt-1 text-[11px] opacity-60 truncate">
-                  {{ platformLabelOf(ch.platform) }}
+                  {{ platformLabelText(ch.platform) }}
                 </div>
               </div>
               <input
@@ -48,7 +48,7 @@
                 :title="t('config.remoteIm.channelDetails')"
                 @click.stop="openChannelConfigModal(ch.id)"
               >
-                编辑
+                {{ t("common.edit") }}
               </button>
               <button
                 class="btn btn-sm btn-square border shrink-0"
@@ -96,36 +96,36 @@
                   <div class="mt-1 flex flex-wrap gap-1 text-[10px]">
                     <span
                       class="badge badge-info badge-xs"
-                      :title="processingModeHint(item)"
+                      :title="processingModeHintText(item)"
                     >
                       {{ contactProcessingModeLabel(item) }}
                     </span>
                     <span
                       class="badge badge-primary badge-xs"
-                      :title="contactActivationHint(item)"
+                      :title="contactActivationHintText(item)"
                     >
                       {{ contactActivationModeLabel(item) }}
                     </span>
                     <span
                       v-if="item.allowReceive"
                       class="badge badge-xs badge-warning"
-                      title="允许收信"
+                      :title="t('config.remoteIm.allowReceive')"
                     >
-                      收信
+                      {{ t("config.remoteIm.receiveShort") }}
                     </span>
                     <span
                       v-if="item.allowSend"
                       class="badge badge-xs badge-warning"
-                      title="允许发信"
+                      :title="t('config.remoteIm.allowSend')"
                     >
-                      发信
+                      {{ t("config.remoteIm.sendShort") }}
                     </span>
                     <span
                       v-if="item.allowSendFiles"
                       class="badge badge-xs badge-warning"
-                      title="允许发文件"
+                      :title="t('config.remoteIm.allowSendFiles')"
                     >
-                      文件
+                      {{ t("config.remoteIm.filesShort") }}
                     </span>
                   </div>
                 </div>
@@ -437,7 +437,7 @@
         <div class="flex items-center justify-between shrink-0">
           <div class="font-semibold text-lg flex items-center gap-2">
             <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#07c160] text-white text-sm font-bold">微</span>
-            <span>联系人设置 · {{ contactModalTitle }}</span>
+            <span>{{ t("config.remoteIm.contactSettingsTitle", { name: contactModalTitle }) }}</span>
           </div>
           <button class="btn btn-sm btn-circle btn-ghost" @click="closeContactConfigModal">
             <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -450,35 +450,35 @@
           <div class="flex-1 overflow-y-auto">
             <ul class="list gap-2">
               <li class="list-row flex items-start justify-between gap-3">
-                <div class="font-medium">处理部门</div>
+                <div class="font-medium">{{ t("config.remoteIm.processingDepartment") }}</div>
                 <div class="flex w-64 flex-col gap-1">
                   <select
                     class="select select-bordered select-sm w-full"
                     v-model="contactDraft.boundDepartmentId"
                   >
-                    <option value="">主部门</option>
-                    <option v-for="dept in remoteImDepartmentOptions" :key="dept.id" :value="dept.id">{{ dept.name }}</option>
+                    <option value="">{{ t("config.department.assistantBadge") }}</option>
+                    <option v-for="dept in remoteImDepartmentOptions" :key="dept.id" :value="dept.id">{{ dept.label }}</option>
                   </select>
                   <span class="text-[11px] opacity-60">{{ contactDraftRoutingHint }}</span>
                 </div>
               </li>
 
               <li class="list-row flex items-start justify-between gap-3">
-                <div class="font-medium">处理模式</div>
+                <div class="font-medium">{{ t("config.remoteIm.processingMode") }}</div>
                 <div class="flex w-64 flex-col gap-1">
                   <select
                     class="select select-bordered select-sm w-full"
                     v-model="contactDraft.processingMode"
                   >
-                    <option value="continuous">有上下文</option>
-                    <option value="qa">无上下文</option>
+                    <option value="continuous">{{ t("config.remoteIm.processingModeContinuous") }}</option>
+                    <option value="qa">{{ t("config.remoteIm.processingModeQa") }}</option>
                   </select>
                   <span class="text-[11px] opacity-60">{{ contactDraftProcessingHint }}</span>
                 </div>
               </li>
 
               <li class="list-row flex items-start justify-between gap-3">
-                <div class="font-medium">入场时机</div>
+                <div class="font-medium">{{ t("config.remoteIm.activateMode") }}</div>
                 <div class="flex w-64 flex-col gap-2">
                   <select
                     class="select select-bordered select-sm w-full"
@@ -500,37 +500,37 @@
               </li>
 
               <li class="list-row flex items-start justify-between gap-3">
-                <div class="font-medium">闭嘴词</div>
+                <div class="font-medium">{{ t("config.remoteIm.muteKeywords") }}</div>
                 <div class="flex w-64 flex-col gap-2">
                   <input
                     type="text"
                     class="input input-bordered input-sm w-full"
-                    placeholder="例如：闭嘴，别说话"
+                    :placeholder="t('config.remoteIm.muteKeywordsPlaceholder')"
                     v-model="contactDraft.muteKeywordsText"
                   />
                   <span class="text-[11px] opacity-60">
-                    命中后立即进入闭嘴状态，并直接拦截后续在场、回复和发信判定。
+                    {{ t("config.remoteIm.muteKeywordsHint") }}
                   </span>
                 </div>
               </li>
 
               <li class="list-row flex items-start justify-between gap-3">
-                <div class="font-medium">张嘴词</div>
+                <div class="font-medium">{{ t("config.remoteIm.unmuteKeywords") }}</div>
                 <div class="flex w-64 flex-col gap-2">
                   <input
                     type="text"
                     class="input input-bordered input-sm w-full"
-                    placeholder="例如：张嘴，继续说"
+                    :placeholder="t('config.remoteIm.unmuteKeywordsPlaceholder')"
                     v-model="contactDraft.unmuteKeywordsText"
                   />
                   <span class="text-[11px] opacity-60">
-                    仅在闭嘴期间生效；命中后解除闭嘴，本条消息继续走后续正常判定。
+                    {{ t("config.remoteIm.unmuteKeywordsHint") }}
                   </span>
                 </div>
               </li>
 
               <li class="list-row flex items-center justify-between gap-3">
-                <div class="font-medium">闭嘴时长</div>
+                <div class="font-medium">{{ t("config.remoteIm.muteDuration") }}</div>
                 <div class="flex w-64 items-center gap-2">
                   <input
                     type="number"
@@ -543,35 +543,35 @@
               </li>
 
               <li class="list-row flex items-start justify-between gap-3">
-                <div class="font-medium">应答策略</div>
+                <div class="font-medium">{{ t("config.remoteIm.responseStrategy") }}</div>
                 <div class="flex w-64 flex-col gap-2">
                   <select
                     class="select select-bordered select-sm w-full"
                     v-model="contactDraft.responseStrategy"
                   >
-                    <option value="always_reply">始终回复</option>
-                    <option value="smart_judge">智能判断</option>
+                    <option value="always_reply">{{ t("config.remoteIm.responseStrategyAlways") }}</option>
+                    <option value="smart_judge">{{ t("config.remoteIm.responseStrategySmart") }}</option>
                   </select>
                   <span class="text-[11px] opacity-60">{{ contactDraftResponseStrategyHint }}</span>
                 </div>
               </li>
 
               <li class="list-row flex items-start justify-between gap-3">
-                <div class="font-medium">什么时候应该回答</div>
+                <div class="font-medium">{{ t("config.remoteIm.responseGuidance") }}</div>
                 <div class="flex w-64 flex-col gap-2">
                   <textarea
                     class="textarea textarea-bordered textarea-sm min-h-28 w-full"
                     v-model="contactDraft.responseGuidance"
-                    placeholder="例如：当对方直接提问、请求帮助、需要确认，或明显期待继续互动时回答。"
+                    :placeholder="t('config.remoteIm.responseGuidancePlaceholder')"
                   />
                   <span class="text-[11px] opacity-60">
-                    仅在“智能判断”时生效。秘书会把最近 7 条消息和本批新消息交给快速模型，并参考这里的规则判断是否需要回复。
+                    {{ t("config.remoteIm.responseGuidanceHint") }}
                   </span>
                 </div>
               </li>
 
               <li class="list-row flex items-center justify-between gap-3">
-                <div class="font-medium">耐心离场</div>
+                <div class="font-medium">{{ t("config.remoteIm.patienceExit") }}</div>
                 <div class="flex w-64 items-center gap-2">
                   <input
                     type="number"
@@ -602,7 +602,7 @@
               </li>
 
               <li class="list-row flex items-center justify-between gap-3">
-                <div class="font-medium">发送文件</div>
+                <div class="font-medium">{{ t("config.remoteIm.allowSendFiles") }}</div>
                 <input
                   type="checkbox"
                   class="toggle toggle-primary"
@@ -614,14 +614,14 @@
               <!-- 工作目录配置 -->
               <li class="list-row flex flex-col gap-2 pt-3 mt-2 border-t border-base-300">
                 <div class="flex items-center justify-between">
-                  <div class="font-medium">工作目录</div>
-                  <span class="text-[11px] opacity-50">系统目录始终存在且只读</span>
+                  <div class="font-medium">{{ t("config.remoteIm.workspace") }}</div>
+                  <span class="text-[11px] opacity-50">{{ t("config.remoteIm.systemWorkspaceReadonly") }}</span>
                 </div>
                 <div
                   v-if="contactDraft.shellWorkspaces.length === 0"
                   class="rounded-box border border-dashed border-base-300 bg-base-200/20 px-3 py-4 text-center text-xs opacity-60"
                 >
-                  未配置自定义工作目录，联系人会话仅有系统目录（只读）
+                  {{ t("config.remoteIm.noCustomWorkspace") }}
                 </div>
                 <div v-else class="divide-y divide-base-300">
                   <div
@@ -691,7 +691,7 @@
               </li>
 
           <div class="mt-2 text-[11px] opacity-60 leading-5">
-            联系人消息始终进入该联系人的独立会话；处理部门只决定后台处理消息的部门与模型。
+            {{ t("config.remoteIm.contactConversationHint") }}
           </div>
           </div>
           <div class="mt-3 pt-3 border-t border-base-300 flex items-center justify-between gap-2 shrink-0">
@@ -727,20 +727,15 @@ import { useI18n } from "vue-i18n";
 import { Plus, RefreshCw, RotateCcw, Save, ScrollText, Settings, SquareTerminal, Trash2 } from "lucide-vue-next";
 import { invokeTauri } from "../../../../services/tauri-api";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { AppConfig, RemoteImChannelConfig, RemoteImContact, RemoteImPlatform, ShellWorkspace } from "../../../../types/app";
+import type { AppConfig, DepartmentConfig, RemoteImChannelConfig, RemoteImContact, RemoteImPlatform, ShellWorkspace } from "../../../../types/app";
 import type { ChannelConnectionStatus, ChannelLogEntry, WeixinLoginStatus } from "./remote-im/types";
 import {
-  contactActivationHint,
-  contactResponseStrategyHint,
-  contactRoutingHint,
   formatLogTime,
   normalizeActivationMode,
   normalizeProcessingMode,
   normalizeResponseStrategy,
   parseActivationKeywords,
   parseKeywordList,
-  platformLabelOf,
-  processingModeHint,
 } from "./remote-im/helpers";
 
 const props = defineProps<{
@@ -915,7 +910,7 @@ const contactLogsTarget = computed(() =>
 );
 const contactModalTitle = computed(() => {
   if (!selectedContact.value) return "-";
-  if (selectedContact.value.platform === "weixin_oc") return "微信联系人";
+  if (selectedContact.value.platform === "weixin_oc") return t("config.remoteIm.weixinContact");
   return contactDisplayName(selectedContact.value);
 });
 const contactLogsTitle = computed(() => {
@@ -954,28 +949,25 @@ const contactDraftDirty = computed(() =>
 );
 const contactDraftRoutingHint = computed(() => {
   if (!selectedContact.value || !contactDraft.value) return "";
-  return contactRoutingHint({
-    ...selectedContact.value,
-    boundDepartmentId: contactDraft.value.boundDepartmentId || undefined,
-  } as RemoteImContact);
+  return t("config.remoteIm.routingHint");
 });
 const contactDraftProcessingHint = computed(() => {
   if (!selectedContact.value || !contactDraft.value) return "";
-  return processingModeHint({
+  return processingModeHintText({
     ...selectedContact.value,
     processingMode: contactDraft.value.processingMode,
   } as RemoteImContact);
 });
 const contactDraftActivationHint = computed(() => {
   if (!selectedContact.value || !contactDraft.value) return "";
-  return contactActivationHint({
+  return contactActivationHintText({
     ...selectedContact.value,
     activationMode: contactDraft.value.activationMode,
   } as RemoteImContact);
 });
 const contactDraftResponseStrategyHint = computed(() => {
   if (!selectedContact.value || !contactDraft.value) return "";
-  return contactResponseStrategyHint({
+  return contactResponseStrategyHintText({
     ...selectedContact.value,
     responseStrategy: contactDraft.value.responseStrategy,
   } as RemoteImContact);
@@ -1001,7 +993,10 @@ const contactLogDisplayLines = computed(() =>
 const remoteImDepartmentOptions = computed(() =>
   (props.config.departments || [])
     .filter((dept) => dept.id !== "assistant-department" && !dept.isBuiltInAssistant)
-    .map((dept) => ({ id: dept.id, name: dept.name || dept.id })),
+    .map((dept) => ({
+      id: dept.id,
+      label: departmentDisplayName(dept),
+    })),
 );
 
 const contactKeywordDrafts = ref<Record<string, string>>({});
@@ -1012,8 +1007,8 @@ function buildContactDraftFromContact(item: RemoteImContact): ContactEditDraft {
     processingMode: normalizeProcessingMode(item.processingMode),
     activationMode: normalizeActivationMode(item.activationMode || "never"),
     activationKeywordsText: item.activationKeywords.join(", "),
-    muteKeywordsText: (Array.isArray(item.muteKeywords) ? item.muteKeywords : ["闭嘴"]).join(", "),
-    unmuteKeywordsText: (Array.isArray(item.unmuteKeywords) ? item.unmuteKeywords : ["张嘴"]).join(", "),
+    muteKeywordsText: (Array.isArray(item.muteKeywords) ? item.muteKeywords : [t("config.remoteIm.defaultMuteKeyword")]).join(", "),
+    unmuteKeywordsText: (Array.isArray(item.unmuteKeywords) ? item.unmuteKeywords : [t("config.remoteIm.defaultUnmuteKeyword")]).join(", "),
     responseStrategy: normalizeResponseStrategy(item.responseStrategy),
     responseGuidance: String(item.responseGuidance || "").trim(),
     patienceSeconds: Math.max(0, Number(item.patienceSeconds || 60)),
@@ -1532,8 +1527,8 @@ async function saveContactDraft() {
     const nextMuteKeywords = parseKeywordList(draft.muteKeywordsText);
     const nextUnmuteKeywords = parseKeywordList(draft.unmuteKeywordsText);
     const currentKeywords = Array.isArray(item.activationKeywords) ? item.activationKeywords : [];
-    const currentMuteKeywords = Array.isArray(item.muteKeywords) ? item.muteKeywords : ["闭嘴"];
-    const currentUnmuteKeywords = Array.isArray(item.unmuteKeywords) ? item.unmuteKeywords : ["张嘴"];
+    const currentMuteKeywords = Array.isArray(item.muteKeywords) ? item.muteKeywords : [t("config.remoteIm.defaultMuteKeyword")];
+    const currentUnmuteKeywords = Array.isArray(item.unmuteKeywords) ? item.unmuteKeywords : [t("config.remoteIm.defaultUnmuteKeyword")];
     const keywordsChanged = JSON.stringify(nextKeywords) !== JSON.stringify(currentKeywords);
     const muteKeywordsChanged =
       JSON.stringify(nextMuteKeywords) !== JSON.stringify(currentMuteKeywords);
@@ -1760,9 +1755,9 @@ async function refreshContacts() {
     for (const item of contacts.value) {
       item.activationMode = normalizeActivationMode(item.activationMode || "never");
       item.activationKeywords = Array.isArray(item.activationKeywords) ? item.activationKeywords : [];
-      item.muteKeywords = Array.isArray(item.muteKeywords) && item.muteKeywords.length > 0 ? item.muteKeywords : ["闭嘴"];
+      item.muteKeywords = Array.isArray(item.muteKeywords) && item.muteKeywords.length > 0 ? item.muteKeywords : [t("config.remoteIm.defaultMuteKeyword")];
       item.unmuteKeywords =
-        Array.isArray(item.unmuteKeywords) && item.unmuteKeywords.length > 0 ? item.unmuteKeywords : ["张嘴"];
+        Array.isArray(item.unmuteKeywords) && item.unmuteKeywords.length > 0 ? item.unmuteKeywords : [t("config.remoteIm.defaultUnmuteKeyword")];
       item.activationCooldownSeconds = Math.max(0, Number(item.activationCooldownSeconds || 0));
       item.processingMode = normalizeProcessingMode(item.processingMode);
       item.responseStrategy = normalizeResponseStrategy(item.responseStrategy);
@@ -1847,23 +1842,23 @@ function contactLogHumanId(value: string): string {
 }
 
 function contactLogBoolLabel(value: string): string {
-  return value === "是" || value.toLowerCase() === "true" ? "是" : "否";
+  return value === "是" || value.toLowerCase() === "true" ? t("common.yes") : t("common.no");
 }
 
 function contactLogModeLabel(value: string): string {
-  if (value === "direct") return "直接入队";
-  if (value === "queued") return "排队入队";
-  if (value === "duplicate") return "重复消息";
+  if (value === "direct") return t("config.remoteIm.logModeDirect");
+  if (value === "queued") return t("config.remoteIm.logModeQueued");
+  if (value === "duplicate") return t("config.remoteIm.logModeDuplicate");
   return value || "-";
 }
 
 function contactLogDecisionLabel(value: string): string {
-  if (value === "reply" || value === "reply_async") return "已回复";
-  if (value === "send") return "已发送";
-  if (value === "send_files") return "已发送文件";
-  if (value === "no_reply") return "不回复";
-  if (value === "send_async") return "异步发送";
-  return value || "完成";
+  if (value === "reply" || value === "reply_async") return t("config.remoteIm.logDecisionReply");
+  if (value === "send") return t("config.remoteIm.logDecisionSend");
+  if (value === "send_files") return t("config.remoteIm.logDecisionSendFiles");
+  if (value === "no_reply") return t("config.remoteIm.logDecisionNoReply");
+  if (value === "send_async") return t("config.remoteIm.logDecisionSendAsync");
+  return value || t("common.done");
 }
 
 function contactLogStateSummary(message: string): string {
@@ -1873,7 +1868,7 @@ function contactLogStateSummary(message: string): string {
   const parts = [
     presence,
     work,
-    activate ? (contactLogBoolLabel(activate) === "是" ? "激活" : "不激活") : "",
+    activate ? (contactLogBoolLabel(activate) === t("common.yes") ? t("config.remoteIm.logActivate") : t("config.remoteIm.logInactive")) : "",
   ].filter(Boolean);
   return parts.join("；");
 }
@@ -2038,13 +2033,29 @@ async function deleteContact(item: RemoteImContact) {
 
 function contactDepartmentLabel(item: RemoteImContact): string {
   const departmentId = String(item.boundDepartmentId || "").trim();
-  if (!departmentId) return "主部门";
+  if (!departmentId) return t("config.department.assistantBadge");
   const matched = remoteImDepartmentOptions.value.find((dept) => dept.id === departmentId);
-  return matched ? matched.name : departmentId;
+  return matched ? matched.label : departmentId;
+}
+
+function departmentDisplayName(dept: DepartmentConfig): string {
+  const id = String(dept.id || "").trim();
+  if (id === "remote-customer-service-department") {
+    return t("config.department.defaults.remoteCustomerServiceName");
+  }
+  return String(dept.name || "").trim() || id;
 }
 
 function contactProcessingModeLabel(item: RemoteImContact): string {
-  return normalizeProcessingMode(item.processingMode) === "qa" ? "无上下文" : "有上下文";
+  return normalizeProcessingMode(item.processingMode) === "qa"
+    ? t("config.remoteIm.processingModeQa")
+    : t("config.remoteIm.processingModeContinuous");
+}
+
+function processingModeHintText(item: RemoteImContact): string {
+  return normalizeProcessingMode(item.processingMode) === "qa"
+    ? t("config.remoteIm.processingModeQaHint")
+    : t("config.remoteIm.processingModeContinuousHint");
 }
 
 function contactActivationModeLabel(item: RemoteImContact): string {
@@ -2052,6 +2063,27 @@ function contactActivationModeLabel(item: RemoteImContact): string {
   if (mode === "always") return t("config.remoteIm.activateModeAlways");
   if (mode === "keyword") return t("config.remoteIm.activateModeKeyword");
   return t("config.remoteIm.activateModeNever");
+}
+
+function contactActivationHintText(item: RemoteImContact): string {
+  const mode = normalizeActivationMode(item.activationMode);
+  if (mode === "always") return t("config.remoteIm.activateModeAlwaysHint");
+  if (mode === "keyword") return t("config.remoteIm.activateModeKeywordHint");
+  return t("config.remoteIm.activateModeNeverHint");
+}
+
+function contactResponseStrategyHintText(item: RemoteImContact): string {
+  return normalizeResponseStrategy(item.responseStrategy) === "smart_judge"
+    ? t("config.remoteIm.responseStrategySmartHint")
+    : t("config.remoteIm.responseStrategyAlwaysHint");
+}
+
+function platformLabelText(platform: string): string {
+  const value = String(platform || "").trim().toLowerCase();
+  if (value === "weixin_oc") return t("config.remoteIm.platformOptions.weixinOc");
+  if (value === "feishu") return t("config.remoteIm.platformOptions.feishu");
+  if (value === "dingtalk") return t("config.remoteIm.platformOptions.dingtalk");
+  return t("config.remoteIm.platformOptions.onebotV11");
 }
 
 async function refreshChannelStatus() {

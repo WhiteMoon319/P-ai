@@ -10,13 +10,13 @@
         </div>
 
         <div class="flex items-center gap-2">
-          <button class="btn btn-sm btn-square btn-primary shrink-0" type="button" title="新增供应商"
+          <button class="btn btn-sm btn-square btn-primary shrink-0" type="button" :title="t('config.api.addProvider')"
             @click="addProvider()">
             <Plus class="h-4 w-4" />
           </button>
           <button class="btn btn-sm btn-square shrink-0"
             :class="scopedProviderList.length <= 1 ? 'btn-disabled bg-base-200 text-base-content/30' : 'btn-error'"
-            type="button" title="删除当前供应商" :disabled="scopedProviderList.length <= 1"
+            type="button" :title="t('config.api.removeProvider')" :disabled="scopedProviderList.length <= 1"
             @click="removeProvider(selectedProviderId)">
             <Trash2 class="h-4 w-4" />
           </button>
@@ -30,7 +30,7 @@
             class="btn btn-sm btn-square shrink-0"
             :class="currentProviderDirty ? 'btn-info' : 'bg-base-200 text-base-content/30 shadow-none'"
             type="button"
-            title="还原当前供应商草稿"
+            :title="t('config.api.restoreProviderDraft')"
             :disabled="!currentProviderDirty || props.savingConfig"
             @click="handleRestoreProviderDraft"
           >
@@ -40,7 +40,7 @@
             :class="currentProviderDirty
               ? 'btn-success api-save-btn--dirty'
               : 'bg-base-200 text-base-content/50 shadow-none'" type="button"
-            :title="props.savingConfig ? t('config.api.saving') : currentProviderDirty ? '保存配置' : '已保存'"
+            :title="props.savingConfig ? t('config.api.saving') : currentProviderDirty ? t('config.api.saveConfig') : t('config.api.saved')"
             :disabled="!currentProviderDirty || props.savingConfig" @click="handleSaveApiConfig">
             <Save v-if="!props.savingConfig" class="h-4 w-4" />
             <span v-else class="loading loading-spinner loading-sm"></span>
@@ -53,13 +53,13 @@
         <div class="card bg-base-100 border border-base-300">
           <div class="card-body gap-3 p-4">
             <div class="flex items-center justify-between gap-2">
-              <div class="card-title text-base mb-0">供应商设置</div>
+              <div class="card-title text-base mb-0">{{ t("config.api.providerSettings") }}</div>
             </div>
 
             <div class="grid gap-3 md:grid-cols-2">
               <label class="flex flex-col gap-1">
                 <span class="text-sm font-medium">{{ t("config.api.configName") }}</span>
-                <input v-model="selectedProvider.name" class="input input-bordered input-sm" placeholder="供应商名称" />
+                <input v-model="selectedProvider.name" class="input input-bordered input-sm" :placeholder="t('config.api.providerNamePlaceholder')" />
               </label>
 
               <label class="flex flex-col gap-1">
@@ -131,12 +131,12 @@
             <div class="card-body gap-3 p-4">
               <div class="flex items-center justify-between gap-2">
                 <div>
-                  <div class="card-title text-base mb-1">API Key 池</div>
-                  <div class="text-xs opacity-60">同一供应商下所有模型共享轮询池，每次调用后游标 +1。</div>
+                  <div class="card-title text-base mb-1">{{ t("config.api.apiKeyPool") }}</div>
+                  <div class="text-xs opacity-60">{{ t("config.api.apiKeyPoolHint") }}</div>
                 </div>
                 <button class="btn btn-sm bg-base-200" type="button" @click="addApiKey">
                   <Plus class="h-3.5 w-3.5" />
-                  <span>新增 Key</span>
+                  <span>{{ t("config.api.addApiKey") }}</span>
                 </button>
               </div>
 
@@ -158,7 +158,7 @@
                 </div>
                 <div v-if="selectedProvider.apiKeys.length === 0"
                   class="rounded-box border border-dashed border-base-300 px-3 py-3 text-sm opacity-60">
-                  还没有 API Key，点击“新增 Key”开始配置。
+                  {{ t("config.api.noApiKey") }}
                 </div>
               </div>
             </div>
@@ -179,8 +179,8 @@
             <div class="card-body gap-3 p-4">
               <div class="flex items-center justify-between gap-2">
                 <div>
-                  <div class="card-title text-base mb-1">模型卡片</div>
-                  <div class="text-xs opacity-60">支持手填模型名，也支持从刷新结果里点选辅助填入。</div>
+                  <div class="card-title text-base mb-1">{{ t("config.api.modelCards") }}</div>
+                  <div class="text-xs opacity-60">{{ t("config.api.modelCardsHint") }}</div>
                 </div>
                 <div class="flex gap-2">
                   <button class="btn btn-sm bg-base-200" type="button" :class="{ loading: props.refreshingModels }"
@@ -190,7 +190,7 @@
                   </button>
                   <button class="btn btn-sm bg-base-200" type="button" @click="addModelCard">
                     <Plus class="h-3.5 w-3.5" />
-                    <span>新增模型</span>
+                    <span>{{ t("config.api.addModel") }}</span>
                   </button>
                 </div>
               </div>
@@ -214,7 +214,7 @@
                     <div class="flex items-start justify-between gap-2">
                       <button class="min-w-0 flex-1 text-left" type="button" @click="selectModelCard(modelCard.id)">
                         <div class="card-title text-base mb-1">{{ `${selectedProvider.name ||
-                          selectedProvider.id}/${modelCard.model || "未命名模型"}` }}</div>
+                          selectedProvider.id}/${modelCard.model || t("config.api.unnamedModel")}` }}</div>
                       </button>
                       <button class="btn btn-sm btn-square btn-ghost" type="button"
                         :class="selectedProvider.models.length <= 1 ? 'text-base-content/30' : 'text-error'"
@@ -237,7 +237,7 @@
                         </div>
                         <div v-if="selectedProtocol === 'auto' && resolvedAdapterByModelId[modelCard.id]"
                           class="mt-1 text-xs opacity-70">
-                          匹配协议：{{ resolvedAdapterByModelId[modelCard.id] }}
+                          {{ t("config.api.matchedProtocol", { protocol: resolvedAdapterByModelId[modelCard.id] }) }}
                         </div>
                         <div v-if="shouldWarnDeepSeekKimiProtocol(modelCard)"
                           class="alert alert-warning mt-2 py-2 text-xs">
@@ -305,7 +305,7 @@
                       </label>
 
                       <label v-if="showGeminiReasoningEffort(modelCard)" class="flex flex-col gap-1">
-                        <span class="text-sm font-medium">Google 思维强度</span>
+                        <span class="text-sm font-medium">{{ t("config.api.googleReasoningEffort") }}</span>
                         <select
                           :value="geminiReasoningEffortValue(modelCard)"
                           class="select select-bordered select-sm"
@@ -318,7 +318,7 @@
                       </label>
 
                       <label v-if="showOpenaiReasoningEffort(modelCard)" class="flex flex-col gap-1">
-                        <span class="text-sm font-medium">思维强度</span>
+                        <span class="text-sm font-medium">{{ t("config.api.reasoningEffort") }}</span>
                         <select
                           :value="openaiReasoningEffortValue(modelCard)"
                           class="select select-bordered select-sm"
@@ -331,7 +331,7 @@
                       </label>
 
                       <label v-if="showDeepSeekReasoningEffort(modelCard)" class="flex flex-col gap-1">
-                        <span class="text-sm font-medium">思维强度</span>
+                        <span class="text-sm font-medium">{{ t("config.api.reasoningEffort") }}</span>
                         <select
                           :value="deepseekReasoningEffortValue(modelCard)"
                           class="select select-bordered select-sm"
@@ -435,21 +435,6 @@ const DEFAULT_REASONING_EFFORT = "medium";
 const DEFAULT_GEMINI_REASONING_EFFORT = "high";
 const DEFAULT_OPENAI_REASONING_EFFORT = "high";
 const DEFAULT_DEEPSEEK_REASONING_EFFORT = "high";
-const openaiReasoningEffortOptions = [
-  { value: "low", label: "低" },
-  { value: "medium", label: "中" },
-  { value: "high", label: "高" },
-  { value: "xhigh", label: "极高" },
-];
-const deepseekReasoningEffortOptions = [
-  { value: "high", label: "高" },
-  { value: "xhigh", label: "极高" },
-];
-const geminiReasoningEffortOptions = [
-  { value: "low", label: "低" },
-  { value: "high", label: "高" },
-];
-
 const props = defineProps<{
   config: AppConfig;
   baseUrlReference: string;
@@ -469,6 +454,20 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const openaiReasoningEffortOptions = computed(() => [
+  { value: "low", label: t("config.api.reasoningLow") },
+  { value: "medium", label: t("config.api.reasoningMedium") },
+  { value: "high", label: t("config.api.reasoningHigh") },
+  { value: "xhigh", label: t("config.api.reasoningXHigh") },
+]);
+const deepseekReasoningEffortOptions = computed(() => [
+  { value: "high", label: t("config.api.reasoningHigh") },
+  { value: "xhigh", label: t("config.api.reasoningXHigh") },
+]);
+const geminiReasoningEffortOptions = computed(() => [
+  { value: "low", label: t("config.api.reasoningLow") },
+  { value: "high", label: t("config.api.reasoningHigh") },
+]);
 const baseUrlHelperOpen = ref(false);
 const linkHelperActiveProtocol = ref<ApiRequestFormat>("openai");
 const selectedPresetId = ref("openai-official");
@@ -483,14 +482,14 @@ const resolvedAdapterByModelId = ref<Record<string, string>>({});
 const codexAuthBusy = ref(false);
 const codexAuthStatusByProvider = ref<Record<string, CodexAuthStatus>>({});
 const codexAuthPollTimer = ref<number | null>(null);
-const capabilityTabs: Array<{ id: ApiCapability; label: string }> = [
-  { id: "text", label: "文本" },
-  { id: "voice", label: "语音" },
-  { id: "embedding", label: "向量" },
-];
+const capabilityTabs = computed<Array<{ id: ApiCapability; label: string }>>(() => [
+  { id: "text", label: t("config.api.capabilityText") },
+  { id: "voice", label: t("config.api.capabilityVoice") },
+  { id: "embedding", label: t("config.api.capabilityEmbedding") },
+]);
 const protocolOptionsByCapability: Record<ApiCapability, ProtocolOption[]> = {
   text: [
-    { value: "auto", label: "Auto（按模型名）" },
+    { value: "auto", label: "Auto" },
     { value: "openai", label: "OpenAI Compatible" },
     { value: "deepseek", label: "DeepSeek" },
     { value: "openai_responses", label: "OpenAI Responses" },
@@ -616,7 +615,13 @@ const activeCapability = computed<ApiCapability>(() => capabilityFromRequestForm
 const scopedProviderList = computed(() =>
   providerList.value.filter((provider) => capabilityFromRequestFormat(provider.requestFormat) === activeCapability.value),
 );
-const protocolOptions = computed(() => protocolOptionsByCapability[activeCapability.value]);
+const protocolOptions = computed(() =>
+  protocolOptionsByCapability[activeCapability.value].map((option) =>
+    option.value === "auto"
+      ? { ...option, label: t("config.api.protocolAuto") }
+      : option,
+  ),
+);
 
 const selectedModel = computed(() => {
   const [, modelId] = String(props.config.selectedApiConfigId || "").split("::");
@@ -708,13 +713,13 @@ function normalizeGeminiReasoningEffort(model: ApiModelConfigItem) {
 }
 
 function normalizeOpenaiReasoningEffort(model: ApiModelConfigItem) {
-  if (!openaiReasoningEffortOptions.some((item) => item.value === String(model.reasoningEffort || "").trim().toLowerCase())) {
+  if (!openaiReasoningEffortOptions.value.some((item) => item.value === String(model.reasoningEffort || "").trim().toLowerCase())) {
     model.reasoningEffort = DEFAULT_OPENAI_REASONING_EFFORT;
   }
 }
 
 function normalizeDeepSeekReasoningEffort(model: ApiModelConfigItem) {
-  if (!deepseekReasoningEffortOptions.some((item) => item.value === String(model.reasoningEffort || "").trim().toLowerCase())) {
+  if (!deepseekReasoningEffortOptions.value.some((item) => item.value === String(model.reasoningEffort || "").trim().toLowerCase())) {
     model.reasoningEffort = DEFAULT_DEEPSEEK_REASONING_EFFORT;
   }
 }
@@ -755,23 +760,23 @@ function isDeepSeekModelAdapter(adapter: string | undefined): boolean {
 }
 
 function openaiReasoningEffortValue(modelCard: ApiModelConfigItem): string {
-  return openaiReasoningEffortOptions.some((item) => item.value === String(modelCard.reasoningEffort || "").trim().toLowerCase())
+  return openaiReasoningEffortOptions.value.some((item) => item.value === String(modelCard.reasoningEffort || "").trim().toLowerCase())
     ? String(modelCard.reasoningEffort || "").trim().toLowerCase()
     : DEFAULT_OPENAI_REASONING_EFFORT;
 }
 
 function setOpenaiReasoningEffort(modelCard: ApiModelConfigItem, value: string) {
-  modelCard.reasoningEffort = openaiReasoningEffortOptions.some((item) => item.value === value) ? value : DEFAULT_OPENAI_REASONING_EFFORT;
+  modelCard.reasoningEffort = openaiReasoningEffortOptions.value.some((item) => item.value === value) ? value : DEFAULT_OPENAI_REASONING_EFFORT;
 }
 
 function deepseekReasoningEffortValue(modelCard: ApiModelConfigItem): string {
-  return deepseekReasoningEffortOptions.some((item) => item.value === String(modelCard.reasoningEffort || "").trim().toLowerCase())
+  return deepseekReasoningEffortOptions.value.some((item) => item.value === String(modelCard.reasoningEffort || "").trim().toLowerCase())
     ? String(modelCard.reasoningEffort || "").trim().toLowerCase()
     : DEFAULT_DEEPSEEK_REASONING_EFFORT;
 }
 
 function setDeepSeekReasoningEffort(modelCard: ApiModelConfigItem, value: string) {
-  modelCard.reasoningEffort = deepseekReasoningEffortOptions.some((item) => item.value === value) ? value : DEFAULT_DEEPSEEK_REASONING_EFFORT;
+  modelCard.reasoningEffort = deepseekReasoningEffortOptions.value.some((item) => item.value === value) ? value : DEFAULT_DEEPSEEK_REASONING_EFFORT;
 }
 
 function capabilityFromRequestFormat(format: ApiRequestFormat | string): ApiCapability {
@@ -879,10 +884,10 @@ function normalizedModelReasoningEffort(provider: ApiProviderConfigItem, model: 
     return value === "low" ? "low" : DEFAULT_GEMINI_REASONING_EFFORT;
   }
   if (provider.requestFormat === "deepseek") {
-    return deepseekReasoningEffortOptions.some((item) => item.value === value) ? value : DEFAULT_DEEPSEEK_REASONING_EFFORT;
+    return deepseekReasoningEffortOptions.value.some((item) => item.value === value) ? value : DEFAULT_DEEPSEEK_REASONING_EFFORT;
   }
   if (provider.requestFormat === "openai" || provider.requestFormat === "openai_responses") {
-    return openaiReasoningEffortOptions.some((item) => item.value === value) ? value : DEFAULT_OPENAI_REASONING_EFFORT;
+    return openaiReasoningEffortOptions.value.some((item) => item.value === value) ? value : DEFAULT_OPENAI_REASONING_EFFORT;
   }
   return value || DEFAULT_REASONING_EFFORT;
 }

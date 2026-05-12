@@ -113,7 +113,7 @@ function openDetailDialog(requestId: string) {
               :disabled="resolving"
               @click="openDetailDialog(item.requestId)"
             >
-              详情
+              {{ t("common.details") }}
             </button>
             <button
               type="button"
@@ -121,7 +121,7 @@ function openDetailDialog(requestId: string) {
               :disabled="resolving"
               @click="emit('approve', item.requestId)"
             >
-              批准
+              {{ t("terminalApproval.approve") }}
             </button>
             <button
               type="button"
@@ -129,7 +129,7 @@ function openDetailDialog(requestId: string) {
               :disabled="resolving"
               @click="emit('deny', item.requestId)"
             >
-              驳回
+              {{ t("terminalApproval.deny") }}
             </button>
           </div>
         </div>

@@ -528,6 +528,34 @@ fn set_github_update_method(
     Ok(runtime_config)
 }
 
+fn normalize_ui_language(value: &str) -> String {
+    match value.trim() {
+        "en-US" => "en-US".to_string(),
+        "zh-TW" => "zh-TW".to_string(),
+        _ => "zh-CN".to_string(),
+    }
+}
+
+#[tauri::command]
+fn set_ui_language(
+    ui_language: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<AppConfig, String> {
+    let normalized = normalize_ui_language(&ui_language);
+    let mut config = state_read_config_cached(&state)?;
+    normalize_app_config(&mut config);
+    if config.ui_language != normalized {
+        config.ui_language = normalized.clone();
+        state_write_config_cached(&state, &config)?;
+        eprintln!("[配置] 界面语言已保存：ui_language={normalized}");
+    }
+    let data = state_read_agents_runtime_snapshot(&state)?;
+    let runtime_config = runtime_config_with_private_organization(&state, &config, &data)?;
+    let _ = app.emit("easy-call:config-updated", &runtime_config);
+    Ok(runtime_config)
+}
+
 #[tauri::command]
 fn load_config(state: State<'_, AppState>) -> Result<AppConfig, String> {
     let mut result = state_read_config_cached(&state)?;

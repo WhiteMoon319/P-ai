@@ -1017,7 +1017,10 @@ function departmentDefaultSeed(department: DepartmentConfig | null | undefined):
     return EXPLORER_DEPARTMENT_DEFAULT;
   }
   if (id === "remote-customer-service-department") {
-    return REMOTE_CUSTOMER_SERVICE_DEPARTMENT_DEFAULT;
+    return {
+      ...REMOTE_CUSTOMER_SERVICE_DEPARTMENT_DEFAULT,
+      name: t("config.department.defaults.remoteCustomerServiceName"),
+    };
   }
   return null;
 }

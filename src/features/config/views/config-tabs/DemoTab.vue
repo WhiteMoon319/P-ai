@@ -3,12 +3,12 @@
     <div class="card border border-base-300 bg-base-100">
       <div class="card-body gap-3 p-4">
         <div class="space-y-1">
-          <h3 class="card-title text-base">Windows 原生通知测试</h3>
+          <h3 class="card-title text-base">{{ t("config.demo.nativeNotificationTitle") }}</h3>
           <p class="text-sm text-base-content/70">
-            点击下面按钮后，会通过 Tauri 后端触发一次系统原生通知，方便先验证基础能力。
+            {{ t("config.demo.nativeNotificationSummary") }}
           </p>
           <p class="text-xs text-base-content/60">
-            说明：开发模式下，Windows 可能显示 PowerShell 名称或默认图标，这不代表正式安装版最终效果。
+            {{ t("config.demo.nativeNotificationDevHint") }}
           </p>
         </div>
 
@@ -19,9 +19,9 @@
             :disabled="sending"
             @click="sendNativeNotification"
           >
-            {{ sending ? "发送中..." : "弹一个原生通知" }}
+            {{ sending ? t("config.demo.sending") : t("config.demo.sendNativeNotification") }}
           </button>
-          <span class="text-xs text-base-content/60">建议先把应用最小化或切到后台再测试。</span>
+          <span class="text-xs text-base-content/60">{{ t("config.demo.backgroundHint") }}</span>
         </div>
 
         <div v-if="errorText" class="alert alert-error text-sm">
@@ -38,6 +38,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../../services/tauri-api";
 
 type NativeNotificationDemoResult = {
@@ -51,6 +52,7 @@ type NativeNotificationDemoResult = {
 const sending = ref(false);
 const errorText = ref("");
 const resultText = ref("");
+const { t } = useI18n();
 
 async function sendNativeNotification() {
   sending.value = true;
@@ -60,7 +62,7 @@ async function sendNativeNotification() {
   try {
     const result = await invokeTauri<NativeNotificationDemoResult>("demo_send_native_notification");
     resultText.value = [
-      `已尝试发送原生通知。`,
+      t("config.demo.nativeNotificationSent"),
       `title: ${result.title}`,
       `permissionBefore: ${result.permissionBefore}`,
       `permissionAfter: ${result.permissionAfter}`,

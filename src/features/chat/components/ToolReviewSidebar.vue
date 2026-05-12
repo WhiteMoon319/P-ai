@@ -59,10 +59,10 @@
       <div v-else-if="activeTab === 'delegates'" class="flex min-h-0 flex-1 flex-col">
         <div v-if="props.delegateLoading && props.delegateStatuses.length === 0" class="flex min-h-0 flex-1 items-center justify-center text-sm text-base-content/65">
           <span class="loading loading-spinner loading-sm mr-2"></span>
-          正在加载委托状态
+          {{ t("chat.toolReview.delegateLoading") }}
         </div>
         <div v-else-if="props.delegateStatuses.length === 0" class="px-4 py-2 text-sm text-base-content/65">
-          当前会话暂无委托
+          {{ t("chat.toolReview.delegateEmpty") }}
         </div>
         <div v-else class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-2">
           <section
@@ -278,10 +278,10 @@
             </summary>
             <div class="collapse-content flex flex-col gap-3 px-3 pb-3">
               <div class="whitespace-pre-wrap wrap-break-word text-sm leading-7 text-base-content/80">
-                {{ finding.body || "暂无说明" }}
+                {{ finding.body || t("chat.toolReview.noDescription") }}
               </div>
               <div v-if="finding.location" class="rounded-box border border-base-300 bg-base-100 px-3 py-2 text-xs leading-6 text-base-content/70">
-                位置：{{ finding.location }}
+                {{ t("chat.toolReview.location", { location: finding.location }) }}
               </div>
             </div>
           </details>
@@ -289,7 +289,7 @@
         <pre
           v-else-if="currentReport?.status === 'success'"
           class="whitespace-pre-wrap wrap-break-word rounded-box border border-base-300 bg-base-200 px-3 py-3 text-sm leading-7 text-base-content/80"
-        >{{ currentReport.reportText || "暂无代码审查内容" }}</pre>
+        >{{ currentReport.reportText || t("chat.toolReview.noReportContent") }}</pre>
         <MarkdownRender
           v-else
           class="ecall-markdown-content tool-review-report-markdown max-w-none"
@@ -1146,8 +1146,8 @@ function reportExpandedText(report: ToolReviewReportRecord) {
   if (report.status === "pending") return "生成中";
   if (report.status === "failed") return report.errorText || "生成失败";
   const parsed = parseToolReviewJson(report.reportText);
-  if (parsed) return stringField(parsed.raw.overall_explanation) || report.reportText || "暂无代码审查内容";
-  return reportMarkdownField(report, "判定说明") || report.reportText || "暂无代码审查内容";
+  if (parsed) return stringField(parsed.raw.overall_explanation) || report.reportText || t("chat.toolReview.noReportContent");
+  return reportMarkdownField(report, "判定说明") || report.reportText || t("chat.toolReview.noReportContent");
 }
 </script>
 

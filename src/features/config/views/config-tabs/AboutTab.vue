@@ -47,8 +47,8 @@
           v-if="updateDialogReleaseUrl"
           class="btn"
           @click="openUpdateRelease"
-        >打开 Releases</button>
-        <button class="btn" @click="closeUpdateDialog">知道了</button>
+        >{{ t("dialogs.update.openReleases") }}</button>
+        <button class="btn" @click="closeUpdateDialog">{{ t("common.confirm") }}</button>
       </div>
     </div>
   </dialog>
@@ -73,7 +73,7 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const updateDialogOpen = ref(false);
-const updateDialogTitle = ref("检查更新");
+const updateDialogTitle = ref("");
 const updateDialogBody = ref("");
 const updateDialogReleaseUrl = ref("");
 const appVersion = ref("...");

@@ -751,6 +751,7 @@ fn main() {
             get_app_version,
             get_project_repository_url,
             set_github_update_method,
+            set_ui_language,
             load_config,
             check_message_store_migration,
             run_message_store_migration,

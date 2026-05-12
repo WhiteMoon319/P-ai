@@ -117,10 +117,10 @@ function handleConfirmDeleteConversationFromArchiveDialog() {
         >
           {{
             updateDialogPrimaryAction === 'force'
-              ? '强制下载更新'
+              ? t("dialogs.update.forceDownload")
               : updateDialogPrimaryAction === 'restart'
-                ? '更新并重启'
-                : '下载更新'
+                ? t("dialogs.update.restart")
+                : t("dialogs.update.download")
           }}
         </button>
         <button
@@ -128,10 +128,10 @@ function handleConfirmDeleteConversationFromArchiveDialog() {
           class="btn btn-sm"
           @click="emit('openUpdateRelease')"
         >
-          打开 Releases
+          {{ t("dialogs.update.openReleases") }}
         </button>
         <button class="btn btn-sm" @click="emit('closeUpdateDialog')">
-          {{ updateDialogPrimaryAction ? '取消' : '知道了' }}
+          {{ updateDialogPrimaryAction ? t("common.cancel") : t("common.confirm") }}
         </button>
       </div>
     </div>
@@ -152,20 +152,20 @@ function handleConfirmDeleteConversationFromArchiveDialog() {
 
   <dialog class="modal" :class="{ 'modal-open': rewindConfirmDialogOpen }">
     <div class="modal-box max-w-md">
-      <h3 class="font-semibold text-base">撤回选项</h3>
-      <div class="mt-2 text-sm opacity-80">请选择本次撤回要执行的范围：</div>
+      <h3 class="font-semibold text-base">{{ t("dialogs.rewind.title") }}</h3>
+      <div class="mt-2 text-sm opacity-80">{{ t("dialogs.rewind.hint") }}</div>
       <div class="mt-4 flex flex-col items-center gap-2">
         <button
           v-if="rewindConfirmCanUndoPatch"
           class="btn btn-sm btn-error w-full"
           @click="emit('confirmRewindWithPatch')"
         >
-          撤回消息并撤回修改
+          {{ t("dialogs.rewind.withPatch") }}
         </button>
         <button class="btn btn-sm w-full" @click="emit('confirmRewindMessageOnly')">
-          仅撤回消息
+          {{ t("dialogs.rewind.messageOnly") }}
         </button>
-        <button class="btn btn-sm btn-primary w-full" @click="emit('cancelRewindConfirm')">取消</button>
+        <button class="btn btn-sm btn-primary w-full" @click="emit('cancelRewindConfirm')">{{ t("common.cancel") }}</button>
       </div>
     </div>
     <form method="dialog" class="modal-backdrop">
@@ -219,8 +219,8 @@ function handleConfirmDeleteConversationFromArchiveDialog() {
 
   <dialog class="modal" :class="{ 'modal-open': skillPlaceholderDialogOpen }">
     <div class="modal-box max-w-md">
-      <h3 class="font-semibold text-base">Skill 列表</h3>
-      <div class="mt-2 text-sm opacity-80">预留功能，暂未实现。</div>
+      <h3 class="font-semibold text-base">{{ t("dialogs.skill.title") }}</h3>
+      <div class="mt-2 text-sm opacity-80">{{ t("dialogs.skill.placeholder") }}</div>
       <div class="modal-action">
         <button class="btn btn-sm btn-primary" @click="emit('closeSkillPlaceholderDialog')">{{ t("common.close") }}</button>
       </div>
@@ -232,13 +232,13 @@ function handleConfirmDeleteConversationFromArchiveDialog() {
 
   <dialog class="modal" :class="{ 'modal-open': forceArchiveActionDialogOpen }">
     <div class="modal-box w-[80vw] max-w-[80vw]">
-      <h3 class="font-semibold text-base">处理当前会话</h3>
-      <div v-if="forceArchivePreviewLoading" class="mt-3 text-sm opacity-70">正在判断当前会话适合压缩、归档还是丢弃...</div>
+      <h3 class="font-semibold text-base">{{ t("dialogs.forceArchive.title") }}</h3>
+      <div v-if="forceArchivePreviewLoading" class="mt-3 text-sm opacity-70">{{ t("dialogs.forceArchive.loading") }}</div>
       <template v-else>
         <div class="mt-3 rounded-box border border-base-300 bg-base-200/40 px-3 py-3 text-sm">
-          <div class="font-medium">压缩</div>
-          <div class="mt-1 opacity-80">整理较早历史，保留当前会话继续聊。</div>
-          <div class="mt-2 text-xs opacity-70">适合上下文占用偏高，但你还想继续当前话题时使用。</div>
+          <div class="font-medium">{{ t("dialogs.forceArchive.compactTitle") }}</div>
+          <div class="mt-1 opacity-80">{{ t("dialogs.forceArchive.compactSummary") }}</div>
+          <div class="mt-2 text-xs opacity-70">{{ t("dialogs.forceArchive.compactHint") }}</div>
           <div
             v-if="forceCompactionPreview?.compactionDisabledReason"
             class="mt-3 rounded border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning-content"
@@ -247,14 +247,14 @@ function handleConfirmDeleteConversationFromArchiveDialog() {
           </div>
         </div>
         <div class="mt-3 rounded-box border border-base-300 bg-base-200/40 px-3 py-3 text-sm">
-          <div class="font-medium">丢弃</div>
-          <div class="mt-1 opacity-80">直接删除当前会话，不生成摘要，也不保留归档。</div>
-          <div class="mt-2 text-xs opacity-70">适合测试、误触发，或确认这段内容不需要留痕时使用。</div>
+          <div class="font-medium">{{ t("dialogs.forceArchive.dropTitle") }}</div>
+          <div class="mt-1 opacity-80">{{ t("dialogs.forceArchive.dropSummary") }}</div>
+          <div class="mt-2 text-xs opacity-70">{{ t("dialogs.forceArchive.dropHint") }}</div>
         </div>
         <div class="mt-3 rounded-box border border-base-300 bg-base-200/40 px-3 py-3 text-sm">
-          <div class="font-medium">归档</div>
-          <div class="mt-1 opacity-80">执行记忆反思并保留正文对话，不生成摘要。</div>
-          <div class="mt-2 text-xs opacity-70">适合这段会话已经结束，准备沉淀为历史记录时使用。</div>
+          <div class="font-medium">{{ t("dialogs.forceArchive.archiveTitle") }}</div>
+          <div class="mt-1 opacity-80">{{ t("dialogs.forceArchive.archiveSummary") }}</div>
+          <div class="mt-2 text-xs opacity-70">{{ t("dialogs.forceArchive.archiveHint") }}</div>
           <div
             v-if="forceArchivePreview?.archiveDisabledReason"
             class="mt-3 rounded border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning-content"
@@ -265,8 +265,8 @@ function handleConfirmDeleteConversationFromArchiveDialog() {
       </template>
       <div class="mt-4 flex items-end justify-between gap-4">
         <div class="text-xs opacity-60">
-          <div>当前会话消息数：{{ forceArchivePreview?.messageCount ?? 0 }}</div>
-          <div>当前上下文占用：{{ forceCompactionPreview?.contextUsagePercent ?? 0 }}%</div>
+          <div>{{ t("dialogs.forceArchive.messageCount", { count: forceArchivePreview?.messageCount ?? 0 }) }}</div>
+          <div>{{ t("dialogs.forceArchive.contextUsage", { percent: forceCompactionPreview?.contextUsagePercent ?? 0 }) }}</div>
         </div>
         <div class="modal-action mt-0">
         <button
@@ -274,21 +274,21 @@ function handleConfirmDeleteConversationFromArchiveDialog() {
           :disabled="forceArchivePreviewLoading || !forceArchivePreview?.canDropConversation || forcingArchive"
           @click="handleConfirmDeleteConversationFromArchiveDialog"
         >
-          丢弃
+          {{ t("dialogs.forceArchive.dropTitle") }}
         </button>
         <button
           class="btn btn-sm btn-primary"
           :disabled="forceArchivePreviewLoading || !forceCompactionPreview?.canCompact || forcingArchive"
           @click="handleConfirmForceCompactionAction"
         >
-          压缩
+          {{ t("dialogs.forceArchive.compactTitle") }}
         </button>
         <button
           class="btn btn-sm btn-secondary"
           :disabled="forceArchivePreviewLoading || !forceArchivePreview?.canArchive || forcingArchive"
           @click="handleConfirmForceArchiveAction"
         >
-          归档
+          {{ t("dialogs.forceArchive.archiveTitle") }}
         </button>
         <button class="btn btn-sm" :disabled="forceArchivePreviewLoading || forcingArchive" @click="handleCloseForceArchiveActionDialog">
           {{ t("common.cancel") }}

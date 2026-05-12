@@ -17,7 +17,7 @@
       v-if="selectionModeEnabled"
       class="rounded-box border border-base-300 bg-base-100 px-3 py-3"
     >
-      <div class="text-xs opacity-70">已选择 {{ selectedMessageCount }} 条消息</div>
+      <div class="text-xs opacity-70">{{ t("chat.selection.selectedCount", { count: selectedMessageCount }) }}</div>
       <div class="mt-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -25,7 +25,7 @@
           :disabled="selectedMessageCount === 0"
           @click="emit('selectionActionBranch')"
         >
-          创造会话分支
+          {{ t("chat.selection.branch") }}
         </button>
         <button
           type="button"
@@ -34,7 +34,7 @@
           :disabled="selectedMessageCount === 0 || selectionDeliverTargetOptions.length === 0"
           @click="openSelectionDeliverCard"
         >
-          转发到会话
+          {{ t("chat.selection.forward") }}
         </button>
         <button
           type="button"
@@ -43,7 +43,7 @@
           :disabled="delegateDepartmentOptions.length === 0"
           @click="openSelectionDelegateCard"
         >
-          发起委托
+          {{ t("chat.selection.delegate") }}
         </button>
         <button
           type="button"
@@ -51,7 +51,7 @@
           :disabled="selectedMessageCount === 0"
           @click="emit('selectionActionCopy')"
         >
-          复制
+          {{ t("common.copy") }}
         </button>
         <button
           type="button"
@@ -60,22 +60,22 @@
           :disabled="selectedMessageCount === 0"
           @click="openSelectionShareCard"
         >
-          分享
+          {{ t("chat.selection.share") }}
         </button>
         <button
           type="button"
           class="btn btn-sm btn-ghost ml-auto"
           @click="handleExitSelectionMode"
         >
-          取消
+          {{ t("common.cancel") }}
         </button>
       </div>
       <div
         v-if="selectionDeliverCardOpen"
         class="mt-3 rounded-box border border-base-300 bg-base-200/50 px-3 py-3"
       >
-        <div class="text-sm font-medium">转发到会话</div>
-        <div class="mt-1 text-xs opacity-70">会把当前选中的原消息插入到目标会话末尾；如果目标会话正在流式输出，会直接失败。</div>
+        <div class="text-sm font-medium">{{ t("chat.selection.forward") }}</div>
+        <div class="mt-1 text-xs opacity-70">{{ t("chat.selection.forwardHint") }}</div>
         <select
           v-model="selectionDeliverTargetConversationId"
           class="select select-bordered select-sm mt-3 w-full"
@@ -95,7 +95,7 @@
             class="btn btn-sm"
             @click="closeSelectionDeliverCard"
           >
-            取消
+            {{ t("common.cancel") }}
           </button>
           <button
             type="button"
@@ -103,7 +103,7 @@
             :disabled="!selectionDeliverTargetConversationId"
             @click="confirmSelectionDeliver"
           >
-            确定转发
+            {{ t("chat.selection.confirmForward") }}
           </button>
         </div>
       </div>
@@ -113,13 +113,13 @@
       >
         <div class="flex items-center justify-between gap-3">
           <div>
-            <div class="text-sm font-medium">发起异步委托</div>
-            <div class="mt-1 text-xs opacity-70">选中消息会作为纯文本背景发送给子代理；不选消息也可以直接委托。</div>
+            <div class="text-sm font-medium">{{ t("chat.selection.asyncDelegate") }}</div>
+            <div class="mt-1 text-xs opacity-70">{{ t("chat.selection.delegateHint") }}</div>
           </div>
           <div class="flex shrink-0 items-center gap-2">
-            <span class="text-sm opacity-70">快捷委托</span>
-            <button type="button" class="btn btn-sm" @click="applyDelegateReviewPreset">审查</button>
-            <button type="button" class="btn btn-sm btn-ghost" @click="clearSelectionDelegateFields">清空</button>
+            <span class="text-sm opacity-70">{{ t("chat.selection.quickDelegate") }}</span>
+            <button type="button" class="btn btn-sm" @click="applyDelegateReviewPreset">{{ t("chat.selection.reviewPreset") }}</button>
+            <button type="button" class="btn btn-sm btn-ghost" @click="clearSelectionDelegateFields">{{ t("common.clear") }}</button>
           </div>
         </div>
         <div v-if="recentDelegateRequests.length > 0" class="mt-3 flex flex-wrap gap-2">
@@ -142,27 +142,27 @@
         <textarea
           v-model="selectionDelegateBackground"
           class="textarea textarea-bordered mt-3 min-h-16 w-full resize-y text-sm"
-          placeholder="补充背景（可选）"
+          :placeholder="t('chat.selection.backgroundPlaceholder')"
         ></textarea>
         <textarea
           v-model="selectionDelegateQuestion"
           class="textarea textarea-bordered mt-2 min-h-20 w-full resize-y text-sm"
-          placeholder="要子代理查清的问题"
+          :placeholder="t('chat.selection.questionPlaceholder')"
         ></textarea>
         <textarea
           v-model="selectionDelegateFocus"
           class="textarea textarea-bordered mt-2 min-h-20 w-full resize-y text-sm"
-          placeholder="搜索/调查重点（可选）"
+          :placeholder="t('chat.selection.focusPlaceholder')"
         ></textarea>
         <div class="mt-3 flex items-center justify-end gap-2">
-          <button type="button" class="btn btn-sm" @click="closeSelectionDelegateCard">取消</button>
+          <button type="button" class="btn btn-sm" @click="closeSelectionDelegateCard">{{ t("common.cancel") }}</button>
           <button
             type="button"
             class="btn btn-sm btn-primary"
             :disabled="!canSubmitSelectionDelegate"
             @click="confirmSelectionDelegate"
           >
-            发起委托
+            {{ t("chat.selection.delegate") }}
           </button>
         </div>
       </div>
@@ -170,12 +170,12 @@
         v-if="selectionShareCardOpen"
         class="mt-3 rounded-box border border-base-300 bg-base-200/50 px-3 py-3"
       >
-        <div class="text-sm font-medium">分享</div>
-        <div class="mt-1 text-xs opacity-70">把当前选中的消息导出为可分享文件。</div>
+        <div class="text-sm font-medium">{{ t("chat.selection.share") }}</div>
+        <div class="mt-1 text-xs opacity-70">{{ t("chat.selection.shareHint") }}</div>
         <div class="mt-3 flex flex-wrap items-center gap-2">
-          <button type="button" class="btn btn-sm btn-primary" @click="confirmSelectionShare('png')">导出图片</button>
-          <button type="button" class="btn btn-sm" @click="confirmSelectionShare('html')">导出 HTML</button>
-          <button type="button" class="btn btn-sm btn-ghost ml-auto" @click="closeSelectionShareCard">取消</button>
+          <button type="button" class="btn btn-sm btn-primary" @click="confirmSelectionShare('png')">{{ t("chat.selection.exportImage") }}</button>
+          <button type="button" class="btn btn-sm" @click="confirmSelectionShare('html')">{{ t("chat.selection.exportHtml") }}</button>
+          <button type="button" class="btn btn-sm btn-ghost ml-auto" @click="closeSelectionShareCard">{{ t("common.cancel") }}</button>
         </div>
       </div>
     </div>

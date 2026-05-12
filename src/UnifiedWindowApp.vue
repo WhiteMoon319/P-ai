@@ -3902,22 +3902,22 @@ async function branchConversationFromSelection(payload: { count: number; message
           input: { conversationId },
         });
         if (warning) {
-          setStatus(`会话分支已在新独立窗口打开（降级整理）：${warning}`);
+          setStatus(tr("status.conversationBranchOpenedWithWarning", { warning }));
         } else {
-          setStatus(`已在新独立窗口打开会话分支：${String(result?.title || "").trim() || conversationId}`);
+          setStatus(tr("status.conversationBranchOpened", { title: String(result?.title || "").trim() || conversationId }));
         }
       } catch (detachError) {
         console.error("[独立聊天窗口] 会话分支创建成功，但打开新独立窗口失败", detachError);
-        setStatus(`会话分支已创建，但打开新独立窗口失败：${formatI18nError(tr, "status.requestFailed", detachError)}`);
+        setStatus(tr("status.conversationBranchDetachFailed", { err: formatI18nError(tr, "status.requestFailed", detachError) }));
       }
       return;
     }
     const snapshot = await requestConversationLightSnapshot(conversationId);
     applyConversationSnapshot(snapshot);
     if (warning) {
-      setStatus(`会话分支创建完成（降级整理）：${warning}`);
+      setStatus(tr("status.conversationBranchCreatedWithWarning", { warning }));
     } else {
-      setStatus(`已创建会话分支：${String(result?.title || "").trim() || conversationId}`);
+      setStatus(tr("status.conversationBranchCreated", { title: String(result?.title || "").trim() || conversationId }));
     }
   } catch (error) {
     setStatusError("status.loadMessagesFailed", error);
@@ -3963,7 +3963,9 @@ async function forwardConversationFromSelection(payload: {
     await refreshUnarchivedConversationOverview();
     const snapshot = await requestConversationLightSnapshot(effectiveTargetConversationId);
     applyConversationSnapshot(snapshot);
-    setStatus(`已转发到会话 ${Number(result?.forwardedCount || selectedMessageIds.length)} 条消息`);
+    setStatus(tr("status.conversationSelectionForwarded", {
+      count: Number(result?.forwardedCount || selectedMessageIds.length),
+    }));
   } catch (error) {
     setStatusError("status.loadMessagesFailed", error);
   } finally {
@@ -3995,7 +3997,7 @@ async function userAsyncDelegateFromSelection(payload: {
     createConversationDepartmentOptions.value.find((item) => item.id === targetDepartmentId)?.ownerAgentId || "",
   ).trim();
   if (sourceAgentId && targetOwnerAgentId && sourceAgentId === targetOwnerAgentId) {
-    setStatus("你同时担任这个职位，只能发起同步委托");
+    setStatus(tr("status.asyncDelegateSelfSyncOnly"));
     return false;
   }
   try {
@@ -4019,11 +4021,11 @@ async function userAsyncDelegateFromSelection(payload: {
     const targetName = String(result?.targetAgentName || result?.targetAgentId || "").trim() || "子代理";
     const selectedCount = Number(result?.selectedMessageCount || selectedMessageIds.length);
     setStatus(selectedCount > 0
-      ? `已发起异步委托给 ${targetName}，带入 ${selectedCount} 条消息`
-      : `已发起异步委托给 ${targetName}`);
+      ? tr("status.asyncDelegateStartedWithMessages", { name: targetName, count: selectedCount })
+      : tr("status.asyncDelegateStarted", { name: targetName }));
     return true;
   } catch (error) {
-    setStatus(`发起委托失败：${formatI18nError(tr, "status.requestFailed", error)}`);
+    setStatus(tr("status.asyncDelegateFailed", { err: formatI18nError(tr, "status.requestFailed", error) }));
     return false;
   }
 }
@@ -4830,7 +4832,20 @@ watch(
 );
 
 function setUiLanguage(value: string) {
-  if (!applyUiLanguage(value)) return;
+  const changed = applyUiLanguage(value);
+  const lang = normalizeLocale(value);
+  void invokeTauri<AppConfig>("set_ui_language", { uiLanguage: lang })
+    .then((saved) => {
+      config.uiLanguage = normalizeLocale(saved.uiLanguage);
+      locale.value = config.uiLanguage;
+      lastSavedConfigJson.value = buildConfigSnapshotJson();
+      if (changed) {
+        setStatus(t("status.configSaved"));
+      }
+    })
+    .catch((error) => {
+      setStatusError("status.saveConfigFailed", error);
+    });
 }
 
 async function importPersonaMemories(payload: { agentId: string; file: File }) {

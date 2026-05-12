@@ -50,7 +50,7 @@
 
       <div
         class="inline-flex h-8 w-8 items-center justify-center text-base-content/70"
-        :title="`当前上下文已使用 ${normalizedChatUsagePercent}%`"
+        :title="t('chat.contextUsageTitle', { percent: normalizedChatUsagePercent })"
       >
         <svg
           class="h-5 w-5 -rotate-90"
@@ -187,7 +187,7 @@
       </button>
       <button
         class="btn btn-ghost btn-sm"
-        title="最小化"
+        :title="t('window.minimize')"
         @click.stop="$emit('minimize-window')"
         :disabled="!windowReady"
       >
@@ -195,7 +195,7 @@
       </button>
       <button
         class="btn btn-ghost btn-sm"
-        :title="maximized ? '还原窗口' : '最大化'"
+        :title="maximized ? t('window.restore') : t('window.maximize')"
         @click.stop="$emit('toggle-maximize-window')"
         :disabled="!windowReady"
       >
@@ -203,7 +203,7 @@
       </button>
       <button
         class="btn btn-sm btn-ghost hover:bg-error"
-        :title="closeTitle || 'Close'"
+        :title="closeTitle || t('common.close')"
         @click.stop="$emit('close-window')"
         :disabled="!windowReady"
       >

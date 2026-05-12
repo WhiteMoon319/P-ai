@@ -3,13 +3,13 @@
     <div class="card bg-base-100 border border-base-300">
       <div class="card-body gap-3 p-4">
         <div>
-          <div class="card-title text-base mb-1">Codex 登录</div>
-          <div class="text-xs opacity-60">本地读取只检查凭证文件本身；运行时如果 token 过期，再由后端按需要刷新。</div>
+          <div class="card-title text-base mb-1">{{ t("config.api.codexLogin") }}</div>
+          <div class="text-xs opacity-60">{{ t("config.api.codexLoginHint") }}</div>
         </div>
 
         <div class="grid gap-3">
           <label class="flex flex-col gap-1">
-            <span class="text-sm font-medium">认证方式</span>
+            <span class="text-sm font-medium">{{ t("config.api.codexAuthMode") }}</span>
             <select v-model="provider.codexAuthMode" class="select select-bordered select-sm" @change="void refreshCodexAuthStatus()">
               <option v-for="item in codexAuthModeOptions" :key="item.value" :value="item.value">
                 {{ item.label }}
@@ -20,44 +20,44 @@
 
         <div v-if="provider.codexAuthMode === 'read_local'" class="grid gap-3">
           <label class="flex flex-col gap-1">
-            <span class="text-sm font-medium">本地凭证路径</span>
+            <span class="text-sm font-medium">{{ t("config.api.codexLocalAuthPath") }}</span>
             <input v-model="provider.codexLocalAuthPath" class="input input-bordered input-sm" :placeholder="DEFAULT_CODEX_LOCAL_AUTH_PATH" />
           </label>
           <div class="flex gap-2">
             <button class="btn btn-sm bg-base-200" type="button" :disabled="codexAuthBusy" @click="checkLocalCodexAuth">
-              检查本地登录
+              {{ t("config.api.codexCheckLocalLogin") }}
             </button>
           </div>
         </div>
 
         <div v-else class="grid gap-3">
-          <div class="text-sm opacity-70">应用会打开浏览器完成 OAuth 登录，凭证存到应用私有目录。</div>
+          <div class="text-sm opacity-70">{{ t("config.api.codexOAuthHint") }}</div>
           <div class="flex flex-wrap gap-2">
             <button class="btn btn-sm btn-primary" type="button" :disabled="codexAuthBusy" @click="startCodexOAuthLogin">
               <span v-if="codexAuthBusy" class="loading loading-spinner loading-xs"></span>
-              <span>登录 Codex</span>
+              <span>{{ t("config.api.codexLoginAction") }}</span>
             </button>
             <button v-if="currentCodexAuthStatus?.authenticated" class="btn btn-sm btn-outline btn-error" type="button" :disabled="codexAuthBusy" @click="logoutCodex">
-              退出登录
+              {{ t("config.api.codexLogout") }}
             </button>
           </div>
         </div>
 
         <div class="rounded-box border border-base-300 bg-base-200/50 p-3 text-sm">
-          <div class="font-medium">状态：{{ currentCodexAuthStatus?.status || "unknown" }}</div>
-          <div class="mt-1 opacity-80">{{ currentCodexAuthStatus?.message || "尚未检查登录状态。" }}</div>
-          <div class="mt-2 text-xs opacity-70">解析路径：{{ currentCodexAuthStatus?.localAuthPath || provider.codexLocalAuthPath || DEFAULT_CODEX_LOCAL_AUTH_PATH }}</div>
-          <div v-if="currentCodexAuthStatus?.email" class="text-xs opacity-70">账号：{{ currentCodexAuthStatus.email }}</div>
+          <div class="font-medium">{{ t("config.api.codexStatus", { status: currentCodexAuthStatus?.status || "unknown" }) }}</div>
+          <div class="mt-1 opacity-80">{{ currentCodexAuthStatus?.message || t("config.api.codexStatusUnchecked") }}</div>
+          <div class="mt-2 text-xs opacity-70">{{ t("config.api.codexResolvedPath", { path: currentCodexAuthStatus?.localAuthPath || provider.codexLocalAuthPath || DEFAULT_CODEX_LOCAL_AUTH_PATH }) }}</div>
+          <div v-if="currentCodexAuthStatus?.email" class="text-xs opacity-70">{{ t("config.api.codexAccount", { email: currentCodexAuthStatus.email }) }}</div>
           <div v-if="currentCodexAuthStatus?.accountId" class="text-xs opacity-70">Account ID：{{ currentCodexAuthStatus.accountId }}</div>
-          <div v-if="currentCodexAuthStatus?.expiresAt" class="text-xs opacity-70">过期时间：{{ currentCodexAuthStatus.expiresAt }}</div>
+          <div v-if="currentCodexAuthStatus?.expiresAt" class="text-xs opacity-70">{{ t("config.api.codexExpiresAt", { time: currentCodexAuthStatus.expiresAt }) }}</div>
           <div v-if="currentCodexAuthStatus?.managedAuthPath && provider.codexAuthMode === 'managed_oauth'" class="text-xs opacity-70">
-            托管凭证：{{ currentCodexAuthStatus.managedAuthPath }}
+            {{ t("config.api.codexManagedAuthPath", { path: currentCodexAuthStatus.managedAuthPath }) }}
           </div>
           <div class="mt-3 rounded-box border border-base-300 bg-base-100/70 p-3">
             <div class="flex items-center justify-between gap-2">
               <div>
                 <div class="text-xs font-medium uppercase tracking-wide opacity-70">Rate Limits</div>
-                <div class="text-[11px] opacity-60">同步官方 usage 快照，长窗口按 weekly 口径展示。</div>
+                <div class="text-[11px] opacity-60">{{ t("config.api.codexRateLimitHint") }}</div>
               </div>
               <span v-if="currentCodexRateLimitBusy" class="loading loading-spinner loading-xs"></span>
             </div>
@@ -68,13 +68,13 @@
 
             <div v-else-if="currentCodexRateLimitSnapshots.length" class="mt-2 grid gap-2">
               <div v-if="currentCodexRateLimitPlanType" class="text-xs opacity-70">
-                套餐：{{ formatCodexPlanType(currentCodexRateLimitPlanType) }}
+                {{ t("config.api.codexPlan", { plan: formatCodexPlanType(currentCodexRateLimitPlanType) }) }}
               </div>
               <div class="text-xs opacity-70">
-                快照数：{{ currentCodexRateLimitSnapshots.length }}
+                {{ t("config.api.codexSnapshotCount", { count: currentCodexRateLimitSnapshots.length }) }}
               </div>
               <div class="text-xs opacity-70 break-all">
-                接口：{{ currentCodexRateLimitQuery?.usageUrl || "-" }}
+                {{ t("config.api.codexEndpoint", { url: currentCodexRateLimitQuery?.usageUrl || "-" }) }}
               </div>
 
               <div
@@ -96,7 +96,7 @@
                       <span class="text-xs opacity-80">{{ formatCodexRemainingText(snapshot.primary) }}</span>
                     </div>
                     <div v-if="snapshot.primary.resetsAt" class="mt-1 text-[11px] opacity-70">
-                      重置：{{ formatCodexResetAt(snapshot.primary.resetsAt) }}
+                      {{ t("config.api.codexResetAt", { time: formatCodexResetAt(snapshot.primary.resetsAt) }) }}
                     </div>
                   </div>
 
@@ -109,7 +109,7 @@
                       <span class="text-xs opacity-80">{{ formatCodexRemainingText(snapshot.secondary) }}</span>
                     </div>
                     <div v-if="snapshot.secondary.resetsAt" class="mt-1 text-[11px] opacity-70">
-                      重置：{{ formatCodexResetAt(snapshot.secondary.resetsAt) }}
+                      {{ t("config.api.codexResetAt", { time: formatCodexResetAt(snapshot.secondary.resetsAt) }) }}
                     </div>
                   </div>
                 </div>
@@ -118,7 +118,7 @@
                   v-else
                   class="rounded-box border border-dashed border-base-300 bg-base-100/60 px-3 py-2 text-xs opacity-70"
                 >
-                  当前 bucket 未返回窗口数据
+                  {{ t("config.api.codexNoWindowData") }}
                 </div>
               </div>
 
@@ -139,15 +139,15 @@
       <div class="card-body gap-3 p-4">
         <div class="flex items-center justify-between gap-2">
           <div>
-            <div class="card-title text-base mb-1">Codex 模型</div>
-            <div class="text-xs opacity-60">Codex 只允许设置思维强度，其余参数保持默认。</div>
+            <div class="card-title text-base mb-1">{{ t("config.api.codexModels") }}</div>
+            <div class="text-xs opacity-60">{{ t("config.api.codexModelsHint") }}</div>
           </div>
           <div class="flex gap-2">
             <button class="btn btn-sm bg-base-200" type="button" :class="{ loading: refreshingModels }" :disabled="refreshingModels" @click="$emit('refreshModels')">
-              <span>刷新模型</span>
+              <span>{{ t("config.api.refreshModels") }}</span>
             </button>
             <button class="btn btn-sm bg-base-200" type="button" @click="addModelCard">
-              <span>新增模型</span>
+              <span>{{ t("config.api.addModel") }}</span>
             </button>
           </div>
         </div>
@@ -159,7 +159,7 @@
             <div class="card-body gap-3 p-4">
               <div class="flex items-start justify-between gap-2">
                 <button class="min-w-0 flex-1 text-left" type="button" @click="$emit('selectModel', modelCard.id)">
-                  <div class="card-title text-base mb-1">{{ `${provider.name || provider.id}/${modelCard.model || "未命名模型"}` }}</div>
+                  <div class="card-title text-base mb-1">{{ `${provider.name || provider.id}/${modelCard.model || t("config.api.unnamedModel")}` }}</div>
                 </button>
                 <button class="btn btn-sm btn-square btn-ghost" type="button" :class="provider.models.length <= 1 ? 'text-base-content/30' : 'text-error'" :disabled="provider.models.length <= 1" @click="removeModelCard(modelCard.id)">
                   <Trash2 class="h-3.5 w-3.5" />
@@ -168,7 +168,7 @@
 
               <div class="grid gap-3 md:grid-cols-2">
                 <label class="flex flex-col gap-1">
-                  <span class="text-sm font-medium">模型</span>
+                  <span class="text-sm font-medium">{{ t("config.api.model") }}</span>
                   <select v-model="modelCard.model" class="select select-bordered select-sm" @change="syncCachedModels">
                     <option v-for="option in providerModelOptions" :key="`${modelCard.id}-${option}`" :value="option">
                       {{ option }}
@@ -177,7 +177,7 @@
                 </label>
 
                 <label class="flex flex-col gap-1">
-                  <span class="text-sm font-medium">思维强度</span>
+                  <span class="text-sm font-medium">{{ t("config.api.reasoningEffort") }}</span>
                   <select v-model="modelCard.reasoningEffort" class="select select-bordered select-sm">
                     <option v-for="item in reasoningEffortOptions" :key="item.value" :value="item.value">
                       {{ item.label }}
@@ -187,7 +187,7 @@
               </div>
 
               <label class="flex items-center justify-between rounded-box border border-base-300 bg-base-200 px-3 py-2">
-                <span class="text-sm">启用工具</span>
+                <span class="text-sm">{{ t("config.api.capTools") }}</span>
                 <input v-model="modelCard.enableTools" type="checkbox" class="toggle toggle-sm" />
               </label>
             </div>
@@ -200,6 +200,7 @@
 
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { Trash2 } from "lucide-vue-next";
 import type {
   ApiModelConfigItem,
@@ -228,6 +229,7 @@ const props = defineProps<{
   modelRefreshError: string;
 }>();
 
+const { t } = useI18n();
 const emit = defineEmits<{
   (e: "refreshModels"): void;
   (e: "selectModel", modelId: string): void;
@@ -239,12 +241,12 @@ const codexAuthPollTimer = ref<number | null>(null);
 const codexRateLimitQueryByProvider = ref<Record<string, CodexRateLimitQueryResult | null>>({});
 const codexRateLimitBusyByProvider = ref<Record<string, boolean>>({});
 const codexRateLimitErrorByProvider = ref<Record<string, string>>({});
-const reasoningEffortOptions = [
-  { value: "low", label: "低" },
-  { value: "medium", label: "中" },
-  { value: "high", label: "高" },
-  { value: "xhigh", label: "极高" },
-];
+const reasoningEffortOptions = computed(() => [
+  { value: "low", label: t("config.api.reasoningLow") },
+  { value: "medium", label: t("config.api.reasoningMedium") },
+  { value: "high", label: t("config.api.reasoningHigh") },
+  { value: "xhigh", label: t("config.api.reasoningXHigh") },
+]);
 const codexAuthModeOptions: Array<{ value: CodexAuthMode; label: string }> = [
   { value: "read_local", label: "读取本地" },
   { value: "managed_oauth", label: "自行登录" },
