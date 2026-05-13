@@ -534,6 +534,7 @@
           @copy-report="copyToolReviewReport"
           @attach-report="$emit('attachToolReviewReport', $event)"
           @open-delegate-detail="openDelegateArchiveDetail"
+          @abort-delegate="abortDelegate"
         />
       </div>
     </div>
@@ -1925,6 +1926,7 @@ const {
   delegateStatusesLoading,
   delegateStatusesErrorText,
   openDelegateArchiveDetail,
+  abortDelegate,
 } = useDelegateStatus({
   activeConversationId: toRef(props, "activeConversationId"),
   panelOpen: toolReviewPanelOpen,

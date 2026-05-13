@@ -835,6 +835,7 @@ fn main() {
             get_unarchived_conversation_message_by_id,
             list_delegate_conversations,
             list_conversation_delegate_statuses,
+            abort_delegate_conversation,
             get_delegate_conversation_messages,
             delete_delegate_conversation,
             delete_unarchived_conversation,

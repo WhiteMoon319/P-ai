@@ -262,6 +262,76 @@ fn delegate_runtime_thread_archive(
     Ok(())
 }
 
+fn abort_delegate_runtime_thread(
+    app_state: &AppState,
+    delegate_id: &str,
+    reason: &str,
+) -> Result<bool, String> {
+    let normalized_delegate_id = delegate_id.trim();
+    if normalized_delegate_id.is_empty() {
+        return Err("delegateId 不能为空".to_string());
+    }
+    let thread = delegate_runtime_thread_get(app_state, normalized_delegate_id)?;
+    let Some(thread) = thread else {
+        return Ok(false);
+    };
+    let chat_key = delegate_thread_chat_key(&thread);
+    let aborted_chat = {
+        let mut inflight = app_state
+            .inflight_chat_abort_handles
+            .lock()
+            .map_err(|_| "Failed to lock inflight chat abort handles".to_string())?;
+        if let Some(handle) = inflight.remove(&chat_key) {
+            handle.abort();
+            true
+        } else {
+            false
+        }
+    };
+    let aborted_tool = abort_inflight_tool_abort_handle(app_state, &chat_key)?;
+    let descendant_count = abort_delegate_runtime_descendants_by_parent_session(app_state, &chat_key)?;
+    if let Err(err) = clear_conversation_queue(
+        app_state,
+        &thread.conversation.id,
+        "委托已被打断，队列消息已清理",
+    ) {
+        runtime_log_info(format!(
+            "[委托会话] 清理队列失败: delegate_id={}, error={}",
+            normalized_delegate_id, err
+        ));
+    }
+    if let Err(err) = release_conversation_processing_claim(app_state, &thread.conversation.id) {
+        runtime_log_info(format!(
+            "[委托会话] 释放处理声明失败: delegate_id={}, error={}",
+            normalized_delegate_id, err
+        ));
+    }
+    if let Err(err) = set_conversation_runtime_state(app_state, &thread.conversation.id, MainSessionState::Idle) {
+        runtime_log_info(format!(
+            "[委托会话] 重置运行态失败: delegate_id={}, error={}",
+            normalized_delegate_id, err
+        ));
+    }
+    clear_inflight_completed_tool_history(app_state, &chat_key)?;
+    let archived_at = now_iso();
+    delegate_runtime_thread_archive(app_state, normalized_delegate_id, &archived_at)?;
+    delegate_store_update_status(
+        &app_state.data_path,
+        normalized_delegate_id,
+        DELEGATE_STATUS_FAILED,
+    )?;
+    runtime_log_info(format!(
+        "[委托会话] 已打断: delegate_id={}, chat_key={}, reason={}, aborted_chat={}, aborted_tool={}, descendant_count={}",
+        normalized_delegate_id,
+        chat_key,
+        reason,
+        aborted_chat,
+        aborted_tool,
+        descendant_count
+    ));
+    Ok(true)
+}
+
 fn delegate_runtime_thread_get_any(
     app_state: &AppState,
     delegate_id: &str,

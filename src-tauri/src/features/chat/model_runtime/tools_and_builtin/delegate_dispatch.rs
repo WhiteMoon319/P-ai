@@ -323,6 +323,8 @@ async fn run_sync_delegate_on_child_task(
 ) -> Result<SendChatResult, String> {
     // 同步委托仍需等待结果，但不要把子会话整条发送链路直接压在当前工具调用栈上。
     // 远程联系人路径会额外叠加一层上下文准备与 IM 规则处理，直接 await 容易把 tokio worker 栈顶爆。
+    let abort_state = app_state.clone();
+    let abort_delegate_id = delegate.delegate_id.clone();
     let join = tokio::spawn(async move {
         delegate_run_thread_to_completion(
             app_state,
@@ -334,7 +336,47 @@ async fn run_sync_delegate_on_child_task(
     });
     match join.await {
         Ok(result) => result,
-        Err(err) => Err(format!("同步委托子任务异常结束: {err}")),
+        Err(err) => {
+            let _ = abort_delegate_runtime_thread(
+                &abort_state,
+                &abort_delegate_id,
+                "同步委托子任务异常结束",
+            );
+            Err(format!("同步委托子任务异常结束: {err}"))
+        }
+    }
+}
+
+struct SyncDelegateAbortGuard {
+    state: AppState,
+    delegate_id: String,
+    completed: bool,
+}
+
+impl SyncDelegateAbortGuard {
+    fn new(state: AppState, delegate_id: String) -> Self {
+        Self {
+            state,
+            delegate_id,
+            completed: false,
+        }
+    }
+
+    fn complete(&mut self) {
+        self.completed = true;
+    }
+}
+
+impl Drop for SyncDelegateAbortGuard {
+    fn drop(&mut self) {
+        if self.completed {
+            return;
+        }
+        let _ = abort_delegate_runtime_thread(
+            &self.state,
+            &self.delegate_id,
+            "同步委托等待层被取消",
+        );
     }
 }
 
@@ -487,14 +529,17 @@ async fn delegate_execute_sync(
         false,
         call_stack,
     )?;
+    let mut abort_guard = SyncDelegateAbortGuard::new(app_state.clone(), delegate.delegate_id.clone());
 
-    match run_sync_delegate_on_child_task(
+    let sync_result = run_sync_delegate_on_child_task(
         app_state.clone(),
         delegate.clone(),
         delegate_target_chat_api_config_ids(&preflight.config, &preflight.target_department),
         session_id.to_string(),
     )
-    .await {
+    .await;
+    abort_guard.complete();
+    match sync_result {
         Ok(run) => Ok(serde_json::json!({
             "ok": true,
             "status": "委托完成",

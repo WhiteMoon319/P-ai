@@ -75,6 +75,19 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
     }
   }
 
+  async function abortDelegate(status: ConversationDelegateStatusSummary) {
+    const delegateId = String(status?.delegateId || "").trim();
+    if (!delegateId) return;
+    try {
+      await invokeTauri("abort_delegate_conversation", {
+        input: { delegateId },
+      });
+      await refresh();
+    } catch (error) {
+      delegateStatusesErrorText.value = `打断委托失败：${String(error)}`;
+    }
+  }
+
   watch(
     () => [panelOpen.value, String(activeConversationId.value || "").trim()],
     () => syncPolling(),
@@ -88,5 +101,6 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
     delegateStatusesLoading,
     delegateStatusesErrorText,
     openDelegateArchiveDetail,
+    abortDelegate,
   };
 }

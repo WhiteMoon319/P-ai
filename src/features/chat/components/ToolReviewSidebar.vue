@@ -88,7 +88,13 @@
                 <span class="shrink-0">用量 {{ formatTokenK(delegate.tokenCount) }}</span>
               </div>
             </div>
-            <div class="mt-3 flex justify-end">
+            <div class="mt-3 flex justify-end gap-2">
+              <button
+                v-if="isDelegateRunning(delegate.status)"
+                type="button"
+                class="btn btn-sm btn-error btn-outline gap-1.5 font-normal"
+                @click="emit('abortDelegate', delegate)"
+              >打断</button>
               <button
                 type="button"
                 class="btn btn-sm gap-1.5 border-base-300 bg-base-100 font-normal hover:bg-base-100"
@@ -467,6 +473,7 @@ const emit = defineEmits<{
   (e: "copyReport", reportText: string): void;
   (e: "attachReport", reportText: string): void;
   (e: "openDelegateDetail", status: ConversationDelegateStatusSummary): void;
+  (e: "abortDelegate", status: ConversationDelegateStatusSummary): void;
 }>();
 
 const { t } = useI18n();
@@ -1076,6 +1083,10 @@ function formatDelegateStatus(status: string) {
   if (status === "completed") return "已完成";
   if (status === "failed") return "失败";
   return "未知";
+}
+
+function isDelegateRunning(status: string) {
+  return status === "running" || status === "delivered";
 }
 
 function delegateStatusBadgeClass(status: string) {

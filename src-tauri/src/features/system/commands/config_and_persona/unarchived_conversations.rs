@@ -1119,6 +1119,31 @@ fn list_conversation_delegate_statuses(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct AbortDelegateConversationInput {
+    delegate_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AbortDelegateConversationResult {
+    aborted: bool,
+}
+
+#[tauri::command]
+fn abort_delegate_conversation(
+    input: AbortDelegateConversationInput,
+    state: State<'_, AppState>,
+) -> Result<AbortDelegateConversationResult, String> {
+    let aborted = abort_delegate_runtime_thread(
+        state.inner(),
+        &input.delegate_id,
+        "用户从委托状态卡片打断",
+    )?;
+    Ok(AbortDelegateConversationResult { aborted })
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct GetUnarchivedConversationMessagesInput {
     conversation_id: String,
 }
