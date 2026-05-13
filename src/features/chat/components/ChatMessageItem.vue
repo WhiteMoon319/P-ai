@@ -1789,6 +1789,10 @@ function openResolvedImagePreview(
   max-width: none;
 }
 
+.ecall-message-simple .ecall-message-bubble-bg-hidden {
+  padding-inline: 1rem !important;
+}
+
 .ecall-message-continued {
   padding-top: 0;
 }

@@ -2,6 +2,10 @@
 
 ## 进行中
 
+- 优化（chat-simple-message-padding）：聊天历史无气泡模式下为消息正文恢复左右内边距，避免长文本贴边显示。
+
+- 修复（chat-model-select-opaque）：聊天输入栏模型选择器取消透明 ghost 样式，恢复实底下拉背景，避免模型上拉列表透出聊天内容。
+
 - 修复（windows-updater-before-exit-shutdown）：Windows 安装版自动更新在 updater 硬退出旧进程前先优雅停机远程 IM 与 MCP 后台服务，并保留 Tauri 默认退出清理，避免更新重启后 OneBot 端口和远程联系人运行态残留。
 
 ## 发布：v0.9.87
