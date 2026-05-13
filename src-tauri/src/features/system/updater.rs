@@ -282,6 +282,23 @@ fn updater_public_key() -> Result<&'static str, String> {
     Ok(key)
 }
 
+#[cfg(target_os = "windows")]
+fn shutdown_background_services_before_windows_updater_exit(app: AppHandle) {
+    // tauri-plugin-updater 在 Windows 安装版会启动安装器后直接 std::process::exit(0)，
+    // 必须挂到 on_before_exit，并保留默认 cleanup_before_exit，才能在硬退出前收干净运行态。
+    eprintln!("[自动更新] Windows 安装器退出前开始优雅停机后台服务");
+    let cleanup_app = app.clone();
+    let handle = thread::spawn(move || {
+        tauri::async_runtime::block_on(graceful_shutdown_background_services(&app));
+    });
+    if handle.join().is_err() {
+        eprintln!("[自动更新] Windows 安装器退出前优雅停机后台服务失败：停机线程异常退出");
+    } else {
+        eprintln!("[自动更新] Windows 安装器退出前优雅停机后台服务完成");
+    }
+    cleanup_app.cleanup_before_exit();
+}
+
 fn detect_update_runtime_paths() -> Result<UpdateRuntimePaths, String> {
     let exe_path = std::env::current_exe()
         .map_err(|err| format!("获取当前可执行文件路径失败：{err}"))?;
@@ -724,13 +741,19 @@ async fn check_updater_with_manifest_fallbacks(
             if let Some(ref target) = target {
                 builder = builder.target(target.clone());
             }
-    #[cfg(target_os = "windows")]
+            #[cfg(target_os = "windows")]
             {
                 // NSIS 自动更新如果不显式传入当前安装目录，安装器可能会回落到默认目录。
                 // `/D=...` 需要作为最后一个 NSIS 参数传入，tauri-plugin-updater 会把额外 installer_args
                 // 追加在内部参数之后，这里正好满足要求。
                 if runtime_kind == UpdateRuntimeKind::Installer {
                     let runtime = detect_update_runtime_paths()?;
+                    let app_before_exit = app.clone();
+                    builder = builder.on_before_exit(move || {
+                        shutdown_background_services_before_windows_updater_exit(
+                            app_before_exit.clone(),
+                        );
+                    });
                     builder = builder.installer_arg(std::ffi::OsString::from(format!(
                         "/D={}",
                         runtime.exe_dir.display()

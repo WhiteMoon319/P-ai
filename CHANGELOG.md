@@ -2,6 +2,8 @@
 
 ## 进行中
 
+- 修复（windows-updater-before-exit-shutdown）：Windows 安装版自动更新在 updater 硬退出旧进程前先优雅停机远程 IM 与 MCP 后台服务，并保留 Tauri 默认退出清理，避免更新重启后 OneBot 端口和远程联系人运行态残留。
+
 ## 发布：v0.9.87
 
 - 发布（release-0.9.87）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.87`，纳入本轮三栏侧栏交互、界面语言持久化、遗漏 i18n 文案补齐、远程联系人设置本地化与聊天时间分割线等改动。
