@@ -1488,7 +1488,6 @@ async function switchRemoteImContactConversation(contactId: string) {
     hasMoreBackendHistory.value = nextMessages.length >= FOREGROUND_SNAPSHOT_RECENT_LIMIT;
     clearConversationBadge(conversationId);
     markConversationReadPersisted(conversationId);
-    scheduleConversationScrollToBottomFallback(conversationId);
   } catch (error) {
     setStatusError("status.loadMessagesFailed", error);
   } finally {
@@ -3368,9 +3367,6 @@ async function applyConversationMessagesAfterSynced(payload: ConversationMessage
       triggerConversationScrollToBottom(conversationId, "manual_after_synced");
       return;
     }
-    if (pendingConversationScrollToBottomConversationId === conversationId) {
-      triggerConversationScrollToBottom(conversationId, "after_synced");
-    }
   }
 }
 
@@ -3453,7 +3449,6 @@ function applyConversationSnapshot(snapshot: SwitchConversationSnapshot) {
     maybeResumeForegroundStreamingDraft(nextConversationId, "apply_snapshot");
     void resumeForegroundRuntimeFromBackend(nextConversationId, "apply_snapshot");
   }
-  scheduleConversationScrollToBottomFallback(nextConversationId);
 }
 
 function applyConversationTodosUpdated(payload?: ConversationTodosUpdatedPayload | null) {
@@ -3765,34 +3760,21 @@ async function switchUnarchivedConversation(conversationId: string) {
       markConversationReadPersisted(previousConversationId);
     }
     chatFlow.freezeForegroundRoundState();
-    currentChatConversationId.value = cid;
-    currentChatTodos.value = [];
     clearPendingManualScrollToBottom();
-    const cachedDisplay = freezeConversationMessages(conversationMessageCache.value[cid] || []);
-    allMessages.value = cachedDisplay;
-    hasMoreBackendHistory.value = inferHasMoreHistoryFromSnapshot(cachedDisplay);
     foregroundTailLatestReady.value = false;
-    maybeResumeForegroundStreamingDraft(cid, "switch_cached_display");
-    void resumeForegroundRuntimeFromBackend(cid, "switch_cached_display");
-    clearConversationBadge(cid);
-    markConversationReadPersisted(cid);
     const trace = beginForegroundPaintTrace(cid);
-    await nextTick();
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    logForegroundPaintTrace(trace, "前台切换首帧完成", {
-      fromConversationId: previousConversationId,
-      cachedCount: cachedDisplay.length,
-      displayBlockCount: displayMessageBlocks.value.length,
-      syncCostMs: Math.round((perfNow() - startedAt) * 10) / 10,
-    });
     const snapshot = await requestConversationLightSnapshot(cid);
     applyConversationSnapshot(snapshot);
     await resumeForegroundRuntimeFromBackend(cid, "switch_snapshot");
+    clearConversationBadge(cid);
+    markConversationReadPersisted(cid);
     await nextTick();
     logForegroundPaintTrace(trace, "前台轻量快照已接管最新消息", {
       conversationId: cid,
       snapshotCount: Array.isArray(snapshot?.messages) ? snapshot.messages.length : 0,
       hasMoreHistory: !!snapshot?.hasMoreHistory,
+      fromConversationId: previousConversationId,
+      syncCostMs: Math.round((perfNow() - startedAt) * 10) / 10,
     });
   } catch (error) {
     setStatusError("status.loadMessagesFailed", error);

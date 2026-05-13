@@ -98,7 +98,7 @@
                       </button>
                       <ul
                         tabindex="0"
-                        class="menu dropdown-content z-[60] mt-2 w-40 rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
+                        class="menu dropdown-content z-60 mt-2 w-40 rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
                         @click.stop
                         @mousedown.stop
                       >
@@ -366,9 +366,10 @@ function conversationItemTitle(item: ChatConversationOverviewItem): string {
 }
 
 function handleConversationCardClick(item: ChatConversationOverviewItem) {
+  const conversationId = String(item.conversationId || "").trim();
   if (isCurrentConversation(item) || isConversationDisabled(item)) return;
   emit("select", {
-    conversationId: String(item.conversationId || "").trim(),
+    conversationId,
     kind: item.kind,
     remoteContactId: String(item.remoteContactId || "").trim() || undefined,
   });

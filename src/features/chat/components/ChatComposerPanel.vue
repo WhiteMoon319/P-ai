@@ -379,7 +379,7 @@
             <Mic class="h-3.5 w-3.5" />
           </button>
           <select
-            class="select select-bordered select-sm h-8 min-h-8 w-44 max-w-44 bg-base-100 text-base-content"
+            class="select select-bordered select-sm h-8 min-h-8 w-44 max-w-44 border-transparent bg-base-100 text-base-content focus:border-transparent focus:outline-none"
             :value="selectedChatModelId"
             :disabled="chatting || frozen || normalizedChatModelOptions.length === 0"
             title="首要模型"

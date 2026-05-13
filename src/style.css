@@ -274,7 +274,7 @@ body {
   .overflow-auto,
   .overflow-scroll,
   textarea
-) {
+):not(.ecall-chat-scroll-container) {
   scrollbar-gutter: stable both-edges;
   scrollbar-color: transparent transparent;
 }
@@ -285,7 +285,7 @@ body {
   .overflow-auto,
   .overflow-scroll,
   textarea
-):where(:hover, :focus, :focus-within) {
+):not(.ecall-chat-scroll-container):where(:hover, :focus, :focus-within) {
   scrollbar-color: color-mix(in oklab, currentColor 28%, transparent) transparent;
 }
 
@@ -295,7 +295,7 @@ body {
   .overflow-auto,
   .overflow-scroll,
   textarea
-)::-webkit-scrollbar-track {
+):not(.ecall-chat-scroll-container)::-webkit-scrollbar-track {
   background: transparent;
 }
 
@@ -305,7 +305,7 @@ body {
   .overflow-auto,
   .overflow-scroll,
   textarea
-)::-webkit-scrollbar-thumb {
+):not(.ecall-chat-scroll-container)::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background-color: transparent;
 }
@@ -316,8 +316,43 @@ body {
   .overflow-auto,
   .overflow-scroll,
   textarea
-):where(:hover, :focus, :focus-within)::-webkit-scrollbar-thumb {
+):not(.ecall-chat-scroll-container):where(:hover, :focus, :focus-within)::-webkit-scrollbar-thumb {
   background-color: color-mix(in oklab, currentColor 28%, transparent);
+}
+
+.ecall-chat-scroll-container {
+  scrollbar-width: none;
+  scrollbar-gutter: auto;
+}
+
+.ecall-chat-scroll-container::-webkit-scrollbar {
+  display: none;
+}
+
+.chat-input-no-focus,
+.chat-input-no-focus:focus,
+.chat-input-no-focus:focus-visible {
+  border-color: transparent !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background-color: transparent !important;
+}
+
+.chat-input-no-focus::placeholder {
+  color: color-mix(in oklab, currentColor 40%, transparent);
+}
+
+.ecall-pane-splitter {
+  width: 4px;
+  cursor: col-resize;
+  flex-shrink: 0;
+  transition: background-color 0.15s;
+  background-color: transparent;
+}
+
+.ecall-pane-splitter:hover,
+.ecall-pane-splitter-active {
+  background-color: color-mix(in oklab, currentColor 18%, transparent);
 }
 
 .answer {

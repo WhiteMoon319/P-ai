@@ -50,6 +50,16 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
     latestOwnElasticMinHeight.value = Math.max(0, scrollViewportHeight - toolbarHeight);
   }
 
+  async function prepareBottomAlignmentLayout() {
+    updateJumpToBottomOffset();
+    updateLatestOwnElasticMinHeight();
+    await nextTick();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    updateJumpToBottomOffset();
+    updateLatestOwnElasticMinHeight();
+    await nextTick();
+  }
+
   function isNearBottom(el: HTMLElement): boolean {
     const threshold = 24;
     const distance = el.scrollHeight - (el.scrollTop + el.clientHeight);
@@ -166,6 +176,7 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
     () => {
       nextTick(() => {
         updateJumpToBottomOffset();
+        updateLatestOwnElasticMinHeight();
         const el = scrollContainer.value;
         if (el) {
           lastBottomState.value = isNearBottom(el);
@@ -185,5 +196,6 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
     showJumpToBottom,
     jumpToBottomStyle,
     onScroll,
+    prepareBottomAlignmentLayout,
   };
 }
