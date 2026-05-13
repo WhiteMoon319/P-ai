@@ -2,6 +2,8 @@
 
 ## 进行中
 
+- 修复（remote-im-channel-state-shards）：个人微信扫码登录态与轮询游标迁移到按渠道分片的后端状态文件，轮询成功不再写入总配置文件；旧配置中的微信 `token/accountId/userId/syncBuf` 会幂等迁移并清理，钉钉、飞书与 OneBot 的用户固定接入参数继续保留在配置层。
+
 - 优化（chat-simple-message-padding）：聊天历史无气泡模式下为消息正文恢复左右内边距，避免长文本贴边显示。
 
 - 修复（chat-model-select-opaque）：聊天输入栏模型选择器取消透明 ghost 样式，恢复实底下拉背景，避免模型上拉列表透出聊天内容。

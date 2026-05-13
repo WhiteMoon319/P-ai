@@ -1579,6 +1579,7 @@ mod terminal_exec_tests {
             provider_request_gates: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             conversation_index_repair_gates: Arc::new(Mutex::new(HashMap::new())),
             remote_im_contact_runtime_states: Arc::new(Mutex::new(HashMap::new())),
+            remote_im_channel_state_write_locks: Arc::new(Mutex::new(HashMap::new())),
             hidden_skill_snapshot_cache: Arc::new(Mutex::new(String::new())),
             preferred_release_source: Arc::new(Mutex::new("github".to_string())),
             migration_preview_dirs: Arc::new(Mutex::new(HashMap::new())),

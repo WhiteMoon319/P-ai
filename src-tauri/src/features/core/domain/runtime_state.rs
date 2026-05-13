@@ -102,6 +102,8 @@ struct AppState {
         Arc<Mutex<std::collections::HashMap<String, Arc<Mutex<()>>>>>,
     remote_im_contact_runtime_states:
         Arc<Mutex<std::collections::HashMap<String, RemoteImContactRuntimeState>>>,
+    remote_im_channel_state_write_locks:
+        Arc<Mutex<std::collections::HashMap<String, Arc<Mutex<()>>>>>,
     hidden_skill_snapshot_cache: Arc<Mutex<String>>,
     preferred_release_source: Arc<Mutex<String>>,
     migration_preview_dirs: Arc<Mutex<std::collections::HashMap<String, String>>>,
@@ -327,6 +329,9 @@ impl AppState {
                 std::collections::HashMap::new(),
             )),
             remote_im_contact_runtime_states: Arc::new(Mutex::new(
+                std::collections::HashMap::new(),
+            )),
+            remote_im_channel_state_write_locks: Arc::new(Mutex::new(
                 std::collections::HashMap::new(),
             )),
             hidden_skill_snapshot_cache: Arc::new(Mutex::new(String::new())),

@@ -161,6 +161,7 @@ async fn run_single_weixin_oc_poll_cycle(
         .find(|item| item.id == channel_id)
         .cloned()
         .ok_or_else(|| format!("个人微信渠道不存在: {channel_id}"))?;
+    let channel = remote_im_channel_with_effective_credentials(state, &channel)?;
     let creds = WeixinOcCredentials::from_value(&channel.credentials);
     let token = creds.token.trim().to_string();
     if token.is_empty() {
@@ -209,19 +210,15 @@ async fn run_single_weixin_oc_poll_cycle(
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        let mut writable = state_read_config_cached(state)?;
-        if let Some(writable_channel) = writable
-            .remote_im_channels
-            .iter_mut()
-            .find(|item| item.id == channel.id)
-        {
-            let mut next_creds = WeixinOcCredentials::from_value(&writable_channel.credentials);
-            if next_creds.sync_buf.trim() != next_sync_buf {
-                next_creds.sync_buf = next_sync_buf.to_string();
-                writable_channel.credentials = serde_json::to_value(&next_creds)
-                    .map_err(|err| format!("序列化个人微信凭证失败: {err}"))?;
-                state_write_config_cached(state, &writable)?;
-            }
+        if creds.sync_buf.trim() != next_sync_buf {
+            remote_im_patch_channel_private_state(
+                state,
+                &RemoteImPlatform::WeixinOc,
+                &channel.id,
+                |private| {
+                    private.sync_buf = next_sync_buf.to_string();
+                },
+            )?;
         }
     }
     for msg in data.msgs.unwrap_or_default() {
@@ -445,7 +442,8 @@ async fn remote_im_weixin_oc_sync_contacts(
     if channel.platform != RemoteImPlatform::WeixinOc {
         return Err("该渠道不是个人微信渠道".to_string());
     }
-    let creds = WeixinOcCredentials::from_value(&channel.credentials);
+    let credentials = remote_im_effective_credentials(state.inner(), channel)?;
+    let creds = WeixinOcCredentials::from_value(&credentials);
     if creds.account_id.trim().is_empty() || creds.token.trim().is_empty() {
         return Ok(WeixinOcSyncContactsResult {
             channel_id: input.channel_id,

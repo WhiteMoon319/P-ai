@@ -35,8 +35,10 @@ impl WeixinOcManager {
         }
     }
 
-    async fn load_state_from_channel(&self, channel: &RemoteImChannelConfig) {
-        let creds = WeixinOcCredentials::from_value(&channel.credentials);
+    async fn load_state_from_channel(&self, state: &AppState, channel: &RemoteImChannelConfig) {
+        let credentials = remote_im_effective_credentials(state, channel)
+            .unwrap_or_else(|_| channel.credentials.clone());
+        let creds = WeixinOcCredentials::from_value(&credentials);
         self.set_state(&channel.id, |state| {
             state.base_url = creds.normalized_base_url();
             state.account_id = creds.account_id.trim().to_string();
@@ -394,14 +396,15 @@ impl WeixinOcManager {
             "[个人微信] reconcile_channel_runtime: channel_id={}, enabled={}, platform={:?}",
             channel.id, channel.enabled, channel.platform
         );
-        self.load_state_from_channel(channel).await;
+        self.load_state_from_channel(&state, channel).await;
         self.stop_channel_inner(&channel.id).await;
         if channel.platform != RemoteImPlatform::WeixinOc || !channel.enabled {
             eprintln!("[个人微信] 渠道已停用: channel_id={}", channel.id);
             self.add_log(&channel.id, "info", "[个人微信] 渠道已停用").await;
             return Ok(());
         }
-        let creds = WeixinOcCredentials::from_value(&channel.credentials);
+        let effective_channel = remote_im_channel_with_effective_credentials(&state, channel)?;
+        let creds = WeixinOcCredentials::from_value(&effective_channel.credentials);
         eprintln!(
             "[个人微信] 当前凭证: channel_id={}, base_url={}, token_len={}, account_id={}, user_id={}",
             channel.id,
@@ -424,7 +427,7 @@ impl WeixinOcManager {
         eprintln!("[个人微信] 渠道已启用，正在启动轮询: channel_id={}", channel.id);
         self.add_log(&channel.id, "info", "[个人微信] 渠道已启用，正在启动轮询")
             .await;
-        self.start_channel_inner(channel.clone(), state).await
+        self.start_channel_inner(effective_channel, state).await
     }
 
     async fn start_channel_inner(

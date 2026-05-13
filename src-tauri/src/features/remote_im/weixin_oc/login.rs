@@ -10,7 +10,7 @@ impl WeixinOcManager {
         if channel.platform != RemoteImPlatform::WeixinOc {
             return Err("该渠道不是个人微信渠道".to_string());
         }
-        self.load_state_from_channel(channel).await;
+        self.load_state_from_channel(state, channel).await;
         if !input.force_refresh {
             if let Some(existing) = self
                 .login_sessions
@@ -31,7 +31,8 @@ impl WeixinOcManager {
                 }
             }
         }
-        let creds = WeixinOcCredentials::from_value(&channel.credentials);
+        let credentials = remote_im_effective_credentials(state, channel)?;
+        let creds = WeixinOcCredentials::from_value(&credentials);
         let client = build_weixin_oc_http_client(creds.normalized_api_timeout_ms())?;
         let url = format!(
             "{}/ilink/bot/get_bot_qrcode",
@@ -133,7 +134,8 @@ impl WeixinOcManager {
         let config = state_read_config_cached(state)?;
         let channel = remote_im_channel_by_id(&config, &input.channel_id)
             .ok_or_else(|| format!("渠道不存在: {}", input.channel_id))?;
-        let creds = WeixinOcCredentials::from_value(&channel.credentials);
+        let credentials = remote_im_effective_credentials(state, channel)?;
+        let creds = WeixinOcCredentials::from_value(&credentials);
         let client = build_weixin_oc_http_client(creds.normalized_long_poll_timeout_ms())?;
         let url = format!(
             "{}/ilink/bot/get_qrcode_status",
@@ -203,24 +205,18 @@ impl WeixinOcManager {
                     last_error: login.error,
                 });
             }
-            let updated_channel = {
-                let mut writable = state_read_config_cached(state)?;
-                let writable_channel = writable
-                    .remote_im_channels
-                    .iter_mut()
-                    .find(|item| item.id == input.channel_id)
-                    .ok_or_else(|| format!("渠道不存在: {}", input.channel_id))?;
-                let mut writable_creds = WeixinOcCredentials::from_value(&writable_channel.credentials);
-                writable_creds.token = bot_token.clone();
-                writable_creds.account_id = account_id.clone();
-                writable_creds.user_id = user_id.clone();
-                writable_creds.base_url = base_url.clone();
-                writable_channel.credentials = serde_json::to_value(&writable_creds)
-                    .map_err(|err| format!("序列化个人微信凭证失败: {err}"))?;
-                let updated_channel = writable_channel.clone();
-                state_write_config_cached(state, &writable)?;
-                updated_channel
-            };
+            remote_im_patch_channel_private_state(
+                state,
+                &RemoteImPlatform::WeixinOc,
+                &input.channel_id,
+                |private| {
+                    private.token = bot_token.clone();
+                    private.account_id = account_id.clone();
+                    private.user_id = user_id.clone();
+                    private.base_url = base_url.clone();
+                },
+            )?;
+            let updated_channel = remote_im_channel_with_effective_credentials(state, channel)?;
             self.login_sessions.write().await.remove(&input.channel_id);
             self.set_state(&input.channel_id, |runtime| {
                 runtime.connected = false;
@@ -320,22 +316,7 @@ impl WeixinOcManager {
     async fn logout(&self, state: &AppState, channel_id: &str) -> Result<(), String> {
         self.stop_channel(channel_id).await;
         self.login_sessions.write().await.remove(channel_id);
-        {
-            let mut writable = state_read_config_cached(state)?;
-            let channel = writable
-                .remote_im_channels
-                .iter_mut()
-                .find(|item| item.id == channel_id)
-                .ok_or_else(|| format!("渠道不存在: {}", channel_id))?;
-            let mut creds = WeixinOcCredentials::from_value(&channel.credentials);
-            creds.token.clear();
-            creds.account_id.clear();
-            creds.user_id.clear();
-            creds.sync_buf.clear();
-            channel.credentials = serde_json::to_value(&creds)
-                .map_err(|err| format!("序列化个人微信凭证失败: {err}"))?;
-            state_write_config_cached(state, &writable)?;
-        }
+        remote_im_delete_channel_private_state(state, &RemoteImPlatform::WeixinOc, channel_id)?;
         self.set_state(channel_id, |runtime| {
             *runtime = WeixinOcRuntimeState::default();
             runtime.login_status = "logged_out".to_string();

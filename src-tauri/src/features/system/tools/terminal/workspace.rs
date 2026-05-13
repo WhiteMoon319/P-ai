@@ -1064,6 +1064,7 @@ mod terminal_workspace_tests {
             remote_im_contact_runtime_states: Arc::new(Mutex::new(HashMap::new())),
             hidden_skill_snapshot_cache: Arc::new(Mutex::new(String::new())),
             preferred_release_source: Arc::new(Mutex::new(String::new())),
+            remote_im_channel_state_write_locks: Arc::new(Mutex::new(HashMap::new())),
             migration_preview_dirs: Arc::new(Mutex::new(HashMap::new())),
             delegate_active_ids: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
         }

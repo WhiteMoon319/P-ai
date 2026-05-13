@@ -561,7 +561,9 @@ fn load_config(state: State<'_, AppState>) -> Result<AppConfig, String> {
     let mut result = state_read_config_cached(&state)?;
     normalize_app_config(&mut result);
     let workspace_changed = ensure_default_shell_workspace_in_config(&mut result, &state);
-    if workspace_changed {
+    let remote_im_private_state_migrated =
+        remote_im_migrate_channel_private_states(&state, &mut result)?;
+    if workspace_changed || remote_im_private_state_migrated {
         state_write_config_cached(&state, &result)?;
     }
     let mut runtime_data = state_read_agents_runtime_snapshot(&state)?;
@@ -575,7 +577,9 @@ fn read_app_bootstrap_snapshot(state: &AppState) -> Result<AppBootstrapSnapshot,
     let mut config = state_read_config_cached(state)?;
     normalize_app_config(&mut config);
     let workspace_changed = ensure_default_shell_workspace_in_config(&mut config, state);
-    if workspace_changed {
+    let remote_im_private_state_migrated =
+        remote_im_migrate_channel_private_states(state, &mut config)?;
+    if workspace_changed || remote_im_private_state_migrated {
         state_write_config_cached(state, &config)?;
     }
     let mut data = state_read_agents_runtime_snapshot(state)?;
@@ -640,6 +644,7 @@ fn save_config(
     }
     let mut config = config;
     normalize_app_config(&mut config);
+    remote_im_migrate_channel_private_states(&state, &mut config)?;
     let _ = ensure_default_shell_workspace_in_config(&mut config, &state);
     set_record_hotkey_probe_background_wake_enabled(config.record_background_wake_enabled);
 

@@ -49,6 +49,7 @@ include!("features/chat/conversation_prompt_service.rs");
 include!("features/chat/conversation_service/mod.rs");
 include!("features/chat/model_runtime.rs");
 include!("features/chat/scheduler.rs");
+include!("features/remote_im/channel_store.rs");
 include!("features/remote_im/onebot_v11_ws.rs");
 include!("features/remote_im/dingtalk_stream.rs");
 include!("features/remote_im/weixin_oc.rs");
@@ -188,9 +189,10 @@ async fn remote_im_restart_channel(
         )
         .await;
 
+    let effective_channel = remote_im_channel_with_effective_credentials(state.inner(), &channel)?;
     let manager = onebot_v11_ws_manager();
     manager
-        .reconcile_channel_runtime(&channel)
+        .reconcile_channel_runtime(&effective_channel)
         .await
         .map_err(|err| format!("重启渠道失败: {}", err))?;
     eprintln!(
@@ -206,7 +208,7 @@ async fn remote_im_restart_channel(
     } else if channel.enabled && channel.platform == RemoteImPlatform::Dingtalk {
         let state_clone = state.inner().clone();
         let manager = dingtalk_stream_manager();
-        let channel_clone = channel.clone();
+        let channel_clone = remote_im_channel_with_effective_credentials(&state_clone, &channel)?;
         tauri::async_runtime::spawn(async move {
             if let Err(err) = manager
                 .reconcile_channel_runtime(&channel_clone, state_clone)
@@ -221,7 +223,7 @@ async fn remote_im_restart_channel(
     } else if channel.platform == RemoteImPlatform::WeixinOc {
         let state_clone = state.inner().clone();
         weixin_oc_manager()
-            .reconcile_channel_runtime(&channel, state_clone)
+            .reconcile_channel_runtime(&effective_channel, state_clone)
             .await?;
     }
 
@@ -282,8 +284,22 @@ async fn start_background_services_after_frontend_ready(
 }
 
 async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {
-    let config = match state_read_config_cached(&app_handle.state::<AppState>()) {
-        Ok(config) => config,
+    let app_state = app_handle.state::<AppState>();
+    let config = match state_read_config_cached(&app_state) {
+        Ok(mut config) => {
+            if let Err(err) =
+                remote_im_migrate_channel_private_states(app_state.inner(), &mut config)
+                    .and_then(|changed| {
+                        if changed {
+                            state_write_config_cached(app_state.inner(), &config)?;
+                        }
+                        Ok(())
+                    })
+            {
+                eprintln!("[启动] 远程 IM 私有状态迁移失败，继续按现有配置启动: {}", err);
+            }
+            config
+        }
         Err(err) => {
             eprintln!("[启动] 前端就绪后读取远程 IM 配置失败，跳过启动: {:?}", err);
             return;
@@ -298,7 +314,18 @@ async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {
         .cloned()
         .collect();
     for channel in &napcat_channels {
-        if let Err(err) = onebot_v11_ws_server_start(channel.clone(), app_handle.clone()) {
+        let effective_channel =
+            match remote_im_channel_with_effective_credentials(&event_state, channel) {
+                Ok(value) => value,
+                Err(err) => {
+                    eprintln!(
+                        "[启动] OneBot v11 渠道私有状态读取失败: channel_id={}, error={}",
+                        channel.id, err
+                    );
+                    continue;
+                }
+            };
+        if let Err(err) = onebot_v11_ws_server_start(effective_channel, app_handle.clone()) {
             eprintln!(
                 "[启动] 前端就绪后启动 OneBot v11 WS 服务失败: channel_id={}, error={}",
                 channel.id, err
@@ -330,7 +357,18 @@ async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {
         let manager = dingtalk_stream_manager();
         tauri::async_runtime::spawn(async move {
             let channel_id = channel.id.clone();
-            if let Err(err) = manager.start_channel(channel, state_clone).await {
+            let effective_channel =
+                match remote_im_channel_with_effective_credentials(&state_clone, &channel) {
+                    Ok(value) => value,
+                    Err(err) => {
+                        eprintln!(
+                            "[启动] 钉钉渠道私有状态读取失败: channel_id={}, error={}",
+                            channel_id, err
+                        );
+                        return;
+                    }
+                };
+            if let Err(err) = manager.start_channel(effective_channel, state_clone).await {
                 eprintln!(
                     "[启动] 前端就绪后启动钉钉 Stream 渠道失败: channel_id={}, error={}",
                     channel_id, err

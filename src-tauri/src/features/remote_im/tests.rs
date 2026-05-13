@@ -779,6 +779,7 @@
                 std::collections::HashMap::new(),
             )),
             remote_im_contact_runtime_states: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            remote_im_channel_state_write_locks: Arc::new(Mutex::new(std::collections::HashMap::new())),
             hidden_skill_snapshot_cache: Arc::new(Mutex::new(String::new())),
             preferred_release_source: Arc::new(Mutex::new("github".to_string())),
             migration_preview_dirs: Arc::new(Mutex::new(std::collections::HashMap::new())),

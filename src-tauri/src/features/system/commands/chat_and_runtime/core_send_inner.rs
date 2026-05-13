@@ -608,7 +608,7 @@ async fn remote_im_auto_send_assistant_reply_to_source(
         .await?
     };
     let send_result =
-        remote_im_send_content_payload(&channel, &contact, content, false, "reply_async").await?;
+        remote_im_send_content_payload(state, &channel, &contact, content, false, "reply_async").await?;
     let tool_result = serde_json::to_string(&send_result)
         .map_err(|err| format!("序列化自动 contact_reply 结果失败: {err}"))?;
     let args_value = serde_json::json!({

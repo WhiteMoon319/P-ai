@@ -247,6 +247,7 @@ async fn remote_im_build_text_content_items(
 }
 
 async fn remote_im_send_content_payload(
+    state: &AppState,
     channel: &RemoteImChannelConfig,
     contact: &RemoteImContact,
     content: Vec<Value>,
@@ -265,7 +266,8 @@ async fn remote_im_send_content_payload(
         "contact_id": contact.remote_contact_id,
         "content": content,
     });
-    let platform_message_id = match remote_im_send_via_sdk(channel, contact, &payload).await {
+    let send_channel = remote_im_channel_with_effective_credentials(state, channel)?;
+    let platform_message_id = match remote_im_send_via_sdk(&send_channel, contact, &payload).await {
         Ok(value) => value,
         Err(err) => {
             remote_im_append_channel_log_async(
@@ -376,7 +378,7 @@ async fn builtin_contact_reply(
         contact.channel_id, contact.remote_contact_id, text
     );
     let content = remote_im_build_text_content_items(state, &text, &seed_source).await?;
-    remote_im_send_content_payload(&channel, &contact, content, false, "reply").await
+    remote_im_send_content_payload(state, &channel, &contact, content, false, "reply").await
 }
 
 async fn builtin_contact_send_files(
@@ -404,7 +406,7 @@ async fn builtin_contact_send_files(
     }
     let content = remote_im_build_file_content_items(state, &file_paths).await?;
     let mut result =
-        remote_im_send_content_payload(&channel, &contact, content, false, "send_files").await?;
+        remote_im_send_content_payload(state, &channel, &contact, content, false, "send_files").await?;
     if let Some(obj) = result.as_object_mut() {
         obj.insert("file_count".to_string(), serde_json::json!(file_paths.len()));
     }
