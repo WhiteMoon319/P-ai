@@ -81,15 +81,19 @@
   font-variation-settings: "wght" var(--ecall-md-strong-weight);
 }
 
-.ecall-markdown-content :where(a,.link-node) {
-  color: inherit;
-  text-decoration: underline;
-  text-underline-offset: 0.18em;
-  text-decoration-color: color-mix(in srgb, var(--color-base-content) 28%, transparent);
+.ecall-markdown-content a,
+.ecall-markdown-content .link-node {
+  color: var(--color-primary) !important;
+  text-decoration-line: underline !important;
+  text-decoration-thickness: 0.08em !important;
+  text-underline-offset: 0.18em !important;
+  text-decoration-color: color-mix(in srgb, var(--color-primary) 58%, transparent) !important;
 }
 
-.ecall-markdown-content :where(a,.link-node):hover {
-  text-decoration-color: color-mix(in srgb, var(--color-base-content) 50%, transparent);
+.ecall-markdown-content a:hover,
+.ecall-markdown-content .link-node:hover {
+  color: color-mix(in srgb, var(--color-primary) 82%, var(--color-base-content)) !important;
+  text-decoration-color: currentColor !important;
 }
 
 .ecall-markdown-content :where(blockquote,.blockquote) {
