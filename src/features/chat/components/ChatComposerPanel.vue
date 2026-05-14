@@ -379,22 +379,32 @@
           >
             <Mic class="h-3.5 w-3.5" />
           </button>
-          <select
-            class="select select-bordered select-sm h-8 min-h-8 w-44 max-w-44 border-transparent bg-base-100 text-base-content focus:border-transparent focus:outline-none"
-            :value="selectedChatModelId"
-            :disabled="chatting || frozen || normalizedChatModelOptions.length === 0"
-            title="首要模型"
-            @change="handleChatModelChange"
-          >
-            <option
-              v-for="item in normalizedChatModelOptions"
-              :key="item.id"
-              :value="item.id"
-              class="bg-base-100 text-base-content"
+          <div ref="modelDropdownRef" class="relative">
+            <button
+              type="button"
+              class="btn btn-sm h-8 min-h-8 w-44 max-w-44 justify-between border-0 shadow-none bg-base-100 text-base-content"
+              :disabled="chatting || frozen || normalizedChatModelOptions.length === 0"
+              @click="modelDropdownOpen = !modelDropdownOpen"
             >
-              {{ item.name }}
-            </option>
-          </select>
+              <span class="truncate">{{ selectedModelName }}</span>
+              <ChevronDown class="h-3 w-3 shrink-0 opacity-50 rotate-180" :class="{ 'rotate-0': modelDropdownOpen }" />
+            </button>
+            <ul
+              v-if="modelDropdownOpen"
+              class="absolute bottom-full left-0 z-[9999] mb-2 w-80 max-h-[80vh] overflow-y-auto rounded-box border border-base-300 bg-base-100 p-2 shadow-xl"
+            >
+              <li v-for="item in normalizedChatModelOptions" :key="item.id" class="list-none">
+                <button
+                  type="button"
+                  class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm hover:bg-base-200 transition-colors truncate"
+                  :class="{ 'bg-primary/10': item.id === selectedChatModelId }"
+                  @click="selectChatModel(item.id)"
+                >
+                  {{ item.name }}
+                </button>
+              </li>
+            </ul>
+          </div>
         </div>
         <div class="flex items-center gap-2">
           <span
@@ -424,7 +434,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { FileText, Image as ImageIcon, Layers2, Mic, Minus, Paperclip, Plus, Send, Square, X } from "lucide-vue-next";
+import { ChevronDown, FileText, Image as ImageIcon, Layers2, Mic, Minus, Paperclip, Plus, Send, Square, X } from "lucide-vue-next";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, SkillListResult } from "../../../types/app";
 import { invokeTauri } from "../../../services/tauri-api";
 import ChatQueuePreview from "./ChatQueuePreview.vue";
@@ -602,6 +612,10 @@ const normalizedChatModelOptions = computed(() =>
     }))
     .filter((item) => !!item.id && !!item.name),
 );
+const selectedModelName = computed(() => {
+  const found = normalizedChatModelOptions.value.find((item) => item.id === props.selectedChatModelId);
+  return found?.name || props.selectedChatModelId;
+});
 const showIdeWorkspaceGroupLabel = computed(() => false);
 const attachedIdeContextReferenceIds = computed(() => new Set((props.attachedIdeContextReferences || []).map((item) => item.id)));
 const mergedIdeContextGroups = computed<IdeContextWorkspaceGroup[]>(() => {
@@ -1171,10 +1185,32 @@ function updateMentionState() {
   }
 }
 
-function handleChatModelChange(event: Event) {
-  const value = String((event.target as HTMLSelectElement)?.value || "").trim();
-  if (!value || value === props.selectedChatModelId) return;
-  emit("update:selectedChatModelId", value);
+const modelDropdownOpen = ref(false);
+const modelDropdownRef = ref<HTMLElement | null>(null);
+
+function handleModelDropdownClickOutside(event: MouseEvent) {
+  if (
+    modelDropdownRef.value &&
+    !modelDropdownRef.value.contains(event.target as Node)
+  ) {
+    modelDropdownOpen.value = false;
+  }
+}
+
+watch(modelDropdownOpen, (open) => {
+  if (open) {
+    nextTick(() => {
+      document.addEventListener("click", handleModelDropdownClickOutside);
+    });
+  } else {
+    document.removeEventListener("click", handleModelDropdownClickOutside);
+  }
+});
+
+function selectChatModel(id: string) {
+  if (!id || id === props.selectedChatModelId) return;
+  modelDropdownOpen.value = false;
+  emit("update:selectedChatModelId", id);
 }
 
 function togglePlanMode() {
