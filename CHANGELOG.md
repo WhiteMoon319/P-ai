@@ -1,5 +1,11 @@
 # 变更日志
 
+## 发布：v0.9.90
+
+- 发布（release-0.9.90）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.90`，纳入输入框覆盖式浮动滚动条。
+
+- 修复（chat-input-floating-scrollbar）：输入框原生滚动条替换为覆盖式浮动滚动条，`resizeChatInput` 中 `minHeight` 从 32 改为 48 对齐 DaisyUI 默认值，无内容时空滚动条不再出现。
+
 ## 发布：v0.9.89
 
 - 发布（release-0.9.89）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.89`，纳入本轮输入面板模型下拉改为上拉、会话运行状态通知、文件引用阅读器与只读自动刷新、滚动条悬停显示修复。
@@ -12,7 +18,7 @@
 
 - 修复（chat-markdown-link-style）：修复 Markdown 链接样式。
 
-- 修复（chat-input-scrollbar-gutter）：输入面板文本输入框移除 `scrollbar-gutter-stable`，滚动条仅在内容溢出时出现，无内容时空轨道不再显示。
+- 修复（chat-input-floating-scrollbar）：输入框原生滚动条替换为覆盖式浮动滚动条，`resizeChatInput` 中 `minHeight` 从 32 改为 48 对齐 DaisyUI 默认值，无内容时空滚动条不再出现。
 
 ## 进行中
 
