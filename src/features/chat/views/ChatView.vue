@@ -589,8 +589,8 @@ const activeJumpToBottomRequest = ref(0);
 
 const {
   virtualizer, virtualEntries, totalVirtualSize, measureVirtualRow,
-  scheduleVirtualMeasure, syncViewportMetrics, scrollConversationToBottomOnce,
-  scrollToLastItem, alignItemToTop, captureVisibleAnchor, findRenderedMessageElement,
+  scheduleVirtualMeasure, syncViewportMetrics,
+  resetVirtualizerAtConversationBottom, alignItemToTop, captureVisibleAnchor, findRenderedMessageElement,
   resolveMessageAnchorElement, syncVisibleStreamingVirtualItemViewportTops,
 } = useChatVirtualScroll({
   renderItems: virtualRenderItems, renderItemById, blockChronologicalIndexMap,
@@ -659,8 +659,9 @@ const {
   scrollContainer, chatScrollbarRef: chatScrollbarRef as Ref<{ updateThumb: () => void; hide?: () => void } | null>,
   activeJumpToBottomRequest,
   prepareBottomAlignmentLayout,
-  onScroll, scheduleVirtualMeasure, syncViewportMetrics, scrollConversationToBottomOnce,
-  scrollToLastItem, alignItemToTop, captureVisibleAnchor, findRenderedMessageElement, resolveMessageAnchorElement,
+  onScroll, scheduleVirtualMeasure, syncViewportMetrics,
+  resetConversationToBottom: resetVirtualizerAtConversationBottom,
+  alignItemToTop, captureVisibleAnchor, findRenderedMessageElement, resolveMessageAnchorElement,
   syncVisibleStreamingVirtualItemViewportTops,
   refreshObservedVirtualItemElements: () => {},
   latestOwnElasticItemId,

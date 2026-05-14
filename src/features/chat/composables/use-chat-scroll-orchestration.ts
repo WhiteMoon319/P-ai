@@ -9,8 +9,7 @@ export interface UseChatScrollOrchestrationOptions {
   onScroll: () => void;
   scheduleVirtualMeasure: () => void;
   syncViewportMetrics: () => void;
-  scrollConversationToBottomOnce: () => void;
-  scrollToLastItem: () => void;
+  resetConversationToBottom: () => void;
   alignItemToTop: (itemId: string, behavior?: ScrollBehavior) => void;
   captureVisibleAnchor: (edge: "top" | "bottom") => { messageId: string; edge: "top" | "bottom"; offset: number } | null;
   findRenderedMessageElement: (messageId: string) => HTMLElement | null;
@@ -44,8 +43,7 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
     onScroll,
     scheduleVirtualMeasure,
     syncViewportMetrics,
-    scrollConversationToBottomOnce,
-    scrollToLastItem,
+    resetConversationToBottom,
     alignItemToTop,
     captureVisibleAnchor,
     findRenderedMessageElement,
@@ -119,12 +117,9 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
     pendingOlderHistoryAnchor.value = null;
     pendingOlderHistoryScrollRestore.value = null;
     scheduleVirtualMeasure();
-    void nextTick(() => {
-      scrollConversationToBottomOnce();
-      requestAnimationFrame(() => {
-        scrollConversationToBottomOnce();
-        activeJumpToBottomRequest.value = 0;
-      });
+    void nextTick(async () => {
+      await prepareBottomAlignmentLayout?.();
+      resetConversationToBottom();
     });
   }
 

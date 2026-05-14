@@ -580,6 +580,7 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     scrollToLastItem,
     scheduleJumpToBottomStep,
     startJumpToBottomTransaction,
+    resetVirtualizerAtConversationBottom,
     alignItemToTop,
     captureVisibleAnchor,
     findRenderedMessageElement,
