@@ -1,12 +1,22 @@
 # 变更日志
 
-## 进行中
+## 发布：v0.9.89
 
-- 修复（chat-conversation-status-notice）：会话列表运行状态新增后台忙碌、未查看完成与失败提示；完成态保留到用户切入会话后清理，后台完成追加消息时即时增加未读数，关闭聊天错误横幅时同步清除对应会话的失败标记。
+- 发布（release-0.9.89）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.89`，纳入本轮输入面板模型下拉改为上拉、会话运行状态通知、文件引用阅读器与只读自动刷新、滚动条悬停显示修复。
+
+- 功能（chat-model-selector-upward）：输入面板模型选择器从原生 `<select>` 替换为上拉自定义菜单，选项悬停高亮、选中标记背景色、点击外部自动收起、宽 `w-80` 高 `max-h-80vh`、超长模型名省略、去边框去阴影。
+
+- 功能（chat-conversation-status-notice）：会话列表运行状态新增后台忙碌、未查看完成与失败提示；完成态保留到用户切入会话后清理，后台完成追加消息时即时增加未读数，关闭聊天错误横幅时同步清除对应会话的失败标记。
 
 - 功能（chat-file-reader-context-watch）：聊天右栏文件阅读器新增显式文件片段引用候选，按当前可视范围与用户选区生成可附加上下文，附加后作为快照随消息发送；同时为当前活动文件和可见目录节点加入只读自动刷新，外部变更后自动更新阅读内容与目录节点。
 
-## 发布：v0.9.88
+- 修复（chat-markdown-link-style）：修复 Markdown 链接样式。
+
+- 修复（chat-input-scrollbar-gutter）：输入面板文本输入框移除 `scrollbar-gutter-stable`，滚动条仅在内容溢出时出现，无内容时空轨道不再显示。
+
+## 进行中
+
+
 
 - 发布（release-0.9.88）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.88`，纳入本轮更新退出停机、远程 IM 渠道运行态分片、委托打断、聊天三栏标题栏、侧边栏持久化、Markdown 基础样式与滚底定位修复。
 

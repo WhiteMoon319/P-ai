@@ -279,7 +279,7 @@
         <textarea
           ref="chatInputRef"
           v-model="localChatInput"
-          class="w-full textarea resize-none overflow-y-auto chat-input-no-focus scrollbar-gutter-stable min-h-8"
+          class="w-full textarea resize-none overflow-y-auto chat-input-no-focus min-h-8"
           rows="1"
           :disabled="frozen"
           :placeholder="chatInputPlaceholder"
