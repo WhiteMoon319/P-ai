@@ -1224,37 +1224,13 @@ onBeforeUnmount(() => {
   line-height: 1.65;
 }
 
-.file-reader-content :deep(.ecall-markdown-content :where(blockquote,.blockquote)) {
-  border-left-color: color-mix(in srgb, var(--color-base-content) 16%, transparent);
-  background: transparent;
-  padding-left: 0.75rem;
-}
-
 .file-reader-content :deep(.ecall-markdown-content :where(hr,.hr-node)) {
   margin: 0.75rem 0;
-}
-
-.file-reader-content :deep(.ecall-markdown-content :where(:not(pre) > code,.inline-code,.inline-code-node)) {
-  background: color-mix(in srgb, var(--color-base-200) 72%, transparent);
-  color: var(--color-base-content);
-  font-size: 0.86em;
 }
 
 .file-reader-content :deep(.ecall-markdown-content :where(table,.table-node)) {
   width: 100%;
   font-size: 0.92rem;
-}
-
-.file-reader-content :deep(.ecall-markdown-content :where(th,.table-node th)) {
-  background: color-mix(in srgb, var(--color-base-200) 78%, transparent);
-}
-
-.file-reader-content :deep(.ecall-markdown-content :where(tbody tr:nth-child(even),.table-node tbody tr:nth-child(even))) {
-  background: color-mix(in srgb, var(--color-base-200) 42%, transparent);
-}
-
-.file-reader-content :deep(.ecall-markdown-content :where(tbody tr:hover,.table-node tbody tr:hover)) {
-  background: color-mix(in srgb, var(--color-base-200) 62%, transparent);
 }
 
 .file-reader-code-main {

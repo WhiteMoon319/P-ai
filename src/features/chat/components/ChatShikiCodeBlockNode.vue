@@ -147,6 +147,14 @@ onBeforeUnmount(() => {
   color: #e5e7eb;
 }
 
+.ecall-shiki-codeblock-dark :deep(.code-block-container) {
+  background: var(--code-action-bar-bg) !important;
+  border: 1px solid var(--code-action-bar-border);
+  border-radius: 0.85rem;
+  overflow: hidden;
+  box-shadow: none;
+}
+
 .ecall-shiki-codeblock-dark :deep(.code-block-header),
 .ecall-shiki-codeblock-dark :deep(.code-header-main) {
   background: var(--code-action-bar-bg) !important;

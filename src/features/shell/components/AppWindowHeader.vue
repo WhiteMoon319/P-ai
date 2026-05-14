@@ -40,17 +40,6 @@
         </div>
       </div>
 
-      <button
-        v-if="sideConversationListVisible && !detachedChatWindow"
-        type="button"
-        class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
-        :title="t('chat.resourceExplorer')"
-        @mousedown.stop
-        @click.stop
-      >
-        <Files class="h-3.5 w-3.5" />
-      </button>
-
       <div v-if="sideConversationListVisible && !detachedChatWindow" role="tablist" class="tabs tabs-border min-w-0 shrink-0" @mousedown.stop>
         <button
           type="button"
@@ -438,7 +427,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import MarkdownRender, { enableKatex, enableMermaid, getMarkdown, parseMarkdownToStructure } from "markstream-vue";
-import { Download, Files, FoldVertical, History, Minus, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ScrollText, Search, Settings, Square, SquarePen, X } from "lucide-vue-next";
+import { Download, FoldVertical, History, Minus, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ScrollText, Search, Settings, Square, SquarePen, X } from "lucide-vue-next";
 import type { ChatConversationOverviewItem } from "../../../types/app";
 import { resolveConversationDisplayTitle } from "../../chat/utils/conversation-title";
 import { registerChatMarkstreamComponents } from "../../chat/markdown/register-chat-markstream";
