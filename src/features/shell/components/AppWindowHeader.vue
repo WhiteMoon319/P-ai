@@ -45,8 +45,8 @@
           type="button"
           role="tab"
           class="tab h-8 px-2"
-          :class="conversationListTab === 'local' ? 'tab-active font-semibold' : ''"
-          @click.stop="emit('update:conversation-list-tab', 'local')"
+          :class="chatLeftPanelMode === 'local' ? 'tab-active font-semibold' : ''"
+          @click.stop="emit('update:chat-left-panel-mode', 'local')"
         >
           {{ t("chat.localConversationTab") }}
         </button>
@@ -54,8 +54,8 @@
           type="button"
           role="tab"
           class="tab h-8 px-2"
-          :class="conversationListTab === 'contact' ? 'tab-active font-semibold' : ''"
-          @click.stop="emit('update:conversation-list-tab', 'contact')"
+          :class="chatLeftPanelMode === 'contact' ? 'tab-active font-semibold' : ''"
+          @click.stop="emit('update:chat-left-panel-mode', 'contact')"
         >
           {{ t("chat.contactConversationTab") }}
         </button>
@@ -138,16 +138,6 @@
 
       <div class="relative z-40 flex min-w-0 items-center justify-end gap-1" @mousedown.stop>
         <button
-          v-if="!toolReviewPanelOpenVisible"
-          type="button"
-          class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
-          :title="t('chat.toolReview.title')"
-          @click.stop="emit('toggle-tool-review-panel')"
-        >
-          <PanelRightClose class="h-3.5 w-3.5" />
-        </button>
-
-        <button
           v-if="!detachedChatWindow"
           class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
           :title="t('window.archivesTitle')"
@@ -164,6 +154,16 @@
         >
           <Settings class="h-3.5 w-3.5" />
         </button>
+
+        <button
+          v-if="!toolReviewPanelOpenVisible"
+          type="button"
+          class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
+          :title="t('chat.toolReview.title')"
+          @click.stop="emit('toggle-tool-review-panel')"
+        >
+          <PanelRightClose class="h-3.5 w-3.5" />
+        </button>
       </div>
     </div>
 
@@ -172,6 +172,36 @@
       data-tauri-drag-region
       class="relative z-30 flex h-full min-w-0 flex-nowrap items-center justify-end gap-1 px-2"
     >
+      <div v-if="toolReviewPanelOpenVisible" role="tablist" class="tabs tabs-border min-w-0 shrink-0" @mousedown.stop>
+        <button
+          type="button"
+          role="tab"
+          class="tab h-8 px-2"
+          :class="chatRightPanelMode === 'reader' ? 'tab-active font-semibold' : ''"
+          @click.stop="emit('update:chat-right-panel-mode', 'reader')"
+        >
+          {{ t("chat.readerPanelTab") }}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="tab h-8 px-2"
+          :class="chatRightPanelMode === 'review' ? 'tab-active font-semibold' : ''"
+          @click.stop="emit('update:chat-right-panel-mode', 'review')"
+        >
+          {{ t("chat.reviewPanelTab") }}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="tab h-8 px-2"
+          :class="chatRightPanelMode === 'delegate' ? 'tab-active font-semibold' : ''"
+          @click.stop="emit('update:chat-right-panel-mode', 'delegate')"
+        >
+          {{ t("chat.delegatePanelTab") }}
+        </button>
+      </div>
+
       <button
         v-if="toolReviewPanelOpenVisible"
         type="button"
@@ -500,6 +530,8 @@ const props = defineProps<{
   toolReviewPanelOpenVisible: boolean;
   chatSidePanelWidths: { leftWidth: number; rightWidth: number };
   conversationListTab: "local" | "contact";
+  chatLeftPanelMode: "local" | "contact";
+  chatRightPanelMode: "reader" | "review" | "delegate";
   activeConversationId: string;
   conversationItems: ChatConversationOverviewItem[];
   userAlias: string;
@@ -529,6 +561,8 @@ const emit = defineEmits<{
   (e: "toggle-side-conversation-list"): void;
   (e: "toggle-tool-review-panel"): void;
   (e: "update:conversation-list-tab", value: "local" | "contact"): void;
+  (e: "update:chat-left-panel-mode", value: "local" | "contact"): void;
+  (e: "update:chat-right-panel-mode", value: "reader" | "review" | "delegate"): void;
   (e: "minimize-window"): void;
   (e: "toggle-maximize-window"): void;
   (e: "switch-conversation", payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }): void;

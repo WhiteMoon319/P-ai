@@ -16,7 +16,7 @@
         :user-avatar-url="userAvatarUrl"
         :persona-name-map="personaNameMap"
         :persona-avatar-url-map="personaAvatarUrlMap"
-        :active-tab="conversationListTab"
+        :active-tab="chatLeftPanelMode === 'contact' ? 'contact' : 'local'"
         @update:active-tab="$emit('updateConversationListTab', $event)"
         @select="handleConversationListSelect"
         @rename="handleConversationRename"
@@ -259,9 +259,36 @@
         />
       </div>
 
-      <div v-if="toolReviewPanelOpen" class="flex h-full min-h-0 shrink-0 border-l border-base-300 bg-base-100 pt-2"
+      <div v-if="toolReviewPanelOpen" class="flex h-full min-h-0 shrink-0 border-l border-base-300 bg-base-100"
         :style="{ width: `${rightSidebarWidth}px` }">
-        <ToolReviewSidebar ref="toolReviewSidebarRef" class="w-full"
+        <FileReaderPanel
+          v-if="chatRightPanelMode === 'reader'"
+          ref="chatReaderPanelRef"
+          class="h-full w-full"
+          :initial-root-path="currentWorkspaceRootPath"
+          :session-key="chatFileReaderSessionKey"
+          :legacy-session-key="legacyChatFileReaderSessionKey"
+          :enable-global-drop="false"
+          :markdown-is-dark="markdownIsDark"
+          custom-markstream-id="chat-file-reader-markstream"
+        >
+          <template #empty>
+            <div class="space-y-2 px-5 text-center">
+              <div class="font-medium text-base-content/70">选择文件开始阅读</div>
+              <div class="text-xs leading-relaxed text-base-content/50">右侧目录会跟随当前会话工作区，也可以通过文件标签页同时阅读多个文件。</div>
+            </div>
+          </template>
+        </FileReaderPanel>
+        <DelegateStatusSidebar
+          v-else-if="chatRightPanelMode === 'delegate'"
+          class="w-full"
+          :statuses="delegateStatuses"
+          :loading="delegateStatusesLoading"
+          :error-text="delegateStatusesErrorText"
+          @open-delegate-detail="openDelegateArchiveDetail"
+          @abort-delegate="abortDelegate"
+        />
+        <ToolReviewSidebar v-else ref="toolReviewSidebarRef" class="w-full"
           :batches="toolReviewBatches" :current-batch-key="toolReviewCurrentBatchKey"
           :detail-map="toolReviewDetailMap" :detail-loading-call-id="toolReviewDetailLoadingCallId"
           :reviewing-call-id="toolReviewReviewingCallId" :batch-reviewing-key="toolReviewBatchReviewingKey"
@@ -270,14 +297,12 @@
           :current-report-id="toolReviewCurrentReportId" :markdown-is-dark="markdownIsDark"
           :current-workspace-name="currentWorkspaceName" :current-workspace-root-path="currentWorkspaceRootPath"
           :workspaces="workspaces" :current-department-id="currentDepartmentId"
-          :department-options="toolReviewDepartmentOptions" :delegate-statuses="delegateStatuses"
-          :delegate-loading="delegateStatusesLoading" :delegate-error-text="delegateStatusesErrorText"
+          :department-options="toolReviewDepartmentOptions"
           @select-batch="setToolReviewCurrentBatchKey" @load-item-detail="loadToolReviewItemDetail"
           @review-item="runToolReviewForCall" @review-batch="runToolReviewForBatch"
           @pick-commit-review="handlePickCommitReview" @review-code="handleToolReviewCode"
           @retry-report="handleRetryToolReviewReport" @delete-report="handleDeleteToolReviewReport"
           @copy-report="copyToolReviewReport" @attach-report="$emit('attachToolReviewReport', $event)"
-          @open-delegate-detail="openDelegateArchiveDetail" @abort-delegate="abortDelegate"
         />
       </div>
     </div>
@@ -328,6 +353,8 @@ import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import ChatConversationSidebar from "../components/ChatConversationSidebar.vue";
 import ChatWorkspaceToolbar from "../components/ChatWorkspaceToolbar.vue";
 import ToolReviewSidebar from "../components/ToolReviewSidebar.vue";
+import DelegateStatusSidebar from "../components/DelegateStatusSidebar.vue";
+import FileReaderPanel from "../../file-reader/components/FileReaderPanel.vue";
 import ChatImagePreviewDialog from "../components/dialogs/ChatImagePreviewDialog.vue";
 import ChatSupervisionTaskDialog from "../components/dialogs/ChatSupervisionTaskDialog.vue";
 import ConversationTodoDropdown from "../components/ConversationTodoDropdown.vue";
@@ -383,6 +410,8 @@ const props = defineProps<{
   conversationItems?: ChatConversationOverviewItem[]; sideConversationListVisible: boolean;
   initialToolReviewPanelOpen: boolean;
   conversationListTab: "local" | "contact";
+  chatLeftPanelMode: "local" | "contact";
+  chatRightPanelMode: "reader" | "review" | "delegate";
   createConversationDepartmentOptions: Array<{ id: string; name: string; ownerAgentId?: string; ownerName: string; providerName?: string; modelName?: string }>;
   delegateDepartmentIds: string[]; defaultCreateConversationDepartmentId: string;
   ideContextGroups: IdeContextWorkspaceGroup[]; attachedIdeContextReferences: IdeContextReferenceItem[];
@@ -399,6 +428,8 @@ const emit = defineEmits<{
   (e: "sidePanelWidthsChange", value: { leftWidth: number; rightWidth: number }): void;
   (e: "sidePanelWidthsCommit", value: { leftWidth: number; rightWidth: number }): void;
   (e: "updateConversationListTab", value: "local" | "contact"): void;
+  (e: "update:chatLeftPanelMode", value: "local" | "contact"): void;
+  (e: "update:chatRightPanelMode", value: "reader" | "review" | "delegate"): void;
   (e: "removeClipboardImage", index: number): void;
   (e: "removeQueuedAttachmentNotice", index: number): void;
   (e: "startRecording"): void; (e: "stopRecording"): void; (e: "pickAttachments"): void;
@@ -436,6 +467,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const toolReviewSidebarRef = ref<ComponentPublicInstance<{ setCommitOptions: (items: ToolReviewCommitOption[], loading?: boolean, total?: number, page?: number, pageSize?: number) => void }> | null>(null);
+const chatReaderPanelRef = ref<InstanceType<typeof FileReaderPanel> | null>(null);
 const chatScrollbarRef = ref<InstanceType<typeof FloatingScrollbar> | null>(null);
 const linkOpenErrorText = ref("");
 const conversationSummaryCard = ref<{ visible: boolean; text: string }>({ visible: false, text: "" });
@@ -454,6 +486,16 @@ const {
 const toolReviewDepartmentOptions = computed(() => {
   const allowed = new Set((Array.isArray(props.delegateDepartmentIds) ? props.delegateDepartmentIds : []).map((id) => String(id || "").trim()).filter(Boolean));
   return (Array.isArray(props.createConversationDepartmentOptions) ? props.createConversationDepartmentOptions : []).filter((item) => allowed.has(String(item.id || "").trim()));
+});
+
+const chatFileReaderSessionKey = computed(() => {
+  const conversationId = String(props.activeConversationId || "").trim();
+  return conversationId ? `easy_call.chat_file_reader_session.${conversationId}.v1` : "";
+});
+
+const legacyChatFileReaderSessionKey = computed(() => {
+  const conversationId = String(props.activeConversationId || "").trim();
+  return conversationId ? `easy-call.chat.file-reader-session.${conversationId}` : "";
 });
 
 // ==================== messages / audio / bubble ====================

@@ -183,6 +183,8 @@
         :side-conversation-list-visible="sideConversationListVisible"
         :initial-tool-review-panel-open="initialToolReviewPanelOpen"
         :conversation-list-tab="conversationListTab"
+        :chat-left-panel-mode="chatLeftPanelMode"
+        :chat-right-panel-mode="chatRightPanelMode"
         @update:chat-input="updateChatInput"
         @update:selected-instruction-prompts="updateSelectedInstructionPrompts"
         @add-mention="addChatMention"
@@ -192,6 +194,8 @@
         @side-panel-widths-change="setChatSidePanelWidths"
         @side-panel-widths-commit="commitChatSidePanelWidths"
         @update:conversation-list-tab="updateConversationListTab"
+        @update:chat-left-panel-mode="updateChatLeftPanelMode"
+        @update:chat-right-panel-mode="updateChatRightPanelMode"
         @remove-clipboard-image="removeClipboardImage"
         @remove-queued-attachment-notice="removeQueuedAttachmentNotice"
         @pick-attachments="pickAttachments"
@@ -413,6 +417,8 @@ const props = defineProps<{
   sideConversationListVisible: boolean;
   initialToolReviewPanelOpen: boolean;
   conversationListTab: "local" | "contact";
+  chatLeftPanelMode: "local" | "contact";
+  chatRightPanelMode: "reader" | "review" | "delegate";
   config: AppConfig;
   configTab: "welcome" | "hotkey" | "api" | "tools" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "remoteIm" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
   localeOptions: Array<{ value: "zh-CN" | "en-US" | "zh-TW"; label: string }>;
@@ -638,6 +644,8 @@ const props = defineProps<{
   setToolReviewPanelOpen: (value: boolean) => void;
   setChatSidePanelWidths: (value: { leftWidth: number; rightWidth: number }, options?: { syncWindow?: boolean }) => void;
   updateConversationListTab: (value: "local" | "contact") => void;
+  updateChatLeftPanelMode: (value: "local" | "contact") => void;
+  updateChatRightPanelMode: (value: "reader" | "review" | "delegate") => void;
   removeClipboardImage: (index: number) => void;
   removeQueuedAttachmentNotice: (index: number) => void;
   pickAttachments: () => void;

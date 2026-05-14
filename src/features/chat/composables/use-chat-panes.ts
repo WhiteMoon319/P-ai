@@ -3,19 +3,24 @@ import { nextTick, ref, watch, type Ref } from "vue";
 type PaneResizeSide = "left" | "right";
 
 export const PANE_WIDTH_LIMITS = {
-  left: { min: 240, max: 560, default: 320 },
-  right: { min: 280, max: 680, default: 320 },
+  left: { min: 100, max: 10000, default: 320 },
+  right: { min: 100, max: 10000, default: 320 },
 } as const;
 
-export const PANE_CENTER_MIN_WIDTH = 360;
+export const PANE_CENTER_MIN_WIDTH = 100;
 export const PANE_WIDTH_STORAGE_KEYS = {
+  left: "easy_call.chat_left_sidebar_width.v1",
+  right: "easy_call.chat_right_sidebar_width.v1",
+} as const;
+const LEGACY_PANE_WIDTH_STORAGE_KEYS = {
   left: "easy-call.chat.left-sidebar-width",
   right: "easy-call.chat.right-sidebar-width",
 } as const;
 
 export function loadStoredPaneWidth(side: PaneResizeSide): number {
   if (typeof window === "undefined") return PANE_WIDTH_LIMITS[side].default;
-  const raw = window.localStorage.getItem(PANE_WIDTH_STORAGE_KEYS[side]);
+  const raw = window.localStorage.getItem(PANE_WIDTH_STORAGE_KEYS[side])
+    ?? window.localStorage.getItem(LEGACY_PANE_WIDTH_STORAGE_KEYS[side]);
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : PANE_WIDTH_LIMITS[side].default;
 }
@@ -55,7 +60,7 @@ export function useChatPanes(options: UseChatPanesOptions) {
         ? (toolReviewPanelOpen.value ? rightSidebarWidth.value : 0)
         : (showSideConversationList.value && !detachedChatWindow ? leftSidebarWidth.value : 0);
     const layoutMax = layoutWidth > 0 ? layoutWidth - otherPaneWidth - PANE_CENTER_MIN_WIDTH : limits.max;
-    const effectiveMax = Math.max(limits.min, Math.min(limits.max, layoutMax));
+    const effectiveMax = Math.max(limits.min, layoutMax > 0 ? layoutMax : limits.max);
     return Math.round(Math.min(effectiveMax, Math.max(limits.min, width)));
   }
 

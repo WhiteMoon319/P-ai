@@ -14,6 +14,8 @@
       :tool-review-panel-open-visible="toolReviewPanelOpenVisible"
       :chat-side-panel-widths="chatSidePanelWidths"
       :conversation-list-tab="conversationListTab"
+      :chat-left-panel-mode="chatLeftPanelMode"
+      :chat-right-panel-mode="chatRightPanelMode"
       :active-conversation-id="currentChatConversationId"
       :conversation-items="chatConversationItems"
       :user-alias="userAlias"
@@ -45,6 +47,8 @@
       @toggle-side-conversation-list="toggleSideConversationList"
       @toggle-tool-review-panel="toggleToolReviewPanel"
       @update:conversation-list-tab="updateConversationListTab"
+      @update:chat-left-panel-mode="updateChatLeftPanelMode"
+      @update:chat-right-panel-mode="updateChatRightPanelMode"
       @switch-conversation="switchChatConversation"
       @rename-conversation="renameCurrentConversation"
       @toggle-pin-conversation="toggleConversationPin"
@@ -63,6 +67,8 @@
       :side-conversation-list-visible="sideConversationListVisible"
       :initial-tool-review-panel-open="toolReviewPanelOpenVisible"
       :conversation-list-tab="conversationListTab"
+      :chat-left-panel-mode="chatLeftPanelMode"
+      :chat-right-panel-mode="chatRightPanelMode"
       :config="config"
       :config-tab="configTab"
       :locale-options="localeOptions"
@@ -275,6 +281,8 @@
       :set-tool-review-panel-open="handleToolReviewPanelOpenChange"
       :set-chat-side-panel-widths="handleChatSidePanelWidthsChange"
       :update-conversation-list-tab="updateConversationListTab"
+      :update-chat-left-panel-mode="updateChatLeftPanelMode"
+      :update-chat-right-panel-mode="updateChatRightPanelMode"
       :remove-clipboard-image="removeClipboardImage"
       :remove-queued-attachment-notice="removeQueuedAttachmentNotice"
       :pick-attachments="pickChatAttachments"
@@ -635,6 +643,26 @@ const webviewZoomFactor = ref(1);
 const WEBVIEW_ZOOM_PERCENT_OPTIONS = [80, 90, 100, 110, 120, 150] as const;
 const WEBVIEW_ZOOM_APPLY_DELAY_MS = 500;
 const CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY = "easy_call.chat_conversation_list_tab.v1";
+const CHAT_LEFT_PANEL_MODE_STORAGE_KEY = "easy_call.chat_left_panel_mode.v1";
+const CHAT_RIGHT_PANEL_MODE_STORAGE_KEY = "easy_call.chat_right_panel_mode.v1";
+const LEGACY_CHAT_LEFT_PANEL_MODE_STORAGE_KEY = "easy-call.chat.left-panel-mode";
+const LEGACY_CHAT_RIGHT_PANEL_MODE_STORAGE_KEY = "easy-call.chat.right-panel-mode";
+const CHAT_SIDE_PANEL_VISIBILITY_STORAGE_KEYS = {
+  left: "easy_call.chat_left_sidebar_visible.v1",
+  right: "easy_call.chat_right_sidebar_visible.v1",
+} as const;
+const LEGACY_CHAT_SIDE_PANEL_VISIBILITY_STORAGE_KEYS = {
+  left: "easy-call.chat.left-sidebar-visible",
+  right: "easy-call.chat.right-sidebar-visible",
+} as const;
+const CHAT_SIDE_PANEL_WIDTH_STORAGE_KEYS = {
+  left: "easy_call.chat_left_sidebar_width.v1",
+  right: "easy_call.chat_right_sidebar_width.v1",
+} as const;
+const LEGACY_CHAT_SIDE_PANEL_WIDTH_STORAGE_KEYS = {
+  left: "easy-call.chat.left-sidebar-width",
+  right: "easy-call.chat.right-sidebar-width",
+} as const;
 let chatHistoryFlushedUnlisten: UnlistenFn | null = null;
 let chatRoundStartedUnlisten: UnlistenFn | null = null;
 let chatRoundCompletedUnlisten: UnlistenFn | null = null;
@@ -679,6 +707,8 @@ const selectedChatMentions = ref<ChatMentionTarget[]>([]);
 const chatInput = ref("");
 const currentChatConversationId = ref("");
 const conversationListTab = ref<"local" | "contact">(loadStoredConversationListTab());
+const chatLeftPanelMode = ref<"local" | "contact">(loadStoredChatLeftPanelMode());
+const chatRightPanelMode = ref<"reader" | "review" | "delegate">(loadStoredChatRightPanelMode());
 const sideConversationListVisible = ref(loadStoredChatSidePanelVisibility("left"));
 const toolReviewPanelOpenVisible = ref(loadStoredChatSidePanelVisibility("right"));
 const chatSidePanelWidths = ref(loadStoredChatSidePanelWidths());
@@ -782,28 +812,68 @@ function loadStoredConversationListTab(): "local" | "contact" {
   return stored === "contact" ? "contact" : "local";
 }
 
+function loadStoredChatLeftPanelMode(): "local" | "contact" {
+  if (typeof window === "undefined") return loadStoredConversationListTab();
+  const stored = String(window.localStorage.getItem(CHAT_LEFT_PANEL_MODE_STORAGE_KEY) || window.localStorage.getItem(LEGACY_CHAT_LEFT_PANEL_MODE_STORAGE_KEY) || "").trim();
+  return stored === "contact" ? "contact" : loadStoredConversationListTab();
+}
+
+function loadStoredChatRightPanelMode(): "reader" | "review" | "delegate" {
+  if (typeof window === "undefined") return "review";
+  const stored = String(window.localStorage.getItem(CHAT_RIGHT_PANEL_MODE_STORAGE_KEY) || window.localStorage.getItem(LEGACY_CHAT_RIGHT_PANEL_MODE_STORAGE_KEY) || "").trim();
+  return stored === "reader" || stored === "delegate" ? stored : "review";
+}
+
 function updateConversationListTab(value: "local" | "contact") {
   conversationListTab.value = value === "contact" ? "contact" : "local";
+  chatLeftPanelMode.value = conversationListTab.value;
   if (typeof window === "undefined") return;
   window.localStorage.setItem(CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY, conversationListTab.value);
+  window.localStorage.setItem(CHAT_LEFT_PANEL_MODE_STORAGE_KEY, chatLeftPanelMode.value);
+}
+
+function updateChatLeftPanelMode(value: "local" | "contact") {
+  const nextMode = value === "contact" ? "contact" : "local";
+  chatLeftPanelMode.value = nextMode;
+  conversationListTab.value = nextMode;
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(CHAT_LEFT_PANEL_MODE_STORAGE_KEY, nextMode);
+    window.localStorage.setItem(CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY, nextMode);
+  }
+  if (!sideConversationListVisible.value && viewMode.value === "chat" && !detachedChatWindow.value) {
+    void toggleSideConversationList();
+  }
+}
+
+function updateChatRightPanelMode(value: "reader" | "review" | "delegate") {
+  const nextMode = value === "reader" || value === "delegate" ? value : "review";
+  chatRightPanelMode.value = nextMode;
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(CHAT_RIGHT_PANEL_MODE_STORAGE_KEY, nextMode);
+  }
+  if (!toolReviewPanelOpenVisible.value && viewMode.value === "chat") {
+    void toggleToolReviewPanel();
+  }
 }
 
 function loadStoredChatSidePanelVisibility(side: "left" | "right"): boolean {
   if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(`easy-call.chat.${side}-sidebar-visible`) === "true";
+  const stored = window.localStorage.getItem(CHAT_SIDE_PANEL_VISIBILITY_STORAGE_KEYS[side])
+    ?? window.localStorage.getItem(LEGACY_CHAT_SIDE_PANEL_VISIBILITY_STORAGE_KEYS[side]);
+  return stored === "true";
 }
 
 function storeChatSidePanelVisibility(side: "left" | "right", visible: boolean) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(`easy-call.chat.${side}-sidebar-visible`, visible ? "true" : "false");
+  window.localStorage.setItem(CHAT_SIDE_PANEL_VISIBILITY_STORAGE_KEYS[side], visible ? "true" : "false");
 }
 
 function loadStoredChatSidePanelWidths(): { leftWidth: number; rightWidth: number } {
   if (typeof window === "undefined") {
     return { leftWidth: 320, rightWidth: 320 };
   }
-  const leftWidth = Number(window.localStorage.getItem("easy-call.chat.left-sidebar-width"));
-  const rightWidth = Number(window.localStorage.getItem("easy-call.chat.right-sidebar-width"));
+  const leftWidth = Number(window.localStorage.getItem(CHAT_SIDE_PANEL_WIDTH_STORAGE_KEYS.left) ?? window.localStorage.getItem(LEGACY_CHAT_SIDE_PANEL_WIDTH_STORAGE_KEYS.left));
+  const rightWidth = Number(window.localStorage.getItem(CHAT_SIDE_PANEL_WIDTH_STORAGE_KEYS.right) ?? window.localStorage.getItem(LEGACY_CHAT_SIDE_PANEL_WIDTH_STORAGE_KEYS.right));
   return {
     leftWidth: Number.isFinite(leftWidth) ? leftWidth : 320,
     rightWidth: Number.isFinite(rightWidth) ? rightWidth : 320,
