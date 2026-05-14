@@ -37,17 +37,25 @@
             >
               <div class="flex items-center gap-2 p-2">
               <div class="shrink-0">
-                <div class="avatar">
-                  <div class="w-10 h-10 rounded-full bg-error text-error-content">
-                    <img
-                      v-if="lastSpeakerAvatarUrl(item)"
-                      :src="lastSpeakerAvatarUrl(item)"
-                      :alt="lastSpeakerLabel(item)"
-                      class="w-10 h-10 rounded-full object-cover"
-                    />
-                    <span v-else class="flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold">
-                      {{ lastSpeakerInitial(item) }}
-                    </span>
+                <div class="indicator">
+                  <span
+                    v-if="conversationIndicatorTone(item)"
+                    class="indicator-item indicator-top indicator-end z-10 h-2.5 w-2.5 translate-x-0.5 -translate-y-0.5 rounded-full"
+                    :class="conversationIndicatorClass(conversationIndicatorTone(item))"
+                    aria-hidden="true"
+                  ></span>
+                  <div class="avatar">
+                    <div class="w-10 h-10 rounded-full bg-error text-error-content">
+                      <img
+                        v-if="lastSpeakerAvatarUrl(item)"
+                        :src="lastSpeakerAvatarUrl(item)"
+                        :alt="lastSpeakerLabel(item)"
+                        class="w-10 h-10 rounded-full object-cover"
+                      />
+                      <span v-else class="flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold">
+                        {{ lastSpeakerInitial(item) }}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -148,7 +156,9 @@
                     {{ latestPreviewLine(item) }}
                   </span>
                   <div class="flex shrink-0 items-center gap-2">
-                    <span v-if="item.runtimeState" class="text-[11px] text-base-content/60">
+                    <span v-if="conversationPipelineStatus(item) === 'busy'" class="loading loading-spinner loading-xs text-primary" :title="t('chat.runtimeStreaming')"></span>
+                    <span v-else-if="conversationPipelineStatus(item) === 'error'" class="badge badge-error badge-xs">{{ t("common.failed") }}</span>
+                    <span v-else-if="item.runtimeState" class="text-[11px] text-base-content/60">
                       {{ runtimeStateText(item.runtimeState) }}
                     </span>
                     <span
@@ -181,6 +191,7 @@ import { computed, nextTick, ref, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
 import { Archive, Ellipsis, PencilLine, Pin, PinOff, Trash2 } from "lucide-vue-next";
 import type { ChatConversationOverviewItem, ConversationPreviewMessage } from "../../../types/app";
+import { usePipelineStatus } from "../../shell/composables/use-pipeline-status";
 import { formatConversationListTime } from "../utils/conversation-time";
 import { resolveConversationDisplayTitle } from "../utils/conversation-title";
 import ChatConversationFloatingScroll from "./ChatConversationFloatingScroll.vue";
@@ -206,6 +217,7 @@ const emit = defineEmits<{
 }>();
 
 const { t, locale } = useI18n();
+const { conversationStatusById } = usePipelineStatus();
 const renameInputRef = ref<HTMLInputElement | null>(null);
 const editingConversationId = ref("");
 const editingTitleDraft = ref("");
@@ -416,6 +428,25 @@ function unreadCountBadge(item: ChatConversationOverviewItem): string {
   const unreadCount = Math.max(0, Number(item.unreadCount || 0));
   if (unreadCount <= 0) return "";
   return unreadCount > 99 ? "99+" : String(unreadCount);
+}
+
+function conversationPipelineStatus(item: ChatConversationOverviewItem) {
+  return conversationStatusById.value[String(item.conversationId || "").trim()] || "";
+}
+
+function conversationIndicatorTone(item: ChatConversationOverviewItem): "error" | "info" | "success" | "" {
+  const pipelineStatus = conversationPipelineStatus(item);
+  if (pipelineStatus === "error") return "error";
+  if (pipelineStatus === "busy") return "info";
+  if (pipelineStatus === "success") return "success";
+  return "";
+}
+
+function conversationIndicatorClass(tone: "error" | "info" | "success" | ""): string {
+  if (tone === "error") return "bg-error";
+  if (tone === "info") return "bg-warning";
+  if (tone === "success") return "bg-success";
+  return "";
 }
 
 function normalizedPreviewMessages(item: ChatConversationOverviewItem): ConversationPreviewMessage[] {

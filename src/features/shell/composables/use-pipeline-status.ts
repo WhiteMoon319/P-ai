@@ -1,7 +1,7 @@
 import { computed, onMounted, onUnmounted, ref, type ComputedRef } from "vue";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-export type ConversationPipelineStatus = "busy" | "error";
+export type ConversationPipelineStatus = "busy" | "success" | "error";
 
 export interface ConversationWorkStatusEvent {
   conversationId?: string;
@@ -14,6 +14,7 @@ export interface ConversationWorkStatusEvent {
 export interface PipelineState {
   conversationStatusById: ComputedRef<Record<string, ConversationPipelineStatus>>;
   markConversationRead: (conversationId: string) => void;
+  clearConversationStatus: (conversationId: string, expectedStatus?: ConversationPipelineStatus) => void;
 }
 
 const conversationStatusByIdRef = ref<Record<string, ConversationPipelineStatus>>({});
@@ -59,7 +60,8 @@ async function startConversationWorkStatusListener() {
         setConversationStatus(conversationId, "error");
         return;
       }
-      setConversationStatus(conversationId);
+      // "success" 表示后台会话有未查看的完成结果，保留到用户切入该会话后再清理。
+      setConversationStatus(conversationId, "success");
     });
     if (consumerCount <= 0) {
       off();
@@ -100,6 +102,14 @@ export function usePipelineStatus(): PipelineState {
     markConversationRead: (conversationId: string) => {
       const normalizedConversationId = String(conversationId || "").trim();
       if (!normalizedConversationId) return;
+      if (conversationStatusByIdRef.value[normalizedConversationId] === "success") {
+        setConversationStatus(normalizedConversationId);
+      }
+    },
+    clearConversationStatus: (conversationId: string, expectedStatus?: ConversationPipelineStatus) => {
+      const normalizedConversationId = String(conversationId || "").trim();
+      if (!normalizedConversationId) return;
+      if (expectedStatus && conversationStatusByIdRef.value[normalizedConversationId] !== expectedStatus) return;
       setConversationStatus(normalizedConversationId);
     },
   };

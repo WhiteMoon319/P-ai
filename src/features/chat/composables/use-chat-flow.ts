@@ -78,6 +78,7 @@ type UseChatFlowOptions = {
   toolStatusState: Ref<"running" | "done" | "failed" | "">;
   streamToolCalls?: Ref<StreamToolCallView[]>;
   chatErrorText: Ref<string>;
+  setConversationChatError?: (conversationId: string, text: string) => void;
   allMessages: Ref<ChatMessage[]>;
   onOwnUserDraftInserted?: () => void;
   t: (key: string, params?: Record<string, unknown>) => string;
@@ -306,6 +307,19 @@ export function useChatFlow(options: UseChatFlowOptions) {
 
   function normalizeConversationId(conversationId?: string | null): string {
     return String(conversationId || "").trim();
+  }
+
+  function setChatErrorText(text: string, conversationId?: string | null) {
+    const cid = normalizeConversationId(conversationId || (options.getConversationId ? options.getConversationId() : ""));
+    if (cid && options.setConversationChatError) {
+      options.setConversationChatError(cid, text);
+      return;
+    }
+    options.chatErrorText.value = text;
+  }
+
+  function clearChatErrorText(conversationId?: string | null) {
+    setChatErrorText("", conversationId);
   }
 
   function positiveRoundedNumber(value: unknown): number {
@@ -1366,7 +1380,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     if (typeof result.reasoningInline === "string") {
       options.latestReasoningInlineText.value = result.reasoningInline;
     }
-    options.chatErrorText.value = "";
+    clearChatErrorText();
     if ((options.toolStatusState.value as string) === "running") {
       options.toolStatusState.value = "done";
       options.toolStatusText.value = summarizeToolCallsText() || options.t("status.toolCallDone");
@@ -1400,7 +1414,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     clearConversationStreamCache(options.getConversationId ? options.getConversationId() : "");
     clearFrontendDispatchTimer();
     activeActivationId = "";
-    options.chatErrorText.value = "";
+    clearChatErrorText();
     setRound({ phase: "idle" });
     options.chatting.value = false;
     reasoningStartedAtMs.value = 0;
@@ -1421,7 +1435,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     options.latestReasoningStandardText.value = "";
     options.latestReasoningInlineText.value = "";
     pendingReasoningStandardBreak = false;
-    options.chatErrorText.value = options.formatRequestFailed(error);
+    setChatErrorText(options.formatRequestFailed(error));
     if (!options.toolStatusText.value) {
       options.toolStatusState.value = "failed";
       options.toolStatusText.value = summarizeToolCallsText() || options.t("status.toolCallFailed");
@@ -1480,7 +1494,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
     options.chatting.value = false;
     reasoningStartedAtMs.value = 0;
     resetDisplayState();
-    options.chatErrorText.value = "";
   }
 
   function clearForegroundRuntimeState() {
@@ -1503,7 +1516,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
     options.chatting.value = false;
     reasoningStartedAtMs.value = 0;
     resetDisplayState();
-    options.chatErrorText.value = "";
     clearConversationStreamCache(conversationId);
   }
 
@@ -1547,7 +1559,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
     options.chatting.value = false;
     reasoningStartedAtMs.value = 0;
     resetDisplayState();
-    options.chatErrorText.value = "";
   }
 
   function beginAssistantActivationFromEvent(payload: RoundStartedPayload): number {
@@ -1976,7 +1987,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     options.latestReasoningStandardText.value = "";
     options.latestReasoningInlineText.value = "";
     pendingReasoningStandardBreak = false;
-    options.chatErrorText.value = options.formatRequestFailed(error);
+    setChatErrorText(options.formatRequestFailed(error));
     if (!options.toolStatusText.value) {
       options.toolStatusState.value = "failed";
       options.toolStatusText.value = summarizeToolCallsText() || options.t("status.toolCallFailed");
@@ -2140,7 +2151,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
             message: String((err as { message?: string })?.message ?? err ?? ""),
             gen: hfGen,
           });
-          options.chatErrorText.value = options.formatRequestFailed(err);
+          setChatErrorText(options.formatRequestFailed(err));
         });
         return;
       }
@@ -2312,6 +2323,8 @@ export function useChatFlow(options: UseChatFlowOptions) {
     const currentConversationId = String(options.getConversationId ? options.getConversationId() : "").trim();
     const payloadConversationId = String(parsed?.conversationId || "").trim();
     if (currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId) {
+      const errorDetail = parsed?.error || raw || String(raw);
+      setChatErrorText(options.formatRequestFailed(errorDetail), payloadConversationId);
       clearConversationStreamCache(payloadConversationId);
       return;
     }
@@ -2349,7 +2362,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
           rawPayload: raw,
         }
       );
-      options.chatErrorText.value = options.formatRequestFailed(errorDetail);
+      setChatErrorText(options.formatRequestFailed(errorDetail), payloadConversationId || currentConversationId);
       await options.onReloadMessages();
       return;
     }
@@ -2449,15 +2462,16 @@ export function useChatFlow(options: UseChatFlowOptions) {
     if (!plainText && finalImages.length === 0 && queuedAttachments.length === 0 && extraTextBlocks.length === 0) return;
     const sendSession = options.getSession();
     if (!sendSession || !sendSession.apiConfigId || !sendSession.agentId) return;
+    const sendConversationId = normalizeConversationId(options.getConversationId ? options.getConversationId() : "");
 
     const hasForegroundRoundInFlight = options.chatting.value || round.phase !== "idle";
     if (!hasForegroundRoundInFlight) {
-      clearConversationStreamCache(options.getConversationId ? options.getConversationId() : "");
+      clearConversationStreamCache(sendConversationId);
       activeActivationId = "";
       options.toolStatusText.value = "";
       options.toolStatusState.value = "";
       if (options.streamToolCalls) options.streamToolCalls.value = [];
-      options.chatErrorText.value = "";
+      clearChatErrorText(sendConversationId);
     }
 
     const sentImages = finalImages;
@@ -2522,7 +2536,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
         mentions: selectedMentions.length > 0 ? selectedMentions : undefined,
         session: {
           ...sendSession,
-          conversationId: options.getConversationId ? options.getConversationId() : "",
+          conversationId: sendConversationId,
         },
         onDelta: deltaChannel,
       });
@@ -2542,7 +2556,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     } catch (error) {
       if (isChatAbortedByUser(error)) {
         sendStartedAtMsByGen.delete(gen);
-        options.chatErrorText.value = "";
+        clearChatErrorText(sendConversationId);
         if ((round.phase === "streaming" || round.phase === "queued") && round.gen === gen) {
           setRound({ phase: "idle" });
           clearFrontendDispatchTimer();
@@ -2563,14 +2577,14 @@ export function useChatFlow(options: UseChatFlowOptions) {
         removeDraft(`${DRAFT_ASSISTANT_ID_PREFIX}${gen}`);
         sendStartedAtMsByGen.delete(gen);
         clearFrontendDispatchTimer();
-        options.chatErrorText.value = options.formatRequestFailed(error);
+        setChatErrorText(options.formatRequestFailed(error), sendConversationId);
         return;
       }
 
       options.latestAssistantText.value = "";
       options.latestReasoningStandardText.value = "";
       options.latestReasoningInlineText.value = "";
-      options.chatErrorText.value = options.formatRequestFailed(error);
+      setChatErrorText(options.formatRequestFailed(error), sendConversationId);
       if (!options.toolStatusText.value) {
         options.toolStatusState.value = "failed";
         options.toolStatusText.value = summarizeToolCallsText() || options.t("status.toolCallFailed");

@@ -290,6 +290,7 @@
       :stop-recording="() => stopRecording(false)"
       :send-chat="sendChatFromCurrentWindow"
       :stop-chat="chatFlow.stopChat"
+      :clear-chat-error="clearChatError"
       :on-jump-to-conversation-bottom="ensureLatestForegroundTailThenScrollToBottom"
       :open-supervision-task-dialog="openSupervisionTaskDialog"
       :on-detach-conversation="detachCurrentConversationToWindow"
@@ -454,6 +455,7 @@ import {
   useShellDialogFlows,
 } from "./features/shell/composables/use-shell-dialog-flows";
 import { useTerminalApproval, type TerminalApprovalRequestPayload } from "./features/shell/composables/use-terminal-approval";
+import { usePipelineStatus } from "./features/shell/composables/use-pipeline-status";
 import { applyUiFont, normalizeUiFont } from "./features/shell/composables/use-ui-font";
 import { useWindowActions } from "./features/shell/composables/use-window-actions";
 import { useViewRefresh } from "./features/shell/composables/use-view-refresh";
@@ -725,9 +727,65 @@ let suppressNextOwnMessageAlignFromHistoryFlushed = 0;
 const toolStatusText = ref("");
 const toolStatusState = ref<"running" | "done" | "failed" | "">("");
 const streamToolCalls = ref<Array<{ name: string; argsText: string }>>([]);
-const chatErrorText = ref("");
+const conversationChatErrorTextMap = ref<Record<string, string>>({});
+const fallbackChatErrorText = ref("");
+const chatErrorText = computed({
+  get: () => getConversationChatErrorText(currentChatConversationId.value),
+  set: (text: string) => {
+    setConversationChatErrorText(currentChatConversationId.value, text);
+  },
+});
 const clipboardImages = ref<Array<{ mime: string; bytesBase64: string; savedPath?: string }>>([]);
 const queuedAttachmentNotices = ref<Array<{ id: string; fileName: string; relativePath: string; mime: string }>>([]);
+
+function getConversationChatErrorText(conversationId: string) {
+  const cid = String(conversationId || "").trim();
+  if (!cid) return fallbackChatErrorText.value;
+  return conversationChatErrorTextMap.value[cid] || "";
+}
+
+function setConversationChatErrorText(conversationId: string, text: string) {
+  const cid = String(conversationId || "").trim();
+  const normalizedText = String(text || "");
+  if (!cid) {
+    fallbackChatErrorText.value = normalizedText;
+    return;
+  }
+  const next = { ...conversationChatErrorTextMap.value };
+  if (normalizedText.trim()) {
+    next[cid] = normalizedText;
+  } else {
+    delete next[cid];
+  }
+  conversationChatErrorTextMap.value = next;
+}
+
+function clearMatchingConversationChatErrors(predicate: (text: string) => boolean) {
+  let changed = false;
+  const next: Record<string, string> = {};
+  for (const [conversationId, text] of Object.entries(conversationChatErrorTextMap.value)) {
+    if (predicate(text)) {
+      changed = true;
+      continue;
+    }
+    next[conversationId] = text;
+  }
+  if (changed) {
+    conversationChatErrorTextMap.value = next;
+  }
+  if (predicate(fallbackChatErrorText.value)) {
+    fallbackChatErrorText.value = "";
+  }
+}
+
+function clearChatError() {
+  const conversationId = String(currentChatConversationId.value || "").trim();
+  setConversationChatErrorText(conversationId, "");
+  clearConversationStatus(conversationId, "error");
+  if (toolStatusState.value === "failed") {
+    toolStatusState.value = "";
+  }
+}
 
 function handleChatInputUpdate(value: string) {
   chatInput.value = value;
@@ -985,6 +1043,7 @@ const { perfNow, perfLog, setStatus, setStatusError, localeOptions, applyUiLangu
   status,
   perfDebug: PERF_DEBUG,
 });
+const { clearConversationStatus } = usePipelineStatus();
 const {
   checkingUpdate,
   hasAvailableUpdate,
@@ -3202,10 +3261,11 @@ function applyConversationOverviewAppendedMessage(
       return item;
     }
     changed = true;
+    const shouldMarkUnread = cid !== String(currentChatConversationId.value || "").trim();
     return {
       ...item,
       messageCount: Math.max(0, Number(item.messageCount || 0)) + 1,
-      unreadCount: Number(item.unreadCount || 0),
+      unreadCount: Math.max(0, Number(item.unreadCount || 0)) + (shouldMarkUnread ? 1 : 0),
       updatedAt: messageAt || item.updatedAt,
       lastMessageAt: messageAt || item.lastMessageAt,
       previewMessages: [...existingPreviewMessages, preview].slice(-2),
@@ -4245,9 +4305,7 @@ const appBootstrap = useAppBootstrap({
     if ("sttAutoSend" in payload) {
       config.sttAutoSend = !!payload.sttAutoSend;
     }
-    if (chatErrorText.value.includes("不支持图片附件") || chatErrorText.value.includes("PDF 附件")) {
-      chatErrorText.value = "";
-    }
+    clearMatchingConversationChatErrors((text) => text.includes("不支持图片附件") || text.includes("PDF 附件"));
     if (viewMode.value === "chat") {
       await refreshConversationHistory();
     }
@@ -4861,9 +4919,7 @@ watch(
     visionEnabled: hasVisionFallback.value,
   }),
   () => {
-    if (chatErrorText.value.includes("不支持图片附件") || chatErrorText.value.includes("PDF 附件")) {
-      chatErrorText.value = "";
-    }
+    clearMatchingConversationChatErrors((text) => text.includes("不支持图片附件") || text.includes("PDF 附件"));
   },
 );
 
@@ -5004,6 +5060,7 @@ const chatFlow = useChatFlow({
   toolStatusState,
   streamToolCalls,
   chatErrorText,
+  setConversationChatError: setConversationChatErrorText,
   allMessages,
   onOwnUserDraftInserted: () => {
     suppressNextOwnMessageAlignFromHistoryFlushed += 1;

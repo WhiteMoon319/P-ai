@@ -5,7 +5,6 @@ import type { TerminalApprovalConversationItem } from "../../shell/composables/u
 export function useChatConversationCtx(
   props: {
     currentTheme: string;
-    isDarkAppTheme: (theme: string) => boolean;
     activeConversationId: string;
     conversationItems?: ChatConversationOverviewItem[];
     unarchivedConversationItems: ChatConversationOverviewItem[];
@@ -25,9 +24,10 @@ export function useChatConversationCtx(
     selectedMentions: ChatMentionTarget[];
     messageBlocks: Array<{ isExtraTextBlock?: boolean; planCard?: { action?: string }; sourceMessageId?: string; id?: string; providerMeta?: Record<string, unknown> }>;
   },
+  isDarkAppTheme: (theme: string) => boolean,
   t: (key: string, params?: Record<string, unknown>) => string,
 ) {
-  const markdownIsDark = computed(() => props.isDarkAppTheme(props.currentTheme));
+  const markdownIsDark = computed(() => isDarkAppTheme(props.currentTheme));
 
   function isOrganizeContextToolCall(call: { name: string; status?: string }): boolean {
     const name = String(call.name || "").trim().toLowerCase();

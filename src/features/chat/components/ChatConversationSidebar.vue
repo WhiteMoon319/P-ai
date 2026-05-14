@@ -155,7 +155,9 @@
                     {{ latestPreviewLine(item) }}
                   </span>
                   <div class="flex shrink-0 items-center gap-2">
-                    <span v-if="item.runtimeState" class="text-[11px] text-base-content/60">{{ runtimeStateText(item.runtimeState) }}</span>
+                    <span v-if="conversationPipelineStatus(item) === 'busy'" class="loading loading-spinner loading-xs text-primary" :title="t('chat.runtimeStreaming')"></span>
+                    <span v-else-if="conversationPipelineStatus(item) === 'error'" class="badge badge-error badge-xs">{{ t("common.failed") }}</span>
+                    <span v-else-if="item.runtimeState" class="text-[11px] text-base-content/60">{{ runtimeStateText(item.runtimeState) }}</span>
                     <span
                       v-if="unreadCountBadge(item)"
                       class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-error px-1.5 text-[11px] font-medium text-error-content"
@@ -312,15 +314,17 @@ function isCurrentConversation(item: ChatConversationOverviewItem): boolean {
 
 function conversationIndicatorTone(item: ChatConversationOverviewItem): "error" | "info" | "success" | "" {
   const conversationId = String(item.conversationId || "").trim();
-  if (!conversationId || isCurrentConversation(item)) return "";
+  if (!conversationId) return "";
   const pipelineStatus = conversationStatusById.value[conversationId];
   if (pipelineStatus === "error") return "error";
-  if (pipelineStatus === "busy") return "success";
+  if (pipelineStatus === "busy") return "info";
+  if (pipelineStatus === "success") return "success";
   return "";
 }
 
 function conversationIndicatorClass(tone: "error" | "info" | "success" | ""): string {
   if (tone === "error") return "bg-error";
+  if (tone === "info") return "bg-warning";
   if (tone === "success") return "bg-success";
   return "";
 }
@@ -445,6 +449,10 @@ function unreadCountBadge(item: ChatConversationOverviewItem): string {
   const unreadCount = Math.max(0, Number(item.unreadCount || 0));
   if (unreadCount <= 0) return "";
   return unreadCount > 99 ? "99+" : String(unreadCount);
+}
+
+function conversationPipelineStatus(item: ChatConversationOverviewItem) {
+  return conversationStatusById.value[String(item.conversationId || "").trim()] || "";
 }
 
 function runtimeStateText(runtimeState?: ChatConversationOverviewItem["runtimeState"]): string {

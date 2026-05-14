@@ -189,11 +189,20 @@
         </div>
 
         <div ref="composerContainer" class="relative shrink-0 border-t border-base-300 bg-base-100 p-2">
-          <div v-if="chatStatusBanner" class="pointer-events-none absolute inset-x-0 top-0 z-10 -translate-y-full">
-            <div class="relative flex w-full items-center justify-center rounded-none px-4 py-1.5 text-center text-[12px] backdrop-blur-md"
+          <div v-if="chatStatusBanner" class="absolute inset-x-0 top-0 z-10 -translate-y-full">
+            <div class="relative flex w-full items-center justify-center gap-2 rounded-none px-4 py-1.5 text-center text-[12px] backdrop-blur-md"
               :class="chatStatusBanner.tone === 'error' ? 'bg-error/12 text-error' : chatStatusBanner.text === t('chat.statusCompactingContext') ? 'bg-info/12 text-info' : 'bg-base-200/75 text-base-content'">
               <span class="relative z-1" :class="chatStatusBanner.tone === 'error' ? '' : 'text-base-content/80 ecall-shimmer-text ecall-reasoning-shimmer'"
                 :data-shimmer-text="chatStatusBanner.tone === 'error' ? '' : chatStatusBanner.text">{{ chatStatusBanner.text }}</span>
+              <button
+                v-if="chatStatusBanner.tone === 'error'"
+                type="button"
+                class="btn btn-ghost btn-xs h-5 min-h-5 w-5 shrink-0 p-0 text-error hover:bg-error/15"
+                :title="t('common.close')"
+                @click="$emit('clearChatError')"
+              >
+                <X class="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
           <ChatApprovalPanel
@@ -344,7 +353,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch, type ComponentPublicInstance, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { isDarkAppTheme } from "../../shell/composables/use-app-theme";
-import { ChevronsDown, History } from "lucide-vue-next";
+import { ChevronsDown, History, X } from "lucide-vue-next";
 import "markstream-vue/index.css";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ChatMessageBlock, ChatPersonaPresenceChip, ChatTodoItem, ConversationDelegateStatusSummary, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, ShellWorkspace } from "../../../types/app";
@@ -439,6 +448,7 @@ const emit = defineEmits<{
   (e: "update:planModeEnabled", value: boolean): void;
   (e: "sendChat", payload?: { extraTextBlocks?: string[] }): void;
   (e: "stopChat"): void; (e: "forceArchive"): void;
+  (e: "clearChatError"): void;
   (e: "recallTurn", payload: { turnId: string }): void;
   (e: "regenerateTurn", payload: { turnId: string }): void;
   (e: "confirmPlan", payload: { messageId: string }): void;
@@ -483,7 +493,7 @@ const {
   activeConversationTerminalApprovals, supervisionButtonTitle,
   isOrganizingContextBusy, chatStatusBanner, selectedMentionKeys,
   latestPendingPlanMessageId,
-} = useChatConversationCtx({ ...props, isDarkAppTheme }, t);
+} = useChatConversationCtx(props, isDarkAppTheme, t);
 
 const toolReviewDepartmentOptions = computed(() => {
   const allowed = new Set((Array.isArray(props.delegateDepartmentIds) ? props.delegateDepartmentIds : []).map((id) => String(id || "").trim()).filter(Boolean));

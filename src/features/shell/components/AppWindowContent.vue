@@ -205,6 +205,7 @@
         @stop-recording="stopRecording"
         @send-chat="sendChat"
         @stop-chat="stopChat"
+        @clear-chat-error="clearChatError"
         @load-older-history="onLoadOlderChatHistory"
         @reached-bottom="onReachedChatBottom"
         @jump-to-conversation-bottom="onJumpToConversationBottom"
@@ -653,6 +654,7 @@ const props = defineProps<{
   stopRecording: () => void;
   sendChat: () => void;
   stopChat: () => void;
+  clearChatError: () => void;
   onLoadOlderChatHistory: () => void;
   onReachedChatBottom: () => void;
   onJumpToConversationBottom: () => void;
