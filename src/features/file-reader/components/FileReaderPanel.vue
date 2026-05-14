@@ -211,7 +211,14 @@
           </button>
         </div>
         <div class="relative min-h-0 flex-1" @mouseenter="contentScrollbarRef?.reveal()" @mouseleave="contentScrollbarRef?.hide()">
-        <div ref="contentScroller" class="file-reader-scroll-container h-full min-h-0 overflow-auto" :class="activeTab?.kind === 'markdown' && !activeTab?.rawMode ? '' : 'file-reader-code-main'">
+        <div
+          ref="contentScroller"
+          class="file-reader-scroll-container h-full min-h-0 overflow-auto"
+          :class="activeTab?.kind === 'markdown' && !activeTab?.rawMode ? '' : 'file-reader-code-main'"
+          @scroll="captureVisibleRangeContext"
+          @mouseup="captureCurrentTextSelection"
+          @keyup="captureCurrentTextSelection"
+        >
           <div v-if="!activeTab" class="flex h-full items-center justify-center text-sm text-base-content/55">
             <slot name="empty">
               <span>还没有打开文件。</span>
@@ -277,6 +284,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { ChevronDown, ChevronRight, Code2, Eye, ExternalLink, FilePlus, FileText, Folder, ListIndentDecrease, ListIndentIncrease, RefreshCw, Search, SquareTerminal, X } from "lucide-vue-next";
 import MarkdownRender, { enableKatex, enableMermaid, getMarkdown, parseMarkdownToStructure } from "markstream-vue";
@@ -285,6 +293,7 @@ import "markstream-vue/index.css";
 import { invokeTauri } from "../../../services/tauri-api";
 import { registerFileReaderMarkstreamComponents } from "../../../apps/file-reader/register-file-reader-markstream";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
+import type { IdeContextReferenceItem } from "../../../types/app";
 
 enableMermaid();
 enableKatex();
@@ -344,6 +353,17 @@ type FileReaderSessionState = {
   directoryRootPath?: string;
 };
 
+type FileReaderWatchTarget = {
+  path: string;
+  kind: "file" | "directory";
+};
+
+type FileReaderWatchEventPayload = {
+  sessionId: string;
+  path: string;
+  kind: "file" | "directory";
+};
+
 // ==================== Props ====================
 
 const props = withDefaults(defineProps<{
@@ -371,6 +391,8 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   (e: "openPath", path: string): void;
   (e: "selectPath", path: string): void;
+  (e: "captureContextReference", reference: IdeContextReferenceItem): void;
+  (e: "clearSelectionContextReference"): void;
 }>();
 
 // ==================== Constants ====================
@@ -405,6 +427,7 @@ const markdownMermaidProps = {
   showFullscreenButton: true, showCollapseButton: false, showZoomControls: true,
   showModeToggle: false, enableWheelZoom: true, showTooltips: false,
 };
+const CONTEXT_TEXT_BLOCK_CONTENT_LIMIT = 2000;
 
 // ==================== State ====================
 
@@ -427,10 +450,19 @@ const addressScrollState = ref({ scrollable: false, left: 0, clientWidth: 0, scr
 const showTabs = computed(() => props.showTabs !== false && !props.directoryOnly);
 const showPickFileButton = computed(() => props.showPickFileButton !== false && !props.directoryOnly);
 const directoryOnly = computed(() => !!props.directoryOnly);
+const fileReaderWatchSessionId = computed(() => String(props.sessionKey || props.customMarkstreamId || "file-reader").trim());
 
 let unlistenFileDrop: (() => void) | null = null;
+let unlistenFileReaderWatch: UnlistenFn | null = null;
 let restoringSessionId = 0;
 let suppressSessionPersist = false;
+let lastCapturedSelectionKey = "";
+let lastCapturedVisibleRangeKey = "";
+let visibleRangeCaptureTimer = 0;
+let watchTargetUpdateTimer = 0;
+let autoRefreshFileTimer = 0;
+let autoRefreshDirectoryTimer = 0;
+const pendingAutoRefreshDirectoryPaths = new Set<string>();
 
 // ==================== Computed ====================
 
@@ -517,9 +549,14 @@ watch([() => props.sessionKey, () => props.initialRootPath], ([nextKey, nextRoot
 
 watch(
   [tabs, activePath, directoryRootPath],
-  () => persistFileReaderSession(),
+  () => {
+    persistFileReaderSession();
+    scheduleFileReaderWatchTargetUpdate();
+  },
   { deep: true },
 );
+
+watch(visibleTreeRows, () => scheduleFileReaderWatchTargetUpdate());
 
 // ==================== Address Scroll ====================
 
@@ -548,6 +585,352 @@ function handleAddressWheel(event: WheelEvent) {
   const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
   el.scrollLeft += delta;
   updateAddressScrollState();
+}
+
+// ==================== Auto Refresh Watch ====================
+
+function scheduleFileReaderWatchTargetUpdate() {
+  if (watchTargetUpdateTimer) window.clearTimeout(watchTargetUpdateTimer);
+  watchTargetUpdateTimer = window.setTimeout(() => {
+    watchTargetUpdateTimer = 0;
+    void updateFileReaderWatchTargets();
+  }, 250);
+}
+
+async function updateFileReaderWatchTargets() {
+  const sessionId = fileReaderWatchSessionId.value;
+  if (!sessionId) return;
+  const targets = collectFileReaderWatchTargets();
+  try {
+    await invokeTauri("update_file_reader_watch_targets", {
+      input: { sessionId, targets },
+    });
+  } catch (error) {
+    console.warn("[文件阅读器] 更新自动刷新监听目标失败", error);
+  }
+}
+
+function collectFileReaderWatchTargets(): FileReaderWatchTarget[] {
+  const targets: FileReaderWatchTarget[] = [];
+  const active = activeTab.value;
+  if (active?.loaded && !active.loading && !active.error && active.path) {
+    targets.push({ path: normalizePath(active.path), kind: "file" });
+  }
+  const root = directoryTreeRoot.value;
+  if (root?.path) {
+    targets.push({ path: normalizePath(root.path), kind: "directory" });
+  }
+  const perDirectoryCount = new Map<string, number>();
+  for (const row of visibleTreeRows.value) {
+    if (row.kind !== "entry") continue;
+    const path = normalizePath(row.entry.path);
+    const parentPath = directoryFromPath(path);
+    const currentCount = perDirectoryCount.get(parentPath) || 0;
+    if (currentCount >= 100) continue;
+    perDirectoryCount.set(parentPath, currentCount + 1);
+    targets.push({ path, kind: row.entry.isDirectory ? "directory" : "file" });
+  }
+  const seen = new Set<string>();
+  return targets.filter((target) => {
+    const key = `${target.kind}:${normalizePath(target.path).toLowerCase()}`;
+    if (!target.path || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+async function startFileReaderWatchListener() {
+  stopFileReaderWatchListener();
+  try {
+    unlistenFileReaderWatch = await listen<FileReaderWatchEventPayload>("easy-call:file-reader-watch-changed", (event) => {
+      handleFileReaderWatchEvent(event.payload);
+    });
+  } catch (error) {
+    console.warn("[文件阅读器] 监听自动刷新事件失败", error);
+  }
+}
+
+function stopFileReaderWatchListener() {
+  unlistenFileReaderWatch?.();
+  unlistenFileReaderWatch = null;
+}
+
+function handleFileReaderWatchEvent(payload: FileReaderWatchEventPayload) {
+  if (String(payload?.sessionId || "").trim() !== fileReaderWatchSessionId.value) return;
+  const changedPath = normalizePath(payload?.path || "");
+  if (!changedPath) return;
+  const active = activeTab.value;
+  if (active && sameNormalizedPath(changedPath, active.path)) {
+    scheduleAutoRefreshActiveTab();
+    return;
+  }
+  if (String(payload?.kind || "").trim() === "directory" && directoryTreeRoot.value && isPathRelevantToVisibleDirectory(changedPath)) {
+    scheduleAutoRefreshDirectoryNode(changedPath);
+  }
+}
+
+function scheduleAutoRefreshActiveTab() {
+  if (autoRefreshFileTimer) window.clearTimeout(autoRefreshFileTimer);
+  autoRefreshFileTimer = window.setTimeout(() => {
+    autoRefreshFileTimer = 0;
+    const active = activeTab.value;
+    if (active?.path) void openPath(active.path);
+  }, 350);
+}
+
+function scheduleAutoRefreshDirectoryNode(path: string) {
+  const normalizedPath = normalizePath(path);
+  if (!normalizedPath) return;
+  pendingAutoRefreshDirectoryPaths.add(normalizedPath);
+  if (autoRefreshDirectoryTimer) window.clearTimeout(autoRefreshDirectoryTimer);
+  autoRefreshDirectoryTimer = window.setTimeout(() => {
+    autoRefreshDirectoryTimer = 0;
+    const paths = Array.from(pendingAutoRefreshDirectoryPaths);
+    pendingAutoRefreshDirectoryPaths.clear();
+    for (const directoryPath of paths) {
+      if (!isPathRelevantToVisibleDirectory(directoryPath)) continue;
+      const node = treeDirectoryNode(directoryPath);
+      const root = directoryTreeRoot.value;
+      if (!node && !sameNormalizedPath(directoryPath, root?.path || "")) continue;
+      void loadDirectory(directoryPath, node?.expanded ?? true);
+    }
+  }, 500);
+}
+
+function isPathRelevantToVisibleDirectory(path: string) {
+  const normalizedPath = normalizePath(path);
+  const root = directoryTreeRoot.value;
+  if (root && sameNormalizedPath(normalizedPath, root.path)) return true;
+  return visibleTreeRows.value.some((row) => row.kind === "entry" && sameNormalizedPath(normalizedPath, row.entry.path));
+}
+
+function sameNormalizedPath(left: string, right: string) {
+  return normalizePath(left).toLowerCase() === normalizePath(right).toLowerCase();
+}
+
+// ==================== Context Capture ====================
+
+function captureCurrentTextSelection() {
+  const tab = activeTab.value;
+  const scroller = contentScroller.value;
+  if (!tab || !scroller || tab.loading || tab.error) return;
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+    lastCapturedSelectionKey = "";
+    emit("clearSelectionContextReference");
+    return;
+  }
+  const range = selection.getRangeAt(0);
+  if (!scroller.contains(range.commonAncestorContainer)) {
+    lastCapturedSelectionKey = "";
+    emit("clearSelectionContextReference");
+    return;
+  }
+
+  const selectedText = normalizeSelectedText(selection.toString());
+  if (!selectedText) return;
+
+  const lineRange = resolveSelectedLineRange(tab, scroller, selectedText);
+  const meta = buildContextMeta(tab);
+  const capturedAt = new Date().toISOString();
+  const selectionKey = [
+    meta.filePath,
+    lineRange.startLine || "",
+    lineRange.endLine || "",
+    selectedText,
+  ].join("\n");
+  if (selectionKey === lastCapturedSelectionKey) return;
+  lastCapturedSelectionKey = selectionKey;
+
+  const displayLineSuffix = formatLineSuffix(lineRange.startLine, lineRange.endLine);
+  emitContextReference({
+    tab,
+    source: "selection",
+    lineRange,
+    content: selectedText,
+    displayLabel: `${meta.relativePath || tab.title}${displayLineSuffix}`,
+    capturedAt,
+  });
+}
+
+function captureVisibleRangeContext() {
+  if (visibleRangeCaptureTimer) window.clearTimeout(visibleRangeCaptureTimer);
+  visibleRangeCaptureTimer = window.setTimeout(() => {
+    visibleRangeCaptureTimer = 0;
+    captureVisibleRangeContextNow();
+  }, 80);
+}
+
+function captureVisibleRangeContextNow(options: { force?: boolean } = {}) {
+  const tab = activeTab.value;
+  const scroller = contentScroller.value;
+  if (!tab || !scroller || tab.loading || tab.error || !tab.loaded) return;
+  const lines = splitContentLines(tab.content);
+  if (lines.length === 0) return;
+  const lineRange = resolveVisibleLineRange(scroller, lines.length);
+  const content = lines.slice(lineRange.startLine - 1, lineRange.endLine).join("\n").trim();
+  if (!content) return;
+  const meta = buildContextMeta(tab);
+  const visibleRangeKey = [meta.filePath, lineRange.startLine, lineRange.endLine, content].join("\n");
+  if (!options.force && visibleRangeKey === lastCapturedVisibleRangeKey) return;
+  lastCapturedVisibleRangeKey = visibleRangeKey;
+  const capturedAt = new Date().toISOString();
+  emitContextReference({
+    tab,
+    source: "visible_range",
+    lineRange,
+    content: content.slice(0, 20_000),
+    displayLabel: `${meta.relativePath || tab.title}${formatLineSuffix(lineRange.startLine, lineRange.endLine)}`,
+    capturedAt,
+  });
+}
+
+function emitContextReference(input: {
+  tab: FileTab;
+  source: "selection" | "visible_range";
+  lineRange: { startLine?: number; endLine?: number };
+  content: string;
+  displayLabel: string;
+  capturedAt: string;
+}) {
+  const meta = buildContextMeta(input.tab);
+  const languageId = languageIdFromTab(input.tab);
+  emit("captureContextReference", {
+    id: `file-reader-context:${hashText([
+      meta.filePath,
+      input.source,
+      input.lineRange.startLine || "",
+      input.lineRange.endLine || "",
+    ].join("\n"))}`,
+    workspacePath: meta.workspacePath,
+    workspaceName: meta.workspaceName,
+    filePath: meta.filePath,
+    fileName: input.tab.title,
+    relativePath: meta.relativePath,
+    startLine: input.lineRange.startLine,
+    endLine: input.lineRange.endLine,
+    displayLabel: input.displayLabel,
+    content: input.content,
+    languageId,
+    source: input.source,
+    capturedAt: input.capturedAt,
+    textBlock: buildContextTextBlock({
+      filePath: meta.filePath,
+      lineRange: input.lineRange,
+      languageId,
+      source: input.source,
+      capturedAt: input.capturedAt,
+      content: input.content,
+    }),
+  });
+}
+
+function buildContextMeta(tab: FileTab) {
+  const filePath = normalizePath(tab.path);
+  const workspacePath = normalizePath(props.initialRootPath || directoryFromPath(filePath));
+  return {
+    filePath,
+    workspacePath,
+    workspaceName: titleFromPath(workspacePath),
+    relativePath: relativePathFromWorkspace(filePath, workspacePath),
+  };
+}
+
+function normalizeSelectedText(value: string) {
+  return String(value || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\u00a0/g, " ")
+    .trim()
+    .slice(0, 20_000);
+}
+
+function splitContentLines(value: string) {
+  const normalized = String(value || "").replace(/\r\n/g, "\n");
+  return normalized.length > 0 ? normalized.split("\n") : [];
+}
+
+function resolveVisibleLineRange(scroller: HTMLElement, totalLines: number): { startLine: number; endLine: number } {
+  const scrollableHeight = Math.max(1, scroller.scrollHeight - scroller.clientHeight);
+  const startRatio = Math.max(0, Math.min(1, scroller.scrollTop / scrollableHeight));
+  const visibleRatio = Math.max(0.05, Math.min(1, scroller.clientHeight / Math.max(1, scroller.scrollHeight)));
+  const startLine = Math.max(1, Math.min(totalLines, Math.floor(startRatio * totalLines) + 1));
+  const visibleLineCount = Math.max(12, Math.ceil(totalLines * visibleRatio));
+  const endLine = Math.max(startLine, Math.min(totalLines, startLine + visibleLineCount - 1));
+  return { startLine, endLine };
+}
+
+function resolveSelectedLineRange(tab: FileTab, scroller: HTMLElement, selectedText: string): { startLine: number; endLine: number } {
+  if (tab.kind === "markdown" && !tab.rawMode) {
+    return resolveVisibleLineRange(scroller, Math.max(1, splitContentLines(tab.content).length));
+  }
+  return resolveRawSelectedLineRange(tab.content, selectedText)
+    || resolveVisibleLineRange(scroller, Math.max(1, splitContentLines(tab.content).length));
+}
+
+function resolveRawSelectedLineRange(source: string, selectedText: string): { startLine: number; endLine: number } | null {
+  const normalizedSource = String(source || "").replace(/\r\n/g, "\n");
+  const normalizedSelection = selectedText.replace(/\r\n/g, "\n");
+  const index = normalizedSource.indexOf(normalizedSelection);
+  if (index < 0) return null;
+  if (normalizedSource.indexOf(normalizedSelection, index + Math.max(1, normalizedSelection.length)) >= 0) return null;
+  const before = normalizedSource.slice(0, index);
+  const startLine = before.split("\n").length;
+  const selectedLineCount = Math.max(1, normalizedSelection.split("\n").length);
+  return { startLine, endLine: startLine + selectedLineCount - 1 };
+}
+
+function relativePathFromWorkspace(filePath: string, workspacePath: string) {
+  const normalizedFilePath = normalizePath(filePath);
+  const normalizedWorkspacePath = normalizePath(workspacePath).replace(/\/+$/, "");
+  if (!normalizedWorkspacePath) return normalizedFilePath;
+  const lowerFilePath = normalizedFilePath.toLowerCase();
+  const lowerWorkspacePath = normalizedWorkspacePath.toLowerCase();
+  if (lowerFilePath === lowerWorkspacePath) return titleFromPath(normalizedFilePath);
+  const prefix = `${lowerWorkspacePath}/`;
+  if (lowerFilePath.startsWith(prefix)) {
+    return normalizedFilePath.slice(normalizedWorkspacePath.length + 1);
+  }
+  return normalizedFilePath;
+}
+
+function languageIdFromTab(tab: FileTab) {
+  return CODE_LANGUAGE_BY_EXTENSION[tab.extension] || tab.extension || tab.kind || "text";
+}
+
+function formatLineSuffix(startLine?: number, endLine?: number) {
+  if (!startLine) return "";
+  if (endLine && endLine > startLine) return `:${startLine}-${endLine}`;
+  return `:${startLine}`;
+}
+
+function hashText(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
+}
+
+function buildContextTextBlock(input: {
+  filePath: string;
+  lineRange: { startLine?: number; endLine?: number };
+  languageId: string;
+  source: string;
+  capturedAt: string;
+  content: string;
+}) {
+  const location = `${input.filePath}${formatLineSuffix(input.lineRange.startLine, input.lineRange.endLine)}`;
+  const contentLength = input.content.length;
+  if (contentLength > CONTEXT_TEXT_BLOCK_CONTENT_LIMIT) {
+    return `用户引用了文件片段：${location}（引用内容共 ${contentLength} 字符，超过 2000 字符，未附加正文）`;
+  }
+  return [
+    `用户引用了文件片段：${location}`,
+    "```text",
+    input.content,
+    "```",
+  ].join("\n");
 }
 
 // ==================== Helpers ====================
@@ -771,6 +1154,8 @@ function setActiveTab(path: string) {
   const tab = tabs.value.find((item) => item.path === normalizedPath);
   if (tab && !tab.loaded && !tab.loading) {
     void openPath(normalizedPath);
+  } else {
+    void nextTick(() => captureVisibleRangeContextNow());
   }
 }
 
@@ -881,6 +1266,7 @@ async function openPath(path: string, options: { reuseActiveTab?: boolean } = {}
     replaceTabState(tab);
     await updateHighlightedCode(tab);
     scheduleAddressScrollStateUpdate();
+    void nextTick(() => captureVisibleRangeContextNow());
     emit("openPath", resolvedPath);
   } catch (error) {
     tab.loaded = true;
@@ -1088,6 +1474,8 @@ function flattenDirectoryEntries(entries: FileReaderDirectoryEntry[], depth: num
 
 onMounted(async () => {
   window.addEventListener("resize", updateAddressScrollState);
+  void startFileReaderWatchListener();
+  scheduleFileReaderWatchTargetUpdate();
   if (props.enableGlobalDrop === false) return;
   try {
     unlistenFileDrop = await getCurrentWebview().onDragDropEvent((event) => {
@@ -1108,6 +1496,15 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener("resize", updateAddressScrollState);
+  if (watchTargetUpdateTimer) window.clearTimeout(watchTargetUpdateTimer);
+  if (autoRefreshFileTimer) window.clearTimeout(autoRefreshFileTimer);
+  if (autoRefreshDirectoryTimer) window.clearTimeout(autoRefreshDirectoryTimer);
+  if (visibleRangeCaptureTimer) window.clearTimeout(visibleRangeCaptureTimer);
+  pendingAutoRefreshDirectoryPaths.clear();
+  stopFileReaderWatchListener();
+  void invokeTauri("update_file_reader_watch_targets", {
+    input: { sessionId: fileReaderWatchSessionId.value, targets: [] },
+  }).catch(() => {});
   unlistenFileDrop?.();
 });
 

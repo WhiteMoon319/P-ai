@@ -1369,8 +1369,54 @@ struct FileReaderDirectoryPayload {
     entries: Vec<FileReaderDirectoryEntry>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FileReaderWatchTargetInput {
+    path: String,
+    kind: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FileReaderWatchTargetsInput {
+    session_id: String,
+    targets: Vec<FileReaderWatchTargetInput>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileReaderWatchEventPayload {
+    session_id: String,
+    path: String,
+    kind: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FileReaderWatchFingerprint {
+    exists: bool,
+    is_dir: bool,
+    len: u64,
+    modified_ms: u128,
+    directory_signature: String,
+}
+
+#[derive(Debug, Clone)]
+struct FileReaderWatchTrackedTarget {
+    path: String,
+    kind: String,
+    fingerprint: FileReaderWatchFingerprint,
+}
+
+static FILE_READER_WATCH_TARGETS: OnceLock<
+    Mutex<std::collections::HashMap<String, Vec<FileReaderWatchTrackedTarget>>>,
+> = OnceLock::new();
+static FILE_READER_WATCH_THREAD_STARTED: OnceLock<()> = OnceLock::new();
+
 const FILE_READER_MAX_BYTES: u64 = 2 * 1024 * 1024;
 const FILE_READER_READ_BURST_WINDOW_MS: u64 = 100;
+const FILE_READER_WATCH_POLL_MS: u64 = 700;
+const FILE_READER_WATCH_MAX_TARGETS: usize = 160;
+const FILE_READER_WATCH_DIRECTORY_SIGNATURE_LIMIT: usize = 100;
 
 #[derive(Debug, Clone)]
 struct FileReaderReadTrace {
@@ -1386,6 +1432,155 @@ fn file_reader_file_kind(extension: &str) -> &'static str {
         "md" | "markdown" | "mdx" => "markdown",
         _ => "code",
     }
+}
+
+fn file_reader_watch_targets_store(
+) -> &'static Mutex<std::collections::HashMap<String, Vec<FileReaderWatchTrackedTarget>>> {
+    FILE_READER_WATCH_TARGETS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
+
+fn file_reader_watch_modified_ms(metadata: &fs::Metadata) -> u128 {
+    metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0)
+}
+
+fn file_reader_watch_fingerprint(path: &str) -> FileReaderWatchFingerprint {
+    let path_buf = PathBuf::from(path);
+    let metadata = match fs::metadata(&path_buf) {
+        Ok(value) => value,
+        Err(_) => {
+            return FileReaderWatchFingerprint {
+                exists: false,
+                is_dir: false,
+                len: 0,
+                modified_ms: 0,
+                directory_signature: String::new(),
+            };
+        }
+    };
+    let is_dir = metadata.is_dir();
+    let directory_signature = if is_dir {
+        file_reader_watch_directory_signature(&path_buf)
+    } else {
+        String::new()
+    };
+    FileReaderWatchFingerprint {
+        exists: true,
+        is_dir,
+        len: metadata.len(),
+        modified_ms: file_reader_watch_modified_ms(&metadata),
+        directory_signature,
+    }
+}
+
+fn file_reader_watch_directory_signature(path: &PathBuf) -> String {
+    let read_dir = match fs::read_dir(path) {
+        Ok(value) => value,
+        Err(_) => return String::new(),
+    };
+    let mut entries = Vec::new();
+    for entry in read_dir.take(FILE_READER_WATCH_DIRECTORY_SIGNATURE_LIMIT) {
+        let Ok(entry) = entry else { continue };
+        let entry_path = entry.path();
+        let metadata = match entry.metadata() {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        entries.push(format!(
+            "{}|{}|{}|{}",
+            entry.file_name().to_string_lossy(),
+            if metadata.is_dir() { "d" } else { "f" },
+            metadata.len(),
+            file_reader_watch_modified_ms(&metadata)
+        ));
+        if entry_path.as_os_str().is_empty() {
+            continue;
+        }
+    }
+    entries.sort();
+    entries.join("\n")
+}
+
+fn start_file_reader_watch_polling(app: AppHandle) {
+    let _ = FILE_READER_WATCH_THREAD_STARTED.get_or_init(|| {
+        std::thread::spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_millis(FILE_READER_WATCH_POLL_MS));
+            let events = {
+                let store = file_reader_watch_targets_store();
+                let mut targets_by_session =
+                    store.lock().unwrap_or_else(|poison| poison.into_inner());
+                let mut events = Vec::new();
+                for (session_id, targets) in targets_by_session.iter_mut() {
+                    for target in targets.iter_mut() {
+                        let next = file_reader_watch_fingerprint(&target.path);
+                        if next == target.fingerprint {
+                            continue;
+                        }
+                        target.fingerprint = next;
+                        events.push(FileReaderWatchEventPayload {
+                            session_id: session_id.clone(),
+                            path: target.path.clone(),
+                            kind: target.kind.clone(),
+                        });
+                    }
+                }
+                events
+            };
+            for payload in events {
+                let _ = app.emit("easy-call:file-reader-watch-changed", payload);
+            }
+        });
+    });
+}
+
+#[tauri::command]
+fn update_file_reader_watch_targets(
+    app: AppHandle,
+    input: FileReaderWatchTargetsInput,
+) -> Result<(), String> {
+    let session_id = input.session_id.trim().to_string();
+    if session_id.is_empty() {
+        return Err("sessionId is required".to_string());
+    }
+    start_file_reader_watch_polling(app);
+    let mut seen = std::collections::HashSet::new();
+    let mut targets = Vec::new();
+    for target in input.targets.into_iter().take(FILE_READER_WATCH_MAX_TARGETS) {
+        let raw_path = target.path.trim();
+        if raw_path.is_empty() {
+            continue;
+        }
+        let normalized_path = PathBuf::from(raw_path)
+            .canonicalize()
+            .unwrap_or_else(|_| PathBuf::from(raw_path))
+            .to_string_lossy()
+            .replace('\\', "/");
+        if !seen.insert(normalized_path.clone()) {
+            continue;
+        }
+        let kind = match target.kind.trim() {
+            "directory" => "directory",
+            _ => "file",
+        }
+        .to_string();
+        targets.push(FileReaderWatchTrackedTarget {
+            fingerprint: file_reader_watch_fingerprint(&normalized_path),
+            path: normalized_path,
+            kind,
+        });
+    }
+    let store = file_reader_watch_targets_store();
+    let mut targets_by_session = store.lock().map_err(|_| "文件阅读器监听状态锁定失败".to_string())?;
+    if targets.is_empty() {
+        targets_by_session.remove(&session_id);
+    } else {
+        targets_by_session.insert(session_id, targets);
+    }
+    Ok(())
 }
 
 fn log_file_reader_read_burst(window_label: &str, path: &str) {

@@ -981,6 +981,7 @@ fn main() {
             open_file_reader_window_command,
             read_file_reader_file,
             list_file_reader_directory,
+            update_file_reader_watch_targets,
             open_file_reader_directory_shell,
             open_local_file_directory,
             open_file_with_default_program,

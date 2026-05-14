@@ -248,6 +248,7 @@
             :class="isIdeContextAttached(item.id) ? 'badge badge-primary' : 'badge badge-ghost'"
             :disabled="chatting || frozen"
             :title="ideContextReferenceTitle(item)"
+            @mousedown.prevent
             @click="toggleIdeContextReference(item)"
           >
             <Minus v-if="isIdeContextAttached(item.id)" class="h-3.5 w-3.5" />
@@ -601,49 +602,53 @@ const normalizedChatModelOptions = computed(() =>
     }))
     .filter((item) => !!item.id && !!item.name),
 );
-const showIdeWorkspaceGroupLabel = computed(() => mergedIdeContextGroups.value.length > 1);
+const showIdeWorkspaceGroupLabel = computed(() => false);
 const attachedIdeContextReferenceIds = computed(() => new Set((props.attachedIdeContextReferences || []).map((item) => item.id)));
 const mergedIdeContextGroups = computed<IdeContextWorkspaceGroup[]>(() => {
-  const groupsMap = new Map<string, IdeContextWorkspaceGroup>();
+  const referencesByIdentity = new Map<string, IdeContextReferenceItem>();
+  const attachedMap = new Map((props.attachedIdeContextReferences || []).map((item) => [item.id, item]));
+  const attachedReferences = Array.isArray(props.attachedIdeContextReferences) ? props.attachedIdeContextReferences : [];
   for (const group of props.ideContextGroups || []) {
-    const workspacePath = String(group.workspacePath || "").trim();
-    const workspaceName = String(group.workspaceName || "").trim() || workspacePath;
-    const key = workspacePath || workspaceName || "__default__";
-    groupsMap.set(key, {
-      workspacePath,
-      workspaceName,
-      references: [...(group.references || [])],
-    });
+    for (const item of group.references || []) {
+      const identity = ideContextReferenceIdentityKey(item);
+      if (!identity) continue;
+      if (attachedReferences.some((attached) => ideContextSameRange(attached, item))) continue;
+      referencesByIdentity.set(identity, item);
+    }
   }
   for (const item of props.attachedIdeContextReferences || []) {
-    const workspacePath = String(item.workspacePath || "").trim();
-    const workspaceName = String(item.workspaceName || "").trim() || workspacePath;
-    const key = workspacePath || workspaceName || "__default__";
-    if (!groupsMap.has(key)) {
-      groupsMap.set(key, {
-        workspacePath,
-        workspaceName,
-        references: [],
-      });
-    }
-    const group = groupsMap.get(key);
-    if (!group) continue;
-    if (!group.references.some((reference) => reference.id === item.id)) {
-      group.references.unshift(item);
-    }
+    const identity = ideContextReferenceIdentityKey(item);
+    if (!identity) continue;
+    referencesByIdentity.set(identity, item);
   }
-  const attachedMap = new Map((props.attachedIdeContextReferences || []).map((item) => [item.id, item]));
-  return Array.from(groupsMap.values())
-    .map((group) => ({
-      ...group,
-      references: [...group.references].sort((left, right) => {
-        const leftAttached = attachedMap.has(left.id) ? 1 : 0;
-        const rightAttached = attachedMap.has(right.id) ? 1 : 0;
-        return rightAttached - leftAttached;
-      }),
-    }))
-    .filter((group) => group.references.length > 0);
+  const references = Array.from(referencesByIdentity.values()).sort((left, right) => {
+    const leftAttached = attachedMap.has(left.id) ? 1 : 0;
+    const rightAttached = attachedMap.has(right.id) ? 1 : 0;
+    if (leftAttached !== rightAttached) return rightAttached - leftAttached;
+    return String(left.displayLabel || "").localeCompare(String(right.displayLabel || ""));
+  });
+  return references.length > 0 ? [{ workspacePath: "", workspaceName: "", references }] : [];
 });
+
+function ideContextReferencePathKey(item: IdeContextReferenceItem): string {
+  return String(item.filePath || item.relativePath || item.displayLabel || item.id || "").trim().replace(/\\/g, "/").toLowerCase();
+}
+
+function ideContextReferenceIdentityKey(item: IdeContextReferenceItem): string {
+  const path = ideContextReferencePathKey(item);
+  if (!path) return "";
+  return [
+    path,
+    Number(item.startLine || 0),
+    Number(item.endLine || 0),
+  ].join(":");
+}
+
+function ideContextSameRange(left: IdeContextReferenceItem, right: IdeContextReferenceItem): boolean {
+  return ideContextReferencePathKey(left) === ideContextReferencePathKey(right)
+    && Number(left.startLine || 0) === Number(right.startLine || 0)
+    && Number(left.endLine || 0) === Number(right.endLine || 0);
+}
 
 function isIdeContextAttached(referenceId: string): boolean {
   return attachedIdeContextReferenceIds.value.has(referenceId);
@@ -652,9 +657,10 @@ function isIdeContextAttached(referenceId: string): boolean {
 function toggleIdeContextReference(item: IdeContextReferenceItem) {
   if (isIdeContextAttached(item.id)) {
     emit("removeIdeContextReference", item.id);
-    return;
+  } else {
+    emit("attachIdeContextReference", item);
   }
-  emit("attachIdeContextReference", item);
+  void nextTick(() => focusInput({ preventScroll: true }));
 }
 
 function ideContextReferenceTitle(item: IdeContextReferenceItem): string {

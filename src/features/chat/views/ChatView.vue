@@ -221,7 +221,7 @@
             :create-conversation-department-options="createConversationDepartmentOptions"
             :delegate-department-ids="delegateDepartmentIds"
             :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
-            :ide-context-groups="visibleIdeContextGroups" :attached-ide-context-references="attachedIdeContextReferences"
+            :ide-context-groups="mergedVisibleIdeContextGroups" :attached-ide-context-references="attachedIdeContextReferences"
             @update:chat-input="$emit('update:chatInput', $event)" @add-mention="$emit('addMention', $event)"
             @remove-mention="$emit('removeMention', $event)" @remove-clipboard-image="$emit('removeClipboardImage', $event)"
             @remove-queued-attachment-notice="$emit('removeQueuedAttachmentNotice', $event)"
@@ -271,6 +271,8 @@
           :enable-global-drop="false"
           :markdown-is-dark="markdownIsDark"
           custom-markstream-id="chat-file-reader-markstream"
+          @capture-context-reference="handleCaptureFileReaderContextReference"
+          @clear-selection-context-reference="handleClearFileReaderSelectionContextReference"
         >
           <template #empty>
             <div class="space-y-2 px-5 text-center">
@@ -339,7 +341,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, type ComponentPublicInstance, type Ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch, type ComponentPublicInstance, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { isDarkAppTheme } from "../../shell/composables/use-app-theme";
 import { ChevronsDown, History } from "lucide-vue-next";
@@ -557,6 +559,48 @@ const {
   workspaces: toRef(props, "workspaces"),
   currentWorkspaceRootPath: toRef(props, "currentWorkspaceRootPath"),
   currentWorkspaceName: toRef(props, "currentWorkspaceName"),
+});
+
+const fileReaderVisibleContextReference = ref<IdeContextReferenceItem | null>(null);
+const fileReaderSelectionContextReference = ref<IdeContextReferenceItem | null>(null);
+const fileReaderContextReferences = computed<IdeContextReferenceItem[]>(() => {
+  const visible = fileReaderVisibleContextReference.value;
+  const selection = fileReaderSelectionContextReference.value;
+  if (!visible && !selection) return [];
+  if (!visible) return selection ? [selection] : [];
+  if (!selection) return [visible];
+  const visibleFilePath = String(visible.filePath || "").trim();
+  const selectionFilePath = String(selection.filePath || "").trim();
+  return visibleFilePath && visibleFilePath === selectionFilePath ? [selection] : [visible];
+});
+const mergedVisibleIdeContextGroups = computed<IdeContextWorkspaceGroup[]>(() => {
+  if (fileReaderContextReferences.value.length === 0) return visibleIdeContextGroups.value;
+  return [
+    {
+      workspacePath: String(props.currentWorkspaceRootPath || "").trim(),
+      workspaceName: String(props.currentWorkspaceName || "").trim() || t("chat.allowedWorkspaceButton"),
+      references: fileReaderContextReferences.value,
+    },
+    ...visibleIdeContextGroups.value,
+  ];
+});
+
+function handleCaptureFileReaderContextReference(reference: IdeContextReferenceItem) {
+  const source = String(reference.source || "").trim();
+  if (source === "visible_range") {
+    fileReaderVisibleContextReference.value = { ...reference };
+  } else {
+    fileReaderSelectionContextReference.value = { ...reference };
+  }
+}
+
+function handleClearFileReaderSelectionContextReference() {
+  fileReaderSelectionContextReference.value = null;
+}
+
+watch(() => props.activeConversationId, () => {
+  fileReaderVisibleContextReference.value = null;
+  fileReaderSelectionContextReference.value = null;
 });
 
 // ==================== selection state shared between virtual list & selection mode ====================
