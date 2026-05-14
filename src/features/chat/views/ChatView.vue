@@ -1,7 +1,7 @@
 <template>
   <div
     ref="chatLayoutRoot"
-    class="h-full min-h-0"
+    class="relative h-full min-h-0"
     :class="showSideConversationList && !detachedChatWindow ? 'flex flex-row overflow-hidden' : 'flex flex-col relative'"
   >
     <div
@@ -16,6 +16,8 @@
         :user-avatar-url="userAvatarUrl"
         :persona-name-map="personaNameMap"
         :persona-avatar-url-map="personaAvatarUrlMap"
+        :active-tab="conversationListTab"
+        @update:active-tab="$emit('updateConversationListTab', $event)"
         @select="handleConversationListSelect"
         @rename="handleConversationRename"
         @toggle-pin-conversation="handleConversationPinToggle"
@@ -23,21 +25,6 @@
         @delete-conversation="handleConversationDelete"
       />
     </div>
-
-    <div
-      v-if="showSideConversationList && !detachedChatWindow"
-      class="ecall-pane-splitter ecall-pane-splitter-left"
-      :class="{ 'ecall-pane-splitter-active': activePaneResizeSide === 'left' }"
-      role="separator"
-      tabindex="0"
-      aria-orientation="vertical"
-      :aria-valuemin="PANE_WIDTH_LIMITS.left.min"
-      :aria-valuemax="PANE_WIDTH_LIMITS.left.max"
-      :aria-valuenow="leftSidebarWidth"
-      @pointerdown="startPaneResize('left', $event)"
-      @keydown.left.prevent="adjustPaneWidthByKeyboard('left', -24)"
-      @keydown.right.prevent="adjustPaneWidthByKeyboard('left', 24)"
-    ></div>
 
     <div class="flex min-h-0 min-w-0 flex-1 overflow-hidden">
       <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
@@ -174,8 +161,6 @@
                 :supervision-active="supervisionActive" :supervision-label="t('chat.supervision.button')"
                 :supervision-active-label="t('chat.supervision.buttonActive')" :supervision-title="supervisionButtonTitle"
                 :supervision-disabled="activeConversationSummary?.kind === 'remote_im_contact'"
-                :review-button-label="t('chat.toolReview.title')"
-                :review-panel-open="toolReviewPanelOpen"
                 :show-detach-button="!detachedChatWindow && !activeConversationSummary?.isMainConversation"
                 :detach-disabled="!activeConversationId || activeConversationSummary?.isMainConversation || chatting || frozen || conversationBusy"
                 @lock-workspace="$emit('lockWorkspace')" @open-branch-selection="openBranchSelectionMenu"
@@ -190,7 +175,6 @@
                   emit('addMention', { agentId, agentName: String(entry?.agentName || '').trim() || agentId, departmentId, departmentName: String(entry?.departmentName || '').trim() || departmentId, avatarUrl: String(entry?.avatarUrl || '').trim() || undefined });
                 }"
                 @open-supervision-task="$emit('openSupervisionTask')" @detach-conversation="handleDetachConversationRequest"
-                @toggle-tool-review="toggleToolReviewPanel"
               />
             </div>
           </div>
@@ -275,18 +259,6 @@
         />
       </div>
 
-      <div
-        v-if="toolReviewPanelOpen"
-        class="ecall-pane-splitter ecall-pane-splitter-right"
-        :class="{ 'ecall-pane-splitter-active': activePaneResizeSide === 'right' }"
-        role="separator" tabindex="0" aria-orientation="vertical"
-        :aria-valuemin="PANE_WIDTH_LIMITS.right.min" :aria-valuemax="PANE_WIDTH_LIMITS.right.max"
-        :aria-valuenow="rightSidebarWidth"
-        @pointerdown="startPaneResize('right', $event)"
-        @keydown.left.prevent="adjustPaneWidthByKeyboard('right', 24)"
-        @keydown.right.prevent="adjustPaneWidthByKeyboard('right', -24)"
-      ></div>
-
       <div v-if="toolReviewPanelOpen" class="flex h-full min-h-0 shrink-0 border-l border-base-300 bg-base-100 pt-2"
         :style="{ width: `${rightSidebarWidth}px` }">
         <ToolReviewSidebar ref="toolReviewSidebarRef" class="w-full"
@@ -309,6 +281,35 @@
         />
       </div>
     </div>
+
+    <div
+      v-if="showSideConversationList && !detachedChatWindow"
+      class="ecall-pane-splitter ecall-pane-splitter-left absolute bottom-0 top-0 z-30"
+      :class="{ 'ecall-pane-splitter-active': activePaneResizeSide === 'left' }"
+      :style="{ left: `${leftSidebarWidth - 2}px` }"
+      role="separator"
+      tabindex="0"
+      aria-orientation="vertical"
+      :aria-valuemin="PANE_WIDTH_LIMITS.left.min"
+      :aria-valuemax="PANE_WIDTH_LIMITS.left.max"
+      :aria-valuenow="leftSidebarWidth"
+      @pointerdown="startPaneResize('left', $event)"
+      @keydown.left.prevent="adjustPaneWidthByKeyboard('left', -24)"
+      @keydown.right.prevent="adjustPaneWidthByKeyboard('left', 24)"
+    ></div>
+
+    <div
+      v-if="toolReviewPanelOpen"
+      class="ecall-pane-splitter ecall-pane-splitter-right absolute bottom-0 top-0 z-30"
+      :class="{ 'ecall-pane-splitter-active': activePaneResizeSide === 'right' }"
+      :style="{ right: `${rightSidebarWidth - 2}px` }"
+      role="separator" tabindex="0" aria-orientation="vertical"
+      :aria-valuemin="PANE_WIDTH_LIMITS.right.min" :aria-valuemax="PANE_WIDTH_LIMITS.right.max"
+      :aria-valuenow="rightSidebarWidth"
+      @pointerdown="startPaneResize('right', $event)"
+      @keydown.left.prevent="adjustPaneWidthByKeyboard('right', 24)"
+      @keydown.right.prevent="adjustPaneWidthByKeyboard('right', -24)"
+    ></div>
   </div>
 </template>
 
@@ -381,6 +382,7 @@ const props = defineProps<{
   currentTheme: string; unarchivedConversationItems: ChatConversationOverviewItem[];
   conversationItems?: ChatConversationOverviewItem[]; sideConversationListVisible: boolean;
   initialToolReviewPanelOpen: boolean;
+  conversationListTab: "local" | "contact";
   createConversationDepartmentOptions: Array<{ id: string; name: string; ownerAgentId?: string; ownerName: string; providerName?: string; modelName?: string }>;
   delegateDepartmentIds: string[]; defaultCreateConversationDepartmentId: string;
   ideContextGroups: IdeContextWorkspaceGroup[]; attachedIdeContextReferences: IdeContextReferenceItem[];
@@ -396,6 +398,7 @@ const emit = defineEmits<{
   (e: "toolReviewPanelOpenChange", value: boolean): void;
   (e: "sidePanelWidthsChange", value: { leftWidth: number; rightWidth: number }): void;
   (e: "sidePanelWidthsCommit", value: { leftWidth: number; rightWidth: number }): void;
+  (e: "updateConversationListTab", value: "local" | "contact"): void;
   (e: "removeClipboardImage", index: number): void;
   (e: "removeQueuedAttachmentNotice", index: number): void;
   (e: "startRecording"): void; (e: "stopRecording"): void; (e: "pickAttachments"): void;
@@ -606,7 +609,7 @@ const {
   toolReviewDetailMap, toolReviewDetailLoadingCallId, toolReviewReviewingCallId,
   toolReviewBatchReviewingKey, toolReviewSubmittingBatchKey, toolReviewErrorText,
   toolReviewReportErrorText, toolReviewReports, toolReviewCurrentReportId,
-  toggleToolReviewPanel, setToolReviewCurrentBatchKey,
+  setToolReviewCurrentBatchKey,
   loadToolReviewItemDetail, runToolReviewForCall, runToolReviewForBatch,
   handlePickCommitReview, handleDeleteToolReviewReport, handleToolReviewCode,
   handleRetryToolReviewReport,

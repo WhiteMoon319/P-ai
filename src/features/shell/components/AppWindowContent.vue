@@ -182,6 +182,7 @@
         :detached-chat-window="detachedChatWindow"
         :side-conversation-list-visible="sideConversationListVisible"
         :initial-tool-review-panel-open="initialToolReviewPanelOpen"
+        :conversation-list-tab="conversationListTab"
         @update:chat-input="updateChatInput"
         @update:selected-instruction-prompts="updateSelectedInstructionPrompts"
         @add-mention="addChatMention"
@@ -190,6 +191,7 @@
         @tool-review-panel-open-change="setToolReviewPanelOpen"
         @side-panel-widths-change="setChatSidePanelWidths"
         @side-panel-widths-commit="commitChatSidePanelWidths"
+        @update:conversation-list-tab="updateConversationListTab"
         @remove-clipboard-image="removeClipboardImage"
         @remove-queued-attachment-notice="removeQueuedAttachmentNotice"
         @pick-attachments="pickAttachments"
@@ -410,6 +412,7 @@ const props = defineProps<{
   detachedChatWindow?: boolean;
   sideConversationListVisible: boolean;
   initialToolReviewPanelOpen: boolean;
+  conversationListTab: "local" | "contact";
   config: AppConfig;
   configTab: "welcome" | "hotkey" | "api" | "tools" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "remoteIm" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
   localeOptions: Array<{ value: "zh-CN" | "en-US" | "zh-TW"; label: string }>;
@@ -634,6 +637,7 @@ const props = defineProps<{
   setSideConversationListVisible: (value: boolean) => void;
   setToolReviewPanelOpen: (value: boolean) => void;
   setChatSidePanelWidths: (value: { leftWidth: number; rightWidth: number }, options?: { syncWindow?: boolean }) => void;
+  updateConversationListTab: (value: "local" | "contact") => void;
   removeClipboardImage: (index: number) => void;
   removeQueuedAttachmentNotice: (index: number) => void;
   pickAttachments: () => void;

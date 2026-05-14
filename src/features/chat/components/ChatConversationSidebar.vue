@@ -6,6 +6,7 @@
       :search-placeholder="t('chat.conversationSearchPlaceholder')"
       :local-label="t('chat.localConversationTab')"
       :contact-label="t('chat.contactConversationTab')"
+      :show-tabs="false"
     />
     <ChatConversationFloatingScroll class="flex-1 min-h-0">
       <section
@@ -191,8 +192,6 @@ import { resolveConversationDisplayTitle } from "../utils/conversation-title";
 import ChatConversationFloatingScroll from "./ChatConversationFloatingScroll.vue";
 import ChatConversationListHeader from "./ChatConversationListHeader.vue";
 
-const CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY = "easy_call.chat_conversation_list_tab.v1";
-
 const props = defineProps<{
   items: ChatConversationOverviewItem[];
   activeConversationId: string;
@@ -200,6 +199,7 @@ const props = defineProps<{
   userAvatarUrl: string;
   personaNameMap: Record<string, string>;
   personaAvatarUrlMap: Record<string, string>;
+  activeTab: "local" | "contact";
 }>();
 
 const emit = defineEmits<{
@@ -208,6 +208,7 @@ const emit = defineEmits<{
   (e: "togglePinConversation", conversationId: string): void;
   (e: "archiveConversation", conversationId: string): void;
   (e: "deleteConversation", conversationId: string): void;
+  (e: "update:activeTab", value: "local" | "contact"): void;
 }>();
 
 const { t, locale } = useI18n();
@@ -215,19 +216,11 @@ const renameInputRef = ref<HTMLInputElement | null>(null);
 const editingConversationId = ref("");
 const editingTitleDraft = ref("");
 const conversationSearchQuery = ref("");
-const activeConversationTab = ref<"local" | "contact">(readStoredConversationTab());
-const { conversationStatusById, markConversationRead } = usePipelineStatus();
-
-function readStoredConversationTab(): "local" | "contact" {
-  if (typeof window === "undefined") return "local";
-  const stored = String(window.localStorage.getItem(CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY) || "").trim();
-  return stored === "contact" ? "contact" : "local";
-}
-
-watch(activeConversationTab, (value) => {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY, value);
+const activeConversationTab = computed({
+  get: () => props.activeTab === "contact" ? "contact" : "local",
+  set: (value: "local" | "contact") => emit("update:activeTab", value),
 });
+const { conversationStatusById, markConversationRead } = usePipelineStatus();
 
 const conversationPreviewCache = computed(() => new Map(
   props.items.map((item) => [String(item.conversationId || "").trim(), Array.isArray(item.previewMessages) ? item.previewMessages : []]),

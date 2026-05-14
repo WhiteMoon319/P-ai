@@ -1138,6 +1138,7 @@
       "otherConversations": "其他",
       "localConversationTab": "本地",
       "contactConversationTab": "远程",
+      "resourceExplorer": "资源管理器",
       "conversationSearchPlaceholder": "搜索会话标题或最近两条消息",
       "conversationSearchEmpty": "没有匹配的会话",
       "pinConversation": "置顶会话",

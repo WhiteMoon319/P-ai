@@ -1,17 +1,27 @@
 <template>
   <div
-    class="min-h-10 h-10 shrink-0 px-2 relative z-40 overflow-visible select-none"
-    :class="viewMode === 'chat' ? 'navbar' : 'grid grid-cols-[1fr_auto_1fr] items-center bg-base-200 border-b border-base-300'"
+    class="min-h-10 h-10 shrink-0 relative z-40 overflow-visible select-none"
+    :class="viewMode === 'chat' ? 'grid items-center bg-base-200 border-b border-base-300' : 'grid grid-cols-[1fr_auto_1fr] items-center bg-base-200 border-b border-base-300 px-2'"
+    :style="viewMode === 'chat' ? chatHeaderGridStyle : undefined"
   >
     <div
       v-if="viewMode !== 'chat'"
       data-tauri-drag-region
-      class="absolute inset-0 cursor-move"
+      class="absolute inset-0"
       aria-hidden="true"
     ></div>
-
-    <div v-if="viewMode === 'chat'" class="relative z-10 flex min-w-0 flex-none items-center gap-1" @mousedown.stop>
-      <div v-if="!detachedChatWindow" class="relative">
+    <div
+      v-else
+      data-tauri-drag-region
+      class="absolute inset-0 z-10"
+      aria-hidden="true"
+    ></div>
+    <div
+      v-if="viewMode === 'chat'"
+      data-tauri-drag-region
+      class="relative z-30 flex h-full min-w-0 items-center gap-1 px-2"
+    >
+      <div v-if="!detachedChatWindow" class="relative" @mousedown.stop>
         <div class="indicator">
           <span
             v-if="conversationUnreadTotal > 0"
@@ -19,80 +29,199 @@
             aria-hidden="true"
           ></span>
           <button
+            v-if="sideConversationListVisible"
             class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
             :class="sideConversationListVisible ? 'btn-active' : ''"
             :title="t('chat.conversationList')"
             @click.stop="emit('toggle-side-conversation-list')"
           >
-            <TextAlignJustify class="h-3.5 w-3.5" />
+            <PanelLeftOpen class="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
 
       <button
-        v-if="!detachedChatWindow"
+        v-if="sideConversationListVisible && !detachedChatWindow"
+        type="button"
         class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
-        :title="t('chat.newConversation')"
-        @click.stop="handleCreateConversation"
+        :title="t('chat.resourceExplorer')"
+        @mousedown.stop
+        @click.stop
       >
-        <SquarePen class="h-4 w-4" />
+        <Files class="h-3.5 w-3.5" />
       </button>
 
-      <button
-        v-if="viewMode === 'chat'"
-        class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
-        :disabled="forcingArchive || chatting"
-        :title="forceArchiveTip"
-        @click.stop="$emit('force-archive')"
-      >
-        <FoldVertical class="h-3.5 w-3.5 shrink-0" />
-      </button>
+      <div v-if="sideConversationListVisible && !detachedChatWindow" role="tablist" class="tabs tabs-border min-w-0 shrink-0" @mousedown.stop>
+        <button
+          type="button"
+          role="tab"
+          class="tab h-8 px-2"
+          :class="conversationListTab === 'local' ? 'tab-active font-semibold' : ''"
+          @click.stop="emit('update:conversation-list-tab', 'local')"
+        >
+          {{ t("chat.localConversationTab") }}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="tab h-8 px-2"
+          :class="conversationListTab === 'contact' ? 'tab-active font-semibold' : ''"
+          @click.stop="emit('update:conversation-list-tab', 'contact')"
+        >
+          {{ t("chat.contactConversationTab") }}
+        </button>
+      </div>
+
+    </div>
+
+    <div
+      v-if="viewMode === 'chat'"
+      data-tauri-drag-region
+      class="relative z-30 grid h-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 px-2"
+    >
+      <div class="relative z-40 flex min-w-0 items-center gap-1" @mousedown.stop>
+        <button
+          v-if="!sideConversationListVisible && !detachedChatWindow"
+          class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
+          :title="t('chat.conversationList')"
+          @click.stop="emit('toggle-side-conversation-list')"
+        >
+          <PanelLeftClose class="h-3.5 w-3.5" />
+        </button>
+
+        <button
+          v-if="!detachedChatWindow"
+          class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
+          :title="t('chat.newConversation')"
+          @click.stop="handleCreateConversation"
+        >
+          <SquarePen class="h-4 w-4" />
+        </button>
+
+        <button
+          class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
+          :disabled="forcingArchive || chatting"
+          :title="forceArchiveTip"
+          @click.stop="$emit('force-archive')"
+        >
+          <FoldVertical class="h-3.5 w-3.5 shrink-0" />
+        </button>
+
+        <div
+          class="inline-flex h-8 w-8 items-center justify-center text-base-content/70"
+          :title="t('chat.contextUsageTitle', { percent: normalizedChatUsagePercent })"
+        >
+          <svg
+            class="h-5 w-5 -rotate-90"
+            viewBox="0 0 36 36"
+          >
+            <circle
+              cx="18"
+              cy="18"
+              r="14"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="4"
+              class="opacity-20"
+            />
+            <circle
+              cx="18"
+              cy="18"
+              r="14"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="4"
+              stroke-linecap="round"
+              :stroke-dasharray="circumference"
+              :stroke-dashoffset="strokeDashoffset"
+            />
+          </svg>
+        </div>
+      </div>
 
       <div
-        class="inline-flex h-8 w-8 items-center justify-center text-base-content/70"
-        :title="t('chat.contextUsageTitle', { percent: normalizedChatUsagePercent })"
+        data-tauri-drag-region
+        class="relative z-30 flex min-w-0 flex-1 self-stretch items-center justify-center px-2"
+        :title="combinedTitleTooltip"
       >
-        <svg
-          class="h-5 w-5 -rotate-90"
-          viewBox="0 0 36 36"
+        <span class="pointer-events-none truncate text-sm font-semibold text-base-content">{{ combinedTitle }}</span>
+      </div>
+
+      <div class="relative z-40 flex min-w-0 items-center justify-end gap-1" @mousedown.stop>
+        <button
+          v-if="!toolReviewPanelOpenVisible"
+          type="button"
+          class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
+          :title="t('chat.toolReview.title')"
+          @click.stop="emit('toggle-tool-review-panel')"
         >
-          <circle
-            cx="18"
-            cy="18"
-            r="14"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="4"
-            class="opacity-20"
-          />
-          <circle
-            cx="18"
-            cy="18"
-            r="14"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="4"
-            stroke-linecap="round"
-            :stroke-dasharray="circumference"
-            :stroke-dashoffset="strokeDashoffset"
-          />
-        </svg>
+          <PanelRightClose class="h-3.5 w-3.5" />
+        </button>
+
+        <button
+          v-if="!detachedChatWindow"
+          class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
+          :title="t('window.archivesTitle')"
+          @click.stop="$emit('open-archives')"
+        >
+          <History class="h-3.5 w-3.5" />
+        </button>
+
+        <button
+          v-if="!detachedChatWindow"
+          class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
+          :title="openConfigTitle"
+          @click.stop="$emit('open-config')"
+        >
+          <Settings class="h-3.5 w-3.5" />
+        </button>
       </div>
     </div>
 
     <div
       v-if="viewMode === 'chat'"
       data-tauri-drag-region
-      class="min-w-0 flex-1 self-stretch cursor-move"
-      aria-hidden="true"
-    ></div>
-
-    <div
-      v-if="viewMode === 'chat'"
-      class="pointer-events-none absolute left-1/2 top-1/2 z-0 flex max-w-[50%] -translate-x-1/2 -translate-y-1/2 items-center px-2"
-      :title="combinedTitleTooltip"
+      class="relative z-30 flex h-full min-w-0 flex-nowrap items-center justify-end gap-1 px-2"
     >
-      <span class="truncate text-sm font-semibold text-base-content">{{ combinedTitle }}</span>
+      <button
+        v-if="toolReviewPanelOpenVisible"
+        type="button"
+        class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
+        :class="toolReviewPanelOpenVisible ? 'btn-active' : ''"
+        :title="t('chat.toolReview.title')"
+        @mousedown.stop
+        @click.stop="emit('toggle-tool-review-panel')"
+      >
+        <PanelRightOpen class="h-3.5 w-3.5" />
+      </button>
+
+      <button
+        class="btn btn-ghost btn-sm"
+        :title="t('window.minimize')"
+        @mousedown.stop
+        @click.stop="$emit('minimize-window')"
+        :disabled="!windowReady"
+      >
+        <Minus class="h-3.5 w-3.5" />
+      </button>
+      <button
+        class="btn btn-ghost btn-sm"
+        :title="maximized ? t('window.restore') : t('window.maximize')"
+        @mousedown.stop
+        @click.stop="$emit('toggle-maximize-window')"
+        :disabled="!windowReady"
+      >
+        <Square class="h-3.5 w-3.5" />
+      </button>
+      <button
+        class="btn btn-sm btn-ghost hover:bg-error"
+        :title="closeTitle || t('common.close')"
+        @mousedown.stop
+        @click.stop="$emit('close-window')"
+        :disabled="!windowReady"
+      >
+        <X class="h-3.5 w-3.5" />
+      </button>
     </div>
 
     <div v-if="viewMode !== 'chat'" class="relative z-10 min-w-0 justify-self-start flex items-center gap-2" @mousedown.stop>
@@ -168,23 +297,7 @@
       </div>
     </div>
 
-    <div class="relative z-10 flex justify-self-end gap-1" @mousedown.stop>
-      <button
-        v-if="viewMode === 'chat' && !detachedChatWindow"
-        class="btn btn-ghost btn-sm"
-        :title="t('window.archivesTitle')"
-        @click.stop="$emit('open-archives')"
-      >
-        <History class="h-3.5 w-3.5" />
-      </button>
-      <button
-        v-if="viewMode === 'chat' && !detachedChatWindow"
-        class="btn btn-ghost btn-sm"
-        :title="openConfigTitle"
-        @click.stop="$emit('open-config')"
-      >
-        <Settings class="h-3.5 w-3.5" />
-      </button>
+    <div v-if="viewMode !== 'chat'" class="relative z-10 flex shrink-0 flex-nowrap justify-self-end gap-1 px-2" @mousedown.stop>
       <button
         class="btn btn-ghost btn-sm"
         :title="t('window.minimize')"
@@ -325,7 +438,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import MarkdownRender, { enableKatex, enableMermaid, getMarkdown, parseMarkdownToStructure } from "markstream-vue";
-import { Download, FoldVertical, History, Minus, ScrollText, Search, Settings, Square, SquarePen, TextAlignJustify, X } from "lucide-vue-next";
+import { Download, Files, FoldVertical, History, Minus, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ScrollText, Search, Settings, Square, SquarePen, X } from "lucide-vue-next";
 import type { ChatConversationOverviewItem } from "../../../types/app";
 import { resolveConversationDisplayTitle } from "../../chat/utils/conversation-title";
 import { registerChatMarkstreamComponents } from "../../chat/markdown/register-chat-markstream";
@@ -395,6 +508,9 @@ const props = defineProps<{
   chatting: boolean;
   currentPersonaName: string;
   sideConversationListVisible: boolean;
+  toolReviewPanelOpenVisible: boolean;
+  chatSidePanelWidths: { leftWidth: number; rightWidth: number };
+  conversationListTab: "local" | "contact";
   activeConversationId: string;
   conversationItems: ChatConversationOverviewItem[];
   userAlias: string;
@@ -422,6 +538,8 @@ const emit = defineEmits<{
   (e: "open-config"): void;
   (e: "open-archives"): void;
   (e: "toggle-side-conversation-list"): void;
+  (e: "toggle-tool-review-panel"): void;
+  (e: "update:conversation-list-tab", value: "local" | "contact"): void;
   (e: "minimize-window"): void;
   (e: "toggle-maximize-window"): void;
   (e: "switch-conversation", payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }): void;
@@ -449,6 +567,20 @@ const normalizedChatUsagePercent = computed(() =>
 const strokeDashoffset = computed(() => {
   const percent = normalizedChatUsagePercent.value;
   return RING_CIRCUMFERENCE * (1 - percent / 100);
+});
+
+const chatHeaderGridStyle = computed(() => {
+  const leftWidth = Number(props.chatSidePanelWidths?.leftWidth || 0);
+  const rightWidth = Number(props.chatSidePanelWidths?.rightWidth || 0);
+  const leftColumn = props.sideConversationListVisible && !props.detachedChatWindow && Number.isFinite(leftWidth) && leftWidth > 0
+    ? `${Math.round(leftWidth)}px`
+    : "0px";
+  const rightColumn = props.toolReviewPanelOpenVisible && Number.isFinite(rightWidth) && rightWidth > 0
+    ? `${Math.round(rightWidth)}px`
+    : "max-content";
+  return {
+    gridTemplateColumns: `${leftColumn} minmax(0, 1fr) ${rightColumn}`,
+  };
 });
 
 const currentConversationTitle = computed(() => {

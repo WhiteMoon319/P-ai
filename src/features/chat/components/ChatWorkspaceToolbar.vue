@@ -83,15 +83,6 @@
     </div>
     <div class="flex min-w-0 items-center justify-end gap-1.5">
       <button
-        type="button"
-        class="btn btn-sm btn-circle overflow-visible p-0 shrink-0 border relative"
-        :class="reviewPanelOpen ? 'border-primary/60 bg-primary/10 text-primary hover:border-primary hover:bg-primary/15' : 'border-base-300/70 bg-base-100/70 hover:border-base-300 hover:bg-base-200'"
-        :title="reviewButtonLabel"
-        @click="emit('toggleToolReview')"
-      >
-        <Glasses class="h-4 w-4" />
-      </button>
-      <button
         v-for="entry in uniqueMentionEntries"
         :key="entry.agentId"
         type="button"
@@ -191,7 +182,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { ClipboardList, ExternalLink, Folder, GitBranchPlus, Glasses, Grip, Package, SquareTerminal, Timer } from "lucide-vue-next";
+import { ClipboardList, ExternalLink, Folder, GitBranchPlus, Grip, Package, SquareTerminal, Timer } from "lucide-vue-next";
 import type { ChatMentionEntry } from "../../../types/app";
 
 const props = defineProps<{
@@ -208,8 +199,6 @@ const props = defineProps<{
   supervisionActiveLabel: string;
   supervisionTitle: string;
   supervisionDisabled?: boolean;
-  reviewButtonLabel: string;
-  reviewPanelOpen: boolean;
   hideMenuButton?: boolean;
   hideWorkspaceButton?: boolean;
   showDetachButton?: boolean;
@@ -224,7 +213,6 @@ const emit = defineEmits<{
   (e: "openForwardSelection"): void;
   (e: "openShareSelection"): void;
   (e: "detachConversation"): void;
-  (e: "toggleToolReview"): void;
   (e: "mentionEntry", entry: ChatMentionEntry): void;
 }>();
 

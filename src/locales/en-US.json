@@ -1091,6 +1091,7 @@
       "otherConversations": "Others",
       "localConversationTab": "Local",
       "contactConversationTab": "Remote",
+      "resourceExplorer": "Resource Explorer",
       "conversationSearchPlaceholder": "Search title or last two messages",
       "conversationSearchEmpty": "No matching conversations",
       "pinConversation": "Pin conversation",

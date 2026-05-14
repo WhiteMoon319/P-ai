@@ -11,7 +11,7 @@
           @input="emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
         />
       </label>
-      <div role="tablist" class="tabs tabs-border shrink-0">
+      <div v-if="showTabs" role="tablist" class="tabs tabs-border shrink-0">
         <button
           type="button"
           role="tab"
@@ -44,6 +44,7 @@ defineProps<{
   searchPlaceholder: string;
   localLabel: string;
   contactLabel: string;
+  showTabs?: boolean;
 }>();
 
 const emit = defineEmits<{

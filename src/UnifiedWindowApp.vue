@@ -11,6 +11,9 @@
       :chatting="chatting"
       :current-persona-name="String(currentForegroundPersona?.name || '').trim() || t('archives.roleAssistant')"
       :side-conversation-list-visible="sideConversationListVisible"
+      :tool-review-panel-open-visible="toolReviewPanelOpenVisible"
+      :chat-side-panel-widths="chatSidePanelWidths"
+      :conversation-list-tab="conversationListTab"
       :active-conversation-id="currentChatConversationId"
       :conversation-items="chatConversationItems"
       :user-alias="userAlias"
@@ -40,6 +43,8 @@
       @select-config-search-result="handleSelectConfigSearchResult"
       @update-to-latest="triggerUpdateToLatest"
       @toggle-side-conversation-list="toggleSideConversationList"
+      @toggle-tool-review-panel="toggleToolReviewPanel"
+      @update:conversation-list-tab="updateConversationListTab"
       @switch-conversation="switchChatConversation"
       @rename-conversation="renameCurrentConversation"
       @toggle-pin-conversation="toggleConversationPin"
@@ -57,6 +62,7 @@
       :detached-chat-window="detachedChatWindow"
       :side-conversation-list-visible="sideConversationListVisible"
       :initial-tool-review-panel-open="toolReviewPanelOpenVisible"
+      :conversation-list-tab="conversationListTab"
       :config="config"
       :config-tab="configTab"
       :locale-options="localeOptions"
@@ -268,6 +274,7 @@
       :set-side-conversation-list-visible="handleSideConversationListVisibleChange"
       :set-tool-review-panel-open="handleToolReviewPanelOpenChange"
       :set-chat-side-panel-widths="handleChatSidePanelWidthsChange"
+      :update-conversation-list-tab="updateConversationListTab"
       :remove-clipboard-image="removeClipboardImage"
       :remove-queued-attachment-notice="removeQueuedAttachmentNotice"
       :pick-attachments="pickChatAttachments"
@@ -627,6 +634,7 @@ const detachedTemporaryApiConfigId = ref("");
 const webviewZoomFactor = ref(1);
 const WEBVIEW_ZOOM_PERCENT_OPTIONS = [80, 90, 100, 110, 120, 150] as const;
 const WEBVIEW_ZOOM_APPLY_DELAY_MS = 500;
+const CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY = "easy_call.chat_conversation_list_tab.v1";
 let chatHistoryFlushedUnlisten: UnlistenFn | null = null;
 let chatRoundStartedUnlisten: UnlistenFn | null = null;
 let chatRoundCompletedUnlisten: UnlistenFn | null = null;
@@ -670,6 +678,7 @@ const selectedInstructionPrompts = ref<PromptCommandPreset[]>([]);
 const selectedChatMentions = ref<ChatMentionTarget[]>([]);
 const chatInput = ref("");
 const currentChatConversationId = ref("");
+const conversationListTab = ref<"local" | "contact">(loadStoredConversationListTab());
 const sideConversationListVisible = ref(loadStoredChatSidePanelVisibility("left"));
 const toolReviewPanelOpenVisible = ref(loadStoredChatSidePanelVisibility("right"));
 const chatSidePanelWidths = ref(loadStoredChatSidePanelWidths());
@@ -767,6 +776,18 @@ function handleToolReviewPanelOpenChange(value: boolean) {
   void syncChatSidePanelsWindowExpansion();
 }
 
+function loadStoredConversationListTab(): "local" | "contact" {
+  if (typeof window === "undefined") return "local";
+  const stored = String(window.localStorage.getItem(CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY) || "").trim();
+  return stored === "contact" ? "contact" : "local";
+}
+
+function updateConversationListTab(value: "local" | "contact") {
+  conversationListTab.value = value === "contact" ? "contact" : "local";
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY, conversationListTab.value);
+}
+
 function loadStoredChatSidePanelVisibility(side: "left" | "right"): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(`easy-call.chat.${side}-sidebar-visible`) === "true";
@@ -820,6 +841,17 @@ async function toggleSideConversationList() {
   }
   sideConversationListVisible.value = nextVisible;
   storeChatSidePanelVisibility("left", nextVisible);
+}
+
+async function toggleToolReviewPanel() {
+  const nextVisible = !toolReviewPanelOpenVisible.value;
+  try {
+    await syncChatSidePanelsWindowExpansion(sideConversationListVisible.value, nextVisible);
+  } catch (error) {
+    console.warn("[工具审查栏] 调整聊天窗口尺寸失败，继续切换侧栏", error);
+  }
+  toolReviewPanelOpenVisible.value = nextVisible;
+  storeChatSidePanelVisibility("right", nextVisible);
 }
 
 const allMessages = shallowRef<ChatMessage[]>([]);
