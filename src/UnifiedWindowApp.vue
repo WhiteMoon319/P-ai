@@ -56,6 +56,7 @@
       :view-mode="viewMode"
       :detached-chat-window="detachedChatWindow"
       :side-conversation-list-visible="sideConversationListVisible"
+      :initial-tool-review-panel-open="toolReviewPanelOpenVisible"
       :config="config"
       :config-tab="configTab"
       :locale-options="localeOptions"
@@ -669,8 +670,8 @@ const selectedInstructionPrompts = ref<PromptCommandPreset[]>([]);
 const selectedChatMentions = ref<ChatMentionTarget[]>([]);
 const chatInput = ref("");
 const currentChatConversationId = ref("");
-const sideConversationListVisible = ref(false);
-const toolReviewPanelOpenVisible = ref(false);
+const sideConversationListVisible = ref(loadStoredChatSidePanelVisibility("left"));
+const toolReviewPanelOpenVisible = ref(loadStoredChatSidePanelVisibility("right"));
 const chatSidePanelWidths = ref(loadStoredChatSidePanelWidths());
 const conversationForegroundSyncing = ref(false);
 const backgroundConversationBadgeMap = ref<Record<string, BackgroundConversationBadgeState>>({});
@@ -754,12 +755,26 @@ async function updatePlanModeEnabled(value: boolean) {
 
 function handleSideConversationListVisibleChange(value: boolean) {
   sideConversationListVisible.value = value;
+  storeChatSidePanelVisibility("left", value);
   void syncChatSidePanelsWindowExpansion();
 }
 
 function handleToolReviewPanelOpenChange(value: boolean) {
   toolReviewPanelOpenVisible.value = value;
+  if (value || String(currentChatConversationId.value || "").trim()) {
+    storeChatSidePanelVisibility("right", value);
+  }
   void syncChatSidePanelsWindowExpansion();
+}
+
+function loadStoredChatSidePanelVisibility(side: "left" | "right"): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(`easy-call.chat.${side}-sidebar-visible`) === "true";
+}
+
+function storeChatSidePanelVisibility(side: "left" | "right", visible: boolean) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(`easy-call.chat.${side}-sidebar-visible`, visible ? "true" : "false");
 }
 
 function loadStoredChatSidePanelWidths(): { leftWidth: number; rightWidth: number } {
@@ -804,6 +819,7 @@ async function toggleSideConversationList() {
     console.warn("[会话栏] 调整聊天窗口尺寸失败，继续切换侧栏", error);
   }
   sideConversationListVisible.value = nextVisible;
+  storeChatSidePanelVisibility("left", nextVisible);
 }
 
 const allMessages = shallowRef<ChatMessage[]>([]);
@@ -4422,6 +4438,10 @@ onMounted(() => {
     tauriWindowLabel.value = label || "unknown";
     detachedChatWindow.value = tauriWindowLabel.value.startsWith("chat-detached-");
     isChatTauriWindow.value = tauriWindowLabel.value === "chat" || detachedChatWindow.value;
+    if (detachedChatWindow.value) {
+      sideConversationListVisible.value = false;
+      toolReviewPanelOpenVisible.value = false;
+    }
   } catch {
     tauriWindowLabel.value = "unknown";
     detachedChatWindow.value = false;

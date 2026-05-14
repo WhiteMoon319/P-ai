@@ -181,6 +181,7 @@
         :current-theme="currentTheme"
         :detached-chat-window="detachedChatWindow"
         :side-conversation-list-visible="sideConversationListVisible"
+        :initial-tool-review-panel-open="initialToolReviewPanelOpen"
         @update:chat-input="updateChatInput"
         @update:selected-instruction-prompts="updateSelectedInstructionPrompts"
         @add-mention="addChatMention"
@@ -408,6 +409,7 @@ const props = defineProps<{
   viewMode: "chat" | "archives" | "config";
   detachedChatWindow?: boolean;
   sideConversationListVisible: boolean;
+  initialToolReviewPanelOpen: boolean;
   config: AppConfig;
   configTab: "welcome" | "hotkey" | "api" | "tools" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "remoteIm" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
   localeOptions: Array<{ value: "zh-CN" | "en-US" | "zh-TW"; label: string }>;
@@ -696,7 +698,7 @@ const promptPreviewDialogVNodeRef: VNodeRef = (el) => {
 const chatViewRef = ref<{ exitMessageSelectionMode: () => void } | null>(null);
 
 function commitChatSidePanelWidths(value: { leftWidth: number; rightWidth: number }) {
-  props.setChatSidePanelWidths(value, { syncWindow: true });
+  props.setChatSidePanelWidths(value);
 }
 
 function handleDetachConversation() {

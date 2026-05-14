@@ -1,14 +1,13 @@
-import { watch, type Ref, type ComputedRef, type ComponentPublicInstance } from "vue";
+import { watch, type Ref, type ComponentPublicInstance } from "vue";
 import { useChatToolReview, type ToolReviewCodeReviewScope, type ToolReviewCommitOption, type ToolReviewReportRecord } from "./use-chat-tool-review";
 import { resolveRetryToolReviewDepartmentId } from "../utils/tool-review-department";
-import type { ChatMessageBlock } from "../../../types/app";
 
 export interface UseChatToolReviewHandlersOptions {
   activeConversationId: Ref<string>;
-  messageBlocks: ComputedRef<ChatMessageBlock[]>;
   toolReviewRefreshTick: Ref<number>;
   currentDepartmentId: Ref<string>;
   departmentOptions: Ref<Array<{ id: string }>>;
+  initialPanelOpen?: Ref<boolean>;
   t: (key: string, params?: Record<string, unknown>) => string;
   syncViewportMetrics: () => void;
   onRefreshMessage: (payload: { conversationId: string; messageId: string }) => void;
@@ -23,9 +22,6 @@ export function useChatToolReviewHandlers(options: UseChatToolReviewHandlersOpti
     toolReviewPanelOpen,
     toolReviewBatches,
     toolReviewCurrentBatchKey,
-    toolReviewButtonCount,
-    toolReviewButtonLabel,
-    toolReviewButtonEnabled,
     toolReviewDetailMap,
     toolReviewDetailLoadingCallId,
     toolReviewReviewingCallId,
@@ -45,8 +41,8 @@ export function useChatToolReviewHandlers(options: UseChatToolReviewHandlersOpti
     listToolReviewCommitOptions,
   } = useChatToolReview({
     activeConversationId: options.activeConversationId,
-    messageBlocks: options.messageBlocks,
     refreshTick: options.toolReviewRefreshTick,
+    initialPanelOpen: options.initialPanelOpen,
     t,
     onRefreshMessage: options.onRefreshMessage,
   });
@@ -125,9 +121,6 @@ export function useChatToolReviewHandlers(options: UseChatToolReviewHandlersOpti
     toolReviewPanelOpen,
     toolReviewBatches,
     toolReviewCurrentBatchKey,
-    toolReviewButtonCount,
-    toolReviewButtonLabel,
-    toolReviewButtonEnabled,
     toolReviewDetailMap,
     toolReviewDetailLoadingCallId,
     toolReviewReviewingCallId,

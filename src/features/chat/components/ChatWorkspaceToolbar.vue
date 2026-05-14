@@ -86,17 +86,10 @@
         type="button"
         class="btn btn-sm btn-circle overflow-visible p-0 shrink-0 border relative"
         :class="reviewPanelOpen ? 'border-primary/60 bg-primary/10 text-primary hover:border-primary hover:bg-primary/15' : 'border-base-300/70 bg-base-100/70 hover:border-base-300 hover:bg-base-200'"
-        :disabled="!reviewButtonEnabled"
         :title="reviewButtonLabel"
         @click="emit('toggleToolReview')"
       >
         <Glasses class="h-4 w-4" />
-        <span
-          v-if="normalizedReviewButtonCount > 0"
-          class="badge badge-primary badge-xs absolute -right-1.5 -top-1.5 min-w-4 px-1 text-[10px]"
-        >
-          {{ normalizedReviewButtonCount > 99 ? "99+" : normalizedReviewButtonCount }}
-        </span>
       </button>
       <button
         v-for="entry in uniqueMentionEntries"
@@ -216,9 +209,7 @@ const props = defineProps<{
   supervisionTitle: string;
   supervisionDisabled?: boolean;
   reviewButtonLabel: string;
-  reviewButtonCount?: number;
   reviewPanelOpen: boolean;
-  reviewButtonEnabled: boolean;
   hideMenuButton?: boolean;
   hideWorkspaceButton?: boolean;
   showDetachButton?: boolean;
@@ -239,9 +230,6 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const busy = computed(() => props.chatting || props.frozen || !!props.conversationBusy);
-const normalizedReviewButtonCount = computed(() =>
-  Math.max(0, Math.round(Number(props.reviewButtonCount || 0))),
-);
 
 // ========== 头像栏去重 + 部门弹出 ==========
 

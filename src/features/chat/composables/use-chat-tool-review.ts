@@ -1,6 +1,5 @@
-import { computed, ref, watch, type ComputedRef, type Ref } from "vue";
+import { ref, watch, type Ref } from "vue";
 import { invokeTauri } from "../../../services/tauri-api";
-import type { ChatMessageBlock } from "../../../types/app";
 
 export type ToolReviewStoredReview = {
   kind: string;
@@ -107,14 +106,14 @@ type ListToolReviewCommitOptionsOutput = {
 
 type UseChatToolReviewOptions = {
   activeConversationId: Ref<string>;
-  messageBlocks: ComputedRef<ChatMessageBlock[]>;
   refreshTick: Ref<number>;
+  initialPanelOpen?: Ref<boolean>;
   t: (key: string, params?: Record<string, unknown>) => string;
   onRefreshMessage?: (input: { conversationId: string; messageId: string }) => void | Promise<void>;
 };
 
 export function useChatToolReview(options: UseChatToolReviewOptions) {
-  const toolReviewPanelOpen = ref(false);
+  const toolReviewPanelOpen = ref(!!options.initialPanelOpen?.value);
   const toolReviewBatches = ref<ToolReviewBatchSummary[]>([]);
   const toolReviewCurrentBatchKey = ref("");
   const toolReviewDetailMap = ref<Record<string, ToolReviewItemDetail>>({});
@@ -240,18 +239,6 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
       }
     }
   }
-
-  const toolReviewButtonCount = computed(() => {
-    const currentKey = String(toolReviewCurrentBatchKey.value || "").trim();
-    if (!currentKey) return 0;
-    return toolReviewBatches.value.find((batch) => batch.batchKey === currentKey)?.itemCount || 0;
-  });
-  const toolReviewButtonLabel = computed(() =>
-    options.t("chat.toolReview.button", { count: toolReviewButtonCount.value })
-  );
-  const toolReviewButtonEnabled = computed(
-    () => !!String(options.activeConversationId.value || "").trim()
-  );
 
   async function refreshMessagesAfterReviewMutation(
     conversationId: string,
@@ -402,10 +389,6 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
   }
 
   function toggleToolReviewPanel() {
-    if (!toolReviewButtonEnabled.value) {
-      toolReviewPanelOpen.value = false;
-      return;
-    }
     toolReviewPanelOpen.value = !toolReviewPanelOpen.value;
   }
 
@@ -420,6 +403,15 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
       void refreshToolReviewBatches();
     },
   );
+
+  if (options.initialPanelOpen) {
+    watch(
+      () => options.initialPanelOpen?.value,
+      (open) => {
+        toolReviewPanelOpen.value = !!open;
+      },
+    );
+  }
 
   watch(
     () => String(options.activeConversationId.value || "").trim(),
@@ -437,8 +429,6 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
       toolReviewReportErrorText.value = "";
       if (conversationId) {
         void refreshToolReviewBatches();
-      } else {
-        toolReviewPanelOpen.value = false;
       }
     },
     { immediate: true },
@@ -448,9 +438,6 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
     toolReviewPanelOpen,
     toolReviewBatches,
     toolReviewCurrentBatchKey,
-    toolReviewButtonCount,
-    toolReviewButtonLabel,
-    toolReviewButtonEnabled,
     toolReviewDetailMap,
     toolReviewDetailLoadingCallId,
     toolReviewReviewingCallId,

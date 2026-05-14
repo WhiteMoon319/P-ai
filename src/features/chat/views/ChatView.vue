@@ -174,8 +174,8 @@
                 :supervision-active="supervisionActive" :supervision-label="t('chat.supervision.button')"
                 :supervision-active-label="t('chat.supervision.buttonActive')" :supervision-title="supervisionButtonTitle"
                 :supervision-disabled="activeConversationSummary?.kind === 'remote_im_contact'"
-                :review-button-label="toolReviewButtonLabel" :review-button-count="toolReviewButtonCount"
-                :review-panel-open="toolReviewPanelOpen" :review-button-enabled="toolReviewButtonEnabled"
+                :review-button-label="t('chat.toolReview.title')"
+                :review-panel-open="toolReviewPanelOpen"
                 :show-detach-button="!detachedChatWindow && !activeConversationSummary?.isMainConversation"
                 :detach-disabled="!activeConversationId || activeConversationSummary?.isMainConversation || chatting || frozen || conversationBusy"
                 @lock-workspace="$emit('lockWorkspace')" @open-branch-selection="openBranchSelectionMenu"
@@ -380,6 +380,7 @@ const props = defineProps<{
   recentSupervisionTaskHistory: Array<{ goal: string; why: string; todo: string; durationHours: number }>;
   currentTheme: string; unarchivedConversationItems: ChatConversationOverviewItem[];
   conversationItems?: ChatConversationOverviewItem[]; sideConversationListVisible: boolean;
+  initialToolReviewPanelOpen: boolean;
   createConversationDepartmentOptions: Array<{ id: string; name: string; ownerAgentId?: string; ownerName: string; providerName?: string; modelName?: string }>;
   delegateDepartmentIds: string[]; defaultCreateConversationDepartmentId: string;
   ideContextGroups: IdeContextWorkspaceGroup[]; attachedIdeContextReferences: IdeContextReferenceItem[];
@@ -602,7 +603,6 @@ const {
 
 const {
   toolReviewPanelOpen, toolReviewBatches, toolReviewCurrentBatchKey,
-  toolReviewButtonCount, toolReviewButtonLabel, toolReviewButtonEnabled,
   toolReviewDetailMap, toolReviewDetailLoadingCallId, toolReviewReviewingCallId,
   toolReviewBatchReviewingKey, toolReviewSubmittingBatchKey, toolReviewErrorText,
   toolReviewReportErrorText, toolReviewReports, toolReviewCurrentReportId,
@@ -612,10 +612,10 @@ const {
   handleRetryToolReviewReport,
 } = useChatToolReviewHandlers({
   activeConversationId: toRef(props, "activeConversationId"),
-  messageBlocks: computed(() => props.messageBlocks),
   toolReviewRefreshTick: toRef(props, "toolReviewRefreshTick"),
   currentDepartmentId: toRef(props, "currentDepartmentId"),
   departmentOptions: toolReviewDepartmentOptions,
+  initialPanelOpen: toRef(props, "initialToolReviewPanelOpen"),
   t, syncViewportMetrics,
   onRefreshMessage: (payload) => emit("refreshToolReviewMessage", payload),
   onToolReviewPanelOpenChange: (open) => emit("toolReviewPanelOpenChange", open),
