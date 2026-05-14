@@ -286,6 +286,7 @@
           @input="handleChatInputInput"
           @keydown="handleChatInputKeydown"
         ></textarea>
+        <FloatingScrollbar v-if="chatInputRef" :target="chatInputRef" />
       </div>
       <Teleport to="body">
         <div
@@ -438,6 +439,7 @@ import { ChevronDown, FileText, Image as ImageIcon, Layers2, Mic, Minus, Papercl
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, SkillListResult } from "../../../types/app";
 import { invokeTauri } from "../../../services/tauri-api";
 import ChatQueuePreview from "./ChatQueuePreview.vue";
+import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import { useChatQueue } from "../composables/use-chat-queue";
 import { resolveConversationDisplayTitle } from "../utils/conversation-title";
 
@@ -1221,7 +1223,7 @@ function togglePlanMode() {
 function resizeChatInput() {
   const el = chatInputRef.value;
   if (!el) return;
-  const minHeight = 32;
+  const minHeight = 48;
   const maxHeight = 160;
   el.style.height = "auto";
   const nextHeight = Math.max(Math.min(el.scrollHeight, maxHeight), minHeight);
@@ -1550,3 +1552,12 @@ watch(
   },
 );
 </script>
+
+<style scoped>
+.chat-input-no-focus::-webkit-scrollbar {
+  display: none;
+}
+.chat-input-no-focus {
+  scrollbar-width: none;
+}
+</style>
