@@ -492,6 +492,20 @@
           class="whitespace-pre-wrap break-all"
           style="overflow-wrap: anywhere;"
         >{{ isOwnMessage(block) ? ownMessageDisplayText(block) : block.text }}</div>
+        <div
+          v-if="block.extraTextReferences && block.extraTextReferences.length > 0"
+          :class="block.text ? 'mt-2 flex flex-wrap gap-1' : 'flex flex-wrap gap-1'"
+        >
+          <div
+            v-for="(reference, idx) in block.extraTextReferences"
+            :key="`${block.id}-extra-ref-${idx}`"
+            class="badge badge-ghost gap-1 py-3"
+            :title="reference.label"
+          >
+            <FileText class="h-3.5 w-3.5" />
+            <span class="max-w-64 truncate text-[11px]">{{ reference.label }}</span>
+          </div>
+        </div>
         <div v-if="block.images.length > 0" :class="block.taskTrigger || block.text ? 'mt-2 grid gap-1' : 'grid gap-1'">
           <template v-for="(img, idx) in block.images" :key="`${block.id}-img-${idx}`">
             <img

@@ -812,7 +812,7 @@ async function handleAssistantLinkClick(event: MouseEvent) {
   if (isAbsoluteLocalPath(href)) {
     event.preventDefault(); event.stopPropagation();
     try {
-      if (canOpenInFileReader(href)) { await invokeTauri("open_file_reader_window_command", { path: href }); }
+      if (canOpenInFileReader(href)) { await openLocalFileInChatReader(href); }
       else { await invokeTauri("open_local_file_directory", { path: href }); }
       linkOpenErrorText.value = "";
     } catch (error) { linkOpenErrorText.value = t("status.openLinkFailed", { err: String(error) }); }
@@ -823,6 +823,16 @@ async function handleAssistantLinkClick(event: MouseEvent) {
     try { await invokeTauri("open_external_url", { url: href }); linkOpenErrorText.value = ""; }
     catch (error) { linkOpenErrorText.value = t("status.openLinkFailed", { err: String(error) }); }
   }
+}
+
+async function openLocalFileInChatReader(path: string) {
+  emit("update:chatRightPanelMode", "reader");
+  if (!props.initialToolReviewPanelOpen) {
+    emit("toolReviewPanelOpenChange", true);
+  }
+  await nextTick();
+  await nextTick();
+  await chatReaderPanelRef.value?.openPath(path);
 }
 
 // ==================== time divider ====================

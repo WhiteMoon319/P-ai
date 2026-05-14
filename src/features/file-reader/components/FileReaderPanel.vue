@@ -39,6 +39,16 @@
           </button>
         </div>
       </div>
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm h-8 min-h-8 w-8 shrink-0 px-0"
+        :disabled="!activeDirectoryPath"
+        :title="directoryTreeRoot ? '收起文件树' : `展开文件树：${activeDirectoryPath}`"
+        @click="toggleDirectoryTree"
+      >
+        <ListIndentIncrease v-if="directoryTreeRoot" class="h-4 w-4" />
+        <ListIndentDecrease v-else class="h-4 w-4" />
+      </button>
     </div>
 
     <div class="flex min-h-0 flex-1" :class="directoryOnly ? '' : 'flex-row-reverse'">
@@ -198,16 +208,6 @@
           >
             <Code2 v-if="activeTab?.rawMode" class="h-4 w-4" />
             <Eye v-else class="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs h-6 min-h-6 w-6 shrink-0 px-0"
-            :disabled="!activeDirectoryPath"
-            :title="directoryTreeRoot ? '收起文件树' : `展开文件树：${activeDirectoryPath}`"
-            @click="toggleDirectoryTree"
-          >
-            <ListIndentIncrease v-if="directoryTreeRoot" class="h-4 w-4" />
-            <ListIndentDecrease v-else class="h-4 w-4" />
           </button>
         </div>
         <div class="relative min-h-0 flex-1" @mouseenter="contentScrollbarRef?.reveal()" @mouseleave="contentScrollbarRef?.hide()">
@@ -983,7 +983,7 @@ async function restoreFileReaderSession(key = props.sessionKey, fallbackRootPath
     directoryTreeSearchVisible.value = false;
     directoryNodes.value = {};
 
-    const fallbackRoot = normalizePath(fallbackRootPath || "");
+    const fallbackRoot = props.directoryOnly ? normalizePath(fallbackRootPath || "") : "";
     if (!storageKey) {
       if (fallbackRoot) {
         directoryRootPath.value = fallbackRoot;
@@ -999,7 +999,7 @@ async function restoreFileReaderSession(key = props.sessionKey, fallbackRootPath
     const restoredActivePath = normalizePath(state.activePath || "");
     activePath.value = restoredTabs.includes(restoredActivePath) ? restoredActivePath : restoredTabs[0] || "";
 
-    const restoredDirectoryRoot = normalizePath(state.directoryRootPath || fallbackRoot);
+    const restoredDirectoryRoot = normalizePath(state.directoryRootPath || "");
     if (restoredDirectoryRoot) {
       directoryRootPath.value = restoredDirectoryRoot;
     }
