@@ -2,6 +2,8 @@
 
 - 修复（chat-view-layout）：ChatView 根容器始终使用 `flex flex-row` 布局，不再根据侧栏显隐切换 `flex-row`/`flex-col`。
 
+- 修复（sidebar-expansion）：删除窗口扩展逻辑，开关侧栏不再触发窗口 resize，窗口模式下与全屏表现一致。
+
 - 清理（debug-log）：移除虚拟滚动调试日志 `traceVirtualScrollFrames`、`debugVirtualScrollState` 高频刷屏调用。
 
 ## 发布：v0.9.90

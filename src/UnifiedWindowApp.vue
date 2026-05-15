@@ -853,7 +853,6 @@ async function updatePlanModeEnabled(value: boolean) {
 function handleSideConversationListVisibleChange(value: boolean) {
   sideConversationListVisible.value = value;
   storeChatSidePanelVisibility("left", value);
-  void syncChatSidePanelsWindowExpansion();
 }
 
 function handleToolReviewPanelOpenChange(value: boolean) {
@@ -861,7 +860,6 @@ function handleToolReviewPanelOpenChange(value: boolean) {
   if (value || String(currentChatConversationId.value || "").trim()) {
     storeChatSidePanelVisibility("right", value);
   }
-  void syncChatSidePanelsWindowExpansion();
 }
 
 function loadStoredConversationListTab(): "local" | "contact" {
@@ -945,39 +943,16 @@ function handleChatSidePanelWidthsChange(value: { leftWidth: number; rightWidth:
     leftWidth: Number.isFinite(leftWidth) ? leftWidth : 320,
     rightWidth: Number.isFinite(rightWidth) ? rightWidth : 320,
   };
-  if (options?.syncWindow) {
-    void syncChatSidePanelsWindowExpansion();
-  }
-}
-
-async function syncChatSidePanelsWindowExpansion(leftVisible = sideConversationListVisible.value, rightVisible = toolReviewPanelOpenVisible.value) {
-  if (viewMode.value !== "chat" || detachedChatWindow.value) return;
-  await invokeTauri<boolean>("set_chat_side_panels_window_expanded", {
-    leftExpanded: leftVisible,
-    rightExpanded: rightVisible,
-    leftWidth: chatSidePanelWidths.value.leftWidth,
-    rightWidth: chatSidePanelWidths.value.rightWidth,
-  });
 }
 
 async function toggleSideConversationList() {
   const nextVisible = !sideConversationListVisible.value;
-  try {
-    await syncChatSidePanelsWindowExpansion(nextVisible, toolReviewPanelOpenVisible.value);
-  } catch (error) {
-    console.warn("[会话栏] 调整聊天窗口尺寸失败，继续切换侧栏", error);
-  }
   sideConversationListVisible.value = nextVisible;
   storeChatSidePanelVisibility("left", nextVisible);
 }
 
 async function toggleToolReviewPanel() {
   const nextVisible = !toolReviewPanelOpenVisible.value;
-  try {
-    await syncChatSidePanelsWindowExpansion(sideConversationListVisible.value, nextVisible);
-  } catch (error) {
-    console.warn("[工具审查栏] 调整聊天窗口尺寸失败，继续切换侧栏", error);
-  }
   toolReviewPanelOpenVisible.value = nextVisible;
   storeChatSidePanelVisibility("right", nextVisible);
 }
