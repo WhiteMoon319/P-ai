@@ -3,8 +3,8 @@ import { nextTick, ref, watch, type Ref } from "vue";
 type PaneResizeSide = "left" | "right";
 
 export const PANE_WIDTH_LIMITS = {
-  left: { min: 100, max: 10000, default: 320 },
-  right: { min: 100, max: 10000, default: 320 },
+  left: { min: 200, max: 10000, default: 320 },
+  right: { min: 350, max: 10000, default: 320 },
 } as const;
 
 export const PANE_CENTER_MIN_WIDTH = 100;
