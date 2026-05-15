@@ -42,8 +42,8 @@
       <button
         type="button"
         class="btn btn-ghost btn-sm h-8 min-h-8 w-8 shrink-0 px-0"
-        :disabled="!activeDirectoryPath"
-        :title="directoryTreeRoot ? '收起文件树' : `展开文件树：${activeDirectoryPath}`"
+        :disabled="!directoryToggleTargetPath"
+        :title="directoryTreeRoot ? '收起文件树' : `展开文件树：${directoryToggleTargetPath}`"
         @click="toggleDirectoryTree"
       >
         <ListIndentIncrease v-if="directoryTreeRoot" class="h-4 w-4" />
@@ -525,6 +525,14 @@ const activePathSegments = computed(() => {
 });
 
 const activeDirectoryPath = computed(() => activePathSegments.value[activePathSegments.value.length - 1]?.path || "");
+const initialDirectoryPath = computed(() => normalizePath(props.initialRootPath || ""));
+const directoryToggleTargetPath = computed(() => {
+  const currentRoot = normalizePath(directoryRootPath.value);
+  if (currentRoot) return currentRoot;
+  const activeDirectory = activeDirectoryPath.value;
+  if (activeDirectory) return activeDirectory;
+  return initialDirectoryPath.value;
+});
 
 // ==================== Watchers ====================
 
@@ -1364,7 +1372,7 @@ async function toggleDirectoryTree() {
     closeDirectoryTree();
     return;
   }
-  const path = activeDirectoryPath.value;
+  const path = directoryToggleTargetPath.value;
   if (path) {
     await openDirectoryTree(path);
   }
