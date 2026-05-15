@@ -114,8 +114,6 @@ export function useChatPanes(options: UseChatPanesOptions) {
     activePaneResizeSide.value = null;
     if (side) {
       storePaneWidth(side, side === "left" ? leftSidebarWidth.value : rightSidebarWidth.value);
-      await nextTick();
-      syncViewportMetrics();
       onPaneWidthsCommit(leftSidebarWidth.value, rightSidebarWidth.value);
     }
   }
