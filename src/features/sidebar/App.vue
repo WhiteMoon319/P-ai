@@ -12,7 +12,7 @@
     @new-conversation="openCreateConversationDialog"
     @open-settings="openSettings"
     @compact-conversation="openCompactionDialog"
-    @reconnect="bootstrap"
+    @reconnect="refreshDiscovery"
   >
     <ConversationListView
       v-if="view === 'list'"
@@ -31,6 +31,7 @@
       :chat-model-options="chatModelOptions"
       :workspace-access="workspaceAccess"
       :messages="messages"
+      :clipboard-images="clipboardImages"
       :streaming-text="streamingText"
       :streaming-reasoning-standard="streamingReasoningStandard"
       :streaming-reasoning-inline="streamingReasoningInline"
@@ -39,10 +40,15 @@
       :has-prev-block="hasPrevBlock"
       @send="send"
       @stop="stop"
+      @remove-clipboard-image="removeClipboardImage"
       @load-prev-block="loadPrevBlock"
       @update:selected-chat-model-id="selectChatModel"
       @update-workspace-access="selectWorkspaceAccess"
       @recall-turn="recallTurn"
+      @open-code-review="openCodeReview"
+      @open-supervision-task="openSupervisionTask"
+      @selection-action-branch="branchConversationFromSelection"
+      @selection-action-delegate="delegateFromSelection"
     />
     <SidebarCompactionDialog
       :open="compactionDialogOpen"
@@ -62,11 +68,35 @@
       @close="closeCreateConversationDialog"
       @confirm="createConversation"
     />
+    <ToolReviewTargetDialog
+      :open="codeReviewDialogOpen"
+      :submitting="codeReviewSubmitting"
+      :error-text="codeReviewErrorText"
+      :current-department-id="activeDepartmentId"
+      :department-options="createConversationDepartmentOptions"
+      :commit-options="commitOptions"
+      :commit-options-loading="commitOptionsLoading"
+      :commit-total="commitTotal"
+      :commit-page="commitPage"
+      :commit-page-size="commitPageSize"
+      @close="closeCodeReviewDialog"
+      @pick-commit-review="loadCodeReviewCommitOptions"
+      @review-code="submitCodeReview"
+    />
+    <ChatSupervisionTaskDialog
+      :open="supervisionDialogOpen"
+      :saving="supervisionSaving"
+      :error-text="supervisionErrorText"
+      :active-task="null"
+      :recent-history="[]"
+      @close="closeSupervisionTask"
+      @save="saveSupervisionTask"
+    />
   </SidebarLayout>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import type { ApiConfigItem, ChatMessage } from "../../types/app";
 import { removeBinaryPlaceholders, messageText } from "../../utils/chat-message";
 import SidebarLayout from "./layouts/SidebarLayout.vue";
@@ -75,6 +105,9 @@ import ChatViewWrapper from "./views/ChatViewWrapper.vue";
 import SidebarCompactionDialog from "./views/SidebarCompactionDialog.vue";
 import CreateConversationDialog, { type SidebarCreateDepartmentOption } from "./views/CreateConversationDialog.vue";
 import { useWsTransport, type SidebarBridgeConfig } from "./composables/use-ws-transport";
+import ToolReviewTargetDialog from "../chat/components/ToolReviewTargetDialog.vue";
+import ChatSupervisionTaskDialog from "../chat/components/dialogs/ChatSupervisionTaskDialog.vue";
+import type { ToolReviewCodeReviewScope, ToolReviewCommitOption } from "../chat/composables/use-chat-tool-review";
 
 type ConversationSummary = {
   conversationId: string;
@@ -117,6 +150,11 @@ type SidebarWorkspacePermission = {
   access?: "read_only" | "approval" | "full_access" | "";
   workspaceName?: string;
   rootPath?: string;
+};
+
+type SidebarClipboardImage = {
+  mime: string;
+  bytesBase64: string;
 };
 
 type RewindConversationResult = {
@@ -184,6 +222,7 @@ const workspaceAccess = ref<"read_only" | "approval" | "full_access" | "">("appr
 const vscodeWorkspaceRoots = ref<Array<{ path: string; name: string }>>([]);
 const messages = ref<ChatMessage[]>([]);
 const inputText = ref("");
+const clipboardImages = ref<SidebarClipboardImage[]>([]);
 const streamingText = ref("");
 const streamingReasoningStandard = ref("");
 const streamingReasoningInline = ref("");
@@ -198,18 +237,31 @@ const creatingConversation = ref(false);
 const createConversationDepartmentOptions = ref<SidebarCreateDepartmentOption[]>([]);
 const defaultCreateConversationDepartmentId = ref("");
 const createConversationErrorText = ref("");
+const codeReviewDialogOpen = ref(false);
+const codeReviewSubmitting = ref(false);
+const codeReviewErrorText = ref("");
+const commitOptions = ref<ToolReviewCommitOption[]>([]);
+const commitOptionsLoading = ref(false);
+const commitTotal = ref(0);
+const commitPage = ref(1);
+const commitPageSize = ref(30);
+const supervisionDialogOpen = ref(false);
+const supervisionSaving = ref(false);
+const supervisionErrorText = ref("");
 const selectedBlockId = ref<number | null>(null);
 const hasPrevBlock = ref(false);
-const view = ref<"list" | "chat">("chat");
+const view = ref<"list" | "chat">("list");
+let discoveryRefreshTimer: number | null = null;
 
 const activeSummary = computed(() => conversations.value.find((item) => item.conversationId === activeConversationId.value));
 const activeConversationRuntimeState = computed(() => String(activeSummary.value?.runtimeState || "").trim());
+const activeDepartmentId = computed(() => String(activeSummary.value?.departmentId || "").trim());
 
 function normalizeDiscovery(payload: DiscoveryPayload): SidebarBridgeConfig | null {
   const chatUrl = String(payload.chatUrl || "").trim() || String(payload.url || "").trim().replace(/\/ide-context$/, "/chat");
   const token = String(payload.token || "").trim();
-  if (!chatUrl || !token) return null;
-  return { chatUrl, token };
+  if (!chatUrl) return null;
+  return token ? { chatUrl, token } : { chatUrl };
 }
 
 async function loadDiscovery(): Promise<SidebarBridgeConfig | null> {
@@ -240,9 +292,7 @@ async function refreshList() {
   const result = await transport.request<{ conversations: ConversationSummary[]; persona?: SidebarPersonaPayload }>("conversation.list");
   conversations.value = Array.isArray(result.conversations) ? result.conversations : [];
   if (result.persona) listPersona.value = result.persona;
-  if (!activeConversationId.value && conversations.value[0]) {
-    await openConversation(conversations.value[0].conversationId);
-  } else if (activeConversationId.value) {
+  if (activeConversationId.value) {
     activeTitle.value = activeSummary.value?.title || activeTitle.value;
   }
 }
@@ -363,6 +413,164 @@ async function openSettings() {
   }
 }
 
+async function openCodeReview() {
+  codeReviewErrorText.value = "";
+  try {
+    if (createConversationDepartmentOptions.value.length === 0) {
+      await loadCreateConversationOptions();
+    }
+    codeReviewDialogOpen.value = true;
+  } catch (error) {
+    codeReviewErrorText.value = String(error || "加载审查部门失败");
+    codeReviewDialogOpen.value = true;
+  }
+}
+
+function closeCodeReviewDialog() {
+  if (codeReviewSubmitting.value) return;
+  codeReviewDialogOpen.value = false;
+  codeReviewErrorText.value = "";
+}
+
+async function loadCodeReviewCommitOptions(page = 1) {
+  if (!activeConversationId.value) return;
+  commitOptionsLoading.value = true;
+  try {
+    const result = await transport.request<{ total: number; page: number; pageSize: number; commits: ToolReviewCommitOption[] }>("toolReview.commitOptions.list", {
+      conversationId: activeConversationId.value,
+      page,
+      pageSize: commitPageSize.value,
+    });
+    commitOptions.value = Array.isArray(result.commits) ? result.commits : [];
+    commitTotal.value = Number(result.total || 0);
+    commitPage.value = Number(result.page || page);
+    commitPageSize.value = Number(result.pageSize || commitPageSize.value);
+    codeReviewErrorText.value = "";
+  } catch (error) {
+    commitOptions.value = [];
+    codeReviewErrorText.value = String(error || "读取 commit 失败");
+  } finally {
+    commitOptionsLoading.value = false;
+  }
+}
+
+async function submitCodeReview(input: { scope: ToolReviewCodeReviewScope; target?: string; departmentId: string }) {
+  if (!activeConversationId.value || codeReviewSubmitting.value) return;
+  codeReviewSubmitting.value = true;
+  codeReviewErrorText.value = "";
+  try {
+    await transport.request("toolReview.code.submit", {
+      conversationId: activeConversationId.value,
+      scope: input.scope,
+      target: String(input.target || "").trim() || undefined,
+      departmentId: input.departmentId,
+    });
+  } catch (error) {
+    codeReviewErrorText.value = String(error || "发起代码审查失败");
+    codeReviewDialogOpen.value = true;
+  } finally {
+    codeReviewSubmitting.value = false;
+  }
+}
+
+async function branchConversationFromSelection(payload: { count: number; messageIds: string[] }) {
+  const selectedMessageIds = Array.isArray(payload?.messageIds)
+    ? payload.messageIds.map((item) => String(item || "").trim()).filter((item, index, array) => !!item && array.indexOf(item) === index)
+    : [];
+  if (!activeConversationId.value || selectedMessageIds.length === 0) return;
+  try {
+    const result = await transport.request<{ conversationId: string; title?: string; warning?: string | null }>("conversation.branchFromSelection", {
+      sourceConversationId: activeConversationId.value,
+      selectedMessageIds,
+    });
+    await refreshList();
+    await openConversation(result.conversationId);
+  } catch (error) {
+    transport.errorText.value = String(error || "创建会话分支失败");
+  }
+}
+
+async function delegateFromSelection(payload: { count: number; messageIds: string[]; departmentId: string; presetId: string; background: string; question: string; focus: string }) {
+  const selectedMessageIds = Array.isArray(payload?.messageIds)
+    ? payload.messageIds.map((item) => String(item || "").trim()).filter((item, index, array) => !!item && array.indexOf(item) === index)
+    : [];
+  const targetDepartmentId = String(payload.departmentId || "").trim();
+  const question = String(payload.question || "").trim();
+  if (!activeConversationId.value || !targetDepartmentId || !question) return;
+  try {
+    await transport.request("delegate.submit", {
+      conversationId: activeConversationId.value,
+      targetDepartmentId,
+      presetId: String(payload.presetId || "review").trim() || "review",
+      background: String(payload.background || "").trim(),
+      question,
+      focus: String(payload.focus || "").trim(),
+      selectedMessageIds,
+    });
+  } catch (error) {
+    transport.errorText.value = String(error || "发起委托失败");
+  }
+}
+
+function openSupervisionTask() {
+  if (!activeConversationId.value) {
+    transport.errorText.value = "当前没有会话，无法发起监督任务";
+    return;
+  }
+  supervisionErrorText.value = "";
+  supervisionDialogOpen.value = true;
+}
+
+function closeSupervisionTask() {
+  if (supervisionSaving.value) return;
+  supervisionDialogOpen.value = false;
+  supervisionErrorText.value = "";
+}
+
+function formatDateToLocalRfc3339(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const offsetMinutes = -date.getTimezoneOffset();
+  const offsetSign = offsetMinutes >= 0 ? "+" : "-";
+  const absOffset = Math.abs(offsetMinutes);
+  return [
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`,
+    `${offsetSign}${pad(Math.floor(absOffset / 60))}:${pad(absOffset % 60)}`,
+  ].join("");
+}
+
+async function saveSupervisionTask(payload: { durationHours: number; goal: string; why: string; todo: string }) {
+  if (!activeConversationId.value || supervisionSaving.value) return;
+  supervisionSaving.value = true;
+  supervisionErrorText.value = "";
+  try {
+    const now = new Date();
+    now.setSeconds(0, 0);
+    const endAt = new Date(now.getTime() + payload.durationHours * 3_600_000);
+    const created = await transport.request<{ taskId?: string }>("task.create", {
+      conversationId: activeConversationId.value,
+      targetScope: "desktop",
+      goal: String(payload.goal || "").trim(),
+      why: String(payload.why || "").trim(),
+      todo: String(payload.todo || "").trim(),
+      trigger: {
+        runAt: formatDateToLocalRfc3339(now),
+        cronExpression: "* * * * *",
+        endAt: formatDateToLocalRfc3339(endAt),
+      },
+    });
+    const taskId = String(created.taskId || "").trim();
+    if (taskId) {
+      try { await transport.request("task.dispatchNow", { taskId }); } catch { /* best-effort */ }
+    }
+    supervisionDialogOpen.value = false;
+  } catch (error) {
+    supervisionErrorText.value = String(error || "保存监督任务失败");
+  } finally {
+    supervisionSaving.value = false;
+  }
+}
+
 function applyModelPayload(payload: SidebarModelPayload) {
   selectedChatModelId.value = String(payload.selectedChatModelId || "").trim();
   chatModelOptions.value = Array.isArray(payload.chatModelOptions) ? payload.chatModelOptions : [];
@@ -447,19 +655,71 @@ async function confirmCompaction() {
   }
 }
 
+function readBlobAsDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("读取剪贴板图片失败"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function pastedImageFiles(event: ClipboardEvent): File[] {
+  const data = event.clipboardData;
+  if (!data) return [];
+  const filesFromItems = data.items && data.items.length > 0
+    ? Array.from(data.items)
+      .filter((item) => item.kind === "file" && item.type.toLowerCase().startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => !!file)
+    : [];
+  if (filesFromItems.length > 0) return filesFromItems;
+  return data.files
+    ? Array.from(data.files).filter((file) => String(file.type || "").toLowerCase().startsWith("image/"))
+    : [];
+}
+
+async function appendClipboardImagesFromPaste(event: ClipboardEvent) {
+  if (view.value !== "chat" || busy.value || compacting.value) return;
+  const files = pastedImageFiles(event);
+  if (files.length === 0) return;
+  event.preventDefault();
+  try {
+    for (const file of files) {
+      const dataUrl = await readBlobAsDataUrl(file);
+      const bytesBase64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : "";
+      if (!bytesBase64) continue;
+      clipboardImages.value.push({
+        mime: String(file.type || "image/png").trim() || "image/png",
+        bytesBase64,
+      });
+    }
+  } catch (error) {
+    transport.errorText.value = String(error || "读取剪贴板图片失败");
+  }
+}
+
+function removeClipboardImage(index: number) {
+  if (index < 0 || index >= clipboardImages.value.length) return;
+  clipboardImages.value.splice(index, 1);
+}
+
 async function send() {
   const text = inputText.value.trim();
-  if (!text || !activeConversationId.value || busy.value) return;
+  const images = clipboardImages.value.map((item) => ({ ...item }));
+  if ((!text && images.length === 0) || !activeConversationId.value || busy.value) return;
   inputText.value = "";
+  clipboardImages.value = [];
   busy.value = true;
   try {
-    await transport.request("chat.send", { conversationId: activeConversationId.value, text });
+    await transport.request("chat.send", { conversationId: activeConversationId.value, text, images });
   } catch (error) {
     busy.value = false;
     streamingText.value = "";
     streamingReasoningStandard.value = "";
     streamingReasoningInline.value = "";
     if (!inputText.value.trim()) inputText.value = text;
+    clipboardImages.value = [...images, ...clipboardImages.value];
     transport.errorText.value = String(error || "发送失败");
   }
 }
@@ -588,19 +848,56 @@ async function bootstrap() {
   if (transport.connected.value) await refreshList();
 }
 
+function clearDiscoveryRefreshTimer() {
+  if (discoveryRefreshTimer === null) return;
+  window.clearTimeout(discoveryRefreshTimer);
+  discoveryRefreshTimer = null;
+}
+
+function refreshDiscovery() {
+  clearDiscoveryRefreshTimer();
+  transport.errorText.value = "";
+  transport.connecting.value = true;
+  window.parent.postMessage({ type: "pai-refresh-discovery" }, "*");
+  discoveryRefreshTimer = window.setTimeout(() => {
+    discoveryRefreshTimer = null;
+    if (transport.connected.value) return;
+    transport.connecting.value = false;
+    transport.errorText.value = "PAI 未运行";
+  }, 3000);
+}
+
+function handleWindowPaste(event: ClipboardEvent) {
+  void appendClipboardImagesFromPaste(event);
+}
+
+function handleWindowMessage(event: MessageEvent) {
+  const data = event.data as { type?: string; discovery?: DiscoveryPayload };
+  if (data?.type === "pai-discovery" && data.discovery) {
+    clearDiscoveryRefreshTimer();
+    applyWorkspaceRoots(data.discovery.workspaceRoots);
+    const config = normalizeDiscovery(data.discovery);
+    if (config) void transport.connect(config).then(refreshList);
+    else {
+      transport.connecting.value = false;
+      transport.errorText.value = "PAI 未运行";
+    }
+  }
+}
+
 onMounted(() => {
   registerNotifications();
   transport.onAuthRefreshNeeded(() => {
-    window.parent.postMessage({ type: "pai-refresh-discovery" }, "*");
+    refreshDiscovery();
   });
-  window.addEventListener("message", (event) => {
-    const data = event.data as { type?: string; discovery?: DiscoveryPayload };
-    if (data?.type === "pai-discovery" && data.discovery) {
-      applyWorkspaceRoots(data.discovery.workspaceRoots);
-      const config = normalizeDiscovery(data.discovery);
-      if (config) void transport.connect(config).then(refreshList);
-    }
-  });
+  window.addEventListener("message", handleWindowMessage);
+  window.addEventListener("paste", handleWindowPaste);
   void bootstrap();
+});
+
+onBeforeUnmount(() => {
+  clearDiscoveryRefreshTimer();
+  window.removeEventListener("message", handleWindowMessage);
+  window.removeEventListener("paste", handleWindowPaste);
 });
 </script>

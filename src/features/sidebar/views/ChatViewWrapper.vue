@@ -6,7 +6,7 @@
     :assistant-avatar-url="assistantAvatarUrl"
     :persona-name-map="personaNameMap"
     :persona-avatar-url-map="personaAvatarUrlMap"
-    :mention-entries="[]"
+    :mention-entries="sidebarMentionEntries"
     :selected-mentions="[]"
     latest-user-text=""
     :latest-user-images="[]"
@@ -18,7 +18,7 @@
     tool-status-state=""
     :stream-tool-calls="[]"
     chat-error-text=""
-    :clipboard-images="[]"
+    :clipboard-images="clipboardImages"
     :queued-attachment-notices="[]"
     :chat-input="input"
     :instruction-presets="[]"
@@ -92,7 +92,7 @@
     @update:conversation-list-tab="noop"
     @update:chat-left-panel-mode="noop"
     @update:chat-right-panel-mode="noop"
-    @remove-clipboard-image="noop"
+    @remove-clipboard-image="$emit('removeClipboardImage', $event)"
     @remove-queued-attachment-notice="noop"
     @start-recording="noop"
     @stop-recording="noop"
@@ -105,10 +105,11 @@
     @regenerate-turn="noop"
     @confirm-plan="noop"
     @lock-workspace="noop"
-    @open-supervision-task="noop"
+    @open-code-review="$emit('openCodeReview')"
+    @open-supervision-task="$emit('openSupervisionTask')"
     @detach-conversation="noop"
     @close-supervision-task="noop"
-    @save-supervision-task="noop"
+    @save-supervision-task="$emit('saveSupervisionTask', $event)"
     @switch-conversation="noop"
     @rename-conversation="noop"
     @toggle-pin-conversation="noop"
@@ -119,9 +120,9 @@
     @attach-tool-review-report="noop"
     @selection-action-copy="noop"
     @selection-action-copy-error="noop"
-    @selection-action-branch="noop"
+    @selection-action-branch="$emit('selectionActionBranch', $event)"
     @selection-action-forward="noop"
-    @selection-action-delegate="noop"
+    @selection-action-delegate="$emit('selectionActionDelegate', $event)"
     @selection-action-share="noop"
     @approve-terminal-approval="noop"
     @deny-terminal-approval="noop"
@@ -131,7 +132,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import type { ApiConfigItem, ChatMessage } from "../../../types/app";
+import type { ApiConfigItem, ChatMentionEntry, ChatMessage } from "../../../types/app";
 import ChatView from "../../chat/views/ChatView.vue";
 import { useChatMessageBlocks } from "../../chat/composables/use-chat-turns";
 
@@ -166,6 +167,7 @@ const props = defineProps<{
   workspaceAccess: "read_only" | "approval" | "full_access" | "";
   input: string;
   messages: ChatMessage[];
+  clipboardImages: Array<{ mime: string; bytesBase64: string }>;
   streamingText: string;
   streamingReasoningStandard: string;
   streamingReasoningInline: string;
@@ -178,10 +180,16 @@ defineEmits<{
   "update:input": [value: string];
   send: [];
   stop: [];
+  removeClipboardImage: [index: number];
   loadPrevBlock: [];
   "update:selectedChatModelId": [value: string];
   updateWorkspaceAccess: [value: "read_only" | "approval" | "full_access"];
   recallTurn: [payload: { turnId: string }];
+  openCodeReview: [];
+  openSupervisionTask: [];
+  saveSupervisionTask: [payload: { durationHours: number; goal: string; why: string; todo: string }];
+  selectionActionBranch: [payload: { count: number; messageIds: string[] }];
+  selectionActionDelegate: [payload: { count: number; messageIds: string[]; departmentId: string; presetId: string; background: string; question: string; focus: string }];
 }>();
 
 const allMessages = shallowRef<ChatMessage[]>([]);
@@ -201,6 +209,26 @@ const personaAvatarUrlMap = computed<Record<string, string>>(() => {
   const next = { ...(props.persona?.personaAvatarUrlMap || {}) };
   if (props.activeAgentId && assistantAvatarUrl.value) next[props.activeAgentId] = assistantAvatarUrl.value;
   return next;
+});
+const sidebarMentionEntries = computed<ChatMentionEntry[]>(() => {
+  const nameMap = personaNameMap.value;
+  const avatarMap = personaAvatarUrlMap.value;
+  return Object.entries(nameMap)
+    .filter(([agentId]) => agentId !== "user-persona")
+    .map(([agentId, name]) => {
+      const agentName = String(name || agentId).trim() || agentId;
+      return {
+        agentId,
+        agentName,
+        avatarUrl: String(avatarMap[agentId] || "").trim() || undefined,
+        departmentId: agentId,
+        departmentName: agentName,
+        departmentNames: [agentName],
+        isFrontSpeaking: agentId === props.activeAgentId,
+        hasBackgroundTask: false,
+        mentionable: true,
+      };
+    });
 });
 const vscodeTheme = ref(resolveVsCodeTheme());
 const scrollToBottomRequest = ref(0);

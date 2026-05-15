@@ -280,71 +280,21 @@
     </form>
   </dialog>
 
-  <dialog class="modal" :class="{ 'modal-open': reviewTargetDialogOpen }">
-    <div class="modal-box w-[88vw] max-w-4xl p-0">
-      <div class="border-b border-base-300 px-5 py-4">
-        <div class="text-base font-semibold">{{ t("chat.toolReview.generateReviewReport") }}</div>
-      </div>
-      <div class="px-5 pt-4">
-        <div class="mb-4 grid gap-1.5">
-          <div class="text-xs font-medium text-base-content/60">{{ t("chat.toolReview.departmentLabel") }}</div>
-          <select v-model="selectedReviewDepartmentId" class="select select-bordered select-sm w-full">
-            <option v-for="department in props.departmentOptions" :key="department.id" :value="department.id">
-              {{ departmentOptionLabel(department) }}
-            </option>
-          </select>
-        </div>
-        <div role="tablist" class="tabs tabs-border">
-          <button type="button" role="tab" class="tab" :class="{ 'tab-active': reviewTargetTab === 'commit' }" @click="setReviewTargetTab('commit')">{{ t("chat.toolReview.scopeCommit") }}</button>
-          <button type="button" role="tab" class="tab" :class="{ 'tab-active': reviewTargetTab === 'main' }" @click="setReviewTargetTab('main')">{{ t("chat.toolReview.scopeMain") }}</button>
-          <button type="button" role="tab" class="tab" :class="{ 'tab-active': reviewTargetTab === 'uncommitted' }" @click="setReviewTargetTab('uncommitted')">{{ t("chat.toolReview.scopeUncommitted") }}</button>
-          <button type="button" role="tab" class="tab" :class="{ 'tab-active': reviewTargetTab === 'custom' }" @click="setReviewTargetTab('custom')">{{ t("chat.toolReview.scopeCustom") }}</button>
-        </div>
-      </div>
-      <div class="px-5 py-4">
-        <div v-if="reviewTargetTab === 'commit'" class="rounded-box border border-base-300">
-          <div class="sticky top-0 z-10 flex items-center justify-between border-b border-base-300 bg-base-100 px-4 py-3 text-sm">
-            <button type="button" class="btn btn-sm" :disabled="commitOptionsLoading || commitPage <= 1" @click="requestCommitPage(commitPage - 1)">上一页</button>
-            <span class="text-base-content/70">第 {{ commitPage }} 页 / 共 {{ commitTotalPages }} 页 · {{ commitTotal }}</span>
-            <button type="button" class="btn btn-sm" :disabled="commitOptionsLoading || commitPage >= commitTotalPages" @click="requestCommitPage(commitPage + 1)">下一页</button>
-          </div>
-          <div class="max-h-[55vh] overflow-y-auto">
-            <div v-if="commitOptionsLoading" class="px-4 py-3 text-sm text-base-content/70">{{ t("chat.toolReview.commitPickerLoading") }}</div>
-            <div v-else-if="commitOptions.length === 0" class="px-4 py-3 text-sm text-base-content/70">{{ t("chat.toolReview.commitPickerEmpty") }}</div>
-            <button
-              v-for="item in commitOptions"
-              :key="item.hash"
-              type="button"
-              class="flex w-full items-start gap-3 border-b border-base-300 px-4 py-3 text-left last:border-b-0 hover:bg-base-200"
-              @click="toggleCommitSelection(item.hash)"
-            >
-              <input type="checkbox" class="checkbox checkbox-sm mt-1" :checked="selectedCommitHashes.includes(item.hash)" tabindex="-1">
-              <div class="min-w-0 flex-1 text-sm text-base-content">{{ item.subject }}</div>
-            </button>
-          </div>
-        </div>
-
-        <div v-else-if="reviewTargetTab === 'custom'">
-          <textarea
-            v-model="customTargetText"
-            class="textarea textarea-bordered h-40 w-full"
-            :placeholder="t('chat.toolReview.customDialogPlaceholder')"
-          ></textarea>
-        </div>
-
-        <div v-else class="rounded-box border border-base-300 px-4 py-3 text-sm text-base-content/70">
-          {{ reviewTargetTab === 'main' ? t('chat.toolReview.scopeMain') : t('chat.toolReview.scopeUncommitted') }}
-        </div>
-      </div>
-      <div class="flex items-center justify-end gap-3 border-t border-base-300 px-5 py-4">
-        <button type="button" class="btn" @click="closeReviewTargetDialog">{{ t("common.cancel") }}</button>
-        <button type="button" class="btn btn-primary" :disabled="!canConfirmReviewTarget" @click="confirmReviewTargetSelection">{{ t("common.confirm") }}</button>
-      </div>
-    </div>
-    <form method="dialog" class="modal-backdrop">
-      <button @click.prevent="closeReviewTargetDialog">close</button>
-    </form>
-  </dialog>
+  <ToolReviewTargetDialog
+    :open="reviewTargetDialogOpen"
+    :submitting="submitting"
+    :error-text="reportErrorText"
+    :current-department-id="currentDepartmentId"
+    :department-options="departmentOptions"
+    :commit-options="commitOptions"
+    :commit-options-loading="commitOptionsLoading"
+    :commit-total="commitTotal"
+    :commit-page="commitPage"
+    :commit-page-size="commitPageSize"
+    @close="reviewTargetDialogOpen = false"
+    @pick-commit-review="handlePickCommitReview"
+    @review-code="handleReviewCode"
+  />
 </template>
 
 <script setup lang="ts">
@@ -356,6 +306,7 @@ import { defaultWorkspaceNameFromPath, inferWorkspaceName, isLegacyGenericWorksp
 import type { ToolReviewBatchSummary, ToolReviewCodeReviewScope, ToolReviewCommitOption, ToolReviewItemDetail, ToolReviewItemSummary, ToolReviewReportRecord } from "../composables/use-chat-tool-review";
 import { registerChatMarkstreamComponents } from "../markdown/register-chat-markstream";
 import ToolReviewItemCard from "./ToolReviewItemCard.vue";
+import ToolReviewTargetDialog from "./ToolReviewTargetDialog.vue";
 
 enableMermaid();
 enableKatex();
@@ -426,11 +377,7 @@ const localCurrentReportId = ref("");
 const rootAttrs = useAttrs();
 const commitOptions = ref<ToolReviewCommitOption[]>([]);
 const commitOptionsLoading = ref(false);
-const selectedCommitHashes = ref<string[]>([]);
-const customTargetText = ref("");
 const selectedFindingIds = ref<string[]>([]);
-const selectedReviewDepartmentId = ref("");
-const reviewTargetTab = ref<"commit" | "main" | "uncommitted" | "custom">("main");
 const commitPage = ref(1);
 const commitPageSize = ref(30);
 const commitTotal = ref(0);
@@ -529,14 +476,6 @@ const reviewGroups = computed<ToolReviewGroup[]>(() => {
 const currentBatchUnreviewedCount = computed(() =>
   currentBatch.value?.items.filter((item) => !item.hasReview).length ?? 0
 );
-
-const validReviewDepartmentId = computed(() => {
-  const selected = String(selectedReviewDepartmentId.value || "").trim();
-  if (selected && props.departmentOptions.some((item) => item.id === selected)) return selected;
-  const current = String(props.currentDepartmentId || "").trim();
-  if (current && props.departmentOptions.some((item) => item.id === current)) return current;
-  return String(props.departmentOptions[0]?.id || "").trim();
-});
 
 function sortByOrderIndex(left: ToolReviewItemSummary, right: ToolReviewItemSummary) {
   return Number(left.orderIndex || 0) - Number(right.orderIndex || 0);
@@ -893,28 +832,6 @@ watch(
   }
 );
 
-watch(
-  () => [props.currentDepartmentId, props.departmentOptions.map((item) => item.id).join("|")],
-  () => {
-    const current = String(props.currentDepartmentId || "").trim();
-    selectedReviewDepartmentId.value = props.departmentOptions.some((item) => item.id === current)
-      ? current
-      : String(props.departmentOptions[0]?.id || "").trim();
-  },
-  { immediate: true },
-);
-
-watch(
-  () => reviewTargetDialogOpen.value,
-  (open) => {
-    if (!open) return;
-    const current = String(props.currentDepartmentId || "").trim();
-    selectedReviewDepartmentId.value = props.departmentOptions.some((item) => item.id === current)
-      ? current
-      : String(props.departmentOptions[0]?.id || "").trim();
-  },
-);
-
 function handleReportAction() {
   reviewTargetDialogOpen.value = true;
 }
@@ -927,73 +844,17 @@ function setCommitOptions(items: ToolReviewCommitOption[] = [], loading = false,
   commitPageSize.value = pageSize;
 }
 
-function closeReviewTargetDialog() {
-  reviewTargetDialogOpen.value = false;
-  selectedCommitHashes.value = [];
-  customTargetText.value = "";
-}
-
-function setReviewTargetTab(tab: "commit" | "main" | "uncommitted" | "custom") {
-  reviewTargetTab.value = tab;
-  if (tab === "commit" && !commitOptionsLoading.value && commitOptions.value.length === 0) {
-    commitOptionsLoading.value = true;
-    emit("pickCommitReview", 1);
-  }
-}
-
-const commitTotalPages = computed(() => Math.max(1, Math.ceil(commitTotal.value / Math.max(1, commitPageSize.value))));
-
-function requestCommitPage(page: number) {
-  const normalizedPage = Math.min(Math.max(1, page), commitTotalPages.value);
+function handlePickCommitReview(page: number) {
   commitOptionsLoading.value = true;
-  emit("pickCommitReview", normalizedPage);
+  emit("pickCommitReview", page);
 }
 
-const canConfirmReviewTarget = computed(() => {
-  if (!validReviewDepartmentId.value) return false;
-  if (reviewTargetTab.value === "commit") return selectedCommitHashes.value.length > 0;
-  if (reviewTargetTab.value === "custom") return !!customTargetText.value.trim();
-  return true;
-});
-
-function toggleCommitSelection(hash: string) {
-  const normalizedHash = String(hash || "").trim();
-  if (!normalizedHash) return;
-  selectedCommitHashes.value = selectedCommitHashes.value.includes(normalizedHash)
-    ? selectedCommitHashes.value.filter((item) => item !== normalizedHash)
-    : [...selectedCommitHashes.value, normalizedHash];
-}
-
-function confirmReviewTargetSelection() {
-  const departmentId = validReviewDepartmentId.value;
-  if (!departmentId) return;
-  if (reviewTargetTab.value === "commit") {
-    if (selectedCommitHashes.value.length === 0) return;
-    emit("reviewCode", { scope: "commit", target: selectedCommitHashes.value.join("\n"), departmentId });
-    closeReviewTargetDialog();
-    return;
-  }
-  if (reviewTargetTab.value === "custom") {
-    const target = customTargetText.value.trim();
-    if (!target) return;
-    emit("reviewCode", { scope: "custom", target, departmentId });
-    closeReviewTargetDialog();
-    return;
-  }
-  emit("reviewCode", { scope: reviewTargetTab.value, target: "", departmentId });
-  closeReviewTargetDialog();
-}
-
-function departmentOptionLabel(department: { id: string; name: string; ownerName: string; providerName?: string; modelName?: string }) {
-  const name = String(department.name || department.id || "").trim();
-  const ownerName = String(department.ownerName || "").trim();
-  const providerName = String(department.providerName || "").trim();
-  const modelName = String(department.modelName || "").trim();
-  const modelText = [providerName, modelName].filter(Boolean).join(" / ");
-  return [name, ownerName, modelText].filter(Boolean).join(" · ");
+function handleReviewCode(input: { scope: ToolReviewCodeReviewScope; target?: string; departmentId: string }) {
+  emit("reviewCode", input);
 }
 
 defineExpose({
+  handleReportAction,
   setCommitOptions,
 });
 

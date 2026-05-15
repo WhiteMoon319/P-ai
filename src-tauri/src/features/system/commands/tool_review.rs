@@ -26,6 +26,13 @@ async fn list_tool_review_commit_options(
     input: ToolReviewCommitPageInput,
     state: State<'_, AppState>,
 ) -> Result<ListToolReviewCommitOptionsOutput, String> {
+    list_tool_review_commit_options_internal_command(input, state.inner()).await
+}
+
+async fn list_tool_review_commit_options_internal_command(
+    input: ToolReviewCommitPageInput,
+    state: &AppState,
+) -> Result<ListToolReviewCommitOptionsOutput, String> {
     let conversation_id = input.conversation_id.trim();
     let page = input.page.max(1);
     let page_size = input.page_size.clamp(1, 100);
@@ -37,7 +44,7 @@ async fn list_tool_review_commit_options(
         runtime_log_info("[工具审查][commit列表] 跳过 conversation_id 为空".to_string());
         return Ok(ListToolReviewCommitOptionsOutput { total: 0, page, page_size, commits: Vec::new() });
     }
-    let conversation = with_tool_review_conversation(state.inner(), conversation_id, |conversation| {
+    let conversation = with_tool_review_conversation(state, conversation_id, |conversation| {
         Ok(conversation.clone())
     })
     .map_err(|err| {
@@ -47,7 +54,7 @@ async fn list_tool_review_commit_options(
         ));
         err
     })?;
-    let (total, commits) = tool_review_list_commit_options_internal(state.inner(), &conversation, page, page_size)
+    let (total, commits) = tool_review_list_commit_options_internal(state, &conversation, page, page_size)
         .await
         .map_err(|err| {
             runtime_log_error(format!(
@@ -500,15 +507,22 @@ fn delete_tool_review_report(
     input: DeleteToolReviewReportInput,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    delete_tool_review_report_internal(input, state.inner())
+}
+
+fn delete_tool_review_report_internal(
+    input: DeleteToolReviewReportInput,
+    state: &AppState,
+) -> Result<(), String> {
     let conversation_id = input.conversation_id.trim();
     let report_id = input.report_id.trim();
     if conversation_id.is_empty() || report_id.is_empty() {
         return Err("conversationId 和 reportId 不能为空。".to_string());
     }
-    with_tool_review_conversation(state.inner(), conversation_id, |_conversation| {
+    with_tool_review_conversation(state, conversation_id, |_conversation| {
         tool_review_delete_report_record(&state.data_path, conversation_id, report_id)
     })?;
-    emit_tool_review_reports_updated(state.inner(), conversation_id, report_id, "deleted");
+    emit_tool_review_reports_updated(state, conversation_id, report_id, "deleted");
     Ok(())
 }
 
@@ -1291,11 +1305,18 @@ fn list_tool_review_reports(
     input: ToolReviewConversationInput,
     state: State<'_, AppState>,
 ) -> Result<ListToolReviewReportsOutput, String> {
+    list_tool_review_reports_internal(input, state.inner())
+}
+
+fn list_tool_review_reports_internal(
+    input: ToolReviewConversationInput,
+    state: &AppState,
+) -> Result<ListToolReviewReportsOutput, String> {
     let conversation_id = input.conversation_id.trim();
     if conversation_id.is_empty() {
         return Ok(ListToolReviewReportsOutput { reports: Vec::new() });
     }
-    with_tool_review_conversation(state.inner(), conversation_id, |_conversation| {
+    with_tool_review_conversation(state, conversation_id, |_conversation| {
         let _ = tool_review_prune_legacy_batch_report_records(&state.data_path, conversation_id)?;
         Ok(ListToolReviewReportsOutput {
             reports: tool_review_list_reports_newest_first(&state.data_path, conversation_id)?,
@@ -1427,6 +1448,13 @@ async fn submit_tool_review_code(
     input: ToolReviewCodeReviewInput,
     state: State<'_, AppState>,
 ) -> Result<SubmitToolReviewCodeOutput, String> {
+    submit_tool_review_code_internal(input, state.inner()).await
+}
+
+async fn submit_tool_review_code_internal(
+    input: ToolReviewCodeReviewInput,
+    state: &AppState,
+) -> Result<SubmitToolReviewCodeOutput, String> {
     let conversation_id = input.conversation_id.trim();
     runtime_log_info(format!(
         "[工具审查][后端] 收到 submit_tool_review_code conversation_id={} scope={} target={}",
@@ -1457,7 +1485,7 @@ async fn submit_tool_review_code(
         .map(str::trim)
         .filter(|value| !value.is_empty());
 
-    let app_state = state.inner().clone();
+    let app_state = state.clone();
     let conversation = with_tool_review_conversation(&app_state, conversation_id, |conversation| {
         Ok(conversation.clone())
     })

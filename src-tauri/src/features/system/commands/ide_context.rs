@@ -159,13 +159,6 @@ struct IdeChatJsonRpcError {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatAuthParams {
-    #[serde(default)]
-    auth_token: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct IdeChatConversationInput {
     conversation_id: String,
 }
@@ -196,6 +189,17 @@ struct IdeChatSendInput {
     text: String,
     #[serde(default)]
     extra_text_blocks: Vec<String>,
+    #[serde(default)]
+    images: Vec<IdeChatImageInput>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IdeChatImageInput {
+    mime: String,
+    bytes_base64: String,
+    #[serde(default)]
+    name: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1260,7 +1264,13 @@ fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, Strin
     if conversation_id.is_empty() {
         return Err("conversationId is required".to_string());
     }
-    if text.is_empty() && input.extra_text_blocks.iter().all(|item| item.trim().is_empty()) {
+    if text.is_empty()
+        && input.extra_text_blocks.iter().all(|item| item.trim().is_empty())
+        && input
+            .images
+            .iter()
+            .all(|item| item.bytes_base64.trim().is_empty())
+    {
         return Err("消息内容为空".to_string());
     }
     let conversation = state_read_conversation_cached(state, &conversation_id)?;
@@ -1273,16 +1283,36 @@ fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, Strin
         return Err("会话部门为空，无法从侧边栏发送。".to_string());
     }
     let request_id = runtime_context_request_id_or_new(None, None, "vscode-sidebar");
+    let mut parts = if text.is_empty() {
+        Vec::new()
+    } else {
+        vec![MessagePart::Text { text: text.clone() }]
+    };
+    for image in input.images {
+        let mime = image.mime.trim().to_ascii_lowercase();
+        let bytes_base64 = image.bytes_base64.trim().to_string();
+        if !mime.starts_with("image/") || bytes_base64.is_empty() {
+            continue;
+        }
+        parts.push(MessagePart::Image {
+            mime,
+            bytes_base64,
+            name: image.name.and_then(|value| {
+                let trimmed = value.trim().to_string();
+                if trimmed.is_empty() { None } else { Some(trimmed) }
+            }),
+            compressed: false,
+        });
+    }
+    if parts.is_empty() && input.extra_text_blocks.iter().all(|item| item.trim().is_empty()) {
+        return Err("消息内容为空".to_string());
+    }
     let user_message = ChatMessage {
         id: Uuid::new_v4().to_string(),
         role: "user".to_string(),
         created_at: now_iso(),
         speaker_agent_id: None,
-        parts: if text.is_empty() {
-            Vec::new()
-        } else {
-            vec![MessagePart::Text { text: text.clone() }]
-        },
+        parts,
         extra_text_blocks: input
             .extra_text_blocks
             .into_iter()
@@ -1622,41 +1652,67 @@ fn ide_chat_open_settings(app: &AppHandle) -> Result<Value, String> {
     Ok(serde_json::json!({ "opened": true }))
 }
 
+fn ide_chat_tool_review_reports(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<ToolReviewConversationInput>(params)?;
+    serde_json::to_value(list_tool_review_reports_internal(input, state)?)
+        .map_err(|err| format!("Serialize tool review reports failed: {err}"))
+}
+
+fn ide_chat_tool_review_delete_report(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<DeleteToolReviewReportInput>(params)?;
+    delete_tool_review_report_internal(input, state)?;
+    Ok(serde_json::json!({ "deleted": true }))
+}
+
+async fn ide_chat_tool_review_commit_options(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<ToolReviewCommitPageInput>(params)?;
+    serde_json::to_value(list_tool_review_commit_options_internal_command(input, state).await?)
+        .map_err(|err| format!("Serialize tool review commit options failed: {err}"))
+}
+
+async fn ide_chat_tool_review_submit_code(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<ToolReviewCodeReviewInput>(params)?;
+    serde_json::to_value(submit_tool_review_code_internal(input, state).await?)
+        .map_err(|err| format!("Serialize tool review submit result failed: {err}"))
+}
+
+async fn ide_chat_branch_conversation(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<BranchUnarchivedConversationFromSelectionInput>(params)?;
+    serde_json::to_value(branch_unarchived_conversation_from_selection_internal(input, state).await?)
+        .map_err(|err| format!("Serialize branch conversation result failed: {err}"))
+}
+
+async fn ide_chat_submit_delegate(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<SubmitUserAsyncDelegateInput>(params)?;
+    serde_json::to_value(submit_user_async_delegate_internal(input, state).await?)
+        .map_err(|err| format!("Serialize delegate submit result failed: {err}"))
+}
+
+fn ide_chat_task_create(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<TaskCreateInput>(params)?;
+    serde_json::to_value(task_store_create_task(&state.data_path, &input)?)
+        .map_err(|err| format!("Serialize task create result failed: {err}"))
+}
+
+async fn ide_chat_task_dispatch_now(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<TaskDispatchNowInput>(params)?;
+    let task = task_store_get_task_record(&state.data_path, input.task_id.trim())?;
+    let Some(session) = task_resolve_dispatch_session(state, &task)? else {
+        return Ok(serde_json::json!(false));
+    };
+    task_dispatch_due_task(state, &task, &session).await?;
+    Ok(serde_json::json!(true))
+}
+
 async fn ide_chat_handle_jsonrpc_request(
     request: IdeChatJsonRpcRequest,
     state: &AppState,
     app: &AppHandle,
-    ide_context_runtime: &IdeContextRuntime,
-    port: u16,
     client_id: &str,
-    authenticated: &mut bool,
     opened_conversation_id: &mut Option<String>,
 ) -> Value {
     if request.jsonrpc.trim() != "2.0" {
         return ide_chat_jsonrpc_error(request.id, -32600, "jsonrpc must be 2.0");
-    }
-    if !*authenticated {
-        let auth_params = ide_chat_parse_params::<IdeChatAuthParams>(request.params.clone());
-        let token = match auth_params {
-            Ok(params) => params.auth_token.unwrap_or_default(),
-            Err(_) => String::new(),
-        };
-        match ide_context_consume_bridge_token(ide_context_runtime, &token) {
-            Ok(next_token) => {
-                *authenticated = true;
-                if let Err(err) = publish_ide_context_bridge_discovery(port, &next_token) {
-                    eprintln!("[VSCode 侧边栏] 轮换发现 token 失败: {}", err);
-                }
-            }
-            Err((err, refreshed_token)) => {
-                if let Some(refreshed_token) = refreshed_token.as_deref() {
-                    if let Err(publish_err) = publish_ide_context_bridge_discovery(port, refreshed_token) {
-                        eprintln!("[VSCode 侧边栏] 过期后重写发现 token 失败: {}", publish_err);
-                    }
-                }
-                return ide_chat_jsonrpc_error(request.id, -32001, err);
-            }
-        }
     }
     let sidebar_label = ide_chat_sidebar_window_label(client_id);
     let result = match request.method.as_str() {
@@ -1693,6 +1749,10 @@ async fn ide_chat_handle_jsonrpc_request(
         "conversation.createOptions" => ide_chat_create_conversation_options(state),
         "conversation.delete" => ide_chat_delete_conversation(state, request.params),
         "conversation.rewind" => ide_chat_rewind_conversation(state, request.params).await,
+        "conversation.branchFromSelection" => ide_chat_branch_conversation(state, request.params).await,
+        "delegate.submit" => ide_chat_submit_delegate(state, request.params).await,
+        "task.create" => ide_chat_task_create(state, request.params),
+        "task.dispatchNow" => ide_chat_task_dispatch_now(state, request.params).await,
         "conversation.compactPreview" => ide_chat_compact_preview(state, request.params),
         "conversation.compact" => ide_chat_compact_conversation(state, request.params).await,
         "model.list" => ide_chat_model_list(state, request.params),
@@ -1702,6 +1762,10 @@ async fn ide_chat_handle_jsonrpc_request(
         "settings.open" => ide_chat_open_settings(app),
         "chat.send" => ide_chat_send_message(state, request.params),
         "chat.stop" => ide_chat_stop_conversation(state, request.params),
+        "toolReview.reports.list" => ide_chat_tool_review_reports(state, request.params),
+        "toolReview.report.delete" => ide_chat_tool_review_delete_report(state, request.params),
+        "toolReview.commitOptions.list" => ide_chat_tool_review_commit_options(state, request.params).await,
+        "toolReview.code.submit" => ide_chat_tool_review_submit_code(state, request.params).await,
         _ => return ide_chat_jsonrpc_error(request.id, -32601, "method not found"),
     };
     match result {
@@ -1799,10 +1863,8 @@ async fn ide_context_ws_handle_connection(
         ide_context_chat_ws_handle_connection(
             ws_stream,
             peer_addr,
-            port,
             app,
             state,
-            ide_context_runtime,
         )
         .await;
         return;
@@ -1917,10 +1979,8 @@ async fn ide_context_ws_handle_connection(
 async fn ide_context_chat_ws_handle_connection(
     ws_stream: tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>,
     peer_addr: std::net::SocketAddr,
-    port: u16,
     app: AppHandle,
     state: AppState,
-    ide_context_runtime: IdeContextRuntime,
 ) {
     eprintln!("[VSCode 侧边栏] 客户端已连接: {}", peer_addr);
     let client_id = Uuid::new_v4().to_string();
@@ -1946,36 +2006,27 @@ async fn ide_context_chat_ws_handle_connection(
         "method": "bridge.ready",
         "params": {
             "path": IDE_CONTEXT_CHAT_BRIDGE_PATH,
-            "authRequired": true,
+            "authRequired": false,
         },
     }));
-    let mut authenticated = false;
-    let mut registered_for_broadcast = false;
+    if let Ok(mut clients) = ide_context_chat_clients().lock() {
+        clients.insert(client_id.clone(), outbound_tx.clone());
+    }
     let mut opened_conversation_id: Option<String> = None;
     while let Some(message) = ws_receiver.next().await {
         match message {
             Ok(tokio_tungstenite::tungstenite::Message::Text(text)) => {
-                let was_authenticated = authenticated;
                 let response = match serde_json::from_str::<IdeChatJsonRpcRequest>(&text) {
                     Ok(request) => ide_chat_handle_jsonrpc_request(
                         request,
                         &state,
                         &app,
-                        &ide_context_runtime,
-                        port,
                         &client_id,
-                        &mut authenticated,
                         &mut opened_conversation_id,
                     )
                     .await,
                     Err(err) => ide_chat_jsonrpc_error(None, -32700, format!("invalid json: {err}")),
                 };
-                if authenticated && !was_authenticated && !registered_for_broadcast {
-                    if let Ok(mut clients) = ide_context_chat_clients().lock() {
-                        clients.insert(client_id.clone(), outbound_tx.clone());
-                        registered_for_broadcast = true;
-                    }
-                }
                 let _ = outbound_tx.send(response);
             }
             Ok(tokio_tungstenite::tungstenite::Message::Ping(payload)) => {

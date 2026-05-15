@@ -149,13 +149,17 @@
               </div>
             </div>
 
-            <div v-if="!sidebarMode" ref="toolbarContainer" class="ecall-chat-toolbar-shell px-2 pt-1 pb-2">
+            <div ref="toolbarContainer" class="ecall-chat-toolbar-shell px-2 pt-1 pb-2">
               <ChatWorkspaceToolbar
                 :chatting="chatting" :frozen="frozen" :conversation-busy="conversationBusy"
                 :workspace-button-label="t('chat.allowedWorkspaceButton')" :workspace-button-name="currentWorkspaceName"
                 :workspace-button-disabled="!activeConversationId || activeConversationSummary?.kind === 'remote_im_contact'"
                 :hide-menu-button="activeConversationSummary?.kind === 'remote_im_contact'"
-                :hide-workspace-button="activeConversationSummary?.kind === 'remote_im_contact'"
+                :hide-workspace-button="sidebarMode || activeConversationSummary?.kind === 'remote_im_contact'"
+                :show-forward-menu-item="!sidebarMode"
+                :show-share-menu-item="!sidebarMode"
+                :show-workspace-menu-item="!sidebarMode"
+                :show-code-review-menu-item="sidebarMode"
                 :mention-entries="mentionEntries" :selected-mention-keys="selectedMentionKeys"
                 :supervision-active="supervisionActive" :supervision-label="t('chat.supervision.button')"
                 :supervision-active-label="t('chat.supervision.buttonActive')" :supervision-title="supervisionButtonTitle"
@@ -165,6 +169,7 @@
                 @lock-workspace="$emit('lockWorkspace')" @open-branch-selection="openBranchSelectionMenu"
                 @open-delegate-selection="openDelegateSelectionMenu" @open-forward-selection="openForwardSelectionMenu"
                 @open-share-selection="openShareSelectionMenu"
+                @open-code-review="$emit('openCodeReview')"
                 @mention-entry="(entry) => {
                   const agentId = String(entry?.agentId || '').trim();
                   const departmentId = String(entry?.departmentId || '').trim();
@@ -458,7 +463,7 @@ const emit = defineEmits<{
   (e: "recallTurn", payload: { turnId: string }): void;
   (e: "regenerateTurn", payload: { turnId: string }): void;
   (e: "confirmPlan", payload: { messageId: string }): void;
-  (e: "lockWorkspace"): void; (e: "openSupervisionTask"): void;
+  (e: "lockWorkspace"): void; (e: "openSupervisionTask"): void; (e: "openCodeReview"): void;
   (e: "detachConversation"): void; (e: "closeSupervisionTask"): void;
   (e: "saveSupervisionTask", payload: { durationHours: number; goal: string; why: string; todo: string }): void;
   (e: "switchConversation", payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }): void;
@@ -545,7 +550,6 @@ function canConfirmPlan(block: ChatMessageBlock): boolean {
 }
 
 function openSelectionMenu() {
-  if (sidebarMode.value) return;
   if (props.chatting || props.frozen || props.conversationBusy) return;
   messageSelectionModeEnabled.value = true;
   selectedMessageRenderIds.value = [];

@@ -1672,7 +1672,14 @@ async fn submit_user_async_delegate(
     input: SubmitUserAsyncDelegateInput,
     state: State<'_, AppState>,
 ) -> Result<SubmitUserAsyncDelegateOutput, String> {
-    let (plan, selected_message_count) = resolve_user_async_delegate_plan(state.inner(), &input)?;
+    submit_user_async_delegate_internal(input, state.inner()).await
+}
+
+async fn submit_user_async_delegate_internal(
+    input: SubmitUserAsyncDelegateInput,
+    state: &AppState,
+) -> Result<SubmitUserAsyncDelegateOutput, String> {
+    let (plan, selected_message_count) = resolve_user_async_delegate_plan(state, &input)?;
     let output = SubmitUserAsyncDelegateOutput {
         delegate_id: String::new(),
         conversation_id: plan.root_conversation_id.clone(),
@@ -1680,7 +1687,7 @@ async fn submit_user_async_delegate(
         target_agent_name: plan.target_agent_name.clone(),
         selected_message_count,
     };
-    let delegate_id = spawn_user_async_delegate(state.inner().clone(), plan)?;
+    let delegate_id = spawn_user_async_delegate(state.clone(), plan)?;
     runtime_log_info(format!(
         "[用户异步委托] 发起 完成 conversation_id={} delegate_id={} target_agent_id={} selected_message_count={}",
         output.conversation_id,

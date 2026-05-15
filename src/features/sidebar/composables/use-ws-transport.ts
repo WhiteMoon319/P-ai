@@ -8,7 +8,7 @@ type PendingRequest = {
 
 export type SidebarBridgeConfig = {
   chatUrl: string;
-  token: string;
+  token?: string;
 };
 
 export function useWsTransport() {
@@ -104,8 +104,9 @@ export function useWsTransport() {
   function request<T>(method: string, params: Record<string, unknown> = {}, timeoutMs = 30000): Promise<T> {
     if (!canSend.value || !socket.value) return Promise.reject(new Error("PAI 未运行"));
     const id = requestId++;
-    const authToken = bridgeConfig.value?.token || "";
-    const body = { jsonrpc: "2.0", id, method, params: { authToken, ...params } };
+    const authToken = String(bridgeConfig.value?.token || "").trim();
+    const bodyParams = authToken ? { authToken, ...params } : params;
+    const body = { jsonrpc: "2.0", id, method, params: bodyParams };
     return new Promise<T>((resolve, reject) => {
       const timer = window.setTimeout(() => {
         pending.delete(id);

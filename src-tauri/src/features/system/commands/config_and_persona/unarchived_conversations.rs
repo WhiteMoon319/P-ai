@@ -470,6 +470,13 @@ async fn branch_unarchived_conversation_from_selection(
     input: BranchUnarchivedConversationFromSelectionInput,
     state: State<'_, AppState>,
 ) -> Result<BranchUnarchivedConversationFromSelectionOutput, String> {
+    branch_unarchived_conversation_from_selection_internal(input, state.inner()).await
+}
+
+async fn branch_unarchived_conversation_from_selection_internal(
+    input: BranchUnarchivedConversationFromSelectionInput,
+    state: &AppState,
+) -> Result<BranchUnarchivedConversationFromSelectionOutput, String> {
     let source_conversation_id = input.source_conversation_id.trim();
     if source_conversation_id.is_empty() {
         return Err("sourceConversationId 不能为空".to_string());
@@ -486,11 +493,11 @@ async fn branch_unarchived_conversation_from_selection(
     }
 
     let result = conversation_service().branch_unarchived_conversation_from_selection(
-        state.inner(),
+        state,
         source_conversation_id,
         &normalized_selected_message_ids,
     )?;
-    emit_unarchived_conversation_overview_updated_payload(state.inner(), &result.overview_payload);
+    emit_unarchived_conversation_overview_updated_payload(state, &result.overview_payload);
     runtime_log_info(format!(
         "[会话分支] 完成，任务=按已选消息创建会话分支，source_conversation_id={}，conversation_id={}，selected_count={}，has_compaction_seed={}",
         source_conversation_id,

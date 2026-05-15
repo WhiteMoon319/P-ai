@@ -22,36 +22,42 @@
           :class="menuPlacement === 'top' ? 'mb-3' : 'mt-3'"
         >
           <li v-if="!busy">
-            <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openDelegateSelection')">
+            <button v-if="showDelegateMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openDelegateSelection')">
               <ClipboardList class="h-4 w-4 shrink-0" />
               <span class="leading-5">{{ t("chat.conversationMenu.startDelegate") }}</span>
             </button>
           </li>
           <li v-if="!busy">
-            <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openBranchSelection')">
+            <button v-if="showBranchMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openBranchSelection')">
               <GitBranchPlus class="h-4 w-4 shrink-0" />
               <span class="leading-5">{{ t("chat.conversationMenu.branchConversation") }}</span>
             </button>
           </li>
+          <li v-if="showCodeReviewMenuItem && !busy">
+            <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openCodeReview')">
+              <ClipboardCheck class="h-4 w-4 shrink-0" />
+              <span class="leading-5">发起代码审查</span>
+            </button>
+          </li>
           <li v-if="!busy">
-            <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openForwardSelection')">
+            <button v-if="showForwardMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openForwardSelection')">
               <Package class="h-4 w-4 shrink-0" />
               <span class="leading-5">{{ t("chat.conversationMenu.forwardConversation") }}</span>
             </button>
           </li>
           <li v-if="!busy">
-            <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openShareSelection')">
+            <button v-if="showShareMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openShareSelection')">
               <ExternalLink class="h-4 w-4 shrink-0" />
               <span class="leading-5">{{ t("chat.conversationMenu.shareConversation") }}</span>
             </button>
           </li>
-          <li>
+          <li v-if="showSupervisionMenuItem">
             <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="frozen || supervisionDisabled" @click="emit('openSupervisionTask')">
               <Timer class="h-4 w-4 shrink-0" />
               <span class="leading-5">{{ t("chat.conversationMenu.startSupervision") }}</span>
             </button>
           </li>
-          <li v-if="!busy && !workspaceButtonDisabled">
+          <li v-if="showWorkspaceMenuItem && !busy && !workspaceButtonDisabled">
             <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy || workspaceButtonDisabled" @click="emit('lockWorkspace')">
               <Folder class="h-4 w-4 shrink-0" />
               <span class="leading-5">{{ t("chat.conversationMenu.setWorkspace") }}</span>
@@ -182,10 +188,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { ClipboardList, ExternalLink, Folder, GitBranchPlus, Grip, Package, SquareTerminal, Timer } from "lucide-vue-next";
+import { ClipboardCheck, ClipboardList, ExternalLink, Folder, GitBranchPlus, Grip, Package, SquareTerminal, Timer } from "lucide-vue-next";
 import type { ChatMentionEntry } from "../../../types/app";
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   chatting: boolean;
   frozen: boolean;
   conversationBusy?: boolean;
@@ -201,14 +207,30 @@ const props = defineProps<{
   supervisionDisabled?: boolean;
   hideMenuButton?: boolean;
   hideWorkspaceButton?: boolean;
+  showDelegateMenuItem?: boolean;
+  showBranchMenuItem?: boolean;
+  showCodeReviewMenuItem?: boolean;
+  showForwardMenuItem?: boolean;
+  showShareMenuItem?: boolean;
+  showSupervisionMenuItem?: boolean;
+  showWorkspaceMenuItem?: boolean;
   showDetachButton?: boolean;
   detachDisabled?: boolean;
-}>();
+}>(), {
+  showDelegateMenuItem: true,
+  showBranchMenuItem: true,
+  showCodeReviewMenuItem: false,
+  showForwardMenuItem: true,
+  showShareMenuItem: true,
+  showSupervisionMenuItem: true,
+  showWorkspaceMenuItem: true,
+});
 
 const emit = defineEmits<{
   (e: "lockWorkspace"): void;
   (e: "openSupervisionTask"): void;
   (e: "openBranchSelection"): void;
+  (e: "openCodeReview"): void;
   (e: "openDelegateSelection"): void;
   (e: "openForwardSelection"): void;
   (e: "openShareSelection"): void;
@@ -218,6 +240,13 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const busy = computed(() => props.chatting || props.frozen || !!props.conversationBusy);
+const showDelegateMenuItem = computed(() => props.showDelegateMenuItem);
+const showBranchMenuItem = computed(() => props.showBranchMenuItem);
+const showCodeReviewMenuItem = computed(() => props.showCodeReviewMenuItem);
+const showForwardMenuItem = computed(() => props.showForwardMenuItem);
+const showShareMenuItem = computed(() => props.showShareMenuItem);
+const showSupervisionMenuItem = computed(() => props.showSupervisionMenuItem);
+const showWorkspaceMenuItem = computed(() => props.showWorkspaceMenuItem);
 
 // ========== 头像栏去重 + 部门弹出 ==========
 
