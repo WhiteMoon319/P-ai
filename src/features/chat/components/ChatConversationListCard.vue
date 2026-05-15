@@ -156,9 +156,9 @@
                     {{ latestPreviewLine(item) }}
                   </span>
                   <div class="flex shrink-0 items-center gap-2">
-                    <span v-if="conversationPipelineStatus(item) === 'busy'" class="loading loading-spinner loading-xs text-primary" :title="t('chat.runtimeStreaming')"></span>
-                    <span v-else-if="conversationPipelineStatus(item) === 'error'" class="badge badge-error badge-xs">{{ t("common.failed") }}</span>
-                    <span v-else-if="item.runtimeState" class="text-[11px] text-base-content/60">
+                    <span v-if="!isCurrentConversation(item) && conversationPipelineStatus(item) === 'busy'" class="loading loading-spinner loading-xs text-primary" :title="t('chat.runtimeStreaming')"></span>
+                    <span v-else-if="!isCurrentConversation(item) && conversationPipelineStatus(item) === 'error'" class="badge badge-error badge-xs">{{ t("common.failed") }}</span>
+                    <span v-else-if="!isCurrentConversation(item) && item.runtimeState" class="text-[11px] text-base-content/60">
                       {{ runtimeStateText(item.runtimeState) }}
                     </span>
                     <span
@@ -217,7 +217,9 @@ const emit = defineEmits<{
 }>();
 
 const { t, locale } = useI18n();
-const { conversationStatusById } = usePipelineStatus();
+const { conversationStatusById } = usePipelineStatus({
+  activeConversationId: computed(() => String(props.activeConversationId || "").trim()),
+});
 const renameInputRef = ref<HTMLInputElement | null>(null);
 const editingConversationId = ref("");
 const editingTitleDraft = ref("");
@@ -435,6 +437,7 @@ function conversationPipelineStatus(item: ChatConversationOverviewItem) {
 }
 
 function conversationIndicatorTone(item: ChatConversationOverviewItem): "error" | "info" | "success" | "" {
+  if (isCurrentConversation(item)) return "";
   const pipelineStatus = conversationPipelineStatus(item);
   if (pipelineStatus === "error") return "error";
   if (pipelineStatus === "busy") return "info";

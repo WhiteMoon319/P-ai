@@ -17,11 +17,16 @@ export interface PipelineState {
   clearConversationStatus: (conversationId: string, expectedStatus?: ConversationPipelineStatus) => void;
 }
 
+interface UsePipelineStatusOptions {
+  activeConversationId?: ComputedRef<string>;
+}
+
 const conversationStatusByIdRef = ref<Record<string, ConversationPipelineStatus>>({});
 const latestRequestIdByConversation = new Map<string, string>();
 let unlisten: UnlistenFn | null = null;
 let listenerStarting = false;
 let consumerCount = 0;
+let currentActiveConversationIdGetter: (() => string) | null = null;
 
 function setConversationStatus(conversationId: string, status?: ConversationPipelineStatus) {
   const next = { ...conversationStatusByIdRef.value };
@@ -60,6 +65,11 @@ async function startConversationWorkStatusListener() {
         setConversationStatus(conversationId, "error");
         return;
       }
+      const activeConversationId = currentActiveConversationIdGetter ? currentActiveConversationIdGetter() : "";
+      if (conversationId === activeConversationId) {
+        setConversationStatus(conversationId);
+        return;
+      }
       // "success" 表示后台会话有未查看的完成结果，保留到用户切入该会话后再清理。
       setConversationStatus(conversationId, "success");
     });
@@ -86,7 +96,11 @@ function stopConversationWorkStatusListener() {
   unlisten = null;
 }
 
-export function usePipelineStatus(): PipelineState {
+export function usePipelineStatus(options: UsePipelineStatusOptions = {}): PipelineState {
+  currentActiveConversationIdGetter = options.activeConversationId
+    ? () => String(options.activeConversationId?.value || "").trim()
+    : currentActiveConversationIdGetter;
+
   onMounted(() => {
     consumerCount += 1;
     void startConversationWorkStatusListener();

@@ -35,6 +35,7 @@
       :streaming-reasoning-standard="streamingReasoningStandard"
       :streaming-reasoning-inline="streamingReasoningInline"
       :busy="busy"
+      :runtime-state="activeConversationRuntimeState"
       :has-prev-block="hasPrevBlock"
       @send="send"
       @stop="stop"
@@ -202,6 +203,7 @@ const hasPrevBlock = ref(false);
 const view = ref<"list" | "chat">("chat");
 
 const activeSummary = computed(() => conversations.value.find((item) => item.conversationId === activeConversationId.value));
+const activeConversationRuntimeState = computed(() => String(activeSummary.value?.runtimeState || "").trim());
 
 function normalizeDiscovery(payload: DiscoveryPayload): SidebarBridgeConfig | null {
   const chatUrl = String(payload.chatUrl || "").trim() || String(payload.url || "").trim().replace(/\/ide-context$/, "/chat");
@@ -253,9 +255,24 @@ async function loadCreateConversationOptions() {
     || "";
 }
 
+function clearCompletedRuntimeStateForConversation(conversationId: string) {
+  const targetId = String(conversationId || "").trim();
+  if (!targetId) return;
+  conversations.value = conversations.value.map((item) => {
+    if (String(item.conversationId || "").trim() !== targetId) return item;
+    const state = String(item.runtimeState || "").trim();
+    if (state === "done" || state === "failed" || state === "completed") {
+      return { ...item, runtimeState: "" };
+    }
+    return item;
+  });
+}
+
 async function openConversation(conversationId: string) {
+  clearCompletedRuntimeStateForConversation(activeConversationId.value);
   const result = await transport.request<OpenConversationResult>("conversation.open", { conversationId });
   activeConversationId.value = result.conversationId;
+  clearCompletedRuntimeStateForConversation(result.conversationId);
   activeTitle.value = result.title || activeSummary.value?.title || "PAI";
   activeAgentId.value = String(result.agentId || "").trim();
   persona.value = result.persona || {};
@@ -523,7 +540,10 @@ function appendMessages(next: unknown) {
 function registerNotifications() {
   transport.onNotification("conversation.overviewUpdated", (payload) => {
     const value = payload as { unarchivedConversations?: ConversationSummary[] };
-    if (Array.isArray(value.unarchivedConversations)) conversations.value = value.unarchivedConversations;
+    if (Array.isArray(value.unarchivedConversations)) {
+      conversations.value = value.unarchivedConversations;
+      clearCompletedRuntimeStateForConversation(activeConversationId.value);
+    }
   });
   transport.onNotification("conversation.messageAppended", appendMessages);
   transport.onNotification("chat.historyFlushed", appendMessages);
@@ -548,6 +568,7 @@ function registerNotifications() {
   });
   transport.onNotification("chat.roundFinished", (payload) => {
     const value = payload as { conversationId?: string; assistantMessage?: ChatMessage };
+    clearCompletedRuntimeStateForConversation(value.conversationId || "");
     if (value.conversationId !== activeConversationId.value) return;
     busy.value = false;
     streamingText.value = "";

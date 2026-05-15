@@ -491,7 +491,9 @@ enableMermaid();
 enableKatex();
 registerChatMarkstreamComponents();
 
-const { markConversationRead } = usePipelineStatus();
+const { markConversationRead } = usePipelineStatus({
+  activeConversationId: computed(() => String(props.activeConversationId || "").trim()),
+});
 
 const markstreamMarkdown = getMarkdown();
 const markdownCodeBlockProps = {

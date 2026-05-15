@@ -1043,7 +1043,9 @@ const { perfNow, perfLog, setStatus, setStatusError, localeOptions, applyUiLangu
   status,
   perfDebug: PERF_DEBUG,
 });
-const { clearConversationStatus } = usePipelineStatus();
+const { clearConversationStatus } = usePipelineStatus({
+  activeConversationId: computed(() => String(currentChatConversationId.value || "").trim()),
+});
 const {
   checkingUpdate,
   hasAvailableUpdate,

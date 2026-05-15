@@ -158,6 +158,7 @@ function unreadCount(item: ConversationListItem): string {
 }
 
 function indicatorTone(item: ConversationListItem): "busy" | "error" | "" {
+  if (item.conversationId === props.activeConversationId) return "";
   const state = String(item.runtimeState || "").trim();
   if (state === "assistant_streaming" || state === "organizing_context") return "busy";
   return "";
@@ -175,6 +176,7 @@ function itemClass(item: ConversationListItem): string {
 }
 
 function runtimeStateText(item: ConversationListItem): string {
+  if (item.conversationId === props.activeConversationId) return "";
   if (item.detachedWindowOpen) return "已打开";
   const state = String(item.runtimeState || "").trim();
   if (state === "assistant_streaming") return "回复中";

@@ -155,9 +155,9 @@
                     {{ latestPreviewLine(item) }}
                   </span>
                   <div class="flex shrink-0 items-center gap-2">
-                    <span v-if="conversationPipelineStatus(item) === 'busy'" class="loading loading-spinner loading-xs text-primary" :title="t('chat.runtimeStreaming')"></span>
-                    <span v-else-if="conversationPipelineStatus(item) === 'error'" class="badge badge-error badge-xs">{{ t("common.failed") }}</span>
-                    <span v-else-if="item.runtimeState" class="text-[11px] text-base-content/60">{{ runtimeStateText(item.runtimeState) }}</span>
+                    <span v-if="!isCurrentConversation(item) && conversationPipelineStatus(item) === 'busy'" class="loading loading-spinner loading-xs text-primary" :title="t('chat.runtimeStreaming')"></span>
+                    <span v-else-if="!isCurrentConversation(item) && conversationPipelineStatus(item) === 'error'" class="badge badge-error badge-xs">{{ t("common.failed") }}</span>
+                    <span v-else-if="!isCurrentConversation(item) && item.runtimeState" class="text-[11px] text-base-content/60">{{ runtimeStateText(item.runtimeState) }}</span>
                     <span
                       v-if="unreadCountBadge(item)"
                       class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-error px-1.5 text-[11px] font-medium text-error-content"
@@ -222,7 +222,9 @@ const activeConversationTab = computed({
   get: () => props.activeTab === "contact" ? "contact" : "local",
   set: (value: "local" | "contact") => emit("update:activeTab", value),
 });
-const { conversationStatusById, markConversationRead } = usePipelineStatus();
+const { conversationStatusById, markConversationRead } = usePipelineStatus({
+  activeConversationId: computed(() => String(props.activeConversationId || "").trim()),
+});
 
 const conversationPreviewCache = computed(() => new Map(
   props.items.map((item) => [String(item.conversationId || "").trim(), Array.isArray(item.previewMessages) ? item.previewMessages : []]),
@@ -313,6 +315,7 @@ function isCurrentConversation(item: ChatConversationOverviewItem): boolean {
 }
 
 function conversationIndicatorTone(item: ChatConversationOverviewItem): "error" | "info" | "success" | "" {
+  if (isCurrentConversation(item)) return "";
   const conversationId = String(item.conversationId || "").trim();
   if (!conversationId) return "";
   const pipelineStatus = conversationStatusById.value[conversationId];

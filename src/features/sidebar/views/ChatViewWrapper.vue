@@ -13,7 +13,7 @@
     latest-assistant-text=""
     latest-reasoning-standard-text=""
     latest-reasoning-inline-text=""
-    :frontend-round-phase="busy ? 'streaming' : 'idle'"
+    :frontend-round-phase="chatFrontendRoundPhase"
     tool-status-text=""
     tool-status-state=""
     :stream-tool-calls="[]"
@@ -170,6 +170,7 @@ const props = defineProps<{
   streamingReasoningStandard: string;
   streamingReasoningInline: string;
   busy: boolean;
+  runtimeState?: string;
   hasPrevBlock: boolean;
 }>();
 
@@ -204,6 +205,12 @@ const personaAvatarUrlMap = computed<Record<string, string>>(() => {
 const vscodeTheme = ref(resolveVsCodeTheme());
 const scrollToBottomRequest = ref(0);
 const streamingDraftCreatedAt = ref("");
+const chatFrontendRoundPhase = computed<"idle" | "waiting" | "queued" | "streaming">(() => {
+  if (props.busy) return "streaming";
+  const state = String(props.runtimeState || "").trim();
+  if (state === "assistant_streaming" || state === "organizing_context") return "streaming";
+  return "idle";
+});
 
 function resolveVsCodeTheme(): "dark" | "corporate" {
   if (document.body.classList.contains("vscode-dark") || document.body.classList.contains("vscode-high-contrast")) {
