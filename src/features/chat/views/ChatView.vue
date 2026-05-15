@@ -104,8 +104,8 @@
                       :stream-tool-calls="visibleStreamToolCalls" :markdown-is-dark="markdownIsDark"
                       :playing-audio-id="playingAudioId" :active-turn-user="false"
                       :compact-with-previous="entry.item.compactWithPrevious"
-                      :can-regenerate="canRegenerateBlock(entry.item.block, entry.item.blockIndex)"
-                      :can-confirm-plan="canConfirmPlan(entry.item.block)"
+                      :can-regenerate="!sidebarMode && canRegenerateBlock(entry.item.block, entry.item.blockIndex)"
+                      :can-confirm-plan="!sidebarMode && canConfirmPlan(entry.item.block)"
                       :bubble-background-hidden="isBubbleBackgroundHidden(entry.item.block)"
                       :hide-toggle-enabled="canToggleBubbleBackground(entry.item.block)"
                       @recall-turn="$emit('recallTurn', $event)" @regenerate-turn="$emit('regenerateTurn', $event)"
@@ -132,8 +132,8 @@
                         :stream-tool-calls="visibleStreamToolCalls" :markdown-is-dark="markdownIsDark"
                         :playing-audio-id="playingAudioId" :active-turn-user="false"
                         :compact-with-previous="groupItem.compactWithPrevious"
-                        :can-regenerate="canRegenerateBlock(groupItem.block, groupItem.blockIndex)"
-                        :can-confirm-plan="canConfirmPlan(groupItem.block)"
+                        :can-regenerate="!sidebarMode && canRegenerateBlock(groupItem.block, groupItem.blockIndex)"
+                        :can-confirm-plan="!sidebarMode && canConfirmPlan(groupItem.block)"
                         :bubble-background-hidden="isBubbleBackgroundHidden(groupItem.block)"
                         :hide-toggle-enabled="canToggleBubbleBackground(groupItem.block)"
                         @recall-turn="$emit('recallTurn', $event)" @regenerate-turn="$emit('regenerateTurn', $event)"
@@ -150,7 +150,7 @@
               </div>
             </div>
 
-            <div ref="toolbarContainer" class="ecall-chat-toolbar-shell px-2 pt-1 pb-2">
+            <div v-if="!sidebarMode" ref="toolbarContainer" class="ecall-chat-toolbar-shell px-2 pt-1 pb-2">
               <ChatWorkspaceToolbar
                 :chatting="chatting" :frozen="frozen" :conversation-busy="conversationBusy"
                 :workspace-button-label="t('chat.allowedWorkspaceButton')" :workspace-button-name="currentWorkspaceName"
@@ -220,6 +220,7 @@
             :transcribing="transcribing" :can-record="canRecord" :recording="recording" :recording-ms="recordingMs"
             :record-hotkey="recordHotkey" :selected-chat-model-id="selectedChatModelId"
             :chat-model-options="chatModelOptions" :plan-mode-enabled="planModeEnabled"
+            :workspace-access="workspaceAccess"
             :frontend-round-phase="frontendRoundPhase" :chat-usage-percent="chatUsagePercent"
             :force-archive-tip="forceArchiveTip" :chatting="chatting" :busy="conversationBusy"
             :stop-chat-disabled="isOrganizingContextBusy" :frozen="frozen"
@@ -231,12 +232,14 @@
             :delegate-department-ids="delegateDepartmentIds"
             :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
             :ide-context-groups="mergedVisibleIdeContextGroups" :attached-ide-context-references="attachedIdeContextReferences"
+            :sidebar-mode="sidebarMode"
             @update:chat-input="$emit('update:chatInput', $event)" @add-mention="$emit('addMention', $event)"
             @remove-mention="$emit('removeMention', $event)" @remove-clipboard-image="$emit('removeClipboardImage', $event)"
             @remove-queued-attachment-notice="$emit('removeQueuedAttachmentNotice', $event)"
             @start-recording="$emit('startRecording')" @stop-recording="$emit('stopRecording')"
             @pick-attachments="$emit('pickAttachments')"
             @update:selected-chat-model-id="$emit('update:selectedChatModelId', $event)"
+            @update:workspace-access="$emit('updateWorkspaceAccess', $event)"
             @update:plan-mode-enabled="$emit('update:planModeEnabled', $event)"
             @attach-ide-context-reference="handleAttachIdeContextReference"
             @remove-ide-context-reference="handleRemoveIdeContextReference"
@@ -262,13 +265,14 @@
         />
 
         <ChatSupervisionTaskDialog
+          v-if="!sidebarMode"
           :open="supervisionDialogOpen" :saving="supervisionTaskSaving" :error-text="supervisionTaskError"
           :active-task="activeSupervisionTask" :recent-history="recentSupervisionTaskHistory"
           @close="$emit('closeSupervisionTask')" @save="$emit('saveSupervisionTask', $event)"
         />
       </div>
 
-      <div v-if="toolReviewPanelOpen" class="flex h-full min-h-0 shrink-0 border-l border-base-300 bg-base-100"
+      <div v-if="effectiveToolReviewPanelOpen" class="flex h-full min-h-0 shrink-0 border-l border-base-300 bg-base-100"
         :style="{ width: `${rightSidebarWidth}px` }">
         <FileReaderPanel
           v-if="chatRightPanelMode === 'reader'"
@@ -335,7 +339,7 @@
     ></div>
 
     <div
-      v-if="toolReviewPanelOpen"
+      v-if="effectiveToolReviewPanelOpen"
       class="ecall-pane-splitter ecall-pane-splitter-right absolute bottom-0 top-0 z-30"
       :class="{ 'ecall-pane-splitter-active': activePaneResizeSide === 'right' }"
       :style="{ right: `${rightSidebarWidth - 2}px` }"
@@ -428,6 +432,8 @@ const props = defineProps<{
   ideContextGroups: IdeContextWorkspaceGroup[]; attachedIdeContextReferences: IdeContextReferenceItem[];
   detachedChatWindow?: boolean; terminalApprovals?: TerminalApprovalConversationItem[];
   terminalApprovalResolving?: boolean;
+  sidebarMode?: boolean;
+  workspaceAccess?: "read_only" | "approval" | "full_access" | "";
 }>();
 
 const emit = defineEmits<{
@@ -445,6 +451,7 @@ const emit = defineEmits<{
   (e: "removeQueuedAttachmentNotice", index: number): void;
   (e: "startRecording"): void; (e: "stopRecording"): void; (e: "pickAttachments"): void;
   (e: "update:selectedChatModelId", value: string): void;
+  (e: "updateWorkspaceAccess", value: "read_only" | "approval" | "full_access"): void;
   (e: "update:planModeEnabled", value: boolean): void;
   (e: "sendChat", payload?: { extraTextBlocks?: string[] }): void;
   (e: "stopChat"): void; (e: "forceArchive"): void;
@@ -473,6 +480,7 @@ const emit = defineEmits<{
   (e: "selectionActionShare", payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; exportFormat?: "html" | "png" }): void;
   (e: "approveTerminalApproval", requestId: string): void;
   (e: "denyTerminalApproval", requestId: string): void;
+  (e: "openSidebarFileReference", href: string): void;
 }>();
 
 // ==================== basic state ====================
@@ -515,6 +523,7 @@ const legacyChatFileReaderSessionKey = computed(() => {
 const { playingAudioId, copyMessage, stopAudioPlayback, toggleAudioPlayback } = useChatMessageActions();
 const { isHidden: isBubbleBackgroundHidden, canToggle: canToggleBubbleBackground, toggle: toggleBubbleBackground } = useBubbleBackground(toRef(props, "activeConversationId"));
 const showSideConversationList = computed(() => !!props.sideConversationListVisible);
+const sidebarMode = computed(() => !!props.sidebarMode);
 
 function canRegenerateBlock(block: ChatMessageBlock, blockIndex: number): boolean {
   if (block.role !== "assistant" || block.isExtraTextBlock) return false;
@@ -537,6 +546,7 @@ function canConfirmPlan(block: ChatMessageBlock): boolean {
 }
 
 function openSelectionMenu() {
+  if (sidebarMode.value) return;
   if (props.chatting || props.frozen || props.conversationBusy) return;
   messageSelectionModeEnabled.value = true;
   selectedMessageRenderIds.value = [];
@@ -569,6 +579,7 @@ const {
   workspaces: toRef(props, "workspaces"),
   currentWorkspaceRootPath: toRef(props, "currentWorkspaceRootPath"),
   currentWorkspaceName: toRef(props, "currentWorkspaceName"),
+  enabled: computed(() => !sidebarMode.value),
 });
 
 const fileReaderVisibleContextReference = ref<IdeContextReferenceItem | null>(null);
@@ -695,6 +706,8 @@ const {
   activeConversationId: toRef(props, "activeConversationId"),
   latestOwnElasticItemId,
   latestOwnElasticMinHeight,
+  debugEnabled: computed(() => !sidebarMode.value),
+  smoothScrollEnabled: computed(() => !sidebarMode.value),
   onUserScroll: () => onScroll(),
 });
 
@@ -720,6 +733,7 @@ const {
   onToolReviewPanelOpenChange: (open) => emit("toolReviewPanelOpenChange", open),
   toolReviewSidebarRef,
 });
+const effectiveToolReviewPanelOpen = computed(() => !sidebarMode.value && toolReviewPanelOpen.value);
 
 // ==================== delegate status ====================
 
@@ -728,7 +742,7 @@ const {
   openDelegateArchiveDetail, abortDelegate,
 } = useDelegateStatus({
   activeConversationId: toRef(props, "activeConversationId"),
-  panelOpen: toolReviewPanelOpen,
+  panelOpen: effectiveToolReviewPanelOpen,
 });
 
 // ==================== panes ====================
@@ -738,7 +752,7 @@ const {
   leftSidebarWidth, rightSidebarWidth, activePaneResizeSide,
   startPaneResize, adjustPaneWidthByKeyboard,
 } = useChatPanes({
-  chatLayoutRoot, toolReviewPanelOpen,
+  chatLayoutRoot, toolReviewPanelOpen: effectiveToolReviewPanelOpen,
   showSideConversationList, detachedChatWindow: !!props.detachedChatWindow,
   syncViewportMetrics,
   onPaneWidthsChange: (left, right) => emit("sidePanelWidthsChange", { leftWidth: left, rightWidth: right }),
@@ -821,6 +835,10 @@ async function handleAssistantLinkClick(event: MouseEvent) {
   if (!href) return;
   if (isAbsoluteLocalPath(href)) {
     event.preventDefault(); event.stopPropagation();
+    if (sidebarMode.value) {
+      emit("openSidebarFileReference", href);
+      return;
+    }
     try {
       if (canOpenInFileReader(href)) { await openLocalFileInChatReader(href); }
       else { await invokeTauri("open_local_file_directory", { path: href }); }

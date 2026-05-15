@@ -763,6 +763,7 @@ fn emit_assistant_delta_app_event(
         "conversationId": conversation_id,
         "event": event,
     });
+    ide_chat_broadcast_notification("chat.assistantDelta", payload.clone());
     let _ = app_handle.emit(CHAT_ASSISTANT_DELTA_EVENT, payload);
 }
 
@@ -1001,6 +1002,7 @@ fn emit_stream_rebind_required_event(
         "phaseId": phase_id.map(str::trim).filter(|value| !value.is_empty()),
         "reason": reason.trim(),
     });
+    ide_chat_broadcast_notification("chat.streamRebindRequired", payload.clone());
     runtime_log_info(format!(
         "[聊天流式重绑] 发送普通事件 conversation_id={} request_id={} phase_id={} reason={}",
         conversation_id.trim(),
@@ -2466,6 +2468,7 @@ fn emit_history_flushed_event(
     conversation_id: &str,
     event_ids: &[String],
 ) {
+    ide_chat_broadcast_notification("chat.historyFlushed", payload.clone());
     let app_handle = match state.app_handle.lock() {
         Ok(guard) => guard.as_ref().cloned(),
         Err(_) => None,
@@ -2516,6 +2519,7 @@ fn emit_round_started_event(
         "departmentId": department_id,
         "agentId": agent_id,
     });
+    ide_chat_broadcast_notification("chat.roundStarted", payload.clone());
     match app_handle.emit(CHAT_ROUND_STARTED_EVENT, payload) {
         Ok(_) => {}
         Err(err) => eprintln!(
@@ -2548,12 +2552,14 @@ fn emit_round_completed_event(
         "conversationId": conversation_id,
         "activationId": activation_id.map(str::trim).filter(|value| !value.is_empty()),
         "requestId": request_id.map(str::trim).filter(|value| !value.is_empty()),
+        "status": "completed",
         "assistantText": result.assistant_text,
         "reasoningStandard": result.reasoning_standard,
         "reasoningInline": result.reasoning_inline,
         "archivedBeforeSend": result.archived_before_send,
         "assistantMessage": result.assistant_message,
     });
+    ide_chat_broadcast_notification("chat.roundFinished", payload.clone());
     match app_handle.emit(CHAT_ROUND_COMPLETED_EVENT, payload) {
         Ok(_) => {}
         Err(err) => eprintln!(
@@ -2743,12 +2749,14 @@ fn emit_stop_chat_round_completed_event(
     };
     let payload = serde_json::json!({
         "conversationId": conversation_id,
+        "status": "stopped",
         "assistantText": result.assistant_text,
         "reasoningStandard": result.reasoning_standard,
         "reasoningInline": result.reasoning_inline,
         "archivedBeforeSend": false,
         "assistantMessage": result.assistant_message,
     });
+    ide_chat_broadcast_notification("chat.roundFinished", payload.clone());
     match app_handle.emit(CHAT_ROUND_COMPLETED_EVENT, payload) {
         Ok(_) => {}
         Err(err) => eprintln!(
@@ -2781,8 +2789,10 @@ fn emit_round_failed_event(
         "conversationId": conversation_id,
         "activationId": activation_id.map(str::trim).filter(|value| !value.is_empty()),
         "requestId": request_id.map(str::trim).filter(|value| !value.is_empty()),
+        "status": "failed",
         "error": error_text,
     });
+    ide_chat_broadcast_notification("chat.roundFinished", payload.clone());
     match app_handle.emit(CHAT_ROUND_FAILED_EVENT, payload) {
         Ok(_) => {}
         Err(err) => eprintln!(

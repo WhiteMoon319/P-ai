@@ -14,6 +14,8 @@ interface UseChatVirtualScrollOptions {
   activeConversationId: Ref<string>;
   latestOwnElasticItemId: Ref<string>;
   latestOwnElasticMinHeight: Ref<number>;
+  debugEnabled?: Ref<boolean> | boolean;
+  smoothScrollEnabled?: Ref<boolean> | boolean;
   onUserScroll: () => void;
 }
 
@@ -28,6 +30,8 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     activeConversationId,
     latestOwnElasticItemId,
     latestOwnElasticMinHeight,
+    debugEnabled,
+    smoothScrollEnabled,
     onUserScroll,
   } = options;
 
@@ -62,8 +66,19 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
 
   function chatVirtualScrollDebugEnabled(): boolean {
     if (typeof window === "undefined") return false;
+    const configuredDebugEnabled = typeof debugEnabled === "object" && debugEnabled && "value" in debugEnabled
+      ? debugEnabled.value
+      : debugEnabled;
+    if (configuredDebugEnabled === false) return false;
     return window.localStorage.getItem("easy-call.debug.chat-virtual-scroll") === "1"
       || (window as any).__easyCallDebugChatVirtualScroll === true;
+  }
+
+  function nativeSmoothScrollEnabled(): boolean {
+    const configured = typeof smoothScrollEnabled === "object" && smoothScrollEnabled && "value" in smoothScrollEnabled
+      ? smoothScrollEnabled.value
+      : smoothScrollEnabled;
+    return configured !== false;
   }
 
   function debugVirtualScrollState(label: string) {
@@ -457,7 +472,8 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     const scrollStyles = window.getComputedStyle(scrollEl);
     const targetTop = parseFloat(scrollStyles.paddingTop || "0");
     const nextTop = scrollEl.scrollTop + (wrapperRect.top - containerRect.top) - targetTop;
-    scrollEl.scrollTo({ top: Math.max(0, nextTop), behavior });
+    const resolvedBehavior: ScrollBehavior = behavior === "smooth" && !nativeSmoothScrollEnabled() ? "auto" : behavior;
+    scrollEl.scrollTo({ top: Math.max(0, nextTop), behavior: resolvedBehavior });
     onUserScroll();
   }
 

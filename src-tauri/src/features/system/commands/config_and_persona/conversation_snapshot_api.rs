@@ -583,6 +583,7 @@ fn emit_unarchived_conversation_overview_updated_payload(
     state: &AppState,
     payload: &UnarchivedConversationOverviewUpdatedPayload,
 ) {
+    ide_chat_broadcast_notification("conversation.overviewUpdated", serde_json::json!(payload));
     let started_at = std::time::Instant::now();
     runtime_log_info(format!(
         "[会话概览] 开始，任务=推送未归档会话概览，preferred_conversation_id={}，conversation_count={}",
@@ -662,6 +663,7 @@ fn emit_conversation_runtime_state_updated_payload(
     state: &AppState,
     payload: &ConversationRuntimeStateUpdatedPayload,
 ) {
+    ide_chat_broadcast_notification("conversation.runtimeStateUpdated", serde_json::json!(payload));
     let started_at = std::time::Instant::now();
     let app_handle = match state.app_handle.lock() {
         Ok(guard) => guard.as_ref().cloned(),

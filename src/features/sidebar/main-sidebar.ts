@@ -1,0 +1,9 @@
+import { createApp } from "vue";
+import App from "./App.vue";
+import { i18n } from "../../i18n";
+import "../../style.css";
+import "markstream-vue/index.css";
+import "../chat/markdown/markdown-content.css";
+import "./assets/sidebar-theme.css";
+
+createApp(App).use(i18n).mount("#app");

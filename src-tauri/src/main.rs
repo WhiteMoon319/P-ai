@@ -279,8 +279,8 @@ async fn start_background_services_after_frontend_ready(
         Ok(result) => log_workspace_load_result("[工作区加载]", &result),
         Err(err) => eprintln!("[工作区加载] 状态=失败，error={err}"),
     }
-    start_remote_im_services_after_frontend_ready(app_handle).await;
-    start_ide_context_bridge_server(startup_state, ide_context_runtime);
+    start_remote_im_services_after_frontend_ready(app_handle.clone()).await;
+    start_ide_context_bridge_server(app_handle, startup_state, ide_context_runtime);
 }
 
 async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {

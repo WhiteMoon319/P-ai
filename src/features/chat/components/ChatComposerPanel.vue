@@ -1,6 +1,7 @@
 <template>
   <div>
     <ChatQueuePreview
+      v-if="!sidebarMode"
       :queue-events="visibleQueueEvents"
       :session-state="sessionState"
       @recall-to-input="handleRecallToInput"
@@ -28,6 +29,7 @@
           {{ t("chat.selection.branch") }}
         </button>
         <button
+          v-if="!sidebarMode"
           type="button"
           class="btn btn-sm"
           :class="{ 'btn-primary': selectionDeliverCardOpen }"
@@ -37,6 +39,7 @@
           {{ t("chat.selection.forward") }}
         </button>
         <button
+          v-if="!sidebarMode"
           type="button"
           class="btn btn-sm"
           :class="{ 'btn-primary': selectionDelegateCardOpen }"
@@ -54,6 +57,7 @@
           {{ t("common.copy") }}
         </button>
         <button
+          v-if="!sidebarMode"
           type="button"
           class="btn btn-sm"
           :class="{ 'btn-primary': selectionShareCardOpen }"
@@ -71,7 +75,7 @@
         </button>
       </div>
       <div
-        v-if="selectionDeliverCardOpen"
+        v-if="!sidebarMode && selectionDeliverCardOpen"
         class="mt-3 rounded-box border border-base-300 bg-base-200/50 px-3 py-3"
       >
         <div class="text-sm font-medium">{{ t("chat.selection.forward") }}</div>
@@ -108,7 +112,7 @@
         </div>
       </div>
       <div
-        v-if="selectionDelegateCardOpen"
+        v-if="!sidebarMode && selectionDelegateCardOpen"
         class="mt-3 rounded-box border border-base-300 bg-base-200/50 px-3 py-3"
       >
         <div class="flex items-center justify-between gap-3">
@@ -167,7 +171,7 @@
         </div>
       </div>
       <div
-        v-if="selectionShareCardOpen"
+        v-if="!sidebarMode && selectionShareCardOpen"
         class="mt-3 rounded-box border border-base-300 bg-base-200/50 px-3 py-3"
       >
         <div class="text-sm font-medium">{{ t("chat.selection.share") }}</div>
@@ -352,6 +356,7 @@
       <div class="mt-2 flex items-center justify-between gap-2">
         <div class="flex items-center gap-2">
           <button
+            v-if="!sidebarMode"
             class="btn btn-sm btn-circle btn-ghost shrink-0"
             :disabled="chatting || frozen"
             :title="t('chat.command')"
@@ -360,6 +365,7 @@
             <Layers2 class="h-3.5 w-3.5" />
           </button>
           <button
+            v-if="!sidebarMode"
             class="btn btn-sm btn-circle btn-ghost shrink-0"
             :disabled="chatting || frozen"
             :title="t('chat.attach')"
@@ -368,6 +374,7 @@
             <Paperclip class="h-3.5 w-3.5" />
           </button>
           <button
+            v-if="!sidebarMode"
             class="btn btn-sm btn-circle shrink-0"
             :class="recording ? 'btn-error' : 'btn-ghost'"
             :disabled="!canRecord || chatting || frozen"
@@ -380,7 +387,7 @@
           >
             <Mic class="h-3.5 w-3.5" />
           </button>
-          <div ref="modelDropdownRef" class="relative">
+          <div v-if="normalizedChatModelOptions.length > 0" ref="modelDropdownRef" class="relative">
             <button
               type="button"
               class="btn btn-sm h-8 min-h-8 w-44 max-w-44 justify-between border-0 shadow-none bg-base-100 text-base-content"
@@ -402,6 +409,33 @@
                   @click="selectChatModel(item.id)"
                 >
                   {{ item.name }}
+                </button>
+              </li>
+            </ul>
+          </div>
+          <div v-if="sidebarMode" ref="workspaceAccessDropdownRef" class="relative">
+            <button
+              type="button"
+              class="btn btn-sm h-8 min-h-8 w-20 max-w-20 justify-between border-0 bg-base-100 text-base-content shadow-none"
+              :disabled="chatting || frozen"
+              title="Shell 权限"
+              @click="workspaceAccessDropdownOpen = !workspaceAccessDropdownOpen"
+            >
+              <span class="truncate">{{ workspaceAccessLabel }}</span>
+              <ChevronDown class="h-3 w-3 shrink-0 opacity-50 rotate-180" :class="{ 'rotate-0': workspaceAccessDropdownOpen }" />
+            </button>
+            <ul
+              v-if="workspaceAccessDropdownOpen"
+              class="absolute bottom-full left-0 z-[9999] mb-2 w-28 rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
+            >
+              <li v-for="item in workspaceAccessOptions" :key="item.id" class="list-none">
+                <button
+                  type="button"
+                  class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-base-200"
+                  :class="{ 'bg-primary/10': item.id === workspaceAccess }"
+                  @click="selectWorkspaceAccess(item.id)"
+                >
+                  {{ item.label }}
                 </button>
               </li>
             </ul>
@@ -482,6 +516,7 @@ const props = defineProps<{
   recordHotkey: string;
   selectedChatModelId: string;
   chatModelOptions: ApiConfigItem[];
+  workspaceAccess?: "read_only" | "approval" | "full_access" | "";
   planModeEnabled: boolean;
   chatting: boolean;
   frontendRoundPhase?: "idle" | "queued" | "waiting" | "streaming";
@@ -500,6 +535,7 @@ const props = defineProps<{
   defaultCreateConversationDepartmentId: string;
   ideContextGroups: IdeContextWorkspaceGroup[];
   attachedIdeContextReferences: IdeContextReferenceItem[];
+  sidebarMode?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -519,6 +555,7 @@ const emit = defineEmits<{
   (e: "stopRecording"): void;
   (e: "pickAttachments"): void;
   (e: "update:selectedChatModelId", value: string): void;
+  (e: "update:workspaceAccess", value: "read_only" | "approval" | "full_access"): void;
   (e: "update:planModeEnabled", value: boolean): void;
   (e: "attachIdeContextReference", value: IdeContextReferenceItem): void;
   (e: "removeIdeContextReference", value: string): void;
@@ -527,7 +564,10 @@ const emit = defineEmits<{
 }>();
 
 const { t, locale } = useI18n();
-const { queueEvents, sessionState, recallQueueEvent, markGuided } = useChatQueue();
+const sidebarMode = computed(() => !!props.sidebarMode);
+const { queueEvents, sessionState, recallQueueEvent, markGuided } = useChatQueue({
+  enabled: computed(() => !sidebarMode.value),
+});
 
 const visibleQueueEvents = computed(() => {
   const activeConversationId = String(props.activeConversationId || "").trim();
@@ -1189,6 +1229,25 @@ function updateMentionState() {
 
 const modelDropdownOpen = ref(false);
 const modelDropdownRef = ref<HTMLElement | null>(null);
+const workspaceAccessDropdownOpen = ref(false);
+const workspaceAccessDropdownRef = ref<HTMLElement | null>(null);
+
+type WorkspaceAccessOption = { id: "read_only" | "approval" | "full_access"; label: string };
+const workspaceAccessOptions: WorkspaceAccessOption[] = [
+  { id: "read_only", label: "只读" },
+  { id: "approval", label: "审批" },
+  { id: "full_access", label: "全权" },
+];
+
+const workspaceAccess = computed<WorkspaceAccessOption["id"]>(() => {
+  const raw = String(props.workspaceAccess || "").trim();
+  if (raw === "read_only" || raw === "full_access") return raw;
+  return "approval";
+});
+
+const workspaceAccessLabel = computed(() =>
+  workspaceAccessOptions.find((item) => item.id === workspaceAccess.value)?.label || "审批",
+);
 
 function handleModelDropdownClickOutside(event: MouseEvent) {
   if (
@@ -1196,6 +1255,12 @@ function handleModelDropdownClickOutside(event: MouseEvent) {
     !modelDropdownRef.value.contains(event.target as Node)
   ) {
     modelDropdownOpen.value = false;
+  }
+  if (
+    workspaceAccessDropdownRef.value &&
+    !workspaceAccessDropdownRef.value.contains(event.target as Node)
+  ) {
+    workspaceAccessDropdownOpen.value = false;
   }
 }
 
@@ -1213,6 +1278,12 @@ function selectChatModel(id: string) {
   if (!id || id === props.selectedChatModelId) return;
   modelDropdownOpen.value = false;
   emit("update:selectedChatModelId", id);
+}
+
+function selectWorkspaceAccess(id: WorkspaceAccessOption["id"]) {
+  workspaceAccessDropdownOpen.value = false;
+  if (id === workspaceAccess.value) return;
+  emit("update:workspaceAccess", id);
 }
 
 function togglePlanMode() {

@@ -14,6 +14,7 @@ const wrapperRef = ref<HTMLElement | null>(null);
 const canExpand = ref(false);
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 let resizeObserver: ResizeObserver | null = null;
+let mutationObserver: MutationObserver | null = null;
 let pendingResizeFrame = 0;
 
 const resolvedNode = computed(() => {
@@ -50,14 +51,35 @@ function refreshExpandAvailability() {
   canExpand.value = contentEl.scrollHeight > collapsedMaxHeightPx + 1;
 }
 
+function normalizeShikiThemeSurfaces() {
+  const wrapperEl = wrapperRef.value;
+  if (!wrapperEl) return;
+
+  wrapperEl.querySelectorAll<HTMLElement>("pre.shiki, .shiki").forEach((el) => {
+    el.style.setProperty("background", "#101828", "important");
+    el.style.setProperty("background-color", "#101828", "important");
+    el.style.setProperty("background-image", "none", "important");
+  });
+
+  wrapperEl.querySelectorAll<HTMLElement>("pre.shiki code, .shiki code, pre.shiki .line, .shiki .line, pre.shiki span, .shiki span").forEach((el) => {
+    el.style.setProperty("background", "transparent", "important");
+    el.style.setProperty("background-color", "transparent", "important");
+    el.style.setProperty("background-image", "none", "important");
+    el.style.setProperty("box-shadow", "none", "important");
+    el.style.setProperty("text-shadow", "none", "important");
+  });
+}
+
 function scheduleResizeDrivenRefresh() {
   if (typeof window === "undefined") {
+    normalizeShikiThemeSurfaces();
     refreshExpandAvailability();
     return;
   }
   if (pendingResizeFrame) return;
   pendingResizeFrame = window.requestAnimationFrame(() => {
     pendingResizeFrame = 0;
+    normalizeShikiThemeSurfaces();
     refreshExpandAvailability();
   });
 }
@@ -68,13 +90,16 @@ function scheduleExpandAvailabilityRefresh() {
     refreshTimer = null;
   }
   void nextTick(() => {
+    normalizeShikiThemeSurfaces();
     refreshExpandAvailability();
     if (typeof window !== "undefined") {
       window.requestAnimationFrame(() => {
+        normalizeShikiThemeSurfaces();
         refreshExpandAvailability();
       });
     }
     refreshTimer = setTimeout(() => {
+      normalizeShikiThemeSurfaces();
       refreshExpandAvailability();
       refreshTimer = null;
     }, 120);
@@ -102,6 +127,16 @@ onMounted(() => {
     });
     resizeObserver.observe(wrapperRef.value);
   }
+  if (typeof MutationObserver !== "undefined" && wrapperRef.value) {
+    mutationObserver = new MutationObserver(() => {
+      scheduleResizeDrivenRefresh();
+    });
+    mutationObserver.observe(wrapperRef.value, {
+      childList: true,
+      subtree: true,
+    });
+  }
+  scheduleExpandAvailabilityRefresh();
 });
 
 watch(
@@ -123,6 +158,8 @@ onBeforeUnmount(() => {
   }
   resizeObserver?.disconnect();
   resizeObserver = null;
+  mutationObserver?.disconnect();
+  mutationObserver = null;
 });
 </script>
 
@@ -132,7 +169,6 @@ onBeforeUnmount(() => {
 }
 
 .ecall-shiki-codeblock-dark {
-  --code-fg: #e5e7eb;
   --code-action-fg: color-mix(in oklab, var(--color-base-content) 62%, transparent);
   --code-action-hover-fg: var(--color-base-content);
   --code-action-bar-bg: var(--color-base-200);
@@ -141,10 +177,6 @@ onBeforeUnmount(() => {
   --code-action-menu-border: color-mix(in oklab, var(--color-base-content) 14%, transparent);
   --code-action-menu-item-hover-bg: var(--color-base-200);
   --code-action-menu-item-hover-fg: var(--color-base-content);
-  --code-line-number: #64748b;
-  --vscode-editor-foreground: #e5e7eb;
-  --vscode-foreground: #e5e7eb;
-  color: #e5e7eb;
 }
 
 .ecall-shiki-codeblock-dark :deep(.code-block-container) {
@@ -240,25 +272,31 @@ onBeforeUnmount(() => {
   color: inherit !important;
 }
 
-.ecall-shiki-codeblock-dark :deep(.code-block-container),
 .ecall-shiki-codeblock-dark :deep(.code-block-content),
-.ecall-shiki-codeblock-dark :deep(.code-block-render),
-.ecall-shiki-codeblock-dark :deep(.code-fallback-plain),
-.ecall-shiki-codeblock-dark :deep(pre.code-pre-fallback) {
-  color: #e5e7eb !important;
-}
-
-.ecall-shiki-codeblock-dark :deep(.code-block-content),
-.ecall-shiki-codeblock-dark :deep(.code-block-render),
-.ecall-shiki-codeblock-dark :deep(.code-fallback-plain),
-.ecall-shiki-codeblock-dark :deep(pre.code-pre-fallback) {
+.ecall-shiki-codeblock-dark :deep(.code-block-render) {
   background: #101828 !important;
 }
 
-.ecall-shiki-codeblock-dark :deep(pre),
+.ecall-shiki-codeblock-dark :deep(.code-fallback-plain),
+.ecall-shiki-codeblock-dark :deep(pre.code-pre-fallback) {
+  color: #e5e7eb !important;
+  background: #101828 !important;
+}
+
+.ecall-shiki-codeblock-dark :deep(pre.shiki),
 .ecall-shiki-codeblock-dark :deep(.shiki) {
-  color: #e5e7eb !important;
   background: #101828 !important;
+  display: block !important;
+  width: 100% !important;
+  min-width: 100% !important;
+}
+
+.ecall-shiki-codeblock-dark :deep(.line),
+.ecall-shiki-codeblock-dark :deep(.shiki span),
+.ecall-shiki-codeblock-dark :deep(.line span) {
+  background: transparent !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
 }
 
 .ecall-shiki-codeblock-dark :deep(.code-block-content) {
@@ -269,12 +307,6 @@ onBeforeUnmount(() => {
 .ecall-shiki-codeblock-dark :deep(.code-block-content > :first-child),
 .ecall-shiki-codeblock-dark :deep(.code-block-render > :first-child) {
   margin-top: 0 !important;
-}
-
-.ecall-shiki-codeblock-dark :deep(.shiki span),
-.ecall-shiki-codeblock-dark :deep(.line),
-.ecall-shiki-codeblock-dark :deep(.line span) {
-  color: inherit;
 }
 
 </style>

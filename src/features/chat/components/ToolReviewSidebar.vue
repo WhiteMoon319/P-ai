@@ -1225,7 +1225,7 @@ function reportExpandedText(report: ToolReviewReportRecord) {
   margin: 0.65rem 0;
 }
 
-.assistant-markdown :deep(.ecall-markdown-content :where(:not(pre) > code,.inline-code)) {
+.assistant-markdown :deep(.ecall-markdown-content :where(:not(pre) > code,.inline-code):not(.code-block-container *)) {
   font-size: 0.86em;
 }
 

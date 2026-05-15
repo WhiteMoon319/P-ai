@@ -1,0 +1,46 @@
+{
+  "name": "pai-sidebar",
+  "displayName": "PAI Sidebar",
+  "description": "PAI VS Code sidebar bridge.",
+  "version": "0.0.1",
+  "publisher": "pai",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Other"],
+  "icon": "icons/128x128.png",
+  "files": [
+    "extension.js",
+    "package.json",
+    "dist/**",
+    "icons/**"
+  ],
+  "activationEvents": ["onView:paiSidebar.chatView"],
+  "main": "./extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "paiSidebar",
+          "title": "PAI",
+          "icon": "icons/32x32.png"
+        }
+      ]
+    },
+    "views": {
+      "paiSidebar": [
+        {
+          "id": "paiSidebar.chatView",
+          "name": "Chat",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "paiSidebar.refresh",
+        "title": "PAI: Refresh Sidebar"
+      }
+    ]
+  }
+}
