@@ -104,20 +104,6 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     );
   }
 
-  function traceVirtualScrollFrames(label: string, frameCount = 6) {
-    if (!chatVirtualScrollDebugEnabled()) return;
-    const requestId = ++debugTraceRequest;
-    let frame = 0;
-    const tick = () => {
-      if (requestId !== debugTraceRequest) return;
-      debugVirtualScrollState(`${label}:frame-${frame}`);
-      frame += 1;
-      if (frame >= frameCount) return;
-      requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  }
-
   const virtualizer = useVirtualizer(
     computed(() => ({
       count: renderItems.value.length,
@@ -375,7 +361,6 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     clearMeasuredVirtualState();
     initialBottomOffset.value = estimateTotalRenderSize();
     virtualizer.value.measure();
-    debugVirtualScrollState("初始底部定位准备");
     void nextTick(async () => {
       if (requestId !== conversationVirtualizerResetRequest) return;
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -388,9 +373,7 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       if (lastIndex >= 0) {
         virtualizer.value.scrollToIndex(lastIndex, { align: "end" });
       }
-      debugVirtualScrollState("初始底部定位完成");
       scrollbarRef.value?.updateThumb();
-      traceVirtualScrollFrames("reset:after-nextTick");
     });
   }
 
@@ -399,11 +382,9 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     activeJumpToBottomRequest.value = 0;
     clearMeasuredVirtualState();
     initialBottomOffset.value = 0;
-    debugVirtualScrollState("切换会话等待首批消息");
     void nextTick(() => {
       if (String(activeConversationId.value || "").trim() !== conversationId) return;
       if (renderItems.value.length <= 0) return;
-      debugVirtualScrollState("首批消息已到达");
       resetVirtualizerAtConversationBottom();
     });
   }

@@ -1,5 +1,9 @@
 # 变更日志
 
+- 修复（chat-view-layout）：ChatView 根容器始终使用 `flex flex-row` 布局，不再根据侧栏显隐切换 `flex-row`/`flex-col`。
+
+- 清理（debug-log）：移除虚拟滚动调试日志 `traceVirtualScrollFrames`、`debugVirtualScrollState` 高频刷屏调用。
+
 ## 发布：v0.9.90
 
 - 发布（release-0.9.90）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.90`，纳入输入框覆盖式浮动滚动条。

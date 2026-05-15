@@ -1,8 +1,7 @@
 <template>
   <div
     ref="chatLayoutRoot"
-    class="relative h-full min-h-0"
-    :class="showSideConversationList && !detachedChatWindow ? 'flex flex-row overflow-hidden' : 'flex flex-col relative'"
+    class="relative flex h-full min-h-0 flex-row overflow-hidden"
   >
     <div
       v-if="showSideConversationList && !detachedChatWindow"
