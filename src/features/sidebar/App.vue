@@ -48,6 +48,7 @@
       :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
       :current-department-id="activeDepartmentId"
       :current-workspace-name="currentWorkspaceName"
+      :current-todos="sidebarTodos"
       :hide-workspace-button="hideWorkspaceButton"
       :terminal-approvals="activeConversationTerminalApprovals"
       :terminal-approval-resolving="terminalApprovalResolving"
@@ -146,7 +147,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import type { ApiConfigItem, ChatMessage } from "../../types/app";
+import type { ApiConfigItem, ChatMessage, ChatTodoItem } from "../../types/app";
 import { removeBinaryPlaceholders, messageText } from "../../utils/chat-message";
 import { normalizeDepartmentChildIds } from "../config/utils/department-graph";
 import { useI18n } from "vue-i18n";
@@ -200,6 +201,7 @@ type OpenConversationResult = {
   runtime?: SidebarConversationRuntimePayload | null;
   persona?: SidebarPersonaPayload;
   model?: SidebarModelPayload;
+  currentTodos?: ChatTodoItem[];
 };
 
 type SidebarWorkspacePermission = {
@@ -314,6 +316,7 @@ const workspaceRootPath = ref("");
 const workspaceRootName = ref("");
 const vscodeWorkspaceRoots = ref<Array<{ path: string; name: string }>>([]);
 const messages = ref<ChatMessage[]>([]);
+const sidebarTodos = ref<ChatTodoItem[]>([]);
 const inputText = ref("");
 const clipboardImages = ref<SidebarClipboardImage[]>([]);
 const streamingText = ref("");
@@ -558,6 +561,7 @@ async function openConversation(conversationId: string) {
   applyModelPayload(result.model || {});
   await refreshWorkspacePermission();
   messages.value = Array.isArray(result.messages) ? result.messages : [];
+  sidebarTodos.value = Array.isArray(result.currentTodos) ? result.currentTodos : [];
   clearStreamingState();
   applyRuntimeStreamCache(result.runtime);
   selectedBlockId.value = null;
@@ -1295,6 +1299,12 @@ function registerNotifications() {
     patchConversationRuntimeState(conversationId, runtimeState);
     if (conversationId === activeConversationId.value && (runtimeState === "done" || runtimeState === "failed" || runtimeState === "completed" || !runtimeState)) {
       clearCompletedRuntimeStateForConversation(conversationId);
+    }
+  });
+  transport.onNotification("conversation.todosUpdated", (payload) => {
+    const value = payload as { conversationId?: string; currentTodos?: ChatTodoItem[] };
+    if (String(value.conversationId || "").trim() === activeConversationId.value) {
+      sidebarTodos.value = Array.isArray(value.currentTodos) ? value.currentTodos : [];
     }
   });
   transport.onNotification("conversation.messageAppended", appendMessages);

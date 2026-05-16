@@ -751,6 +751,7 @@ fn emit_conversation_todos_updated_payload(
     state: &AppState,
     payload: &ConversationTodosUpdatedPayload,
 ) {
+    ide_chat_broadcast_notification("conversation.todosUpdated", serde_json::json!(payload));
     let app_handle = match state.app_handle.lock() {
         Ok(guard) => guard.as_ref().cloned(),
         Err(err) => {

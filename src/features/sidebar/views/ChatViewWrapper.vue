@@ -54,7 +54,7 @@
     :workspaces="[]"
     :current-department-id="currentDepartmentId"
     :active-conversation-id="activeConversationId"
-    :current-todos="[]"
+    :current-todos="props.currentTodos"
     :supervision-active="false"
     supervision-title=""
     :supervision-dialog-open="false"
@@ -135,7 +135,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import type { ApiConfigItem, ChatMentionEntry, ChatMessage } from "../../../types/app";
+import type { ApiConfigItem, ChatMentionEntry, ChatMessage, ChatTodoItem } from "../../../types/app";
 import ChatView from "../../chat/views/ChatView.vue";
 import { useChatMessageBlocks } from "../../chat/composables/use-chat-turns";
 import type { TerminalApprovalConversationItem } from "../../shell/composables/use-terminal-approval";
@@ -187,6 +187,7 @@ const props = defineProps<{
   defaultCreateConversationDepartmentId: string;
   currentDepartmentId: string;
   currentWorkspaceName: string;
+  currentTodos: ChatTodoItem[];
   hideWorkspaceButton?: boolean;
   terminalApprovals: TerminalApprovalConversationItem[];
   terminalApprovalResolving: boolean;

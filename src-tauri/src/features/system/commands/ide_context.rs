@@ -1265,6 +1265,7 @@ fn ide_chat_conversation_open_result(state: &AppState, conversation_id: &str) ->
         "runtime": runtime,
         "persona": persona,
         "model": model,
+        "currentTodos": conversation.current_todos,
     }))
 }
 
