@@ -10,6 +10,8 @@
 
 - 优化（delegate-poll）：委托状态轮询间隔从 2 秒缩短至 1 秒。
 
+- 修复（notification）：修复 VS Code 侧边栏已打开的后台会话仍触发系统通知的问题；通知跳过逻辑补全 detached_chat_windows 检查。
+
 - 新增（conversation-list-state）：统一本地会话列表状态，前端不再各自推演"忙碌、完成、失败、未读、是否已打开"，只拉取并监听后端产出的 `state` 字段（`activity`、`runtimeState`、`unreadCount`、`openState`、`openedBy`、`disabledReason`、`failedMessage`、`completedAt`）。
 
 - 升级（markstream-vue）：0.0.13-beta.2 → 1.0.0，代码块主题跟随应用亮暗模式切换。

@@ -737,14 +737,19 @@ fn conversation_has_focused_chat_view(state: &AppState, conversation_id: &str) -
     if focused_window_labels.is_empty() {
         return false;
     }
-    focused_window_labels.iter().any(|window_label| {
+    if focused_window_labels.iter().any(|window_label| {
         let Some(window) = app_handle.get_webview_window(window_label) else {
             return false;
         };
         let is_visible = window.is_visible().unwrap_or(false);
         let is_focused = window.is_focused().unwrap_or(false);
         is_visible && is_focused
-    })
+    }) {
+        return true;
+    }
+    // VS Code 侧边栏通过 WebSocket 连接，不在 active_chat_view_bindings 中，
+    // 但会注册到 detached_chat_windows；只要会话已打开就应跳过通知。
+    detached_chat_window_for_conversation(conversation_id).is_some()
 }
 
 fn emit_assistant_delta_app_event(
