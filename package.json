@@ -29,7 +29,7 @@
     "culori": "^4.0.2",
     "katex": "^0.16.45",
     "lucide-vue-next": "^1.0.0",
-    "markstream-vue": "0.0.13-beta.2",
+    "markstream-vue": "1.0.0",
     "mermaid": "^11.14.0",
     "shiki": "^4.0.2",
     "stream-markdown": "^0.0.15",

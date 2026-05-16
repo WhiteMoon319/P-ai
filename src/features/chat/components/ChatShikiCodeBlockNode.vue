@@ -1,5 +1,5 @@
 <template>
-  <div ref="wrapperRef" class="ecall-shiki-codeblock markstream-vue ecall-shiki-codeblock-dark">
+  <div ref="wrapperRef" class="ecall-shiki-codeblock markstream-vue" :class="isDark ? 'ecall-shiki-codeblock-dark' : 'ecall-shiki-codeblock-light'">
     <MarkdownCodeBlockNode v-bind="resolvedProps" />
   </div>
 </template>
@@ -55,10 +55,11 @@ function refreshExpandAvailability() {
 function normalizeShikiThemeSurfaces() {
   const wrapperEl = wrapperRef.value;
   if (!wrapperEl) return;
+  const bgColor = isDark.value ? "#101828" : "#f6f8fa";
 
   wrapperEl.querySelectorAll<HTMLElement>("pre.shiki, .shiki").forEach((el) => {
-    el.style.setProperty("background", "#101828", "important");
-    el.style.setProperty("background-color", "#101828", "important");
+    el.style.setProperty("background", bgColor, "important");
+    el.style.setProperty("background-color", bgColor, "important");
     el.style.setProperty("background-image", "none", "important");
   });
 
@@ -107,6 +108,8 @@ function scheduleExpandAvailabilityRefresh() {
   });
 }
 
+const isDark = computed(() => Boolean((props as any).isDark));
+
 const resolvedProps = computed(() => {
   const { themes: _themes, ...rest } = props as CodeBlockNodeProps & { themes?: unknown };
   return {
@@ -114,8 +117,8 @@ const resolvedProps = computed(() => {
     node: resolvedNode.value,
     showExpandButton: Boolean(rest.showExpandButton && canExpand.value),
     darkTheme: "github-dark",
-    lightTheme: "github-dark",
-    isDark: true,
+    lightTheme: "github-light",
+    isDark: isDark.value,
     stream: false,
     loading: false,
   };
@@ -148,6 +151,10 @@ watch(
   { immediate: true },
 );
 
+watch(isDark, () => {
+  scheduleExpandAvailabilityRefresh();
+});
+
 onBeforeUnmount(() => {
   if (refreshTimer) {
     clearTimeout(refreshTimer);
@@ -169,7 +176,7 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
-.ecall-shiki-codeblock-dark {
+.ecall-shiki-codeblock {
   --code-action-fg: color-mix(in oklab, var(--color-base-content) 62%, transparent);
   --code-action-hover-fg: var(--color-base-content);
   --code-action-bar-bg: var(--color-base-200);
@@ -180,7 +187,7 @@ onBeforeUnmount(() => {
   --code-action-menu-item-hover-fg: var(--color-base-content);
 }
 
-.ecall-shiki-codeblock-dark :deep(.code-block-container) {
+.ecall-shiki-codeblock :deep(.code-block-container) {
   background: var(--code-action-bar-bg) !important;
   border: 1px solid var(--code-action-bar-border);
   border-radius: 0.85rem;
@@ -188,89 +195,107 @@ onBeforeUnmount(() => {
   box-shadow: none;
 }
 
-.ecall-shiki-codeblock-dark :deep(.code-block-header),
-.ecall-shiki-codeblock-dark :deep(.code-header-main) {
+.ecall-shiki-codeblock :deep(.code-block-header),
+.ecall-shiki-codeblock :deep(.code-header-main) {
   background: var(--code-action-bar-bg) !important;
   border-color: var(--code-action-bar-border) !important;
   box-shadow: none !important;
 }
 
-.ecall-shiki-codeblock-dark :deep(.code-block-header) {
+.ecall-shiki-codeblock :deep(.code-block-header) {
   border-bottom: 1px solid var(--code-action-bar-border) !important;
 }
 
-.ecall-shiki-codeblock-dark :deep(.code-header-title),
-.ecall-shiki-codeblock-dark :deep(.code-header-caption),
-.ecall-shiki-codeblock-dark :deep(.code-header-actions),
-.ecall-shiki-codeblock-dark :deep(.code-block-header .icon-slot) {
+.ecall-shiki-codeblock :deep(.code-header-title),
+.ecall-shiki-codeblock :deep(.code-header-caption),
+.ecall-shiki-codeblock :deep(.code-header-actions),
+.ecall-shiki-codeblock :deep(.code-block-header .icon-slot) {
   color: var(--code-action-fg) !important;
 }
 
-.ecall-shiki-codeblock-dark :deep(.code-block-header button:hover),
-.ecall-shiki-codeblock-dark :deep(.code-block-header [role="button"]:hover) {
+.ecall-shiki-codeblock :deep(.code-block-header button:hover),
+.ecall-shiki-codeblock :deep(.code-block-header [role="button"]:hover) {
   color: var(--code-action-hover-fg) !important;
   background: color-mix(in oklab, var(--color-base-content) 8%, transparent) !important;
 }
 
-.ecall-shiki-codeblock-dark :deep(.code-block-header button),
-.ecall-shiki-codeblock-dark :deep(.code-block-header [role="button"]),
-.ecall-shiki-codeblock-dark :deep(.code-header-actions button),
-.ecall-shiki-codeblock-dark :deep(.code-header-actions [role="button"]) {
+.ecall-shiki-codeblock :deep(.code-block-header button),
+.ecall-shiki-codeblock :deep(.code-block-header [role="button"]),
+.ecall-shiki-codeblock :deep(.code-header-actions button),
+.ecall-shiki-codeblock :deep(.code-header-actions [role="button"]) {
   color: var(--code-action-fg) !important;
 }
 
-.ecall-shiki-codeblock-dark :deep(.menu),
-.ecall-shiki-codeblock-dark :deep(.dropdown-content),
-.ecall-shiki-codeblock-dark :deep([role="menu"]),
-.ecall-shiki-codeblock-dark :deep([role="menuitem"]),
-.ecall-shiki-codeblock-dark :deep(.code-block-header .menu),
-.ecall-shiki-codeblock-dark :deep(.code-block-header .dropdown-content),
-.ecall-shiki-codeblock-dark :deep(.code-block-header [data-radix-popper-content-wrapper]),
-.ecall-shiki-codeblock-dark :deep(.code-block-header [data-radix-menu-content]),
-.ecall-shiki-codeblock-dark :deep(.code-block-header [data-slot="dropdown-content"]) {
+.ecall-shiki-codeblock :deep(.menu),
+.ecall-shiki-codeblock :deep(.dropdown-content),
+.ecall-shiki-codeblock :deep([role="menu"]),
+.ecall-shiki-codeblock :deep([role="menuitem"]),
+.ecall-shiki-codeblock :deep(.code-block-header .menu),
+.ecall-shiki-codeblock :deep(.code-block-header .dropdown-content),
+.ecall-shiki-codeblock :deep(.code-block-header [data-radix-popper-content-wrapper]),
+.ecall-shiki-codeblock :deep(.code-block-header [data-radix-menu-content]),
+.ecall-shiki-codeblock :deep(.code-block-header [data-slot="dropdown-content"]) {
   color: var(--color-base-content) !important;
 }
 
-.ecall-shiki-codeblock-dark :deep(.dropdown-content),
-.ecall-shiki-codeblock-dark :deep(.menu),
-.ecall-shiki-codeblock-dark :deep([role="menu"]),
-.ecall-shiki-codeblock-dark :deep(.code-block-header [data-radix-menu-content]),
-.ecall-shiki-codeblock-dark :deep(.code-block-header [data-slot="dropdown-content"]) {
+.ecall-shiki-codeblock :deep(.dropdown-content),
+.ecall-shiki-codeblock :deep(.menu),
+.ecall-shiki-codeblock :deep([role="menu"]),
+.ecall-shiki-codeblock :deep(.code-block-header [data-radix-menu-content]),
+.ecall-shiki-codeblock :deep(.code-block-header [data-slot="dropdown-content"]) {
   background: var(--code-action-menu-bg) !important;
   border-color: var(--code-action-menu-border) !important;
 }
 
-.ecall-shiki-codeblock-dark :deep(.dropdown-content button),
-.ecall-shiki-codeblock-dark :deep(.dropdown-content [role="menuitem"]),
-.ecall-shiki-codeblock-dark :deep(.menu button),
-.ecall-shiki-codeblock-dark :deep(.menu [role="menuitem"]),
-.ecall-shiki-codeblock-dark :deep([role="menuitem"]),
-.ecall-shiki-codeblock-dark :deep(.code-block-header [data-radix-menu-content] button),
-.ecall-shiki-codeblock-dark :deep(.code-block-header [data-radix-menu-content] [role="menuitem"]),
-.ecall-shiki-codeblock-dark :deep(.code-block-header [data-slot="dropdown-content"] button),
-.ecall-shiki-codeblock-dark :deep(.code-block-header [data-slot="dropdown-content"] [role="menuitem"]) {
+.ecall-shiki-codeblock :deep(.dropdown-content button),
+.ecall-shiki-codeblock :deep(.dropdown-content [role="menuitem"]),
+.ecall-shiki-codeblock :deep(.menu button),
+.ecall-shiki-codeblock :deep(.menu [role="menuitem"]),
+.ecall-shiki-codeblock :deep([role="menuitem"]),
+.ecall-shiki-codeblock :deep(.code-block-header [data-radix-menu-content] button),
+.ecall-shiki-codeblock :deep(.code-block-header [data-radix-menu-content] [role="menuitem"]),
+.ecall-shiki-codeblock :deep(.code-block-header [data-slot="dropdown-content"] button),
+.ecall-shiki-codeblock :deep(.code-block-header [data-slot="dropdown-content"] [role="menuitem"]) {
   color: var(--color-base-content) !important;
 }
 
-.ecall-shiki-codeblock-dark :deep(.dropdown-content button:hover),
-.ecall-shiki-codeblock-dark :deep(.dropdown-content [role="menuitem"]:hover),
-.ecall-shiki-codeblock-dark :deep(.menu button:hover),
-.ecall-shiki-codeblock-dark :deep(.menu [role="menuitem"]:hover),
-.ecall-shiki-codeblock-dark :deep([role="menuitem"]:hover),
-.ecall-shiki-codeblock-dark :deep(.code-block-header [data-radix-menu-content] button:hover),
-.ecall-shiki-codeblock-dark :deep(.code-block-header [data-radix-menu-content] [role="menuitem"]:hover),
-.ecall-shiki-codeblock-dark :deep(.code-block-header [data-slot="dropdown-content"] button:hover),
-.ecall-shiki-codeblock-dark :deep(.code-block-header [data-slot="dropdown-content"] [role="menuitem"]:hover) {
+.ecall-shiki-codeblock :deep(.dropdown-content button:hover),
+.ecall-shiki-codeblock :deep(.dropdown-content [role="menuitem"]:hover),
+.ecall-shiki-codeblock :deep(.menu button:hover),
+.ecall-shiki-codeblock :deep(.menu [role="menuitem"]:hover),
+.ecall-shiki-codeblock :deep([role="menuitem"]:hover),
+.ecall-shiki-codeblock :deep(.code-block-header [data-radix-menu-content] button:hover),
+.ecall-shiki-codeblock :deep(.code-block-header [data-radix-menu-content] [role="menuitem"]:hover),
+.ecall-shiki-codeblock :deep(.code-block-header [data-slot="dropdown-content"] button:hover),
+.ecall-shiki-codeblock :deep(.code-block-header [data-slot="dropdown-content"] [role="menuitem"]:hover) {
   color: var(--code-action-menu-item-hover-fg) !important;
   background: var(--code-action-menu-item-hover-bg) !important;
 }
 
-.ecall-shiki-codeblock-dark :deep(.dropdown-content svg),
-.ecall-shiki-codeblock-dark :deep(.menu svg),
-.ecall-shiki-codeblock-dark :deep([role="menuitem"] svg),
-.ecall-shiki-codeblock-dark :deep(.code-block-header [data-radix-menu-content] svg),
-.ecall-shiki-codeblock-dark :deep(.code-block-header [data-slot="dropdown-content"] svg) {
+.ecall-shiki-codeblock :deep(.dropdown-content svg),
+.ecall-shiki-codeblock :deep(.menu svg),
+.ecall-shiki-codeblock :deep([role="menuitem"] svg),
+.ecall-shiki-codeblock :deep(.code-block-header [data-radix-menu-content] svg),
+.ecall-shiki-codeblock :deep(.code-block-header [data-slot="dropdown-content"] svg) {
   color: inherit !important;
+}
+
+.ecall-shiki-codeblock :deep(.line),
+.ecall-shiki-codeblock :deep(.shiki span),
+.ecall-shiki-codeblock :deep(.line span) {
+  background: transparent !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+.ecall-shiki-codeblock :deep(.code-block-content) {
+  border-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+.ecall-shiki-codeblock :deep(.code-block-content > :first-child),
+.ecall-shiki-codeblock :deep(.code-block-render > :first-child) {
+  margin-top: 0 !important;
 }
 
 .ecall-shiki-codeblock-dark :deep(.code-block-content),
@@ -286,7 +311,28 @@ onBeforeUnmount(() => {
 
 .ecall-shiki-codeblock-dark :deep(pre.shiki),
 .ecall-shiki-codeblock-dark :deep(.shiki) {
+  color: #e5e7eb !important;
   background: #101828 !important;
+  display: block !important;
+  width: 100% !important;
+  min-width: 100% !important;
+}
+
+.ecall-shiki-codeblock-light :deep(.code-block-content),
+.ecall-shiki-codeblock-light :deep(.code-block-render) {
+  background: #f6f8fa !important;
+}
+
+.ecall-shiki-codeblock-light :deep(.code-fallback-plain),
+.ecall-shiki-codeblock-light :deep(pre.code-pre-fallback) {
+  color: #24292f !important;
+  background: #f6f8fa !important;
+}
+
+.ecall-shiki-codeblock-light :deep(pre.shiki),
+.ecall-shiki-codeblock-light :deep(.shiki) {
+  color: #24292f !important;
+  background: #f6f8fa !important;
   display: block !important;
   width: 100% !important;
   min-width: 100% !important;
