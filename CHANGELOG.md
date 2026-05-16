@@ -1,5 +1,15 @@
 # 变更日志
 
+## 发布：v0.9.93
+
+- 升级（markstream-vue）：0.0.13-beta.2 → 1.0.0，代码块主题跟随应用亮暗模式切换。
+
+- 修复（chat-codeblock）：代码块 Shiki 主题不再硬编码，`darkTheme` 使用 `github-dark`、`lightTheme` 使用 `github-light`，`isDark` 透传自应用主题。
+
+- 修复（chat-codeblock）：为代码块 plain text 添加兜底字色，防止浅色主题下深色背景不可见。
+
+- 清理（vscode-sidebar）：移除 `package.json` 中冗余的 `onView` 激活事件声明。
+
 ## 发布：v0.9.92
 
 - 修复（chat-text-indent）：修复 `removeBinaryPlaceholders` 中 `.map(line => line.trim())` 误删所有行首缩进的问题，改为仅在 filter 判断时 trim，保留原始缩进。
