@@ -300,15 +300,6 @@
             </div>
           </template>
         </FileReaderPanel>
-        <DelegateStatusSidebar
-          v-else-if="chatRightPanelMode === 'delegate'"
-          class="w-full"
-          :statuses="delegateStatuses"
-          :loading="delegateStatusesLoading"
-          :error-text="delegateStatusesErrorText"
-          @open-delegate-detail="openDelegateArchiveDetail"
-          @abort-delegate="abortDelegate"
-        />
         <ToolReviewSidebar v-else ref="toolReviewSidebarRef" class="w-full"
           :batches="toolReviewBatches" :current-batch-key="toolReviewCurrentBatchKey"
           :detail-map="toolReviewDetailMap" :detail-loading-call-id="toolReviewDetailLoadingCallId"
@@ -319,11 +310,16 @@
           :current-workspace-name="currentWorkspaceName" :current-workspace-root-path="currentWorkspaceRootPath"
           :workspaces="workspaces" :current-department-id="currentDepartmentId"
           :department-options="toolReviewDepartmentOptions"
+          :delegate-statuses="delegateStatuses"
+          :delegate-statuses-loading="delegateStatusesLoading"
+          :delegate-statuses-error-text="delegateStatusesErrorText"
           @select-batch="setToolReviewCurrentBatchKey" @load-item-detail="loadToolReviewItemDetail"
           @review-item="runToolReviewForCall" @review-batch="runToolReviewForBatch"
           @pick-commit-review="handlePickCommitReview" @review-code="handleToolReviewCode"
           @retry-report="handleRetryToolReviewReport" @delete-report="handleDeleteToolReviewReport"
           @copy-report="copyToolReviewReport" @attach-report="$emit('attachToolReviewReport', $event)"
+          @open-delegate-detail="openDelegateArchiveDetail"
+          @abort-delegate="abortDelegate"
         />
       </div>
     </div>
@@ -374,7 +370,6 @@ import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import ChatConversationSidebar from "../components/ChatConversationSidebar.vue";
 import ChatWorkspaceToolbar from "../components/ChatWorkspaceToolbar.vue";
 import ToolReviewSidebar from "../components/ToolReviewSidebar.vue";
-import DelegateStatusSidebar from "../components/DelegateStatusSidebar.vue";
 import FileReaderPanel from "../../file-reader/components/FileReaderPanel.vue";
 import ChatImagePreviewDialog from "../components/dialogs/ChatImagePreviewDialog.vue";
 import ChatSupervisionTaskDialog from "../components/dialogs/ChatSupervisionTaskDialog.vue";

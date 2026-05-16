@@ -186,16 +186,7 @@
           type="button"
           role="tab"
           class="tab h-8 px-2"
-          :class="chatRightPanelMode === 'review' ? 'tab-active font-semibold' : ''"
-          @click.stop="emit('update:chat-right-panel-mode', 'review')"
-        >
-          {{ t("chat.reviewPanelTab") }}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          class="tab h-8 px-2"
-          :class="chatRightPanelMode === 'delegate' ? 'tab-active font-semibold' : ''"
+          :class="chatRightPanelMode !== 'reader' ? 'tab-active font-semibold' : ''"
           @click.stop="emit('update:chat-right-panel-mode', 'delegate')"
         >
           {{ t("chat.delegatePanelTab") }}

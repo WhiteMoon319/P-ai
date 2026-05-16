@@ -4,6 +4,7 @@
       <div role="tablist" class="tabs tabs-border">
         <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'reports' }" @click="activeTab = 'reports'">{{ t("chat.toolReview.resultsTab") }}</button>
         <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'tools' }" @click="activeTab = 'tools'">{{ t("chat.toolReview.toolsTab") }}</button>
+        <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'delegates' }" @click="activeTab = 'delegates'">{{ t("chat.toolReview.delegatesTab") }}</button>
       </div>
     </div>
     <div class="flex min-h-0 flex-1 flex-col overflow-x-hidden">
@@ -52,6 +53,55 @@
         {{ t("chat.toolReview.empty") }}
       </div>
 
+      <div v-else-if="activeTab === 'delegates'" class="flex min-h-0 flex-1 flex-col">
+        <div v-if="delegateStatusesErrorText" class="mx-4 my-4 rounded-box border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
+          {{ delegateStatusesErrorText }}
+        </div>
+        <div v-if="delegateStatusesLoading && delegateStatuses.length === 0" class="flex min-h-0 flex-1 items-center justify-center text-sm text-base-content/65">
+          <span class="loading loading-spinner loading-sm mr-2"></span>
+          {{ t("chat.toolReview.delegateLoading") }}
+        </div>
+        <div v-else-if="delegateStatuses.length === 0" class="px-4 py-4 text-sm text-base-content/65">
+          {{ t("chat.toolReview.delegateEmpty") }}
+        </div>
+        <div v-else class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-2">
+          <section v-for="delegate in delegateStatuses" :key="delegate.delegateId">
+            <details class="collapse collapse-arrow w-full rounded-box border border-base-300 bg-base-200">
+              <summary class="collapse-title min-h-0 px-3 py-3 pr-10">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="min-w-0 flex items-center gap-2">
+                    <div class="truncate text-sm">{{ delegate.title || delegate.delegateId }}</div>
+                  </div>
+                  <div class="badge badge-sm min-w-14 shrink-0 justify-center whitespace-nowrap" :class="delegateStatusBadgeClass(delegate.status)">
+                    {{ formatDelegateStatus(delegate.status) }}
+                  </div>
+                </div>
+                <div class="mt-1 text-xs text-base-content/65">
+                  用时 {{ formatElapsedMs(delegate.elapsedMs) }} · {{ delegate.requestCount }}步 · 用量 {{ formatTokenK(delegate.tokenCount) }}
+                </div>
+              </summary>
+              <div class="collapse-content flex flex-col gap-3 px-3 pb-3">
+                <div class="whitespace-pre-wrap wrap-break-word text-sm leading-7 text-base-content/75">
+                  最近工具：{{ delegate.lastToolName || "-" }}
+                </div>
+                <div class="flex items-center justify-end gap-3">
+                  <button
+                    v-if="isDelegateRunning(delegate.status)"
+                    type="button"
+                    class="btn btn-sm btn-error btn-outline gap-1.5 font-normal"
+                    @click="emit('abortDelegate', delegate)"
+                  >打断</button>
+                  <button
+                    type="button"
+                    class="btn btn-sm gap-1.5 border-base-300 bg-base-100 font-normal hover:bg-base-100"
+                    @click="emit('openDelegateDetail', delegate)"
+                  >查看详情</button>
+                </div>
+              </div>
+            </details>
+          </section>
+        </div>
+      </div>
       <div v-else class="flex min-h-0 flex-1 flex-col">
         <div class="border-b border-base-300 bg-base-100 px-4 py-3">
           <button
@@ -354,6 +404,9 @@ const props = defineProps<{
   workspaces: ShellWorkspace[];
   currentDepartmentId: string;
   departmentOptions: Array<{ id: string; name: string; ownerName: string; providerName?: string; modelName?: string }>;
+  delegateStatuses: import("../../../types/app").ConversationDelegateStatusSummary[];
+  delegateStatusesLoading: boolean;
+  delegateStatusesErrorText: string;
 }>();
 
 const emit = defineEmits<{
@@ -367,12 +420,14 @@ const emit = defineEmits<{
   (e: "deleteReport", report: ToolReviewReportRecord): void;
   (e: "copyReport", reportText: string): void;
   (e: "attachReport", reportText: string): void;
+  (e: "openDelegateDetail", status: import("../../../types/app").ConversationDelegateStatusSummary): void;
+  (e: "abortDelegate", status: import("../../../types/app").ConversationDelegateStatusSummary): void;
 }>();
 
 const { t } = useI18n();
 const reportDialogOpen = ref(false);
 const reviewTargetDialogOpen = ref(false);
-const activeTab = ref<"tools" | "reports">("reports");
+const activeTab = ref<"tools" | "reports" | "delegates">("reports");
 const localCurrentReportId = ref("");
 const rootAttrs = useAttrs();
 const commitOptions = ref<ToolReviewCommitOption[]>([]);
@@ -891,6 +946,42 @@ function reportStatusBadgeClass(status: string) {
   if (status === "success") return "badge-primary";
   if (status === "failed") return "badge-error";
   return "badge-warning";
+}
+
+function formatDelegateStatus(status: string) {
+  if (status === "running" || status === "delivered") return "执行中";
+  if (status === "completed") return "已完成";
+  if (status === "failed") return "失败";
+  return "未知";
+}
+
+function isDelegateRunning(status: string) {
+  return status === "running" || status === "delivered";
+}
+
+function delegateStatusBadgeClass(status: string) {
+  if (status === "completed") return "badge-primary";
+  if (status === "failed") return "badge-error";
+  if (status === "running" || status === "delivered") return "badge-warning";
+  return "badge-ghost";
+}
+
+function formatTokenK(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "0K";
+  const k = value / 1000;
+  if (k < 10) return `${k.toFixed(1)}K`;
+  return `${Math.round(k)}K`;
+}
+
+function formatElapsedMs(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "0秒";
+  const totalSeconds = Math.floor(value / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}时${minutes}分`;
+  if (minutes > 0) return `${minutes}分${seconds}秒`;
+  return `${seconds}秒`;
 }
 
 function formatReportScope(scope: string) {
