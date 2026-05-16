@@ -43,6 +43,7 @@ export type SidebarCreateDepartmentOption = {
   ownerName: string;
   providerName?: string;
   modelName?: string;
+  childDepartmentIds?: string[];
 };
 
 const props = defineProps<{

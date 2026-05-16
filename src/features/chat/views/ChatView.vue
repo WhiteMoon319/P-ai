@@ -104,7 +104,8 @@
                       :playing-audio-id="playingAudioId" :active-turn-user="false"
                       :compact-with-previous="entry.item.compactWithPrevious"
                       :can-regenerate="!sidebarMode && canRegenerateBlock(entry.item.block, entry.item.blockIndex)"
-                      :can-confirm-plan="!sidebarMode && canConfirmPlan(entry.item.block)"
+                      :can-confirm-plan="canConfirmPlan(entry.item.block)"
+                      :read-plan-file-content="readPlanFileContent"
                       :bubble-background-hidden="isBubbleBackgroundHidden(entry.item.block)"
                       :hide-toggle-enabled="canToggleBubbleBackground(entry.item.block)"
                       @recall-turn="$emit('recallTurn', $event)" @regenerate-turn="$emit('regenerateTurn', $event)"
@@ -132,7 +133,8 @@
                         :playing-audio-id="playingAudioId" :active-turn-user="false"
                         :compact-with-previous="groupItem.compactWithPrevious"
                         :can-regenerate="!sidebarMode && canRegenerateBlock(groupItem.block, groupItem.blockIndex)"
-                        :can-confirm-plan="!sidebarMode && canConfirmPlan(groupItem.block)"
+                        :can-confirm-plan="canConfirmPlan(groupItem.block)"
+                        :read-plan-file-content="readPlanFileContent"
                         :bubble-background-hidden="isBubbleBackgroundHidden(groupItem.block)"
                         :hide-toggle-enabled="canToggleBubbleBackground(groupItem.block)"
                         @recall-turn="$emit('recallTurn', $event)" @regenerate-turn="$emit('regenerateTurn', $event)"
@@ -155,10 +157,10 @@
                 :workspace-button-label="t('chat.allowedWorkspaceButton')" :workspace-button-name="currentWorkspaceName"
                 :workspace-button-disabled="!activeConversationId || activeConversationSummary?.kind === 'remote_im_contact'"
                 :hide-menu-button="activeConversationSummary?.kind === 'remote_im_contact'"
-                :hide-workspace-button="sidebarMode || activeConversationSummary?.kind === 'remote_im_contact'"
+                :hide-workspace-button="hideWorkspaceButton || activeConversationSummary?.kind === 'remote_im_contact'"
                 :show-forward-menu-item="!sidebarMode"
                 :show-share-menu-item="!sidebarMode"
-                :show-workspace-menu-item="!sidebarMode"
+                :show-workspace-menu-item="true"
                 :show-code-review-menu-item="sidebarMode"
                 :mention-entries="mentionEntries" :selected-mention-keys="selectedMentionKeys"
                 :supervision-active="supervisionActive" :supervision-label="t('chat.supervision.button')"
@@ -431,13 +433,15 @@ const props = defineProps<{
   conversationListTab: "local" | "contact";
   chatLeftPanelMode: "local" | "contact";
   chatRightPanelMode: "reader" | "review" | "delegate";
-  createConversationDepartmentOptions: Array<{ id: string; name: string; ownerAgentId?: string; ownerName: string; providerName?: string; modelName?: string }>;
+  createConversationDepartmentOptions: Array<{ id: string; name: string; ownerAgentId?: string; ownerName: string; providerName?: string; modelName?: string; childDepartmentIds?: string[] }>;
   delegateDepartmentIds: string[]; defaultCreateConversationDepartmentId: string;
   ideContextGroups: IdeContextWorkspaceGroup[]; attachedIdeContextReferences: IdeContextReferenceItem[];
   detachedChatWindow?: boolean; terminalApprovals?: TerminalApprovalConversationItem[];
   terminalApprovalResolving?: boolean;
   sidebarMode?: boolean;
+  hideWorkspaceButton?: boolean;
   workspaceAccess?: "read_only" | "approval" | "full_access" | "";
+  readPlanFileContent?: (input: { conversationId: string; path: string }) => Promise<string>;
 }>();
 
 const emit = defineEmits<{

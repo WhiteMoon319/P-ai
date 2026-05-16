@@ -1,5 +1,6 @@
 <template>
   <ChatView
+    ref="chatViewRef"
     :user-alias="userAlias"
     :persona-name="assistantName"
     :user-avatar-url="userAvatarUrl"
@@ -14,9 +15,9 @@
     latest-reasoning-standard-text=""
     latest-reasoning-inline-text=""
     :frontend-round-phase="chatFrontendRoundPhase"
-    tool-status-text=""
-    tool-status-state=""
-    :stream-tool-calls="[]"
+    :tool-status-text="toolStatusText"
+    :tool-status-state="toolStatusState"
+    :stream-tool-calls="streamToolCalls"
     chat-error-text=""
     :clipboard-images="clipboardImages"
     :queued-attachment-notices="[]"
@@ -30,11 +31,11 @@
     record-hotkey=""
     :selected-chat-model-id="selectedChatModelId"
     :tool-review-refresh-tick="0"
-    :terminal-approvals="[]"
-    :terminal-approval-resolving="false"
+    :terminal-approvals="terminalApprovals"
+    :terminal-approval-resolving="terminalApprovalResolving"
     :chat-model-options="chatModelOptions"
     :workspace-access="workspaceAccess"
-    :plan-mode-enabled="false"
+    :plan-mode-enabled="planModeEnabled"
     :chat-usage-percent="0"
     force-archive-tip=""
     :media-drag-active="false"
@@ -48,10 +49,10 @@
     :loading-older-history="false"
     :latest-own-message-align-request="0"
     :conversation-scroll-to-bottom-request="scrollToBottomRequest"
-    current-workspace-name=""
+    :current-workspace-name="currentWorkspaceName"
     current-workspace-root-path=""
     :workspaces="[]"
-    current-department-id=""
+    :current-department-id="currentDepartmentId"
     :active-conversation-id="activeConversationId"
     :current-todos="[]"
     :supervision-active="false"
@@ -63,14 +64,16 @@
     :recent-supervision-task-history="[]"
     :unarchived-conversation-items="[]"
     :conversation-items="[]"
-    :create-conversation-department-options="[]"
-    :delegate-department-ids="[]"
-    default-create-conversation-department-id=""
+    :create-conversation-department-options="createConversationDepartmentOptions"
+    :delegate-department-ids="delegateDepartmentIds"
+    :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
     :ide-context-groups="[]"
     :attached-ide-context-references="[]"
     :current-theme="vscodeTheme"
     :detached-chat-window="true"
     :sidebar-mode="true"
+    :hide-workspace-button="hideWorkspaceButton"
+    :read-plan-file-content="readPlanFileContent"
     :side-conversation-list-visible="false"
     :initial-tool-review-panel-open="false"
     conversation-list-tab="local"
@@ -103,8 +106,8 @@
     @force-archive="noop"
     @recall-turn="$emit('recallTurn', $event)"
     @regenerate-turn="noop"
-    @confirm-plan="noop"
-    @lock-workspace="noop"
+    @confirm-plan="$emit('confirmPlan', $event)"
+    @lock-workspace="$emit('lockWorkspace')"
     @open-code-review="$emit('openCodeReview')"
     @open-supervision-task="$emit('openSupervisionTask')"
     @detach-conversation="noop"
@@ -124,8 +127,8 @@
     @selection-action-forward="noop"
     @selection-action-delegate="$emit('selectionActionDelegate', $event)"
     @selection-action-share="noop"
-    @approve-terminal-approval="noop"
-    @deny-terminal-approval="noop"
+    @approve-terminal-approval="$emit('approveTerminalApproval', $event)"
+    @deny-terminal-approval="$emit('denyTerminalApproval', $event)"
     @open-sidebar-file-reference="openSidebarFileReference"
   />
 </template>
@@ -135,6 +138,7 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vu
 import type { ApiConfigItem, ChatMentionEntry, ChatMessage } from "../../../types/app";
 import ChatView from "../../chat/views/ChatView.vue";
 import { useChatMessageBlocks } from "../../chat/composables/use-chat-turns";
+import type { TerminalApprovalConversationItem } from "../../shell/composables/use-terminal-approval";
 
 type VsCodeApi = { postMessage: (message: unknown) => void };
 
@@ -165,15 +169,28 @@ const props = defineProps<{
   selectedChatModelId: string;
   chatModelOptions: ApiConfigItem[];
   workspaceAccess: "read_only" | "approval" | "full_access" | "";
+  planModeEnabled: boolean;
   input: string;
   messages: ChatMessage[];
   clipboardImages: Array<{ mime: string; bytesBase64: string }>;
   streamingText: string;
   streamingReasoningStandard: string;
   streamingReasoningInline: string;
+  toolStatusText: string;
+  toolStatusState: "running" | "done" | "failed" | "";
+  streamToolCalls: Array<{ toolCallId?: string; name: string; argsText: string; status?: "doing" | "done" }>;
   busy: boolean;
   runtimeState?: string;
   hasPrevBlock: boolean;
+  createConversationDepartmentOptions: Array<{ id: string; name: string; ownerAgentId?: string; ownerName: string; providerName?: string; modelName?: string; childDepartmentIds?: string[] }>;
+  delegateDepartmentIds: string[];
+  defaultCreateConversationDepartmentId: string;
+  currentDepartmentId: string;
+  currentWorkspaceName: string;
+  hideWorkspaceButton?: boolean;
+  terminalApprovals: TerminalApprovalConversationItem[];
+  terminalApprovalResolving: boolean;
+  readPlanFileContent: (input: { conversationId: string; path: string }) => Promise<string>;
 }>();
 
 defineEmits<{
@@ -185,9 +202,13 @@ defineEmits<{
   "update:selectedChatModelId": [value: string];
   updateWorkspaceAccess: [value: "read_only" | "approval" | "full_access"];
   recallTurn: [payload: { turnId: string }];
+  confirmPlan: [payload: { messageId: string }];
+  lockWorkspace: [];
   openCodeReview: [];
   openSupervisionTask: [];
   saveSupervisionTask: [payload: { durationHours: number; goal: string; why: string; todo: string }];
+  approveTerminalApproval: [requestId: string];
+  denyTerminalApproval: [requestId: string];
   selectionActionBranch: [payload: { count: number; messageIds: string[] }];
   selectionActionDelegate: [payload: { count: number; messageIds: string[]; departmentId: string; presetId: string; background: string; question: string; focus: string }];
 }>();
@@ -262,13 +283,32 @@ onBeforeUnmount(() => {
 });
 
 watch(
-  () => [props.messages, props.streamingText, props.streamingReasoningStandard, props.streamingReasoningInline] as const,
+  () => [
+    props.messages,
+    props.streamingText,
+    props.streamingReasoningStandard,
+    props.streamingReasoningInline,
+    props.toolStatusText,
+    props.toolStatusState,
+    props.streamToolCalls,
+  ] as const,
   () => {
     const next = [...props.messages];
     const text = String(props.streamingText || "");
     const reasoningStandard = String(props.streamingReasoningStandard || "");
     const reasoningInline = String(props.streamingReasoningInline || "");
-    if (text.trim() || reasoningStandard.trim() || reasoningInline.trim()) {
+    const toolStatusText = String(props.toolStatusText || "");
+    const streamToolCalls = Array.isArray(props.streamToolCalls)
+      ? props.streamToolCalls.map((item) => ({ ...item }))
+      : [];
+    if (
+      text.trim()
+      || reasoningStandard.trim()
+      || reasoningInline.trim()
+      || toolStatusText.trim()
+      || props.toolStatusState
+      || streamToolCalls.length > 0
+    ) {
       if (!streamingDraftCreatedAt.value) {
         streamingDraftCreatedAt.value = new Date().toISOString();
       }
@@ -284,6 +324,9 @@ watch(
           _streamSegments: [text],
           reasoningStandard,
           reasoningInline,
+          _toolStatusText: toolStatusText,
+          _toolStatusState: props.toolStatusState,
+          _streamToolCalls: streamToolCalls,
         },
         toolCall: [],
       });
@@ -308,6 +351,14 @@ const { visibleMessageBlocks } = useChatMessageBlocks({
   perfDebug: false,
   perfNow: () => performance.now(),
 });
+
+const chatViewRef = ref<{ exitMessageSelectionMode: () => void } | null>(null);
+
+function exitMessageSelectionMode() {
+  chatViewRef.value?.exitMessageSelectionMode();
+}
+
+defineExpose({ exitMessageSelectionMode });
 
 function noop() {}
 

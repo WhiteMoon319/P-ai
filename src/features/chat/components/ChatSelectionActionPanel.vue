@@ -117,6 +117,7 @@ type ConversationDepartmentOption = {
   ownerName: string;
   providerName?: string;
   modelName?: string;
+  childDepartmentIds?: string[];
 };
 
 type RecentDelegateRequest = {

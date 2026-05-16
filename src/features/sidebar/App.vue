@@ -23,6 +23,7 @@
     />
     <ChatViewWrapper
       v-else
+      ref="chatViewWrapperRef"
       v-model:input="inputText"
       :active-conversation-id="activeConversationId"
       :active-agent-id="activeAgentId"
@@ -30,14 +31,27 @@
       :selected-chat-model-id="selectedChatModelId"
       :chat-model-options="chatModelOptions"
       :workspace-access="workspaceAccess"
+      :plan-mode-enabled="activeConversationPlanModeEnabled"
       :messages="messages"
       :clipboard-images="clipboardImages"
       :streaming-text="streamingText"
       :streaming-reasoning-standard="streamingReasoningStandard"
       :streaming-reasoning-inline="streamingReasoningInline"
+      :tool-status-text="toolStatusText"
+      :tool-status-state="toolStatusState"
+      :stream-tool-calls="streamToolCalls"
       :busy="busy"
       :runtime-state="activeConversationRuntimeState"
       :has-prev-block="hasPrevBlock"
+      :create-conversation-department-options="createConversationDepartmentOptions"
+      :delegate-department-ids="sidebarDelegateDepartmentIds"
+      :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
+      :current-department-id="activeDepartmentId"
+      :current-workspace-name="currentWorkspaceName"
+      :hide-workspace-button="hideWorkspaceButton"
+      :terminal-approvals="activeConversationTerminalApprovals"
+      :terminal-approval-resolving="terminalApprovalResolving"
+      :read-plan-file-content="readPlanFileContent"
       @send="send"
       @stop="stop"
       @remove-clipboard-image="removeClipboardImage"
@@ -45,8 +59,12 @@
       @update:selected-chat-model-id="selectChatModel"
       @update-workspace-access="selectWorkspaceAccess"
       @recall-turn="recallTurn"
+      @confirm-plan="confirmPlan"
+      @lock-workspace="openWorkspacePicker"
       @open-code-review="openCodeReview"
       @open-supervision-task="openSupervisionTask"
+      @approve-terminal-approval="approveTerminalApproval"
+      @deny-terminal-approval="denyTerminalApproval"
       @selection-action-branch="branchConversationFromSelection"
       @selection-action-delegate="delegateFromSelection"
     />
@@ -92,6 +110,37 @@
       @close="closeSupervisionTask"
       @save="saveSupervisionTask"
     />
+    <dialog class="modal" :class="{ 'modal-open': rewindConfirmDialogOpen }">
+      <div class="modal-box max-w-md">
+        <h3 class="font-semibold text-base">{{ t("dialogs.rewind.title") }}</h3>
+        <div class="mt-2 text-sm opacity-80">{{ t("dialogs.rewind.hint") }}</div>
+        <div class="mt-4 flex flex-col items-center gap-2">
+          <button class="btn btn-sm w-full" @click="confirmRewindMessageOnly">
+            {{ t("dialogs.rewind.messageOnly") }}
+          </button>
+          <button class="btn btn-sm btn-primary w-full" @click="cancelRewindConfirm">
+            {{ t("common.cancel") }}
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button @click.prevent="cancelRewindConfirm">close</button>
+      </form>
+    </dialog>
+    <ChatWorkspacePickerDialog
+      :open="workspacePickerOpen"
+      :saving="workspacePickerSaving"
+      :workspaces="workspaceDraftChoices"
+      :autonomous-mode="workspaceDraftAutonomousMode"
+      hide-add-workspace
+      @close="closeWorkspacePicker"
+      @set-main="setWorkspaceAsMain"
+      @set-access="setWorkspaceAccess"
+      @set-autonomous-mode="setWorkspaceAutonomousMode"
+      @remove-workspace="removeWorkspace"
+      @open-dir="openWorkspaceDir"
+      @save="saveWorkspacePicker"
+    />
   </SidebarLayout>
 </template>
 
@@ -99,6 +148,8 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import type { ApiConfigItem, ChatMessage } from "../../types/app";
 import { removeBinaryPlaceholders, messageText } from "../../utils/chat-message";
+import { normalizeDepartmentChildIds } from "../config/utils/department-graph";
+import { useI18n } from "vue-i18n";
 import SidebarLayout from "./layouts/SidebarLayout.vue";
 import ConversationListView from "./views/ConversationListView.vue";
 import ChatViewWrapper from "./views/ChatViewWrapper.vue";
@@ -107,7 +158,10 @@ import CreateConversationDialog, { type SidebarCreateDepartmentOption } from "./
 import { useWsTransport, type SidebarBridgeConfig } from "./composables/use-ws-transport";
 import ToolReviewTargetDialog from "../chat/components/ToolReviewTargetDialog.vue";
 import ChatSupervisionTaskDialog from "../chat/components/dialogs/ChatSupervisionTaskDialog.vue";
+import ChatWorkspacePickerDialog from "../chat/components/dialogs/ChatWorkspacePickerDialog.vue";
+import type { ChatWorkspaceChoice } from "../chat/composables/use-chat-workspace";
 import type { ToolReviewCodeReviewScope, ToolReviewCommitOption } from "../chat/composables/use-chat-tool-review";
+import type { TerminalApprovalConversationItem, TerminalApprovalRequestPayload } from "../shell/composables/use-terminal-approval";
 
 type ConversationSummary = {
   conversationId: string;
@@ -121,6 +175,7 @@ type ConversationSummary = {
   departmentId?: string;
   departmentName?: string;
   runtimeState?: string;
+  planModeEnabled?: boolean;
   detachedWindowOpen?: boolean;
   detachedWindowLabel?: string;
   previewMessages?: Array<{
@@ -142,6 +197,7 @@ type OpenConversationResult = {
   agentId?: string;
   departmentId?: string;
   messages: ChatMessage[];
+  runtime?: SidebarConversationRuntimePayload | null;
   persona?: SidebarPersonaPayload;
   model?: SidebarModelPayload;
 };
@@ -196,6 +252,40 @@ type SidebarModelPayload = {
   chatModelOptions?: ApiConfigItem[];
 };
 
+type SidebarStreamToolCallView = {
+  toolCallId?: string;
+  name: string;
+  argsText: string;
+  status?: "doing" | "done";
+};
+
+type SidebarStreamCachePayload = {
+  assistantText?: string;
+  reasoningStandard?: string;
+  reasoningInline?: string;
+  toolStatusText?: string;
+  toolStatusState?: string;
+  streamToolCalls?: unknown[];
+};
+
+type SidebarConversationRuntimePayload = {
+  runtimeState?: string;
+  streamCache?: SidebarStreamCachePayload;
+};
+
+type SidebarAssistantDeltaPayload = {
+  conversationId?: string;
+  event?: {
+    delta?: string;
+    kind?: string;
+    toolName?: string;
+    toolCallId?: string;
+    toolStatus?: string;
+    toolArgs?: string;
+    message?: string;
+  };
+};
+
 type CreateConversationOptionsResult = {
   departments: SidebarCreateDepartmentOption[];
   defaultDepartmentId: string;
@@ -210,6 +300,7 @@ type DiscoveryPayload = {
 };
 
 const transport = useWsTransport();
+const { t } = useI18n();
 const conversations = ref<ConversationSummary[]>([]);
 const activeConversationId = ref("");
 const activeTitle = ref("");
@@ -219,6 +310,8 @@ const listPersona = ref<SidebarPersonaPayload>({});
 const selectedChatModelId = ref("");
 const chatModelOptions = ref<ApiConfigItem[]>([]);
 const workspaceAccess = ref<"read_only" | "approval" | "full_access" | "">("approval");
+const workspaceRootPath = ref("");
+const workspaceRootName = ref("");
 const vscodeWorkspaceRoots = ref<Array<{ path: string; name: string }>>([]);
 const messages = ref<ChatMessage[]>([]);
 const inputText = ref("");
@@ -226,8 +319,12 @@ const clipboardImages = ref<SidebarClipboardImage[]>([]);
 const streamingText = ref("");
 const streamingReasoningStandard = ref("");
 const streamingReasoningInline = ref("");
+const toolStatusText = ref("");
+const toolStatusState = ref<"running" | "done" | "failed" | "">("");
+const streamToolCalls = ref<SidebarStreamToolCallView[]>([]);
 const busy = ref(false);
 const compacting = ref(false);
+const chatViewWrapperRef = ref<{ exitMessageSelectionMode: () => void } | null>(null);
 const compactionDialogOpen = ref(false);
 const compactionPreviewLoading = ref(false);
 const compactionPreview = ref<CompactionPreviewResult | null>(null);
@@ -251,11 +348,38 @@ const supervisionErrorText = ref("");
 const selectedBlockId = ref<number | null>(null);
 const hasPrevBlock = ref(false);
 const view = ref<"list" | "chat">("list");
+const rewindConfirmDialogOpen = ref(false);
+let rewindConfirmResolver: ((mode: "message_only" | "cancel") => void) | null = null;
+const currentWorkspaceName = ref("");
+const workspacePickerOpen = ref(false);
+const workspacePickerSaving = ref(false);
+const workspaceDraftChoices = ref<ChatWorkspaceChoice[]>([]);
+const workspaceDraftAutonomousMode = ref(false);
+const terminalApprovalQueue = ref<TerminalApprovalRequestPayload[]>([]);
+const terminalApprovalResolving = ref(false);
+const hideWorkspaceButton = computed(() => vscodeWorkspaceRoots.value.length === 0);
 let discoveryRefreshTimer: number | null = null;
 
 const activeSummary = computed(() => conversations.value.find((item) => item.conversationId === activeConversationId.value));
 const activeConversationRuntimeState = computed(() => String(activeSummary.value?.runtimeState || "").trim());
+const activeConversationPlanModeEnabled = computed(() => !!activeSummary.value?.planModeEnabled);
 const activeDepartmentId = computed(() => String(activeSummary.value?.departmentId || "").trim());
+const activeConversationTerminalApprovals = computed<TerminalApprovalConversationItem[]>(() =>
+  listConversationTerminalApprovals(activeConversationId.value),
+);
+const sidebarDelegateDepartmentIds = computed(() => {
+  const currentDept = createConversationDepartmentOptions.value.find(
+    (item) => String(item.id || "").trim() === activeDepartmentId.value,
+  );
+  if (!currentDept) return [];
+  const existingIds = new Set(
+    createConversationDepartmentOptions.value
+      .map((item) => String(item.id || "").trim())
+      .filter(Boolean),
+  );
+  return normalizeDepartmentChildIds(currentDept.childDepartmentIds, currentDept.id)
+    .filter((id: string) => existingIds.has(id));
+});
 
 function normalizeDiscovery(payload: DiscoveryPayload): SidebarBridgeConfig | null {
   const chatUrl = String(payload.chatUrl || "").trim() || String(payload.url || "").trim().replace(/\/ide-context$/, "/chat");
@@ -318,9 +442,113 @@ function clearCompletedRuntimeStateForConversation(conversationId: string) {
   });
 }
 
+function patchConversationRuntimeState(conversationId: string, runtimeState: string) {
+  const targetId = String(conversationId || "").trim();
+  if (!targetId) return;
+  conversations.value = conversations.value.map((item) =>
+    String(item.conversationId || "").trim() === targetId
+      ? { ...item, runtimeState }
+      : item,
+  );
+}
+
+function patchConversationPlanMode(conversationId: string, planModeEnabled: boolean) {
+  const targetId = String(conversationId || "").trim();
+  if (!targetId) return;
+  conversations.value = conversations.value.map((item) =>
+    String(item.conversationId || "").trim() === targetId
+      ? { ...item, planModeEnabled }
+      : item,
+  );
+}
+
+function normalizeToolStatusState(value: unknown): "running" | "done" | "failed" | "" {
+  const state = String(value || "").trim();
+  return state === "running" || state === "done" || state === "failed" ? state : "";
+}
+
+function normalizeStreamToolCallView(value: unknown): SidebarStreamToolCallView | null {
+  const raw = value && typeof value === "object" ? value as Record<string, unknown> : null;
+  const toolCallId = String(raw?.toolCallId || "").trim();
+  const name = String(raw?.name || "").trim();
+  if (!toolCallId || !name) return null;
+  return {
+    toolCallId,
+    name,
+    argsText: String(raw?.argsText || ""),
+    status: String(raw?.status || "") === "doing" ? "doing" : "done",
+  };
+}
+
+function normalizeStreamToolCalls(values: unknown): SidebarStreamToolCallView[] {
+  return Array.isArray(values)
+    ? values
+      .map((item) => normalizeStreamToolCallView(item))
+      .filter((item): item is SidebarStreamToolCallView => !!item)
+    : [];
+}
+
+function upsertStreamToolCall(nextCall: SidebarStreamToolCallView) {
+  const toolCallId = String(nextCall.toolCallId || "").trim();
+  if (!toolCallId) return;
+  const index = streamToolCalls.value.findIndex((item) => String(item.toolCallId || "").trim() === toolCallId);
+  if (index >= 0) {
+    const current = streamToolCalls.value[index];
+    streamToolCalls.value.splice(index, 1, {
+      ...current,
+      ...nextCall,
+      argsText: nextCall.argsText || current.argsText,
+      status: nextCall.status,
+    });
+    return;
+  }
+  streamToolCalls.value.push(nextCall);
+}
+
+function clearStreamingState() {
+  streamingText.value = "";
+  streamingReasoningStandard.value = "";
+  streamingReasoningInline.value = "";
+  toolStatusText.value = "";
+  toolStatusState.value = "";
+  streamToolCalls.value = [];
+}
+
+function applyRuntimeStreamCache(runtime: SidebarConversationRuntimePayload | null | undefined) {
+  const cache = runtime?.streamCache;
+  if (!cache) return;
+  streamingText.value = String(cache.assistantText || "");
+  streamingReasoningStandard.value = String(cache.reasoningStandard || "");
+  streamingReasoningInline.value = String(cache.reasoningInline || "");
+  toolStatusText.value = String(cache.toolStatusText || "");
+  toolStatusState.value = normalizeToolStatusState(cache.toolStatusState);
+  streamToolCalls.value = normalizeStreamToolCalls(cache.streamToolCalls);
+}
+
+function applyAssistantToolStatusEvent(event: NonNullable<SidebarAssistantDeltaPayload["event"]>) {
+  const toolStatus = String(event.toolStatus || "").trim();
+  const toolName = String(event.toolName || "").trim();
+  const toolCallId = String(event.toolCallId || "").trim();
+  if (toolCallId && toolName && (toolStatus === "running" || toolStatus === "done" || toolStatus === "failed")) {
+    upsertStreamToolCall({
+      toolCallId,
+      name: toolName,
+      argsText: String(event.toolArgs || ""),
+      status: toolStatus === "running" ? "doing" : "done",
+    });
+  }
+  toolStatusText.value = String(event.message || "");
+  toolStatusState.value = normalizeToolStatusState(toolStatus);
+}
+
 async function openConversation(conversationId: string) {
   clearCompletedRuntimeStateForConversation(activeConversationId.value);
-  const result = await transport.request<OpenConversationResult>("conversation.open", { conversationId });
+  const vscodeRoot = vscodeWorkspaceRoots.value[0];
+  const result = await transport.request<OpenConversationResult>("conversation.open", {
+    conversationId,
+    workspacePath: vscodeRoot?.path || undefined,
+    workspaceName: vscodeRoot?.name || undefined,
+  });
   activeConversationId.value = result.conversationId;
   clearCompletedRuntimeStateForConversation(result.conversationId);
   activeTitle.value = result.title || activeSummary.value?.title || "PAI";
@@ -330,12 +558,12 @@ async function openConversation(conversationId: string) {
   applyModelPayload(result.model || {});
   await refreshWorkspacePermission();
   messages.value = Array.isArray(result.messages) ? result.messages : [];
-  streamingText.value = "";
-  streamingReasoningStandard.value = "";
-  streamingReasoningInline.value = "";
+  clearStreamingState();
+  applyRuntimeStreamCache(result.runtime);
   selectedBlockId.value = null;
   hasPrevBlock.value = true;
   view.value = "chat";
+  loadCreateConversationOptions();
 }
 
 async function refreshWorkspacePermission() {
@@ -353,6 +581,81 @@ async function refreshWorkspacePermission() {
 function applyWorkspacePermission(payload: SidebarWorkspacePermission) {
   const access = String(payload.access || "").trim();
   workspaceAccess.value = access === "read_only" || access === "full_access" ? access : "approval";
+  const rootPath = String(payload.rootPath || "").trim();
+  if (rootPath) workspaceRootPath.value = rootPath;
+  const rootName = String(payload.workspaceName || "").trim();
+  if (rootName) workspaceRootName.value = rootName;
+}
+
+function normalizeTerminalApprovalConversationId(payload: Pick<TerminalApprovalRequestPayload, "sessionId"> | null | undefined): string {
+  const sessionId = String(payload?.sessionId || "").trim();
+  if (!sessionId) return "";
+  const parts = sessionId.split("::");
+  return String(parts[parts.length - 1] || "").trim();
+}
+
+function listConversationTerminalApprovals(conversationId: string): TerminalApprovalConversationItem[] {
+  const normalizedConversationId = String(conversationId || "").trim();
+  if (!normalizedConversationId) return [];
+  return terminalApprovalQueue.value
+    .filter((item) => normalizeTerminalApprovalConversationId(item) === normalizedConversationId)
+    .map((item) => ({ ...item, conversationId: normalizedConversationId }));
+}
+
+function enqueueTerminalApprovalRequest(payload: TerminalApprovalRequestPayload) {
+  const requestId = String(payload.requestId || "").trim();
+  if (!requestId) return;
+  if (terminalApprovalQueue.value.some((item) => item.requestId === requestId)) return;
+  terminalApprovalQueue.value.push({
+    ...payload,
+    requestId,
+    title: String(payload.title || "终端审批"),
+    message: String(payload.message || ""),
+    approvalKind: String(payload.approvalKind || "unknown"),
+    sessionId: String(payload.sessionId || ""),
+    toolName: String(payload.toolName || ""),
+    summary: String(payload.summary || ""),
+    callPreview: String(payload.callPreview || ""),
+    cwd: String(payload.cwd || ""),
+    command: String(payload.command || ""),
+    requestedPath: String(payload.requestedPath || ""),
+    reason: String(payload.reason || ""),
+    reviewOpinion: String(payload.reviewOpinion || ""),
+    reviewModelName: String(payload.reviewModelName || ""),
+    existingPaths: Array.isArray(payload.existingPaths)
+      ? payload.existingPaths.map((item) => String(item || "").trim()).filter(Boolean)
+      : [],
+    targetPaths: Array.isArray(payload.targetPaths)
+      ? payload.targetPaths.map((item) => String(item || "").trim()).filter(Boolean)
+      : [],
+  });
+}
+
+async function resolveTerminalApproval(approved: boolean, requestId?: string) {
+  if (terminalApprovalResolving.value) return;
+  const normalizedRequestId = String(requestId || "").trim();
+  const targetIndex = terminalApprovalQueue.value.findIndex((item) => item.requestId === normalizedRequestId);
+  if (targetIndex < 0) return;
+  terminalApprovalResolving.value = true;
+  try {
+    await transport.request("terminalApproval.resolve", {
+      requestId: terminalApprovalQueue.value[targetIndex].requestId,
+      approved,
+    });
+    terminalApprovalQueue.value.splice(targetIndex, 1);
+  } catch (error) {
+    transport.errorText.value = String(error || "处理审批失败");
+  } finally {
+    terminalApprovalResolving.value = false;
+  }
+}
+
+function approveTerminalApproval(requestId: string) {
+  void resolveTerminalApproval(true, requestId);
+}
+
+function denyTerminalApproval(requestId: string) {
+  void resolveTerminalApproval(false, requestId);
 }
 
 async function loadPrevBlock() {
@@ -465,9 +768,9 @@ async function submitCodeReview(input: { scope: ToolReviewCodeReviewScope; targe
       target: String(input.target || "").trim() || undefined,
       departmentId: input.departmentId,
     });
+    codeReviewDialogOpen.value = false;
   } catch (error) {
     codeReviewErrorText.value = String(error || "发起代码审查失败");
-    codeReviewDialogOpen.value = true;
   } finally {
     codeReviewSubmitting.value = false;
   }
@@ -507,6 +810,7 @@ async function delegateFromSelection(payload: { count: number; messageIds: strin
       focus: String(payload.focus || "").trim(),
       selectedMessageIds,
     });
+    chatViewWrapperRef.value?.exitMessageSelectionMode();
   } catch (error) {
     transport.errorText.value = String(error || "发起委托失败");
   }
@@ -597,13 +901,15 @@ async function selectWorkspaceAccess(access: "read_only" | "approval" | "full_ac
   if (!activeConversationId.value || workspaceAccess.value === access) return;
   const previous = workspaceAccess.value;
   workspaceAccess.value = access;
-  const root = vscodeWorkspaceRoots.value[0];
+  const vscodeRoot = vscodeWorkspaceRoots.value[0];
+  const workspacePath = vscodeRoot?.path || workspaceRootPath.value || undefined;
+  const workspaceName = vscodeRoot?.name || workspaceRootName.value || undefined;
   try {
     const result = await transport.request<SidebarWorkspacePermission>("workspace.permission.select", {
       conversationId: activeConversationId.value,
       access,
-      workspacePath: root?.path || undefined,
-      workspaceName: root?.name || undefined,
+      workspacePath,
+      workspaceName,
     });
     applyWorkspacePermission(result);
   } catch (error) {
@@ -715,9 +1021,7 @@ async function send() {
     await transport.request("chat.send", { conversationId: activeConversationId.value, text, images });
   } catch (error) {
     busy.value = false;
-    streamingText.value = "";
-    streamingReasoningStandard.value = "";
-    streamingReasoningInline.value = "";
+    clearStreamingState();
     if (!inputText.value.trim()) inputText.value = text;
     clipboardImages.value = [...images, ...clipboardImages.value];
     transport.errorText.value = String(error || "发送失败");
@@ -758,10 +1062,10 @@ async function recallTurn(payload: { turnId: string }) {
     transport.errorText.value = "撤回失败：未找到可撤回的用户消息";
     return;
   }
+  const mode = await requestRecallMode();
+  if (mode === "cancel") return;
   if (busy.value) await stop();
-  streamingText.value = "";
-  streamingReasoningStandard.value = "";
-  streamingReasoningInline.value = "";
+  clearStreamingState();
   try {
     const result = await transport.request<RewindConversationResult>("conversation.rewind", {
       conversationId: activeConversationId.value,
@@ -788,6 +1092,184 @@ async function recallTurn(payload: { turnId: string }) {
   }
 }
 
+async function confirmPlan(payload: { messageId: string }) {
+  const conversationId = activeConversationId.value;
+  const planMessageId = String(payload?.messageId || "").trim();
+  if (!conversationId || !planMessageId || busy.value || compacting.value) return;
+  clearStreamingState();
+  try {
+    await transport.request("conversation.planMode.set", {
+      conversationId,
+      planModeEnabled: false,
+    });
+    patchConversationPlanMode(conversationId, false);
+    busy.value = true;
+    await transport.request("conversation.plan.confirm", {
+      conversationId,
+      planMessageId,
+      departmentId: activeDepartmentId.value || undefined,
+      agentId: activeAgentId.value || undefined,
+    });
+  } catch (error) {
+    busy.value = false;
+    transport.errorText.value = String(error || "确认计划失败");
+  }
+}
+
+async function readPlanFileContent(input: { conversationId: string; path: string }): Promise<string> {
+  const result = await transport.request<{ content?: string }>("conversation.plan.readFile", {
+    conversationId: input.conversationId,
+    path: input.path,
+  });
+  return String(result.content || "");
+}
+
+function requestRecallMode(): Promise<"message_only" | "cancel"> {
+  rewindConfirmDialogOpen.value = true;
+  return new Promise((resolve) => {
+    rewindConfirmResolver = resolve;
+  });
+}
+
+function confirmRewindMessageOnly() {
+  const resolver = rewindConfirmResolver;
+  rewindConfirmResolver = null;
+  rewindConfirmDialogOpen.value = false;
+  if (resolver) resolver("message_only");
+}
+
+function cancelRewindConfirm() {
+  const resolver = rewindConfirmResolver;
+  rewindConfirmResolver = null;
+  rewindConfirmDialogOpen.value = false;
+  if (resolver) resolver("cancel");
+}
+
+type WorkspaceListResult = {
+  workspaces: Array<{ id: string; name: string; path: string; level: string; access: string; builtIn: boolean }>;
+  rootPath: string;
+  workspaceName: string;
+  autonomousMode: boolean;
+};
+
+async function refreshWorkspaceList() {
+  if (!activeConversationId.value) return;
+  try {
+    const result = await transport.request<WorkspaceListResult>("workspace.list", {
+      conversationId: activeConversationId.value,
+    });
+    const workspaces = Array.isArray(result.workspaces) ? result.workspaces : [];
+    workspaceDraftChoices.value = workspaces.map((item) => ({
+      id: String(item.id || "").trim(),
+      name: String(item.name || "").trim(),
+      path: String(item.path || "").trim(),
+      level: (String(item.level || "").trim().toLowerCase() === "main" ? "main" : String(item.level || "").trim().toLowerCase() === "system" ? "system" : "secondary") as ChatWorkspaceChoice["level"],
+      access: String(item.access || "approval").trim() as ChatWorkspaceChoice["access"],
+    }));
+    workspaceDraftAutonomousMode.value = Boolean(result.autonomousMode);
+    currentWorkspaceName.value = String(result.workspaceName || "").trim();
+    workspaceRootPath.value = String(result.rootPath || "").trim();
+  } catch {
+    workspaceDraftChoices.value = [];
+  }
+}
+
+function openWorkspacePicker() {
+  refreshWorkspaceList();
+  workspacePickerOpen.value = true;
+}
+
+function closeWorkspacePicker() {
+  if (workspacePickerSaving.value) return;
+  workspacePickerOpen.value = false;
+}
+
+function cloneWorkspaceDraft(items: ChatWorkspaceChoice[]): ChatWorkspaceChoice[] {
+  return (items || []).map((item) => ({
+    id: String(item.id || "").trim(),
+    name: String(item.name || "").trim(),
+    path: String(item.path || "").trim(),
+    level: item.level,
+    access: item.access,
+  }));
+}
+
+function setWorkspaceAsMain(workspaceId: string) {
+  const draft = cloneWorkspaceDraft(workspaceDraftChoices.value).map((item): ChatWorkspaceChoice => {
+    if (item.level === "system") return item;
+    if (item.id === workspaceId) return { ...item, level: "main", access: item.access || "approval" };
+    if (item.level === "main") return { ...item, level: "secondary" };
+    return item;
+  });
+  workspaceDraftChoices.value = draft;
+}
+
+function setWorkspaceAccess(workspaceId: string, access: ChatWorkspaceChoice["access"]) {
+  const draft = cloneWorkspaceDraft(workspaceDraftChoices.value);
+  const target = draft.find((item) => item.id === workspaceId);
+  if (!target || target.level === "system") return;
+  target.access = access;
+  workspaceDraftChoices.value = draft;
+}
+
+function setWorkspaceAutonomousMode(enabled: boolean) {
+  workspaceDraftAutonomousMode.value = Boolean(enabled);
+}
+
+function removeWorkspace(workspaceId: string) {
+  const current = cloneWorkspaceDraft(workspaceDraftChoices.value);
+  const removing = current.find((item) => item.id === workspaceId);
+  const draft = current.filter((item) => item.id !== workspaceId || item.level === "system");
+  if (removing?.level === "main") {
+    const promoteTarget = draft.find((item) => item.level === "secondary");
+    if (promoteTarget) {
+      draft.forEach((item) => {
+        if (item.level === "system") return;
+        if (item.id === promoteTarget.id) item.level = "main";
+        else if (item.level === "main") item.level = "secondary";
+      });
+    }
+  }
+  workspaceDraftChoices.value = draft;
+}
+
+async function openWorkspaceDir(workspaceId: string) {
+  const target = workspaceDraftChoices.value.find((item) => item.id === workspaceId);
+  if (!target?.path) return;
+  try {
+    await transport.request("workspace.openDir", { workspacePath: target.path });
+  } catch { /* ignore */ }
+}
+
+async function saveWorkspacePicker() {
+  if (workspacePickerSaving.value || !activeConversationId.value) return;
+  workspacePickerSaving.value = true;
+  try {
+    const draft = cloneWorkspaceDraft(workspaceDraftChoices.value);
+    await transport.request("workspace.layout.save", {
+      conversationId: activeConversationId.value,
+      workspaces: draft
+        .filter((item) => item.level !== "system")
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          path: item.path,
+          level: item.level,
+          access: item.access,
+          builtIn: false,
+        })),
+      autonomousMode: workspaceDraftAutonomousMode.value,
+    });
+    workspacePickerOpen.value = false;
+    await refreshWorkspacePermission();
+    await refreshWorkspaceList();
+  } catch (error) {
+    transport.errorText.value = String(error || "保存工作区设置失败");
+  } finally {
+    workspacePickerSaving.value = false;
+  }
+}
+
 function appendMessages(next: unknown) {
   const payload = next as { conversationId?: string; messages?: ChatMessage[]; message?: ChatMessage };
   if (payload.conversationId && payload.conversationId !== activeConversationId.value) return;
@@ -805,22 +1287,37 @@ function registerNotifications() {
       clearCompletedRuntimeStateForConversation(activeConversationId.value);
     }
   });
+  transport.onNotification("conversation.runtimeStateUpdated", (payload) => {
+    const value = payload as { conversationId?: string; runtimeState?: string };
+    const conversationId = String(value.conversationId || "").trim();
+    if (!conversationId) return;
+    const runtimeState = String(value.runtimeState || "").trim();
+    patchConversationRuntimeState(conversationId, runtimeState);
+    if (conversationId === activeConversationId.value && (runtimeState === "done" || runtimeState === "failed" || runtimeState === "completed" || !runtimeState)) {
+      clearCompletedRuntimeStateForConversation(conversationId);
+    }
+  });
   transport.onNotification("conversation.messageAppended", appendMessages);
+  transport.onNotification("terminalApproval.requested", (payload) => {
+    enqueueTerminalApprovalRequest(payload as TerminalApprovalRequestPayload);
+  });
   transport.onNotification("chat.historyFlushed", appendMessages);
   transport.onNotification("chat.roundStarted", (payload) => {
     const value = payload as { conversationId?: string };
     if (value.conversationId === activeConversationId.value) {
       busy.value = true;
-      streamingText.value = "";
-      streamingReasoningStandard.value = "";
-      streamingReasoningInline.value = "";
+      clearStreamingState();
     }
   });
   transport.onNotification("chat.assistantDelta", (payload) => {
-    const value = payload as { conversationId?: string; event?: { delta?: string; kind?: string } };
+    const value = payload as SidebarAssistantDeltaPayload;
     if (value.conversationId !== activeConversationId.value) return;
     const delta = String(value.event?.delta || "");
     const kind = String(value.event?.kind || "").trim();
+    if (kind === "tool_status" && value.event) {
+      applyAssistantToolStatusEvent(value.event);
+      return;
+    }
     if (!delta) return;
     if (kind === "reasoning_standard") streamingReasoningStandard.value += delta;
     else if (kind === "reasoning_inline") streamingReasoningInline.value += delta;
@@ -831,9 +1328,7 @@ function registerNotifications() {
     clearCompletedRuntimeStateForConversation(value.conversationId || "");
     if (value.conversationId !== activeConversationId.value) return;
     busy.value = false;
-    streamingText.value = "";
-    streamingReasoningStandard.value = "";
-    streamingReasoningInline.value = "";
+    clearStreamingState();
     if (value.assistantMessage) appendMessages({ conversationId: value.conversationId, message: value.assistantMessage });
   });
 }

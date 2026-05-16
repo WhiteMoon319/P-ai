@@ -117,7 +117,7 @@ function openDetailDialog(requestId: string) {
             </button>
             <button
               type="button"
-              class="btn btn-primary btn-xs w-full text-primary-content"
+              class="btn btn-xs w-full border-base-300 bg-base-200 text-base-content hover:bg-base-300"
               :disabled="resolving"
               @click="emit('approve', item.requestId)"
             >
@@ -125,7 +125,7 @@ function openDetailDialog(requestId: string) {
             </button>
             <button
               type="button"
-              class="btn btn-warning btn-xs w-full text-warning-content"
+              class="btn btn-xs w-full border-base-300 bg-base-200 text-base-content hover:bg-base-300"
               :disabled="resolving"
               @click="emit('deny', item.requestId)"
             >

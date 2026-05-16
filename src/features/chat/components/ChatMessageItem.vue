@@ -658,6 +658,7 @@ const props = defineProps<{
   compactWithPrevious: boolean;
   canRegenerate: boolean;
   canConfirmPlan: boolean;
+  readPlanFileContent?: (input: { conversationId: string; path: string }) => Promise<string>;
   bubbleBackgroundHidden: boolean;
   hideToggleEnabled: boolean;
 }>();
@@ -708,10 +709,10 @@ watch(
     }
     planMarkdownLoading.value = true;
     try {
-      const content = await invokeTauri<string>("read_plan_file_content", {
-        conversationId: snapshot.conversationId,
-        path: snapshot.path,
-      });
+      const input = { conversationId: snapshot.conversationId, path: snapshot.path };
+      const content = props.readPlanFileContent
+        ? await props.readPlanFileContent(input)
+        : await invokeTauri<string>("read_plan_file_content", input);
       if (cancelled || disposed) return;
       planMarkdownText.value = String(content || "");
     } catch (error) {

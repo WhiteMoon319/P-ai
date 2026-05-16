@@ -161,6 +161,8 @@ struct IdeChatJsonRpcError {
 #[serde(rename_all = "camelCase")]
 struct IdeChatConversationInput {
     conversation_id: String,
+    workspace_path: Option<String>,
+    workspace_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -219,6 +221,13 @@ struct IdeChatStopInput {
 struct IdeChatSelectModelInput {
     conversation_id: String,
     api_config_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IdeChatResolveTerminalApprovalInput {
+    request_id: String,
+    approved: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -446,6 +455,86 @@ fn ide_chat_select_workspace_permission(state: &AppState, params: Value) -> Resu
     ide_chat_workspace_permission_payload(state, &updated)
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IdeChatWorkspaceListInput {
+    conversation_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IdeChatReadPlanFileInput {
+    conversation_id: String,
+    path: String,
+}
+
+fn ide_chat_workspace_list(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatWorkspaceListInput>(params)?;
+    let conversation_id = input.conversation_id.trim();
+    if conversation_id.is_empty() {
+        return Err("conversationId is required".to_string());
+    }
+    let conversation = state_read_conversation_cached(state, conversation_id)?;
+    let workspaces = terminal_allowed_workspaces_for_conversation_canonical(state, Some(&conversation))?;
+    let main = workspaces
+        .iter()
+        .find(|ws| ws.level == SHELL_WORKSPACE_LEVEL_MAIN)
+        .or_else(|| workspaces.iter().find(|ws| ws.level == SHELL_WORKSPACE_LEVEL_SYSTEM));
+    let root_path = main
+        .map(|ws| ws.path.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let workspace_name = main
+        .map(|ws| ws.name.clone())
+        .unwrap_or_default();
+    let autonomous_mode = conversation.shell_autonomous_mode;
+    let workspace_values: Vec<Value> = workspaces
+        .iter()
+        .map(|ws| {
+            serde_json::json!({
+                "id": ws.id,
+                "name": ws.name,
+                "level": ws.level,
+                "access": ws.access,
+                "builtIn": ws.built_in,
+                "path": ws.path.to_string_lossy().to_string(),
+            })
+        })
+        .collect();
+    Ok(serde_json::json!({
+        "workspaces": workspace_values,
+        "rootPath": root_path,
+        "workspaceName": workspace_name,
+        "autonomousMode": autonomous_mode,
+    }))
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IdeChatWorkspaceLayoutSaveInput {
+    conversation_id: String,
+    #[serde(default)]
+    workspaces: Vec<ShellWorkspaceConfig>,
+    #[serde(default)]
+    autonomous_mode: Option<bool>,
+}
+
+fn ide_chat_workspace_layout_save(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatWorkspaceLayoutSaveInput>(params)?;
+    let conversation_id = input.conversation_id.trim();
+    if conversation_id.is_empty() {
+        return Err("conversationId is required".to_string());
+    }
+    let normalized_workspaces = normalize_conversation_shell_workspaces(state, &input.workspaces);
+    let updated = apply_conversation_chat_workspace_changes(
+        state,
+        conversation_id,
+        Some(None),
+        Some(normalized_workspaces),
+        input.autonomous_mode,
+    )?;
+    ide_chat_workspace_permission_payload(state, &updated)
+}
+
 fn ide_chat_create_conversation_options(state: &AppState) -> Result<Value, String> {
     let config = state_read_config_cached(state)?;
     let agents = state_read_agents_cached(state)?;
@@ -489,6 +578,7 @@ fn ide_chat_create_conversation_options(state: &AppState) -> Result<Value, Strin
                 "ownerName": owner_name,
                 "providerName": if api_config.name.trim().is_empty() { api_config.id.trim() } else { api_config.name.trim() },
                 "modelName": api_config.model.trim(),
+                "childDepartmentIds": &department.child_department_ids,
             }))
         })
         .collect::<Vec<_>>();
@@ -1178,6 +1268,49 @@ fn ide_chat_conversation_open_result(state: &AppState, conversation_id: &str) ->
     }))
 }
 
+fn ide_chat_ensure_sidebar_workspace(
+    state: &AppState,
+    conversation_id: &str,
+    workspace_path: &str,
+    workspace_name: Option<&str>,
+) -> Result<(), String> {
+    let conversation = state_read_conversation_cached(state, conversation_id)?;
+    let mut workspaces = conversation.shell_workspaces.clone();
+    let has_main = workspaces.iter().any(|ws| {
+        normalize_shell_workspace_level_text(&ws.level) == SHELL_WORKSPACE_LEVEL_MAIN
+    });
+    if has_main {
+        return Ok(());
+    }
+    let name = workspace_name
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .map(String::from)
+        .unwrap_or_else(|| {
+            std::path::Path::new(workspace_path)
+                .file_name()
+                .map(|f| f.to_string_lossy().to_string())
+                .unwrap_or_else(|| workspace_path.to_string())
+        });
+    workspaces.push(ShellWorkspaceConfig {
+        id: "vscode-sidebar-main-workspace".to_string(),
+        name: name.to_string(),
+        path: workspace_path.to_string(),
+        level: SHELL_WORKSPACE_LEVEL_MAIN.to_string(),
+        access: SHELL_WORKSPACE_ACCESS_APPROVAL.to_string(),
+        built_in: false,
+    });
+    let normalized_workspaces = normalize_conversation_shell_workspaces(state, &workspaces);
+    apply_conversation_chat_workspace_changes(
+        state,
+        conversation_id,
+        Some(None),
+        Some(normalized_workspaces),
+        None,
+    )?;
+    Ok(())
+}
+
 fn ide_chat_conversation_list(state: &AppState) -> Result<Value, String> {
     let summaries = conversation_service()
         .list_unarchived_conversation_summaries(state)?
@@ -1652,6 +1785,55 @@ fn ide_chat_open_settings(app: &AppHandle) -> Result<Value, String> {
     Ok(serde_json::json!({ "opened": true }))
 }
 
+fn ide_chat_resolve_terminal_approval(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatResolveTerminalApprovalInput>(params)?;
+    let resolved = resolve_terminal_approval_request(
+        state,
+        input.request_id.trim(),
+        input.approved,
+    )?;
+    Ok(serde_json::json!({ "resolved": resolved }))
+}
+
+fn ide_chat_set_conversation_plan_mode(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<SetConversationPlanModeInput>(params)?;
+    let conversation_id = input.conversation_id.trim();
+    if conversation_id.is_empty() {
+        return Err("conversationId 不能为空".to_string());
+    }
+    let current_enabled =
+        get_conversation_plan_mode_enabled(state, conversation_id).unwrap_or(false);
+    if current_enabled != input.plan_mode_enabled {
+        set_conversation_plan_mode_enabled(state, conversation_id, input.plan_mode_enabled)?;
+        runtime_log_info(format!(
+            "[计划模式] 完成，任务=VSCode边栏切换会话运行时计划模式，会话ID={}，状态={}",
+            conversation_id,
+            if input.plan_mode_enabled { "开启" } else { "关闭" }
+        ));
+    }
+    Ok(serde_json::json!({
+        "conversationId": conversation_id,
+        "planModeEnabled": input.plan_mode_enabled,
+    }))
+}
+
+async fn ide_chat_confirm_plan(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<ConfirmPlanAndContinueInput>(params)?;
+    let continued = confirm_plan_and_continue_inner(state, &input).await?;
+    Ok(serde_json::json!({ "continued": continued }))
+}
+
+fn ide_chat_read_plan_file(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatReadPlanFileInput>(params)?;
+    let conversation_id = input.conversation_id.trim();
+    if conversation_id.is_empty() {
+        return Err("conversationId is required.".to_string());
+    }
+    let resolved = resolve_plan_file_for_conversation_id(state, conversation_id, input.path.trim())?;
+    let content = read_plan_markdown_file(&resolved.canonical_path)?;
+    Ok(serde_json::json!({ "content": content }))
+}
+
 fn ide_chat_tool_review_reports(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<ToolReviewConversationInput>(params)?;
     serde_json::to_value(list_tool_review_reports_internal(input, state)?)
@@ -1726,6 +1908,9 @@ async fn ide_chat_handle_jsonrpc_request(
                     &sidebar_label,
                     opened_conversation_id,
                 )?;
+                if let Some(workspace_path) = input.workspace_path.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
+                    let _ = ide_chat_ensure_sidebar_workspace(state, &input.conversation_id, workspace_path, input.workspace_name.as_deref());
+                }
                 Ok(result)
             }),
         "conversation.blockPage" => ide_chat_conversation_block_page(state, request.params),
@@ -1759,6 +1944,12 @@ async fn ide_chat_handle_jsonrpc_request(
         "model.select" => ide_chat_select_model(state, app, request.params),
         "workspace.permission" => ide_chat_workspace_permission(state, request.params),
         "workspace.permission.select" => ide_chat_select_workspace_permission(state, request.params),
+        "workspace.list" => ide_chat_workspace_list(state, request.params),
+        "workspace.layout.save" => ide_chat_workspace_layout_save(state, request.params),
+        "terminalApproval.resolve" => ide_chat_resolve_terminal_approval(state, request.params),
+        "conversation.planMode.set" => ide_chat_set_conversation_plan_mode(state, request.params),
+        "conversation.plan.confirm" => ide_chat_confirm_plan(state, request.params).await,
+        "conversation.plan.readFile" => ide_chat_read_plan_file(state, request.params),
         "settings.open" => ide_chat_open_settings(app),
         "chat.send" => ide_chat_send_message(state, request.params),
         "chat.stop" => ide_chat_stop_conversation(state, request.params),

@@ -1,5 +1,7 @@
 # 变更日志
 
+- 修复（vscode-sidebar）：补齐 VS Code 边栏打包发布脚本与文档，修复边栏审批、工具调用流、计划确认与计划文件读取桥接，并统一审批卡片按钮样式。
+
 - 修复（chat-view-layout）：ChatView 根容器始终使用 `flex flex-row` 布局，不再根据侧栏显隐切换 `flex-row`/`flex-col`。
 
 - 修复（sidebar-expansion）：删除窗口扩展逻辑，开关侧栏不再触发窗口 resize，窗口模式下与全屏表现一致。
