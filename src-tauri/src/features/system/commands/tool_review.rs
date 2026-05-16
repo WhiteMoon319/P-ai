@@ -365,6 +365,8 @@ struct ToolReviewReportRecord {
     report_text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     error_text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    delegate_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -518,6 +520,16 @@ fn delete_tool_review_report_internal(
     let report_id = input.report_id.trim();
     if conversation_id.is_empty() || report_id.is_empty() {
         return Err("conversationId 和 reportId 不能为空。".to_string());
+    }
+    // 先读取报告，若有 delegate_id 则打断对应委托
+    let reports = tool_review_read_report_records(&state.data_path, conversation_id)?;
+    if let Some(report) = reports.iter().find(|r| r.id.trim() == report_id) {
+        if let Some(ref delegate_id) = report.delegate_id {
+            let did = delegate_id.trim();
+            if !did.is_empty() {
+                let _ = abort_delegate_runtime_thread(state, did, "用户删除审查报告时连带打断");
+            }
+        }
     }
     with_tool_review_conversation(state, conversation_id, |_conversation| {
         tool_review_delete_report_record(&state.data_path, conversation_id, report_id)
@@ -1088,6 +1100,7 @@ fn tool_review_create_pending_report(
         updated_at: now,
         report_text: String::new(),
         error_text: None,
+        delegate_id: None,
     };
     records.push(record.clone());
     tool_review_write_report_records(data_path, conversation_id, &records)?;
@@ -1102,6 +1115,7 @@ fn tool_review_update_report_record(
     title: Option<&str>,
     report_text: Option<&str>,
     error_text: Option<&str>,
+    delegate_id: Option<&str>,
 ) -> Result<ToolReviewReportRecord, String> {
     let mut records = tool_review_read_report_records(data_path, conversation_id)?;
     let target_id = report_id.trim();
@@ -1124,6 +1138,9 @@ fn tool_review_update_report_record(
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned);
+        if let Some(did) = delegate_id.map(str::trim).filter(|v| !v.is_empty()) {
+            item.delegate_id = Some(did.to_string());
+        }
     }
     let updated = records[position].clone();
     tool_review_write_report_records(data_path, conversation_id, &records)?;
@@ -1584,6 +1601,7 @@ async fn submit_tool_review_code_internal(
                     None,
                     None,
                     Some(&err),
+                    None,
                 );
                 runtime_log_error(format!(
                     "[工具审查][后端] 读取 code-review skill 失败 conversation_id={} scope={} report_id={} err={}",
@@ -1627,6 +1645,7 @@ async fn submit_tool_review_code_internal(
                     None,
                     None,
                     Some(&err),
+                    None,
                 );
                 runtime_log_error(format!(
                     "[工具审查][后端] 代码审查委托失败 conversation_id={} scope={} report_id={} err={}",
@@ -1636,6 +1655,13 @@ async fn submit_tool_review_code_internal(
                 return;
             }
         };
+        let result_delegate_id = delegate_result
+            .get("delegate")
+            .and_then(|d| d.get("delegateId"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(ToOwned::to_owned);
         let ok = delegate_result.get("ok").and_then(Value::as_bool).unwrap_or(false);
         if !ok {
             let reason = delegate_result
@@ -1651,6 +1677,7 @@ async fn submit_tool_review_code_internal(
                 None,
                 None,
                 Some(&reason),
+                result_delegate_id.as_deref(),
             );
             runtime_log_error(format!(
                 "[工具审查][后端] 代码审查委托返回失败 conversation_id={} scope={} report_id={} reason={}",
@@ -1676,6 +1703,7 @@ async fn submit_tool_review_code_internal(
                     None,
                     None,
                     Some(&err),
+                    None,
                 );
                 runtime_log_error(format!(
                     "[工具审查][后端] 代码审查结果缺失 conversation_id={} scope={} report_id={}",
@@ -1695,6 +1723,7 @@ async fn submit_tool_review_code_internal(
             Some(&report_title),
             Some(&report_text),
             None,
+            result_delegate_id.as_deref(),
         ) {
             Ok(_) => {
                 runtime_log_info(format!(
@@ -1716,6 +1745,7 @@ async fn submit_tool_review_code_internal(
                     None,
                     None,
                     Some(&err),
+                    None,
                 );
                 emit_tool_review_reports_updated(&app_state, &conversation_id_owned, &report_id, "failed");
             }

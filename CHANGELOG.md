@@ -2,6 +2,14 @@
 
 ## 发布：v0.9.93
 
+- 重构（chat-right-panel）：合并审查/评估/委托为统一三标签面板，标题栏收窄为“阅读”与“委托”两个 tab，委托内容内联至 ToolReviewSidebar，去除独立 DelegateStatusSidebar 嵌套。
+
+- 新增（delegate-progress）：新增 DelegateProgressLine 组件，折叠卡片第二行实时显示委托进度（用时/步数/用量/最近工具）或完成摘要，审查报告与委托卡片统一使用。
+
+- 修复（tool-review）：审查报告记录新增 delegateId 字段，删除审查报告时自动打断对应委托；报告进度匹配改为按 delegateId 精确匹配并回退至会话上下文兜底。
+
+- 优化（delegate-poll）：委托状态轮询间隔从 2 秒缩短至 1 秒。
+
 - 新增（conversation-list-state）：统一本地会话列表状态，前端不再各自推演"忙碌、完成、失败、未读、是否已打开"，只拉取并监听后端产出的 `state` 字段（`activity`、`runtimeState`、`unreadCount`、`openState`、`openedBy`、`disabledReason`、`failedMessage`、`completedAt`）。
 
 - 升级（markstream-vue）：0.0.13-beta.2 → 1.0.0，代码块主题跟随应用亮暗模式切换。

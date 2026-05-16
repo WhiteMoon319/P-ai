@@ -76,9 +76,13 @@
                     {{ formatDelegateStatus(delegate.status) }}
                   </div>
                 </div>
-                <div class="mt-1 text-xs text-base-content/65">
-                  用时 {{ formatElapsedMs(delegate.elapsedMs) }} · {{ delegate.requestCount }}步 · 用量 {{ formatTokenK(delegate.tokenCount) }}
-                </div>
+                <DelegateProgressLine
+                  :running="isDelegateRunning(delegate.status)"
+                  :elapsed-ms="delegate.elapsedMs"
+                  :request-count="delegate.requestCount"
+                  :token-count="delegate.tokenCount"
+                  :last-tool-name="delegate.lastToolName"
+                />
               </summary>
               <div class="collapse-content flex flex-col gap-3 px-3 pb-3">
                 <div class="whitespace-pre-wrap wrap-break-word text-sm leading-7 text-base-content/75">
@@ -131,9 +135,22 @@
                     {{ formatReportStatus(report.status) }}
                   </div>
                 </div>
-                <div v-if="report.status === 'success'" class="mt-1 text-xs text-base-content/65">
-                  {{ reportJudgementSummary(report) }}
-                </div>
+                <DelegateProgressLine
+                  v-if="report.status === 'success'"
+                  :text="reportJudgementSummary(report)"
+                />
+                <DelegateProgressLine
+                  v-else-if="report.status === 'pending' && matchedReportProgress(report)"
+                  :running="true"
+                  :elapsed-ms="matchedReportProgress(report)!.elapsedMs"
+                  :request-count="matchedReportProgress(report)!.requestCount"
+                  :token-count="matchedReportProgress(report)!.tokenCount"
+                  :last-tool-name="matchedReportProgress(report)!.lastToolName"
+                />
+                <DelegateProgressLine
+                  v-else-if="report.status === 'pending'"
+                  text="生成中..."
+                />
               </summary>
               <div class="collapse-content flex flex-col gap-3 px-3 pb-3">
                 <div class="whitespace-pre-wrap wrap-break-word text-sm leading-7 text-base-content/75">
@@ -357,6 +374,7 @@ import type { ToolReviewBatchSummary, ToolReviewCodeReviewScope, ToolReviewCommi
 import { registerChatMarkstreamComponents } from "../markdown/register-chat-markstream";
 import ToolReviewItemCard from "./ToolReviewItemCard.vue";
 import ToolReviewTargetDialog from "./ToolReviewTargetDialog.vue";
+import DelegateProgressLine from "./DelegateProgressLine.vue";
 
 enableMermaid();
 enableKatex();
@@ -637,6 +655,19 @@ const currentReport = computed(() => {
 });
 
 const reportTotalPages = computed(() => Math.max(1, Math.ceil(props.reports.length / reportPageSize)));
+
+function matchedReportProgress(report: ToolReviewReportRecord) {
+  const targetId = String(report.delegateId || "").trim();
+  if (targetId) {
+    return props.delegateStatuses.find((d) => d.delegateId === targetId) || null;
+  }
+  // 委托刚创建、delegate_id 尚未写入报告时，按会话匹配运行中的委托
+  const convId = String(report.conversationId || "").trim();
+  if (!convId) return null;
+  return props.delegateStatuses.find(
+    (d) => (d.status === "running" || d.status === "delivered") && d.rootConversationId === convId,
+  ) || null;
+}
 
 const pagedReports = computed(() => {
   const page = Math.min(Math.max(1, reportPage.value), reportTotalPages.value);
