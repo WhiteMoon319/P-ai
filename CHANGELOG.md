@@ -1,5 +1,11 @@
 # 变更日志
 
+## 发布：v0.9.92
+
+- 修复（chat-text-indent）：修复 `removeBinaryPlaceholders` 中 `.map(line => line.trim())` 误删所有行首缩进的问题，改为仅在 filter 判断时 trim，保留原始缩进。
+
+- 清理（debug-log）：移除 `ChatShikiCodeBlockNode.vue` 与 `ChatMessageItem.vue` 中的调试日志。
+
 ## 发布：v0.9.91
 
 - 修复（vscode-sidebar）：补齐 VS Code 边栏打包发布脚本与文档，修复边栏审批、工具调用流、计划确认与计划文件读取桥接，并统一审批卡片按钮样式。

@@ -18,11 +18,12 @@ let mutationObserver: MutationObserver | null = null;
 let pendingResizeFrame = 0;
 
 const resolvedNode = computed(() => {
-  if (!props.node?.diff) return props.node;
+  const node = props.node;
+  if (!node?.diff) return node;
   return {
-    ...props.node,
+    ...node,
     language: "diff",
-    code: String(props.node.raw ?? ""),
+    code: String(node.raw ?? ""),
     diff: false,
     originalCode: undefined,
     updatedCode: undefined,
