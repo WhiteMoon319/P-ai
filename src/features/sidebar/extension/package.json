@@ -15,7 +15,6 @@
     "dist/**",
     "icons/**"
   ],
-  "activationEvents": ["onView:paiSidebar.chatView"],
   "main": "./extension.js",
   "contributes": {
     "viewsContainers": {
