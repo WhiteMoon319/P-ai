@@ -321,6 +321,7 @@ fn detach_current_conversation_to_window(
         conversation_id,
         window_label
     );
+    clear_conversation_list_activity_mark(&state, conversation_id);
     emit_unarchived_conversation_overview_updated_from_state(&state)?;
     Ok(DetachedChatWindowOutput {
         conversation_id: conversation_id.to_string(),

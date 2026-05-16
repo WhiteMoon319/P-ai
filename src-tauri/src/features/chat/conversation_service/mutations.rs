@@ -96,6 +96,7 @@ impl ConversationService {
         let target_conversation_id = target_conversation.id.clone();
         ensure_unarchived_conversation_not_organizing(state, &target_conversation_id)?;
         clear_conversation_unread_count(&mut target_conversation);
+        clear_conversation_list_activity_mark(state, &target_conversation_id);
         if created_new_conversation {
             state_schedule_conversation_persist(state, &target_conversation, true)?;
         } else {
@@ -227,6 +228,7 @@ impl ConversationService {
             };
         let conversation_id = target_conversation.id.clone();
         ensure_unarchived_conversation_not_organizing(state, &conversation_id)?;
+        clear_conversation_list_activity_mark(state, &conversation_id);
         if created_new_conversation {
             state_schedule_conversation_persist(state, &target_conversation, true)?;
         }
@@ -978,6 +980,7 @@ impl ConversationService {
             return Err("删除后未找到可用会话".to_string());
         }
         state_schedule_conversation_delete(state, normalized_conversation_id, true)?;
+        clear_conversation_list_activity_mark(state, normalized_conversation_id);
         let unarchived_conversations =
             self.collect_unarchived_conversation_summaries_cached(state, &app_config)?;
         drop(guard);

@@ -399,3 +399,10 @@ struct ActiveChatViewBinding {
     conversation_id: String,
     delta_channel: tauri::ipc::Channel<AssistantDeltaEvent>,
 }
+
+#[derive(Debug, Clone)]
+struct ConversationListActivityMark {
+    activity: String,
+    failed_message: Option<String>,
+    completed_at: Option<String>,
+}

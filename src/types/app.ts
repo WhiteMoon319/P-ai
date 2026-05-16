@@ -689,6 +689,18 @@ export type UnarchivedConversationSummary = {
   detachedWindowOpen?: boolean;
   detachedWindowLabel?: string;
   previewMessages?: ConversationPreviewMessage[];
+  state?: ConversationListItemState;
+};
+
+export type ConversationListItemState = {
+  activity: "idle" | "busy" | "completed" | "failed";
+  runtimeState: "idle" | "assistant_streaming" | "organizing_context";
+  unreadCount: number;
+  openState: "closed" | "open";
+  openedBy?: "main" | "detached" | "vscode";
+  disabledReason?: "organizing_context" | "opened_elsewhere";
+  failedMessage?: string;
+  completedAt?: string;
 };
 
 export type ConversationPreviewMessage = {
@@ -733,6 +745,7 @@ export type ChatConversationOverviewItem = {
   canCreateNew?: boolean;
   backgroundStatus?: "completed" | "failed";
   previewMessages?: ConversationPreviewMessage[];
+  state?: ConversationListItemState;
 };
 
 export type DelegateConversationSummary = {

@@ -2438,6 +2438,57 @@ async fn activate_main_assistant(
         ));
     }
 
+    // 后台会话活动标记：前台观看时不写 completed/failed，直接清标记
+    let is_watched = state
+        .active_chat_view_bindings
+        .lock()
+        .ok()
+        .map(|bindings| {
+            bindings.values().any(|b| b.conversation_id.trim() == conversation_id)
+        })
+        .unwrap_or(false)
+        || detached_chat_window_for_conversation(conversation_id).is_some();
+    if is_watched {
+        clear_conversation_list_activity_mark(state, conversation_id);
+    } else {
+        match &result {
+            Ok(_) => {
+                set_conversation_list_activity_mark(
+                    state,
+                    conversation_id,
+                    ConversationListActivityMark {
+                        activity: "completed".to_string(),
+                        failed_message: None,
+                        completed_at: Some(now_iso()),
+                    },
+                );
+            }
+            Err(err) => {
+                if err != CHAT_ABORTED_BY_USER_ERROR {
+                    set_conversation_list_activity_mark(
+                        state,
+                        conversation_id,
+                        ConversationListActivityMark {
+                            activity: "failed".to_string(),
+                            failed_message: Some(err.clone()),
+                            completed_at: None,
+                        },
+                    );
+                } else {
+                    clear_conversation_list_activity_mark(state, conversation_id);
+                }
+            }
+        }
+    }
+
+    // 活动标记变化后广播完整列表更新
+    if let Err(err) = emit_unarchived_conversation_overview_updated_from_state(state) {
+        runtime_log_warn(format!(
+            "[会话概览] 跳过，任务=活动标记更新后推送，conversation_id={}，error={}",
+            conversation_id, err
+        ));
+    }
+
     result.map(|result| ActivatedAssistantResult {
         result,
         activation_id,

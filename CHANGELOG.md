@@ -2,6 +2,8 @@
 
 ## 发布：v0.9.93
 
+- 新增（conversation-list-state）：统一本地会话列表状态，前端不再各自推演"忙碌、完成、失败、未读、是否已打开"，只拉取并监听后端产出的 `state` 字段（`activity`、`runtimeState`、`unreadCount`、`openState`、`openedBy`、`disabledReason`、`failedMessage`、`completedAt`）。
+
 - 升级（markstream-vue）：0.0.13-beta.2 → 1.0.0，代码块主题跟随应用亮暗模式切换。
 
 - 修复（chat-codeblock）：代码块 Shiki 主题不再硬编码，`darkTheme` 使用 `github-dark`、`lightTheme` 使用 `github-light`，`isDark` 透传自应用主题。
