@@ -397,7 +397,7 @@ const workspaceDraftChoices = ref<ChatWorkspaceChoice[]>([]);
 const workspaceDraftAutonomousMode = ref(false);
 const terminalApprovalQueue = ref<TerminalApprovalRequestPayload[]>([]);
 const terminalApprovalResolving = ref(false);
-const hideWorkspaceButton = computed(() => vscodeWorkspaceRoots.value.length === 0);
+const hideWorkspaceButton = computed(() => false);
 let discoveryRefreshTimer: number | null = null;
 
 const activeSummary = computed(() => conversations.value.find((item) => item.conversationId === activeConversationId.value));

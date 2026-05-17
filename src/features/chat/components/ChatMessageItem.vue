@@ -95,103 +95,7 @@
               blockNeedsWideBubble(block) ? 'ecall-assistant-bubble-wide' : '',
             ]"
           >
-            <div v-if="block.planCard" class="space-y-3">
-              <div class="flex items-center gap-2">
-                <span class="badge badge-sm badge-ghost">
-                  {{ block.planCard.action === "complete" ? t("chat.plan.completeBadge") : t("chat.plan.badge") }}
-                </span>
-              </div>
-              <div class="font-mono text-[11px] leading-5 break-all text-base-content/55">{{ block.planCard.path }}</div>
-              <div v-if="block.planCard.action === 'present'" class="space-y-2">
-                <div
-                  v-if="planMarkdownLoading"
-                  class="flex items-center gap-2 text-sm leading-6 text-base-content/65"
-                >
-                  <span class="loading loading-spinner loading-xs"></span>
-                  <span>正在读取计划文件</span>
-                </div>
-                <div
-                  v-else-if="planMarkdownError"
-                  class="whitespace-pre-wrap text-sm leading-6 text-warning"
-                >{{ planMarkdownError }}</div>
-                <div
-                  v-else-if="planMarkdownText && forcePlainMarkdownRender"
-                  @click="emit('assistantLinkClick', $event)"
-                >
-                  <SidebarLightMarkdown :text="planMarkdownText" />
-                </div>
-                <div v-else-if="planMarkdownText" ref="markdownContainerRef">
-                  <MarkdownRender
-                    class="ecall-markdown-content max-w-none"
-                    custom-id="chat-markstream"
-                    :nodes="markdownNodesForPlanCard(block)"
-                    :is-dark="markdownIsDark"
-                    :final="true"
-                    :max-live-nodes="0"
-                    :batch-rendering="false"
-                    :initial-render-batch-size="0"
-                    :render-batch-size="0"
-                    :render-batch-delay="0"
-                    :render-batch-budget-ms="0"
-                    :code-block-props="markdownCodeBlockProps"
-                    :mermaid-props="markdownMermaidProps"
-                    :typewriter="false"
-                    @click="emit('assistantLinkClick', $event)"
-                  />
-                </div>
-              </div>
-              <div v-if="block.planCard.action === 'present'" class="space-y-2">
-                <button
-                  type="button"
-                  class="ecall-plan-confirm-action btn btn-sm btn-primary"
-                  :disabled="chatting || busy || frozen || !canConfirmPlan"
-                  @click="emit('confirmPlan', { messageId: block.sourceMessageId || block.id })"
-                >
-                  {{ t("chat.plan.confirmAction") }}
-                </button>
-                <div class="text-xs opacity-60">{{ t("chat.plan.confirmHint") }}</div>
-              </div>
-            </div>
-            <div v-if="block.taskTrigger" class="space-y-2">
-        <div class="flex items-center gap-2">
-          <span class="badge badge-sm badge-ghost">{{ t("chat.taskTrigger.badge") }}</span>
-        </div>
-        <div v-if="block.taskTrigger.taskId" class="space-y-0.5">
-          <div class="text-[11px] opacity-55">{{ t("config.task.fields.taskId") }}</div>
-          <div class="font-mono text-xs leading-6 break-all">{{ block.taskTrigger.taskId }}</div>
-        </div>
-        <div v-if="block.taskTrigger.goal" class="space-y-0.5">
-          <div class="text-[11px] opacity-55">{{ t("config.task.fields.goal") }}</div>
-          <div class="text-sm leading-6 whitespace-pre-wrap">{{ block.taskTrigger.goal }}</div>
-        </div>
-        <div v-if="block.taskTrigger.why" class="space-y-0.5">
-          <div class="text-[11px] opacity-55">{{ t("config.task.fields.why") }}</div>
-          <div class="text-sm leading-6 whitespace-pre-wrap">{{ block.taskTrigger.why }}</div>
-        </div>
-        <div v-if="block.taskTrigger.todo" class="space-y-0.5">
-          <div class="text-[11px] opacity-55">{{ t("config.task.fields.todo") }}</div>
-          <div class="text-sm leading-6 whitespace-pre-wrap">{{ block.taskTrigger.todo }}</div>
-        </div>
-        <div v-if="block.taskTrigger.runAt || block.taskTrigger.endAt || block.taskTrigger.nextRunAt || block.taskTrigger.cronExpression" class="grid gap-1 text-sm leading-6">
-          <div v-if="block.taskTrigger.runAt">
-            <span class="text-[11px] opacity-55">{{ t("config.task.fields.runAt") }}</span>
-            <span class="ml-2">{{ formattedBlockTime(block.taskTrigger.runAt) }}</span>
-          </div>
-          <div v-if="block.taskTrigger.nextRunAt">
-            <span class="text-[11px] opacity-55">{{ t("config.task.fields.nextRunAt") }}</span>
-            <span class="ml-2">{{ formattedBlockTime(block.taskTrigger.nextRunAt) }}</span>
-          </div>
-          <div v-if="block.taskTrigger.endAt">
-            <span class="text-[11px] opacity-55">{{ t("config.task.fields.endAt") }}</span>
-            <span class="ml-2">{{ formattedBlockTime(block.taskTrigger.endAt) }}</span>
-          </div>
-          <div v-if="block.taskTrigger.cronExpression">
-            <span class="text-[11px] opacity-55">{{ t("config.task.fields.cronExpression") }}</span>
-            <span class="ml-2">{{ block.taskTrigger.cronExpression }}</span>
-          </div>
-        </div>
-      </div>
-      <div v-if="!isOwnMessage(block) && block.reasoningStandard" class="flex flex-col opacity-90">
+            <div v-if="!isOwnMessage(block) && block.reasoningStandard" class="flex flex-col opacity-90">
         <details class="collapse border-l-2 border-base-content/20 pl-3 rounded-none min-w-55" @toggle="onReasoningStandardToggle">
           <summary class="collapse-title py-1 px-1 min-h-0 text-xs font-semibold flex items-center gap-1.5 text-base-content/80 hover:bg-base-200">
             <span class="inline-block shrink-0 text-[10px] leading-none text-success">▲</span>
@@ -352,6 +256,102 @@
             :typewriter="false"
             @click="emit('assistantLinkClick', $event)"
           />
+        </div>
+      </div>
+      <div v-if="block.planCard" class="space-y-3" :class="hasRenderableMemeSegments(block) || block.text ? 'mt-3' : ''">
+        <div class="flex items-center gap-2">
+          <span class="badge badge-sm badge-ghost">
+            {{ block.planCard.action === "complete" ? t("chat.plan.completeBadge") : t("chat.plan.badge") }}
+          </span>
+        </div>
+        <div class="font-mono text-[11px] leading-5 break-all text-base-content/55">{{ block.planCard.path }}</div>
+        <div v-if="block.planCard.action === 'present'" class="space-y-2">
+          <div
+            v-if="planMarkdownLoading"
+            class="flex items-center gap-2 text-sm leading-6 text-base-content/65"
+          >
+            <span class="loading loading-spinner loading-xs"></span>
+            <span>正在读取计划文件</span>
+          </div>
+          <div
+            v-else-if="planMarkdownError"
+            class="whitespace-pre-wrap text-sm leading-6 text-warning"
+          >{{ planMarkdownError }}</div>
+          <div
+            v-else-if="planMarkdownText && forcePlainMarkdownRender"
+            @click="emit('assistantLinkClick', $event)"
+          >
+            <SidebarLightMarkdown :text="planMarkdownText" />
+          </div>
+          <div v-else-if="planMarkdownText" ref="markdownContainerRef">
+            <MarkdownRender
+              class="ecall-markdown-content max-w-none"
+              custom-id="chat-markstream"
+              :nodes="markdownNodesForPlanCard(block)"
+              :is-dark="markdownIsDark"
+              :final="true"
+              :max-live-nodes="0"
+              :batch-rendering="false"
+              :initial-render-batch-size="0"
+              :render-batch-size="0"
+              :render-batch-delay="0"
+              :render-batch-budget-ms="0"
+              :code-block-props="markdownCodeBlockProps"
+              :mermaid-props="markdownMermaidProps"
+              :typewriter="false"
+              @click="emit('assistantLinkClick', $event)"
+            />
+          </div>
+        </div>
+        <div v-if="block.planCard.action === 'present'" class="space-y-2">
+          <button
+            type="button"
+            class="ecall-plan-confirm-action btn btn-sm btn-primary"
+            :disabled="chatting || busy || frozen || !canConfirmPlan"
+            @click="emit('confirmPlan', { messageId: block.sourceMessageId || block.id })"
+          >
+            {{ t("chat.plan.confirmAction") }}
+          </button>
+          <div class="text-xs opacity-60">{{ t("chat.plan.confirmHint") }}</div>
+        </div>
+      </div>
+      <div v-if="block.taskTrigger" class="space-y-2" :class="hasRenderableMemeSegments(block) || block.text || block.planCard ? 'mt-3' : ''">
+        <div class="flex items-center gap-2">
+          <span class="badge badge-sm badge-ghost">{{ t("chat.taskTrigger.badge") }}</span>
+        </div>
+        <div v-if="block.taskTrigger.taskId" class="space-y-0.5">
+          <div class="text-[11px] opacity-55">{{ t("config.task.fields.taskId") }}</div>
+          <div class="font-mono text-xs leading-6 break-all">{{ block.taskTrigger.taskId }}</div>
+        </div>
+        <div v-if="block.taskTrigger.goal" class="space-y-0.5">
+          <div class="text-[11px] opacity-55">{{ t("config.task.fields.goal") }}</div>
+          <div class="text-sm leading-6 whitespace-pre-wrap">{{ block.taskTrigger.goal }}</div>
+        </div>
+        <div v-if="block.taskTrigger.why" class="space-y-0.5">
+          <div class="text-[11px] opacity-55">{{ t("config.task.fields.why") }}</div>
+          <div class="text-sm leading-6 whitespace-pre-wrap">{{ block.taskTrigger.why }}</div>
+        </div>
+        <div v-if="block.taskTrigger.todo" class="space-y-0.5">
+          <div class="text-[11px] opacity-55">{{ t("config.task.fields.todo") }}</div>
+          <div class="text-sm leading-6 whitespace-pre-wrap">{{ block.taskTrigger.todo }}</div>
+        </div>
+        <div v-if="block.taskTrigger.runAt || block.taskTrigger.endAt || block.taskTrigger.nextRunAt || block.taskTrigger.cronExpression" class="grid gap-1 text-sm leading-6">
+          <div v-if="block.taskTrigger.runAt">
+            <span class="text-[11px] opacity-55">{{ t("config.task.fields.runAt") }}</span>
+            <span class="ml-2">{{ formattedBlockTime(block.taskTrigger.runAt) }}</span>
+          </div>
+          <div v-if="block.taskTrigger.nextRunAt">
+            <span class="text-[11px] opacity-55">{{ t("config.task.fields.nextRunAt") }}</span>
+            <span class="ml-2">{{ formattedBlockTime(block.taskTrigger.nextRunAt) }}</span>
+          </div>
+          <div v-if="block.taskTrigger.endAt">
+            <span class="text-[11px] opacity-55">{{ t("config.task.fields.endAt") }}</span>
+            <span class="ml-2">{{ formattedBlockTime(block.taskTrigger.endAt) }}</span>
+          </div>
+          <div v-if="block.taskTrigger.cronExpression">
+            <span class="text-[11px] opacity-55">{{ t("config.task.fields.cronExpression") }}</span>
+            <span class="ml-2">{{ block.taskTrigger.cronExpression }}</span>
+          </div>
         </div>
       </div>
       <div v-if="block.images.length > 0" :class="block.taskTrigger || block.text ? 'mt-2 grid gap-1' : 'grid gap-1'">

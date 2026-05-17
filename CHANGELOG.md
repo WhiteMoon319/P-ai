@@ -14,6 +14,10 @@
 
 - 修复（naming-emit）：ShellDialogsHost closeConfigSaveErrorDialog 重命名为 closeSettingsSaveErrorDialog 与父监听对齐；ChatComposerPanel 补齐 trimTip/trim-conversation 声明；AppWindowHeader 设置按钮 title 使用 openSettingsTitle prop。
 
+- 修复（sidebar-workspace）：VSCode 侧边栏工作区权限按钮始终显示，不再依赖 vscodeWorkspaceRoots 是否为空。
+
+- 重构（message-layout）：助理气泡内计划交互区和任务触发卡片移至正文下方，渲染顺序改为：思维链 → 工具调用 → 正文 → 计划/任务 → 图片/音频。
+
 - 修复（sidebar-title）：Web 端标题取值逻辑与 APP 端对齐，改为 computed 从 activeSummary 按 title → summaryTitle → 时间回退派生；APP 端标题栏去除部门/人格拼接，仅显示会话标题且超10字截断。
 
 - 修复（header-spacing）：右侧面板切换按钮从中间 grid 右列移至右边 flex 容器，消除与设置按钮之间的多余间距。
