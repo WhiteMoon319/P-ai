@@ -258,6 +258,7 @@
       :open-current-history="openCurrentHistory"
       :open-conversation-summary="openConversationSummary"
       :open-force-archive-action-dialog="openForceArchiveActionDialog"
+      :open-config-window="openConfigWindow"
       :open-prompt-preview="openPromptPreview"
       :open-system-prompt-preview="openSystemPromptPreview"
       :open-memory-viewer="openMemoryViewer"

@@ -77,7 +77,13 @@
         >
           <PanelLeftClose class="h-3.5 w-3.5" />
         </button>
+      </div>
 
+      <div
+        data-tauri-drag-region
+        class="relative z-30 flex min-w-0 flex-1 self-stretch items-center justify-center gap-1 px-2"
+        :title="combinedTitleTooltip"
+      >
         <button
           v-if="!detachedChatWindow"
           class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
@@ -86,19 +92,12 @@
         >
           <SquarePen class="h-4 w-4" />
         </button>
-
+        <span class="pointer-events-none truncate text-sm font-semibold text-base-content">{{ combinedTitle }}</span>
         <button
-          class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
+          class="btn btn-ghost btn-sm btn-square h-8 min-h-8 w-8 shrink-0"
           :disabled="forcingArchive || chatting"
-          :title="forceArchiveTip"
+          :title="`${t('chat.contextUsageTitle', { percent: normalizedChatUsagePercent })} · ${forceArchiveTip}`"
           @click.stop="$emit('force-archive')"
-        >
-          <FoldVertical class="h-3.5 w-3.5 shrink-0" />
-        </button>
-
-        <div
-          class="inline-flex h-8 w-8 items-center justify-center text-base-content/70"
-          :title="t('chat.contextUsageTitle', { percent: normalizedChatUsagePercent })"
         >
           <svg
             class="h-5 w-5 -rotate-90"
@@ -125,36 +124,10 @@
               :stroke-dashoffset="strokeDashoffset"
             />
           </svg>
-        </div>
-      </div>
-
-      <div
-        data-tauri-drag-region
-        class="relative z-30 flex min-w-0 flex-1 self-stretch items-center justify-center px-2"
-        :title="combinedTitleTooltip"
-      >
-        <span class="pointer-events-none truncate text-sm font-semibold text-base-content">{{ combinedTitle }}</span>
+        </button>
       </div>
 
       <div class="relative z-40 flex min-w-0 items-center justify-end gap-1" @mousedown.stop>
-        <button
-          v-if="!detachedChatWindow"
-          class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
-          :title="t('window.archivesTitle')"
-          @click.stop="$emit('open-archives')"
-        >
-          <History class="h-3.5 w-3.5" />
-        </button>
-
-        <button
-          v-if="!detachedChatWindow"
-          class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
-          :title="openConfigTitle"
-          @click.stop="$emit('open-config')"
-        >
-          <Settings class="h-3.5 w-3.5" />
-        </button>
-
         <button
           v-if="!toolReviewPanelOpenVisible"
           type="button"

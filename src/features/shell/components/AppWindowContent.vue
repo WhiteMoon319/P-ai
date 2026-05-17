@@ -213,6 +213,8 @@
         @regenerate-turn="onRegenerateTurn"
         @confirm-plan="confirmPlan"
         @force-archive="openForceArchiveActionDialog"
+        @open-current-history="openCurrentHistory"
+        @open-config="openConfigWindow"
         @selection-action-copy="setStatus(props.t('chat.selection.copied', { count: $event.count }))"
         @selection-action-copy-error="setStatus(props.t('chat.copyFailed'))"
         @selection-action-branch="onBranchConversationFromSelection($event)"
@@ -622,6 +624,7 @@ const props = defineProps<{
   openCurrentHistory: () => void;
   openConversationSummary: (conversationId: string) => void;
   openForceArchiveActionDialog: () => void;
+  openConfigWindow: () => void;
   openPromptPreview: () => void;
   openSystemPromptPreview: () => void;
   openMemoryViewer: () => void;

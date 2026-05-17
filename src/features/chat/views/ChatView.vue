@@ -258,7 +258,7 @@
             @selection-action-forward="emitSelectionAction('forward', $event)"
             @selection-action-delegate="emitSelectionAction('delegate', $event)"
             @selection-action-share="emitSelectionAction('share', $event)"
-            @force-archive="$emit('forceArchive')" @switch-conversation="$emit('switchConversation', $event)"
+            @force-archive="$emit('forceArchive')" @open-current-history="$emit('openCurrentHistory')" @open-config="$emit('openConfig')" @switch-conversation="$emit('switchConversation', $event)"
             @create-conversation="$emit('createConversation', $event)"
           />
         </div>
@@ -459,7 +459,7 @@ const emit = defineEmits<{
   (e: "updateWorkspaceAccess", value: "read_only" | "approval" | "full_access"): void;
   (e: "update:planModeEnabled", value: boolean): void;
   (e: "sendChat", payload?: { extraTextBlocks?: string[] }): void;
-  (e: "stopChat"): void; (e: "forceArchive"): void;
+  (e: "stopChat"): void; (e: "forceArchive"): void; (e: "openCurrentHistory"): void; (e: "openConfig"): void;
   (e: "clearChatError"): void;
   (e: "recallTurn", payload: { turnId: string }): void;
   (e: "regenerateTurn", payload: { turnId: string }): void;
