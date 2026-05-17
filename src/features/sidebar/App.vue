@@ -14,6 +14,7 @@
     @open-settings="openSettings"
     @compact-conversation="openCompactionDialog"
     @reconnect="refreshDiscovery"
+    @toggle-review-panel="toggleReviewPanel"
   >
     <ConversationListView
       v-if="view === 'list'"
@@ -70,6 +71,18 @@
       @deny-terminal-approval="denyTerminalApproval"
       @selection-action-branch="branchConversationFromSelection"
       @selection-action-delegate="delegateFromSelection"
+    />
+    <SidebarReviewPanel
+      :open="reviewPanelOpen"
+      :loading="reviewReportsLoading"
+      :submitting="codeReviewSubmitting"
+      :deleting="reviewReportDeleting"
+      :error-text="reviewErrorText"
+      :reports="reviewReports"
+      @close="closeReviewPanel"
+      @open-code-review="openCodeReview"
+      @delete-report="deleteReviewReport"
+      @retry-report="retryReviewReport"
     />
     <SidebarCompactionDialog
       :open="compactionDialogOpen"
@@ -158,13 +171,14 @@ import SidebarLayout from "./layouts/SidebarLayout.vue";
 import ConversationListView from "./views/ConversationListView.vue";
 import ChatViewWrapper from "./views/ChatViewWrapper.vue";
 import SidebarCompactionDialog from "./views/SidebarCompactionDialog.vue";
+import SidebarReviewPanel from "./views/SidebarReviewPanel.vue";
 import CreateConversationDialog, { type SidebarCreateDepartmentOption } from "./views/CreateConversationDialog.vue";
 import { useWsTransport, type SidebarBridgeConfig } from "./composables/use-ws-transport";
 import ToolReviewTargetDialog from "../chat/components/ToolReviewTargetDialog.vue";
 import ChatSupervisionTaskDialog from "../chat/components/dialogs/ChatSupervisionTaskDialog.vue";
 import ChatWorkspacePickerDialog from "../chat/components/dialogs/ChatWorkspacePickerDialog.vue";
 import type { ChatWorkspaceChoice } from "../chat/composables/use-chat-workspace";
-import type { ToolReviewCodeReviewScope, ToolReviewCommitOption } from "../chat/composables/use-chat-tool-review";
+import type { ToolReviewCodeReviewScope, ToolReviewCommitOption, ToolReviewReportRecord } from "../chat/composables/use-chat-tool-review";
 import type { TerminalApprovalConversationItem, TerminalApprovalRequestPayload } from "../shell/composables/use-terminal-approval";
 
 type ConversationSummary = {
@@ -358,6 +372,11 @@ const createConversationErrorText = ref("");
 const codeReviewDialogOpen = ref(false);
 const codeReviewSubmitting = ref(false);
 const codeReviewErrorText = ref("");
+const reviewPanelOpen = ref(false);
+const reviewReports = ref<ToolReviewReportRecord[]>([]);
+const reviewReportsLoading = ref(false);
+const reviewReportDeleting = ref(false);
+const reviewErrorText = ref("");
 const commitOptions = ref<ToolReviewCommitOption[]>([]);
 const commitOptionsLoading = ref(false);
 const commitTotal = ref(0);
@@ -858,8 +877,73 @@ async function submitCodeReview(input: { scope: ToolReviewCodeReviewScope; targe
       departmentId: input.departmentId,
     });
     codeReviewDialogOpen.value = false;
+    if (reviewPanelOpen.value) loadReviewReports();
   } catch (error) {
     codeReviewErrorText.value = String(error || "发起代码审查失败");
+  } finally {
+    codeReviewSubmitting.value = false;
+  }
+}
+
+function toggleReviewPanel() {
+  if (reviewPanelOpen.value) {
+    reviewPanelOpen.value = false;
+  } else {
+    reviewPanelOpen.value = true;
+    loadReviewReports();
+  }
+}
+
+function closeReviewPanel() {
+  reviewPanelOpen.value = false;
+}
+
+async function loadReviewReports() {
+  if (!activeConversationId.value) return;
+  reviewReportsLoading.value = true;
+  reviewErrorText.value = "";
+  try {
+    const result = await transport.request<{ reports: ToolReviewReportRecord[] }>("toolReview.reports.list", {
+      conversationId: activeConversationId.value,
+    });
+    reviewReports.value = Array.isArray(result.reports) ? result.reports : [];
+  } catch (error) {
+    reviewErrorText.value = String(error || "加载审查报告失败");
+  } finally {
+    reviewReportsLoading.value = false;
+  }
+}
+
+async function deleteReviewReport(report: ToolReviewReportRecord) {
+  if (!activeConversationId.value || reviewReportDeleting.value) return;
+  reviewReportDeleting.value = true;
+  try {
+    await transport.request("toolReview.report.delete", {
+      conversationId: activeConversationId.value,
+      reportId: report.id,
+    });
+    await loadReviewReports();
+  } catch (error) {
+    reviewErrorText.value = String(error || "删除审查报告失败");
+  } finally {
+    reviewReportDeleting.value = false;
+  }
+}
+
+async function retryReviewReport(report: ToolReviewReportRecord) {
+  if (!activeConversationId.value || codeReviewSubmitting.value) return;
+  codeReviewSubmitting.value = true;
+  codeReviewErrorText.value = "";
+  try {
+    await transport.request("toolReview.code.submit", {
+      conversationId: activeConversationId.value,
+      scope: report.scope || "uncommitted",
+      target: String(report.target || "").trim() || undefined,
+      departmentId: String(report.departmentId || "").trim() || undefined,
+    });
+    await loadReviewReports();
+  } catch (error) {
+    reviewErrorText.value = String(error || "重新生成审查报告失败");
   } finally {
     codeReviewSubmitting.value = false;
   }

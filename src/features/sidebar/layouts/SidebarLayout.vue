@@ -1,5 +1,5 @@
 <template>
-  <div class="flex h-full min-h-0 flex-col bg-base-100 text-base-content">
+  <div class="relative flex h-full min-h-0 flex-col bg-base-100 text-base-content">
     <header class="flex h-10 shrink-0 items-center gap-1 border-b border-base-300 px-2">
       <button
         class="btn btn-ghost btn-sm h-8 min-h-8 w-8 shrink-0 px-0"
@@ -36,6 +36,13 @@
 
       <button
         class="btn btn-ghost btn-sm h-8 min-h-8 w-8 shrink-0 px-0"
+        title="审查"
+        @click="$emit('toggleReviewPanel')"
+      >
+        <FileSearch class="h-4 w-4" />
+      </button>
+      <button
+        class="btn btn-ghost btn-sm h-8 min-h-8 w-8 shrink-0 px-0"
         title="设置"
         @click="$emit('openSettings')"
       >
@@ -57,7 +64,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { ChevronLeft, RefreshCcw, Settings, SquarePen } from "lucide-vue-next";
+import { ChevronLeft, FileSearch, RefreshCcw, Settings, SquarePen } from "lucide-vue-next";
 
 const props = defineProps<{
   view: "list" | "chat";
@@ -88,5 +95,6 @@ defineEmits<{
   openSettings: [];
   compactConversation: [];
   reconnect: [];
+  toggleReviewPanel: [];
 }>();
 </script>
