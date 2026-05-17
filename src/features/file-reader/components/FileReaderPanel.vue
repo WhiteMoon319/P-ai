@@ -164,6 +164,8 @@
                   class="inline-flex shrink-0 items-center rounded px-1.5 py-1 hover:bg-base-200 hover:text-base-content"
                   :title="`浏览目录：${segment.path}`"
                   @click="openDirectoryTree(segment.path)"
+                  @mouseenter="showHoverDirectoryTree(segment.path, $event)"
+                  @mouseleave="hideHoverDirectoryTree"
                 >
                   {{ segment.label }}
                 </button>
@@ -278,6 +280,77 @@
         <span>{{ actionErrorMessage }}</span>
       </div>
     </div>
+
+    <Teleport to="body">
+      <template v-if="hoverDirectoryTreeVisible">
+        <div
+          class="fixed z-1199"
+          :style="hoverDirectoryBridgeStyle"
+          @mouseenter="cancelHideHoverDirectoryTree"
+          @mouseleave="hideHoverDirectoryTree"
+        ></div>
+        <div
+          ref="hoverDirectoryTreeRef"
+          class="fixed z-1200 flex flex-col overflow-hidden rounded-box border border-base-300 bg-base-100 shadow-xl"
+          :style="hoverDirectoryTreeStyle"
+          @mouseenter="cancelHideHoverDirectoryTree"
+          @mouseleave="hideHoverDirectoryTree"
+        >
+          <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-base-300 bg-base-200 px-3 text-sm">
+            <span class="flex-1 truncate font-medium">{{ hoverDirectoryTreeRoot?.name || "" }}</span>
+          </div>
+          <div ref="hoverDirectoryScroller" class="flex-1 overflow-auto py-1 text-sm">
+            <div v-if="hoverDirectoryTreeRoot?.loading" class="flex items-center gap-2 px-3 py-2 text-xs opacity-65">
+              <span class="loading loading-spinner loading-xs"></span>
+              正在读取目录
+            </div>
+            <div v-else-if="hoverDirectoryTreeRoot?.error" class="px-3 py-2 text-xs text-error">
+              {{ hoverDirectoryTreeRoot.error }}
+            </div>
+            <div v-else-if="hoverDirectoryTreeRows.length === 0" class="px-3 py-2 text-xs opacity-60">
+              空目录
+            </div>
+            <template v-else>
+              <div
+                v-for="row in hoverDirectoryTreeRows"
+                :key="row.key"
+                class="flex h-7 items-center gap-1 px-2"
+                :class="row.kind === 'entry' && !row.entry.isDirectory ? 'hover:bg-base-300/55' : ''"
+                :style="{ paddingLeft: `${8 + row.depth * 14}px` }"
+              >
+                <template v-if="row.kind === 'entry'">
+                  <button
+                    v-if="row.entry.isDirectory"
+                    class="btn btn-ghost btn-xs h-5 min-h-5 w-5 shrink-0 px-0"
+                    type="button"
+                    :title="isHoverDirectoryExpanded(row.entry.path) ? '收起目录' : '展开目录'"
+                    @click.stop="toggleHoverDirectory(row.entry)"
+                  >
+                    <ChevronDown v-if="isHoverDirectoryExpanded(row.entry.path)" class="h-3.5 w-3.5" />
+                    <ChevronRight v-else class="h-3.5 w-3.5" />
+                  </button>
+                  <span v-else class="h-5 w-5 shrink-0"></span>
+                  <button
+                    type="button"
+                    class="flex min-w-0 flex-1 items-center gap-1.5 rounded px-1 py-0.5 text-left"
+                    :title="row.entry.path"
+                    @click.stop="openFileFromHoverTree(row.entry)"
+                  >
+                    <Folder v-if="row.entry.isDirectory" class="h-4 w-4 shrink-0 text-warning" />
+                    <FileText v-else class="h-4 w-4 shrink-0 opacity-70" />
+                    <span class="min-w-0 truncate">{{ row.entry.name }}</span>
+                  </button>
+                </template>
+                <template v-else>
+                  <span class="h-5 w-5 shrink-0"></span>
+                  <span class="truncate px-1 text-xs opacity-60">{{ row.text }}</span>
+                </template>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+    </Teleport>
   </div>
 </template>
 
@@ -452,6 +525,15 @@ const showPickFileButton = computed(() => props.showPickFileButton !== false && 
 const directoryOnly = computed(() => !!props.directoryOnly);
 const fileReaderWatchSessionId = computed(() => String(props.sessionKey || props.customMarkstreamId || "file-reader").trim());
 
+const hoverDirectoryTreeVisible = ref(false);
+const hoverDirectoryTreeRoot = ref<DirectoryNode | null>(null);
+const hoverDirectoryTreeNodes = ref<Record<string, DirectoryNode>>({});
+const hoverDirectoryTreeStyle = ref<Record<string, string>>({ left: "0px", top: "0px", width: "280px" });
+const hoverDirectoryTreeRef = ref<HTMLElement | null>(null);
+const hoverDirectoryScroller = ref<HTMLElement | null>(null);
+const hoverDirectoryTreeAnchor = ref("");
+let hoverHideTimer: number | null = null;
+
 let unlistenFileDrop: (() => void) | null = null;
 let unlistenFileReaderWatch: UnlistenFn | null = null;
 let restoringSessionId = 0;
@@ -472,6 +554,32 @@ const directoryTreeRoot = computed(() => {
   const rootPath = normalizePath(directoryRootPath.value);
   return rootPath ? directoryNodes.value[rootPath] || null : null;
 });
+
+const hoverDirectoryTreeRows = computed<TreeRow[]>(() => {
+  const root = hoverDirectoryTreeRoot.value;
+  if (!root || root.loading || root.error) return [];
+  return flattenDirectoryEntriesFromNodes(root.entries, root.path, hoverDirectoryTreeNodes.value, 0, directoryTreeFilter.value);
+});
+
+const hoverDirectoryBridgeStyle = computed(() => {
+  const style = hoverDirectoryTreeStyle.value;
+  const width = parseInt(style.width || "280", 10);
+  return {
+    left: style.left,
+    top: `${parseInt(style.top || "0", 10) - 4}px`,
+    width: `${width}px`,
+    height: "8px",
+  };
+});
+
+function isHoverDirectoryExpanded(path: string) {
+  return !!hoverDirectoryTreeNodes.value[normalizePath(path)]?.expanded;
+}
+
+function isHoverDirectoryCollapsed(path: string) {
+  const node = hoverDirectoryTreeNodes.value[normalizePath(path)];
+  return node !== undefined && node.loaded && !node.loading && !node.expanded;
+}
 
 const activeMarkdownSource = computed(() => {
   const tab = activeTab.value;
@@ -1367,6 +1475,128 @@ function closeDirectoryTree() {
   directoryTreeSearchVisible.value = false;
 }
 
+// ==================== Hover Directory Tree ====================
+
+async function showHoverDirectoryTree(path: string, event: MouseEvent) {
+  if (hoverHideTimer) { window.clearTimeout(hoverHideTimer); hoverHideTimer = null; }
+
+  const normalizedPath = normalizePath(path);
+  if (!normalizedPath) return;
+
+  hoverDirectoryTreeAnchor.value = normalizedPath;
+  hoverDirectoryTreeVisible.value = true;
+
+  await nextTick();
+
+  const target = event.target as HTMLElement;
+  const rect = target.getBoundingClientRect();
+  const panelWidth = 280;
+  const panelHeight = Math.round(window.innerHeight * 0.8);
+  const gap = 4;
+
+  let left = rect.left;
+  if (left + panelWidth > window.innerWidth) {
+    left = window.innerWidth - panelWidth - 8;
+  }
+  if (left < 8) left = 8;
+
+  let top = rect.bottom + gap;
+  if (top + panelHeight > window.innerHeight) {
+    top = Math.max(8, rect.top - panelHeight - gap);
+  }
+
+  hoverDirectoryTreeStyle.value = {
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${panelWidth}px`,
+    height: `${panelHeight}px`,
+  };
+
+  if (hoverDirectoryTreeNodes.value[normalizedPath]?.loaded) {
+    hoverDirectoryTreeRoot.value = hoverDirectoryTreeNodes.value[normalizedPath];
+    return;
+  }
+
+  await loadDirectoryForHover(normalizedPath);
+}
+
+function hideHoverDirectoryTree() {
+  hoverHideTimer = window.setTimeout(() => {
+    hoverDirectoryTreeVisible.value = false;
+    hoverDirectoryTreeRoot.value = null;
+    hoverDirectoryTreeAnchor.value = "";
+    hoverHideTimer = null;
+  }, 150);
+}
+
+function cancelHideHoverDirectoryTree() {
+  if (hoverHideTimer) { window.clearTimeout(hoverHideTimer); hoverHideTimer = null; }
+}
+
+async function loadDirectoryForHover(path: string) {
+  const dirName = path.split(/[\\/]/).filter(Boolean).pop() || path;
+  hoverDirectoryTreeRoot.value = { path, name: dirName, entries: [], loaded: false, loading: true, error: "", expanded: true };
+  hoverDirectoryTreeNodes.value[path] = hoverDirectoryTreeRoot.value;
+
+  try {
+    const payload = await invokeTauri<FileReaderDirectoryPayload>("list_file_reader_directory", { path });
+    const resolvedPath = normalizePath(payload.path || path);
+    const resolvedName = String(payload.name || dirName);
+    const normalizedEntries = normalizeDirectoryEntries(payload.entries || []);
+    hoverDirectoryTreeRoot.value = { path: resolvedPath, name: resolvedName, entries: normalizedEntries, loaded: true, loading: false, error: "", expanded: true };
+    hoverDirectoryTreeNodes.value[resolvedPath] = hoverDirectoryTreeRoot.value;
+    hoverDirectoryTreeNodes.value[path] = hoverDirectoryTreeRoot.value;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    hoverDirectoryTreeRoot.value = { path, name: dirName, entries: [], loaded: true, loading: false, error: errorMsg, expanded: true };
+    hoverDirectoryTreeNodes.value[path] = hoverDirectoryTreeRoot.value;
+  }
+}
+
+function toggleHoverDirectory(entry: FileReaderDirectoryEntry) {
+  if (!entry.isDirectory) return;
+  const normalizedPath = normalizePath(entry.path);
+  const node = hoverDirectoryTreeNodes.value[normalizedPath];
+  if (!node) return;
+
+  if (node.expanded) {
+    hoverDirectoryTreeNodes.value[normalizedPath] = { ...node, expanded: false };
+    hoverDirectoryTreeRoot.value = hoverDirectoryTreeRoot.value?.path === normalizedPath ? { ...hoverDirectoryTreeRoot.value, expanded: false } : hoverDirectoryTreeRoot.value;
+  } else if (node.loaded) {
+    hoverDirectoryTreeNodes.value[normalizedPath] = { ...node, expanded: true };
+  } else {
+    hoverDirectoryTreeNodes.value[normalizedPath] = { ...node, loading: true };
+    loadHoverSubDirectory(entry);
+  }
+}
+
+async function loadHoverSubDirectory(entry: FileReaderDirectoryEntry) {
+  const normalizedPath = normalizePath(entry.path);
+  try {
+    const payload = await invokeTauri<FileReaderDirectoryPayload>("list_file_reader_directory", { path: normalizedPath });
+    const normalizedEntries = normalizeDirectoryEntries(payload.entries || []);
+    const currentNode = hoverDirectoryTreeNodes.value[normalizedPath];
+    if (currentNode) {
+      hoverDirectoryTreeNodes.value[normalizedPath] = { ...currentNode, entries: normalizedEntries, loaded: true, loading: false, error: "", expanded: true };
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    const currentNode = hoverDirectoryTreeNodes.value[normalizedPath];
+    if (currentNode) {
+      hoverDirectoryTreeNodes.value[normalizedPath] = { ...currentNode, loading: false, error: errorMsg };
+    }
+  }
+}
+
+async function openFileFromHoverTree(entry: FileReaderDirectoryEntry) {
+  if (entry.isDirectory) {
+    toggleHoverDirectory(entry);
+    return;
+  }
+  hideHoverDirectoryTree();
+  await openPath(entry.path);
+}
+
 async function toggleDirectoryTree() {
   if (directoryTreeRoot.value) {
     closeDirectoryTree();
@@ -1473,6 +1703,36 @@ function flattenDirectoryEntries(entries: FileReaderDirectoryEntry[], depth: num
       rows.push({ kind: "status", key: `empty:${normalizedPath}`, depth: depth + 1, text: "空目录" });
     } else if (node.loaded) {
       rows.push(...flattenDirectoryEntries(node.entries, depth + 1));
+    }
+  }
+  return rows;
+}
+
+function flattenDirectoryEntriesFromNodes(entries: FileReaderDirectoryEntry[], rootPath: string, nodes: Record<string, DirectoryNode>, depth: number, filter = ""): TreeRow[] {
+  const normalizedFilter = filter.trim().toLowerCase();
+  const rows: TreeRow[] = [];
+  for (const entry of entries) {
+    const normalizedPath = normalizePath(entry.path);
+    const node = nodes[normalizedPath];
+    const isExpanded = node?.expanded;
+    const childRows = entry.isDirectory && isExpanded ? flattenDirectoryEntriesFromNodes(nodes[normalizedPath]?.entries || [], normalizedPath, nodes, depth + 1, filter) : [];
+    const matchesFilter = !normalizedFilter || entry.name.toLowerCase().includes(normalizedFilter);
+    if (normalizedFilter && !matchesFilter && childRows.length === 0) continue;
+    rows.push({ kind: "entry", key: `entry:${normalizedPath}`, depth, entry: { ...entry, path: normalizedPath } });
+    if (normalizedFilter) {
+      rows.push(...childRows);
+      continue;
+    }
+    if (!entry.isDirectory || !isExpanded) continue;
+    if (!node) continue;
+    if (node.loading) {
+      rows.push({ kind: "status", key: `loading:${normalizedPath}`, depth: depth + 1, text: "正在读取目录" });
+    } else if (node.error) {
+      rows.push({ kind: "status", key: `error:${normalizedPath}`, depth: depth + 1, text: node.error });
+    } else if (node.loaded && node.entries.length === 0) {
+      rows.push({ kind: "status", key: `empty:${normalizedPath}`, depth: depth + 1, text: "空目录" });
+    } else if (node.loaded) {
+      rows.push(...flattenDirectoryEntriesFromNodes(node.entries, normalizedPath, nodes, depth + 1));
     }
   }
   return rows;

@@ -1,5 +1,9 @@
 # 变更日志
 
+## 发布：v0.9.95
+
+- 新增（file-reader-hover-tree）：地址栏面包屑目录按钮悬停时弹出浮动目录树面板，支持展开/收起子目录和点击打开文件，面板带边界检测确保不超出窗口可视区域。
+
 ## 发布：v0.9.94
 
 - 重构（chat-right-panel）：合并审查/评估/委托为统一三标签面板，标题栏收窄为“阅读”与“委托”两个 tab，委托内容内联至 ToolReviewSidebar，去除独立 DelegateStatusSidebar 嵌套。
