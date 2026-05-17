@@ -1338,8 +1338,9 @@ function registerNotifications() {
     clearCompletedRuntimeStateForConversation(value.conversationId || "");
     if (value.conversationId !== activeConversationId.value) return;
     busy.value = false;
-    clearStreamingState();
+    // 先追加正式消息再清流式状态，避免 Vue 先删草稿再插正式消息导致一帧闪烁。
     if (value.assistantMessage) appendMessages({ conversationId: value.conversationId, message: value.assistantMessage });
+    clearStreamingState();
   });
 }
 

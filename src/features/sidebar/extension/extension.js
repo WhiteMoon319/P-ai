@@ -19,6 +19,15 @@ function readDiscovery() {
   }
 }
 
+function readDiscoveryFileContent() {
+  const discoveryPath = path.join(os.tmpdir(), DISCOVERY_FILE);
+  try {
+    return fs.readFileSync(discoveryPath, "utf8");
+  } catch {
+    return "";
+  }
+}
+
 function readWorkspaceRoots() {
   return (vscode.workspace.workspaceFolders || []).map((folder) => ({
     path: folder.uri.fsPath,
@@ -122,6 +131,8 @@ class PaiSidebarProvider {
   constructor(extensionUri) {
     this.extensionUri = extensionUri;
     this.view = null;
+    this._discoveryWatcher = null;
+    this._lastDiscoveryContent = "";
   }
 
   resolveWebviewView(webviewView) {
@@ -148,6 +159,35 @@ class PaiSidebarProvider {
     });
     webview.html = this.html(webview, assets);
     this.postDiscovery();
+    this._startDiscoveryWatcher();
+  }
+
+  _startDiscoveryWatcher() {
+    if (this._discoveryWatcher) return;
+    const discoveryPath = path.join(os.tmpdir(), DISCOVERY_FILE);
+    this._lastDiscoveryContent = readDiscoveryFileContent();
+    let debounceTimer = null;
+    try {
+      this._discoveryWatcher = fs.watch(discoveryPath, () => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          const content = readDiscoveryFileContent();
+          if (content !== this._lastDiscoveryContent) {
+            this._lastDiscoveryContent = content;
+            this.postDiscovery();
+          }
+        }, 300);
+      });
+    } catch {
+      // 文件不存在时 watcher 无法启动，等下次 postDiscovery 时重试
+    }
+  }
+
+  _stopDiscoveryWatcher() {
+    if (this._discoveryWatcher) {
+      this._discoveryWatcher.close();
+      this._discoveryWatcher = null;
+    }
   }
 
   postDiscovery() {
@@ -188,16 +228,29 @@ class PaiSidebarProvider {
   }
 }
 
+let currentProvider = null;
+
 function activate(context) {
   const provider = new PaiSidebarProvider(context.extensionUri);
+  currentProvider = provider;
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider("paiSidebar.chatView", provider, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
     vscode.commands.registerCommand("paiSidebar.refresh", () => provider.postDiscovery()),
+    { dispose: () => provider._stopDiscoveryWatcher() },
   );
 }
 
-function deactivate() {}
+function deactivate() {
+  if (currentProvider) {
+    currentProvider._stopDiscoveryWatcher();
+    // 清空旧 webview HTML，迫使新 provider 注册时 VS Code 重新调用 resolveWebviewView
+    if (currentProvider.view) {
+      try { currentProvider.view.webview.html = ""; } catch {}
+    }
+    currentProvider = null;
+  }
+}
 
 module.exports = { activate, deactivate };
