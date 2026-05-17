@@ -1,13 +1,27 @@
 <template>
   <aside class="flex h-full w-full shrink-0 flex-col border-r border-base-300 bg-base-200">
-    <ChatConversationListHeader
-      v-model:search-query="conversationSearchQuery"
-      v-model:active-tab="activeConversationTab"
-      :search-placeholder="t('chat.conversationSearchPlaceholder')"
-      :local-label="t('chat.localConversationTab')"
-      :contact-label="t('chat.contactConversationTab')"
-      :show-tabs="false"
-    />
+    <div class="flex items-center gap-2 p-2 pb-0">
+      <div role="tablist" class="tabs tabs-border min-w-0 shrink-0">
+        <button
+          type="button"
+          role="tab"
+          class="tab h-8 px-3"
+          :class="activeTab === 'local' ? 'tab-active font-semibold' : ''"
+          @click="emit('update:activeTab', 'local')"
+        >
+          {{ t('chat.localConversationTab') }}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="tab h-8 px-3"
+          :class="activeTab === 'contact' ? 'tab-active font-semibold' : ''"
+          @click="emit('update:activeTab', 'contact')"
+        >
+          {{ t('chat.contactConversationTab') }}
+        </button>
+      </div>
+    </div>
     <ChatConversationFloatingScroll class="flex-1 min-h-0">
       <section
         v-for="section in filteredConversationSections"
@@ -180,19 +194,30 @@
         {{ t("chat.conversationSearchEmpty") }}
       </div>
     </ChatConversationFloatingScroll>
+    <div class="shrink-0 border-t border-base-300 p-2">
+      <label class="input input-bordered input-sm flex h-8 min-w-0 items-center gap-2 bg-base-100">
+        <Search class="h-3.5 w-3.5 opacity-60" />
+        <input
+          v-model="conversationSearchQuery"
+          type="text"
+          class="w-full bg-transparent outline-none"
+          :placeholder="t('chat.conversationSearchPlaceholder')"
+        />
+      </label>
+    </div>
   </aside>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
-import { Archive, Ellipsis, PencilLine, Pin, PinOff, Trash2 } from "lucide-vue-next";
+import { Archive, Ellipsis, PencilLine, Pin, PinOff, Search, Trash2 } from "lucide-vue-next";
 import type { ChatConversationOverviewItem, ConversationPreviewMessage } from "../../../types/app";
 import { usePipelineStatus } from "../../shell/composables/use-pipeline-status";
 import { formatConversationListTime } from "../utils/conversation-time";
 import { resolveConversationDisplayTitle } from "../utils/conversation-title";
 import ChatConversationFloatingScroll from "./ChatConversationFloatingScroll.vue";
-import ChatConversationListHeader from "./ChatConversationListHeader.vue";
+
 
 const props = defineProps<{
   items: ChatConversationOverviewItem[];

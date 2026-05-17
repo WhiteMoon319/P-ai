@@ -40,27 +40,6 @@
         </div>
       </div>
 
-      <div v-if="sideConversationListVisible && !detachedChatWindow" role="tablist" class="tabs tabs-border min-w-0 shrink-0" @mousedown.stop>
-        <button
-          type="button"
-          role="tab"
-          class="tab h-8 px-2"
-          :class="chatLeftPanelMode === 'local' ? 'tab-active font-semibold' : ''"
-          @click.stop="emit('update:chat-left-panel-mode', 'local')"
-        >
-          {{ t("chat.localConversationTab") }}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          class="tab h-8 px-2"
-          :class="chatLeftPanelMode === 'contact' ? 'tab-active font-semibold' : ''"
-          @click.stop="emit('update:chat-left-panel-mode', 'contact')"
-        >
-          {{ t("chat.contactConversationTab") }}
-        </button>
-      </div>
-
     </div>
 
     <div
