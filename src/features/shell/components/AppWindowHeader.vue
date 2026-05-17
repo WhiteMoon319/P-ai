@@ -135,15 +135,6 @@
       </div>
 
       <div class="relative z-40 flex min-w-0 items-center justify-end gap-1" @mousedown.stop>
-        <button
-          v-if="!toolReviewPanelOpenVisible"
-          type="button"
-          class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
-          :title="t('chat.toolReview.title')"
-          @click.stop="emit('toggle-tool-review-panel')"
-        >
-          <PanelRightClose class="h-3.5 w-3.5" />
-        </button>
       </div>
     </div>
 
@@ -183,6 +174,16 @@
         @click.stop="emit('toggle-tool-review-panel')"
       >
         <PanelRightOpen class="h-3.5 w-3.5" />
+      </button>
+
+      <button
+        v-if="!toolReviewPanelOpenVisible"
+        type="button"
+        class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
+        :title="t('chat.toolReview.title')"
+        @click.stop="emit('toggle-tool-review-panel')"
+      >
+        <PanelRightClose class="h-3.5 w-3.5" />
       </button>
 
       <button

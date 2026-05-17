@@ -12,6 +12,8 @@
 
 - 修复（sidebar-title）：Web 端标题取值逻辑与 APP 端对齐，改为 computed 从 activeSummary 按 title → summaryTitle → 时间回退派生；APP 端标题栏去除部门/人格拼接，仅显示会话标题且超10字截断。
 
+- 修复（header-spacing）：右侧面板切换按钮从中间 grid 右列移至右边 flex 容器，消除与设置按钮之间的多余间距。
+
 ## 发布：v0.9.95
 
 - 新增（file-reader-hover-tree）：地址栏面包屑目录按钮悬停时弹出浮动目录树面板，支持展开/收起子目录和点击打开文件，面板带边界检测确保不超出窗口可视区域。
