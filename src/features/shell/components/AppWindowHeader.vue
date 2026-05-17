@@ -48,14 +48,42 @@
       class="relative z-30 grid h-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 px-2"
     >
       <div class="relative z-40 flex min-w-0 items-center gap-1" @mousedown.stop>
-        <button
+        <div
           v-if="!sideConversationListVisible && !detachedChatWindow"
-          class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
-          :title="t('chat.conversationList')"
-          @click.stop="emit('toggle-side-conversation-list')"
+          class="relative"
+          @mouseenter="handleHoverSidebarEnter"
+          @mouseleave="handleHoverSidebarLeave"
         >
-          <PanelLeftClose class="h-3.5 w-3.5" />
-        </button>
+          <button
+            class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
+            :title="t('chat.conversationList')"
+            @click.stop="emit('toggle-side-conversation-list')"
+          >
+            <PanelLeftClose class="h-3.5 w-3.5" />
+          </button>
+          <div
+            v-if="hoverSidebarOpen"
+            class="absolute left-0 top-full z-50 mt-1 h-[90vh] max-h-[90vh] w-72 rounded-box border border-base-300 bg-base-200 shadow-xl overflow-hidden"
+            @mouseenter="handleHoverSidebarEnter"
+            @mouseleave="handleHoverSidebarLeave"
+          >
+            <ChatConversationSidebar
+              :items="conversationItems"
+              :active-conversation-id="activeConversationId"
+              :user-alias="userAlias"
+              :user-avatar-url="userAvatarUrl"
+              :persona-name-map="personaNameMap"
+              :persona-avatar-url-map="personaAvatarUrlMap"
+              :active-tab="conversationListTab"
+              @select="handleHoverConversationSelect"
+              @rename="$emit('rename-conversation', $event)"
+              @toggle-pin-conversation="$emit('toggle-pin-conversation', $event)"
+              @archive-conversation="$emit('archive-conversation', $event)"
+              @delete-conversation="$emit('delete-conversation', $event)"
+              @update:active-tab="$emit('update:conversation-list-tab', $event)"
+            />
+          </div>
+        </div>
       </div>
 
       <div
@@ -403,6 +431,7 @@ import MarkdownRender, { enableKatex, enableMermaid, getMarkdown, parseMarkdownT
 import { Download, FoldVertical, History, Minus, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ScrollText, Search, Settings, Square, SquarePen, X } from "lucide-vue-next";
 import type { ChatConversationOverviewItem } from "../../../types/app";
 import { resolveConversationDisplayTitle } from "../../chat/utils/conversation-title";
+import ChatConversationSidebar from "../../chat/components/ChatConversationSidebar.vue";
 import { registerChatMarkstreamComponents } from "../../chat/markdown/register-chat-markstream";
 import type { ConfigSearchResult, ConfigSearchTab } from "../../config/search/config-search";
 import { isDarkAppTheme } from "../composables/use-app-theme";
@@ -572,6 +601,24 @@ const currentConversationDepartmentName = computed(() => {
 const conversationUnreadTotal = computed(() =>
   props.conversationItems.reduce((total, item) => total + Math.max(0, Number(item.unreadCount || 0)), 0),
 );
+
+const hoverSidebarOpen = ref(false);
+let hoverSidebarTimer: ReturnType<typeof setTimeout> | null = null;
+
+function handleHoverSidebarEnter() {
+  if (hoverSidebarTimer) { clearTimeout(hoverSidebarTimer); hoverSidebarTimer = null; }
+  hoverSidebarOpen.value = true;
+}
+
+function handleHoverSidebarLeave() {
+  if (hoverSidebarTimer) clearTimeout(hoverSidebarTimer);
+  hoverSidebarTimer = setTimeout(() => { hoverSidebarOpen.value = false; }, 200);
+}
+
+function handleHoverConversationSelect(payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }) {
+  hoverSidebarOpen.value = false;
+  emit("switch-conversation", payload);
+}
 
 const combinedTitle = computed(() => {
   const parts: string[] = [];
