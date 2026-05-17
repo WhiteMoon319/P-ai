@@ -4,6 +4,9 @@ const path = require("node:path");
 const vscode = require("vscode");
 
 const DISCOVERY_FILE = "p-ai-ide-context-bridge.json";
+const IDE_CONTEXT_CLIENT_ID = `vscode-${process.pid}`;
+const MAX_CONTEXT_LINES = 240;
+const MAX_CONTEXT_CHARS = 40000;
 
 function readDiscovery() {
   const discoveryPath = path.join(os.tmpdir(), DISCOVERY_FILE);
@@ -33,6 +36,163 @@ function readWorkspaceRoots() {
     path: folder.uri.fsPath,
     name: folder.name,
   }));
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function normalizeRangeLines(startLine, endLine) {
+  const start = Math.max(0, Math.min(startLine, endLine));
+  const end = Math.max(start, Math.max(startLine, endLine));
+  return { start, end };
+}
+
+function workspaceForFile(filePath) {
+  const uri = vscode.Uri.file(filePath);
+  const folder = vscode.workspace.getWorkspaceFolder(uri);
+  if (folder) {
+    return { path: folder.uri.fsPath, name: folder.name };
+  }
+  const root = readWorkspaceRoots()[0];
+  return root || { path: "", name: "" };
+}
+
+function relativePathForFile(filePath, workspacePath) {
+  if (!workspacePath) return path.basename(filePath);
+  const relative = path.relative(workspacePath, filePath);
+  if (!relative || relative.startsWith("..")) return path.basename(filePath);
+  return relative.replace(/\\/g, "/");
+}
+
+function lineSuffix(startLine, endLine) {
+  if (startLine > 0 && endLine > startLine) return `:${startLine}-${endLine}`;
+  if (startLine > 0) return `:${startLine}`;
+  return "";
+}
+
+function textBlockForReference(reference) {
+  const lines = ["[IDE 上下文引用]", `文件: ${reference.filePath}`];
+  if (reference.startLine || reference.endLine) {
+    const lineText = reference.endLine && reference.endLine > reference.startLine
+      ? `${reference.startLine}-${reference.endLine}`
+      : String(reference.startLine || reference.endLine || "");
+    if (lineText) lines.push(`行号: ${lineText}`);
+  }
+  if (reference.languageId) lines.push(`语言: ${reference.languageId}`);
+  if (reference.source) lines.push(`来源: ${reference.source}`);
+  if (reference.capturedAt) lines.push(`采集时间: ${reference.capturedAt}`);
+  lines.push("内容:");
+  lines.push(reference.content || "");
+  return lines.join("\n");
+}
+
+function readDocumentLineRange(document, startLine, endLine) {
+  if (!document || document.lineCount <= 0) return "";
+  const normalized = normalizeRangeLines(startLine, endLine);
+  const start = Math.min(normalized.start, document.lineCount - 1);
+  const end = Math.min(normalized.end, Math.min(document.lineCount - 1, start + MAX_CONTEXT_LINES - 1));
+  const endCharacter = document.lineAt(end).range.end.character;
+  return document.getText(new vscode.Range(new vscode.Position(start, 0), new vscode.Position(end, endCharacter))).slice(0, MAX_CONTEXT_CHARS);
+}
+
+function createReference(document, source, startLineZeroBased, endLineZeroBased, content, capturedAt) {
+  const filePath = document.uri.fsPath;
+  if (!filePath || document.uri.scheme !== "file") return null;
+  const workspace = workspaceForFile(filePath);
+  const relativePath = relativePathForFile(filePath, workspace.path);
+  const fileName = path.basename(filePath);
+  const startLine = Math.max(1, startLineZeroBased + 1);
+  const endLine = Math.max(startLine, endLineZeroBased + 1);
+  const reference = {
+    id: `${source}:${filePath}:${startLine}:${endLine}`,
+    workspacePath: workspace.path,
+    workspaceName: workspace.name || path.basename(workspace.path || "") || "Workspace",
+    filePath,
+    fileName,
+    relativePath,
+    startLine,
+    endLine,
+    displayLabel: `${fileName}${lineSuffix(startLine, endLine)}`,
+    content: String(content || "").trim(),
+    languageId: document.languageId || undefined,
+    source,
+    capturedAt,
+    textBlock: "",
+  };
+  if (!reference.content) return null;
+  reference.textBlock = textBlockForReference(reference);
+  return reference;
+}
+
+function collectIdeContextReferences() {
+  const capturedAt = nowIso();
+  const references = [];
+  const seen = new Set();
+  const visibleEditors = vscode.window.visibleTextEditors || [];
+  for (const editor of visibleEditors) {
+    const document = editor.document;
+    if (!document || document.uri.scheme !== "file") continue;
+    const selectionReferences = [];
+    for (const selection of editor.selections || []) {
+      if (!selection || selection.isEmpty) continue;
+      const start = selection.start.isBefore(selection.end) ? selection.start : selection.end;
+      const end = selection.end.isAfter(selection.start) ? selection.end : selection.start;
+      const content = document.getText(new vscode.Range(start, end)).slice(0, MAX_CONTEXT_CHARS);
+      const reference = createReference(document, "selection", start.line, end.line, content, capturedAt);
+      if (reference) selectionReferences.push(reference);
+    }
+    if (selectionReferences.length > 0) {
+      for (const reference of selectionReferences) {
+        if (seen.has(reference.id)) continue;
+        seen.add(reference.id);
+        references.push(reference);
+      }
+      continue;
+    }
+    for (const visibleRange of editor.visibleRanges || []) {
+      const content = readDocumentLineRange(document, visibleRange.start.line, visibleRange.end.line);
+      const reference = createReference(document, "visible_range", visibleRange.start.line, visibleRange.end.line, content, capturedAt);
+      if (reference && !seen.has(reference.id)) {
+        seen.add(reference.id);
+        references.push(reference);
+      }
+    }
+  }
+  return references;
+}
+
+function ideContextSignature(references) {
+  return references
+    .map((reference) => [
+      reference.source,
+      reference.filePath,
+      reference.startLine || 0,
+      reference.endLine || 0,
+      reference.content,
+    ].join("\u001f"))
+    .sort()
+    .join("\u001e");
+}
+
+function snapshotPayloadFromReferences(references, discovery) {
+  return {
+    clientId: IDE_CONTEXT_CLIENT_ID,
+    authToken: String(discovery?.token || ""),
+    editor: "vscode",
+    workspaceRoots: readWorkspaceRoots().map((root) => root.path).filter(Boolean),
+    references: references.map((reference) => ({
+      id: reference.id,
+      filePath: reference.filePath,
+      startLine: reference.startLine,
+      endLine: reference.endLine,
+      content: reference.content,
+      languageId: reference.languageId,
+      source: reference.source,
+      capturedAt: reference.capturedAt,
+    })),
+    updatedAt: nowIso(),
+  };
 }
 
 function nonce() {
@@ -133,6 +293,12 @@ class PaiSidebarProvider {
     this.view = null;
     this._discoveryWatcher = null;
     this._lastDiscoveryContent = "";
+    this._ideContextSocket = null;
+    this._ideContextSocketUrl = "";
+    this._ideContextTimer = null;
+    this._ideContextSendTimer = null;
+    this._lastIdeContextSignature = "";
+    this._subscriptions = [];
   }
 
   resolveWebviewView(webviewView) {
@@ -160,6 +326,7 @@ class PaiSidebarProvider {
     webview.html = this.html(webview, assets);
     this.postDiscovery();
     this._startDiscoveryWatcher();
+    this._startIdeContextSync();
   }
 
   _startDiscoveryWatcher() {
@@ -190,8 +357,92 @@ class PaiSidebarProvider {
     }
   }
 
-  postDiscovery() {
+  _startIdeContextSync() {
+    if (this._ideContextTimer) return;
+    this._subscriptions.push(
+      vscode.window.onDidChangeActiveTextEditor(() => this.scheduleIdeContextSync()),
+      vscode.window.onDidChangeVisibleTextEditors(() => this.scheduleIdeContextSync()),
+      vscode.window.onDidChangeTextEditorSelection(() => this.scheduleIdeContextSync()),
+    );
+    this.scheduleIdeContextSync();
+    this._ideContextTimer = setInterval(() => this.scheduleIdeContextSync(), 5000);
+  }
+
+  _stopIdeContextSync() {
+    if (this._ideContextTimer) {
+      clearInterval(this._ideContextTimer);
+      this._ideContextTimer = null;
+    }
+    if (this._ideContextSendTimer) {
+      clearTimeout(this._ideContextSendTimer);
+      this._ideContextSendTimer = null;
+    }
+    for (const subscription of this._subscriptions.splice(0)) {
+      try { subscription.dispose(); } catch {}
+    }
+    if (this._ideContextSocket) {
+      try { this._ideContextSocket.close(); } catch {}
+      this._ideContextSocket = null;
+      this._ideContextSocketUrl = "";
+    }
+  }
+
+  scheduleIdeContextSync() {
+    if (this._ideContextSendTimer) clearTimeout(this._ideContextSendTimer);
+    this._ideContextSendTimer = setTimeout(() => {
+      this._ideContextSendTimer = null;
+      this.syncIdeContext();
+    }, 200);
+  }
+
+  syncIdeContext() {
     const discovery = readDiscovery();
+    const references = collectIdeContextReferences();
+    const signature = ideContextSignature(references);
+    if (signature === this._lastIdeContextSignature) return;
+    this._lastIdeContextSignature = signature;
+    if (!discovery?.bridgeUrl && !discovery?.url) return;
+    const bridgeUrl = String(discovery.bridgeUrl || discovery.url || "").trim();
+    if (!bridgeUrl) return;
+    const payload = snapshotPayloadFromReferences(references, discovery);
+    this.sendIdeContextSnapshot(bridgeUrl, payload);
+  }
+
+  sendIdeContextSnapshot(bridgeUrl, payload) {
+    const send = () => {
+      try {
+        this._ideContextSocket?.send(JSON.stringify(payload));
+      } catch {
+        this._ideContextSocket = null;
+      }
+    };
+    if (this._ideContextSocket && this._ideContextSocketUrl === bridgeUrl && this._ideContextSocket.readyState === 1) {
+      send();
+      return;
+    }
+    if (this._ideContextSocket && this._ideContextSocketUrl !== bridgeUrl) {
+      try { this._ideContextSocket.close(); } catch {}
+      this._ideContextSocket = null;
+    }
+    if (this._ideContextSocket && this._ideContextSocket.readyState === 0) return;
+    try {
+      if (typeof WebSocket !== "function") return;
+      this._ideContextSocketUrl = bridgeUrl;
+      this._ideContextSocket = new WebSocket(bridgeUrl);
+      this._ideContextSocket.onopen = send;
+      this._ideContextSocket.onerror = () => {
+        this._ideContextSocket = null;
+      };
+      this._ideContextSocket.onclose = () => {
+        this._ideContextSocket = null;
+      };
+    } catch {
+      this._ideContextSocket = null;
+    }
+  }
+
+  postDiscovery(discoveryInput) {
+    const discovery = discoveryInput || readDiscovery();
     if (this.view) {
       void this.view.webview.postMessage({
         type: "pai-discovery",
@@ -205,7 +456,10 @@ class PaiSidebarProvider {
     const assets = preloadedAssets || readSidebarAssets(this.extensionUri);
     const scriptUris = assets.scripts.map((asset) => webview.asWebviewUri(asset).toString());
     const styleUris = assets.styles.map((asset) => webview.asWebviewUri(asset).toString());
-    const discovery = JSON.stringify({ ...(readDiscovery() || {}), workspaceRoots: readWorkspaceRoots() });
+    const discovery = JSON.stringify({
+      ...(readDiscovery() || {}),
+      workspaceRoots: readWorkspaceRoots(),
+    });
     return `<!doctype html>
 <html lang="en">
 <head>
@@ -221,7 +475,7 @@ class PaiSidebarProvider {
   ${
     scriptUris.length > 0
       ? scriptUris.map((uri) => `<script nonce="${scriptNonce}" type="module" src="${uri}"></script>`).join("\n  ")
-      : "<p>Sidebar assets are missing. Run the sidebar build first.</p>"
+      : "<p>Pai assets are missing. Run the extension build first.</p>"
   }
 </body>
 </html>`;
@@ -238,13 +492,19 @@ function activate(context) {
       webviewOptions: { retainContextWhenHidden: true },
     }),
     vscode.commands.registerCommand("paiSidebar.refresh", () => provider.postDiscovery()),
-    { dispose: () => provider._stopDiscoveryWatcher() },
+    {
+      dispose: () => {
+        provider._stopDiscoveryWatcher();
+        provider._stopIdeContextSync();
+      },
+    },
   );
 }
 
 function deactivate() {
   if (currentProvider) {
     currentProvider._stopDiscoveryWatcher();
+    currentProvider._stopIdeContextSync();
     // 清空旧 webview HTML，迫使新 provider 注册时 VS Code 重新调用 resolveWebviewView
     if (currentProvider.view) {
       try { currentProvider.view.webview.html = ""; } catch {}

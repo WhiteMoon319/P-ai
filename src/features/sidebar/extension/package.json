@@ -1,13 +1,15 @@
 {
-  "name": "pai-sidebar",
-  "displayName": "PAI Sidebar",
-  "description": "PAI VS Code sidebar bridge.",
-  "version": "0.0.1",
+  "name": "pai",
+  "displayName": "Pai",
+  "description": "Pai 桌面版的连接器。",
+  "version": "0.9.93",
   "publisher": "pai",
   "engines": {
     "vscode": "^1.90.0"
   },
-  "categories": ["Other"],
+  "categories": [
+    "Other"
+  ],
   "icon": "icons/128x128.png",
   "files": [
     "extension.js",
@@ -21,7 +23,7 @@
       "activitybar": [
         {
           "id": "paiSidebar",
-          "title": "PAI",
+          "title": "Pai",
           "icon": "icons/32x32.png"
         }
       ]
@@ -38,7 +40,7 @@
     "commands": [
       {
         "command": "paiSidebar.refresh",
-        "title": "PAI: Refresh Sidebar"
+        "title": "Pai: 刷新连接器"
       }
     ]
   }

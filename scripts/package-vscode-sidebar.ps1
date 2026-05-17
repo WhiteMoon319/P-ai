@@ -1,5 +1,5 @@
 param(
-  [string]$OutputPath = "pai-sidebar-test.vsix",
+  [string]$OutputPath = "pai-test.vsix",
   [switch]$SkipBuild
 )
 
@@ -10,6 +10,8 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $extensionDir = Join-Path $repoRoot "src\features\sidebar\extension"
 $rootDistDir = Join-Path $repoRoot "dist"
 $extensionDistDir = Join-Path $extensionDir "dist"
+$rootPackageJsonPath = Join-Path $repoRoot "package.json"
+$extensionPackageJsonPath = Join-Path $extensionDir "package.json"
 
 if ([System.IO.Path]::IsPathRooted($OutputPath)) {
   $vsixPath = [System.IO.Path]::GetFullPath($OutputPath)
@@ -19,6 +21,20 @@ if ([System.IO.Path]::IsPathRooted($OutputPath)) {
 
 Push-Location $repoRoot
 try {
+  $syncVersionScript = @'
+const fs = require("node:fs");
+const rootPackagePath = process.argv[2];
+const extensionPackagePath = process.argv[3];
+const rootPackage = JSON.parse(fs.readFileSync(rootPackagePath, "utf8"));
+const extensionPackage = JSON.parse(fs.readFileSync(extensionPackagePath, "utf8"));
+extensionPackage.version = String(rootPackage.version || "");
+fs.writeFileSync(extensionPackagePath, `${JSON.stringify(extensionPackage, null, 2)}\n`, "utf8");
+'@
+  $syncVersionScript | node - $rootPackageJsonPath $extensionPackageJsonPath
+  if ($LASTEXITCODE -ne 0) {
+    throw "Sync extension version failed with exit code $LASTEXITCODE."
+  }
+
   if (-not $SkipBuild) {
     Write-Host "[vscode-sidebar] Building root frontend..."
     & pnpm build

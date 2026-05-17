@@ -67,7 +67,7 @@
     :create-conversation-department-options="createConversationDepartmentOptions"
     :delegate-department-ids="delegateDepartmentIds"
     :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
-    :ide-context-groups="[]"
+    :ide-context-groups="ideContextGroups"
     :attached-ide-context-references="[]"
     :current-theme="vscodeTheme"
     :detached-chat-window="true"
@@ -80,7 +80,7 @@
     chat-left-panel-mode="local"
     chat-right-panel-mode="reader"
     @update:chat-input="$emit('update:input', $event)"
-    @send-chat="$emit('send')"
+    @send-chat="$emit('send', $event)"
     @stop-chat="$emit('stop')"
     @load-older-history="$emit('loadPrevBlock')"
     @clear-chat-error="noop"
@@ -135,7 +135,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import type { ApiConfigItem, ChatMentionEntry, ChatMessage, ChatTodoItem } from "../../../types/app";
+import type { ApiConfigItem, ChatMentionEntry, ChatMessage, ChatTodoItem, IdeContextWorkspaceGroup } from "../../../types/app";
 import ChatView from "../../chat/views/ChatView.vue";
 import { useChatMessageBlocks } from "../../chat/composables/use-chat-turns";
 import type { TerminalApprovalConversationItem } from "../../shell/composables/use-terminal-approval";
@@ -191,12 +191,13 @@ const props = defineProps<{
   hideWorkspaceButton?: boolean;
   terminalApprovals: TerminalApprovalConversationItem[];
   terminalApprovalResolving: boolean;
+  ideContextGroups: IdeContextWorkspaceGroup[];
   readPlanFileContent: (input: { conversationId: string; path: string }) => Promise<string>;
 }>();
 
 defineEmits<{
   "update:input": [value: string];
-  send: [];
+  send: [payload?: { extraTextBlocks?: string[] }];
   stop: [];
   removeClipboardImage: [index: number];
   loadPrevBlock: [];

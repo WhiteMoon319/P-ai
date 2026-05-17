@@ -669,12 +669,11 @@ fn ide_context_consume_bridge_token(
     if !auth.valid_tokens.contains_key(provided) {
         return Err(("invalid authToken".to_string(), None));
     }
-    let next_token = ide_context_generate_bridge_token();
     auth.valid_tokens.insert(
-        next_token.clone(),
+        provided.to_string(),
         now + time::Duration::seconds(IDE_CONTEXT_AUTH_TOKEN_TTL_SECS),
     );
-    Ok(next_token)
+    Ok(provided.to_string())
 }
 
 fn ide_context_normalize_time_or_now(field_name: &str, raw: &str) -> String {
@@ -797,6 +796,13 @@ fn emit_ide_context_updated(state: &AppState, client_id: &str, updated_at: &str)
             },
         );
     }
+    ide_chat_broadcast_notification(
+        "ideContext.updated",
+        serde_json::json!({
+            "clientId": client_id,
+            "updatedAt": updated_at,
+        }),
+    );
 }
 
 fn ide_context_compare_key(raw: &str) -> String {
@@ -1070,6 +1076,13 @@ fn upsert_ide_context_snapshot(
 fn query_ide_context_references(
     input: IdeContextWorkspaceQueryInput,
     ide_context_runtime: State<'_, IdeContextRuntime>,
+) -> Result<IdeContextQueryResultOutput, String> {
+    query_ide_context_references_internal(input, ide_context_runtime.inner())
+}
+
+fn query_ide_context_references_internal(
+    input: IdeContextWorkspaceQueryInput,
+    ide_context_runtime: &IdeContextRuntime,
 ) -> Result<IdeContextQueryResultOutput, String> {
     let workspaces: Vec<IdeContextWorkspaceInput> = input
         .workspaces
@@ -1891,6 +1904,7 @@ async fn ide_chat_handle_jsonrpc_request(
     request: IdeChatJsonRpcRequest,
     state: &AppState,
     app: &AppHandle,
+    ide_context_runtime: &IdeContextRuntime,
     client_id: &str,
     opened_conversation_id: &mut Option<String>,
 ) -> Value {
@@ -1946,6 +1960,9 @@ async fn ide_chat_handle_jsonrpc_request(
         "workspace.permission" => ide_chat_workspace_permission(state, request.params),
         "workspace.permission.select" => ide_chat_select_workspace_permission(state, request.params),
         "workspace.list" => ide_chat_workspace_list(state, request.params),
+        "ideContext.query" => ide_chat_parse_params::<IdeContextWorkspaceQueryInput>(request.params)
+            .and_then(|input| serde_json::to_value(query_ide_context_references_internal(input, ide_context_runtime)?)
+                .map_err(|err| format!("serialize IDE context query result failed: {err}"))),
         "workspace.layout.save" => ide_chat_workspace_layout_save(state, request.params),
         "terminalApproval.resolve" => ide_chat_resolve_terminal_approval(state, request.params),
         "conversation.planMode.set" => ide_chat_set_conversation_plan_mode(state, request.params),
@@ -2057,6 +2074,7 @@ async fn ide_context_ws_handle_connection(
             peer_addr,
             app,
             state,
+            ide_context_runtime,
         )
         .await;
         return;
@@ -2086,11 +2104,8 @@ async fn ide_context_ws_handle_connection(
                                 &ide_context_runtime,
                                 input.auth_token.as_deref().unwrap_or(""),
                             ) {
-                                Ok(next_token) => {
+                                Ok(_token) => {
                                     authenticated = true;
-                                    if let Err(err) = publish_ide_context_bridge_discovery(port, &next_token) {
-                                        eprintln!("[IDE 上下文桥] 轮换发现 token 失败: {}", err);
-                                    }
                                 }
                                 Err((err, refreshed_token)) => {
                                     if let Some(refreshed_token) = refreshed_token.as_deref() {
@@ -2173,6 +2188,7 @@ async fn ide_context_chat_ws_handle_connection(
     peer_addr: std::net::SocketAddr,
     app: AppHandle,
     state: AppState,
+    ide_context_runtime: IdeContextRuntime,
 ) {
     eprintln!("[VSCode 侧边栏] 客户端已连接: {}", peer_addr);
     let client_id = Uuid::new_v4().to_string();
@@ -2213,6 +2229,7 @@ async fn ide_context_chat_ws_handle_connection(
                         request,
                         &state,
                         &app,
+                        &ide_context_runtime,
                         &client_id,
                         &mut opened_conversation_id,
                     )
@@ -2259,11 +2276,11 @@ mod ide_context_tests {
         let token = ide_context_issue_bridge_token(&runtime).expect("issue token");
 
         let next_token = ide_context_consume_bridge_token(&runtime, &token).expect("first consume");
-        assert_ne!(next_token, token);
+        assert_eq!(next_token, token);
 
         let second_next =
             ide_context_consume_bridge_token(&runtime, &token).expect("second consume with same token");
-        assert_ne!(second_next, token);
+        assert_eq!(second_next, token);
     }
 
     #[test]

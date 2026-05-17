@@ -31,18 +31,18 @@ pnpm package:vscode-sidebar
 
 1. 执行根目录 `pnpm build`
 2. 把根 `dist/` 同步到 `src/features/sidebar/extension/dist/`
-3. 在扩展目录生成 `pai-sidebar-test.vsix`
+3. 在扩展目录生成 `pai-test.vsix`
 
 默认产物位置：
 
 ```text
-src/features/sidebar/extension/pai-sidebar-test.vsix
+src/features/sidebar/extension/pai-test.vsix
 ```
 
 如果要自定义输出文件名，可以这样传参：
 
 ```bash
-pnpm package:vscode-sidebar -- -OutputPath pai-sidebar-0.0.1.vsix
+pnpm package:vscode-sidebar -- -OutputPath pai-0.9.93.vsix
 ```
 
 如果你已经手动跑过 `pnpm build`，想跳过再次构建：
@@ -121,7 +121,7 @@ pnpm publish:vscode-sidebar -- -SkipDuplicate
 
 ```bash
 pnpm build
-pnpm dlx @vscode/vsce package -o pai-sidebar-test.vsix --allow-missing-repository --skip-license
+pnpm dlx @vscode/vsce package -o pai-test.vsix --allow-missing-repository --skip-license
 ```
 
 发布脚本内部等价于：

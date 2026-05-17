@@ -52,6 +52,7 @@
       :hide-workspace-button="hideWorkspaceButton"
       :terminal-approvals="activeConversationTerminalApprovals"
       :terminal-approval-resolving="terminalApprovalResolving"
+      :ide-context-groups="vscodeIdeContextGroups"
       :read-plan-file-content="readPlanFileContent"
       @send="send"
       @stop="stop"
@@ -147,7 +148,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import type { ApiConfigItem, ChatMessage, ChatTodoItem } from "../../types/app";
+import type { ApiConfigItem, ChatMessage, ChatTodoItem, IdeContextWorkspaceGroup } from "../../types/app";
 import { removeBinaryPlaceholders, messageText } from "../../utils/chat-message";
 import { normalizeDepartmentChildIds } from "../config/utils/department-graph";
 import { useI18n } from "vue-i18n";
@@ -301,6 +302,11 @@ type DiscoveryPayload = {
   workspaceRoots?: Array<{ path?: string; name?: string }>;
 };
 
+type IdeContextQueryResult = {
+  groups?: IdeContextWorkspaceGroup[];
+  updatedAt?: string;
+};
+
 const transport = useWsTransport();
 const { t } = useI18n();
 const conversations = ref<ConversationSummary[]>([]);
@@ -315,6 +321,7 @@ const workspaceAccess = ref<"read_only" | "approval" | "full_access" | "">("appr
 const workspaceRootPath = ref("");
 const workspaceRootName = ref("");
 const vscodeWorkspaceRoots = ref<Array<{ path: string; name: string }>>([]);
+const vscodeIdeContextGroups = ref<IdeContextWorkspaceGroup[]>([]);
 const messages = ref<ChatMessage[]>([]);
 const sidebarTodos = ref<ChatTodoItem[]>([]);
 const inputText = ref("");
@@ -413,6 +420,77 @@ function applyWorkspaceRoots(rawRoots: DiscoveryPayload["workspaceRoots"]) {
       name: String(item?.name || "").trim(),
     }))
     .filter((item) => item.path);
+}
+
+function currentIdeContextWorkspaces() {
+  return vscodeWorkspaceRoots.value
+    .map((item) => ({
+      path: String(item.path || "").trim(),
+      name: String(item.name || "").trim() || undefined,
+    }))
+    .filter((item) => item.path);
+}
+
+async function refreshIdeContextGroups() {
+  if (!transport.connected.value) return;
+  const workspaces = currentIdeContextWorkspaces();
+  if (workspaces.length === 0) {
+    vscodeIdeContextGroups.value = [];
+    return;
+  }
+  try {
+    const result = await transport.request<IdeContextQueryResult>("ideContext.query", { workspaces }, 8000);
+    applyIdeContextGroups(result.groups || []);
+  } catch {
+    // IDE 上下文是辅助信息，查询失败时不打断聊天主流程。
+  }
+}
+
+function applyIdeContextGroups(rawGroups: IdeContextWorkspaceGroup[] | undefined) {
+  vscodeIdeContextGroups.value = (Array.isArray(rawGroups) ? rawGroups : [])
+    .map((group) => ({
+      workspacePath: String(group?.workspacePath || "").trim(),
+      workspaceName: String(group?.workspaceName || "").trim(),
+      references: (Array.isArray(group?.references) ? group.references : [])
+        .map((item) => ({
+          ...item,
+          id: String(item?.id || "").trim(),
+          workspacePath: String(item?.workspacePath || group?.workspacePath || "").trim(),
+          workspaceName: String(item?.workspaceName || group?.workspaceName || "").trim(),
+          filePath: String(item?.filePath || "").trim(),
+          fileName: String(item?.fileName || "").trim(),
+          relativePath: String(item?.relativePath || "").trim(),
+          displayLabel: String(item?.displayLabel || "").trim(),
+          content: String(item?.content || ""),
+          source: String(item?.source || "").trim(),
+          capturedAt: String(item?.capturedAt || "").trim(),
+          textBlock: String(item?.textBlock || "").trim(),
+        }))
+        .filter((item) => item.id && item.filePath && item.textBlock)
+        .reduce((items, item) => {
+          const fileKey = String(item.filePath || "").replace(/\\/g, "/").toLowerCase();
+          const existingIndex = items.findIndex((existing) =>
+            String(existing.filePath || "").replace(/\\/g, "/").toLowerCase() === fileKey,
+          );
+          if (existingIndex < 0) return [...items, item];
+          const existing = items[existingIndex];
+          const itemIsSelection = String(item.source || "").trim() === "selection";
+          const existingIsSelection = String(existing.source || "").trim() === "selection";
+          if (!itemIsSelection && existingIsSelection) return items;
+          if (itemIsSelection && !existingIsSelection) {
+            const next = [...items];
+            next[existingIndex] = item;
+            return next;
+          }
+          const itemLineCount = Math.max(1, Number(item.endLine || item.startLine || 0) - Number(item.startLine || 0) + 1);
+          const existingLineCount = Math.max(1, Number(existing.endLine || existing.startLine || 0) - Number(existing.startLine || 0) + 1);
+          if (itemLineCount >= existingLineCount) return items;
+          const next = [...items];
+          next[existingIndex] = item;
+          return next;
+        }, [] as IdeContextWorkspaceGroup["references"]),
+    }))
+    .filter((group) => group.references.length > 0);
 }
 
 async function refreshList() {
@@ -1014,15 +1092,23 @@ function removeClipboardImage(index: number) {
   clipboardImages.value.splice(index, 1);
 }
 
-async function send() {
+async function send(payload?: { extraTextBlocks?: string[] }) {
   const text = inputText.value.trim();
   const images = clipboardImages.value.map((item) => ({ ...item }));
-  if ((!text && images.length === 0) || !activeConversationId.value || busy.value) return;
+  const extraTextBlocks = (Array.isArray(payload?.extraTextBlocks) ? payload.extraTextBlocks : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  if ((!text && images.length === 0 && extraTextBlocks.length === 0) || !activeConversationId.value || busy.value) return;
   inputText.value = "";
   clipboardImages.value = [];
   busy.value = true;
   try {
-    await transport.request("chat.send", { conversationId: activeConversationId.value, text, images });
+    await transport.request("chat.send", {
+      conversationId: activeConversationId.value,
+      text,
+      images,
+      extraTextBlocks,
+    });
   } catch (error) {
     busy.value = false;
     clearStreamingState();
@@ -1291,6 +1377,9 @@ function registerNotifications() {
       clearCompletedRuntimeStateForConversation(activeConversationId.value);
     }
   });
+  transport.onNotification("ideContext.updated", () => {
+    void refreshIdeContextGroups();
+  });
   transport.onNotification("conversation.runtimeStateUpdated", (payload) => {
     const value = payload as { conversationId?: string; runtimeState?: string };
     const conversationId = String(value.conversationId || "").trim();
@@ -1351,7 +1440,10 @@ async function bootstrap() {
     return;
   }
   await transport.connect(config);
-  if (transport.connected.value) await refreshList();
+  if (transport.connected.value) {
+    await refreshList();
+    await refreshIdeContextGroups();
+  }
 }
 
 function clearDiscoveryRefreshTimer() {
@@ -1383,7 +1475,10 @@ function handleWindowMessage(event: MessageEvent) {
     clearDiscoveryRefreshTimer();
     applyWorkspaceRoots(data.discovery.workspaceRoots);
     const config = normalizeDiscovery(data.discovery);
-    if (config) void transport.connect(config).then(refreshList);
+    if (config) void transport.connect(config).then(async () => {
+      await refreshList();
+      await refreshIdeContextGroups();
+    });
     else {
       transport.connecting.value = false;
       transport.errorText.value = "PAI 未运行";

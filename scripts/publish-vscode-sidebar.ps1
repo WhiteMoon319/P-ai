@@ -1,5 +1,5 @@
 param(
-  [string]$OutputPath = "pai-sidebar-test.vsix",
+  [string]$OutputPath = "pai-test.vsix",
   [switch]$SkipBuild,
   [switch]$SkipPackage,
   [switch]$SkipDuplicate,

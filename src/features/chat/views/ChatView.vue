@@ -599,14 +599,16 @@ const fileReaderContextReferences = computed<IdeContextReferenceItem[]>(() => {
   return visibleFilePath && visibleFilePath === selectionFilePath ? [selection] : [visible];
 });
 const mergedVisibleIdeContextGroups = computed<IdeContextWorkspaceGroup[]>(() => {
-  if (fileReaderContextReferences.value.length === 0) return visibleIdeContextGroups.value;
+  const propGroups = Array.isArray(props.ideContextGroups) ? props.ideContextGroups : [];
+  const baseGroups = propGroups.length > 0 ? propGroups : visibleIdeContextGroups.value;
+  if (fileReaderContextReferences.value.length === 0) return baseGroups;
   return [
     {
       workspacePath: String(props.currentWorkspaceRootPath || "").trim(),
       workspaceName: String(props.currentWorkspaceName || "").trim() || t("chat.allowedWorkspaceButton"),
       references: fileReaderContextReferences.value,
     },
-    ...visibleIdeContextGroups.value,
+    ...baseGroups,
   ];
 });
 

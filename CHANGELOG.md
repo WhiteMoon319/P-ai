@@ -26,6 +26,8 @@
 
 - 修复（vscode-sidebar-scroll）：侧边栏发送用户消息写入完成后直接滚到底部，禁用平滑滚动时仍保持即时跟随。
 
+- 功能（vscode-connector）：VS Code 扩展展示名改为 Pai，描述改为桌面版连接器，扩展版本随主应用同步；插件同步可见编辑器/选区上下文到后端，侧边栏通过 `ideContext.query` 刷新附件，避免选区变化触发侧边栏重连刷新。
+
 ## 发布：v0.9.92
 
 - 修复（chat-text-indent）：修复 `removeBinaryPlaceholders` 中 `.map(line => line.trim())` 误删所有行首缩进的问题，改为仅在 filter 判断时 trim，保留原始缩进。
