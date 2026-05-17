@@ -28,6 +28,8 @@
 
 - 功能（vscode-connector）：VS Code 扩展展示名改为 Pai，描述改为桌面版连接器，扩展版本随主应用同步；插件同步可见编辑器/选区上下文到后端，侧边栏通过 `ideContext.query` 刷新附件，避免选区变化触发侧边栏重连刷新。
 
+- 修复（summary-context）：收紧 SummaryContext 与归档反思 JSON 输出约束，要求字符串内容引用统一使用竖引号 `「」` / `『』`，降低裸英文双引号导致的 JSON 解析失败。
+
 ## 发布：v0.9.92
 
 - 修复（chat-text-indent）：修复 `removeBinaryPlaceholders` 中 `.map(line => line.trim())` 误删所有行首缩进的问题，改为仅在 filter 判断时 trim，保留原始缩进。
