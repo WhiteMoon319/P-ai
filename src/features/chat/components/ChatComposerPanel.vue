@@ -355,6 +355,8 @@ const props = defineProps<{
   ideContextGroups: IdeContextWorkspaceGroup[];
   attachedIdeContextReferences: IdeContextReferenceItem[];
   sidebarMode?: boolean;
+  trimTip?: string;
+  chatUsagePercent?: number;
 }>();
 
 const emit = defineEmits<{
@@ -382,6 +384,7 @@ const emit = defineEmits<{
   (e: "stopChat"): void;
   (e: "open-conversation-list"): void;
   (e: "open-settings"): void;
+  (e: "trim-conversation"): void;
 }>();
 
 const { t } = useI18n();

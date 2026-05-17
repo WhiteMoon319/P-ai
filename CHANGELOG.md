@@ -8,6 +8,10 @@
 
 - 修复（sidebar-layout）：SidebarLayout.vue 中 $emit 三元表达式类型错误，改为分支调用以匹配 defineEmits 重载签名。
 
+- 修复（naming-emit）：ShellDialogsHost closeConfigSaveErrorDialog 重命名为 closeSettingsSaveErrorDialog 与父监听对齐；ChatComposerPanel 补齐 trimTip/trim-conversation 声明；AppWindowHeader 设置按钮 title 使用 openSettingsTitle prop。
+
+- 修复（sidebar-title）：Web 端标题取值逻辑与 APP 端对齐，改为 computed 从 activeSummary 按 title → summaryTitle → 时间回退派生；APP 端标题栏去除部门/人格拼接，仅显示会话标题且超10字截断。
+
 ## 发布：v0.9.95
 
 - 新增（file-reader-hover-tree）：地址栏面包屑目录按钮悬停时弹出浮动目录树面板，支持展开/收起子目录和点击打开文件，面板带边界检测确保不超出窗口可视区域。

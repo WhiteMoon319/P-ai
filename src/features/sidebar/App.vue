@@ -152,6 +152,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import type { ApiConfigItem, ChatMessage, ChatTodoItem, IdeContextWorkspaceGroup } from "../../types/app";
 import { removeBinaryPlaceholders, messageText } from "../../utils/chat-message";
 import { normalizeDepartmentChildIds } from "../config/utils/department-graph";
+import { formatConversationFallbackTitle } from "../chat/utils/conversation-title";
 import { useI18n } from "vue-i18n";
 import SidebarLayout from "./layouts/SidebarLayout.vue";
 import ConversationListView from "./views/ConversationListView.vue";
@@ -312,7 +313,15 @@ const transport = useWsTransport();
 const { t } = useI18n();
 const conversations = ref<ConversationSummary[]>([]);
 const activeConversationId = ref("");
-const activeTitle = ref("");
+const activeTitle = computed(() => {
+  const item = activeSummary.value;
+  if (!item) return "PAI";
+  const title = String(item.title || "").trim();
+  if (title) return title;
+  const summary = String(item.summaryTitle || "").trim();
+  if (summary) return summary;
+  return formatConversationFallbackTitle(item.lastMessageAt || item.updatedAt) || "PAI";
+});
 const activeAgentId = ref("");
 const persona = ref<SidebarPersonaPayload>({});
 const listPersona = ref<SidebarPersonaPayload>({});
@@ -499,9 +508,6 @@ async function refreshList() {
   const result = await transport.request<{ conversations: ConversationSummary[]; persona?: SidebarPersonaPayload }>("conversation.list");
   conversations.value = Array.isArray(result.conversations) ? result.conversations : [];
   if (result.persona) listPersona.value = result.persona;
-  if (activeConversationId.value) {
-    activeTitle.value = activeSummary.value?.title || activeTitle.value;
-  }
 }
 
 async function loadCreateConversationOptions() {
@@ -634,7 +640,6 @@ async function openConversation(conversationId: string) {
   });
   activeConversationId.value = result.conversationId;
   clearCompletedRuntimeStateForConversation(result.conversationId);
-  activeTitle.value = result.title || activeSummary.value?.title || "PAI";
   activeAgentId.value = String(result.agentId || "").trim();
   persona.value = result.persona || {};
   if (result.persona) listPersona.value = result.persona;
@@ -1169,7 +1174,6 @@ async function recallTurn(payload: { turnId: string }) {
     inputText.value = recalled ? removeBinaryPlaceholders(messageText(recalled)) : inputText.value;
     if (result.conversation) {
       activeConversationId.value = result.conversation.conversationId;
-      activeTitle.value = result.conversation.title || activeTitle.value;
       messages.value = Array.isArray(result.conversation.messages) ? result.conversation.messages : messages.value.slice(0, target.keepCount);
       persona.value = result.conversation.persona || persona.value;
       applyModelPayload(result.conversation.model || {});

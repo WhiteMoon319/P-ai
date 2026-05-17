@@ -64,7 +64,7 @@ const emit = defineEmits<{
   confirmRewindWithPatch: [];
   confirmRewindMessageOnly: [];
   cancelRewindConfirm: [];
-  closeConfigSaveErrorDialog: [];
+  closeSettingsSaveErrorDialog: [];
   closeArchiveImportPreviewDialog: [];
   confirmArchiveImport: [];
   closeSkillPlaceholderDialog: [];
@@ -183,11 +183,11 @@ function handleConfirmDeleteConversationFromArchiveDialog() {
         :class="configSaveErrorDialogKind === 'warning' ? 'text-warning' : 'text-error'"
       >{{ configSaveErrorDialogBody }}</pre>
       <div class="modal-action">
-        <button class="btn btn-sm btn-primary" @click="emit('closeConfigSaveErrorDialog')">{{ t("common.close") }}</button>
+        <button class="btn btn-sm btn-primary" @click="emit('closeSettingsSaveErrorDialog')">{{ t("common.close") }}</button>
       </div>
     </div>
     <form method="dialog" class="modal-backdrop">
-      <button @click.prevent="emit('closeConfigSaveErrorDialog')">close</button>
+      <button @click.prevent="emit('closeSettingsSaveErrorDialog')">close</button>
     </form>
   </dialog>
 

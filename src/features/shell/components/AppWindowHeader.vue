@@ -187,7 +187,7 @@
 
       <button
         class="btn btn-ghost btn-sm"
-        :title="t('common.settings')"
+        :title="openSettingsTitle || t('common.settings')"
         @mousedown.stop
         @click.stop="$emit('open-settings')"
       >
@@ -630,20 +630,12 @@ function handleHoverConversationSelect(payload: { conversationId: string; kind?:
 }
 
 const combinedTitle = computed(() => {
-  const parts: string[] = [];
-  const title = currentConversationTitle.value;
-  const dept = currentConversationDepartmentName.value;
-  const persona = props.currentPersonaName;
-
-  if (title) parts.push(title);
-  if (dept) parts.push(dept);
-  if (persona) parts.push(persona);
-
-  return parts.join(" · ");
+  const raw = currentConversationTitle.value;
+  return raw.length > 10 ? raw.slice(0, 10) + "…" : raw;
 });
 
 const combinedTitleTooltip = computed(() => {
-  return combinedTitle.value || props.currentPersonaName;
+  return currentConversationTitle.value || props.currentPersonaName;
 });
 
 watch(
