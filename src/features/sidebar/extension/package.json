@@ -2,7 +2,7 @@
   "name": "pai",
   "displayName": "Pai",
   "description": "Pai 桌面版的连接器。",
-  "version": "0.9.93",
+  "version": "0.9.94",
   "publisher": "pai",
   "engines": {
     "vscode": "^1.90.0"

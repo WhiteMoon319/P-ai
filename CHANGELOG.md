@@ -1,6 +1,6 @@
 # 变更日志
 
-## 发布：v0.9.93
+## 发布：v0.9.94
 
 - 重构（chat-right-panel）：合并审查/评估/委托为统一三标签面板，标题栏收窄为“阅读”与“委托”两个 tab，委托内容内联至 ToolReviewSidebar，去除独立 DelegateStatusSidebar 嵌套。
 
