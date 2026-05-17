@@ -18,6 +18,8 @@
 
 - 修复（chat-codeblock）：代码块 Shiki 主题不再硬编码，`darkTheme` 使用 `github-dark`、`lightTheme` 使用 `github-light`，`isDark` 透传自应用主题。
 
+- 更新（sidebar-extension）：VS Code 侧边栏扩展发布者改为 yokami233618，扩展名改为 P-ai-Sidebar，显示名改为 P-ai。
+
 - 修复（chat-codeblock）：为代码块 plain text 添加兜底字色，防止浅色主题下深色背景不可见。
 
 - 清理（vscode-sidebar）：移除 `package.json` 中冗余的 `onView` 激活事件声明。
