@@ -7,6 +7,7 @@
     :active-title="activeTitle"
     :active-conversation-id="activeConversationId"
     :compacting="compacting"
+    :chat-usage-percent="chatUsagePercent"
     @show-list="view = 'list'"
     @show-chat="view = 'chat'"
     @new-conversation="openCreateConversationDialog"
@@ -334,7 +335,8 @@ const toolStatusState = ref<"running" | "done" | "failed" | "">("");
 const streamToolCalls = ref<SidebarStreamToolCallView[]>([]);
 const busy = ref(false);
 const compacting = ref(false);
-const chatViewWrapperRef = ref<{ exitMessageSelectionMode: () => void } | null>(null);
+const chatViewWrapperRef = ref<{ exitMessageSelectionMode: () => void; chatUsagePercent?: number } | null>(null);
+const chatUsagePercent = computed(() => chatViewWrapperRef.value?.chatUsagePercent ?? 0);
 const compactionDialogOpen = ref(false);
 const compactionPreviewLoading = ref(false);
 const compactionPreview = ref<CompactionPreviewResult | null>(null);

@@ -36,7 +36,7 @@
     :chat-model-options="chatModelOptions"
     :workspace-access="workspaceAccess"
     :plan-mode-enabled="planModeEnabled"
-    :chat-usage-percent="0"
+    :chat-usage-percent="chatUsagePercent"
     force-archive-tip=""
     :media-drag-active="false"
     :chatting="busy"
@@ -256,6 +256,7 @@ const sidebarMentionEntries = computed<ChatMentionEntry[]>(() => {
 const vscodeTheme = ref(resolveVsCodeTheme());
 const scrollToBottomRequest = ref(0);
 const streamingDraftCreatedAt = ref("");
+const streamingDraftStartedAtMs = ref(0);
 let lastSeenOwnMessageId = "";
 const chatFrontendRoundPhase = computed<"idle" | "waiting" | "queued" | "streaming">(() => {
   if (props.busy) return "streaming";
@@ -297,6 +298,7 @@ onBeforeUnmount(() => {
 
 watch(
   () => [
+    props.busy,
     props.messages,
     props.streamingText,
     props.streamingReasoningStandard,
@@ -315,7 +317,8 @@ watch(
       ? props.streamToolCalls.map((item) => ({ ...item }))
       : [];
     if (
-      text.trim()
+      props.busy
+      || text.trim()
       || reasoningStandard.trim()
       || reasoningInline.trim()
       || toolStatusText.trim()
@@ -324,7 +327,16 @@ watch(
     ) {
       if (!streamingDraftCreatedAt.value) {
         streamingDraftCreatedAt.value = new Date().toISOString();
+        streamingDraftStartedAtMs.value = Date.now();
       }
+      const hasStreamingContent = !!(
+        text.trim()
+        || reasoningStandard.trim()
+        || reasoningInline.trim()
+        || toolStatusText.trim()
+        || props.toolStatusState
+        || streamToolCalls.length > 0
+      );
       next.push({
         id: `sidebar-stream-${props.activeConversationId || "conversation"}`,
         role: "assistant",
@@ -340,11 +352,14 @@ watch(
           _toolStatusText: toolStatusText,
           _toolStatusState: props.toolStatusState,
           _streamToolCalls: streamToolCalls,
+          _preStreamingStatusText: hasStreamingContent ? "" : "等待回复",
+          _frontendDispatchElapsedMs: Date.now() - streamingDraftStartedAtMs.value,
         },
         toolCall: [],
       });
     } else {
       streamingDraftCreatedAt.value = "";
+      streamingDraftStartedAtMs.value = 0;
     }
     allMessages.value = next;
   },
@@ -355,6 +370,7 @@ watch(
   () => props.activeConversationId,
   () => {
     streamingDraftCreatedAt.value = "";
+    streamingDraftStartedAtMs.value = 0;
     lastSeenOwnMessageId = latestOwnMessageId(Array.isArray(props.messages) ? props.messages : []);
   },
   { immediate: true },
@@ -379,7 +395,7 @@ watch(
   { flush: "post" },
 );
 
-const { visibleMessageBlocks } = useChatMessageBlocks({
+const { visibleMessageBlocks, chatUsagePercent } = useChatMessageBlocks({
   allMessages,
   activeChatApiConfig,
   perfDebug: false,
@@ -392,7 +408,7 @@ function exitMessageSelectionMode() {
   chatViewRef.value?.exitMessageSelectionMode();
 }
 
-defineExpose({ exitMessageSelectionMode });
+defineExpose({ exitMessageSelectionMode, chatUsagePercent });
 
 function noop() {}
 
