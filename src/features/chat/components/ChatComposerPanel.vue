@@ -201,7 +201,7 @@
       </Teleport>
       <div class="mt-2 flex items-center justify-between gap-2">
         <div class="flex items-center gap-2">
-          <div v-if="!sidebarMode" class="relative">
+          <div v-if="!sidebarMode" ref="menuWrapperRef" class="relative">
             <button
               ref="menuTriggerRef"
               class="btn btn-sm btn-circle btn-ghost shrink-0"
@@ -419,6 +419,7 @@ const sidebarMode = computed(() => !!props.sidebarMode);
 
 const menuOpen = ref(false);
 const menuTriggerRef = ref<HTMLButtonElement | null>(null);
+const menuWrapperRef = ref<HTMLDivElement | null>(null);
 
 function closeMenu() {
   menuOpen.value = false;
@@ -437,9 +438,8 @@ function handleOpenConfig() {
 function onMenuOutsideClick(event: MouseEvent) {
   if (!menuOpen.value) return;
   const target = event.target as Node | null;
-  if (menuTriggerRef.value && !menuTriggerRef.value.contains(target)) {
-    closeMenu();
-  }
+  if (menuWrapperRef.value && menuWrapperRef.value.contains(target)) return;
+  closeMenu();
 }
 
 onMounted(() => { document.addEventListener('pointerdown', onMenuOutsideClick); });
