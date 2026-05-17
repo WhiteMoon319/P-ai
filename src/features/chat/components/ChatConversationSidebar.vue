@@ -21,6 +21,27 @@
           {{ t('chat.contactConversationTab') }}
         </button>
       </div>
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs h-7 min-h-7 w-7 min-w-7 p-0 ml-auto"
+        :class="showSearch ? 'text-primary' : 'text-base-content/55'"
+        :title="t('chat.conversationSearchPlaceholder')"
+        @click="showSearch = !showSearch"
+      >
+        <Search class="h-4 w-4" />
+      </button>
+    </div>
+    <div v-if="showSearch" class="shrink-0 px-2 pb-1">
+      <label class="input input-bordered input-sm flex h-8 min-w-0 items-center gap-2 bg-base-100">
+        <Search class="h-3.5 w-3.5 opacity-60" />
+        <input
+          ref="searchInputRef"
+          v-model="conversationSearchQuery"
+          type="text"
+          class="w-full bg-transparent outline-none"
+          :placeholder="t('chat.conversationSearchPlaceholder')"
+        />
+      </label>
     </div>
     <ChatConversationFloatingScroll class="flex-1 min-h-0">
       <section
@@ -194,17 +215,6 @@
         {{ t("chat.conversationSearchEmpty") }}
       </div>
     </ChatConversationFloatingScroll>
-    <div class="shrink-0 border-t border-base-300 p-2">
-      <label class="input input-bordered input-sm flex h-8 min-w-0 items-center gap-2 bg-base-100">
-        <Search class="h-3.5 w-3.5 opacity-60" />
-        <input
-          v-model="conversationSearchQuery"
-          type="text"
-          class="w-full bg-transparent outline-none"
-          :placeholder="t('chat.conversationSearchPlaceholder')"
-        />
-      </label>
-    </div>
   </aside>
 </template>
 
@@ -243,6 +253,8 @@ const renameInputRef = ref<HTMLInputElement | null>(null);
 const editingConversationId = ref("");
 const editingTitleDraft = ref("");
 const conversationSearchQuery = ref("");
+const showSearch = ref(false);
+const searchInputRef = ref<HTMLInputElement | null>(null);
 const activeConversationTab = computed({
   get: () => props.activeTab === "contact" ? "contact" : "local",
   set: (value: "local" | "contact") => emit("update:activeTab", value),
@@ -310,6 +322,15 @@ watch(
   (conversationId) => markConversationRead(conversationId),
   { immediate: true },
 );
+
+watch(showSearch, async (visible) => {
+  if (visible) {
+    await nextTick();
+    searchInputRef.value?.focus();
+  } else {
+    conversationSearchQuery.value = "";
+  }
+});
 
 function resetConversationTitleEdit() {
   editingConversationId.value = "";
