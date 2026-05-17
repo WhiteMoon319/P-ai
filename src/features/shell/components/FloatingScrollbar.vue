@@ -35,11 +35,11 @@ const thumbHeight = ref(24);
 const thumbTop = ref(0);
 
 let resizeObserver: ResizeObserver | null = null;
-let mutationObserver: MutationObserver | null = null;
 let dragStartY = 0;
 let dragStartScrollTop = 0;
 let activePointerId: number | null = null;
 let observedScroller: HTMLElement | null = null;
+let pendingThumbFrame = 0;
 
 const thumbStyle = computed(() => ({
   height: `${thumbHeight.value}px`,
@@ -50,7 +50,7 @@ function setDocumentDragging(active: boolean) {
   document.body.classList.toggle("floating-scrollbar-dragging", active);
 }
 
-function updateThumb() {
+function updateThumbNow() {
   const scroller = targetRef.value;
   if (!scroller) return;
 
@@ -71,8 +71,16 @@ function updateThumb() {
     : Math.round((scrollTop / (scrollHeight - clientHeight)) * maxTop);
 }
 
+function updateThumb() {
+  if (pendingThumbFrame) return;
+  pendingThumbFrame = requestAnimationFrame(() => {
+    pendingThumbFrame = 0;
+    updateThumbNow();
+  });
+}
+
 function reveal() {
-  updateThumb();
+  updateThumbNow();
   if (!canScroll.value) return;
   scrollbarVisible.value = true;
 }
@@ -84,14 +92,16 @@ function hide() {
 
 function handleScroll() {
   updateThumb();
-  reveal();
+  if (!scrollbarVisible.value) scrollbarVisible.value = true;
 }
 
 function disconnectObservers() {
   resizeObserver?.disconnect();
   resizeObserver = null;
-  mutationObserver?.disconnect();
-  mutationObserver = null;
+  if (pendingThumbFrame) {
+    cancelAnimationFrame(pendingThumbFrame);
+    pendingThumbFrame = 0;
+  }
 }
 
 function removeObservedScrollerListener(scroller = observedScroller) {
@@ -114,21 +124,9 @@ function observeScroller(scroller: HTMLElement | null) {
   if (typeof ResizeObserver !== "undefined") {
     resizeObserver = new ResizeObserver(updateThumb);
     resizeObserver.observe(scroller);
-    if (scroller.firstElementChild instanceof HTMLElement) {
-      resizeObserver.observe(scroller.firstElementChild);
+    for (const child of Array.from(scroller.children)) {
+      if (child instanceof HTMLElement) resizeObserver.observe(child);
     }
-  }
-  if (typeof MutationObserver !== "undefined") {
-    mutationObserver = new MutationObserver(() => {
-      const firstChild = scroller.firstElementChild;
-      if (resizeObserver && firstChild instanceof HTMLElement) {
-        resizeObserver.disconnect();
-        resizeObserver.observe(scroller);
-        resizeObserver.observe(firstChild);
-      }
-      updateThumb();
-    });
-    mutationObserver.observe(scroller, { childList: true, subtree: true });
   }
   void nextTick(updateThumb);
 }

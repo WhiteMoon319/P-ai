@@ -22,6 +22,10 @@
 
 - 清理（vscode-sidebar）：移除 `package.json` 中冗余的 `onView` 激活事件声明。
 
+- 优化（vscode-sidebar）：侧边栏聊天改用轻量 Markdown 渲染，保留粗体/斜体/删除线/行内代码/链接/列表/表格/引用/代码块复制等基础格式，降低 VS Code Webview 滚动卡顿。
+
+- 修复（vscode-sidebar-scroll）：侧边栏发送用户消息写入完成后直接滚到底部，禁用平滑滚动时仍保持即时跟随。
+
 ## 发布：v0.9.92
 
 - 修复（chat-text-indent）：修复 `removeBinaryPlaceholders` 中 `.map(line => line.trim())` 误删所有行首缩进的问题，改为仅在 filter 判断时 trim，保留原始缩进。

@@ -255,6 +255,7 @@ const sidebarMentionEntries = computed<ChatMentionEntry[]>(() => {
 const vscodeTheme = ref(resolveVsCodeTheme());
 const scrollToBottomRequest = ref(0);
 const streamingDraftCreatedAt = ref("");
+let lastSeenOwnMessageId = "";
 const chatFrontendRoundPhase = computed<"idle" | "waiting" | "queued" | "streaming">(() => {
   if (props.busy) return "streaming";
   const state = String(props.runtimeState || "").trim();
@@ -267,6 +268,16 @@ function resolveVsCodeTheme(): "dark" | "corporate" {
     return "dark";
   }
   return "corporate";
+}
+
+function latestOwnMessageId(messages: ChatMessage[]): string {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (String(message?.role || "").trim() !== "user") continue;
+    const id = String(message?.id || "").trim();
+    if (id) return id;
+  }
+  return "";
 }
 
 let themeObserver: MutationObserver | null = null;
@@ -343,7 +354,28 @@ watch(
   () => props.activeConversationId,
   () => {
     streamingDraftCreatedAt.value = "";
+    lastSeenOwnMessageId = latestOwnMessageId(Array.isArray(props.messages) ? props.messages : []);
   },
+  { immediate: true },
+);
+
+watch(
+  () => props.messages,
+  (messages) => {
+    const nextOwnMessageId = latestOwnMessageId(Array.isArray(messages) ? messages : []);
+    if (!nextOwnMessageId) {
+      lastSeenOwnMessageId = "";
+      return;
+    }
+    if (!lastSeenOwnMessageId) {
+      lastSeenOwnMessageId = nextOwnMessageId;
+      return;
+    }
+    if (nextOwnMessageId === lastSeenOwnMessageId) return;
+    lastSeenOwnMessageId = nextOwnMessageId;
+    scrollToBottomRequest.value += 1;
+  },
+  { flush: "post" },
 );
 
 const { visibleMessageBlocks } = useChatMessageBlocks({

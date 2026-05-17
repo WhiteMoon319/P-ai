@@ -108,6 +108,7 @@
                       :read-plan-file-content="readPlanFileContent"
                       :bubble-background-hidden="isBubbleBackgroundHidden(entry.item.block)"
                       :hide-toggle-enabled="canToggleBubbleBackground(entry.item.block)"
+                      :disable-markdown-render="sidebarMode"
                       @recall-turn="$emit('recallTurn', $event)" @regenerate-turn="$emit('regenerateTurn', $event)"
                       @confirm-plan="$emit('confirmPlan', $event)" @enter-selection-mode="enterMessageSelectionMode"
                       @toggle-message-selected="toggleMessageSelected" @copy-message="copyMessage"
@@ -137,6 +138,7 @@
                         :read-plan-file-content="readPlanFileContent"
                         :bubble-background-hidden="isBubbleBackgroundHidden(groupItem.block)"
                         :hide-toggle-enabled="canToggleBubbleBackground(groupItem.block)"
+                        :disable-markdown-render="sidebarMode"
                         @recall-turn="$emit('recallTurn', $event)" @regenerate-turn="$emit('regenerateTurn', $event)"
                         @confirm-plan="$emit('confirmPlan', $event)" @enter-selection-mode="enterMessageSelectionMode"
                         @toggle-message-selected="toggleMessageSelected" @copy-message="copyMessage"
@@ -700,7 +702,7 @@ const {
   virtualizer, virtualEntries, totalVirtualSize, measureVirtualRow,
   scheduleVirtualMeasure, syncViewportMetrics,
   resetVirtualizerAtConversationBottom, alignItemToTop, captureVisibleAnchor, findRenderedMessageElement,
-  resolveMessageAnchorElement, syncVisibleStreamingVirtualItemViewportTops,
+  resolveMessageAnchorElement, syncVisibleStreamingVirtualItemViewportTops, refreshObservedVirtualItemElements,
 } = useChatVirtualScroll({
   renderItems: virtualRenderItems, renderItemById, blockChronologicalIndexMap,
   scrollContainer, scrollbarRef: chatScrollbarRef as Ref<{ updateThumb: () => void } | null>,
@@ -775,7 +777,7 @@ const {
   resetConversationToBottom: resetVirtualizerAtConversationBottom,
   alignItemToTop, captureVisibleAnchor, findRenderedMessageElement, resolveMessageAnchorElement,
   syncVisibleStreamingVirtualItemViewportTops,
-  refreshObservedVirtualItemElements: () => {},
+  refreshObservedVirtualItemElements,
   latestOwnElasticItemId,
   props: {
     hasMoreHistory: toRef(props, "hasMoreHistory"), loadingOlderHistory: toRef(props, "loadingOlderHistory"),

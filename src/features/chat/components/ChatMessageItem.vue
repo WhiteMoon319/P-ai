@@ -114,6 +114,12 @@
                   v-else-if="planMarkdownError"
                   class="whitespace-pre-wrap text-sm leading-6 text-warning"
                 >{{ planMarkdownError }}</div>
+                <div
+                  v-else-if="planMarkdownText && forcePlainMarkdownRender"
+                  @click="emit('assistantLinkClick', $event)"
+                >
+                  <SidebarLightMarkdown :text="planMarkdownText" />
+                </div>
                 <div v-else-if="planMarkdownText" ref="markdownContainerRef">
                   <MarkdownRender
                     class="ecall-markdown-content max-w-none"
@@ -281,7 +287,13 @@
               v-if="segment.type === 'text' && segment.text"
               class="ecall-meme-text-segment"
             >
+              <SidebarLightMarkdown
+                v-if="forcePlainMarkdownRender"
+                :text="segment.text"
+                @click="emit('assistantLinkClick', $event)"
+              />
               <MarkdownRender
+                v-else
                 class="ecall-markdown-content ecall-inline-meme-markdown max-w-none"
                 custom-id="chat-markstream"
                 :nodes="markdownNodesForText(block, segment.text, true, `meme:${index}`)"
@@ -316,7 +328,13 @@
           class="whitespace-pre-wrap break-all"
           style="overflow-wrap: anywhere;"
         >{{ block.text }}</div>
-        <div ref="markdownContainerRef">
+        <div
+          v-else-if="forcePlainMarkdownRender"
+          @click="emit('assistantLinkClick', $event)"
+        >
+          <SidebarLightMarkdown :text="splitThinkText(block.text).visible || block.text" />
+        </div>
+        <div v-else ref="markdownContainerRef">
           <MarkdownRender
             class="ecall-markdown-content max-w-none"
             custom-id="chat-markstream"
@@ -600,6 +618,7 @@ import type { ChatMessageBlock, MemeMessageSegment } from "../../../types/app";
 import { formatIsoToLocalHourMinute } from "../../../utils/time";
 import { registerChatMarkstreamComponents } from "../markdown/register-chat-markstream";
 import { normalizeLocalLinkHref } from "../utils/local-link";
+import SidebarLightMarkdown from "./SidebarLightMarkdown.vue";
 
 enableMermaid();
 enableKatex();
@@ -637,6 +656,8 @@ const markdownMermaidProps = {
 };
 const imageDataUrlCache = new Map<string, string>();
 const imageDataUrlPromiseCache = new Map<string, Promise<string>>();
+const debugPlainMarkdownRender = typeof window !== "undefined"
+  && window.localStorage.getItem("easy-call.debug.chat-plain-markdown") === "1";
 
 const props = defineProps<{
   activeConversationId: string;
@@ -661,6 +682,7 @@ const props = defineProps<{
   readPlanFileContent?: (input: { conversationId: string; path: string }) => Promise<string>;
   bubbleBackgroundHidden: boolean;
   hideToggleEnabled: boolean;
+  disableMarkdownRender?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -687,6 +709,7 @@ const toolCallsExpanded = ref(false);
 const planMarkdownText = ref("");
 const planMarkdownError = ref("");
 const planMarkdownLoading = ref(false);
+const forcePlainMarkdownRender = computed(() => !!props.disableMarkdownRender || debugPlainMarkdownRender);
 let disposed = false;
 
 watch(
