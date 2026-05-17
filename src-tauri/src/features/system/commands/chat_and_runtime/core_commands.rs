@@ -236,7 +236,7 @@ async fn confirm_plan_and_continue_inner(
         )
     };
     let continue_event_id = format!("confirm-plan-continue-{}", Uuid::new_v4());
-    let preview = build_force_compaction_preview_result(state, &selected_api, &conversation)?;
+    let preview = build_trim_compaction_preview_result(state, &selected_api, &conversation)?;
     let should_compact_before_continue =
         preview.can_compact && plan_confirm_context_usage_ratio(&conversation, &selected_api) >= 0.60;
     if should_compact_before_continue {

@@ -7,7 +7,7 @@
       :current-theme="currentTheme"
       :title-text="titleText"
       :chat-usage-percent="chatUsagePercent"
-      :forcing-archive="forcingArchive"
+      :trimming="trimming"
       :chatting="chatting"
       :current-persona-name="String(currentForegroundPersona?.name || '').trim() || t('archives.roleAssistant')"
       :side-conversation-list-visible="sideConversationListVisible"
@@ -24,10 +24,10 @@
       :persona-avatar-url-map="chatPersonaAvatarUrlMap"
       :create-conversation-department-options="createConversationDepartmentOptions"
       :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
-      :force-archive-tip="t('chat.forceArchiveTip')"
+      :trim-tip="t('chat.trimTip')"
       :maximized="maximized"
       :window-ready="windowReady"
-      :open-config-title="t('window.configTitle')"
+      :open-settings-title="t('window.configTitle')"
       :close-title="t('common.close')"
       :config-search-query="configSearchQuery"
       :config-search-results="configSearchResults"
@@ -37,8 +37,8 @@
       :checking-update="checkingUpdate"
       :update-to-latest-label="updateToLatestLabel"
       :update-to-latest-title="updateToLatestTitle"
-      @open-archives="openCurrentHistory"
-      @open-config="openConfigWindow"
+      @open-archives="openConversationList"
+      @open-settings="openSettingsWindow"
       @minimize-window="minimizeWindowAndClearForeground"
       @toggle-maximize-window="toggleMaximizeWindow"
       @update:config-search-query="updateConfigSearchQuery"
@@ -55,7 +55,7 @@
       @archive-conversation="archiveConversationFromList"
       @delete-conversation="deleteUnarchivedConversationFromArchives"
       @create-conversation="createUnarchivedConversation"
-      @force-archive="openForceArchiveActionDialog"
+      @trim-conversation="openTrimActionDialog"
       @start-drag="startDrag"
       @close-window="handleCloseWindow"
     />
@@ -153,11 +153,11 @@
       :deny-terminal-approval="denyTerminalApproval"
       :plan-mode-enabled="currentConversationPlanModeEnabled"
       :chat-usage-percent="chatUsagePercent"
-      :force-archive-tip="t('chat.forceArchiveTip')"
+      :trim-tip="t('chat.trimTip')"
       :media-drag-active="mediaDragActive"
       :chatting="chatting"
-      :forcing-archive="forcingArchive"
-      :forcing-archive-conversation-id="forcingArchiveConversationId"
+      :trimming="trimming"
+      :trimming-conversation-id="trimmingConversationId"
       :compacting-conversation="compactingConversation"
       :compacting-conversation-id="compactingConversationId"
       :branching-conversation="branchingConversation"
@@ -255,10 +255,10 @@
       :reset-personas="loadPersonas"
       :save-personas="savePersonas"
       :import-persona-memories="importPersonaMemories"
-      :open-current-history="openCurrentHistory"
+      :open-conversation-list="openConversationList"
       :open-conversation-summary="openConversationSummary"
-      :open-force-archive-action-dialog="openForceArchiveActionDialog"
-      :open-config-window="openConfigWindow"
+      :open-trim-action-dialog="openTrimActionDialog"
+      :open-settings-window="openSettingsWindow"
       :open-prompt-preview="openPromptPreview"
       :open-system-prompt-preview="openSystemPromptPreview"
       :open-memory-viewer="openMemoryViewer"
@@ -362,11 +362,11 @@
       :archive-import-preview="archiveImportPreview"
       :archive-import-running="archiveImportRunning"
       :skill-placeholder-dialog-open="skillPlaceholderDialogOpen"
-      :force-archive-action-dialog-open="forceArchiveActionDialogOpen"
-      :force-archive-preview-loading="forceArchivePreviewLoading"
-      :force-archive-preview="forceArchivePreview"
-      :force-compaction-preview="forceCompactionPreview"
-      :forcing-archive="forcingArchive"
+      :trim-action-dialog-open="trimActionDialogOpen"
+      :trim-preview-loading="trimPreviewLoading"
+      :trim-preview="trimPreview"
+      :trim-compaction-preview="trimCompactionPreview"
+      :trimming="trimming"
       @close-update-dialog="closeUpdateDialog"
       @confirm-update-dialog-primary="confirmUpdateDialogPrimary"
       @open-update-release="openUpdateRelease"
@@ -376,14 +376,14 @@
       @confirm-rewind-with-patch="confirmRewindWithPatch"
       @confirm-rewind-message-only="confirmRewindMessageOnly"
       @cancel-rewind-confirm="cancelRewindConfirm"
-      @close-config-save-error-dialog="closeConfigSaveErrorDialog"
+      @close-settings-save-error-dialog="closeSettingsSaveErrorDialog"
       @close-archive-import-preview-dialog="closeArchiveImportPreviewDialog"
       @confirm-archive-import="confirmArchiveImport"
       @close-skill-placeholder-dialog="closeSkillPlaceholderDialog"
       @confirm-delete-conversation-from-archive-dialog="confirmDeleteConversationFromArchiveDialog"
-      @confirm-force-compaction-action="confirmForceCompactionAction"
-      @confirm-force-archive-action="handleConfirmForceArchiveAction()"
-      @close-force-archive-action-dialog="closeForceArchiveActionDialog"
+      @confirm-trim-compaction-action="confirmTrimCompactionAction"
+      @confirm-trim-action="handleConfirmTrimAction()"
+      @close-trim-action-dialog="closeTrimActionDialog"
     />
     <Win10ResizeHandles :enabled="resizeHandlesEnabled" />
     <ChatWorkspacePickerDialog
@@ -985,12 +985,12 @@ let messageStoreMigrationResolve: (() => void) | null = null;
 let messageStoreMigrationReject: ((error: Error) => void) | null = null;
 let messageStoreMigrationProgressUnlisten: UnlistenFn | null = null;
 const chatting = ref(false);
-const forcingArchive = ref(false);
+const trimming = ref(false);
 const compactingConversation = ref(false);
-const forcingArchiveConversationId = ref("");
+const trimmingConversationId = ref("");
 const compactingConversationId = ref("");
 const suppressNextCompactionReload = ref(false);
-const conversationBusy = computed(() => forcingArchive.value || compactingConversation.value);
+const conversationBusy = computed(() => trimming.value || compactingConversation.value);
 const branchingConversation = ref(false);
 const forwardingConversationSelection = ref(false);
 const hasMoreBackendHistory = ref(false);
@@ -1388,7 +1388,7 @@ const {
   cleanup: cleanupSpeechRecording,
 } = useSpeechRecording({
   t: tr,
-  canStart: () => !chatting.value && !forcingArchive.value,
+  canStart: () => !chatting.value && !trimming.value,
   getLanguage: () => normalizeLocale(config.uiLanguage),
   getMinRecordSeconds: () => config.minRecordSeconds,
   getMaxRecordSeconds: () => config.maxRecordSeconds,
@@ -1435,7 +1435,7 @@ const {
     }
     if (source !== "remote") return;
     if (!config.sttAutoSend) return;
-    if (chatting.value || forcingArchive.value) return;
+    if (chatting.value || trimming.value) return;
     setTimeout(() => {
       sendChatFromCurrentWindow();
     }, 0);
@@ -1572,7 +1572,7 @@ const chatMedia = useChatMedia({
   setStatusError,
   viewMode,
   chatting,
-  forcingArchive,
+  trimming,
   isRecording: () => recording.value,
   activeChatApiConfig: computed(() => currentForegroundApiConfig.value),
   hasVisionFallback,
@@ -1596,7 +1596,7 @@ const playHotkeyRecordTest = chatMedia.playHotkeyRecordTest;
 const cleanupChatMedia = chatMedia.cleanupChatMedia;
 const { removeQueuedAttachmentNotice, pickChatAttachments } = useChatAttachmentPickerFlow({
   chatting,
-  forcingArchive,
+  trimming,
   queuedAttachmentNotices,
   onNativeFileDrop,
   setStatusError,
@@ -1766,16 +1766,16 @@ let {
   configSaveErrorDialogBody,
   configSaveErrorDialogKind,
   skillPlaceholderDialogOpen,
-  forceArchiveActionDialogOpen,
-  forceArchivePreviewLoading,
-  forceArchivePreview,
-  forceCompactionPreview,
+  trimActionDialogOpen,
+  trimPreviewLoading,
+  trimPreview,
+  trimCompactionPreview,
   rewindConfirmDialogOpen,
   rewindConfirmCanUndoPatch,
-  openForceArchiveActionDialog,
-  closeForceArchiveActionDialog,
-  confirmForceCompactionAction,
-  confirmForceArchiveAction,
+  openTrimActionDialog,
+  closeTrimActionDialog,
+  confirmTrimCompactionAction,
+  confirmTrimAction,
   confirmDeleteConversationFromArchiveDialog,
   openSkillPlaceholderDialog,
   closeSkillPlaceholderDialog,
@@ -1788,11 +1788,11 @@ let {
   openRuntimeLogsDialog,
   closeRuntimeLogsDialog,
   clearRuntimeLogs,
-  closeConfigSaveErrorDialog,
-  openConfigSaveErrorDialog,
+  closeSettingsSaveErrorDialog,
+  openSettingsSaveErrorDialog,
 } = {} as ReturnType<typeof useShellDialogFlows>;
 const {
-  openConfigWindow,
+  openSettingsWindow,
   summonChatWindowFromConfig,
   closeWindowAndClearForeground,
   minimizeWindowAndClearForeground,
@@ -2575,7 +2575,7 @@ const configPersistence = useConfigPersistence({
   t: tr,
   setStatus,
   setStatusError,
-  onSaveConfigError: openConfigSaveErrorDialog,
+  onSaveConfigError: openSettingsSaveErrorDialog,
   config,
   locale,
   normalizeLocale,
@@ -2635,10 +2635,10 @@ const chatRuntime = useChatRuntime({
   activeChatApiConfigId: currentForegroundApiConfigId,
   assistantDepartmentAgentId: currentForegroundAgentId,
   currentConversationId: currentChatConversationId,
-  forcingArchiveConversationId,
+  trimmingConversationId,
   compactingConversationId,
   chatting,
-  forcingArchive,
+  trimming,
   compactingConversation,
   suppressNextCompactionReload,
   allMessages,
@@ -2649,8 +2649,8 @@ const chatRuntime = useChatRuntime({
 });
 const {
   refreshConversationHistory,
-  forceArchiveNow,
-  forceCompactNow,
+  trimNow,
+  trimCompactNow,
   loadAllMessages,
 } = chatRuntime;
 ({
@@ -2663,16 +2663,16 @@ const {
   configSaveErrorDialogBody,
   configSaveErrorDialogKind,
   skillPlaceholderDialogOpen,
-  forceArchiveActionDialogOpen,
-  forceArchivePreviewLoading,
-  forceArchivePreview,
-  forceCompactionPreview,
+  trimActionDialogOpen,
+  trimPreviewLoading,
+  trimPreview,
+  trimCompactionPreview,
   rewindConfirmDialogOpen,
   rewindConfirmCanUndoPatch,
-  openForceArchiveActionDialog,
-  closeForceArchiveActionDialog,
-  confirmForceCompactionAction,
-  confirmForceArchiveAction,
+  openTrimActionDialog,
+  closeTrimActionDialog,
+  confirmTrimCompactionAction,
+  confirmTrimAction,
   confirmDeleteConversationFromArchiveDialog,
   openSkillPlaceholderDialog,
   closeSkillPlaceholderDialog,
@@ -2685,8 +2685,8 @@ const {
   openRuntimeLogsDialog,
   closeRuntimeLogsDialog,
   clearRuntimeLogs,
-  closeConfigSaveErrorDialog,
-  openConfigSaveErrorDialog,
+  closeSettingsSaveErrorDialog,
+  openSettingsSaveErrorDialog,
 } = useShellDialogFlows({
   t: tr,
   configTab,
@@ -2699,8 +2699,8 @@ const {
   unarchivedConversations,
   setStatus,
   setStatusError,
-  forceCompactNow,
-  forceArchiveNow,
+  trimCompactNow,
+  trimNow,
   deleteUnarchivedConversationFromArchives,
 }));
 
@@ -2747,12 +2747,12 @@ async function archiveConversationFromList(conversationId: string) {
   if (normalizedConversationId !== String(currentChatConversationId.value || "").trim()) {
     await switchUnarchivedConversation(normalizedConversationId);
   }
-  openForceArchiveActionDialog();
+  openTrimActionDialog();
 }
 
-async function handleConfirmForceArchiveAction() {
+async function handleConfirmTrimAction() {
   if (!detachedChatWindow.value) {
-    await confirmForceArchiveAction();
+    await confirmTrimAction();
     return;
   }
   const conversationId = String(currentChatConversationId.value || "").trim();
@@ -2760,11 +2760,11 @@ async function handleConfirmForceArchiveAction() {
   const agentId = String(currentForegroundAgentId.value || "").trim();
   if (!conversationId || !apiConfigId || !agentId) {
     setStatus("当前没有可归档的会话。");
-    closeForceArchiveActionDialog();
+    closeTrimActionDialog();
     return;
   }
-  closeForceArchiveActionDialog();
-  void invokeTauri("force_archive_current", {
+  closeTrimActionDialog();
+  void invokeTauri("trim_current_conversation", {
       input: {
         session: {
           apiConfigId,
@@ -2819,9 +2819,9 @@ function clearForegroundConversation(reason: string) {
   cacheConversationMessages(previousConversationId, allMessages.value);
   currentChatConversationId.value = "";
   currentChatTodos.value = [];
-  if (forcingArchiveConversationId.value === previousConversationId) {
-    forcingArchiveConversationId.value = "";
-    forcingArchive.value = false;
+  if (trimmingConversationId.value === previousConversationId) {
+    trimmingConversationId.value = "";
+    trimming.value = false;
   }
   if (compactingConversationId.value === previousConversationId) {
     compactingConversationId.value = "";
@@ -2882,7 +2882,7 @@ async function detachCurrentConversationToWindow() {
     detachedChatWindow: detachedChatWindow.value,
     currentConversationId: String(currentChatConversationId.value || "").trim(),
     chatting: chatting.value,
-    forcingArchive: forcingArchive.value,
+    trimming: trimming.value,
     compactingConversation: compactingConversation.value,
     isMainConversation: !!currentForegroundConversationSummary.value?.isMainConversation,
   });
@@ -2892,11 +2892,11 @@ async function detachCurrentConversationToWindow() {
     return;
   }
   const conversationId = String(currentChatConversationId.value || "").trim();
-  if (!conversationId || chatting.value || forcingArchive.value || compactingConversation.value) {
+  if (!conversationId || chatting.value || trimming.value || compactingConversation.value) {
     console.warn("[独立聊天窗口][前端链路] 当前状态不允许独立窗口", {
       conversationId,
       chatting: chatting.value,
-      forcingArchive: forcingArchive.value,
+      trimming: trimming.value,
       compactingConversation: compactingConversation.value,
     });
     return;
@@ -4080,7 +4080,7 @@ async function forwardConversationFromSelection(payload: {
     !sourceConversationId
     || !targetConversationId
     || selectedMessageIds.length === 0
-    || forcingArchive.value
+    || trimming.value
     || branchingConversation.value
     || forwardingConversationSelection.value
   ) return;
@@ -5015,7 +5015,7 @@ async function importPersonaMemories(payload: { agentId: string; file: File }) {
 
 const chatFlow = useChatFlow({
   chatting,
-  forcingArchive,
+  trimming,
   getSession: () => {
     const apiConfigId = String(currentForegroundApiConfigId.value || "").trim();
     const agentId = String(currentForegroundAgentId.value || "").trim();
@@ -5271,7 +5271,7 @@ const { handleConfirmPlan } = useConfirmPlan({
   currentDepartmentId: currentForegroundDepartmentId,
   currentConversationId: currentChatConversationId,
   chatting,
-  forcingArchive,
+  trimming,
   compactingConversation,
   setConversationPlanMode,
   clearForegroundRuntimeState: chatFlow.clearForegroundRuntimeState,
@@ -5386,7 +5386,7 @@ const {
   allMessages,
   maybeUpdateConversationOverviewFromLoadedMessages: maybeUpdateForegroundConversationOverviewFromLoadedMessages,
   chatting,
-  forcingArchive,
+  trimming,
   compactingConversation,
   chatInput,
   selectedMentions: selectedChatMentions,
@@ -5411,7 +5411,7 @@ function handleToolsChanged() {
   }
 }
 
-const { openCurrentHistory, openConversationSummary, openPromptPreview, openSystemPromptPreview } = useChatDialogActions({
+const { openConversationList, openConversationSummary, openPromptPreview, openSystemPromptPreview } = useChatDialogActions({
   activeChatApiConfigId: currentForegroundApiConfigId,
   assistantDepartmentAgentId: currentForegroundAgentId,
   openPromptPreviewDialog,

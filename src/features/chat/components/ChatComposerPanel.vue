@@ -201,36 +201,6 @@
       </Teleport>
       <div class="mt-2 flex items-center justify-between gap-2">
         <div class="flex items-center gap-2">
-          <div v-if="!sidebarMode" ref="menuWrapperRef" class="relative">
-            <button
-              ref="menuTriggerRef"
-              class="btn btn-sm btn-circle btn-ghost shrink-0"
-              :disabled="chatting || frozen"
-              title="菜单"
-              @click="menuOpen = !menuOpen"
-            >
-              <Menu class="h-3.5 w-3.5" />
-            </button>
-            <div
-              v-if="menuOpen"
-              class="absolute bottom-full left-0 z-9999 mb-2 min-w-[120px] rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
-            >
-              <button
-                class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-base-200 transition-colors"
-                @click="handleOpenHistory"
-              >
-                <History class="h-3.5 w-3.5" />
-                <span>历史消息</span>
-              </button>
-              <button
-                class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-base-200 transition-colors"
-                @click="handleOpenConfig"
-              >
-                <Settings class="h-3.5 w-3.5" />
-                <span>设置</span>
-              </button>
-            </div>
-          </div>
           <button
             v-if="!sidebarMode"
             class="btn btn-sm btn-circle btn-ghost shrink-0"
@@ -410,8 +380,8 @@ const emit = defineEmits<{
   (e: "removeIdeContextReference", value: string): void;
   (e: "sendChat"): void;
   (e: "stopChat"): void;
-  (e: "open-current-history"): void;
-  (e: "open-config"): void;
+  (e: "open-conversation-list"): void;
+  (e: "open-settings"): void;
 }>();
 
 const { t } = useI18n();
@@ -427,12 +397,12 @@ function closeMenu() {
 
 function handleOpenHistory() {
   closeMenu();
-  emit('open-current-history');
+  emit('open-conversation-list');
 }
 
 function handleOpenConfig() {
   closeMenu();
-  emit('open-config');
+  emit('open-settings');
 }
 
 function onMenuOutsideClick(event: MouseEvent) {

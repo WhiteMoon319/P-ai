@@ -1676,7 +1676,7 @@ fn ide_chat_compact_preview(state: &AppState, params: Value) -> Result<Value, St
     let session = ide_chat_session_for_conversation(state, &input.conversation_id)?;
     let (selected_api, _resolved_api, source, _effective_agent_id) =
         resolve_archive_target_conversation(state, &session)?;
-    let preview = build_force_compaction_preview_result(state, &selected_api, &source)?;
+    let preview = build_trim_compaction_preview_result(state, &selected_api, &source)?;
     Ok(serde_json::to_value(preview).map_err(|err| format!("serialize compact preview failed: {err}"))?)
 }
 
@@ -1685,7 +1685,7 @@ async fn ide_chat_compact_conversation(state: &AppState, params: Value) -> Resul
     let session = ide_chat_session_for_conversation(state, &input.conversation_id)?;
     let (selected_api, resolved_api, source, effective_agent_id) =
         resolve_archive_target_conversation(state, &session)?;
-    let preview = build_force_compaction_preview_result(state, &selected_api, &source)?;
+    let preview = build_trim_compaction_preview_result(state, &selected_api, &source)?;
     if !preview.can_compact {
         return Err(preview
             .compaction_disabled_reason
@@ -1697,7 +1697,7 @@ async fn ide_chat_compact_conversation(state: &AppState, params: Value) -> Resul
         &resolved_api,
         &source,
         &effective_agent_id,
-        "manual_force_compaction",
+        "manual_trim_compaction",
         "COMPACTION-FORCE",
         false,
     )

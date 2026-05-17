@@ -11,7 +11,7 @@ type UseChatMediaOptions = {
   setStatusError: (key: string, error: unknown) => void;
   viewMode: Ref<"chat" | "archives" | "config">;
   chatting: Ref<boolean>;
-  forcingArchive: Ref<boolean>;
+  trimming: Ref<boolean>;
   isRecording: () => boolean;
   activeChatApiConfig: ComputedRef<ApiConfigItem | null>;
   hasVisionFallback: ComputedRef<boolean>;
@@ -195,7 +195,7 @@ export function useChatMedia(options: UseChatMediaOptions) {
 
   function onPaste(event: ClipboardEvent) {
     if (options.viewMode.value !== "chat") return;
-    if (options.forcingArchive.value) return;
+    if (options.trimming.value) return;
     const apiConfig = options.activeChatApiConfig.value;
     if (!apiConfig) return;
     const collected = collectPastedFiles(event);
@@ -228,7 +228,7 @@ export function useChatMedia(options: UseChatMediaOptions) {
 
   function onDragOver(event: DragEvent) {
     if (options.viewMode.value !== "chat") return;
-    if (options.forcingArchive.value) return;
+    if (options.trimming.value) return;
     const apiConfig = options.activeChatApiConfig.value;
     if (!apiConfig) return;
     if (!event.dataTransfer) return;
@@ -251,7 +251,7 @@ export function useChatMedia(options: UseChatMediaOptions) {
 
   function onDrop(event: DragEvent) {
     if (options.viewMode.value !== "chat") return;
-    if (options.forcingArchive.value) return;
+    if (options.trimming.value) return;
     const apiConfig = options.activeChatApiConfig.value;
     if (!apiConfig) return;
     const collected = collectDroppedFiles(event);
@@ -279,7 +279,7 @@ export function useChatMedia(options: UseChatMediaOptions) {
 
   async function onNativeFileDrop(paths: string[]) {
     if (options.viewMode.value !== "chat") return;
-    if (options.forcingArchive.value) return;
+    if (options.trimming.value) return;
     const apiConfig = options.activeChatApiConfig.value;
     if (!apiConfig) return;
     if (!Array.isArray(paths) || paths.length === 0) return;

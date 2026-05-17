@@ -349,7 +349,7 @@ fn spawn_organize_context_auto_compaction(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ForceArchivePreviewResult {
+struct TrimPreviewResult {
     conversation_id: String,
     can_archive: bool,
     can_drop_conversation: bool,
@@ -370,7 +370,7 @@ struct ForceArchiveCurrentInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ForceCompactionPreviewResult {
+struct TrimCompactionPreviewResult {
     conversation_id: String,
     can_compact: bool,
     message_count: usize,
@@ -430,11 +430,11 @@ fn prepare_background_archive_active_conversation(
     )
 }
 
-fn build_force_compaction_preview_result(
+fn build_trim_compaction_preview_result(
     state: &AppState,
     selected_api: &ApiConfig,
     source: &Conversation,
-) -> Result<ForceCompactionPreviewResult, String> {
+) -> Result<TrimCompactionPreviewResult, String> {
     let message_count = archive_pipeline_message_count_for_delete(source);
     let has_assistant_reply = archive_pipeline_has_assistant_reply(source);
     let is_empty = source.messages.is_empty();
@@ -454,7 +454,7 @@ fn build_force_compaction_preview_result(
     } else {
         None
     };
-    Ok(ForceCompactionPreviewResult {
+    Ok(TrimCompactionPreviewResult {
         conversation_id: source.id.clone(),
         can_compact: compaction_disabled_reason.is_none(),
         message_count,
@@ -1320,7 +1320,7 @@ async fn summarize_compaction_with_fallback(
 }
 
 #[tauri::command]
-async fn force_archive_current(
+async fn trim_current_conversation(
     input: ForceArchiveCurrentInput,
     state: State<'_, AppState>,
 ) -> Result<ForceArchiveResult, String> {
@@ -1368,13 +1368,13 @@ async fn force_archive_current(
                 &effective_agent_id_cloned,
                 Some(active_conversation_id_for_background.as_str()),
                 None,
-                "manual_force_archive",
+                "manual_trim_conversation",
                 "ARCHIVE-FORCE",
             )
             .await;
             if let Err(err) = result {
                 eprintln!(
-                    "[ARCHIVE-FORCE] 失败，任务=background_force_archive，conversation_id={}，error={}",
+                    "[TRIM] 失败，任务=background_trim_conversation，conversation_id={}，error={}",
                     source_cloned.id, err
                 );
             }
@@ -1385,7 +1385,7 @@ async fn force_archive_current(
             .is_err()
         {
             eprintln!(
-                "[ARCHIVE-FORCE] 失败，任务=background_force_archive，conversation_id={}，error=panic",
+                "[TRIM] 失败，任务=background_trim_conversation，conversation_id={}，error=panic",
                 source_cloned.id
             );
             if let Err(err) = set_conversation_runtime_state(
@@ -1394,7 +1394,7 @@ async fn force_archive_current(
                 MainSessionState::Idle,
             ) {
                 eprintln!(
-                    "[ARCHIVE-FORCE] 警告，任务=background_force_archive_reset_state，conversation_id={}，error={}",
+                    "[TRIM] 警告，任务=background_trim_conversation_reset_state，conversation_id={}，error={}",
                     source_cloned.id, err
                 );
             } else {
@@ -1426,13 +1426,13 @@ async fn force_archive_current(
 }
 
 #[tauri::command]
-async fn force_compact_current(
+async fn trim_compact_current(
     input: SessionSelector,
     state: State<'_, AppState>,
 ) -> Result<ForceArchiveResult, String> {
     let (selected_api, resolved_api, source, effective_agent_id) =
         resolve_archive_target_conversation(state.inner(), &input)?;
-    let preview = build_force_compaction_preview_result(state.inner(), &selected_api, &source)?;
+    let preview = build_trim_compaction_preview_result(state.inner(), &selected_api, &source)?;
     if !preview.can_compact {
         return Err(preview
             .compaction_disabled_reason
@@ -1444,7 +1444,7 @@ async fn force_compact_current(
         &resolved_api,
         &source,
         &effective_agent_id,
-        "manual_force_compaction",
+        "manual_trim_compaction",
         "COMPACTION-FORCE",
         false,
     )
@@ -1454,10 +1454,10 @@ async fn force_compact_current(
 }
 
 #[tauri::command]
-fn preview_force_archive_current(
+fn preview_trim_current_conversation(
     input: SessionSelector,
     state: State<'_, AppState>,
-) -> Result<ForceArchivePreviewResult, String> {
+) -> Result<TrimPreviewResult, String> {
     let (_selected_api, _resolved_api, source, _effective_agent_id) =
         resolve_archive_target_conversation(state.inner(), &input)?;
     let runtime = state_read_runtime_state_cached(state.inner())?;
@@ -1488,7 +1488,7 @@ fn preview_force_archive_current(
     } else {
         None
     };
-    Ok(ForceArchivePreviewResult {
+    Ok(TrimPreviewResult {
         conversation_id: source.id,
         can_archive: archive_disabled_reason.is_none(),
         can_drop_conversation: !is_main_conversation,
@@ -1500,13 +1500,13 @@ fn preview_force_archive_current(
 }
 
 #[tauri::command]
-fn preview_force_compact_current(
+fn preview_trim_compact_current(
     input: SessionSelector,
     state: State<'_, AppState>,
-) -> Result<ForceCompactionPreviewResult, String> {
+) -> Result<TrimCompactionPreviewResult, String> {
     let (selected_api, _resolved_api, source, _effective_agent_id) =
         resolve_archive_target_conversation(state.inner(), &input)?;
-    build_force_compaction_preview_result(state.inner(), &selected_api, &source)
+    build_trim_compaction_preview_result(state.inner(), &selected_api, &source)
 }
 
 pub(crate) async fn run_archive_pipeline(

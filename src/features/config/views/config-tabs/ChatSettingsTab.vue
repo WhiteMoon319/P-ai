@@ -141,7 +141,7 @@
       <div class="card-body p-4">
         <h3 class="card-title text-base mb-3">{{ t("config.chatSettings.quickActionsTitle") }}</h3>
         <div class="grid grid-cols-3 gap-2">
-          <button class="btn btn-sm bg-base-200 border-base-300 hover:bg-base-300 whitespace-nowrap" @click="$emit('openCurrentHistory')">{{ t("config.chatSettings.openCurrentHistory") }}</button>
+          <button class="btn btn-sm bg-base-200 border-base-300 hover:bg-base-300 whitespace-nowrap" @click="$emit('openConversationList')">{{ t("config.chatSettings.openConversationList") }}</button>
           <button class="btn btn-sm bg-base-200 border-base-300 hover:bg-base-300 whitespace-nowrap" @click="$emit('openPromptPreview')">{{ t("config.chatSettings.previewRequest") }}</button>
           <button class="btn btn-sm bg-base-200 border-base-300 hover:bg-base-300 whitespace-nowrap" @click="$emit('openSystemPromptPreview')">{{ t("config.chatSettings.previewSystemPrompt") }}</button>
         </div>
@@ -211,7 +211,7 @@ const emit = defineEmits<{
   (e: "update:instructionPresets", value: PromptCommandPreset[]): void;
   (e: "patchConversationApiSettings", value: ConversationApiSettingsPatch): void;
   (e: "patchChatSettings", value: ChatSettingsPatch): void;
-  (e: "openCurrentHistory"): void;
+  (e: "openConversationList"): void;
   (e: "openPromptPreview"): void;
   (e: "openSystemPromptPreview"): void;
   (e: "refreshImageCacheStats"): void;

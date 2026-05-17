@@ -4,7 +4,7 @@ import type { ChatMessage, RuntimeLogEntry, UnarchivedConversationSummary } from
 import type { ConfigSaveErrorInfo } from "../../config/composables/use-config-persistence";
 import { inspectUndoablePatchCalls } from "../../../utils/chat-message-semantics";
 
-export type ForceArchivePreviewResult = {
+export type TrimPreviewResult = {
   conversationId: string;
   canArchive: boolean;
   canDropConversation: boolean;
@@ -14,7 +14,7 @@ export type ForceArchivePreviewResult = {
   archiveDisabledReason?: string | null;
 };
 
-export type ForceCompactionPreviewResult = {
+export type TrimCompactionPreviewResult = {
   conversationId: string;
   canCompact: boolean;
   messageCount: number;
@@ -41,8 +41,8 @@ type UseShellDialogFlowsOptions = {
   unarchivedConversations: Ref<UnarchivedConversationSummary[]>;
   setStatus: (message: string) => void;
   setStatusError: (key: string, error: unknown) => void;
-  forceCompactNow: () => Promise<void>;
-  forceArchiveNow: () => Promise<void>;
+  trimCompactNow: () => Promise<void>;
+  trimNow: () => Promise<void>;
   deleteUnarchivedConversationFromArchives: (conversationId: string) => Promise<void>;
 };
 
@@ -56,20 +56,20 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
   const configSaveErrorDialogBody = ref("");
   const configSaveErrorDialogKind = ref<"warning" | "error">("error");
   const skillPlaceholderDialogOpen = ref(false);
-  const forceArchiveActionDialogOpen = ref(false);
-  const forceArchivePreviewLoading = ref(false);
-  const forceArchivePreview = ref<ForceArchivePreviewResult | null>(null);
-  const forceCompactionPreview = ref<ForceCompactionPreviewResult | null>(null);
+  const trimActionDialogOpen = ref(false);
+  const trimPreviewLoading = ref(false);
+  const trimPreview = ref<TrimPreviewResult | null>(null);
+  const trimCompactionPreview = ref<TrimCompactionPreviewResult | null>(null);
   const rewindConfirmDialogOpen = ref(false);
   const rewindConfirmCanUndoPatch = ref(false);
   const rewindConfirmUndoHint = ref("");
   let rewindConfirmResolver: ((mode: RecallMode) => void) | null = null;
 
-  function closeForceArchiveActionDialog() {
-    forceArchiveActionDialogOpen.value = false;
-    forceArchivePreviewLoading.value = false;
-    forceArchivePreview.value = null;
-    forceCompactionPreview.value = null;
+  function closeTrimActionDialog() {
+    trimActionDialogOpen.value = false;
+    trimPreviewLoading.value = false;
+    trimPreview.value = null;
+    trimCompactionPreview.value = null;
   }
 
   function currentUnarchivedConversationSummary(): UnarchivedConversationSummary | null {
@@ -102,7 +102,7 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
     return 0;
   }
 
-  function buildForceArchivePreview(conversationId: string): ForceArchivePreviewResult {
+  function buildTrimPreview(conversationId: string): TrimPreviewResult {
     const messages = options.allMessages.value || [];
     const summary = currentUnarchivedConversationSummary();
     const isMainConversation = summary?.isMainConversation === true;
@@ -131,7 +131,7 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
     };
   }
 
-  function buildForceCompactionPreview(conversationId: string): ForceCompactionPreviewResult {
+  function buildTrimCompactionPreview(conversationId: string): TrimCompactionPreviewResult {
     const messages = options.allMessages.value || [];
     const summary = currentUnarchivedConversationSummary();
     const messageCount = countArchiveCandidateMessages(messages);
@@ -162,51 +162,51 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
     };
   }
 
-  async function openForceArchiveActionDialog() {
+  async function openTrimActionDialog() {
     const conversationId = String(options.currentChatConversationId.value || "").trim();
     if (!conversationId) {
       options.setStatus("当前没有可处理的会话。");
       return;
     }
-    forceArchiveActionDialogOpen.value = false;
-    forceArchivePreviewLoading.value = true;
-    forceArchivePreview.value = null;
-    forceCompactionPreview.value = null;
+    trimActionDialogOpen.value = false;
+    trimPreviewLoading.value = true;
+    trimPreview.value = null;
+    trimCompactionPreview.value = null;
     try {
-      const archivePreview = buildForceArchivePreview(conversationId);
-      const compactionPreview = buildForceCompactionPreview(conversationId);
-      forceArchivePreview.value = archivePreview;
-      forceCompactionPreview.value = compactionPreview;
-      forceArchiveActionDialogOpen.value = true;
+      const archivePreview = buildTrimPreview(conversationId);
+      const compactionPreview = buildTrimCompactionPreview(conversationId);
+      trimPreview.value = archivePreview;
+      trimCompactionPreview.value = compactionPreview;
+      trimActionDialogOpen.value = true;
     } catch (error) {
-      closeForceArchiveActionDialog();
+      closeTrimActionDialog();
       options.setStatusError("status.loadConversationActionPreviewFailed", error);
     } finally {
-      forceArchivePreviewLoading.value = false;
+      trimPreviewLoading.value = false;
     }
   }
 
-  async function confirmForceCompactionAction() {
-    if (!forceCompactionPreview.value?.canCompact) return;
-    closeForceArchiveActionDialog();
-    await options.forceCompactNow();
+  async function confirmTrimCompactionAction() {
+    if (!trimCompactionPreview.value?.canCompact) return;
+    closeTrimActionDialog();
+    await options.trimCompactNow();
   }
 
-  async function confirmForceArchiveAction() {
-    if (!forceArchivePreview.value?.canArchive) return;
-    closeForceArchiveActionDialog();
-    await options.forceArchiveNow();
+  async function confirmTrimAction() {
+    if (!trimPreview.value?.canArchive) return;
+    closeTrimActionDialog();
+    await options.trimNow();
   }
 
   async function confirmDeleteConversationFromArchiveDialog() {
     const conversationId = String(options.currentChatConversationId.value || "").trim();
     if (!conversationId) return;
     if (currentUnarchivedConversationSummary()?.isMainConversation) {
-      closeForceArchiveActionDialog();
+      closeTrimActionDialog();
       options.setStatus("主会话暂不支持删除。");
       return;
     }
-    closeForceArchiveActionDialog();
+    closeTrimActionDialog();
     await options.deleteUnarchivedConversationFromArchives(conversationId);
   }
 
@@ -339,11 +339,11 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
     }
   }
 
-  function closeConfigSaveErrorDialog() {
+  function closeSettingsSaveErrorDialog() {
     configSaveErrorDialogOpen.value = false;
   }
 
-  function openConfigSaveErrorDialog(info: ConfigSaveErrorInfo) {
+  function openSettingsSaveErrorDialog(info: ConfigSaveErrorInfo) {
     configSaveErrorDialogTitle.value = options.t("status.saveConfigDialogTitle");
     if (info.kind === "hotkey_conflict") {
       configSaveErrorDialogKind.value = "warning";
@@ -369,17 +369,17 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
     configSaveErrorDialogBody,
     configSaveErrorDialogKind,
     skillPlaceholderDialogOpen,
-    forceArchiveActionDialogOpen,
-    forceArchivePreviewLoading,
-    forceArchivePreview,
-    forceCompactionPreview,
+    trimActionDialogOpen,
+    trimPreviewLoading,
+    trimPreview,
+    trimCompactionPreview,
     rewindConfirmDialogOpen,
     rewindConfirmCanUndoPatch,
     rewindConfirmUndoHint,
-    openForceArchiveActionDialog,
-    closeForceArchiveActionDialog,
-    confirmForceCompactionAction,
-    confirmForceArchiveAction,
+    openTrimActionDialog,
+    closeTrimActionDialog,
+    confirmTrimCompactionAction,
+    confirmTrimAction,
     confirmDeleteConversationFromArchiveDialog,
     openSkillPlaceholderDialog,
     closeSkillPlaceholderDialog,
@@ -392,7 +392,7 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
     openRuntimeLogsDialog,
     closeRuntimeLogsDialog,
     clearRuntimeLogs,
-    closeConfigSaveErrorDialog,
-    openConfigSaveErrorDialog,
+    closeSettingsSaveErrorDialog,
+    openSettingsSaveErrorDialog,
   };
 }

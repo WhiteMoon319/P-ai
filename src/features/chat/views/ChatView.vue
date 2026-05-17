@@ -230,7 +230,7 @@
             :chat-model-options="chatModelOptions" :plan-mode-enabled="planModeEnabled"
             :workspace-access="workspaceAccess"
             :frontend-round-phase="frontendRoundPhase" :chat-usage-percent="chatUsagePercent"
-            :force-archive-tip="forceArchiveTip" :chatting="chatting" :busy="conversationBusy"
+            :trim-tip="trimTip" :chatting="chatting" :busy="conversationBusy"
             :stop-chat-disabled="isOrganizingContextBusy" :frozen="frozen"
             :show-side-conversation-list="detachedChatWindow ? false : showSideConversationList"
             :active-conversation-id="activeConversationId" :unarchived-conversation-items="unarchivedConversationItems"
@@ -258,7 +258,7 @@
             @selection-action-forward="emitSelectionAction('forward', $event)"
             @selection-action-delegate="emitSelectionAction('delegate', $event)"
             @selection-action-share="emitSelectionAction('share', $event)"
-            @force-archive="$emit('forceArchive')" @open-current-history="$emit('openCurrentHistory')" @open-config="$emit('openConfig')" @switch-conversation="$emit('switchConversation', $event)"
+            @trim-conversation="$emit('trimConversation')" @open-conversation-list="$emit('openConversationList')" @open-settings="$emit('openSettings')" @switch-conversation="$emit('switchConversation', $event)"
             @create-conversation="$emit('createConversation', $event)"
           />
         </div>
@@ -412,8 +412,8 @@ const props = defineProps<{
   chatInput: string; instructionPresets: PromptCommandPreset[]; chatInputPlaceholder: string;
   canRecord: boolean; recording: boolean; recordingMs: number; transcribing: boolean; recordHotkey: string;
   selectedChatModelId: string; toolReviewRefreshTick: number; chatModelOptions: ApiConfigItem[];
-  planModeEnabled: boolean; chatUsagePercent: number; forceArchiveTip: string;
-  mediaDragActive: boolean; chatting: boolean; forcingArchive: boolean; forcingArchiveConversationId?: string;
+  planModeEnabled: boolean; chatUsagePercent: number; trimTip: string;
+  mediaDragActive: boolean; chatting: boolean; trimming: boolean; trimmingConversationId?: string;
   compactingConversation: boolean; compactingConversationId?: string;
   conversationBusy: boolean; frozen: boolean; messageBlocks: ChatMessageBlock[];
   hasMoreHistory: boolean; loadingOlderHistory: boolean;
@@ -459,7 +459,7 @@ const emit = defineEmits<{
   (e: "updateWorkspaceAccess", value: "read_only" | "approval" | "full_access"): void;
   (e: "update:planModeEnabled", value: boolean): void;
   (e: "sendChat", payload?: { extraTextBlocks?: string[] }): void;
-  (e: "stopChat"): void; (e: "forceArchive"): void; (e: "openCurrentHistory"): void; (e: "openConfig"): void;
+  (e: "stopChat"): void; (e: "trimConversation"): void; (e: "openConversationList"): void; (e: "openSettings"): void;
   (e: "clearChatError"): void;
   (e: "recallTurn", payload: { turnId: string }): void;
   (e: "regenerateTurn", payload: { turnId: string }): void;

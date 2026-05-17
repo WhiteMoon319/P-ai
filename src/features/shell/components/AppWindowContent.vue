@@ -88,7 +88,7 @@
       @reset-personas="resetPersonas"
       @save-personas="savePersonas"
       @import-persona-memories="importPersonaMemories"
-      @open-current-history="openCurrentHistory"
+      @open-conversation-list="openConversationList"
       @open-prompt-preview="openPromptPreview"
       @open-system-prompt-preview="openSystemPromptPreview"
       @open-memory-viewer="openMemoryViewer"
@@ -144,14 +144,14 @@
         :chat-model-options="textCapableApiConfigs"
         :plan-mode-enabled="planModeEnabled"
         :chat-usage-percent="chatUsagePercent"
-        :force-archive-tip="forceArchiveTip"
+        :trim-tip="trimTip"
         :media-drag-active="mediaDragActive"
         :chatting="chatting"
-        :forcing-archive="forcingArchive"
-        :forcing-archive-conversation-id="forcingArchiveConversationId"
+        :trimming="trimming"
+        :trimming-conversation-id="trimmingConversationId"
         :compacting-conversation="compactingConversation"
         :compacting-conversation-id="compactingConversationId"
-        :conversation-busy="forcingArchive || compactingConversation"
+        :conversation-busy="trimming || compactingConversation"
         :frozen="branchingConversation || forwardingConversationSelection"
         :message-blocks="visibleMessageBlocks"
         :has-more-history="chatHasMoreHistory"
@@ -212,9 +212,9 @@
         @recall-turn="onRecallTurn"
         @regenerate-turn="onRegenerateTurn"
         @confirm-plan="confirmPlan"
-        @force-archive="openForceArchiveActionDialog"
-        @open-current-history="openCurrentHistory"
-        @open-config="openConfigWindow"
+        @trim-conversation="openTrimActionDialog"
+        @open-conversation-list="openConversationList"
+        @open-settings="openSettingsWindow"
         @selection-action-copy="setStatus(props.t('chat.selection.copied', { count: $event.count }))"
         @selection-action-copy-error="setStatus(props.t('chat.copyFailed'))"
         @selection-action-branch="onBranchConversationFromSelection($event)"
@@ -505,11 +505,11 @@ const props = defineProps<{
   denyTerminalApproval: (requestId?: string) => void;
   planModeEnabled: boolean;
   chatUsagePercent: number;
-  forceArchiveTip: string;
+  trimTip: string;
   mediaDragActive: boolean;
   chatting: boolean;
-  forcingArchive: boolean;
-  forcingArchiveConversationId?: string;
+  trimming: boolean;
+  trimmingConversationId?: string;
   compactingConversation: boolean;
   compactingConversationId?: string;
   branchingConversation: boolean;
@@ -621,10 +621,10 @@ const props = defineProps<{
   resetPersonas: () => Promise<unknown> | unknown;
   savePersonas: () => Promise<boolean> | boolean;
   importPersonaMemories: (payload: { agentId: string; file: File }) => void;
-  openCurrentHistory: () => void;
+  openConversationList: () => void;
   openConversationSummary: (conversationId: string) => void;
-  openForceArchiveActionDialog: () => void;
-  openConfigWindow: () => void;
+  openTrimActionDialog: () => void;
+  openSettingsWindow: () => void;
   openPromptPreview: () => void;
   openSystemPromptPreview: () => void;
   openMemoryViewer: () => void;

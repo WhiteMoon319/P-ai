@@ -61,7 +61,7 @@ export type FrontendRoundPhase = "idle" | "queued" | "waiting" | "streaming";
 
 type UseChatFlowOptions = {
   chatting: Ref<boolean>;
-  forcingArchive: Ref<boolean>;
+  trimming: Ref<boolean>;
   getSession: () => { apiConfigId: string; agentId: string; departmentId?: string } | null;
   getConversationId?: () => string;
   chatInput: Ref<string>;

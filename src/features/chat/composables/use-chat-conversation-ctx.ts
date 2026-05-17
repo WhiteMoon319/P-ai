@@ -11,8 +11,8 @@ export function useChatConversationCtx(
     currentTodos: ChatTodoItem[];
     compactingConversation: boolean;
     compactingConversationId?: string;
-    forcingArchive: boolean;
-    forcingArchiveConversationId?: string;
+    trimming: boolean;
+    trimmingConversationId?: string;
     terminalApprovals?: TerminalApprovalConversationItem[];
     terminalApprovalResolving?: boolean;
     supervisionActive: boolean;
@@ -109,9 +109,9 @@ export function useChatConversationCtx(
   const chatStatusBanner = computed<null | { text: string; tone: "default" | "error" }>(() => {
     const errorText = String(props.chatErrorText || "").trim();
     if (errorText) return { text: errorText, tone: "error" };
-    if (props.forcingArchive) {
+    if (props.trimming) {
       const currentId = String(props.activeConversationId || "").trim();
-      const archivingId = String(props.forcingArchiveConversationId || "").trim();
+      const archivingId = String(props.trimmingConversationId || "").trim();
       if (!currentId || currentId !== archivingId) return null;
       return { text: t("chat.statusArchivingConversation"), tone: "default" };
     }

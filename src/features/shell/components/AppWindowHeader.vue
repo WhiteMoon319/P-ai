@@ -102,9 +102,9 @@
         <span class="pointer-events-none truncate text-sm font-semibold text-base-content">{{ combinedTitle }}</span>
         <button
           class="btn btn-ghost btn-sm btn-square h-8 min-h-8 w-8 shrink-0"
-          :disabled="forcingArchive || chatting"
-          :title="`${t('chat.contextUsageTitle', { percent: normalizedChatUsagePercent })} · ${forceArchiveTip}`"
-          @click.stop="$emit('force-archive')"
+          :disabled="trimming || chatting"
+          :title="`${t('chat.contextUsageTitle', { percent: normalizedChatUsagePercent })} · ${trimTip}`"
+          @click.stop="$emit('trimConversation')"
         >
           <svg
             class="h-5 w-5 -rotate-90"
@@ -187,6 +187,15 @@
 
       <button
         class="btn btn-ghost btn-sm"
+        :title="t('common.settings')"
+        @mousedown.stop
+        @click.stop="$emit('open-settings')"
+      >
+        <Settings class="h-3.5 w-3.5" />
+      </button>
+
+      <button
+        class="btn btn-ghost btn-sm"
         :title="t('window.minimize')"
         @mousedown.stop
         @click.stop="$emit('minimize-window')"
@@ -258,7 +267,7 @@
           class="w-full bg-transparent outline-none"
           :value="configSearchQuery"
           :placeholder="configSearchPlaceholder"
-          @focus="openConfigSearchPopover"
+          @focus="openSettingsSearchPopover"
           @input="handleConfigSearchInput"
           @keydown="handleConfigSearchKeydown"
         />
@@ -497,7 +506,7 @@ const props = defineProps<{
   currentTheme: string;
   titleText: string;
   chatUsagePercent: number;
-  forcingArchive: boolean;
+  trimming: boolean;
   chatting: boolean;
   currentPersonaName: string;
   sideConversationListVisible: boolean;
@@ -514,10 +523,10 @@ const props = defineProps<{
   personaAvatarUrlMap: Record<string, string>;
   createConversationDepartmentOptions: ConversationDepartmentOption[];
   defaultCreateConversationDepartmentId: string;
-  forceArchiveTip: string;
+  trimTip: string;
   maximized: boolean;
   windowReady: boolean;
-  openConfigTitle: string;
+  openSettingsTitle: string;
   closeTitle?: string;
   configSearchQuery?: string;
   configSearchResults?: ConfigSearchResult[];
@@ -530,7 +539,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: "open-config"): void;
+  (e: "open-settings"): void;
   (e: "open-archives"): void;
   (e: "toggle-side-conversation-list"): void;
   (e: "toggle-tool-review-panel"): void;
@@ -545,7 +554,7 @@ const emit = defineEmits<{
   (e: "archive-conversation", conversationId: string): void;
   (e: "delete-conversation", conversationId: string): void;
   (e: "create-conversation", input?: CreateConversationInput): void;
-  (e: "force-archive"): void;
+  (e: "trimConversation"): void;
   (e: "startDrag"): void;
   (e: "close-window"): void;
   (e: "update:config-search-query", value: string): void;
@@ -715,7 +724,7 @@ function handleWindowKeydown(event: KeyboardEvent) {
   }
 }
 
-function openConfigSearchPopover() {
+function openSettingsSearchPopover() {
   if (props.viewMode !== "config") return;
   configSearchOpen.value = true;
 }

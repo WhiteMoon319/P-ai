@@ -4,7 +4,7 @@
       <button
         class="btn btn-ghost btn-sm h-8 min-h-8 w-8 shrink-0 px-0"
         title="会话列表"
-        @click="$emit(view === 'list' ? 'showChat' : 'showList')"
+        @click="view === 'list' ? $emit('showChat') : $emit('showList')"
       >
         <ChevronLeft class="h-4 w-4" />
       </button>

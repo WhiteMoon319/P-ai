@@ -4,6 +4,10 @@
 
 - 重构（sidebar）：VSCode 侧边栏标题栏对齐主应用风格，左箭头切换会话列表、中间新建/标题/压缩进度环、右侧设置按钮，标题超10字自动省略。
 
+- 重构（naming）：全局命名对齐实际语义：force-archive → trim-conversation（抛弃/压缩/归档三合一）、open-current-history → open-conversation-list、open-config → open-settings；前后端事件名、变量名、类型名、i18n 键、Rust 命令名同步更新。
+
+- 修复（sidebar-layout）：SidebarLayout.vue 中 $emit 三元表达式类型错误，改为分支调用以匹配 defineEmits 重载签名。
+
 ## 发布：v0.9.95
 
 - 新增（file-reader-hover-tree）：地址栏面包屑目录按钮悬停时弹出浮动目录树面板，支持展开/收起子目录和点击打开文件，面板带边界检测确保不超出窗口可视区域。
