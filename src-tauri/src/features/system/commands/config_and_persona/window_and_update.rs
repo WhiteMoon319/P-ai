@@ -19,6 +19,11 @@ fn show_quick_setup_window(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn open_runtime_logs_window(app: AppHandle) -> Result<(), String> {
+    show_runtime_logs_window(&app)
+}
+
+#[tauri::command]
 fn complete_quick_setup_and_open_chat(app: AppHandle) -> Result<(), String> {
     show_window(&app, "chat")?;
     if let Some(window) = app.get_webview_window("quick-setup") {

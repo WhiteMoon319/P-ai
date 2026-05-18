@@ -309,17 +309,9 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
   }
 
   function openRuntimeLogsDialog() {
-    runtimeLogsDialogOpen.value = true;
-    void (async () => {
-      try {
-        await invokeTauri("append_runtime_log_probe", {
-          message: `日志窗口打开，window=${options.tauriWindowLabel.value}`,
-        });
-      } catch {
-        // ignore probe write failure, do not block log list refresh
-      }
-      await refreshRuntimeLogs();
-    })();
+    void invokeTauri("open_runtime_logs_window").catch((err) => {
+      console.warn("[运行日志] 打开日志窗口失败", err);
+    });
   }
 
   function closeRuntimeLogsDialog() {
