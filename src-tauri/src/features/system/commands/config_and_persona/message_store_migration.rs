@@ -1,4 +1,20 @@
 const MESSAGE_STORE_MIGRATION_PROGRESS_EVENT: &str = "easy-call:message-store-migration-progress";
+const CURRENT_MESSAGE_STORE_MIGRATION_VERSION: u32 = 1;
+
+fn message_store_migration_lock() -> &'static std::sync::Mutex<()> {
+    static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+    LOCK.get_or_init(|| std::sync::Mutex::new(()))
+}
+
+fn lock_message_store_migration() -> std::sync::MutexGuard<'static, ()> {
+    message_store_migration_lock().lock().unwrap_or_else(|poison| {
+        eprintln!(
+            "[消息存储迁移] 迁移锁已污染，继续串行执行恢复，error={:?}",
+            poison
+        );
+        poison.into_inner()
+    })
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -209,16 +225,29 @@ fn preflight_message_store_conversation(
                 },
             }
         }
-        Ok(Some(status)) => MessageStoreMigrationPreflightItem {
-            conversation_id: conversation_id.to_string(),
-            title: String::new(),
-            status: "blocked".to_string(),
-            message_count: status.source_message_count,
-            reason: Some(format!(
-                "消息仓库 manifest 未处于 ready JSONL 状态：kind={}，state={}",
-                status.message_store_kind, status.migration_state
-            )),
-        },
+        Ok(Some(status)) => {
+            let legacy_path = app_layout_chat_conversation_path(data_path, conversation_id);
+            if legacy_path.exists() {
+                let mut item = preflight_legacy_conversation(data_path, conversation_id);
+                if item.status == "legacyReadyToMigrate" {
+                    item.reason = Some(format!(
+                        "检测到未完成的消息仓库迁移，将重试恢复：kind={}，state={}",
+                        status.message_store_kind, status.migration_state
+                    ));
+                }
+                return item;
+            }
+            MessageStoreMigrationPreflightItem {
+                conversation_id: conversation_id.to_string(),
+                title: String::new(),
+                status: "blocked".to_string(),
+                message_count: status.source_message_count,
+                reason: Some(format!(
+                    "消息仓库 manifest 未处于 ready JSONL 状态：kind={}，state={}",
+                    status.message_store_kind, status.migration_state
+                )),
+            }
+        }
         Ok(None) => preflight_legacy_conversation(data_path, conversation_id),
         Err(err) => MessageStoreMigrationPreflightItem {
             conversation_id: conversation_id.to_string(),
@@ -228,6 +257,36 @@ fn preflight_message_store_conversation(
             reason: Some(err),
         },
     }
+}
+
+fn empty_message_store_migration_preflight_report() -> MessageStoreMigrationPreflightReport {
+    MessageStoreMigrationPreflightReport {
+        total_conversations: 0,
+        ready_count: 0,
+        legacy_count: 0,
+        blocked_count: 0,
+        can_auto_migrate: true,
+        items: Vec::new(),
+    }
+}
+
+fn message_store_migration_version_recorded(state: &AppState) -> Result<bool, String> {
+    Ok(state_read_runtime_state_cached(state)?.message_store_migration_version
+        >= CURRENT_MESSAGE_STORE_MIGRATION_VERSION)
+}
+
+fn record_message_store_migration_version(state: &AppState) -> Result<(), String> {
+    let mut runtime = state_read_runtime_state_cached(state)?;
+    if runtime.message_store_migration_version >= CURRENT_MESSAGE_STORE_MIGRATION_VERSION {
+        return Ok(());
+    }
+    runtime.message_store_migration_version = CURRENT_MESSAGE_STORE_MIGRATION_VERSION;
+    state_write_runtime_state_cached(state, &runtime)?;
+    eprintln!(
+        "[消息存储迁移] 完成 task=record_message_store_migration_version version={}",
+        CURRENT_MESSAGE_STORE_MIGRATION_VERSION
+    );
+    Ok(())
 }
 
 fn build_message_store_migration_preflight_report(
@@ -257,7 +316,15 @@ fn build_message_store_migration_preflight_report(
 fn check_message_store_migration(
     state: State<'_, AppState>,
 ) -> Result<MessageStoreMigrationPreflightReport, String> {
-    Ok(build_message_store_migration_preflight_report(&state))
+    let _migration_guard = lock_message_store_migration();
+    if message_store_migration_version_recorded(&state)? {
+        return Ok(empty_message_store_migration_preflight_report());
+    }
+    let report = build_message_store_migration_preflight_report(&state);
+    if report.blocked_count == 0 && report.legacy_count == 0 {
+        record_message_store_migration_version(&state)?;
+    }
+    Ok(report)
 }
 
 fn message_store_discard_backup_root(state: &AppState) -> Result<PathBuf, String> {
@@ -357,12 +424,16 @@ fn run_message_store_migration(
     state: State<'_, AppState>,
     input: RunMessageStoreMigrationInput,
 ) -> Result<MessageStoreMigrationRunReport, String> {
+    let _migration_guard = lock_message_store_migration();
     let mut report = MessageStoreMigrationRunReport {
         migrated_count: 0,
         skipped_ready_count: 0,
         discarded_count: 0,
         failed_count: 0,
     };
+    if message_store_migration_version_recorded(&state)? {
+        return Ok(report);
+    }
     let preflight = build_message_store_migration_preflight_report(&state);
     let blocked = preflight
         .items
@@ -444,5 +515,6 @@ fn run_message_store_migration(
         }
     }
     refresh_message_store_migration_caches(&state)?;
+    record_message_store_migration_version(&state)?;
     Ok(report)
 }

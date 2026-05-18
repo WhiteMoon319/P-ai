@@ -147,6 +147,8 @@ struct AgentsFile {
 #[serde(rename_all = "camelCase")]
 struct RuntimeStateFile {
     version: u32,
+    #[serde(default)]
+    message_store_migration_version: u32,
     #[serde(alias = "selectedAgentId", alias = "selected_agent_id")]
     assistant_department_agent_id: String,
     user_alias: String,
@@ -179,6 +181,7 @@ impl Default for RuntimeStateFile {
     fn default() -> Self {
         Self {
             version: APP_DATA_SCHEMA_VERSION,
+            message_store_migration_version: 0,
             assistant_department_agent_id: default_assistant_department_agent_id(),
             user_alias: default_user_alias(),
             response_style_id: default_response_style_id(),
@@ -270,6 +273,7 @@ fn build_agents_file(agents: &[AgentProfile]) -> AgentsFile {
 fn build_runtime_state_file(data: &AppData) -> RuntimeStateFile {
     RuntimeStateFile {
         version: APP_DATA_SCHEMA_VERSION,
+        message_store_migration_version: 0,
         assistant_department_agent_id: data.assistant_department_agent_id.clone(),
         user_alias: data.user_alias.clone(),
         response_style_id: data.response_style_id.clone(),

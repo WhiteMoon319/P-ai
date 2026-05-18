@@ -2,6 +2,8 @@
 
 ## 发布：v0.9.96
 
+- 修复（message-store-migration）：消息仓库迁移增加版本标记与后端互斥锁，避免多窗口启动并发检查读到 building 中间态导致误报，迁移完成后同版本不再重复扫描。
+
 - 重构（sidebar）：VSCode 侧边栏标题栏对齐主应用风格，左箭头切换会话列表、中间新建/标题/压缩进度环、右侧设置按钮，标题超10字自动省略。
 
 - 重构（naming）：全局命名对齐实际语义：force-archive → trim-conversation（抛弃/压缩/归档三合一）、open-current-history → open-conversation-list、open-config → open-settings；前后端事件名、变量名、类型名、i18n 键、Rust 命令名同步更新。
