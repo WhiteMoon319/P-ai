@@ -31,7 +31,7 @@
         <Search class="h-4 w-4" />
       </button>
     </div>
-    <div v-if="showSearch" class="shrink-0 px-2 pb-1">
+    <div v-if="showSearch" class="shrink-0 px-2 pt-1 pb-1">
       <label class="input input-bordered input-sm flex h-8 min-w-0 items-center gap-2 bg-base-100">
         <Search class="h-3.5 w-3.5 opacity-60" />
         <input
