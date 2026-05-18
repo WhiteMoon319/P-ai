@@ -711,6 +711,27 @@ fn list_recent_runtime_logs() -> Result<Vec<RuntimeLogEntry>, String> {
 }
 
 #[tauri::command]
+fn list_runtime_logs_since(since_created_at: Option<String>) -> Result<Vec<RuntimeLogEntry>, String> {
+    let logs = runtime_log_buffer()
+        .lock()
+        .map_err(|_| "Failed to lock runtime logs".to_string())?;
+    let anchor = since_created_at
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .unwrap_or("");
+    if anchor.is_empty() {
+        return Ok(logs.entries.iter().cloned().collect());
+    }
+    Ok(logs
+        .entries
+        .iter()
+        .filter(|entry| entry.created_at.as_str() > anchor)
+        .cloned()
+        .collect())
+}
+
+#[tauri::command]
 fn clear_recent_runtime_logs() -> Result<bool, String> {
     let mut logs = runtime_log_buffer()
         .lock()

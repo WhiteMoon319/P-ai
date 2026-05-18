@@ -838,6 +838,58 @@ fn show_chat_entry_window(app: &AppHandle) -> Result<(), String> {
     show_window(app, target)
 }
 
+// ==================== 运行日志窗口 ====================
+
+const RUNTIME_LOGS_WINDOW_LABEL: &str = "runtime-logs";
+
+fn show_runtime_logs_window(app: &AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(RUNTIME_LOGS_WINDOW_LABEL) {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+    let app_handle = app.clone();
+    std::thread::Builder::new()
+        .name("runtime-logs-window-create".to_string())
+        .spawn(move || {
+            if app_handle.get_webview_window(RUNTIME_LOGS_WINDOW_LABEL).is_some() {
+                return;
+            }
+            let window = match tauri::WebviewWindowBuilder::new(
+                &app_handle,
+                RUNTIME_LOGS_WINDOW_LABEL,
+                tauri::WebviewUrl::App("runtime-logs.html".into()),
+            )
+            .title("PAI - 运行日志")
+            .inner_size(900.0, 600.0)
+            .min_inner_size(600.0, 400.0)
+            .resizable(true)
+            .decorations(false)
+            .shadow(true)
+            .visible(false)
+            .build()
+            {
+                Ok(w) => w,
+                Err(err) => {
+                    runtime_log_error(format!("[运行日志窗口] 创建失败: {err}"));
+                    return;
+                }
+            };
+            let _ = window.show();
+            let _ = window.set_focus();
+            let cloned = window.clone();
+            let _ = window.on_window_event(move |event| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = cloned.hide();
+                }
+            });
+        })
+        .map_err(|err| format!("Spawn runtime-logs window thread failed: {err}"))?;
+    Ok(())
+}
+
 fn build_tray(app: &AppHandle) -> Result<(), String> {
     let config = MenuItem::with_id(app, "config", "配置", true, None::<&str>)
         .map_err(|err| format!("Create tray menu item failed: {err}"))?;
@@ -847,10 +899,12 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
         .map_err(|err| format!("Create tray menu item failed: {err}"))?;
     let archives = MenuItem::with_id(app, "archives", "归档", true, None::<&str>)
         .map_err(|err| format!("Create tray menu item failed: {err}"))?;
+    let runtime_logs = MenuItem::with_id(app, "runtime-logs", "运行日志", true, None::<&str>)
+        .map_err(|err| format!("Create tray menu item failed: {err}"))?;
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)
         .map_err(|err| format!("Create tray menu item failed: {err}"))?;
 
-    let menu = Menu::with_items(app, &[&config, &chat, &file_reader, &archives, &quit])
+    let menu = Menu::with_items(app, &[&config, &chat, &file_reader, &archives, &runtime_logs, &quit])
         .map_err(|err| format!("Create tray menu failed: {err}"))?;
 
     let mut tray = TrayIconBuilder::with_id(MAIN_TRAY_ID).menu(&menu);
@@ -880,6 +934,8 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
                 let _ = show_file_reader_window(app);
             } else if id == "archives" {
                 let _ = show_window(app, "archives");
+            } else if id == "runtime-logs" {
+                let _ = show_runtime_logs_window(app);
             } else if id == "quit" {
                 graceful_exit_app(app, 0);
             }

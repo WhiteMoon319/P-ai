@@ -926,6 +926,7 @@ fn main() {
             list_recent_llm_round_logs,
             clear_recent_llm_round_logs,
             list_recent_runtime_logs,
+            list_runtime_logs_since,
             clear_recent_runtime_logs,
             append_runtime_log_probe,
             remote_im_list_channels,
