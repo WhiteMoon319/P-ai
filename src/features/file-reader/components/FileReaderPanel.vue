@@ -237,21 +237,11 @@
             <pre class="file-reader-raw-pre">{{ activeTab.content }}</pre>
           </div>
           <div v-else-if="activeTab.kind === 'markdown'" class="file-reader-content mx-auto w-full max-w-300 px-4 py-4">
-            <MarkdownRender
+            <AppMarkdownRenderer
               class="ecall-markdown-content max-w-none"
-              :custom-id="customMarkstreamId"
-              :nodes="activeMarkdownNodes"
+              :text="activeMarkdownSource"
               :is-dark="markdownIsDark"
-              :final="true"
-              :max-live-nodes="0"
-              :batch-rendering="false"
-              :initial-render-batch-size="0"
-              :render-batch-size="0"
-              :render-batch-delay="0"
-              :render-batch-budget-ms="0"
-              :code-block-props="markdownCodeBlockProps"
-              :mermaid-props="markdownMermaidProps"
-              :typewriter="false"
+              variant="document"
             />
           </div>
           <div v-else class="file-reader-code-view" v-html="activeHighlightedCodeHtml"></div>
@@ -360,17 +350,13 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { ChevronDown, ChevronRight, Code2, Eye, ExternalLink, FilePlus, FileText, Folder, ListIndentDecrease, ListIndentIncrease, RefreshCw, Search, SquareTerminal, X } from "lucide-vue-next";
-import MarkdownRender, { enableKatex, enableMermaid, getMarkdown, parseMarkdownToStructure } from "markstream-vue";
 import { bundledLanguagesInfo, codeToHtml } from "shiki";
-import "markstream-vue/index.css";
 import { invokeTauri } from "../../../services/tauri-api";
-import { registerFileReaderMarkstreamComponents } from "../../../apps/file-reader/register-file-reader-markstream";
+import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import type { IdeContextReferenceItem } from "../../../types/app";
 
-enableMermaid();
-enableKatex();
-registerFileReaderMarkstreamComponents();
+initKatex();
 
 // ==================== Types ====================
 
@@ -489,22 +475,10 @@ const CODE_LANGUAGE_BY_EXTENSION: Record<string, string> = {
   md: "markdown", markdown: "markdown", mdx: "mdx",
 };
 
-const markdownCodeBlockProps = {
-  showHeader: true, showCopyButton: true, showPreviewButton: false,
-  showExpandButton: true, showCollapseButton: true, showFontSizeButtons: true,
-  enableFontSizeControl: true, isShowPreview: false, showTooltips: false,
-};
-
-const markdownMermaidProps = {
-  showHeader: true, showCopyButton: true, showExportButton: false,
-  showFullscreenButton: true, showCollapseButton: false, showZoomControls: true,
-  showModeToggle: false, enableWheelZoom: true, showTooltips: false,
-};
 const CONTEXT_TEXT_BLOCK_CONTENT_LIMIT = 2000;
 
 // ==================== State ====================
 
-const markstreamMarkdown = getMarkdown();
 const tabs = ref<FileTab[]>([]);
 const activePath = ref("");
 const actionErrorMessage = ref("");
@@ -587,10 +561,6 @@ const activeMarkdownSource = computed(() => {
   if (tab.rawMode) return "";
   return tab.kind === "markdown" ? stripMarkdownHtmlComments(tab.content) : "";
 });
-
-const activeMarkdownNodes = computed(() =>
-  parseMarkdownToStructure(activeMarkdownSource.value, markstreamMarkdown, { final: true })
-);
 
 const activeHighlightedCodeHtml = computed(() => {
   const tab = activeTab.value;

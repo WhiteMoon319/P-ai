@@ -196,22 +196,11 @@
                 :text="segment.text"
                 @click="emit('assistantLinkClick', $event)"
               />
-              <MarkdownRender
+              <AppMarkdownRenderer
                 v-else
                 class="ecall-markdown-content ecall-inline-meme-markdown max-w-none"
-                custom-id="chat-markstream"
-                :nodes="markdownNodesForText(block, segment.text, true, `meme:${index}`)"
+                :text="segment.text"
                 :is-dark="markdownIsDark"
-                :final="true"
-                :max-live-nodes="0"
-                :batch-rendering="false"
-                :initial-render-batch-size="0"
-                :render-batch-size="0"
-                :render-batch-delay="0"
-                :render-batch-budget-ms="0"
-                :code-block-props="markdownCodeBlockProps"
-                :mermaid-props="markdownMermaidProps"
-                :typewriter="false"
                 @click="emit('assistantLinkClick', $event)"
               />
             </div>
@@ -239,21 +228,11 @@
           <SidebarLightMarkdown :text="splitThinkText(block.text).visible || block.text" />
         </div>
         <div v-else ref="markdownContainerRef">
-          <MarkdownRender
+          <AppMarkdownRenderer
             class="ecall-markdown-content max-w-none"
-            custom-id="chat-markstream"
-            :nodes="markdownNodesForBlock(block)"
+            :text="splitThinkText(block.text).visible || block.text"
             :is-dark="markdownIsDark"
-            :final="!block.isStreaming"
-            :max-live-nodes="0"
-            :batch-rendering="!!block.isStreaming"
-            :initial-render-batch-size="block.isStreaming ? STREAM_INITIAL_RENDER_BATCH_SIZE : 0"
-            :render-batch-size="block.isStreaming ? STREAM_RENDER_BATCH_SIZE : 0"
-            :render-batch-delay="block.isStreaming ? STREAM_RENDER_BATCH_DELAY : 0"
-            :render-batch-budget-ms="block.isStreaming ? STREAM_RENDER_BATCH_BUDGET_MS : 0"
-            :code-block-props="markdownCodeBlockProps"
-            :mermaid-props="markdownMermaidProps"
-            :typewriter="false"
+            :streaming="!!block.isStreaming"
             @click="emit('assistantLinkClick', $event)"
           />
         </div>
@@ -284,21 +263,10 @@
             <SidebarLightMarkdown :text="planMarkdownText" />
           </div>
           <div v-else-if="planMarkdownText" ref="markdownContainerRef">
-            <MarkdownRender
+            <AppMarkdownRenderer
               class="ecall-markdown-content max-w-none"
-              custom-id="chat-markstream"
-              :nodes="markdownNodesForPlanCard(block)"
+              :text="planMarkdownText"
               :is-dark="markdownIsDark"
-              :final="true"
-              :max-live-nodes="0"
-              :batch-rendering="false"
-              :initial-render-batch-size="0"
-              :render-batch-size="0"
-              :render-batch-delay="0"
-              :render-batch-budget-ms="0"
-              :code-block-props="markdownCodeBlockProps"
-              :mermaid-props="markdownMermaidProps"
-              :typewriter="false"
               @click="emit('assistantLinkClick', $event)"
             />
           </div>
@@ -612,48 +580,15 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch, watchEffect, watchPostEffect } from "vue";
 import { useI18n } from "vue-i18n";
 import { CircleCheckBig, Copy, Eye, EyeOff, FileText, Pause, Play, RotateCcw, Undo2 } from "lucide-vue-next";
-import MarkdownRender, { enableKatex, enableMermaid, getMarkdown, parseMarkdownToStructure } from "markstream-vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ChatMessageBlock, MemeMessageSegment } from "../../../types/app";
 import { formatIsoToLocalHourMinute } from "../../../utils/time";
-import { registerChatMarkstreamComponents } from "../markdown/register-chat-markstream";
+import { AppMarkdownRenderer, initKatex } from "../markdown";
 import { normalizeLocalLinkHref } from "../utils/local-link";
 import SidebarLightMarkdown from "./SidebarLightMarkdown.vue";
 
-enableMermaid();
-enableKatex();
-registerChatMarkstreamComponents();
+initKatex();
 
-const STREAM_MARKDOWN_PARSE_THROTTLE_MS = 100;
-const MARKDOWN_NODE_CACHE_LIMIT = 100;
-const STREAM_INITIAL_RENDER_BATCH_SIZE = 20;
-const STREAM_RENDER_BATCH_SIZE = 10;
-const STREAM_RENDER_BATCH_DELAY = 24;
-const STREAM_RENDER_BATCH_BUDGET_MS = 4;
-const markstreamMarkdown = getMarkdown();
-const markdownNodeCache = new Map<string, { text: string; final: boolean; nodes: any[]; lastParseTime: number }>();
-const markdownCodeBlockProps = {
-  showHeader: true,
-  showCopyButton: true,
-  showPreviewButton: false,
-  showExpandButton: true,
-  showCollapseButton: true,
-  showFontSizeButtons: false,
-  enableFontSizeControl: false,
-  isShowPreview: false,
-  showTooltips: false,
-};
-const markdownMermaidProps = {
-  showHeader: true,
-  showCopyButton: true,
-  showExportButton: false,
-  showFullscreenButton: true,
-  showCollapseButton: false,
-  showZoomControls: true,
-  showModeToggle: false,
-  enableWheelZoom: true,
-  showTooltips: false,
-};
 const imageDataUrlCache = new Map<string, string>();
 const imageDataUrlPromiseCache = new Map<string, Promise<string>>();
 const debugPlainMarkdownRender = typeof window !== "undefined"
@@ -1573,43 +1508,6 @@ function splitThinkText(raw: string): { visible: string; inline: string } {
     visible: visible.trim(),
     inline: blocks.join("\n\n"),
   };
-}
-
-function markdownNodesForText(
-  block: ChatMessageBlock,
-  rawText: string,
-  final: boolean,
-  cacheSuffix = "main",
-): any[] {
-  const text = splitThinkText(rawText).visible;
-  const cacheKey = `${String(block.id || "")}::${cacheSuffix}`;
-  const cached = markdownNodeCache.get(cacheKey);
-  if (cached && cached.text === text && cached.final === final) {
-    markdownNodeCache.delete(cacheKey);
-    markdownNodeCache.set(cacheKey, cached);
-    return cached.nodes;
-  }
-
-  const now = Date.now();
-  if (!final && cached && now - cached.lastParseTime < STREAM_MARKDOWN_PARSE_THROTTLE_MS) {
-    return cached.nodes;
-  }
-
-  const nodes = parseMarkdownToStructure(text, markstreamMarkdown, { final });
-  if (markdownNodeCache.size >= MARKDOWN_NODE_CACHE_LIMIT) {
-    const oldestKey = markdownNodeCache.keys().next().value;
-    if (typeof oldestKey === "string") markdownNodeCache.delete(oldestKey);
-  }
-  markdownNodeCache.set(cacheKey, { text, final, nodes, lastParseTime: now });
-  return nodes;
-}
-
-function markdownNodesForBlock(block: ChatMessageBlock): any[] {
-  return markdownNodesForText(block, block.text, !block.isStreaming, "main");
-}
-
-function markdownNodesForPlanCard(block: ChatMessageBlock): any[] {
-  return markdownNodesForText(block, planMarkdownText.value, true, "plan-card");
 }
 
 function normalizeRenderedLocalLinks() {

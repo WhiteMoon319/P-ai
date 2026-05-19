@@ -29,10 +29,8 @@
     "culori": "^4.0.2",
     "katex": "^0.16.45",
     "lucide-vue-next": "^1.0.0",
-    "markstream-vue": "1.0.0",
     "mermaid": "^11.14.0",
     "shiki": "^4.0.2",
-    "stream-markdown": "^0.0.15",
     "vue": "^3.5.32",
     "vue-i18n": "^11.3.2",
     "vue-virtual-scroller": "^3.0.0"

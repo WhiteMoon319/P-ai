@@ -417,15 +417,12 @@
         <div v-else-if="changelogError" class="rounded-box border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
           {{ changelogError }}
         </div>
-        <MarkdownRender
+        <AppMarkdownRenderer
           v-else-if="changelogMarkdown"
           class="ecall-markdown-content max-w-none"
-          custom-id="chat-markstream"
-          :nodes="changelogNodes"
+          :text="changelogMarkdown"
           :is-dark="markdownIsDark"
-          :code-block-props="markdownCodeBlockProps"
-          :mermaid-props="markdownMermaidProps"
-          :typewriter="false"
+          variant="document"
         />
         <div v-else class="flex h-full min-h-0 items-center justify-center text-sm text-base-content/70">
           {{ t("about.changelogEmpty") }}
@@ -442,16 +439,16 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../services/tauri-api";
-import MarkdownRender, { enableKatex, enableMermaid, getMarkdown, parseMarkdownToStructure } from "markstream-vue";
 import { Download, FoldVertical, History, Minus, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ScrollText, Search, Settings, Square, SquarePen, X } from "lucide-vue-next";
 import type { ChatConversationOverviewItem } from "../../../types/app";
 import { resolveConversationDisplayTitle } from "../../chat/utils/conversation-title";
 import ChatConversationSidebar from "../../chat/components/ChatConversationSidebar.vue";
-import { registerChatMarkstreamComponents } from "../../chat/markdown/register-chat-markstream";
+import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
 import type { ConfigSearchResult, ConfigSearchTab } from "../../config/search/config-search";
 import { isDarkAppTheme } from "../composables/use-app-theme";
-import "markstream-vue/index.css";
 import { usePipelineStatus } from "../composables/use-pipeline-status";
+
+initKatex();
 
 const RING_RADIUS = 14;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
@@ -474,37 +471,11 @@ type CreateConversationInput = {
 const RECENT_CONVERSATION_TOPICS_STORAGE_KEY = "easy_call.recent_conversation_topics.v1";
 const RECENT_CONVERSATION_TOPICS_LIMIT = 7;
 
-enableMermaid();
-enableKatex();
-registerChatMarkstreamComponents();
-
 const { markConversationRead } = usePipelineStatus({
   activeConversationId: computed(() => String(props.activeConversationId || "").trim()),
 });
 
-const markstreamMarkdown = getMarkdown();
-const markdownCodeBlockProps = {
-  showHeader: true,
-  showCopyButton: true,
-  showPreviewButton: false,
-  showExpandButton: true,
-  showCollapseButton: true,
-  showFontSizeButtons: false,
-  enableFontSizeControl: false,
-  isShowPreview: false,
-  showTooltips: false,
-};
-const markdownMermaidProps = {
-  showHeader: true,
-  showCopyButton: true,
-  showExportButton: false,
-  showFullscreenButton: true,
-  showCollapseButton: false,
-  showZoomControls: true,
-  showModeToggle: false,
-  enableWheelZoom: true,
-  showTooltips: false,
-};
+const markdownIsDark = computed(() => isDarkAppTheme(props.currentTheme));
 
 const props = defineProps<{
   viewMode: "chat" | "archives" | "config";
@@ -657,11 +628,6 @@ const changelogLoading = ref(false);
 const changelogError = ref("");
 const changelogMarkdown = ref("");
 const changelogLoaded = ref(false);
-
-const changelogNodes = computed(() =>
-  parseMarkdownToStructure(changelogMarkdown.value || "", markstreamMarkdown, { final: true }),
-);
-const markdownIsDark = computed(() => isDarkAppTheme(props.currentTheme));
 
 function loadRecentConversationTopics() {
   try {

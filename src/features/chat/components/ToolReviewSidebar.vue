@@ -310,14 +310,11 @@
           v-else-if="currentReport?.status === 'success'"
           class="whitespace-pre-wrap wrap-break-word rounded-box border border-base-300 bg-base-200 px-3 py-3 text-sm leading-7 text-base-content/80"
         >{{ currentReport.reportText || t("chat.toolReview.noReportContent") }}</pre>
-        <MarkdownRender
+        <AppMarkdownRenderer
           v-else
           class="ecall-markdown-content tool-review-report-markdown max-w-none"
-          :nodes="reportMarkdownNodes"
+          :text="reportMarkdownText"
           :is-dark="markdownIsDark"
-          :code-block-props="markdownCodeBlockProps"
-          :mermaid-props="markdownMermaidProps"
-          :typewriter="false"
         />
       </div>
       <div class="flex items-center justify-between gap-3 border-t border-base-300 px-4 py-3">
@@ -367,42 +364,15 @@
 <script setup lang="ts">
 import { computed, ref, useAttrs, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import MarkdownRender, { enableKatex, enableMermaid, getMarkdown, parseMarkdownToStructure } from "markstream-vue";
 import type { ShellWorkspace } from "../../../types/app";
 import { defaultWorkspaceNameFromPath, inferWorkspaceName, isLegacyGenericWorkspaceName, normalizeWorkspaceLevel } from "../../../utils/shell-workspaces";
 import type { ToolReviewBatchSummary, ToolReviewCodeReviewScope, ToolReviewCommitOption, ToolReviewItemDetail, ToolReviewItemSummary, ToolReviewReportRecord } from "../composables/use-chat-tool-review";
-import { registerChatMarkstreamComponents } from "../markdown/register-chat-markstream";
+import { AppMarkdownRenderer, initKatex } from "../markdown";
 import ToolReviewItemCard from "./ToolReviewItemCard.vue";
 import ToolReviewTargetDialog from "./ToolReviewTargetDialog.vue";
 import DelegateProgressLine from "./DelegateProgressLine.vue";
 
-enableMermaid();
-enableKatex();
-registerChatMarkstreamComponents();
-
-const markstreamMarkdown = getMarkdown();
-const markdownCodeBlockProps = {
-  showHeader: true,
-  showCopyButton: true,
-  showPreviewButton: false,
-  showExpandButton: true,
-  showCollapseButton: true,
-  showFontSizeButtons: false,
-  enableFontSizeControl: false,
-  isShowPreview: false,
-  showTooltips: false,
-};
-const markdownMermaidProps = {
-  showHeader: true,
-  showCopyButton: true,
-  showExportButton: false,
-  showFullscreenButton: true,
-  showCollapseButton: false,
-  showZoomControls: true,
-  showModeToggle: false,
-  enableWheelZoom: true,
-  showTooltips: false,
-};
+initKatex();
 
 const props = defineProps<{
   batches: ToolReviewBatchSummary[];
@@ -675,12 +645,8 @@ const pagedReports = computed(() => {
   return props.reports.slice(start, start + reportPageSize);
 });
 
-const reportMarkdownNodes = computed(() =>
-  parseMarkdownToStructure(
-    currentReport.value?.reportText || currentReport.value?.errorText || "",
-    markstreamMarkdown,
-    { final: true },
-  )
+const reportMarkdownText = computed(() =>
+  currentReport.value?.reportText || currentReport.value?.errorText || ""
 );
 
 type ReportFindingView = {
