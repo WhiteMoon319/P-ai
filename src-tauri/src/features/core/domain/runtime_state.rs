@@ -112,6 +112,8 @@ struct AppState {
     /// 当前活跃的委托线程 conversation_id 集合。
     /// 工具审批链路通过查表判断当前是否应跳过弹窗（有委托活跃 → 不弹窗，默认拒绝）。
     delegate_active_ids: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+    /// 后端 setup 完成标记，前端在此标记为 true 之前不应发起数据加载。
+    backend_ready: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl std::fmt::Debug for AppState {
@@ -341,6 +343,7 @@ impl AppState {
             preferred_release_source: Arc::new(Mutex::new("github".to_string())),
             migration_preview_dirs: Arc::new(Mutex::new(std::collections::HashMap::new())),
             delegate_active_ids: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
+            backend_ready: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         })
     }
 }

@@ -770,6 +770,12 @@ fn main() {
                 eprintln!("[启动] 检测到 devtools 开关已开启，但当前构建未启用 open_devtools API，跳过打开 devtools");
             }
             eprintln!("[启动] 任务调度、工作区加载与远程 IM 服务延后到前端 mounted ready 后启动");
+            app_handle
+                .state::<AppState>()
+                .backend_ready
+                .store(true, std::sync::atomic::Ordering::Release);
+            let _ = app_handle.emit("easy-call:backend-ready", ());
+            eprintln!("[启动] 后端就绪信号已发出");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -795,6 +801,7 @@ fn main() {
             check_message_store_migration,
             run_message_store_migration,
             load_app_bootstrap_snapshot,
+            is_backend_ready,
             list_system_fonts,
             set_webview_zoom_percent,
             set_chat_side_panels_window_expanded,

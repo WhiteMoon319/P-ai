@@ -644,6 +644,11 @@ fn load_app_bootstrap_snapshot(state: State<'_, AppState>) -> Result<AppBootstra
 }
 
 #[tauri::command]
+fn is_backend_ready(state: State<'_, AppState>) -> bool {
+    state.backend_ready.load(std::sync::atomic::Ordering::Acquire)
+}
+
+#[tauri::command]
 fn list_system_fonts() -> Result<Vec<String>, String> {
     let mut families = font_kit::source::SystemSource::new()
         .all_families()
