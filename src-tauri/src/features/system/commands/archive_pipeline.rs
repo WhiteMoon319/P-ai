@@ -2003,6 +2003,23 @@ async fn run_archive_pipeline_inner(
         )),
     }
 
+    // 清理 apply_patch 备份记录
+    match cleanup_backup_records_from_messages(&state.data_path, &source.messages) {
+        Ok(cleaned) if cleaned > 0 => {
+            eprintln!(
+                "[归档] apply_patch 备份清理完成: conversation={}, cleaned={}",
+                source.id, cleaned
+            );
+        }
+        Err(err) => {
+            eprintln!(
+                "[归档] apply_patch 备份清理失败: conversation={}, error={}",
+                source.id, err
+            );
+        }
+        _ => {}
+    }
+
     // 清理PDF缓存
     if let Err(e) = cleanup_pdf_cache_for_conversation(&state, &source.id) {
         eprintln!(

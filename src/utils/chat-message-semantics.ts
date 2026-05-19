@@ -372,7 +372,9 @@ function defaultToolResultSuccess(rawContent: unknown): boolean {
   const text = String(rawContent || "").trim();
   if (!text) return false;
   try {
-    const parsed = JSON.parse(text) as { ok?: unknown; approved?: unknown };
+    const parsed = JSON.parse(text) as { ok?: unknown; approved?: unknown; backupRecordId?: unknown };
+    // 有 backupRecordId 就说明有备份可恢复
+    if (typeof parsed.backupRecordId === "string" && parsed.backupRecordId.trim()) return true;
     return parsed.ok === true && parsed.approved !== false;
   } catch {
     return false;

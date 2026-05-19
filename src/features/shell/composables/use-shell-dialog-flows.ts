@@ -224,8 +224,14 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
     if (text.startsWith("*** Begin Patch")) return true;
     if (!text.startsWith("{")) return false;
     try {
-      const parsed = JSON.parse(text) as { input?: unknown };
-      return typeof parsed.input === "string" && parsed.input.trim().startsWith("*** Begin Patch");
+      const parsed = JSON.parse(text) as { input?: unknown; operations?: unknown };
+      if (typeof parsed.input === "string" && parsed.input.trim().startsWith("*** Begin Patch")) return true;
+      if (Array.isArray(parsed.operations) && parsed.operations.length > 0) return true;
+      if (typeof parsed.input === "string") {
+        const inner = JSON.parse(parsed.input) as { operations?: unknown };
+        if (Array.isArray(inner.operations) && inner.operations.length > 0) return true;
+      }
+      return false;
     } catch {
       return false;
     }

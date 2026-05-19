@@ -131,6 +131,13 @@
         <h3 class="font-semibold text-base">{{ t("dialogs.rewind.title") }}</h3>
         <div class="mt-2 text-sm opacity-80">{{ t("dialogs.rewind.hint") }}</div>
         <div class="mt-4 flex flex-col items-center gap-2">
+          <button
+            v-if="rewindConfirmCanUndoPatch"
+            class="btn btn-sm btn-error w-full"
+            @click="confirmRewindWithPatch"
+          >
+            {{ t("dialogs.rewind.withPatch") }}
+          </button>
           <button class="btn btn-sm w-full" @click="confirmRewindMessageOnly">
             {{ t("dialogs.rewind.messageOnly") }}
           </button>
@@ -389,7 +396,8 @@ const selectedBlockId = ref<number | null>(null);
 const hasPrevBlock = ref(false);
 const view = ref<"list" | "chat">("list");
 const rewindConfirmDialogOpen = ref(false);
-let rewindConfirmResolver: ((mode: "message_only" | "cancel") => void) | null = null;
+const rewindConfirmCanUndoPatch = ref(false);
+let rewindConfirmResolver: ((mode: "message_only" | "with_patch" | "cancel") => void) | null = null;
 const currentWorkspaceName = ref("");
 const workspacePickerOpen = ref(false);
 const workspacePickerSaving = ref(false);
@@ -1243,7 +1251,7 @@ async function recallTurn(payload: { turnId: string }) {
     transport.errorText.value = "撤回失败：未找到可撤回的用户消息";
     return;
   }
-  const mode = await requestRecallMode();
+  const mode = await requestRecallMode(target.keepCount);
   if (mode === "cancel") return;
   if (busy.value) await stop();
   clearStreamingState();
@@ -1252,7 +1260,7 @@ async function recallTurn(payload: { turnId: string }) {
       conversationId: activeConversationId.value,
       agentId: activeAgentId.value,
       messageId: target.targetUserMessageId,
-      undoApplyPatch: false,
+      undoApplyPatch: mode === "with_patch",
     });
     const recalled = result.recalledUserMessage || messages.value[target.keepCount];
     inputText.value = recalled ? removeBinaryPlaceholders(messageText(recalled)) : inputText.value;
@@ -1304,17 +1312,46 @@ async function readPlanFileContent(input: { conversationId: string; path: string
   return String(result.content || "");
 }
 
-function requestRecallMode(): Promise<"message_only" | "cancel"> {
+function hasBackupRecordIdInMessages(fromIndex: number): boolean {
+  for (const message of messages.value.slice(fromIndex)) {
+    const events = (message as any).tool_call as any[] | undefined;
+    if (!Array.isArray(events)) continue;
+    for (const event of events) {
+      if (event?.role !== "tool") continue;
+      const content = String(event?.content || "").trim();
+      if (!content) continue;
+      try {
+        const parsed = JSON.parse(content);
+        if (typeof parsed?.backupRecordId === "string" && parsed.backupRecordId.trim()) {
+          return true;
+        }
+      } catch { /* ignore */ }
+    }
+  }
+  return false;
+}
+
+function requestRecallMode(keepCount: number): Promise<"message_only" | "with_patch" | "cancel"> {
+  rewindConfirmCanUndoPatch.value = hasBackupRecordIdInMessages(keepCount);
   rewindConfirmDialogOpen.value = true;
   return new Promise((resolve) => {
     rewindConfirmResolver = resolve;
   });
 }
 
+function confirmRewindWithPatch() {
+  const resolver = rewindConfirmResolver;
+  rewindConfirmResolver = null;
+  rewindConfirmDialogOpen.value = false;
+  rewindConfirmCanUndoPatch.value = false;
+  if (resolver) resolver("with_patch");
+}
+
 function confirmRewindMessageOnly() {
   const resolver = rewindConfirmResolver;
   rewindConfirmResolver = null;
   rewindConfirmDialogOpen.value = false;
+  rewindConfirmCanUndoPatch.value = false;
   if (resolver) resolver("message_only");
 }
 
@@ -1322,6 +1359,7 @@ function cancelRewindConfirm() {
   const resolver = rewindConfirmResolver;
   rewindConfirmResolver = null;
   rewindConfirmDialogOpen.value = false;
+  rewindConfirmCanUndoPatch.value = false;
   if (resolver) resolver("cancel");
 }
 
