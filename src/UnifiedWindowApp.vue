@@ -5467,13 +5467,11 @@ async function runMessageStoreMigrationFromGate(discardInvalid: boolean) {
 
 async function ensureMessageStoreMigrationGate() {
   await ensureMessageStoreMigrationProgressListener();
-  messageStoreMigration.visible = true;
-  messageStoreMigration.mode = "checking";
-  messageStoreMigration.message = "正在检查会话消息仓库...";
   const report = await invokeTauri<MessageStoreMigrationPreflightReport>(
     "check_message_store_migration",
   );
   if (report.blockedCount > 0) {
+    messageStoreMigration.visible = true;
     messageStoreMigration.mode = "blocked";
     messageStoreMigration.blockedItems = report.items.filter((item) => item.status === "blocked");
     messageStoreMigration.message = `发现 ${report.blockedCount} 个异常会话。需要确认是否抛弃异常会话并继续迁移。`;
@@ -5483,11 +5481,12 @@ async function ensureMessageStoreMigrationGate() {
     });
   }
   if (report.legacyCount > 0) {
+    messageStoreMigration.visible = true;
+    messageStoreMigration.mode = "checking";
     messageStoreMigration.message = `发现 ${report.legacyCount} 个旧会话，正在迁移...`;
     await runMessageStoreMigrationFromGate(false);
     return;
   }
-  resetMessageStoreMigrationGate();
 }
 
 function cancelMessageStoreMigration() {
