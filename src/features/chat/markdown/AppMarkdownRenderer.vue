@@ -90,30 +90,52 @@ const parseState = {
   cachedText: "",
   batchLimit: 0,
   batchTimer: 0,
+  parseRetryTimer: 0,
 };
 
 const batchRendered = ref(0);
+const parseRetryTick = ref(0);
+
+function clearParseRetryTimer() {
+  if (!parseState.parseRetryTimer) return;
+  clearTimeout(parseState.parseRetryTimer);
+  parseState.parseRetryTimer = 0;
+}
+
+function parseAndCacheBlocks(text: string, streaming: boolean): MarkdownBlock[] {
+  clearParseRetryTimer();
+  parseState.lastParseTime = Date.now();
+  parseState.cachedText = text;
+  parseState.cachedBlocks = parseMarkdownBlocks(text, streaming);
+  return parseState.cachedBlocks;
+}
+
+function scheduleStreamingParseRetry(delayMs: number) {
+  if (parseState.parseRetryTimer) return;
+  parseState.parseRetryTimer = window.setTimeout(() => {
+    parseState.parseRetryTimer = 0;
+    parseRetryTick.value += 1;
+  }, Math.max(1, delayMs));
+}
 
 const allBlocks = computed<MarkdownBlock[]>(() => {
+  void parseRetryTick.value;
   const text = props.text;
   if (!text) return [];
 
   if (!props.streaming) {
-    parseState.cachedText = text;
-    parseState.cachedBlocks = parseMarkdownBlocks(text, false);
-    return parseState.cachedBlocks;
+    return parseAndCacheBlocks(text, false);
   }
 
   // Streaming: throttle re-parses
   const now = Date.now();
   if (parseState.cachedText === text) return parseState.cachedBlocks;
-  if (now - parseState.lastParseTime < STREAM_PARSE_THROTTLE_MS && parseState.cachedBlocks.length > 0) {
+  const elapsed = now - parseState.lastParseTime;
+  if (elapsed < STREAM_PARSE_THROTTLE_MS && parseState.cachedBlocks.length > 0) {
+    scheduleStreamingParseRetry(STREAM_PARSE_THROTTLE_MS - elapsed);
     return parseState.cachedBlocks;
   }
-  parseState.lastParseTime = now;
-  parseState.cachedText = text;
-  parseState.cachedBlocks = parseMarkdownBlocks(text, true);
-  return parseState.cachedBlocks;
+  return parseAndCacheBlocks(text, true);
 });
 
 // Batch rendering for streaming: reveal blocks progressively
@@ -149,6 +171,7 @@ watch(
   () => props.streaming,
   (streaming) => {
     if (!streaming) {
+      clearParseRetryTimer();
       parseState.batchLimit = 0;
       if (parseState.batchTimer) {
         clearTimeout(parseState.batchTimer);
@@ -172,6 +195,7 @@ function scheduleBatchReveal(targetLen: number) {
 }
 
 onBeforeUnmount(() => {
+  clearParseRetryTimer();
   if (parseState.batchTimer) {
     clearTimeout(parseState.batchTimer);
     parseState.batchTimer = 0;
@@ -209,9 +233,13 @@ function renderSegments(segments: InlineSegment[], keyPrefix: string): VNodeChil
       return h(InlineMath, { key: `${keyPrefix}-m-${index}`, text: segment.text });
     }
     if (segment.type === "link") {
+      const href = sanitizeMarkdownHref(segment.href);
+      if (!href) {
+        return h("span", { key: `${keyPrefix}-a-${index}` }, segment.text);
+      }
       return h("a", {
         key: `${keyPrefix}-a-${index}`,
-        href: segment.href,
+        href,
         class: "ecall-md-link",
         target: "_blank",
         rel: "noopener noreferrer",
@@ -233,6 +261,36 @@ function renderSegments(segments: InlineSegment[], keyPrefix: string): VNodeChil
     }
     return segment.text;
   });
+}
+
+function sanitizeMarkdownHref(rawHref: string): string {
+  const href = String(rawHref || "").replace(/[\u0000-\u001F\u007F]/g, "").trim();
+  if (!href) return "";
+  if (href.startsWith("#") || href.startsWith("/") || href.startsWith("./") || href.startsWith("../")) {
+    return href;
+  }
+  if (href.startsWith("\\\\") || /^[A-Za-z]:[\\/]/.test(href)) {
+    return href.replace(/\\/g, "/");
+  }
+  if (/^file:/i.test(href)) {
+    try {
+      const url = new URL(href);
+      const decodedPath = decodeURIComponent(url.pathname || "");
+      if (url.host && url.host !== "localhost") {
+        return `\\\\${url.host}${decodedPath.replace(/\//g, "\\")}`;
+      }
+      return decodedPath.replace(/^\/([A-Za-z]:)/, "$1");
+    } catch {
+      return "";
+    }
+  }
+  const schemeMatch = href.match(/^([A-Za-z][A-Za-z0-9+.-]*):/);
+  if (!schemeMatch) return href;
+  const scheme = schemeMatch[1].toLowerCase();
+  if (scheme === "http" || scheme === "https" || scheme === "mailto") {
+    return href;
+  }
+  return "";
 }
 
 // ==================== Inline Math (KaTeX) ====================

@@ -1,5 +1,9 @@
 # 变更日志
 
+## 未发布
+
+- 修复（markdown）：自写 Markdown 渲染器限制链接 href 的安全协议，避免模型输出或文件内容中的 `javascript:` / `data:` 等不可信链接在 WebView 中执行；同时修复流式节流窗口内最后一段内容可能停留在旧缓存的问题。
+
 ## 发布：v0.9.97
 
 - 重构（markdown）：替换 markstream-vue 为自写 AppMarkdownRenderer，代码块 shiki 高亮、数学公式 KaTeX 渲染、mermaid 图表渲染；流式采用乐观闭合策略（未闭合块不输出，闭合后一次性渲染），消除画面跳动；支持 chat/document 两种排版变体。
