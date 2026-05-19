@@ -401,6 +401,18 @@
       @save="saveChatWorkspacePicker"
     />
     <div
+      v-if="startupOverlayVisible"
+      class="fixed inset-0 z-9998 flex items-center justify-center bg-base-300/90 p-6 backdrop-blur"
+    >
+      <div class="flex min-w-72 max-w-sm items-center gap-3 rounded-box border border-base-content/10 bg-base-100 px-5 py-4 shadow-2xl">
+        <span class="loading loading-spinner loading-md text-primary"></span>
+        <div class="min-w-0">
+          <div class="font-medium">{{ startupOverlayMessage }}</div>
+          <div class="mt-1 text-xs opacity-60">请稍候...</div>
+        </div>
+      </div>
+    </div>
+    <div
       v-if="messageStoreMigration.visible"
       class="fixed inset-0 z-9999 flex items-center justify-center bg-base-300/90 p-6 backdrop-blur"
     >
@@ -966,6 +978,8 @@ const terminalApprovalResolving = ref(false);
 const loading = ref(false);
 const saving = ref(false);
 const startupDataReady = ref(false);
+const startupOverlayVisible = ref(false);
+const startupOverlayMessage = ref("等待后端加载中...");
 const messageStoreMigration = reactive<{
   visible: boolean;
   mode: MessageStoreMigrationGateMode;
@@ -3998,8 +4012,7 @@ async function createUnarchivedConversation(input?: { title?: string; department
     } else {
       await refreshUnarchivedConversationOverview();
     }
-    const snapshot = await requestConversationLightSnapshot(conversationId);
-    applyConversationSnapshot(snapshot);
+    await switchUnarchivedConversation(conversationId);
   } catch (error) {
     setStatus(`转发到会话失败：${formatI18nError(tr, "status.requestFailed", error)}`);
   }
@@ -5540,6 +5553,10 @@ useAppLifecycle({
   stopRecording,
   cleanupSpeechRecording,
   cleanupChatMedia,
+  onStartupOverlayChange: (visible, message) => {
+    startupOverlayVisible.value = visible;
+    startupOverlayMessage.value = message || "等待后端加载中...";
+  },
   onStartupStepFailed: (label, error) => {
     setStatus(`启动步骤失败：${label}：${formatI18nError(tr, "status.requestFailed", error)}`);
   },
