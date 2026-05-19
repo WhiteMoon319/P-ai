@@ -1,5 +1,11 @@
 # 变更日志
 
+## 发布：v0.9.97
+
+- 重构（markdown）：替换 markstream-vue 为自写 AppMarkdownRenderer，代码块 shiki 高亮、数学公式 KaTeX 渲染、mermaid 图表渲染；流式采用乐观闭合策略（未闭合块不输出，闭合后一次性渲染），消除画面跳动；支持 chat/document 两种排版变体。
+
+- 移除依赖：markstream-vue、stream-markdown。
+
 ## 发布：v0.9.96
 
 - 修复（message-store-migration）：消息仓库迁移增加版本标记与后端互斥锁，避免多窗口启动并发检查读到 building 中间态导致误报，迁移完成后同版本不再重复扫描。
