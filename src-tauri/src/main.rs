@@ -574,6 +574,9 @@ fn graceful_restart_app(app: &AppHandle) {
 }
 
 fn main() {
+    init_backend_file_logging();
+    install_backend_file_panic_hook();
+
     if std::env::args().any(|arg| arg == MCP_SCREENSHOT_SERVER_FLAG) {
         if let Err(err) = run_desktop_screenshot_mcp_server() {
             eprintln!("{err}");

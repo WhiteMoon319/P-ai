@@ -110,25 +110,30 @@ watch(filteredLogs, () => {
 
 onMounted(async () => {
   restoreThemeFromStorage();
-  unlistenTheme = await listen<AppThemeState>("easy-call:theme-changed", (event) => {
-    const state = event.payload;
-    if (state.kind === "preset" && state.name) {
-      document.documentElement.setAttribute("data-theme", state.name);
-    } else if (state.kind === "generated" && state.controls) {
-      const tokens = generateGeneratedThemeTokens(state.controls as GeneratedThemeControls);
-      const styleText = buildGeneratedThemeStyleText(tokens);
-      let existing = document.getElementById("easy-call-generated-theme-style");
-      if (existing instanceof HTMLStyleElement) {
-        existing.textContent = styleText;
-      } else {
-        existing = document.createElement("style");
-        existing.id = "easy-call-generated-theme-style";
-        existing.textContent = styleText;
-        document.head.appendChild(existing);
+  try {
+    unlistenTheme = await listen<AppThemeState>("easy-call:theme-changed", (event) => {
+      const state = event.payload;
+      if (state.kind === "preset" && state.name) {
+        document.documentElement.setAttribute("data-theme", state.name);
+      } else if (state.kind === "generated" && state.controls) {
+        const tokens = generateGeneratedThemeTokens(state.controls as GeneratedThemeControls);
+        const styleText = buildGeneratedThemeStyleText(tokens);
+        let existing = document.getElementById("easy-call-generated-theme-style");
+        if (existing instanceof HTMLStyleElement) {
+          existing.textContent = styleText;
+        } else {
+          existing = document.createElement("style");
+          existing.id = "easy-call-generated-theme-style";
+          existing.textContent = styleText;
+          document.head.appendChild(existing);
+        }
+        document.documentElement.setAttribute("data-theme", GENERATED_THEME_NAME);
       }
-      document.documentElement.setAttribute("data-theme", GENERATED_THEME_NAME);
-    }
-  });
+    });
+  } catch (err) {
+    console.error("[运行日志窗口] 监听主题变化失败", err);
+    errorText.value = `监听主题变化失败：${String(err)}`;
+  }
   await loadInitial();
   startPolling();
 });
