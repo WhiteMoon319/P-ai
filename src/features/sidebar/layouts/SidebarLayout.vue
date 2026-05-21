@@ -64,7 +64,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { ChevronLeft, FileSearch, RefreshCcw, Settings, SquarePen } from "lucide-vue-next";
+import { ChevronLeft, FileSearch, RefreshCcw, Settings, SquarePen } from "@lucide/vue";
 
 const props = defineProps<{
   view: "list" | "chat";

@@ -459,10 +459,13 @@
             &state,
             &worker_memory_context,
             serde_json::json!({
-                "memoryType": "knowledge",
-                "judgment": "当前任务由执行者人格负责",
-                "reasoning": "回归测试",
-                "tags": ["执行者", "回归"]
+                "action": "create",
+                "memory": {
+                    "memoryType": "knowledge",
+                    "judgment": "当前任务由执行者人格负责",
+                    "reasoning": "回归测试",
+                    "tags": ["执行者", "回归"]
+                }
             }),
         )
         .expect("save memory");
@@ -540,10 +543,13 @@
             &state,
             &deputy_memory_context,
             serde_json::json!({
-                "memoryType": "knowledge",
-                "judgment": "这是副手人格记录的共享记忆",
-                "reasoning": "回归测试",
-                "tags": ["副手回归", "共享"]
+                "action": "create",
+                "memory": {
+                    "memoryType": "knowledge",
+                    "judgment": "这是副手人格记录的共享记忆",
+                    "reasoning": "回归测试",
+                    "tags": ["副手回归", "共享"]
+                }
             }),
         )
         .expect("save deputy memory");
@@ -587,10 +593,13 @@
             &state,
             &private_worker_memory_context,
             serde_json::json!({
-                "memoryType": "knowledge",
-                "judgment": "这是私有工作区人格记录的共享记忆",
-                "reasoning": "回归测试",
-                "tags": ["私有回归", "共享"]
+                "action": "create",
+                "memory": {
+                    "memoryType": "knowledge",
+                    "judgment": "这是私有工作区人格记录的共享记忆",
+                    "reasoning": "回归测试",
+                    "tags": ["私有回归", "共享"]
+                }
             }),
         )
         .expect("save private workspace memory");

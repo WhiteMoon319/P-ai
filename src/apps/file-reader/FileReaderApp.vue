@@ -58,7 +58,7 @@
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { FilePlus, FileText, Minus, Square, X } from "lucide-vue-next";
+import { FilePlus, FileText, Minus, Square, X } from "@lucide/vue";
 import { open } from "@tauri-apps/plugin-dialog";
 import FileReaderPanel from "../../features/file-reader/components/FileReaderPanel.vue";
 import { type AppThemeState, type GeneratedThemeControls } from "../../features/shell/theme/theme-types";

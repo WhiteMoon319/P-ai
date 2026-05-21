@@ -53,7 +53,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { ListTodo } from "lucide-vue-next";
+import { ListTodo } from "@lucide/vue";
 
 interface NormalizedTodo {
   content: string;

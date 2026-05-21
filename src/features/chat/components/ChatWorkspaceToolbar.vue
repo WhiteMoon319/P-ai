@@ -188,7 +188,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { ClipboardCheck, ClipboardList, ExternalLink, Folder, GitBranchPlus, Grip, Package, SquareTerminal, Timer } from "lucide-vue-next";
+import { ClipboardCheck, ClipboardList, ExternalLink, Folder, GitBranchPlus, Grip, Package, SquareTerminal, Timer } from "@lucide/vue";
 import type { ChatMentionEntry } from "../../../types/app";
 
 const props = withDefaults(defineProps<{

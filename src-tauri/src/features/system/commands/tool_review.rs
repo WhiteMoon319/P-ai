@@ -907,7 +907,7 @@ async fn tool_review_exec_git_readonly(
     timeout_ms: u64,
 ) -> Result<String, String> {
     let session_id = format!("tool-review-code::{}", conversation_id.trim());
-    let execution = sandbox_execute_command(state, &session_id, command, cwd, timeout_ms).await?;
+    let execution = sandbox_execute_command(state, &session_id, command, cwd, timeout_ms, false).await?;
     let stdout = terminal_decode_output_bytes(&execution.stdout);
     let stderr = terminal_decode_output_bytes(&execution.stderr);
     if !execution.ok {

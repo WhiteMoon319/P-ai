@@ -1479,7 +1479,7 @@ async fn builtin_shell_exec(
         }
     }
 
-    let execution_result = sandbox_execute_command(state, &normalized_session, cmd, &execution_cwd, timeout_ms).await;
+    let execution_result = sandbox_execute_command(state, &normalized_session, cmd, &execution_cwd, timeout_ms, is_read_whitelist).await;
     let execution = match execution_result {
         Ok(execution) => execution,
         Err(err) if terminal_is_timeout_error(&err) => {

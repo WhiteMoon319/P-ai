@@ -343,7 +343,7 @@ import { useI18n } from "vue-i18n";
 import { emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Eye, EyeOff, Minus, SlidersHorizontal, X } from "lucide-vue-next";
+import { Eye, EyeOff, Minus, SlidersHorizontal, X } from "@lucide/vue";
 import { i18n, normalizeLocale } from "../../../i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ApiProviderConfigItem, ApiRequestFormat, AppBootstrapSnapshot, AppConfig, ChatSettings, PersonaProfile, ResponseStyleOption } from "../../../types/app";

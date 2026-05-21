@@ -86,7 +86,7 @@
 
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { X } from "lucide-vue-next";
+import { X } from "@lucide/vue";
 import type { ToolReviewReportRecord } from "../../chat/composables/use-chat-tool-review";
 
 defineProps<{
