@@ -263,6 +263,57 @@ fn frontend_ready_start_remote_im_services(app: AppHandle) -> Result<bool, Strin
     Ok(true)
 }
 
+/// 阶段 2 延迟初始化：在 backend_ready 之后异步执行，避免阻塞前端首屏渲染。
+async fn run_deferred_setup(app_handle: AppHandle) {
+    let app_state = app_handle.state::<AppState>();
+    if let Err(err) = register_default_hotkey(&app_handle) {
+        eprintln!("[启动-延迟] 注册默认快捷键失败: {err}");
+    }
+    if let Err(err) = start_app_data_persist_worker(app_state.inner()) {
+        eprintln!("[启动-延迟] 启动后台持久化服务失败: {err}");
+    }
+    if let Err(err) = start_conversation_persist_worker(app_state.inner()) {
+        eprintln!("[启动-延迟] 启动会话后台持久化服务失败: {err}");
+    }
+    if let Err(err) = start_record_hotkey_probe(
+        app_handle.clone(),
+        app_state.config_path.clone(),
+    ) {
+        eprintln!("[启动-延迟] 启动录音热键探针失败: {err}");
+    }
+    if let Err(err) = build_tray(&app_handle) {
+        eprintln!("[启动-延迟] 构建托盘失败: {err}");
+    }
+    match state_read_config_cached(app_state.inner()) {
+        Ok(mut config) => {
+            if run_startup_self_checks(&mut config) {
+                if let Err(err) = state_write_config_cached(app_state.inner(), &config) {
+                    eprintln!("[启动自检] 写入修复后的配置失败: {err}");
+                } else {
+                    eprintln!("[启动自检] 完成，已将副手部门模型从默认人格修正为副手");
+                }
+            }
+        }
+        Err(err) => {
+            eprintln!("[启动自检] 读取配置失败: {err}");
+        }
+    }
+    if let Err(err) = memory_store_open(&app_state.data_path) {
+        eprintln!("[启动-延迟] 初始化记忆存储失败: {err}");
+    }
+    if let Err(err) = task_store_open(&app_state.data_path) {
+        eprintln!("[启动-延迟] 初始化任务存储失败: {err}");
+    }
+    if let Err(err) = delegate_store_open(&app_state.data_path) {
+        eprintln!("[启动-延迟] 初始化委托存储失败：{err}");
+    }
+    let _ = sync_default_tray_icon(&app_handle);
+    if should_enable_devtools() {
+        eprintln!("[启动-延迟] 检测到 devtools 开关已开启，但当前构建未启用 open_devtools API，跳过打开 devtools");
+    }
+    eprintln!("[启动-延迟] 阶段 2 初始化完成，任务调度与远程 IM 服务延后到前端 mounted ready 后启动");
+}
+
 async fn start_background_services_after_frontend_ready(
     app_handle: AppHandle,
     startup_state: AppState,
@@ -706,49 +757,9 @@ fn main() {
                     eprintln!("[启动] 写入应用句柄槽位失败: {e}");
                 }
             }
-            if let Err(err) = register_default_hotkey(&app_handle) {
-                eprintln!("[启动] 注册默认快捷键失败: {err}");
-            }
-            if let Err(err) = start_app_data_persist_worker(app_handle.state::<AppState>().inner()) {
-                eprintln!("[启动] 启动后台持久化服务失败: {err}");
-            }
-            if let Err(err) = start_conversation_persist_worker(app_handle.state::<AppState>().inner()) {
-                eprintln!("[启动] 启动会话后台持久化服务失败: {err}");
-            }
-            if let Err(err) = start_record_hotkey_probe(
-                app_handle.clone(),
-                app_handle.state::<AppState>().config_path.clone(),
-            ) {
-                eprintln!("[启动] 启动录音热键探针失败: {err}");
-            }
-            if let Err(err) = build_tray(&app_handle) {
-                eprintln!("[启动] 构建托盘失败: {err}");
-            }
+
+            // ========== 阶段 1：最小启动，尽快让前端可见 ==========
             let app_state = app_handle.state::<AppState>();
-            match state_read_config_cached(app_state.inner()) {
-                Ok(mut config) => {
-                    if run_startup_self_checks(&mut config) {
-                        if let Err(err) = state_write_config_cached(app_state.inner(), &config) {
-                            eprintln!("[启动自检] 写入修复后的配置失败: {err}");
-                        } else {
-                            eprintln!("[启动自检] 完成，已将副手部门模型从默认人格修正为副手");
-                        }
-                    }
-                }
-                Err(err) => {
-                    eprintln!("[启动自检] 读取配置失败: {err}");
-                }
-            }
-            if let Err(err) = memory_store_open(&app_state.data_path) {
-                eprintln!("[启动] 初始化记忆存储失败: {err}");
-            }
-            if let Err(err) = task_store_open(&app_state.data_path) {
-                eprintln!("[启动] 初始化任务存储失败: {err}");
-            }
-            if let Err(err) = delegate_store_open(&app_state.data_path) {
-                eprintln!("[启动] 初始化委托存储失败：{err}");
-            }
-            let _ = sync_default_tray_icon(&app_handle);
             attach_window_layout_persistence(&app_handle);
             hide_on_close(&app_handle);
             let startup_window_label = match state_read_config_cached(app_state.inner()) {
@@ -769,16 +780,19 @@ fn main() {
                     let _ = window.set_focus();
                 }
             }
-            if should_enable_devtools() {
-                eprintln!("[启动] 检测到 devtools 开关已开启，但当前构建未启用 open_devtools API，跳过打开 devtools");
-            }
-            eprintln!("[启动] 任务调度、工作区加载与远程 IM 服务延后到前端 mounted ready 后启动");
             app_handle
                 .state::<AppState>()
                 .backend_ready
                 .store(true, std::sync::atomic::Ordering::Release);
             let _ = app_handle.emit("easy-call:backend-ready", ());
-            eprintln!("[启动] 后端就绪信号已发出");
+            eprintln!("[启动] 后端就绪信号已发出（阶段 1 完成）");
+
+            // ========== 阶段 2：异步完成剩余初始化 ==========
+            let deferred_handle = app_handle.clone();
+            tauri::async_runtime::spawn(async move {
+                run_deferred_setup(deferred_handle).await;
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
