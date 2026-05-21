@@ -327,7 +327,7 @@ fn build_conversation_list_item_state(
 ) -> ConversationListItemState {
     let runtime_state = get_conversation_runtime_state(state, conversation_id)
         .unwrap_or(MainSessionState::Idle);
-    let (open_state, opened_by, open_label) =
+    let (open_state, opened_by, _open_label) =
         conversation_list_open_state(state, conversation_id);
     let mark = conversation_list_activity_mark(state, conversation_id);
     let activity = if runtime_state != MainSessionState::Idle {
