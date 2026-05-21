@@ -1,5 +1,6 @@
 import { createApp } from "vue";
 import FileReaderApp from "./apps/file-reader/FileReaderApp.vue";
+import "./lucide-setup";
 import "./style.css";
 import "./features/chat/markdown/markdown-content.css";
 import "katex/dist/katex.min.css";

@@ -1,5 +1,6 @@
 import { createApp } from "vue";
 import ArchivesApp from "./apps/archives/ArchivesApp.vue";
+import "./lucide-setup";
 import "./style.css";
 import "./features/chat/markdown/markdown-content.css";
 import "katex/dist/katex.min.css";
