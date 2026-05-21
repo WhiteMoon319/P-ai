@@ -266,24 +266,35 @@ fn frontend_ready_start_remote_im_services(app: AppHandle) -> Result<bool, Strin
 /// 阶段 2 延迟初始化：在 backend_ready 之后异步执行，避免阻塞前端首屏渲染。
 async fn run_deferred_setup(app_handle: AppHandle) {
     let app_state = app_handle.state::<AppState>();
+
+    let emit_progress = |step: &str| {
+        let _ = app_handle.emit("easy-call:startup-progress", step);
+        eprintln!("[启动-延迟] 开始: {step}");
+    };
+
+    emit_progress("注册快捷键");
     if let Err(err) = register_default_hotkey(&app_handle) {
         eprintln!("[启动-延迟] 注册默认快捷键失败: {err}");
     }
+    emit_progress("启动持久化服务");
     if let Err(err) = start_app_data_persist_worker(app_state.inner()) {
         eprintln!("[启动-延迟] 启动后台持久化服务失败: {err}");
     }
     if let Err(err) = start_conversation_persist_worker(app_state.inner()) {
         eprintln!("[启动-延迟] 启动会话后台持久化服务失败: {err}");
     }
+    emit_progress("启动录音热键探针");
     if let Err(err) = start_record_hotkey_probe(
         app_handle.clone(),
         app_state.config_path.clone(),
     ) {
         eprintln!("[启动-延迟] 启动录音热键探针失败: {err}");
     }
+    emit_progress("构建系统托盘");
     if let Err(err) = build_tray(&app_handle) {
         eprintln!("[启动-延迟] 构建托盘失败: {err}");
     }
+    emit_progress("配置自检");
     match state_read_config_cached(app_state.inner()) {
         Ok(mut config) => {
             if run_startup_self_checks(&mut config) {
@@ -298,12 +309,15 @@ async fn run_deferred_setup(app_handle: AppHandle) {
             eprintln!("[启动自检] 读取配置失败: {err}");
         }
     }
+    emit_progress("初始化记忆存储");
     if let Err(err) = memory_store_open(&app_state.data_path) {
         eprintln!("[启动-延迟] 初始化记忆存储失败: {err}");
     }
+    emit_progress("初始化任务存储");
     if let Err(err) = task_store_open(&app_state.data_path) {
         eprintln!("[启动-延迟] 初始化任务存储失败: {err}");
     }
+    emit_progress("初始化委托存储");
     if let Err(err) = delegate_store_open(&app_state.data_path) {
         eprintln!("[启动-延迟] 初始化委托存储失败：{err}");
     }
@@ -311,7 +325,8 @@ async fn run_deferred_setup(app_handle: AppHandle) {
     if should_enable_devtools() {
         eprintln!("[启动-延迟] 检测到 devtools 开关已开启，但当前构建未启用 open_devtools API，跳过打开 devtools");
     }
-    eprintln!("[启动-延迟] 阶段 2 初始化完成，任务调度与远程 IM 服务延后到前端 mounted ready 后启动");
+    let _ = app_handle.emit("easy-call:startup-progress", "done");
+    eprintln!("[启动-延迟] 阶段 2 初始化完成");
 }
 
 async fn start_background_services_after_frontend_ready(

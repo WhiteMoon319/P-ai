@@ -125,6 +125,7 @@ async function waitForBackendReady(): Promise<void> {
 export function useAppLifecycle(options: UseAppLifecycleOptions) {
   onMounted(async () => {
     options.onStartupOverlayChange?.(true, "等待后端加载中...");
+    let unlistenProgress: (() => void) | null = null;
     try {
       const bootstrapMounted = await runStartupStep(
         "appBootstrapMount",
@@ -140,6 +141,20 @@ export function useAppLifecycle(options: UseAppLifecycleOptions) {
         await waitForBackendReady();
       } catch (error) {
         console.warn("[LIFECYCLE] wait backend ready failed, continue startup refresh", error);
+      }
+
+      // 监听后端阶段 2 延迟初始化进度，实时显示卡在哪一步
+      try {
+        unlistenProgress = await listen<string>("easy-call:startup-progress", (event) => {
+          const step = event.payload;
+          if (step === "done") {
+            options.onStartupOverlayChange?.(true, "加载数据中...");
+          } else {
+            options.onStartupOverlayChange?.(true, `初始化: ${step}`);
+          }
+        });
+      } catch {
+        // 监听失败不影响启动
       }
 
       options.onStartupOverlayChange?.(true, "加载数据中...");
@@ -202,6 +217,7 @@ export function useAppLifecycle(options: UseAppLifecycleOptions) {
       console.error("[LIFECYCLE] startup lifecycle failed:", error);
       options.onStartupStepFailed?.("startupLifecycle", error);
     } finally {
+      if (unlistenProgress) unlistenProgress();
       options.onStartupOverlayChange?.(false, "");
     }
   });
