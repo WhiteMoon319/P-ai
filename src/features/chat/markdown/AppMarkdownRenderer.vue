@@ -237,12 +237,13 @@ function renderSegments(segments: InlineSegment[], keyPrefix: string): VNodeChil
       if (!href) {
         return h("span", { key: `${keyPrefix}-a-${index}` }, segment.text);
       }
+      const isExternalUrl = /^https?:\/\//i.test(href);
       return h("a", {
         key: `${keyPrefix}-a-${index}`,
-        href,
+        href: isExternalUrl ? href : "#",
+        "data-href": isExternalUrl ? undefined : href,
         class: "ecall-md-link",
-        target: "_blank",
-        rel: "noopener noreferrer",
+        ...(isExternalUrl ? { target: "_blank", rel: "noopener noreferrer" } : {}),
       }, segment.text);
     }
     if (segment.type === "strong") {

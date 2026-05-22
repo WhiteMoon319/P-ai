@@ -382,7 +382,7 @@ import { useChatScrollLayout } from "../composables/use-chat-scroll-layout";
 import { useChatToolReview, type ToolReviewCodeReviewScope, type ToolReviewCommitOption, type ToolReviewReportRecord } from "../composables/use-chat-tool-review";
 import type { TerminalApprovalConversationItem } from "../../shell/composables/use-terminal-approval";
 import { isAbsoluteLocalPath, normalizeLocalLinkHref } from "../utils/local-link";
-import { type ChatRenderItem, isRightAlignedMessage, canOpenInFileReader } from "../utils/chat-render";
+import { type ChatRenderItem, isRightAlignedMessage, canOpenInFileReader, fileExtensionFromPath } from "../utils/chat-render";
 import { useIdeContext } from "../composables/use-ide-context";
 import { useDelegateStatus } from "../composables/use-delegate-status";
 import { useBubbleBackground } from "../composables/use-bubble-background";
@@ -836,8 +836,16 @@ async function handleAssistantLinkClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null;
   const anchor = target?.closest("a") as HTMLAnchorElement | null;
   if (!anchor) return;
-  const href = normalizeLocalLinkHref(anchor.getAttribute("href")?.trim() || "");
-  if (!href) return;
+  const rawHref = anchor.getAttribute("data-href") || anchor.getAttribute("href")?.trim() || "";
+  let href = normalizeLocalLinkHref(rawHref);
+  if (!href || href === "#") return;
+  // 相对路径：基于当前工作目录解析为绝对路径
+  if (!isAbsoluteLocalPath(href) && !href.startsWith("http://") && !href.startsWith("https://")) {
+    const root = String(props.currentWorkspaceRootPath || "").trim().replace(/\\/g, "/").replace(/\/$/, "");
+    if (root) {
+      href = `${root}/${href}`;
+    }
+  }
   if (isAbsoluteLocalPath(href)) {
     event.preventDefault(); event.stopPropagation();
     if (sidebarMode.value) {
@@ -845,7 +853,7 @@ async function handleAssistantLinkClick(event: MouseEvent) {
       return;
     }
     try {
-      if (canOpenInFileReader(href)) { await openLocalFileInChatReader(href); }
+      if (canOpenInFileReader(href) || !fileExtensionFromPath(href)) { await openLocalFileInChatReader(href); }
       else { await invokeTauri("open_local_file_directory", { path: href }); }
       linkOpenErrorText.value = "";
     } catch (error) { linkOpenErrorText.value = t("status.openLinkFailed", { err: String(error) }); }

@@ -1029,7 +1029,8 @@ function normalizePath(path: string) {
     .replace(/^\/\?\//, "")
     .replace(/^\?\//, "")
     .replace(/^\?\\/, "")
-    .replace(/\\/g, "/");
+    .replace(/\\/g, "/")
+    .replace(/^\/([A-Za-z]:)/, "$1");
 }
 
 function readFileReaderSessionState(key = props.sessionKey): FileReaderSessionState {
