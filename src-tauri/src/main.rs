@@ -326,6 +326,7 @@ async fn run_deferred_setup(app_handle: AppHandle) {
         eprintln!("[启动-延迟] 检测到 devtools 开关已开启，但当前构建未启用 open_devtools API，跳过打开 devtools");
     }
     let _ = app_handle.emit("easy-call:startup-progress", "done");
+    start_webview_heartbeat_monitor(&app_handle);
     eprintln!("[启动-延迟] 阶段 2 初始化完成");
 }
 
@@ -834,6 +835,8 @@ fn main() {
             run_message_store_migration,
             load_app_bootstrap_snapshot,
             is_backend_ready,
+            webview_pong,
+            debug_crash_webview,
             list_system_fonts,
             set_webview_zoom_percent,
             set_chat_side_panels_window_expanded,

@@ -1069,3 +1069,133 @@ fn hide_on_close(app: &AppHandle) {
         }
     }
 }
+
+// ==================== WebView 心跳崩溃恢复 ====================
+
+const WEBVIEW_HEARTBEAT_INTERVAL_MS: u64 = 5000;
+const WEBVIEW_HEARTBEAT_MAX_MISS: u32 = 3;
+const WEBVIEW_MONITORED_LABELS: &[&str] = &["main", "chat"];
+
+static WEBVIEW_PONG_TIMESTAMPS: OnceLock<Mutex<std::collections::HashMap<String, std::time::Instant>>> =
+    OnceLock::new();
+
+fn webview_pong_timestamps() -> &'static Mutex<std::collections::HashMap<String, std::time::Instant>> {
+    WEBVIEW_PONG_TIMESTAMPS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
+
+fn webview_record_pong(label: &str) {
+    if let Ok(mut map) = webview_pong_timestamps().lock() {
+        map.insert(label.to_string(), std::time::Instant::now());
+    }
+}
+
+fn webview_window_url_for_label(label: &str) -> &'static str {
+    match label {
+        "main" => "index.html",
+        "chat" => "chat.html",
+        "archives" => "archives.html",
+        "quick-setup" => "quick-setup.html",
+        _ => "index.html",
+    }
+}
+
+fn rebuild_crashed_window(app: &AppHandle, label: &str) {
+    eprintln!("[WebView心跳] 窗口崩溃恢复开始: label={label}");
+    // 尝试关闭旧窗口
+    if let Some(window) = app.get_webview_window(label) {
+        let _ = window.destroy();
+    }
+    // 等待旧窗口销毁
+    std::thread::sleep(std::time::Duration::from_millis(200));
+
+    let url = webview_window_url_for_label(label);
+    let (default_w, default_h) = default_window_size(label);
+    let (min_w, min_h) = minimum_window_size(label);
+    let resizable = !is_fixed_window_size(label);
+
+    let result = tauri::WebviewWindowBuilder::new(
+        app,
+        label,
+        tauri::WebviewUrl::App(url.into()),
+    )
+    .title(format!("PAI - {label}"))
+    .inner_size(default_w as f64, default_h as f64)
+    .min_inner_size(min_w as f64, min_h as f64)
+    .resizable(resizable)
+    .decorations(false)
+    .shadow(true)
+    .visible(false)
+    .build();
+
+    match result {
+        Ok(window) => {
+            // 重新注册 hide_on_close
+            let cloned = window.clone();
+            let _ = window.on_window_event(move |event| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = cloned.hide();
+                }
+            });
+            // 恢复布局并显示
+            let _ = apply_window_layout_before_show(app, label);
+            let _ = window.show();
+            let _ = window.set_focus();
+            // 重置 pong 时间戳
+            webview_record_pong(label);
+            eprintln!("[WebView心跳] 窗口崩溃恢复完成: label={label}");
+        }
+        Err(err) => {
+            eprintln!("[WebView心跳] 窗口重建失败: label={label}, error={err}");
+        }
+    }
+}
+
+fn start_webview_heartbeat_monitor(app: &AppHandle) {
+    // 初始化所有监控窗口的 pong 时间戳
+    for label in WEBVIEW_MONITORED_LABELS {
+        webview_record_pong(label);
+    }
+
+    let app_handle = app.clone();
+    std::thread::Builder::new()
+        .name("webview-heartbeat".to_string())
+        .spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(WEBVIEW_HEARTBEAT_INTERVAL_MS));
+
+                for label in WEBVIEW_MONITORED_LABELS {
+                    // 只监控可见窗口
+                    let is_visible = app_handle
+                        .get_webview_window(label)
+                        .and_then(|w| w.is_visible().ok())
+                        .unwrap_or(false);
+                    if !is_visible {
+                        // 不可见窗口重置时间戳，不检测
+                        webview_record_pong(label);
+                        continue;
+                    }
+
+                    // 发送 ping
+                    let _ = app_handle.emit_to(label, "easy-call:webview-ping", ());
+
+                    // 检查上次 pong 时间
+                    let missed = {
+                        let map = webview_pong_timestamps().lock().ok();
+                        map.and_then(|m| m.get(*label).copied())
+                            .map(|last| last.elapsed().as_millis() as u64)
+                            .unwrap_or(0)
+                    };
+                    let threshold = WEBVIEW_HEARTBEAT_INTERVAL_MS * (WEBVIEW_HEARTBEAT_MAX_MISS as u64 + 1);
+                    if missed > threshold {
+                        eprintln!(
+                            "[WebView心跳] 检测到窗口无响应: label={}, missed_ms={}, threshold_ms={}",
+                            label, missed, threshold
+                        );
+                        rebuild_crashed_window(&app_handle, label);
+                    }
+                }
+            }
+        })
+        .ok();
+}

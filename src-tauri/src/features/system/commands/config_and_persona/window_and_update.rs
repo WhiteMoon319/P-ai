@@ -649,6 +649,17 @@ fn is_backend_ready(state: State<'_, AppState>) -> bool {
 }
 
 #[tauri::command]
+fn webview_pong(window: tauri::Window) {
+    webview_record_pong(window.label());
+}
+
+#[tauri::command]
+fn debug_crash_webview(webview: tauri::Webview) -> Result<(), String> {
+    webview.eval("(function(){const a=[];while(true){a.push(new Array(1000000).fill('x'));}})();")
+        .map_err(|err| format!("注入崩溃脚本失败：{err}"))
+}
+
+#[tauri::command]
 fn list_system_fonts() -> Result<Vec<String>, String> {
     let mut families = font_kit::source::SystemSource::new()
         .all_families()
