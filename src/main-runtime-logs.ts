@@ -1,7 +1,7 @@
 import { createApp } from "vue";
 import RuntimeLogsApp from "./apps/runtime-logs/RuntimeLogsApp.vue";
-import "./lucide-setup";
 import "./style.css";
+import { LUCIDE_CONTEXT } from "@lucide/vue";
 
 window.addEventListener("error", (event) => {
   const error = event.error || event;
@@ -23,4 +23,4 @@ window.addEventListener("unhandledrejection", (event) => {
   console.error(`[运行日志窗口][未处理的Promise拒绝] 消息: ${message}, 堆栈: ${stack}`);
 });
 
-createApp(RuntimeLogsApp).mount("#app");
+createApp(RuntimeLogsApp).provide(LUCIDE_CONTEXT, {}).mount("#app");

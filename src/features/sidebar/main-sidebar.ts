@@ -1,9 +1,9 @@
 import { createApp } from "vue";
 import App from "./App.vue";
 import { i18n } from "../../i18n";
-import "../../lucide-setup";
 import "../../style.css";
 import "../chat/markdown/markdown-content.css";
 import "./assets/sidebar-theme.css";
+import { LUCIDE_CONTEXT } from "@lucide/vue";
 
-createApp(App).use(i18n).mount("#app");
+createApp(App).use(i18n).provide(LUCIDE_CONTEXT, {}).mount("#app");
