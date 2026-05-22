@@ -366,6 +366,7 @@ type FileReaderFilePayload = {
   extension: string;
   kind: "markdown" | "code" | string;
   content: string;
+  forcePlain?: boolean;
 };
 
 type FileReaderDirectoryEntry = {
@@ -387,6 +388,7 @@ type FileTab = {
   kind: string;
   content: string;
   rawMode: boolean;
+  forcePlain: boolean;
   loaded: boolean;
   loading: boolean;
   error: string;
@@ -1119,6 +1121,7 @@ function createRestoredTab(path: string): FileTab {
     kind: fileKindFromPath(normalizedPath),
     content: "",
     rawMode: false,
+    forcePlain: false,
     loaded: false,
     loading: false,
     error: "",
@@ -1160,6 +1163,10 @@ function normalizeShikiLineHtml(html: string) {
 
 async function updateHighlightedCode(tab: FileTab) {
   if (tab.kind === "markdown") return;
+  if (tab.forcePlain) {
+    highlightedCodeHtmlByPath.value = { ...highlightedCodeHtmlByPath.value, [tab.path]: escapeHtml(tab.content) };
+    return;
+  }
   const language = resolveShikiLanguage(tab.extension);
   try {
     const html = await codeToHtml(tab.content, { lang: language, theme: "github-dark" });
@@ -1226,7 +1233,7 @@ function upsertLoadingTab(path: string, reuseActiveTab = false) {
   }
   const tab: FileTab = {
     path: normalizedPath, title: titleFromPath(normalizedPath), extension: "",
-    kind: "code", content: "", rawMode: false, loaded: false, loading: true, error: "",
+    kind: "code", content: "", rawMode: false, forcePlain: false, loaded: false, loading: true, error: "",
   };
   tabs.value = [...tabs.value, tab];
   activePath.value = normalizedPath;
@@ -1346,6 +1353,7 @@ async function openPath(path: string, options: { reuseActiveTab?: boolean } = {}
     tab.kind = String(payload.kind || "code");
     tab.content = String(payload.content || "");
     tab.rawMode = false;
+    tab.forcePlain = !!payload.forcePlain;
     tab.loaded = true;
     tab.error = "";
     tab.loading = false;

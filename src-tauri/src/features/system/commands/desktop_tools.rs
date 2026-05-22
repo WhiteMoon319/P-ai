@@ -1351,6 +1351,7 @@ struct FileReaderFilePayload {
     extension: String,
     kind: String,
     content: String,
+    force_plain: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1412,7 +1413,8 @@ static FILE_READER_WATCH_TARGETS: OnceLock<
 > = OnceLock::new();
 static FILE_READER_WATCH_THREAD_STARTED: OnceLock<()> = OnceLock::new();
 
-const FILE_READER_MAX_BYTES: u64 = 2 * 1024 * 1024;
+const FILE_READER_PLAIN_TEXT_THRESHOLD: u64 = 2 * 1024 * 1024;
+const FILE_READER_LINE_TRUNCATE_CHARS: usize = 10000;
 const FILE_READER_READ_BURST_WINDOW_MS: u64 = 100;
 const FILE_READER_WATCH_POLL_MS: u64 = 700;
 const FILE_READER_WATCH_MAX_TARGETS: usize = 160;
@@ -1621,6 +1623,34 @@ fn log_file_reader_read_burst(window_label: &str, path: &str) {
     );
 }
 
+fn format_hex_dump(bytes: &[u8]) -> String {
+    let display_bytes = &bytes[..bytes.len().min(65536)];
+    let mut lines = Vec::with_capacity(display_bytes.len() / 16 + 1);
+    for (i, chunk) in display_bytes.chunks(16).enumerate() {
+        let offset = i * 16;
+        let hex: String = chunk.iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" ");
+        let ascii: String = chunk.iter().map(|&b| if (0x20..=0x7E).contains(&b) { b as char } else { '.' }).collect();
+        lines.push(format!("{offset:08X}  {hex:<48}  {ascii}"));
+    }
+    if bytes.len() > 65536 {
+        lines.push(format!("... (已截断，总大小 {} bytes)", bytes.len()));
+    }
+    lines.join("\n")
+}
+
+fn truncate_long_lines(text: &str, max_chars: usize) -> String {
+    text.lines()
+        .map(|line| {
+            if line.chars().count() > max_chars {
+                format!("{}...", line.chars().take(max_chars).collect::<String>())
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 #[tauri::command]
 fn read_file_reader_file(window: tauri::Window, path: String) -> Result<FileReaderFilePayload, String> {
     let raw_path = path.trim();
@@ -1636,16 +1666,21 @@ fn read_file_reader_file(window: tauri::Window, path: String) -> Result<FileRead
         return Err(format!("目标不是文件：{raw_path}"));
     }
     let metadata = fs::metadata(&file_path).map_err(|err| format!("读取文件信息失败：{err}"))?;
-    if metadata.len() > FILE_READER_MAX_BYTES {
-        return Err(format!(
-            "文件过大，无法预览：{} bytes，当前上限 {} bytes",
-            metadata.len(),
-            FILE_READER_MAX_BYTES
-        ));
-    }
-    let content = decode_text_file_from_path(&file_path)
-        .map_err(|err| format!("读取文本文件失败：{err}"))?
-        .text;
+    let file_size = metadata.len();
+    let force_plain = file_size > FILE_READER_PLAIN_TEXT_THRESHOLD;
+    let content = match decode_text_file_from_path(&file_path) {
+        Ok(decoded) => {
+            if force_plain {
+                truncate_long_lines(&decoded.text, FILE_READER_LINE_TRUNCATE_CHARS)
+            } else {
+                decoded.text
+            }
+        }
+        Err(_) => {
+            let bytes = fs::read(&file_path).map_err(|err| format!("读取文件失败：{err}"))?;
+            format_hex_dump(&bytes)
+        }
+    };
     let resolved_path = file_path.canonicalize().unwrap_or_else(|_| file_path.clone());
     let extension = file_path
         .extension()
@@ -1669,6 +1704,7 @@ fn read_file_reader_file(window: tauri::Window, path: String) -> Result<FileRead
         extension: file_key.clone(),
         kind: file_reader_file_kind(&file_key).to_string(),
         content,
+        force_plain,
     })
 }
 
