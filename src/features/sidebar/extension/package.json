@@ -42,6 +42,21 @@
         "command": "paiSidebar.refresh",
         "title": "Pai: 刷新连接器"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Pai Sidebar",
+      "properties": {
+        "paiSidebar.autoSendIdeContext": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "编辑器、选区或可见区域变化后自动同步 IDE 上下文。"
+        },
+        "paiSidebar.includeVisibleRange": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "没有选区时，同步当前可见代码范围作为 IDE 上下文。"
+        }
+      }
+    }
   }
 }

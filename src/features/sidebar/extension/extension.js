@@ -7,6 +7,16 @@ const DISCOVERY_FILE = "p-ai-ide-context-bridge.json";
 const IDE_CONTEXT_CLIENT_ID = `vscode-${process.pid}`;
 const MAX_CONTEXT_LINES = 240;
 const MAX_CONTEXT_CHARS = 40000;
+const IDE_CONTEXT_DEBOUNCE_MS = 200;
+const IDE_CONTEXT_HEARTBEAT_MS = 10000;
+
+function readIdeContextConfig() {
+  const config = vscode.workspace.getConfiguration("paiSidebar");
+  return {
+    autoSendIdeContext: Boolean(config.get("autoSendIdeContext", true)),
+    includeVisibleRange: Boolean(config.get("includeVisibleRange", true)),
+  };
+}
 
 function readDiscovery() {
   const discoveryPath = path.join(os.tmpdir(), DISCOVERY_FILE);
@@ -125,7 +135,8 @@ function createReference(document, source, startLineZeroBased, endLineZeroBased,
   return reference;
 }
 
-function collectIdeContextReferences() {
+function collectIdeContextReferences(configInput) {
+  const config = configInput || readIdeContextConfig();
   const capturedAt = nowIso();
   const references = [];
   const seen = new Set();
@@ -150,6 +161,7 @@ function collectIdeContextReferences() {
       }
       continue;
     }
+    if (!config.includeVisibleRange) continue;
     for (const visibleRange of editor.visibleRanges || []) {
       const content = readDocumentLineRange(document, visibleRange.start.line, visibleRange.end.line);
       const reference = createReference(document, "visible_range", visibleRange.start.line, visibleRange.end.line, content, capturedAt);
@@ -298,6 +310,9 @@ class PaiSidebarProvider {
     this._ideContextTimer = null;
     this._ideContextSendTimer = null;
     this._lastIdeContextSignature = "";
+    this._lastIdeContextPayload = null;
+    this._lastIdeContextSentAt = 0;
+    this._ideContextDirty = true;
     this._subscriptions = [];
   }
 
@@ -342,6 +357,8 @@ class PaiSidebarProvider {
           if (content !== this._lastDiscoveryContent) {
             this._lastDiscoveryContent = content;
             this.postDiscovery();
+            this.markIdeContextDirty();
+            this.scheduleIdeContextSync();
           }
         }, 300);
       });
@@ -360,12 +377,26 @@ class PaiSidebarProvider {
   _startIdeContextSync() {
     if (this._ideContextTimer) return;
     this._subscriptions.push(
-      vscode.window.onDidChangeActiveTextEditor(() => this.scheduleIdeContextSync()),
-      vscode.window.onDidChangeVisibleTextEditors(() => this.scheduleIdeContextSync()),
-      vscode.window.onDidChangeTextEditorSelection(() => this.scheduleIdeContextSync()),
+      vscode.window.onDidChangeActiveTextEditor(() => {
+        this.markIdeContextDirty();
+        this.scheduleIdeContextSync();
+      }),
+      vscode.window.onDidChangeVisibleTextEditors(() => {
+        this.markIdeContextDirty();
+        this.scheduleIdeContextSync();
+      }),
+      vscode.window.onDidChangeTextEditorSelection(() => {
+        this.markIdeContextDirty();
+        this.scheduleIdeContextSync();
+      }),
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (!event.affectsConfiguration("paiSidebar")) return;
+        this.markIdeContextDirty();
+        this.scheduleIdeContextSync();
+      }),
     );
     this.scheduleIdeContextSync();
-    this._ideContextTimer = setInterval(() => this.scheduleIdeContextSync(), 5000);
+    this._ideContextTimer = setInterval(() => this.syncIdeContext({ heartbeatOnly: true }), 5000);
   }
 
   _stopIdeContextSync() {
@@ -388,23 +419,51 @@ class PaiSidebarProvider {
   }
 
   scheduleIdeContextSync() {
+    const config = readIdeContextConfig();
+    if (!config.autoSendIdeContext) return;
     if (this._ideContextSendTimer) clearTimeout(this._ideContextSendTimer);
     this._ideContextSendTimer = setTimeout(() => {
       this._ideContextSendTimer = null;
       this.syncIdeContext();
-    }, 200);
+    }, IDE_CONTEXT_DEBOUNCE_MS);
   }
 
-  syncIdeContext() {
+  markIdeContextDirty() {
+    this._ideContextDirty = true;
+  }
+
+  syncIdeContext(options = {}) {
+    const heartbeatOnly = Boolean(options.heartbeatOnly);
+    const config = readIdeContextConfig();
+    if (!config.autoSendIdeContext) return;
+    const now = Date.now();
+    const heartbeatDue = this._lastIdeContextPayload && now - this._lastIdeContextSentAt >= IDE_CONTEXT_HEARTBEAT_MS;
+    if (heartbeatOnly && !heartbeatDue) return;
     const discovery = readDiscovery();
-    const references = collectIdeContextReferences();
+    if (heartbeatOnly && !this._ideContextDirty && heartbeatDue) {
+      if (!discovery?.bridgeUrl && !discovery?.url) return;
+      const bridgeUrl = String(discovery.bridgeUrl || discovery.url || "").trim();
+      if (!bridgeUrl) return;
+      this._lastIdeContextPayload = {
+        ...this._lastIdeContextPayload,
+        updatedAt: nowIso(),
+      };
+      this.sendIdeContextSnapshot(bridgeUrl, this._lastIdeContextPayload);
+      return;
+    }
+    const references = collectIdeContextReferences(config);
     const signature = ideContextSignature(references);
-    if (signature === this._lastIdeContextSignature) return;
-    this._lastIdeContextSignature = signature;
+    if (signature === this._lastIdeContextSignature && !heartbeatDue) {
+      this._ideContextDirty = false;
+      return;
+    }
     if (!discovery?.bridgeUrl && !discovery?.url) return;
     const bridgeUrl = String(discovery.bridgeUrl || discovery.url || "").trim();
     if (!bridgeUrl) return;
     const payload = snapshotPayloadFromReferences(references, discovery);
+    this._lastIdeContextSignature = signature;
+    this._lastIdeContextPayload = payload;
+    this._ideContextDirty = false;
     this.sendIdeContextSnapshot(bridgeUrl, payload);
   }
 
@@ -412,6 +471,7 @@ class PaiSidebarProvider {
     const send = () => {
       try {
         this._ideContextSocket?.send(JSON.stringify(payload));
+        this._lastIdeContextSentAt = Date.now();
       } catch {
         this._ideContextSocket = null;
       }
