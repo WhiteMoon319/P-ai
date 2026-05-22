@@ -1,7 +1,7 @@
 import { createApp } from "vue";
 import RuntimeLogsApp from "./apps/runtime-logs/RuntimeLogsApp.vue";
 import "./style.css";
-import { LUCIDE_CONTEXT } from "@lucide/vue";
+import { LUCIDE_CONTEXT } from "./lucide-context";
 
 window.addEventListener("error", (event) => {
   const error = event.error || event;
