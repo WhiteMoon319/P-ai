@@ -2,6 +2,8 @@
 
 ## 未发布
 
+## 发布：v0.10.2
+
 - 重构（frontend）：拆分统一窗口入口，按配置、对话、归档窗口分别组织入口组件，并将聊天流、窗口状态、配置同步、滚动、媒体、工具与生命周期逻辑拆入更细的 composable，降低 `UnifiedWindowApp` 与 `use-chat-flow` 的维护成本。
 
 - 功能（windowing）：新增 WebView 心跳崩溃恢复，后端每 5 秒检测前端 ping，连续 15 秒无响应时自动重建窗口；补充 `debug_crash_webview` 调试命令用于验证恢复链路。
