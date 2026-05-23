@@ -5,8 +5,8 @@
   >
     <div
       v-if="showSideConversationList && !detachedChatWindow"
-      class="flex h-full min-h-0 shrink-0"
-      :style="{ width: `${leftSidebarWidth}px` }"
+      :class="leftPaneInLayout ? 'flex h-full min-h-0 shrink-0' : 'absolute bottom-0 left-0 top-0 z-50 flex h-full min-h-0 border-r border-base-300 bg-base-100 shadow-2xl'"
+      :style="{ width: leftPaneInLayout ? `${leftSidebarWidth}px` : `min(${leftSidebarWidth}px, calc(100% - 56px))` }"
     >
       <ChatConversationSidebar
         :items="conversationItems || unarchivedConversationItems"
@@ -280,8 +280,15 @@
         />
       </div>
 
-      <div v-if="effectiveToolReviewPanelOpen" class="flex h-full min-h-0 shrink-0 border-l border-base-300 bg-base-100"
-        :style="{ width: `${rightSidebarWidth}px` }">
+      <div
+        v-if="leftPaneOverlay || rightPaneOverlay"
+        class="absolute inset-0 z-40 bg-base-300/20 backdrop-blur-[1px]"
+        @click="closeOverlayPanes"
+      ></div>
+
+      <div v-if="effectiveToolReviewPanelOpen"
+        :class="rightPaneInLayout ? 'flex h-full min-h-0 shrink-0 border-l border-base-300 bg-base-100' : 'absolute bottom-0 right-0 top-0 z-50 flex h-full min-h-0 border-l border-base-300 bg-base-100 shadow-2xl'"
+        :style="{ width: rightPaneInLayout ? `${rightSidebarWidth}px` : `min(${rightSidebarWidth}px, calc(100% - 56px))` }">
         <FileReaderPanel
           v-if="chatRightPanelMode === 'reader'"
           ref="chatReaderPanelRef"
@@ -327,7 +334,7 @@
     </div>
 
     <div
-      v-if="showSideConversationList && !detachedChatWindow"
+      v-if="leftPaneInLayout"
       class="ecall-pane-splitter ecall-pane-splitter-left absolute bottom-0 top-0 z-30"
       :class="{ 'ecall-pane-splitter-active': activePaneResizeSide === 'left' }"
       :style="{ left: `${leftSidebarWidth - 2}px` }"
@@ -343,7 +350,7 @@
     ></div>
 
     <div
-      v-if="effectiveToolReviewPanelOpen"
+      v-if="rightPaneInLayout"
       class="ecall-pane-splitter ecall-pane-splitter-right absolute bottom-0 top-0 z-30"
       :class="{ 'ecall-pane-splitter-active': activePaneResizeSide === 'right' }"
       :style="{ right: `${rightSidebarWidth - 2}px` }"
@@ -754,7 +761,8 @@ const {
 
 const panesCleanupFns: Array<() => void> = [];
 const {
-  leftSidebarWidth, rightSidebarWidth, activePaneResizeSide,
+  leftSidebarWidth, rightSidebarWidth, leftPaneInLayout, rightPaneInLayout,
+  leftPaneOverlay, rightPaneOverlay, activePaneResizeSide,
   startPaneResize, adjustPaneWidthByKeyboard,
 } = useChatPanes({
   chatLayoutRoot, toolReviewPanelOpen: effectiveToolReviewPanelOpen,
@@ -764,6 +772,43 @@ const {
   onPaneWidthsCommit: (left, right) => emit("sidePanelWidthsCommit", { leftWidth: left, rightWidth: right }),
   onBeforeUnmountCleanup: (fn) => panesCleanupFns.push(fn),
 });
+
+function closeOverlayPanes() {
+  if (leftPaneOverlay.value) emit("sideConversationListVisibleChange", false);
+  if (rightPaneOverlay.value) emit("toolReviewPanelOpenChange", false);
+}
+
+// 滚动容器宽度变化时保持滚动百分比
+let _scrollWidthPrev = 0;
+let _scrollResizeObserver: ResizeObserver | null = null;
+watch(scrollContainer, (el, _oldEl, onCleanup) => {
+  _scrollResizeObserver?.disconnect();
+  _scrollResizeObserver = null;
+  if (!el) return;
+  _scrollWidthPrev = el.clientWidth;
+  _scrollResizeObserver = new ResizeObserver((entries) => {
+    const entry = entries[0];
+    if (!entry) return;
+    const newWidth = Math.round(entry.contentRect.width);
+    if (newWidth === _scrollWidthPrev || _scrollWidthPrev === 0) {
+      _scrollWidthPrev = newWidth;
+      return;
+    }
+    const maxScroll = el.scrollHeight - el.clientHeight;
+    const ratio = maxScroll > 0 ? el.scrollTop / maxScroll : -1;
+    _scrollWidthPrev = newWidth;
+    if (ratio < 0) return;
+    requestAnimationFrame(() => {
+      const newMax = el.scrollHeight - el.clientHeight;
+      if (newMax > 0) el.scrollTop = Math.round(ratio * newMax);
+    });
+  });
+  _scrollResizeObserver.observe(el);
+  onCleanup(() => {
+    _scrollResizeObserver?.disconnect();
+    _scrollResizeObserver = null;
+  });
+}, { immediate: true });
 
 // ==================== scroll orchestration ====================
 

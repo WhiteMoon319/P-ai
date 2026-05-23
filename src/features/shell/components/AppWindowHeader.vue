@@ -21,25 +21,21 @@
       data-tauri-drag-region
       class="relative z-30 flex h-full min-w-0 items-center gap-1 px-2"
     >
-      <div v-if="!detachedChatWindow" class="relative" @mousedown.stop>
-        <div class="indicator">
-          <span
-            v-if="conversationUnreadTotal > 0"
-            class="indicator-item indicator-top indicator-start z-10 h-2.5 w-2.5 -translate-x-0.5 -translate-y-0.5 rounded-full bg-error"
-            aria-hidden="true"
-          ></span>
-          <button
-            v-if="sideConversationListVisible"
-            class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
-            :class="sideConversationListVisible ? 'btn-active' : ''"
-            :title="t('chat.conversationList')"
-            @click.stop="emit('toggle-side-conversation-list')"
-          >
-            <PanelLeftOpen class="h-3.5 w-3.5" />
-          </button>
-        </div>
+      <div v-if="!detachedChatWindow && leftHeaderInLayout" class="indicator" @mousedown.stop>
+        <span
+          v-if="conversationUnreadTotal > 0"
+          class="indicator-item indicator-top indicator-start z-10 h-2.5 w-2.5 -translate-x-0.5 -translate-y-0.5 rounded-full bg-error"
+          aria-hidden="true"
+        ></span>
+        <button
+          class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
+          :class="sideConversationListVisible ? 'btn-active' : ''"
+          :title="t('chat.conversationList')"
+          @click.stop="emit('toggle-side-conversation-list')"
+        >
+          <LayoutList class="h-3.5 w-3.5" />
+        </button>
       </div>
-
     </div>
 
     <div
@@ -48,16 +44,19 @@
       class="relative z-30 grid h-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 px-2"
     >
       <div class="relative z-40 flex min-w-0 items-center gap-1" @mousedown.stop>
-        <div
-          v-if="!sideConversationListVisible && !detachedChatWindow"
-          class="relative"
-        >
+        <div v-if="!detachedChatWindow && !leftHeaderInLayout" class="indicator">
+          <span
+            v-if="conversationUnreadTotal > 0"
+            class="indicator-item indicator-top indicator-start z-10 h-2.5 w-2.5 -translate-x-0.5 -translate-y-0.5 rounded-full bg-error"
+            aria-hidden="true"
+          ></span>
           <button
             class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
+            :class="sideConversationListVisible ? 'btn-active' : ''"
             :title="t('chat.conversationList')"
             @click.stop="emit('toggle-side-conversation-list')"
           >
-            <PanelLeftClose class="h-3.5 w-3.5" />
+            <LayoutList class="h-3.5 w-3.5" />
           </button>
         </div>
         <button
@@ -108,35 +107,8 @@
         :title="combinedTitleTooltip"
       >
         <span
-          class="relative truncate text-sm font-semibold text-base-content cursor-pointer"
-          @click.stop="toggleHoverSidebar"
-        >{{ combinedTitle }}
-          <div
-            v-if="hoverSidebarOpen && !sideConversationListVisible"
-            class="fixed inset-0 z-40"
-            @click.stop="hoverSidebarOpen = false"
-          />
-          <div
-            v-if="hoverSidebarOpen && !sideConversationListVisible"
-            class="fixed left-0 top-10 z-50 h-[90vh] max-h-[90vh] w-72 rounded-box border border-base-300 bg-base-200 shadow-xl overflow-hidden"
-          >
-          <ChatConversationSidebar
-            :items="conversationItems"
-            :active-conversation-id="activeConversationId"
-            :user-alias="userAlias"
-            :user-avatar-url="userAvatarUrl"
-            :persona-name-map="personaNameMap"
-            :persona-avatar-url-map="personaAvatarUrlMap"
-            :active-tab="conversationListTab"
-            @select="handleHoverConversationSelect"
-            @rename="$emit('rename-conversation', $event)"
-            @toggle-pin-conversation="$emit('toggle-pin-conversation', $event)"
-            @archive-conversation="$emit('archive-conversation', $event)"
-            @delete-conversation="$emit('delete-conversation', $event)"
-            @update:active-tab="$emit('update:conversation-list-tab', $event)"
-          />
-        </div>
-        </span>
+          class="truncate text-sm font-semibold text-base-content"
+        >{{ combinedTitle }}</span>
       </div>
 
       <div class="relative z-40 flex min-w-0 items-center justify-end gap-1" @mousedown.stop>
@@ -148,7 +120,7 @@
       data-tauri-drag-region
       class="relative z-30 flex h-full min-w-0 flex-nowrap items-center justify-end gap-1 px-2"
     >
-      <div v-if="toolReviewPanelOpenVisible" role="tablist" class="tabs tabs-border min-w-0 shrink-0" @mousedown.stop>
+      <div v-if="toolReviewPanelOpenVisible && rightHeaderInLayout" role="tablist" class="tabs tabs-border min-w-0 shrink-0" @mousedown.stop>
         <button
           type="button"
           role="tab"
@@ -170,7 +142,6 @@
       </div>
 
       <button
-        v-if="toolReviewPanelOpenVisible"
         type="button"
         class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
         :class="toolReviewPanelOpenVisible ? 'btn-active' : ''"
@@ -178,17 +149,7 @@
         @mousedown.stop
         @click.stop="emit('toggle-tool-review-panel')"
       >
-        <PanelRightOpen class="h-3.5 w-3.5" />
-      </button>
-
-      <button
-        v-if="!toolReviewPanelOpenVisible"
-        type="button"
-        class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
-        :title="t('chat.toolReview.title')"
-        @click.stop="emit('toggle-tool-review-panel')"
-      >
-        <PanelRightClose class="h-3.5 w-3.5" />
+        <LayoutPanelLeft class="h-3.5 w-3.5 -scale-x-100" />
       </button>
 
       <button
@@ -439,10 +400,9 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../services/tauri-api";
-import { Download, FoldVertical, History, Minus, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ScrollText, Search, Settings, Square, SquarePen, X } from "@lucide/vue";
+import { Download, FoldVertical, History, LayoutList, LayoutPanelLeft, Minus, ScrollText, Search, Settings, Square, SquarePen, X } from "@lucide/vue";
 import type { ChatConversationOverviewItem } from "../../../types/app";
 import { resolveConversationDisplayTitle } from "../../chat/utils/conversation-title";
-import ChatConversationSidebar from "../../chat/components/ChatConversationSidebar.vue";
 import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
 import type { ConfigSearchResult, ConfigSearchTab } from "../../config/search/config-search";
 import { isDarkAppTheme } from "../composables/use-app-theme";
@@ -552,14 +512,45 @@ const strokeDashoffset = computed(() => {
   return RING_CIRCUMFERENCE * (1 - percent / 100);
 });
 
+// ========== responsive header pane layout ==========
+
+const windowWidth = ref(typeof window === "undefined" ? 0 : window.innerWidth);
+
+function updateWindowWidth() {
+  windowWidth.value = typeof window === "undefined" ? 0 : window.innerWidth;
+}
+
+function headerPaneWidth(side: "left" | "right"): number {
+  const raw = side === "left"
+    ? Number(props.chatSidePanelWidths?.leftWidth || 0)
+    : Number(props.chatSidePanelWidths?.rightWidth || 0);
+  const min = side === "left" ? 260 : 320;
+  return Math.max(min, Number.isFinite(raw) && raw > 0 ? Math.round(raw) : min);
+}
+
+function headerCanFit(leftW: number, rightW: number): boolean {
+  return windowWidth.value <= 0 || leftW + 420 + rightW <= windowWidth.value;
+}
+
+const leftHeaderInLayout = computed(() => {
+  if (props.viewMode !== "chat" || !props.sideConversationListVisible || props.detachedChatWindow) return false;
+  return headerCanFit(headerPaneWidth("left"), 0);
+});
+
+const rightHeaderInLayout = computed(() => {
+  if (props.viewMode !== "chat" || !props.toolReviewPanelOpenVisible) return false;
+  const rightW = headerPaneWidth("right");
+  return leftHeaderInLayout.value
+    ? headerCanFit(headerPaneWidth("left"), rightW)
+    : headerCanFit(0, rightW);
+});
+
 const chatHeaderGridStyle = computed(() => {
-  const leftWidth = Number(props.chatSidePanelWidths?.leftWidth || 0);
-  const rightWidth = Number(props.chatSidePanelWidths?.rightWidth || 0);
-  const leftColumn = props.sideConversationListVisible && !props.detachedChatWindow && Number.isFinite(leftWidth) && leftWidth > 0
-    ? `${Math.round(leftWidth)}px`
+  const leftColumn = leftHeaderInLayout.value
+    ? `${headerPaneWidth("left")}px`
     : "0px";
-  const rightColumn = props.toolReviewPanelOpenVisible && Number.isFinite(rightWidth) && rightWidth > 0
-    ? `${Math.round(rightWidth)}px`
+  const rightColumn = rightHeaderInLayout.value
+    ? `${headerPaneWidth("right")}px`
     : "max-content";
   return {
     gridTemplateColumns: `${leftColumn} minmax(0, 1fr) ${rightColumn}`,
@@ -588,21 +579,8 @@ const conversationUnreadTotal = computed(() =>
   props.conversationItems.reduce((total, item) => total + Math.max(0, Number(item.unreadCount || 0)), 0),
 );
 
-const hoverSidebarOpen = ref(false);
-
-function toggleHoverSidebar() {
-  if (props.sideConversationListVisible) return;
-  hoverSidebarOpen.value = !hoverSidebarOpen.value;
-}
-
-function handleHoverConversationSelect(payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }) {
-  hoverSidebarOpen.value = false;
-  emit("switch-conversation", payload);
-}
-
 const combinedTitle = computed(() => {
-  const raw = currentConversationTitle.value;
-  return raw.length > 10 ? raw.slice(0, 10) + "…" : raw;
+  return currentConversationTitle.value || props.currentPersonaName;
 });
 
 const combinedTitleTooltip = computed(() => {
@@ -795,11 +773,14 @@ onMounted(() => {
   loadRecentConversationTopics();
   document.addEventListener("pointerdown", handleDocumentPointerDown);
   window.addEventListener("keydown", handleWindowKeydown);
+  updateWindowWidth();
+  window.addEventListener("resize", updateWindowWidth, { passive: true });
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", handleDocumentPointerDown);
   window.removeEventListener("keydown", handleWindowKeydown);
+  window.removeEventListener("resize", updateWindowWidth);
 });
 </script>
 
