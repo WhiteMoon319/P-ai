@@ -213,8 +213,14 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     if (!itemId) return;
     const scrollEl = scrollContainer.value;
     const previousTop = streamingVirtualItemViewportTop.get(itemId);
-    virtualizer.value.measureElement(element);
     const nextHeight = Math.round(element.getBoundingClientRect().height);
+    const previousHeight = measuredVirtualItemHeights.get(itemId);
+    if (previousHeight === nextHeight) {
+      observedVirtualItemElements.set(itemId, element);
+      updateStreamingVirtualItemViewportTop(itemId, element);
+      return;
+    }
+    virtualizer.value.measureElement(element);
     measuredVirtualItemHeights.set(itemId, nextHeight);
     observedVirtualItemElements.set(itemId, element);
     if (
@@ -310,7 +316,9 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       }
       observedVirtualItemResizeElements.set(resolvedItemId, target);
       const nextHeight = Math.round(target.getBoundingClientRect().height);
-      measuredVirtualItemHeights.set(resolvedItemId, nextHeight);
+      if (measuredVirtualItemHeights.get(resolvedItemId) !== nextHeight) {
+        measuredVirtualItemHeights.set(resolvedItemId, nextHeight);
+      }
       observedVirtualItemElements.set(resolvedItemId, target);
       updateStreamingVirtualItemViewportTop(resolvedItemId, target);
     }

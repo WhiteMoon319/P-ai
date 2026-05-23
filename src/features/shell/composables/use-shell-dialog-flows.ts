@@ -1,8 +1,8 @@
 import { ref, type Ref } from "vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ChatMessage, RuntimeLogEntry, UnarchivedConversationSummary } from "../../../types/app";
-import type { ConfigSaveErrorInfo } from "../../config/composables/use-config-persistence";
 import { inspectUndoablePatchCalls } from "../../../utils/chat-message-semantics";
+import { useConfigSaveErrorDialog } from "./use-config-save-error-dialog";
 
 export type TrimPreviewResult = {
   conversationId: string;
@@ -51,10 +51,10 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
   const runtimeLogs = ref<RuntimeLogEntry[]>([]);
   const runtimeLogsLoading = ref(false);
   const runtimeLogsError = ref("");
-  const configSaveErrorDialogOpen = ref(false);
-  const configSaveErrorDialogTitle = ref("");
-  const configSaveErrorDialogBody = ref("");
-  const configSaveErrorDialogKind = ref<"warning" | "error">("error");
+  const configSaveErrorDialog = useConfigSaveErrorDialog({
+    t: options.t,
+    configTab: options.configTab,
+  });
   const skillPlaceholderDialogOpen = ref(false);
   const trimActionDialogOpen = ref(false);
   const trimPreviewLoading = ref(false);
@@ -337,35 +337,12 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
     }
   }
 
-  function closeSettingsSaveErrorDialog() {
-    configSaveErrorDialogOpen.value = false;
-  }
-
-  function openSettingsSaveErrorDialog(info: ConfigSaveErrorInfo) {
-    configSaveErrorDialogTitle.value = options.t("status.saveConfigDialogTitle");
-    if (info.kind === "hotkey_conflict") {
-      configSaveErrorDialogKind.value = "warning";
-      configSaveErrorDialogBody.value = `${options.t("status.saveConfigHotkeyOccupied", { hotkey: info.hotkey })}\n${options.t("status.saveConfigDialogHint")}`;
-      options.configTab.value = "hotkey";
-    } else if (info.kind === "backend_404") {
-      configSaveErrorDialogKind.value = "error";
-      configSaveErrorDialogBody.value = options.t("status.saveConfigBackend404");
-    } else {
-      configSaveErrorDialogKind.value = "error";
-      configSaveErrorDialogBody.value = options.t("status.saveConfigFailed", { err: info.errorText });
-    }
-    configSaveErrorDialogOpen.value = true;
-  }
-
   return {
     runtimeLogsDialogOpen,
     runtimeLogs,
     runtimeLogsLoading,
     runtimeLogsError,
-    configSaveErrorDialogOpen,
-    configSaveErrorDialogTitle,
-    configSaveErrorDialogBody,
-    configSaveErrorDialogKind,
+    ...configSaveErrorDialog,
     skillPlaceholderDialogOpen,
     trimActionDialogOpen,
     trimPreviewLoading,
@@ -390,7 +367,5 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
     openRuntimeLogsDialog,
     closeRuntimeLogsDialog,
     clearRuntimeLogs,
-    closeSettingsSaveErrorDialog,
-    openSettingsSaveErrorDialog,
   };
 }

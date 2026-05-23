@@ -56,19 +56,28 @@ function updateThumbNow() {
 
   const { clientHeight, scrollHeight, scrollTop } = scroller;
   const scrollable = scrollHeight > clientHeight + 1;
-  canScroll.value = scrollable;
+  if (canScroll.value !== scrollable) {
+    canScroll.value = scrollable;
+  }
   if (!scrollable) {
-    thumbTop.value = 0;
+    if (thumbTop.value !== 0) {
+      thumbTop.value = 0;
+    }
     return;
   }
 
   const trackHeight = Math.max(clientHeight - 8, 0);
   const height = Math.max(24, Math.round((clientHeight / scrollHeight) * trackHeight));
   const maxTop = Math.max(trackHeight - height, 0);
-  thumbHeight.value = height;
-  thumbTop.value = maxTop === 0
+  const top = maxTop === 0
     ? 0
     : Math.round((scrollTop / (scrollHeight - clientHeight)) * maxTop);
+  if (thumbHeight.value !== height) {
+    thumbHeight.value = height;
+  }
+  if (thumbTop.value !== top) {
+    thumbTop.value = top;
+  }
 }
 
 function updateThumb() {
@@ -124,9 +133,6 @@ function observeScroller(scroller: HTMLElement | null) {
   if (typeof ResizeObserver !== "undefined") {
     resizeObserver = new ResizeObserver(updateThumb);
     resizeObserver.observe(scroller);
-    for (const child of Array.from(scroller.children)) {
-      if (child instanceof HTMLElement) resizeObserver.observe(child);
-    }
   }
   void nextTick(updateThumb);
 }
