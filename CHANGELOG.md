@@ -1,5 +1,15 @@
 # 变更日志
 
+## 未发布
+
+- 重构（frontend）：拆分统一窗口入口，按配置、对话、归档窗口分别组织入口组件，并将聊天流、窗口状态、配置同步、滚动、媒体、工具与生命周期逻辑拆入更细的 composable，降低 `UnifiedWindowApp` 与 `use-chat-flow` 的维护成本。
+
+- 功能（windowing）：新增 WebView 心跳崩溃恢复，后端每 5 秒检测前端 ping，连续 15 秒无响应时自动重建窗口；补充 `debug_crash_webview` 调试命令用于验证恢复链路。
+
+- 功能（file-reader）：文件读取去掉 2MB 大小限制，超大纯文本仍可渲染并对单行内容做 10000 字符截断；文本解码失败时回退为十六进制显示。
+
+- 修复（chat）：本地路径链接改用 `data-href` 阻止浏览器默认导航，修复 Windows 路径被规范化为 `/E:/path` 的问题，并让目录链接在侧边栏文件阅读器中打开；修复拆分窗口入口后左侧栏远程会话 tab 点击无法切换的问题。
+
 ## 发布：v0.10.1
 
 - 维护（deps）：前后端依赖全量更新，`lucide-vue-next` 迁移至 `@lucide/vue` v1.16，通过 `app.provide(LUCIDE_CONTEXT)` 修复函数式组件 inject 问题；修复 sandbox read-whitelist cwd 冲突与测试参数格式。

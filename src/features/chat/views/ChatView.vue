@@ -16,7 +16,7 @@
         :persona-name-map="personaNameMap"
         :persona-avatar-url-map="personaAvatarUrlMap"
         :active-tab="chatLeftPanelMode === 'contact' ? 'contact' : 'local'"
-        @update:active-tab="$emit('updateConversationListTab', $event)"
+        @update:active-tab="$emit('update:conversation-list-tab', $event)"
         @select="handleConversationListSelect"
         @rename="handleConversationRename"
         @toggle-pin-conversation="handleConversationPinToggle"
@@ -455,7 +455,7 @@ const emit = defineEmits<{
   (e: "toolReviewPanelOpenChange", value: boolean): void;
   (e: "sidePanelWidthsChange", value: { leftWidth: number; rightWidth: number }): void;
   (e: "sidePanelWidthsCommit", value: { leftWidth: number; rightWidth: number }): void;
-  (e: "updateConversationListTab", value: "local" | "contact"): void;
+  (e: "update:conversation-list-tab", value: "local" | "contact"): void;
   (e: "update:chatLeftPanelMode", value: "local" | "contact"): void;
   (e: "update:chatRightPanelMode", value: "reader" | "review" | "delegate"): void;
   (e: "removeClipboardImage", index: number): void;
