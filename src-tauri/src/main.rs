@@ -817,6 +817,7 @@ fn main() {
             show_archives_window,
             show_quick_setup_window,
             open_runtime_logs_window,
+            hide_current_window,
             complete_quick_setup_and_open_chat,
             detach_current_conversation_to_window,
             get_detached_chat_window_info,

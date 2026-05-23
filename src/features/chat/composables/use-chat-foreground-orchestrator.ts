@@ -239,7 +239,8 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
       await getCurrentWindow().close();
       return;
     }
-    await bindings.closeWindowAndClearForeground();
+    bindings.freezeForegroundConversation("close_window");
+    await bindings.closeWindow();
   }
 
   async function detachCurrentConversationToWindow() {

@@ -563,6 +563,8 @@ export function useChatWindowApp() {
     detachedChatConversationId,
     detachedTemporaryApiConfigId,
     isChatWindowActiveNow,
+    closeWindow,
+    freezeForegroundConversation,
     clearPendingManualScrollToBottom,
     triggerConversationScrollToBottom,
     getPendingManualScrollToBottomConversationId,

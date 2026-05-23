@@ -104,7 +104,8 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
     setStatusError: bindings.setStatusError,
     perfNow: bindings.perfNow,
     isChatWindowActiveNow: bindings.isChatWindowActiveNow,
-    closeWindowAndClearForeground: bindings.closeWindowAndClearForeground,
+    closeWindow: bindings.closeWindow,
+    freezeForegroundConversation: bindings.freezeForegroundConversation,
     getChatFlow: bindings.getChatFlow,
   });
 

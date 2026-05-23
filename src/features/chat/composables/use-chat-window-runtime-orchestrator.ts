@@ -163,6 +163,8 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     perfNow: bindings.perfNow,
     loadAllMessages,
     isChatWindowActiveNow: bindings.isChatWindowActiveNow,
+    closeWindow: bindings.closeWindow,
+    freezeForegroundConversation: bindings.freezeForegroundConversation,
     clearPendingManualScrollToBottom: bindings.clearPendingManualScrollToBottom,
     triggerConversationScrollToBottom: bindings.triggerConversationScrollToBottom,
     getPendingManualScrollToBottomConversationId: bindings.getPendingManualScrollToBottomConversationId,
