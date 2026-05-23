@@ -53,11 +53,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
     bindings.foregroundTailLatestReady.value = true;
     bindings.clearPendingManualScrollToBottom();
     bindings.getChatFlow().freezeForegroundRoundState();
-    console.warn("[聊天追踪][前台会话] 已清空", {
-      windowLabel: bindings.tauriWindowLabel.value,
-      reason,
-      previousConversationId,
-    });
+    void reason;
   }
 
   async function recoverForegroundConversationFromOverview(reason: string, preferredConversationId?: string | null) {
@@ -321,12 +317,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
       bindings.cacheConversationMessages(currentConversationId, bindings.allMessages.value);
     }
     bindings.getChatFlow().freezeForegroundRoundState();
-    console.warn("[聊天追踪][前台会话] 已冻结", {
-      windowLabel: bindings.tauriWindowLabel.value,
-      reason,
-      currentConversationId,
-      messageCount: bindings.allMessages.value.length,
-    });
+    void reason;
   }
 
   function hasActiveForegroundConversation(conversationId?: string | null): boolean {

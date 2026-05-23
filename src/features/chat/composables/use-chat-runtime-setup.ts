@@ -93,16 +93,8 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
           onDelta,
         }),
       onReloadMessages: () => bindings.reloadForegroundConversationMessages("chat_flow_reload"),
-      onHistoryFlushed: async ({ conversationId, pendingMessages, activateAssistant }) => {
+      onHistoryFlushed: async ({ conversationId, pendingMessages }) => {
         const flushedConversationId = String(conversationId || "").trim();
-        console.warn("[聊天追踪][历史刷写处理] 开始", {
-          windowLabel: bindings.tauriWindowLabel.value,
-          flushedConversationId,
-          activateAssistant,
-          pendingCount: Array.isArray(pendingMessages) ? pendingMessages.length : 0,
-          currentConversationId: String(bindings.currentChatConversationId.value || "").trim(),
-          currentMessageCount: bindings.allMessages.value.length,
-        });
         if (flushedConversationId && bindings.isChatWindowActiveNow()) {
           bindings.currentChatConversationId.value = flushedConversationId;
         }
@@ -111,21 +103,10 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
           const fastPathResult = bindings.applySingleOwnUserHistoryFlushFastPath(queueMessages);
           if (fastPathResult) {
             bindings.consumeOrQueueOwnMessageAlign();
-            console.warn("[聊天追踪][历史刷写处理] 单条用户消息快路径完成", {
-              windowLabel: bindings.tauriWindowLabel.value,
-              activateAssistant,
-              messageId: fastPathResult.messageId,
-              finalMessageCount: bindings.allMessages.value.length,
-            });
             bindings.cacheConversationMessages(
               flushedConversationId || String(bindings.currentChatConversationId.value || "").trim(),
               bindings.allMessages.value,
             );
-            console.warn("[聊天追踪][历史刷写处理] 完成", {
-              windowLabel: bindings.tauriWindowLabel.value,
-              flushedConversationId: String(bindings.currentChatConversationId.value || "").trim(),
-              finalMessageCount: bindings.allMessages.value.length,
-            });
             return;
           }
           const currentMessages = [...bindings.allMessages.value];
@@ -135,7 +116,6 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
               .map((message: any) => String(message.id || "").trim())
               .filter((id: string) => !!id),
           );
-          const beforeDedupCount = queueMessages.length;
           const uniqueIncoming = queueMessages.filter((message: any) => {
             const id = String(message.id || "").trim();
             if (!id) return true;
@@ -179,63 +159,15 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
           nextMessages = bindings.reuseStableMessageReferences(nextMessages, bindings.allMessages.value);
           bindings.allMessages.value = nextMessages;
           bindings.foregroundTailLatestReady.value = true;
-          const appendedSummary = uniqueIncoming.map((message: any) => {
-            const meta = (message.providerMeta || {}) as Record<string, unknown>;
-            const origin = meta.origin as Record<string, unknown> | undefined;
-            const messageMeta = ((meta.message_meta || meta.messageMeta || {}) as Record<string, unknown>);
-            return {
-              id: String(message.id || "").trim(),
-              role: String(message.role || "").trim(),
-              speakerAgentId: String(message.speakerAgentId || meta.speakerAgentId || meta.speaker_agent_id || "").trim(),
-              originKind: String(origin?.kind || "").trim(),
-              messageKind: String(messageMeta.kind || meta.messageKind || "").trim(),
-              textPreview: Array.isArray(message.parts)
-                ? message.parts
-                  .filter((part: any) => part?.type === "text")
-                  .map((part: any) => String((part as { text?: string }).text || "").trim())
-                  .filter(Boolean)
-                  .join(" | ")
-                  .slice(0, 80)
-                : "",
-            };
-          });
-          console.warn(`[聊天追踪][前台追加消息] 明细 ${JSON.stringify({
-            windowLabel: bindings.tauriWindowLabel.value,
-            appended: appendedSummary,
-          })}`);
           const appendedOwnUserMessage = appended.some((message: any) => bindings.isLocalOwnUserMessage(message));
           if (appendedOwnUserMessage) {
             bindings.consumeOrQueueOwnMessageAlign();
           }
-          console.warn("[聊天追踪][历史刷写处理] 合并完成", {
-            windowLabel: bindings.tauriWindowLabel.value,
-            activateAssistant,
-            beforeDedupCount,
-            prependedCount: prepended.length,
-            appendedCount: appended.length,
-            droppedAsDuplicate: beforeDedupCount - uniqueIncoming.length,
-            previousMessageCount: currentMessages.length,
-            finalMessageCount: bindings.allMessages.value.length,
-            firstPrependedId: String(prepended[0]?.id || ""),
-            firstAppendedId: String(appended[0]?.id || ""),
-            lastAppendedId: String(appended[appended.length - 1]?.id || ""),
-          });
-        } else {
-          console.warn("[聊天追踪][历史刷写处理] 无待写入消息", {
-            windowLabel: bindings.tauriWindowLabel.value,
-            activateAssistant,
-            finalMessageCount: bindings.allMessages.value.length,
-          });
         }
         bindings.cacheConversationMessages(
           flushedConversationId || String(bindings.currentChatConversationId.value || "").trim(),
           bindings.allMessages.value,
         );
-        console.warn("[聊天追踪][历史刷写处理] 完成", {
-          windowLabel: bindings.tauriWindowLabel.value,
-          flushedConversationId: String(bindings.currentChatConversationId.value || "").trim(),
-          finalMessageCount: bindings.allMessages.value.length,
-        });
       },
   });
   const confirmPlan = useConfirmPlan({

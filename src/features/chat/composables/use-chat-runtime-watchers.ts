@@ -23,10 +23,6 @@ export function useChatRuntimeWatchers(bindings: Record<string, any>) {
     }),
     ({ mode, conversationId }) => {
       if (mode !== "chat" || !bindings.startupDataReady.value) return;
-      console.warn("[聊天追踪][流绑定] 准备绑定", {
-        windowLabel: bindings.tauriWindowLabel.value,
-        conversationId,
-      });
       void (async () => {
         try {
           await bindings.getChatFlow().bindActiveConversationStream(conversationId);

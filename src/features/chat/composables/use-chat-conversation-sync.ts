@@ -58,11 +58,6 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     if (!cid) return;
     if (cid !== String(bindings.currentChatConversationId.value || "").trim()) return;
     if (currentConversationRuntimeState(cid) !== "assistant_streaming") return;
-    console.info("[聊天追踪][草稿恢复] 尝试恢复", {
-      conversationId: cid,
-      reason,
-      currentMessageCount: bindings.allMessages.value.length,
-    });
     bindings.getChatFlow().resumeForegroundStreamingRound();
   }
 
@@ -89,17 +84,6 @@ export function useChatConversationSync(bindings: Record<string, any>) {
       if (resumeSeq !== foregroundRuntimeResumeSeq) return;
       if (cid !== String(bindings.currentChatConversationId.value || "").trim()) return;
       const busy = conversationRuntimeSnapshotIsBusy(snapshot);
-      console.info("[聊天运行态恢复] 后端快照", {
-        conversationId: cid,
-        reason,
-        runtimeState: snapshot.runtimeState,
-        isProcessing: !!snapshot.isProcessing,
-        pendingQueueCount: Math.max(0, Number(snapshot.pendingQueueCount || 0)),
-        hasVisibleProgress: !!snapshot.streamCache?.hasVisibleProgress,
-        assistantTextLength: String(snapshot.streamCache?.assistantText || "").length,
-        reasoningStandardLength: String(snapshot.streamCache?.reasoningStandard || "").length,
-        reasoningInlineLength: String(snapshot.streamCache?.reasoningInline || "").length,
-      });
       if (!busy) return;
       await bindings.getChatFlow().bindActiveConversationStream(cid, true);
       if (resumeSeq !== foregroundRuntimeResumeSeq) return;
@@ -132,14 +116,9 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     label: string,
     detail?: Record<string, unknown>,
   ) {
-    const totalMs = Math.round((bindings.perfNow() - trace.startedAt) * 10) / 10;
-    console.warn("[会话切换计时]", {
-      traceId: trace.id,
-      conversationId: trace.conversationId,
-      label,
-      totalMs,
-      ...detail,
-    });
+    void trace;
+    void label;
+    void detail;
   }
 
   function cacheConversationMessages(conversationId: string, messages: any[]) {

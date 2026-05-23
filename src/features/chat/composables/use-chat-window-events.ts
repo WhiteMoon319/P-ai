@@ -19,20 +19,9 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
       bindings.detachedChatWindow.value = false;
       bindings.isChatTauriWindow.value = false;
     }
-    console.warn("[聊天追踪][窗口] 初始化", {
-      label: bindings.tauriWindowLabel.value,
-      isChatWindow: bindings.isChatTauriWindow.value,
-    });
     if (bindings.isChatTauriWindow.value) {
       void listen<any>("easy-call:history-flushed", (event) => {
         const payloadConversationId = bindings.readConversationIdFromPayload(event.payload);
-        const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
-        console.warn("[聊天追踪][历史刷写] 收到事件", {
-          windowLabel: bindings.tauriWindowLabel.value,
-          hasPayload: event.payload !== undefined,
-          payloadConversationId,
-          currentConversationId,
-        });
         if (bindings.matchesForegroundConversation(payloadConversationId)) {
           void bindings.getChatFlow().handleExternalHistoryFlushed(event.payload);
         } else if (payloadConversationId) {
