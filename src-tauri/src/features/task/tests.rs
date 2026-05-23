@@ -26,6 +26,38 @@
     }
 
     #[test]
+    fn task_todo_from_legacy_fields_should_dedupe_same_status_and_todos() {
+        let todo = task_todo_from_legacy_fields("请自行判断", &["请自行判断".to_string()]);
+        assert_eq!(todo, "请自行判断");
+
+        let prefixed = task_todo_from_legacy_fields("待办：请自行判断", &["请自行判断".to_string()]);
+        assert_eq!(prefixed, "待办：请自行判断");
+    }
+
+    #[test]
+    fn task_tool_how_from_args_should_dedupe_same_status_and_todos() {
+        let args = TaskToolArgsWire {
+            action: "create".to_string(),
+            task_id: None,
+            goal: None,
+            how: None,
+            why: None,
+            title: None,
+            cause: None,
+            flow: None,
+            todos: Some(vec!["请自行判断".to_string()]),
+            status_summary: Some("请自行判断".to_string()),
+            stage_key: None,
+            append_note: None,
+            completion_state: None,
+            completion_conclusion: None,
+            trigger: None,
+        };
+
+        assert_eq!(task_tool_how_from_args(&args).as_deref(), Some("请自行判断"));
+    }
+
+    #[test]
     fn task_store_should_persist_conversation_id() {
         let data_path = test_task_data_path("persist_conversation_id");
         let input = TaskCreateInput {
