@@ -91,8 +91,7 @@
                 </div>
                 <div v-else-if="entry.item.kind === 'message'"
                   v-memo="messageMemoKey(entry.item.block, entry.item.renderId, entry.item.blockIndex, entry.item.compactWithPrevious)">
-                  <div class="ecall-elastic-item-shell"
-                    :style="entry.item.id === latestOwnElasticItemId ? { minHeight: `${latestOwnElasticMinHeight}px` } : undefined">
+                  <div class="ecall-elastic-item-shell">
                     <ChatMessageItem
                       :active-conversation-id="activeConversationId" :block="entry.item.block"
                       :selection-key="entry.item.renderId" :selection-mode-enabled="messageSelectionModeEnabled"
@@ -120,7 +119,7 @@
                   </div>
                 </div>
                 <div v-else class="ecall-turn-group">
-                  <div class="ecall-turn-stack" :style="entry.item.id === latestOwnElasticItemId ? { minHeight: `${latestOwnElasticMinHeight}px` } : undefined">
+                  <div class="ecall-turn-stack">
                     <template v-for="groupItem in entry.item.items" :key="groupItem.renderId">
                       <ChatMessageItem
                         v-memo="messageMemoKey(groupItem.block, groupItem.renderId, groupItem.blockIndex, groupItem.compactWithPrevious)"
@@ -153,6 +152,7 @@
               </div>
             </div>
 
+            <div :style="{ minHeight: `${latestOwnTailSpacerMinHeight}px` }"></div>
             <div ref="toolbarContainer" class="ecall-chat-toolbar-shell px-2 pt-1 pb-2">
               <ChatWorkspaceToolbar
                 :chatting="chatting" :frozen="frozen" :conversation-busy="conversationBusy"
@@ -709,7 +709,7 @@ const activeJumpToBottomRequest = ref(0);
 
 const {
   virtualizer, virtualEntries, totalVirtualSize, measureVirtualRow,
-  scheduleVirtualMeasure, syncViewportMetrics,
+  latestOwnTailContentHeight, scheduleVirtualMeasure, syncViewportMetrics,
   resetVirtualizerAtConversationBottom, alignItemToTop, captureVisibleAnchor, findRenderedMessageElement,
   resolveMessageAnchorElement, syncVisibleStreamingVirtualItemViewportTops, refreshObservedVirtualItemElements,
 } = useChatVirtualScroll({
@@ -722,6 +722,11 @@ const {
   debugEnabled: computed(() => !sidebarMode.value),
   smoothScrollEnabled: computed(() => !sidebarMode.value),
   onUserScroll: () => onScroll(),
+});
+
+const latestOwnTailSpacerMinHeight = computed(() => {
+  if (!latestOwnElasticItemId.value || latestOwnTailContentHeight.value <= 0) return 0;
+  return Math.max(0, latestOwnElasticMinHeight.value - latestOwnTailContentHeight.value);
 });
 
 // ==================== tool review ====================
