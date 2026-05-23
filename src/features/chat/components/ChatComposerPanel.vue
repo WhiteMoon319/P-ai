@@ -202,6 +202,15 @@
       <div class="mt-2 flex items-center justify-between gap-2">
         <div class="flex items-center gap-2">
           <button
+            class="btn btn-sm btn-circle shrink-0"
+            :class="supervisionActive ? 'btn-primary' : 'btn-ghost'"
+            :disabled="frozen || supervisionDisabled"
+            :title="supervisionTitle || t('chat.supervision.buttonTitle')"
+            @click="emit('openSupervisionTask')"
+          >
+            <Target class="h-3.5 w-3.5" />
+          </button>
+          <button
             v-if="!sidebarMode"
             class="btn btn-sm btn-circle btn-ghost shrink-0"
             :disabled="chatting || frozen"
@@ -288,7 +297,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { ChevronDown, FileText, History, Image as ImageIcon, Layers2, Menu, Mic, Minus, Paperclip, Plus, Send, Settings, Square, X } from "@lucide/vue";
+import { ChevronDown, FileText, History, Image as ImageIcon, Layers2, Menu, Mic, Minus, Paperclip, Plus, Send, Settings, Square, Target, X } from "@lucide/vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset } from "../../../types/app";
 import { invokeTauri } from "../../../services/tauri-api";
 import ChatQueuePreview from "./ChatQueuePreview.vue";
@@ -342,6 +351,9 @@ const props = defineProps<{
   busy: boolean;
   stopChatDisabled?: boolean;
   frozen: boolean;
+  supervisionActive: boolean;
+  supervisionTitle: string;
+  supervisionDisabled?: boolean;
   showSideConversationList: boolean;
   activeConversationId: string;
   unarchivedConversationItems: ChatConversationOverviewItem[];
@@ -382,6 +394,7 @@ const emit = defineEmits<{
   (e: "removeIdeContextReference", value: string): void;
   (e: "sendChat"): void;
   (e: "stopChat"): void;
+  (e: "openSupervisionTask"): void;
   (e: "open-conversation-list"): void;
   (e: "open-settings"): void;
   (e: "trim-conversation"): void;

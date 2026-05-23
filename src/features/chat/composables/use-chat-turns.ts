@@ -48,6 +48,7 @@ type UseChatMessageBlocksOptions = {
   activeChatApiConfig: ComputedRef<ApiConfigItem | null>;
   perfDebug: boolean;
   perfNow: () => number;
+  taskTriggerLabels?: { goal: string; todo: string };
 };
 
 export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
@@ -125,7 +126,7 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
     }
 
     const meta = (message.providerMeta || {}) as Record<string, unknown>;
-    const projection = projectMessageForDisplay(message);
+    const projection = projectMessageForDisplay(message, options.taskTriggerLabels);
     const streamSegments = Array.isArray(meta._streamSegments)
       ? (meta._streamSegments as unknown[])
         .map((item) => String(item ?? ""))

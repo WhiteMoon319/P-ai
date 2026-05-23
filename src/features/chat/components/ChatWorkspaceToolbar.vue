@@ -51,12 +51,6 @@
               <span class="leading-5">{{ t("chat.conversationMenu.shareConversation") }}</span>
             </button>
           </li>
-          <li v-if="showSupervisionMenuItem">
-            <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="frozen || supervisionDisabled" @click="emit('openSupervisionTask')">
-              <Timer class="h-4 w-4 shrink-0" />
-              <span class="leading-5">{{ t("chat.conversationMenu.startSupervision") }}</span>
-            </button>
-          </li>
           <li v-if="showWorkspaceMenuItem && !busy && !workspaceButtonDisabled">
             <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy || workspaceButtonDisabled" @click="emit('lockWorkspace')">
               <Folder class="h-4 w-4 shrink-0" />
@@ -188,7 +182,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { ClipboardCheck, ClipboardList, ExternalLink, Folder, GitBranchPlus, Grip, Package, SquareTerminal, Timer } from "@lucide/vue";
+import { ClipboardCheck, ClipboardList, ExternalLink, Folder, GitBranchPlus, Grip, Package, SquareTerminal } from "@lucide/vue";
 import type { ChatMentionEntry } from "../../../types/app";
 
 const props = withDefaults(defineProps<{
@@ -200,11 +194,6 @@ const props = withDefaults(defineProps<{
   workspaceButtonDisabled?: boolean;
   mentionEntries: ChatMentionEntry[];
   selectedMentionKeys: string[];
-  supervisionActive: boolean;
-  supervisionLabel: string;
-  supervisionActiveLabel: string;
-  supervisionTitle: string;
-  supervisionDisabled?: boolean;
   hideMenuButton?: boolean;
   hideWorkspaceButton?: boolean;
   showDelegateMenuItem?: boolean;
@@ -212,7 +201,6 @@ const props = withDefaults(defineProps<{
   showCodeReviewMenuItem?: boolean;
   showForwardMenuItem?: boolean;
   showShareMenuItem?: boolean;
-  showSupervisionMenuItem?: boolean;
   showWorkspaceMenuItem?: boolean;
   showDetachButton?: boolean;
   detachDisabled?: boolean;
@@ -222,13 +210,11 @@ const props = withDefaults(defineProps<{
   showCodeReviewMenuItem: false,
   showForwardMenuItem: true,
   showShareMenuItem: true,
-  showSupervisionMenuItem: true,
   showWorkspaceMenuItem: true,
 });
 
 const emit = defineEmits<{
   (e: "lockWorkspace"): void;
-  (e: "openSupervisionTask"): void;
   (e: "openBranchSelection"): void;
   (e: "openCodeReview"): void;
   (e: "openDelegateSelection"): void;
@@ -245,7 +231,6 @@ const showBranchMenuItem = computed(() => props.showBranchMenuItem);
 const showCodeReviewMenuItem = computed(() => props.showCodeReviewMenuItem);
 const showForwardMenuItem = computed(() => props.showForwardMenuItem);
 const showShareMenuItem = computed(() => props.showShareMenuItem);
-const showSupervisionMenuItem = computed(() => props.showSupervisionMenuItem);
 const showWorkspaceMenuItem = computed(() => props.showWorkspaceMenuItem);
 
 // ========== 头像栏去重 + 部门弹出 ==========

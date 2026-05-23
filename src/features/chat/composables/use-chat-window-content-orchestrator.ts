@@ -69,6 +69,10 @@ export function useChatWindowContentOrchestrator(bindings: Record<string, any>) 
     activeChatApiConfig: personaConversation.currentForegroundApiConfig,
     perfDebug: bindings.PERF_DEBUG,
     perfNow: bindings.perfNow,
+    taskTriggerLabels: {
+      goal: bindings.tr("config.task.fields.goal"),
+      todo: bindings.tr("config.task.fields.todo"),
+    },
   });
   const terminalApproval = useTerminalApproval({
     queue: bindings.terminalApprovalQueue,

@@ -10,6 +10,8 @@
 
 - 修复（chat）：本地路径链接改用 `data-href` 阻止浏览器默认导航，修复 Windows 路径被规范化为 `/E:/path` 的问题，并让目录链接在侧边栏文件阅读器中打开；修复拆分窗口入口后左侧栏远程会话 tab 点击无法切换的问题。
 
+- 调整（goal-task）：将“督工/监督任务”入口改为目标任务 / Goal Task，从更多菜单移至输入区左下角；创建表单简化为仅输入目标，底层继续复用原任务机制并固定写入推进原因与待办。
+
 ## 发布：v0.10.1
 
 - 维护（deps）：前后端依赖全量更新，`lucide-vue-next` 迁移至 `@lucide/vue` v1.16，通过 `app.provide(LUCIDE_CONTEXT)` 修复函数式组件 inject 问题；修复 sandbox read-whitelist cwd 冲突与测试参数格式。

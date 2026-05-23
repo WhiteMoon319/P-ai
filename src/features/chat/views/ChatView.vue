@@ -165,9 +165,6 @@
                 :show-workspace-menu-item="true"
                 :show-code-review-menu-item="sidebarMode"
                 :mention-entries="mentionEntries" :selected-mention-keys="selectedMentionKeys"
-                :supervision-active="supervisionActive" :supervision-label="t('chat.supervision.button')"
-                :supervision-active-label="t('chat.supervision.buttonActive')" :supervision-title="supervisionButtonTitle"
-                :supervision-disabled="activeConversationSummary?.kind === 'remote_im_contact'"
                 :show-detach-button="!detachedChatWindow && !activeConversationSummary?.isMainConversation"
                 :detach-disabled="!activeConversationId || activeConversationSummary?.isMainConversation || chatting || frozen || conversationBusy"
                 @lock-workspace="$emit('lockWorkspace')" @open-branch-selection="openBranchSelectionMenu"
@@ -182,7 +179,7 @@
                   if (selectedMentionKeys.includes(mentionKey)) { emit('removeMention', { agentId, departmentId }); return; }
                   emit('addMention', { agentId, agentName: String(entry?.agentName || '').trim() || agentId, departmentId, departmentName: String(entry?.departmentName || '').trim() || departmentId, avatarUrl: String(entry?.avatarUrl || '').trim() || undefined });
                 }"
-                @open-supervision-task="$emit('openSupervisionTask')" @detach-conversation="handleDetachConversationRequest"
+                @detach-conversation="handleDetachConversationRequest"
               />
             </div>
           </div>
@@ -232,6 +229,9 @@
             :frontend-round-phase="frontendRoundPhase" :chat-usage-percent="chatUsagePercent"
             :trim-tip="trimTip" :chatting="chatting" :busy="conversationBusy"
             :stop-chat-disabled="isOrganizingContextBusy" :frozen="frozen"
+            :supervision-active="supervisionActive"
+            :supervision-title="supervisionButtonTitle"
+            :supervision-disabled="activeConversationSummary?.kind === 'remote_im_contact'"
             :show-side-conversation-list="detachedChatWindow ? false : showSideConversationList"
             :active-conversation-id="activeConversationId" :unarchived-conversation-items="unarchivedConversationItems"
             :user-alias="userAlias" :user-avatar-url="userAvatarUrl"
@@ -252,6 +252,7 @@
             @attach-ide-context-reference="handleAttachIdeContextReference"
             @remove-ide-context-reference="handleRemoveIdeContextReference"
             @send-chat="handleSendChat" @stop-chat="$emit('stopChat')"
+            @open-supervision-task="$emit('openSupervisionTask')"
             @exit-selection-mode="exitMessageSelectionMode"
             @selection-action-copy="copySelectedMessages"
             @selection-action-branch="emitSelectionAction('branch')"

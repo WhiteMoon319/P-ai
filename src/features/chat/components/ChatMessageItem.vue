@@ -184,7 +184,7 @@
           </div>
         </details>
       </div>
-      <div v-if="hasRenderableMemeSegments(block)" :class="block.taskTrigger ? 'mt-3' : ''">
+      <div v-if="hasRenderableMemeSegments(block)">
         <div ref="markdownContainerRef" class="ecall-meme-segment-flow">
           <template v-for="(segment, index) in block.memeSegments || []" :key="`${block.id}-meme-${index}`">
             <div
@@ -215,7 +215,7 @@
           </template>
         </div>
       </div>
-      <div v-else-if="block.text" :class="block.taskTrigger ? 'mt-3' : ''">
+      <div v-else-if="block.text">
         <div
           v-if="isOwnMessage(block)"
           class="whitespace-pre-wrap break-all"
@@ -281,45 +281,6 @@
             {{ t("chat.plan.confirmAction") }}
           </button>
           <div class="text-xs opacity-60">{{ t("chat.plan.confirmHint") }}</div>
-        </div>
-      </div>
-      <div v-if="block.taskTrigger" class="space-y-2" :class="hasRenderableMemeSegments(block) || block.text || block.planCard ? 'mt-3' : ''">
-        <div class="flex items-center gap-2">
-          <span class="badge badge-sm badge-ghost">{{ t("chat.taskTrigger.badge") }}</span>
-        </div>
-        <div v-if="block.taskTrigger.taskId" class="space-y-0.5">
-          <div class="text-[11px] opacity-55">{{ t("config.task.fields.taskId") }}</div>
-          <div class="font-mono text-xs leading-6 break-all">{{ block.taskTrigger.taskId }}</div>
-        </div>
-        <div v-if="block.taskTrigger.goal" class="space-y-0.5">
-          <div class="text-[11px] opacity-55">{{ t("config.task.fields.goal") }}</div>
-          <div class="text-sm leading-6 whitespace-pre-wrap">{{ block.taskTrigger.goal }}</div>
-        </div>
-        <div v-if="block.taskTrigger.why" class="space-y-0.5">
-          <div class="text-[11px] opacity-55">{{ t("config.task.fields.why") }}</div>
-          <div class="text-sm leading-6 whitespace-pre-wrap">{{ block.taskTrigger.why }}</div>
-        </div>
-        <div v-if="block.taskTrigger.todo" class="space-y-0.5">
-          <div class="text-[11px] opacity-55">{{ t("config.task.fields.todo") }}</div>
-          <div class="text-sm leading-6 whitespace-pre-wrap">{{ block.taskTrigger.todo }}</div>
-        </div>
-        <div v-if="block.taskTrigger.runAt || block.taskTrigger.endAt || block.taskTrigger.nextRunAt || block.taskTrigger.cronExpression" class="grid gap-1 text-sm leading-6">
-          <div v-if="block.taskTrigger.runAt">
-            <span class="text-[11px] opacity-55">{{ t("config.task.fields.runAt") }}</span>
-            <span class="ml-2">{{ formattedBlockTime(block.taskTrigger.runAt) }}</span>
-          </div>
-          <div v-if="block.taskTrigger.nextRunAt">
-            <span class="text-[11px] opacity-55">{{ t("config.task.fields.nextRunAt") }}</span>
-            <span class="ml-2">{{ formattedBlockTime(block.taskTrigger.nextRunAt) }}</span>
-          </div>
-          <div v-if="block.taskTrigger.endAt">
-            <span class="text-[11px] opacity-55">{{ t("config.task.fields.endAt") }}</span>
-            <span class="ml-2">{{ formattedBlockTime(block.taskTrigger.endAt) }}</span>
-          </div>
-          <div v-if="block.taskTrigger.cronExpression">
-            <span class="text-[11px] opacity-55">{{ t("config.task.fields.cronExpression") }}</span>
-            <span class="ml-2">{{ block.taskTrigger.cronExpression }}</span>
-          </div>
         </div>
       </div>
       <div v-if="block.images.length > 0" :class="block.taskTrigger || block.text ? 'mt-2 grid gap-1' : 'grid gap-1'">

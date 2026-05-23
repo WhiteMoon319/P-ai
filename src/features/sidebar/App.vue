@@ -999,7 +999,7 @@ async function delegateFromSelection(payload: { count: number; messageIds: strin
 
 function openSupervisionTask() {
   if (!activeConversationId.value) {
-    transport.errorText.value = "当前没有会话，无法发起监督任务";
+    transport.errorText.value = "当前没有会话，无法创建目标任务";
     return;
   }
   supervisionErrorText.value = "";
@@ -1035,7 +1035,7 @@ async function saveSupervisionTask(payload: { durationHours: number; goal: strin
     const created = await transport.request<{ taskId?: string }>("task.create", {
       conversationId: activeConversationId.value,
       targetScope: "desktop",
-      goal: String(payload.goal || "").trim(),
+      goal: `Goal Task：${String(payload.goal || "").trim()}`,
       why: String(payload.why || "").trim(),
       todo: String(payload.todo || "").trim(),
       trigger: {
@@ -1050,7 +1050,7 @@ async function saveSupervisionTask(payload: { durationHours: number; goal: strin
     }
     supervisionDialogOpen.value = false;
   } catch (error) {
-    supervisionErrorText.value = String(error || "保存监督任务失败");
+    supervisionErrorText.value = String(error || "目标任务保存失败");
   } finally {
     supervisionSaving.value = false;
   }
