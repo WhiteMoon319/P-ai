@@ -83,7 +83,11 @@
           <span class="text-xs italic opacity-60">{{ t("config.remoteIm.contactsEmpty") }}</span>
         </li>
         <template v-else>
-          <li v-for="item in currentChannelContacts" :key="item.id" class="border-b border-base-200 last:border-b-0">
+          <template v-for="group in groupedContacts" :key="group.mode">
+            <li class="menu-title text-base-content">
+              <span class="text-sm font-bold">{{ group.label }}（{{ group.items.length }}）</span>
+            </li>
+            <li v-for="item in group.items" :key="item.id" class="border-b border-base-200 last:border-b-0">
             <div class="flex items-start gap-2 px-3 py-2">
                 <span class="badge shrink-0" :class="item.remoteContactType === 'group' ? 'badge-secondary' : 'badge-primary'">{{ item.remoteContactType === "group" ? t("config.remoteIm.group") : t("config.remoteIm.private") }}</span>
                 <div class="flex-1 min-w-0">
@@ -101,24 +105,11 @@
                       {{ contactProcessingModeLabel(item) }}
                     </span>
                     <span
-                      class="badge badge-primary badge-xs"
-                      :title="contactActivationHintText(item)"
+                      class="badge badge-xs"
+                      :class="normalizeResponseStrategy(item.responseStrategy) === 'smart_judge' ? 'badge-accent' : 'badge-ghost'"
+                      :title="contactResponseStrategyHintText(item)"
                     >
-                      {{ contactActivationModeLabel(item) }}
-                    </span>
-                    <span
-                      v-if="item.allowReceive"
-                      class="badge badge-xs badge-warning"
-                      :title="t('config.remoteIm.allowReceive')"
-                    >
-                      {{ t("config.remoteIm.receiveShort") }}
-                    </span>
-                    <span
-                      v-if="item.allowSend"
-                      class="badge badge-xs badge-warning"
-                      :title="t('config.remoteIm.allowSend')"
-                    >
-                      {{ t("config.remoteIm.sendShort") }}
+                      {{ normalizeResponseStrategy(item.responseStrategy) === "smart_judge" ? t("config.remoteIm.responseStrategySmart") : t("config.remoteIm.responseStrategyAlways") }}
                     </span>
                     <span
                       v-if="item.allowSendFiles"
@@ -130,6 +121,25 @@
                   </div>
                 </div>
                 <div class="flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    class="toggle toggle-sm"
+                    :class="item.allowSend ? 'toggle-success' : ''"
+                    :checked="item.allowSend"
+                    :title="t('config.remoteIm.allowSend')"
+                    @click.stop
+                    @change="toggleContactAllowReceiveAndSend(item, ($event.target as HTMLInputElement).checked)"
+                  />
+                  <div v-if="contactNeedsQuickModel(item) && !props.config.toolReviewApiConfigId" class="dropdown dropdown-end">
+                    <div tabindex="0" role="button" class="btn btn-ghost btn-square btn-sm text-error hover:bg-error hover:text-error-content">
+                      <AlertTriangle class="h-4 w-4" />
+                    </div>
+                    <div tabindex="0" class="dropdown-content card card-sm bg-base-100 border border-error/30 shadow-lg z-10 w-64">
+                      <div class="card-body p-3">
+                        <p class="text-error text-xs">{{ t('config.remoteIm.quickModelMissingHint') }}</p>
+                      </div>
+                    </div>
+                  </div>
                   <button
                     class="btn btn-ghost btn-square btn-sm hover:bg-base-300"
                     :title="t('config.remoteIm.viewLogs')"
@@ -147,6 +157,7 @@
                 </div>
             </div>
           </li>
+          </template>
         </template>
       </ul>
     </div>
@@ -584,24 +595,6 @@
               </li>
 
               <li class="list-row flex items-center justify-between gap-3">
-                <div class="font-medium">{{ t("config.remoteIm.allowReceive") }}</div>
-                <input
-                  type="checkbox"
-                  class="toggle toggle-primary"
-                  v-model="contactDraft.allowReceive"
-                />
-              </li>
-
-              <li class="list-row flex items-center justify-between gap-3">
-                <div class="font-medium">{{ t("config.remoteIm.allowSend") }}</div>
-                <input
-                  type="checkbox"
-                  class="toggle toggle-primary"
-                  v-model="contactDraft.allowSend"
-                />
-              </li>
-
-              <li class="list-row flex items-center justify-between gap-3">
                 <div class="font-medium">{{ t("config.remoteIm.allowSendFiles") }}</div>
                 <input
                   type="checkbox"
@@ -724,7 +717,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Plus, RefreshCw, RotateCcw, Save, ScrollText, Settings, SquareTerminal, Trash2 } from "@lucide/vue";
+import { AlertTriangle, Plus, RefreshCw, RotateCcw, Save, ScrollText, Settings, SquareTerminal, Trash2 } from "@lucide/vue";
 import { invokeTauri } from "../../../../services/tauri-api";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { AppConfig, DepartmentConfig, RemoteImChannelConfig, RemoteImContact, RemoteImPlatform, ShellWorkspace } from "../../../../types/app";
@@ -901,6 +894,22 @@ const channelDirty = computed(() => channelSnapshot.value !== lastSavedChannelSn
 const currentChannelContacts = computed(() => {
   if (!selectedChannelId.value) return [];
   return contacts.value.filter((c) => c.channelId === selectedChannelId.value);
+});
+
+type ContactGroup = { mode: "always" | "keyword" | "never"; label: string; items: typeof currentChannelContacts.value };
+const groupedContacts = computed<ContactGroup[]>(() => {
+  const all = currentChannelContacts.value;
+  const groups: { mode: ContactGroup["mode"]; label: string; items: typeof all }[] = [
+    { mode: "always", label: t("config.remoteIm.activateModeAlways"), items: [] },
+    { mode: "keyword", label: t("config.remoteIm.activateModeKeyword"), items: [] },
+    { mode: "never", label: t("config.remoteIm.activateModeNever"), items: [] },
+  ];
+  for (const c of all) {
+    const mode = normalizeActivationMode(c.activationMode);
+    const target = groups.find((g) => g.mode === mode);
+    (target ?? groups[2]).items.push(c);
+  }
+  return groups.filter((g) => g.items.length > 0);
 });
 const selectedContact = computed(() =>
   currentChannelContacts.value.find((item) => item.id === selectedContactId.value) ?? null,
@@ -1287,17 +1296,27 @@ async function toggleSelectedChannelEnabled(enabled: boolean) {
 }
 
 async function toggleContactAllowSend(item: RemoteImContact, enabled: boolean) {
-  const oldValue = item.allowSend;
+  const oldSend = item.allowSend;
+  const oldReceive = item.allowReceive;
   item.allowSend = enabled;
+  item.allowReceive = enabled;
   try {
     await invokeTauri<RemoteImContact>("remote_im_update_contact_allow_send", {
       input: { contactId: item.id, allowSend: enabled },
     });
+    await invokeTauri<RemoteImContact>("remote_im_update_contact_allow_receive", {
+      input: { contactId: item.id, allowReceive: enabled },
+    });
     await refreshContacts();
   } catch (error) {
-    item.allowSend = oldValue;
+    item.allowSend = oldSend;
+    item.allowReceive = oldReceive;
     props.setStatusAction(t("status.saveConfigFailed", { err: String(error) }));
   }
+}
+
+async function toggleContactAllowReceiveAndSend(item: RemoteImContact, enabled: boolean) {
+  await toggleContactAllowSend(item, enabled);
 }
 
 async function toggleContactAllowReceive(item: RemoteImContact, enabled: boolean) {
@@ -2076,6 +2095,10 @@ function contactResponseStrategyHintText(item: RemoteImContact): string {
   return normalizeResponseStrategy(item.responseStrategy) === "smart_judge"
     ? t("config.remoteIm.responseStrategySmartHint")
     : t("config.remoteIm.responseStrategyAlwaysHint");
+}
+
+function contactNeedsQuickModel(item: RemoteImContact): boolean {
+  return normalizeResponseStrategy(item.responseStrategy) === "smart_judge";
 }
 
 function platformLabelText(platform: string): string {
