@@ -143,9 +143,32 @@
               <div class="grid gap-2">
                 <div v-for="(apiKey, index) in selectedProvider.apiKeys" :key="`key-${selectedProvider.id}-${index}`"
                   class="flex items-center gap-2">
+                  <div v-if="connectionTestKeyStatus[selectedProvider.apiKeys[index].trim()]" class="dropdown dropdown-start">
+                    <div tabindex="0" role="button" class="cursor-pointer">
+                      <span v-if="connectionTestKeyStatus[selectedProvider.apiKeys[index].trim()]?.status === 'success'" class="status status-success"></span>
+                      <span v-else class="status status-error"></span>
+                    </div>
+                    <div tabindex="0" class="dropdown-content card card-sm bg-base-100 border border-base-300 shadow-lg z-10 w-64">
+                      <div class="card-body p-3">
+                        <p v-if="connectionTestKeyStatus[selectedProvider.apiKeys[index].trim()]?.status === 'success'" class="text-success text-xs">
+                          {{ t('config.api.testConnectionSuccess', { latency: connectionTestKeyStatus[selectedProvider.apiKeys[index].trim()]?.latencyMs }) }}
+                        </p>
+                        <p v-else class="text-error text-xs break-all">
+                          {{ connectionTestKeyStatus[selectedProvider.apiKeys[index].trim()]?.error }}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <span v-else class="w-4 shrink-0"></span>
                   <input v-model="selectedProvider.apiKeys[index]"
                     :type="showApiKeys[selectedProvider.id]?.[index] ? 'text' : 'password'"
                     class="input input-bordered input-sm flex-1" :placeholder="`API Key #${index + 1}`" />
+                  <button class="btn btn-sm btn-square bg-base-200" type="button"
+                    :disabled="index === 0"
+                    :title="t('config.api.pinApiKeyToTop')"
+                    @click="pinApiKeyToTop(index)">
+                    <ArrowUpToLine class="h-3.5 w-3.5" />
+                  </button>
                   <button class="btn btn-sm btn-square bg-base-200" type="button"
                     @click="toggleApiKeyVisible(selectedProvider.id, index)">
                     <EyeOff v-if="showApiKeys[selectedProvider.id]?.[index]" class="h-3.5 w-3.5" />
@@ -174,6 +197,35 @@
             @refresh-models="$emit('refreshModels')"
             @select-model="selectModelCard"
           />
+
+          <div v-if="!selectedProviderIsCodex" class="card bg-base-100 border border-base-300">
+            <div class="card-body gap-3 p-4">
+              <div class="flex items-center justify-between gap-2">
+                <div class="card-title text-base mb-0">{{ t("config.api.connectionTest") }}</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <select v-model="connectionTestModelId" class="select select-bordered select-sm flex-1">
+                  <option v-for="m in selectedProvider.models" :key="m.id" :value="m.id">
+                    {{ m.model || t('config.api.unnamedModel') }}
+                  </option>
+                </select>
+                <button class="btn btn-sm" type="button"
+                  :class="connectionTestFirstKeyRunning ? 'loading' : 'bg-base-200'"
+                  :disabled="connectionTestFirstKeyRunning || connectionTestAllKeysRunning"
+                  @click="runConnectionTestFirstKey">
+                  <span v-if="connectionTestFirstKeyRunning" class="loading loading-spinner loading-xs"></span>
+                  {{ t("config.api.testFirstKey") }}
+                </button>
+                <button class="btn btn-sm" type="button"
+                  :class="connectionTestAllKeysRunning ? 'loading' : 'bg-base-200'"
+                  :disabled="connectionTestFirstKeyRunning || connectionTestAllKeysRunning"
+                  @click="runConnectionTestAllKeys">
+                  <span v-if="connectionTestAllKeysRunning" class="loading loading-spinner loading-xs"></span>
+                  {{ t("config.api.testAllKeys") }}
+                </button>
+              </div>
+            </div>
+          </div>
 
           <div v-if="!selectedProviderIsCodex" class="card bg-base-100 border border-base-300">
             <div class="card-body gap-3 p-4">
@@ -365,6 +417,13 @@
                         </div>
                       </label>
                     </div>
+
+                    <div v-if="modelConnectionResult[modelCard.id]" class="rounded-box border px-3 py-2 text-xs"
+                      :class="modelConnectionResult[modelCard.id]?.success ? 'border-success/30 text-success' : 'border-error/30 text-error'">
+                      {{ modelConnectionResult[modelCard.id]?.success
+                        ? t('config.api.testConnectionSuccess', { latency: modelConnectionResult[modelCard.id]?.latencyMs })
+                        : t('config.api.testConnectionFailed', { error: modelConnectionResult[modelCard.id]?.error }) }}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -394,7 +453,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { AlertTriangle, ChevronDown, ExternalLink, Eye, EyeOff, Plus, RefreshCw, RotateCcw, Save, Trash2, WandSparkles } from "@lucide/vue";
+import { AlertTriangle, ArrowUpToLine, ChevronDown, ExternalLink, Eye, EyeOff, Plus, RefreshCw, RotateCcw, Save, Trash2, WandSparkles } from "@lucide/vue";
 import type { ApiModelConfigItem, ApiProviderConfigItem, ApiRequestFormat, AppConfig, CodexAuthMode, CodexAuthStatus } from "../../../../types/app";
 import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
 import { invokeTauri } from "../../../../services/tauri-api";
@@ -482,6 +541,15 @@ const resolvedAdapterByModelId = ref<Record<string, string>>({});
 const codexAuthBusy = ref(false);
 const codexAuthStatusByProvider = ref<Record<string, CodexAuthStatus>>({});
 const codexAuthPollTimer = ref<number | null>(null);
+type ModelConnectionResult = { success: boolean; latencyMs?: number; error?: string };
+const modelConnectionTesting = ref<Record<string, boolean>>({});
+const modelConnectionResult = ref<Record<string, ModelConnectionResult>>({});
+type ConnectionTestResultItem = { keyPreview: string; success: boolean; latencyMs?: number; error?: string };
+const connectionTestModelId = ref("");
+const connectionTestFirstKeyRunning = ref(false);
+const connectionTestAllKeysRunning = ref(false);
+const connectionTestResults = ref<ConnectionTestResultItem[]>([]);
+const connectionTestKeyStatus = ref<Record<string, { status: "success" | "failed"; latencyMs?: number; error?: string }>>({});
 const capabilityTabs = computed<Array<{ id: ApiCapability; label: string }>>(() => [
   { id: "text", label: t("config.api.capabilityText") },
   { id: "voice", label: t("config.api.capabilityVoice") },
@@ -1140,6 +1208,17 @@ function removeApiKey(index: number) {
   provider.apiKeys.splice(index, 1);
 }
 
+function pinApiKeyToTop(index: number) {
+  const provider = selectedProvider.value;
+  if (!provider || index === 0 || index >= provider.apiKeys.length) return;
+  const [key] = provider.apiKeys.splice(index, 1);
+  provider.apiKeys.unshift(key);
+  showApiKeys.value = {
+    ...showApiKeys.value,
+    [provider.id]: Object.fromEntries(provider.apiKeys.map((_, i) => [i, true])),
+  };
+}
+
 function toggleApiKeyVisible(providerId: string, index: number) {
   showApiKeys.value = {
     ...showApiKeys.value,
@@ -1468,6 +1547,161 @@ function handleRestoreProviderDraft() {
   revertUnsavedConfigIfNeeded();
 }
 
+async function testModelConnection(modelCardId: string) {
+  const provider = selectedProvider.value;
+  if (!provider) return;
+  const modelCard = provider.models.find((m) => m.id === modelCardId);
+  if (!modelCard) return;
+  const apiKey = (provider.apiKeys || []).find((k) => k.trim()) ?? "";
+  if (!apiKey.trim()) {
+    modelConnectionResult.value = {
+      ...modelConnectionResult.value,
+      [modelCardId]: { success: false, error: "API key is empty" },
+    };
+    return;
+  }
+  const modelName = modelCard.model.trim();
+  const cap = capabilityFromRequestFormat(provider.requestFormat);
+  if (cap === "embedding" && !modelName) {
+    modelConnectionResult.value = {
+      ...modelConnectionResult.value,
+      [modelCardId]: { success: false, error: "Model name is empty" },
+    };
+    return;
+  }
+  modelConnectionTesting.value = { ...modelConnectionTesting.value, [modelCardId]: true };
+  modelConnectionResult.value = { ...modelConnectionResult.value, [modelCardId]: undefined as unknown as ModelConnectionResult };
+  const started = Date.now();
+  try {
+    if (cap === "voice") {
+      const result = await invokeTauri<{ elapsedMs: number }>("test_voice_connection", {
+        input: {
+          baseUrl: provider.baseUrl.trim(),
+          apiKey: apiKey.trim(),
+          requestFormat: provider.requestFormat,
+        },
+      });
+      modelConnectionResult.value = {
+        ...modelConnectionResult.value,
+        [modelCardId]: { success: true, latencyMs: result.elapsedMs },
+      };
+    } else if (cap === "embedding") {
+      const result = await invokeTauri<{ vectorDim: number; elapsedMs: number }>("test_embedding_connection", {
+        input: {
+          baseUrl: provider.baseUrl.trim(),
+          apiKey: apiKey.trim(),
+          requestFormat: provider.requestFormat,
+          model: modelName,
+        },
+      });
+      modelConnectionResult.value = {
+        ...modelConnectionResult.value,
+        [modelCardId]: { success: true, latencyMs: result.elapsedMs },
+      };
+    } else {
+      await invokeTauri<string>("quick_genai_chat", {
+        input: {
+          baseUrl: provider.baseUrl.trim(),
+          apiKey: apiKey.trim(),
+          requestFormat: provider.requestFormat,
+          model: modelName,
+          prompt: "连通性测试，恢复1代表连通",
+          providerId: provider.id,
+        },
+      });
+      modelConnectionResult.value = {
+        ...modelConnectionResult.value,
+        [modelCardId]: { success: true, latencyMs: Date.now() - started },
+      };
+    }
+  } catch (err) {
+    modelConnectionResult.value = {
+      ...modelConnectionResult.value,
+      [modelCardId]: { success: false, error: String(err || "Unknown error") },
+    };
+  } finally {
+    modelConnectionTesting.value = { ...modelConnectionTesting.value, [modelCardId]: false };
+  }
+}
+
+function maskKeyPreview(key: string): string {
+  const trimmed = key.trim();
+  if (trimmed.length <= 8) return "*".repeat(trimmed.length);
+  return trimmed.slice(0, 4) + "*".repeat(trimmed.length - 8) + trimmed.slice(-4);
+}
+
+async function runSingleConnectionTest(apiKey: string): Promise<ConnectionTestResultItem> {
+  const provider = selectedProvider.value!;
+  const modelCard = provider.models.find((m) => m.id === connectionTestModelId.value) ?? provider.models[0];
+  const modelName = modelCard?.model.trim() ?? "";
+  const cap = capabilityFromRequestFormat(provider.requestFormat);
+  const started = Date.now();
+  try {
+    if (cap === "voice") {
+      const result = await invokeTauri<{ elapsedMs: number }>("test_voice_connection", {
+        input: { baseUrl: provider.baseUrl.trim(), apiKey: apiKey.trim(), requestFormat: provider.requestFormat },
+      });
+      return { keyPreview: maskKeyPreview(apiKey), success: true, latencyMs: result.elapsedMs };
+    } else if (cap === "embedding") {
+      const result = await invokeTauri<{ vectorDim: number; elapsedMs: number }>("test_embedding_connection", {
+        input: { baseUrl: provider.baseUrl.trim(), apiKey: apiKey.trim(), requestFormat: provider.requestFormat, model: modelName },
+      });
+      return { keyPreview: maskKeyPreview(apiKey), success: true, latencyMs: result.elapsedMs };
+    } else {
+      await invokeTauri<string>("quick_genai_chat", {
+        input: { baseUrl: provider.baseUrl.trim(), apiKey: apiKey.trim(), requestFormat: provider.requestFormat, model: modelName, prompt: "连通性测试，恢复1代表连通", providerId: provider.id },
+      });
+      return { keyPreview: maskKeyPreview(apiKey), success: true, latencyMs: Date.now() - started };
+    }
+  } catch (err) {
+    return { keyPreview: maskKeyPreview(apiKey), success: false, error: String(err || "Unknown error") };
+  }
+}
+
+async function runConnectionTestFirstKey() {
+  const provider = selectedProvider.value;
+  if (!provider) return;
+  const apiKey = (provider.apiKeys || []).find((k) => k.trim()) ?? "";
+  if (!apiKey.trim()) {
+    connectionTestResults.value = [{ keyPreview: "-", success: false, error: "API key is empty" }];
+    return;
+  }
+  connectionTestFirstKeyRunning.value = true;
+  connectionTestResults.value = [];
+  connectionTestKeyStatus.value = {};
+  try {
+    const result = await runSingleConnectionTest(apiKey);
+    connectionTestResults.value = [result];
+    connectionTestKeyStatus.value = { [apiKey.trim()]: result.success ? { status: "success", latencyMs: result.latencyMs } : { status: "failed", error: result.error } };
+  } finally {
+    connectionTestFirstKeyRunning.value = false;
+  }
+}
+
+async function runConnectionTestAllKeys() {
+  const provider = selectedProvider.value;
+  if (!provider) return;
+  const keys = (provider.apiKeys || []).filter((k) => k.trim());
+  if (keys.length === 0) {
+    connectionTestResults.value = [{ keyPreview: "-", success: false, error: "API key is empty" }];
+    return;
+  }
+  connectionTestAllKeysRunning.value = true;
+  connectionTestResults.value = [];
+  connectionTestKeyStatus.value = {};
+  try {
+    const results: ConnectionTestResultItem[] = [];
+    for (const key of keys) {
+      const result = await runSingleConnectionTest(key);
+      results.push(result);
+      connectionTestResults.value = [...results];
+      connectionTestKeyStatus.value = { ...connectionTestKeyStatus.value, [key.trim()]: result.success ? { status: "success", latencyMs: result.latencyMs } : { status: "failed", error: result.error } };
+    }
+  } finally {
+    connectionTestAllKeysRunning.value = false;
+  }
+}
+
 watch(
   selectedProtocol,
   () => {
@@ -1507,6 +1741,22 @@ watch(
       void syncSelectedProviderModelMetadata();
     }
   },
+);
+
+watch(
+  () => selectedProvider.value?.id,
+  () => {
+    const provider = selectedProvider.value;
+    if (!provider || provider.models.length === 0) {
+      connectionTestModelId.value = "";
+      connectionTestResults.value = [];
+      return;
+    }
+    if (!provider.models.some((m) => m.id === connectionTestModelId.value)) {
+      connectionTestModelId.value = provider.models[0].id;
+    }
+  },
+  { immediate: true },
 );
 
 onUnmounted(() => {

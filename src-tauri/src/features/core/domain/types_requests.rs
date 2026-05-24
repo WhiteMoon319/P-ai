@@ -282,6 +282,38 @@ struct FetchModelMetadataOutput {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct TestEmbeddingConnectionInput {
+    base_url: String,
+    api_key: String,
+    request_format: RequestFormat,
+    model: String,
+    #[serde(default)]
+    text: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TestEmbeddingConnectionResult {
+    vector_dim: usize,
+    elapsed_ms: u128,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TestVoiceConnectionInput {
+    base_url: String,
+    api_key: String,
+    request_format: RequestFormat,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TestVoiceConnectionResult {
+    elapsed_ms: u128,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CheckToolsStatusInput {
     #[serde(default)]
     agent_id: Option<String>,

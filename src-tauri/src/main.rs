@@ -953,6 +953,8 @@ fn main() {
             preview_trim_compact_current,
             refresh_models,
             quick_genai_chat,
+            test_embedding_connection,
+            test_voice_connection,
             resolve_model_adapter_kind,
             fetch_model_metadata,
             export_config_migration_package,

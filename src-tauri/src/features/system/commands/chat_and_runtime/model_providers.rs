@@ -673,3 +673,106 @@ async fn resolve_model_adapter_kind(model_name: String) -> Result<String, String
         }
     }
 }
+
+#[tauri::command]
+async fn test_embedding_connection(
+    _state: State<'_, AppState>,
+    input: TestEmbeddingConnectionInput,
+) -> Result<TestEmbeddingConnectionResult, String> {
+    let base_url = input.base_url.trim();
+    let api_key = input.api_key.trim();
+    let model = input.model.trim();
+    if base_url.is_empty() {
+        return Err("Base URL is empty.".to_string());
+    }
+    if api_key.is_empty() {
+        return Err("API key is empty.".to_string());
+    }
+    if model.is_empty() {
+        return Err("Model name is empty.".to_string());
+    }
+    let kind = match input.request_format {
+        RequestFormat::GeminiEmbedding => MemoryProviderKind::GeminiEmbedding,
+        RequestFormat::OpenAIRerank => {
+            return Err("Rerank format cannot be tested as embedding.".to_string());
+        }
+        _ => MemoryProviderKind::OpenAIEmbedding,
+    };
+    let cfg = MemoryProviderApiConfig {
+        base_url: base_url.to_string(),
+        api_key: api_key.to_string(),
+        model: model.to_string(),
+    };
+    let provider = memory_create_embedding_provider(kind, &cfg, Some(model))?;
+    let started = std::time::Instant::now();
+    let vectors = provider
+        .embed_batch(&[input
+            .text
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .unwrap_or("embedding connectivity test")
+            .to_string()])
+        .map_err(|err| format!("Embedding test failed: {err}"))?;
+    let dim = vectors.first().map(|v| v.len()).unwrap_or(0);
+    if dim == 0 {
+        return Err("Embedding returned zero-dim vector.".to_string());
+    }
+    let elapsed_ms = started.elapsed().as_millis();
+    runtime_log_info(format!(
+        "[连通性测试] 类型=嵌入 模型={} 向量维度={} 耗时={}ms",
+        model, dim, elapsed_ms
+    ));
+    Ok(TestEmbeddingConnectionResult {
+        vector_dim: dim,
+        elapsed_ms,
+    })
+}
+
+#[tauri::command]
+async fn test_voice_connection(input: TestVoiceConnectionInput) -> Result<TestVoiceConnectionResult, String> {
+    let base_url = input.base_url.trim();
+    let api_key = input.api_key.trim();
+    if base_url.is_empty() {
+        return Err("Base URL is empty.".to_string());
+    }
+    if api_key.is_empty() {
+        return Err("API key is empty.".to_string());
+    }
+    let is_tts = matches!(input.request_format, RequestFormat::OpenAITts);
+    let models_url = {
+        let base = base_url.trim_end_matches('/');
+        let lower = base.to_ascii_lowercase();
+        if lower.ends_with("/v1") {
+            format!("{base}/models")
+        } else if lower.ends_with("/audio/transcriptions") || lower.ends_with("/audio/speech") {
+            format!("{}/v1/models", base.rsplit_once('/').map(|(h, _)| h).unwrap_or(base))
+        } else {
+            format!("{base}/v1/models")
+        }
+    };
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|err| format!("Build HTTP client failed: {err}"))?;
+    let started = std::time::Instant::now();
+    let resp = client
+        .get(&models_url)
+        .bearer_auth(api_key)
+        .send()
+        .await
+        .map_err(|err| format!("Voice endpoint unreachable: {err}"))?;
+    let elapsed_ms = started.elapsed().as_millis();
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        let snippet = body.chars().take(300).collect::<String>();
+        return Err(format!("{status}: {snippet}"));
+    }
+    let kind = if is_tts { "TTS" } else { "STT" };
+    runtime_log_info(format!(
+        "[连通性测试] 类型={} 耗时={}ms",
+        kind, elapsed_ms
+    ));
+    Ok(TestVoiceConnectionResult { elapsed_ms })
+}

@@ -194,7 +194,14 @@
       "capImage": "Image",
       "capTools": "Tools",
       "saveModelFirstHint": "Model changed. Save the model first, then limits and capabilities will be updated from model metadata.",
-      "capabilityLimitedByModelHint": "Some capability toggles are limited by the current model metadata."
+      "capabilityLimitedByModelHint": "Some capability toggles are limited by the current model metadata.",
+      "testConnection": "Test",
+      "testConnectionSuccess": "Connected ({latency}ms)",
+      "testConnectionFailed": "Failed: {error}",
+      "pinApiKeyToTop": "Pin to top",
+      "connectionTest": "Connection Test",
+      "testFirstKey": "Test First",
+      "testAllKeys": "Test All"
     },
     "migration": {
       "pageTitle": "Data Management",

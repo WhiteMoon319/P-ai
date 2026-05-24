@@ -194,7 +194,14 @@
       "capImage": "图片",
       "capTools": "工具调用",
       "saveModelFirstHint": "模型已更改，请先保存模型；保存后会按模型元数据更新上下限与可用能力。",
-      "capabilityLimitedByModelHint": "当前模型元数据限制了部分能力开关。"
+      "capabilityLimitedByModelHint": "当前模型元数据限制了部分能力开关。",
+      "testConnection": "测试连通",
+      "testConnectionSuccess": "连通（{latency}ms）",
+      "testConnectionFailed": "失败：{error}",
+      "pinApiKeyToTop": "置顶",
+      "connectionTest": "连通性测试",
+      "testFirstKey": "测试首个",
+      "testAllKeys": "测试全部"
     },
     "migration": {
       "pageTitle": "数据管理",
