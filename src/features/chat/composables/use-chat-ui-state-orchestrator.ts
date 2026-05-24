@@ -244,8 +244,11 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     }
   }
 
+  let _panelOpenedByFile = false;
+
   function updateChatRightPanelMode(value: "reader" | "review" | "delegate") {
     const nextMode = value === "reader" || value === "delegate" ? value : "review";
+    _panelOpenedByFile = value === "reader";
     chatRightPanelMode.value = nextMode;
     if (typeof window !== "undefined") {
       window.localStorage.setItem(CHAT_RIGHT_PANEL_MODE_STORAGE_KEY, nextMode);
@@ -275,6 +278,12 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     const nextVisible = !toolReviewPanelOpenVisible.value;
     toolReviewPanelOpenVisible.value = nextVisible;
     storeChatSidePanelVisibility("right", nextVisible);
+    if (nextVisible && !_panelOpenedByFile) {
+      chatRightPanelMode.value = "review";
+    }
+    if (!nextVisible) {
+      _panelOpenedByFile = false;
+    }
   }
 
   const configSearchResults = computed<ConfigSearchResult[]>(() => {
