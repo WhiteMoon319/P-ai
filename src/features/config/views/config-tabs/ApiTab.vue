@@ -1211,11 +1211,17 @@ function removeApiKey(index: number) {
 function pinApiKeyToTop(index: number) {
   const provider = selectedProvider.value;
   if (!provider || index === 0 || index >= provider.apiKeys.length) return;
+  const currentVisibleKeys = showApiKeys.value[provider.id] || {};
+  const nextVisibleKeys: Record<number, boolean> = {};
+  provider.apiKeys.forEach((_, currentIndex) => {
+    const nextIndex = currentIndex === index ? 0 : currentIndex < index ? currentIndex + 1 : currentIndex;
+    nextVisibleKeys[nextIndex] = !!currentVisibleKeys[currentIndex];
+  });
   const [key] = provider.apiKeys.splice(index, 1);
   provider.apiKeys.unshift(key);
   showApiKeys.value = {
     ...showApiKeys.value,
-    [provider.id]: Object.fromEntries(provider.apiKeys.map((_, i) => [i, true])),
+    [provider.id]: nextVisibleKeys,
   };
 }
 
@@ -1747,6 +1753,8 @@ watch(
   () => selectedProvider.value?.id,
   () => {
     const provider = selectedProvider.value;
+    connectionTestKeyStatus.value = {};
+    modelConnectionResult.value = {};
     if (!provider || provider.models.length === 0) {
       connectionTestModelId.value = "";
       connectionTestResults.value = [];

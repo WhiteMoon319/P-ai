@@ -705,14 +705,16 @@ async fn test_embedding_connection(
     };
     let provider = memory_create_embedding_provider(kind, &cfg, Some(model))?;
     let started = std::time::Instant::now();
-    let vectors = provider
-        .embed_batch(&[input
-            .text
-            .as_deref()
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .unwrap_or("embedding connectivity test")
-            .to_string()])
+    let text = input
+        .text
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .unwrap_or("embedding connectivity test")
+        .to_string();
+    let vectors = tokio::task::spawn_blocking(move || provider.embed_batch(&[text]))
+        .await
+        .map_err(|err| format!("Embedding test failed: {err}"))?
         .map_err(|err| format!("Embedding test failed: {err}"))?;
     let dim = vectors.first().map(|v| v.len()).unwrap_or(0);
     if dim == 0 {
@@ -746,7 +748,19 @@ async fn test_voice_connection(input: TestVoiceConnectionInput) -> Result<TestVo
         if lower.ends_with("/v1") {
             format!("{base}/models")
         } else if lower.ends_with("/audio/transcriptions") || lower.ends_with("/audio/speech") {
-            format!("{}/v1/models", base.rsplit_once('/').map(|(h, _)| h).unwrap_or(base))
+            let prefix = lower
+                .rfind("/v1/")
+                .map(|idx| &base[..idx])
+                .unwrap_or_else(|| {
+                    let suffix = if lower.ends_with("/audio/transcriptions") {
+                        "/audio/transcriptions"
+                    } else {
+                        "/audio/speech"
+                    };
+                    &base[..base.len().saturating_sub(suffix.len())]
+                })
+                .trim_end_matches('/');
+            format!("{prefix}/v1/models")
         } else {
             format!("{base}/v1/models")
         }

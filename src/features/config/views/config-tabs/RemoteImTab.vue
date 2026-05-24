@@ -1312,6 +1312,7 @@ async function toggleContactAllowSend(item: RemoteImContact, enabled: boolean) {
     item.allowSend = oldSend;
     item.allowReceive = oldReceive;
     props.setStatusAction(t("status.saveConfigFailed", { err: String(error) }));
+    await refreshContacts();
   }
 }
 
