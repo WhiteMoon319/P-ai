@@ -245,12 +245,20 @@
           <div v-if="normalizedChatModelOptions.length > 0" ref="modelDropdownRef" class="relative">
             <button
               type="button"
-              class="btn btn-sm h-8 min-h-8 w-44 max-w-44 justify-between border-0 shadow-none bg-base-100 text-base-content"
+              :class="compactModelButton
+                ? 'btn btn-sm btn-square h-8 min-h-8 w-8 shrink-0 border-0 shadow-none bg-base-100 text-base-content hover:bg-base-200'
+                : 'btn btn-sm h-8 min-h-8 w-44 max-w-44 justify-between border-0 shadow-none bg-base-100 text-base-content hover:bg-base-200'"
               :disabled="chatting || frozen || normalizedChatModelOptions.length === 0"
+              :title="selectedModelName"
               @click="modelDropdownOpen = !modelDropdownOpen"
             >
-              <span class="truncate">{{ selectedModelName }}</span>
-              <ChevronDown class="h-3 w-3 shrink-0 opacity-50 rotate-180" :class="{ 'rotate-0': modelDropdownOpen }" />
+              <template v-if="compactModelButton">
+                <Bot class="h-3.5 w-3.5 shrink-0" />
+              </template>
+              <template v-else>
+                <span class="truncate">{{ selectedModelName }}</span>
+                <ChevronDown class="h-3 w-3 shrink-0 opacity-50 rotate-180" :class="{ 'rotate-0': modelDropdownOpen }" />
+              </template>
             </button>
             <ul
               v-if="modelDropdownOpen"
@@ -297,7 +305,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { ChevronDown, FileText, History, Image as ImageIcon, Layers2, Menu, Mic, Minus, Paperclip, Plus, Send, Settings, Square, Target, X } from "@lucide/vue";
+import { Bot, ChevronDown, FileText, History, Image as ImageIcon, Layers2, Menu, Mic, Minus, Paperclip, Plus, Send, Settings, Square, Target, X } from "@lucide/vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset } from "../../../types/app";
 import { invokeTauri } from "../../../services/tauri-api";
 import ChatQueuePreview from "./ChatQueuePreview.vue";
@@ -451,6 +459,7 @@ const CHAT_INPUT_HISTORY_STORAGE_KEY = "easy_call.chat_input_history.v1";
 const CHAT_INPUT_HISTORY_LIMIT = 100;
 const composerRootRef = ref<HTMLDivElement | null>(null);
 const chatInputRef = ref<HTMLTextAreaElement | null>(null);
+const composerWidth = ref(0);
 const chatInputHistory = ref<string[]>([]);
 const chatInputHistoryCursor = ref(-1);
 const chatInputHistoryDraft = ref("");
@@ -490,6 +499,7 @@ const selectedModelName = computed(() => {
   const found = normalizedChatModelOptions.value.find((item) => item.id === props.selectedChatModelId);
   return found?.name || props.selectedChatModelId;
 });
+const compactModelButton = computed(() => composerWidth.value > 0 && composerWidth.value < 420);
 const showIdeWorkspaceGroupLabel = computed(() => false);
 const attachedIdeContextReferenceIds = computed(() => new Set((props.attachedIdeContextReferences || []).map((item) => item.id)));
 const mergedIdeContextGroups = computed<IdeContextWorkspaceGroup[]>(() => {
@@ -794,6 +804,12 @@ function updateMentionState() {
 
 const modelDropdownOpen = ref(false);
 const modelDropdownRef = ref<HTMLElement | null>(null);
+let composerWidthObserver: ResizeObserver | null = null;
+
+function refreshComposerWidth() {
+  const el = composerRootRef.value;
+  composerWidth.value = el ? Math.round(el.getBoundingClientRect().width) : 0;
+}
 
 function handleModelDropdownClickOutside(event: MouseEvent) {
   if (
@@ -811,6 +827,12 @@ watch(modelDropdownOpen, (open) => {
     });
   } else {
     document.removeEventListener("click", handleModelDropdownClickOutside);
+  }
+});
+
+watch(compactModelButton, (compact) => {
+  if (compact) {
+    modelDropdownOpen.value = false;
   }
 });
 
@@ -1057,8 +1079,14 @@ onMounted(() => {
   window.addEventListener("keydown", handleWindowKeydown);
   window.addEventListener("resize", refreshMentionPanelPosition);
   window.addEventListener("scroll", refreshMentionPanelPosition, true);
+  refreshComposerWidth();
+  if (typeof ResizeObserver !== "undefined" && composerRootRef.value) {
+    composerWidthObserver = new ResizeObserver(() => refreshComposerWidth());
+    composerWidthObserver.observe(composerRootRef.value);
+  }
   nextTick(() => {
     resizeChatInput();
+    refreshComposerWidth();
     refreshMentionPanelPosition();
   });
 });
@@ -1071,6 +1099,8 @@ onBeforeUnmount(() => {
     cancelAnimationFrame(resizeInputRaf.value);
     resizeInputRaf.value = 0;
   }
+  composerWidthObserver?.disconnect();
+  composerWidthObserver = null;
 });
 
 watch(

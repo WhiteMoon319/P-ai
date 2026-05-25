@@ -140,12 +140,51 @@
           {{ t("chat.delegatePanelTab") }}
         </button>
       </div>
+      <div
+        v-else-if="toolReviewPanelOpenVisible"
+        class="dropdown dropdown-bottom dropdown-end shrink-0"
+        @mousedown.stop
+      >
+        <button
+          type="button"
+          tabindex="0"
+          class="btn btn-ghost btn-sm btn-square h-8 min-h-8 w-8"
+          :title="chatRightPanelMode === 'reader' ? t('chat.readerPanelTab') : t('chat.delegatePanelTab')"
+        >
+          <ChevronDown class="h-3.5 w-3.5" />
+        </button>
+        <ul
+          tabindex="0"
+          class="dropdown-content menu z-50 mt-2 w-36 rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
+        >
+          <li>
+            <button
+              type="button"
+              class="font-normal"
+              :class="chatRightPanelMode === 'reader' ? 'menu-active font-semibold' : ''"
+              @click.stop="emit('update:chat-right-panel-mode', 'reader')"
+            >
+              {{ t("chat.readerPanelTab") }}
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              class="font-normal"
+              :class="chatRightPanelMode !== 'reader' ? 'menu-active font-semibold' : ''"
+              @click.stop="emit('update:chat-right-panel-mode', 'delegate')"
+            >
+              {{ t("chat.delegatePanelTab") }}
+            </button>
+          </li>
+        </ul>
+      </div>
 
       <button
         type="button"
         class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
         :class="toolReviewPanelOpenVisible ? 'btn-active' : ''"
-        :title="t('chat.toolReview.title')"
+        :title="t('chat.rightSidebarToggle')"
         @mousedown.stop
         @click.stop="emit('toggle-tool-review-panel')"
       >
@@ -400,7 +439,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../services/tauri-api";
-import { Download, FoldVertical, History, LayoutList, LayoutPanelLeft, Minus, ScrollText, Search, Settings, Square, SquarePen, X } from "@lucide/vue";
+import { ChevronDown, Download, FoldVertical, History, LayoutList, LayoutPanelLeft, Minus, ScrollText, Search, Settings, Square, SquarePen, X } from "@lucide/vue";
 import type { ChatConversationOverviewItem } from "../../../types/app";
 import { resolveConversationDisplayTitle } from "../../chat/utils/conversation-title";
 import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
@@ -524,12 +563,12 @@ function headerPaneWidth(side: "left" | "right"): number {
   const raw = side === "left"
     ? Number(props.chatSidePanelWidths?.leftWidth || 0)
     : Number(props.chatSidePanelWidths?.rightWidth || 0);
-  const min = side === "left" ? 260 : 320;
+  const min = 260;
   return Math.max(min, Number.isFinite(raw) && raw > 0 ? Math.round(raw) : min);
 }
 
 function headerCanFit(leftW: number, rightW: number): boolean {
-  return windowWidth.value <= 0 || leftW + 420 + rightW <= windowWidth.value;
+  return windowWidth.value <= 0 || leftW + 300 + rightW <= windowWidth.value;
 }
 
 const leftHeaderInLayout = computed(() => {
@@ -556,6 +595,7 @@ const chatHeaderGridStyle = computed(() => {
     gridTemplateColumns: `${leftColumn} minmax(0, 1fr) ${rightColumn}`,
   };
 });
+
 
 const currentConversationTitle = computed(() => {
   const activeId = String(props.activeConversationId || "").trim();

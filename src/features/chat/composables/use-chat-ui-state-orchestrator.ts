@@ -39,9 +39,9 @@ function loadStoredChatLeftPanelMode(): "local" | "contact" {
 }
 
 function loadStoredChatRightPanelMode(): "reader" | "review" | "delegate" {
-  if (typeof window === "undefined") return "review";
+  if (typeof window === "undefined") return "delegate";
   const stored = String(window.localStorage.getItem(CHAT_RIGHT_PANEL_MODE_STORAGE_KEY) || window.localStorage.getItem(LEGACY_CHAT_RIGHT_PANEL_MODE_STORAGE_KEY) || "").trim();
-  return stored === "reader" || stored === "delegate" ? stored : "review";
+  return stored === "reader" || stored === "delegate" ? stored : "delegate";
 }
 
 function loadStoredChatSidePanelVisibility(side: "left" | "right"): boolean {
@@ -278,9 +278,6 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     const nextVisible = !toolReviewPanelOpenVisible.value;
     toolReviewPanelOpenVisible.value = nextVisible;
     storeChatSidePanelVisibility("right", nextVisible);
-    if (nextVisible && !_panelOpenedByFile) {
-      chatRightPanelMode.value = "review";
-    }
     if (!nextVisible) {
       _panelOpenedByFile = false;
     }

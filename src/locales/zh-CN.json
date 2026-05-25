@@ -1148,6 +1148,7 @@
       "readerPanelTab": "阅读",
       "reviewPanelTab": "审查",
       "delegatePanelTab": "委托",
+      "rightSidebarToggle": "右侧栏",
       "resourceExplorer": "资源管理器",
       "conversationSearchPlaceholder": "搜索会话标题或最近两条消息",
       "conversationSearchEmpty": "没有匹配的会话",

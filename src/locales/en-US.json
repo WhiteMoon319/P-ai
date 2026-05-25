@@ -1101,6 +1101,7 @@
       "readerPanelTab": "Read",
       "reviewPanelTab": "Review",
       "delegatePanelTab": "Delegate",
+      "rightSidebarToggle": "Right Sidebar",
       "resourceExplorer": "Resource Explorer",
       "conversationSearchPlaceholder": "Search title or last two messages",
       "conversationSearchEmpty": "No matching conversations",
