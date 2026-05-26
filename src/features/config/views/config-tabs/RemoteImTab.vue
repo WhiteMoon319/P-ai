@@ -124,11 +124,11 @@
                   <input
                     type="checkbox"
                     class="toggle toggle-sm"
-                    :class="item.allowSend ? 'toggle-success' : ''"
-                    :checked="item.allowSend"
-                    :title="t('config.remoteIm.allowSend')"
+                    :class="contactCommunicationToggleClass(item)"
+                    :checked="contactCommunicationToggleEnabled(item)"
+                    :title="`${t('config.remoteIm.allowReceive')} / ${t('config.remoteIm.allowSend')}`"
                     @click.stop
-                    @change="toggleContactAllowReceiveAndSend(item, ($event.target as HTMLInputElement).checked)"
+                    @change="toggleContactCommunication(item, ($event.target as HTMLInputElement).checked)"
                   />
                   <div v-if="contactNeedsQuickModel(item) && !props.config.toolReviewApiConfigId" class="dropdown dropdown-end">
                     <div tabindex="0" role="button" class="btn btn-ghost btn-square btn-sm text-error hover:bg-error hover:text-error-content">
@@ -723,6 +723,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { AppConfig, DepartmentConfig, RemoteImChannelConfig, RemoteImContact, RemoteImPlatform, ShellWorkspace } from "../../../../types/app";
 import type { ChannelConnectionStatus, ChannelLogEntry, WeixinLoginStatus } from "./remote-im/types";
 import {
+  contactCommunicationToggleClass,
+  contactCommunicationToggleEnabled,
   formatLogTime,
   normalizeActivationMode,
   normalizeProcessingMode,
@@ -1295,7 +1297,7 @@ async function toggleSelectedChannelEnabled(enabled: boolean) {
   await toggleChannelEnabled(selectedChannel.value, enabled);
 }
 
-async function toggleContactAllowSend(item: RemoteImContact, enabled: boolean) {
+async function toggleContactCommunication(item: RemoteImContact, enabled: boolean) {
   const oldSend = item.allowSend;
   const oldReceive = item.allowReceive;
   item.allowSend = enabled;
@@ -1313,24 +1315,6 @@ async function toggleContactAllowSend(item: RemoteImContact, enabled: boolean) {
     item.allowReceive = oldReceive;
     props.setStatusAction(t("status.saveConfigFailed", { err: String(error) }));
     await refreshContacts();
-  }
-}
-
-async function toggleContactAllowReceiveAndSend(item: RemoteImContact, enabled: boolean) {
-  await toggleContactAllowSend(item, enabled);
-}
-
-async function toggleContactAllowReceive(item: RemoteImContact, enabled: boolean) {
-  const oldValue = item.allowReceive;
-  item.allowReceive = enabled;
-  try {
-    await invokeTauri<RemoteImContact>("remote_im_update_contact_allow_receive", {
-      input: { contactId: item.id, allowReceive: enabled },
-    });
-    await refreshContacts();
-  } catch (error) {
-    item.allowReceive = oldValue;
-    props.setStatusAction(t("status.saveConfigFailed", { err: String(error) }));
   }
 }
 
@@ -1589,11 +1573,8 @@ async function saveContactDraft() {
       });
     }
 
-    if (!!draft.allowReceive !== !!item.allowReceive) {
-      await toggleContactAllowReceive(item, !!draft.allowReceive);
-    }
-    if (!!draft.allowSend !== !!item.allowSend) {
-      await toggleContactAllowSend(item, !!draft.allowSend);
+    if (!!draft.allowReceive !== !!item.allowReceive || !!draft.allowSend !== !!item.allowSend) {
+      await toggleContactCommunication(item, !!draft.allowReceive || !!draft.allowSend);
     }
     if (!!draft.allowSendFiles !== !!item.allowSendFiles) {
       await toggleContactAllowSendFiles(item, !!draft.allowSendFiles);
