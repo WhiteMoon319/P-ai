@@ -214,6 +214,7 @@
           <RemoteImTab
             v-else-if="props.configTab === 'remoteIm'"
             :config="config"
+            :personas="personas"
             :save-config-action="saveConfigAction"
             :set-status-action="setStatusAction"
           />

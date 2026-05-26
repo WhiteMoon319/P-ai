@@ -727,7 +727,7 @@ import { useI18n } from "vue-i18n";
 import { AlertTriangle, Plus, RefreshCw, RotateCcw, Save, ScrollText, Settings, SquareTerminal, Trash2 } from "@lucide/vue";
 import { invokeTauri } from "../../../../services/tauri-api";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { AppConfig, DepartmentConfig, RemoteImChannelConfig, RemoteImContact, RemoteImPlatform, ShellWorkspace } from "../../../../types/app";
+import type { AppConfig, DepartmentConfig, PersonaProfile, RemoteImChannelConfig, RemoteImContact, RemoteImPlatform, ShellWorkspace } from "../../../../types/app";
 import type { ChannelConnectionStatus, ChannelLogEntry, WeixinLoginStatus } from "./remote-im/types";
 import {
   contactCommunicationToggleClass,
@@ -742,6 +742,7 @@ import {
 
 const props = defineProps<{
   config: AppConfig;
+  personas: PersonaProfile[];
   saveConfigAction: () => Promise<boolean> | boolean;
   setStatusAction: (text: string) => void;
 }>();
@@ -2065,9 +2066,20 @@ async function deleteContact(item: RemoteImContact) {
 
 function contactDepartmentLabel(item: RemoteImContact): string {
   const departmentId = String(item.boundDepartmentId || "").trim();
-  if (!departmentId) return t("config.department.assistantBadge");
-  const matched = remoteImDepartmentOptions.value.find((dept) => dept.id === departmentId);
-  return matched ? matched.label : departmentId;
+  const department = departmentId
+    ? (props.config.departments || []).find((dept) => String(dept.id || "").trim() === departmentId)
+    : (props.config.departments || []).find((dept) => dept.id === "assistant-department" || dept.isBuiltInAssistant);
+  const departmentName = department
+    ? departmentDisplayName(department)
+    : departmentId || t("config.department.assistantBadge");
+  const personaNames = (department?.agentIds || [])
+    .map((agentId) => {
+      const normalizedAgentId = String(agentId || "").trim();
+      return (props.personas || []).find((agent) => String(agent.id || "").trim() === normalizedAgentId)?.name || "";
+    })
+    .map((name) => String(name || "").trim())
+    .filter(Boolean);
+  return personaNames.length > 0 ? `${departmentName}（${personaNames.join(" / ")}）` : departmentName;
 }
 
 function departmentDisplayName(dept: DepartmentConfig): string {
