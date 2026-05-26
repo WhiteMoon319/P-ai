@@ -75,6 +75,9 @@
           <RefreshCw class="h-3.5 w-3.5" :class="contactsLoading ? 'animate-spin' : ''" />
         </button>
       </div>
+      <div v-if="contactsDisabledReason" class="px-3 pb-2 text-xs text-warning">
+        {{ contactsDisabledReason }}
+      </div>
       <ul class="w-full flex-1 overflow-y-auto px-0">
         <li v-if="contactsError" class="menu-title">
           <span class="text-xs text-error">{{ contactsError }}</span>
@@ -126,6 +129,7 @@
                     class="toggle toggle-sm"
                     :class="contactCommunicationToggleClass(item)"
                     :checked="contactCommunicationToggleEnabled(item)"
+                    :disabled="contactsDisabled"
                     :title="`${t('config.remoteIm.allowReceive')} / ${t('config.remoteIm.allowSend')}`"
                     @click.stop
                     @change="toggleContactCommunication(item, ($event.target as HTMLInputElement).checked)"
@@ -150,6 +154,7 @@
                   <button
                     class="btn btn-ghost btn-square btn-sm hover:bg-base-300"
                     :title="t('config.remoteIm.channelDetails')"
+                    :disabled="contactsDisabled"
                     @click.stop="openContactConfigModal(item.id)"
                   >
                     <Settings class="h-4 w-4" />
@@ -396,6 +401,8 @@
                   <span class="text-xs">
                     {{ channelStatus?.connected
                       ? `${t("config.remoteIm.connected")} (${channelStatus.peerAddr})`
+                      : channelStatus?.statusText === "binding_retry"
+                        ? (channelStatus.lastError || "固定端口被占用，正在重试")
                       : channelStatus?.listenAddr
                         ? t("config.remoteIm.waitingForConnection")
                         : t("config.remoteIm.serverNotStarted") }}
@@ -690,7 +697,7 @@
           <div class="mt-3 pt-3 border-t border-base-300 flex items-center justify-between gap-2 shrink-0">
             <button
               class="btn btn-ghost text-error"
-              :disabled="contactSaving || contactDeleting || !selectedContact"
+              :disabled="contactsDisabled || contactSaving || contactDeleting || !selectedContact"
               @click="selectedContact && deleteContact(selectedContact)"
             >
               <Trash2 class="h-3.5 w-3.5" />
@@ -701,7 +708,7 @@
               <RotateCcw class="h-3.5 w-3.5" />
               {{ t("common.reset") }}
             </button>
-            <button class="btn btn-primary" :disabled="!contactDraftDirty || contactSaving || contactDeleting" @click="saveContactDraft">
+            <button class="btn btn-primary" :disabled="contactsDisabled || !contactDraftDirty || contactSaving || contactDeleting" @click="saveContactDraft">
               <Save v-if="!contactSaving" class="h-3.5 w-3.5" />
               <span v-else class="loading loading-spinner loading-xs"></span>
               {{ t("common.save") }}
@@ -897,6 +904,25 @@ const currentChannelContacts = computed(() => {
   if (!selectedChannelId.value) return [];
   return contacts.value.filter((c) => c.channelId === selectedChannelId.value);
 });
+const contactsDisabledReason = computed(() => {
+  const channel = selectedChannel.value;
+  if (!channel) return "";
+  if (!channel.enabled) return "当前渠道未启用，联系人列表不可操作。";
+  if (channel.platform === "feishu") return "";
+  if (channel.platform === "onebot_v11" || channel.platform === "dingtalk" || channel.platform === "weixin_oc") {
+    const status = channelRuntimeStates.value[channel.id];
+    if (status?.connected) return "";
+    if (channel.platform === "onebot_v11" && status?.statusText === "binding_retry") {
+      return status.lastError || "OneBot 固定端口被占用，正在按原端口重试绑定。";
+    }
+    if (channel.platform === "onebot_v11" && status?.statusText === "binding") {
+      return "OneBot 正在绑定固定端口，连接成功前联系人列表不可操作。";
+    }
+    return "渠道尚未真正连接，连接成功前联系人列表不可操作。";
+  }
+  return "";
+});
+const contactsDisabled = computed(() => !!contactsDisabledReason.value);
 
 type ContactGroup = { mode: "always" | "keyword" | "never"; label: string; items: typeof currentChannelContacts.value };
 const groupedContacts = computed<ContactGroup[]>(() => {
@@ -1298,6 +1324,7 @@ async function toggleSelectedChannelEnabled(enabled: boolean) {
 }
 
 async function toggleContactCommunication(item: RemoteImContact, enabled: boolean) {
+  if (contactsDisabled.value) return;
   const oldSend = item.allowSend;
   const oldReceive = item.allowReceive;
   item.allowSend = enabled;
@@ -1319,6 +1346,7 @@ async function toggleContactCommunication(item: RemoteImContact, enabled: boolea
 }
 
 async function toggleContactAllowSendFiles(item: RemoteImContact, enabled: boolean) {
+  if (contactsDisabled.value) return;
   const oldValue = item.allowSendFiles;
   item.allowSendFiles = enabled;
   try {
@@ -1349,6 +1377,7 @@ async function saveContactActivation(
     >
   >,
 ) {
+  if (contactsDisabled.value) return;
   const oldMode = item.activationMode;
   const oldKeywords = [...item.activationKeywords];
   const oldMuteKeywords = [...(Array.isArray(item.muteKeywords) ? item.muteKeywords : [])];
@@ -1511,6 +1540,7 @@ function resetContactDraft() {
 }
 
 async function saveContactDraft() {
+  if (contactsDisabled.value) return;
   if (!selectedContact.value || !contactDraft.value || !contactDraftDirty.value || contactSaving.value) return;
   const item = selectedContact.value;
   const draft = contactDraft.value;
@@ -2004,6 +2034,7 @@ function buildContactLogDisplayItem(log: ChannelLogEntry): ContactLogDisplayItem
 }
 
 async function deleteContact(item: RemoteImContact) {
+  if (contactsDisabled.value) return;
   if (contactDeleting.value) return;
   const displayName = contactSafeDisplayName(item);
   const confirmed = window.confirm(`确定删除联系人“${displayName}”吗？\n仅删除联系人记录，不清理已有会话历史。`);
@@ -2187,6 +2218,8 @@ function channelStatusPreview(channel: RemoteImChannelConfig): string {
   if (status.connected) {
     return t("config.remoteIm.connected");
   }
+  if (status.statusText === "binding_retry") return status.lastError || "固定端口被占用，正在重试";
+  if (status.statusText === "binding") return "正在绑定固定端口";
   return status.listenAddr ? t("config.remoteIm.waitingForConnection") : t("config.remoteIm.serverNotStarted");
 }
 
@@ -2195,6 +2228,8 @@ function channelListStatusBadgeText(channel: RemoteImChannelConfig): string {
   if (channel.platform === "onebot_v11" || channel.platform === "dingtalk" || channel.platform === "weixin_oc") {
     const status = channelRuntimeStates.value[channel.id];
     if (status?.connected) return t("config.remoteIm.connected");
+    if (channel.platform === "onebot_v11" && status?.statusText === "binding_retry") return "重试绑定";
+    if (channel.platform === "onebot_v11" && status?.statusText === "binding") return "绑定中";
     if (channel.platform === "weixin_oc" && status?.statusText === "need_login") return "待登录";
     return t("config.remoteIm.enabledState");
   }

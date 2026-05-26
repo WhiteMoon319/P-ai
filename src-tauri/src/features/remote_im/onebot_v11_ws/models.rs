@@ -7,6 +7,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::SinkExt;
+use socket2::{Domain, Protocol, Socket, Type};
 use tokio::net::TcpListener;
 use tokio::sync::{broadcast, oneshot, watch, RwLock};
 use tokio_util::sync::CancellationToken;
@@ -74,6 +75,8 @@ const NAPCAT_RECONNECT_INTERVAL_SECS: u64 = 30;
 const NAPCAT_MAX_MEDIA_DOWNLOAD_SIZE_BYTES: u64 = 20 * 1024 * 1024;
 const NAPCAT_WS_HANDSHAKE_TIMEOUT_SECS: u64 = 5;
 const NAPCAT_ACTIVE_CONNECTION_REPLACE_TIMEOUT_MS: u64 = 1500;
+const NAPCAT_BIND_RETRY_TIMEOUT_SECS: u64 = 600;
+const NAPCAT_BIND_RETRY_INTERVAL_MS: u64 = 10_000;
 
 impl OnebotV11WsCredentials {
     pub fn from_credentials(credentials: &Value) -> Self {
@@ -143,6 +146,10 @@ pub struct OnebotV11WsManager {
     channel_logs: Arc<RwLock<HashMap<String, Vec<ChannelLogEntry>>>>,
     /// 渠道监听地址: channel_id -> listen_addr
     listen_addrs: Arc<RwLock<HashMap<String, String>>>,
+    /// 渠道状态文本: channel_id -> status_text
+    channel_status_texts: Arc<RwLock<HashMap<String, String>>>,
+    /// 渠道最近错误: channel_id -> last_error
+    channel_last_errors: Arc<RwLock<HashMap<String, String>>>,
     /// 渠道 accept 循环的 JoinHandle，用于 stop 时等待旧服务器释放端口
     channel_tasks: Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>>,
     /// 渠道派生任务组，用于 stop 时收割所有连接任务

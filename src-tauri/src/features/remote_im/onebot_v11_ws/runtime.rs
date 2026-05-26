@@ -7,6 +7,8 @@ impl OnebotV11WsManager {
             channel_event_senders: Arc::new(RwLock::new(HashMap::new())),
             channel_logs: Arc::new(RwLock::new(HashMap::new())),
             listen_addrs: Arc::new(RwLock::new(HashMap::new())),
+            channel_status_texts: Arc::new(RwLock::new(HashMap::new())),
+            channel_last_errors: Arc::new(RwLock::new(HashMap::new())),
             channel_tasks: Arc::new(RwLock::new(HashMap::new())),
             channel_runtimes: Arc::new(RwLock::new(HashMap::new())),
             event_consumer_stop_senders: Arc::new(RwLock::new(HashMap::new())),
@@ -108,6 +110,8 @@ impl OnebotV11WsManager {
         self.connections.write().await.remove(channel_id);
         self.connection_stop_senders.write().await.remove(channel_id);
         self.listen_addrs.write().await.remove(channel_id);
+        self.channel_status_texts.write().await.remove(channel_id);
+        self.channel_last_errors.write().await.remove(channel_id);
         self.channel_shutdowns.write().await.remove(channel_id);
         self.channel_event_senders.write().await.remove(channel_id);
         self.channel_tasks.write().await.remove(channel_id);
@@ -130,6 +134,16 @@ impl OnebotV11WsManager {
                 .await
                 .contains_key(channel_id)
             && !self.listen_addrs.read().await.contains_key(channel_id)
+            && !self
+                .channel_status_texts
+                .read()
+                .await
+                .contains_key(channel_id)
+            && !self
+                .channel_last_errors
+                .read()
+                .await
+                .contains_key(channel_id)
             && !self.channel_tasks.read().await.contains_key(channel_id)
             && !self.channel_runtimes.read().await.contains_key(channel_id)
             && !self
@@ -215,6 +229,8 @@ impl OnebotV11WsManager {
         self.connections.write().await.remove(channel_id);
         self.connection_stop_senders.write().await.remove(channel_id);
         self.listen_addrs.write().await.remove(channel_id);
+        self.channel_status_texts.write().await.remove(channel_id);
+        self.channel_last_errors.write().await.remove(channel_id);
         self.channel_event_senders.write().await.remove(channel_id);
         self.force_clear_channel_runtime_state(channel_id).await;
         while !self.channel_runtime_state_is_clear(channel_id).await {
@@ -239,7 +255,6 @@ impl OnebotV11WsManager {
         &self,
         channel: &RemoteImChannelConfig,
     ) -> Result<(), String> {
-        let _guard = self.channel_lifecycle_guard(&channel.id).await;
         self.stop_channel_inner(&channel.id).await?;
         if channel.enabled && channel.platform == RemoteImPlatform::OnebotV11 {
             let credentials = OnebotV11WsCredentials::from_credentials(&channel.credentials);
@@ -252,6 +267,16 @@ impl OnebotV11WsManager {
     pub async fn get_connection_status(&self, channel_id: &str) -> ChannelConnectionStatus {
         let connections = self.connections.read().await;
         let listen_addrs = self.listen_addrs.read().await;
+        let status_texts = self.channel_status_texts.read().await;
+        let last_errors = self.channel_last_errors.read().await;
+        let status_text = status_texts
+            .get(channel_id)
+            .filter(|value| !value.trim().is_empty())
+            .cloned();
+        let last_error = last_errors
+            .get(channel_id)
+            .filter(|value| !value.trim().is_empty())
+            .cloned();
 
         if let Some(conn) = connections.get(channel_id) {
             ChannelConnectionStatus {
@@ -260,8 +285,8 @@ impl OnebotV11WsManager {
                 peer_addr: conn.peer_addr.clone(),
                 connected_at: conn.connected_at,
                 listen_addr: listen_addrs.get(channel_id).cloned().unwrap_or_default(),
-                status_text: None,
-                last_error: None,
+                status_text,
+                last_error,
                 account_id: None,
                 base_url: None,
                 login_session_key: None,
@@ -274,8 +299,8 @@ impl OnebotV11WsManager {
                 peer_addr: None,
                 connected_at: None,
                 listen_addr: listen_addrs.get(channel_id).cloned().unwrap_or_default(),
-                status_text: None,
-                last_error: None,
+                status_text,
+                last_error,
                 account_id: None,
                 base_url: None,
                 login_session_key: None,
@@ -296,7 +321,6 @@ impl OnebotV11WsManager {
         channel_id: String,
         credentials: OnebotV11WsCredentials,
     ) -> Result<(), String> {
-        let _guard = self.channel_lifecycle_guard(&channel_id).await;
         self.start_inner(channel_id, credentials).await
     }
 
@@ -309,10 +333,45 @@ impl OnebotV11WsManager {
         let addr: SocketAddr = format!("{}:{}", credentials.ws_host, credentials.ws_port)
             .parse()
             .map_err(|e| format!("无效地址: {}", e))?;
-
-        let listener = TcpListener::bind(&addr)
+        let channel_runtime = OnebotChannelRuntime {
+            cancel: CancellationToken::new(),
+            tasks: TaskTracker::new(),
+        };
+        self.channel_runtimes
+            .write()
             .await
-            .map_err(|e| format!("绑定端口失败: {}", e))?;
+            .insert(channel_id.clone(), channel_runtime.clone());
+
+        self.listen_addrs
+            .write()
+            .await
+            .insert(channel_id.clone(), addr.to_string());
+        self.channel_status_texts
+            .write()
+            .await
+            .insert(channel_id.clone(), "binding".to_string());
+        self.channel_last_errors.write().await.remove(&channel_id);
+
+        let listener_result = bind_onebot_listener_with_retry(
+            &channel_id,
+            addr,
+            self.channel_status_texts.clone(),
+            self.channel_last_errors.clone(),
+            channel_runtime.cancel.clone(),
+        )
+        .await;
+        let listener = match listener_result {
+            Ok(listener) => listener,
+            Err(err) => {
+                self.force_clear_channel_runtime_state(&channel_id).await;
+                return Err(format!("绑定端口失败: {}", err));
+            }
+        };
+        self.channel_status_texts
+            .write()
+            .await
+            .insert(channel_id.clone(), "listening".to_string());
+        self.channel_last_errors.write().await.remove(&channel_id);
 
         let listen_addr = addr.to_string();
         eprintln!("[远程IM][OneBot v11 WS] 渠道 {} 开始监听 {}", channel_id, listen_addr);
@@ -325,14 +384,6 @@ impl OnebotV11WsManager {
         let connection_stop_senders = self.connection_stop_senders.clone();
         let channel_logs = self.channel_logs.clone();
         let active_connection_gate = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let channel_runtime = OnebotChannelRuntime {
-            cancel: CancellationToken::new(),
-            tasks: TaskTracker::new(),
-        };
-        self.channel_runtimes
-            .write()
-            .await
-            .insert(channel_id.clone(), channel_runtime.clone());
 
         // 创建 per-channel 的关闭信号
         let (shutdown_tx, _) = broadcast::channel::<()>(1);
@@ -600,5 +651,75 @@ impl OnebotV11WsManager {
         .await;
         connection_stop_senders.write().await.remove(&channel_id);
         active_connection_gate.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+fn bind_onebot_listener(addr: SocketAddr) -> std::io::Result<TcpListener> {
+    let socket = Socket::new(Domain::for_address(addr), Type::STREAM, Some(Protocol::TCP))?;
+    socket.set_reuse_address(true)?;
+    socket.bind(&addr.into())?;
+    socket.listen(128)?;
+    socket.set_nonblocking(true)?;
+    let std_listener: std::net::TcpListener = socket.into();
+    TcpListener::from_std(std_listener)
+}
+
+async fn bind_onebot_listener_with_retry(
+    channel_id: &str,
+    addr: SocketAddr,
+    channel_status_texts: Arc<RwLock<HashMap<String, String>>>,
+    channel_last_errors: Arc<RwLock<HashMap<String, String>>>,
+    cancel: CancellationToken,
+) -> std::io::Result<TcpListener> {
+    let started_at = std::time::Instant::now();
+    let mut attempts = 0_u32;
+    loop {
+        attempts = attempts.saturating_add(1);
+        match bind_onebot_listener(addr) {
+            Ok(listener) => {
+                if attempts > 1 {
+                    eprintln!(
+                        "[远程IM][OneBot v11 WS] 固定端口重试绑定成功: channel_id={}, addr={}, attempts={}, duration_ms={}",
+                        channel_id,
+                        addr,
+                        attempts,
+                        started_at.elapsed().as_millis()
+                    );
+                }
+                return Ok(listener);
+            }
+            Err(err)
+                if err.kind() == std::io::ErrorKind::AddrInUse
+                    && started_at.elapsed() < Duration::from_secs(NAPCAT_BIND_RETRY_TIMEOUT_SECS) =>
+            {
+                let message = format!(
+                    "固定端口仍被占用，{} 秒后重试: addr={}, attempts={}, elapsed_ms={}, error={}",
+                    NAPCAT_BIND_RETRY_INTERVAL_MS / 1000,
+                    addr,
+                    attempts,
+                    started_at.elapsed().as_millis(),
+                    err
+                );
+                eprintln!("[远程IM][OneBot v11 WS] {}: channel_id={}", message, channel_id);
+                channel_status_texts
+                    .write()
+                    .await
+                    .insert(channel_id.to_string(), "binding_retry".to_string());
+                channel_last_errors
+                    .write()
+                    .await
+                    .insert(channel_id.to_string(), message);
+                tokio::select! {
+                    _ = cancel.cancelled() => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Interrupted,
+                            "渠道已停止，取消固定端口绑定重试",
+                        ));
+                    }
+                    _ = tokio::time::sleep(Duration::from_millis(NAPCAT_BIND_RETRY_INTERVAL_MS)) => {}
+                }
+            }
+            Err(err) => return Err(err),
+        }
     }
 }
