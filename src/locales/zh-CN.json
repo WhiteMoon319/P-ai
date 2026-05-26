@@ -26,7 +26,8 @@
     "details": "详情",
     "yes": "是",
     "no": "否",
-    "done": "完成"
+    "done": "完成",
+    "settings": "设置"
   },
   "window": {
     "configTitle": "PAI - 配置窗口",
@@ -764,6 +765,7 @@
       "responseStrategySmart": "智能判断",
       "responseStrategyAlwaysHint": "始终回复：一旦允许入场，就直接交给处理部门回复。",
       "responseStrategySmartHint": "智能判断：先用快速模型检查这批消息是否真的需要回复。",
+      "quickModelMissingHint": "智能判断需要先配置快速模型。",
       "responseGuidance": "什么时候应该回答",
       "responseGuidancePlaceholder": "例如：当对方直接提问、请求帮助、需要确认，或明显期待继续互动时回答。",
       "responseGuidanceHint": "仅在“智能判断”时生效。秘书会把最近 7 条消息和本批新消息交给快速模型，并参考这里的规则判断是否需要回复。",
@@ -997,11 +999,14 @@
       "deploySuccess": "部署成功",
       "deployFailed": "部署失败",
       "toolEnabled": "工具已启用",
+      "toolDisabled": "工具已禁用",
       "toolSwitchFailed": "工具开关失败",
       "saved": "已保存: {name}",
       "deleted": "已删除: {id}",
       "transport": "transport={transport}",
-      "openDir": "打开目录"
+      "openDir": "打开目录",
+      "openDirOpened": "已打开目录: {path}",
+      "openDirFailed": "打开目录失败: {err}"
     },
     "mcpServerCard": {
       "displayNamePlaceholder": "显示名称",
@@ -1357,6 +1362,7 @@
     "codeReviewRetryNoDepartment": "当前没有可直属下级部门，无法重新生成代码审查任务。",
     "codeReviewRetryUnsupportedScope": "不支持重新生成该代码审查范围：{scope}",
     "codeReviewDeleteFailed": "删除代码审查报告失败",
+    "codeReviewSubmitFailed": "提交代码审查失败",
     "delegateArchiveOpenFailed": "打开委托归档失败：{err}",
     "delegateStatusLoadFailed": "委托状态加载失败：{err}"
   },

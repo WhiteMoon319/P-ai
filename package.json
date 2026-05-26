@@ -12,6 +12,7 @@
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
     "smoke": "powershell -ExecutionPolicy Bypass -File scripts/smoke.ps1",
+    "i18n:check": "node scripts/check-i18n-keys.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },

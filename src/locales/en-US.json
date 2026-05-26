@@ -26,7 +26,8 @@
     "details": "Details",
     "yes": "Yes",
     "no": "No",
-    "done": "Done"
+    "done": "Done",
+    "settings": "Settings"
   },
   "window": {
     "configTitle": "P-ai - Config",
@@ -764,6 +765,7 @@
       "responseStrategySmart": "Smart Judge",
       "responseStrategyAlwaysHint": "Always reply: once entry is allowed, hand off directly to the processing department.",
       "responseStrategySmartHint": "Smart judge: first use a fast model to check whether this batch really needs a reply.",
+      "quickModelMissingHint": "Smart judge requires a quick model first.",
       "responseGuidance": "When Should It Reply",
       "responseGuidancePlaceholder": "Example: reply when the other person asks directly, requests help, needs confirmation, or clearly expects interaction.",
       "responseGuidanceHint": "Only applies to Smart Judge. The secretary sends the latest 7 messages and this batch to the fast model, then uses these rules to decide whether to reply.",
@@ -997,11 +999,14 @@
       "deploySuccess": "Deploy successful",
       "deployFailed": "Deploy failed",
       "toolEnabled": "Tool enabled",
+      "toolDisabled": "Tool disabled",
       "toolSwitchFailed": "Tool switch failed",
       "saved": "Saved: {name}",
       "deleted": "Deleted: {id}",
       "transport": "transport={transport}",
-      "openDir": "Open Directory"
+      "openDir": "Open Directory",
+      "openDirOpened": "Opened directory: {path}",
+      "openDirFailed": "Failed to open directory: {err}"
     },
     "mcpServerCard": {
       "displayNamePlaceholder": "Display Name",
@@ -1356,6 +1361,7 @@
     "codeReviewRetryNoDepartment": "No subordinate department available to retry the code review.",
     "codeReviewRetryUnsupportedScope": "Unsupported code review scope for retry: {scope}",
     "codeReviewDeleteFailed": "Failed to delete code review report",
+    "codeReviewSubmitFailed": "Failed to submit code review",
     "delegateArchiveOpenFailed": "Failed to open delegate archive: {err}",
     "delegateStatusLoadFailed": "Failed to load delegate status: {err}"
   },

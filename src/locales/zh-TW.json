@@ -26,7 +26,8 @@
     "details": "詳情",
     "yes": "是",
     "no": "否",
-    "done": "完成"
+    "done": "完成",
+    "settings": "設定"
   },
   "window": {
     "configTitle": "π師傅 - 配置視窗",
@@ -764,6 +765,7 @@
       "responseStrategySmart": "智能判斷",
       "responseStrategyAlwaysHint": "始終回覆：一旦允許入場，就直接交給處理部門回覆。",
       "responseStrategySmartHint": "智能判斷：先用快速模型檢查這批訊息是否真的需要回覆。",
+      "quickModelMissingHint": "智能判斷需要先配置快速模型。",
       "responseGuidance": "什麼時候應該回答",
       "responseGuidancePlaceholder": "例如：當對方直接提問、請求幫助、需要確認，或明顯期待繼續互動時回答。",
       "responseGuidanceHint": "僅在「智能判斷」時生效。秘書會把最近 7 條訊息和本批新訊息交給快速模型，並參考這裡的規則判斷是否需要回覆。",
@@ -997,11 +999,14 @@
       "deploySuccess": "部署成功",
       "deployFailed": "部署失敗",
       "toolEnabled": "工具已啟用",
+      "toolDisabled": "工具已停用",
       "toolSwitchFailed": "工具開關失敗",
       "saved": "已儲存: {name}",
       "deleted": "已刪除: {id}",
       "transport": "transport={transport}",
-      "openDir": "打開目錄"
+      "openDir": "打開目錄",
+      "openDirOpened": "已打開目錄: {path}",
+      "openDirFailed": "打開目錄失敗: {err}"
     },
     "mcpServerCard": {
       "displayNamePlaceholder": "顯示名稱",
@@ -1356,6 +1361,7 @@
     "codeReviewRetryNoDepartment": "目前沒有可直屬下級部門，無法重新產生程式碼審查任務。",
     "codeReviewRetryUnsupportedScope": "不支援重新產生該程式碼審查範圍：{scope}",
     "codeReviewDeleteFailed": "刪除程式碼審查報告失敗",
+    "codeReviewSubmitFailed": "提交程式碼審查失敗",
     "delegateArchiveOpenFailed": "開啟委託歸檔失敗：{err}",
     "delegateStatusLoadFailed": "委託狀態載入失敗：{err}"
   },
