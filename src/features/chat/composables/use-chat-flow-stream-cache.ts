@@ -19,6 +19,8 @@ import {
 export type ConversationStreamCache = {
   activationId?: string;
   requestId?: string;
+  startedAt?: string;
+  startedAtMs?: number;
   frontendDispatchStartedAtMs?: number;
   frontendDispatchElapsedMs?: number;
   assistantText: string;
@@ -35,6 +37,8 @@ export type ConversationStreamCache = {
 export type ConversationRuntimeStreamCacheSnapshot = {
   activationId?: string;
   requestId?: string;
+  startedAt?: string;
+  startedAtMs?: number;
   frontendDispatchStartedAtMs?: number;
   frontendDispatchElapsedMs?: number;
   assistantText?: string;
@@ -85,9 +89,11 @@ export function streamCacheHasVisibleProgress(
 
 function emptyConversationStreamCache(): ConversationStreamCache {
   return {
-    activationId: "",
-    requestId: "",
-    frontendDispatchStartedAtMs: 0,
+      activationId: "",
+      requestId: "",
+      startedAt: "",
+      startedAtMs: 0,
+      frontendDispatchStartedAtMs: 0,
     frontendDispatchElapsedMs: 0,
     assistantText: "",
     reasoningStandard: "",
@@ -112,6 +118,8 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
     return {
       activationId: String(cache.activationId || "").trim(),
       requestId: String(cache.requestId || "").trim(),
+      startedAt: String(cache.startedAt || "").trim(),
+      startedAtMs: positiveRoundedNumber(cache.startedAtMs),
       frontendDispatchStartedAtMs: positiveRoundedNumber(cache.frontendDispatchStartedAtMs),
       frontendDispatchElapsedMs: positiveRoundedNumber(cache.frontendDispatchElapsedMs),
       assistantText: cache.assistantText,
@@ -137,6 +145,8 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
       ...next,
       activationId: String(next.activationId || "").trim(),
       requestId: String(next.requestId || "").trim(),
+      startedAt: String(next.startedAt || "").trim(),
+      startedAtMs: positiveRoundedNumber(next.startedAtMs),
       frontendDispatchStartedAtMs: positiveRoundedNumber(next.frontendDispatchStartedAtMs),
       frontendDispatchElapsedMs: positiveRoundedNumber(next.frontendDispatchElapsedMs),
       streamToolCalls: Array.isArray(next.streamToolCalls) ? next.streamToolCalls.map((item) => ({ ...item })) : [],
@@ -153,10 +163,12 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
     const cid = normalizeConversationId(conversationId || (options.getConversationId ? options.getConversationId() : ""));
     if (!cid) return;
     const activeActivationId = options.getActiveActivationId();
-    writeConversationStreamCache(cid, () => ({
+    writeConversationStreamCache(cid, (current) => ({
       assistantText: String(options.latestAssistantText.value || ""),
       activationId: activeActivationId,
       requestId: activeActivationId,
+      startedAt: current.startedAt,
+      startedAtMs: current.startedAtMs,
       frontendDispatchStartedAtMs: options.getFrontendDispatchStartedAtMs(),
       frontendDispatchElapsedMs: options.currentFrontendDispatchElapsedMs(),
       reasoningStandard: String(options.latestReasoningStandardText.value || ""),
@@ -220,7 +232,9 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
     writeConversationStreamCache(cid, (current) => ({
       activationId: String(snapshot.activationId || snapshot.requestId || current.activationId || "").trim(),
       requestId: String(snapshot.requestId || snapshot.activationId || current.requestId || "").trim(),
-      frontendDispatchStartedAtMs: positiveRoundedNumber(snapshot.frontendDispatchStartedAtMs || current.frontendDispatchStartedAtMs),
+      startedAt: String(snapshot.startedAt || current.startedAt || "").trim(),
+      startedAtMs: positiveRoundedNumber(snapshot.startedAtMs || current.startedAtMs),
+      frontendDispatchStartedAtMs: positiveRoundedNumber(snapshot.startedAtMs || snapshot.frontendDispatchStartedAtMs || current.frontendDispatchStartedAtMs),
       frontendDispatchElapsedMs: positiveRoundedNumber(snapshot.frontendDispatchElapsedMs || current.frontendDispatchElapsedMs),
       assistantText: String(snapshot.assistantText || ""),
       reasoningStandard: String(snapshot.reasoningStandard || ""),
@@ -250,6 +264,8 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
         ...current,
         activationId: String(parsed.activationId || parsed.requestId || current.activationId || activeActivationId || "").trim(),
         requestId: String(parsed.requestId || parsed.activationId || current.requestId || activeActivationId || "").trim(),
+        startedAt: current.startedAt,
+        startedAtMs: current.startedAtMs,
         frontendDispatchStartedAtMs: options.getFrontendDispatchStartedAtMs(),
         frontendDispatchElapsedMs: options.currentFrontendDispatchElapsedMs(),
         streamToolCalls: mergeStreamToolCallsForward(

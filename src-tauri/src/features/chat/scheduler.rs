@@ -187,6 +187,8 @@ pub(crate) struct ConversationStreamRuntimeCacheSnapshot {
     pub stream_tool_calls: Vec<ConversationStreamToolCallRuntimeCache>,
     pub stream_tool_call_count: usize,
     pub stream_last_tool_name: String,
+    pub started_at: String,
+    pub started_at_ms: u64,
     pub updated_at: String,
     pub has_visible_progress: bool,
 }
@@ -798,6 +800,15 @@ fn stream_cache_has_visible_progress(cache: &ConversationStreamRuntimeCache) -> 
         || !cache.stream_tool_calls.is_empty()
 }
 
+fn now_unix_ms() -> u64 {
+    let millis = now_utc().unix_timestamp_nanos() / 1_000_000;
+    if millis <= 0 {
+        0
+    } else {
+        millis.min(i128::from(u64::MAX)) as u64
+    }
+}
+
 fn event_tool_call_id(event: &AssistantDeltaEvent) -> Option<&str> {
     event
         .tool_call_id
@@ -824,13 +835,17 @@ fn reset_conversation_stream_runtime_cache(
     conversation_id: &str,
     activation_id: &str,
     request_id: &str,
+    started_at: &str,
+    started_at_ms: u64,
 ) -> Result<(), String> {
     let mut slots = lock_conversation_runtime_slots(state)?;
     let slot = conversation_slot_mut(&mut slots, conversation_id);
     slot.stream_cache = ConversationStreamRuntimeCache {
         activation_id: activation_id.trim().to_string(),
         request_id: request_id.trim().to_string(),
-        updated_at: now_iso(),
+        started_at: started_at.trim().to_string(),
+        started_at_ms,
+        updated_at: started_at.trim().to_string(),
         ..ConversationStreamRuntimeCache::default()
     };
     Ok(())
@@ -1296,6 +1311,8 @@ pub(crate) fn read_conversation_runtime_snapshot(
         stream_tool_calls: stream_cache.stream_tool_calls,
         stream_tool_call_count: stream_cache.stream_tool_call_count,
         stream_last_tool_name: stream_cache.stream_last_tool_name,
+        started_at: stream_cache.started_at,
+        started_at_ms: stream_cache.started_at_ms,
         updated_at: stream_cache.updated_at,
         has_visible_progress,
     };
@@ -2218,11 +2235,15 @@ async fn activate_main_assistant(
     }
     let activation_id = trace_id.clone();
     let activation_reason = resolve_activation_reason(&runtime_context);
+    let stream_started_at = now_iso();
+    let stream_started_at_ms = now_unix_ms();
     reset_conversation_stream_runtime_cache(
         state,
         conversation_id,
         activation_id.as_str(),
         trace_id.as_str(),
+        stream_started_at.as_str(),
+        stream_started_at_ms,
     )?;
     emit_round_started_event(
         state,
@@ -2232,6 +2253,8 @@ async fn activate_main_assistant(
         activation_reason.as_str(),
         session_info.department_id.as_str(),
         session_info.agent_id.as_str(),
+        stream_started_at.as_str(),
+        stream_started_at_ms,
     );
 
     // 设置状态为 AssistantStreaming
@@ -2555,6 +2578,8 @@ fn emit_round_started_event(
     reason: &str,
     department_id: &str,
     agent_id: &str,
+    started_at: &str,
+    started_at_ms: u64,
 ) {
     let app_handle = match state.app_handle.lock() {
         Ok(guard) => guard.as_ref().cloned(),
@@ -2574,6 +2599,8 @@ fn emit_round_started_event(
         "reason": reason,
         "departmentId": department_id,
         "agentId": agent_id,
+        "startedAt": started_at,
+        "startedAtMs": started_at_ms,
     });
     ide_chat_broadcast_notification("chat.roundStarted", payload.clone());
     match app_handle.emit(CHAT_ROUND_STARTED_EVENT, payload) {
