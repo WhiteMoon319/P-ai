@@ -168,10 +168,12 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
     clearForegroundConversation: chatForeground.clearForegroundConversation,
     recoverForegroundConversationFromOverview: chatForeground.recoverForegroundConversationFromOverview,
     switchUnarchivedConversation: chatForeground.switchUnarchivedConversation,
+    archiveCurrentConversation: bindings.archiveCurrentConversation,
     getOpenTrimActionDialog: () => bindings.openTrimActionDialog,
     getConfirmTrimAction: () => bindings.confirmTrimAction,
     getCloseTrimActionDialog: () => bindings.closeTrimActionDialog,
     setStatus: bindings.setStatus,
+    setStatusError: bindings.setStatusError,
   });
 
   async function refreshChatUnarchivedConversations() {

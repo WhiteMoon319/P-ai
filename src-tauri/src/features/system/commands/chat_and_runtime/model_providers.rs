@@ -597,7 +597,7 @@ async fn quick_genai_chat(
         api_key: api_key.to_string(),
         model: model.to_string(),
         reasoning_effort: None,
-        temperature: Some(0.0),
+        temperature: None,
         max_output_tokens: Some(16),
         prompt_cache_key: None,
         extra_headers: Vec::new(),

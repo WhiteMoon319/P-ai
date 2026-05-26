@@ -48,7 +48,11 @@ export function useChatConversationDialogGlue(bindings: Record<string, any>) {
     if (normalizedConversationId !== String(bindings.currentChatConversationId.value || "").trim()) {
       await bindings.switchUnarchivedConversation(normalizedConversationId);
     }
-    bindings.getOpenTrimActionDialog()();
+    try {
+      await bindings.archiveCurrentConversation();
+    } catch (error) {
+      bindings.setStatusError("status.trimArchiveFailed", error);
+    }
   }
 
   async function handleConfirmTrimAction() {

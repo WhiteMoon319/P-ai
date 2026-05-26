@@ -605,7 +605,7 @@ const providerPresets: ProviderPreset[] = [
   { id: "anthropic-official", name: "Anthropic", category: "official", urls: { anthropic: "https://api.anthropic.com" }, docsUrl: "https://docs.anthropic.com/en/api/overview" },
   { id: "google-gemini", name: "Google Gemini", category: "official", urls: { gemini: "https://generativelanguage.googleapis.com", gemini_embedding: "https://generativelanguage.googleapis.com" }, docsUrl: "https://ai.google.dev/gemini-api/docs", hasFreeQuota: true },
   { id: "deepseek", name: "DeepSeek", category: "domestic", urls: { auto: "https://api.deepseek.com/v1", deepseek: "https://api.deepseek.com/v1", anthropic: "https://api.deepseek.com/anthropic", openai: "https://api.deepseek.com/v1", openai_responses: "https://api.deepseek.com/v1" }, docsUrl: "https://api-docs.deepseek.com/" },
-  { id: "moonshot-kimi", name: "Moonshot/Kimi", category: "domestic", urls: { auto: "https://api.moonshot.cn/v1", moonshot: "https://api.moonshot.cn/v1", openai: "https://api.moonshot.cn/v1", openai_responses: "https://api.moonshot.cn/v1" }, docsUrl: "https://platform.moonshot.cn/docs/api-reference" },
+  { id: "moonshot-kimi", name: "Moonshot/Kimi", category: "domestic", urls: { auto: "https://api.moonshot.cn/v1", moonshot: "https://api.moonshot.cn/v1", anthropic: "https://api.kimi.com/coding/", openai: "https://api.moonshot.cn/v1", openai_responses: "https://api.moonshot.cn/v1" }, docsUrl: "https://platform.moonshot.cn/docs/api-reference" },
   { id: "aliyun-bailian-coding", name: "百炼编程", category: "domestic", urls: { anthropic: "https://coding.dashscope.aliyuncs.com/apps/anthropic/v1", openai: "https://coding.dashscope.aliyuncs.com/v1", openai_responses: "https://coding.dashscope.aliyuncs.com/v1" }, docsUrl: "https://help.aliyun.com/zh/model-studio/" },
   { id: "aliyun-bailian", name: "百炼通用", category: "domestic", urls: { auto: "https://dashscope.aliyuncs.com/compatible-mode/v1", openai: "https://dashscope.aliyuncs.com/compatible-mode/v1", openai_responses: "https://dashscope.aliyuncs.com/compatible-mode/v1" }, docsUrl: "https://help.aliyun.com/zh/model-studio/" },
   { id: "baidu-qianfan", name: "百度千帆", category: "domestic", urls: { baidu: "https://qianfan.baidubce.com/v2", openai: "https://qianfan.baidubce.com/v2", openai_responses: "https://qianfan.baidubce.com/v2" }, docsUrl: "https://cloud.baidu.com/doc/WENXINWORKSHOP/index.html" },
@@ -1528,6 +1528,8 @@ function applyGeneratedBaseUrl(presetId?: string) {
     selectedPresetId.value = presetId;
   }
   if (!generatedBaseUrl.value) return;
+  selectedProvider.value.requestFormat = linkHelperActiveProtocol.value;
+  applyProtocolDefaults(selectedProvider.value);
   selectedProvider.value.baseUrl = generatedBaseUrl.value;
 }
 

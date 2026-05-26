@@ -177,6 +177,7 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     openTrimActionDialog: shellDialogFlows.openTrimActionDialog,
     confirmTrimAction: shellDialogFlows.confirmTrimAction,
     closeTrimActionDialog: shellDialogFlows.closeTrimActionDialog,
+    archiveCurrentConversation: chatRuntime.trimNow,
     getChatFlow: () => bindings.getChatFlow(),
     detachCurrentConversationToWindow: bindings.detachCurrentConversationToWindow,
     openPromptPreview: () => serviceAssemblies.chatDialogActions.openPromptPreview,

@@ -14,8 +14,17 @@ export function useChatConversationItemsDerivedState(bindings: Record<string, an
   ] as const;
 
   const chatUnarchivedConversationItems = computed(() => {
+    const trimmingConversationId = String(bindings.trimmingConversationId?.value || "").trim();
+    const compactingConversationId = String(bindings.compactingConversationId?.value || "").trim();
     const items = bindings.unarchivedConversations.value
-      .map((item: any) => ({
+      .map((item: any) => {
+        const conversationId = String(item.conversationId || "").trim();
+        const localRuntimeState = conversationId && conversationId === trimmingConversationId
+          ? "archiving"
+          : conversationId && conversationId === compactingConversationId
+            ? "compacting"
+            : "";
+        return {
         conversationId: item.conversationId,
         title: item.title,
         summaryTitle: item.summaryTitle,
@@ -32,7 +41,7 @@ export function useChatConversationItemsDerivedState(bindings: Record<string, an
         isMainConversation: !!item.isMainConversation,
         isPinned: !!item.isPinned,
         pinIndex: Number.isFinite(Number(item.pinIndex)) ? Number(item.pinIndex) : undefined,
-        runtimeState: item.runtimeState,
+        runtimeState: localRuntimeState || item.runtimeState,
         currentTodo: String(item.currentTodo || "").trim(),
         currentTodos: Array.isArray(item.currentTodos) ? item.currentTodos : [],
         detachedWindowOpen: !!item.detachedWindowOpen,
@@ -42,7 +51,8 @@ export function useChatConversationItemsDerivedState(bindings: Record<string, an
         previewMessages: Array.isArray(item.previewMessages) ? item.previewMessages : [],
         backgroundStatus:
           bindings.backgroundConversationBadgeMap.value[String(item.conversationId || "").trim()] || undefined,
-      }));
+        };
+      });
 
     const usedIndices = new Set<number>();
     return items.map((item: any) => {

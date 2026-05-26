@@ -682,7 +682,7 @@ export type UnarchivedConversationSummary = {
   isMainConversation?: boolean;
   isPinned?: boolean;
   pinIndex?: number;
-  runtimeState?: "idle" | "assistant_streaming" | "organizing_context";
+  runtimeState?: "idle" | "assistant_streaming" | "organizing_context" | "archiving" | "compacting";
   currentTodo?: string;
   planModeEnabled?: boolean;
   currentTodos?: ChatTodoItem[];
@@ -736,7 +736,7 @@ export type ChatConversationOverviewItem = {
   isMainConversation?: boolean;
   isPinned?: boolean;
   pinIndex?: number;
-  runtimeState?: "idle" | "assistant_streaming" | "organizing_context";
+  runtimeState?: "idle" | "assistant_streaming" | "organizing_context" | "archiving" | "compacting";
   currentTodo?: string;
   currentTodos?: ChatTodoItem[];
   detachedWindowOpen?: boolean;

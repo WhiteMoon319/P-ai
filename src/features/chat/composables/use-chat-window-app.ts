@@ -162,7 +162,10 @@ export function useChatWindowApp() {
   const deleteUnarchivedConversationFromArchives = (conversationId: string) => conversationActions.deleteUnarchivedConversationFromArchives(conversationId);
   const applyConversationRuntimeStateUpdated: ConversationActionsBridge["applyConversationRuntimeStateUpdated"] =
     (payload) => conversationActions.applyConversationRuntimeStateUpdated(payload);
-  const conversationApi = { bind: (actions: ConversationActionsBridge) => { conversationActions = actions; } };
+  const conversationApi = {
+    bind: (actions: ConversationActionsBridge) => { conversationActions = actions; },
+    applyConversationRuntimeStateUpdated,
+  };
   let chatFlow: any = null;
   let suppressNextOwnMessageAlignFromHistoryFlushed = 0;
   function bumpOwnUserDraftAlign() {
