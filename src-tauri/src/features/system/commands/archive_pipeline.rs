@@ -615,10 +615,7 @@ async fn summarize_archived_conversation_with_model_v2(
             open_loops
         },
         useful_memory_ids: resolve_memory_curation_ids(&parsed.useful_memory_ids, &id_alias_map),
-        memory_actions: resolve_memory_action_drafts(
-            &parsed.memory_actions.into_iter().take(7).collect::<Vec<_>>(),
-            &id_alias_map,
-        ),
+        memory_actions: resolve_memory_action_drafts(&parsed.memory_actions, &id_alias_map),
     })
 }
 
@@ -2144,5 +2141,26 @@ mod archive_pipeline_tests {
         assert!(summary.contains("未完事项"));
         assert!(summary.contains("1. 继续改 archive pipeline"));
         assert!(summary.contains("2. 补充 JSON 契约测试"));
+    }
+
+    #[test]
+    fn resolve_memory_action_drafts_should_not_cap_actions_at_seven() {
+        let drafts = (0..8)
+            .map(|idx| ArchiveMemoryActionDraft {
+                action: ArchiveMemoryActionKind::Create,
+                source_memory_ids: Vec::new(),
+                memory: ArchiveMemoryDraft {
+                    memory_type: "knowledge".to_string(),
+                    judgment: format!("测试记忆 {}", idx),
+                    reasoning: "测试依据".to_string(),
+                    tags: vec!["测试".to_string()],
+                },
+            })
+            .collect::<Vec<_>>();
+        let id_alias_map = HashMap::<String, String>::new();
+
+        let resolved = resolve_memory_action_drafts(&drafts, &id_alias_map);
+
+        assert_eq!(resolved.len(), 8);
     }
 }

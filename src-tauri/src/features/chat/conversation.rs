@@ -1772,6 +1772,13 @@ fn build_prompt_user_meta_text(
                 tags.push(format!("contact_id={}", contact_id));
             }
         }
+    } else if message
+        .speaker_agent_id
+        .as_deref()
+        .map(str::trim)
+        == Some(USER_PERSONA_ID)
+    {
+        tags.push(format!("user_id={}", USER_PERSONA_ID));
     }
     if let Some(memory_ids) = message
         .provider_meta

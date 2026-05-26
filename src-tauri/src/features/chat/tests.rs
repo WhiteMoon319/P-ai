@@ -284,6 +284,24 @@
     }
 
     #[test]
+    fn build_prompt_user_meta_text_should_include_local_user_id() {
+        let now = now_iso();
+        let mut message = test_text_message("user", "继续", &now);
+        message.speaker_agent_id = Some(USER_PERSONA_ID.to_string());
+
+        let meta = build_prompt_user_meta_text(
+            &message,
+            &[default_agent(), default_user_persona()],
+            "用户",
+            "zh-CN",
+            false,
+        )
+        .expect("meta text");
+
+        assert!(meta.contains("user_id=user-persona"));
+    }
+
+    #[test]
     fn build_prompt_user_meta_text_should_use_snake_case_remote_identity_tags() {
         let now = now_iso();
         let mut message = test_text_message("user", "你好", &now);

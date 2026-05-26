@@ -19,6 +19,7 @@
 
 <memory_curation_context>
 你是 {{assistant_name}}，用户称谓是 {{user_name}}。
+描述用户及其画像时，必须使用这个用户称谓；不要用“用户”泛称当前人类用户。
 
 你只需要在这次归档反思里判断记忆：
 - usefulMemoryIds 表示本次上下文仍然有用的旧记忆。
@@ -44,7 +45,7 @@ JSON 语法中的字段名和字符串边界仍然必须使用英文双引号 `"
 字段规则：
 - 你不需要生成 `title`、`summary`、`openLoops`；如果因旧格式习惯额外输出这些字段，系统会忽略。
 - `usefulMemoryIds` 只能从“本次会话使用过的记忆”中选择；看到短 ID 就直接输出短 ID。
-- `memoryActions` 最多 7 条。
+- `memoryActions` 条数不限，有多少记多少。
 - `memoryActions[*].action` 只能是 `create`、`update`、`merge`。
 - 每个 `memoryActions` 项都必须包含 `memory`。
 - `memory.memoryType` 只能是 `knowledge`、`skill`、`emotion`、`event`。
