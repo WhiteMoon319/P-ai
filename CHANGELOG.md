@@ -2,6 +2,10 @@
 
 ## 未发布
 
+## 发布：v0.10.8
+
+- 修复（remote-im）：OneBot v11 WS 事件总线改为渠道级生命周期，事件消费器可在 NapCat 客户端连接前完成订阅，避免重启后连接已建立但早到消息无人消费导致 QQ 消息收不到；同时兼容二进制 JSON WebSocket 帧。
+
 ## 发布：v0.10.7
 
 - 修复（user-profile-memory）：本地用户画像改用消息链路中的 `user-persona` 作为真实用户 ID，并在最新用户请求元信息中注入 `user_id=user-persona`；整理/归档提示词改为使用用户称谓和后置身份片段生成画像标签，避免输出占位符 `用户ID`，并允许 `memoryActions` 多条保留不再静默截断。
