@@ -1,8 +1,8 @@
 impl OnebotV11WsManager {
     /// 订阅事件流
     pub async fn subscribe_events(&self, channel_id: &str) -> Option<broadcast::Receiver<Value>> {
-        let connections = self.connections.read().await;
-        connections.get(channel_id).map(|c| c.event_tx.subscribe())
+        let senders = self.channel_event_senders.read().await;
+        senders.get(channel_id).map(|tx| tx.subscribe())
     }
 
     /// 关闭所有服务器

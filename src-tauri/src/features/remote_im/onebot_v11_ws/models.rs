@@ -116,8 +116,6 @@ struct WsConnection {
     tx: broadcast::Sender<String>,
     /// 等待响应的 oneshot 映射: echo -> sender
     pending_responses: Arc<RwLock<HashMap<String, oneshot::Sender<OneBotApiResponse>>>>,
-    /// 事件上报通道
-    event_tx: broadcast::Sender<Value>,
     /// 连接的对端地址
     peer_addr: Option<String>,
     /// 连接时间
@@ -139,6 +137,8 @@ pub struct OnebotV11WsManager {
     connection_stop_senders: Arc<RwLock<HashMap<String, watch::Sender<bool>>>>,
     /// 每个渠道独立的关闭信号: channel_id -> shutdown sender
     channel_shutdowns: Arc<RwLock<HashMap<String, broadcast::Sender<()>>>>,
+    /// 每个渠道独立的事件总线: channel_id -> event sender
+    channel_event_senders: Arc<RwLock<HashMap<String, broadcast::Sender<Value>>>>,
     /// 渠道日志: channel_id -> 日志条目列表
     channel_logs: Arc<RwLock<HashMap<String, Vec<ChannelLogEntry>>>>,
     /// 渠道监听地址: channel_id -> listen_addr

@@ -4,6 +4,7 @@ impl OnebotV11WsManager {
             connections: Arc::new(RwLock::new(HashMap::new())),
             connection_stop_senders: Arc::new(RwLock::new(HashMap::new())),
             channel_shutdowns: Arc::new(RwLock::new(HashMap::new())),
+            channel_event_senders: Arc::new(RwLock::new(HashMap::new())),
             channel_logs: Arc::new(RwLock::new(HashMap::new())),
             listen_addrs: Arc::new(RwLock::new(HashMap::new())),
             channel_tasks: Arc::new(RwLock::new(HashMap::new())),
@@ -108,6 +109,7 @@ impl OnebotV11WsManager {
         self.connection_stop_senders.write().await.remove(channel_id);
         self.listen_addrs.write().await.remove(channel_id);
         self.channel_shutdowns.write().await.remove(channel_id);
+        self.channel_event_senders.write().await.remove(channel_id);
         self.channel_tasks.write().await.remove(channel_id);
         self.channel_runtimes.write().await.remove(channel_id);
         self.event_consumer_stop_senders.write().await.remove(channel_id);
@@ -122,6 +124,11 @@ impl OnebotV11WsManager {
                 .await
                 .contains_key(channel_id)
             && !self.channel_shutdowns.read().await.contains_key(channel_id)
+            && !self
+                .channel_event_senders
+                .read()
+                .await
+                .contains_key(channel_id)
             && !self.listen_addrs.read().await.contains_key(channel_id)
             && !self.channel_tasks.read().await.contains_key(channel_id)
             && !self.channel_runtimes.read().await.contains_key(channel_id)
@@ -208,6 +215,7 @@ impl OnebotV11WsManager {
         self.connections.write().await.remove(channel_id);
         self.connection_stop_senders.write().await.remove(channel_id);
         self.listen_addrs.write().await.remove(channel_id);
+        self.channel_event_senders.write().await.remove(channel_id);
         self.force_clear_channel_runtime_state(channel_id).await;
         while !self.channel_runtime_state_is_clear(channel_id).await {
             eprintln!(
@@ -334,6 +342,10 @@ impl OnebotV11WsManager {
         // 创建连接通道
         let (conn_tx, _) = broadcast::channel::<String>(64);
         let (event_tx, _) = broadcast::channel::<Value>(256);
+        self.channel_event_senders
+            .write()
+            .await
+            .insert(channel_id.clone(), event_tx.clone());
         let pending_responses = Arc::new(RwLock::new(HashMap::<String, oneshot::Sender<OneBotApiResponse>>::new()));
 
         let saved_channel_id = channel_id.clone();
@@ -563,7 +575,6 @@ impl OnebotV11WsManager {
             let conn = WsConnection {
                 tx: conn_tx.clone(),
                 pending_responses: pending_responses.clone(),
-                event_tx: event_tx.clone(),
                 peer_addr: Some(peer_addr_str.clone()),
                 connected_at: Some(Utc::now()),
             };

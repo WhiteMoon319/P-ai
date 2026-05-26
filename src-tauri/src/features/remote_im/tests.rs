@@ -833,6 +833,62 @@
     }
 
     #[tokio::test]
+    async fn onebot_channel_event_bus_should_exist_before_client_connection() {
+        use futures_util::SinkExt as _;
+
+        let manager = OnebotV11WsManager::new();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind temp listener");
+        let port = listener.local_addr().expect("local addr").port();
+        drop(listener);
+
+        manager
+            .start(
+                "channel-a".to_string(),
+                OnebotV11WsCredentials {
+                    ws_host: "127.0.0.1".to_string(),
+                    ws_port: port,
+                    ws_token: None,
+                },
+            )
+            .await
+            .expect("start onebot channel");
+
+        let mut event_rx = manager
+            .subscribe_events("channel-a")
+            .await
+            .expect("event bus should be available before client connects");
+
+        let url = format!("ws://127.0.0.1:{port}");
+        let (mut client, _) = tokio_tungstenite::connect_async(url.as_str())
+            .await
+            .expect("connect client");
+        let event = serde_json::json!({
+            "post_type": "message",
+            "message_type": "private",
+            "user_id": 10001,
+            "message_id": 42,
+            "message": "hello"
+        });
+        client
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                event.to_string().into(),
+            ))
+            .await
+            .expect("send event");
+
+        let received = tokio::time::timeout(Duration::from_secs(2), event_rx.recv())
+            .await
+            .expect("event should arrive")
+            .expect("event bus open");
+        assert_eq!(received.get("message_id").and_then(Value::as_i64), Some(42));
+
+        manager
+            .stop_channel("channel-a")
+            .await
+            .expect("stop onebot channel");
+    }
+
+    #[tokio::test]
     async fn onebot_channel_should_replace_existing_connection_on_second_handshake() {
         let manager = OnebotV11WsManager::new();
         let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind temp listener");

@@ -62,6 +62,24 @@ async fn append_channel_log(
     }
 }
 
+async fn route_onebot_ws_payload(
+    payload: &str,
+    pending_responses: &Arc<RwLock<HashMap<String, oneshot::Sender<OneBotApiResponse>>>>,
+    event_tx: &broadcast::Sender<Value>,
+) {
+    if let Ok(value) = serde_json::from_str::<Value>(payload) {
+        if let Some(echo) = value.get("echo").and_then(Value::as_str) {
+            if let Ok(response) = serde_json::from_value::<OneBotApiResponse>(value.clone()) {
+                if let Some(tx) = pending_responses.write().await.remove(echo) {
+                    let _ = tx.send(response);
+                }
+            }
+        } else if value.get("post_type").is_some() {
+            let _ = event_tx.send(value);
+        }
+    }
+}
+
 async fn run_message_loop(
     mut ws_sender: WsSender,
     mut ws_receiver: WsReceiver,
@@ -134,16 +152,11 @@ async fn run_message_loop(
             msg = ws_receiver.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
-                        if let Ok(value) = serde_json::from_str::<Value>(&text) {
-                            if let Some(echo) = value.get("echo").and_then(Value::as_str) {
-                                if let Ok(response) = serde_json::from_value::<OneBotApiResponse>(value.clone()) {
-                                    if let Some(tx) = pending_responses.write().await.remove(echo) {
-                                        let _ = tx.send(response);
-                                    }
-                                }
-                            } else if value.get("post_type").is_some() {
-                                let _ = event_tx.send(value);
-                            }
+                        route_onebot_ws_payload(&text, &pending_responses, &event_tx).await;
+                    }
+                    Some(Ok(Message::Binary(data))) => {
+                        if let Ok(text) = std::str::from_utf8(&data) {
+                            route_onebot_ws_payload(text, &pending_responses, &event_tx).await;
                         }
                     }
                     Some(Ok(Message::Ping(data))) => {
