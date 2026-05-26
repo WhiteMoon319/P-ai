@@ -560,7 +560,12 @@
       "sending": "Sending...",
       "sendNativeNotification": "Show Native Notification",
       "backgroundHint": "Minimize the app or move it to the background before testing.",
-      "nativeNotificationSent": "Attempted to send a native notification."
+      "nativeNotificationSent": "Attempted to send a native notification.",
+      "restartTitle": "App Restart Test",
+      "restartSummary": "Trigger the normal app restart flow to test background-service shutdown and relaunch.",
+      "restartApp": "Restart PAI",
+      "restarting": "Restarting...",
+      "restartRequested": "Restart requested."
     },
     "department": {
       "title": "Department",

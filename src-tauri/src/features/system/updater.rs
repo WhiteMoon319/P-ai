@@ -289,12 +289,19 @@ fn shutdown_background_services_before_windows_updater_exit(app: AppHandle) {
     eprintln!("[自动更新] Windows 安装器退出前开始优雅停机后台服务");
     let cleanup_app = app.clone();
     let handle = thread::spawn(move || {
-        tauri::async_runtime::block_on(graceful_shutdown_background_services(&app));
+        tauri::async_runtime::block_on(graceful_shutdown_background_services_with_timeout(&app))
     });
-    if handle.join().is_err() {
-        eprintln!("[自动更新] Windows 安装器退出前优雅停机后台服务失败：停机线程异常退出");
-    } else {
-        eprintln!("[自动更新] Windows 安装器退出前优雅停机后台服务完成");
+    match handle.join() {
+        Ok(true) => {
+            eprintln!("[自动更新] Windows 安装器退出前优雅停机后台服务完成");
+        }
+        Ok(false) => {
+            eprintln!("[自动更新] Windows 安装器退出前优雅停机后台服务超时");
+            show_background_shutdown_timeout_dialog(&cleanup_app);
+        }
+        Err(_) => {
+            eprintln!("[自动更新] Windows 安装器退出前优雅停机后台服务失败：停机线程异常退出");
+        }
     }
     cleanup_app.cleanup_before_exit();
 }
@@ -1178,14 +1185,31 @@ async fn apply_prepared_github_update(app: AppHandle) -> Result<(), String> {
                     UpdateRuntimeKind::Installer,
                     UPDATE_STAGE_COMPLETED,
                     format!("安装版更新 {} 已安装，准备重启", prepared.target_version),
-                    Some(prepared.current_version),
-                    Some(prepared.target_version),
+                    Some(prepared.current_version.clone()),
+                    Some(prepared.target_version.clone()),
                     None,
                     None,
                     None,
                 ),
             );
-            graceful_shutdown_background_services(&app).await;
+            if !graceful_shutdown_background_services_with_timeout(&app).await {
+                let message = "自动关闭失败，请手动关闭应用重启".to_string();
+                show_background_shutdown_timeout_dialog(&app);
+                emit_update_progress(
+                    &app,
+                    build_update_progress(
+                        UpdateRuntimeKind::Installer,
+                        UPDATE_STAGE_FAILED,
+                        format!("更新失败：{message}"),
+                        Some(prepared.current_version),
+                        Some(prepared.target_version),
+                        None,
+                        None,
+                        Some(message.clone()),
+                    ),
+                );
+                return Err(message);
+            }
             app.restart()
         }
         PreparedGithubUpdate::Portable(prepared) => {
@@ -1213,20 +1237,37 @@ async fn apply_prepared_github_update(app: AppHandle) -> Result<(), String> {
                 );
                 return Err(message);
             }
+            if !graceful_shutdown_background_services_with_timeout(&app).await {
+                let message = "自动关闭失败，请手动关闭应用重启".to_string();
+                show_background_shutdown_timeout_dialog(&app);
+                emit_update_progress(
+                    &app,
+                    build_update_progress(
+                        prepared.runtime_kind,
+                        UPDATE_STAGE_FAILED,
+                        format!("更新失败：{message}"),
+                        Some(prepared.current_version),
+                        Some(prepared.target_version),
+                        None,
+                        None,
+                        Some(message.clone()),
+                    ),
+                );
+                return Err(message);
+            }
             emit_update_progress(
                 &app,
                 build_update_progress(
                     prepared.runtime_kind,
                     UPDATE_STAGE_REPLACING,
                     format!("便携版更新 {} 已准备完成，程序即将退出并完成替换", prepared.target_version),
-                    Some(prepared.current_version),
-                    Some(prepared.target_version),
+                    Some(prepared.current_version.clone()),
+                    Some(prepared.target_version.clone()),
                     None,
                     None,
                     None,
                 ),
             );
-            graceful_shutdown_background_services(&app).await;
             app.exit(0);
             Ok(())
         }

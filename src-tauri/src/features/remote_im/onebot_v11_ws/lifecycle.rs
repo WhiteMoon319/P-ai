@@ -39,33 +39,14 @@ pub fn onebot_v11_ws_manager() -> Arc<OnebotV11WsManager> {
     ONEBOT_V11_WS_MANAGER.clone()
 }
 
-/// 启动 OneBot v11 WebSocket 服务器（同步版本，用于应用启动）
-pub(crate) fn onebot_v11_ws_server_start(
+/// 启动 OneBot v11 WebSocket 服务器
+pub(crate) async fn onebot_v11_ws_server_start(
     channel: RemoteImChannelConfig,
-    _app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
     let credentials = OnebotV11WsCredentials::from_credentials(&channel.credentials);
     let manager = onebot_v11_ws_manager();
     let channel_id = channel.id.clone();
-
-    // 通过 oneshot 等待异步启动结果，确保错误能传递给调用方
-    let (tx, rx) = std::sync::mpsc::channel();
-    tauri::async_runtime::spawn(async move {
-        let result = manager.start(channel_id, credentials).await;
-        if tx.send(result).is_err() {
-            eprintln!("[远程IM][OneBot v11 WS] 启动结果回传失败：接收端已关闭");
-        }
-    });
-
-    match rx.recv_timeout(Duration::from_secs(8)) {
-        Ok(result) => result,
-        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-            Err("启动 OneBot v11 WS 服务超时，异步任务未及时返回".to_string())
-        }
-        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-            Err("启动任务通道关闭".to_string())
-        }
-    }
+    manager.start(channel_id, credentials).await
 }
 
 /// 获取渠道连接状态

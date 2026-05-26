@@ -266,7 +266,10 @@ impl OnebotV11WsManager {
             match tokio::time::timeout(Duration::from_secs(5), &mut handle).await {
                 Ok(join_result) => {
                     if let Err(err) = join_result {
-                        return Err(format!("停止事件消费器失败: {}", err));
+                        eprintln!(
+                            "[远程IM][OneBot v11 事件] 停止消费器失败，已移除任务句柄: channel_id={}, error={}",
+                            channel_id, err
+                        );
                     }
                 }
                 Err(_) => {

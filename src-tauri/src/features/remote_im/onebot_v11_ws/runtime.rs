@@ -90,21 +90,83 @@ impl OnebotV11WsManager {
         let Some(runtime) = runtime else {
             return;
         };
+        eprintln!(
+            "[远程IM][OneBot v11 WS] 开始等待渠道连接任务组退出: channel_id={}",
+            channel_id
+        );
         runtime.cancel.cancel();
         runtime.tasks.close();
-        let wait_result = tokio::time::timeout(Duration::from_secs(5), runtime.tasks.wait()).await;
-        if wait_result.is_err() {
-            eprintln!(
-                "[远程IM][OneBot v11 WS] 停止渠道连接任务超时，已关闭任务组: {}",
-                channel_id
-            );
-            self.add_log(channel_id, "warn", "停止渠道连接任务超时").await;
-        }
+        runtime.tasks.wait().await;
+        eprintln!(
+            "[远程IM][OneBot v11 WS] 渠道连接任务组已退出: channel_id={}",
+            channel_id
+        );
+    }
+
+    async fn force_clear_channel_runtime_state(&self, channel_id: &str) {
+        self.connections.write().await.remove(channel_id);
+        self.connection_stop_senders.write().await.remove(channel_id);
+        self.listen_addrs.write().await.remove(channel_id);
+        self.channel_shutdowns.write().await.remove(channel_id);
+        self.channel_tasks.write().await.remove(channel_id);
+        self.channel_runtimes.write().await.remove(channel_id);
+        self.event_consumer_stop_senders.write().await.remove(channel_id);
+        self.event_consumer_tasks.write().await.remove(channel_id);
+    }
+
+    async fn channel_runtime_state_is_clear(&self, channel_id: &str) -> bool {
+        !self.connections.read().await.contains_key(channel_id)
+            && !self
+                .connection_stop_senders
+                .read()
+                .await
+                .contains_key(channel_id)
+            && !self.channel_shutdowns.read().await.contains_key(channel_id)
+            && !self.listen_addrs.read().await.contains_key(channel_id)
+            && !self.channel_tasks.read().await.contains_key(channel_id)
+            && !self.channel_runtimes.read().await.contains_key(channel_id)
+            && !self
+                .event_consumer_stop_senders
+                .read()
+                .await
+                .contains_key(channel_id)
+            && !self
+                .event_consumer_tasks
+                .read()
+                .await
+                .contains_key(channel_id)
     }
 
     async fn stop_channel_inner(&self, channel_id: &str) -> Result<(), String> {
-        self.stop_event_consumer_inner(channel_id).await?;
-        self.stop_onebot_connection_inner(channel_id).await?;
+        let started_at = std::time::Instant::now();
+        eprintln!(
+            "[远程IM][OneBot v11 WS] 开始强制停止渠道: channel_id={}",
+            channel_id
+        );
+        eprintln!(
+            "[远程IM][OneBot v11 WS] 停止阶段=事件消费器: channel_id={}",
+            channel_id
+        );
+        if let Err(err) = self.stop_event_consumer_inner(channel_id).await {
+            eprintln!(
+                "[远程IM][OneBot v11 WS] 停止事件消费器失败，继续强制清理渠道: channel_id={}, error={}",
+                channel_id, err
+            );
+        }
+        eprintln!(
+            "[远程IM][OneBot v11 WS] 停止阶段=活动连接: channel_id={}",
+            channel_id
+        );
+        if let Err(err) = self.stop_onebot_connection_inner(channel_id).await {
+            eprintln!(
+                "[远程IM][OneBot v11 WS] 停止活动连接失败，继续强制清理渠道: channel_id={}, error={}",
+                channel_id, err
+            );
+        }
+        eprintln!(
+            "[远程IM][OneBot v11 WS] 停止阶段=accept循环: channel_id={}",
+            channel_id
+        );
         // 发送关闭信号给该渠道的 accept 循环
         let shutdown_tx = { self.channel_shutdowns.write().await.remove(channel_id) };
         if let Some(tx) = shutdown_tx {
@@ -117,22 +179,50 @@ impl OnebotV11WsManager {
             match tokio::time::timeout(Duration::from_secs(8), &mut handle).await {
                 Ok(join_result) => {
                     if let Err(err) = join_result {
-                        return Err(format!("停止渠道任务失败: {}", err));
+                        eprintln!(
+                            "[远程IM][OneBot v11 WS] 停止渠道任务失败，继续清理运行态: channel_id={}, error={}",
+                            channel_id, err
+                        );
                     }
                 }
                 Err(_) => {
                     handle.abort();
                     let _ = handle.await;
-                    return Err(format!("停止渠道超时: {}", channel_id));
+                    eprintln!(
+                        "[远程IM][OneBot v11 WS] 停止渠道超时，已强制中止 accept 循环: {}",
+                        channel_id
+                    );
                 }
             }
         }
+        eprintln!(
+            "[远程IM][OneBot v11 WS] 停止阶段=连接任务组: channel_id={}",
+            channel_id
+        );
         self.stop_channel_runtime_tasks_inner(channel_id).await;
+        eprintln!(
+            "[远程IM][OneBot v11 WS] 停止阶段=清理运行态: channel_id={}",
+            channel_id
+        );
         // 清除连接和监听地址
         self.connections.write().await.remove(channel_id);
         self.connection_stop_senders.write().await.remove(channel_id);
         self.listen_addrs.write().await.remove(channel_id);
+        self.force_clear_channel_runtime_state(channel_id).await;
+        while !self.channel_runtime_state_is_clear(channel_id).await {
+            eprintln!(
+                "[远程IM][OneBot v11 WS] 渠道运行态仍未清空，继续强制清理: channel_id={}",
+                channel_id
+            );
+            self.force_clear_channel_runtime_state(channel_id).await;
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
         self.add_log(channel_id, "info", "渠道服务器已停止").await;
+        eprintln!(
+            "[远程IM][OneBot v11 WS] 渠道已强制停止完成: channel_id={}, duration_ms={}",
+            channel_id,
+            started_at.elapsed().as_millis()
+        );
         Ok(())
     }
 

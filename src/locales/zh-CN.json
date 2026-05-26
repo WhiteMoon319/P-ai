@@ -560,7 +560,12 @@
       "sending": "发送中...",
       "sendNativeNotification": "弹一个原生通知",
       "backgroundHint": "建议先把应用最小化或切到后台再测试。",
-      "nativeNotificationSent": "已尝试发送原生通知。"
+      "nativeNotificationSent": "已尝试发送原生通知。",
+      "restartTitle": "应用重启测试",
+      "restartSummary": "触发普通应用重启流程，方便验证后台服务关闭与重启链路。",
+      "restartApp": "重启 PAI",
+      "restarting": "正在重启...",
+      "restartRequested": "已发起重启请求。"
     },
     "department": {
       "title": "部门",

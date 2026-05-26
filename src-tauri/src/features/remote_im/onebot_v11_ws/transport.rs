@@ -80,7 +80,11 @@ async fn run_message_loop(
     loop {
         tokio::select! {
             _ = cancel.cancelled() => {
-                let _ = ws_sender.send(Message::Close(None)).await;
+                let _ = tokio::time::timeout(
+                    std::time::Duration::from_millis(500),
+                    ws_sender.send(Message::Close(None)),
+                )
+                .await;
                 disconnect_level = "info".to_string();
                 disconnect_message = format!("收到渠道取消信号: {}", peer_addr_str);
                 break;
@@ -88,7 +92,12 @@ async fn run_message_loop(
             cmd = cmd_rx.recv() => {
                 match cmd {
                     Ok(payload) => {
-                        if ws_sender.send(Message::Text(payload.into())).await.is_err() {
+                        let send_result = tokio::time::timeout(
+                            std::time::Duration::from_millis(500),
+                            ws_sender.send(Message::Text(payload.into())),
+                        )
+                        .await;
+                        if !matches!(send_result, Ok(Ok(()))) {
                             disconnect_level = "warn".to_string();
                             disconnect_message = format!("向客户端发送消息失败: {}", peer_addr_str);
                             break;
@@ -105,7 +114,11 @@ async fn run_message_loop(
                 match changed {
                     Ok(()) => {
                         if *stop_rx.borrow() {
-                            let _ = ws_sender.send(Message::Close(None)).await;
+                            let _ = tokio::time::timeout(
+                                std::time::Duration::from_millis(500),
+                                ws_sender.send(Message::Close(None)),
+                            )
+                            .await;
                             disconnect_level = "info".to_string();
                             disconnect_message = format!("收到连接停止信号: {}", peer_addr_str);
                             break;
@@ -134,7 +147,11 @@ async fn run_message_loop(
                         }
                     }
                     Some(Ok(Message::Ping(data))) => {
-                        let _ = ws_sender.send(Message::Pong(data)).await;
+                        let _ = tokio::time::timeout(
+                            std::time::Duration::from_millis(500),
+                            ws_sender.send(Message::Pong(data)),
+                        )
+                        .await;
                     }
                     Some(Ok(Message::Close(_))) | None => {
                         break;

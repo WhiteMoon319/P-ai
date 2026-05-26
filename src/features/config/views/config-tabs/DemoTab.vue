@@ -37,6 +37,29 @@
     <div class="card border border-base-300 bg-base-100">
       <div class="card-body gap-3 p-4">
         <div class="space-y-1">
+          <h3 class="card-title text-base">{{ t("config.demo.restartTitle") }}</h3>
+          <p class="text-sm text-base-content/70">
+            {{ t("config.demo.restartSummary") }}
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            class="btn btn-warning"
+            :disabled="restarting"
+            @click="restartApp"
+          >
+            <RotateCcw class="size-4" aria-hidden="true" />
+            {{ restarting ? t("config.demo.restarting") : t("config.demo.restartApp") }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card border border-base-300 bg-base-100">
+      <div class="card-body gap-3 p-4">
+        <div class="space-y-1">
           <h3 class="card-title text-base">DelegateProgressLine 预览</h3>
           <p class="text-sm text-base-content/70">折叠卡片第二行的实时进度组件样本。</p>
         </div>
@@ -98,6 +121,7 @@
 </template>
 
 <script setup lang="ts">
+import { RotateCcw } from "@lucide/vue";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../../services/tauri-api";
@@ -112,6 +136,7 @@ type NativeNotificationDemoResult = {
 };
 
 const sending = ref(false);
+const restarting = ref(false);
 const errorText = ref("");
 const resultText = ref("");
 const { t } = useI18n();
@@ -134,6 +159,20 @@ async function sendNativeNotification() {
     errorText.value = error instanceof Error ? error.message : String(error);
   } finally {
     sending.value = false;
+  }
+}
+
+async function restartApp() {
+  restarting.value = true;
+  errorText.value = "";
+  resultText.value = "";
+
+  try {
+    await invokeTauri<void>("demo_restart_app");
+    resultText.value = t("config.demo.restartRequested");
+  } catch (error) {
+    errorText.value = error instanceof Error ? error.message : String(error);
+    restarting.value = false;
   }
 }
 </script>

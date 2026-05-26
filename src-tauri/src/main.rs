@@ -21,7 +21,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, PhysicalPosition, Position, State,
 };
-use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
 use uuid::Uuid;
@@ -108,6 +108,15 @@ fn install_tauri_async_runtime() -> Result<tokio::runtime::Runtime, String> {
         format!("设置 Tauri 异步运行时失败: {panic_text}")
     })?;
     Ok(runtime)
+}
+
+#[tauri::command]
+fn demo_restart_app(app: AppHandle) -> Result<(), String> {
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        graceful_restart_app(&app);
+    });
+    Ok(())
 }
 
 // Remote IM 命令包装
@@ -380,6 +389,7 @@ async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {
         .filter(|ch| ch.enabled && ch.platform == RemoteImPlatform::OnebotV11)
         .cloned()
         .collect();
+    let mut started_napcat_channels = Vec::new();
     for channel in &napcat_channels {
         let effective_channel =
             match remote_im_channel_with_effective_credentials(&event_state, channel) {
@@ -392,14 +402,19 @@ async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {
                     continue;
                 }
             };
-        if let Err(err) = onebot_v11_ws_server_start(effective_channel, app_handle.clone()) {
-            eprintln!(
-                "[启动] 前端就绪后启动 OneBot v11 WS 服务失败: channel_id={}, error={}",
-                channel.id, err
-            );
+        match onebot_v11_ws_server_start(effective_channel).await {
+            Ok(()) => {
+                started_napcat_channels.push(channel.clone());
+            }
+            Err(err) => {
+                eprintln!(
+                    "[启动] 前端就绪后启动 OneBot v11 WS 服务失败: channel_id={}, error={}",
+                    channel.id, err
+                );
+            }
         }
     }
-    for channel in napcat_channels {
+    for channel in started_napcat_channels {
         let channel_id = channel.id.clone();
         let state_clone = event_state.clone();
         if let Err(err) = onebot_v11_ws_manager()
@@ -469,9 +484,33 @@ async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {
 const APP_SHUTDOWN_STATE_IDLE: u8 = 0;
 const APP_SHUTDOWN_STATE_RUNNING: u8 = 1;
 const APP_SHUTDOWN_STATE_DONE: u8 = 2;
+const BACKGROUND_SHUTDOWN_TIMEOUT_SECS: u64 = 60;
 
 static APP_SHUTDOWN_STATE: std::sync::atomic::AtomicU8 =
     std::sync::atomic::AtomicU8::new(APP_SHUTDOWN_STATE_IDLE);
+
+fn show_background_shutdown_timeout_dialog(app: &AppHandle) {
+    let message = "自动关闭失败，请手动关闭应用重启";
+    eprintln!("[退出] {message}");
+    app.dialog()
+        .message(message)
+        .title("自动关闭失败")
+        .kind(MessageDialogKind::Error)
+        .show(|_| {});
+}
+
+fn show_background_shutdown_timeout_dialog_then_exit(app: &AppHandle, code: i32) {
+    let message = "自动关闭失败，请手动关闭应用重启";
+    eprintln!("[退出] {message}");
+    let app_handle = app.clone();
+    app.dialog()
+        .message(message)
+        .title("自动关闭失败")
+        .kind(MessageDialogKind::Error)
+        .show(move |_| {
+            app_handle.exit(code);
+        });
+}
 
 async fn graceful_shutdown_background_services(app: &AppHandle) {
     let shutdown_started = APP_SHUTDOWN_STATE.compare_exchange(
@@ -512,26 +551,17 @@ async fn graceful_shutdown_background_services(app: &AppHandle) {
             match channel.platform {
                 RemoteImPlatform::OnebotV11 => shutdown_futures.push(Box::pin(async move {
                     let stop_started = std::time::Instant::now();
-                    match tokio::time::timeout(
-                        std::time::Duration::from_secs(10),
-                        onebot_v11_ws_manager().stop_channel(&channel_id),
-                    )
-                    .await
-                    {
-                        Ok(Ok(())) => eprintln!(
+                    match onebot_v11_ws_manager().stop_channel(&channel_id).await {
+                        Ok(()) => eprintln!(
                             "[退出] OneBot 渠道已停止: channel_id={}，duration_ms={}",
                             channel_id,
                             stop_started.elapsed().as_millis()
                         ),
-                        Ok(Err(err)) => eprintln!(
-                            "[退出] OneBot 渠道停止失败: channel_id={}，duration_ms={}，error={}",
+                        Err(err) => eprintln!(
+                            "[退出] OneBot 渠道停止异常，底层已执行强制清理: channel_id={}，duration_ms={}，error={}",
                             channel_id,
                             stop_started.elapsed().as_millis(),
                             err
-                        ),
-                        Err(_) => eprintln!(
-                            "[退出] OneBot 渠道停止超时: channel_id={}，timeout_ms=10000",
-                            channel_id
                         ),
                     }
                 })),
@@ -626,18 +656,43 @@ async fn graceful_shutdown_background_services(app: &AppHandle) {
     APP_SHUTDOWN_STATE.store(APP_SHUTDOWN_STATE_DONE, std::sync::atomic::Ordering::SeqCst);
 }
 
-fn graceful_shutdown_background_services_blocking(app: &AppHandle) {
-    tauri::async_runtime::block_on(graceful_shutdown_background_services(app));
+async fn graceful_shutdown_background_services_with_timeout(app: &AppHandle) -> bool {
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(BACKGROUND_SHUTDOWN_TIMEOUT_SECS),
+        graceful_shutdown_background_services(app),
+    )
+    .await
+    {
+        Ok(()) => true,
+        Err(_) => {
+            APP_SHUTDOWN_STATE.store(
+                APP_SHUTDOWN_STATE_IDLE,
+                std::sync::atomic::Ordering::SeqCst,
+            );
+            eprintln!("[退出] 后台服务自动关闭超过 {} 秒", BACKGROUND_SHUTDOWN_TIMEOUT_SECS);
+            false
+        }
+    }
+}
+
+fn graceful_shutdown_background_services_blocking(app: &AppHandle) -> bool {
+    tauri::async_runtime::block_on(graceful_shutdown_background_services_with_timeout(app))
 }
 
 fn graceful_exit_app(app: &AppHandle, code: i32) {
-    graceful_shutdown_background_services_blocking(app);
-    app.exit(code);
+    if graceful_shutdown_background_services_blocking(app) {
+        app.exit(code);
+    } else {
+        show_background_shutdown_timeout_dialog_then_exit(app, code);
+    }
 }
 
 fn graceful_restart_app(app: &AppHandle) {
-    graceful_shutdown_background_services_blocking(app);
-    app.restart();
+    if graceful_shutdown_background_services_blocking(app) {
+        app.restart();
+    } else {
+        show_background_shutdown_timeout_dialog(app);
+    }
 }
 
 fn main() {
@@ -1004,6 +1059,7 @@ fn main() {
             desktop_screenshot,
             xcap,
             demo_send_native_notification,
+            demo_restart_app,
             get_host_runtime_prerequisites,
             install_host_runtime_prerequisite,
             terminal_self_check,
