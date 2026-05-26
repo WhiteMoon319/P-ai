@@ -159,6 +159,16 @@
                             <span>{{ t("common.rename") }}</span>
                           </button>
                         </li>
+                        <li>
+                          <button
+                            type="button"
+                            :disabled="!canExportConversation(item)"
+                            @click.stop="requestConversationExport(item)"
+                          >
+                            <Download class="h-4 w-4" />
+                            <span>{{ t("chat.exportConversation") }}</span>
+                          </button>
+                        </li>
                         <li v-if="!item.isMainConversation">
                           <button
                             type="button"
@@ -221,7 +231,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
-import { Archive, Ellipsis, PencilLine, Pin, PinOff, Search, Trash2 } from "@lucide/vue";
+import { Archive, Download, Ellipsis, PencilLine, Pin, PinOff, Search, Trash2 } from "@lucide/vue";
 import type { ChatConversationOverviewItem, ConversationPreviewMessage } from "../../../types/app";
 import { usePipelineStatus } from "../../shell/composables/use-pipeline-status";
 import { formatConversationListTime } from "../utils/conversation-time";
@@ -244,6 +254,7 @@ const emit = defineEmits<{
   (e: "rename", payload: { conversationId: string; title: string }): void;
   (e: "togglePinConversation", conversationId: string): void;
   (e: "archiveConversation", conversationId: string): void;
+  (e: "exportConversation", conversationId: string): void;
   (e: "deleteConversation", conversationId: string): void;
   (e: "update:activeTab", value: "local" | "contact"): void;
 }>();
@@ -434,6 +445,10 @@ function canArchiveConversation(item: ChatConversationOverviewItem): boolean {
   return isLocalConversation(item) && !item.isMainConversation && !isConversationDisabled(item);
 }
 
+function canExportConversation(item: ChatConversationOverviewItem): boolean {
+  return isLocalConversation(item) && !isConversationDisabled(item);
+}
+
 function canDeleteConversation(item: ChatConversationOverviewItem): boolean {
   return isLocalConversation(item) && !item.isMainConversation && !isConversationDisabled(item);
 }
@@ -451,6 +466,11 @@ function toggleConversationPin(item: ChatConversationOverviewItem) {
 function requestConversationArchive(item: ChatConversationOverviewItem) {
   if (!canArchiveConversation(item)) return;
   emit("archiveConversation", String(item.conversationId || "").trim());
+}
+
+function requestConversationExport(item: ChatConversationOverviewItem) {
+  if (!canExportConversation(item)) return;
+  emit("exportConversation", String(item.conversationId || "").trim());
 }
 
 function requestConversationDelete(item: ChatConversationOverviewItem) {

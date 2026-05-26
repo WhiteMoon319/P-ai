@@ -232,6 +232,7 @@
         @rename-conversation="onRenameConversation"
         @toggle-pin-conversation="onToggleConversationPin"
         @archive-conversation="onArchiveConversation"
+        @export-conversation="exportConversationShare"
         @delete-conversation="onDeleteConversation"
         @create-conversation="onCreateConversation"
         @approve-terminal-approval="approveTerminalApproval"
@@ -675,7 +676,7 @@ const props = defineProps<{
   onToggleConversationPin: (conversationId: string) => void;
   onArchiveConversation: (conversationId: string) => void;
   onDeleteConversation: (conversationId: string) => void;
-  onCreateConversation: (input?: { title?: string; departmentId?: string }) => void;
+  onCreateConversation: (input?: { title?: string; departmentId?: string; copyCurrent?: boolean; importPath?: string }) => void;
   onBranchConversationFromSelection: (payload: { count: number; messageIds: string[] }) => void;
   onForwardConversationFromSelection: (payload: { count: number; messageIds: string[]; targetConversationId: string }) => void;
   onUserAsyncDelegateFromSelection: (payload: { count: number; messageIds: string[]; departmentId: string; presetId: string; background: string; question: string; focus: string }) => Promise<boolean> | boolean;
@@ -729,6 +730,30 @@ function handleDetachConversation() {
 const selectionShareDialogOpen = ref(false);
 const selectionShareDialogLoading = ref(false);
 const selectionSharePayload = ref<SelectionSharePayload | null>(null);
+
+async function exportConversationShare(conversationId: string) {
+  const id = String(conversationId || "").trim();
+  if (!id) return;
+  try {
+    const result = await invokeTauri<{ fileName: string; payloadJson: string }>("export_conversation_share_json", {
+      input: { conversationId: id },
+    });
+    const path = await save({
+      filters: [{ name: "JSON", extensions: ["json"] }],
+      defaultPath: String(result?.fileName || "conversation.json").trim() || "conversation.json",
+    });
+    if (!path) return;
+    await invokeTauri("write_utf8_text_file_to_path", {
+      input: {
+        path,
+        text: String(result?.payloadJson || ""),
+      },
+    });
+    props.setStatus(props.t("chat.conversationShareExported", { path }));
+  } catch (error) {
+    props.setStatus(props.t("chat.conversationShareExportFailed", { err: String(error) }));
+  }
+}
 
 async function handleUserAsyncDelegateFromSelection(payload: {
   count: number;

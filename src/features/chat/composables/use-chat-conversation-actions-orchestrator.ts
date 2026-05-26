@@ -9,7 +9,7 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
       : [];
   }
 
-  async function createUnarchivedConversation(input?: { title?: string; departmentId?: string; copyCurrent?: boolean }) {
+  async function createUnarchivedConversation(input?: { title?: string; departmentId?: string; copyCurrent?: boolean; importPath?: string }) {
     const departmentId =
       String(input?.departmentId || "").trim()
       || bindings.defaultCreateConversationDepartmentId.value;
@@ -18,16 +18,25 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
       const copySourceConversationId = input?.copyCurrent
         ? String(bindings.currentChatConversationId.value || "").trim()
         : "";
+      const importPath = String(input?.importPath || "").trim();
       const result = await invokeTauri<{
         conversationId: string;
         unarchivedConversations?: any[];
-      }>("create_unarchived_conversation", {
-        input: {
-          departmentId,
-          title: String(input?.title || "").trim() || null,
-          copySourceConversationId: copySourceConversationId || null,
-        },
-      });
+      }>(importPath ? "import_conversation_share_from_file" : "create_unarchived_conversation", importPath
+        ? {
+          input: {
+            path: importPath,
+            departmentId,
+            title: String(input?.title || "").trim() || null,
+          },
+        }
+        : {
+          input: {
+            departmentId,
+            title: String(input?.title || "").trim() || null,
+            copySourceConversationId: copySourceConversationId || null,
+          },
+        });
       const conversationId = String(result?.conversationId || "").trim();
       if (!conversationId) return;
       if (Array.isArray(result.unarchivedConversations)) {
@@ -36,8 +45,11 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
         await bindings.refreshUnarchivedConversationOverview();
       }
       await bindings.switchUnarchivedConversation(conversationId);
+      if (importPath) {
+        bindings.setStatus(bindings.tr("status.conversationShareImported"));
+      }
     } catch (error) {
-      bindings.setStatus(`转发到会话失败：${bindings.formatRequestFailed(error)}`);
+      bindings.setStatus(bindings.tr("status.conversationCreateFailed", { err: bindings.formatRequestFailed(error) }));
     }
   }
 

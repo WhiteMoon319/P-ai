@@ -923,6 +923,8 @@ fn main() {
             mark_conversation_read,
             set_conversation_plan_mode,
             create_unarchived_conversation,
+            export_conversation_share_json,
+            import_conversation_share_from_file,
             branch_unarchived_conversation_from_selection,
             forward_unarchived_conversation_selection,
             rename_unarchived_conversation,

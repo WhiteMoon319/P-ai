@@ -21,6 +21,7 @@
         @rename="handleConversationRename"
         @toggle-pin-conversation="handleConversationPinToggle"
         @archive-conversation="handleConversationArchive"
+        @export-conversation="handleConversationExport"
         @delete-conversation="handleConversationDelete"
       />
     </div>
@@ -478,8 +479,9 @@ const emit = defineEmits<{
   (e: "renameConversation", payload: { conversationId: string; title: string }): void;
   (e: "togglePinConversation", conversationId: string): void;
   (e: "archiveConversation", conversationId: string): void;
+  (e: "exportConversation", conversationId: string): void;
   (e: "deleteConversation", conversationId: string): void;
-  (e: "createConversation", input?: { title?: string; departmentId?: string }): void;
+  (e: "createConversation", input?: { title?: string; departmentId?: string; copyCurrent?: boolean; importPath?: string }): void;
   (e: "loadOlderHistory"): void; (e: "reachedBottom"): void;
   (e: "jumpToConversationBottom"): void;
   (e: "refreshToolReviewMessage", payload: { conversationId: string; messageId: string }): void;
@@ -873,6 +875,7 @@ function handleConversationRename(payload: { conversationId: string; title: stri
 }
 function handleConversationPinToggle(id: string) { emit("togglePinConversation", String(id || "").trim()); }
 function handleConversationArchive(id: string) { emit("archiveConversation", String(id || "").trim()); }
+function handleConversationExport(id: string) { emit("exportConversation", String(id || "").trim()); }
 function handleConversationDelete(id: string) { emit("deleteConversation", String(id || "").trim()); }
 
 // ==================== link / copy ====================

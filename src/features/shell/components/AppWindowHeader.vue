@@ -377,6 +377,11 @@
         </div>
       </div>
       <div class="modal-action">
+        <button class="btn btn-sm" :disabled="importConversationLoading" @click="importConversationFromExternal">
+          <span v-if="importConversationLoading" class="loading loading-spinner loading-xs"></span>
+          <Upload v-else class="h-4 w-4" />
+          <span>{{ t("chat.importConversationExternal") }}</span>
+        </button>
         <button class="btn btn-sm" @click="closeCreateConversationDialog">{{ t("common.cancel") }}</button>
         <button class="btn btn-sm btn-primary" @click="confirmCreateConversation">{{ t("common.confirm") }}</button>
       </div>
@@ -439,7 +444,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../services/tauri-api";
-import { ChevronDown, Download, FoldVertical, History, LayoutList, LayoutPanelLeft, Minus, ScrollText, Search, Settings, Square, SquarePen, X } from "@lucide/vue";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { ChevronDown, Download, FoldVertical, History, LayoutList, LayoutPanelLeft, Minus, ScrollText, Search, Settings, Square, SquarePen, Upload, X } from "@lucide/vue";
 import type { ChatConversationOverviewItem } from "../../../types/app";
 import { resolveConversationDisplayTitle } from "../../chat/utils/conversation-title";
 import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
@@ -465,6 +471,7 @@ type CreateConversationInput = {
   title?: string;
   departmentId?: string;
   copyCurrent?: boolean;
+  importPath?: string;
 };
 
 const RECENT_CONVERSATION_TOPICS_STORAGE_KEY = "easy_call.recent_conversation_topics.v1";
@@ -640,6 +647,7 @@ const createConversationDialogOpen = ref(false);
 const createConversationTitle = ref("");
 const createConversationDepartmentId = ref("");
 const createConversationCopyCurrent = ref(false);
+const importConversationLoading = ref(false);
 const configSearchOpen = ref(false);
 const changelogDialogOpen = ref(false);
 const changelogLoading = ref(false);
@@ -771,6 +779,7 @@ function closeCreateConversationDialog() {
   createConversationTitle.value = "";
   createConversationDepartmentId.value = "";
   createConversationCopyCurrent.value = false;
+  importConversationLoading.value = false;
 }
 
 function applyRecentConversationTopic(topic: string) {
@@ -800,6 +809,38 @@ function confirmCreateConversation() {
     departmentId: departmentId || undefined,
     copyCurrent,
   });
+}
+
+async function importConversationFromExternal() {
+  if (importConversationLoading.value) return;
+  importConversationLoading.value = true;
+  try {
+    const selected = await openDialog({
+      multiple: false,
+      directory: false,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    const importPath = Array.isArray(selected) ? selected[0] : selected;
+    const path = String(importPath || "").trim();
+    if (!path) return;
+    const title = String(createConversationTitle.value || "").trim();
+    const departmentId = String(createConversationDepartmentId.value || "").trim();
+    if (title) {
+      pushRecentConversationTopic(title);
+    }
+    createConversationDialogOpen.value = false;
+    createConversationTitle.value = "";
+    createConversationDepartmentId.value = "";
+    createConversationCopyCurrent.value = false;
+    emit("create-conversation", {
+      title,
+      departmentId: departmentId || undefined,
+      copyCurrent: false,
+      importPath: path,
+    });
+  } finally {
+    importConversationLoading.value = false;
+  }
 }
 
 function handleCreateConversationDialogKeydown(event: KeyboardEvent) {
