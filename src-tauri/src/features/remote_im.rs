@@ -230,6 +230,14 @@ fn remote_im_upsert_contact_for_inbound(
         {
             contact.remote_contact_name = name.to_string();
         }
+        if let Some(avatar_url) = input
+            .sender_avatar_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+        {
+            contact.avatar_url = avatar_url.to_string();
+        }
         if matches!(input.platform, RemoteImPlatform::Dingtalk) {
             let session_webhook = resolve_dingtalk_session_webhook(input);
             if session_webhook.is_some() {
@@ -253,6 +261,12 @@ fn remote_im_upsert_contact_for_inbound(
         remote_contact_id: input.remote_contact_id.trim().to_string(),
         remote_contact_name: input
             .remote_contact_name
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or("")
+            .to_string(),
+        avatar_url: input
+            .sender_avatar_url
             .as_deref()
             .map(str::trim)
             .unwrap_or("")

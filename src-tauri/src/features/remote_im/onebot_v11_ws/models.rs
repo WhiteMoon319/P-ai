@@ -127,6 +127,7 @@ struct WsConnection {
 
 #[derive(Clone)]
 struct OnebotChannelRuntime {
+    id: String,
     cancel: CancellationToken,
     tasks: TaskTracker,
 }

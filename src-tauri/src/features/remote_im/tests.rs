@@ -216,6 +216,7 @@
             remote_contact_type: input.remote_contact_type.clone(),
             remote_contact_id: input.remote_contact_id.clone(),
             remote_contact_name: input.remote_contact_name.clone().unwrap_or_default(),
+            avatar_url: String::new(),
             remark_name: String::new(),
             allow_send: false,
             allow_send_files: false,
@@ -359,6 +360,7 @@
             remote_contact_type: input.remote_contact_type.clone(),
             remote_contact_id: input.remote_contact_id.clone(),
             remote_contact_name: input.remote_contact_name.clone().unwrap_or_default(),
+            avatar_url: String::new(),
             remark_name: String::new(),
             allow_send: false,
             allow_send_files: false,
@@ -889,6 +891,68 @@
     }
 
     #[tokio::test]
+    async fn onebot_channel_start_should_be_serialized_per_channel() {
+        let manager = OnebotV11WsManager::new();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind temp listener");
+        let port = listener.local_addr().expect("local addr").port();
+        drop(listener);
+
+        let credentials = OnebotV11WsCredentials {
+            ws_host: "127.0.0.1".to_string(),
+            ws_port: port,
+            ws_token: None,
+        };
+        let first = manager.start("channel-a".to_string(), credentials.clone());
+        let second = manager.start("channel-a".to_string(), credentials);
+        let (first_result, second_result) = tokio::join!(first, second);
+
+        first_result.expect("first start should succeed");
+        second_result.expect("second start should wait and succeed");
+        assert_eq!(manager.channel_tasks.read().await.len(), 1);
+        assert_eq!(manager.channel_runtimes.read().await.len(), 1);
+        let logs = manager.get_logs("channel-a").await;
+        assert_eq!(
+            logs.iter()
+                .filter(|entry| entry.message.contains("服务器启动，监听"))
+                .count(),
+            1
+        );
+        assert!(
+            logs.iter()
+                .any(|entry| entry.message.contains("跳过重复启动")),
+            "second start should reuse the existing listener"
+        );
+
+        manager
+            .stop_channel("channel-a")
+            .await
+            .expect("stop onebot channel");
+    }
+
+    #[tokio::test]
+    async fn onebot_stop_channel_should_cancel_bind_retry_without_waiting_for_lifecycle_lock() {
+        let manager = OnebotV11WsManager::new();
+        let addr = "127.0.0.1:6199".parse().expect("valid onebot addr");
+        let runtime = {
+            let _guard = manager.channel_lifecycle_guard("channel-a").await;
+            manager.prepare_start_after_stop_at("channel-a", addr).await
+        };
+        manager
+            .channel_status_texts
+            .write()
+            .await
+            .insert("channel-a".to_string(), "binding_retry".to_string());
+
+        tokio::time::timeout(Duration::from_secs(1), manager.stop_channel("channel-a"))
+            .await
+            .expect("stop should not wait for the bind retry timeout")
+            .expect("stop channel");
+
+        assert!(runtime.cancel.is_cancelled());
+        assert!(manager.channel_runtimes.read().await.is_empty());
+    }
+
+    #[tokio::test]
     async fn onebot_channel_should_replace_existing_connection_on_second_handshake() {
         let manager = OnebotV11WsManager::new();
         let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind temp listener");
@@ -987,6 +1051,7 @@
             remote_contact_type: "private".to_string(),
             remote_contact_id: "remote-a".to_string(),
             remote_contact_name: "张三".to_string(),
+            avatar_url: String::new(),
             remark_name: String::new(),
             allow_send: true,
             allow_send_files: false,

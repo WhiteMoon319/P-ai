@@ -120,6 +120,70 @@ impl OnebotV11WsManager {
         self.event_consumer_tasks.write().await.remove(channel_id);
     }
 
+    async fn clear_channel_runtime_state_keep_diagnostics(&self, channel_id: &str) {
+        self.connections.write().await.remove(channel_id);
+        self.connection_stop_senders.write().await.remove(channel_id);
+        self.channel_shutdowns.write().await.remove(channel_id);
+        self.channel_event_senders.write().await.remove(channel_id);
+        self.channel_tasks.write().await.remove(channel_id);
+        self.channel_runtimes.write().await.remove(channel_id);
+        self.event_consumer_stop_senders.write().await.remove(channel_id);
+        self.event_consumer_tasks.write().await.remove(channel_id);
+    }
+
+    async fn channel_server_is_listening_at(&self, channel_id: &str, addr: SocketAddr) -> bool {
+        let expected_addr = addr.to_string();
+        let listen_addr_matches = self
+            .listen_addrs
+            .read()
+            .await
+            .get(channel_id)
+            .map(|value| value == &expected_addr)
+            .unwrap_or(false);
+        if !listen_addr_matches {
+            return false;
+        }
+        let has_live_accept_task = self
+            .channel_tasks
+            .read()
+            .await
+            .get(channel_id)
+            .map(|handle| !handle.is_finished())
+            .unwrap_or(false);
+        has_live_accept_task && self.channel_runtimes.read().await.contains_key(channel_id)
+    }
+
+    async fn channel_start_is_in_progress_at(&self, channel_id: &str, addr: SocketAddr) -> bool {
+        let expected_addr = addr.to_string();
+        let listen_addr_matches = self
+            .listen_addrs
+            .read()
+            .await
+            .get(channel_id)
+            .map(|value| value == &expected_addr)
+            .unwrap_or(false);
+        if !listen_addr_matches {
+            return false;
+        }
+        let status_is_binding = self
+            .channel_status_texts
+            .read()
+            .await
+            .get(channel_id)
+            .map(|value| value == "binding" || value == "binding_retry")
+            .unwrap_or(false);
+        status_is_binding && self.channel_runtimes.read().await.contains_key(channel_id)
+    }
+
+    async fn channel_runtime_matches(&self, channel_id: &str, runtime_id: &str) -> bool {
+        self.channel_runtimes
+            .read()
+            .await
+            .get(channel_id)
+            .map(|runtime| runtime.id == runtime_id)
+            .unwrap_or(false)
+    }
+
     async fn channel_runtime_state_is_clear(&self, channel_id: &str) -> bool {
         !self.connections.read().await.contains_key(channel_id)
             && !self
@@ -255,12 +319,38 @@ impl OnebotV11WsManager {
         &self,
         channel: &RemoteImChannelConfig,
     ) -> Result<(), String> {
-        self.stop_channel_inner(&channel.id).await?;
-        if channel.enabled && channel.platform == RemoteImPlatform::OnebotV11 {
+        let start_plan = {
+            let _guard = self.channel_lifecycle_guard(&channel.id).await;
+            self.stop_channel_inner(&channel.id).await?;
+            if !channel.enabled {
+                self.channel_status_texts
+                    .write()
+                    .await
+                    .insert(channel.id.clone(), "disabled".to_string());
+                self.channel_last_errors.write().await.remove(&channel.id);
+                self.add_log(&channel.id, "info", "渠道已禁用，跳过启动").await;
+                return Ok(());
+            }
+            if channel.platform != RemoteImPlatform::OnebotV11 {
+                self.channel_status_texts
+                    .write()
+                    .await
+                    .insert(channel.id.clone(), "unsupported_platform".to_string());
+                self.add_log(&channel.id, "warn", "渠道不是 OneBot v11，跳过启动").await;
+                return Ok(());
+            }
             let credentials = OnebotV11WsCredentials::from_credentials(&channel.credentials);
-            self.start_inner(channel.id.clone(), credentials).await?;
-        }
-        Ok(())
+            let addr = onebot_listen_addr_from_credentials(&credentials)?;
+            let runtime = self.prepare_start_after_stop_at(&channel.id, addr).await;
+            (credentials, addr, runtime)
+        };
+        self.finish_start_after_prepare(
+            channel.id.clone(),
+            start_plan.0,
+            start_plan.1,
+            start_plan.2,
+        )
+        .await
     }
 
     /// 获取渠道连接状态
@@ -329,29 +419,63 @@ impl OnebotV11WsManager {
         channel_id: String,
         credentials: OnebotV11WsCredentials,
     ) -> Result<(), String> {
-        self.stop_channel_inner(&channel_id).await?;
-        let addr: SocketAddr = format!("{}:{}", credentials.ws_host, credentials.ws_port)
-            .parse()
-            .map_err(|e| format!("无效地址: {}", e))?;
+        let addr = onebot_listen_addr_from_credentials(&credentials)?;
+        let runtime = {
+            let _guard = self.channel_lifecycle_guard(&channel_id).await;
+            if self.channel_server_is_listening_at(&channel_id, addr).await {
+                self.channel_status_texts
+                    .write()
+                    .await
+                    .insert(channel_id.clone(), "listening".to_string());
+                self.channel_last_errors.write().await.remove(&channel_id);
+                self.add_log(&channel_id, "info", "服务器已在监听，跳过重复启动").await;
+                return Ok(());
+            }
+            if self.channel_start_is_in_progress_at(&channel_id, addr).await {
+                self.add_log(&channel_id, "info", "服务器启动流程已存在，跳过重复启动").await;
+                return Ok(());
+            }
+            self.stop_channel_inner(&channel_id).await?;
+            self.prepare_start_after_stop_at(&channel_id, addr).await
+        };
+        self.finish_start_after_prepare(channel_id, credentials, addr, runtime)
+            .await
+    }
+
+    async fn prepare_start_after_stop_at(
+        &self,
+        channel_id: &str,
+        addr: SocketAddr,
+    ) -> OnebotChannelRuntime {
         let channel_runtime = OnebotChannelRuntime {
+            id: Uuid::new_v4().to_string(),
             cancel: CancellationToken::new(),
             tasks: TaskTracker::new(),
         };
         self.channel_runtimes
             .write()
             .await
-            .insert(channel_id.clone(), channel_runtime.clone());
+            .insert(channel_id.to_string(), channel_runtime.clone());
 
         self.listen_addrs
             .write()
             .await
-            .insert(channel_id.clone(), addr.to_string());
+            .insert(channel_id.to_string(), addr.to_string());
         self.channel_status_texts
             .write()
             .await
-            .insert(channel_id.clone(), "binding".to_string());
-        self.channel_last_errors.write().await.remove(&channel_id);
+            .insert(channel_id.to_string(), "binding".to_string());
+        self.channel_last_errors.write().await.remove(channel_id);
+        channel_runtime
+    }
 
+    async fn finish_start_after_prepare(
+        &self,
+        channel_id: String,
+        credentials: OnebotV11WsCredentials,
+        addr: SocketAddr,
+        channel_runtime: OnebotChannelRuntime,
+    ) -> Result<(), String> {
         let listener_result = bind_onebot_listener_with_retry(
             &channel_id,
             addr,
@@ -363,10 +487,37 @@ impl OnebotV11WsManager {
         let listener = match listener_result {
             Ok(listener) => listener,
             Err(err) => {
-                self.force_clear_channel_runtime_state(&channel_id).await;
-                return Err(format!("绑定端口失败: {}", err));
+                let was_cancelled = err.kind() == std::io::ErrorKind::Interrupted
+                    || !self.channel_runtime_matches(&channel_id, &channel_runtime.id).await;
+                if was_cancelled {
+                    return Err(format!("绑定端口已取消: {}", err));
+                }
+                let message = describe_onebot_bind_error(addr, &err);
+                self.clear_channel_runtime_state_keep_diagnostics(&channel_id).await;
+                self.listen_addrs
+                    .write()
+                    .await
+                    .insert(channel_id.clone(), addr.to_string());
+                self.channel_status_texts
+                    .write()
+                    .await
+                    .insert(channel_id.clone(), "bind_failed".to_string());
+                self.channel_last_errors
+                    .write()
+                    .await
+                    .insert(channel_id.clone(), message.clone());
+                self.add_log(&channel_id, "error", &message).await;
+                return Err(format!("绑定端口失败: {}", message));
             }
         };
+        let _guard = self.channel_lifecycle_guard(&channel_id).await;
+        if !self
+            .channel_runtime_matches(&channel_id, &channel_runtime.id)
+            .await
+        {
+            self.add_log(&channel_id, "info", "服务器启动已被新的渠道状态取代，丢弃本次监听").await;
+            return Ok(());
+        }
         self.channel_status_texts
             .write()
             .await
@@ -662,6 +813,28 @@ fn bind_onebot_listener(addr: SocketAddr) -> std::io::Result<TcpListener> {
     socket.set_nonblocking(true)?;
     let std_listener: std::net::TcpListener = socket.into();
     TcpListener::from_std(std_listener)
+}
+
+fn onebot_listen_addr_from_credentials(
+    credentials: &OnebotV11WsCredentials,
+) -> Result<SocketAddr, String> {
+    format!("{}:{}", credentials.ws_host, credentials.ws_port)
+        .parse()
+        .map_err(|err| format!("无效地址: {}", err))
+}
+
+fn describe_onebot_bind_error(addr: SocketAddr, err: &std::io::Error) -> String {
+    if err.kind() == std::io::ErrorKind::PermissionDenied && err.raw_os_error() == Some(10013) {
+        return format!(
+            "监听地址不可绑定: addr={}，error={}。Windows 返回 10013，常见原因是同一 PAI 旧监听尚未释放、重复启动流程抢占，或其他进程/系统策略占用该端口。",
+            addr,
+            err
+        );
+    }
+    if err.kind() == std::io::ErrorKind::AddrInUse {
+        return format!("监听地址仍被占用: addr={}，error={}", addr, err);
+    }
+    format!("监听地址绑定失败: addr={}，error={}", addr, err)
 }
 
 async fn bind_onebot_listener_with_retry(

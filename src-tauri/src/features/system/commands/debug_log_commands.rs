@@ -185,6 +185,18 @@ fn rotate_backend_log_if_needed(path: &PathBuf, pending_bytes: u64) {
     archive_backend_log(path);
 }
 
+fn now_log_local_rfc3339() -> String {
+    let now = now_utc();
+    UtcOffset::current_local_offset()
+        .ok()
+        .map(|offset| now.to_offset(offset))
+        .unwrap_or(now)
+        .replace_nanosecond(0)
+        .ok()
+        .and_then(|value| value.format(&Rfc3339).ok())
+        .unwrap_or_else(now_utc_rfc3339)
+}
+
 fn append_backend_log_line(level: &str, message: &str) {
     let Some(path) = backend_log_path().as_ref() else {
         return;
@@ -192,7 +204,12 @@ fn append_backend_log_line(level: &str, message: &str) {
     let Ok(_guard) = backend_log_write_lock().lock() else {
         return;
     };
-    let line = format!("{} {:<5} {}\n", now_iso(), level.to_uppercase(), message);
+    let line = format!(
+        "{} {:<5} {}\n",
+        now_log_local_rfc3339(),
+        level.to_uppercase(),
+        message
+    );
     rotate_backend_log_if_needed(path, line.len() as u64);
     if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
         let _ = std::io::Write::write_all(&mut file, line.as_bytes());
@@ -275,19 +292,20 @@ fn runtime_log_push(level: &str, message: String) {
     let _ = std::io::Write::write_all(&mut std::io::stderr(), format!("{message}\n").as_bytes());
     let (normalized_level, normalized_message) = normalize_runtime_log(level, message);
     append_backend_log_line(&normalized_level, &normalized_message);
+    let created_at = now_log_local_rfc3339();
     let Ok(mut buf) = runtime_log_buffer().lock() else {
         return;
     };
     if let Some(last) = buf.entries.back_mut() {
         if last.level == normalized_level && last.message == normalized_message {
             last.repeat = last.repeat.saturating_add(1);
-            last.created_at = now_iso();
+            last.created_at = created_at;
             return;
         }
     }
     let entry = RuntimeLogEntry {
         id: Uuid::new_v4().to_string(),
-        created_at: now_iso(),
+        created_at,
         level: normalized_level,
         message: normalized_message,
         repeat: 1,
@@ -615,7 +633,7 @@ fn build_llm_round_log_entry(
     let success = error.as_ref().map(|value| value.trim().is_empty()).unwrap_or(true);
     LlmRoundLogEntry {
         id: Uuid::new_v4().to_string(),
-        created_at: now_iso(),
+        created_at: now_log_local_rfc3339(),
         trace_id,
         scene: scene.to_string(),
         request_format: request_format.as_str().to_string(),

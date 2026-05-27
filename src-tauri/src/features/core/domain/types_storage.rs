@@ -166,6 +166,8 @@ struct RemoteImContact {
     #[serde(default)]
     remote_contact_name: String,
     #[serde(default)]
+    avatar_url: String,
+    #[serde(default)]
     remark_name: String,
     #[serde(default)]
     allow_send: bool,

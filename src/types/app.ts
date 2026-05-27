@@ -308,6 +308,7 @@ export type RemoteImContact = {
   remoteContactType: string;
   remoteContactId: string;
   remoteContactName: string;
+  avatarUrl?: string;
   remarkName: string;
   allowSend: boolean;
   allowSendFiles: boolean;

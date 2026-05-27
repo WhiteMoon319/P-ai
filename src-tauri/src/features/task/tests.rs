@@ -363,6 +363,7 @@
             remote_contact_type: "group".to_string(),
             remote_contact_id: "remote-a".to_string(),
             remote_contact_name: "测试群".to_string(),
+            avatar_url: String::new(),
             remark_name: String::new(),
             allow_send: false,
             allow_send_files: false,

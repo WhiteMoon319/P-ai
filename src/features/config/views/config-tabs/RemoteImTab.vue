@@ -35,7 +35,7 @@
                 type="checkbox"
                 class="toggle toggle-primary toggle-sm mt-0.5 shrink-0"
                 :checked="ch.enabled"
-                :disabled="saving"
+                :disabled="saving || isChannelOperationBusy(ch.id)"
                 @mousedown.stop
                 @click.stop
                 @change.stop="(e) => toggleChannelEnabled(ch, (e.target as HTMLInputElement).checked)"
@@ -90,75 +90,135 @@
             <li class="menu-title text-base-content">
               <span class="text-sm font-bold">{{ group.label }}（{{ group.items.length }}）</span>
             </li>
-            <li v-for="item in group.items" :key="item.id" class="border-b border-base-200 last:border-b-0">
+            <li
+              v-for="item in group.items"
+              :key="item.id"
+              class="border-b border-base-200 last:border-b-0"
+            >
             <div class="flex items-start gap-2 px-3 py-2">
-                <span class="badge shrink-0" :class="item.remoteContactType === 'group' ? 'badge-secondary' : 'badge-primary'">{{ item.remoteContactType === "group" ? t("config.remoteIm.group") : t("config.remoteIm.private") }}</span>
-                <div class="flex-1 min-w-0">
-                  <div class="truncate font-semibold">
-                    <span class="font-normal opacity-70">[{{ contactDepartmentLabel(item) }}]</span>
-                    {{ " " }}
-                    {{ contactSafeDisplayName(item) }}
-                    <span class="text-xs font-normal opacity-50">（{{ contactSecondaryText(item) }}）</span>
-                  </div>
-                  <div class="mt-1 flex flex-wrap gap-1 text-[10px]">
-                    <span
-                      class="badge badge-info badge-xs"
-                      :title="processingModeHintText(item)"
-                    >
-                      {{ contactProcessingModeLabel(item) }}
-                    </span>
-                    <span
-                      class="badge badge-xs"
-                      :class="normalizeResponseStrategy(item.responseStrategy) === 'smart_judge' ? 'badge-accent' : 'badge-ghost'"
-                      :title="contactResponseStrategyHintText(item)"
-                    >
-                      {{ normalizeResponseStrategy(item.responseStrategy) === "smart_judge" ? t("config.remoteIm.responseStrategySmart") : t("config.remoteIm.responseStrategyAlways") }}
-                    </span>
-                    <span
-                      v-if="item.allowSendFiles"
-                      class="badge badge-xs badge-warning"
-                      :title="t('config.remoteIm.allowSendFiles')"
-                    >
-                      {{ t("config.remoteIm.filesShort") }}
-                    </span>
+                <div class="avatar placeholder shrink-0">
+                  <div class="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-base-300 bg-base-200 text-xs font-semibold leading-none text-base-content/70">
+                    <img v-if="contactAvatarUrl(item)" :src="contactAvatarUrl(item)" :alt="contactSafeDisplayName(item)" class="block h-full w-full object-cover" />
+                    <span v-else>{{ contactAvatarFallbackText(item) }}</span>
                   </div>
                 </div>
-                <div class="flex items-center gap-1">
-                  <input
-                    type="checkbox"
-                    class="toggle toggle-sm"
-                    :class="contactCommunicationToggleClass(item)"
-                    :checked="contactCommunicationToggleEnabled(item)"
-                    :disabled="contactsDisabled"
-                    :title="`${t('config.remoteIm.allowReceive')} / ${t('config.remoteIm.allowSend')}`"
-                    @click.stop
-                    @change="toggleContactCommunication(item, ($event.target as HTMLInputElement).checked)"
-                  />
-                  <div v-if="contactNeedsQuickModel(item) && !props.config.toolReviewApiConfigId" class="dropdown dropdown-end">
-                    <div tabindex="0" role="button" class="btn btn-ghost btn-square btn-sm text-error hover:bg-error hover:text-error-content">
-                      <AlertTriangle class="h-4 w-4" />
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <div class="min-w-0 flex-1 truncate font-semibold">
+                      <span class="font-normal opacity-70">[{{ contactDepartmentLabel(item) }}]</span>
+                      {{ " " }}
+                      {{ contactSafeDisplayName(item) }}
+                      <span class="text-xs font-normal opacity-50">（{{ contactSecondaryText(item) }}）</span>
                     </div>
-                    <div tabindex="0" class="dropdown-content card card-sm bg-base-100 border border-error/30 shadow-lg z-10 w-64">
-                      <div class="card-body p-3">
-                        <p class="text-error text-xs">{{ t('config.remoteIm.quickModelMissingHint') }}</p>
+                    <div class="flex shrink-0 items-center gap-1">
+                      <input
+                        type="checkbox"
+                        class="toggle toggle-sm"
+                        :class="contactCommunicationToggleClass(item)"
+                        :checked="contactCommunicationToggleEnabled(item)"
+                        :disabled="contactsDisabled"
+                        :title="`${t('config.remoteIm.allowReceive')} / ${t('config.remoteIm.allowSend')}`"
+                        @click.stop
+                        @change="toggleContactCommunication(item, ($event.target as HTMLInputElement).checked)"
+                      />
+                      <div v-if="contactNeedsQuickModel(item) && !props.config.toolReviewApiConfigId" class="dropdown dropdown-end">
+                        <div tabindex="0" role="button" class="btn btn-ghost btn-square btn-sm text-error hover:bg-error hover:text-error-content">
+                          <AlertTriangle class="h-4 w-4" />
+                        </div>
+                        <div tabindex="0" class="dropdown-content card card-sm bg-base-100 border border-error/30 shadow-lg z-10 w-64">
+                          <div class="card-body p-3">
+                            <p class="text-error text-xs">{{ t('config.remoteIm.quickModelMissingHint') }}</p>
+                          </div>
+                        </div>
                       </div>
+                      <button
+                        class="btn btn-ghost btn-square btn-sm hover:bg-base-300"
+                        :title="t('config.remoteIm.viewLogs')"
+                        @click.stop="openContactLogsModal(item.id)"
+                      >
+                        <ScrollText class="h-4 w-4" />
+                      </button>
+                      <button
+                        class="btn btn-ghost btn-square btn-sm hover:bg-base-300"
+                        :title="t('config.remoteIm.channelDetails')"
+                        :disabled="contactsDisabled"
+                        @click.stop="openContactConfigModal(item.id)"
+                      >
+                        <Settings class="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
-                  <button
-                    class="btn btn-ghost btn-square btn-sm hover:bg-base-300"
-                    :title="t('config.remoteIm.viewLogs')"
-                    @click.stop="openContactLogsModal(item.id)"
-                  >
-                    <ScrollText class="h-4 w-4" />
-                  </button>
-                  <button
-                    class="btn btn-ghost btn-square btn-sm hover:bg-base-300"
-                    :title="t('config.remoteIm.channelDetails')"
-                    :disabled="contactsDisabled"
-                    @click.stop="openContactConfigModal(item.id)"
-                  >
-                    <Settings class="h-4 w-4" />
-                  </button>
+                  <div class="mt-1.5 flex flex-nowrap gap-1.5 overflow-x-auto whitespace-nowrap text-xs [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <span class="badge badge-sm shrink-0" :class="item.remoteContactType === 'group' ? 'badge-secondary' : 'badge-primary'">
+                      {{ item.remoteContactType === "group" ? t("config.remoteIm.group") : t("config.remoteIm.private") }}
+                    </span>
+                    <span
+                      class="badge badge-sm shrink-0 gap-1 transition-colors"
+                      :class="contactActivationBadgeClass(item)"
+                      :title="contactActivationHintText(item)"
+                    >
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-xs h-4 min-h-0 w-4 p-0"
+                        title="上移触发模式"
+                        :disabled="contactsDisabled || isContactOperationBusy(item.id)"
+                        @click.stop="moveContactActivationMode(item, -1)"
+                      >
+                        <ChevronUp class="h-3 w-3" />
+                      </button>
+                      {{ contactActivationModeLabel(item) }}
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-xs h-4 min-h-0 w-4 p-0"
+                        title="下移触发模式"
+                        :disabled="contactsDisabled || isContactOperationBusy(item.id)"
+                        @click.stop="moveContactActivationMode(item, 1)"
+                      >
+                        <ChevronDown class="h-3 w-3" />
+                      </button>
+                    </span>
+                    <span
+                      v-if="contactKeywordModeMissingKeywords(item)"
+                      class="badge badge-sm badge-warning shrink-0 gap-1.5"
+                      title="关键词入场已启用，但关键词为空。请补充关键词，否则不会触发入场。"
+                    >
+                      <AlertTriangle class="h-3.5 w-3.5" />
+                      关键词空
+                    </span>
+                    <button
+                      type="button"
+                      class="badge badge-sm shrink-0 gap-1.5 transition-colors"
+                      :class="contactProcessingModeBadgeClass(item)"
+                      :title="`${processingModeHintText(item)} 点击切换处理模式`"
+                      :disabled="contactsDisabled || isContactOperationBusy(item.id)"
+                      @click.stop="cycleContactProcessingMode(item)"
+                    >
+                      <RefreshCw class="h-3.5 w-3.5 opacity-70" />
+                      {{ contactProcessingModeLabel(item) }}
+                    </button>
+                    <button
+                      type="button"
+                      class="badge badge-sm shrink-0 gap-1.5"
+                      :class="normalizeResponseStrategy(item.responseStrategy) === 'smart_judge' ? 'badge-accent' : 'badge-ghost'"
+                      :title="`${contactResponseStrategyHintText(item)} 点击切换回复策略`"
+                      :disabled="contactsDisabled || isContactOperationBusy(item.id)"
+                      @click.stop="cycleContactResponseStrategy(item)"
+                    >
+                      <RefreshCw class="h-3.5 w-3.5 opacity-70" />
+                      {{ normalizeResponseStrategy(item.responseStrategy) === "smart_judge" ? t("config.remoteIm.responseStrategySmart") : t("config.remoteIm.responseStrategyAlways") }}
+                    </button>
+                    <button
+                      type="button"
+                      class="badge badge-sm shrink-0 gap-1.5"
+                      :class="item.allowSendFiles ? 'badge-warning' : 'badge-ghost'"
+                      :title="`${t('config.remoteIm.allowSendFiles')}：${item.allowSendFiles ? '已允许' : '未允许'}。点击切换`"
+                      :disabled="contactsDisabled || isContactOperationBusy(item.id)"
+                      @click.stop="cycleContactAllowSendFiles(item)"
+                    >
+                      <RefreshCw class="h-3.5 w-3.5 opacity-70" />
+                      {{ t("config.remoteIm.filesShort") }}{{ item.allowSendFiles ? "" : "关" }}
+                    </button>
+                  </div>
                 </div>
             </div>
           </li>
@@ -392,20 +452,19 @@
               <div class="border-t border-base-300 mt-2 pt-2">
                 <div class="flex items-center justify-between">
                   <span class="font-semibold">{{ t("config.remoteIm.connectionStatus") }}</span>
-                  <button class="btn btn-square btn-ghost" :title="t('common.refresh')" @click="refreshChannelStatus">
+                  <button
+                    class="btn btn-square btn-ghost"
+                    :title="t('common.refresh')"
+                    :disabled="isChannelOperationBusy(selectedChannel.id)"
+                    @click="refreshChannelStatus"
+                  >
                     <RefreshCw class="h-3.5 w-3.5" />
                   </button>
                 </div>
                 <div class="mt-2 flex items-center gap-2">
                   <span class="size-2 rounded-full" :class="channelStatus?.connected ? 'bg-success' : 'bg-base-300'"></span>
                   <span class="text-xs">
-                    {{ channelStatus?.connected
-                      ? `${t("config.remoteIm.connected")} (${channelStatus.peerAddr})`
-                      : channelStatus?.statusText === "binding_retry"
-                        ? (channelStatus.lastError || "固定端口被占用，正在重试")
-                      : channelStatus?.listenAddr
-                        ? t("config.remoteIm.waitingForConnection")
-                        : t("config.remoteIm.serverNotStarted") }}
+                    {{ onebotStatusText(channelStatus) }}
                   </span>
                 </div>
               </div>
@@ -436,10 +495,10 @@
               <button
                 class="btn"
                 :class="channelDirty ? 'btn-primary' : 'btn-ghost'"
-                :disabled="!channelDirty || saving"
+                :disabled="!channelDirty || saving || isChannelOperationBusy(selectedChannel.id)"
                 @click="saveChannels"
               >
-                <Save v-if="!saving" class="h-3.5 w-3.5" />
+                <Save v-if="!saving && !isChannelOperationBusy(selectedChannel.id)" class="h-3.5 w-3.5" />
                 <span v-else class="loading loading-spinner loading-xs"></span>
                 {{ t("common.save") }}
               </button>
@@ -724,7 +783,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { AlertTriangle, Plus, RefreshCw, RotateCcw, Save, ScrollText, Settings, SquareTerminal, Trash2 } from "@lucide/vue";
+import { AlertTriangle, ChevronDown, ChevronUp, Plus, RefreshCw, RotateCcw, Save, ScrollText, Settings, SquareTerminal, Trash2 } from "@lucide/vue";
 import { invokeTauri } from "../../../../services/tauri-api";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { AppConfig, DepartmentConfig, PersonaProfile, RemoteImChannelConfig, RemoteImContact, RemoteImPlatform, ShellWorkspace } from "../../../../types/app";
@@ -756,6 +815,8 @@ const saving = ref(false);
 const contactsLoading = ref(false);
 const contactsError = ref("");
 const contacts = ref<RemoteImContact[]>([]);
+const channelOperationIds = ref<Record<string, boolean>>({});
+const contactOperationIds = ref<Record<string, boolean>>({});
 const credentialDrafts = ref<Record<string, string>>({});
 const napcatCredentials = ref({ wsHost: "0.0.0.0", wsPort: 6199, wsToken: "" });
 const dingtalkCredentials = ref({ clientId: "", clientSecret: "" });
@@ -901,6 +962,36 @@ const channelSnapshot = computed(() => {
 const lastSavedChannelSnapshot = ref(channelSnapshot.value);
 const channelDirty = computed(() => channelSnapshot.value !== lastSavedChannelSnapshot.value);
 
+function isChannelOperationBusy(channelId: string): boolean {
+  return !!channelOperationIds.value[channelId];
+}
+
+function setChannelOperationBusy(channelId: string, busy: boolean) {
+  if (busy) {
+    channelOperationIds.value = { ...channelOperationIds.value, [channelId]: true };
+    return;
+  }
+  const next = { ...channelOperationIds.value };
+  delete next[channelId];
+  channelOperationIds.value = next;
+}
+
+function isContactOperationBusy(contactId: string): boolean {
+  return !!contactOperationIds.value[contactId];
+}
+
+async function withContactOperation(contactId: string, action: () => Promise<void>) {
+  if (isContactOperationBusy(contactId)) return;
+  contactOperationIds.value = { ...contactOperationIds.value, [contactId]: true };
+  try {
+    await action();
+  } finally {
+    const next = { ...contactOperationIds.value };
+    delete next[contactId];
+    contactOperationIds.value = next;
+  }
+}
+
 const currentChannelContacts = computed(() => {
   if (!selectedChannelId.value) return [];
   return contacts.value.filter((c) => c.channelId === selectedChannelId.value);
@@ -916,14 +1007,21 @@ const contactsDisabledReason = computed(() => {
     if (channel.platform === "onebot_v11" && status?.statusText === "binding_retry") {
       return status.lastError || "OneBot 固定端口被占用，正在按原端口重试绑定。";
     }
+    if (channel.platform === "onebot_v11" && status?.statusText === "bind_failed") {
+      return status.lastError || "OneBot 端口绑定失败，请换一个可用端口后保存并重启渠道。";
+    }
     if (channel.platform === "onebot_v11" && status?.statusText === "binding") {
       return "OneBot 正在绑定固定端口，连接成功前联系人列表不可操作。";
+    }
+    if (channel.platform === "onebot_v11" && status?.listenAddr) {
+      return `OneBot 服务端已监听 ${status.listenAddr}，等待 NapCat/协议端连接后联系人列表可操作。`;
     }
     return "渠道尚未真正连接，连接成功前联系人列表不可操作。";
   }
   return "";
 });
 const contactsDisabled = computed(() => !!contactsDisabledReason.value);
+const contactActivationModeOrder: RemoteImContact["activationMode"][] = ["always", "keyword", "never"];
 
 type ContactGroup = { mode: "always" | "keyword" | "never"; label: string; items: typeof currentChannelContacts.value };
 const groupedContacts = computed<ContactGroup[]>(() => {
@@ -1226,11 +1324,13 @@ function resetNapcatCredentials() {
 
 async function saveChannels() {
   if (saving.value || !selectedChannel.value) return false;
+  const savedId = selectedChannelId.value;
+  if (isChannelOperationBusy(savedId)) return false;
   if (selectedChannel.value.platform === "feishu") {
     syncCredentialJson(selectedChannel.value);
   }
-  const savedId = selectedChannelId.value;
   saving.value = true;
+  setChannelOperationBusy(savedId, true);
   try {
     const result = await Promise.resolve(props.saveConfigAction());
     if (result) {
@@ -1268,11 +1368,13 @@ async function saveChannels() {
     }
     return false;
   } finally {
+    setChannelOperationBusy(savedId, false);
     saving.value = false;
   }
 }
 
 async function toggleChannelEnabled(channel: RemoteImChannelConfig, enabled: boolean) {
+  if (saving.value || isChannelOperationBusy(channel.id)) return;
   const previousEnabled = channel.enabled;
   props.setStatusAction(`正在${enabled ? "启用" : "停用"}渠道：${channel.name || channel.id}`);
   if (enabled) {
@@ -1284,6 +1386,7 @@ async function toggleChannelEnabled(channel: RemoteImChannelConfig, enabled: boo
   }
   channel.enabled = enabled;
   saving.value = true;
+  setChannelOperationBusy(channel.id, true);
   try {
     const result = await Promise.resolve(props.saveConfigAction());
     if (result) {
@@ -1315,6 +1418,7 @@ async function toggleChannelEnabled(channel: RemoteImChannelConfig, enabled: boo
     channel.enabled = previousEnabled;
     props.setStatusAction(t("status.saveConfigFailed", { err: String(error) }));
   } finally {
+    setChannelOperationBusy(channel.id, false);
     saving.value = false;
   }
 }
@@ -1438,6 +1542,63 @@ function onContactActivationModeChange(item: RemoteImContact, modeRaw: string) {
   void saveContactActivation(item, { activationMode: mode });
 }
 
+function contactActivationModeIndex(item: RemoteImContact): number {
+  const mode = normalizeActivationMode(item.activationMode || "never");
+  const index = contactActivationModeOrder.indexOf(mode);
+  return index >= 0 ? index : contactActivationModeOrder.length - 1;
+}
+
+function reorderContactAfterActivationMove(
+  contactId: string,
+  targetMode: RemoteImContact["activationMode"],
+  direction: -1 | 1,
+) {
+  const moved = contacts.value.find((contact) => contact.id === contactId);
+  if (!moved) return;
+  const channelId = moved.channelId;
+  const channelItems = contacts.value.filter((contact) => contact.channelId === channelId && contact.id !== contactId);
+  const targetGroup = channelItems.filter(
+    (contact) => normalizeActivationMode(contact.activationMode || "never") === targetMode,
+  );
+  const rebuiltChannelItems: RemoteImContact[] = [];
+  for (const mode of contactActivationModeOrder) {
+    const items = channelItems.filter((contact) => normalizeActivationMode(contact.activationMode || "never") === mode);
+    if (mode === targetMode && direction === 1) {
+      rebuiltChannelItems.push(moved);
+    }
+    rebuiltChannelItems.push(...items);
+    if (mode === targetMode && direction === -1) {
+      rebuiltChannelItems.push(moved);
+    }
+  }
+  if (targetGroup.length === 0 && !rebuiltChannelItems.some((contact) => contact.id === contactId)) {
+    rebuiltChannelItems.push(moved);
+  }
+  const next = [...contacts.value];
+  let cursor = 0;
+  for (let index = 0; index < next.length; index += 1) {
+    if (next[index].channelId !== channelId) continue;
+    const replacement = rebuiltChannelItems[cursor];
+    if (replacement) {
+      next[index] = replacement;
+      cursor += 1;
+    }
+  }
+  contacts.value = next;
+}
+
+async function moveContactActivationMode(item: RemoteImContact, direction: -1 | 1) {
+  if (contactsDisabled.value) return;
+  const currentIndex = contactActivationModeIndex(item);
+  const nextIndex = (currentIndex + direction + contactActivationModeOrder.length) % contactActivationModeOrder.length;
+  const nextMode = contactActivationModeOrder[nextIndex];
+  if (!nextMode) return;
+  await withContactOperation(item.id, async () => {
+    await saveContactActivation(item, { activationMode: nextMode });
+    reorderContactAfterActivationMove(item.id, nextMode, direction);
+  });
+}
+
 async function onContactDepartmentChange(
   item: RemoteImContact,
   departmentIdRaw: string,
@@ -1478,6 +1639,25 @@ async function onContactProcessingModeChange(
     item.processingMode = oldValue;
     props.setStatusAction(t("status.saveConfigFailed", { err: String(error) }));
   }
+}
+
+async function cycleContactProcessingMode(item: RemoteImContact) {
+  if (contactsDisabled.value) return;
+  const current = normalizeProcessingMode(item.processingMode);
+  const next = current === "qa" ? "continuous" : "qa";
+  await withContactOperation(item.id, () => onContactProcessingModeChange(item, next));
+}
+
+async function cycleContactResponseStrategy(item: RemoteImContact) {
+  if (contactsDisabled.value) return;
+  const current = normalizeResponseStrategy(item.responseStrategy);
+  const next = current === "smart_judge" ? "always_reply" : "smart_judge";
+  await withContactOperation(item.id, () => saveContactActivation(item, { responseStrategy: next }));
+}
+
+async function cycleContactAllowSendFiles(item: RemoteImContact) {
+  if (contactsDisabled.value) return;
+  await withContactOperation(item.id, () => toggleContactAllowSendFiles(item, !item.allowSendFiles));
 }
 
 function onContactActivationKeywordsBlur(item: RemoteImContact) {
@@ -2096,6 +2276,20 @@ function contactProcessingModeLabel(item: RemoteImContact): string {
     : t("config.remoteIm.processingModeContinuous");
 }
 
+function contactAvatarUrl(item: RemoteImContact): string {
+  return String(item.avatarUrl || "").trim();
+}
+
+function contactAvatarFallbackText(item: RemoteImContact): string {
+  const name = contactSafeDisplayName(item).trim();
+  if (name) return Array.from(name)[0] || "?";
+  return item.remoteContactType === "group" ? "群" : "私";
+}
+
+function contactProcessingModeBadgeClass(item: RemoteImContact): string {
+  return normalizeProcessingMode(item.processingMode) === "qa" ? "badge-secondary" : "badge-info";
+}
+
 function processingModeHintText(item: RemoteImContact): string {
   return normalizeProcessingMode(item.processingMode) === "qa"
     ? t("config.remoteIm.processingModeQaHint")
@@ -2107,6 +2301,19 @@ function contactActivationModeLabel(item: RemoteImContact): string {
   if (mode === "always") return t("config.remoteIm.activateModeAlways");
   if (mode === "keyword") return t("config.remoteIm.activateModeKeyword");
   return t("config.remoteIm.activateModeNever");
+}
+
+function contactActivationBadgeClass(item: RemoteImContact): string {
+  const mode = normalizeActivationMode(item.activationMode || "never");
+  if (mode === "always") return "badge-success";
+  if (mode === "keyword") return "badge-primary";
+  return "badge-ghost";
+}
+
+function contactKeywordModeMissingKeywords(item: RemoteImContact): boolean {
+  if (normalizeActivationMode(item.activationMode || "never") !== "keyword") return false;
+  return !Array.isArray(item.activationKeywords)
+    || item.activationKeywords.every((keyword) => !String(keyword || "").trim());
 }
 
 function contactActivationHintText(item: RemoteImContact): string {
@@ -2188,6 +2395,17 @@ async function refreshAllChannelStatuses() {
   await Promise.all(jobs);
 }
 
+function onebotStatusText(status: ChannelConnectionStatus | null): string {
+  if (!status) return t("config.remoteIm.serverNotStarted");
+  if (status.connected) return `${t("config.remoteIm.connected")} (${status.peerAddr})`;
+  if (status.statusText === "binding_retry") return status.lastError || "固定端口被占用，正在重试";
+  if (status.statusText === "bind_failed") return status.lastError || "端口绑定失败";
+  if (status.statusText === "disabled") return "渠道已禁用";
+  if (status.statusText === "binding") return "正在绑定固定端口";
+  if (status.listenAddr) return `服务端已监听 ${status.listenAddr}，等待 NapCat/OneBot 客户端连接`;
+  return t("config.remoteIm.serverNotStarted");
+}
+
 function channelStatusPreview(channel: RemoteImChannelConfig): string {
   if (channel.platform === "weixin_oc") {
     const status = channelRuntimeStates.value[channel.id];
@@ -2231,8 +2449,10 @@ function channelStatusPreview(channel: RemoteImChannelConfig): string {
     return t("config.remoteIm.connected");
   }
   if (status.statusText === "binding_retry") return status.lastError || "固定端口被占用，正在重试";
+  if (status.statusText === "bind_failed") return status.lastError || "端口绑定失败";
+  if (status.statusText === "disabled") return "渠道已禁用";
   if (status.statusText === "binding") return "正在绑定固定端口";
-  return status.listenAddr ? t("config.remoteIm.waitingForConnection") : t("config.remoteIm.serverNotStarted");
+  return status.listenAddr ? `已监听 ${status.listenAddr}，等待客户端连接` : t("config.remoteIm.serverNotStarted");
 }
 
 function channelListStatusBadgeText(channel: RemoteImChannelConfig): string {
@@ -2241,7 +2461,10 @@ function channelListStatusBadgeText(channel: RemoteImChannelConfig): string {
     const status = channelRuntimeStates.value[channel.id];
     if (status?.connected) return t("config.remoteIm.connected");
     if (channel.platform === "onebot_v11" && status?.statusText === "binding_retry") return "重试绑定";
+    if (channel.platform === "onebot_v11" && status?.statusText === "bind_failed") return "绑定失败";
+    if (channel.platform === "onebot_v11" && status?.statusText === "disabled") return "已禁用";
     if (channel.platform === "onebot_v11" && status?.statusText === "binding") return "绑定中";
+    if (channel.platform === "onebot_v11" && status?.listenAddr) return "等待连接";
     if (channel.platform === "weixin_oc" && status?.statusText === "need_login") return "待登录";
     return t("config.remoteIm.enabledState");
   }
@@ -2252,6 +2475,8 @@ function channelListStatusBadgeClass(channel: RemoteImChannelConfig): string {
   if (!channel.enabled) return "badge-ghost";
   if (channel.platform === "onebot_v11" || channel.platform === "dingtalk" || channel.platform === "weixin_oc") {
     const status = channelRuntimeStates.value[channel.id];
+    if (channel.platform === "onebot_v11" && status?.statusText === "bind_failed") return "badge-error";
+    if (channel.platform === "onebot_v11" && status?.statusText === "disabled") return "badge-ghost";
     if (channel.platform === "weixin_oc" && status?.statusText === "need_login") return "badge-warning";
     return status?.connected ? "badge-success" : "badge-warning";
   }
