@@ -14,6 +14,7 @@ pub(super) struct MessageStoreStatus {
     pub(super) source_message_count: usize,
     pub(super) last_message_id: String,
     pub(super) messages_jsonl_bytes: u64,
+    pub(super) updated_at: String,
     pub(super) ready_jsonl: bool,
 }
 
@@ -667,6 +668,10 @@ pub(super) fn read_message_store_status(
         source_message_count,
         last_message_id,
         messages_jsonl_bytes,
+        updated_at: manifest
+            .as_ref()
+            .map(|item| item.updated_at().to_string())
+            .unwrap_or_default(),
         ready_jsonl,
     })
 }
@@ -693,6 +698,7 @@ pub(super) fn read_ready_message_store_status(
         source_message_count: manifest.source_message_count(),
         last_message_id: manifest.last_message_id().to_string(),
         messages_jsonl_bytes: manifest.messages_jsonl_bytes(),
+        updated_at: manifest.updated_at().to_string(),
         ready_jsonl: true,
     }))
 }
@@ -866,6 +872,7 @@ pub(super) fn read_message_store_manifest_status(
         source_message_count: manifest.source_message_count(),
         last_message_id: manifest.last_message_id().to_string(),
         messages_jsonl_bytes: manifest.messages_jsonl_bytes(),
+        updated_at: manifest.updated_at().to_string(),
         ready_jsonl: manifest.should_read_jsonl(),
     }))
 }

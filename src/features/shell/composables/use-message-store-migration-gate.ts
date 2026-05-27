@@ -16,6 +16,7 @@ type MessageStoreMigrationPreflightReport = {
   totalConversations: number;
   readyCount: number;
   legacyCount: number;
+  busyCount?: number;
   blockedCount: number;
   canAutoMigrate: boolean;
   items: MessageStoreMigrationPreflightItem[];

@@ -1,3 +1,4 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useViewRefresh } from "../../shell/composables/use-view-refresh";
 import { formatI18nError } from "../../../utils/error";
 import { useChatRuntimeWatchers } from "./use-chat-runtime-watchers";
@@ -154,7 +155,11 @@ export function useChatWindowLifecycleOrchestrator(bindings: Record<string, any>
     onNativeFileDrop: bindings.onNativeFileDrop,
     mediaDragActive: bindings.mediaDragActive,
     recordHotkey: bindings.recordHotkey,
-    ensureMessageStoreMigrationGate: bindings.ensureMessageStoreMigrationGate,
+    ensureMessageStoreMigrationGate: async () => {
+      const currentWindowLabel = String(getCurrentWindow().label || "").trim();
+      if (bindings.detachedChatWindow.value || currentWindowLabel.startsWith("chat-detached-")) return;
+      await bindings.ensureMessageStoreMigrationGate();
+    },
     refreshAllViewData,
     startupDataReady: bindings.startupDataReady,
     currentChatConversationId: bindings.currentChatConversationId,

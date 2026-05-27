@@ -1,5 +1,6 @@
 const MESSAGE_STORE_MIGRATION_PROGRESS_EVENT: &str = "easy-call:message-store-migration-progress";
 const CURRENT_MESSAGE_STORE_MIGRATION_VERSION: u32 = 1;
+const ACTIVE_BUILDING_MANIFEST_GRACE_SECONDS: i64 = 300;
 
 fn message_store_migration_lock() -> &'static std::sync::Mutex<()> {
     static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
@@ -22,6 +23,7 @@ struct MessageStoreMigrationPreflightReport {
     total_conversations: usize,
     ready_count: usize,
     legacy_count: usize,
+    busy_count: usize,
     blocked_count: usize,
     can_auto_migrate: bool,
     items: Vec<MessageStoreMigrationPreflightItem>,
@@ -226,6 +228,18 @@ fn preflight_message_store_conversation(
             }
         }
         Ok(Some(status)) => {
+            if status.migration_state == "building" && message_store_manifest_recently_updated(&status.updated_at) {
+                return MessageStoreMigrationPreflightItem {
+                    conversation_id: conversation_id.to_string(),
+                    title: String::new(),
+                    status: "busy".to_string(),
+                    message_count: status.source_message_count,
+                    reason: Some(format!(
+                        "消息仓库正在写入，暂不参与迁移预检：kind={}，state={}",
+                        status.message_store_kind, status.migration_state
+                    )),
+                };
+            }
             let legacy_path = app_layout_chat_conversation_path(data_path, conversation_id);
             if legacy_path.exists() {
                 let mut item = preflight_legacy_conversation(data_path, conversation_id);
@@ -264,10 +278,20 @@ fn empty_message_store_migration_preflight_report() -> MessageStoreMigrationPref
         total_conversations: 0,
         ready_count: 0,
         legacy_count: 0,
+        busy_count: 0,
         blocked_count: 0,
         can_auto_migrate: true,
         items: Vec::new(),
     }
+}
+
+fn message_store_manifest_recently_updated(updated_at: &str) -> bool {
+    let Some(updated_at) = parse_iso(updated_at) else {
+        return false;
+    };
+    let elapsed = now_utc() - updated_at;
+    elapsed.whole_seconds() >= 0
+        && elapsed.whole_seconds() <= ACTIVE_BUILDING_MANIFEST_GRACE_SECONDS
 }
 
 fn message_store_migration_version_recorded(state: &AppState) -> Result<bool, String> {
@@ -301,11 +325,13 @@ fn build_message_store_migration_preflight_report(
         .iter()
         .filter(|item| item.status == "legacyReadyToMigrate")
         .count();
+    let busy_count = items.iter().filter(|item| item.status == "busy").count();
     let blocked_count = items.iter().filter(|item| item.status == "blocked").count();
     MessageStoreMigrationPreflightReport {
         total_conversations: items.len(),
         ready_count,
         legacy_count,
+        busy_count,
         blocked_count,
         can_auto_migrate: blocked_count == 0,
         items,
