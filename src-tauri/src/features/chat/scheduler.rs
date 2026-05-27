@@ -1496,6 +1496,53 @@ fn collect_activated_remote_im_sources(
     activated_remote_im_sources
 }
 
+fn remote_im_source_has_pending_queue_event(
+    state: &AppState,
+    conversation_id: &str,
+    source: &RemoteImActivationSource,
+) -> bool {
+    let Ok(slots) = lock_conversation_runtime_slots(state) else {
+        return false;
+    };
+    let Some(slot) = slots.get(conversation_id.trim()) else {
+        return false;
+    };
+    let source_key = remote_im_activation_source_key(source);
+    slot.pending_queue.iter().any(|event| {
+        matches!(event.source, ChatEventSource::RemoteIm)
+            && event
+                .sender_info
+                .as_ref()
+                .map(|sender| {
+                    remote_im_activation_source_key(&remote_im_activation_source_from_sender(sender))
+                        == source_key
+                })
+                .unwrap_or(false)
+    })
+}
+
+fn filter_remote_im_follow_up_sources_for_pending_queue(
+    state: &AppState,
+    conversation_id: &str,
+    sources: Vec<RemoteImActivationSource>,
+) -> Vec<RemoteImActivationSource> {
+    sources
+        .into_iter()
+        .filter(|source| {
+            let has_pending_queue =
+                remote_im_source_has_pending_queue_event(state, conversation_id, source);
+            if has_pending_queue {
+                runtime_log_info(format!(
+                    "[远程联系人状态机] 待办续跑跳过: conversation_id={}，remote_contact_id={}，reason=等待队列消息先写入历史",
+                    conversation_id,
+                    source.remote_contact_id
+                ));
+            }
+            !has_pending_queue
+        })
+        .collect()
+}
+
 fn release_conversation_processing_claim(
     state: &AppState,
     conversation_id: &str,
@@ -2021,6 +2068,11 @@ async fn process_conversation_batch(
                             Vec::new()
                         }
                     };
+                    follow_up_sources = filter_remote_im_follow_up_sources_for_pending_queue(
+                        state,
+                        conversation_id,
+                        follow_up_sources,
+                    );
                     emit_round_completed_event(
                         state,
                         conversation_id,
@@ -2078,6 +2130,12 @@ async fn process_conversation_batch(
                                         Vec::new()
                                     }
                                 };
+                                follow_up_sources =
+                                    filter_remote_im_follow_up_sources_for_pending_queue(
+                                        state,
+                                        conversation_id,
+                                        follow_up_sources,
+                                    );
                                 emit_round_completed_event(
                                     state,
                                     conversation_id,

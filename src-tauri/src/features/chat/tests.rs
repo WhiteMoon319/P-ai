@@ -2272,6 +2272,60 @@
         assert_eq!(all_sources[1].channel_id, "remote-im-b");
     }
 
+    #[test]
+    fn filter_remote_im_follow_up_sources_should_wait_for_pending_queue_message() {
+        let state = test_chat_runtime_state();
+        let created_at = now_iso();
+        let remote_sender = RemoteImMessageSource {
+            channel_id: "remote-im-a".to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            im_name: "QQ".to_string(),
+            remote_contact_type: "private".to_string(),
+            remote_contact_id: "contact-a".to_string(),
+            remote_contact_name: "张三".to_string(),
+            sender_id: "contact-a".to_string(),
+            sender_name: "张三".to_string(),
+            sender_avatar_url: None,
+            platform_message_id: None,
+        };
+        let source = remote_im_activation_source_from_sender(&remote_sender);
+        let event = ChatPendingEvent {
+            id: Uuid::new_v4().to_string(),
+            conversation_id: "conversation-a".to_string(),
+            created_at: created_at.clone(),
+            source: ChatEventSource::RemoteIm,
+            queue_mode: ChatQueueMode::Normal,
+            messages: vec![test_text_message("user", "忙碌期间来的新消息", &created_at)],
+            activate_assistant: true,
+            session_info: ChatSessionInfo {
+                department_id: ASSISTANT_DEPARTMENT_ID.to_string(),
+                agent_id: DEFAULT_AGENT_ID.to_string(),
+            },
+            runtime_context: None,
+            sender_info: Some(remote_sender),
+        };
+        {
+            let mut slots = state
+                .conversation_runtime_slots
+                .lock()
+                .expect("lock runtime slots");
+            let slot = conversation_slot_mut(&mut slots, "conversation-a");
+            slot.pending_queue.push_back(event);
+        }
+
+        assert!(remote_im_source_has_pending_queue_event(
+            &state,
+            "conversation-a",
+            &source,
+        ));
+        let filtered = filter_remote_im_follow_up_sources_for_pending_queue(
+            &state,
+            "conversation-a",
+            vec![source],
+        );
+        assert!(filtered.is_empty());
+    }
+
     fn seed_remote_im_auto_send_test_state(
         channel_credentials: Value,
     ) -> (AppState, RemoteImActivationSource, String, String, String) {
