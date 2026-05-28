@@ -5,11 +5,11 @@ impl OnebotV11WsManager {
         senders.get(channel_id).map(|tx| tx.subscribe())
     }
 
-    /// 关闭所有服务器
+    /// 关闭所有服务器（通过取消所有 runtime 的 CancellationToken 触发 axum graceful shutdown）
     pub async fn shutdown(&self) {
-        let shutdowns = self.channel_shutdowns.write().await.drain().collect::<Vec<_>>();
-        for (_, tx) in shutdowns {
-            let _ = tx.send(());
+        let runtimes: Vec<_> = self.channel_runtimes.read().await.values().cloned().collect();
+        for runtime in runtimes {
+            runtime.cancel.cancel();
         }
     }
 
@@ -18,10 +18,13 @@ impl OnebotV11WsManager {
         self.connections.read().await.contains_key(channel_id)
     }
 
-    /// 订阅渠道的关闭信号
-    pub(crate) async fn subscribe_shutdown(&self, channel_id: &str) -> Option<broadcast::Receiver<()>> {
-        let shutdowns = self.channel_shutdowns.read().await;
-        shutdowns.get(channel_id).map(|tx| tx.subscribe())
+    /// 获取渠道的 CancellationToken，事件消费器用它来感知渠道停止
+    pub(crate) async fn get_channel_cancel_token(&self, channel_id: &str) -> Option<CancellationToken> {
+        self.channel_runtimes
+            .read()
+            .await
+            .get(channel_id)
+            .map(|runtime| runtime.cancel.clone())
     }
 }
 
@@ -60,4 +63,3 @@ pub async fn get_channel_logs(channel_id: String) -> Result<Vec<ChannelLogEntry>
     let manager = onebot_v11_ws_manager();
     Ok(manager.get_logs(&channel_id).await)
 }
-

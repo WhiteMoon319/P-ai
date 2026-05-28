@@ -2,6 +2,8 @@
 
 ## 未发布
 
+- 重构（remote-im）：OneBot v11 WS 服务器从手写 TCP listener + accept 循环迁移至 axum serve，由框架管理端口绑定、连接接受与 graceful shutdown；移除 600 秒 bind retry 循环和 channel_shutdowns broadcast，stop 后端口确定性释放，消除"自己占自己端口"和长时间无响应问题。
+
 - 修复（message-store）：独立聊天窗口不再触发全局消息仓库迁移预检；迁移预检将近期更新的 `building` manifest 视为活跃写入而非异常会话，并避免 busy 状态阻止迁移版本落盘。
 
 - 修复（remote-im）：OneBot v11 生命周期改为短锁收敛并跳过重复启动，避免端口重试期间停用/重启被长时间阻塞；运行日志时间改为本地时间；远程联系人列表增加头像、可点击胶囊与触发模式上下调整，优化服务端已监听但协议端未连接时的状态提示。

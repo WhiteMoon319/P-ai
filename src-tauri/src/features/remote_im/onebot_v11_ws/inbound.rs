@@ -147,14 +147,14 @@ async fn napcat_run_event_consumer_loop(
 ) {
     loop {
         // 等待连接建立后才能订阅事件
-        let (mut event_rx, mut shutdown_rx) = loop {
+        let (mut event_rx, cancel_token) = loop {
             if *stop_rx.borrow() {
                 manager.add_log(&channel_id, "info", "事件消费器收到停止信号").await;
                 return;
             }
             if let Some(rx) = manager.subscribe_events(&channel_id).await {
-                if let Some(srx) = manager.subscribe_shutdown(&channel_id).await {
-                    break (rx, srx);
+                if let Some(token) = manager.get_channel_cancel_token(&channel_id).await {
+                    break (rx, token);
                 }
             }
             // 连接尚未建立或渠道已停止，按节流间隔重试
@@ -222,8 +222,8 @@ async fn napcat_run_event_consumer_loop(
                         Err(_) => return,
                     }
                 }
-                _ = shutdown_rx.recv() => {
-                    eprintln!("[远程IM][OneBot v11 事件] 渠道 {} 收到关闭信号，停止事件消费", channel_id);
+                _ = cancel_token.cancelled() => {
+                    eprintln!("[远程IM][OneBot v11 事件] 渠道 {} 收到取消信号，停止事件消费", channel_id);
                     manager.add_log(&channel_id, "info", "事件消费器已停止").await;
                     return; // 渠道已停止，完全退出消费循环
                 }

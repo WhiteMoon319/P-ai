@@ -1,46 +1,28 @@
-fn build_reject_response(
-    status: tokio_tungstenite::tungstenite::http::StatusCode,
-) -> HttpResponse<Option<String>> {
-    tokio_tungstenite::tungstenite::http::Response::builder()
-        .status(status)
-        .body(None)
-        .unwrap_or_else(|e| {
-            eprintln!("[远程IM][OneBot v11 WS] 构建拒绝响应失败: {}", e);
-            tokio_tungstenite::tungstenite::http::Response::builder()
-                .status(tokio_tungstenite::tungstenite::http::StatusCode::INTERNAL_SERVER_ERROR)
-                .body(None)
-                .unwrap_or_else(|_| tokio_tungstenite::tungstenite::http::Response::new(None))
-        })
-}
-
-fn validate_ws_token(req: &Request, expected: Option<&str>) -> Result<(), HttpResponse<Option<String>>> {
-    let mut received_token: Option<String> = None;
-    if let Some(query) = req.uri().query() {
+fn validate_ws_token_from_query(query: Option<&str>, headers: &axum::http::HeaderMap, expected: Option<&str>) -> bool {
+    let Some(expect) = expected else {
+        return true; // 无 token 要求，直接通过
+    };
+    // 从 query string 提取 access_token
+    if let Some(query) = query {
         for pair in query.split('&') {
             if let Some((key, value)) = pair.split_once('=') {
-                if key == "access_token" {
-                    received_token = Some(value.to_string());
+                if key == "access_token" && value == expect {
+                    return true;
                 }
             }
         }
     }
-    if let Some(auth_header) = req.headers().get("Authorization") {
+    // 从 Authorization header 提取 Bearer token
+    if let Some(auth_header) = headers.get("Authorization") {
         if let Ok(auth_str) = auth_header.to_str() {
             if let Some(token) = auth_str.strip_prefix("Bearer ") {
-                received_token = Some(token.to_string());
+                if token == expect {
+                    return true;
+                }
             }
         }
     }
-    if let Some(expect) = expected {
-        match received_token.as_deref() {
-            Some(token) if token == expect => Ok(()),
-            _ => Err(build_reject_response(
-                tokio_tungstenite::tungstenite::http::StatusCode::FORBIDDEN,
-            )),
-        }
-    } else {
-        Ok(())
-    }
+    false
 }
 
 async fn append_channel_log(
@@ -81,8 +63,8 @@ async fn route_onebot_ws_payload(
 }
 
 async fn run_message_loop(
-    mut ws_sender: WsSender,
-    mut ws_receiver: WsReceiver,
+    mut ws_sender: AxumWsSender,
+    mut ws_receiver: AxumWsReceiver,
     mut cmd_rx: broadcast::Receiver<String>,
     mut stop_rx: tokio::sync::watch::Receiver<bool>,
     pending_responses: Arc<RwLock<HashMap<String, oneshot::Sender<OneBotApiResponse>>>>,
@@ -93,6 +75,8 @@ async fn run_message_loop(
     peer_addr_str: String,
     cancel: CancellationToken,
 ) {
+    use futures_util::StreamExt;
+
     let mut disconnect_level = "info".to_string();
     let mut disconnect_message = format!("客户端断开: {}", peer_addr_str);
     loop {
@@ -100,7 +84,7 @@ async fn run_message_loop(
             _ = cancel.cancelled() => {
                 let _ = tokio::time::timeout(
                     std::time::Duration::from_millis(500),
-                    ws_sender.send(Message::Close(None)),
+                    ws_sender.send(AxumWsMessage::Close(None)),
                 )
                 .await;
                 disconnect_level = "info".to_string();
@@ -112,7 +96,7 @@ async fn run_message_loop(
                     Ok(payload) => {
                         let send_result = tokio::time::timeout(
                             std::time::Duration::from_millis(500),
-                            ws_sender.send(Message::Text(payload.into())),
+                            ws_sender.send(AxumWsMessage::Text(payload.into())),
                         )
                         .await;
                         if !matches!(send_result, Ok(Ok(()))) {
@@ -134,7 +118,7 @@ async fn run_message_loop(
                         if *stop_rx.borrow() {
                             let _ = tokio::time::timeout(
                                 std::time::Duration::from_millis(500),
-                                ws_sender.send(Message::Close(None)),
+                                ws_sender.send(AxumWsMessage::Close(None)),
                             )
                             .await;
                             disconnect_level = "info".to_string();
@@ -151,22 +135,22 @@ async fn run_message_loop(
             }
             msg = ws_receiver.next() => {
                 match msg {
-                    Some(Ok(Message::Text(text))) => {
+                    Some(Ok(AxumWsMessage::Text(text))) => {
                         route_onebot_ws_payload(&text, &pending_responses, &event_tx).await;
                     }
-                    Some(Ok(Message::Binary(data))) => {
+                    Some(Ok(AxumWsMessage::Binary(data))) => {
                         if let Ok(text) = std::str::from_utf8(&data) {
                             route_onebot_ws_payload(text, &pending_responses, &event_tx).await;
                         }
                     }
-                    Some(Ok(Message::Ping(data))) => {
+                    Some(Ok(AxumWsMessage::Ping(data))) => {
                         let _ = tokio::time::timeout(
                             std::time::Duration::from_millis(500),
-                            ws_sender.send(Message::Pong(data)),
+                            ws_sender.send(AxumWsMessage::Pong(data)),
                         )
                         .await;
                     }
-                    Some(Ok(Message::Close(_))) | None => {
+                    Some(Ok(AxumWsMessage::Close(_))) | None => {
                         break;
                     }
                     Some(Ok(_)) => {}
