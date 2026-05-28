@@ -348,7 +348,7 @@ async fn fetch_models_genai(
         .build();
     let mut models = tokio::time::timeout(
         std::time::Duration::from_secs(20),
-        client.all_model_names(adapter_kind),
+        client.all_model_names(adapter_kind, None),
     )
     .await
     .map_err(|_| format!("Fetch genai model list timed out: {adapter_kind}"))?
