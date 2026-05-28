@@ -140,45 +140,16 @@
           {{ t("chat.delegatePanelTab") }}
         </button>
       </div>
-      <div
+      <button
         v-else-if="toolReviewPanelOpenVisible"
-        class="dropdown dropdown-bottom dropdown-end shrink-0"
+        type="button"
+        class="btn btn-ghost btn-sm btn-square h-8 min-h-8 w-8 shrink-0"
+        :title="chatRightPanelMode === 'reader' ? t('chat.readerPanelTab') : t('chat.delegatePanelTab')"
         @mousedown.stop
+        @click.stop="emit('update:chat-right-panel-mode', chatRightPanelMode === 'reader' ? 'delegate' : 'reader')"
       >
-        <button
-          type="button"
-          tabindex="0"
-          class="btn btn-ghost btn-sm btn-square h-8 min-h-8 w-8"
-          :title="chatRightPanelMode === 'reader' ? t('chat.readerPanelTab') : t('chat.delegatePanelTab')"
-        >
-          <ChevronDown class="h-3.5 w-3.5" />
-        </button>
-        <ul
-          tabindex="0"
-          class="dropdown-content menu z-50 mt-2 w-36 rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
-        >
-          <li>
-            <button
-              type="button"
-              class="font-normal"
-              :class="chatRightPanelMode === 'reader' ? 'menu-active font-semibold' : ''"
-              @click.stop="emit('update:chat-right-panel-mode', 'reader')"
-            >
-              {{ t("chat.readerPanelTab") }}
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              class="font-normal"
-              :class="chatRightPanelMode !== 'reader' ? 'menu-active font-semibold' : ''"
-              @click.stop="emit('update:chat-right-panel-mode', 'delegate')"
-            >
-              {{ t("chat.delegatePanelTab") }}
-            </button>
-          </li>
-        </ul>
-      </div>
+        <ArrowUpDown class="h-3.5 w-3.5" />
+      </button>
 
       <button
         type="button"
@@ -445,7 +416,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { ChevronDown, Download, FoldVertical, History, LayoutList, LayoutPanelLeft, Minus, ScrollText, Search, Settings, Square, SquarePen, Upload, X } from "@lucide/vue";
+import { ArrowUpDown, Download, FoldVertical, History, LayoutList, LayoutPanelLeft, Minus, ScrollText, Search, Settings, Square, SquarePen, Upload, X } from "@lucide/vue";
 import type { ChatConversationOverviewItem } from "../../../types/app";
 import { resolveConversationDisplayTitle } from "../../chat/utils/conversation-title";
 import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
