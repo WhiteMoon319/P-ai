@@ -401,6 +401,48 @@ fn remote_im_trim_conversation_for_qa_mode(conversation: &Conversation) -> Conve
     trimmed
 }
 
+fn conversation_upsert_final_assistant_message(
+    conversation: &mut Conversation,
+    current_agent_id: &str,
+    assistant_message: ChatMessage,
+    now: &str,
+) -> ChatMessage {
+    let target_idx = conversation
+        .messages
+        .last()
+        .filter(|message| message.role.trim() == "assistant")
+        .filter(|message| {
+            message
+                .speaker_agent_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                == Some(current_agent_id.trim())
+        })
+        .map(|_| conversation.messages.len().saturating_sub(1));
+    if let Some(idx) = target_idx {
+        if let Some(existing) = conversation.messages.get_mut(idx) {
+            let existing_id = existing.id.clone();
+            let existing_created_at = existing.created_at.clone();
+            let existing_tool_call = existing.tool_call.take();
+            *existing = assistant_message;
+            existing.id = existing_id;
+            existing.created_at = existing_created_at;
+            if existing.tool_call.as_ref().map(|items| items.is_empty()).unwrap_or(true) {
+                existing.tool_call = existing_tool_call;
+            }
+            conversation.updated_at = now.to_string();
+            conversation.last_assistant_at = Some(now.to_string());
+            return existing.clone();
+        }
+    }
+    conversation.messages.push(assistant_message.clone());
+    increment_conversation_unread_count(conversation, 1);
+    conversation.updated_at = now.to_string();
+    conversation.last_assistant_at = Some(now.to_string());
+    assistant_message
+}
+
 fn remote_im_find_contact_by_conversation<'a>(
     data: &'a AppData,
     conversation_id: &str,
@@ -3099,11 +3141,12 @@ async fn send_chat_message_inner(
                         &reasoning_inline,
                         provider_meta,
                     );
-                    conversation.messages.push(assistant_message.clone());
-                    increment_conversation_unread_count(&mut conversation, 1);
-                    persisted_assistant_message = Some(assistant_message);
-                    conversation.updated_at = now.clone();
-                    conversation.last_assistant_at = Some(now);
+                    persisted_assistant_message = Some(conversation_upsert_final_assistant_message(
+                        &mut conversation,
+                        &current_agent.id,
+                        assistant_message,
+                        &now,
+                    ));
                 }
                 conversation_service().persist_conversation_with_chat_index(
                     &state,
@@ -3125,11 +3168,12 @@ async fn send_chat_message_inner(
                             &reasoning_inline,
                             provider_meta,
                         );
-                        conversation.messages.push(assistant_message.clone());
-                        increment_conversation_unread_count(&mut conversation, 1);
-                        persisted_assistant_message = Some(assistant_message);
-                        conversation.updated_at = now.clone();
-                        conversation.last_assistant_at = Some(now);
+                        persisted_assistant_message = Some(conversation_upsert_final_assistant_message(
+                            &mut conversation,
+                            &current_agent.id,
+                            assistant_message,
+                            &now,
+                        ));
                     }
                     delegate_runtime_thread_conversation_update(&state, &conversation_id, conversation)?;
                 }
@@ -3423,6 +3467,137 @@ mod core_send_inner_tests {
             trusted_input_tokens: None,
             round_logs_recorded_internally: false,
         }
+    }
+
+    #[test]
+    fn conversation_upsert_final_assistant_message_should_update_last_same_assistant() {
+        let now = now_iso();
+        let mut conversation = Conversation {
+            id: "conversation-a".to_string(),
+            title: "测试".to_string(),
+            agent_id: "agent-a".to_string(),
+            department_id: ASSISTANT_DEPARTMENT_ID.to_string(),
+            bound_conversation_id: None,
+            parent_conversation_id: None,
+            child_conversation_ids: Vec::new(),
+            fork_message_cursor: None,
+            unread_count: 0,
+            conversation_kind: String::new(),
+            root_conversation_id: None,
+            delegate_id: None,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+            last_user_at: None,
+            last_assistant_at: None,
+            status: String::new(),
+            summary: String::new(),
+            user_profile_snapshot: String::new(),
+            shell_workspace_path: None,
+            shell_workspaces: Vec::new(),
+            shell_autonomous_mode: false,
+            archived_at: None,
+            messages: vec![ChatMessage {
+                id: "assistant-existing".to_string(),
+                role: "assistant".to_string(),
+                created_at: now.clone(),
+                speaker_agent_id: Some("agent-a".to_string()),
+                parts: vec![MessagePart::Text {
+                    text: String::new(),
+                }],
+                extra_text_blocks: Vec::new(),
+                provider_meta: None,
+                tool_call: Some(vec![
+                    serde_json::json!({
+                        "role": "assistant",
+                        "content": Value::Null,
+                        "tool_calls": [{
+                            "id": "call-1",
+                            "type": "function",
+                            "function": {
+                                "name": "read_file",
+                                "arguments": "{}"
+                            }
+                        }]
+                    }),
+                    serde_json::json!({
+                        "role": "tool",
+                        "tool_call_id": "call-1",
+                        "content": "ok"
+                    }),
+                ]),
+                mcp_call: None,
+            }],
+            current_todos: Vec::new(),
+            memory_recall_table: Vec::new(),
+            plan_mode_enabled: false,
+        };
+        let final_message = build_assistant_message_from_request_sequence(
+            "assistant-new".to_string(),
+            "agent-a",
+            now.clone(),
+            &[
+                serde_json::json!({
+                    "role": "assistant",
+                    "content": Value::Null,
+                    "tool_calls": [{
+                        "id": "call-1",
+                        "type": "function",
+                        "function": {
+                            "name": "read_file",
+                            "arguments": "{}"
+                        }
+                    }]
+                }),
+                serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": "call-1",
+                    "content": "ok"
+                }),
+                serde_json::json!({
+                    "role": "assistant",
+                    "content": "最终回答"
+                }),
+            ],
+            "",
+            Some(serde_json::json!({
+                "effectivePromptTokens": 128_u64
+            })),
+        );
+
+        let persisted = conversation_upsert_final_assistant_message(
+            &mut conversation,
+            "agent-a",
+            final_message,
+            &now,
+        );
+
+        assert_eq!(conversation.messages.len(), 1);
+        assert_eq!(persisted.id, "assistant-existing");
+        assert_eq!(
+            conversation.messages[0]
+                .parts
+                .first()
+                .and_then(|part| match part {
+                    MessagePart::Text { text } => Some(text.as_str()),
+                    _ => None,
+                }),
+            Some("最终回答")
+        );
+        assert_eq!(
+            conversation.messages[0]
+                .tool_call
+                .as_ref()
+                .map(Vec::len),
+            Some(2)
+        );
+        assert_eq!(
+            conversation.messages[0]
+                .provider_meta
+                .as_ref()
+                .and_then(|meta| meta.get("effectivePromptTokens"))
+                .and_then(Value::as_u64),
+            Some(128)
+        );
     }
 
     #[test]

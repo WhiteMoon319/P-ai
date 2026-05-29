@@ -34,6 +34,19 @@ export function useChatConversationCtx(
     return name === "organize_context" || name === "archive";
   }
 
+  function isOrganizeContextStatusText(text: string): boolean {
+    const value = String(text || "").trim();
+    return !!value && (
+      value.includes(t("chat.statusCompactingContext"))
+      || value.includes("压缩上下文")
+      || value.includes("壓縮上下文")
+      || value.includes("整理上下文")
+      || value.includes("整理後繼續")
+      || value.includes("整理后继续")
+      || value.toLowerCase().includes("compacting context")
+    );
+  }
+
   const visibleStreamToolCalls = computed(() =>
     props.streamToolCalls.filter((call) => !isOrganizeContextToolCall(call)),
   );
@@ -97,13 +110,14 @@ export function useChatConversationCtx(
 
   const isOrganizingContextBusy = computed(() => {
     if (props.compactingConversation && isCurrentConversationCompacting.value) return true;
+    const runtimeState = String(activeConversationSummary.value?.runtimeState || "").trim();
+    if (runtimeState === "organizing_context" || runtimeState === "compacting") return true;
     const runningTool = activeRunningToolCall.value;
     if (runningTool && isOrganizeContextToolCall(runningTool)) return true;
     const statusState = String(props.toolStatusState || "").trim();
     if (statusState !== "running") return false;
-    const statusText = t("chat.statusCompactingContext");
     const actualText = String(props.toolStatusText || "").trim();
-    return actualText.includes(statusText);
+    return isOrganizeContextStatusText(actualText);
   });
 
   const chatStatusBanner = computed<null | { text: string; tone: "default" | "error" }>(() => {

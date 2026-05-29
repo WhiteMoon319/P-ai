@@ -1928,6 +1928,95 @@
     }
 
     #[test]
+    fn build_prompt_after_compaction_should_not_replay_pre_compaction_checkpoint_tool_history() {
+        let now = now_iso();
+        let agent = default_agent();
+        let checkpoint = build_stop_chat_partial_assistant_message(
+            &agent.id,
+            "我已经读取完文件，准备继续处理。",
+            "先读取文件，再继续总结。",
+            "",
+            &[
+                serde_json::json!({
+                    "role": "assistant",
+                    "content": Value::Null,
+                    "reasoning_content": "先读取文件",
+                    "tool_calls": [{
+                        "id": "call_read",
+                        "type": "function",
+                        "function": {
+                            "name": "read_file",
+                            "arguments": "{\"path\":\"README.md\"}"
+                        }
+                    }]
+                }),
+                serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": "call_read",
+                    "content": "README 内容"
+                }),
+            ],
+        );
+        let compaction = ChatMessage {
+            id: Uuid::new_v4().to_string(),
+            role: "user".to_string(),
+            created_at: now.clone(),
+            speaker_agent_id: Some(SYSTEM_PERSONA_ID.to_string()),
+            parts: vec![MessagePart::Text {
+                text: "[上下文整理]\n整理摘要：已读取 README，接下来继续处理。".to_string(),
+            }],
+            extra_text_blocks: Vec::new(),
+            provider_meta: Some(serde_json::json!({
+                "message_meta": {
+                    "kind": "context_compaction",
+                    "scene": "compaction",
+                    "reason": "organize_context"
+                }
+            })),
+            tool_call: None,
+            mcp_call: None,
+        };
+        let messages = vec![
+            test_text_message("user", "请读取 README 并继续处理", &now),
+            checkpoint,
+            compaction,
+            test_text_message("user", "继续", &now),
+        ];
+        let conv = test_active_conversation_with_messages(messages, Some(now));
+
+        let prepared = build_prompt(
+            &conv,
+            &agent,
+            &[agent.clone(), default_user_persona()],
+            &[],
+            "用户",
+            "我是...",
+            DEFAULT_RESPONSE_STYLE_ID,
+            "zh-CN",
+            None,
+            None,
+            None,
+            false,
+        );
+
+        assert_eq!(prepared.latest_user_text, "继续");
+        assert_eq!(prepared.history_messages.len(), 1);
+        assert!(prepared.history_messages[0].text.contains("已读取 README"));
+        assert!(
+            prepared
+                .history_messages
+                .iter()
+                .all(|message| message.tool_calls.is_none())
+        );
+        assert!(
+            prepared
+                .history_messages
+                .iter()
+                .all(|message| !message.text.contains("README 内容"))
+        );
+    }
+
+    #[test]
     fn build_prompt_should_resolve_latest_user_from_trimmed_context_window() {
         let now = now_iso();
         let agent = default_agent();
