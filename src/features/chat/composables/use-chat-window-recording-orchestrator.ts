@@ -22,6 +22,7 @@ type UseChatWindowRecordingOrchestratorOptions = {
   prewarmMicrophone: () => Promise<unknown>;
   refreshChatUnarchivedConversations: () => Promise<void>;
   freezeForegroundConversation: (reason: string) => void;
+  restoreForegroundConversationProjection: (conversationId: string, reason: string) => Promise<void>;
 };
 
 export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordingOrchestratorOptions) {
@@ -133,7 +134,16 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     if (active) {
       void stopRecording(false);
       const activeConversationId = String(options.currentChatConversationId.value || "").trim();
-      if (!activeConversationId && options.startupDataReady.value) {
+      if (activeConversationId) {
+        void options.restoreForegroundConversationProjection(activeConversationId, reason)
+          .catch((error) => {
+            console.warn("[聊天流式恢复] 前台激活同步失败", {
+              conversationId: activeConversationId,
+              reason,
+              error,
+            });
+          });
+      } else if (options.startupDataReady.value) {
         void options.refreshChatUnarchivedConversations()
           .catch((error) => {
             console.warn("[聊天追踪][前台会话] 激活恢复失败", error);

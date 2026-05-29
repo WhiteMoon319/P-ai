@@ -188,6 +188,20 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
     chatForeground.freezeForegroundConversation(reason);
   }
 
+  async function restoreForegroundConversationProjection(conversationId: string, reason: string) {
+    const cid = String(conversationId || "").trim();
+    if (!cid) return;
+    const restoredFromCache = bindings.getChatFlow().resumeForegroundStreamCacheProjection({
+      conversationId: cid,
+      reason,
+    });
+    const runtimeState = await resumeForegroundRuntimeFromBackend(cid, reason);
+    if (restoredFromCache && runtimeState === "idle") {
+      bindings.getChatFlow().clearForegroundRoundState();
+      await reloadForegroundConversationMessages(reason);
+    }
+  }
+
   async function deleteUnarchivedConversationFromArchives(conversationId: string) {
     await chatConversationDialogGlue.deleteUnarchivedConversationFromArchives(conversationId);
   }
@@ -257,6 +271,7 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
     refreshChatUnarchivedConversations,
     sendChatFromCurrentWindow,
     freezeForegroundConversation,
+    restoreForegroundConversationProjection,
     switchRemoteImContactConversation: chatRemoteConversation.switchRemoteImContactConversation,
     openConversationInDetachedWindowById: chatRemoteConversation.openConversationInDetachedWindowById,
     switchChatConversation: chatRemoteConversation.switchChatConversation,

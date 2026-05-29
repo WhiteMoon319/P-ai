@@ -5,6 +5,11 @@ import { formalizeMessages, normalizeConversationId, positiveRoundedNumber, read
 import type { ResumeForegroundRuntimeRoundInput } from "./use-chat-flow-types";
 import type { RoundStartedPayload } from "./use-chat-flow-events";
 
+type ResumeForegroundStreamCacheProjectionInput = {
+  conversationId?: string | null;
+  reason?: string;
+};
+
 export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
   function applyQueuedStreamingStateIfNeeded(draftId: string) {
     const queuedStreamingState = bindings.getQueuedStreamingState();
@@ -210,6 +215,23 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
       : ensureForegroundWaitingRound(input?.statusText || bindings.t("chat.statusWaitingReply"));
   }
 
+  function resumeForegroundStreamCacheProjection(input?: ResumeForegroundStreamCacheProjectionInput) {
+    const currentConversationId = normalizeConversationId(bindings.getConversationId ? bindings.getConversationId() : "");
+    const conversationId = normalizeConversationId(input?.conversationId || currentConversationId);
+    if (!conversationId || conversationId !== currentConversationId) return 0;
+    const cache = bindings.readConversationStreamCache(conversationId);
+    if (!streamCacheHasVisibleProgress(cache)) return 0;
+    console.info("[聊天流式恢复] 从前端缓存恢复当前会话投影", {
+      conversationId,
+      reason: String(input?.reason || ""),
+      assistantTextLength: String(cache?.assistantText || "").length,
+      reasoningStandardLength: String(cache?.reasoningStandard || "").length,
+      reasoningInlineLength: String(cache?.reasoningInline || "").length,
+      toolCallCount: Number(cache?.streamToolCallCount || 0),
+    });
+    return ensureForegroundStreamingRound();
+  }
+
   function promoteQueuedRoundToStreaming(gen: number) {
     const round = bindings.getRound();
     if (round.phase === "streaming" && round.gen === gen) {
@@ -259,6 +281,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     ensureForegroundWaitingRound,
     ensureForegroundStreamingRound,
     resumeForegroundRuntimeRound,
+    resumeForegroundStreamCacheProjection,
     promoteQueuedRoundToStreaming,
   };
 }

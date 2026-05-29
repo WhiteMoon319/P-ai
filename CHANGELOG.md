@@ -2,6 +2,8 @@
 
 ## 未发布
 
+- 修复（chat-stream）：聊天窗口失焦后重新激活时，优先从前端流式缓存恢复当前会话投影，并在后端已完成时清理临时流式草稿后重载正式消息，避免切回窗口后流式内容不同步或草稿悬挂。
+
 - 重构（remote-im）：OneBot v11 WS 服务器从手写 TCP listener + accept 循环迁移至 axum serve，由框架管理端口绑定、连接接受与 graceful shutdown；移除 600 秒 bind retry 循环和 channel_shutdowns broadcast，stop 后端口确定性释放，消除"自己占自己端口"和长时间无响应问题。
 
 ## 发布：v0.10.10

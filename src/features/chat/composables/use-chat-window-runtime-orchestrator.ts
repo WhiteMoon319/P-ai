@@ -186,6 +186,7 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
   bindings.conversationApi.bind({
     refreshChatUnarchivedConversations: conversationOrchestrator.refreshChatUnarchivedConversations,
     freezeForegroundConversation: conversationOrchestrator.freezeForegroundConversation,
+    restoreForegroundConversationProjection: conversationOrchestrator.restoreForegroundConversationProjection,
     sendChatFromCurrentWindow: conversationOrchestrator.sendChatFromCurrentWindow,
     detachCurrentConversationToWindow: conversationOrchestrator.detachCurrentConversationToWindow,
     deleteUnarchivedConversationFromArchives: conversationOrchestrator.deleteUnarchivedConversationFromArchives,

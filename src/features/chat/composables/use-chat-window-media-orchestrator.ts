@@ -94,6 +94,7 @@ export function useChatWindowMediaOrchestrator(bindings: Record<string, any>) {
     prewarmMicrophone,
     refreshChatUnarchivedConversations: bindings.refreshChatUnarchivedConversations,
     freezeForegroundConversation: bindings.freezeForegroundConversation,
+    restoreForegroundConversationProjection: bindings.restoreForegroundConversationProjection,
   });
 
   const chatMedia = useChatMedia({

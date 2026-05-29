@@ -653,6 +653,10 @@ export function useChatFlow(options: UseChatFlowOptions) {
     return foregroundRounds?.resumeForegroundRuntimeRound(input) ?? 0;
   }
 
+  function resumeForegroundStreamCacheProjection(input?: { conversationId?: string | null; reason?: string }) {
+    return foregroundRounds?.resumeForegroundStreamCacheProjection(input) ?? 0;
+  }
+
   function promoteQueuedRoundToStreaming(gen: number) {
     return foregroundRounds?.promoteQueuedRoundToStreaming(gen) ?? 0;
   }
@@ -738,6 +742,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     freezeForegroundRoundState,
     resumeForegroundStreamingRound: ensureForegroundStreamingRound,
     resumeForegroundRuntimeRound,
+    resumeForegroundStreamCacheProjection,
     bindActiveConversationStream: channelBinding.bindActiveConversationStream,
     handleExternalStreamRebindRequired: externalEvents.handleExternalStreamRebindRequired,
     handleExternalHistoryFlushed: externalEvents.handleExternalHistoryFlushed,
