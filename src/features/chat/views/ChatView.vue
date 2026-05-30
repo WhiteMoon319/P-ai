@@ -481,7 +481,7 @@ const emit = defineEmits<{
   (e: "archiveConversation", conversationId: string): void;
   (e: "exportConversation", conversationId: string): void;
   (e: "deleteConversation", conversationId: string): void;
-  (e: "createConversation", input?: { title?: string; departmentId?: string; copyCurrent?: boolean; importPath?: string }): void;
+  (e: "createConversation", input?: { title?: string; departmentId?: string; copyCurrent?: boolean; importPath?: string; shellWorkspaces?: ShellWorkspace[]; shellAutonomousMode?: boolean }): void;
   (e: "loadOlderHistory"): void; (e: "reachedBottom"): void;
   (e: "jumpToConversationBottom"): void;
   (e: "refreshToolReviewMessage", payload: { conversationId: string; messageId: string }): void;

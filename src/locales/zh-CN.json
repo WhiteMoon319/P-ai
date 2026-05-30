@@ -5,6 +5,7 @@
     "cancel": "取消",
     "confirm": "确认",
     "copy": "复制",
+    "browse": "浏览",
     "more": "更多",
     "expand": "展开",
     "collapse": "收起",
@@ -1174,6 +1175,8 @@
     "workspacePickerEmpty": "当前还没有会话工作目录，先添加一个即可。",
     "workspaceCurrent": "当前",
     "allowedWorkspaceButton": "允许 AI 访问的目录",
+    "createConversationNoWorkspace": "不设置工作目录",
+    "createConversationMaxPermission": "给予会话最大权限",
     "conversationMenu": {
       "title": "会话菜单",
       "startDelegate": "发起委托",

@@ -1,4 +1,5 @@
 import { invokeTauri } from "../../../services/tauri-api";
+import type { ShellWorkspace } from "../../../types/app";
 
 export function useChatConversationActionsOrchestrator(bindings: Record<string, any>) {
   function normalizeSelectedMessageIds(messageIds: unknown): string[] {
@@ -9,7 +10,7 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
       : [];
   }
 
-  async function createUnarchivedConversation(input?: { title?: string; departmentId?: string; copyCurrent?: boolean; importPath?: string }) {
+  async function createUnarchivedConversation(input?: { title?: string; departmentId?: string; copyCurrent?: boolean; importPath?: string; shellWorkspaces?: ShellWorkspace[]; shellAutonomousMode?: boolean }) {
     const departmentId =
       String(input?.departmentId || "").trim()
       || bindings.defaultCreateConversationDepartmentId.value;
@@ -28,6 +29,8 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
             path: importPath,
             departmentId,
             title: String(input?.title || "").trim() || null,
+            shellWorkspaces: input?.shellWorkspaces || null,
+            shellAutonomousMode: Boolean(input?.shellAutonomousMode),
           },
         }
         : {
@@ -35,6 +38,8 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
             departmentId,
             title: String(input?.title || "").trim() || null,
             copySourceConversationId: copySourceConversationId || null,
+            shellWorkspaces: input?.shellWorkspaces || null,
+            shellAutonomousMode: Boolean(input?.shellAutonomousMode),
           },
         });
       const conversationId = String(result?.conversationId || "").trim();

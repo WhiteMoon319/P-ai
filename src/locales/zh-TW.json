@@ -5,6 +5,7 @@
     "cancel": "取消",
     "confirm": "確認",
     "copy": "複製",
+    "browse": "瀏覽",
     "more": "更多",
     "expand": "展開",
     "collapse": "收起",
@@ -1173,6 +1174,8 @@
     "workspacePickerEmpty": "目前還沒有會話工作目錄，先新增一個即可。",
     "workspaceCurrent": "目前",
     "allowedWorkspaceButton": "允許 AI 存取的目錄",
+    "createConversationNoWorkspace": "不設定工作目錄",
+    "createConversationMaxPermission": "給予會話最大權限",
     "conversationMenu": {
       "title": "會話選單",
       "startDelegate": "發起委託",

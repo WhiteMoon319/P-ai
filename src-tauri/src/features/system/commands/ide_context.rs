@@ -1381,6 +1381,8 @@ fn ide_chat_create_conversation(state: &AppState, params: Value) -> Result<Value
             department_id: input.department_id,
             title: input.title,
             copy_source_conversation_id: None,
+            shell_workspaces: None,
+            shell_autonomous_mode: None,
         },
     )?;
     emit_unarchived_conversation_overview_updated_payload(state, &result.overview_payload);

@@ -18,6 +18,7 @@
       :chat-right-panel-mode="chatRightPanelMode"
       :active-conversation-id="currentChatConversationId"
       :conversation-items="chatConversationItems"
+      :current-chat-workspaces="chatWorkspaceChoices"
       :user-alias="userAlias"
       :user-avatar-url="userAvatarUrl"
       :persona-name-map="chatPersonaNameMap"

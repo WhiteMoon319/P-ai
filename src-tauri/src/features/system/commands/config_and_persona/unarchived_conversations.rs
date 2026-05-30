@@ -144,6 +144,10 @@ struct CreateUnarchivedConversationInput {
     title: Option<String>,
     #[serde(default)]
     copy_source_conversation_id: Option<String>,
+    #[serde(default)]
+    shell_workspaces: Option<Vec<ShellWorkspaceConfig>>,
+    #[serde(default)]
+    shell_autonomous_mode: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -174,6 +178,10 @@ struct ImportConversationShareFromFileInput {
     department_id: Option<String>,
     #[serde(default)]
     title: Option<String>,
+    #[serde(default)]
+    shell_workspaces: Option<Vec<ShellWorkspaceConfig>>,
+    #[serde(default)]
+    shell_autonomous_mode: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -664,6 +672,8 @@ fn import_conversation_share_from_file(
         department_id: input.department_id.clone(),
         title: requested_title,
         copy_source_conversation_id: None,
+        shell_workspaces: input.shell_workspaces.clone(),
+        shell_autonomous_mode: input.shell_autonomous_mode,
     };
     let result = conversation_service().create_unarchived_conversation(state.inner(), &create_input)?;
     let conversation_id = result.conversation_id.clone();

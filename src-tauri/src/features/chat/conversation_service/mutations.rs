@@ -704,7 +704,7 @@ impl ConversationService {
             .filter(|value| !value.is_empty())
             .unwrap_or_default();
         let copy_source_conversation_id = trimmed_option(input.copy_source_conversation_id.as_deref());
-        let conversation = if let Some(source_conversation_id) = copy_source_conversation_id.as_deref() {
+        let mut conversation = if let Some(source_conversation_id) = copy_source_conversation_id.as_deref() {
             let source_conversation = state_read_conversation_cached(state, source_conversation_id)
                 .ok()
                 .filter(|conversation| {
@@ -730,6 +730,14 @@ impl ConversationService {
                 conversation_title,
             )
         };
+        if let Some(shell_workspaces) = input.shell_workspaces.as_ref() {
+            conversation.shell_workspaces =
+                normalize_conversation_shell_workspaces(state, shell_workspaces);
+            conversation.shell_workspace_path = None;
+        }
+        if let Some(shell_autonomous_mode) = input.shell_autonomous_mode {
+            conversation.shell_autonomous_mode = shell_autonomous_mode;
+        }
         let conversation_id = conversation.id.clone();
         let persist_seq = state_schedule_conversation_persist(state, &conversation, true)?;
         runtime_log_info(format!(

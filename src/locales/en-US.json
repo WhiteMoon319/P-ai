@@ -5,6 +5,7 @@
     "cancel": "Cancel",
     "confirm": "Confirm",
     "copy": "Copy",
+    "browse": "Browse",
     "more": "More",
     "expand": "Expand",
     "collapse": "Collapse",
@@ -1127,6 +1128,8 @@
     "workspacePickerEmpty": "No conversation workspace has been added yet. Add one to continue.",
     "workspaceCurrent": "Current",
     "allowedWorkspaceButton": "Directories AI Can Access",
+    "createConversationNoWorkspace": "No working directory",
+    "createConversationMaxPermission": "Grant maximum permissions",
     "conversationMenu": {
       "title": "Conversation Menu",
       "startDelegate": "Start Delegate",

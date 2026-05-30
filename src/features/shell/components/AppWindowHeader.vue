@@ -302,20 +302,30 @@
   </div>
 
   <dialog v-if="viewMode === 'chat'" class="modal" :class="{ 'modal-open': createConversationDialogOpen }">
-    <div class="modal-box max-w-md">
+    <div class="modal-box max-w-lg">
       <h3 class="text-base font-semibold">{{ t("chat.newConversation") }}</h3>
-      <div class="mt-3 flex flex-col gap-3">
-        <div class="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm leading-6 text-base-content/80">
-          {{ t("chat.unarchivedConversationMemoryReminder") }}
+      <div class="mt-4 flex flex-col gap-3">
+        <div class="flex flex-col gap-2">
+          <input
+            ref="createConversationInputRef"
+            v-model="createConversationTitle"
+            type="text"
+            class="input input-bordered w-full"
+            :placeholder="t('chat.newConversationTopicPlaceholder')"
+            @keydown="handleCreateConversationDialogKeydown"
+          />
+          <div v-if="recentConversationTopics.length > 0" class="flex flex-wrap gap-1.5">
+            <button
+              v-for="topic in recentConversationTopics"
+              :key="topic"
+              type="button"
+              class="btn btn-ghost btn-xs h-7 min-h-7 rounded-full px-3 text-xs font-medium text-base-content/75"
+              @click="applyRecentConversationTopic(topic)"
+            >
+              {{ topic }}
+            </button>
+          </div>
         </div>
-        <input
-          ref="createConversationInputRef"
-          v-model="createConversationTitle"
-          type="text"
-          class="input input-bordered w-full"
-          :placeholder="t('chat.newConversationTopicPlaceholder')"
-          @keydown="handleCreateConversationDialogKeydown"
-        />
         <select
           v-model="createConversationDepartmentId"
           class="select select-bordered w-full"
@@ -328,33 +338,66 @@
             {{ departmentOptionLabel(department) }}
           </option>
         </select>
-        <label class="label cursor-pointer justify-start gap-3 rounded-lg border border-base-300 px-3 py-2">
+        <label class="flex h-10 cursor-pointer items-center justify-start gap-3 px-1">
           <input v-model="createConversationCopyCurrent" type="checkbox" class="checkbox checkbox-sm" />
           <span class="label-text text-sm">{{ t("chat.copyCurrentConversation") }}</span>
         </label>
-        <div v-if="recentConversationTopics.length > 0" class="flex flex-col gap-2">
-          <div class="text-xs font-medium opacity-70">{{ t("chat.recentConversationTopics") }}</div>
-          <div class="flex flex-wrap gap-2">
-            <button
-              v-for="topic in recentConversationTopics"
-              :key="topic"
-              type="button"
-              class="btn btn-sm btn-ghost"
-              @click="applyRecentConversationTopic(topic)"
+        <div class="grid grid-cols-[minmax(0,1fr)_5rem] gap-2">
+          <div class="join min-w-0">
+            <select
+              v-model="createConversationWorkspacePath"
+              class="select select-bordered join-item min-w-0 flex-1"
+              @change="handleCreateConversationWorkspaceChange"
             >
-              {{ topic }}
+              <option value="">{{ t("chat.createConversationNoWorkspace") }}</option>
+              <option
+                v-for="workspace in selectableCreateConversationWorkspaces"
+                :key="workspace.id"
+                :value="workspace.path"
+              >
+                {{ workspace.name }}
+              </option>
+              <option
+                v-if="createConversationCustomWorkspace && !selectableCreateConversationWorkspaces.some((item) => item.path === createConversationCustomWorkspace?.path)"
+                :value="createConversationCustomWorkspace.path"
+              >
+                {{ createConversationCustomWorkspace.name }}
+              </option>
+            </select>
+            <button
+              type="button"
+              class="btn btn-square join-item"
+              :title="t('common.browse')"
+              @click="pickCreateConversationWorkspace"
+            >
+              <FolderOpen class="h-4 w-4" />
             </button>
           </div>
+          <select
+            v-model="createConversationWorkspaceAccess"
+            class="select select-bordered min-w-0"
+            :disabled="!createConversationWorkspacePath"
+          >
+            <option value="approval">{{ workspaceAccessLabel("approval") }}</option>
+            <option value="full_access">{{ workspaceAccessLabel("full_access") }}</option>
+            <option value="read_only">{{ workspaceAccessLabel("read_only") }}</option>
+          </select>
         </div>
       </div>
-      <div class="modal-action">
-        <button class="btn btn-sm" :disabled="importConversationLoading" @click="importConversationFromExternal">
-          <span v-if="importConversationLoading" class="loading loading-spinner loading-xs"></span>
-          <Upload v-else class="h-4 w-4" />
-          <span>{{ t("chat.importConversationExternal") }}</span>
-        </button>
-        <button class="btn btn-sm" @click="closeCreateConversationDialog">{{ t("common.cancel") }}</button>
-        <button class="btn btn-sm btn-primary" @click="confirmCreateConversation">{{ t("common.confirm") }}</button>
+      <div class="modal-action mt-5 items-center justify-between gap-3">
+        <label class="label min-w-0 cursor-pointer justify-start gap-2 p-0">
+          <input v-model="createConversationMaxPermission" type="checkbox" class="checkbox checkbox-sm" />
+          <span class="label-text truncate text-sm">{{ t("chat.createConversationMaxPermission") }}</span>
+        </label>
+        <div class="flex shrink-0 items-center justify-end gap-2">
+          <button class="btn btn-sm btn-ghost gap-2 px-2" :disabled="importConversationLoading" @click="importConversationFromExternal">
+            <span v-if="importConversationLoading" class="loading loading-spinner loading-xs"></span>
+            <Upload v-else class="h-4 w-4" />
+            <span>{{ t("chat.importConversationExternal") }}</span>
+          </button>
+          <button class="btn btn-sm" @click="closeCreateConversationDialog">{{ t("common.cancel") }}</button>
+          <button class="btn btn-sm btn-primary" @click="confirmCreateConversation">{{ t("common.confirm") }}</button>
+        </div>
       </div>
     </div>
     <form method="dialog" class="modal-backdrop">
@@ -416,8 +459,9 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { ArrowUpDown, Download, FoldVertical, History, LayoutList, LayoutPanelLeft, Minus, ScrollText, Search, Settings, Square, SquarePen, Upload, X } from "@lucide/vue";
-import type { ChatConversationOverviewItem } from "../../../types/app";
+import { ArrowUpDown, Download, FoldVertical, FolderOpen, History, LayoutList, LayoutPanelLeft, Minus, ScrollText, Search, Settings, Square, SquarePen, Upload, X } from "@lucide/vue";
+import type { ChatConversationOverviewItem, ShellWorkspace, ShellWorkspaceAccess } from "../../../types/app";
+import { defaultWorkspaceNameFromPath } from "../../../utils/shell-workspaces";
 import { resolveConversationDisplayTitle } from "../../chat/utils/conversation-title";
 import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
 import type { ConfigSearchResult, ConfigSearchTab } from "../../config/search/config-search";
@@ -443,10 +487,14 @@ type CreateConversationInput = {
   departmentId?: string;
   copyCurrent?: boolean;
   importPath?: string;
+  shellWorkspaces?: ShellWorkspace[];
+  shellAutonomousMode?: boolean;
 };
 
 const RECENT_CONVERSATION_TOPICS_STORAGE_KEY = "easy_call.recent_conversation_topics.v1";
 const RECENT_CONVERSATION_TOPICS_LIMIT = 7;
+const RECENT_CREATE_CONVERSATION_WORKSPACES_STORAGE_KEY = "easy_call.recent_create_conversation_workspaces.v1";
+const RECENT_CREATE_CONVERSATION_WORKSPACES_LIMIT = 12;
 
 const { markConversationRead } = usePipelineStatus({
   activeConversationId: computed(() => String(props.activeConversationId || "").trim()),
@@ -471,6 +519,7 @@ const props = defineProps<{
   chatRightPanelMode: "reader" | "review" | "delegate";
   activeConversationId: string;
   conversationItems: ChatConversationOverviewItem[];
+  currentChatWorkspaces?: ShellWorkspace[];
   userAlias: string;
   userAvatarUrl: string;
   personaNameMap: Record<string, string>;
@@ -618,6 +667,11 @@ const createConversationDialogOpen = ref(false);
 const createConversationTitle = ref("");
 const createConversationDepartmentId = ref("");
 const createConversationCopyCurrent = ref(false);
+const createConversationWorkspacePath = ref("");
+const createConversationWorkspaceAccess = ref<ShellWorkspaceAccess>("approval");
+const createConversationCustomWorkspace = ref<ShellWorkspace | null>(null);
+const createConversationMaxPermission = ref(false);
+const recentCreateConversationWorkspaces = ref<ShellWorkspace[]>([]);
 const importConversationLoading = ref(false);
 const configSearchOpen = ref(false);
 const changelogDialogOpen = ref(false);
@@ -625,6 +679,168 @@ const changelogLoading = ref(false);
 const changelogError = ref("");
 const changelogMarkdown = ref("");
 const changelogLoaded = ref(false);
+
+const selectableCreateConversationWorkspaces = computed<ShellWorkspace[]>(() =>
+  mergeCreateConversationWorkspaces([
+    ...(props.currentChatWorkspaces || []),
+    ...recentCreateConversationWorkspaces.value,
+  ])
+    .filter((item) => item.level !== "system" && String(item.path || "").trim())
+    .map((item) => ({
+      id: String(item.id || "").trim() || `conversation-workspace-${String(item.path || "").trim()}`,
+      name: String(item.name || "").trim() || defaultWorkspaceNameFromPath(item.path) || item.path,
+      path: String(item.path || "").trim(),
+      level: item.level === "main" ? "main" : "secondary",
+      access: normalizeWorkspaceAccess(item.access),
+      builtIn: false,
+    })),
+);
+
+function normalizeWorkspacePathKey(path: string): string {
+  return String(path || "").trim().toLowerCase();
+}
+
+function mergeCreateConversationWorkspaces(items: ShellWorkspace[]): ShellWorkspace[] {
+  const merged: ShellWorkspace[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    const path = String(item.path || "").trim();
+    const key = normalizeWorkspacePathKey(path);
+    if (!path || seen.has(key)) continue;
+    seen.add(key);
+    merged.push({ ...item, path });
+  }
+  return merged;
+}
+
+function normalizeWorkspaceAccess(value: unknown): ShellWorkspaceAccess {
+  const access = String(value || "").trim();
+  if (access === "full_access" || access === "read_only" || access === "approval") {
+    return access;
+  }
+  return "approval";
+}
+
+function resetCreateConversationWorkspace() {
+  createConversationWorkspacePath.value = "";
+  createConversationWorkspaceAccess.value = "approval";
+  createConversationCustomWorkspace.value = null;
+  createConversationMaxPermission.value = false;
+}
+
+function workspaceAccessLabel(access: ShellWorkspaceAccess): string {
+  if (access === "full_access") return t("config.tools.workspaceAccessFullAccess");
+  if (access === "read_only") return t("config.tools.workspaceAccessReadOnly");
+  return t("config.tools.workspaceAccessApproval");
+}
+
+function selectedCreateConversationWorkspace(): ShellWorkspace | undefined {
+  const path = String(createConversationWorkspacePath.value || "").trim();
+  if (!path) return undefined;
+  const source = selectableCreateConversationWorkspaces.value.find((item) => item.path === path)
+    || (createConversationCustomWorkspace.value?.path === path ? createConversationCustomWorkspace.value : null);
+  const name = String(source?.name || "").trim() || defaultWorkspaceNameFromPath(path) || path;
+  return {
+    id: String(source?.id || "").trim() || `conversation-workspace-${Date.now().toString(36)}`,
+    name,
+    path,
+    level: "main",
+    access: normalizeWorkspaceAccess(createConversationWorkspaceAccess.value),
+    builtIn: false,
+  };
+}
+
+function createConversationWorkspacePayload(): ShellWorkspace[] | undefined {
+  const workspace = selectedCreateConversationWorkspace();
+  return workspace ? [workspace] : undefined;
+}
+
+function loadRecentCreateConversationWorkspaces() {
+  try {
+    const raw = window.localStorage.getItem(RECENT_CREATE_CONVERSATION_WORKSPACES_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+    recentCreateConversationWorkspaces.value = mergeCreateConversationWorkspaces(parsed.map((item): ShellWorkspace => ({
+      id: String(item?.id || "").trim(),
+      name: String(item?.name || "").trim(),
+      path: String(item?.path || "").trim(),
+      level: "secondary",
+      access: normalizeWorkspaceAccess(item?.access),
+      builtIn: false,
+    }))).slice(0, RECENT_CREATE_CONVERSATION_WORKSPACES_LIMIT);
+  } catch {
+    recentCreateConversationWorkspaces.value = [];
+  }
+}
+
+function saveRecentCreateConversationWorkspaces() {
+  try {
+    window.localStorage.setItem(
+      RECENT_CREATE_CONVERSATION_WORKSPACES_STORAGE_KEY,
+      JSON.stringify(recentCreateConversationWorkspaces.value),
+    );
+  } catch {
+    // ignore persistence failures
+  }
+}
+
+function pushRecentCreateConversationWorkspace(workspace: ShellWorkspace | undefined) {
+  if (!workspace?.path) return;
+  const normalized: ShellWorkspace = {
+    id: workspace.id || `conversation-workspace-${Date.now().toString(36)}`,
+    name: workspace.name || defaultWorkspaceNameFromPath(workspace.path) || workspace.path,
+    path: workspace.path,
+    level: "secondary",
+    access: normalizeWorkspaceAccess(workspace.access),
+    builtIn: false,
+  };
+  const targetKey = normalizeWorkspacePathKey(normalized.path);
+  recentCreateConversationWorkspaces.value = [
+    normalized,
+    ...recentCreateConversationWorkspaces.value.filter((item) => normalizeWorkspacePathKey(item.path) !== targetKey),
+  ].slice(0, RECENT_CREATE_CONVERSATION_WORKSPACES_LIMIT);
+  saveRecentCreateConversationWorkspaces();
+}
+
+function handleCreateConversationWorkspaceChange() {
+  const path = String(createConversationWorkspacePath.value || "").trim();
+  if (!path) {
+    createConversationWorkspaceAccess.value = "approval";
+    return;
+  }
+  const source = selectableCreateConversationWorkspaces.value.find((item) => item.path === path)
+    || (createConversationCustomWorkspace.value?.path === path ? createConversationCustomWorkspace.value : null);
+  createConversationWorkspaceAccess.value = normalizeWorkspaceAccess(source?.access);
+}
+
+async function pickCreateConversationWorkspace() {
+  const selected = await openDialog({
+    multiple: false,
+    directory: true,
+  });
+  const path = String(Array.isArray(selected) ? selected[0] : selected || "").trim();
+  if (!path) return;
+  const existing = selectableCreateConversationWorkspaces.value.find((item) => item.path.toLowerCase() === path.toLowerCase());
+  if (existing) {
+    createConversationWorkspacePath.value = existing.path;
+    createConversationWorkspaceAccess.value = normalizeWorkspaceAccess(existing.access);
+    pushRecentCreateConversationWorkspace(existing);
+    return;
+  }
+  const workspace: ShellWorkspace = {
+    id: `conversation-workspace-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    name: defaultWorkspaceNameFromPath(path) || path,
+    path,
+    level: "main",
+    access: "approval",
+    builtIn: false,
+  };
+  createConversationCustomWorkspace.value = workspace;
+  createConversationWorkspacePath.value = workspace.path;
+  createConversationWorkspaceAccess.value = workspace.access;
+  pushRecentCreateConversationWorkspace(workspace);
+}
 
 function loadRecentConversationTopics() {
   try {
@@ -717,6 +933,7 @@ function handleCreateConversation() {
     || String(props.defaultCreateConversationDepartmentId || "").trim()
     || String(props.createConversationDepartmentOptions[0]?.id || "").trim();
   createConversationCopyCurrent.value = false;
+  resetCreateConversationWorkspace();
   createConversationDialogOpen.value = true;
   nextTick(() => createConversationInputRef.value?.focus());
 }
@@ -750,6 +967,7 @@ function closeCreateConversationDialog() {
   createConversationTitle.value = "";
   createConversationDepartmentId.value = "";
   createConversationCopyCurrent.value = false;
+  resetCreateConversationWorkspace();
   importConversationLoading.value = false;
 }
 
@@ -775,10 +993,16 @@ function confirmCreateConversation() {
   createConversationTitle.value = "";
   createConversationDepartmentId.value = "";
   createConversationCopyCurrent.value = false;
+  const shellWorkspaces = createConversationWorkspacePayload();
+  const shellAutonomousMode = createConversationMaxPermission.value;
+  pushRecentCreateConversationWorkspace(shellWorkspaces?.[0]);
+  resetCreateConversationWorkspace();
   emit("create-conversation", {
     title,
     departmentId: departmentId || undefined,
     copyCurrent,
+    shellWorkspaces,
+    shellAutonomousMode,
   });
 }
 
@@ -803,11 +1027,17 @@ async function importConversationFromExternal() {
     createConversationTitle.value = "";
     createConversationDepartmentId.value = "";
     createConversationCopyCurrent.value = false;
+    const shellWorkspaces = createConversationWorkspacePayload();
+    const shellAutonomousMode = createConversationMaxPermission.value;
+    pushRecentCreateConversationWorkspace(shellWorkspaces?.[0]);
+    resetCreateConversationWorkspace();
     emit("create-conversation", {
       title,
       departmentId: departmentId || undefined,
       copyCurrent: false,
       importPath: path,
+      shellWorkspaces,
+      shellAutonomousMode,
     });
   } finally {
     importConversationLoading.value = false;
@@ -823,6 +1053,7 @@ function handleCreateConversationDialogKeydown(event: KeyboardEvent) {
 
 onMounted(() => {
   loadRecentConversationTopics();
+  loadRecentCreateConversationWorkspaces();
   document.addEventListener("pointerdown", handleDocumentPointerDown);
   window.addEventListener("keydown", handleWindowKeydown);
   updateWindowWidth();
