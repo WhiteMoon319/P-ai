@@ -479,6 +479,8 @@ fn remote_im_contact_tool_history_events(
 
 // ==================== 图像回退 ====================
 
+const IMAGE_FALLBACK_RECENT_USER_MESSAGE_LIMIT: usize = 7;
+
 async fn resolve_image_description_with_vision_fallback(
     state: &AppState,
     vision_api: &ApiConfig,
@@ -513,6 +515,57 @@ async fn resolve_image_description_with_vision_fallback(
     Ok(Some(trimmed))
 }
 
+fn prepared_latest_user_present(prepared: &PreparedPrompt) -> bool {
+    !prepared.latest_user_text.trim().is_empty()
+        || !prepared.latest_user_meta_text.trim().is_empty()
+        || !prepared.latest_user_extra_text.trim().is_empty()
+        || prepared
+            .latest_user_extra_blocks
+            .iter()
+            .any(|block| !block.trim().is_empty())
+        || !prepared.latest_images.is_empty()
+        || !prepared.latest_audios.is_empty()
+}
+
+fn recent_user_image_fallback_plan(prepared: &PreparedPrompt) -> (Vec<bool>, bool) {
+    let latest_user_in_window = prepared_latest_user_present(prepared);
+    let mut remaining = IMAGE_FALLBACK_RECENT_USER_MESSAGE_LIMIT
+        .saturating_sub(usize::from(latest_user_in_window));
+    let mut history_in_window = vec![false; prepared.history_messages.len()];
+
+    // 远程联系人可能连续刷大量图片。图转文按“最近用户消息条数”限流：
+    // 最新消息优先占 1 条，历史消息再从后向前补齐，旧图片只保留路径引用。
+    for (idx, message) in prepared.history_messages.iter().enumerate().rev() {
+        if message.role.trim() != "user" {
+            continue;
+        }
+        if remaining == 0 {
+            break;
+        }
+        history_in_window[idx] = true;
+        remaining -= 1;
+    }
+
+    (history_in_window, latest_user_in_window)
+}
+
+fn image_reference_block_for_fallback(index: usize, image: &PreparedBinaryPayload) -> String {
+    let reference = image
+        .saved_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .map(|path| format!("路径：{path}"))
+        .unwrap_or_else(|| {
+            format!(
+                "路径：未保存；mime={}；base64_chars={}",
+                image.mime,
+                image.content.len()
+            )
+        });
+    format!("[图片{}]\n{}", index + 1, reference)
+}
+
 async fn apply_prompt_image_fallbacks_to_prepared(
     state: &AppState,
     app_config: &AppConfig,
@@ -536,14 +589,32 @@ async fn apply_prompt_image_fallbacks_to_prepared(
     }
 
     let mut changed = false;
+    let (history_image_fallback_window, latest_user_in_window) =
+        recent_user_image_fallback_plan(prepared);
 
-    for message in &mut prepared.history_messages {
+    for (message_index, message) in prepared.history_messages.iter_mut().enumerate() {
         if message.role.trim() != "user" || message.images.is_empty() {
             continue;
         }
 
         let original_images = std::mem::take(&mut message.images);
         let mut converted_blocks = Vec::<String>::new();
+        if !history_image_fallback_window
+            .get(message_index)
+            .copied()
+            .unwrap_or(false)
+        {
+            converted_blocks.extend(
+                original_images
+                    .iter()
+                    .enumerate()
+                    .map(|(index, image)| image_reference_block_for_fallback(index, image)),
+            );
+            message.extra_text_blocks.extend(converted_blocks);
+            changed = true;
+            continue;
+        }
+
         for (index, image_payload) in original_images.into_iter().enumerate() {
             let image = BinaryPart {
                 mime: image_payload.mime,
@@ -570,22 +641,31 @@ async fn apply_prompt_image_fallbacks_to_prepared(
     if !prepared.latest_images.is_empty() {
         let original_images = std::mem::take(&mut prepared.latest_images);
         let mut converted_blocks = Vec::<String>::new();
-        for (index, image_payload) in original_images.into_iter().enumerate() {
-            let image = BinaryPart {
-                mime: image_payload.mime,
-                bytes_base64: image_payload.content,
-                saved_path: image_payload.saved_path,
-            };
-            if let Some(text) = resolve_image_description_with_vision_fallback(
-                state,
-                &vision_api,
-                &vision_resolved,
-                &image,
-            )
-            .await?
-            {
-                converted_blocks.push(format!("[图片{}]\n{}", index + 1, text));
+        if latest_user_in_window {
+            for (index, image_payload) in original_images.into_iter().enumerate() {
+                let image = BinaryPart {
+                    mime: image_payload.mime,
+                    bytes_base64: image_payload.content,
+                    saved_path: image_payload.saved_path,
+                };
+                if let Some(text) = resolve_image_description_with_vision_fallback(
+                    state,
+                    &vision_api,
+                    &vision_resolved,
+                    &image,
+                )
+                .await?
+                {
+                    converted_blocks.push(format!("[图片{}]\n{}", index + 1, text));
+                }
             }
+        } else {
+            converted_blocks.extend(
+                original_images
+                    .iter()
+                    .enumerate()
+                    .map(|(index, image)| image_reference_block_for_fallback(index, image)),
+            );
         }
         if !converted_blocks.is_empty() {
             prepared_prompt_append_latest_user_extra_blocks(prepared, &converted_blocks);
@@ -3390,6 +3470,87 @@ mod core_send_inner_tests {
             custom_max_output_tokens_enabled: false,
             failure_retry_count: 0,
         }
+    }
+
+    fn test_prepared_prompt_with_user_image_history(
+        history_user_count: usize,
+        latest_user_text: &str,
+    ) -> PreparedPrompt {
+        let history_messages = (0..history_user_count)
+            .map(|idx| PreparedHistoryMessage {
+                role: "user".to_string(),
+                text: format!("user-{idx}"),
+                extra_text_blocks: Vec::new(),
+                user_time_text: None,
+                images: vec![PreparedBinaryPayload {
+                    mime: "image/png".to_string(),
+                    content: B64.encode(format!("image-{idx}").as_bytes()),
+                    saved_path: Some(format!("downloads/image-{idx}.png")),
+                }],
+                audios: Vec::new(),
+                tool_calls: None,
+                tool_call_id: None,
+                reasoning_content: None,
+            })
+            .collect::<Vec<_>>();
+        PreparedPrompt {
+            preamble: String::new(),
+            history_messages,
+            latest_user_text: latest_user_text.to_string(),
+            latest_user_meta_text: String::new(),
+            latest_user_extra_text: String::new(),
+            latest_user_extra_blocks: Vec::new(),
+            latest_images: if latest_user_text.trim().is_empty() {
+                Vec::new()
+            } else {
+                vec![PreparedBinaryPayload {
+                    mime: "image/png".to_string(),
+                    content: B64.encode(b"latest"),
+                    saved_path: Some("downloads/latest.png".to_string()),
+                }]
+            },
+            latest_audios: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn recent_user_image_fallback_plan_should_count_latest_user_first() {
+        let prepared = test_prepared_prompt_with_user_image_history(8, "latest");
+
+        let (history_window, latest_in_window) = recent_user_image_fallback_plan(&prepared);
+
+        assert!(latest_in_window);
+        assert_eq!(
+            history_window,
+            vec![false, false, true, true, true, true, true, true]
+        );
+    }
+
+    #[test]
+    fn recent_user_image_fallback_plan_should_use_last_seven_history_users_without_latest() {
+        let prepared = test_prepared_prompt_with_user_image_history(8, "");
+
+        let (history_window, latest_in_window) = recent_user_image_fallback_plan(&prepared);
+
+        assert!(!latest_in_window);
+        assert_eq!(
+            history_window,
+            vec![false, true, true, true, true, true, true, true]
+        );
+    }
+
+    #[test]
+    fn image_reference_block_for_fallback_should_preserve_saved_path() {
+        let image = PreparedBinaryPayload {
+            mime: "image/png".to_string(),
+            content: B64.encode(b"old-image"),
+            saved_path: Some("downloads/old.png".to_string()),
+        };
+
+        assert_eq!(
+            image_reference_block_for_fallback(0, &image),
+            "[图片1]\n路径：downloads/old.png"
+        );
     }
 
     #[test]
