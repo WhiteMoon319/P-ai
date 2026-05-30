@@ -185,6 +185,7 @@ struct ConversationStreamRuntimeCache {
     started_at: String,
     started_at_ms: u64,
     updated_at: String,
+    persisted_assistant_message_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]

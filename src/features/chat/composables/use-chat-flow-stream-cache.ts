@@ -32,6 +32,7 @@ export type ConversationStreamCache = {
   streamToolCalls: StreamToolCallView[];
   streamToolCallCount: number;
   streamLastToolName: string;
+  persistedAssistantMessageId?: string;
 };
 
 export type ConversationRuntimeStreamCacheSnapshot = {
@@ -50,6 +51,7 @@ export type ConversationRuntimeStreamCacheSnapshot = {
   streamToolCallCount?: number;
   streamLastToolName?: string;
   hasVisibleProgress?: boolean;
+  persistedAssistantMessageId?: string;
 };
 
 type UseChatFlowStreamCacheOptions = {
@@ -248,6 +250,7 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
       ),
       streamToolCallCount: Math.max(0, Math.round(Number(snapshot.streamToolCallCount || 0))),
       streamLastToolName: String(snapshot.streamLastToolName || ""),
+      persistedAssistantMessageId: String(snapshot.persistedAssistantMessageId || current.persistedAssistantMessageId || "").trim(),
     }));
   }
 

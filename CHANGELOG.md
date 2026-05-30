@@ -3,6 +3,7 @@
 ## 未发布
 
 - 升级（builtin-network）：`fetch` 与 `websearch` 内置工具默认优先走 Exa MCP 网关（`https://mcp.exa.ai/mcp`），当 Exa 返回非标准成功结果（无 `result`、SSE 解析失败、内容为空等）时自动降级到原有内置实现（`fetch` 回退 reqwest + trafilatura，`websearch` 回退 Bing HTML 解析），无需本地额度计数，仅按返回结果质量判定降级。
+- 修复（chat-stream）：流式期间工具调用结果即时持久化后，切换会话再切回时流式草稿与半成品持久化消息重复显示；后端流式缓存新增 `persisted_assistant_message_id` 字段，前端切会话恢复统一只从后端读取快照并按该字段去重，移除前端本地缓存恢复路径。
 
 ## 发布：v0.10.11
 

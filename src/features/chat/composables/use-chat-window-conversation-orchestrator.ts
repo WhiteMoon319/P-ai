@@ -191,14 +191,11 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
   async function restoreForegroundConversationProjection(conversationId: string, reason: string) {
     const cid = String(conversationId || "").trim();
     if (!cid) return;
-    const restoredFromCache = bindings.getChatFlow().resumeForegroundStreamCacheProjection({
-      conversationId: cid,
-      reason,
-    });
+    // 不再从前端本地缓存恢复流式投影，统一只从后端读取。
+    // 后端 snapshot 天然包含 persistedAssistantMessageId，去重逻辑只需在 resumeForegroundRuntimeRound 中做一次。
     const runtimeState = await resumeForegroundRuntimeFromBackend(cid, reason);
-    if (restoredFromCache && runtimeState === "idle") {
+    if (runtimeState === "idle") {
       bindings.getChatFlow().clearForegroundRoundState();
-      await reloadForegroundConversationMessages(reason);
     }
   }
 

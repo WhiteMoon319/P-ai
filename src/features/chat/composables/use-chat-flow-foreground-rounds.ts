@@ -153,6 +153,21 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     const existingDraftId = String(existingDraft?.id || "").trim();
     const existingDraftMeta = ((existingDraft?.providerMeta || {}) as Record<string, unknown>);
     const restoredFromCache = !existingDraftId && bindings.applyConversationStreamCacheToDisplay(conversationId);
+    // 去重：若流式缓存携带 persistedAssistantMessageId，说明该条真实 assistant 消息已被后端持久化，
+    // 但流式缓存草稿会包含更完整的内容，移除这条半成品以避免刷新后重复显示。
+    if (conversationId) {
+      const streamCache = bindings.readConversationStreamCache(conversationId);
+      const persistedId = String(streamCache?.persistedAssistantMessageId || "").trim();
+      if (persistedId) {
+        const beforeLen = bindings.allMessages.value.length;
+        bindings.allMessages.value = bindings.allMessages.value.filter(
+          (msg: any) => String(msg?.id || "").trim() !== persistedId,
+        );
+        if (bindings.allMessages.value.length !== beforeLen) {
+          console.info("[聊天流式恢复] 移除半成品持久化消息", { persistedId, beforeLen, afterLen: bindings.allMessages.value.length });
+        }
+      }
+    }
     const existingDraftStartedAtMs = existingDraftId ? positiveRoundedNumber(existingDraftMeta._frontendDispatchStartedAtMs) : 0;
     const existingDraftElapsedMs = existingDraftId ? positiveRoundedNumber(existingDraftMeta._frontendDispatchElapsedMs) : 0;
     console.info("[聊天流式阶段] 前台恢复流式投影", {
@@ -194,6 +209,18 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
       bindings.writeConversationStreamCacheSnapshot(conversationId, input.streamCache);
     }
     const cache = bindings.readConversationStreamCache(conversationId);
+    // 去重：若流式缓存携带 persistedAssistantMessageId，移除该条半成品持久化消息，
+    // 避免刷新后流式草稿与历史消息同时显示。
+    const persistedId = String(cache?.persistedAssistantMessageId || "").trim();
+    if (persistedId) {
+      const beforeLen = bindings.allMessages.value.length;
+      bindings.allMessages.value = bindings.allMessages.value.filter(
+        (msg: any) => String(msg?.id || "").trim() !== persistedId,
+      );
+      if (bindings.allMessages.value.length !== beforeLen) {
+        console.info("[聊天流式恢复] 移除半成品持久化消息", { persistedId, beforeLen, afterLen: bindings.allMessages.value.length });
+      }
+    }
     const hasVisibleProgress =
       !!input?.streamCache?.hasVisibleProgress
       || streamCacheHasVisibleProgress(input?.streamCache)
@@ -248,6 +275,21 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     const existingDraftId = String(existingDraft?.id || "").trim();
     const existingDraftMeta = ((existingDraft?.providerMeta || {}) as Record<string, unknown>);
     const restoredFromCache = !existingDraftId && bindings.applyConversationStreamCacheToDisplay(conversationId);
+    // 去重：若流式缓存携带 persistedAssistantMessageId，说明该条真实 assistant 消息已被后端持久化，
+    // 但流式缓存草稿会包含更完整的内容，移除这条半成品以避免刷新后重复显示。
+    if (conversationId) {
+      const streamCache = bindings.readConversationStreamCache(conversationId);
+      const persistedId = String(streamCache?.persistedAssistantMessageId || "").trim();
+      if (persistedId) {
+        const beforeLen = bindings.allMessages.value.length;
+        bindings.allMessages.value = bindings.allMessages.value.filter(
+          (msg: any) => String(msg?.id || "").trim() !== persistedId,
+        );
+        if (bindings.allMessages.value.length !== beforeLen) {
+          console.info("[聊天流式恢复] 移除半成品持久化消息", { persistedId, beforeLen, afterLen: bindings.allMessages.value.length });
+        }
+      }
+    }
     const existingDraftStartedAtMs = existingDraftId ? positiveRoundedNumber(existingDraftMeta._frontendDispatchStartedAtMs) : 0;
     const existingDraftElapsedMs = existingDraftId ? positiveRoundedNumber(existingDraftMeta._frontendDispatchElapsedMs) : 0;
     if (!restoredFromCache) {

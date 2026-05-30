@@ -731,6 +731,11 @@ fn persist_completed_tool_pair_async(
             provider_meta_patch,
         ) {
             Ok(result) => {
+                set_stream_cache_persisted_assistant_message_id(
+                    &state,
+                    &context.conversation_id,
+                    &result.assistant_message_id,
+                );
                 runtime_log_info(format!(
                     "[聊天] 完成，任务=append_tool_call_result_pair，session={}，conversation_id={}，assistant_message_id={}，created={}，tool_event_count={}",
                     chat_session_key,

@@ -191,6 +191,7 @@ pub(crate) struct ConversationStreamRuntimeCacheSnapshot {
     pub started_at_ms: u64,
     pub updated_at: String,
     pub has_visible_progress: bool,
+    pub persisted_assistant_message_id: String,
 }
 
 const CHAT_QUEUE_SNAPSHOT_EVENT: &str = "easy-call:chat-queue-snapshot";
@@ -851,6 +852,26 @@ fn reset_conversation_stream_runtime_cache(
     Ok(())
 }
 
+fn set_stream_cache_persisted_assistant_message_id(
+    state: &AppState,
+    conversation_id: &str,
+    assistant_message_id: &str,
+) {
+    let mut slots = match lock_conversation_runtime_slots(state) {
+        Ok(slots) => slots,
+        Err(err) => {
+            eprintln!("[聊天流式缓存] 更新 persisted_assistant_message_id 失败，锁错误: {err}");
+            return;
+        }
+    };
+    let cid = conversation_id.trim();
+    if cid.is_empty() {
+        return;
+    }
+    let slot = conversation_slot_mut(&mut slots, cid);
+    slot.stream_cache.persisted_assistant_message_id = assistant_message_id.trim().to_string();
+}
+
 fn clear_conversation_stream_runtime_cache(
     state: &AppState,
     conversation_id: &str,
@@ -1315,6 +1336,7 @@ pub(crate) fn read_conversation_runtime_snapshot(
         started_at_ms: stream_cache.started_at_ms,
         updated_at: stream_cache.updated_at,
         has_visible_progress,
+        persisted_assistant_message_id: stream_cache.persisted_assistant_message_id,
     };
     Ok(ConversationRuntimeSnapshot {
         conversation_id: cid.to_string(),
