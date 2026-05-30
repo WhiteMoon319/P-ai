@@ -148,35 +148,23 @@
                       </button>
                     </div>
                   </div>
-                  <div class="mt-1.5 flex flex-nowrap gap-1.5 overflow-x-auto whitespace-nowrap text-xs [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <div class="mt-1.5 flex flex-wrap gap-1.5 overflow-visible whitespace-nowrap text-xs">
                     <span class="badge badge-sm shrink-0" :class="item.remoteContactType === 'group' ? 'badge-secondary' : 'badge-primary'">
                       {{ item.remoteContactType === "group" ? t("config.remoteIm.group") : t("config.remoteIm.private") }}
                     </span>
-                    <span
-                      class="badge badge-sm shrink-0 gap-1 transition-colors"
-                      :class="contactActivationBadgeClass(item)"
-                      :title="contactActivationHintText(item)"
-                    >
+                    <div>
                       <button
                         type="button"
-                        class="btn btn-ghost btn-xs h-4 min-h-0 w-4 p-0"
-                        title="上移触发模式"
+                        class="badge badge-sm shrink-0 gap-1.5 transition-colors"
+                        :class="contactActivationBadgeClass(item)"
+                        :title="contactActivationHintText(item)"
                         :disabled="contactsDisabled || isContactOperationBusy(item.id)"
-                        @click.stop="moveContactActivationMode(item, -1)"
+                        @click.stop="openContactPillMenu($event, item, 'activation')"
                       >
-                        <ChevronUp class="h-3 w-3" />
+                        {{ contactActivationModeLabel(item) }}
+                        <ChevronUp class="h-3.5 w-3.5 opacity-70" />
                       </button>
-                      {{ contactActivationModeLabel(item) }}
-                      <button
-                        type="button"
-                        class="btn btn-ghost btn-xs h-4 min-h-0 w-4 p-0"
-                        title="下移触发模式"
-                        :disabled="contactsDisabled || isContactOperationBusy(item.id)"
-                        @click.stop="moveContactActivationMode(item, 1)"
-                      >
-                        <ChevronDown class="h-3 w-3" />
-                      </button>
-                    </span>
+                    </div>
                     <span
                       v-if="contactKeywordModeMissingKeywords(item)"
                       class="badge badge-sm badge-warning shrink-0 gap-1.5"
@@ -185,39 +173,45 @@
                       <AlertTriangle class="h-3.5 w-3.5" />
                       关键词空
                     </span>
-                    <button
-                      type="button"
-                      class="badge badge-sm shrink-0 gap-1.5 transition-colors"
-                      :class="contactProcessingModeBadgeClass(item)"
-                      :title="`${processingModeHintText(item)} 点击切换处理模式`"
-                      :disabled="contactsDisabled || isContactOperationBusy(item.id)"
-                      @click.stop="cycleContactProcessingMode(item)"
-                    >
-                      <RefreshCw class="h-3.5 w-3.5 opacity-70" />
-                      {{ contactProcessingModeLabel(item) }}
-                    </button>
-                    <button
-                      type="button"
-                      class="badge badge-sm shrink-0 gap-1.5"
-                      :class="normalizeResponseStrategy(item.responseStrategy) === 'smart_judge' ? 'badge-accent' : 'badge-ghost'"
-                      :title="`${contactResponseStrategyHintText(item)} 点击切换回复策略`"
-                      :disabled="contactsDisabled || isContactOperationBusy(item.id)"
-                      @click.stop="cycleContactResponseStrategy(item)"
-                    >
-                      <RefreshCw class="h-3.5 w-3.5 opacity-70" />
-                      {{ normalizeResponseStrategy(item.responseStrategy) === "smart_judge" ? t("config.remoteIm.responseStrategySmart") : t("config.remoteIm.responseStrategyAlways") }}
-                    </button>
-                    <button
-                      type="button"
-                      class="badge badge-sm shrink-0 gap-1.5"
-                      :class="item.allowSendFiles ? 'badge-warning' : 'badge-ghost'"
-                      :title="`${t('config.remoteIm.allowSendFiles')}：${item.allowSendFiles ? '已允许' : '未允许'}。点击切换`"
-                      :disabled="contactsDisabled || isContactOperationBusy(item.id)"
-                      @click.stop="cycleContactAllowSendFiles(item)"
-                    >
-                      <RefreshCw class="h-3.5 w-3.5 opacity-70" />
-                      {{ t("config.remoteIm.filesShort") }}{{ item.allowSendFiles ? "" : "关" }}
-                    </button>
+                    <div>
+                      <button
+                        type="button"
+                        class="badge badge-sm shrink-0 gap-1.5 transition-colors"
+                        :class="contactProcessingModeBadgeClass(item)"
+                        :title="processingModeHintText(item)"
+                        :disabled="contactsDisabled || isContactOperationBusy(item.id)"
+                        @click.stop="openContactPillMenu($event, item, 'processing')"
+                      >
+                        {{ contactProcessingModeLabel(item) }}
+                        <ChevronUp class="h-3.5 w-3.5 opacity-70" />
+                      </button>
+                    </div>
+                    <div>
+                      <button
+                        type="button"
+                        class="badge badge-sm shrink-0 gap-1.5"
+                        :class="normalizeResponseStrategy(item.responseStrategy) === 'smart_judge' ? 'badge-accent' : 'badge-ghost'"
+                        :title="contactResponseStrategyHintText(item)"
+                        :disabled="contactsDisabled || isContactOperationBusy(item.id)"
+                        @click.stop="openContactPillMenu($event, item, 'response')"
+                      >
+                        {{ contactResponseStrategyLabel(item) }}
+                        <ChevronUp class="h-3.5 w-3.5 opacity-70" />
+                      </button>
+                    </div>
+                    <div>
+                      <button
+                        type="button"
+                        class="badge badge-sm shrink-0 gap-1.5"
+                        :class="item.allowSendFiles ? 'badge-warning' : 'badge-ghost'"
+                        :title="t('config.remoteIm.allowSendFiles')"
+                        :disabled="contactsDisabled || isContactOperationBusy(item.id)"
+                        @click.stop="openContactPillMenu($event, item, 'files')"
+                      >
+                        {{ contactSendFilesLabel(item) }}
+                        <ChevronUp class="h-3.5 w-3.5 opacity-70" />
+                      </button>
+                    </div>
                   </div>
                 </div>
             </div>
@@ -226,6 +220,33 @@
         </template>
       </ul>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="contactPillMenu"
+        class="fixed inset-0 z-[9999]"
+        @click="closeContactPillMenu"
+        @wheel.passive="closeContactPillMenu"
+      >
+        <ul
+          class="menu menu-sm fixed rounded-box border border-base-300 bg-base-100 p-1 text-sm shadow-xl"
+          :class="contactPillMenu.widthClass"
+          :style="{ left: `${contactPillMenu.left}px`, top: `${contactPillMenu.top}px` }"
+          @click.stop
+        >
+          <li v-for="option in contactPillMenu.options" :key="option.key">
+            <button
+              type="button"
+              class="leading-5"
+              :class="{ active: option.active }"
+              @click="selectContactPillMenuOption(option)"
+            >
+              {{ option.label }}
+            </button>
+          </li>
+        </ul>
+      </div>
+    </Teleport>
 
     <div class="modal z-90" :class="{ 'modal-open': addChannelModalOpen }" @click.self="closeAddChannelModal">
       <div class="modal-box max-w-md">
@@ -783,7 +804,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { AlertTriangle, ChevronDown, ChevronUp, Plus, RefreshCw, RotateCcw, Save, ScrollText, Settings, SquareTerminal, Trash2 } from "@lucide/vue";
+import { AlertTriangle, ChevronUp, Plus, RefreshCw, RotateCcw, Save, ScrollText, Settings, SquareTerminal, Trash2 } from "@lucide/vue";
 import { invokeTauri } from "../../../../services/tauri-api";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { AppConfig, DepartmentConfig, PersonaProfile, RemoteImChannelConfig, RemoteImContact, RemoteImPlatform, ShellWorkspace } from "../../../../types/app";
@@ -811,6 +832,21 @@ const WEIXIN_OC_BOT_TYPE = "3";
 const WEIXIN_OC_QR_POLL_INTERVAL = 1;
 const WEIXIN_OC_LONG_POLL_TIMEOUT_MS = 35000;
 const WEIXIN_OC_API_TIMEOUT_MS = 15000;
+type ContactPillMenuKind = "activation" | "processing" | "response" | "files";
+type ContactPillMenuOption = {
+  key: string;
+  label: string;
+  active: boolean;
+  value: string | boolean;
+};
+type ContactPillMenuState = {
+  contactId: string;
+  kind: ContactPillMenuKind;
+  left: number;
+  top: number;
+  widthClass: string;
+  options: ContactPillMenuOption[];
+};
 const saving = ref(false);
 const contactsLoading = ref(false);
 const contactsError = ref("");
@@ -844,6 +880,7 @@ const addChannelModalOpen = ref(false);
 const channelConfigModalOpen = ref(false);
 const contactConfigModalOpen = ref(false);
 const selectedContactId = ref<string>("");
+const contactPillMenu = ref<ContactPillMenuState | null>(null);
 const contactSaving = ref(false);
 const contactDeleting = ref(false);
 const channelRuntimeStates = ref<Record<string, ChannelConnectionStatus | null>>({});
@@ -1542,6 +1579,114 @@ function onContactActivationModeChange(item: RemoteImContact, modeRaw: string) {
   void saveContactActivation(item, { activationMode: mode });
 }
 
+function contactActivationModeOptions(): Array<{ value: RemoteImContact["activationMode"]; label: string }> {
+  return [
+    { value: "always", label: t("config.remoteIm.activateModeAlways") },
+    { value: "keyword", label: t("config.remoteIm.activateModeKeyword") },
+    { value: "never", label: t("config.remoteIm.activateModeNever") },
+  ];
+}
+
+async function selectContactActivationMode(
+  item: RemoteImContact,
+  mode: RemoteImContact["activationMode"],
+) {
+  if (contactsDisabled.value) return;
+  const nextMode = normalizeActivationMode(mode);
+  if (normalizeActivationMode(item.activationMode || "never") === nextMode) return;
+  await withContactOperation(item.id, () => saveContactActivation(item, { activationMode: nextMode }));
+}
+
+function closeContactPillMenu() {
+  contactPillMenu.value = null;
+}
+
+function contactPillMenuWidthClass(kind: ContactPillMenuKind): string {
+  if (kind === "processing") return "w-40";
+  if (kind === "files") return "w-32";
+  return "w-36";
+}
+
+function contactPillMenuOptions(
+  item: RemoteImContact,
+  kind: ContactPillMenuKind,
+): ContactPillMenuOption[] {
+  if (kind === "activation") {
+    const current = normalizeActivationMode(item.activationMode || "never");
+    return contactActivationModeOptions().map((option) => ({
+      key: option.value,
+      label: option.label,
+      active: current === option.value,
+      value: option.value,
+    }));
+  }
+  if (kind === "processing") {
+    const current = normalizeProcessingMode(item.processingMode);
+    return contactProcessingModeOptions().map((option) => ({
+      key: option.value,
+      label: option.label,
+      active: current === option.value,
+      value: option.value,
+    }));
+  }
+  if (kind === "response") {
+    const current = normalizeResponseStrategy(item.responseStrategy);
+    return contactResponseStrategyOptions().map((option) => ({
+      key: option.value,
+      label: option.label,
+      active: current === option.value,
+      value: option.value,
+    }));
+  }
+  return contactSendFilesOptions().map((option) => ({
+    key: String(option.value),
+    label: option.label,
+    active: !!item.allowSendFiles === option.value,
+    value: option.value,
+  }));
+}
+
+function openContactPillMenu(
+  event: MouseEvent,
+  item: RemoteImContact,
+  kind: ContactPillMenuKind,
+) {
+  if (contactsDisabled.value || isContactOperationBusy(item.id)) return;
+  const target = event.currentTarget as HTMLElement | null;
+  const rect = target?.getBoundingClientRect();
+  if (!rect) return;
+  const options = contactPillMenuOptions(item, kind);
+  const menuHeight = options.length * 32 + 10;
+  const menuWidth = kind === "processing" ? 160 : kind === "files" ? 128 : 144;
+  const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, rect.left));
+  const top = Math.max(8, rect.top - menuHeight - 4);
+  contactPillMenu.value = {
+    contactId: item.id,
+    kind,
+    left,
+    top,
+    widthClass: contactPillMenuWidthClass(kind),
+    options,
+  };
+}
+
+async function selectContactPillMenuOption(option: ContactPillMenuOption) {
+  const menu = contactPillMenu.value;
+  if (!menu) return;
+  const item = contacts.value.find((contact) => contact.id === menu.contactId);
+  closeContactPillMenu();
+  if (!item) return;
+  if (menu.kind === "activation") {
+    await selectContactActivationMode(item, option.value as RemoteImContact["activationMode"]);
+  } else if (menu.kind === "processing") {
+    await selectContactProcessingMode(item, option.value as "continuous" | "qa");
+  } else if (menu.kind === "response") {
+    await selectContactResponseStrategy(item, option.value as NonNullable<RemoteImContact["responseStrategy"]>);
+  } else {
+    await selectContactAllowSendFiles(item, option.value === true);
+  }
+}
+
 function contactActivationModeIndex(item: RemoteImContact): number {
   const mode = normalizeActivationMode(item.activationMode || "never");
   const index = contactActivationModeOrder.indexOf(mode);
@@ -1641,6 +1786,23 @@ async function onContactProcessingModeChange(
   }
 }
 
+function contactProcessingModeOptions(): Array<{ value: "continuous" | "qa"; label: string }> {
+  return [
+    { value: "continuous", label: t("config.remoteIm.processingModeContinuous") },
+    { value: "qa", label: t("config.remoteIm.processingModeQa") },
+  ];
+}
+
+async function selectContactProcessingMode(
+  item: RemoteImContact,
+  mode: "continuous" | "qa",
+) {
+  if (contactsDisabled.value) return;
+  const nextMode = normalizeProcessingMode(mode);
+  if (normalizeProcessingMode(item.processingMode) === nextMode) return;
+  await withContactOperation(item.id, () => onContactProcessingModeChange(item, nextMode));
+}
+
 async function cycleContactProcessingMode(item: RemoteImContact) {
   if (contactsDisabled.value) return;
   const current = normalizeProcessingMode(item.processingMode);
@@ -1648,11 +1810,54 @@ async function cycleContactProcessingMode(item: RemoteImContact) {
   await withContactOperation(item.id, () => onContactProcessingModeChange(item, next));
 }
 
+function contactResponseStrategyOptions(): Array<{
+  value: NonNullable<RemoteImContact["responseStrategy"]>;
+  label: string;
+}> {
+  return [
+    { value: "always_reply", label: t("config.remoteIm.responseStrategyAlways") },
+    { value: "smart_judge", label: t("config.remoteIm.responseStrategySmart") },
+  ];
+}
+
+function contactResponseStrategyLabel(item: RemoteImContact): string {
+  return normalizeResponseStrategy(item.responseStrategy) === "smart_judge"
+    ? t("config.remoteIm.responseStrategySmart")
+    : t("config.remoteIm.responseStrategyAlways");
+}
+
+async function selectContactResponseStrategy(
+  item: RemoteImContact,
+  strategy: NonNullable<RemoteImContact["responseStrategy"]>,
+) {
+  if (contactsDisabled.value) return;
+  const nextStrategy = normalizeResponseStrategy(strategy);
+  if (normalizeResponseStrategy(item.responseStrategy) === nextStrategy) return;
+  await withContactOperation(item.id, () => saveContactActivation(item, { responseStrategy: nextStrategy }));
+}
+
 async function cycleContactResponseStrategy(item: RemoteImContact) {
   if (contactsDisabled.value) return;
   const current = normalizeResponseStrategy(item.responseStrategy);
   const next = current === "smart_judge" ? "always_reply" : "smart_judge";
   await withContactOperation(item.id, () => saveContactActivation(item, { responseStrategy: next }));
+}
+
+function contactSendFilesOptions(): Array<{ value: boolean; label: string }> {
+  return [
+    { value: true, label: "可发文件" },
+    { value: false, label: "禁发文件" },
+  ];
+}
+
+function contactSendFilesLabel(item: RemoteImContact): string {
+  return item.allowSendFiles ? "可发文件" : "禁发文件";
+}
+
+async function selectContactAllowSendFiles(item: RemoteImContact, enabled: boolean) {
+  if (contactsDisabled.value) return;
+  if (!!item.allowSendFiles === enabled) return;
+  await withContactOperation(item.id, () => toggleContactAllowSendFiles(item, enabled));
 }
 
 async function cycleContactAllowSendFiles(item: RemoteImContact) {
