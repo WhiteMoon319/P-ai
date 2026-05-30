@@ -317,22 +317,22 @@
                       <label
                         class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
                         <span class="text-sm">{{ t("config.api.capImage") }}</span>
-                        <input v-model="modelCard.enableImage" type="checkbox" class="toggle toggle-sm" />
+                        <input v-model="modelCard.enableImage" type="checkbox" class="checkbox checkbox-sm" />
                       </label>
                       <label
                         class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
                         <span class="text-sm">{{ t("config.api.capTools") }}</span>
-                        <input v-model="modelCard.enableTools" type="checkbox" class="toggle toggle-sm" />
+                        <input v-model="modelCard.enableTools" type="checkbox" class="checkbox checkbox-sm" />
                       </label>
                       <label
                         class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
                         <span class="text-sm">{{ t("config.api.temperature") }}</span>
-                        <input v-model="modelCard.customTemperatureEnabled" type="checkbox" class="toggle toggle-sm" />
+                        <input v-model="modelCard.customTemperatureEnabled" type="checkbox" class="checkbox checkbox-sm" />
                       </label>
                       <label
                         class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
                         <span class="text-sm">{{ t("config.api.maxOutputTokens") }}</span>
-                        <input v-model="modelCard.customMaxOutputTokensEnabled" type="checkbox" class="toggle toggle-sm" />
+                        <input v-model="modelCard.customMaxOutputTokensEnabled" type="checkbox" class="checkbox checkbox-sm" />
                       </label>
                     </div>
 
@@ -820,7 +820,8 @@ function showDeepSeekReasoningEffort(modelCard: ApiModelConfigItem): boolean {
 }
 
 function isOpenaiModelAdapter(adapter: string | undefined): boolean {
-  return String(adapter || "").trim().toLowerCase() === "openai";
+  const normalized = String(adapter || "").trim().toLowerCase().replace(/[\s_-]/g, "");
+  return normalized === "openai" || normalized === "openairesp" || normalized === "openairesponses";
 }
 
 function isDeepSeekModelAdapter(adapter: string | undefined): boolean {
