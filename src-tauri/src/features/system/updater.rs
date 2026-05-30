@@ -862,7 +862,7 @@ async fn check_updater_with_manifest_fallbacks(
             }
             .map_err(|err| format!("配置更新端点失败（地址：{endpoint}，第 {attempt} 次）：{err}"))?;
             if force {
-                builder = builder.version_comparator(|current, update| update.version != current);
+                builder = builder.version_comparator(|_, _| true);
             }
             let updater = match builder.build() {
                 Ok(updater) => updater,
