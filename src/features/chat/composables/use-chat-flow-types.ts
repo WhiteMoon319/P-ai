@@ -40,14 +40,15 @@ export type UseChatFlowOptions = {
     extraTextBlocks?: string[];
     mentions?: ChatMentionTarget[];
     session: { apiConfigId: string; agentId: string; departmentId?: string; conversationId?: string };
+    traceId: string;
     onDelta: Channel<AssistantDeltaEvent>;
   }) => Promise<{
-    assistantText: string;
-    latestUserText: string;
-    reasoningStandard?: string;
-    reasoningInline?: string;
-    archivedBeforeSend: boolean;
-    assistantMessage?: ChatMessage;
+    accepted: boolean;
+    duplicate: boolean;
+    eventId: string;
+    conversationId: string;
+    traceId: string;
+    ingress: string;
   }>;
   invokeStopChatMessage?: (input: {
     session: { apiConfigId: string; agentId: string; departmentId?: string; conversationId?: string };

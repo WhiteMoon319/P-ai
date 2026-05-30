@@ -989,6 +989,7 @@ fn main() {
             open_workspace_file,
             read_plan_file_content,
             confirm_plan_and_continue,
+            submit_chat_message,
             send_chat_message,
             send_user_mention_message,
             submit_user_async_delegate,

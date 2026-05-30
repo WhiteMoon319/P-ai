@@ -86,6 +86,7 @@ struct AppState {
     >,
     pending_chat_delta_channels:
         Arc<Mutex<std::collections::HashMap<String, tauri::ipc::Channel<AssistantDeltaEvent>>>>,
+    accepted_submit_trace_ids: Arc<Mutex<std::collections::VecDeque<String>>>,
     active_chat_view_bindings:
         Arc<Mutex<std::collections::HashMap<String, ActiveChatViewBinding>>>,
     conversation_list_activity_marks:
@@ -318,6 +319,7 @@ impl AppState {
             conversation_processing_claims: Arc::new(Mutex::new(std::collections::HashSet::new())),
             pending_chat_result_senders: Arc::new(Mutex::new(std::collections::HashMap::new())),
             pending_chat_delta_channels: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            accepted_submit_trace_ids: Arc::new(Mutex::new(std::collections::VecDeque::new())),
             active_chat_view_bindings: Arc::new(Mutex::new(std::collections::HashMap::new())),
             conversation_list_activity_marks: Arc::new(Mutex::new(std::collections::HashMap::new())),
             dequeue_lock: Arc::new(Mutex::new(())),

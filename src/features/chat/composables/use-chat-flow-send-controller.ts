@@ -26,14 +26,15 @@ type UseChatFlowSendControllerOptions = {
     extraTextBlocks?: string[];
     mentions?: ChatMentionTarget[];
     session: { apiConfigId: string; agentId: string; departmentId?: string; conversationId?: string };
+    traceId: string;
     onDelta: Channel<AssistantDeltaEvent>;
   }) => Promise<{
-    assistantText: string;
-    latestUserText: string;
-    reasoningStandard?: string;
-    reasoningInline?: string;
-    archivedBeforeSend: boolean;
-    assistantMessage?: ChatMessage;
+    accepted: boolean;
+    duplicate: boolean;
+    eventId: string;
+    conversationId: string;
+    traceId: string;
+    ingress: string;
   }>;
   onOwnUserDraftInserted?: () => void;
   t: (key: string, params?: Record<string, unknown>) => string;
@@ -143,9 +144,12 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
 
     const deltaChannel = new Channel<AssistantDeltaEvent>();
     options.channelBinding.attachDeltaHandler(deltaChannel, "sendChat", () => gen, () => gen);
+    const traceId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     try {
-      const result = await options.invokeSendChatMessage({
+      await options.invokeSendChatMessage({
         text: plainText,
         displayText:
           overrides && typeof overrides.displayText === "string"
@@ -159,21 +163,9 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
           ...sendSession,
           conversationId: sendConversationId,
         },
+        traceId,
         onDelta: deltaChannel,
       });
-
-      const cur = options.getSession();
-      if (!cur || cur.apiConfigId !== sendSession.apiConfigId || cur.agentId !== sendSession.agentId) return;
-
-      const round = options.getRound();
-      if ((round.phase === "streaming" || round.phase === "queued") && round.gen === gen) {
-        await options.handleRoundCompleted(gen, {
-          assistantText: String(result.assistantText || ""),
-          reasoningStandard: result.reasoningStandard,
-          reasoningInline: result.reasoningInline,
-          assistantMessage: result.assistantMessage,
-        });
-      }
     } catch (error) {
       if (isChatAbortedByUser(error)) {
         options.sendRecovery.handleAbortedSend(gen, sendConversationId);
@@ -181,7 +173,7 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
       }
       await options.sendRecovery.handleFailedSend(gen, error, sendSession, sendConversationId);
     } finally {
-      await options.sendRecovery.finalizeSendChat(gen, overrides?.suppressInitialReload);
+      // submit_chat_message 是短提交命令；成功后的轮次收束只由 history_flushed、round_started、round_completed 等事件驱动。
     }
   }
 

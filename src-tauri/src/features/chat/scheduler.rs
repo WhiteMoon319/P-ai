@@ -621,17 +621,26 @@ pub(crate) fn ingress_chat_event(
     Ok(ChatEventIngress::Direct(event))
 }
 
-pub(crate) fn register_chat_event_runtime(
+pub(crate) fn register_chat_event_delta_channel(
     state: &AppState,
     event_id: &str,
     on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
-    sender: tokio::sync::oneshot::Sender<Result<SendChatResult, String>>,
 ) -> Result<(), String> {
     state
         .pending_chat_delta_channels
         .lock()
         .map_err(|_| "Failed to lock pending chat delta channels".to_string())?
         .insert(event_id.to_string(), on_delta);
+    Ok(())
+}
+
+pub(crate) fn register_chat_event_runtime(
+    state: &AppState,
+    event_id: &str,
+    on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
+    sender: tokio::sync::oneshot::Sender<Result<SendChatResult, String>>,
+) -> Result<(), String> {
+    register_chat_event_delta_channel(state, event_id, on_delta)?;
     state
         .pending_chat_result_senders
         .lock()

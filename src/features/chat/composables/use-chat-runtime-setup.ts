@@ -39,11 +39,9 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
       t: bindings.tr,
       formatRequestFailed: (error: unknown) => bindings.formatRequestFailed(error),
       removeBinaryPlaceholders: bindings.removeBinaryPlaceholders,
-      invokeSendChatMessage: ({ text, displayText, images, attachments, extraTextBlocks, mentions, session, onDelta }) =>
+      invokeSendChatMessage: ({ text, displayText, images, attachments, extraTextBlocks, mentions, session, traceId, onDelta }) =>
         invokeTauri(
-          Array.isArray(mentions) && mentions.length > 0
-            ? "send_user_mention_message"
-            : "send_chat_message",
+          "submit_chat_message",
           {
             input: {
               payload: {
@@ -67,6 +65,7 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
                 departmentId: session.departmentId || null,
                 conversationId: session.conversationId || null,
               },
+              traceId,
             },
             onDelta,
           },

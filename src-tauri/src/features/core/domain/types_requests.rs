@@ -87,6 +87,17 @@ struct RemoteImReplyTarget {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct SubmitChatResult {
+    accepted: bool,
+    duplicate: bool,
+    event_id: String,
+    conversation_id: String,
+    trace_id: String,
+    ingress: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SendChatResult {
     conversation_id: String,
     latest_user_text: String,
