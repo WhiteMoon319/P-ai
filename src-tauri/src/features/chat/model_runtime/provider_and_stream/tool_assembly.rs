@@ -86,7 +86,7 @@ fn operate_tool_timeout_override(args_json: &str) -> std::time::Duration {
 
 fn build_global_tool_schema_cache(state: &AppState) -> Vec<ProviderToolDefinition> {
     let preview_session_id = "__tool_schema_cache__".to_string();
-    let preview_api_id = "__tool_schema_cache__".to_string();
+    let _preview_api_id = "__tool_schema_cache__".to_string();
     let preview_agent_id = DEFAULT_AGENT_ID.to_string();
     let preview_memory_context = build_memory_agent_context(&preview_agent_id, false)
         .unwrap_or(MemoryAgentContext {
@@ -109,13 +109,6 @@ fn build_global_tool_schema_cache(state: &AppState) -> Vec<ProviderToolDefinitio
         .provider_tool_definition(),
         operate_provider_tool_definition(),
         BuiltinReloadTool { app_state: state.clone() }.provider_tool_definition(),
-        BuiltinOrganizeContextTool {
-            app_state: state.clone(),
-            session_id: preview_session_id.clone(),
-            api_config_id: preview_api_id.clone(),
-            agent_id: preview_agent_id,
-        }
-        .provider_tool_definition(),
         read_provider_tool_definition(),
         BuiltinTerminalExecTool {
             app_state: state.clone(),
@@ -317,12 +310,6 @@ fn push_runtime_tool_executors(
     }));
     tools.push(Box::new(BuiltinOperateTool { model_supports_image }));
     tools.push(Box::new(BuiltinReloadTool { app_state: state.clone() }));
-    tools.push(Box::new(BuiltinOrganizeContextTool {
-        app_state: state.clone(),
-        session_id: tool_session_id.to_string(),
-        api_config_id: api_config_id.to_string(),
-        agent_id: agent.id.to_string(),
-    }));
     tools.push(Box::new(BuiltinReadFileTool {
         app_state: state.clone(),
         session_id: tool_session_id.to_string(),
