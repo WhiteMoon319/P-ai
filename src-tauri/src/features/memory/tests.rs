@@ -323,6 +323,180 @@
         assert!(lines[0].eq_ignore_ascii_case("apple"));
     }
 
+    fn test_memory_entry(id: &str, judgment: &str, tags: Vec<&str>) -> MemoryEntry {
+        MemoryEntry {
+            id: id.to_string(),
+            memory_no: None,
+            memory_type: "knowledge".to_string(),
+            judgment: judgment.to_string(),
+            reasoning: "".to_string(),
+            tags: tags.into_iter().map(ToOwned::to_owned).collect(),
+            created_at: now_iso(),
+            owner_agent_id: None,
+            updated_at: now_iso(),
+        }
+    }
+
+    fn temp_memory_data_path(name: &str) -> PathBuf {
+        let root = std::env::temp_dir()
+            .join("easy_call_ai_tests")
+            .join(format!("{}_{}", name, Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create temp dir");
+        root.join("app_data.json")
+    }
+
+    #[test]
+    fn memory_tokenizer_should_emit_cjk_unigrams_and_bigrams() {
+        let tokens = memory_tokenize_terms("测试角色 Rust", true);
+        assert!(tokens.contains(&"测".to_string()));
+        assert!(tokens.contains(&"测试".to_string()));
+        assert!(tokens.contains(&"试角".to_string()));
+        assert!(tokens.contains(&"角色".to_string()));
+        assert!(tokens.contains(&"rust".to_string()));
+    }
+
+    #[test]
+    fn memory_tantivy_search_should_prioritize_multi_term_hits() {
+        let memories = vec![
+            test_memory_entry("both", "用户偏好深色主题，也喜欢简洁代码", vec!["主题", "代码"]),
+            test_memory_entry("theme", "用户偏好深色主题", vec!["主题"]),
+            test_memory_entry("code", "用户喜欢简洁代码", vec!["代码"]),
+        ];
+
+        let hits = memory_tantivy_bm25_scores(&memories, "深色主题|简洁代码", 10).expect("bm25");
+        assert_eq!(
+            hits.first().map(|hit| hit.memory_id.as_str()),
+            Some("both")
+        );
+    }
+
+    #[test]
+    fn memory_multi_term_count_should_not_be_lost_by_per_term_truncation() {
+        let mut memories = Vec::<MemoryEntry>::new();
+        for idx in 0..60 {
+            memories.push(test_memory_entry(
+                &format!("theme-{idx}"),
+                &format!("深色主题 深色主题 深色主题 样本 {idx}"),
+                vec!["主题"],
+            ));
+        }
+        memories.push(test_memory_entry(
+            "both-low-frequency",
+            "深色主题与简洁代码都重要",
+            vec!["主题", "代码"],
+        ));
+        memories.push(test_memory_entry(
+            "code-only",
+            "简洁代码也重要",
+            vec!["代码"],
+        ));
+
+        let hits = memory_tantivy_bm25_scores(&memories, "深色主题|简洁代码", 3).expect("bm25");
+        assert_eq!(
+            hits.first().map(|hit| hit.memory_id.as_str()),
+            Some("both-low-frequency")
+        );
+    }
+
+    #[test]
+    fn memory_multi_term_count_should_ignore_loose_fragment_hits() {
+        let memories = vec![
+            test_memory_entry(
+                "fragment-noise",
+                "深 简 深 简 深 简",
+                vec!["碎片"],
+            ),
+            test_memory_entry(
+                "complete-one-term",
+                "深色主题是用户明确偏好",
+                vec!["主题"],
+            ),
+        ];
+
+        let hits = memory_tantivy_bm25_scores(&memories, "深色主题|简洁代码", 2).expect("bm25");
+        assert_eq!(
+            hits.first().map(|hit| hit.memory_id.as_str()),
+            Some("complete-one-term")
+        );
+    }
+
+    #[test]
+    fn memory_rrf_should_fuse_bm25_and_vector_ranks() {
+        let bm25_rank_map = HashMap::from([
+            ("a".to_string(), 1usize),
+            ("b".to_string(), 2usize),
+        ]);
+        let vector_rank_map = HashMap::from([
+            ("b".to_string(), 1usize),
+            ("a".to_string(), 3usize),
+        ]);
+
+        let a_score = memory_rrf_score_for_id("a", &bm25_rank_map, Some(&vector_rank_map));
+        let b_score = memory_rrf_score_for_id("b", &bm25_rank_map, Some(&vector_rank_map));
+        let vector_only = memory_rrf_score_for_id("c", &bm25_rank_map, Some(&HashMap::from([
+            ("c".to_string(), 1usize),
+        ])));
+
+        assert!(b_score > a_score, "vector rank should affect fused order");
+        assert!(vector_only > 0.0 && vector_only < b_score);
+        assert!(a_score > 0.0 && a_score < 0.5);
+    }
+
+    #[test]
+    fn memory_bm25_only_should_keep_normalized_scores_for_filtering() {
+        let data_path = temp_memory_data_path("rrf_relative_threshold");
+        let memories = vec![
+            test_memory_entry("hit", "用户最喜欢测试角色", vec!["测试角色"]),
+            test_memory_entry("miss", "今天讨论数据库迁移", vec!["数据库"]),
+        ];
+
+        let ranked = memory_mixed_ranked_items(&data_path, &memories, "测试角色", 7);
+        assert_eq!(
+            ranked.first().map(|item| item.memory_id.as_str()),
+            Some("hit")
+        );
+        assert!(
+            (ranked[0].final_score - ranked[0].bm25_score).abs() < f64::EPSILON,
+            "BM25-only path should keep normalized BM25 as final_score for thresholding"
+        );
+
+        let ids = memory_recall_hit_ids(&data_path, &memories, "测试角色");
+        assert_eq!(ids, vec!["hit".to_string()]);
+    }
+
+    #[test]
+    fn memory_recall_half_top_threshold_should_keep_single_route_rank_one() {
+        let dual_route_top = 2.0 / (MEMORY_RRF_K + 1.0);
+        let single_route_rank_one = 1.0 / (MEMORY_RRF_K + 1.0);
+        let below_half = single_route_rank_one - 0.0001;
+        let ranked = vec![
+            MemoryMixedRankItem {
+                memory_id: "dual".to_string(),
+                bm25_score: 1.0,
+                bm25_raw_score: 10.0,
+                vector_score: 1.0,
+                final_score: dual_route_top,
+            },
+            MemoryMixedRankItem {
+                memory_id: "bm25-rank1".to_string(),
+                bm25_score: 1.0,
+                bm25_raw_score: 9.0,
+                vector_score: 0.0,
+                final_score: single_route_rank_one,
+            },
+            MemoryMixedRankItem {
+                memory_id: "weak".to_string(),
+                bm25_score: 0.0,
+                bm25_raw_score: 0.0,
+                vector_score: 0.0,
+                final_score: below_half,
+            },
+        ];
+
+        let ids = memory_recall_ids_from_ranked_items(ranked);
+        assert_eq!(ids, vec!["dual".to_string(), "bm25-rank1".to_string()]);
+    }
+
     #[test]
     fn latest_recall_memory_ids_should_return_latest_seven() {
         let mut rows = Vec::<String>::new();

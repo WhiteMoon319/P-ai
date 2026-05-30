@@ -730,9 +730,6 @@ fn import_angel_memories_by_scope(
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(|err| format!("开始记忆备份导入事务失败: {err}"))?;
 
-    let draft_tags: Vec<String> = items.iter().flat_map(|d| d.tags.iter().cloned()).collect();
-    memory_jieba_add_words(&draft_tags);
-
     let mut next_memory_no = tx
         .query_row(
             "SELECT COALESCE(MAX(memory_no), 0) + 1 FROM memory_record",
