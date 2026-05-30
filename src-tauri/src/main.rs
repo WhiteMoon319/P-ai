@@ -612,6 +612,13 @@ async fn graceful_shutdown_background_services(app: &AppHandle) {
     // 兜底广播关闭，确保仍持有 shutdown receiver 的旧渠道尽快退出 accept 循环。
     onebot_v11_ws_manager().shutdown().await;
 
+    let ide_bridge_started_at = std::time::Instant::now();
+    shutdown_ide_context_bridge_server().await;
+    eprintln!(
+        "[退出] IDE 上下文桥已停止: duration_ms={}",
+        ide_bridge_started_at.elapsed().as_millis()
+    );
+
     match load_workspace_mcp_servers(&state) {
         Ok(servers) => {
             let shutdown_futures = servers

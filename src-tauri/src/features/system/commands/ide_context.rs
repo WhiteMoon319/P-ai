@@ -92,6 +92,7 @@ const IDE_CONTEXT_BRIDGE_DISCOVERY_FILE: &str = "p-ai-ide-context-bridge.json";
 const IDE_CONTEXT_SNAPSHOT_TTL_SECS: i64 = 30;
 const IDE_CONTEXT_AUTH_TOKEN_TTL_SECS: i64 = 24 * 60 * 60;
 static IDE_CONTEXT_BRIDGE_STARTED: AtomicBool = AtomicBool::new(false);
+static IDE_CONTEXT_BRIDGE_SHUTDOWN: OnceLock<tokio_util::sync::CancellationToken> = OnceLock::new();
 static IDE_CONTEXT_CHAT_CLIENTS: OnceLock<
     Arc<Mutex<std::collections::HashMap<String, tokio::sync::mpsc::UnboundedSender<serde_json::Value>>>>,
 > = OnceLock::new();
@@ -928,6 +929,10 @@ fn ide_context_chat_bridge_url(port: u16) -> String {
 
 fn ide_context_bridge_discovery_path() -> std::path::PathBuf {
     std::env::temp_dir().join(IDE_CONTEXT_BRIDGE_DISCOVERY_FILE)
+}
+
+fn ide_context_bridge_shutdown_token() -> &'static tokio_util::sync::CancellationToken {
+    IDE_CONTEXT_BRIDGE_SHUTDOWN.get_or_init(tokio_util::sync::CancellationToken::new)
 }
 
 fn publish_ide_context_bridge_discovery(port: u16, token: &str) -> Result<(), String> {
@@ -1990,6 +1995,7 @@ fn start_ide_context_bridge_server(app: AppHandle, state: AppState, ide_context_
     {
         return;
     }
+    let shutdown_token = ide_context_bridge_shutdown_token().clone();
     tauri::async_runtime::spawn(async move {
         let (listener, port) = match bind_ide_context_bridge_listener().await {
             Ok(result) => result,
@@ -2018,12 +2024,20 @@ fn start_ide_context_bridge_server(app: AppHandle, state: AppState, ide_context_
         }
         eprintln!("[IDE 上下文桥] 已监听 {}", bridge_url);
         loop {
-            let (stream, peer_addr) = match listener.accept().await {
-                Ok(result) => result,
-                Err(err) => {
-                    eprintln!("[IDE 上下文桥] 接收连接失败: {}", err);
-                    continue;
+            let (stream, peer_addr) = tokio::select! {
+                _ = shutdown_token.cancelled() => {
+                    clear_ide_context_bridge_discovery();
+                    IDE_CONTEXT_BRIDGE_STARTED.store(false, Ordering::SeqCst);
+                    eprintln!("[IDE 上下文桥] 收到停机信号，停止监听 {}", bridge_url);
+                    break;
                 }
+                result = listener.accept() => match result {
+                    Ok(result) => result,
+                    Err(err) => {
+                        eprintln!("[IDE 上下文桥] 接收连接失败: {}", err);
+                        continue;
+                    }
+                },
             };
             let state_clone = state.clone();
             let app_clone = app.clone();
@@ -2041,6 +2055,29 @@ fn start_ide_context_bridge_server(app: AppHandle, state: AppState, ide_context_
             });
         }
     });
+}
+
+pub(crate) async fn shutdown_ide_context_bridge_server() {
+    if !IDE_CONTEXT_BRIDGE_STARTED.load(Ordering::SeqCst) {
+        clear_ide_context_bridge_discovery();
+        return;
+    }
+    ide_context_bridge_shutdown_token().cancel();
+    clear_ide_context_bridge_discovery();
+    if let Some(clients) = IDE_CONTEXT_CHAT_CLIENTS.get() {
+        if let Ok(mut clients) = clients.lock() {
+            clients.clear();
+        }
+    }
+    for _ in 0..40 {
+        if !IDE_CONTEXT_BRIDGE_STARTED.load(Ordering::SeqCst) {
+            eprintln!("[IDE 上下文桥] 已停止");
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    IDE_CONTEXT_BRIDGE_STARTED.store(false, Ordering::SeqCst);
+    eprintln!("[IDE 上下文桥] 停止等待超时，已清理发现文件");
 }
 
 async fn ide_context_ws_handle_connection(
