@@ -2,6 +2,8 @@
 
 ## 未发布
 
+- 升级（builtin-network）：`fetch` 与 `websearch` 内置工具默认优先走 Exa MCP 网关（`https://mcp.exa.ai/mcp`），当 Exa 返回非标准成功结果（无 `result`、SSE 解析失败、内容为空等）时自动降级到原有内置实现（`fetch` 回退 reqwest + trafilatura，`websearch` 回退 Bing HTML 解析），无需本地额度计数，仅按返回结果质量判定降级。
+
 ## 发布：v0.10.11
 
 - 修复（remote-im）：远程联系人列表状态胶囊改为上拉菜单选择，菜单挂载到页面根部以避免被联系人列表滚动容器裁剪，并优化文件发送权限文案。
