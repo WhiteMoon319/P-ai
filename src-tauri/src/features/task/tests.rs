@@ -365,7 +365,7 @@
             remote_contact_name: "测试群".to_string(),
             avatar_url: String::new(),
             remark_name: String::new(),
-            allow_send: false,
+            allow_send: true,
             allow_send_files: false,
             allow_receive: true,
             activation_mode: "never".to_string(),

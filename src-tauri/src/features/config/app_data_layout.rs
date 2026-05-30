@@ -270,8 +270,15 @@ fn build_agents_file(agents: &[AgentProfile]) -> AgentsFile {
     }
 }
 
+fn normalize_runtime_state_contact_communication(runtime: &mut RuntimeStateFile) {
+    for contact in &mut runtime.remote_im_contacts {
+        contact.allow_send = contact.allow_send || contact.allow_receive;
+        contact.allow_receive = contact.allow_send;
+    }
+}
+
 fn build_runtime_state_file(data: &AppData) -> RuntimeStateFile {
-    RuntimeStateFile {
+    let mut runtime = RuntimeStateFile {
         version: APP_DATA_SCHEMA_VERSION,
         message_store_migration_version: 0,
         assistant_department_agent_id: data.assistant_department_agent_id.clone(),
@@ -288,7 +295,9 @@ fn build_runtime_state_file(data: &AppData) -> RuntimeStateFile {
         pdf_image_cache: data.pdf_image_cache.clone(),
         remote_im_contacts: data.remote_im_contacts.clone(),
         remote_im_contact_checkpoints: data.remote_im_contact_checkpoints.clone(),
-    }
+    };
+    normalize_runtime_state_contact_communication(&mut runtime);
+    runtime
 }
 
 fn build_chat_index_item(conversation: &Conversation) -> ChatIndexConversationItem {
@@ -389,23 +398,26 @@ fn write_agents_shard(path: &PathBuf, agents: &[AgentProfile]) -> Result<bool, S
 }
 
 fn read_runtime_state_shard(path: &PathBuf) -> Result<RuntimeStateFile, String> {
-    if !app_layout_exists(path) && path.exists() {
+    let mut runtime = if !app_layout_exists(path) && path.exists() {
         let data = read_app_data(path)?;
-        return Ok(build_runtime_state_file(&data));
-    }
-    if app_layout_runtime_state_path(path).exists() {
-        read_json_file::<RuntimeStateFile>(&app_layout_runtime_state_path(path), "runtime state file")
+        build_runtime_state_file(&data)
+    } else if app_layout_runtime_state_path(path).exists() {
+        read_json_file::<RuntimeStateFile>(&app_layout_runtime_state_path(path), "runtime state file")?
     } else {
-        Ok(RuntimeStateFile::default())
-    }
+        RuntimeStateFile::default()
+    };
+    normalize_runtime_state_contact_communication(&mut runtime);
+    Ok(runtime)
 }
 
 fn write_runtime_state_shard(path: &PathBuf, runtime: &RuntimeStateFile) -> Result<bool, String> {
     fs::create_dir_all(app_layout_state_dir(path))
         .map_err(|err| format!("Create state layout dir failed: {err}"))?;
+    let mut normalized = runtime.clone();
+    normalize_runtime_state_contact_communication(&mut normalized);
     write_json_file_atomic_if_changed(
         &app_layout_runtime_state_path(path),
-        runtime,
+        &normalized,
         "runtime state file",
     )
 }

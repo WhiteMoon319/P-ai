@@ -554,6 +554,7 @@ mod prompt_assembly_tests {
             conversation_processing_claims: Arc::new(Mutex::new(HashSet::new())),
             pending_chat_result_senders: Arc::new(Mutex::new(HashMap::new())),
             pending_chat_delta_channels: Arc::new(Mutex::new(HashMap::new())),
+            accepted_submit_trace_ids: Arc::new(Mutex::new(std::collections::VecDeque::new())),
             active_chat_view_bindings: Arc::new(Mutex::new(HashMap::new())),
             conversation_list_activity_marks: Arc::new(Mutex::new(HashMap::new())),
             dequeue_lock: Arc::new(Mutex::new(())),

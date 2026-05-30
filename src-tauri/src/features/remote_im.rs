@@ -272,7 +272,7 @@ fn remote_im_upsert_contact_for_inbound(
             .unwrap_or("")
             .to_string(),
         remark_name: String::new(),
-        allow_send: false,
+        allow_send: default_allow_receive,
         allow_send_files: false,
         allow_receive: default_allow_receive,
         activation_mode: "never".to_string(),
@@ -2496,6 +2496,7 @@ fn remote_im_update_contact_allow_send(
         .find(|item| item.id == input.contact_id)
         .ok_or_else(|| format!("未找到远程联系人：{}", input.contact_id))?;
     contact.allow_send = input.allow_send;
+    contact.allow_receive = input.allow_send;
     let output = contact.clone();
     state_write_runtime_state_cached(&state, &runtime)?;
     Ok(output)
@@ -2530,6 +2531,7 @@ fn remote_im_update_contact_allow_receive(
         .find(|item| item.id == input.contact_id)
         .ok_or_else(|| format!("未找到远程联系人：{}", input.contact_id))?;
     contact.allow_receive = input.allow_receive;
+    contact.allow_send = input.allow_receive;
     let output = contact.clone();
     state_write_runtime_state_cached(&state, &runtime)?;
     Ok(output)
@@ -2891,6 +2893,7 @@ pub(crate) fn remote_im_enqueue_message_internal(
             && contact.activation_keywords.is_empty()
             && contact.activation_cooldown_seconds == 0;
         if looks_like_default_contact {
+            contact.allow_send = true;
             contact.allow_receive = true;
             eprintln!(
                 "[远程IM] 自动开启收信: contact_id={}, contact_name={}, channel_id={}, platform={:?}, reason=matched_default_contact",

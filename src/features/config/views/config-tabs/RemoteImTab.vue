@@ -1475,9 +1475,6 @@ async function toggleContactCommunication(item: RemoteImContact, enabled: boolea
     await invokeTauri<RemoteImContact>("remote_im_update_contact_allow_send", {
       input: { contactId: item.id, allowSend: enabled },
     });
-    await invokeTauri<RemoteImContact>("remote_im_update_contact_allow_receive", {
-      input: { contactId: item.id, allowReceive: enabled },
-    });
     await refreshContacts();
   } catch (error) {
     item.allowSend = oldSend;

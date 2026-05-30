@@ -943,6 +943,7 @@ fn state_write_runtime_state_cached(
         .lock()
         .map_err(|_| "Failed to lock app data persist write lock".to_string())?;
     let mut next_runtime = runtime.clone();
+    normalize_runtime_state_contact_communication(&mut next_runtime);
     if let Ok(existing_runtime) = read_runtime_state_shard(&state.data_path) {
         next_runtime.message_store_migration_version = next_runtime
             .message_store_migration_version

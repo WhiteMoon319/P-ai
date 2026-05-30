@@ -1,5 +1,5 @@
     #[test]
-    fn remote_im_upsert_contact_for_inbound_should_create_with_send_false_and_receive_follow_channel_activation() {
+    fn remote_im_upsert_contact_for_inbound_should_create_with_communication_follow_channel_activation() {
         let channel = RemoteImChannelConfig {
             id: "c1".to_string(),
             name: "qq".to_string(),
@@ -53,7 +53,7 @@
             .iter()
             .find(|item| item.id == contact_id)
             .expect("contact exists");
-        assert!(!contact.allow_send);
+        assert!(contact.allow_send);
         assert!(contact.allow_receive);
         assert_eq!(contact.activation_mode, "never");
         assert!(contact.activation_keywords.is_empty());
@@ -218,7 +218,7 @@
             remote_contact_name: input.remote_contact_name.clone().unwrap_or_default(),
             avatar_url: String::new(),
             remark_name: String::new(),
-            allow_send: false,
+            allow_send: true,
             allow_send_files: false,
             allow_receive: true,
             activation_mode: "never".to_string(),
@@ -362,7 +362,7 @@
             remote_contact_name: input.remote_contact_name.clone().unwrap_or_default(),
             avatar_url: String::new(),
             remark_name: String::new(),
-            allow_send: false,
+            allow_send: true,
             allow_send_files: false,
             allow_receive: true,
             activation_mode: "never".to_string(),
@@ -768,6 +768,7 @@
             conversation_processing_claims: Arc::new(Mutex::new(std::collections::HashSet::new())),
             pending_chat_result_senders: Arc::new(Mutex::new(std::collections::HashMap::new())),
             pending_chat_delta_channels: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            accepted_submit_trace_ids: Arc::new(Mutex::new(std::collections::VecDeque::new())),
             active_chat_view_bindings: Arc::new(Mutex::new(std::collections::HashMap::new())),
             conversation_list_activity_marks: Arc::new(Mutex::new(std::collections::HashMap::new())),
             dequeue_lock: Arc::new(Mutex::new(())),

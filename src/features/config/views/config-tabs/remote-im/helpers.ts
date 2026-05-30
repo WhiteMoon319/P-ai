@@ -54,7 +54,7 @@ export function contactResponseStrategyHint(item: RemoteImContact): string {
 }
 
 export function contactCommunicationToggleEnabled(item: Pick<RemoteImContact, "allowReceive" | "allowSend">): boolean {
-  return !!item.allowReceive || !!item.allowSend;
+  return !!item.allowSend;
 }
 
 export function contactCommunicationToggleClass(item: Pick<RemoteImContact, "allowReceive" | "allowSend">): string {
