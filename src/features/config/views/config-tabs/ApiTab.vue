@@ -1075,7 +1075,7 @@ function createProvider(seed: string, capability: ApiCapability = activeCapabili
     id: `api-provider-${seed}`,
     name: `API Provider ${providerList.value.length + 1}`,
     requestFormat,
-    allowConcurrentRequests: false,
+    allowConcurrentRequests: true,
     maxConcurrentRequests: null,
     enableText: capability === "text",
     enableImage: false,
