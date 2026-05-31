@@ -497,6 +497,145 @@
         assert_eq!(ids, vec!["dual".to_string(), "bm25-rank1".to_string()]);
     }
 
+    fn test_chat_message(id: &str, role: &str, speaker_agent_id: Option<&str>, text: &str) -> ChatMessage {
+        ChatMessage {
+            id: id.to_string(),
+            role: role.to_string(),
+            created_at: format!("2026-05-30T00:00:0{}Z", id.chars().last().unwrap_or('0')),
+            speaker_agent_id: speaker_agent_id.map(ToOwned::to_owned),
+            parts: vec![MessagePart::Text {
+                text: text.to_string(),
+            }],
+            extra_text_blocks: Vec::new(),
+            provider_meta: None,
+            tool_call: None,
+            mcp_call: None,
+        }
+    }
+
+    fn test_chat_agent(id: &str, name: &str) -> AgentProfile {
+        AgentProfile {
+            id: id.to_string(),
+            name: name.to_string(),
+            system_prompt: String::new(),
+            tools: Vec::new(),
+            created_at: now_iso(),
+            updated_at: now_iso(),
+            avatar_path: None,
+            avatar_updated_at: None,
+            is_built_in_user: false,
+            is_built_in_system: false,
+            private_memory_enabled: false,
+            source: "main".to_string(),
+            scope: "global".to_string(),
+        }
+    }
+
+    #[test]
+    fn chat_history_slices_should_keep_short_message_boundaries_without_overlap() {
+        let segment = ChatHistorySegment {
+            source_kind: "localConversation".to_string(),
+            source_id: "c1".to_string(),
+            source_title: "测试会话".to_string(),
+            segment_id: "block-1".to_string(),
+            messages: vec![
+                test_chat_message("m1", "user", None, "我喜欢深色主题"),
+                test_chat_message("m2", "assistant", Some("agent-a"), "我记住了"),
+            ],
+        };
+        let slices = chat_history_slices_from_segment(
+            &segment,
+            &[test_chat_agent("agent-a", "小夏")],
+            "用户",
+        );
+
+        assert_eq!(slices.len(), 1);
+        assert!(slices[0].content.contains("[用户]: 我喜欢深色主题"));
+        assert!(slices[0].content.contains("[小夏]: 我记住了"));
+        assert_eq!(slices[0].visible_agent_ids, vec!["agent-a".to_string()]);
+    }
+
+    #[test]
+    fn chat_history_slices_should_overlap_only_when_single_message_is_split() {
+        let long_text = "甲".repeat(CHAT_HISTORY_SLICE_TARGET_CHARS + 40);
+        let segment = ChatHistorySegment {
+            source_kind: "localConversation".to_string(),
+            source_id: "c2".to_string(),
+            source_title: "长消息".to_string(),
+            segment_id: "block-2".to_string(),
+            messages: vec![test_chat_message("m1", "assistant", Some("agent-a"), &long_text)],
+        };
+        let slices = chat_history_slices_from_segment(
+            &segment,
+            &[test_chat_agent("agent-a", "小夏")],
+            "用户",
+        );
+
+        assert!(slices.len() >= 2);
+        let first_tail = slices[0]
+            .content
+            .chars()
+            .rev()
+            .take(CHAT_HISTORY_LONG_MESSAGE_OVERLAP_CHARS)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<String>();
+        assert!(slices[1].content.starts_with(&first_tail));
+        assert_eq!(slices[0].message_start_id, "m1");
+        assert_eq!(slices[1].message_start_id, "m1");
+    }
+
+    #[test]
+    fn chat_history_tantivy_search_should_only_search_visible_agent_slices() {
+        let slices = vec![
+            ChatHistorySlice {
+                id: "s1".to_string(),
+                source_kind: "localConversation".to_string(),
+                source_id: "c1".to_string(),
+                source_title: "A".to_string(),
+                segment_id: "b1".to_string(),
+                slice_index: 0,
+                content: "[小夏]: 用户喜欢深色主题".to_string(),
+                speakers: vec!["小夏".to_string()],
+                visible_agent_ids: vec!["agent-a".to_string()],
+                time_start: now_iso(),
+                time_end: now_iso(),
+                message_start_id: "m1".to_string(),
+                message_end_id: "m1".to_string(),
+            },
+            ChatHistorySlice {
+                id: "s2".to_string(),
+                source_kind: "localConversation".to_string(),
+                source_id: "c2".to_string(),
+                source_title: "B".to_string(),
+                segment_id: "b1".to_string(),
+                slice_index: 0,
+                content: "[小秋]: 用户喜欢深色主题".to_string(),
+                speakers: vec!["小秋".to_string()],
+                visible_agent_ids: vec!["agent-b".to_string()],
+                time_start: now_iso(),
+                time_end: now_iso(),
+                message_start_id: "m2".to_string(),
+                message_end_id: "m2".to_string(),
+            },
+        ];
+        let (index, reader, fields) =
+            chat_history_build_tantivy_index(&slices).expect("build index");
+        let cached = CachedChatHistoryIndex {
+            signature: "test".to_string(),
+            slices,
+            stats: ChatHistorySearchStats::default(),
+            index,
+            reader,
+            fields,
+        };
+        let hits = chat_history_tantivy_search(&cached, "agent-a", "深色主题", 10).expect("search");
+
+        assert_eq!(hits.len(), 1);
+        assert_eq!(cached.slices[hits[0].0].id, "s1");
+    }
+
     #[test]
     fn latest_recall_memory_ids_should_return_latest_seven() {
         let mut rows = Vec::<String>::new();

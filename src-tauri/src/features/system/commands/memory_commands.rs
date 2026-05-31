@@ -1126,6 +1126,14 @@ fn search_memories_mixed(
 }
 
 #[tauri::command]
+fn search_chat_history_slices(
+    input: ChatHistorySearchInput,
+    state: State<'_, AppState>,
+) -> Result<ChatHistorySearchResult, String> {
+    chat_history_search_for_agent(state.inner(), &input)
+}
+
+#[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
     let trimmed = url.trim();
     if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {

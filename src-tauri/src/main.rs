@@ -67,6 +67,7 @@ include!("features/system/updater.rs");
 // ==================== 记忆匹配 ====================
 include!("features/memory/store.rs");
 include!("features/memory/matcher.rs");
+include!("features/memory/chat_history_search.rs");
 include!("features/memory/providers.rs");
 
 // ==================== MCP ====================
@@ -975,6 +976,7 @@ fn main() {
             write_utf8_text_file_to_path,
             write_base64_file_to_path,
             search_memories_mixed,
+            search_chat_history_slices,
             sync_memory_embedding_provider,
             test_memory_embedding_provider,
             test_memory_rerank_provider,
