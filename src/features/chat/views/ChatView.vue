@@ -187,7 +187,12 @@
           </div>
           <FloatingScrollbar ref="chatScrollbarRef" :target="scrollContainer" />
         </div>
-        <CompactionSummaryCard :visible="conversationSummaryCard.visible" :text="conversationSummaryCard.text" @close="closeConversationSummaryCard" />
+        <CompactionSummaryCard
+          :visible="conversationSummaryCard.visible"
+          :text="conversationSummaryCard.text"
+          :is-dark="markdownIsDark"
+          @close="closeConversationSummaryCard"
+        />
         <div v-show="showJumpToBottom" class="pointer-events-none absolute bottom-3 right-5 z-30 flex justify-end" :style="jumpToBottomStyle">
           <button class="btn btn-sm btn-circle btn-primary pointer-events-auto shadow-lg" :title="t('chat.jumpToBottom')" @click="handleJumpToBottom">
             <ChevronsDown class="h-4 w-4" />

@@ -14,10 +14,12 @@
           {{ t("common.close") }}
         </button>
       </div>
-      <div class="max-h-[min(52vh,28rem)] overflow-y-auto px-4 py-3">
-        <div class="whitespace-pre-wrap break-words text-sm leading-6 text-base-content/85">
-          {{ text }}
-        </div>
+      <div class="max-h-[min(60vh,34rem)] overflow-y-auto px-4 py-3">
+        <AppMarkdownRenderer
+          class="ecall-markdown-content max-w-none text-sm text-base-content/85"
+          :text="text"
+          :is-dark="isDark"
+        />
       </div>
     </div>
   </div>
@@ -25,10 +27,12 @@
 
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
+import AppMarkdownRenderer from "../markdown/AppMarkdownRenderer.vue";
 
 defineProps<{
   visible: boolean;
   text: string;
+  isDark: boolean;
 }>();
 
 defineEmits<{

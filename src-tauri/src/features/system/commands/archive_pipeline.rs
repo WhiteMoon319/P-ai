@@ -579,16 +579,26 @@ fn archive_pipeline_message_plain_text(message: &ChatMessage) -> String {
     clean_text(blocks.join("\n").trim())
 }
 
-fn archive_pipeline_recent_user_assistant_messages_by_token_budget(
+#[derive(Debug, Clone, PartialEq)]
+struct PreservedDialogueEntry {
+    role: String,
+    text: String,
+}
+
+fn archive_pipeline_preserved_dialogue_by_token_budget(
     source: &Conversation,
-    max_tokens: usize,
-) -> Vec<(String, String)> {
-    if max_tokens == 0 {
-        return Vec::new();
-    }
-    let mut recent = Vec::<(String, String)>::new();
-    let mut consumed_tokens = 0.0f64;
-    let token_budget = max_tokens as f64;
+    full_max_tokens: usize,
+    compact_max_tokens: usize,
+    compact_max_chars: usize,
+) -> (Vec<PreservedDialogueEntry>, Vec<PreservedDialogueEntry>) {
+    let mut full_recent = Vec::<PreservedDialogueEntry>::new();
+    let mut compact_older = Vec::<PreservedDialogueEntry>::new();
+    let mut full_consumed_tokens = 0.0f64;
+    let mut compact_consumed_tokens = 0.0f64;
+    let full_budget = full_max_tokens as f64;
+    let compact_budget = compact_max_tokens as f64;
+    let mut filling_compact = full_max_tokens == 0;
+
     for message in source.messages.iter().rev() {
         let role = message.role.trim();
         if role != "user" && role != "assistant" {
@@ -601,18 +611,44 @@ fn archive_pipeline_recent_user_assistant_messages_by_token_budget(
         if text.is_empty() {
             continue;
         }
-        let next_tokens = estimated_tokens_for_text(&text);
-        if !recent.is_empty() && consumed_tokens + next_tokens > token_budget {
+
+        if !filling_compact {
+            let next_tokens = estimated_tokens_for_text(&text);
+            if full_recent.is_empty() || full_consumed_tokens + next_tokens <= full_budget {
+                full_consumed_tokens += next_tokens;
+                full_recent.push(PreservedDialogueEntry {
+                    role: role.to_string(),
+                    text,
+                });
+                if full_consumed_tokens >= full_budget {
+                    filling_compact = true;
+                }
+                continue;
+            }
+            filling_compact = true;
+        }
+
+        if compact_max_tokens == 0 || compact_max_chars == 0 {
             break;
         }
-        consumed_tokens += next_tokens;
-        recent.push((role.to_string(), text));
-        if consumed_tokens >= token_budget {
+        let compact_text = truncate_by_chars(&text, compact_max_chars);
+        let compact_tokens = estimated_tokens_for_text(&compact_text);
+        if !compact_older.is_empty() && compact_consumed_tokens + compact_tokens > compact_budget {
+            break;
+        }
+        compact_consumed_tokens += compact_tokens;
+        compact_older.push(PreservedDialogueEntry {
+            role: role.to_string(),
+            text: compact_text,
+        });
+        if compact_consumed_tokens >= compact_budget {
             break;
         }
     }
-    recent.reverse();
-    recent
+
+    compact_older.reverse();
+    full_recent.reverse();
+    (compact_older, full_recent)
 }
 
 fn archive_pipeline_is_context_compaction_message(message: &ChatMessage) -> bool {
@@ -704,7 +740,7 @@ fn compose_summary_context_summary(
     open_loops: &[String],
     scene: SummaryContextScene,
 ) -> String {
-    let summary = clean_text(summary.trim());
+    let summary = normalize_markdown_block(summary);
     if open_loops.is_empty() {
         return summary;
     }
@@ -715,11 +751,11 @@ fn compose_summary_context_summary(
         .collect::<Vec<_>>()
         .join("\n");
     let _ = scene;
-    let section_title = "未完事项";
+    let section_title = "## 未完事项";
     if summary.is_empty() {
-        format!("{}：\n{}", section_title, open_loop_lines)
+        format!("{}\n\n{}", section_title, open_loop_lines)
     } else {
-        format!("{}\n\n{}：\n{}", summary, section_title, open_loop_lines)
+        format!("{}\n\n{}\n\n{}", summary, section_title, open_loop_lines)
     }
 }
 
@@ -870,11 +906,11 @@ fn build_compaction_message(
     let profile_snapshot = user_profile_snapshot
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(clean_text)
+        .map(format_user_profile_snapshot_markdown)
         .unwrap_or_else(|| "（暂无用户画像）".to_string());
     let todo_snapshot = current_todos
         .and_then(todo_markdown_block)
-        .map(|value| clean_text(&value))
+        .map(|value| normalize_markdown_block(&value))
         .unwrap_or_default();
     let user_profile_block = if todo_snapshot.is_empty() {
         profile_snapshot
@@ -882,15 +918,18 @@ fn build_compaction_message(
         format!("{}\n\n{}", profile_snapshot, todo_snapshot)
     };
     let summary_note = if reason.is_empty() {
-        "以下内容为当前会话中较早历史对话的整理结果。\n\
-         为保证连续性，后文按约 10K token 的预算保留了最近的原始对话，不包含在本段摘要中。\n\
-         摘要中的助手发言统一使用当前人格昵称表示。"
+        "- 以下内容为当前会话中较早历史对话的整理结果。\n\
+         - 为保证连续性，后文保留了最近的原始对话，不包含在本段摘要中。\n\
+         - 摘要中的助手发言统一使用当前人格昵称表示。"
             .to_string()
     } else {
-        "以下内容为当前会话中较早历史对话的整理结果。\n\
-         为保证连续性，后文按约 10K token 的预算保留了最近的原始对话，不包含在本段摘要中。\n\
-         摘要中的助手发言统一使用当前人格昵称表示。"
-            .to_string()
+        format!(
+            "- 整理原因：{}\n\
+             - 以下内容为当前会话中较早历史对话的整理结果。\n\
+             - 为保证连续性，后文保留了最近的原始对话，不包含在本段摘要中。\n\
+             - 摘要中的助手发言统一使用当前人格昵称表示。",
+            reason
+        )
     };
     let preserved_dialogue_text = preserved_dialogue
         .map(str::trim)
@@ -898,9 +937,9 @@ fn build_compaction_message(
         .map(normalize_multiline_block)
         .unwrap_or_else(|| "（暂无保留对话）".to_string());
     let text = format!(
-        "[上下文整理]\n\n用户画像：\n{}\n\n摘要说明：\n{}\n\n摘要正文：\n{}\n\n保留对话：\n{}",
+        "## 用户画像\n\n{}\n\n## 摘要说明\n\n{}\n\n## 摘要正文\n\n{}\n\n## 保留对话\n\n{}",
         user_profile_block,
-        clean_text(summary_note.trim()),
+        normalize_markdown_block(&summary_note),
         clean_compaction_summary_text(summary),
         preserved_dialogue_text
     );
@@ -935,17 +974,118 @@ fn normalize_multiline_block(input: &str) -> String {
         .join("\n")
 }
 
+fn normalize_markdown_block(input: &str) -> String {
+    let normalized = input.replace("\r\n", "\n").replace('\r', "\n");
+    let mut lines = normalized
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>();
+    while lines.first().map(|line| line.trim().is_empty()).unwrap_or(false) {
+        lines.remove(0);
+    }
+    while lines.last().map(|line| line.trim().is_empty()).unwrap_or(false) {
+        lines.pop();
+    }
+    lines.join("\n")
+}
+
+#[derive(Debug, Clone, Default)]
+struct MemoryContextEntryDraft {
+    id: String,
+    judgment: String,
+    reasoning: String,
+}
+
+fn format_user_profile_snapshot_markdown(input: &str) -> String {
+    let entries = parse_memory_context_entries(input);
+    if entries.is_empty() {
+        return normalize_markdown_block(input);
+    }
+    entries
+        .into_iter()
+        .map(|entry| {
+            let judgment = clean_text(entry.judgment.trim());
+            let reasoning = clean_text(entry.reasoning.trim());
+            if reasoning.is_empty() || reasoning == "无" {
+                format!("- `{}` {}", entry.id, judgment)
+            } else {
+                format!("- `{}` {}\n  - 理由：{}", entry.id, judgment, reasoning)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn parse_memory_context_entries(input: &str) -> Vec<MemoryContextEntryDraft> {
+    if !input.contains("<memory_context>") {
+        return Vec::new();
+    }
+    let mut entries = Vec::<MemoryContextEntryDraft>::new();
+    let mut current: Option<MemoryContextEntryDraft> = None;
+    let mut in_reasoning = false;
+
+    for token in input.split_whitespace() {
+        if token == "<memory_context>" || token == "</memory_context>" {
+            continue;
+        }
+        if let Some(id) = token
+            .strip_prefix("<id:")
+            .and_then(|value| value.strip_suffix('>'))
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            if let Some(entry) = current.take() {
+                entries.push(entry);
+            }
+            current = Some(MemoryContextEntryDraft {
+                id: id.to_string(),
+                judgment: String::new(),
+                reasoning: String::new(),
+            });
+            in_reasoning = false;
+            continue;
+        }
+        if token.starts_with("</id:") {
+            if let Some(entry) = current.take() {
+                entries.push(entry);
+            }
+            in_reasoning = false;
+            continue;
+        }
+        if token == ">" {
+            in_reasoning = true;
+            continue;
+        }
+        let Some(entry) = current.as_mut() else {
+            continue;
+        };
+        let target = if in_reasoning {
+            &mut entry.reasoning
+        } else {
+            &mut entry.judgment
+        };
+        if !target.is_empty() {
+            target.push(' ');
+        }
+        target.push_str(token);
+    }
+    if let Some(entry) = current {
+        entries.push(entry);
+    }
+    entries
+}
+
 fn clean_compaction_summary_text(input: &str) -> String {
     let trimmed = input.trim();
     if let Some((summary, active_plans)) = trimmed.split_once("<active_plans>") {
-        let cleaned_summary = clean_text(summary.trim());
+        let cleaned_summary = normalize_markdown_block(summary);
         let cleaned_active_plans = normalize_multiline_block(&format!("<active_plans>{active_plans}"));
         if cleaned_summary.is_empty() {
             return cleaned_active_plans;
         }
         return format!("{}\n\n{}", cleaned_summary, cleaned_active_plans);
     }
-    clean_text(trimmed)
+    normalize_markdown_block(trimmed)
 }
 
 fn build_initial_summary_context_message(
@@ -957,11 +1097,11 @@ fn build_initial_summary_context_message(
     let profile_snapshot = user_profile_snapshot
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(clean_text)
+        .map(format_user_profile_snapshot_markdown)
         .unwrap_or_else(|| "（暂无用户画像）".to_string());
     let todo_snapshot = current_todos
         .and_then(todo_markdown_block)
-        .map(|value| clean_text(&value))
+        .map(|value| normalize_markdown_block(&value))
         .unwrap_or_default();
     let user_profile_block = if todo_snapshot.is_empty() {
         profile_snapshot
@@ -970,7 +1110,7 @@ fn build_initial_summary_context_message(
     };
     let normalized_title = title.and_then(normalize_summary_context_title);
     let text = format!(
-        "[上下文整理]\n\n用户画像：\n{}\n\n摘要说明：\n这是新会话的初始背景，不包含历史对话摘要。",
+        "## 用户画像\n\n{}\n\n## 摘要说明\n\n- 这是新会话的初始背景，不包含历史对话摘要。",
         user_profile_block
     );
     ChatMessage {
@@ -1032,16 +1172,26 @@ fn build_compaction_preserved_dialogue_block(
     assistant_name: &str,
     max_tokens: usize,
 ) -> String {
-    archive_pipeline_recent_user_assistant_messages_by_token_budget(source, max_tokens)
+    const OLDER_COMPACT_TOKEN_BUDGET: usize = 2_000;
+    const OLDER_COMPACT_MAX_CHARS: usize = 50;
+
+    let (compact_older, full_recent) = archive_pipeline_preserved_dialogue_by_token_budget(
+        source,
+        max_tokens,
+        OLDER_COMPACT_TOKEN_BUDGET,
+        OLDER_COMPACT_MAX_CHARS,
+    );
+    compact_older
         .into_iter()
-        .map(|(role, text)| {
-            let speaker = if role.eq_ignore_ascii_case("assistant") {
+        .chain(full_recent)
+        .map(|entry| {
+            let speaker = if entry.role.eq_ignore_ascii_case("assistant") {
                 assistant_name.trim()
             } else {
                 user_alias.trim()
             };
             let speaker = if speaker.is_empty() {
-                if role.eq_ignore_ascii_case("assistant") {
+                if entry.role.eq_ignore_ascii_case("assistant") {
                     "助手"
                 } else {
                     "用户"
@@ -1049,7 +1199,7 @@ fn build_compaction_preserved_dialogue_block(
             } else {
                 speaker
             };
-            format!("{}：{}", speaker, text)
+            format!("{}：{}", speaker, entry.text)
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -2030,14 +2180,73 @@ mod archive_pipeline_tests {
     #[test]
     fn compose_summary_context_summary_should_append_open_loops() {
         let summary = compose_summary_context_summary(
-            "已完成前端任务编辑器重构",
+            "## 当前进展\n\n- 已完成前端任务编辑器重构",
             &vec!["继续改 archive pipeline".to_string(), "补充 JSON 契约测试".to_string()],
             SummaryContextScene::Compaction,
         );
         assert!(summary.contains("已完成前端任务编辑器重构"));
-        assert!(summary.contains("未完事项"));
+        assert!(summary.contains("## 未完事项"));
         assert!(summary.contains("1. 继续改 archive pipeline"));
         assert!(summary.contains("2. 补充 JSON 契约测试"));
+    }
+
+    #[test]
+    fn format_user_profile_snapshot_markdown_should_render_memory_context_as_list() {
+        let snapshot = "<memory_context> <id:1078> 遥酱计划自己编写 pai 的 VS Code 侧边栏扩展 > 方向已确认 </id:1078> <id:1075> 遥酱深度关注原神设定 > 对游戏叙事质量要求较高 </id:1075> </memory_context>";
+
+        let rendered = format_user_profile_snapshot_markdown(snapshot);
+
+        assert!(rendered.contains("- `1078` 遥酱计划自己编写 pai 的 VS Code 侧边栏扩展"));
+        assert!(rendered.contains("  - 理由：方向已确认"));
+        assert!(rendered.contains("- `1075` 遥酱深度关注原神设定"));
+    }
+
+    #[test]
+    fn build_compaction_message_should_use_markdown_sections() {
+        let message = build_compaction_message(
+            "## 当前进展\n\n- 已完成摘要格式优化",
+            Some("摘要格式"),
+            "",
+            Some("<memory_context>\n<id:12>\n偏好清晰 Markdown\n> 摘要需要可扫描\n</id:12>\n</memory_context>"),
+            None,
+            None,
+        );
+        let text = render_message_content_for_model(&message);
+
+        assert!(text.contains("## 用户画像"));
+        assert!(text.contains("- `12` 偏好清晰 Markdown"));
+        assert!(text.contains("## 摘要正文"));
+        assert!(text.contains("## 当前进展\n\n- 已完成摘要格式优化"));
+        assert!(!text.contains("[上下文整理]"));
+    }
+
+    #[test]
+    fn preserved_dialogue_should_keep_older_context_as_short_prefixes() {
+        let mut source = test_conversation();
+        source.messages = vec![
+            test_message(
+                "m1",
+                "user",
+                "这是更早的一条用户短消息，用来确认不要被很长的助手回复挤出上下文窗口",
+            ),
+            test_message(
+                "m2",
+                "assistant",
+                "这是更早的一条助手消息，需要被截断保留前缀以便下一轮知道对话脉络，并且这条消息故意写得很长，确保超过五十个字后会出现省略号",
+            ),
+            test_message(
+                "m3",
+                "assistant",
+                "这是最近的一条超长助手回复。".repeat(200).as_str(),
+            ),
+        ];
+
+        let block = build_compaction_preserved_dialogue_block(&source, "遥酱", "PAI", 1);
+
+        assert!(block.contains("遥酱：这是更早的一条用户短消息"));
+        assert!(block.contains("PAI：这是更早的一条助手消息"));
+        assert!(block.contains("..."));
+        assert!(block.contains("PAI：这是最近的一条超长助手回复"));
     }
 
     #[test]
