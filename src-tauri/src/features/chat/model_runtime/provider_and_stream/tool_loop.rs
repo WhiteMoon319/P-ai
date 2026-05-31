@@ -208,44 +208,6 @@ struct ToolLoopAutoCompactionContext {
     trusted_prompt_usage: std::sync::Arc<std::sync::Mutex<Option<TrustedPromptUsage>>>,
 }
 
-fn organize_context_auto_tool_call_id(context: &ToolLoopAutoCompactionContext, reason: &str) -> String {
-    let identity = context
-        .request_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(context.conversation_id.as_str());
-    format!("auto_organize_context:{reason}:{identity}")
-}
-
-fn send_organize_context_status_event(
-    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
-    context: &ToolLoopAutoCompactionContext,
-    reason: &str,
-    tool_status: &str,
-    message: &str,
-) {
-    let request_id = context
-        .request_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned);
-    let _ = on_delta.send(AssistantDeltaEvent {
-        delta: String::new(),
-        kind: Some("tool_status".to_string()),
-        request_id: request_id.clone(),
-        activation_id: request_id,
-        phase_id: None,
-        reason: Some(reason.to_string()),
-        tool_name: Some("organize_context".to_string()),
-        tool_call_id: Some(organize_context_auto_tool_call_id(context, reason)),
-        tool_status: Some(tool_status.to_string()),
-        tool_args: None,
-        message: Some(message.to_string()),
-    });
-}
-
 fn tool_loop_transient_tool_history_message(events: &[Value]) -> Option<ChatMessage> {
     if events.is_empty() {
         return None;
@@ -1005,14 +967,6 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
         return Ok(false);
     }
 
-    send_organize_context_status_event(
-        on_delta,
-        context,
-        "auto_before_tool_continue",
-        "running",
-        "正在压缩上下文，完成后继续执行...",
-    );
-
     // Tool-result appends are spawned so ordinary tool loops do not pay an I/O
     // barrier on every call. Context compaction is a history boundary: before
     // creating the summary, wait for the spawned appends to update the message
@@ -1027,6 +981,7 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
     let refreshed_source = persist_tool_loop_compaction_checkpoint(
         state,
         context,
+        on_delta,
         &[],
         partial_assistant_text,
         partial_reasoning_standard,
@@ -1048,13 +1003,6 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
     let archive_result = match archive_res {
         Ok(result) => result,
         Err(err) => {
-            send_organize_context_status_event(
-                on_delta,
-                context,
-                "auto_before_tool_continue",
-                "failed",
-                &format!("上下文压缩失败：{err}"),
-            );
             return Err(format!("自动整理失败：{err}"));
         }
     };
@@ -1082,20 +1030,13 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
         ));
     }
 
-    send_organize_context_status_event(
-        on_delta,
-        context,
-        "auto_before_tool_continue",
-        "done",
-        "上下文压缩完成，正在重新开始当前调度...",
-    );
-
     Err(CHAT_DISPATCH_RESTART_AFTER_COMPACTION.to_string())
 }
 
 fn persist_tool_loop_compaction_checkpoint(
     state: &AppState,
     context: &ToolLoopAutoCompactionContext,
+    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
     transient_tool_history: &[Value],
     partial_assistant_text: &str,
     partial_reasoning_standard: &str,
@@ -1106,7 +1047,7 @@ fn persist_tool_loop_compaction_checkpoint(
     let should_persist = !partial_assistant_text.trim().is_empty()
         || !partial_reasoning_standard.trim().is_empty()
         || !history_for_checkpoint.is_empty();
-    if should_persist {
+    let persist_result = if should_persist {
         let persist_result = conversation_service().persist_stop_chat_partial_message(
             state,
             Some(context.conversation_id.as_str()),
@@ -1130,10 +1071,30 @@ fn persist_tool_loop_compaction_checkpoint(
             history_for_checkpoint.len()
         ));
         clear_inflight_completed_tool_history(state, chat_session_key)?;
+        persist_result
     } else {
         runtime_log_info(format!(
             "[上下文整理] 跳过，任务=interrupt_checkpoint，conversation_id={}，reason={}，原因=无可落盘内容",
             context.conversation_id, reason
+        ));
+        StopChatPersistResult {
+            persisted: false,
+            conversation_id: Some(context.conversation_id.clone()),
+            assistant_message: None,
+        }
+    };
+    let _ = on_delta.send(round_completed_delta_event(
+        &context.conversation_id,
+        context.request_id.as_deref(),
+        partial_assistant_text,
+        partial_reasoning_standard,
+        "",
+        persist_result.assistant_message.as_ref(),
+    ));
+    if let Err(err) = clear_conversation_stream_runtime_cache(state, &context.conversation_id) {
+        runtime_log_warn(format!(
+            "[聊天流式缓存] 压缩前清理失败 conversation_id={} reason={} error={}",
+            context.conversation_id, reason, err
         ));
     }
     tool_loop_active_conversation_snapshot(state, &context.conversation_id)?
@@ -1154,14 +1115,6 @@ async fn apply_organize_context_compaction_checkpoint(
 ) -> Result<(), String> {
     let state = state.ok_or_else(|| "缺少应用状态，无法整理上下文。".to_string())?;
     let context = context.ok_or_else(|| "缺少当前调度上下文，无法整理上下文。".to_string())?;
-    send_organize_context_status_event(
-        on_delta,
-        context,
-        "organize_context",
-        "running",
-        "正在保存已完成工作并压缩上下文...",
-    );
-
     // Same boundary rule as automatic compaction: organize_context stops the
     // current dispatch and builds a summary from the durable conversation, so
     // any spawned tool-result appends from this dispatch must finish first.
@@ -1175,6 +1128,7 @@ async fn apply_organize_context_compaction_checkpoint(
     let refreshed_source = persist_tool_loop_compaction_checkpoint(
         state,
         context,
+        on_delta,
         &[],
         partial_assistant_text,
         partial_reasoning_standard,
@@ -1205,23 +1159,9 @@ async fn apply_organize_context_compaction_checkpoint(
                     context.conversation_id, warning
                 ));
             }
-            send_organize_context_status_event(
-                on_delta,
-                context,
-                "organize_context",
-                "done",
-                "上下文压缩完成，正在重新开始当前调度...",
-            );
             Ok(())
         }
         Err(err) => {
-            send_organize_context_status_event(
-                on_delta,
-                context,
-                "organize_context",
-                "failed",
-                &format!("上下文压缩失败：{err}"),
-            );
             Err(format!("整理失败：{err}"))
         }
     }

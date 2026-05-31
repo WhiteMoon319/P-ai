@@ -64,6 +64,10 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
         reasoningInline: p?.reasoningInline,
         assistantMessage: p?.assistantMessage,
       };
+      if (currentRound.phase === "queued" && parsed.reason === "context_compaction_boundary") {
+        void options.handleRoundCompleted(currentGen, result);
+        return;
+      }
       if (currentRound.phase === "queued") {
         options.setPendingTerminalEvent({
           kind: "completed",

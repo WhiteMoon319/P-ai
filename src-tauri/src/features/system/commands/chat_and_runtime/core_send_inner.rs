@@ -2650,20 +2650,21 @@ async fn send_chat_message_inner(
             selected_api.context_window_tokens
         );
         if decision.should_archive {
-            if decision.forced {
-                let _ = on_delta.send(AssistantDeltaEvent {
-                    delta: "".to_string(),
-                    kind: Some("tool_status".to_string()),
-                    request_id: None,
-                    activation_id: runtime_context.request_id.clone(),
-                    phase_id: None,
-                    reason: None,
-                    tool_name: Some("archive".to_string()),
-                    tool_call_id: None,
-                    tool_status: Some("running".to_string()),
-                    tool_args: None,
-                    message: Some("正在整理上下文...".to_string()),
-                });
+            let _ = on_delta.send(round_completed_delta_event(
+                &conversation_for_compaction.id,
+                runtime_context.request_id.as_deref(),
+                "",
+                "",
+                "",
+                None,
+            ));
+            if let Err(err) =
+                clear_conversation_stream_runtime_cache(&state, &conversation_for_compaction.id)
+            {
+                runtime_log_warn(format!(
+                    "[聊天流式缓存] 发送前压缩清理失败 conversation_id={} reason={} error={}",
+                    conversation_for_compaction.id, decision.reason, err
+                ));
             }
 
             let archive_res = run_context_compaction_pipeline(
@@ -2690,19 +2691,10 @@ async fn send_chat_message_inner(
                                 result.warning.unwrap_or_default()
                             )
                         };
-                        let _ = on_delta.send(AssistantDeltaEvent {
-                            delta: "".to_string(),
-                            kind: Some("tool_status".to_string()),
-                            request_id: None,
-                            activation_id: runtime_context.request_id.clone(),
-                            phase_id: None,
-                            reason: None,
-                            tool_name: Some("archive".to_string()),
-                            tool_call_id: None,
-                            tool_status: Some("done".to_string()),
-                            tool_args: None,
-                            message: Some(done_message),
-                        });
+                        runtime_log_info(format!(
+                            "[上下文整理] 发送前压缩完成 conversation_id={} reason={} message={}",
+                            conversation_for_compaction.id, decision.reason, done_message
+                        ));
                     }
                     compaction_restart_count = compaction_restart_count.saturating_add(1);
                     if compaction_restart_count > 3 {
@@ -2726,21 +2718,6 @@ async fn send_chat_message_inner(
                     continue 'dispatch;
                 }
                 Err(err) => {
-                    if decision.forced {
-                        let _ = on_delta.send(AssistantDeltaEvent {
-                            delta: "".to_string(),
-                            kind: Some("tool_status".to_string()),
-                            request_id: None,
-                            activation_id: runtime_context.request_id.clone(),
-                            phase_id: None,
-                            reason: None,
-                            tool_name: Some("archive".to_string()),
-                            tool_call_id: None,
-                            tool_status: Some("failed".to_string()),
-                            tool_args: None,
-                            message: Some(format!("整理失败：{err}")),
-                        });
-                    }
                     return Err(format!("整理失败：{err}"));
                 }
             }

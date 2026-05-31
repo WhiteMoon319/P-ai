@@ -54,6 +54,73 @@ describe("useChatFlow stream isolation", () => {
     vi.useRealTimers();
   });
 
+  it("closes queued round immediately when compaction boundary completes it", async () => {
+    const chatting = ref(false);
+    const trimming = ref(false);
+    const chatInput = ref("new question");
+    const clipboardImages = ref<Array<{ mime: string; bytesBase64: string }>>([]);
+    const latestUserText = ref("");
+    const latestUserImages = ref<Array<{ mime: string; bytesBase64: string }>>([]);
+    const latestAssistantText = ref("");
+    const latestReasoningStandardText = ref("");
+    const latestReasoningInlineText = ref("");
+    const toolStatusText = ref("");
+    const toolStatusState = ref<"running" | "done" | "failed" | "">("");
+    const chatErrorText = ref("");
+    const allMessages = shallowRef<ChatMessage[]>([]);
+    const visibleTurnCount = ref(1);
+    const onReloadMessages = vi.fn(async () => {});
+
+    type ChannelLike = {
+      emit: (event: AssistantDeltaEvent) => void;
+    };
+
+    let capturedChannel: ChannelLike | null = null;
+    const flow = useChatFlow({
+      chatting,
+      trimming,
+      getSession: () => ({ apiConfigId: "api-1", agentId: "agent-1" }),
+      chatInput,
+      clipboardImages,
+      latestUserText,
+      latestUserImages,
+      latestAssistantText,
+      latestReasoningStandardText,
+      latestReasoningInlineText,
+      toolStatusText,
+      toolStatusState,
+      chatErrorText,
+      allMessages,
+      visibleMessageBlockCount: visibleTurnCount,
+      t: (key) => key,
+      formatRequestFailed: (error) => String(error),
+      removeBinaryPlaceholders: (text) => text,
+      invokeSendChatMessage: ({ onDelta }) =>
+        new Promise(() => {
+          capturedChannel = onDelta as unknown as ChannelLike;
+        }),
+      onReloadMessages,
+    });
+
+    void flow.sendChat();
+    await Promise.resolve();
+    capturedChannel!.emit({ kind: "history_flushed", message: "{\"conversationId\":\"conversation-1\",\"messageCount\":1,\"activateAssistant\":true}" });
+    await flushAsyncSteps();
+    expect(flow.frontendRoundPhase.value).toBe("waiting");
+
+    capturedChannel!.emit({
+      kind: "round_completed",
+      reason: "context_compaction_boundary",
+      message: "{\"conversationId\":\"conversation-1\",\"assistantText\":\"\",\"reasoningStandard\":\"\",\"reasoningInline\":\"\",\"archivedBeforeSend\":false}",
+    });
+    await flushAsyncSteps();
+
+    expect(flow.frontendRoundPhase.value).toBe("idle");
+    expect(chatting.value).toBe(false);
+    expect(allMessages.value.some((message) => String(message.id || "").startsWith("__draft_assistant__:"))).toBe(false);
+    expect(onReloadMessages).toHaveBeenCalledTimes(1);
+  });
+
   it("does not hydrate streaming bubble from history before first delta", async () => {
     const chatting = ref(false);
     const trimming = ref(false);

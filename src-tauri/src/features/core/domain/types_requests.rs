@@ -437,6 +437,44 @@ struct AssistantDeltaEvent {
     message: Option<String>,
 }
 
+fn round_completed_delta_event(
+    conversation_id: &str,
+    request_id: Option<&str>,
+    assistant_text: &str,
+    reasoning_standard: &str,
+    reasoning_inline: &str,
+    assistant_message: Option<&ChatMessage>,
+) -> AssistantDeltaEvent {
+    let normalized_request_id = request_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    let message = serde_json::json!({
+        "conversationId": conversation_id.trim(),
+        "activationId": normalized_request_id,
+        "requestId": normalized_request_id,
+        "assistantText": assistant_text,
+        "reasoningStandard": reasoning_standard,
+        "reasoningInline": reasoning_inline,
+        "archivedBeforeSend": false,
+        "assistantMessage": assistant_message,
+    })
+    .to_string();
+    AssistantDeltaEvent {
+        delta: String::new(),
+        kind: Some("round_completed".to_string()),
+        request_id: normalized_request_id.clone(),
+        activation_id: normalized_request_id,
+        phase_id: None,
+        reason: Some("context_compaction_boundary".to_string()),
+        tool_name: None,
+        tool_call_id: None,
+        tool_status: None,
+        tool_args: None,
+        message: Some(message),
+    }
+}
+
 #[derive(Clone)]
 struct ActiveChatViewBinding {
     conversation_id: String,

@@ -240,23 +240,6 @@ async fn confirm_plan_and_continue_inner(
     let should_compact_before_continue =
         preview.can_compact && plan_confirm_context_usage_ratio(&conversation, &selected_api) >= 0.60;
     if should_compact_before_continue {
-        dispatch_assistant_delta_to_active_view(
-            state,
-            conversation_id,
-            &AssistantDeltaEvent {
-                delta: String::new(),
-                kind: Some("tool_status".to_string()),
-                request_id: Some(continue_event_id.clone()),
-                activation_id: Some(continue_event_id.clone()),
-                phase_id: None,
-                reason: Some("confirm_plan_before_continue".to_string()),
-                tool_name: Some("archive".to_string()),
-                tool_call_id: None,
-                tool_status: Some("running".to_string()),
-                tool_args: None,
-                message: Some("正在执行上下文压缩...".to_string()),
-            },
-        );
         let compaction_result = run_context_compaction_pipeline(
             state,
             &selected_api,
@@ -270,51 +253,14 @@ async fn confirm_plan_and_continue_inner(
         .await;
         match compaction_result {
             Ok(result) => {
-                let message = result
-                    .warning
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .map(|warning| format!("已完成压缩（降级总结）：{warning}"))
-                    .unwrap_or_else(|| {
-                        format!("已完成压缩，更新记忆 {} 条。", result.merged_memories)
-                    });
-                dispatch_assistant_delta_to_active_view(
-                    state,
+                runtime_log_info(format!(
+                    "[上下文整理] 计划确认前压缩完成 conversation_id={} merged_memories={} warning={}",
                     conversation_id,
-                    &AssistantDeltaEvent {
-                        delta: String::new(),
-                        kind: Some("tool_status".to_string()),
-                        request_id: Some(continue_event_id.clone()),
-                        activation_id: Some(continue_event_id.clone()),
-                        phase_id: None,
-                        reason: Some("confirm_plan_before_continue".to_string()),
-                        tool_name: Some("archive".to_string()),
-                        tool_call_id: None,
-                        tool_status: Some("done".to_string()),
-                        tool_args: None,
-                        message: Some(message),
-                    },
-                );
+                    result.merged_memories,
+                    result.warning.as_deref().unwrap_or("")
+                ));
             }
             Err(err) => {
-                dispatch_assistant_delta_to_active_view(
-                    state,
-                    conversation_id,
-                    &AssistantDeltaEvent {
-                        delta: String::new(),
-                        kind: Some("tool_status".to_string()),
-                        request_id: Some(continue_event_id.clone()),
-                        activation_id: Some(continue_event_id.clone()),
-                        phase_id: None,
-                        reason: Some("confirm_plan_before_continue".to_string()),
-                        tool_name: Some("archive".to_string()),
-                        tool_call_id: None,
-                        tool_status: Some("failed".to_string()),
-                        tool_args: None,
-                        message: Some(format!("上下文压缩失败: {err}")),
-                    },
-                );
                 return Err(err);
             }
         }
