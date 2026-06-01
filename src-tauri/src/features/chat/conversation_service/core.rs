@@ -31,9 +31,22 @@ impl ConversationService {
         }
         if self.conversation_has_active_chat_view(state, &conversation.id) {
             clear_conversation_unread_count(conversation);
-            return;
+        } else {
+            increment_conversation_unread_count(conversation, count);
         }
-        increment_conversation_unread_count(conversation, count);
+        if let Err(err) = state_update_conversation_metadata_cached(
+            state,
+            &conversation.id,
+            |cached| {
+                cached.unread_count = conversation.unread_count;
+                Ok(())
+            },
+        ) {
+            runtime_log_warn(format!(
+                "[会话未读] 警告，任务=同步未读数metadata缓存，会话ID={}，unread_count={}，error={}",
+                conversation.id, conversation.unread_count, err
+            ));
+        }
     }
 
     fn remote_im_runtime_state_should_cache_blocks(
@@ -387,39 +400,26 @@ impl ConversationService {
         if normalized_conversation_id.is_empty() {
             return Err("指定会话不存在：".to_string());
         }
-        let mut conversation = self
+        let conversation = self
             .read_persisted_conversation(state, normalized_conversation_id)
             .map_err(|_| format!("指定会话不存在：{normalized_conversation_id}"))?;
         let original_path = conversation.shell_workspace_path.clone();
         let original_workspaces = conversation.shell_workspaces.clone();
         let original_autonomous_mode = conversation.shell_autonomous_mode;
-        if let Some(value) = shell_workspace_path {
-            conversation.shell_workspace_path = value;
-        }
-        if let Some(value) = shell_workspaces {
-            conversation.shell_workspaces = value;
-        }
-        if let Some(value) = shell_autonomous_mode {
-            conversation.shell_autonomous_mode = value;
-        }
-        if conversation
-            .shell_workspace_path
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .is_some()
-            && terminal_workspace_path_from_conversation(state, &conversation).is_none()
+        let updated = self.set_conversation_shell_workspace_metadata(
+            state,
+            normalized_conversation_id,
+            shell_workspace_path,
+            shell_workspaces,
+            shell_autonomous_mode,
+        )?;
+        if updated.shell_workspace_path == original_path
+            && updated.shell_workspaces == original_workspaces
+            && updated.shell_autonomous_mode == original_autonomous_mode
         {
-            conversation.shell_workspace_path = None;
+            return Ok(updated);
         }
-        if conversation.shell_workspace_path == original_path
-            && conversation.shell_workspaces == original_workspaces
-            && conversation.shell_autonomous_mode == original_autonomous_mode
-        {
-            return Ok(conversation);
-        }
-        self.persist_conversation(state, &conversation)?;
-        Ok(conversation)
+        Ok(updated)
     }
 
 }

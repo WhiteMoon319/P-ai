@@ -3274,6 +3274,14 @@ async fn send_chat_message_inner(
                         assistant_message,
                         &now,
                     ));
+                    state_update_conversation_metadata_cached(
+                        &state,
+                        &conversation.id,
+                        |cached| {
+                            cached.unread_count = conversation.unread_count;
+                            Ok(())
+                        },
+                    )?;
                 }
                 conversation_service().persist_conversation(
                     &state,

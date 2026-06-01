@@ -3423,7 +3423,7 @@
     }
 
     #[test]
-    fn state_schedule_conversation_persist_should_preserve_field_level_model_metadata() {
+    fn state_schedule_conversation_persist_should_preserve_field_level_metadata() {
         let state = test_chat_runtime_state();
         let now = now_iso();
         let conversation = test_chat_conversation("conversation-preserve-model", "active", &now);
@@ -3437,8 +3437,23 @@
                 Some("api-model-d".to_string()),
             )
             .expect("set preferred model");
+        conversation_service()
+            .set_conversation_title_metadata(&state, &conversation.id, "字段级标题")
+            .expect("set title");
+        conversation_service()
+            .set_conversation_shell_workspace_metadata(
+                &state,
+                &conversation.id,
+                Some(Some(state.llm_workspace_path.to_string_lossy().to_string())),
+                None,
+                Some(true),
+            )
+            .expect("set workspace metadata");
 
         let mut stale_full_snapshot = conversation.clone();
+        stale_full_snapshot.title = "过期标题".to_string();
+        stale_full_snapshot.shell_workspace_path = None;
+        stale_full_snapshot.shell_autonomous_mode = false;
         stale_full_snapshot.messages.push(test_text_message("user", "hello", &now));
         stale_full_snapshot.updated_at = now.clone();
         state_schedule_conversation_persist(&state, &stale_full_snapshot)
@@ -3450,6 +3465,12 @@
             cached.preferred_api_config_id.as_deref(),
             Some("api-model-d")
         );
+        assert_eq!(cached.title, "字段级标题");
+        assert_eq!(
+            cached.shell_workspace_path.as_deref(),
+            Some(state.llm_workspace_path.to_string_lossy().as_ref())
+        );
+        assert!(cached.shell_autonomous_mode);
         assert_eq!(cached.messages.len(), 1);
     }
 

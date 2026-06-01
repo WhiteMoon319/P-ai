@@ -119,6 +119,33 @@ impl ConversationService {
         Ok(conversation)
     }
 
+    fn set_conversation_title_metadata(
+        &self,
+        state: &AppState,
+        conversation_id: &str,
+        next_title: &str,
+    ) -> Result<Conversation, String> {
+        let normalized_conversation_id = conversation_id.trim();
+        if normalized_conversation_id.is_empty() {
+            return Err("conversationId is required.".to_string());
+        }
+        let normalized_title = next_title.trim().to_string();
+        let guard = state
+            .conversation_lock
+            .lock()
+            .map_err(|err| format!("Failed to lock state mutex at {}:{} {}: {err}", file!(), line!(), module_path!()))?;
+        let (conversation, (), _) = state_update_conversation_metadata_cached(
+            state,
+            normalized_conversation_id,
+            |conversation| {
+                conversation.title = normalized_title;
+                Ok(())
+            },
+        )?;
+        drop(guard);
+        Ok(conversation)
+    }
+
     fn set_conversation_plan_mode_enabled_metadata(
         &self,
         state: &AppState,
@@ -138,6 +165,78 @@ impl ConversationService {
             normalized_conversation_id,
             |conversation| {
                 conversation.plan_mode_enabled = enabled;
+                Ok(())
+            },
+        )?;
+        drop(guard);
+        Ok(conversation)
+    }
+
+    fn set_conversation_unread_count_metadata(
+        &self,
+        state: &AppState,
+        conversation_id: &str,
+        unread_count: usize,
+    ) -> Result<Conversation, String> {
+        let normalized_conversation_id = conversation_id.trim();
+        if normalized_conversation_id.is_empty() {
+            return Err("conversationId is required.".to_string());
+        }
+        let guard = state
+            .conversation_lock
+            .lock()
+            .map_err(|err| format!("Failed to lock state mutex at {}:{} {}: {err}", file!(), line!(), module_path!()))?;
+        let (conversation, (), _) = state_update_conversation_metadata_cached(
+            state,
+            normalized_conversation_id,
+            |conversation| {
+                conversation.unread_count = unread_count;
+                Ok(())
+            },
+        )?;
+        drop(guard);
+        Ok(conversation)
+    }
+
+    fn set_conversation_shell_workspace_metadata(
+        &self,
+        state: &AppState,
+        conversation_id: &str,
+        shell_workspace_path: Option<Option<String>>,
+        shell_workspaces: Option<Vec<ShellWorkspaceConfig>>,
+        shell_autonomous_mode: Option<bool>,
+    ) -> Result<Conversation, String> {
+        let normalized_conversation_id = conversation_id.trim();
+        if normalized_conversation_id.is_empty() {
+            return Err("conversationId is required.".to_string());
+        }
+        let guard = state
+            .conversation_lock
+            .lock()
+            .map_err(|err| format!("Failed to lock state mutex at {}:{} {}: {err}", file!(), line!(), module_path!()))?;
+        let (conversation, (), _) = state_update_conversation_metadata_cached(
+            state,
+            normalized_conversation_id,
+            |conversation| {
+                if let Some(value) = shell_workspace_path {
+                    conversation.shell_workspace_path = value;
+                }
+                if let Some(value) = shell_workspaces {
+                    conversation.shell_workspaces = value;
+                }
+                if let Some(value) = shell_autonomous_mode {
+                    conversation.shell_autonomous_mode = value;
+                }
+                if conversation
+                    .shell_workspace_path
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .is_some()
+                    && terminal_workspace_path_from_conversation(state, conversation).is_none()
+                {
+                    conversation.shell_workspace_path = None;
+                }
                 Ok(())
             },
         )?;

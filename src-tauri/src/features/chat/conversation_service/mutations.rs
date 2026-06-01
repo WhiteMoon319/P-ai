@@ -95,8 +95,18 @@ impl ConversationService {
             };
         let target_conversation_id = target_conversation.id.clone();
         ensure_unarchived_conversation_not_organizing(state, &target_conversation_id)?;
-        clear_conversation_unread_count(&mut target_conversation);
+        let unread_changed = clear_conversation_unread_count(&mut target_conversation);
         clear_conversation_list_activity_mark(state, &target_conversation_id);
+        if unread_changed && !created_new_conversation {
+            state_update_conversation_metadata_cached(
+                state,
+                &target_conversation_id,
+                |conversation| {
+                    conversation.unread_count = 0;
+                    Ok(())
+                },
+            )?;
+        }
         if created_new_conversation {
             state_schedule_conversation_persist(state, &target_conversation)?;
         } else {
@@ -611,9 +621,9 @@ impl ConversationService {
                 conversation: Some(conversation),
             });
         }
-        state_schedule_conversation_persist(state, &conversation)?;
-        let result_conversation = conversation.clone();
         drop(guard);
+        let result_conversation =
+            self.set_conversation_unread_count_metadata(state, normalized_conversation_id, 0)?;
         Ok(MarkConversationReadResult {
             conversation: Some(result_conversation),
         })
@@ -637,7 +647,7 @@ impl ConversationService {
 
         ensure_unarchived_conversation_not_organizing(state, normalized_conversation_id)?;
 
-        let mut conversation = state_read_conversation_cached(state, normalized_conversation_id)?;
+        let conversation = state_read_conversation_cached(state, normalized_conversation_id)?;
         self.ensure_unarchived_conversation(&conversation, normalized_conversation_id)
             .map_err(|_| "未找到可改名的会话".to_string())?;
         if conversation.title.trim() == normalized_title {
@@ -645,9 +655,12 @@ impl ConversationService {
             return Ok(normalized_title.to_string());
         }
 
-        conversation.title = normalized_title.to_string();
-        state_schedule_conversation_persist(state, &conversation)?;
         drop(guard);
+        self.set_conversation_title_metadata(
+            state,
+            normalized_conversation_id,
+            normalized_title,
+        )?;
         Ok(normalized_title.to_string())
     }
 
@@ -931,6 +944,14 @@ impl ConversationService {
         target_conversation.updated_at = now.clone();
         target_conversation.status = "active".to_string();
         increment_conversation_unread_count(&mut target_conversation, selected_messages.len());
+        state_update_conversation_metadata_cached(
+            state,
+            target_conversation_id,
+            |conversation| {
+                conversation.unread_count = target_conversation.unread_count;
+                Ok(())
+            },
+        )?;
         if let Some(last_message) = target_conversation.messages.last() {
             if last_message.role.trim().eq_ignore_ascii_case("assistant") {
                 target_conversation.last_assistant_at = Some(now.clone());

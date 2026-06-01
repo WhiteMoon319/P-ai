@@ -574,6 +574,19 @@ fn state_remove_chat_index_conversation_cached(
     Ok(())
 }
 
+fn preserve_field_level_conversation_metadata(
+    target: &mut Conversation,
+    source: &Conversation,
+) {
+    target.title = source.title.clone();
+    target.shell_workspace_path = source.shell_workspace_path.clone();
+    target.shell_workspaces = source.shell_workspaces.clone();
+    target.shell_autonomous_mode = source.shell_autonomous_mode;
+    target.unread_count = source.unread_count;
+    target.plan_mode_enabled = source.plan_mode_enabled;
+    target.preferred_api_config_id = source.preferred_api_config_id.clone();
+}
+
 #[allow(dead_code)]
 fn state_write_conversation_cached(
     state: &AppState,
@@ -1080,9 +1093,7 @@ fn state_schedule_conversation_persist(
             .lock()
             .map_err(|_| "Failed to lock cached conversations".to_string())?;
         if let Some(existing) = cached.get(&conversation.id) {
-            conversation_for_cache.preferred_api_config_id =
-                existing.preferred_api_config_id.clone();
-            conversation_for_cache.plan_mode_enabled = existing.plan_mode_enabled;
+            preserve_field_level_conversation_metadata(&mut conversation_for_cache, existing);
         }
         cached.insert(conversation.id.clone(), conversation_for_cache.clone());
     }
