@@ -583,6 +583,9 @@ fn preserve_field_level_conversation_metadata(
     target.shell_workspaces = source.shell_workspaces.clone();
     target.shell_autonomous_mode = source.shell_autonomous_mode;
     target.unread_count = source.unread_count;
+    target.updated_at = source.updated_at.clone();
+    target.last_user_at = source.last_user_at.clone();
+    target.last_assistant_at = source.last_assistant_at.clone();
     target.status = source.status.clone();
     target.summary = source.summary.clone();
     target.archived_at = source.archived_at.clone();

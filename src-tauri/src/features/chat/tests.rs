@@ -3490,7 +3490,8 @@
         stale_full_snapshot.user_profile_snapshot.clear();
         stale_full_snapshot.memory_recall_table.clear();
         stale_full_snapshot.messages.push(test_text_message("user", "hello", &now));
-        stale_full_snapshot.updated_at = now.clone();
+        stale_full_snapshot.updated_at = "2020-01-01T00:00:00Z".to_string();
+        stale_full_snapshot.last_user_at = Some("2020-01-01T00:00:00Z".to_string());
         state_schedule_conversation_persist(&state, &stale_full_snapshot)
             .expect("schedule stale full persist");
 
@@ -3512,6 +3513,11 @@
         assert_eq!(cached.current_todos[0].content, "字段级 todo");
         assert_eq!(cached.user_profile_snapshot, "字段级画像");
         assert_eq!(cached.memory_recall_table, vec!["memory-a".to_string()]);
+        assert_eq!(cached.updated_at, now);
+        assert_ne!(
+            cached.last_user_at.as_deref(),
+            Some("2020-01-01T00:00:00Z")
+        );
         assert_eq!(cached.messages.len(), 1);
     }
 

@@ -950,6 +950,9 @@ impl ConversationService {
             |conversation| {
                 conversation.unread_count = target_conversation.unread_count;
                 conversation.status = target_conversation.status.clone();
+                conversation.updated_at = target_conversation.updated_at.clone();
+                conversation.last_user_at = target_conversation.last_user_at.clone();
+                conversation.last_assistant_at = target_conversation.last_assistant_at.clone();
                 Ok(())
             },
         )?;
@@ -1315,6 +1318,16 @@ fn persist_stop_chat_target_update(
             delegate_runtime_thread_conversation_update(state, conversation_id, conversation)
         }
         StopChatConversationTarget::Persisted(conversation) => {
+            state_update_conversation_metadata_cached(
+                state,
+                &conversation.id,
+                |cached| {
+                    cached.updated_at = conversation.updated_at.clone();
+                    cached.last_user_at = conversation.last_user_at.clone();
+                    cached.last_assistant_at = conversation.last_assistant_at.clone();
+                    Ok(())
+                },
+            )?;
             service.persist_conversation(state, &conversation)
         }
     }

@@ -3287,6 +3287,8 @@ async fn send_chat_message_inner(
                         &conversation.id,
                         |cached| {
                             cached.unread_count = conversation.unread_count;
+                            cached.updated_at = conversation.updated_at.clone();
+                            cached.last_assistant_at = conversation.last_assistant_at.clone();
                             Ok(())
                         },
                     )?;

@@ -39,6 +39,9 @@ impl ConversationService {
             &conversation.id,
             |cached| {
                 cached.unread_count = conversation.unread_count;
+                cached.updated_at = conversation.updated_at.clone();
+                cached.last_user_at = conversation.last_user_at.clone();
+                cached.last_assistant_at = conversation.last_assistant_at.clone();
                 Ok(())
             },
         ) {
