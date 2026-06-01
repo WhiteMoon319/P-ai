@@ -630,7 +630,7 @@
       "primaryAssignee": "Primary",
       "addAssignee": "Add Persona",
       "assigneeEmpty": "No personas are assigned to this department yet.",
-      "assigneePrimaryHint": "The first persona remains the primary executor during the compatibility phase.",
+      "assigneePrimaryHint": "The selected persona is the primary executor for this department.",
       "assigneeLimitHint": "Multi-persona departments are a future feature. For now, each department can bind only one persona.",
       "assigneePlaceholder": "Not assigned",
       "selectHint": "Please select a department from the left"

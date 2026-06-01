@@ -102,82 +102,31 @@
 
             <div class="px-4 py-4">
               <div class="mb-2 text-[11px] uppercase tracking-wide opacity-40">{{ t("config.department.assignee") }}</div>
-              <div class="grid gap-3">
-                <div v-if="selectedDepartmentAssigneeIds.length > 0" class="grid gap-2">
-                  <div
-                    v-for="(agentId, idx) in selectedDepartmentAssigneeIds"
-                    :key="`${selectedDepartment.id}-agent-${agentId}`"
-                    class="flex items-center gap-2"
+              <div class="grid gap-2">
+                <select
+                  class="select select-bordered select-sm w-full"
+                  :value="selectedDepartmentAssigneeId"
+                  @change="updateDepartmentAssignee(($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="">{{ t("config.department.assigneePlaceholder") }}</option>
+                  <option
+                    v-if="selectedDepartmentAssigneeId && !availableAssigneePersonas.some((persona) => persona.id === selectedDepartmentAssigneeId)"
+                    :value="selectedDepartmentAssigneeId"
                   >
-                    <div class="min-w-0 flex-1 rounded-xl border border-base-300 bg-base-200/60 px-3 py-2">
-                      <div class="flex items-center gap-2">
-                        <span class="truncate text-sm">{{ personaNameById(agentId) }}</span>
-                        <span v-if="idx === 0" class="badge badge-primary badge-sm shrink-0">{{ t("config.department.primaryAssignee") }}</span>
-                        <span
-                          v-if="selectedDepartment.isBuiltInAssistant && idx === 0 && agentId === assistantDepartmentAgentId"
-                          class="text-xs opacity-50"
-                        >
-                          {{ t("config.department.currentAssistant") }}
-                        </span>
-                      </div>
-                    </div>
-                    <div class="join">
-                      <button
-                        class="btn btn-sm btn-square join-item opacity-60 hover:opacity-100"
-                        type="button"
-                        :disabled="idx <= 0"
-                        :title="t('config.department.moveUp')"
-                        @click="moveDepartmentAssignee(idx, -1)"
-                      >
-                        ↑
-                      </button>
-                      <button
-                        class="btn btn-sm btn-square join-item opacity-60 hover:opacity-100"
-                        type="button"
-                        :disabled="idx >= selectedDepartmentAssigneeIds.length - 1"
-                        :title="t('config.department.moveDown')"
-                        @click="moveDepartmentAssignee(idx, 1)"
-                      >
-                        ↓
-                      </button>
-                      <button
-                        class="btn btn-sm btn-square join-item opacity-60 hover:opacity-100"
-                        type="button"
-                        :title="t('config.department.remove')"
-                        @click="removeDepartmentAssigneeAt(idx)"
-                      >
-                        <Trash2 class="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div v-else class="text-xs opacity-50">
-                  {{ t("config.department.assigneeEmpty") }}
-                </div>
-                <div class="flex items-center gap-2">
-                  <select
-                    class="select select-bordered select-sm flex-1"
-                    :value="pendingDepartmentAssigneeId"
-                    :disabled="departmentAssigneeLimitReached"
-                    @change="pendingDepartmentAssigneeId = ($event.target as HTMLSelectElement).value"
+                    {{ personaNameById(selectedDepartmentAssigneeId) }}
+                  </option>
+                  <option v-for="persona in availableAssigneePersonas" :key="persona.id" :value="persona.id">
+                    {{ persona.name }}
+                  </option>
+                </select>
+                <div class="flex min-h-5 flex-wrap items-center gap-2 text-[11px] opacity-50">
+                  <span>{{ t("config.department.assigneePrimaryHint") }}</span>
+                  <span
+                    v-if="selectedDepartment.isBuiltInAssistant && selectedDepartmentAssigneeId === assistantDepartmentAgentId"
+                    class="badge badge-primary badge-sm"
                   >
-                    <option value="">{{ t("config.department.assigneePlaceholder") }}</option>
-                    <option v-for="persona in remainingAssigneePersonas" :key="persona.id" :value="persona.id">
-                      {{ persona.name }}
-                    </option>
-                  </select>
-                  <button
-                    class="btn btn-sm"
-                    type="button"
-                    :disabled="!pendingDepartmentAssigneeId || departmentAssigneeLimitReached"
-                    @click="addDepartmentAssignee"
-                  >
-                    {{ t("config.department.addAssignee") }}
-                  </button>
-                </div>
-                <div class="text-[11px] opacity-50">{{ t("config.department.assigneePrimaryHint") }}</div>
-                <div v-if="departmentAssigneeLimitReached" class="text-[11px] text-warning opacity-80">
-                  {{ t("config.department.assigneeLimitHint") }}
+                    {{ t("config.department.currentAssistant") }}
+                  </span>
                 </div>
               </div>
             </div>
@@ -588,7 +537,6 @@ const permissionCatalog = ref<DepartmentPermissionCatalog>({
 });
 const permissionCatalogLoading = ref(false);
 const permissionCatalogError = ref("");
-const pendingDepartmentAssigneeId = ref("");
 
 const sortedDepartments = computed(() =>
   [...departmentDrafts.value].sort((a, b) => {
@@ -702,13 +650,8 @@ const availableAssigneePersonas = computed(() =>
 const selectedDepartmentAssigneeIds = computed(() =>
   normalizeNameList(selectedDepartment.value?.agentIds || []),
 );
-const departmentAssigneeLimitReached = computed(() =>
-  selectedDepartmentAssigneeIds.value.length >= 1,
-);
-const remainingAssigneePersonas = computed(() =>
-  availableAssigneePersonas.value.filter(
-    (persona) => !selectedDepartmentAssigneeIds.value.includes(String(persona.id || "").trim()),
-  ),
+const selectedDepartmentAssigneeId = computed(() =>
+  selectedDepartmentAssigneeIds.value[0] || "",
 );
 
 function canServeAsRegularDepartmentPersona(persona: PersonaProfile): boolean {
@@ -771,23 +714,6 @@ watch(
     if (!sortedDepartments.value.some((item) => item.id === selectedDepartmentId.value)) {
       selectedDepartmentId.value = sortedDepartments.value[0]?.id || "assistant-department";
     }
-  },
-  { immediate: true },
-);
-
-watch(
-  () => ({
-    selectedDepartmentId: selectedDepartmentId.value,
-    remainingPersonaIds: remainingAssigneePersonas.value.map((persona) => persona.id).join("|"),
-  }),
-  () => {
-    if (
-      pendingDepartmentAssigneeId.value
-      && remainingAssigneePersonas.value.some((persona) => persona.id === pendingDepartmentAssigneeId.value)
-    ) {
-      return;
-    }
-    pendingDepartmentAssigneeId.value = remainingAssigneePersonas.value[0]?.id || "";
   },
   { immediate: true },
 );
@@ -1053,42 +979,12 @@ function personaNameById(agentId: string): string {
   ).trim() || normalizedAgentId;
 }
 
-function addDepartmentAssignee() {
+function updateDepartmentAssignee(agentId: string) {
   const target = selectedDepartment.value;
   if (!target) return;
-  if (departmentAssigneeLimitReached.value) return;
-  const nextAgentId = String(pendingDepartmentAssigneeId.value || "").trim();
-  if (!nextAgentId) return;
-  const nextAgentIds = normalizeNameList([...(target.agentIds || []), nextAgentId]);
+  const nextAgentId = String(agentId || "").trim();
+  const nextAgentIds = nextAgentId ? [nextAgentId] : [];
   if (JSON.stringify(nextAgentIds) === JSON.stringify(normalizeNameList(target.agentIds || []))) return;
-  target.agentIds = nextAgentIds;
-  pendingDepartmentAssigneeId.value = remainingAssigneePersonas.value
-    .map((persona) => String(persona.id || "").trim())
-    .find((id) => !!id && id !== nextAgentId) || "";
-  touchSelectedDepartment();
-}
-
-function removeDepartmentAssigneeAt(index: number) {
-  const target = selectedDepartment.value;
-  if (!target) return;
-  const nextAgentIds = normalizeNameList(target.agentIds || []);
-  if (index < 0 || index >= nextAgentIds.length) return;
-  nextAgentIds.splice(index, 1);
-  target.agentIds = nextAgentIds;
-  if (!pendingDepartmentAssigneeId.value) {
-    pendingDepartmentAssigneeId.value = remainingAssigneePersonas.value[0]?.id || "";
-  }
-  touchSelectedDepartment();
-}
-
-function moveDepartmentAssignee(index: number, delta: number) {
-  const target = selectedDepartment.value;
-  if (!target) return;
-  const nextAgentIds = normalizeNameList(target.agentIds || []);
-  const swapIndex = index + delta;
-  if (index < 0 || index >= nextAgentIds.length || swapIndex < 0 || swapIndex >= nextAgentIds.length) return;
-  const [item] = nextAgentIds.splice(index, 1);
-  nextAgentIds.splice(swapIndex, 0, item);
   target.agentIds = nextAgentIds;
   touchSelectedDepartment();
 }

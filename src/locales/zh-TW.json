@@ -630,7 +630,7 @@
       "primaryAssignee": "主執行",
       "addAssignee": "新增人格",
       "assigneeEmpty": "目前還沒有掛載人格。",
-      "assigneePrimaryHint": "首位人格將作為當前兼容階段的主執行人格。",
+      "assigneePrimaryHint": "所選人格將作為當前部門的主執行人格。",
       "assigneeLimitHint": "部門多人格仍是未來功能，目前每個部門暫時只允許綁定 1 個人格。",
       "assigneePlaceholder": "暫不指定",
       "selectHint": "請從左側選擇一個部門"
