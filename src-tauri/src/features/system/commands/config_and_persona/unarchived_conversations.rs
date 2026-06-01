@@ -761,7 +761,7 @@ fn import_conversation_share_from_file(
         .find(|message| message.role.trim() == "assistant")
         .map(|message| message.created_at.clone());
     conversation_service().sync_conversation_metadata_from_snapshot(state.inner(), &conversation)?;
-    state_schedule_conversation_persist(state.inner(), &conversation)?;
+    conversation_service().persist_conversation(state.inner(), &conversation)?;
 
     let overview_payload = UnarchivedConversationOverviewUpdatedPayload {
         preferred_conversation_id: Some(conversation_id.clone()),

@@ -2288,7 +2288,7 @@ fn ensure_remote_im_contact_conversation_id(
     );
     conversation.status = "inactive".to_string();
     let conversation_id = conversation.id.clone();
-    state_schedule_conversation_persist(state, &conversation)?;
+    conversation_service().persist_conversation(state, &conversation)?;
     contact.bound_conversation_id = Some(conversation_id.clone());
     Ok(conversation_id)
 }

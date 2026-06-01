@@ -101,7 +101,7 @@ fn task_resolve_main_dispatch_conversation_id(
             None,
         );
         let conversation_id = conversation.id.clone();
-        state_schedule_conversation_persist(state, &conversation)?;
+        conversation_service().persist_conversation(state, &conversation)?;
         runtime.main_conversation_id = Some(conversation_id.clone());
         state_write_runtime_state_cached(state, runtime)?;
         conversation_id
