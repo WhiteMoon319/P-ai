@@ -221,8 +221,8 @@ describe("useChatFlow stream isolation", () => {
     expect(capturedChannel).not.toBeNull();
     capturedChannel!.emit({ kind: "history_flushed", message: "{\"conversationId\":\"conversation-1\",\"messageCount\":1,\"activateAssistant\":true}" });
     await flushAsyncSteps();
-    expect(chatting.value).toBe(false);
-    expect(flow.frontendRoundPhase.value).toBe("queued");
+    expect(chatting.value).toBe(true);
+    expect(flow.frontendRoundPhase.value).toBe("waiting");
     expect(visibleTurnCount.value).toBe(1);
 
     capturedChannel!.emit({ delta: "N" });
@@ -241,9 +241,9 @@ describe("useChatFlow stream isolation", () => {
 
     await sendPromise;
 
-    expect(latestAssistantText.value).toBe("A_new");
+    expect(latestAssistantText.value).toBe("N");
     expect(chatErrorText.value).toBe("");
-    expect(chatting.value).toBe(false);
+    expect(chatting.value).toBe(true);
   });
 
   it("shows retry status in the pre-streaming assistant draft", async () => {
@@ -413,7 +413,7 @@ describe("useChatFlow stream isolation", () => {
     expect(toolStatusText.value).toBe("");
     expect(toolStatusState.value).toBe("");
     expect(allMessages.value.some((message) => String(message.id || "").startsWith("__draft_assistant__:"))).toBe(false);
-    expect(onReloadMessages).toHaveBeenCalledTimes(2);
+    expect(onReloadMessages).toHaveBeenCalledTimes(1);
   });
 
   it("stops stream by preserving partial text and syncing stop payload", async () => {
@@ -473,8 +473,8 @@ describe("useChatFlow stream isolation", () => {
     expect(capturedChannel).not.toBeNull();
     capturedChannel!.emit({ kind: "history_flushed", message: "{\"conversationId\":\"conversation-1\",\"messageCount\":1,\"activateAssistant\":true}" });
     await flushAsyncSteps();
-    expect(chatting.value).toBe(false);
-    expect(flow.frontendRoundPhase.value).toBe("queued");
+    expect(chatting.value).toBe(true);
+    expect(flow.frontendRoundPhase.value).toBe("waiting");
     expect(visibleTurnCount.value).toBe(1);
     capturedChannel!.emit({ delta: "ABC" });
     capturedChannel!.emit({ kind: "reasoning_inline", delta: "R1" });
@@ -490,7 +490,7 @@ describe("useChatFlow stream isolation", () => {
       partialReasoningStandard: "",
       partialReasoningInline: "R1",
     });
-    expect(onReloadMessages).toHaveBeenCalledTimes(2);
+    expect(onReloadMessages).toHaveBeenCalledTimes(1);
   });
 
   it("keeps current streaming round visible until history_flushed switches to next round", async () => {
@@ -557,8 +557,8 @@ describe("useChatFlow stream isolation", () => {
 
     capturedChannels[0].emit({ kind: "history_flushed", message: "{\"conversationId\":\"conversation-1\",\"messageCount\":1,\"activateAssistant\":true}" });
     await flushAsyncSteps();
-    expect(chatting.value).toBe(false);
-    expect(flow.frontendRoundPhase.value).toBe("queued");
+    expect(chatting.value).toBe(true);
+    expect(flow.frontendRoundPhase.value).toBe("waiting");
     expect(visibleTurnCount.value).toBe(1);
 
     capturedChannels[0].emit({ delta: "FIRST" });
@@ -581,15 +581,15 @@ describe("useChatFlow stream isolation", () => {
 
     capturedChannels[1].emit({ kind: "history_flushed", message: "{\"conversationId\":\"conversation-1\",\"messageCount\":2,\"activateAssistant\":true}" });
     await flushAsyncSteps();
-    expect(onReloadMessages).toHaveBeenCalledTimes(2);
+    expect(onReloadMessages).toHaveBeenCalledTimes(0);
     expect(latestAssistantText.value).toBe("FIRST");
     expect(chatting.value).toBe(true);
-    expect(flow.frontendRoundPhase.value).toBe("streaming");
+    expect(flow.frontendRoundPhase.value).toBe("waiting");
     expect(visibleTurnCount.value).toBe(1);
 
     capturedChannels[1].emit({ delta: "SECOND-AFTER-FLUSH" });
     await vi.advanceTimersByTimeAsync(1200);
-    expect(latestAssistantText.value).toBe("FIRST");
+    expect(latestAssistantText.value).toBe("SECOND-AFTER-FLUSH");
 
     resolveRequests[0]({
       assistantText: "FIRST-DONE",
@@ -600,9 +600,9 @@ describe("useChatFlow stream isolation", () => {
     });
     await firstSend;
 
-    // 当前实现下，第一轮收尾前仍保留前台；收尾完成后先落成第一轮正式结果。
-    expect(latestAssistantText.value).toBe("FIRST-DONE");
-    expect(chatting.value).toBe(false);
+    // 第二轮收到 history_flushed 后成为前台轮次，第一轮收尾不再覆盖当前显示。
+    expect(latestAssistantText.value).toBe("SECOND-AFTER-FLUSH");
+    expect(chatting.value).toBe(true);
 
     resolveRequests[1]({
       assistantText: "SECOND-DONE",
@@ -613,8 +613,8 @@ describe("useChatFlow stream isolation", () => {
     });
     await secondSend;
 
-    expect(latestAssistantText.value).toBe("FIRST-DONE");
-    expect(chatting.value).toBe(false);
+    expect(latestAssistantText.value).toBe("SECOND-AFTER-FLUSH");
+    expect(chatting.value).toBe(true);
   });
 
   it("does not enter streaming view for non-activated batch without history_flushed", async () => {
@@ -687,7 +687,7 @@ describe("useChatFlow stream isolation", () => {
     await sendPromise;
 
     expect(latestAssistantText.value).toBe("");
-    expect(onReloadMessages).toHaveBeenCalledTimes(1);
+    expect(onReloadMessages).toHaveBeenCalledTimes(0);
     expect(chatting.value).toBe(false);
   });
 });

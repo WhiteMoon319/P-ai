@@ -14,12 +14,12 @@ describe("remote im helpers", () => {
     ]);
   });
 
-  it("treats receive-only legacy contacts as enabled in the merged communication toggle", () => {
-    expect(contactCommunicationToggleEnabled({ allowReceive: true, allowSend: false })).toBe(true);
-    expect(contactCommunicationToggleClass({ allowReceive: true, allowSend: false })).toBe("toggle-success");
+  it("treats receive-only legacy contacts as disabled in the merged communication toggle", () => {
+    expect(contactCommunicationToggleEnabled({ allowReceive: true, allowSend: false })).toBe(false);
+    expect(contactCommunicationToggleClass({ allowReceive: true, allowSend: false })).toBe("");
   });
 
-  it("marks the merged contact communication toggle enabled when either direction is on", () => {
+  it("marks the merged contact communication toggle enabled when sending is on", () => {
     expect(contactCommunicationToggleEnabled({ allowReceive: true, allowSend: true })).toBe(true);
     expect(contactCommunicationToggleClass({ allowReceive: true, allowSend: true })).toBe("toggle-success");
     expect(contactCommunicationToggleEnabled({ allowReceive: false, allowSend: true })).toBe(true);

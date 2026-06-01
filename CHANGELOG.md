@@ -2,6 +2,8 @@
 
 ## 未发布
 
+## 发布：v0.10.14
+
 - 重构（persistence）：会话总索引（花名册）不再落盘为 `chat_index.json`，改为进程内由各会话分片 `meta.json` 派生的内存态；启动时扫描分片重建（含旧 `app_data.json` 回退），运行期随会话增删改做 O(1) 内存更新。移除读路径对账自愈、`include_chat_index` 开关与 `cached_chat_index_mtime`/`cached_chat_index_dirty`/索引修复门等冗余机制，消除索引与会话本体漂移导致的"自愈频繁触发"。
 - 修复（persistence）：工具结果直写路径与后台持久化 worker 统一经 `app_data_persist_write_lock` 串行落盘，worker 在写锁临界区内复核 dirty 集合跳过已直写会话，消除写-写竞态与旧快照覆盖（lost update）。
 - 修复（persistence）：退出/重启前同步排空待持久化队列，避免 120ms 去抖窗口内的会话/应用数据写入随进程退出丢失。
