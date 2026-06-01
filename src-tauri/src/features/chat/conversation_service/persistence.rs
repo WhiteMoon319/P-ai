@@ -93,6 +93,19 @@ impl ConversationService {
         state_schedule_conversation_persist(state, conversation).map(|_| ())
     }
 
+    fn sync_conversation_metadata_from_snapshot(
+        &self,
+        state: &AppState,
+        conversation: &Conversation,
+    ) -> Result<Conversation, String> {
+        let (conversation, (), _) =
+            state_update_conversation_metadata_cached(state, &conversation.id, |cached| {
+                preserve_field_level_conversation_metadata(cached, conversation);
+                Ok(())
+            })?;
+        Ok(conversation)
+    }
+
     fn set_conversation_preferred_api_config_id(
         &self,
         state: &AppState,

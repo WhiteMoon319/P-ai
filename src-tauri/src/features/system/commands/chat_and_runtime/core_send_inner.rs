@@ -2472,14 +2472,8 @@ async fn send_chat_message_inner(
                     for memory_id in &recall_payload.raw_ids {
                         conversation.memory_recall_table.push(memory_id.clone());
                     }
-                    state_update_conversation_metadata_cached(
-                        &state,
-                        &conversation.id,
-                        |cached| {
-                            cached.memory_recall_table = conversation.memory_recall_table.clone();
-                            Ok(())
-                        },
-                    )?;
+                    conversation_service()
+                        .sync_conversation_metadata_from_snapshot(&state, &conversation)?;
                     conversation_service().persist_conversation(
                         &state,
                         &conversation,
@@ -3282,16 +3276,8 @@ async fn send_chat_message_inner(
                         assistant_message,
                         &now,
                     ));
-                    state_update_conversation_metadata_cached(
-                        &state,
-                        &conversation.id,
-                        |cached| {
-                            cached.unread_count = conversation.unread_count;
-                            cached.updated_at = conversation.updated_at.clone();
-                            cached.last_assistant_at = conversation.last_assistant_at.clone();
-                            Ok(())
-                        },
-                    )?;
+                    conversation_service()
+                        .sync_conversation_metadata_from_snapshot(&state, &conversation)?;
                 }
                 conversation_service().persist_conversation(
                     &state,
