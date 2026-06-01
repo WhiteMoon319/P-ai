@@ -1124,6 +1124,17 @@ fn execute_rewind_conversation_mutation_on_conversation(
     maybe_undo_rewind_apply_patch(state, input, &removed_messages, message_id, started_at)?;
     let (removed_count, remaining_count, current_todo, current_todos) =
         persist_rewind_conversation_state(conversation, remove_from)?;
+    state_update_conversation_metadata_cached(
+        state,
+        &conversation.id,
+        |cached| {
+            cached.current_todos = conversation.current_todos.clone();
+            cached.updated_at = conversation.updated_at.clone();
+            cached.last_user_at = conversation.last_user_at.clone();
+            cached.last_assistant_at = conversation.last_assistant_at.clone();
+            Ok(())
+        },
+    )?;
     Ok(RewindConversationMutationResult {
         conversation_id: conversation.id.clone(),
         removed_count,

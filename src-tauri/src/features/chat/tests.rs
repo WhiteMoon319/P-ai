@@ -3459,6 +3459,16 @@
                 Some(now.clone()),
             )
             .expect("set lifecycle metadata");
+        conversation_service()
+            .set_conversation_current_todos_metadata(
+                &state,
+                &conversation.id,
+                vec![ConversationTodoItem {
+                    content: "字段级 todo".to_string(),
+                    status: "in_progress".to_string(),
+                }],
+            )
+            .expect("set todos metadata");
 
         let mut stale_full_snapshot = conversation.clone();
         stale_full_snapshot.title = "过期标题".to_string();
@@ -3466,6 +3476,7 @@
         stale_full_snapshot.shell_autonomous_mode = false;
         stale_full_snapshot.status = "active".to_string();
         stale_full_snapshot.archived_at = None;
+        stale_full_snapshot.current_todos = Vec::new();
         stale_full_snapshot.messages.push(test_text_message("user", "hello", &now));
         stale_full_snapshot.updated_at = now.clone();
         state_schedule_conversation_persist(&state, &stale_full_snapshot)
@@ -3485,6 +3496,8 @@
         assert!(cached.shell_autonomous_mode);
         assert_eq!(cached.status, "archived");
         assert_eq!(cached.archived_at.as_deref(), Some(now.as_str()));
+        assert_eq!(cached.current_todos.len(), 1);
+        assert_eq!(cached.current_todos[0].content, "字段级 todo");
         assert_eq!(cached.messages.len(), 1);
     }
 

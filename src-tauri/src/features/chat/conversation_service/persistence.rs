@@ -198,6 +198,32 @@ impl ConversationService {
         Ok(conversation)
     }
 
+    fn set_conversation_current_todos_metadata(
+        &self,
+        state: &AppState,
+        conversation_id: &str,
+        current_todos: Vec<ConversationTodoItem>,
+    ) -> Result<Conversation, String> {
+        let normalized_conversation_id = conversation_id.trim();
+        if normalized_conversation_id.is_empty() {
+            return Err("conversationId is required.".to_string());
+        }
+        let guard = state
+            .conversation_lock
+            .lock()
+            .map_err(|err| format!("Failed to lock state mutex at {}:{} {}: {err}", file!(), line!(), module_path!()))?;
+        let (conversation, (), _) = state_update_conversation_metadata_cached(
+            state,
+            normalized_conversation_id,
+            |conversation| {
+                conversation.current_todos = current_todos;
+                Ok(())
+            },
+        )?;
+        drop(guard);
+        Ok(conversation)
+    }
+
     fn set_conversation_shell_workspace_metadata(
         &self,
         state: &AppState,
@@ -344,7 +370,7 @@ impl ConversationService {
             .conversation_lock
             .lock()
             .map_err(|err| format!("Failed to lock state mutex at {}:{} {}: {err}", file!(), line!(), module_path!()))?;
-        let mut conversation = match state_read_conversation_cached(state, normalized_conversation_id) {
+        let conversation = match state_read_conversation_cached(state, normalized_conversation_id) {
             Ok(conversation) => conversation,
             Err(err) => {
                 runtime_log_debug(format!(
@@ -363,10 +389,13 @@ impl ConversationService {
             drop(guard);
             return Ok(None);
         }
-        conversation.current_todos = stored_todos.to_vec();
-        let current_todo = conversation_current_todo_text(&conversation);
-        state_schedule_conversation_persist(state, &conversation)?;
         drop(guard);
+        let updated = self.set_conversation_current_todos_metadata(
+            state,
+            normalized_conversation_id,
+            stored_todos.to_vec(),
+        )?;
+        let current_todo = conversation_current_todo_text(&updated);
         Ok(Some(ConversationTodosUpdateResult { current_todo }))
     }
 }

@@ -586,6 +586,7 @@ fn preserve_field_level_conversation_metadata(
     target.status = source.status.clone();
     target.summary = source.summary.clone();
     target.archived_at = source.archived_at.clone();
+    target.current_todos = source.current_todos.clone();
     target.plan_mode_enabled = source.plan_mode_enabled;
     target.preferred_api_config_id = source.preferred_api_config_id.clone();
 }
