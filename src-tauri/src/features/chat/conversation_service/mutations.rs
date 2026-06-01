@@ -949,6 +949,7 @@ impl ConversationService {
             target_conversation_id,
             |conversation| {
                 conversation.unread_count = target_conversation.unread_count;
+                conversation.status = target_conversation.status.clone();
                 Ok(())
             },
         )?;

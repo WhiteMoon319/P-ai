@@ -3449,11 +3449,23 @@
                 Some(true),
             )
             .expect("set workspace metadata");
+        conversation_service()
+            .set_conversation_lifecycle_metadata(
+                &state,
+                &conversation.id,
+                Some("archived"),
+                Some(""),
+                Some(Some(now.clone())),
+                Some(now.clone()),
+            )
+            .expect("set lifecycle metadata");
 
         let mut stale_full_snapshot = conversation.clone();
         stale_full_snapshot.title = "过期标题".to_string();
         stale_full_snapshot.shell_workspace_path = None;
         stale_full_snapshot.shell_autonomous_mode = false;
+        stale_full_snapshot.status = "active".to_string();
+        stale_full_snapshot.archived_at = None;
         stale_full_snapshot.messages.push(test_text_message("user", "hello", &now));
         stale_full_snapshot.updated_at = now.clone();
         state_schedule_conversation_persist(&state, &stale_full_snapshot)
@@ -3471,6 +3483,8 @@
             Some(state.llm_workspace_path.to_string_lossy().as_ref())
         );
         assert!(cached.shell_autonomous_mode);
+        assert_eq!(cached.status, "archived");
+        assert_eq!(cached.archived_at.as_deref(), Some(now.as_str()));
         assert_eq!(cached.messages.len(), 1);
     }
 

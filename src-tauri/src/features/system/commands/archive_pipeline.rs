@@ -2003,10 +2003,14 @@ async fn run_archive_pipeline_inner(
     }
     let previous_status = archived_conversation.status.clone();
     let now = now_iso();
-    archived_conversation.status = "archived".to_string();
-    archived_conversation.summary.clear();
-    archived_conversation.archived_at = Some(now.clone());
-    archived_conversation.updated_at = now;
+    archived_conversation = conversation_service().set_conversation_lifecycle_metadata(
+        state,
+        &source.id,
+        Some("archived"),
+        Some(""),
+        Some(Some(now.clone())),
+        Some(now),
+    )?;
     let archive_id = archived_conversation.id.clone();
     eprintln!(
         "[会话] 已归档: conversation_id={}, previous_status={}, reason=\"{}\"",
@@ -2035,7 +2039,6 @@ async fn run_archive_pipeline_inner(
             }
         })
         .ok_or_else(|| "归档后未能确定当前前台会话。".to_string())?;
-    state_schedule_conversation_persist(state, &archived_conversation)?;
     match delegate_runtime_thread_conversation_delete_by_root(state, &source.id) {
         Ok(deleted_count) => runtime_log_info(format!(
             "[委托会话] 完成，任务=随会话归档级联清理，root_conversation_id={}，deleted_count={}",

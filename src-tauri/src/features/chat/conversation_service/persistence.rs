@@ -244,6 +244,48 @@ impl ConversationService {
         Ok(conversation)
     }
 
+    fn set_conversation_lifecycle_metadata(
+        &self,
+        state: &AppState,
+        conversation_id: &str,
+        status: Option<&str>,
+        summary: Option<&str>,
+        archived_at: Option<Option<String>>,
+        updated_at: Option<String>,
+    ) -> Result<Conversation, String> {
+        let normalized_conversation_id = conversation_id.trim();
+        if normalized_conversation_id.is_empty() {
+            return Err("conversationId is required.".to_string());
+        }
+        let normalized_status = status.map(|value| value.trim().to_string());
+        let next_summary = summary.map(ToOwned::to_owned);
+        let guard = state
+            .conversation_lock
+            .lock()
+            .map_err(|err| format!("Failed to lock state mutex at {}:{} {}: {err}", file!(), line!(), module_path!()))?;
+        let (conversation, (), _) = state_update_conversation_metadata_cached(
+            state,
+            normalized_conversation_id,
+            |conversation| {
+                if let Some(value) = normalized_status {
+                    conversation.status = value;
+                }
+                if let Some(value) = next_summary {
+                    conversation.summary = value;
+                }
+                if let Some(value) = archived_at {
+                    conversation.archived_at = value;
+                }
+                if let Some(value) = updated_at {
+                    conversation.updated_at = value;
+                }
+                Ok(())
+            },
+        )?;
+        drop(guard);
+        Ok(conversation)
+    }
+
     fn append_tool_call_result_pair(
         &self,
         state: &AppState,
