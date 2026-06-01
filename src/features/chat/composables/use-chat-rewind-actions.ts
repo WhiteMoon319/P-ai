@@ -23,6 +23,7 @@ type UseChatRewindActionsOptions = {
   chatting: Ref<boolean>;
   trimming: Ref<boolean>;
   compactingConversation: Ref<boolean>;
+  chatErrorText: Ref<string>;
   chatInput: Ref<string>;
   selectedMentions: Ref<ChatMentionTarget[]>;
   clipboardImages: Ref<Array<{ mime: string; bytesBase64: string; savedPath?: string }>>;
@@ -34,8 +35,6 @@ type UseChatRewindActionsOptions = {
   messageText: (message: ChatMessage) => string;
   extractMessageImages: (message: ChatMessage) => Array<{ mime: string; bytesBase64?: string; mediaRef?: string }>;
   requestRecallMode: (payload: { turnId: string }) => Promise<RecallConfirmMode>;
-  stopChat: () => Promise<void> | void;
-  clearForegroundRuntimeState: () => void;
 };
 
 export function useChatRewindActions(options: UseChatRewindActionsOptions) {
@@ -109,24 +108,6 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
       }
     }
     return null;
-  }
-
-  async function interruptConversationRuntimeForRewind() {
-    const agentId = String(options.activeAgentId.value || "").trim();
-    const conversationId = String(options.currentConversationId.value || "").trim();
-    if (!agentId || !conversationId) return;
-    try {
-      await options.stopChat();
-    } catch {
-      // Continue with backend cleanup even if local stopChat coordination fails.
-    }
-    await invokeTauri("interrupt_conversation_runtime", {
-      session: {
-        apiConfigId: String(options.activeApiConfigId.value || "").trim() || null,
-        agentId,
-        conversationId,
-      },
-    });
   }
 
   async function rewindConversationFromTurn(turnId: string, undoApplyPatch: boolean): Promise<ChatMessage | null> {
@@ -227,23 +208,26 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
       trimming: options.trimming.value,
       compactingConversation: options.compactingConversation.value,
     });
-    if (options.trimming.value || options.compactingConversation.value) {
-      console.info("[会话撤回] 跳过：当前会话处于忙碌状态", {
+    if (options.chatting.value || options.trimming.value || options.compactingConversation.value) {
+      const message = "当前会话正在运行或整理上下文，完成后再撤回。";
+      console.info("[会话撤回] 失败：当前会话处于忙碌状态", {
         turnId: payload?.turnId,
+        chatting: options.chatting.value,
         trimming: options.trimming.value,
         compactingConversation: options.compactingConversation.value,
       });
+      options.setChatErrorText(`撤回失败：${message}`);
+      options.setStatusError("status.rewindConversationFailed", message);
       return;
     }
     const mode = await options.requestRecallMode({ turnId: payload.turnId });
     console.info("[会话撤回] 弹窗选择结果", { mode, turnId: payload.turnId });
     if (mode === "cancel") return;
-    options.clearForegroundRuntimeState();
     options.setChatErrorText("");
-    await interruptConversationRuntimeForRewind();
     const recalledUserMessage = await rewindConversationFromTurn(payload.turnId, mode === "with_patch");
     if (!recalledUserMessage) {
       console.warn("[会话撤回] 结束：未拿到可回填消息", { turnId: payload.turnId, mode });
+      if (options.chatErrorText.value.trim()) return;
       const message = mode === "with_patch"
         ? "撤回失败：文件状况改变，修改工具不可逆，请选择仅撤回"
         : "撤回失败：未找到可回填的用户消息";
@@ -263,9 +247,12 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
   }
 
   async function handleRegenerateTurn(payload: { turnId: string }) {
-    if (options.trimming.value || options.compactingConversation.value) return;
-    options.clearForegroundRuntimeState();
-    await interruptConversationRuntimeForRewind();
+    if (options.chatting.value || options.trimming.value || options.compactingConversation.value) {
+      const message = "当前会话正在运行或整理上下文，完成后再重新生成。";
+      options.setChatErrorText(`重新生成失败：${message}`);
+      options.setStatusError("status.rewindConversationFailed", message);
+      return;
+    }
     const recalledUserMessage = await rewindConversationFromTurn(payload.turnId, false);
     if (!recalledUserMessage) return;
     options.chatInput.value = options.removeBinaryPlaceholders(options.messageText(recalledUserMessage));

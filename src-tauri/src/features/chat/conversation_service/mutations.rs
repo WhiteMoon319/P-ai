@@ -447,6 +447,21 @@ impl ConversationService {
             drop(guard);
             return Err("Target user message not found in active conversation.".to_string());
         }
+        let runtime_state = get_conversation_runtime_state(state, &conversation_id)?;
+        if runtime_state != MainSessionState::Idle {
+            let runtime_state_text = match runtime_state {
+                MainSessionState::Idle => "空闲",
+                MainSessionState::AssistantStreaming => "助理流式输出",
+                MainSessionState::OrganizingContext => "整理上下文",
+            };
+            drop(guard);
+            runtime_log_info(format!(
+                "[会话撤回] 失败，任务=rewind_conversation_from_message，conversation_id={}，原因=会话运行中，runtime_state={}",
+                conversation_id,
+                runtime_state_text
+            ));
+            return Err("当前会话正在运行或整理上下文，完成后再撤回。".to_string());
+        }
         hydrate_rewind_conversation_messages_from_store(state, &mut conversation)?;
         let result = execute_rewind_conversation_mutation_on_conversation(
             state,

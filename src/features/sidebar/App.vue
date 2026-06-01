@@ -1245,7 +1245,11 @@ function resolveRewindTargetUserMessage(turnId: string): { targetUserMessageId: 
 }
 
 async function recallTurn(payload: { turnId: string }) {
-  if (!activeConversationId.value || compacting.value) return;
+  if (!activeConversationId.value) return;
+  if (busy.value || compacting.value) {
+    transport.errorText.value = "撤回失败：当前会话正在运行或整理上下文，完成后再撤回。";
+    return;
+  }
   const target = resolveRewindTargetUserMessage(payload.turnId);
   if (!target?.targetUserMessageId) {
     transport.errorText.value = "撤回失败：未找到可撤回的用户消息";
@@ -1253,8 +1257,6 @@ async function recallTurn(payload: { turnId: string }) {
   }
   const mode = await requestRecallMode(target.keepCount);
   if (mode === "cancel") return;
-  if (busy.value) await stop();
-  clearStreamingState();
   try {
     const result = await transport.request<RewindConversationResult>("conversation.rewind", {
       conversationId: activeConversationId.value,
@@ -1262,6 +1264,7 @@ async function recallTurn(payload: { turnId: string }) {
       messageId: target.targetUserMessageId,
       undoApplyPatch: mode === "with_patch",
     });
+    clearStreamingState();
     const recalled = result.recalledUserMessage || messages.value[target.keepCount];
     inputText.value = recalled ? removeBinaryPlaceholders(messageText(recalled)) : inputText.value;
     if (result.conversation) {

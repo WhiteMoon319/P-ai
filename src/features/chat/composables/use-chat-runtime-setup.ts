@@ -199,6 +199,7 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
       chatting: bindings.chatting,
       trimming: bindings.trimming,
       compactingConversation: bindings.compactingConversation,
+      chatErrorText: bindings.chatErrorText,
       chatInput: bindings.chatInput,
       selectedMentions: bindings.selectedChatMentions,
       clipboardImages: bindings.clipboardImages,
@@ -212,8 +213,6 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
       messageText: bindings.messageText,
       extractMessageImages: bindings.extractMessageImages,
       requestRecallMode: bindings.requestRecallMode,
-      stopChat: chatFlow.stopChat,
-      clearForegroundRuntimeState: chatFlow.clearForegroundRuntimeState,
   });
 
   chatFlowRef = chatFlow;

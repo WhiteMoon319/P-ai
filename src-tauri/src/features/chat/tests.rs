@@ -3742,6 +3742,127 @@
         );
     }
 
+    fn setup_rewind_busy_test_conversation(
+        conversation_id: &str,
+    ) -> (AppState, RewindConversationInput, String) {
+        let state = test_chat_runtime_state();
+        write_config(&state.config_path, &AppConfig::default()).expect("write config");
+        let now = now_iso();
+        let mut first_user = test_text_message("user", "第一句", &now);
+        first_user.id = "user-1".to_string();
+        let mut first_assistant = test_text_message("assistant", "第一句回复", &now);
+        first_assistant.id = "assistant-1".to_string();
+        let mut recalled_user = test_text_message("user", "需要撤回", &now);
+        recalled_user.id = "user-2".to_string();
+        let mut trailing_assistant = test_text_message("assistant", "后续回复", &now);
+        trailing_assistant.id = "assistant-2".to_string();
+        let mut conversation = build_conversation_record(
+            "",
+            DEFAULT_AGENT_ID,
+            ASSISTANT_DEPARTMENT_ID,
+            "撤回忙碌态测试",
+            CONVERSATION_KIND_CHAT,
+            None,
+            None,
+        );
+        conversation.id = conversation_id.to_string();
+        conversation.status = "active".to_string();
+        conversation.messages = vec![
+            first_user,
+            first_assistant,
+            recalled_user.clone(),
+            trailing_assistant,
+        ];
+        state_schedule_conversation_persist(&state, &conversation, true)
+            .expect("persist conversation");
+        let store_paths =
+            message_store::message_store_paths(&state.data_path, &conversation.id)
+                .expect("message store paths");
+        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
+            .expect("write message store");
+        let input = RewindConversationInput {
+            session: SessionSelector {
+                api_config_id: None,
+                department_id: Some(ASSISTANT_DEPARTMENT_ID.to_string()),
+                agent_id: DEFAULT_AGENT_ID.to_string(),
+                conversation_id: Some(conversation.id.clone()),
+            },
+            message_id: recalled_user.id.clone(),
+            undo_apply_patch: false,
+        };
+        (state, input, recalled_user.id)
+    }
+
+    #[test]
+    fn rewind_conversation_should_fail_without_mutation_while_assistant_streaming() {
+        let (state, input, recalled_user_id) =
+            setup_rewind_busy_test_conversation("conversation-rewind-streaming");
+        set_conversation_runtime_state(
+            &state,
+            "conversation-rewind-streaming",
+            MainSessionState::AssistantStreaming,
+        )
+        .expect("set runtime state");
+
+        let result = conversation_service().rewind_conversation_from_message(
+            &state,
+            &input,
+            DEFAULT_AGENT_ID,
+            &recalled_user_id,
+            &std::time::Instant::now(),
+        );
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .err()
+                .unwrap_or_default()
+                .contains("当前会话正在运行或整理上下文")
+        );
+        let cached = state_read_conversation_cached(&state, "conversation-rewind-streaming")
+            .expect("read cached conversation");
+        assert_eq!(cached.messages.len(), 4);
+        let store_paths =
+            message_store::message_store_paths(&state.data_path, "conversation-rewind-streaming")
+                .expect("message store paths");
+        let stored = message_store::read_ready_message_store_all_messages(&store_paths)
+            .expect("read message store")
+            .expect("message store exists");
+        assert_eq!(stored.len(), 4);
+    }
+
+    #[test]
+    fn rewind_conversation_should_fail_without_mutation_while_organizing_context() {
+        let (state, input, recalled_user_id) =
+            setup_rewind_busy_test_conversation("conversation-rewind-organizing");
+        set_conversation_runtime_state(
+            &state,
+            "conversation-rewind-organizing",
+            MainSessionState::OrganizingContext,
+        )
+        .expect("set runtime state");
+
+        let result = conversation_service().rewind_conversation_from_message(
+            &state,
+            &input,
+            DEFAULT_AGENT_ID,
+            &recalled_user_id,
+            &std::time::Instant::now(),
+        );
+
+        assert!(result.is_err());
+        let cached = state_read_conversation_cached(&state, "conversation-rewind-organizing")
+            .expect("read cached conversation");
+        assert_eq!(cached.messages.len(), 4);
+        let store_paths =
+            message_store::message_store_paths(&state.data_path, "conversation-rewind-organizing")
+                .expect("message store paths");
+        let stored = message_store::read_ready_message_store_all_messages(&store_paths)
+            .expect("read message store")
+            .expect("message store exists");
+        assert_eq!(stored.len(), 4);
+    }
+
     #[test]
     fn scheduler_should_allow_two_conversations_to_run_in_parallel() {
         let state = test_chat_runtime_state();
