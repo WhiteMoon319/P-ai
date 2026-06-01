@@ -3334,6 +3334,126 @@
     }
 
     #[test]
+    fn set_conversation_preferred_model_should_schedule_meta_only_persist() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let conversation = test_chat_conversation("conversation-meta-only-model", "active", &now);
+        write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
+        state_mark_conversation_direct_persisted(&state, &conversation)
+            .expect("mark persisted");
+
+        let updated = conversation_service()
+            .set_conversation_preferred_api_config_id(
+                &state,
+                &conversation.id,
+                Some("api-model-b".to_string()),
+            )
+            .expect("set preferred model");
+
+        assert_eq!(
+            updated.preferred_api_config_id.as_deref(),
+            Some("api-model-b")
+        );
+        let pending = state
+            .conversation_persist_pending
+            .lock()
+            .expect("lock pending");
+        let pending = pending.as_ref().expect("pending meta persist");
+        assert!(pending.conversations.is_empty());
+        assert!(pending.metadata_conversation_ids.contains(&conversation.id));
+        assert!(!pending.deleted_conversation_ids.contains(&conversation.id));
+    }
+
+    #[test]
+    fn set_conversation_preferred_model_should_update_existing_full_pending_snapshot() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let conversation = test_chat_conversation("conversation-pending-model", "active", &now);
+        state_schedule_conversation_persist(&state, &conversation).expect("schedule full persist");
+
+        conversation_service()
+            .set_conversation_preferred_api_config_id(
+                &state,
+                &conversation.id,
+                Some("api-model-c".to_string()),
+            )
+            .expect("set preferred model");
+
+        let pending = state
+            .conversation_persist_pending
+            .lock()
+            .expect("lock pending");
+        let pending = pending.as_ref().expect("pending full persist");
+        assert!(pending.metadata_conversation_ids.is_empty());
+        assert_eq!(
+            pending
+                .conversations
+                .get(&conversation.id)
+                .and_then(|item| item.preferred_api_config_id.as_deref()),
+            Some("api-model-c")
+        );
+    }
+
+    #[test]
+    fn flush_pending_persists_should_write_meta_only_preferred_model() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let conversation = test_chat_conversation("conversation-flush-meta-model", "active", &now);
+        write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
+        state_mark_conversation_direct_persisted(&state, &conversation)
+            .expect("mark persisted");
+        conversation_service()
+            .set_conversation_preferred_api_config_id(
+                &state,
+                &conversation.id,
+                Some("api-model-flush".to_string()),
+            )
+            .expect("set preferred model");
+
+        let wrote = flush_pending_persists_blocking(&state).expect("flush pending");
+        let restored = read_conversation_shard(&state.data_path, &conversation.id)
+            .expect("read restored conversation");
+
+        assert!(wrote);
+        assert_eq!(
+            restored.preferred_api_config_id.as_deref(),
+            Some("api-model-flush")
+        );
+        assert!(restored.messages.is_empty());
+    }
+
+    #[test]
+    fn state_schedule_conversation_persist_should_preserve_field_level_model_metadata() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let conversation = test_chat_conversation("conversation-preserve-model", "active", &now);
+        write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
+        state_mark_conversation_direct_persisted(&state, &conversation)
+            .expect("mark persisted");
+        conversation_service()
+            .set_conversation_preferred_api_config_id(
+                &state,
+                &conversation.id,
+                Some("api-model-d".to_string()),
+            )
+            .expect("set preferred model");
+
+        let mut stale_full_snapshot = conversation.clone();
+        stale_full_snapshot.messages.push(test_text_message("user", "hello", &now));
+        stale_full_snapshot.updated_at = now.clone();
+        state_schedule_conversation_persist(&state, &stale_full_snapshot)
+            .expect("schedule stale full persist");
+
+        let cached = state_read_conversation_cached(&state, &conversation.id)
+            .expect("read cached conversation");
+        assert_eq!(
+            cached.preferred_api_config_id.as_deref(),
+            Some("api-model-d")
+        );
+        assert_eq!(cached.messages.len(), 1);
+    }
+
+    #[test]
     fn state_mark_conversation_direct_persisted_should_update_memory_chat_index_only() {
         let state = test_chat_runtime_state();
         let now = now_iso();

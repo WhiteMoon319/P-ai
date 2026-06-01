@@ -167,15 +167,11 @@ fn set_conversation_preferred_model(
         }
     }
 
-    {
-        let _guard = state
-            .conversation_lock
-            .lock()
-            .map_err(|err| format!("Failed to lock state mutex at {}:{} {}: {err}", file!(), line!(), module_path!()))?;
-        let mut conversation = state_read_conversation_cached(state.inner(), conversation_id)?;
-        conversation.preferred_api_config_id = preferred_api_config_id.clone();
-        state_write_conversation_meta_cached(state.inner(), &conversation)?;
-    }
+    conversation_service().set_conversation_preferred_api_config_id(
+        state.inner(),
+        conversation_id,
+        preferred_api_config_id.clone(),
+    )?;
     let overview_payload =
         conversation_service().refresh_unarchived_conversation_overview_payload(state.inner())?;
     emit_unarchived_conversation_overview_updated_payload(state.inner(), &overview_payload);

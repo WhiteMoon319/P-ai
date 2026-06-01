@@ -1481,6 +1481,11 @@ pub(crate) fn set_conversation_plan_mode_enabled(
     conversation_id: &str,
     enabled: bool,
 ) -> Result<(), String> {
+    conversation_service().set_conversation_plan_mode_enabled_metadata(
+        state,
+        conversation_id,
+        enabled,
+    )?;
     let normalized_conversation_id = conversation_id.trim();
     let mut slots = lock_conversation_runtime_slots(state)?;
     let slot = conversation_slot_mut(&mut slots, normalized_conversation_id);

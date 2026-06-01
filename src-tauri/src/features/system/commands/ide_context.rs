@@ -1769,15 +1769,11 @@ fn ide_chat_select_model(state: &AppState, _app: &AppHandle, params: Value) -> R
         }
         Some(api_config_id.to_string())
     };
-    {
-        let _guard = state
-            .conversation_lock
-            .lock()
-            .map_err(|err| format!("Failed to lock state mutex at {}:{} {}: {err}", file!(), line!(), module_path!()))?;
-        let mut conversation = state_read_conversation_cached(state, conversation_id)?;
-        conversation.preferred_api_config_id = preferred_api_config_id;
-        state_write_conversation_meta_cached(state, &conversation)?;
-    }
+    conversation_service().set_conversation_preferred_api_config_id(
+        state,
+        conversation_id,
+        preferred_api_config_id,
+    )?;
     let overview_payload = conversation_service().refresh_unarchived_conversation_overview_payload(state)?;
     emit_unarchived_conversation_overview_updated_payload(state, &overview_payload);
     let updated_conversation = state_read_conversation_cached(state, conversation_id)?;

@@ -93,6 +93,58 @@ impl ConversationService {
         state_schedule_conversation_persist(state, conversation).map(|_| ())
     }
 
+    fn set_conversation_preferred_api_config_id(
+        &self,
+        state: &AppState,
+        conversation_id: &str,
+        preferred_api_config_id: Option<String>,
+    ) -> Result<Conversation, String> {
+        let normalized_conversation_id = conversation_id.trim();
+        if normalized_conversation_id.is_empty() {
+            return Err("conversationId is required.".to_string());
+        }
+        let guard = state
+            .conversation_lock
+            .lock()
+            .map_err(|err| format!("Failed to lock state mutex at {}:{} {}: {err}", file!(), line!(), module_path!()))?;
+        let (conversation, (), _) = state_update_conversation_metadata_cached(
+            state,
+            normalized_conversation_id,
+            |conversation| {
+                conversation.preferred_api_config_id = preferred_api_config_id.clone();
+                Ok(())
+            },
+        )?;
+        drop(guard);
+        Ok(conversation)
+    }
+
+    fn set_conversation_plan_mode_enabled_metadata(
+        &self,
+        state: &AppState,
+        conversation_id: &str,
+        enabled: bool,
+    ) -> Result<Conversation, String> {
+        let normalized_conversation_id = conversation_id.trim();
+        if normalized_conversation_id.is_empty() {
+            return Err("conversationId is required.".to_string());
+        }
+        let guard = state
+            .conversation_lock
+            .lock()
+            .map_err(|err| format!("Failed to lock state mutex at {}:{} {}: {err}", file!(), line!(), module_path!()))?;
+        let (conversation, (), _) = state_update_conversation_metadata_cached(
+            state,
+            normalized_conversation_id,
+            |conversation| {
+                conversation.plan_mode_enabled = enabled;
+                Ok(())
+            },
+        )?;
+        drop(guard);
+        Ok(conversation)
+    }
+
     fn append_tool_call_result_pair(
         &self,
         state: &AppState,

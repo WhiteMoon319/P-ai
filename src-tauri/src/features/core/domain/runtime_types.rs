@@ -91,6 +91,7 @@ struct PendingAppDataPersist {
 struct PendingConversationPersist {
     seq: u64,
     conversations: std::collections::HashMap<String, Conversation>,
+    metadata_conversation_ids: std::collections::HashSet<String>,
     deleted_conversation_ids: std::collections::HashSet<String>,
 }
 

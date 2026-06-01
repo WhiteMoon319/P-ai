@@ -326,8 +326,11 @@ fn state_mark_conversation_direct_persisted(
             .map_err(|_| "Failed to lock pending conversation persist".to_string())?;
         let should_clear_slot = if let Some(slot) = pending.as_mut() {
             slot.conversations.remove(&conversation.id);
+            slot.metadata_conversation_ids.remove(&conversation.id);
             slot.deleted_conversation_ids.remove(&conversation.id);
-            slot.conversations.is_empty() && slot.deleted_conversation_ids.is_empty()
+            slot.conversations.is_empty()
+                && slot.metadata_conversation_ids.is_empty()
+                && slot.deleted_conversation_ids.is_empty()
         } else {
             false
         };
@@ -335,23 +338,27 @@ fn state_mark_conversation_direct_persisted(
             *pending = None;
         }
     }
-    sync_cached_app_data_conversation(state, conversation)?;
-    state_upsert_chat_index_conversation_cached(state, conversation)?;
+    sync_cached_app_data_conversation(state, &conversation)?;
+    state_upsert_chat_index_conversation_cached(state, &conversation)?;
     refresh_cached_app_data_dirty(state);
     Ok(())
 }
 
-fn state_write_conversation_meta_cached(
+fn state_update_conversation_metadata_cached<T>(
     state: &AppState,
-    conversation: &Conversation,
-) -> Result<(), String> {
-    {
-        let _write_guard = state
-            .app_data_persist_write_lock
-            .lock()
-            .map_err(|_| "Failed to lock app data persist write lock".to_string())?;
-        write_conversation_meta_shard(&state.data_path, conversation)?;
+    conversation_id: &str,
+    updater: impl FnOnce(&mut Conversation) -> Result<T, String>,
+) -> Result<(Conversation, T, u64), String> {
+    let normalized_conversation_id = conversation_id.trim();
+    if normalized_conversation_id.is_empty() {
+        return Err("Conversation id is empty".to_string());
     }
+    let mut conversation = state_read_conversation_cached(state, normalized_conversation_id)?;
+    let result = updater(&mut conversation)?;
+    let seq = state
+        .conversation_persist_latest_seq
+        .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
+        + 1;
     let disk_mtime = conversation_shard_modified_time(&state.data_path, &conversation.id);
     {
         let mut cached = state
@@ -375,21 +382,37 @@ fn state_write_conversation_meta_cached(
         deleted_ids.remove(&conversation.id);
     }
     {
+        let mut dirty_ids = state
+            .cached_conversation_dirty_ids
+            .lock()
+            .map_err(|_| "Failed to lock cached conversation dirty ids".to_string())?;
+        dirty_ids.insert(conversation.id.clone());
+    }
+    {
         let mut pending = state
             .conversation_persist_pending
             .lock()
             .map_err(|_| "Failed to lock pending conversation persist".to_string())?;
-        if let Some(slot) = pending.as_mut() {
-            if slot.conversations.contains_key(&conversation.id) {
-                slot.conversations
-                    .insert(conversation.id.clone(), conversation.clone());
-            }
+        let slot = pending.get_or_insert_with(|| PendingConversationPersist {
+            seq,
+            conversations: std::collections::HashMap::new(),
+            metadata_conversation_ids: std::collections::HashSet::new(),
+            deleted_conversation_ids: std::collections::HashSet::new(),
+        });
+        slot.seq = seq;
+        if slot.conversations.contains_key(&conversation.id) {
+            slot.conversations
+                .insert(conversation.id.clone(), conversation.clone());
+        } else {
+            slot.metadata_conversation_ids.insert(conversation.id.clone());
         }
+        slot.deleted_conversation_ids.remove(&conversation.id);
     }
-    sync_cached_app_data_conversation(state, conversation)?;
-    state_upsert_chat_index_conversation_cached(state, conversation)?;
+    sync_cached_app_data_conversation(state, &conversation)?;
+    state_upsert_chat_index_conversation_cached(state, &conversation)?;
     refresh_cached_app_data_dirty(state);
-    Ok(())
+    state.conversation_persist_notify.notify_one();
+    Ok((conversation, result, seq))
 }
 
 fn has_pending_app_data_persist(state: &AppState) -> bool {
@@ -1049,13 +1072,19 @@ fn state_schedule_conversation_persist(
         .conversation_persist_latest_seq
         .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
         + 1;
+    let mut conversation_for_cache = conversation.clone();
     let conversation_disk_mtime = conversation_shard_modified_time(&state.data_path, &conversation.id);
     {
         let mut cached = state
             .cached_conversations
             .lock()
             .map_err(|_| "Failed to lock cached conversations".to_string())?;
-        cached.insert(conversation.id.clone(), conversation.clone());
+        if let Some(existing) = cached.get(&conversation.id) {
+            conversation_for_cache.preferred_api_config_id =
+                existing.preferred_api_config_id.clone();
+            conversation_for_cache.plan_mode_enabled = existing.plan_mode_enabled;
+        }
+        cached.insert(conversation.id.clone(), conversation_for_cache.clone());
     }
     {
         let mut cached_mtimes = state
@@ -1078,8 +1107,8 @@ fn state_schedule_conversation_persist(
             .map_err(|_| "Failed to lock cached deleted conversation ids".to_string())?;
         deleted_ids.remove(&conversation.id);
     }
-    sync_cached_app_data_conversation(state, conversation)?;
-    state_upsert_chat_index_conversation_cached(state, conversation)?;
+    sync_cached_app_data_conversation(state, &conversation_for_cache)?;
+    state_upsert_chat_index_conversation_cached(state, &conversation_for_cache)?;
 
     {
         let mut pending = state
@@ -1089,11 +1118,13 @@ fn state_schedule_conversation_persist(
         let slot = pending.get_or_insert_with(|| PendingConversationPersist {
             seq,
             conversations: std::collections::HashMap::new(),
+            metadata_conversation_ids: std::collections::HashSet::new(),
             deleted_conversation_ids: std::collections::HashSet::new(),
         });
         slot.seq = seq;
         slot.conversations
-            .insert(conversation.id.clone(), conversation.clone());
+            .insert(conversation.id.clone(), conversation_for_cache.clone());
+        slot.metadata_conversation_ids.remove(&conversation.id);
         slot.deleted_conversation_ids.remove(&conversation.id);
     }
     refresh_cached_app_data_dirty(state);
@@ -1152,10 +1183,13 @@ fn state_schedule_conversation_delete(
         let slot = pending.get_or_insert_with(|| PendingConversationPersist {
             seq,
             conversations: std::collections::HashMap::new(),
+            metadata_conversation_ids: std::collections::HashSet::new(),
             deleted_conversation_ids: std::collections::HashSet::new(),
         });
         slot.seq = seq;
         slot.conversations.remove(normalized_conversation_id);
+        slot.metadata_conversation_ids
+            .remove(normalized_conversation_id);
         slot.deleted_conversation_ids
             .insert(normalized_conversation_id.to_string());
     }
@@ -1223,8 +1257,30 @@ fn flush_pending_persists_blocking(state: &AppState) -> Result<bool, String> {
             write_conversation_shard(&state.data_path, &conversation_for_write)?;
             wrote_anything = true;
         }
+        for conversation_id in &pending.metadata_conversation_ids {
+            if pending.conversations.contains_key(conversation_id)
+                || pending.deleted_conversation_ids.contains(conversation_id)
+                || skip_directly_persisted.contains(conversation_id)
+            {
+                continue;
+            }
+            let Some(conversation_for_write) = ({
+                let cached = state
+                    .cached_conversations
+                    .lock()
+                    .map_err(|_| "Failed to lock cached conversations".to_string())?;
+                cached.get(conversation_id).cloned()
+            }) else {
+                continue;
+            };
+            write_conversation_meta_shard(&state.data_path, &conversation_for_write)?;
+            wrote_anything = true;
+        }
         if let Ok(mut dirty_ids) = state.cached_conversation_dirty_ids.lock() {
             for conversation_id in pending.conversations.keys() {
+                dirty_ids.remove(conversation_id);
+            }
+            for conversation_id in &pending.metadata_conversation_ids {
                 dirty_ids.remove(conversation_id);
             }
         }
@@ -1448,9 +1504,35 @@ fn start_conversation_persist_worker(state: &AppState) -> Result<(), String> {
                         };
                         write_conversation_shard(&data_path, &conversation_for_write)?;
                     }
+                    for conversation_id in &pending_for_write.metadata_conversation_ids {
+                        if pending_for_write.conversations.contains_key(conversation_id)
+                            || pending_for_write
+                                .deleted_conversation_ids
+                                .contains(conversation_id)
+                            || skip_directly_persisted.contains(conversation_id)
+                        {
+                            continue;
+                        }
+                        let Some(conversation_for_write) = ({
+                            let cached = cached_conversations_for_write.lock().map_err(|err| {
+                                named_lock_error(
+                                    "cached_conversations",
+                                    file!(),
+                                    line!(),
+                                    module_path!(),
+                                    &err,
+                                )
+                            })?;
+                            cached.get(conversation_id).cloned()
+                        }) else {
+                            continue;
+                        };
+                        write_conversation_meta_shard(&data_path, &conversation_for_write)?;
+                    }
                     let conversation_mtimes = pending_for_write
                         .conversations
                         .keys()
+                        .chain(pending_for_write.metadata_conversation_ids.iter())
                         .map(|conversation_id| {
                             (
                                 conversation_id.clone(),
@@ -1488,6 +1570,7 @@ fn start_conversation_persist_worker(state: &AppState) -> Result<(), String> {
                                 slot.as_ref().map(|item| {
                                     item.conversations
                                         .keys()
+                                        .chain(item.metadata_conversation_ids.iter())
                                         .cloned()
                                         .collect::<std::collections::HashSet<_>>()
                                 })
@@ -1495,6 +1578,11 @@ fn start_conversation_persist_worker(state: &AppState) -> Result<(), String> {
                             .unwrap_or_default();
                         if let Ok(mut dirty_ids) = state_clone.cached_conversation_dirty_ids.lock() {
                             for conversation_id in pending.conversations.keys() {
+                                if !pending_ids.contains(conversation_id) {
+                                    dirty_ids.remove(conversation_id);
+                                }
+                            }
+                            for conversation_id in &pending.metadata_conversation_ids {
                                 if !pending_ids.contains(conversation_id) {
                                     dirty_ids.remove(conversation_id);
                                 }
