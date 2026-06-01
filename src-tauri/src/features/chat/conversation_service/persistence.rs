@@ -312,6 +312,49 @@ impl ConversationService {
         Ok(conversation)
     }
 
+    fn set_conversation_routing_metadata(
+        &self,
+        state: &AppState,
+        conversation_id: &str,
+        department_id: Option<&str>,
+        agent_id: Option<&str>,
+        root_conversation_id: Option<Option<String>>,
+        conversation_kind: Option<&str>,
+    ) -> Result<Conversation, String> {
+        let normalized_conversation_id = conversation_id.trim();
+        if normalized_conversation_id.is_empty() {
+            return Err("conversationId is required.".to_string());
+        }
+        let next_department_id = department_id.map(|value| value.trim().to_string());
+        let next_agent_id = agent_id.map(|value| value.trim().to_string());
+        let next_conversation_kind = conversation_kind.map(|value| value.trim().to_string());
+        let guard = state
+            .conversation_lock
+            .lock()
+            .map_err(|err| format!("Failed to lock state mutex at {}:{} {}: {err}", file!(), line!(), module_path!()))?;
+        let (conversation, (), _) = state_update_conversation_metadata_cached(
+            state,
+            normalized_conversation_id,
+            |conversation| {
+                if let Some(value) = next_department_id {
+                    conversation.department_id = value;
+                }
+                if let Some(value) = next_agent_id {
+                    conversation.agent_id = value;
+                }
+                if let Some(value) = root_conversation_id {
+                    conversation.root_conversation_id = value;
+                }
+                if let Some(value) = next_conversation_kind {
+                    conversation.conversation_kind = value;
+                }
+                Ok(())
+            },
+        )?;
+        drop(guard);
+        Ok(conversation)
+    }
+
     fn append_tool_call_result_pair(
         &self,
         state: &AppState,

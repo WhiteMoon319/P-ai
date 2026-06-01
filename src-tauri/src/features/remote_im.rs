@@ -2300,27 +2300,25 @@ fn sync_remote_im_contact_conversation_binding(
     department_id: &str,
     agent_id: &str,
 ) -> Result<(), String> {
-    let mut conversation = state_read_conversation_cached(state, conversation_id)?;
+    let conversation = state_read_conversation_cached(state, conversation_id)?;
     if !conversation.summary.trim().is_empty() || !conversation_is_remote_im_contact(&conversation)
     {
         return Ok(());
     }
     let target_key = remote_im_contact_conversation_key(contact);
-    let mut changed = false;
-    if conversation.department_id.trim() != department_id {
-        conversation.department_id = department_id.trim().to_string();
-        changed = true;
-    }
-    if conversation.agent_id.trim() != agent_id {
-        conversation.agent_id = agent_id.trim().to_string();
-        changed = true;
-    }
-    if conversation.root_conversation_id.as_deref().map(str::trim) != Some(target_key.as_str()) {
-        conversation.root_conversation_id = Some(target_key);
-        changed = true;
-    }
-    if changed {
-        state_schedule_conversation_persist(state, &conversation)?;
+    let department_changed = conversation.department_id.trim() != department_id;
+    let agent_changed = conversation.agent_id.trim() != agent_id;
+    let root_changed =
+        conversation.root_conversation_id.as_deref().map(str::trim) != Some(target_key.as_str());
+    if department_changed || agent_changed || root_changed {
+        conversation_service().set_conversation_routing_metadata(
+            state,
+            conversation_id,
+            Some(department_id),
+            Some(agent_id),
+            Some(Some(target_key)),
+            None,
+        )?;
     }
     Ok(())
 }

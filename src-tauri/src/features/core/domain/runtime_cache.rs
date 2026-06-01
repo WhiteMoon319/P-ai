@@ -579,6 +579,16 @@ fn preserve_field_level_conversation_metadata(
     source: &Conversation,
 ) {
     target.title = source.title.clone();
+    target.agent_id = source.agent_id.clone();
+    target.department_id = source.department_id.clone();
+    target.bound_conversation_id = source.bound_conversation_id.clone();
+    target.parent_conversation_id = source.parent_conversation_id.clone();
+    target.child_conversation_ids = source.child_conversation_ids.clone();
+    target.fork_message_cursor = source.fork_message_cursor.clone();
+    target.conversation_kind = source.conversation_kind.clone();
+    target.root_conversation_id = source.root_conversation_id.clone();
+    target.delegate_id = source.delegate_id.clone();
+    target.created_at = source.created_at.clone();
     target.shell_workspace_path = source.shell_workspace_path.clone();
     target.shell_workspaces = source.shell_workspaces.clone();
     target.shell_autonomous_mode = source.shell_autonomous_mode;

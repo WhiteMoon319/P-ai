@@ -3473,6 +3473,10 @@
             &state,
             &conversation.id,
             |conversation| {
+                conversation.agent_id = "字段级agent".to_string();
+                conversation.department_id = "字段级department".to_string();
+                conversation.root_conversation_id = Some("字段级root".to_string());
+                conversation.conversation_kind = CONVERSATION_KIND_REMOTE_IM_CONTACT.to_string();
                 conversation.user_profile_snapshot = "字段级画像".to_string();
                 conversation.memory_recall_table = vec!["memory-a".to_string()];
                 Ok(())
@@ -3486,6 +3490,10 @@
         stale_full_snapshot.shell_autonomous_mode = false;
         stale_full_snapshot.status = "active".to_string();
         stale_full_snapshot.archived_at = None;
+        stale_full_snapshot.agent_id = DEFAULT_AGENT_ID.to_string();
+        stale_full_snapshot.department_id = ASSISTANT_DEPARTMENT_ID.to_string();
+        stale_full_snapshot.root_conversation_id = None;
+        stale_full_snapshot.conversation_kind = CONVERSATION_KIND_CHAT.to_string();
         stale_full_snapshot.current_todos = Vec::new();
         stale_full_snapshot.user_profile_snapshot.clear();
         stale_full_snapshot.memory_recall_table.clear();
@@ -3513,6 +3521,13 @@
         assert_eq!(cached.current_todos[0].content, "字段级 todo");
         assert_eq!(cached.user_profile_snapshot, "字段级画像");
         assert_eq!(cached.memory_recall_table, vec!["memory-a".to_string()]);
+        assert_eq!(cached.agent_id, "字段级agent");
+        assert_eq!(cached.department_id, "字段级department");
+        assert_eq!(cached.root_conversation_id.as_deref(), Some("字段级root"));
+        assert_eq!(
+            cached.conversation_kind,
+            CONVERSATION_KIND_REMOTE_IM_CONTACT
+        );
         assert_eq!(cached.updated_at, now);
         assert_ne!(
             cached.last_user_at.as_deref(),
