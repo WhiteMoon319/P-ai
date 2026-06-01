@@ -16,6 +16,10 @@ impl ConversationService {
         let mut conversation = state_read_conversation_cached(state, normalized_conversation_id)?;
         self.ensure_unarchived_conversation(&conversation, normalized_conversation_id)?;
         let result = updater(&mut conversation)?;
+        state_update_conversation_metadata_cached(state, normalized_conversation_id, |cached| {
+            preserve_field_level_conversation_metadata(cached, &conversation);
+            Ok(())
+        })?;
         state_schedule_conversation_persist(state, &conversation)?;
         drop(guard);
         Ok(result)
@@ -944,6 +948,13 @@ impl ConversationService {
         target_conversation.updated_at = now.clone();
         target_conversation.status = "active".to_string();
         increment_conversation_unread_count(&mut target_conversation, selected_messages.len());
+        if let Some(last_message) = target_conversation.messages.last() {
+            if last_message.role.trim().eq_ignore_ascii_case("assistant") {
+                target_conversation.last_assistant_at = Some(now.clone());
+            } else if last_message.role.trim().eq_ignore_ascii_case("user") {
+                target_conversation.last_user_at = Some(now.clone());
+            }
+        }
         state_update_conversation_metadata_cached(
             state,
             target_conversation_id,
@@ -956,13 +967,6 @@ impl ConversationService {
                 Ok(())
             },
         )?;
-        if let Some(last_message) = target_conversation.messages.last() {
-            if last_message.role.trim().eq_ignore_ascii_case("assistant") {
-                target_conversation.last_assistant_at = Some(now.clone());
-            } else if last_message.role.trim().eq_ignore_ascii_case("user") {
-                target_conversation.last_user_at = Some(now.clone());
-            }
-        }
 
         state_schedule_conversation_persist(state, &target_conversation)?;
         let overview_payload = UnarchivedConversationOverviewUpdatedPayload {

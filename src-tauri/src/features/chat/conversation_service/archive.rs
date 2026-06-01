@@ -393,6 +393,10 @@ impl ConversationService {
                 continue;
             }
             if existing_archive_ids.contains(&conversation_id) {
+                state_update_conversation_metadata_cached(state, &conversation_id, |cached| {
+                    preserve_field_level_conversation_metadata(cached, &conversation);
+                    Ok(())
+                })?;
                 state_schedule_conversation_persist(state, &conversation)?;
                 replaced_count += 1;
             } else {
