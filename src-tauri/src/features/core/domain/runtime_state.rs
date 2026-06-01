@@ -42,7 +42,6 @@ struct AppState {
     cached_runtime_state: Arc<Mutex<Option<RuntimeStateFile>>>,
     cached_runtime_state_mtime: Arc<Mutex<Option<std::time::SystemTime>>>,
     cached_chat_index: Arc<Mutex<Option<ChatIndexFile>>>,
-    cached_chat_index_mtime: Arc<Mutex<Option<std::time::SystemTime>>>,
     cached_conversations: Arc<Mutex<std::collections::HashMap<String, Conversation>>>,
     cached_conversation_mtimes:
         Arc<Mutex<std::collections::HashMap<String, Option<std::time::SystemTime>>>>,
@@ -59,7 +58,6 @@ struct AppState {
     conversation_persist_latest_seq: Arc<std::sync::atomic::AtomicU64>,
     cached_conversation_dirty_ids: Arc<Mutex<std::collections::HashSet<String>>>,
     cached_deleted_conversation_ids: Arc<Mutex<std::collections::HashSet<String>>>,
-    cached_chat_index_dirty: Arc<std::sync::atomic::AtomicBool>,
     app_data_persist_write_lock: Arc<Mutex<()>>,
     last_panic_snapshot: Arc<Mutex<Option<String>>>,
     inflight_chat_abort_handles: Arc<Mutex<std::collections::HashMap<String, AbortHandle>>>,
@@ -101,8 +99,6 @@ struct AppState {
         Arc<Mutex<std::collections::HashSet<String>>>,
     provider_request_gates:
         Arc<tokio::sync::Mutex<std::collections::HashMap<String, Arc<ProviderRequestGate>>>>,
-    conversation_index_repair_gates:
-        Arc<Mutex<std::collections::HashMap<String, Arc<Mutex<()>>>>>,
     remote_im_contact_runtime_states:
         Arc<Mutex<std::collections::HashMap<String, RemoteImContactRuntimeState>>>,
     remote_im_channel_state_write_locks:
@@ -286,7 +282,6 @@ impl AppState {
             cached_runtime_state: Arc::new(Mutex::new(None)),
             cached_runtime_state_mtime: Arc::new(Mutex::new(None)),
             cached_chat_index: Arc::new(Mutex::new(None)),
-            cached_chat_index_mtime: Arc::new(Mutex::new(None)),
             cached_conversations: Arc::new(Mutex::new(std::collections::HashMap::new())),
             cached_conversation_mtimes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             cached_app_data: Arc::new(Mutex::new(None)),
@@ -302,7 +297,6 @@ impl AppState {
             conversation_persist_latest_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             cached_conversation_dirty_ids: Arc::new(Mutex::new(std::collections::HashSet::new())),
             cached_deleted_conversation_ids: Arc::new(Mutex::new(std::collections::HashSet::new())),
-            cached_chat_index_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             app_data_persist_write_lock: Arc::new(Mutex::new(())),
             last_panic_snapshot: Arc::new(Mutex::new(None)),
             inflight_chat_abort_handles: Arc::new(Mutex::new(std::collections::HashMap::new())),
@@ -330,9 +324,6 @@ impl AppState {
                 std::collections::HashSet::new(),
             )),
             provider_request_gates: Arc::new(tokio::sync::Mutex::new(
-                std::collections::HashMap::new(),
-            )),
-            conversation_index_repair_gates: Arc::new(Mutex::new(
                 std::collections::HashMap::new(),
             )),
             remote_im_contact_runtime_states: Arc::new(Mutex::new(

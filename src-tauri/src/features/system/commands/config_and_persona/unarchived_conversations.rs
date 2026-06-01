@@ -703,7 +703,7 @@ fn import_conversation_share_from_file(
         .rev()
         .find(|message| message.role.trim() == "assistant")
         .map(|message| message.created_at.clone());
-    state_schedule_conversation_persist(state.inner(), &conversation, true)?;
+    state_schedule_conversation_persist(state.inner(), &conversation)?;
 
     let overview_payload = UnarchivedConversationOverviewUpdatedPayload {
         preferred_conversation_id: Some(conversation_id.clone()),

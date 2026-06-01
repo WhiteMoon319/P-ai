@@ -379,7 +379,7 @@ impl ConversationService {
             .remote_im_contact_checkpoints
             .retain(|item| item.contact_id.trim() != normalized_contact_id);
         state_write_runtime_state_cached(state, &runtime)?;
-        state_schedule_conversation_delete(state, &conversation.id, true)?;
+        state_schedule_conversation_delete(state, &conversation.id)?;
         drop(guard);
         Ok(true)
     }

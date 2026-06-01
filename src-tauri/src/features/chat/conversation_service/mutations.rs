@@ -16,7 +16,7 @@ impl ConversationService {
         let mut conversation = state_read_conversation_cached(state, normalized_conversation_id)?;
         self.ensure_unarchived_conversation(&conversation, normalized_conversation_id)?;
         let result = updater(&mut conversation)?;
-        state_schedule_conversation_persist(state, &conversation, false)?;
+        state_schedule_conversation_persist(state, &conversation)?;
         drop(guard);
         Ok(result)
     }
@@ -98,9 +98,9 @@ impl ConversationService {
         clear_conversation_unread_count(&mut target_conversation);
         clear_conversation_list_activity_mark(state, &target_conversation_id);
         if created_new_conversation {
-            state_schedule_conversation_persist(state, &target_conversation, true)?;
+            state_schedule_conversation_persist(state, &target_conversation)?;
         } else {
-            state_schedule_conversation_persist(state, &target_conversation, false)?;
+            state_schedule_conversation_persist(state, &target_conversation)?;
         }
         if runtime.main_conversation_id.as_deref().map(str::trim)
             != Some(target_conversation_id.as_str())
@@ -230,7 +230,7 @@ impl ConversationService {
         ensure_unarchived_conversation_not_organizing(state, &conversation_id)?;
         clear_conversation_list_activity_mark(state, &conversation_id);
         if created_new_conversation {
-            state_schedule_conversation_persist(state, &target_conversation, true)?;
+            state_schedule_conversation_persist(state, &target_conversation)?;
         }
         if runtime.main_conversation_id.as_deref().map(str::trim) != Some(conversation_id.as_str())
         {
@@ -362,7 +362,7 @@ impl ConversationService {
             }
             _ => {}
         }
-        state_schedule_conversation_delete(state, &source.id, true)?;
+        state_schedule_conversation_delete(state, &source.id)?;
         let chat_index = state_read_chat_index_cached(state)?;
         let active_conversation_id = chat_index
             .conversations
@@ -388,7 +388,7 @@ impl ConversationService {
                 &source_conversation,
             )?;
             let replacement_id = replacement.id.clone();
-            state_schedule_conversation_persist(state, &replacement, true)?;
+            state_schedule_conversation_persist(state, &replacement)?;
             runtime.main_conversation_id = Some(replacement_id.clone());
             state_write_runtime_state_cached(state, &runtime)?;
             replacement_id
@@ -490,9 +490,9 @@ impl ConversationService {
                     &conversation,
                     result.remaining_count,
                 )?;
-                state_mark_conversation_direct_persisted(state, &conversation, true)?;
+                state_mark_conversation_direct_persisted(state, &conversation)?;
             } else {
-                state_schedule_conversation_persist(state, &conversation, false)?;
+                state_schedule_conversation_persist(state, &conversation)?;
             }
         }
         drop(guard);
@@ -611,7 +611,7 @@ impl ConversationService {
                 conversation: Some(conversation),
             });
         }
-        state_schedule_conversation_persist(state, &conversation, false)?;
+        state_schedule_conversation_persist(state, &conversation)?;
         let result_conversation = conversation.clone();
         drop(guard);
         Ok(MarkConversationReadResult {
@@ -646,7 +646,7 @@ impl ConversationService {
         }
 
         conversation.title = normalized_title.to_string();
-        state_schedule_conversation_persist(state, &conversation, false)?;
+        state_schedule_conversation_persist(state, &conversation)?;
         drop(guard);
         Ok(normalized_title.to_string())
     }
@@ -754,7 +754,7 @@ impl ConversationService {
             conversation.shell_autonomous_mode = shell_autonomous_mode;
         }
         let conversation_id = conversation.id.clone();
-        let persist_seq = state_schedule_conversation_persist(state, &conversation, true)?;
+        let persist_seq = state_schedule_conversation_persist(state, &conversation)?;
         runtime_log_info(format!(
             "[会话] 完成，任务=新建未归档会话，阶段=调度持久化，conversation_id={}，persist_seq={}，department_id={}，agent_id={}，message_count={}，duration_ms={}",
             conversation_id,
@@ -846,7 +846,7 @@ impl ConversationService {
             &selected_messages,
         );
         let conversation_id = conversation.id.clone();
-        state_schedule_conversation_persist(state, &conversation, true)?;
+        state_schedule_conversation_persist(state, &conversation)?;
         if runtime
             .main_conversation_id
             .as_deref()
@@ -939,7 +939,7 @@ impl ConversationService {
             }
         }
 
-        state_schedule_conversation_persist(state, &target_conversation, true)?;
+        state_schedule_conversation_persist(state, &target_conversation)?;
         let overview_payload = UnarchivedConversationOverviewUpdatedPayload {
             preferred_conversation_id: Some(target_conversation_id.to_string()),
             unarchived_conversations: self.collect_unarchived_conversation_summaries_cached(
@@ -1034,7 +1034,7 @@ impl ConversationService {
             }
             _ => {}
         }
-        state_schedule_conversation_delete(state, normalized_conversation_id, true)?;
+        state_schedule_conversation_delete(state, normalized_conversation_id)?;
         clear_conversation_list_activity_mark(state, normalized_conversation_id);
         let unarchived_conversations =
             self.collect_unarchived_conversation_summaries_cached(state, &app_config)?;
@@ -1282,7 +1282,7 @@ fn persist_stop_chat_target_update(
             delegate_runtime_thread_conversation_update(state, conversation_id, conversation)
         }
         StopChatConversationTarget::Persisted(conversation) => {
-            service.persist_conversation_with_chat_index(state, &conversation)
+            service.persist_conversation(state, &conversation)
         }
     }
 }

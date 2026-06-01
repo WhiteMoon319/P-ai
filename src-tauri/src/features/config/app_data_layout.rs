@@ -223,7 +223,6 @@ struct ChatIndexFile {
 struct AppDataWriteStats {
     agents_written: bool,
     runtime_written: bool,
-    chat_index_written: bool,
     conversation_writes: usize,
     conversation_deletes: usize,
 }
@@ -326,6 +325,7 @@ fn chat_index_item_is_archived(item: &ChatIndexConversationItem) -> bool {
     !item.summary.trim().is_empty()
 }
 
+#[cfg(test)]
 fn build_chat_index_file(conversations: &[Conversation]) -> ChatIndexFile {
     ChatIndexFile {
         conversations: conversations
@@ -472,28 +472,9 @@ fn delete_conversation_shard(path: &PathBuf, conversation_id: &str) -> Result<bo
     message_store::delete_message_store_shard_artifacts(&store_paths)
 }
 
-fn read_chat_index_shard(path: &PathBuf) -> Result<ChatIndexFile, String> {
-    if !app_layout_exists(path) && path.exists() {
-        let data = read_app_data(path)?;
-        return Ok(build_chat_index_file(&data.conversations));
-    }
-    if app_layout_chat_index_path(path).exists() {
-        read_json_file::<ChatIndexFile>(&app_layout_chat_index_path(path), "chat index file")
-    } else {
-        Ok(ChatIndexFile::default())
-    }
-}
-
-fn write_chat_index_shard(path: &PathBuf, index: &ChatIndexFile) -> Result<bool, String> {
-    fs::create_dir_all(app_layout_chat_dir(path))
-        .map_err(|err| format!("Create chat layout dir failed: {err}"))?;
-    write_json_file_atomic_if_changed(&app_layout_chat_index_path(path), index, "chat index file")
-}
-
 fn app_layout_exists(path: &PathBuf) -> bool {
     app_layout_agents_path(path).exists()
         || app_layout_runtime_state_path(path).exists()
-        || app_layout_chat_index_path(path).exists()
         || app_layout_chat_conversations_dir(path).exists()
 }
 
@@ -576,10 +557,8 @@ fn update_conversation_cache_signature_for_file(
 fn app_data_cache_signature(path: &PathBuf) -> AppDataCacheSignature {
     let agents_path = app_layout_agents_path(path);
     let runtime_path = app_layout_runtime_state_path(path);
-    let chat_index_path = app_layout_chat_index_path(path);
     let (agents_len, agents_modified) = file_metadata_signature(&agents_path);
     let (runtime_len, runtime_modified) = file_metadata_signature(&runtime_path);
-    let (chat_index_len, chat_index_modified) = file_metadata_signature(&chat_index_path);
 
     let mut conversations = ConversationDirCacheSignature::default();
     let conversations_dir = app_layout_chat_conversations_dir(path);
@@ -633,8 +612,6 @@ fn app_data_cache_signature(path: &PathBuf) -> AppDataCacheSignature {
         agents_modified,
         runtime_len,
         runtime_modified,
-        chat_index_len,
-        chat_index_modified,
         conversations,
     }
 }
@@ -806,43 +783,30 @@ fn read_layout_app_data(path: &PathBuf) -> Result<AppData, String> {
     };
 
     let mut conversations = Vec::<Conversation>::new();
-    let index = if app_layout_chat_index_path(path).exists() {
-        read_json_file::<ChatIndexFile>(&app_layout_chat_index_path(path), "chat index file")?
-    } else {
-        ChatIndexFile::default()
-    };
-    for item in &index.conversations {
-        if let Ok(conv) = read_conversation_shard(path, &item.id) {
-            conversations.push(conv);
-        }
-    }
-    if conversations.is_empty() {
-        let conv_dir = app_layout_chat_conversations_dir(path);
-        if conv_dir.exists() {
-            if let Ok(entries) = fs::read_dir(&conv_dir) {
-                let mut seen_ids = std::collections::HashSet::<String>::new();
-                for entry in entries.flatten() {
-                    let p = entry.path();
-                    let conversation_id = if p.extension().and_then(|v| v.to_str()) == Some("json")
-                    {
-                        p.file_stem()
-                            .and_then(|v| v.to_str())
-                            .unwrap_or_default()
-                            .to_string()
-                    } else if p.is_dir() {
-                        p.file_name()
-                            .and_then(|v| v.to_str())
-                            .unwrap_or_default()
-                            .to_string()
-                    } else {
-                        continue;
-                    };
-                    if conversation_id.trim().is_empty() || !seen_ids.insert(conversation_id.clone()) {
-                        continue;
-                    }
-                    if let Ok(conv) = read_conversation_shard(path, &conversation_id) {
-                        conversations.push(conv);
-                    }
+    let conv_dir = app_layout_chat_conversations_dir(path);
+    if conv_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&conv_dir) {
+            let mut seen_ids = std::collections::HashSet::<String>::new();
+            for entry in entries.flatten() {
+                let p = entry.path();
+                let conversation_id = if p.extension().and_then(|v| v.to_str()) == Some("json") {
+                    p.file_stem()
+                        .and_then(|v| v.to_str())
+                        .unwrap_or_default()
+                        .to_string()
+                } else if p.is_dir() {
+                    p.file_name()
+                        .and_then(|v| v.to_str())
+                        .unwrap_or_default()
+                        .to_string()
+                } else {
+                    continue;
+                };
+                if conversation_id.trim().is_empty() || !seen_ids.insert(conversation_id.clone()) {
+                    continue;
+                }
+                if let Ok(conv) = read_conversation_shard(path, &conversation_id) {
+                    conversations.push(conv);
                 }
             }
         }
@@ -915,23 +879,10 @@ fn read_app_data(path: &PathBuf) -> Result<AppData, String> {
 
 // AppData 聚合写入需要保留，作为兼容/迁移/全量导入导出入口。
 // 但业务热路径禁止直接依赖它，应该优先走分片写入：
-// agents / runtime_state / chat_index / conversation:<id>
+// agents / runtime_state / conversation:<id>
 fn write_app_data_with_stats(path: &PathBuf, data: &AppData) -> Result<AppDataWriteStats, String> {
     let agents = build_agents_file(&data.agents);
     let runtime = build_runtime_state_file(data);
-    let index = ChatIndexFile {
-        conversations: data
-            .conversations
-            .iter()
-            .map(|c| ChatIndexConversationItem {
-                id: c.id.clone(),
-                updated_at: c.updated_at.clone(),
-                status: c.status.clone(),
-                summary: c.summary.clone(),
-                archived_at: c.archived_at.clone(),
-            })
-            .collect::<Vec<_>>(),
-    };
 
     fs::create_dir_all(app_layout_config_dir(path))
         .map_err(|err| format!("Create config layout dir failed: {err}"))?;
@@ -956,12 +907,6 @@ fn write_app_data_with_stats(path: &PathBuf, data: &AppData) -> Result<AppDataWr
         &runtime,
         "runtime state file",
     )?;
-    stats.chat_index_written = write_json_file_atomic_if_changed(
-        &app_layout_chat_index_path(path),
-        &index,
-        "chat index file",
-    )?;
-
     let mut expected_ids = std::collections::HashSet::<String>::new();
     for conv in &data.conversations {
         expected_ids.insert(conv.id.clone());
@@ -993,8 +938,8 @@ fn write_app_data_with_stats(path: &PathBuf, data: &AppData) -> Result<AppDataWr
 /// Compatibility-only full AppData writer.
 ///
 /// New production code must not add new call sites to this function. Prefer shard APIs:
-/// `write_agents_shard`, `write_runtime_state_shard`, `write_chat_index_shard`,
-/// `write_conversation_shard`, and their cached state wrappers.
+/// `write_agents_shard`, `write_runtime_state_shard`, `write_conversation_shard`,
+/// and their cached state wrappers.
 ///
 /// Migration timeline:
 /// - New code: forbidden immediately.
@@ -1007,10 +952,9 @@ fn write_app_data(path: &PathBuf, data: &AppData) -> Result<(), String> {
     let started = std::time::Instant::now();
     let stats = write_app_data_with_stats(path, data)?;
     runtime_log_debug(format!(
-        "[应用数据写入] 任务=应用数据写入，状态=完成，触发=兼容层全量写入，agents_written={}，runtime_written={}，chat_index_written={}，conversation_writes={}，conversation_deletes={}，duration_ms={}",
+        "[应用数据写入] 任务=应用数据写入，状态=完成，触发=兼容层全量写入，agents_written={}，runtime_written={}，conversation_writes={}，conversation_deletes={}，duration_ms={}",
         stats.agents_written,
         stats.runtime_written,
-        stats.chat_index_written,
         stats.conversation_writes,
         stats.conversation_deletes,
         started.elapsed().as_millis()

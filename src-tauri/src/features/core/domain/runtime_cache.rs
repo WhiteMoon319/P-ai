@@ -130,54 +130,6 @@ fn sync_cached_app_data_signature(state: &AppState) -> Result<(), String> {
     Ok(())
 }
 
-fn conversation_index_repair_gate(
-    state: &AppState,
-    conversation_id: &str,
-) -> Result<Arc<Mutex<()>>, String> {
-    let mut gates = state
-        .conversation_index_repair_gates
-        .lock()
-        .map_err(|err| format!("Failed to lock conversation index repair gates: {err}"))?;
-    Ok(gates
-        .entry(conversation_id.to_string())
-        .or_insert_with(|| Arc::new(Mutex::new(())))
-        .clone())
-}
-
-fn format_chat_index_item_log(item: Option<&ChatIndexConversationItem>) -> String {
-    let Some(item) = item else {
-        return "missing".to_string();
-    };
-    format!(
-        "id={} updated_at={} status={} summary_len={} archived_at={}",
-        item.id,
-        item.updated_at,
-        item.status,
-        item.summary.chars().count(),
-        item.archived_at.as_deref().unwrap_or("")
-    )
-}
-
-fn chat_index_item_mismatch_fields(
-    existing: &ChatIndexConversationItem,
-    expected: &ChatIndexConversationItem,
-) -> Vec<&'static str> {
-    let mut fields = Vec::new();
-    if existing.updated_at != expected.updated_at {
-        fields.push("updated_at");
-    }
-    if existing.status != expected.status {
-        fields.push("status");
-    }
-    if existing.summary != expected.summary {
-        fields.push("summary");
-    }
-    if existing.archived_at != expected.archived_at {
-        fields.push("archived_at");
-    }
-    fields
-}
-
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ChatIndexStorageMeta {
@@ -215,6 +167,14 @@ fn collect_chat_index_items_from_storage(
 ) -> Result<Vec<ChatIndexConversationItem>, String> {
     let conv_dir = app_layout_chat_conversations_dir(data_path);
     if !conv_dir.exists() {
+        if !app_layout_exists(data_path) && data_path.exists() {
+            let data = read_app_data(data_path)?;
+            return Ok(data
+                .conversations
+                .iter()
+                .map(build_chat_index_item)
+                .collect::<Vec<_>>());
+        }
         return Ok(Vec::new());
     }
     let mut items =
@@ -262,125 +222,6 @@ fn collect_chat_index_items_from_storage(
         );
     }
     Ok(items.into_values().collect())
-}
-
-fn repair_chat_index_from_storage_snapshot(
-    state: &AppState,
-    index: &mut ChatIndexFile,
-) -> Result<bool, String> {
-    let mut stored_items = collect_chat_index_items_from_storage(&state.data_path)?;
-    if stored_items.is_empty() {
-        return Ok(false);
-    }
-    sort_chat_index_items(&mut stored_items);
-    let changed = index.conversations.len() != stored_items.len()
-        || index
-            .conversations
-            .iter()
-            .zip(stored_items.iter())
-            .any(|(existing, stored)| {
-                existing.id != stored.id
-                    || !chat_index_item_mismatch_fields(existing, stored).is_empty()
-            });
-    if changed {
-        index.conversations = stored_items;
-        runtime_log_info(format!(
-            "[会话索引恢复] 完成，任务=chat_index_recover_from_storage，conversation_count={}",
-            index.conversations.len()
-        ));
-    }
-    Ok(changed)
-}
-
-fn ensure_conversation_chat_index_item_consistent(
-    state: &AppState,
-    conversation: &Conversation,
-    trigger_reason: &str,
-) -> Result<(), String> {
-    let expected = build_chat_index_item(conversation);
-    let chat_index = state_read_chat_index_cached(state)?;
-    let initial_existing = chat_index
-        .conversations
-        .iter()
-        .find(|item| item.id == conversation.id);
-    let initial_mismatch_fields = initial_existing
-        .map(|existing| chat_index_item_mismatch_fields(existing, &expected))
-        .unwrap_or_else(Vec::new);
-    if initial_existing.is_some() && initial_mismatch_fields.is_empty() {
-        return Ok(());
-    }
-
-    let repair_reason = if initial_existing.is_none() {
-        "chat_index_missing_item".to_string()
-    } else {
-        format!(
-            "chat_index_field_mismatch:{}",
-            initial_mismatch_fields.join("|")
-        )
-    };
-    let before_log = format_chat_index_item_log(initial_existing);
-    let started = std::time::Instant::now();
-    eprintln!(
-        "[会话索引自愈] 状态=开始，conversation_id={}，触发原因={}，修复原因={}，修复前={}",
-        conversation.id, trigger_reason, repair_reason, before_log
-    );
-
-    let repair_gate = conversation_index_repair_gate(state, &conversation.id)?;
-    let _repair_guard = repair_gate
-        .lock()
-        .map_err(|err| format!("Failed to lock conversation index repair gate: {err}"))?;
-
-    let mut chat_index = state_read_chat_index_cached(state)?;
-    let existing_after_lock = chat_index
-        .conversations
-        .iter()
-        .find(|item| item.id == conversation.id)
-        .cloned();
-    if existing_after_lock
-        .as_ref()
-        .map(|item| chat_index_item_mismatch_fields(item, &expected).is_empty())
-        .unwrap_or(false)
-    {
-        eprintln!(
-            "[会话索引自愈] 状态=跳过，conversation_id={}，触发原因={}，修复原因={}，修复前={}，修复后={}，duration_ms={}",
-            conversation.id,
-            trigger_reason,
-            repair_reason,
-            before_log,
-            format_chat_index_item_log(existing_after_lock.as_ref()),
-            started.elapsed().as_millis()
-        );
-        return Ok(());
-    }
-
-    upsert_chat_index_conversation(&mut chat_index, conversation);
-    if let Err(err) = state_write_chat_index_cached(state, &chat_index) {
-        eprintln!(
-            "[会话索引自愈] 状态=失败，conversation_id={}，触发原因={}，修复原因={}，修复前={}，修复后={}，duration_ms={}，error={}",
-            conversation.id,
-            trigger_reason,
-            repair_reason,
-            before_log,
-            format_chat_index_item_log(Some(&expected)),
-            started.elapsed().as_millis(),
-            err
-        );
-        return Err(format!(
-            "修复会话索引项失败，conversation_id={}，trigger={}，reason={}，error={}",
-            conversation.id, trigger_reason, repair_reason, err
-        ));
-    }
-
-    eprintln!(
-        "[会话索引自愈] 状态=完成，conversation_id={}，触发原因={}，修复原因={}，修复前={}，修复后={}，duration_ms={}",
-        conversation.id,
-        trigger_reason,
-        repair_reason,
-        before_log,
-        format_chat_index_item_log(Some(&expected)),
-        started.elapsed().as_millis()
-    );
-    Ok(())
 }
 
 fn sync_cached_app_data_agents(state: &AppState, agents: &[AgentProfile]) -> Result<(), String> {
@@ -448,7 +289,6 @@ fn sync_cached_app_data_conversation_deleted(
 fn state_mark_conversation_direct_persisted(
     state: &AppState,
     conversation: &Conversation,
-    include_chat_index: bool,
 ) -> Result<(), String> {
     let disk_mtime = conversation_shard_modified_time(&state.data_path, &conversation.id);
     {
@@ -487,9 +327,7 @@ fn state_mark_conversation_direct_persisted(
         let should_clear_slot = if let Some(slot) = pending.as_mut() {
             slot.conversations.remove(&conversation.id);
             slot.deleted_conversation_ids.remove(&conversation.id);
-            slot.conversations.is_empty()
-                && slot.deleted_conversation_ids.is_empty()
-                && slot.chat_index.is_none()
+            slot.conversations.is_empty() && slot.deleted_conversation_ids.is_empty()
         } else {
             false
         };
@@ -498,23 +336,7 @@ fn state_mark_conversation_direct_persisted(
         }
     }
     sync_cached_app_data_conversation(state, conversation)?;
-    if include_chat_index {
-        let mut chat_index = state_read_chat_index_cached(state)?;
-        upsert_chat_index_conversation(&mut chat_index, conversation);
-        let _ = write_chat_index_shard(&state.data_path, &chat_index)?;
-        let chat_index_mtime = path_modified_time(&app_layout_chat_index_path(&state.data_path));
-        *state
-            .cached_chat_index
-            .lock()
-            .map_err(|_| "Failed to lock cached chat index".to_string())? = Some(chat_index);
-        *state
-            .cached_chat_index_mtime
-            .lock()
-            .map_err(|_| "Failed to lock cached chat index mtime".to_string())? = chat_index_mtime;
-        state
-            .cached_chat_index_dirty
-            .store(false, std::sync::atomic::Ordering::Release);
-    }
+    state_upsert_chat_index_conversation_cached(state, conversation)?;
     refresh_cached_app_data_dirty(state);
     Ok(())
 }
@@ -543,10 +365,7 @@ fn has_pending_conversation_persist(state: &AppState) -> bool {
         .lock()
         .map(|deleted_ids| !deleted_ids.is_empty())
         .unwrap_or(true);
-    let chat_index_dirty = state
-        .cached_chat_index_dirty
-        .load(std::sync::atomic::Ordering::Acquire);
-    has_pending_slot || has_dirty_conversations || has_deleted_conversations || chat_index_dirty
+    has_pending_slot || has_dirty_conversations || has_deleted_conversations
 }
 
 fn refresh_cached_app_data_dirty(state: &AppState) {
@@ -612,11 +431,6 @@ fn state_read_conversation_cached(
         )
         {
             if *cached_mtime == Some(disk_time) {
-                ensure_conversation_chat_index_item_consistent(
-                    state,
-                    conversation,
-                    "state_read_conversation_cached.cache_hit",
-                )?;
                 return Ok(conversation.clone());
             }
         }
@@ -636,18 +450,10 @@ fn state_read_conversation_cached(
             .map_err(|_| "Failed to lock cached conversation mtimes".to_string())?;
         cached_mtimes.insert(conversation_id.to_string(), disk_mtime);
     }
-    ensure_conversation_chat_index_item_consistent(
-        state,
-        &conversation,
-        "state_read_conversation_cached.disk_read",
-    )?;
     Ok(conversation)
 }
 
 fn state_read_chat_index_cached(state: &AppState) -> Result<ChatIndexFile, String> {
-    if state
-        .cached_chat_index_dirty
-        .load(std::sync::atomic::Ordering::Acquire)
     {
         let cached = state
             .cached_chat_index
@@ -657,82 +463,40 @@ fn state_read_chat_index_cached(state: &AppState) -> Result<ChatIndexFile, Strin
             return Ok(index.clone());
         }
     }
-    let disk_mtime = path_modified_time(&app_layout_chat_index_path(&state.data_path));
-    {
-        let cached = state
-            .cached_chat_index
-            .lock()
-            .map_err(|_| "Failed to lock cached chat index".to_string())?;
-        let cached_mtime = state
-            .cached_chat_index_mtime
-            .lock()
-            .map_err(|_| "Failed to lock cached chat index mtime".to_string())?;
-        if let (Some(index), Some(cached_time), Some(disk_time)) =
-            (cached.as_ref(), *cached_mtime, disk_mtime)
-        {
-            if cached_time == disk_time {
-                return Ok(index.clone());
-            }
-        }
-    }
-    let mut index = read_chat_index_shard(&state.data_path)?;
-    if repair_chat_index_from_storage_snapshot(state, &mut index)? {
-        state_write_chat_index_cached(state, &index)?;
-        return Ok(index);
-    }
+    let mut conversations = collect_chat_index_items_from_storage(&state.data_path)?;
+    sort_chat_index_items(&mut conversations);
+    let index = ChatIndexFile { conversations };
     *state
         .cached_chat_index
         .lock()
         .map_err(|_| "Failed to lock cached chat index".to_string())? = Some(index.clone());
-    *state
-        .cached_chat_index_mtime
-        .lock()
-        .map_err(|_| "Failed to lock cached chat index mtime".to_string())? = disk_mtime;
     Ok(index)
 }
 
-fn state_write_chat_index_cached(state: &AppState, index: &ChatIndexFile) -> Result<(), String> {
-    let seq = state
-        .app_data_persist_latest_seq
-        .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
-        + 1;
-    let _write_guard = state
-        .app_data_persist_write_lock
-        .lock()
-        .map_err(|_| "Failed to lock app data persist write lock".to_string())?;
-    let _ = write_chat_index_shard(&state.data_path, index)?;
-    let disk_mtime = path_modified_time(&app_layout_chat_index_path(&state.data_path));
-    *state
-        .cached_chat_index
-        .lock()
-        .map_err(|_| "Failed to lock cached chat index".to_string())? = Some(index.clone());
-    *state
-        .cached_chat_index_mtime
-        .lock()
-        .map_err(|_| "Failed to lock cached chat index mtime".to_string())? = disk_mtime;
-    sync_cached_app_data_signature(state)?;
-    if let Ok(mut pending) = state.app_data_persist_pending.lock() {
-        if pending
-            .as_ref()
-            .map(|item| item.seq <= seq)
-            .unwrap_or(false)
-        {
-            *pending = None;
-        }
-    }
-    refresh_cached_app_data_dirty(state);
-    Ok(())
-}
-
-#[allow(dead_code)]
-fn state_write_conversation_with_chat_index_cached(
+fn state_upsert_chat_index_conversation_cached(
     state: &AppState,
     conversation: &Conversation,
 ) -> Result<(), String> {
-    state_write_conversation_cached(state, conversation)?;
-    let mut chat_index = state_read_chat_index_cached(state)?;
-    upsert_chat_index_conversation(&mut chat_index, conversation);
-    state_write_chat_index_cached(state, &chat_index)?;
+    let mut index = state_read_chat_index_cached(state)?;
+    upsert_chat_index_conversation(&mut index, conversation);
+    sort_chat_index_items(&mut index.conversations);
+    *state
+        .cached_chat_index
+        .lock()
+        .map_err(|_| "Failed to lock cached chat index".to_string())? = Some(index);
+    Ok(())
+}
+
+fn state_remove_chat_index_conversation_cached(
+    state: &AppState,
+    conversation_id: &str,
+) -> Result<(), String> {
+    let mut index = state_read_chat_index_cached(state)?;
+    remove_chat_index_conversation(&mut index, conversation_id);
+    *state
+        .cached_chat_index
+        .lock()
+        .map_err(|_| "Failed to lock cached chat index".to_string())? = Some(index);
     Ok(())
 }
 
@@ -773,6 +537,7 @@ fn state_write_conversation_cached(
         deleted_ids.remove(&conversation.id);
     }
     sync_cached_app_data_conversation(state, conversation)?;
+    state_upsert_chat_index_conversation_cached(state, conversation)?;
     if let Ok(mut pending) = state.app_data_persist_pending.lock() {
         if pending
             .as_ref()
@@ -822,6 +587,7 @@ fn state_delete_conversation_cached(
         deleted_ids.insert(conversation_id.to_string());
     }
     sync_cached_app_data_conversation_deleted(state, conversation_id)?;
+    state_remove_chat_index_conversation_cached(state, conversation_id)?;
     if let Ok(mut pending) = state.app_data_persist_pending.lock() {
         if pending
             .as_ref()
@@ -1227,7 +993,6 @@ fn state_schedule_app_data_persist(state: &AppState, data: &AppData) -> Result<u
 fn state_schedule_conversation_persist(
     state: &AppState,
     conversation: &Conversation,
-    include_chat_index: bool,
 ) -> Result<u64, String> {
     let seq = state
         .conversation_persist_latest_seq
@@ -1263,26 +1028,7 @@ fn state_schedule_conversation_persist(
         deleted_ids.remove(&conversation.id);
     }
     sync_cached_app_data_conversation(state, conversation)?;
-
-    let mut pending_chat_index = None;
-    if include_chat_index {
-        let mut chat_index = state_read_chat_index_cached(state)?;
-        upsert_chat_index_conversation(&mut chat_index, conversation);
-        let disk_mtime = path_modified_time(&app_layout_chat_index_path(&state.data_path));
-        *state
-            .cached_chat_index
-            .lock()
-            .map_err(|_| "Failed to lock cached chat index".to_string())? =
-            Some(chat_index.clone());
-        *state
-            .cached_chat_index_mtime
-            .lock()
-            .map_err(|_| "Failed to lock cached chat index mtime".to_string())? = disk_mtime;
-        state
-            .cached_chat_index_dirty
-            .store(true, std::sync::atomic::Ordering::Release);
-        pending_chat_index = Some(chat_index);
-    }
+    state_upsert_chat_index_conversation_cached(state, conversation)?;
 
     {
         let mut pending = state
@@ -1293,15 +1039,11 @@ fn state_schedule_conversation_persist(
             seq,
             conversations: std::collections::HashMap::new(),
             deleted_conversation_ids: std::collections::HashSet::new(),
-            chat_index: None,
         });
         slot.seq = seq;
         slot.conversations
             .insert(conversation.id.clone(), conversation.clone());
         slot.deleted_conversation_ids.remove(&conversation.id);
-        if pending_chat_index.is_some() {
-            slot.chat_index = pending_chat_index;
-        }
     }
     refresh_cached_app_data_dirty(state);
     state.conversation_persist_notify.notify_one();
@@ -1311,7 +1053,6 @@ fn state_schedule_conversation_persist(
 fn state_schedule_conversation_delete(
     state: &AppState,
     conversation_id: &str,
-    include_chat_index: bool,
 ) -> Result<u64, String> {
     let normalized_conversation_id = conversation_id.trim();
     if normalized_conversation_id.is_empty() {
@@ -1350,35 +1091,7 @@ fn state_schedule_conversation_delete(
         deleted_ids.insert(normalized_conversation_id.to_string());
     }
     sync_cached_app_data_conversation_deleted(state, normalized_conversation_id)?;
-
-    let mut pending_chat_index = None;
-    if include_chat_index {
-        let chat_index_snapshot = {
-            let cached = state
-                .cached_app_data
-                .lock()
-                .map_err(|_| "Failed to lock cached app data".to_string())?;
-            cached
-                .as_ref()
-                .map(|data| build_chat_index_file(&data.conversations))
-        };
-        if let Some(chat_index) = chat_index_snapshot {
-            let disk_mtime = path_modified_time(&app_layout_chat_index_path(&state.data_path));
-            *state
-                .cached_chat_index
-                .lock()
-                .map_err(|_| "Failed to lock cached chat index".to_string())? =
-                Some(chat_index.clone());
-            *state
-                .cached_chat_index_mtime
-                .lock()
-                .map_err(|_| "Failed to lock cached chat index mtime".to_string())? = disk_mtime;
-            state
-                .cached_chat_index_dirty
-                .store(true, std::sync::atomic::Ordering::Release);
-            pending_chat_index = Some(chat_index);
-        }
-    }
+    state_remove_chat_index_conversation_cached(state, normalized_conversation_id)?;
 
     {
         let mut pending = state
@@ -1389,19 +1102,96 @@ fn state_schedule_conversation_delete(
             seq,
             conversations: std::collections::HashMap::new(),
             deleted_conversation_ids: std::collections::HashSet::new(),
-            chat_index: None,
         });
         slot.seq = seq;
         slot.conversations.remove(normalized_conversation_id);
         slot.deleted_conversation_ids
             .insert(normalized_conversation_id.to_string());
-        if pending_chat_index.is_some() {
-            slot.chat_index = pending_chat_index;
-        }
     }
     refresh_cached_app_data_dirty(state);
     state.conversation_persist_notify.notify_one();
     Ok(seq)
+}
+
+/// 退出/重启前同步排空待持久化队列，确保 120ms 去抖窗口内尚未落盘的写入不丢失。
+///
+/// 设计要点：
+/// - 在持有 `app_data_persist_write_lock` 期间串行写盘，与两个后台 worker 互斥；
+/// - 复用后台 worker 的“dirty 集合复核”策略，跳过已被直写路径落盘的会话，避免覆盖更新版本；
+/// - 同步阻塞执行（退出链路本就 `block_on`），不依赖 tokio 调度，规避运行时已开始关闭的竞态。
+///
+/// 返回是否实际写出了内容（用于日志），错误不向上传播为致命，调用方记录即可。
+fn flush_pending_persists_blocking(state: &AppState) -> Result<bool, String> {
+    let _write_guard = state.app_data_persist_write_lock.lock().map_err(|err| {
+        named_lock_error(
+            "app_data_persist_write_lock",
+            file!(),
+            line!(),
+            module_path!(),
+            &err,
+        )
+    })?;
+    let mut wrote_anything = false;
+
+    let pending_conversations = state
+        .conversation_persist_pending
+        .lock()
+        .map_err(|_| "Failed to lock pending conversation persist".to_string())?
+        .take();
+    if let Some(pending) = pending_conversations {
+        let skip_directly_persisted: std::collections::HashSet<String> = {
+            let dirty = state
+                .cached_conversation_dirty_ids
+                .lock()
+                .map_err(|_| "Failed to lock cached conversation dirty ids".to_string())?;
+            pending
+                .conversations
+                .keys()
+                .filter(|conversation_id| !dirty.contains(*conversation_id))
+                .cloned()
+                .collect()
+        };
+        for conversation_id in &pending.deleted_conversation_ids {
+            delete_conversation_shard(&state.data_path, conversation_id)?;
+            wrote_anything = true;
+        }
+        for (conversation_id, conversation) in pending.conversations.iter() {
+            if skip_directly_persisted.contains(conversation_id) {
+                continue;
+            }
+            write_conversation_shard(&state.data_path, conversation)?;
+            wrote_anything = true;
+        }
+        if let Ok(mut dirty_ids) = state.cached_conversation_dirty_ids.lock() {
+            for conversation_id in pending.conversations.keys() {
+                dirty_ids.remove(conversation_id);
+            }
+        }
+        if let Ok(mut deleted_ids) = state.cached_deleted_conversation_ids.lock() {
+            for conversation_id in &pending.deleted_conversation_ids {
+                deleted_ids.remove(conversation_id);
+            }
+        }
+    }
+
+    let pending_app_data = state
+        .app_data_persist_pending
+        .lock()
+        .map_err(|_| "Failed to lock pending app data persist".to_string())?
+        .take();
+    if let Some(pending) = pending_app_data {
+        #[allow(deprecated)]
+        write_app_data(&state.data_path, &pending.data)?;
+        wrote_anything = true;
+        if let Ok(mut cached) = state.cached_app_data.lock() {
+            *cached = Some(pending.data);
+        }
+    }
+
+    state
+        .cached_app_data_dirty
+        .store(false, std::sync::atomic::Ordering::Release);
+    Ok(wrote_anything)
 }
 
 fn start_app_data_persist_worker(state: &AppState) -> Result<(), String> {
@@ -1539,6 +1329,7 @@ fn start_conversation_persist_worker(state: &AppState) -> Result<(), String> {
 
                 let data_path = state_clone.data_path.clone();
                 let write_lock = state_clone.app_data_persist_write_lock.clone();
+                let dirty_ids_for_write = state_clone.cached_conversation_dirty_ids.clone();
                 let pending_for_write = pending.clone();
                 let write_result = tokio::task::spawn_blocking(move || {
                     let _write_guard = write_lock.lock().map_err(|err| {
@@ -1553,7 +1344,31 @@ fn start_conversation_persist_worker(state: &AppState) -> Result<(), String> {
                     for conversation_id in &pending_for_write.deleted_conversation_ids {
                         delete_conversation_shard(&data_path, conversation_id)?;
                     }
-                    for conversation in pending_for_write.conversations.values() {
+                    // 在持有写锁的临界区内复核 dirty 集合：直写路径（如工具结果追加）
+                    // 完成后会把会话从 dirty_ids 移除并写入更新版本。若此处发现批快照中
+                    // 的会话已不在 dirty 集合，说明磁盘上已是更新的直写版本，跳过写入，
+                    // 避免用过期批快照覆盖（lost update）。
+                    let skip_directly_persisted: std::collections::HashSet<String> = {
+                        let dirty = dirty_ids_for_write.lock().map_err(|err| {
+                            named_lock_error(
+                                "cached_conversation_dirty_ids",
+                                file!(),
+                                line!(),
+                                module_path!(),
+                                &err,
+                            )
+                        })?;
+                        pending_for_write
+                            .conversations
+                            .keys()
+                            .filter(|conversation_id| !dirty.contains(*conversation_id))
+                            .cloned()
+                            .collect()
+                    };
+                    for (conversation_id, conversation) in pending_for_write.conversations.iter() {
+                        if skip_directly_persisted.contains(conversation_id) {
+                            continue;
+                        }
                         write_conversation_shard(&data_path, conversation)?;
                     }
                     let conversation_mtimes = pending_for_write
@@ -1571,22 +1386,15 @@ fn start_conversation_persist_worker(state: &AppState) -> Result<(), String> {
                         .iter()
                         .cloned()
                         .collect::<Vec<_>>();
-                    let chat_index_mtime = if let Some(chat_index) = pending_for_write.chat_index.as_ref() {
-                        write_chat_index_shard(&data_path, chat_index)?;
-                        path_modified_time(&app_layout_chat_index_path(&data_path))
-                    } else {
-                        None
-                    };
-                    Ok::<(Vec<(String, Option<std::time::SystemTime>)>, Vec<String>, Option<std::time::SystemTime>), String>((
+                    Ok::<(Vec<(String, Option<std::time::SystemTime>)>, Vec<String>), String>((
                         conversation_mtimes,
                         deleted_ids,
-                        chat_index_mtime,
                     ))
                 })
                 .await;
 
                 match write_result {
-                    Ok(Ok((conversation_mtimes, deleted_ids, chat_index_mtime))) => {
+                    Ok(Ok((conversation_mtimes, deleted_ids))) => {
                         if let Ok(mut cached_mtimes) = state_clone.cached_conversation_mtimes.lock() {
                             for (conversation_id, disk_mtime) in &conversation_mtimes {
                                 cached_mtimes.insert(conversation_id.clone(), *disk_mtime);
@@ -1635,27 +1443,6 @@ fn start_conversation_persist_worker(state: &AppState) -> Result<(), String> {
                                 if !pending_deleted_ids.contains(conversation_id) {
                                     deleted_conversation_ids.remove(conversation_id);
                                 }
-                            }
-                        }
-                        if pending.chat_index.is_some() {
-                            if let Some(disk_mtime) = chat_index_mtime {
-                                if let Ok(mut cached_chat_index_mtime) =
-                                    state_clone.cached_chat_index_mtime.lock()
-                                {
-                                    *cached_chat_index_mtime = Some(disk_mtime);
-                                }
-                            }
-                            let chat_index_still_pending = state_clone
-                                .conversation_persist_pending
-                                .lock()
-                                .ok()
-                                .and_then(|slot| slot.as_ref().map(|item| item.chat_index.is_some()))
-                                .unwrap_or(false);
-                            if !chat_index_still_pending {
-                                state_clone.cached_chat_index_dirty.store(
-                                    false,
-                                    std::sync::atomic::Ordering::Release,
-                                );
                             }
                         }
                         refresh_cached_app_data_dirty(&state_clone);

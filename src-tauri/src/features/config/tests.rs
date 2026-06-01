@@ -905,14 +905,13 @@ maxOutputTokens = 8192
         let first = write_app_data_with_stats(&data_path, &data).expect("write first layout");
         assert!(first.agents_written);
         assert!(first.runtime_written);
-        assert!(first.chat_index_written);
         assert_eq!(first.conversation_writes, 2);
         assert_eq!(first.conversation_deletes, 0);
+        assert!(!app_layout_chat_index_path(&data_path).exists());
 
         let second = write_app_data_with_stats(&data_path, &data).expect("write same layout");
         assert!(!second.agents_written);
         assert!(!second.runtime_written);
-        assert!(!second.chat_index_written);
         assert_eq!(second.conversation_writes, 0);
         assert_eq!(second.conversation_deletes, 0);
 
@@ -922,7 +921,6 @@ maxOutputTokens = 8192
             write_app_data_with_stats(&data_path, &runtime_only).expect("write runtime-only diff");
         assert!(!runtime_stats.agents_written);
         assert!(runtime_stats.runtime_written);
-        assert!(!runtime_stats.chat_index_written);
         assert_eq!(runtime_stats.conversation_writes, 0);
         assert_eq!(runtime_stats.conversation_deletes, 0);
     }
@@ -1073,48 +1071,6 @@ maxOutputTokens = 8192
         );
         assert!(!legacy_conversation_a_path.exists());
         assert!(!legacy_conversation_b_path.exists());
-    }
-
-    #[test]
-    fn write_chat_index_shard_should_not_touch_conversation_files() {
-        let root = std::env::temp_dir().join(format!("eca-chat-index-shard-{}", Uuid::new_v4()));
-        std::fs::create_dir_all(root.join("config")).expect("create temp config dir");
-        let data_path = root.join("config").join("app_data.json");
-
-        let mut data = AppData::default();
-        data.conversations = vec![
-            build_test_conversation("conv-a", "Conversation A"),
-            build_test_conversation("conv-b", "Conversation B"),
-        ];
-        write_app_data_with_stats(&data_path, &data).expect("seed layout");
-
-        let chat_index_path = app_layout_chat_index_path(&data_path);
-        let conversation_a_paths =
-            message_store::message_store_paths(&data_path, "conv-a").expect("conversation a paths");
-        let conversation_b_paths =
-            message_store::message_store_paths(&data_path, "conv-b").expect("conversation b paths");
-        let conversation_a_before =
-            message_store::message_store_shard_write_signature(&conversation_a_paths);
-        let conversation_b_before =
-            message_store::message_store_shard_write_signature(&conversation_b_paths);
-        let chat_index_before = std::fs::read(&chat_index_path).expect("read chat index before");
-
-        let mut index = read_chat_index_shard(&data_path).expect("read chat index shard");
-        index.conversations.reverse();
-        assert!(write_chat_index_shard(&data_path, &index).expect("write chat index shard"));
-
-        assert_ne!(
-            std::fs::read(&chat_index_path).expect("read chat index after"),
-            chat_index_before
-        );
-        assert_eq!(
-            message_store::message_store_shard_write_signature(&conversation_a_paths),
-            conversation_a_before
-        );
-        assert_eq!(
-            message_store::message_store_shard_write_signature(&conversation_b_paths),
-            conversation_b_before
-        );
     }
 
     #[test]

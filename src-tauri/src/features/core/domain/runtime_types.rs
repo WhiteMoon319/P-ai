@@ -92,7 +92,6 @@ struct PendingConversationPersist {
     seq: u64,
     conversations: std::collections::HashMap<String, Conversation>,
     deleted_conversation_ids: std::collections::HashSet<String>,
-    chat_index: Option<ChatIndexFile>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -109,8 +108,6 @@ struct AppDataCacheSignature {
     agents_modified: Option<std::time::SystemTime>,
     runtime_len: u64,
     runtime_modified: Option<std::time::SystemTime>,
-    chat_index_len: u64,
-    chat_index_modified: Option<std::time::SystemTime>,
     conversations: ConversationDirCacheSignature,
 }
 

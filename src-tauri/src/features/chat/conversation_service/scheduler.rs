@@ -199,7 +199,7 @@ fn persist_after_flush(
             runtime.remote_im_contact_checkpoints.clone(),
         ))
         .ok();
-    service.persist_conversation_with_chat_index(state, conversation)?;
+    service.persist_conversation(state, conversation)?;
     if remote_im_runtime_changed {
         state_write_runtime_state_cached(state, runtime)?;
     }

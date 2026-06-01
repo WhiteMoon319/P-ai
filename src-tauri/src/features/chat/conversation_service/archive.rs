@@ -257,7 +257,7 @@ impl ConversationService {
             drop(guard);
             return Err("Archive not found".to_string());
         }
-        state_schedule_conversation_delete(state, normalized_archive_id, true)?;
+        state_schedule_conversation_delete(state, normalized_archive_id)?;
         drop(guard);
         Ok(())
     }
@@ -322,7 +322,7 @@ impl ConversationService {
                     source,
                 )?;
             let conversation_id = conversation.id.clone();
-            state_schedule_conversation_persist(state, &conversation, true)?;
+            state_schedule_conversation_persist(state, &conversation)?;
             if runtime
                 .main_conversation_id
                 .as_deref()
@@ -393,10 +393,10 @@ impl ConversationService {
                 continue;
             }
             if existing_archive_ids.contains(&conversation_id) {
-                state_schedule_conversation_persist(state, &conversation, true)?;
+                state_schedule_conversation_persist(state, &conversation)?;
                 replaced_count += 1;
             } else {
-                state_schedule_conversation_persist(state, &conversation, true)?;
+                state_schedule_conversation_persist(state, &conversation)?;
                 imported_count += 1;
             }
             if selected_archive_id.is_none() {
@@ -447,7 +447,7 @@ impl ConversationService {
         conversation.updated_at = now.clone();
         conversation.last_user_at = Some(now);
         let active_conversation_id = Some(conversation.id.clone());
-        state_schedule_conversation_persist(state, &conversation, false)?;
+        state_schedule_conversation_persist(state, &conversation)?;
 
         drop(guard);
 

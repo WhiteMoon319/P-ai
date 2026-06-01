@@ -6,6 +6,9 @@ pub(super) const MESSAGE_STORE_INDEX_FILE_NAME: &str = "messages.idx.json";
 pub(super) const MESSAGE_STORE_BLOCKS_DIR_NAME: &str = "blocks";
 const MESSAGE_STORE_BLOBS_DIR_NAME: &str = "blobs";
 
+#[cfg(target_os = "windows")]
+use std::os::windows::ffi::OsStrExt as _;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct MessageStorePaths {
     data_path: PathBuf,
@@ -158,23 +161,62 @@ pub(super) fn replace_message_store_file_atomic(
     path: &PathBuf,
     label: &str,
 ) -> Result<(), String> {
-    if let Err(rename_err) = fs::rename(tmp_path, path) {
+    if let Err(replace_err) = replace_message_store_file_atomic_inner(tmp_path, path) {
         if let Err(copy_err) = fs::copy(tmp_path, path) {
             let _ = fs::remove_file(tmp_path);
             return Err(format!(
-                "替换{label}失败，tmp={}，target={}，rename_error={rename_err}，copy_error={copy_err}",
+                "替换{label}失败，tmp={}，target={}，replace_error={replace_err}，copy_error={copy_err}",
                 tmp_path.display(),
                 path.display()
             ));
         }
         fs::remove_file(tmp_path).map_err(|cleanup_err| {
             format!(
-                "清理{label}临时文件失败，tmp={}，rename_error={rename_err}，cleanup_error={cleanup_err}",
+                "清理{label}临时文件失败，tmp={}，replace_error={replace_err}，cleanup_error={cleanup_err}",
                 tmp_path.display()
             )
         })?;
     }
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn replace_message_store_file_atomic_inner(
+    tmp_path: &PathBuf,
+    path: &PathBuf,
+) -> Result<(), std::io::Error> {
+    let tmp_wide = path_to_windows_wide_null(tmp_path);
+    let path_wide = path_to_windows_wide_null(path);
+    let flags = windows_sys::Win32::Storage::FileSystem::MOVEFILE_REPLACE_EXISTING
+        | windows_sys::Win32::Storage::FileSystem::MOVEFILE_WRITE_THROUGH;
+    let ok = unsafe {
+        windows_sys::Win32::Storage::FileSystem::MoveFileExW(
+            tmp_wide.as_ptr(),
+            path_wide.as_ptr(),
+            flags,
+        )
+    };
+    if ok == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn replace_message_store_file_atomic_inner(
+    tmp_path: &PathBuf,
+    path: &PathBuf,
+) -> Result<(), std::io::Error> {
+    fs::rename(tmp_path, path)
+}
+
+#[cfg(target_os = "windows")]
+fn path_to_windows_wide_null(path: &Path) -> Vec<u16> {
+    path.as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
 }
 
 #[cfg(test)]

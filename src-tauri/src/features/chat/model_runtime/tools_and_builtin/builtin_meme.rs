@@ -1304,7 +1304,6 @@ mod builtin_meme_tests {
             cached_runtime_state: Arc::new(Mutex::new(None)),
             cached_runtime_state_mtime: Arc::new(Mutex::new(None)),
             cached_chat_index: Arc::new(Mutex::new(None)),
-            cached_chat_index_mtime: Arc::new(Mutex::new(None)),
             cached_conversations: Arc::new(Mutex::new(std::collections::HashMap::new())),
             cached_conversation_mtimes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             cached_app_data: Arc::new(Mutex::new(None)),
@@ -1320,7 +1319,6 @@ mod builtin_meme_tests {
             conversation_persist_latest_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             cached_conversation_dirty_ids: Arc::new(Mutex::new(std::collections::HashSet::new())),
             cached_deleted_conversation_ids: Arc::new(Mutex::new(std::collections::HashSet::new())),
-            cached_chat_index_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             app_data_persist_write_lock: Arc::new(Mutex::new(())),
             last_panic_snapshot: Arc::new(Mutex::new(None)),
             inflight_chat_abort_handles: Arc::new(Mutex::new(std::collections::HashMap::new())),
@@ -1349,9 +1347,6 @@ mod builtin_meme_tests {
                 std::collections::HashSet::new(),
             )),
             provider_request_gates: Arc::new(tokio::sync::Mutex::new(
-                std::collections::HashMap::new(),
-            )),
-            conversation_index_repair_gates: Arc::new(Mutex::new(
                 std::collections::HashMap::new(),
             )),
             remote_im_contact_runtime_states: Arc::new(Mutex::new(

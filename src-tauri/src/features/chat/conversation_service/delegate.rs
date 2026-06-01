@@ -42,7 +42,7 @@ impl ConversationService {
                 None,
             );
             let conversation_id = conversation.id.clone();
-            state_schedule_conversation_persist(state, &conversation, true)?;
+            state_schedule_conversation_persist(state, &conversation)?;
             let mut runtime = state_read_runtime_state_cached(state)?;
             runtime.main_conversation_id = Some(conversation_id.clone());
             state_write_runtime_state_cached(state, &runtime)?;

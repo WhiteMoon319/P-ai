@@ -2035,7 +2035,7 @@ async fn run_archive_pipeline_inner(
             }
         })
         .ok_or_else(|| "归档后未能确定当前前台会话。".to_string())?;
-    state_schedule_conversation_persist(state, &archived_conversation, true)?;
+    state_schedule_conversation_persist(state, &archived_conversation)?;
     match delegate_runtime_thread_conversation_delete_by_root(state, &source.id) {
         Ok(deleted_count) => runtime_log_info(format!(
             "[委托会话] 完成，任务=随会话归档级联清理，root_conversation_id={}，deleted_count={}",

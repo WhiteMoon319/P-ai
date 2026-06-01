@@ -379,7 +379,7 @@ fn persist_aliyun_multimodal_cache_conversation_update(
                 conversation.id, err
             )
         })?;
-    conversation_service().persist_conversation_with_chat_index(state, conversation)?;
+    conversation_service().persist_conversation(state, conversation)?;
     Ok(())
 }
 

@@ -219,7 +219,6 @@ fn conversation_todo_replace(
         .map_err(|_| format!("未找到会话，conversation_id={conversation_id}"))?;
     conversation.current_todos = stored.clone();
     conversation.updated_at = now_iso();
-    conversation_service().persist_conversation_with_chat_index(state, &conversation)?;
+    conversation_service().persist_conversation(state, &conversation)?;
     Ok(stored)
 }
-

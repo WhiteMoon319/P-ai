@@ -1058,7 +1058,7 @@ fn update_remote_im_reply_decision_for_message(
                             .unwrap_or(true)
                 }) {
                     update_message(message);
-                    conversation_service().persist_conversation_with_chat_index(
+                    conversation_service().persist_conversation(
                         state,
                         &conversation,
                     )?;
@@ -2402,7 +2402,7 @@ async fn send_chat_message_inner(
                     for memory_id in &recall_payload.raw_ids {
                         conversation.memory_recall_table.push(memory_id.clone());
                     }
-                    conversation_service().persist_conversation_with_chat_index(
+                    conversation_service().persist_conversation(
                         &state,
                         &conversation,
                     )?;
@@ -3205,7 +3205,7 @@ async fn send_chat_message_inner(
                         &now,
                     ));
                 }
-                conversation_service().persist_conversation_with_chat_index(
+                conversation_service().persist_conversation(
                     &state,
                     &conversation,
                 )?;

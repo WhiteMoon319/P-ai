@@ -85,12 +85,12 @@ fn build_foreground_snapshot_recent_messages(
 }
 
 impl ConversationService {
-    fn persist_conversation_with_chat_index(
+    fn persist_conversation(
         &self,
         state: &AppState,
         conversation: &Conversation,
     ) -> Result<(), String> {
-        state_schedule_conversation_persist(state, conversation, true).map(|_| ())
+        state_schedule_conversation_persist(state, conversation).map(|_| ())
     }
 
     fn append_tool_call_result_pair(
@@ -110,6 +110,21 @@ impl ConversationService {
         let conversation = state_read_conversation_cached(state, normalized_conversation_id)?;
         self.ensure_unarchived_conversation(&conversation, normalized_conversation_id)?;
         let paths = message_store::message_store_paths(&state.data_path, normalized_conversation_id)?;
+        // 直写落盘必须与后台持久化 worker 共用 app_data_persist_write_lock：
+        // 否则 worker 可能在 spawn_blocking 内用旧快照覆盖这里刚写入的工具结果，
+        // 或与 worker 的写盘交错导致 manifest/分片增量不一致。
+        let _write_guard = state
+            .app_data_persist_write_lock
+            .lock()
+            .map_err(|err| {
+                named_lock_error(
+                    "app_data_persist_write_lock",
+                    file!(),
+                    line!(),
+                    module_path!(),
+                    &err,
+                )
+            })?;
         let append = message_store::append_message_store_tool_call_result_pair(
             &paths,
             &conversation,
@@ -118,7 +133,7 @@ impl ConversationService {
             tool_result_event,
             provider_meta_patch,
         )?;
-        state_mark_conversation_direct_persisted(state, &append.conversation, true)?;
+        state_mark_conversation_direct_persisted(state, &append.conversation)?;
         Ok(append)
     }
 
@@ -157,7 +172,7 @@ impl ConversationService {
         }
         conversation.current_todos = stored_todos.to_vec();
         let current_todo = conversation_current_todo_text(&conversation);
-        state_schedule_conversation_persist(state, &conversation, false)?;
+        state_schedule_conversation_persist(state, &conversation)?;
         drop(guard);
         Ok(Some(ConversationTodosUpdateResult { current_todo }))
     }

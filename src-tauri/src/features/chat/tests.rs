@@ -3072,7 +3072,6 @@
             cached_runtime_state: Arc::new(Mutex::new(None)),
             cached_runtime_state_mtime: Arc::new(Mutex::new(None)),
             cached_chat_index: Arc::new(Mutex::new(None)),
-            cached_chat_index_mtime: Arc::new(Mutex::new(None)),
             cached_conversations: Arc::new(Mutex::new(std::collections::HashMap::new())),
             cached_conversation_mtimes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             cached_app_data: Arc::new(Mutex::new(None)),
@@ -3088,7 +3087,6 @@
             conversation_persist_latest_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             cached_conversation_dirty_ids: Arc::new(Mutex::new(std::collections::HashSet::new())),
             cached_deleted_conversation_ids: Arc::new(Mutex::new(std::collections::HashSet::new())),
-            cached_chat_index_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             app_data_persist_write_lock: Arc::new(Mutex::new(())),
             last_panic_snapshot: Arc::new(Mutex::new(None)),
             inflight_chat_abort_handles: Arc::new(Mutex::new(std::collections::HashMap::new())),
@@ -3117,9 +3115,6 @@
                 std::collections::HashSet::new(),
             )),
             provider_request_gates: Arc::new(tokio::sync::Mutex::new(
-                std::collections::HashMap::new(),
-            )),
-            conversation_index_repair_gates: Arc::new(Mutex::new(
                 std::collections::HashMap::new(),
             )),
             remote_im_contact_runtime_states: Arc::new(Mutex::new(
@@ -3210,20 +3205,14 @@
     }
 
     #[test]
-    fn state_read_conversation_cached_should_self_heal_missing_chat_index_item() {
+    fn state_read_chat_index_cached_should_rebuild_from_storage_without_disk_index() {
         let state = test_chat_runtime_state();
         let now = now_iso();
         let conversation = test_chat_conversation("conversation-heal", "active", &now);
 
         write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
-        write_chat_index_shard(&state.data_path, &ChatIndexFile::default())
-            .expect("write empty chat index");
 
-        let loaded = state_read_conversation_cached(&state, &conversation.id)
-            .expect("read conversation with self heal");
-        assert_eq!(loaded.id, conversation.id);
-
-        let chat_index = read_chat_index_shard(&state.data_path).expect("read chat index");
+        let chat_index = state_read_chat_index_cached(&state).expect("read memory chat index");
         let item = chat_index
             .conversations
             .iter()
@@ -3233,10 +3222,11 @@
         assert_eq!(item.status, conversation.status);
         assert_eq!(item.summary, conversation.summary);
         assert_eq!(item.archived_at, conversation.archived_at);
+        assert!(!app_layout_chat_index_path(&state.data_path).exists());
     }
 
     #[test]
-    fn state_read_conversation_cached_should_keep_archived_chat_index_item_consistent() {
+    fn state_read_chat_index_cached_should_rebuild_archived_fields_from_storage() {
         let state = test_chat_runtime_state();
         let now = now_iso();
         let mut conversation = test_chat_conversation("conversation-hidden-heal", "active", &now);
@@ -3245,25 +3235,8 @@
         conversation.status = "archived".to_string();
 
         write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
-        write_chat_index_shard(
-            &state.data_path,
-            &ChatIndexFile {
-                conversations: vec![ChatIndexConversationItem {
-                    id: conversation.id.clone(),
-                    updated_at: conversation.updated_at.clone(),
-                    status: conversation.status.clone(),
-                    summary: String::new(),
-                    archived_at: conversation.archived_at.clone(),
-                }],
-            },
-        )
-        .expect("write stale chat index");
 
-        let loaded = state_read_conversation_cached(&state, &conversation.id)
-            .expect("read conversation with stale index self heal");
-        assert_eq!(loaded.id, conversation.id);
-
-        let chat_index = read_chat_index_shard(&state.data_path).expect("read chat index");
+        let chat_index = state_read_chat_index_cached(&state).expect("read memory chat index");
         let item = chat_index
             .conversations
             .iter()
@@ -3284,10 +3257,8 @@
         conversation.status = "archived".to_string();
 
         write_conversation_shard(&state.data_path, &conversation).expect("write archived conversation");
-        write_chat_index_shard(&state.data_path, &ChatIndexFile::default())
-            .expect("write empty chat index");
 
-        let chat_index = state_read_chat_index_cached(&state).expect("read repaired chat index");
+        let chat_index = state_read_chat_index_cached(&state).expect("read rebuilt chat index");
         let item = chat_index
             .conversations
             .iter()
@@ -3299,7 +3270,7 @@
     }
 
     #[test]
-    fn read_app_bootstrap_snapshot_should_repair_chat_index_from_storage_snapshot() {
+    fn read_app_bootstrap_snapshot_should_build_memory_chat_index_from_storage_snapshot() {
         let state = test_chat_runtime_state();
         let now = now_iso();
         let mut conversation = test_chat_conversation("conversation-bootstrap-recover", "active", &now);
@@ -3308,26 +3279,90 @@
         conversation.status = "archived".to_string();
 
         write_conversation_shard(&state.data_path, &conversation).expect("write archived conversation");
-        write_chat_index_shard(
-            &state.data_path,
-            &ChatIndexFile {
-                conversations: vec![ChatIndexConversationItem {
-                    id: "conversation-orphan".to_string(),
-                    updated_at: now.clone(),
-                    status: "active".to_string(),
-                    summary: String::new(),
-                    archived_at: None,
-                }],
-            },
-        )
-        .expect("write stale chat index");
 
         let _snapshot = read_app_bootstrap_snapshot(&state).expect("read bootstrap snapshot");
 
-        let chat_index = read_chat_index_shard(&state.data_path).expect("read repaired chat index");
+        let chat_index = state_read_chat_index_cached(&state).expect("read memory chat index");
         assert_eq!(chat_index.conversations.len(), 1);
         assert_eq!(chat_index.conversations[0].id, conversation.id);
         assert_eq!(chat_index.conversations[0].status, conversation.status);
+        assert!(!app_layout_chat_index_path(&state.data_path).exists());
+    }
+
+    #[test]
+    fn state_read_chat_index_cached_should_rebuild_from_legacy_app_data_file() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let conversation = test_chat_conversation("conversation-legacy-index", "active", &now);
+        let mut data = AppData::default();
+        data.conversations = vec![conversation.clone()];
+        std::fs::write(
+            &state.data_path,
+            serde_json::to_vec_pretty(&data).expect("serialize legacy app data"),
+        )
+        .expect("write legacy app data");
+
+        let chat_index = state_read_chat_index_cached(&state).expect("read memory chat index");
+
+        assert_eq!(chat_index.conversations.len(), 1);
+        assert_eq!(chat_index.conversations[0].id, conversation.id);
+        assert!(!app_layout_chat_index_path(&state.data_path).exists());
+    }
+
+    #[test]
+    fn state_schedule_conversation_persist_should_update_memory_chat_index_only() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let mut conversation = test_chat_conversation("conversation-memory-upsert", "active", &now);
+        state_schedule_conversation_persist(&state, &conversation).expect("schedule persist");
+        conversation.summary = "updated summary".to_string();
+        conversation.status = "archived".to_string();
+        conversation.archived_at = Some(now.clone());
+        state_schedule_conversation_persist(&state, &conversation).expect("schedule updated persist");
+
+        let chat_index = state_read_chat_index_cached(&state).expect("read memory chat index");
+        let item = chat_index
+            .conversations
+            .iter()
+            .find(|item| item.id == conversation.id)
+            .expect("chat index item");
+        assert_eq!(item.summary, conversation.summary);
+        assert_eq!(item.status, conversation.status);
+        assert_eq!(item.archived_at, conversation.archived_at);
+        assert!(!app_layout_chat_index_path(&state.data_path).exists());
+    }
+
+    #[test]
+    fn state_mark_conversation_direct_persisted_should_update_memory_chat_index_only() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let mut conversation = test_chat_conversation("conversation-direct-upsert", "active", &now);
+        write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
+        conversation.summary = "direct summary".to_string();
+        conversation.status = "archived".to_string();
+        conversation.archived_at = Some(now.clone());
+        state_mark_conversation_direct_persisted(&state, &conversation)
+            .expect("mark direct persisted");
+
+        let chat_index = state_read_chat_index_cached(&state).expect("read memory chat index");
+        assert_eq!(chat_index.conversations.len(), 1);
+        assert_eq!(chat_index.conversations[0].id, conversation.id);
+        assert_eq!(chat_index.conversations[0].summary, conversation.summary);
+        assert!(!app_layout_chat_index_path(&state.data_path).exists());
+    }
+
+    #[test]
+    fn state_schedule_conversation_delete_should_remove_memory_chat_index_item() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let conversation = test_chat_conversation("conversation-memory-delete", "active", &now);
+        state_schedule_conversation_persist(&state, &conversation).expect("schedule persist");
+
+        state_schedule_conversation_delete(&state, &conversation.id).expect("schedule delete");
+
+        let chat_index = state_read_chat_index_cached(&state).expect("read memory chat index");
+        assert!(chat_index.conversations.is_empty());
+        assert!(!app_layout_chat_index_path(&state.data_path).exists());
     }
 
     #[test]
@@ -3336,22 +3371,6 @@
         let now = now_iso();
         let conversation = test_chat_conversation("conversation-existing", "active", &now);
         write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
-        write_chat_index_shard(
-            &state.data_path,
-            &ChatIndexFile {
-                conversations: vec![
-                    build_chat_index_item(&conversation),
-                    ChatIndexConversationItem {
-                        id: "conversation-orphan".to_string(),
-                        updated_at: now.clone(),
-                        status: "active".to_string(),
-                        summary: String::new(),
-                        archived_at: None,
-                    },
-                ],
-            },
-        )
-        .expect("write stale chat index");
 
         let summaries = conversation_service()
             .collect_unarchived_conversation_summaries_cached(&state, &AppConfig::default())
@@ -3359,7 +3378,7 @@
 
         assert_eq!(summaries.len(), 1);
         assert_eq!(summaries[0].conversation_id, conversation.id);
-        let chat_index = read_chat_index_shard(&state.data_path).expect("read chat index");
+        let chat_index = state_read_chat_index_cached(&state).expect("read memory chat index");
         assert_eq!(chat_index.conversations.len(), 1);
         assert_eq!(chat_index.conversations[0].id, conversation.id);
     }
@@ -3370,19 +3389,6 @@
         let now = now_iso();
         let conversation = test_chat_conversation("conversation-visible-summary-mismatch", "active", &now);
         write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
-        write_chat_index_shard(
-            &state.data_path,
-            &ChatIndexFile {
-                conversations: vec![ChatIndexConversationItem {
-                    id: conversation.id.clone(),
-                    updated_at: conversation.updated_at.clone(),
-                    status: conversation.status.clone(),
-                    summary: "旧摘要".to_string(),
-                    archived_at: conversation.archived_at.clone(),
-                }],
-            },
-        )
-        .expect("write mismatched chat index");
 
         let summaries = conversation_service()
             .collect_unarchived_conversation_summaries_cached(&state, &AppConfig::default())
@@ -3390,7 +3396,7 @@
 
         assert_eq!(summaries.len(), 1);
         assert_eq!(summaries[0].conversation_id, conversation.id);
-        let chat_index = read_chat_index_shard(&state.data_path).expect("read chat index");
+        let chat_index = state_read_chat_index_cached(&state).expect("read memory chat index");
         assert_eq!(chat_index.conversations.len(), 1);
         assert_eq!(chat_index.conversations[0].id, conversation.id);
         assert_eq!(chat_index.conversations[0].summary, conversation.summary);
@@ -3408,16 +3414,6 @@
 
         write_conversation_shard(&state.data_path, &active).expect("write active conversation");
         write_conversation_shard(&state.data_path, &archived).expect("write archived conversation");
-        write_chat_index_shard(
-            &state.data_path,
-            &ChatIndexFile {
-                conversations: vec![
-                    build_chat_index_item(&active),
-                    build_chat_index_item(&archived),
-                ],
-            },
-        )
-        .expect("write mixed chat index");
 
         let summaries = conversation_service()
             .collect_unarchived_conversation_summaries_cached(&state, &AppConfig::default())
@@ -3425,7 +3421,7 @@
 
         assert_eq!(summaries.len(), 1);
         assert_eq!(summaries[0].conversation_id, active.id);
-        let chat_index = read_chat_index_shard(&state.data_path).expect("read chat index");
+        let chat_index = state_read_chat_index_cached(&state).expect("read memory chat index");
         assert_eq!(chat_index.conversations.len(), 2);
         assert!(chat_index
             .conversations
@@ -3550,7 +3546,7 @@
         conversation.messages.push(test_text_message("user", "历史消息", &now));
         conversation.updated_at = now.clone();
         conversation.last_user_at = Some(now.clone());
-        state_schedule_conversation_persist(&state, &conversation, true)
+        state_schedule_conversation_persist(&state, &conversation)
             .expect("persist conversation");
 
         let items = conversation_service()
@@ -3633,7 +3629,7 @@
         conversation.messages.push(test_text_message("user", "历史消息", &now));
         conversation.updated_at = now.clone();
         conversation.last_user_at = Some(now.clone());
-        state_schedule_conversation_persist(&state, &conversation, true)
+        state_schedule_conversation_persist(&state, &conversation)
             .expect("persist conversation");
 
         let messages = conversation_service()
@@ -3690,7 +3686,7 @@
             recalled_user.clone(),
             trailing_assistant,
         ];
-        state_schedule_conversation_persist(&state, &conversation, true)
+        state_schedule_conversation_persist(&state, &conversation)
             .expect("persist full conversation");
         let store_paths =
             message_store::message_store_paths(&state.data_path, &conversation.id)
@@ -3698,7 +3694,7 @@
         message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
             .expect("write message store");
         conversation.messages = Vec::new();
-        state_schedule_conversation_persist(&state, &conversation, true)
+        state_schedule_conversation_persist(&state, &conversation)
             .expect("persist slim conversation");
 
         let input = RewindConversationInput {
@@ -3773,7 +3769,7 @@
             recalled_user.clone(),
             trailing_assistant,
         ];
-        state_schedule_conversation_persist(&state, &conversation, true)
+        state_schedule_conversation_persist(&state, &conversation)
             .expect("persist conversation");
         let store_paths =
             message_store::message_store_paths(&state.data_path, &conversation.id)
@@ -3911,13 +3907,6 @@
         );
         conversation.messages.push(persisted);
         write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
-        write_chat_index_shard(
-            &state.data_path,
-            &ChatIndexFile {
-                conversations: vec![build_chat_index_item(&conversation)],
-            },
-        )
-        .expect("write chat index");
         set_conversation_runtime_state(&state, "conversation-a", MainSessionState::AssistantStreaming)
             .expect("set streaming state");
 
@@ -4085,13 +4074,6 @@
         let now = now_iso();
         let conversation = test_chat_conversation("conversation-guided-no-activation", "active", &now);
         write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
-        write_chat_index_shard(
-            &state.data_path,
-            &ChatIndexFile {
-                conversations: vec![build_chat_index_item(&conversation)],
-            },
-        )
-        .expect("write chat index");
 
         let mut guided_event = test_pending_event("conversation-guided-no-activation");
         guided_event.queue_mode = ChatQueueMode::Guided;
@@ -4666,7 +4648,7 @@
             None,
             None,
         );
-        state_schedule_conversation_persist(&state, &conversation, false)
+        state_schedule_conversation_persist(&state, &conversation)
             .expect("persist conversation");
         refresh_global_tool_schema_cache(&state);
 

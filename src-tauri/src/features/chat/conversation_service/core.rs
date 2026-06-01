@@ -418,7 +418,7 @@ impl ConversationService {
         {
             return Ok(conversation);
         }
-        self.persist_conversation_with_chat_index(state, &conversation)?;
+        self.persist_conversation(state, &conversation)?;
         Ok(conversation)
     }
 

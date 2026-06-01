@@ -657,6 +657,22 @@ async fn graceful_shutdown_background_services(app: &AppHandle) {
         }
     }
 
+    // 退出前同步排空持久化队列：后台 worker 采用 120ms 去抖，
+    // 落在该窗口内的会话/应用数据写入若不在此 flush，会随进程退出丢失。
+    let persist_flush_started_at = std::time::Instant::now();
+    match flush_pending_persists_blocking(&state) {
+        Ok(wrote) => eprintln!(
+            "[退出] 持久化队列已排空: wrote={}，duration_ms={}",
+            wrote,
+            persist_flush_started_at.elapsed().as_millis()
+        ),
+        Err(err) => eprintln!(
+            "[退出] 持久化队列排空失败，可能丢失最后一次写入: duration_ms={}，error={}",
+            persist_flush_started_at.elapsed().as_millis(),
+            err
+        ),
+    }
+
     eprintln!(
         "[退出] 后台服务优雅停机完成: duration_ms={}",
         started_at.elapsed().as_millis()
