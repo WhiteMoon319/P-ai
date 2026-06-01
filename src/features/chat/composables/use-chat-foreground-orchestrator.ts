@@ -39,6 +39,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
     if (!previousConversationId) return;
     bindings.cacheConversationMessages(previousConversationId, bindings.allMessages.value);
     bindings.currentChatConversationId.value = "";
+    bindings.currentChatPreferredApiConfigId.value = "";
     bindings.currentChatTodos.value = [];
     if (bindings.trimmingConversationId.value === previousConversationId) {
       bindings.trimmingConversationId.value = "";

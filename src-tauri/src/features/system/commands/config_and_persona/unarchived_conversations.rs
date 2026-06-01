@@ -29,6 +29,7 @@ fn switch_active_conversation_snapshot(
         runtime_state: snapshot.runtime_state,
         current_todo: snapshot.current_todo,
         current_todos: snapshot.current_todos,
+        preferred_api_config_id: snapshot.preferred_api_config_id,
         unarchived_conversations,
     })
 }
@@ -56,6 +57,7 @@ fn get_foreground_conversation_light_snapshot(
         snapshot.runtime_state = unarchived_conversation_runtime_state(state.inner(), &conversation.id);
         snapshot.current_todo = conversation_current_todo_text(&conversation);
         snapshot.current_todos = conversation.current_todos;
+        snapshot.preferred_api_config_id = conversation.preferred_api_config_id;
     }
     runtime_log_info(format!(
         "[前台轻量快照] 完成，conversation_id={}，message_count={}，has_more_history={}，duration_ms={}",
@@ -72,6 +74,7 @@ fn get_foreground_conversation_light_snapshot(
         runtime_state: snapshot.runtime_state,
         current_todo: snapshot.current_todo,
         current_todos: snapshot.current_todos,
+        preferred_api_config_id: snapshot.preferred_api_config_id,
         unarchived_conversations: conversation_service()
             .list_unarchived_conversation_summaries(state.inner())?
             .summaries,

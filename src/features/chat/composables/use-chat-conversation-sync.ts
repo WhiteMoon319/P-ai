@@ -504,6 +504,7 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     }
     const nextMessages = reuseStableMessageReferences(rawNextMessages, bindings.allMessages.value);
     bindings.currentChatConversationId.value = nextConversationId;
+    bindings.currentChatPreferredApiConfigId.value = String(snapshot.preferredApiConfigId || "").trim();
     bindings.currentChatTodos.value = Array.isArray(snapshot.currentTodos)
       ? snapshot.currentTodos
         .map((item: any) => ({

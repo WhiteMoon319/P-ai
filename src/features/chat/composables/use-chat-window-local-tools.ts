@@ -70,36 +70,10 @@ export function useChatWindowLocalTools(bindings: Record<string, any>) {
     return pending ? await pending : true;
   }
 
-  function patchConversationPreferredModelInOverview(conversationId: string, preferredApiConfigId: string) {
-    const cid = String(conversationId || "").trim();
-    if (!cid) return;
-    const overrideMap = bindings.conversationPreferredApiConfigOverrides?.value;
-    if (overrideMap instanceof Map) {
-      const nextMap = new Map(overrideMap);
-      nextMap.set(cid, preferredApiConfigId);
-      bindings.conversationPreferredApiConfigOverrides.value = nextMap;
-    }
-    const patchOne = (item: any) => {
-      if (String(item.conversationId || "").trim() !== cid) return item;
-      return {
-        ...item,
-        preferredApiConfigId: preferredApiConfigId || undefined,
-      };
-    };
-    bindings.unarchivedConversations.value = bindings.unarchivedConversations.value.map(patchOne);
-    bindings.remoteImContactConversations.value = bindings.remoteImContactConversations.value.map(patchOne);
-  }
-
   function currentConversationPreferredModelId(conversationId: string): string {
     const cid = String(conversationId || "").trim();
-    const overrideMap = bindings.conversationPreferredApiConfigOverrides?.value;
-    if (overrideMap instanceof Map && overrideMap.has(cid)) {
-      return String(overrideMap.get(cid) || "").trim();
-    }
-    const currentItem = bindings.chatConversationItems.value.find(
-      (item: any) => String(item.conversationId || "").trim() === cid,
-    );
-    return String(currentItem?.preferredApiConfigId || "").trim();
+    if (!cid || cid !== String(bindings.currentChatConversationId.value || "").trim()) return "";
+    return String(bindings.currentChatPreferredApiConfigId?.value || "").trim();
   }
 
   async function updateConversationPreferredApiConfig(value: string) {
@@ -113,17 +87,16 @@ export function useChatWindowLocalTools(bindings: Record<string, any>) {
       bindings.setStatus("当前没有可切换模型的会话。");
       return;
     }
-    const currentItem = bindings.chatConversationItems.value.find(
-      (item: any) => String(item.conversationId || "").trim() === conversationId,
-    );
-    const previousId = String(currentItem?.preferredApiConfigId || "").trim();
+    const previousId = String(bindings.currentChatPreferredApiConfigId?.value || "").trim();
     if (previousId === nextId) return;
     console.info("[会话模型] 前端切换首选模型", {
       conversationId,
       preferredApiConfigId: nextId || null,
       detached: !!bindings.detachedChatWindow.value,
     });
-    patchConversationPreferredModelInOverview(conversationId, nextId);
+    if (bindings.currentChatPreferredApiConfigId) {
+      bindings.currentChatPreferredApiConfigId.value = nextId;
+    }
     bindings.detachedTemporaryApiConfigId.value = "";
     let persist!: Promise<boolean>;
     persist = (async () => {
@@ -142,7 +115,7 @@ export function useChatWindowLocalTools(bindings: Record<string, any>) {
         const isLatestPersist = preferredModelPersistPending.get(conversationId) === persist;
         const currentPreferredId = currentConversationPreferredModelId(conversationId);
         if (isLatestPersist && currentPreferredId === nextId) {
-          patchConversationPreferredModelInOverview(conversationId, previousId);
+          bindings.currentChatPreferredApiConfigId.value = previousId;
         }
         bindings.setStatusError("status.saveConfigFailed", error);
         return false;

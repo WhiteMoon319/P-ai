@@ -3424,6 +3424,42 @@
     }
 
     #[test]
+    fn foreground_snapshot_should_include_cached_preferred_model() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let conversation = test_chat_conversation("conversation-snapshot-model", "active", &now);
+        write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
+        state_mark_conversation_direct_persisted(&state, &conversation)
+            .expect("mark persisted");
+
+        conversation_service()
+            .set_conversation_preferred_api_config_id(
+                &state,
+                &conversation.id,
+                Some("api-model-snapshot".to_string()),
+            )
+            .expect("set preferred model");
+
+        let snapshot = conversation_service()
+            .read_foreground_snapshot(&state, Some(&conversation.id), None, 4)
+            .expect("read foreground snapshot");
+        let summaries = conversation_service()
+            .list_unarchived_conversation_summaries(&state)
+            .expect("list summaries")
+            .summaries;
+        let summaries_json = serde_json::to_string(&summaries).expect("serialize summaries");
+
+        assert_eq!(
+            snapshot.preferred_api_config_id.as_deref(),
+            Some("api-model-snapshot")
+        );
+        assert!(
+            !summaries_json.contains("preferredApiConfigId"),
+            "conversation overview must not carry model metadata"
+        );
+    }
+
+    #[test]
     fn state_schedule_conversation_persist_should_preserve_field_level_metadata() {
         let state = test_chat_runtime_state();
         let now = now_iso();

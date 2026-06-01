@@ -196,6 +196,7 @@ impl ConversationService {
                     runtime_state: None,
                     current_todo: None,
                     current_todos: Vec::new(),
+                    preferred_api_config_id: None,
                 }
             }
         };

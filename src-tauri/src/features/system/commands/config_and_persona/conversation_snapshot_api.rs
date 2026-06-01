@@ -61,8 +61,6 @@ struct UnarchivedConversationSummary {
     current_todo: Option<String>,
     #[serde(default)]
     plan_mode_enabled: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    preferred_api_config_id: Option<String>,
     #[serde(default)]
     detached_window_open: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -444,7 +442,6 @@ fn build_unarchived_conversation_summary(
         runtime_state: None,
         current_todo: None,
         plan_mode_enabled: false,
-        preferred_api_config_id: conversation.preferred_api_config_id.clone(),
         detached_window_open: detached_window_label.is_some(),
         detached_window_label,
         state: item_state,
@@ -631,6 +628,8 @@ struct SwitchActiveConversationSnapshotOutput {
     current_todo: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     current_todos: Vec<ConversationTodoItem>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    preferred_api_config_id: Option<String>,
     unarchived_conversations: Vec<UnarchivedConversationSummary>,
 }
 
@@ -646,6 +645,8 @@ struct ForegroundConversationLightSnapshotOutput {
     current_todo: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     current_todos: Vec<ConversationTodoItem>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    preferred_api_config_id: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     unarchived_conversations: Vec<UnarchivedConversationSummary>,
 }
@@ -658,6 +659,7 @@ struct ForegroundConversationSnapshotCore {
     runtime_state: Option<MainSessionState>,
     current_todo: Option<String>,
     current_todos: Vec<ConversationTodoItem>,
+    preferred_api_config_id: Option<String>,
 }
 
 const DEFAULT_FOREGROUND_SNAPSHOT_RECENT_LIMIT: usize = 4;
@@ -975,7 +977,6 @@ mod conversation_snapshot_api_tests {
             runtime_state: None,
             current_todo: None,
             plan_mode_enabled: false,
-            preferred_api_config_id: None,
             detached_window_open: false,
             detached_window_label: None,
             state: ConversationListItemState {

@@ -47,13 +47,7 @@ export function useChatPersonaConversationDerivedState(bindings: Record<string, 
       || String(bindings.assistantDepartmentAgentId.value || "").trim(),
   );
   const currentConversationPreferredApiConfigId = computed(() => {
-    const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
-    const overrideMap = bindings.conversationPreferredApiConfigOverrides?.value;
-    const hasOverride = overrideMap instanceof Map && overrideMap.has(currentConversationId);
-    const overrideApiConfigId = hasOverride ? String(overrideMap.get(currentConversationId) || "").trim() : "";
-    const apiConfigId = hasOverride
-      ? overrideApiConfigId
-      : String(currentForegroundConversationSummary.value?.preferredApiConfigId || "").trim();
+    const apiConfigId = String(bindings.currentChatPreferredApiConfigId?.value || "").trim();
     if (!apiConfigId) return "";
     return bindings.config.apiConfigs.some((item: any) => item.id === apiConfigId && item.enableText)
       ? apiConfigId

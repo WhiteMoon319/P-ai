@@ -345,7 +345,6 @@ export type RemoteImContactConversationSummary = {
   platform: RemoteImPlatform;
   contactDisplayName: string;
   boundDepartmentId?: string;
-  preferredApiConfigId?: string;
   processingMode: "qa" | "continuous";
   previewMessages?: ConversationPreviewMessage[];
 };
@@ -679,7 +678,6 @@ export type UnarchivedConversationSummary = {
   parentConversationId?: string;
   forkMessageCursor?: string;
   apiConfigId?: string;
-  preferredApiConfigId?: string;
   workspaceLabel?: string;
   isActive?: boolean;
   isMainConversation?: boolean;
@@ -732,7 +730,6 @@ export type ChatConversationOverviewItem = {
   departmentName?: string;
   parentConversationId?: string;
   forkMessageCursor?: string;
-  preferredApiConfigId?: string;
   updatedAt?: string;
   lastMessageAt?: string;
   workspaceLabel?: string;

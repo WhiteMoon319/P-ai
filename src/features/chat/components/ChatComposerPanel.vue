@@ -489,21 +489,19 @@ const normalizedInstructionPresets = computed(() =>
     .filter((item) => !!item.id && !!item.prompt),
 );
 const normalizedChatModelOptions = computed(() =>
-  [
-    { id: "__follow_department__", name: "跟随部门模型队列" },
-    ...(Array.isArray(props.chatModelOptions) ? props.chatModelOptions : []),
-  ]
+  (Array.isArray(props.chatModelOptions) ? props.chatModelOptions : [])
     .map((item) => ({
       id: String(item?.id || "").trim(),
       name: String(item?.name || "").trim(),
     }))
     .filter((item) => !!item.id && !!item.name),
 );
-const localModelOptionId = ref("__follow_department__");
+const localModelOptionId = ref("");
 const localModelSelectionTouched = ref(false);
 
 function modelOptionIdFromProps(): string {
-  return String(props.preferredChatModelId || "").trim() || "__follow_department__";
+  return String(props.preferredChatModelId || "").trim()
+    || String(props.conversationCallPrimaryApiConfigId || "").trim();
 }
 
 watch(
@@ -528,9 +526,7 @@ watch(
 
 const activeModelOptionId = computed(() => localModelOptionId.value);
 const selectedModelName = computed(() => {
-  const displayId = localModelOptionId.value === "__follow_department__"
-    ? props.conversationCallPrimaryApiConfigId
-    : localModelOptionId.value;
+  const displayId = localModelOptionId.value || props.conversationCallPrimaryApiConfigId;
   const found = normalizedChatModelOptions.value.find((item) => item.id === displayId);
   return found?.name || displayId;
 });
@@ -872,12 +868,10 @@ watch(compactModelButton, (compact) => {
 });
 
 function selectChatModel(id: string) {
-  if (!id) return;
-  const nextId = id === "__follow_department__" ? "" : id;
-  const nextOptionId = nextId || "__follow_department__";
-  if (nextOptionId === localModelOptionId.value) return;
+  const nextId = String(id || "").trim();
+  if (!nextId || nextId === localModelOptionId.value) return;
   localModelSelectionTouched.value = true;
-  localModelOptionId.value = nextOptionId;
+  localModelOptionId.value = nextId;
   modelDropdownOpen.value = false;
   emit("update:conversationPreferredApiConfigId", nextId);
 }

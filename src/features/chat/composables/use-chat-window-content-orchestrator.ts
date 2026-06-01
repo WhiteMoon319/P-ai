@@ -1,4 +1,3 @@
-import { ref } from "vue";
 import { useAvatarCache } from "./use-avatar-cache";
 import { useChatConversationItemsDerivedState } from "./use-chat-conversation-items-derived-state";
 import { useChatMessageBlocks } from "./use-chat-turns";
@@ -11,7 +10,6 @@ import { useTerminalApproval } from "../../shell/composables/use-terminal-approv
 export function useChatWindowContentOrchestrator(bindings: Record<string, any>) {
   const configDerived = bindings.configDerived;
   const avatarCache = useAvatarCache({ personas: bindings.personas });
-  const conversationPreferredApiConfigOverrides = ref(new Map<string, string>());
   const conversationItems = useChatConversationItemsDerivedState({
     config: bindings.config,
     unarchivedConversations: bindings.unarchivedConversations,
@@ -25,7 +23,7 @@ export function useChatWindowContentOrchestrator(bindings: Record<string, any>) 
     assistantDepartmentAgentId: bindings.assistantDepartmentAgentId,
     personaEditorId: bindings.personaEditorId,
     currentChatConversationId: bindings.currentChatConversationId,
-    conversationPreferredApiConfigOverrides,
+    currentChatPreferredApiConfigId: bindings.currentChatPreferredApiConfigId,
     chatConversationItems: conversationItems.chatConversationItems,
     unarchivedConversations: bindings.unarchivedConversations,
     detachedChatWindow: bindings.detachedChatWindow,
@@ -54,7 +52,7 @@ export function useChatWindowContentOrchestrator(bindings: Record<string, any>) 
     assistantDepartmentAgentId: bindings.assistantDepartmentAgentId,
     currentForegroundDepartmentId: personaConversation.currentForegroundDepartmentId,
     currentChatConversationId: bindings.currentChatConversationId,
-    conversationPreferredApiConfigOverrides,
+    currentChatPreferredApiConfigId: bindings.currentChatPreferredApiConfigId,
     chatConversationItems: conversationItems.chatConversationItems,
     unarchivedConversations: bindings.unarchivedConversations,
     remoteImContactConversations: bindings.remoteImContactConversations,

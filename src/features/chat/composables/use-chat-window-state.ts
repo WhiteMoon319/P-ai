@@ -74,6 +74,7 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
     chatConversationOverviewUpdated: null,
   };
   const currentChatConversationId = ref("");
+  const currentChatPreferredApiConfigId = ref("");
   const personas = ref<PersonaProfile[]>([]);
   const assistantDepartmentAgentId = ref("default-agent");
   const personaEditorId = ref("default-agent");
@@ -153,6 +154,7 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
     detachedTemporaryApiConfigId,
     chatWindowEventUnlisteners,
     currentChatConversationId,
+    currentChatPreferredApiConfigId,
     personas,
     assistantDepartmentAgentId,
     personaEditorId,

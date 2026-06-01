@@ -72,6 +72,7 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
     detachedChatConversationId: bindings.detachedChatConversationId,
     detachedTemporaryApiConfigId: bindings.detachedTemporaryApiConfigId,
     currentChatConversationId: bindings.currentChatConversationId,
+    currentChatPreferredApiConfigId: bindings.currentChatPreferredApiConfigId,
     currentChatTodos: bindings.currentChatTodos,
     currentForegroundAgentId: bindings.currentForegroundAgentId,
     currentForegroundConversationSummary: bindings.currentForegroundConversationSummary,
