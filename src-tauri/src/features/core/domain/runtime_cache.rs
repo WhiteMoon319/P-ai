@@ -286,11 +286,59 @@ fn sync_cached_app_data_conversation_deleted(
     sync_cached_app_data_signature(state)
 }
 
+fn sync_cached_conversation_metadata(
+    state: &AppState,
+    conversation: &Conversation,
+) -> Result<(), String> {
+    let mut metadata = state
+        .cached_conversation_metadata
+        .lock()
+        .map_err(|_| "Failed to lock cached conversation metadata".to_string())?;
+    metadata.insert(conversation.id.clone(), conversation.clone());
+    Ok(())
+}
+
+fn remove_cached_conversation_metadata(
+    state: &AppState,
+    conversation_id: &str,
+) -> Result<(), String> {
+    let mut metadata = state
+        .cached_conversation_metadata
+        .lock()
+        .map_err(|_| "Failed to lock cached conversation metadata".to_string())?;
+    metadata.remove(conversation_id);
+    Ok(())
+}
+
+fn apply_cached_conversation_metadata(
+    state: &AppState,
+    conversation: &mut Conversation,
+) -> Result<(), String> {
+    let metadata = state
+        .cached_conversation_metadata
+        .lock()
+        .map_err(|_| "Failed to lock cached conversation metadata".to_string())?;
+    if let Some(source) = metadata.get(&conversation.id) {
+        preserve_field_level_conversation_metadata(conversation, source);
+    }
+    Ok(())
+}
+
+fn conversation_with_cached_metadata(
+    state: &AppState,
+    conversation: &Conversation,
+) -> Result<Conversation, String> {
+    let mut merged = conversation.clone();
+    apply_cached_conversation_metadata(state, &mut merged)?;
+    Ok(merged)
+}
+
 fn state_mark_conversation_direct_persisted(
     state: &AppState,
     conversation: &Conversation,
 ) -> Result<(), String> {
     let disk_mtime = conversation_shard_modified_time(&state.data_path, &conversation.id);
+    sync_cached_conversation_metadata(state, conversation)?;
     {
         let mut cached = state
             .cached_conversations
@@ -355,6 +403,7 @@ fn state_update_conversation_metadata_cached<T>(
     }
     let mut conversation = state_read_conversation_cached(state, normalized_conversation_id)?;
     let result = updater(&mut conversation)?;
+    sync_cached_conversation_metadata(state, &conversation)?;
     let seq = state
         .conversation_persist_latest_seq
         .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
@@ -489,7 +538,7 @@ fn state_read_conversation_cached(
         }
     }
     let disk_mtime = conversation_shard_modified_time(&state.data_path, conversation_id);
-    {
+    let cached_hit = {
         let cached = state
             .cached_conversations
             .lock()
@@ -505,11 +554,21 @@ fn state_read_conversation_cached(
         )
         {
             if *cached_mtime == Some(disk_time) {
-                return Ok(conversation.clone());
+                Some(conversation.clone())
+            } else {
+                None
             }
+        } else {
+            None
         }
+    };
+    if let Some(mut conversation) = cached_hit {
+        apply_cached_conversation_metadata(state, &mut conversation)?;
+        return Ok(conversation);
     }
-    let conversation = read_conversation_shard(&state.data_path, conversation_id)?;
+    let mut conversation = read_conversation_shard(&state.data_path, conversation_id)?;
+    apply_cached_conversation_metadata(state, &mut conversation)?;
+    sync_cached_conversation_metadata(state, &conversation)?;
     {
         let mut cached = state
             .cached_conversations
@@ -621,6 +680,7 @@ fn state_write_conversation_cached(
         .map_err(|_| "Failed to lock app data persist write lock".to_string())?;
     let _ = write_conversation_shard(&state.data_path, conversation)?;
     let disk_mtime = conversation_shard_modified_time(&state.data_path, &conversation.id);
+    sync_cached_conversation_metadata(state, conversation)?;
     {
         let mut cached = state
             .cached_conversations
@@ -671,6 +731,7 @@ fn state_delete_conversation_cached(
         .lock()
         .map_err(|_| "Failed to lock app data persist write lock".to_string())?;
     let _ = delete_conversation_shard(&state.data_path, conversation_id)?;
+    remove_cached_conversation_metadata(state, conversation_id)?;
     {
         let mut cached = state
             .cached_conversations
@@ -1104,16 +1165,13 @@ fn state_schedule_conversation_persist(
         .conversation_persist_latest_seq
         .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
         + 1;
-    let mut conversation_for_cache = conversation.clone();
+    let conversation_for_cache = conversation_with_cached_metadata(state, conversation)?;
     let conversation_disk_mtime = conversation_shard_modified_time(&state.data_path, &conversation.id);
     {
         let mut cached = state
             .cached_conversations
             .lock()
             .map_err(|_| "Failed to lock cached conversations".to_string())?;
-        if let Some(existing) = cached.get(&conversation.id) {
-            preserve_field_level_conversation_metadata(&mut conversation_for_cache, existing);
-        }
         cached.insert(conversation.id.clone(), conversation_for_cache.clone());
     }
     {
@@ -1181,6 +1239,7 @@ fn state_schedule_conversation_delete(
             .map_err(|_| "Failed to lock cached conversations".to_string())?;
         cached.remove(normalized_conversation_id);
     }
+    remove_cached_conversation_metadata(state, normalized_conversation_id)?;
     {
         let mut cached_mtimes = state
             .cached_conversation_mtimes
