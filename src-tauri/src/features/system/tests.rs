@@ -414,10 +414,10 @@
 
         assert!(!text.contains("当前会话标题："));
         assert!(!text.contains("当前标题"));
-        assert!(text.contains("用户画像："));
-        assert!(text.contains("摘要说明："));
-        assert!(text.contains("摘要正文："));
-        assert!(text.contains("保留对话："));
+        assert!(text.contains("## 用户画像"));
+        assert!(text.contains("## 摘要说明"));
+        assert!(text.contains("## 摘要正文"));
+        assert!(text.contains("## 保留对话"));
         assert!(text.contains("记忆块"));
         assert!(text.contains("## Current Todo List"));
         assert!(text.contains("- [in_progress] Add todo MCP server"));
