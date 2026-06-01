@@ -52,6 +52,18 @@ impl ConversationService {
             history_flush_time,
         )?;
         conversation.updated_at = history_flush_time.to_string();
+        state_update_conversation_metadata_cached(
+            state,
+            &conversation.id,
+            |cached| {
+                cached.user_profile_snapshot = conversation.user_profile_snapshot.clone();
+                cached.memory_recall_table = conversation.memory_recall_table.clone();
+                cached.updated_at = conversation.updated_at.clone();
+                cached.last_user_at = conversation.last_user_at.clone();
+                cached.last_assistant_at = conversation.last_assistant_at.clone();
+                Ok(())
+            },
+        )?;
         persist_after_flush(
             self,
             state,

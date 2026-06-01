@@ -3469,6 +3469,16 @@
                 }],
             )
             .expect("set todos metadata");
+        state_update_conversation_metadata_cached(
+            &state,
+            &conversation.id,
+            |conversation| {
+                conversation.user_profile_snapshot = "字段级画像".to_string();
+                conversation.memory_recall_table = vec!["memory-a".to_string()];
+                Ok(())
+            },
+        )
+        .expect("set runtime metadata");
 
         let mut stale_full_snapshot = conversation.clone();
         stale_full_snapshot.title = "过期标题".to_string();
@@ -3477,6 +3487,8 @@
         stale_full_snapshot.status = "active".to_string();
         stale_full_snapshot.archived_at = None;
         stale_full_snapshot.current_todos = Vec::new();
+        stale_full_snapshot.user_profile_snapshot.clear();
+        stale_full_snapshot.memory_recall_table.clear();
         stale_full_snapshot.messages.push(test_text_message("user", "hello", &now));
         stale_full_snapshot.updated_at = now.clone();
         state_schedule_conversation_persist(&state, &stale_full_snapshot)
@@ -3498,6 +3510,8 @@
         assert_eq!(cached.archived_at.as_deref(), Some(now.as_str()));
         assert_eq!(cached.current_todos.len(), 1);
         assert_eq!(cached.current_todos[0].content, "字段级 todo");
+        assert_eq!(cached.user_profile_snapshot, "字段级画像");
+        assert_eq!(cached.memory_recall_table, vec!["memory-a".to_string()]);
         assert_eq!(cached.messages.len(), 1);
     }
 

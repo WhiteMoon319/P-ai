@@ -2472,6 +2472,14 @@ async fn send_chat_message_inner(
                     for memory_id in &recall_payload.raw_ids {
                         conversation.memory_recall_table.push(memory_id.clone());
                     }
+                    state_update_conversation_metadata_cached(
+                        &state,
+                        &conversation.id,
+                        |cached| {
+                            cached.memory_recall_table = conversation.memory_recall_table.clone();
+                            Ok(())
+                        },
+                    )?;
                     conversation_service().persist_conversation(
                         &state,
                         &conversation,

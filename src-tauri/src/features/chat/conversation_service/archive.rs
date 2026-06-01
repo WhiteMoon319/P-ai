@@ -446,6 +446,16 @@ impl ConversationService {
         let now = now_iso();
         conversation.updated_at = now.clone();
         conversation.last_user_at = Some(now);
+        state_update_conversation_metadata_cached(
+            state,
+            &conversation.id,
+            |cached| {
+                cached.user_profile_snapshot = conversation.user_profile_snapshot.clone();
+                cached.updated_at = conversation.updated_at.clone();
+                cached.last_user_at = conversation.last_user_at.clone();
+                Ok(())
+            },
+        )?;
         let active_conversation_id = Some(conversation.id.clone());
         state_schedule_conversation_persist(state, &conversation)?;
 
