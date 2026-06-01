@@ -30,7 +30,8 @@
       :active-conversation-id="activeConversationId"
       :active-agent-id="activeAgentId"
       :persona="persona"
-      :selected-chat-model-id="selectedChatModelId"
+      :conversation-call-primary-api-config-id="conversationCallPrimaryApiConfigId"
+      :preferred-chat-model-id="preferredChatModelId"
       :chat-model-options="chatModelOptions"
       :workspace-access="workspaceAccess"
       :plan-mode-enabled="activeConversationPlanModeEnabled"
@@ -60,7 +61,7 @@
       @stop="stop"
       @remove-clipboard-image="removeClipboardImage"
       @load-prev-block="loadPrevBlock"
-      @update:selected-chat-model-id="selectChatModel"
+      @update:conversation-preferred-api-config-id="selectChatModel"
       @update-workspace-access="selectWorkspaceAccess"
       @recall-turn="recallTurn"
       @confirm-plan="confirmPlan"
@@ -274,7 +275,8 @@ type SidebarPersonaPayload = {
 };
 
 type SidebarModelPayload = {
-  selectedChatModelId?: string;
+  conversationCallPrimaryApiConfigId?: string;
+  preferredChatModelId?: string;
   chatModelOptions?: ApiConfigItem[];
 };
 
@@ -346,7 +348,8 @@ const activeTitle = computed(() => {
 const activeAgentId = ref("");
 const persona = ref<SidebarPersonaPayload>({});
 const listPersona = ref<SidebarPersonaPayload>({});
-const selectedChatModelId = ref("");
+const conversationCallPrimaryApiConfigId = ref("");
+const preferredChatModelId = ref("");
 const chatModelOptions = ref<ApiConfigItem[]>([]);
 const workspaceAccess = ref<"read_only" | "approval" | "full_access" | "">("approval");
 const workspaceRootPath = ref("");
@@ -1057,23 +1060,34 @@ async function saveSupervisionTask(payload: { durationHours: number; goal: strin
 }
 
 function applyModelPayload(payload: SidebarModelPayload) {
-  selectedChatModelId.value = String(payload.selectedChatModelId || "").trim();
+  conversationCallPrimaryApiConfigId.value = String(payload.conversationCallPrimaryApiConfigId || "").trim();
+  preferredChatModelId.value = String(payload.preferredChatModelId || "").trim();
   chatModelOptions.value = Array.isArray(payload.chatModelOptions) ? payload.chatModelOptions : [];
 }
 
 async function selectChatModel(apiConfigId: string) {
   const nextId = String(apiConfigId || "").trim();
-  if (!nextId || !activeConversationId.value || nextId === selectedChatModelId.value) return;
-  const previousId = selectedChatModelId.value;
-  selectedChatModelId.value = nextId;
+  if (!activeConversationId.value || nextId === preferredChatModelId.value) return;
+  const previousId = conversationCallPrimaryApiConfigId.value;
+  const previousPreferredId = preferredChatModelId.value;
+  console.info("[会话模型] VS Code sidebar 切换首选模型", {
+    conversationId: activeConversationId.value,
+    preferredApiConfigId: nextId || null,
+  });
+  conversationCallPrimaryApiConfigId.value = nextId;
+  preferredChatModelId.value = nextId;
   try {
     const result = await transport.request<SidebarModelPayload>("model.select", {
       conversationId: activeConversationId.value,
       apiConfigId: nextId,
     });
     applyModelPayload(result);
+    if (busy.value) {
+      transport.errorText.value = "模型已切换，将在下一次调度开始时生效。";
+    }
   } catch (error) {
-    selectedChatModelId.value = previousId;
+    conversationCallPrimaryApiConfigId.value = previousId;
+    preferredChatModelId.value = previousPreferredId;
     transport.errorText.value = String(error || "切换模型失败");
   }
 }

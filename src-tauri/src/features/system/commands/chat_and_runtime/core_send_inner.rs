@@ -1084,46 +1084,82 @@ fn update_remote_im_reply_decision_for_message(
     Ok(())
 }
 
-fn prioritize_requested_chat_api_id(
-    requested_api_id: Option<&str>,
+fn prepend_required_chat_api_id(
+    api_id: Option<&str>,
     candidate_api_ids: &mut Vec<String>,
     app_config: &AppConfig,
 ) -> Result<(), String> {
-    let Some(requested_api_id) = requested_api_id
+    let Some(api_id) = api_id
         .map(str::trim)
         .filter(|value| !value.is_empty())
     else {
         return Ok(());
     };
 
-    let Some(requested_api) = app_config
+    let Some(api_config) = app_config
         .api_configs
         .iter()
-        .find(|api| api.id == requested_api_id)
+        .find(|api| api.id == api_id)
     else {
-        return Err(format!(
-            "会话指定模型不存在：session.api_config_id={requested_api_id}"
-        ));
+        return Err(format!("指定模型不存在：api_config_id={api_id}"));
     };
 
-    if !requested_api.request_format.is_chat_text() {
+    if !is_text_chat_api(api_config) {
         return Err(format!(
-            "会话指定模型不是聊天文本模型：session.api_config_id={}, request_format={:?}",
-            requested_api_id,
-            requested_api.request_format
+            "指定模型不是可用聊天文本模型：api_config_id={}, request_format={:?}, enable_text={}",
+            api_id,
+            api_config.request_format,
+            api_config.enable_text
         ));
     }
 
-    if let Some(index) = candidate_api_ids.iter().position(|id| id == requested_api_id) {
+    if let Some(index) = candidate_api_ids.iter().position(|id| id == api_id) {
         if index > 0 {
-            let api_id = candidate_api_ids.remove(index);
-            candidate_api_ids.insert(0, api_id);
+            let existing_api_id = candidate_api_ids.remove(index);
+            candidate_api_ids.insert(0, existing_api_id);
         }
         return Ok(());
     }
 
-    candidate_api_ids.insert(0, requested_api_id.to_string());
+    candidate_api_ids.insert(0, api_id.to_string());
     Ok(())
+}
+
+fn prepend_optional_preferred_chat_api_id(
+    preferred_api_id: Option<&str>,
+    candidate_api_ids: &mut Vec<String>,
+    app_config: &AppConfig,
+) -> Result<bool, String> {
+    let Some(preferred_api_id) = preferred_api_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(false);
+    };
+
+    let Some(api_config) = app_config
+        .api_configs
+        .iter()
+        .find(|api| api.id == preferred_api_id)
+    else {
+        runtime_log_warn(format!(
+            "[会话模型] 跳过，任务=应用会话首选模型，原因=模型不存在，api_config_id={}",
+            preferred_api_id
+        ));
+        return Ok(false);
+    };
+    if !is_text_chat_api(api_config) {
+        runtime_log_warn(format!(
+            "[会话模型] 跳过，任务=应用会话首选模型，原因=模型不可用于聊天文本，api_config_id={}，request_format={:?}，enable_text={}",
+            preferred_api_id,
+            api_config.request_format,
+            api_config.enable_text
+        ));
+        return Ok(false);
+    }
+
+    prepend_required_chat_api_id(Some(preferred_api_id), candidate_api_ids, app_config)?;
+    Ok(true)
 }
 
 fn memory_recall_query_from_user_text(user_text: &str) -> String {
@@ -1538,6 +1574,7 @@ async fn send_chat_message_inner(
             current_todos: Vec::new(),
             memory_recall_table: Vec::new(),
             plan_mode_enabled: false,
+            preferred_api_config_id: None,
         }
     };
     let requested_conversation_id_for_prepare = requested_conversation_id.clone();
@@ -1638,6 +1675,7 @@ async fn send_chat_message_inner(
                     current_todos: Vec::new(),
                     memory_recall_table: Vec::new(),
                     plan_mode_enabled: false,
+                    preferred_api_config_id: None,
                 });
             }
             return build_prepare_snapshot_read_only(
@@ -1703,6 +1741,7 @@ async fn send_chat_message_inner(
                 current_todos: Vec::new(),
                 memory_recall_table: Vec::new(),
                 plan_mode_enabled: false,
+                preferred_api_config_id: None,
             });
         }
         build_prepare_snapshot_read_only(&data, runtime_agents, selected_api, effective_agent_id)
@@ -1880,16 +1919,47 @@ async fn send_chat_message_inner(
                 .ok_or_else(|| "No API config configured. Please add one.".to_string())?;
             candidate_api_ids.push(fallback.id.clone());
         }
-        prioritize_requested_chat_api_id(
-            requested_api_config_id.as_deref(),
-            &mut candidate_api_ids,
-            &app_config,
-        )?;
+        let conversation_preferred_api_config_id = requested_conversation_id_for_prepare
+            .as_deref()
+            .or(runtime_main_conversation_id.as_deref())
+            .and_then(|conversation_id| state_read_conversation_cached(&state, conversation_id).ok())
+            .and_then(|conversation| conversation.preferred_api_config_id)
+            .map(|api_config_id| api_config_id.trim().to_string())
+            .filter(|api_config_id| !api_config_id.is_empty());
+        let requested_api_config_id_snapshot = requested_api_config_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let preferred_model_applied = if let Some(requested_api_config_id_snapshot) = requested_api_config_id_snapshot {
+            prepend_required_chat_api_id(
+                Some(requested_api_config_id_snapshot),
+                &mut candidate_api_ids,
+                &app_config,
+            )?;
+            false
+        } else {
+            prepend_optional_preferred_chat_api_id(
+                conversation_preferred_api_config_id.as_deref(),
+                &mut candidate_api_ids,
+                &app_config,
+            )?
+        };
         let candidate_models_ms = candidate_models_started
             .elapsed()
             .as_millis()
             .min(u128::from(u64::MAX)) as u64;
         prepare_detail_parts.push(format!("候选模型构建={}ms(count={})", candidate_models_ms, candidate_api_ids.len()));
+        runtime_log_info(format!(
+            "[会话模型] 调度，任务=构建候选模型，会话ID={}，单次指定模型={}，会话首选模型={}，会话首选已应用={}，候选队列={}",
+            requested_conversation_id_for_prepare
+                .as_deref()
+                .or(runtime_main_conversation_id.as_deref())
+                .unwrap_or("未知"),
+            requested_api_config_id_snapshot.unwrap_or("无"),
+            conversation_preferred_api_config_id.as_deref().unwrap_or("跟随部门"),
+            preferred_model_applied,
+            candidate_api_ids.join(" -> ")
+        ));
         let selected_api_started = std::time::Instant::now();
         let selected_api_id = candidate_api_ids
             .first()
@@ -3531,7 +3601,7 @@ mod core_send_inner_tests {
     }
 
     #[test]
-    fn prioritize_requested_chat_api_id_should_move_requested_id_to_front() {
+    fn prepend_required_chat_api_id_should_move_id_to_front() {
         let app_config = AppConfig {
             api_configs: vec![test_chat_api("text-a", false), test_chat_api("vision-b", true)],
             api_providers: Vec::new(),
@@ -3539,8 +3609,8 @@ mod core_send_inner_tests {
         };
         let mut candidate_api_ids = vec!["text-a".to_string(), "vision-b".to_string()];
 
-        prioritize_requested_chat_api_id(Some("vision-b"), &mut candidate_api_ids, &app_config)
-            .expect("prioritize requested api id");
+        prepend_required_chat_api_id(Some("vision-b"), &mut candidate_api_ids, &app_config)
+            .expect("prepend required api id");
 
         assert_eq!(
             candidate_api_ids,
@@ -3549,7 +3619,7 @@ mod core_send_inner_tests {
     }
 
     #[test]
-    fn prioritize_requested_chat_api_id_should_insert_requested_chat_model_not_in_department_list() {
+    fn prepend_required_chat_api_id_should_insert_model_not_in_department_list() {
         let app_config = AppConfig {
             api_configs: vec![test_chat_api("text-a", false), test_chat_api("vision-b", true)],
             api_providers: Vec::new(),
@@ -3557,8 +3627,8 @@ mod core_send_inner_tests {
         };
         let mut candidate_api_ids = vec!["text-a".to_string()];
 
-        prioritize_requested_chat_api_id(Some("vision-b"), &mut candidate_api_ids, &app_config)
-            .expect("prioritize requested api id");
+        prepend_required_chat_api_id(Some("vision-b"), &mut candidate_api_ids, &app_config)
+            .expect("prepend required api id");
 
         assert_eq!(
             candidate_api_ids,
@@ -3567,7 +3637,34 @@ mod core_send_inner_tests {
     }
 
     #[test]
-    fn prioritize_requested_chat_api_id_should_reject_non_chat_or_missing_model() {
+    fn prepend_optional_preferred_chat_api_id_should_keep_conversation_choice_first_and_dedupe() {
+        let app_config = AppConfig {
+            api_configs: vec![
+                test_chat_api("api-a", false),
+                test_chat_api("api-b", false),
+                test_chat_api("api-c", false),
+            ],
+            api_providers: Vec::new(),
+            ..AppConfig::default()
+        };
+        let mut candidate_api_ids = vec![
+            "api-a".to_string(),
+            "api-b".to_string(),
+            "api-c".to_string(),
+        ];
+
+        let applied = prepend_optional_preferred_chat_api_id(Some("api-c"), &mut candidate_api_ids, &app_config)
+            .expect("prioritize conversation model");
+
+        assert!(applied);
+        assert_eq!(
+            candidate_api_ids,
+            vec!["api-c".to_string(), "api-a".to_string(), "api-b".to_string()]
+        );
+    }
+
+    #[test]
+    fn prepend_required_chat_api_id_should_reject_non_chat_or_missing_model() {
         let mut embedding_api = test_chat_api("embed-a", false);
         embedding_api.request_format = RequestFormat::OpenAIEmbedding;
         let app_config = AppConfig {
@@ -3578,15 +3675,38 @@ mod core_send_inner_tests {
         let mut candidate_api_ids = vec!["text-a".to_string()];
 
         let non_chat_err =
-            prioritize_requested_chat_api_id(Some("embed-a"), &mut candidate_api_ids, &app_config)
+            prepend_required_chat_api_id(Some("embed-a"), &mut candidate_api_ids, &app_config)
                 .expect_err("non-chat model should be rejected");
         let missing_err =
-            prioritize_requested_chat_api_id(Some("missing"), &mut candidate_api_ids, &app_config)
+            prepend_required_chat_api_id(Some("missing"), &mut candidate_api_ids, &app_config)
                 .expect_err("missing model should be rejected");
 
         assert_eq!(candidate_api_ids, vec!["text-a".to_string()]);
-        assert!(non_chat_err.contains("不是聊天文本模型"));
+        assert!(non_chat_err.contains("不是可用聊天文本模型"));
         assert!(missing_err.contains("模型不存在"));
+    }
+
+    #[test]
+    fn prepend_optional_preferred_chat_api_id_should_skip_stale_model() {
+        let mut disabled_api = test_chat_api("disabled-a", false);
+        disabled_api.enable_text = false;
+        let app_config = AppConfig {
+            api_configs: vec![test_chat_api("text-a", false), disabled_api],
+            api_providers: Vec::new(),
+            ..AppConfig::default()
+        };
+        let mut candidate_api_ids = vec!["text-a".to_string()];
+
+        let missing_applied =
+            prepend_optional_preferred_chat_api_id(Some("missing"), &mut candidate_api_ids, &app_config)
+                .expect("missing preferred model should be skipped");
+        let disabled_applied =
+            prepend_optional_preferred_chat_api_id(Some("disabled-a"), &mut candidate_api_ids, &app_config)
+                .expect("disabled preferred model should be skipped");
+
+        assert!(!missing_applied);
+        assert!(!disabled_applied);
+        assert_eq!(candidate_api_ids, vec!["text-a".to_string()]);
     }
 
     fn test_model_reply(
@@ -3668,6 +3788,7 @@ mod core_send_inner_tests {
             current_todos: Vec::new(),
             memory_recall_table: Vec::new(),
             plan_mode_enabled: false,
+            preferred_api_config_id: None,
         };
         let final_message = build_assistant_message_from_request_sequence(
             "assistant-new".to_string(),

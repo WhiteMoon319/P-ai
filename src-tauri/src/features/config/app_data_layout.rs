@@ -463,6 +463,10 @@ fn write_conversation_shard(path: &PathBuf, conversation: &Conversation) -> Resu
     message_store::write_jsonl_snapshot_directory_shard_if_changed(&store_paths, conversation)
 }
 
+fn write_conversation_meta_shard(path: &PathBuf, conversation: &Conversation) -> Result<(), String> {
+    message_store::write_conversation_directory_meta_for_conversation(path, conversation)
+}
+
 fn delete_conversation_shard(path: &PathBuf, conversation_id: &str) -> Result<bool, String> {
     let conversation_id = conversation_id.trim();
     if conversation_id.is_empty() {

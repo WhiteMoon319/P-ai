@@ -341,6 +341,57 @@ fn state_mark_conversation_direct_persisted(
     Ok(())
 }
 
+fn state_write_conversation_meta_cached(
+    state: &AppState,
+    conversation: &Conversation,
+) -> Result<(), String> {
+    {
+        let _write_guard = state
+            .app_data_persist_write_lock
+            .lock()
+            .map_err(|_| "Failed to lock app data persist write lock".to_string())?;
+        write_conversation_meta_shard(&state.data_path, conversation)?;
+    }
+    let disk_mtime = conversation_shard_modified_time(&state.data_path, &conversation.id);
+    {
+        let mut cached = state
+            .cached_conversations
+            .lock()
+            .map_err(|_| "Failed to lock cached conversations".to_string())?;
+        cached.insert(conversation.id.clone(), conversation.clone());
+    }
+    {
+        let mut cached_mtimes = state
+            .cached_conversation_mtimes
+            .lock()
+            .map_err(|_| "Failed to lock cached conversation mtimes".to_string())?;
+        cached_mtimes.insert(conversation.id.clone(), disk_mtime);
+    }
+    {
+        let mut deleted_ids = state
+            .cached_deleted_conversation_ids
+            .lock()
+            .map_err(|_| "Failed to lock cached deleted conversation ids".to_string())?;
+        deleted_ids.remove(&conversation.id);
+    }
+    {
+        let mut pending = state
+            .conversation_persist_pending
+            .lock()
+            .map_err(|_| "Failed to lock pending conversation persist".to_string())?;
+        if let Some(slot) = pending.as_mut() {
+            if slot.conversations.contains_key(&conversation.id) {
+                slot.conversations
+                    .insert(conversation.id.clone(), conversation.clone());
+            }
+        }
+    }
+    sync_cached_app_data_conversation(state, conversation)?;
+    state_upsert_chat_index_conversation_cached(state, conversation)?;
+    refresh_cached_app_data_dirty(state);
+    Ok(())
+}
+
 fn has_pending_app_data_persist(state: &AppState) -> bool {
     state
         .app_data_persist_pending
@@ -1159,7 +1210,17 @@ fn flush_pending_persists_blocking(state: &AppState) -> Result<bool, String> {
             if skip_directly_persisted.contains(conversation_id) {
                 continue;
             }
-            write_conversation_shard(&state.data_path, conversation)?;
+            let conversation_for_write = {
+                let cached = state
+                    .cached_conversations
+                    .lock()
+                    .map_err(|_| "Failed to lock cached conversations".to_string())?;
+                cached
+                    .get(conversation_id)
+                    .cloned()
+                    .unwrap_or_else(|| conversation.clone())
+            };
+            write_conversation_shard(&state.data_path, &conversation_for_write)?;
             wrote_anything = true;
         }
         if let Ok(mut dirty_ids) = state.cached_conversation_dirty_ids.lock() {
@@ -1330,6 +1391,7 @@ fn start_conversation_persist_worker(state: &AppState) -> Result<(), String> {
                 let data_path = state_clone.data_path.clone();
                 let write_lock = state_clone.app_data_persist_write_lock.clone();
                 let dirty_ids_for_write = state_clone.cached_conversation_dirty_ids.clone();
+                let cached_conversations_for_write = state_clone.cached_conversations.clone();
                 let pending_for_write = pending.clone();
                 let write_result = tokio::task::spawn_blocking(move || {
                     let _write_guard = write_lock.lock().map_err(|err| {
@@ -1369,7 +1431,22 @@ fn start_conversation_persist_worker(state: &AppState) -> Result<(), String> {
                         if skip_directly_persisted.contains(conversation_id) {
                             continue;
                         }
-                        write_conversation_shard(&data_path, conversation)?;
+                        let conversation_for_write = {
+                            let cached = cached_conversations_for_write.lock().map_err(|err| {
+                                named_lock_error(
+                                    "cached_conversations",
+                                    file!(),
+                                    line!(),
+                                    module_path!(),
+                                    &err,
+                                )
+                            })?;
+                            cached
+                                .get(conversation_id)
+                                .cloned()
+                                .unwrap_or_else(|| conversation.clone())
+                        };
+                        write_conversation_shard(&data_path, &conversation_for_write)?;
                     }
                     let conversation_mtimes = pending_for_write
                         .conversations

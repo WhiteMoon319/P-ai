@@ -26,6 +26,7 @@ pub(super) struct ConversationPersistMeta {
     current_todos: Vec<ConversationTodoItem>,
     memory_recall_table: Vec<String>,
     plan_mode_enabled: bool,
+    preferred_api_config_id: Option<String>,
 }
 
 impl ConversationPersistMeta {
@@ -100,6 +101,8 @@ pub(super) struct ConversationShardMeta {
     memory_recall_table: Vec<String>,
     #[serde(default)]
     plan_mode_enabled: bool,
+    #[serde(default)]
+    preferred_api_config_id: Option<String>,
 }
 
 impl ConversationShardMeta {
@@ -117,6 +120,10 @@ impl ConversationShardMeta {
 
     pub(super) fn last_assistant_at(&self) -> Option<&str> {
         self.last_assistant_at.as_deref()
+    }
+
+    pub(super) fn preferred_api_config_id(&self) -> Option<&str> {
+        self.preferred_api_config_id.as_deref()
     }
 
     fn from_conversation(conversation: &Conversation) -> Self {
@@ -147,6 +154,7 @@ impl ConversationShardMeta {
             current_todos: conversation.current_todos.clone(),
             memory_recall_table: conversation.memory_recall_table.clone(),
             plan_mode_enabled: conversation.plan_mode_enabled,
+            preferred_api_config_id: conversation.preferred_api_config_id.clone(),
         }
     }
 
@@ -178,6 +186,7 @@ impl ConversationShardMeta {
             current_todos: meta.current_todos.clone(),
             memory_recall_table: meta.memory_recall_table.clone(),
             plan_mode_enabled: meta.plan_mode_enabled,
+            preferred_api_config_id: meta.preferred_api_config_id.clone(),
         }
     }
 
@@ -209,6 +218,7 @@ impl ConversationShardMeta {
             current_todos: self.current_todos.clone(),
             memory_recall_table: self.memory_recall_table.clone(),
             plan_mode_enabled: self.plan_mode_enabled,
+            preferred_api_config_id: self.preferred_api_config_id.clone(),
         }
     }
 
@@ -241,6 +251,7 @@ impl ConversationShardMeta {
             current_todos: self.current_todos,
             memory_recall_table: self.memory_recall_table,
             plan_mode_enabled: self.plan_mode_enabled,
+            preferred_api_config_id: self.preferred_api_config_id,
         }
     }
 }
@@ -324,6 +335,7 @@ mod message_store_meta_tests {
             }],
             memory_recall_table: vec!["memory-a".to_string()],
             plan_mode_enabled: true,
+            preferred_api_config_id: Some("api-c".to_string()),
         }
     }
 
@@ -340,6 +352,7 @@ mod message_store_meta_tests {
         assert_eq!(persist_meta, ConversationPersistMeta::from_conversation(&conversation));
         assert_eq!(restored.messages.len(), 2);
         assert_eq!(restored.id, conversation.id);
+        assert_eq!(restored.preferred_api_config_id, conversation.preferred_api_config_id);
     }
 
     #[test]

@@ -180,6 +180,7 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     archiveCurrentConversation: chatRuntime.trimNow,
     getChatFlow: () => bindings.getChatFlow(),
     detachCurrentConversationToWindow: bindings.detachCurrentConversationToWindow,
+    waitPendingConversationPreferredModelPersist: bindings.waitPendingConversationPreferredModelPersist,
     openPromptPreview: () => serviceAssemblies.chatDialogActions.openPromptPreview,
   });
 

@@ -51,6 +51,7 @@ impl ConversationService {
                     platform: contact.platform.clone(),
                     contact_display_name: remote_im_contact_display_name(&contact),
                     bound_department_id: contact.bound_department_id.clone(),
+                    preferred_api_config_id: meta.preferred_api_config_id().map(ToOwned::to_owned),
                     processing_mode: normalize_contact_processing_mode(&contact.processing_mode),
                     preview_messages: self
                         .read_remote_im_contact_preview_messages(state, &conversation_id, 2)
@@ -78,6 +79,7 @@ impl ConversationService {
                     platform: contact.platform.clone(),
                     contact_display_name: remote_im_contact_display_name(&contact),
                     bound_department_id: contact.bound_department_id.clone(),
+                    preferred_api_config_id: conversation.preferred_api_config_id.clone(),
                     processing_mode: normalize_contact_processing_mode(&contact.processing_mode),
                     preview_messages: build_conversation_preview_messages(&conversation, 2),
                 })

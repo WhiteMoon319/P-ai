@@ -946,6 +946,7 @@ fn main() {
             get_foreground_conversation_light_snapshot,
             mark_conversation_read,
             set_conversation_plan_mode,
+            set_conversation_preferred_model,
             create_unarchived_conversation,
             export_conversation_share_json,
             import_conversation_share_from_file,

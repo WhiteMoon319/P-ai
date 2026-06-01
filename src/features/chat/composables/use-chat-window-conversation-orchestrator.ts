@@ -100,6 +100,7 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
     clearPendingManualScrollToBottom: bindings.clearPendingManualScrollToBottom,
     triggerConversationScrollToBottom: bindings.triggerConversationScrollToBottom,
     setPendingManualScrollState: bindings.setPendingManualScrollState,
+    waitPendingConversationPreferredModelPersist: bindings.waitPendingConversationPreferredModelPersist,
     setStatus: bindings.setStatus,
     setStatusError: bindings.setStatusError,
     perfNow: bindings.perfNow,

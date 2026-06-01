@@ -248,7 +248,7 @@
               :class="compactModelButton
                 ? 'btn btn-sm btn-square h-8 min-h-8 w-8 shrink-0 border-0 shadow-none bg-base-100 text-base-content hover:bg-base-200'
                 : 'btn btn-sm h-8 min-h-8 w-44 max-w-44 justify-between border-0 shadow-none bg-base-100 text-base-content hover:bg-base-200'"
-              :disabled="chatting || frozen || normalizedChatModelOptions.length === 0"
+              :disabled="frozen || normalizedChatModelOptions.length === 0"
               :title="selectedModelName"
               @click="modelDropdownOpen = !modelDropdownOpen"
             >
@@ -268,7 +268,7 @@
                 <button
                   type="button"
                   class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm hover:bg-base-200 transition-colors truncate"
-                  :class="{ 'bg-primary/10': item.id === selectedChatModelId }"
+                  :class="{ 'bg-primary/10': item.id === activeModelOptionId }"
                   @click="selectChatModel(item.id)"
                 >
                   {{ item.name }}
@@ -350,7 +350,8 @@ const props = defineProps<{
   recording: boolean;
   recordingMs: number;
   recordHotkey: string;
-  selectedChatModelId: string;
+  conversationCallPrimaryApiConfigId: string;
+  preferredChatModelId?: string;
   chatModelOptions: ApiConfigItem[];
   workspaceAccess?: "read_only" | "approval" | "full_access" | "";
   planModeEnabled: boolean;
@@ -395,7 +396,7 @@ const emit = defineEmits<{
   (e: "startRecording"): void;
   (e: "stopRecording"): void;
   (e: "pickAttachments"): void;
-  (e: "update:selectedChatModelId", value: string): void;
+  (e: "update:conversationPreferredApiConfigId", value: string): void;
   (e: "update:workspaceAccess", value: "read_only" | "approval" | "full_access"): void;
   (e: "update:planModeEnabled", value: boolean): void;
   (e: "attachIdeContextReference", value: IdeContextReferenceItem): void;
@@ -488,16 +489,50 @@ const normalizedInstructionPresets = computed(() =>
     .filter((item) => !!item.id && !!item.prompt),
 );
 const normalizedChatModelOptions = computed(() =>
-  (Array.isArray(props.chatModelOptions) ? props.chatModelOptions : [])
+  [
+    { id: "__follow_department__", name: "跟随部门模型队列" },
+    ...(Array.isArray(props.chatModelOptions) ? props.chatModelOptions : []),
+  ]
     .map((item) => ({
       id: String(item?.id || "").trim(),
       name: String(item?.name || "").trim(),
     }))
     .filter((item) => !!item.id && !!item.name),
 );
+const localModelOptionId = ref("__follow_department__");
+const localModelSelectionTouched = ref(false);
+
+function modelOptionIdFromProps(): string {
+  return String(props.preferredChatModelId || "").trim() || "__follow_department__";
+}
+
+watch(
+  () => String(props.activeConversationId || "").trim(),
+  () => {
+    localModelSelectionTouched.value = false;
+    localModelOptionId.value = modelOptionIdFromProps();
+  },
+  { immediate: true },
+);
+
+watch(
+  () => [
+    String(props.preferredChatModelId || "").trim(),
+    String(props.conversationCallPrimaryApiConfigId || "").trim(),
+  ].join("|"),
+  () => {
+    if (localModelSelectionTouched.value) return;
+    localModelOptionId.value = modelOptionIdFromProps();
+  },
+);
+
+const activeModelOptionId = computed(() => localModelOptionId.value);
 const selectedModelName = computed(() => {
-  const found = normalizedChatModelOptions.value.find((item) => item.id === props.selectedChatModelId);
-  return found?.name || props.selectedChatModelId;
+  const displayId = localModelOptionId.value === "__follow_department__"
+    ? props.conversationCallPrimaryApiConfigId
+    : localModelOptionId.value;
+  const found = normalizedChatModelOptions.value.find((item) => item.id === displayId);
+  return found?.name || displayId;
 });
 const compactModelButton = computed(() => composerWidth.value > 0 && composerWidth.value < 420);
 const showIdeWorkspaceGroupLabel = computed(() => false);
@@ -837,9 +872,14 @@ watch(compactModelButton, (compact) => {
 });
 
 function selectChatModel(id: string) {
-  if (!id || id === props.selectedChatModelId) return;
+  if (!id) return;
+  const nextId = id === "__follow_department__" ? "" : id;
+  const nextOptionId = nextId || "__follow_department__";
+  if (nextOptionId === localModelOptionId.value) return;
+  localModelSelectionTouched.value = true;
+  localModelOptionId.value = nextOptionId;
   modelDropdownOpen.value = false;
-  emit("update:selectedChatModelId", id);
+  emit("update:conversationPreferredApiConfigId", nextId);
 }
 
 function togglePlanMode() {

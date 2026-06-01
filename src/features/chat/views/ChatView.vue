@@ -229,7 +229,8 @@
             :clipboard-images="clipboardImages" :queued-attachment-notices="queuedAttachmentNotices"
             :link-open-error-text="linkOpenErrorText" :chat-error-text="chatErrorText"
             :transcribing="transcribing" :can-record="canRecord" :recording="recording" :recording-ms="recordingMs"
-            :record-hotkey="recordHotkey" :selected-chat-model-id="selectedChatModelId"
+            :record-hotkey="recordHotkey" :conversation-call-primary-api-config-id="conversationCallPrimaryApiConfigId"
+            :preferred-chat-model-id="preferredChatModelId"
             :chat-model-options="chatModelOptions" :plan-mode-enabled="planModeEnabled"
             :workspace-access="workspaceAccess"
             :frontend-round-phase="frontendRoundPhase" :chat-usage-percent="chatUsagePercent"
@@ -252,7 +253,7 @@
             @remove-queued-attachment-notice="$emit('removeQueuedAttachmentNotice', $event)"
             @start-recording="$emit('startRecording')" @stop-recording="$emit('stopRecording')"
             @pick-attachments="$emit('pickAttachments')"
-            @update:selected-chat-model-id="$emit('update:selectedChatModelId', $event)"
+            @update:conversation-preferred-api-config-id="$emit('update:conversationPreferredApiConfigId', $event)"
             @update:workspace-access="$emit('updateWorkspaceAccess', $event)"
             @update:plan-mode-enabled="$emit('update:planModeEnabled', $event)"
             @attach-ide-context-reference="handleAttachIdeContextReference"
@@ -424,7 +425,7 @@ const props = defineProps<{
   queuedAttachmentNotices: Array<{ id: string; fileName: string; relativePath: string; mime: string }>;
   chatInput: string; instructionPresets: PromptCommandPreset[]; chatInputPlaceholder: string;
   canRecord: boolean; recording: boolean; recordingMs: number; transcribing: boolean; recordHotkey: string;
-  selectedChatModelId: string; toolReviewRefreshTick: number; chatModelOptions: ApiConfigItem[];
+  conversationCallPrimaryApiConfigId: string; preferredChatModelId?: string; toolReviewRefreshTick: number; chatModelOptions: ApiConfigItem[];
   planModeEnabled: boolean; chatUsagePercent: number; trimTip: string;
   mediaDragActive: boolean; chatting: boolean; trimming: boolean; trimmingConversationId?: string;
   compactingConversation: boolean; compactingConversationId?: string;
@@ -468,7 +469,7 @@ const emit = defineEmits<{
   (e: "removeClipboardImage", index: number): void;
   (e: "removeQueuedAttachmentNotice", index: number): void;
   (e: "startRecording"): void; (e: "stopRecording"): void; (e: "pickAttachments"): void;
-  (e: "update:selectedChatModelId", value: string): void;
+  (e: "update:conversationPreferredApiConfigId", value: string): void;
   (e: "updateWorkspaceAccess", value: "read_only" | "approval" | "full_access"): void;
   (e: "update:planModeEnabled", value: boolean): void;
   (e: "sendChat", payload?: { extraTextBlocks?: string[] }): void;

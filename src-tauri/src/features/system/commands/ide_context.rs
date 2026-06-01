@@ -221,6 +221,7 @@ struct IdeChatStopInput {
 #[serde(rename_all = "camelCase")]
 struct IdeChatSelectModelInput {
     conversation_id: String,
+    #[serde(default)]
     api_config_id: String,
 }
 
@@ -342,13 +343,24 @@ fn ide_chat_persona_payload(state: &AppState, active_agent_id: Option<&str>) -> 
 
 fn ide_chat_model_payload_for_conversation(state: &AppState, conversation: &Conversation) -> Result<Value, String> {
     let config = state_read_config_cached(state)?;
-    let selected_id = config
+    let department_primary_id = config
         .departments
         .iter()
         .find(|department| department.id.trim() == conversation.department_id.trim())
         .map(department_primary_api_config_id)
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| config.assistant_department_api_config_id.trim().to_string());
+    let preferred_id = conversation
+        .preferred_api_config_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .filter(|value| config.api_configs.iter().any(|api| api.id == *value && is_text_chat_api(api)))
+        .map(ToOwned::to_owned);
+    let conversation_call_primary_id = preferred_id
+        .as_deref()
+        .unwrap_or(department_primary_id.as_str())
+        .to_string();
     let options = config
         .api_configs
         .iter()
@@ -365,7 +377,8 @@ fn ide_chat_model_payload_for_conversation(state: &AppState, conversation: &Conv
         })
         .collect::<Vec<_>>();
     Ok(serde_json::json!({
-        "selectedChatModelId": selected_id,
+        "conversationCallPrimaryApiConfigId": conversation_call_primary_id,
+        "preferredChatModelId": preferred_id,
         "chatModelOptions": options,
     }))
 }
@@ -1730,74 +1743,54 @@ fn ide_chat_model_list(state: &AppState, params: Value) -> Result<Value, String>
     ide_chat_model_payload_for_conversation(state, &conversation)
 }
 
-fn ide_chat_select_model(state: &AppState, app: &AppHandle, params: Value) -> Result<Value, String> {
+fn ide_chat_select_model(state: &AppState, _app: &AppHandle, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatSelectModelInput>(params)?;
     let conversation_id = input.conversation_id.trim();
     if conversation_id.is_empty() {
         return Err("conversationId is required".to_string());
     }
     let api_config_id = input.api_config_id.trim();
-    if api_config_id.is_empty() {
-        return Err("apiConfigId is required".to_string());
-    }
-    let conversation = state_read_conversation_cached(state, conversation_id)?;
-    let department_id = conversation.department_id.trim();
-    if department_id.is_empty() {
-        return Err("当前会话没有所属部门，无法切换模型。".to_string());
-    }
-    let mut config = state_read_config_cached(state)?;
-    let selected_api = config
-        .api_configs
-        .iter()
-        .find(|item| item.id.trim() == api_config_id)
-        .ok_or_else(|| format!("API config '{api_config_id}' not found."))?;
-    if !is_text_chat_api(selected_api) {
-        return Err(format!("API config '{api_config_id}' does not support chat text."));
-    }
-    let (department_primary_api_config_id, assistant_department_changed) = {
-        let Some(target_department) = config
-            .departments
-            .iter_mut()
-            .find(|item| item.id.trim() == department_id)
-        else {
-            return Err(format!("Department '{department_id}' not found."));
-        };
-        let mut next_ids = department_api_config_ids(target_department);
-        if next_ids.first().map(|item| item.trim()) != Some(api_config_id) {
-            next_ids.retain(|item| !item.trim().eq_ignore_ascii_case(api_config_id));
-            if next_ids.is_empty() {
-                next_ids.push(api_config_id.to_string());
-            } else {
-                next_ids[0] = api_config_id.to_string();
-            }
+    runtime_log_info(format!(
+        "[会话模型] 开始，任务=切换会话首选模型，入口=vscode_sidebar，会话ID={}，api_config_id={}",
+        conversation_id,
+        if api_config_id.is_empty() { "跟随部门" } else { api_config_id }
+    ));
+    let preferred_api_config_id = if api_config_id.is_empty() {
+        None
+    } else {
+        let config = state_read_config_cached(state)?;
+        let selected_api = config
+            .api_configs
+            .iter()
+            .find(|item| item.id.trim() == api_config_id)
+            .ok_or_else(|| format!("API config '{api_config_id}' not found."))?;
+        if !is_text_chat_api(selected_api) {
+            return Err(format!("API config '{api_config_id}' does not support chat text."));
         }
-        let mut seen = std::collections::HashSet::<String>::new();
-        target_department.api_config_ids = next_ids
-            .into_iter()
-            .map(|item| item.trim().to_string())
-            .filter(|item| !item.is_empty())
-            .filter(|item| seen.insert(item.to_ascii_lowercase()))
-            .collect::<Vec<_>>();
-        target_department.api_config_id = target_department
-            .api_config_ids
-            .first()
-            .cloned()
-            .unwrap_or_default();
-        target_department.updated_at = now_iso();
-        (
-            target_department.api_config_id.clone(),
-            target_department.id == ASSISTANT_DEPARTMENT_ID || target_department.is_built_in_assistant,
-        )
+        Some(api_config_id.to_string())
     };
-    if assistant_department_changed {
-        config.assistant_department_api_config_id = department_primary_api_config_id;
+    {
+        let _guard = state
+            .conversation_lock
+            .lock()
+            .map_err(|err| format!("Failed to lock state mutex at {}:{} {}: {err}", file!(), line!(), module_path!()))?;
+        let mut conversation = state_read_conversation_cached(state, conversation_id)?;
+        conversation.preferred_api_config_id = preferred_api_config_id;
+        state_write_conversation_meta_cached(state, &conversation)?;
     }
-    config.selected_api_config_id = api_config_id.to_string();
-    state_write_config_cached(state, &config)?;
-    let data = state_read_agents_runtime_snapshot(state)?;
-    let runtime_config = runtime_config_with_private_organization(state, &config, &data)?;
-    let _ = app.emit("easy-call:config-updated", &runtime_config);
+    let overview_payload = conversation_service().refresh_unarchived_conversation_overview_payload(state)?;
+    emit_unarchived_conversation_overview_updated_payload(state, &overview_payload);
     let updated_conversation = state_read_conversation_cached(state, conversation_id)?;
+    runtime_log_info(format!(
+        "[会话模型] 完成，任务=切换会话首选模型，入口=vscode_sidebar，会话ID={}，api_config_id={}",
+        conversation_id,
+        updated_conversation
+            .preferred_api_config_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("跟随部门")
+    ));
     ide_chat_model_payload_for_conversation(state, &updated_conversation)
 }
 

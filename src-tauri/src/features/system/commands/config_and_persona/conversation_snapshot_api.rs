@@ -61,6 +61,8 @@ struct UnarchivedConversationSummary {
     current_todo: Option<String>,
     #[serde(default)]
     plan_mode_enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    preferred_api_config_id: Option<String>,
     #[serde(default)]
     detached_window_open: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -442,6 +444,7 @@ fn build_unarchived_conversation_summary(
         runtime_state: None,
         current_todo: None,
         plan_mode_enabled: false,
+        preferred_api_config_id: conversation.preferred_api_config_id.clone(),
         detached_window_open: detached_window_label.is_some(),
         detached_window_label,
         state: item_state,
@@ -671,6 +674,22 @@ struct SetConversationPlanModeInput {
 struct SetConversationPlanModeOutput {
     conversation_id: String,
     plan_mode_enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SetConversationPreferredModelInput {
+    conversation_id: String,
+    #[serde(default)]
+    preferred_api_config_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SetConversationPreferredModelOutput {
+    conversation_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    preferred_api_config_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -956,6 +975,7 @@ mod conversation_snapshot_api_tests {
             runtime_state: None,
             current_todo: None,
             plan_mode_enabled: false,
+            preferred_api_config_id: None,
             detached_window_open: false,
             detached_window_label: None,
             state: ConversationListItemState {

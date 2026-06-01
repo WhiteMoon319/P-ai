@@ -2,6 +2,8 @@
 
 ## 未发布
 
+- 功能（chat）：会话增加“指定模型”字段，模型下拉框改为设置当前会话的 `preferredApiConfigId`；调度队列按“会话指定模型 + 部门模型队列”去重生成，并同步覆盖主窗口、独立聊天窗口与 VS Code sidebar。内部 delegate retry 的单次强制模型语义保留，失效的会话指定模型会自动回退部门队列。
+
 ## 发布：v0.10.14
 
 - 重构（persistence）：会话总索引（花名册）不再落盘为 `chat_index.json`，改为进程内由各会话分片 `meta.json` 派生的内存态；启动时扫描分片重建（含旧 `app_data.json` 回退），运行期随会话增删改做 O(1) 内存更新。移除读路径对账自愈、`include_chat_index` 开关与 `cached_chat_index_mtime`/`cached_chat_index_dirty`/索引修复门等冗余机制，消除索引与会话本体漂移导致的"自愈频繁触发"。

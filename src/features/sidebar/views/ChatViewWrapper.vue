@@ -29,7 +29,8 @@
     :recording-ms="0"
     :transcribing="false"
     record-hotkey=""
-    :selected-chat-model-id="selectedChatModelId"
+    :conversation-call-primary-api-config-id="conversationCallPrimaryApiConfigId"
+    :preferred-chat-model-id="preferredChatModelId"
     :tool-review-refresh-tick="0"
     :terminal-approvals="terminalApprovals"
     :terminal-approval-resolving="terminalApprovalResolving"
@@ -100,7 +101,7 @@
     @start-recording="noop"
     @stop-recording="noop"
     @pick-attachments="noop"
-    @update:selected-chat-model-id="$emit('update:selectedChatModelId', $event)"
+    @update:conversation-preferred-api-config-id="$emit('update:conversationPreferredApiConfigId', $event)"
     @update-workspace-access="$emit('updateWorkspaceAccess', $event)"
     @update:plan-mode-enabled="noop"
     @trim-conversation="noop"
@@ -166,7 +167,8 @@ const props = defineProps<{
     personaNameMap?: Record<string, string>;
     personaAvatarUrlMap?: Record<string, string>;
   };
-  selectedChatModelId: string;
+  conversationCallPrimaryApiConfigId: string;
+  preferredChatModelId?: string;
   chatModelOptions: ApiConfigItem[];
   workspaceAccess: "read_only" | "approval" | "full_access" | "";
   planModeEnabled: boolean;
@@ -201,7 +203,7 @@ defineEmits<{
   stop: [];
   removeClipboardImage: [index: number];
   loadPrevBlock: [];
-  "update:selectedChatModelId": [value: string];
+  "update:conversationPreferredApiConfigId": [value: string];
   updateWorkspaceAccess: [value: "read_only" | "approval" | "full_access"];
   recallTurn: [payload: { turnId: string }];
   confirmPlan: [payload: { messageId: string }];
@@ -217,7 +219,7 @@ defineEmits<{
 
 const allMessages = shallowRef<ChatMessage[]>([]);
 const activeChatApiConfig = computed<ApiConfigItem | null>(
-  () => props.chatModelOptions.find((item) => item.id === props.selectedChatModelId) || null,
+  () => props.chatModelOptions.find((item) => item.id === props.conversationCallPrimaryApiConfigId) || null,
 );
 const userAlias = computed(() => String(props.persona?.userAlias || "我").trim() || "我");
 const userAvatarUrl = computed(() => String(props.persona?.userAvatarUrl || "").trim());

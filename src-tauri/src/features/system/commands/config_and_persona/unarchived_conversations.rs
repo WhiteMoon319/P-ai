@@ -131,6 +131,67 @@ fn set_conversation_plan_mode(
     })
 }
 
+#[tauri::command]
+fn set_conversation_preferred_model(
+    input: SetConversationPreferredModelInput,
+    state: State<'_, AppState>,
+) -> Result<SetConversationPreferredModelOutput, String> {
+    let conversation_id = input.conversation_id.trim();
+    if conversation_id.is_empty() {
+        return Err("conversationId 不能为空".to_string());
+    }
+    let preferred_api_config_id = input
+        .preferred_api_config_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+
+    runtime_log_info(format!(
+        "[会话模型] 开始，任务=切换会话首选模型，入口=tauri，会话ID={}，api_config_id={}",
+        conversation_id,
+        preferred_api_config_id.as_deref().unwrap_or("跟随部门")
+    ));
+
+    if let Some(api_config_id) = preferred_api_config_id.as_deref() {
+        let config = state_read_config_cached(state.inner())?;
+        let Some(api_config) = config.api_configs.iter().find(|api| api.id == api_config_id) else {
+            return Err(format!("会话首选模型不存在：api_config_id={api_config_id}"));
+        };
+        if !api_config.enable_text || !api_config.request_format.is_chat_text() {
+            return Err(format!(
+                "会话首选模型不是聊天文本模型：api_config_id={}，request_format={:?}",
+                api_config_id,
+                api_config.request_format
+            ));
+        }
+    }
+
+    {
+        let _guard = state
+            .conversation_lock
+            .lock()
+            .map_err(|err| format!("Failed to lock state mutex at {}:{} {}: {err}", file!(), line!(), module_path!()))?;
+        let mut conversation = state_read_conversation_cached(state.inner(), conversation_id)?;
+        conversation.preferred_api_config_id = preferred_api_config_id.clone();
+        state_write_conversation_meta_cached(state.inner(), &conversation)?;
+    }
+    let overview_payload =
+        conversation_service().refresh_unarchived_conversation_overview_payload(state.inner())?;
+    emit_unarchived_conversation_overview_updated_payload(state.inner(), &overview_payload);
+
+    runtime_log_info(format!(
+        "[会话模型] 完成，任务=切换会话首选模型，会话ID={}，api_config_id={}",
+        conversation_id,
+        preferred_api_config_id.as_deref().unwrap_or("跟随部门")
+    ));
+
+    Ok(SetConversationPreferredModelOutput {
+        conversation_id: conversation_id.to_string(),
+        preferred_api_config_id,
+    })
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CreateUnarchivedConversationInput {
@@ -2199,6 +2260,7 @@ mod unarchived_conversations_tests {
             current_todos: Vec::new(),
             memory_recall_table: Vec::new(),
             plan_mode_enabled: true,
+            preferred_api_config_id: None,
         }
     }
 

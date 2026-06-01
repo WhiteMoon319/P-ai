@@ -46,15 +46,29 @@ export function useChatPersonaConversationDerivedState(bindings: Record<string, 
       || String(currentForegroundDepartment.value?.agentIds?.[0] || "").trim()
       || String(bindings.assistantDepartmentAgentId.value || "").trim(),
   );
+  const currentConversationPreferredApiConfigId = computed(() => {
+    const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
+    const overrideMap = bindings.conversationPreferredApiConfigOverrides?.value;
+    const hasOverride = overrideMap instanceof Map && overrideMap.has(currentConversationId);
+    const overrideApiConfigId = hasOverride ? String(overrideMap.get(currentConversationId) || "").trim() : "";
+    const apiConfigId = hasOverride
+      ? overrideApiConfigId
+      : String(currentForegroundConversationSummary.value?.preferredApiConfigId || "").trim();
+    if (!apiConfigId) return "";
+    return bindings.config.apiConfigs.some((item: any) => item.id === apiConfigId && item.enableText)
+      ? apiConfigId
+      : "";
+  });
+  const currentForegroundApiConfigIds = computed(() => {
+    const departmentIds = bindings.departmentOrderedApiConfigIds(currentForegroundDepartment.value);
+    return Array.from(new Set([
+      currentConversationPreferredApiConfigId.value,
+      ...departmentIds,
+    ].map((item: string) => String(item || "").trim()).filter(Boolean)));
+  });
   const currentForegroundApiConfigId = computed(
     () => {
-      if (bindings.detachedChatWindow.value) {
-        const temporaryApiConfigId = String(bindings.detachedTemporaryApiConfigId.value || "").trim();
-        if (temporaryApiConfigId && bindings.config.apiConfigs.some((item: any) => item.id === temporaryApiConfigId && item.enableText)) {
-          return temporaryApiConfigId;
-        }
-      }
-      return bindings.departmentConversationApiConfigId(currentForegroundDepartment.value);
+      return currentForegroundApiConfigIds.value[0] || bindings.departmentConversationApiConfigId(currentForegroundDepartment.value);
     },
   );
   const currentForegroundApiConfig = computed(
@@ -251,6 +265,8 @@ export function useChatPersonaConversationDerivedState(bindings: Record<string, 
     currentForegroundDepartmentId,
     currentForegroundDepartment,
     currentForegroundAgentId,
+    currentConversationPreferredApiConfigId,
+    currentForegroundApiConfigIds,
     currentForegroundApiConfigId,
     currentForegroundApiConfig,
     currentForegroundPersona,

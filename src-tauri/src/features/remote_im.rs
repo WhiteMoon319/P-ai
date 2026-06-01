@@ -189,6 +189,8 @@ struct RemoteImContactConversationSummary {
     platform: RemoteImPlatform,
     contact_display_name: String,
     bound_department_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    preferred_api_config_id: Option<String>,
     processing_mode: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     preview_messages: Vec<ConversationPreviewMessage>,

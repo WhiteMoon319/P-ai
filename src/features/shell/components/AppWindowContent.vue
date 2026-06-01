@@ -137,7 +137,8 @@
         :recording-ms="recordingMs"
         :transcribing="transcribing"
         :record-hotkey="recordHotkey"
-        :selected-chat-model-id="selectedChatModelId"
+        :conversation-call-primary-api-config-id="conversationCallPrimaryApiConfigId"
+        :preferred-chat-model-id="preferredChatModelId"
         :tool-review-refresh-tick="toolReviewRefreshTick"
         :terminal-approvals="terminalApprovals"
         :terminal-approval-resolving="terminalApprovalResolving"
@@ -199,7 +200,7 @@
         @remove-clipboard-image="removeClipboardImage"
         @remove-queued-attachment-notice="removeQueuedAttachmentNotice"
         @pick-attachments="pickAttachments"
-        @update:selected-chat-model-id="updateSelectedChatModelId"
+        @update:conversation-preferred-api-config-id="updateConversationPreferredApiConfigId"
         @update:plan-mode-enabled="updatePlanModeEnabled"
         @start-recording="startRecording"
         @stop-recording="stopRecording"
@@ -498,7 +499,8 @@ const props = defineProps<{
   recordingMs: number;
   transcribing: boolean;
   recordHotkey: string;
-  selectedChatModelId: string;
+  conversationCallPrimaryApiConfigId: string;
+  preferredChatModelId?: string;
   toolReviewRefreshTick: number;
   terminalApprovals?: TerminalApprovalConversationItem[];
   terminalApprovalResolving?: boolean;
@@ -643,7 +645,7 @@ const props = defineProps<{
   updateSelectedInstructionPrompts: (value: PromptCommandPreset[]) => void;
   addChatMention: (value: ChatMentionTarget) => void;
   removeChatMention: (value: string | { agentId?: string; departmentId?: string }) => void;
-  updateSelectedChatModelId: (value: string) => void;
+  updateConversationPreferredApiConfigId: (value: string) => void;
   updatePlanModeEnabled: (value: boolean) => void;
   setSideConversationListVisible: (value: boolean) => void;
   setToolReviewPanelOpen: (value: boolean) => void;

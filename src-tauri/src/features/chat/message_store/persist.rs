@@ -521,6 +521,19 @@ pub(super) fn write_conversation_directory_meta_shard(
     write_conversation_shard_meta_atomic(&paths.meta_file, &shard_meta)
 }
 
+pub(super) fn write_conversation_directory_meta_for_conversation(
+    data_path: &PathBuf,
+    conversation: &Conversation,
+) -> Result<(), String> {
+    fs::create_dir_all(app_layout_chat_conversations_dir(data_path))
+        .map_err(|err| format!("Create chat conversations dir failed: {err}"))?;
+    let paths = message_store_paths(data_path, &conversation.id)?;
+    fs::create_dir_all(&paths.shard_dir)
+        .map_err(|err| format!("Create conversation shard dir failed: {err}"))?;
+    let meta = ConversationPersistMeta::from_conversation(conversation);
+    write_conversation_directory_meta_shard(&paths, &meta)
+}
+
 pub(super) fn write_jsonl_snapshot_messages_shard(
     paths: &MessageStorePaths,
     snapshot: &ConversationPersistMessagesSnapshot,
@@ -867,6 +880,7 @@ mod message_store_persist_tests {
             current_todos: Vec::new(),
             memory_recall_table: Vec::new(),
             plan_mode_enabled: false,
+            preferred_api_config_id: None,
         }
     }
 

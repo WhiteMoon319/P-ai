@@ -1,6 +1,8 @@
 import { invokeTauri } from "../../../services/tauri-api";
 
 export function useChatWindowLocalTools(bindings: Record<string, any>) {
+  const preferredModelPersistPending = new Map<string, Promise<boolean>>();
+
   function updatePersonaEditorIdWithNotice(value: string) {
     const nextId = String(value || "").trim();
     if (!nextId || nextId === bindings.personaEditorId.value) return;
@@ -57,17 +59,101 @@ export function useChatWindowLocalTools(bindings: Record<string, any>) {
     }
   }
 
-  function updateAssistantDepartmentApiConfigId(value: string) {
-    if (bindings.detachedChatWindow.value) {
-      const nextId = String(value || "").trim();
-      if (nextId && !bindings.config.apiConfigs.some((item: any) => item.id === nextId && item.enableText)) {
-        bindings.setStatus("当前模型不可用，请重新选择。");
-        return;
-      }
-      bindings.detachedTemporaryApiConfigId.value = nextId;
+  function updateConversationPreferredApiConfigId(value: string) {
+    void updateConversationPreferredApiConfig(value);
+  }
+
+  async function waitPendingConversationPreferredModelPersist(conversationId?: string | null): Promise<boolean> {
+    const cid = String(conversationId || bindings.currentChatConversationId.value || "").trim();
+    if (!cid) return true;
+    const pending = preferredModelPersistPending.get(cid);
+    return pending ? await pending : true;
+  }
+
+  function patchConversationPreferredModelInOverview(conversationId: string, preferredApiConfigId: string) {
+    const cid = String(conversationId || "").trim();
+    if (!cid) return;
+    const overrideMap = bindings.conversationPreferredApiConfigOverrides?.value;
+    if (overrideMap instanceof Map) {
+      const nextMap = new Map(overrideMap);
+      nextMap.set(cid, preferredApiConfigId);
+      bindings.conversationPreferredApiConfigOverrides.value = nextMap;
+    }
+    const patchOne = (item: any) => {
+      if (String(item.conversationId || "").trim() !== cid) return item;
+      return {
+        ...item,
+        preferredApiConfigId: preferredApiConfigId || undefined,
+      };
+    };
+    bindings.unarchivedConversations.value = bindings.unarchivedConversations.value.map(patchOne);
+    bindings.remoteImContactConversations.value = bindings.remoteImContactConversations.value.map(patchOne);
+  }
+
+  function currentConversationPreferredModelId(conversationId: string): string {
+    const cid = String(conversationId || "").trim();
+    const overrideMap = bindings.conversationPreferredApiConfigOverrides?.value;
+    if (overrideMap instanceof Map && overrideMap.has(cid)) {
+      return String(overrideMap.get(cid) || "").trim();
+    }
+    const currentItem = bindings.chatConversationItems.value.find(
+      (item: any) => String(item.conversationId || "").trim() === cid,
+    );
+    return String(currentItem?.preferredApiConfigId || "").trim();
+  }
+
+  async function updateConversationPreferredApiConfig(value: string) {
+    const nextId = String(value || "").trim();
+    if (nextId && !bindings.config.apiConfigs.some((item: any) => item.id === nextId && item.enableText)) {
+      bindings.setStatus("当前模型不可用，请重新选择。");
       return;
     }
-    void updateForegroundDepartmentPrimaryApiConfig(value);
+    const conversationId = String(bindings.currentChatConversationId.value || "").trim();
+    if (!conversationId) {
+      bindings.setStatus("当前没有可切换模型的会话。");
+      return;
+    }
+    const currentItem = bindings.chatConversationItems.value.find(
+      (item: any) => String(item.conversationId || "").trim() === conversationId,
+    );
+    const previousId = String(currentItem?.preferredApiConfigId || "").trim();
+    if (previousId === nextId) return;
+    console.info("[会话模型] 前端切换首选模型", {
+      conversationId,
+      preferredApiConfigId: nextId || null,
+      detached: !!bindings.detachedChatWindow.value,
+    });
+    patchConversationPreferredModelInOverview(conversationId, nextId);
+    bindings.detachedTemporaryApiConfigId.value = "";
+    let persist!: Promise<boolean>;
+    persist = (async () => {
+      try {
+        await invokeTauri("set_conversation_preferred_model", {
+          input: {
+            conversationId,
+            preferredApiConfigId: nextId || null,
+          },
+        });
+        if (bindings.chatting.value) {
+          bindings.setStatus("模型已切换，将在下一次调度开始时生效。");
+        }
+        return true;
+      } catch (error) {
+        const isLatestPersist = preferredModelPersistPending.get(conversationId) === persist;
+        const currentPreferredId = currentConversationPreferredModelId(conversationId);
+        if (isLatestPersist && currentPreferredId === nextId) {
+          patchConversationPreferredModelInOverview(conversationId, previousId);
+        }
+        bindings.setStatusError("status.saveConfigFailed", error);
+        return false;
+      } finally {
+        if (preferredModelPersistPending.get(conversationId) === persist) {
+          preferredModelPersistPending.delete(conversationId);
+        }
+      }
+    })();
+    preferredModelPersistPending.set(conversationId, persist);
+    await persist;
   }
 
   function updateSelectedResponseStyleId(value: string) {
@@ -224,7 +310,9 @@ export function useChatWindowLocalTools(bindings: Record<string, any>) {
     updatePersonaEditorIdWithNotice,
     updateAssistantDepartmentAgentId,
     updateForegroundDepartmentPrimaryApiConfig,
-    updateAssistantDepartmentApiConfigId,
+    updateConversationPreferredApiConfigId,
+    updateConversationPreferredApiConfig,
+    waitPendingConversationPreferredModelPersist,
     updateSelectedResponseStyleId,
     updateSelectedPdfReadMode,
     updateBackgroundVoiceScreenshotKeywords,

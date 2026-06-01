@@ -302,12 +302,10 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
   }
 
   async function sendChatFromCurrentWindow(overrides?: { extraTextBlocks?: string[] }) {
-    if (bindings.detachedChatWindow.value) {
-      const temporaryApiConfigId = String(bindings.detachedTemporaryApiConfigId.value || "").trim();
-      if (temporaryApiConfigId && !bindings.config.apiConfigs.some((item: any) => item.id === temporaryApiConfigId && item.enableText)) {
-        bindings.setStatus("临时模型已不可用，请重新选择模型。");
-        return;
-      }
+    const conversationId = String(bindings.currentChatConversationId.value || "").trim();
+    if (bindings.waitPendingConversationPreferredModelPersist) {
+      const modelPersisted = await bindings.waitPendingConversationPreferredModelPersist(conversationId);
+      if (!modelPersisted) return;
     }
     await bindings.getChatFlow().sendChat(overrides);
   }
