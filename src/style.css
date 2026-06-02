@@ -321,8 +321,13 @@ body {
 }
 
 .ecall-chat-scroll-container {
+  overflow-anchor: none;
   scrollbar-width: none;
   scrollbar-gutter: auto;
+}
+
+.ecall-chat-history-flow {
+  overflow-anchor: none;
 }
 
 .ecall-chat-scroll-container::-webkit-scrollbar {
