@@ -6,13 +6,6 @@ struct ResponseStylePreset {
     prompt: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct HighestInstruction {
-    title: String,
-    rules: Vec<String>,
-}
-
 fn built_in_response_styles() -> &'static Vec<ResponseStylePreset> {
     static STYLES: OnceLock<Vec<ResponseStylePreset>> = OnceLock::new();
     STYLES.get_or_init(|| {
@@ -83,34 +76,11 @@ fn response_style_preset(id: &str) -> ResponseStylePreset {
         })
 }
 
-fn highest_instruction() -> &'static HighestInstruction {
-    static INSTRUCTION: OnceLock<HighestInstruction> = OnceLock::new();
-    INSTRUCTION.get_or_init(|| {
-        serde_json::from_str(include_str!(
-            "../../../../../src/constants/highest-instruction.json"
-        ))
-        .unwrap_or_else(|_| HighestInstruction {
-            title: "系统准则".to_string(),
-            rules: vec![
-                "你必须基于客观事实回答问题，不编造数据、来源或结论。".to_string(),
-                "若信息不足或不确定，直接说明不确定，并给出可验证路径。".to_string(),
-                "优先给出可执行、可验证、与用户问题直接相关的结论。".to_string(),
-            ],
-        })
-    })
-}
-
 fn highest_instruction_markdown() -> String {
-    let source = highest_instruction();
-    let mut out = String::new();
-    for rule in &source.rules {
-        let line = rule.trim();
-        if !line.is_empty() {
-            out.push_str(line);
-            out.push('\n');
-        }
-    }
-    prompt_xml_block("system rules", out)
+    prompt_xml_block(
+        "system rules",
+        include_str!("../../../../../src/constants/highest-instruction.md").trim(),
+    )
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

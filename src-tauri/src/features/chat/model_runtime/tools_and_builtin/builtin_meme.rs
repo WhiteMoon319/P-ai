@@ -717,7 +717,18 @@ fn meme_prompt_rule_block(state: Option<&AppState>) -> Option<String> {
     Some(prompt_xml_block(
         "meme sticker rule",
         format!(
-            "当前可用 meme：{}。\n如果你要发送贴纸，请直接在回答正文中写 `:meme名:`，例如 `:坏笑:`。\n不要编造不存在的 meme 名，也不要调用工具查询列表。\n只有当你需要把当前看到的图片收入贴纸库时，才调用 `meme` 工具。`emotion` 是贴纸名，也是后续可使用的 `:meme名:`。",
+            "## 可用 meme\n\
+             - {}\n\n\
+             ## 发送贴纸\n\
+             - 直接在回答正文中写 `:meme名:`。\n\
+             - 示例：`:坏笑:`\n\
+             - 只能使用上方已经存在的 meme 名。\n\n\
+             ## 不要这样做\n\
+             - 不要编造不存在的 meme 名。\n\
+             - 不要调用工具查询 meme 列表。\n\n\
+             ## 何时调用工具\n\
+             - 只有需要把当前看到的图片收入贴纸库时，才调用 `meme` 工具。\n\
+             - `emotion` 是贴纸名，也是后续可使用的 `:meme名:`。",
             names.join("、")
         ),
     ))
