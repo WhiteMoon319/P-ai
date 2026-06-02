@@ -33,6 +33,8 @@ jobs:
               $allowed = $true
             } elseif ($line -eq 'write_app_data(&state.data_path, data)?;') {
               $allowed = $true
+            } elseif ($line -eq 'write_app_data(&state.data_path, &pending.data)?;') {
+              $allowed = $true
             } elseif ($line -eq 'write_app_data(&data_path, &data_to_write)?;') {
               $allowed = $true
             }
