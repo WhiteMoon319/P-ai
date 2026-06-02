@@ -787,7 +787,7 @@ mod openai_responses_genai_request_tests {
             audios: Vec::new(),
             tool_calls: None,
             tool_call_id: None,
-            reasoning_content: None,
+            reasoning_content: Some("我已经拿到工具结果，现在直接回答用户终端版本。".to_string()),
         });
         PreparedPrompt {
             preamble: "sys".to_string(),
