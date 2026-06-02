@@ -5,6 +5,25 @@ use serde::{Deserialize, Serialize};
 pub struct WorkspaceLoadError {
     pub item: String,
     pub error: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub hint: String,
+    #[serde(default)]
+    pub skipped: bool,
+}
+
+impl WorkspaceLoadError {
+    pub(crate) fn with_hint(
+        item: impl Into<String>,
+        error: impl Into<String>,
+        hint: impl Into<String>,
+    ) -> Self {
+        Self {
+            item: item.into(),
+            error: error.into(),
+            hint: hint.into(),
+            skipped: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,6 +56,10 @@ pub struct SkillSummaryItem {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RefreshMcpAndSkillsResult {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub status: String,
     pub mcp_loaded: Vec<String>,
     pub mcp_failed: Vec<WorkspaceLoadError>,
     pub skills_loaded: Vec<String>,
@@ -53,6 +76,10 @@ pub struct RefreshMcpAndSkillsResult {
     pub total_failed: usize,
     pub loaded_summary: String,
     pub failed_summary: String,
+    #[serde(default)]
+    pub repair_summary: String,
+    #[serde(default)]
+    pub repair_items: Vec<WorkspaceLoadError>,
     pub needs_repair: bool,
 }
 

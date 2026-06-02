@@ -388,6 +388,8 @@ export type SkillListResult = {
 export type WorkspaceLoadError = {
   item: string;
   error: string;
+  hint?: string;
+  skipped?: boolean;
 };
 
 export type WorkspaceLoadedGroup = {
@@ -405,6 +407,8 @@ export type WorkspaceFailedGroup = {
 };
 
 export type RefreshMcpAndSkillsResult = {
+  ok?: boolean;
+  status?: string;
   mcpLoaded: string[];
   mcpFailed: WorkspaceLoadError[];
   skillsLoaded: string[];
@@ -421,6 +425,8 @@ export type RefreshMcpAndSkillsResult = {
   totalFailed: number;
   loadedSummary: string;
   failedSummary: string;
+  repairSummary?: string;
+  repairItems?: WorkspaceLoadError[];
   needsRepair: boolean;
 };
 

@@ -138,7 +138,9 @@ impl Default for DepartmentPermissionControl {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DepartmentConfig {
+    #[serde(default)]
     id: String,
+    #[serde(default)]
     name: String,
     #[serde(default)]
     summary: String,
@@ -152,8 +154,11 @@ struct DepartmentConfig {
     agent_ids: Vec<String>,
     #[serde(default)]
     child_department_ids: Vec<String>,
+    #[serde(default)]
     created_at: String,
+    #[serde(default)]
     updated_at: String,
+    #[serde(default)]
     order_index: i64,
     #[serde(default)]
     is_built_in_assistant: bool,

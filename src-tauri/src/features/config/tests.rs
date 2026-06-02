@@ -807,6 +807,92 @@ maxOutputTokens = 8192
     }
 
     #[test]
+    fn app_config_should_deserialize_legacy_departments_without_timestamps() {
+        let mut cfg: AppConfig = toml::from_str(
+            r#"
+hotkey = "Alt+·"
+selectedApiConfigId = "legacy-openai"
+assistantDepartmentApiConfigId = "legacy-openai"
+
+[[departments]]
+id = "assistant-department"
+name = "助理部门"
+agentIds = ["default-agent"]
+apiConfigIds = ["legacy-openai"]
+
+[[apiConfigs]]
+id = "legacy-openai"
+name = "Legacy OpenAI"
+requestFormat = "openai"
+enableText = true
+enableImage = false
+enableAudio = false
+enableTools = true
+baseUrl = "https://api.openai.com/v1"
+apiKey = "legacy-key"
+model = "gpt-4.1"
+"#,
+        )
+        .expect("legacy department toml should deserialize");
+
+        normalize_app_config(&mut cfg);
+
+        let assistant = cfg
+            .departments
+            .iter()
+            .find(|department| department.id == ASSISTANT_DEPARTMENT_ID)
+            .expect("assistant department should exist");
+        assert!(!assistant.created_at.trim().is_empty());
+        assert_eq!(assistant.updated_at, assistant.created_at);
+        assert!(assistant.order_index > 0);
+    }
+
+    #[test]
+    fn private_department_id_conflict_should_be_skipped_with_repair_hint() {
+        let root = std::env::temp_dir().join(format!("eca-private-org-conflict-{}", Uuid::new_v4()));
+        let data_path = root.join("config").join("app_data.json");
+        let departments_dir = root
+            .join("llm-workspace")
+            .join("private-organization")
+            .join("departments");
+        std::fs::create_dir_all(&departments_dir).expect("create private departments dir");
+        let conflict_id = "literature-knowledge-center";
+        std::fs::write(
+            departments_dir.join("literature-knowledge-center.json"),
+            r#"{
+  "id": "literature-knowledge-center",
+  "name": "文学知识中心",
+  "agentIds": ["default-agent"]
+}"#,
+        )
+        .expect("write private department");
+
+        let mut cfg = AppConfig::default();
+        let mut conflicting_department = cfg.departments[0].clone();
+        conflicting_department.id = conflict_id.to_string();
+        conflicting_department.name = "主配置文学知识中心".to_string();
+        conflicting_department.is_built_in_assistant = false;
+        cfg.departments.push(conflicting_department);
+        let mut data = AppData::default();
+
+        let result = merge_private_organization_into_runtime_data(&data_path, &mut cfg, &mut data)
+            .expect("merge private organization should not fail globally");
+
+        assert!(result.private_departments_loaded.is_empty());
+        assert_eq!(result.private_departments_failed.len(), 1);
+        let error = &result.private_departments_failed[0];
+        assert!(error.skipped);
+        assert!(error.error.contains("私有部门 id 与主配置冲突"));
+        assert!(error.hint.contains("修改该私有部门 id"));
+        assert_eq!(
+            cfg.departments.iter().filter(|department| department.id == conflict_id).count(),
+            1
+        );
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn consume_api_key_for_request_should_rotate_provider_keys_across_same_provider_models() {
         let provider_id = format!(
             "provider-{}",

@@ -192,10 +192,11 @@ pub(crate) fn load_workspace_skill_summaries_with_errors(
     for dir in dirs {
         let skill_md = dir.join("SKILL.md");
         if !skill_md.is_file() {
-            errors.push(WorkspaceLoadError {
-                item: dir.to_string_lossy().to_string(),
-                error: "SKILL.md not found".to_string(),
-            });
+            errors.push(WorkspaceLoadError::with_hint(
+                dir.to_string_lossy().to_string(),
+                "SKILL.md not found",
+                "在该技能目录下创建 SKILL.md，或移除/重命名这个无效技能目录。",
+            ));
             continue;
         }
         match parse_skill_file(&skill_md) {
@@ -207,10 +208,11 @@ pub(crate) fn load_workspace_skill_summaries_with_errors(
                     path: skill_md.to_string_lossy().to_string(),
                 });
             }
-            Err(err) => errors.push(WorkspaceLoadError {
-                item: skill_md.to_string_lossy().to_string(),
-                error: err,
-            }),
+            Err(err) => errors.push(WorkspaceLoadError::with_hint(
+                skill_md.to_string_lossy().to_string(),
+                err,
+                "检查 SKILL.md 的 frontmatter、name/description 与正文格式，修复后重新调用 reload。",
+            )),
         }
     }
     Ok((skills, errors))
@@ -498,8 +500,42 @@ fn summarize_workspace_failed_groups(groups: &[WorkspaceFailedGroup]) -> String 
         }
         lines.push(format!("{}：{} 个加载失败", group.label, group.count));
         for item in &group.items {
-            lines.push(format!("- {} | {}", item.item, item.error));
+            if item.hint.trim().is_empty() {
+                lines.push(format!("- {} | {}", item.item, item.error));
+            } else {
+                lines.push(format!("- {} | {} | 修复：{}", item.item, item.error, item.hint));
+            }
         }
+    }
+    lines.join("\n")
+}
+
+fn collect_workspace_repair_items(groups: &[WorkspaceFailedGroup]) -> Vec<WorkspaceLoadError> {
+    groups
+        .iter()
+        .flat_map(|group| group.items.iter().cloned())
+        .collect::<Vec<_>>()
+}
+
+fn summarize_workspace_repair_items(items: &[WorkspaceLoadError]) -> String {
+    if items.is_empty() {
+        return "reload 完成，未发现需要修复的 LLM 工作区配置。".to_string();
+    }
+    let mut lines = Vec::<String>::new();
+    lines.push(format!(
+        "reload 已跳过 {} 个不合法配置；请按下面的 path/error/hint 修复后再次调用 reload。",
+        items.len()
+    ));
+    for item in items {
+        let hint = if item.hint.trim().is_empty() {
+            "根据错误信息修复该配置项。"
+        } else {
+            item.hint.trim()
+        };
+        lines.push(format!(
+            "- path: {}\n  error: {}\n  hint: {}",
+            item.item, item.error, hint
+        ));
     }
     lines.join("\n")
 }
@@ -528,13 +564,24 @@ fn finalize_workspace_load_result(
     let total_failed = failed_groups.iter().map(|group| group.count).sum::<usize>();
     let loaded_summary = summarize_workspace_loaded_groups(&loaded_groups);
     let failed_summary = summarize_workspace_failed_groups(&failed_groups);
+    let repair_items = collect_workspace_repair_items(&failed_groups);
+    let repair_summary = summarize_workspace_repair_items(&repair_items);
+    let needs_repair = total_failed > 0;
+    result.ok = !needs_repair;
+    result.status = if needs_repair {
+        "needs_repair".to_string()
+    } else {
+        "ok".to_string()
+    };
     result.loaded_groups = loaded_groups;
     result.failed_groups = failed_groups;
     result.total_loaded = total_loaded;
     result.total_failed = total_failed;
     result.loaded_summary = loaded_summary;
     result.failed_summary = failed_summary;
-    result.needs_repair = total_failed > 0;
+    result.repair_summary = repair_summary;
+    result.repair_items = repair_items;
+    result.needs_repair = needs_repair;
     result
 }
 
@@ -561,12 +608,15 @@ fn collect_workspace_load_snapshot(
     let skill_summary = render_skill_summary(&skills);
     let result = RefreshMcpAndSkillsResult {
         mcp_loaded,
+        ok: false,
+        status: String::new(),
         mcp_failed: mcp_errors
             .into_iter()
-            .map(|v| WorkspaceLoadError {
-                item: v.item,
-                error: v.error,
-            })
+            .map(|v| WorkspaceLoadError::with_hint(
+                v.item,
+                v.error,
+                "检查该 MCP JSON 配置的格式、command/args/env 与启用状态；修复后重新调用 reload。",
+            ))
             .collect(),
         skills_loaded,
         skills_failed: skill_errors,
@@ -582,6 +632,8 @@ fn collect_workspace_load_snapshot(
         total_failed: 0,
         loaded_summary: String::new(),
         failed_summary: String::new(),
+        repair_summary: String::new(),
+        repair_items: Vec::new(),
         needs_repair: false,
     };
     Ok((result, servers, data.agents, config.departments))
@@ -608,10 +660,11 @@ pub(crate) async fn load_workspace(state: &AppState) -> Result<RefreshMcpAndSkil
     match mcp_start_supervisor_probe_all_from_policy(state.clone(), "workspace_load") {
         Ok(()) => {}
         Err(err) => {
-            result.mcp_failed.push(WorkspaceLoadError {
-                item: "mcp_supervisor_start".to_string(),
-                error: err,
-            });
+            result.mcp_failed.push(WorkspaceLoadError::with_hint(
+                "mcp_supervisor_start",
+                err,
+                "检查 MCP 运行时启动日志和服务器配置；修复后重新调用 reload。",
+            ));
         }
     }
     refresh_global_tool_schema_cache(state);

@@ -213,66 +213,74 @@ fn load_private_agents_from_workspace(
         let raw = match fs::read_to_string(&path) {
             Ok(value) => value,
             Err(err) => {
-                errors.push(WorkspaceLoadError {
-                    item: path.to_string_lossy().to_string(),
-                    error: format!("读取私有人格 JSON 失败: {err}"),
-                });
+                errors.push(WorkspaceLoadError::with_hint(
+                    path.to_string_lossy().to_string(),
+                    format!("读取私有人格 JSON 失败: {err}"),
+                    "确认文件存在且当前进程有读取权限；修复后重新调用 reload。",
+                ));
                 continue;
             }
         };
         let file = match serde_json::from_str::<PrivatePersonaFile>(&raw) {
             Ok(value) => value,
             Err(err) => {
-                errors.push(WorkspaceLoadError {
-                    item: path.to_string_lossy().to_string(),
-                    error: format!("解析私有人格 JSON 失败: {err}"),
-                });
+                errors.push(WorkspaceLoadError::with_hint(
+                    path.to_string_lossy().to_string(),
+                    format!("解析私有人格 JSON 失败: {err}"),
+                    "修正 JSON 语法，并确保包含 id、name、prompt/systemPrompt 字段。",
+                ));
                 continue;
             }
         };
         let id = file.id.trim().to_string();
         if id.is_empty() {
-            errors.push(WorkspaceLoadError {
-                item: path.to_string_lossy().to_string(),
-                error: "私有人格 id 不能为空".to_string(),
-            });
+            errors.push(WorkspaceLoadError::with_hint(
+                path.to_string_lossy().to_string(),
+                "私有人格 id 不能为空",
+                "为该私有人格填写非空 id，建议使用小写字母、数字和短横线。",
+            ));
             continue;
         }
         if reserved_private_persona_id(&id) {
-            errors.push(WorkspaceLoadError {
-                item: path.to_string_lossy().to_string(),
-                error: format!("私有人格不能使用保留 id: {id}"),
-            });
+            errors.push(WorkspaceLoadError::with_hint(
+                path.to_string_lossy().to_string(),
+                format!("私有人格不能使用保留 id: {id}"),
+                "修改该私有人格 id，不能使用内置用户、系统或默认助理人格 id。",
+            ));
             continue;
         }
         if base_agents.iter().any(|item| item.id == id) {
-            errors.push(WorkspaceLoadError {
-                item: path.to_string_lossy().to_string(),
-                error: format!("私有人格 id 与主配置冲突: {id}"),
-            });
+            errors.push(WorkspaceLoadError::with_hint(
+                path.to_string_lossy().to_string(),
+                format!("私有人格 id 与主配置冲突: {id}"),
+                "修改该私有人格 id，或删除/禁用对应 JSON；私有组织不能复用主配置人格 id。",
+            ));
             continue;
         }
         if !seen_private_ids.insert(id.clone()) {
-            errors.push(WorkspaceLoadError {
-                item: path.to_string_lossy().to_string(),
-                error: format!("私有人格 id 重复: {id}"),
-            });
+            errors.push(WorkspaceLoadError::with_hint(
+                path.to_string_lossy().to_string(),
+                format!("私有人格 id 重复: {id}"),
+                "确保 private-organization/personas 下每个 JSON 的 id 唯一。",
+            ));
             continue;
         }
         let name = file.name.trim().to_string();
         if name.is_empty() {
-            errors.push(WorkspaceLoadError {
-                item: path.to_string_lossy().to_string(),
-                error: format!("私有人格 name 不能为空，id={id}"),
-            });
+            errors.push(WorkspaceLoadError::with_hint(
+                path.to_string_lossy().to_string(),
+                format!("私有人格 name 不能为空，id={id}"),
+                "填写用于展示的人格 name。",
+            ));
             continue;
         }
         let system_prompt = file.system_prompt.trim().to_string();
         if system_prompt.is_empty() {
-            errors.push(WorkspaceLoadError {
-                item: path.to_string_lossy().to_string(),
-                error: format!("私有人格 prompt 不能为空，id={id}"),
-            });
+            errors.push(WorkspaceLoadError::with_hint(
+                path.to_string_lossy().to_string(),
+                format!("私有人格 prompt 不能为空，id={id}"),
+                "填写 prompt 或 systemPrompt，描述该人格的职责与行为约束。",
+            ));
             continue;
         }
         let now = now_iso();
@@ -315,58 +323,65 @@ fn load_private_departments_from_workspace(
         let raw = match fs::read_to_string(&path) {
             Ok(value) => value,
             Err(err) => {
-                errors.push(WorkspaceLoadError {
-                    item: path.to_string_lossy().to_string(),
-                    error: format!("读取私有部门 JSON 失败: {err}"),
-                });
+                errors.push(WorkspaceLoadError::with_hint(
+                    path.to_string_lossy().to_string(),
+                    format!("读取私有部门 JSON 失败: {err}"),
+                    "确认文件存在且当前进程有读取权限；修复后重新调用 reload。",
+                ));
                 continue;
             }
         };
         let file = match serde_json::from_str::<PrivateDepartmentFile>(&raw) {
             Ok(value) => value,
             Err(err) => {
-                errors.push(WorkspaceLoadError {
-                    item: path.to_string_lossy().to_string(),
-                    error: format!("解析私有部门 JSON 失败: {err}"),
-                });
+                errors.push(WorkspaceLoadError::with_hint(
+                    path.to_string_lossy().to_string(),
+                    format!("解析私有部门 JSON 失败: {err}"),
+                    "修正 JSON 语法，并确保包含 id、name、agentIds；apiConfigIds 可省略以使用默认文本模型。",
+                ));
                 continue;
             }
         };
         let id = file.id.trim().to_string();
         if id.is_empty() {
-            errors.push(WorkspaceLoadError {
-                item: path.to_string_lossy().to_string(),
-                error: "私有部门 id 不能为空".to_string(),
-            });
+            errors.push(WorkspaceLoadError::with_hint(
+                path.to_string_lossy().to_string(),
+                "私有部门 id 不能为空",
+                "为该私有部门填写非空 id，建议使用小写字母、数字和短横线。",
+            ));
             continue;
         }
         if reserved_private_department_id(&id) {
-            errors.push(WorkspaceLoadError {
-                item: path.to_string_lossy().to_string(),
-                error: format!("私有部门不能使用保留 id: {id}"),
-            });
+            errors.push(WorkspaceLoadError::with_hint(
+                path.to_string_lossy().to_string(),
+                format!("私有部门不能使用保留 id: {id}"),
+                "修改该私有部门 id；assistant-department 等内置部门 id 不能在私有组织中复用。",
+            ));
             continue;
         }
         if base_config.departments.iter().any(|item| item.id == id) {
-            errors.push(WorkspaceLoadError {
-                item: path.to_string_lossy().to_string(),
-                error: format!("私有部门 id 与主配置冲突: {id}"),
-            });
+            errors.push(WorkspaceLoadError::with_hint(
+                path.to_string_lossy().to_string(),
+                format!("私有部门 id 与主配置冲突: {id}"),
+                "修改该私有部门 id，或删除/禁用对应 JSON；私有组织不能复用主配置部门 id。",
+            ));
             continue;
         }
         if !seen_private_ids.insert(id.clone()) {
-            errors.push(WorkspaceLoadError {
-                item: path.to_string_lossy().to_string(),
-                error: format!("私有部门 id 重复: {id}"),
-            });
+            errors.push(WorkspaceLoadError::with_hint(
+                path.to_string_lossy().to_string(),
+                format!("私有部门 id 重复: {id}"),
+                "确保 private-organization/departments 下每个 JSON 的 id 唯一。",
+            ));
             continue;
         }
         let name = file.name.trim().to_string();
         if name.is_empty() {
-            errors.push(WorkspaceLoadError {
-                item: path.to_string_lossy().to_string(),
-                error: format!("私有部门 name 不能为空，id={id}"),
-            });
+            errors.push(WorkspaceLoadError::with_hint(
+                path.to_string_lossy().to_string(),
+                format!("私有部门 name 不能为空，id={id}"),
+                "填写用于展示和委托识别的部门 name。",
+            ));
             continue;
         }
         let mut api_config_ids = file
@@ -393,10 +408,11 @@ fn load_private_departments_from_workspace(
             }
         }
         if api_config_ids.is_empty() {
-            errors.push(WorkspaceLoadError {
-                item: path.to_string_lossy().to_string(),
-                error: format!("私有部门没有可用的默认文本模型，id={id}"),
-            });
+            errors.push(WorkspaceLoadError::with_hint(
+                path.to_string_lossy().to_string(),
+                format!("私有部门没有可用的默认文本模型，id={id}"),
+                "先在主配置中启用至少一个文本模型，或在该 JSON 的 apiConfigIds 中填写有效文本模型 id。",
+            ));
             continue;
         }
         let invalid_api_config_id = api_config_ids.iter().find(|api_config_id| {
@@ -406,10 +422,11 @@ fn load_private_departments_from_workspace(
                 .any(|api| api.id == **api_config_id && api.enable_text && api.request_format.is_chat_text())
         });
         if let Some(invalid_api_config_id) = invalid_api_config_id {
-            errors.push(WorkspaceLoadError {
-                item: path.to_string_lossy().to_string(),
-                error: format!("私有部门引用了不可用的文本模型，id={id}, apiConfigId={invalid_api_config_id}"),
-            });
+            errors.push(WorkspaceLoadError::with_hint(
+                path.to_string_lossy().to_string(),
+                format!("私有部门引用了不可用的文本模型，id={id}, apiConfigId={invalid_api_config_id}"),
+                "把 apiConfigIds 改为主配置中已启用且支持文本聊天的模型 id，或先启用该模型。",
+            ));
             continue;
         }
         let agent_ids = file
@@ -419,10 +436,11 @@ fn load_private_departments_from_workspace(
             .filter(|value| !value.is_empty())
             .collect::<Vec<_>>();
         if agent_ids.is_empty() {
-            errors.push(WorkspaceLoadError {
-                item: path.to_string_lossy().to_string(),
-                error: format!("私有部门必须至少绑定一个人格，id={id}"),
-            });
+            errors.push(WorkspaceLoadError::with_hint(
+                path.to_string_lossy().to_string(),
+                format!("私有部门必须至少绑定一个人格，id={id}"),
+                "在 agentIds 中填写至少一个可用人格 id；可引用主配置非内置人格或私有人格。",
+            ));
             continue;
         }
         let missing_agent = agent_ids.iter().find(|agent_id| {
@@ -431,10 +449,11 @@ fn load_private_departments_from_workspace(
                 .any(|agent| agent.id == **agent_id && !agent.is_built_in_user && !agent.is_built_in_system)
         });
         if let Some(missing_agent) = missing_agent {
-            errors.push(WorkspaceLoadError {
-                item: path.to_string_lossy().to_string(),
-                error: format!("私有部门引用了不存在的人格，departmentId={id}, agentId={missing_agent}"),
-            });
+            errors.push(WorkspaceLoadError::with_hint(
+                path.to_string_lossy().to_string(),
+                format!("私有部门引用了不存在的人格，departmentId={id}, agentId={missing_agent}"),
+                "先创建对应私有人格 JSON，或把 agentIds 改成已存在且非内置系统/用户的人格 id。",
+            ));
             continue;
         }
         let now = now_iso();

@@ -286,7 +286,7 @@ impl RuntimeToolMetadata for BuiltinReloadTool {
     fn provider_tool_definition(&self) -> ProviderToolDefinition {
         ProviderToolDefinition::new(
             "reload",
-            "清空工作区运行态缓存后，重新加载 MCP、技能、私有人格与私有部门。",
+            "清空工作区运行态缓存后，重新加载 MCP、技能、私有人格与私有部门。不合法配置会被跳过，并在 repairSummary/repairItems 中返回路径、错误和修复建议。",
             serde_json::json!({
               "type": "object",
               "properties": {},
