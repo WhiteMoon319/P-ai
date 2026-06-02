@@ -720,6 +720,7 @@ export type UnarchivedConversationSummary = {
   forkMessageCursor?: string;
   apiConfigId?: string;
   workspaceLabel?: string;
+  workspaceRootPath?: string;
   isActive?: boolean;
   isMainConversation?: boolean;
   isPinned?: boolean;
@@ -774,6 +775,7 @@ export type ChatConversationOverviewItem = {
   updatedAt?: string;
   lastMessageAt?: string;
   workspaceLabel?: string;
+  workspaceRootPath?: string;
   isActive?: boolean;
   isMainConversation?: boolean;
   isPinned?: boolean;

@@ -37,6 +37,7 @@ export function useChatConversationItemsDerivedState(bindings: Record<string, an
         parentConversationId: String(item.parentConversationId || "").trim() || undefined,
         forkMessageCursor: String(item.forkMessageCursor || "").trim() || undefined,
         workspaceLabel: String(item.workspaceLabel || "").trim() || "默认会话目录",
+        workspaceRootPath: String(item.workspaceRootPath || "").trim() || undefined,
         isActive: !!item.isActive,
         isMainConversation: !!item.isMainConversation,
         isPinned: !!item.isPinned,

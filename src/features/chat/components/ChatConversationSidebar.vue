@@ -49,10 +49,18 @@
         :key="section.key"
         class="last:mb-0"
       >
-        <div class="divider m-0 h-auto min-h-0 py-1 text-[11px] font-semibold uppercase tracking-wide text-base-content/45 before:bg-base-300 after:bg-base-300">
-          {{ section.title }}
-        </div>
-        <div>
+        <button
+          type="button"
+          class="flex h-9 w-full items-center gap-2 border-y border-base-300 bg-base-200 px-2.5 text-left text-xs font-semibold text-base-content/65 transition-colors hover:bg-base-300 hover:text-base-content"
+          :title="section.title"
+          @click="toggleConversationSection(section.key)"
+        >
+          <ChevronRight v-if="isConversationSectionCollapsed(section.key)" class="h-4 w-4 shrink-0" />
+          <ChevronDown v-else class="h-4 w-4 shrink-0" />
+          <span class="min-w-0 truncate">{{ section.title }}</span>
+          <span class="shrink-0 tabular-nums text-base-content/45">{{ section.items.length }}</span>
+        </button>
+        <div v-if="!isConversationSectionCollapsed(section.key)">
           <div
             v-for="(item, itemIndex) in section.items"
             :key="item.conversationId"
@@ -231,7 +239,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
-import { Archive, Download, Ellipsis, PencilLine, Pin, PinOff, Search, Trash2 } from "@lucide/vue";
+import { Archive, ChevronDown, ChevronRight, Download, Ellipsis, PencilLine, Pin, PinOff, Search, Trash2 } from "@lucide/vue";
 import type { ChatConversationOverviewItem, ConversationPreviewMessage } from "../../../types/app";
 import { usePipelineStatus } from "../../shell/composables/use-pipeline-status";
 import { formatConversationListTime } from "../utils/conversation-time";
@@ -266,6 +274,7 @@ const editingTitleDraft = ref("");
 const conversationSearchQuery = ref("");
 const showSearch = ref(false);
 const searchInputRef = ref<HTMLInputElement | null>(null);
+const collapsedConversationSectionKeys = ref<Record<string, boolean>>({});
 const activeConversationTab = computed({
   get: () => props.activeTab === "contact" ? "contact" : "local",
   set: (value: "local" | "contact") => emit("update:activeTab", value),
@@ -286,22 +295,28 @@ const conversationSections = computed(() => {
   });
   const pinned = visibleItems.filter((item) => !!item.isPinned || !!item.isMainConversation);
   const others = visibleItems.filter((item) => !item.isPinned && !item.isMainConversation);
-  return [
-    pinned.length > 0
-      ? {
-        key: "pinned",
-        title: t("chat.pinnedConversations"),
-        items: pinned,
-      }
-      : null,
-    others.length > 0
-      ? {
+  const sections: Array<{ key: string; title: string; items: ChatConversationOverviewItem[] }> = [];
+  if (pinned.length > 0) {
+    sections.push({
+      key: "pinned",
+      title: t("chat.pinnedConversations"),
+      items: pinned,
+    });
+  }
+  if (activeConversationTab.value === "contact") {
+    if (others.length > 0) {
+      sections.push({
         key: "others",
         title: t("chat.otherConversations"),
         items: others,
-      }
-      : null,
-  ].filter(Boolean) as Array<{ key: string; title: string; items: ChatConversationOverviewItem[] }>;
+      });
+    }
+    return sections;
+  }
+  return [
+    ...sections,
+    ...workspaceConversationSections(others),
+  ];
 });
 
 const normalizedConversationSearchQuery = computed(() =>
@@ -346,6 +361,42 @@ watch(showSearch, async (visible) => {
 function resetConversationTitleEdit() {
   editingConversationId.value = "";
   editingTitleDraft.value = "";
+}
+
+function workspaceConversationSections(items: ChatConversationOverviewItem[]): Array<{ key: string; title: string; items: ChatConversationOverviewItem[] }> {
+  const sections: Array<{ key: string; title: string; items: ChatConversationOverviewItem[] }> = [];
+  const byWorkspace = new Map<string, { key: string; title: string; items: ChatConversationOverviewItem[] }>();
+  for (const item of items) {
+    const path = String(item.workspaceRootPath || "").trim();
+    const title = String(item.workspaceLabel || "").trim() || workspaceNameFromPath(path) || t("chat.defaultWorkspace");
+    const key = `workspace:${path || title}`;
+    const existing = byWorkspace.get(key);
+    if (existing) {
+      existing.items.push(item);
+      continue;
+    }
+    const section = { key, title, items: [item] };
+    byWorkspace.set(key, section);
+    sections.push(section);
+  }
+  return sections;
+}
+
+function workspaceNameFromPath(path: string): string {
+  const normalized = path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!normalized) return "";
+  return normalized.split("/").filter(Boolean).pop() || normalized;
+}
+
+function isConversationSectionCollapsed(key: string): boolean {
+  return !!collapsedConversationSectionKeys.value[key];
+}
+
+function toggleConversationSection(key: string) {
+  collapsedConversationSectionKeys.value = {
+    ...collapsedConversationSectionKeys.value,
+    [key]: !collapsedConversationSectionKeys.value[key],
+  };
 }
 
 function setRenameInputRef(element: Element | { $el?: Element | null } | null) {

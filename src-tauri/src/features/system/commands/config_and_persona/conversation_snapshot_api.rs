@@ -47,6 +47,8 @@ struct UnarchivedConversationSummary {
     #[serde(skip_serializing_if = "Option::is_none")]
     fork_message_cursor: Option<String>,
     workspace_label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    workspace_root_path: Option<String>,
     #[serde(default)]
     is_active: bool,
     #[serde(default)]
@@ -187,6 +189,60 @@ fn build_conversation_preview_messages(
     limit: usize,
 ) -> Vec<ConversationPreviewMessage> {
     build_preview_messages_from_chat_messages(&conversation.messages, limit)
+}
+
+fn conversation_workspace_name_fallback(path_text: &str) -> String {
+    let normalized = path_text.trim().replace('\\', "/");
+    normalized
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| path_text.trim().to_string())
+}
+
+fn conversation_default_workspace_summary(
+    state: &AppState,
+    conversation: &Conversation,
+) -> (String, Option<String>) {
+    if let Ok(workspace) = terminal_default_workspace_for_conversation_resolved(state, Some(conversation)) {
+        let path = workspace.path.to_string_lossy().to_string();
+        let mut label = workspace.name.trim().to_string();
+        if label.is_empty() {
+            label = conversation_workspace_name_fallback(&path);
+        }
+        return (label, Some(path));
+    }
+
+    let fallback = conversation
+        .shell_workspaces
+        .iter()
+        .find(|workspace| normalize_shell_workspace_level_text(&workspace.level) == SHELL_WORKSPACE_LEVEL_MAIN)
+        .or_else(|| conversation.shell_workspaces.first());
+    if let Some(workspace) = fallback {
+        let path = workspace.path.trim().to_string();
+        let mut label = workspace.name.trim().to_string();
+        if label.is_empty() {
+            label = conversation_workspace_name_fallback(&path);
+        }
+        return (label, Some(path).filter(|value| !value.trim().is_empty()));
+    }
+
+    let legacy_path = conversation
+        .shell_workspace_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if let Some(path) = legacy_path {
+        return (
+            conversation_workspace_name_fallback(path),
+            Some(path.to_string()),
+        );
+    }
+
+    (String::new(), None)
 }
 
 fn build_preview_messages_from_chat_messages(
@@ -411,6 +467,8 @@ fn build_unarchived_conversation_summary(
     let detached_window_label = detached_chat_window_for_conversation(conversation_id);
     let unread_count = conversation_unread_count_for_overview(conversation);
     let item_state = build_conversation_list_item_state(state, conversation_id, unread_count);
+    let (workspace_label, workspace_root_path) =
+        conversation_default_workspace_summary(state, conversation);
     UnarchivedConversationSummary {
         conversation_id: conversation.id.clone(),
         title: conversation.title.clone(),
@@ -434,7 +492,8 @@ fn build_unarchived_conversation_summary(
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned),
-        workspace_label: String::new(),
+        workspace_label,
+        workspace_root_path,
         is_active: conversation.status.trim() == "active",
         is_main_conversation,
         is_pinned: is_main_conversation || pin_index.is_some(),
@@ -970,6 +1029,7 @@ mod conversation_snapshot_api_tests {
             parent_conversation_id: parent_conversation_id.map(ToOwned::to_owned),
             fork_message_cursor: None,
             workspace_label: "默认会话目录".to_string(),
+            workspace_root_path: None,
             is_active: false,
             is_main_conversation: false,
             is_pinned: false,

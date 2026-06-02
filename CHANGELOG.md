@@ -2,6 +2,8 @@
 
 ## 未发布
 
+- 优化（chat）：正常 App 端会话列表支持折叠分组，置顶分组可折叠，非置顶本地会话按生效的 shell 工作目录分组；分组标题增加数量与悬停反馈。
+
 ## 发布：v0.10.15
 
 - 修复（reload）：LLM 工作区 reload 对不合法的 MCP、Skill、私有人格与私有部门配置改为跳过坏项并继续加载其它合法项；返回 `repairSummary` / `repairItems`，包含文件路径、错误原因与修复建议，便于 LLM 自行修复。兼容旧部门配置缺少 `createdAt` / `updatedAt` / `orderIndex` 的情况，避免配置解析失败卡住新手引导。
