@@ -1,4 +1,6 @@
 import type {
+  ChatActivityItem,
+  ChatActivityStatus,
   ChatMentionTarget,
   ChatMessage,
   MemeMessageSegment,
@@ -55,6 +57,11 @@ export type ChatMessageDisplayProjection = {
   toolCallCount: number;
   lastToolName: string;
   toolCalls: Array<{ name: string; argsText: string }>;
+  activityItems: ChatActivityItem[];
+  activityReasoningCharCount: number;
+  activityToolCountsByName: Record<string, number>;
+  activityRunning: boolean;
+  activityStatus: ChatActivityStatus;
 };
 
 export type TaskTriggerDisplayLabels = {
@@ -180,6 +187,246 @@ export function summarizeToolActivityForDisplay(
     count: calls.length,
     lastToolName: calls.length > 0 ? calls[calls.length - 1].toolName : "",
     calls: calls.map((call) => ({ name: call.toolName, argsText: call.argumentsText || "{}" })),
+  };
+}
+
+function chatActivityStats(
+  items: ChatActivityItem[],
+  running: boolean,
+  status?: ChatActivityStatus,
+): {
+  activityReasoningCharCount: number;
+  activityToolCountsByName: Record<string, number>;
+  activityRunning: boolean;
+  activityStatus: ChatActivityStatus;
+} {
+  const activityToolCountsByName: Record<string, number> = {};
+  let activityReasoningCharCount = 0;
+  for (const item of items) {
+    if (item.kind === "reasoning") {
+      activityReasoningCharCount += String(item.text || "").length;
+      continue;
+    }
+    const name = String(item.name || "").trim() || "unknown";
+    activityToolCountsByName[name] = (activityToolCountsByName[name] || 0) + 1;
+  }
+  return {
+    activityReasoningCharCount,
+    activityToolCountsByName,
+    activityRunning: running,
+    activityStatus: status || (items.length > 0 ? "complete" : "idle"),
+  };
+}
+
+function findAdjacentToolResult(
+  events: NormalizedToolHistoryEvent[],
+  assistantIndex: number,
+  invocationId: string,
+): NormalizedToolHistoryEvent | undefined {
+  for (let index = assistantIndex + 1; index < events.length; index += 1) {
+    const event = events[index];
+    if (event.role === "assistant") return undefined;
+    if (event.role !== "tool") continue;
+    if (!invocationId || !event.toolCallId || event.toolCallId === invocationId) {
+      return event;
+    }
+  }
+  return undefined;
+}
+
+export function projectChatActivityForDisplay(message: ChatMessage): {
+  items: ChatActivityItem[];
+  activityReasoningCharCount: number;
+  activityToolCountsByName: Record<string, number>;
+  activityRunning: boolean;
+  activityStatus: ChatActivityStatus;
+} {
+  const events = normalizeMessageToolHistoryEvents(message, "display");
+  const items: ChatActivityItem[] = [];
+  for (let eventIndex = 0; eventIndex < events.length; eventIndex += 1) {
+    const event = events[eventIndex];
+    if (event.role !== "assistant") continue;
+    const reasoningText = String(event.reasoningContent || "").trim();
+    if (reasoningText) {
+      items.push({
+        kind: "reasoning",
+        id: `reasoning-${eventIndex}-${items.length}`,
+        text: reasoningText,
+      });
+    }
+    for (const call of event.toolCalls) {
+      const result = findAdjacentToolResult(events, eventIndex, call.invocationId);
+      items.push({
+        kind: "tool",
+        id: call.invocationId || call.providerCallId || `tool-${eventIndex}-${items.length}`,
+        toolCallId: call.invocationId || undefined,
+        name: call.toolName,
+        argsText: call.argumentsText || "{}",
+        resultText: result ? result.text : undefined,
+        status: "done",
+      });
+    }
+  }
+  return {
+    items,
+    ...chatActivityStats(items, false),
+  };
+}
+
+export function normalizeChatActivityItems(rawItems: unknown): ChatActivityItem[] {
+  if (!Array.isArray(rawItems)) return [];
+  const items: ChatActivityItem[] = [];
+  for (const [index, raw] of rawItems.entries()) {
+    const item = raw && typeof raw === "object" ? raw as Record<string, unknown> : null;
+    const kind = String(item?.kind || "").trim();
+    if (kind === "reasoning") {
+      const text = String(item?.text || "");
+      if (!text.trim()) continue;
+      items.push({
+        kind: "reasoning",
+        id: String(item?.id || "").trim() || `stream-reasoning-${index}`,
+        text,
+        running: !!item?.running,
+      });
+      continue;
+    }
+    if (kind === "tool") {
+      const name = String(item?.name || "").trim();
+      if (!name) continue;
+      const toolCallId = String(item?.toolCallId || "").trim();
+      items.push({
+        kind: "tool",
+        id: String(item?.id || "").trim() || toolCallId || `stream-tool-${index}`,
+        toolCallId: toolCallId || undefined,
+        name,
+        argsText: String(item?.argsText || ""),
+        resultText: typeof item?.resultText === "string" ? item.resultText : undefined,
+        status: String(item?.status || "") === "doing" ? "doing" : "done",
+      });
+    }
+  }
+  return items;
+}
+
+export function appendReasoningToStreamActivityItems(
+  currentItems: ChatActivityItem[],
+  delta: string,
+): ChatActivityItem[] {
+  const text = String(delta || "");
+  if (!text) return normalizeChatActivityItems(currentItems);
+  const items = normalizeChatActivityItems(currentItems);
+  const last = items[items.length - 1];
+  if (last?.kind === "reasoning") {
+    return [
+      ...items.slice(0, -1),
+      {
+        ...last,
+        text: `${last.text}${text}`,
+        running: true,
+      },
+    ];
+  }
+  return [
+    ...items,
+    {
+      kind: "reasoning",
+      id: `stream-reasoning-${items.length}`,
+      text,
+      running: true,
+    },
+  ];
+}
+
+export function applyToolStatusToStreamActivityItems(
+  currentItems: ChatActivityItem[],
+  input: { toolName?: unknown; toolCallId?: unknown; toolStatus?: unknown; toolArgs?: unknown },
+): ChatActivityItem[] {
+  const items = normalizeChatActivityItems(currentItems);
+  const toolName = String(input.toolName || "").trim();
+  const toolCallId = String(input.toolCallId || "").trim();
+  const toolStatus = String(input.toolStatus || "").trim();
+  if (!toolName || !toolCallId || !toolStatus) return items;
+  const index = items.findIndex((item) => item.kind === "tool" && item.toolCallId === toolCallId);
+  const nextTool: ChatActivityItem = {
+    kind: "tool",
+    id: toolCallId,
+    toolCallId,
+    name: toolName,
+    argsText: String(input.toolArgs || ""),
+    status: toolStatus === "running" ? "doing" : "done",
+  };
+  if (index < 0) return [...items, nextTool];
+  const current = items[index];
+  if (current.kind !== "tool") return items;
+  return items.map((item, itemIndex) => {
+    if (itemIndex !== index) return item;
+    return {
+      ...current,
+      name: toolName || current.name,
+      argsText: nextTool.argsText || current.argsText,
+      status: nextTool.status,
+    };
+  });
+}
+
+export function projectStreamingChatActivityForDisplay(input: {
+  reasoningStandard?: string;
+  reasoningInline?: string;
+  toolCalls?: Array<{ toolCallId?: string; name: string; argsText: string; status?: "doing" | "done" }>;
+  activityItems?: ChatActivityItem[];
+  running?: boolean;
+}): {
+  items: ChatActivityItem[];
+  activityReasoningCharCount: number;
+  activityToolCountsByName: Record<string, number>;
+  activityRunning: boolean;
+  activityStatus: ChatActivityStatus;
+} {
+  const eventItems = normalizeChatActivityItems(input.activityItems);
+  const usingEventItems = eventItems.length > 0;
+  const items: ChatActivityItem[] = usingEventItems ? eventItems : [];
+  const reasoningText = [
+    String(input.reasoningStandard || "").trim(),
+    String(input.reasoningInline || "").trim(),
+  ].filter(Boolean).join("\n\n");
+  if (!usingEventItems && reasoningText) {
+    items.push({
+      kind: "reasoning",
+      id: "stream-reasoning",
+      text: reasoningText,
+      running: !!input.running,
+    });
+  }
+  const toolCalls = Array.isArray(input.toolCalls) ? input.toolCalls : [];
+  if (!usingEventItems) {
+    for (const [index, call] of toolCalls.entries()) {
+      const name = String(call.name || "").trim();
+      if (!name) continue;
+      items.push({
+        kind: "tool",
+        id: String(call.toolCallId || "").trim() || `stream-tool-${index}`,
+        toolCallId: String(call.toolCallId || "").trim() || undefined,
+        name,
+        argsText: String(call.argsText || ""),
+        status: String(call.status || "") === "doing" ? "doing" : "done",
+      });
+    }
+  }
+  const activityRunning = !!input.running;
+  const hasDoingTool = items.some((item) => item.kind === "tool" && item.status === "doing");
+  const hasReasoningItem = items.some((item) => item.kind === "reasoning" && !!String(item.text || "").trim());
+  const status: ChatActivityStatus = hasDoingTool
+    ? "running_tool"
+    : reasoningText || hasReasoningItem
+      ? "thinking"
+      : activityRunning
+        ? "requesting"
+        : items.length > 0
+          ? "complete"
+          : "idle";
+  return {
+    items,
+    ...chatActivityStats(items, activityRunning, status),
   };
 }
 
@@ -342,6 +589,7 @@ export function projectMessageForDisplay(
   const parsed = parseAssistantStoredText(rendered);
   const meta = (message.providerMeta || {}) as Record<string, unknown>;
   const toolSummary = summarizeToolActivityForDisplay(message);
+  const activity = projectChatActivityForDisplay(message);
   const finalReasoningStandard = parsed.reasoningStandard || String(meta.reasoningStandard || "").trim();
   const taskTrigger = resolveTaskTrigger(message);
   const planCard = resolvePlanCard(message);
@@ -394,6 +642,11 @@ export function projectMessageForDisplay(
     toolCallCount: toolSummary.count,
     lastToolName: toolSummary.lastToolName,
     toolCalls: toolSummary.calls,
+    activityItems: activity.items,
+    activityReasoningCharCount: activity.activityReasoningCharCount,
+    activityToolCountsByName: activity.activityToolCountsByName,
+    activityRunning: activity.activityRunning,
+    activityStatus: activity.activityStatus,
   };
 }
 

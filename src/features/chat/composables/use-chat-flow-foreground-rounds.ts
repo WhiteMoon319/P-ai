@@ -39,6 +39,9 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     if (bindings.streamToolCalls) {
       bindings.streamToolCalls.value = queuedStreamingState.streamToolCalls;
     }
+    if (bindings.streamActivityItems) {
+      bindings.streamActivityItems.value = queuedStreamingState.streamActivityItems || [];
+    }
     bindings.setStreamToolCallCount(queuedStreamingState.streamToolCallCount);
     bindings.setStreamLastToolName(queuedStreamingState.streamLastToolName);
     if (queuedStreamingState.frontendDispatchStartedAtMs || queuedStreamingState.frontendDispatchElapsedMs) {
@@ -153,6 +156,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     if (round.phase === "streaming") {
       if (!bindings.hasAssistantDraftInMessages()) {
         if (bindings.streamToolCalls) bindings.streamToolCalls.value = [];
+        if (bindings.streamActivityItems) bindings.streamActivityItems.value = [];
         bindings.applyConversationStreamCacheToDisplay(conversationId);
         const draftId = bindings.insertDraft(round.gen);
         bindings.updateDraftText(draftId);
@@ -164,6 +168,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     }
     const gen = bindings.nextGeneration();
     if (bindings.streamToolCalls) bindings.streamToolCalls.value = [];
+    if (bindings.streamActivityItems) bindings.streamActivityItems.value = [];
     const existingDraft = [...bindings.allMessages.value]
       .reverse()
       .find((message: ChatMessage) => String(message?.id || "").trim().startsWith(DRAFT_ASSISTANT_ID_PREFIX));
@@ -189,6 +194,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     bindings.setActiveHistoryMessageCount(formalizeMessages(bindings.allMessages.value).length);
     const draftId = existingDraftId || bindings.insertDraft(gen);
     if (existingDraftId) {
+      bindings.loadStreamActivityItemsFromDraft(draftId);
       bindings.loadStreamToolCallsFromDraft(draftId);
     }
     if (existingDraftId || restoredFromCache) {
@@ -261,6 +267,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     }
     const conversationId = bindings.getConversationId ? bindings.getConversationId() : "";
     if (bindings.streamToolCalls) bindings.streamToolCalls.value = [];
+    if (bindings.streamActivityItems) bindings.streamActivityItems.value = [];
     const existingDraft = [...bindings.allMessages.value]
       .reverse()
       .find((message: ChatMessage) => String(message?.id || "").trim().startsWith(DRAFT_ASSISTANT_ID_PREFIX));
@@ -279,6 +286,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     bindings.setActiveHistoryMessageCount(formalizeMessages(bindings.allMessages.value).length);
     const draftId = existingDraftId || bindings.insertDraft(gen);
     if (existingDraftId) {
+      bindings.loadStreamActivityItemsFromDraft(draftId);
       bindings.loadStreamToolCallsFromDraft(draftId);
     }
     if (existingDraftId || restoredFromCache) {

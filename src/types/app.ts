@@ -568,6 +568,25 @@ export type ChatMessage = {
   toolCall?: ToolCallMessage[];
 };
 
+export type ChatActivityStatus = "idle" | "requesting" | "thinking" | "running_tool" | "complete";
+
+export type ChatActivityItem =
+  | {
+    kind: "reasoning";
+    id: string;
+    text: string;
+    running?: boolean;
+  }
+  | {
+    kind: "tool";
+    id: string;
+    toolCallId?: string;
+    name: string;
+    argsText: string;
+    resultText?: string;
+    status?: "doing" | "done";
+  };
+
 export type ChatSnapshot = {
   conversationId: string;
   latestUser?: ChatMessage;
@@ -611,6 +630,11 @@ export type ChatMessageBlock = {
   toolCallCount: number;
   lastToolName: string;
   toolCalls: Array<{ toolCallId?: string; name: string; argsText: string; status?: "doing" | "done" }>;
+  activityItems: ChatActivityItem[];
+  activityReasoningCharCount: number;
+  activityToolCountsByName: Record<string, number>;
+  activityRunning: boolean;
+  activityStatus: ChatActivityStatus;
 };
 
 export type ChatPersonaPresenceChip = {

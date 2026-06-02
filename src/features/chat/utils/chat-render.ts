@@ -51,9 +51,7 @@ function countFenceMatches(text: string, pattern: RegExp): number {
 export function estimateMessageBlockHeight(block: ChatMessageBlock, isOwn: boolean): number {
   let estimate = isOwn ? 78 : 108;
   const text = String(block.text || "");
-  const inlineReasoning = String(block.reasoningInline || "");
-  const standardReasoning = String(block.reasoningStandard || "");
-  const combinedTextLength = text.length + inlineReasoning.length + standardReasoning.length;
+  const combinedTextLength = text.length;
   estimate += Math.min(920, Math.ceil(combinedTextLength / 28) * 9);
 
   const codeFenceCount = countFenceMatches(text, /```[\w-]*\s*[\r\n]/g);
@@ -63,9 +61,7 @@ export function estimateMessageBlockHeight(block: ChatMessageBlock, isOwn: boole
 
   if (block.planCard) estimate += 84;
   if (block.taskTrigger) estimate += 120;
-  if (standardReasoning.trim()) estimate += Math.min(240, Math.ceil(standardReasoning.length / 36) * 12);
-  if (inlineReasoning.trim()) estimate += Math.min(180, Math.ceil(inlineReasoning.length / 36) * 10);
-  if (block.toolCalls.length > 0) estimate += block.toolCalls.length * 56 + 36;
+  if (block.activityItems.length > 0 || block.activityRunning) estimate += 42;
   if (Array.isArray(block.memeSegments) && block.memeSegments.length > 0) {
     estimate += block.memeSegments.length * 42;
   }
@@ -103,8 +99,10 @@ export function blockSizeDependencies(block: ChatMessageBlock): unknown[] {
     String(block.id || ""),
     String(block.sourceMessageId || ""),
     String(block.text || ""),
-    String(block.reasoningInline || ""),
-    String(block.reasoningStandard || ""),
+    block.activityItems.length,
+    block.activityReasoningCharCount,
+    block.activityRunning,
+    block.activityStatus,
     block.images.length,
     block.audios.length,
     block.attachmentFiles.length,

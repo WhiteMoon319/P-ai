@@ -1,6 +1,6 @@
 import type { Channel } from "@tauri-apps/api/core";
 import type { Ref } from "vue";
-import type { ChatMentionTarget, ChatMessage, PromptCommandPreset } from "../../../types/app";
+import type { ChatActivityItem, ChatMentionTarget, ChatMessage, PromptCommandPreset } from "../../../types/app";
 import type { AssistantDeltaEvent } from "./use-chat-flow-events";
 import type { StreamToolCallView } from "./use-chat-flow-tool-calls";
 import type { ConversationRuntimeStreamCacheSnapshot } from "./use-chat-flow-stream-cache";
@@ -25,6 +25,7 @@ export type UseChatFlowOptions = {
   toolStatusText: Ref<string>;
   toolStatusState: Ref<"running" | "done" | "failed" | "">;
   streamToolCalls?: Ref<StreamToolCallView[]>;
+  streamActivityItems?: Ref<ChatActivityItem[]>;
   chatErrorText: Ref<string>;
   setConversationChatError?: (conversationId: string, text: string) => void;
   allMessages: Ref<ChatMessage[]>;

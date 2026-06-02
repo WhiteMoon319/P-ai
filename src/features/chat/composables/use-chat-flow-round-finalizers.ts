@@ -41,6 +41,7 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
     bindings.clearConversationStreamCache(bindings.getConversationId ? bindings.getConversationId() : "");
     bindings.clearFrontendDispatchTimer();
     bindings.setActiveActivationId("");
+    if (bindings.streamActivityItems) bindings.streamActivityItems.value = [];
     bindings.setRound({ phase: "idle" });
     bindings.chatting.value = false;
     bindings.reasoningStartedAtMs.value = 0;
@@ -87,6 +88,7 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
     bindings.latestAssistantText.value = "";
     bindings.latestReasoningStandardText.value = "";
     bindings.latestReasoningInlineText.value = "";
+    if (bindings.streamActivityItems) bindings.streamActivityItems.value = [];
     bindings.setPendingReasoningStandardBreak(false);
     bindings.setChatErrorText(bindings.formatRequestFailed(error));
     if (!bindings.toolStatusText.value) {

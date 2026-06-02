@@ -1,5 +1,5 @@
 import type { Ref } from "vue";
-import type { ChatMessage } from "../../../types/app";
+import type { ChatActivityItem, ChatMessage } from "../../../types/app";
 import type { RoundState } from "./use-chat-flow-types";
 
 type UseChatFlowForegroundResetOptions = {
@@ -11,6 +11,7 @@ type UseChatFlowForegroundResetOptions = {
   toolStatusText: Ref<string>;
   toolStatusState: Ref<"running" | "done" | "failed" | "">;
   streamToolCalls?: Ref<any[]>;
+  streamActivityItems?: Ref<ChatActivityItem[]>;
   chatting: Ref<boolean>;
   getConversationId?: () => string;
   getRound: () => RoundState;
@@ -43,6 +44,7 @@ export function useChatFlowForegroundReset(options: UseChatFlowForegroundResetOp
     options.toolStatusText.value = "";
     options.toolStatusState.value = "";
     if (options.streamToolCalls) options.streamToolCalls.value = [];
+    if (options.streamActivityItems) options.streamActivityItems.value = [];
   }
 
   function clearForegroundRoundState() {

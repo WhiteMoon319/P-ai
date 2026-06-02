@@ -95,95 +95,70 @@
               blockNeedsWideBubble(block) ? 'ecall-assistant-bubble-wide' : '',
             ]"
           >
-            <div v-if="!isOwnMessage(block) && block.reasoningStandard" class="flex flex-col opacity-90">
-        <details class="collapse border-l-2 border-base-content/20 pl-3 rounded-none min-w-55" @toggle="onReasoningStandardToggle">
-          <summary class="collapse-title py-1 px-1 min-h-0 text-xs font-semibold flex items-center gap-1.5 text-base-content/80 hover:bg-base-200">
-            <span class="inline-block shrink-0 text-[10px] leading-none text-success">▲</span>
-            <span
-              class="block min-w-0 flex-1 truncate font-medium"
-            >
-              {{ reasoningSummaryLabel(block) }}
-            </span>
-          </summary>
-          <div
-            v-if="reasoningStandardExpanded"
-            class="collapse-content px-0 pb-1 pt-2 whitespace-pre-wrap text-xs leading-relaxed text-base-content/70"
-            @click="collapseDetailsFromContentClick"
-          >
-            {{ block.reasoningStandard }}
-          </div>
-        </details>
-      </div>
-      <div v-if="!isOwnMessage(block) && resolvedInlineReasoning(block)" class="flex flex-col opacity-90">
-        <details class="collapse border-l-2 border-base-content/20 pl-3 rounded-none min-w-55" @toggle="onInlineReasoningToggle">
-          <summary class="collapse-title py-1 px-1 min-h-0 text-xs font-semibold flex items-center gap-1.5 text-base-content/80 cursor-pointer hover:bg-base-200">
-            <span class="inline-block shrink-0 text-[10px] leading-none text-success">▲</span>
-            <span
-              class="block min-w-0 flex-1 truncate font-medium"
-            >
-              {{ reasoningSummaryLabel(block) }}
-            </span>
-          </summary>
-          <div
-            v-if="inlineReasoningExpanded"
-            class="collapse-content px-0 pb-1 pt-2 whitespace-pre-wrap text-xs leading-relaxed text-base-content/70"
-            @click="collapseDetailsFromContentClick"
-          >
-            {{ resolvedInlineReasoning(block) }}
-          </div>
-        </details>
-      </div>
-      <div v-if="toolCallsForBlock(block).length > 0" class="flex flex-col opacity-90">
-        <details class="collapse border-l-2 border-base-content/20 pl-3 rounded-none min-w-55" @toggle="onToolCallsToggle">
-          <summary class="collapse-title py-1 px-1 min-h-0 text-xs font-semibold flex items-center gap-1.5 text-base-content/80 hover:bg-base-200">
-            <span
-              v-if="toolSummaryDoing(block)"
-              class="relative inline-flex h-2 w-2 shrink-0 overflow-visible text-success"
-            >
-              <span
-                class="loading loading-spinner loading-md absolute left-1/2 top-1/2 h-5 w-5 max-h-none max-w-none -translate-x-1/2 -translate-y-1/2 text-success"
-              ></span>
-            </span>
-            <span v-else class="inline-block h-2 w-2 rounded-full bg-success"></span>
-            <span
-              class="font-medium"
-            >{{ toolStatusLabel(block) }}</span>
-            <span v-if="toolNamesLabel(block)" class="truncate">{{ ` · ${toolNamesLabel(block)}` }}</span>
-          </summary>
-          <div
-            v-if="toolCallsExpanded"
-            class="collapse-content px-0 pb-1 pt-2 text-xs text-base-content/70"
-            @click="collapseDetailsFromContentClick"
-          >
-            <ul class="timeline timeline-vertical timeline-compact">
-              <li
-                v-for="(toolCall, idx) in toolCallsForBlock(block)"
-                :key="`${block.id}-tool-${idx}`"
-              >
-                <div class="timeline-start max-w-36 pr-2 text-xs font-semibold opacity-75">
-                  {{ toolCallTitle(toolCall, idx + 1) }}
-                </div>
-                <div class="timeline-middle">
+            <div v-if="showActivityPanel(block)" class="flex flex-col opacity-90">
+              <details ref="activityDetailsRef" class="collapse rounded-none min-w-55" @toggle="onActivityToggle">
+                <summary class="collapse-title py-1 px-1 min-h-0 text-xs font-semibold flex items-center gap-1.5 text-base-content/80 hover:bg-base-200">
                   <span
-                    class="inline-block h-2.5 w-2.5 rounded-full"
-                    :class="toolTimelineDotClass(block, toolCall)"
-                  ></span>
+                    v-if="activityIsBusy(block)"
+                    class="relative inline-flex h-2 w-2 shrink-0 overflow-visible text-success"
+                  >
+                    <span
+                      class="loading loading-spinner loading-md absolute left-1/2 top-1/2 h-5 w-5 max-h-none max-w-none -translate-x-1/2 -translate-y-1/2 text-success"
+                    ></span>
+                  </span>
+                  <span v-else class="inline-block h-2 w-2 rounded-full bg-success"></span>
+                  <span class="block min-w-0 flex-1 truncate font-medium">
+                    {{ activitySummaryLabel(block) }}
+                  </span>
+                </summary>
+                <div
+                  v-if="activityExpanded"
+                  class="collapse-content px-0 pb-1 pt-2 text-xs text-base-content/70"
+                  @click="collapseDetailsFromContentClick"
+                >
+                  <div class="flex flex-col gap-1.5">
+                    <details
+                      v-for="(item, idx) in block.activityItems"
+                      :key="`${block.id}-activity-${item.id}-${idx}`"
+                      class="collapse rounded-none border-l border-base-content/15 pl-2"
+                      @toggle="onActivityItemToggle(item, $event)"
+                    >
+                      <summary class="collapse-title flex min-h-0 items-center gap-1.5 px-1 py-1 text-xs hover:bg-base-200">
+                        <span
+                          v-if="item.kind === 'tool' && item.status === 'doing'"
+                          class="loading loading-spinner loading-xs shrink-0 text-primary"
+                        ></span>
+                        <span
+                          v-else
+                          class="inline-flex w-3 shrink-0 items-center justify-center font-mono text-xs leading-none"
+                          :class="item.kind === 'reasoning' ? 'font-semibold text-warning' : 'font-semibold text-base-content/45'"
+                        >{{ item.kind === 'reasoning' ? '+' : '*' }}</span>
+                        <span
+                          class="min-w-0 flex-1 truncate"
+                          :class="item.kind === 'reasoning' ? 'font-semibold italic text-warning' : 'text-base-content/50'"
+                        >
+                          {{ activityItemTitle(item) }}
+                        </span>
+                      </summary>
+                      <div
+                        v-if="isActivityItemExpanded(item)"
+                        class="collapse-content px-1 pb-2 pt-1"
+                      >
+                        <div
+                          v-if="item.kind === 'reasoning'"
+                          class="whitespace-pre-wrap break-words text-xs leading-relaxed text-base-content/70"
+                        >{{ item.text }}</div>
+                        <pre
+                          v-else-if="activityToolResultText(item)"
+                          class="m-0 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded bg-base-200/60 p-2 text-xs leading-relaxed text-base-content/75"
+                        ><code>{{ activityToolResultText(item) }}</code></pre>
+                        <div v-else class="text-xs text-base-content/45">暂无工具结果</div>
+                      </div>
+                    </details>
+                  </div>
                 </div>
-                <div class="timeline-end mb-2 w-full min-w-0 pb-2 pl-3">
-                  <pre
-                    v-if="toolCallSummaryText(toolCall)"
-                    class="m-0 whitespace-pre-wrap break-all text-xs leading-relaxed text-base-content/70"
-                  >{{ toolCallSummaryText(toolCall) }}</pre>
-                </div>
-                <hr
-                  v-if="idx < toolCallsForBlock(block).length - 1"
-                  :class="toolTimelineHrClass(block, toolCall)"
-                />
-              </li>
-            </ul>
-          </div>
-        </details>
-      </div>
+              </details>
+            </div>
       <div v-if="hasRenderableMemeSegments(block)">
         <div ref="markdownContainerRef" class="ecall-meme-segment-flow">
           <template v-for="(segment, index) in block.memeSegments || []" :key="`${block.id}-meme-${index}`">
@@ -538,11 +513,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch, watchEffect, watchPostEffect } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect, watchPostEffect } from "vue";
 import { useI18n } from "vue-i18n";
 import { CircleCheckBig, Copy, Eye, EyeOff, FileText, Pause, Play, RotateCcw, Undo2 } from "@lucide/vue";
 import { invokeTauri } from "../../../services/tauri-api";
-import type { ChatMessageBlock, MemeMessageSegment } from "../../../types/app";
+import type { ChatActivityItem, ChatMessageBlock, MemeMessageSegment } from "../../../types/app";
 import { formatIsoToLocalHourMinute } from "../../../utils/time";
 import { AppMarkdownRenderer, initKatex } from "../markdown";
 import { normalizeLocalLinkHref } from "../utils/local-link";
@@ -599,9 +574,9 @@ const showRegenerateAction = false;
 const { t } = useI18n();
 const resolvedImageSrcMap = ref<Record<string, string>>({});
 const markdownContainerRef = ref<HTMLElement | null>(null);
-const reasoningStandardExpanded = ref(false);
-const inlineReasoningExpanded = ref(false);
-const toolCallsExpanded = ref(false);
+const activityDetailsRef = ref<HTMLDetailsElement | null>(null);
+const activityExpanded = ref(false);
+const expandedActivityItemIds = ref<Record<string, boolean>>({});
 const planMarkdownText = ref("");
 const planMarkdownError = ref("");
 const planMarkdownLoading = ref(false);
@@ -658,16 +633,32 @@ function detailsOpenFromEvent(event: Event): boolean {
   return target instanceof HTMLDetailsElement ? target.open : false;
 }
 
-function onReasoningStandardToggle(event: Event): void {
-  reasoningStandardExpanded.value = detailsOpenFromEvent(event);
+function onActivityToggle(event: Event): void {
+  activityExpanded.value = detailsOpenFromEvent(event);
 }
 
-function onInlineReasoningToggle(event: Event): void {
-  inlineReasoningExpanded.value = detailsOpenFromEvent(event);
+function closeActivityDetails(): void {
+  const details = activityDetailsRef.value;
+  if (details instanceof HTMLDetailsElement) {
+    details.open = false;
+  }
+  activityExpanded.value = false;
 }
 
-function onToolCallsToggle(event: Event): void {
-  toolCallsExpanded.value = detailsOpenFromEvent(event);
+function handleActivityOutsidePointerDown(event: PointerEvent): void {
+  if (!activityExpanded.value) return;
+  const details = activityDetailsRef.value;
+  const target = event.target;
+  if (!(details instanceof HTMLDetailsElement) || !(target instanceof Node)) return;
+  if (details.contains(target)) return;
+  closeActivityDetails();
+}
+
+function onActivityItemToggle(item: ChatActivityItem, event: Event): void {
+  expandedActivityItemIds.value = {
+    ...expandedActivityItemIds.value,
+    [activityItemKey(item)]: detailsOpenFromEvent(event),
+  };
 }
 
 function collapseDetailsFromContentClick(event: MouseEvent): void {
@@ -755,7 +746,7 @@ function assistantStreamingHeaderStatus(block: ChatMessageBlock): string {
   if (hasStreamingSpeechContent(block)) {
     return withElapsed(t("chat.statusSpeaking"));
   }
-  if (String(block.reasoningStandard || resolvedInlineReasoning(block) || "").trim()) {
+  if (block.activityStatus === "thinking" || block.activityStatus === "running_tool") {
     return withElapsed(t("chat.statusThinking"));
   }
   return withElapsed(t("chat.statusWaitingReply"));
@@ -770,6 +761,7 @@ function showAssistantPreStreamingDots(block: ChatMessageBlock): boolean {
     && !String(block.reasoningStandard || "").trim()
     && !String(resolvedInlineReasoning(block) || "").trim()
     && toolCallsForBlock(block).length === 0
+    && !showActivityPanel(block)
     && block.images.length === 0
     && block.audios.length === 0
     && block.attachmentFiles.length === 0;
@@ -791,6 +783,89 @@ function shouldAnimateEnter(block: ChatMessageBlock): boolean {
 
 function toolCallsForBlock(block: ChatMessageBlock): Array<{ name: string; argsText: string; status?: "doing" | "done" }> {
   return block.toolCalls;
+}
+
+function showActivityPanel(block: ChatMessageBlock): boolean {
+  if (isOwnMessage(block)) return false;
+  return block.activityItems.length > 0 || !!block.activityRunning;
+}
+
+function activityIsBusy(block: ChatMessageBlock): boolean {
+  if (!block.activityRunning) return false;
+  return block.activityStatus === "requesting"
+    || block.activityStatus === "thinking"
+    || block.activityStatus === "running_tool";
+}
+
+function activityReasoningCountLabel(block: ChatMessageBlock): string {
+  const count = Number(block.activityReasoningCharCount || 0);
+  return count > 0 ? `(${count.toLocaleString("zh-CN")})` : "";
+}
+
+function activityStatusText(block: ChatMessageBlock): string {
+  if (block.activityStatus === "running_tool") return "正在执行工具";
+  if (block.activityStatus === "thinking") return "正在思考";
+  if (block.activityStatus === "requesting") return "正在请求";
+  const hasReasoning = block.activityItems.some((item) => item.kind === "reasoning");
+  const hasTool = block.activityItems.some((item) => item.kind === "tool");
+  if (hasReasoning && hasTool) return "思考与工具";
+  if (hasReasoning) return "思考";
+  if (hasTool) return "工具执行";
+  return "活动";
+}
+
+function activityToolCountsLabel(block: ChatMessageBlock): string {
+  const counts = new Map<string, number>();
+  const order: string[] = [];
+  for (const item of block.activityItems) {
+    if (item.kind !== "tool") continue;
+    const name = toolCallDisplayName(item.name);
+    if (!counts.has(name)) {
+      counts.set(name, 0);
+      order.push(name);
+    }
+    counts.set(name, (counts.get(name) || 0) + 1);
+  }
+  return order
+    .map((name) => {
+      const total = counts.get(name) || 0;
+      return total > 1 ? `${name}(${total})` : name;
+    })
+    .join(" · ");
+}
+
+function activitySummaryLabel(block: ChatMessageBlock): string {
+  return joinNonEmpty([
+    `${activityStatusText(block)}${activityReasoningCountLabel(block)}`,
+    activityToolCountsLabel(block),
+  ]);
+}
+
+function activityItemKey(item: ChatActivityItem): string {
+  return `${item.kind}:${String(item.id || "")}`;
+}
+
+function isActivityItemExpanded(item: ChatActivityItem): boolean {
+  return !!expandedActivityItemIds.value[activityItemKey(item)];
+}
+
+function activityReasoningPreview(text: string): string {
+  return compactText(String(text || ""), 120);
+}
+
+function activityToolResultText(item: ChatActivityItem): string {
+  if (item.kind !== "tool") return "";
+  return String(item.resultText || "").trim();
+}
+
+function activityItemTitle(item: ChatActivityItem): string {
+  if (item.kind === "reasoning") {
+    return activityReasoningPreview(item.text);
+  }
+  return joinNonEmpty([
+    toolCallDisplayName(item.name),
+    toolCallSummaryText(item),
+  ]);
 }
 
 function toolStatusLabel(block: ChatMessageBlock): string {
@@ -1619,8 +1694,13 @@ watchPostEffect(() => {
   });
 });
 
+onMounted(() => {
+  document.addEventListener("pointerdown", handleActivityOutsidePointerDown, true);
+});
+
 onBeforeUnmount(() => {
   disposed = true;
+  document.removeEventListener("pointerdown", handleActivityOutsidePointerDown, true);
 });
 
 function resolvedImageSrc(

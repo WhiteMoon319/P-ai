@@ -136,7 +136,8 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import type { ApiConfigItem, ChatMentionEntry, ChatMessage, ChatTodoItem, IdeContextWorkspaceGroup } from "../../../types/app";
+import type { ApiConfigItem, ChatActivityItem, ChatMentionEntry, ChatMessage, ChatTodoItem, IdeContextWorkspaceGroup } from "../../../types/app";
+import { normalizeChatActivityItems } from "../../../utils/chat-message-semantics";
 import ChatView from "../../chat/views/ChatView.vue";
 import { useChatMessageBlocks } from "../../chat/composables/use-chat-turns";
 import type { TerminalApprovalConversationItem } from "../../shell/composables/use-terminal-approval";
@@ -181,6 +182,7 @@ const props = defineProps<{
   toolStatusText: string;
   toolStatusState: "running" | "done" | "failed" | "";
   streamToolCalls: Array<{ toolCallId?: string; name: string; argsText: string; status?: "doing" | "done" }>;
+  streamActivityItems: ChatActivityItem[];
   busy: boolean;
   runtimeState?: string;
   hasPrevBlock: boolean;
@@ -308,6 +310,7 @@ watch(
     props.toolStatusText,
     props.toolStatusState,
     props.streamToolCalls,
+    props.streamActivityItems,
   ] as const,
   () => {
     const next = [...props.messages];
@@ -318,6 +321,7 @@ watch(
     const streamToolCalls = Array.isArray(props.streamToolCalls)
       ? props.streamToolCalls.map((item) => ({ ...item }))
       : [];
+    const streamActivityItems = normalizeChatActivityItems(props.streamActivityItems);
     if (
       props.busy
       || text.trim()
@@ -326,6 +330,7 @@ watch(
       || toolStatusText.trim()
       || props.toolStatusState
       || streamToolCalls.length > 0
+      || streamActivityItems.length > 0
     ) {
       if (!streamingDraftCreatedAt.value) {
         streamingDraftCreatedAt.value = new Date().toISOString();
@@ -338,6 +343,7 @@ watch(
         || toolStatusText.trim()
         || props.toolStatusState
         || streamToolCalls.length > 0
+        || streamActivityItems.length > 0
       );
       next.push({
         id: `sidebar-stream-${props.activeConversationId || "conversation"}`,
@@ -354,6 +360,7 @@ watch(
           _toolStatusText: toolStatusText,
           _toolStatusState: props.toolStatusState,
           _streamToolCalls: streamToolCalls,
+          _streamActivityItems: streamActivityItems,
           _preStreamingStatusText: hasStreamingContent ? "" : "等待回复",
           _frontendDispatchElapsedMs: Date.now() - streamingDraftStartedAtMs.value,
         },

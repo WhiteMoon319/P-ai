@@ -9,6 +9,7 @@ import type {
   PersonaProfile,
   PromptCommandPreset,
   ToolLoadStatus,
+  ChatActivityItem,
 } from "../../../types/app";
 
 type UseChatWindowStateOptions = {
@@ -95,7 +96,8 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
   const latestOwnMessageAlignRequest = ref(0);
   const toolStatusText = ref("");
   const toolStatusState = ref<"running" | "done" | "failed" | "">("");
-  const streamToolCalls = ref<Array<{ name: string; argsText: string }>>([]);
+  const streamToolCalls = ref<Array<{ toolCallId?: string; name: string; argsText: string; status?: "doing" | "done" }>>([]);
+  const streamActivityItems = ref<ChatActivityItem[]>([]);
   const clipboardImages = ref<Array<{ mime: string; bytesBase64: string; savedPath?: string }>>([]);
   const queuedAttachmentNotices = ref<Array<{ id: string; fileName: string; relativePath: string; mime: string }>>([]);
   const allMessages = shallowRef<ChatMessage[]>([]);
@@ -176,6 +178,7 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
     toolStatusText,
     toolStatusState,
     streamToolCalls,
+    streamActivityItems,
     clipboardImages,
     queuedAttachmentNotices,
     allMessages,

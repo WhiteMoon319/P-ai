@@ -43,6 +43,7 @@
       :tool-status-text="toolStatusText"
       :tool-status-state="toolStatusState"
       :stream-tool-calls="streamToolCalls"
+      :stream-activity-items="streamActivityItems"
       :busy="busy"
       :runtime-state="activeConversationRuntimeState"
       :has-prev-block="hasPrevBlock"
@@ -170,8 +171,13 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import type { ApiConfigItem, ChatMessage, ChatTodoItem, IdeContextWorkspaceGroup } from "../../types/app";
+import type { ApiConfigItem, ChatActivityItem, ChatMessage, ChatTodoItem, IdeContextWorkspaceGroup } from "../../types/app";
 import { removeBinaryPlaceholders, messageText } from "../../utils/chat-message";
+import {
+  appendReasoningToStreamActivityItems,
+  applyToolStatusToStreamActivityItems,
+  normalizeChatActivityItems,
+} from "../../utils/chat-message-semantics";
 import { normalizeDepartmentChildIds } from "../config/utils/department-graph";
 import { formatConversationFallbackTitle } from "../chat/utils/conversation-title";
 import { useI18n } from "vue-i18n";
@@ -294,6 +300,7 @@ type SidebarStreamCachePayload = {
   toolStatusText?: string;
   toolStatusState?: string;
   streamToolCalls?: unknown[];
+  streamActivityItems?: unknown[];
 };
 
 type SidebarConversationRuntimePayload = {
@@ -366,6 +373,7 @@ const streamingReasoningInline = ref("");
 const toolStatusText = ref("");
 const toolStatusState = ref<"running" | "done" | "failed" | "">("");
 const streamToolCalls = ref<SidebarStreamToolCallView[]>([]);
+const streamActivityItems = ref<ChatActivityItem[]>([]);
 const busy = ref(false);
 const compacting = ref(false);
 const chatViewWrapperRef = ref<{ exitMessageSelectionMode: () => void; chatUsagePercent?: number } | null>(null);
@@ -631,6 +639,7 @@ function clearStreamingState() {
   toolStatusText.value = "";
   toolStatusState.value = "";
   streamToolCalls.value = [];
+  streamActivityItems.value = [];
 }
 
 function applyRuntimeStreamCache(runtime: SidebarConversationRuntimePayload | null | undefined) {
@@ -642,6 +651,7 @@ function applyRuntimeStreamCache(runtime: SidebarConversationRuntimePayload | nu
   toolStatusText.value = String(cache.toolStatusText || "");
   toolStatusState.value = normalizeToolStatusState(cache.toolStatusState);
   streamToolCalls.value = normalizeStreamToolCalls(cache.streamToolCalls);
+  streamActivityItems.value = normalizeChatActivityItems(cache.streamActivityItems);
 }
 
 function applyAssistantToolStatusEvent(event: NonNullable<SidebarAssistantDeltaPayload["event"]>) {
@@ -656,6 +666,7 @@ function applyAssistantToolStatusEvent(event: NonNullable<SidebarAssistantDeltaP
       status: toolStatus === "running" ? "doing" : "done",
     });
   }
+  streamActivityItems.value = applyToolStatusToStreamActivityItems(streamActivityItems.value, event);
   toolStatusText.value = String(event.message || "");
   toolStatusState.value = normalizeToolStatusState(toolStatus);
 }
@@ -1563,9 +1574,15 @@ function registerNotifications() {
       return;
     }
     if (!delta) return;
-    if (kind === "reasoning_standard") streamingReasoningStandard.value += delta;
-    else if (kind === "reasoning_inline") streamingReasoningInline.value += delta;
-    else streamingText.value += delta;
+    if (kind === "reasoning_standard") {
+      streamingReasoningStandard.value += delta;
+      streamActivityItems.value = appendReasoningToStreamActivityItems(streamActivityItems.value, delta);
+    } else if (kind === "reasoning_inline") {
+      streamingReasoningInline.value += delta;
+      streamActivityItems.value = appendReasoningToStreamActivityItems(streamActivityItems.value, delta);
+    } else {
+      streamingText.value += delta;
+    }
   });
   transport.onNotification("chat.roundFinished", (payload) => {
     const value = payload as { conversationId?: string; assistantMessage?: ChatMessage };

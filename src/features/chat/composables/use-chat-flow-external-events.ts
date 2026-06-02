@@ -44,6 +44,7 @@ type UseChatFlowExternalEventsOptions = {
   ensureForegroundStreamingRound: () => number;
   handleStreamingEvent: (gen: number, parsed: any) => void;
   syncStreamToolCallsToDraft: (draftId: string) => void;
+  syncStreamActivityItemsToDraft: (draftId: string) => void;
   updateDraftText: (draftId: string) => void;
 };
 
@@ -280,6 +281,7 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       const latestRound = options.getRound();
       if (latestRound.phase === "streaming") {
         options.syncStreamToolCallsToDraft(latestRound.draftId);
+        options.syncStreamActivityItemsToDraft(latestRound.draftId);
         options.updateDraftText(latestRound.draftId);
       }
       return;

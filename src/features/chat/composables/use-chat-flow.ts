@@ -1,6 +1,7 @@
 import { Channel } from "@tauri-apps/api/core";
 import { ref } from "vue";
-import type { ChatMessage } from "../../../types/app";
+import type { ChatActivityItem, ChatMessage } from "../../../types/app";
+import { normalizeChatActivityItems } from "../../../utils/chat-message-semantics";
 import { useChatFlowChannelBinding } from "./use-chat-flow-channel-binding";
 import {
   DRAFT_ASSISTANT_ID_PREFIX,
@@ -70,6 +71,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     toolStatusText: string;
     toolStatusState: "running" | "done" | "failed" | "";
     streamToolCalls: StreamToolCallView[];
+    streamActivityItems: ChatActivityItem[];
     streamToolCallCount: number;
     streamLastToolName: string;
     frontendDispatchStartedAtMs: number;
@@ -124,9 +126,11 @@ export function useChatFlow(options: UseChatFlowOptions) {
     hasAssistantDraftInMessages,
     insertDraft,
     insertUserDraft,
+    loadStreamActivityItemsFromDraft,
     loadStreamToolCallsFromDraft,
     removeAssistantDrafts,
     removeDraft,
+    syncStreamActivityItemsToDraft,
     syncStreamToolCallsToDraft,
     updateDraftText,
     updateQueuedAssistantDraftStatus,
@@ -138,6 +142,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     latestReasoningInlineText: options.latestReasoningInlineText,
     toolStatusText: options.toolStatusText,
     streamToolCalls: options.streamToolCalls,
+    streamActivityItems: options.streamActivityItems,
     getSession: options.getSession,
     getConversationId: options.getConversationId,
     buildImageAttachmentPayload,
@@ -161,6 +166,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     toolStatusText: options.toolStatusText,
     toolStatusState: options.toolStatusState,
     streamToolCalls: options.streamToolCalls,
+    streamActivityItems: options.streamActivityItems,
     getActiveActivationId: () => activeActivationId,
     getFrontendDispatchStartedAtMs: frontendDispatch.getStartedAtMs,
     getFrontendDispatchElapsedMs: frontendDispatch.getElapsedMs,
@@ -192,6 +198,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     latestReasoningInlineText: options.latestReasoningInlineText,
     toolStatusText: options.toolStatusText,
     toolStatusState: options.toolStatusState,
+    streamActivityItems: options.streamActivityItems,
     chatting: options.chatting,
     reasoningStartedAtMs,
     t: options.t,
@@ -214,7 +221,9 @@ export function useChatFlow(options: UseChatFlowOptions) {
       pendingTerminalEvent = event;
     },
     setQueuedStreamingState: (value: typeof queuedStreamingState) => {
-      queuedStreamingState = value;
+      queuedStreamingState = value
+        ? { ...value, streamActivityItems: normalizeChatActivityItems(value.streamActivityItems) }
+        : null;
     },
     sendStartedAtMsByGen,
     getPendingUserDraftId,
@@ -228,6 +237,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     toolStatusText: options.toolStatusText,
     toolStatusState: options.toolStatusState,
     streamToolCalls: options.streamToolCalls,
+    streamActivityItems: options.streamActivityItems,
     reasoningStartedAtMs,
     getRound: () => round,
     promoteQueuedRoundToStreaming,
@@ -254,6 +264,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
       streamLastToolName = value;
     },
     syncStreamToolCallsToDraft,
+    syncStreamActivityItemsToDraft,
     syncCurrentDisplayStateToConversationStreamCache,
     updateDraftText,
     enqueueStreamDelta: roundFinalizers.enqueueStreamDelta,
@@ -293,7 +304,9 @@ export function useChatFlow(options: UseChatFlowOptions) {
     },
     getQueuedStreamingState: () => queuedStreamingState,
     setQueuedStreamingState: (value: typeof queuedStreamingState) => {
-      queuedStreamingState = value;
+      queuedStreamingState = value
+        ? { ...value, streamActivityItems: normalizeChatActivityItems(value.streamActivityItems) }
+        : null;
     },
     setActiveHistoryMessageCount: (value: number) => {
       activeHistoryMessageCount = value;
@@ -306,6 +319,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     toolStatusText: options.toolStatusText,
     toolStatusState: options.toolStatusState,
     streamToolCalls: options.streamToolCalls,
+    streamActivityItems: options.streamActivityItems,
     chatting: options.chatting,
     t: options.t,
     channelBinding,
@@ -319,6 +333,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     insertDraft,
     updateDraftText,
     applyConversationStreamCacheToDisplay,
+    loadStreamActivityItemsFromDraft,
     loadStreamToolCallsFromDraft,
     readConversationStreamCache,
     writeConversationStreamCacheSnapshot,
@@ -366,6 +381,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     ensureForegroundStreamingRound,
     handleStreamingEvent,
     syncStreamToolCallsToDraft,
+    syncStreamActivityItemsToDraft,
     updateDraftText,
   });
   const stopController = useChatFlowStop({
@@ -447,6 +463,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     toolStatusText: options.toolStatusText,
     toolStatusState: options.toolStatusState,
     streamToolCalls: options.streamToolCalls,
+    streamActivityItems: options.streamActivityItems,
     reasoningStartedAtMs,
     getRound: () => round,
     setRound,
@@ -469,11 +486,13 @@ export function useChatFlow(options: UseChatFlowOptions) {
     sendStartedAtMsByGen,
     hasAssistantDraftInMessages,
     applyConversationStreamCacheToDisplay,
+    loadStreamActivityItemsFromDraft,
     loadStreamToolCallsFromDraft,
     updateQueuedAssistantDraftStatus,
     insertDraft,
     updateDraftText,
     syncStreamToolCallsToDraft,
+    syncStreamActivityItemsToDraft,
     applyPendingTerminalEvent,
     promoteQueuedRoundToStreaming,
     finalizeDeferredRoundCompletion: roundFinalizers.finalizeDeferredRoundCompletion,
@@ -502,6 +521,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     toolStatusText: options.toolStatusText,
     toolStatusState: options.toolStatusState,
     streamToolCalls: options.streamToolCalls,
+    streamActivityItems: options.streamActivityItems,
     getConversationId: options.getConversationId,
     getSession: options.getSession,
     invokeSendChatMessage: options.invokeSendChatMessage,
@@ -542,6 +562,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     toolStatusText: options.toolStatusText,
     toolStatusState: options.toolStatusState,
     streamToolCalls: options.streamToolCalls,
+    streamActivityItems: options.streamActivityItems,
     chatting: options.chatting,
     getConversationId: options.getConversationId,
     getRound: () => round,

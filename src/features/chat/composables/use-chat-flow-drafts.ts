@@ -1,5 +1,6 @@
 import type { Ref } from "vue";
-import type { ChatMentionTarget, ChatMessage } from "../../../types/app";
+import type { ChatActivityItem, ChatMentionTarget, ChatMessage } from "../../../types/app";
+import { normalizeChatActivityItems } from "../../../utils/chat-message-semantics";
 import { consumeClosedMarkdownBlocks } from "./use-chat-flow-text";
 import {
   mergeStreamToolCallsForward,
@@ -19,6 +20,7 @@ type UseChatFlowDraftsOptions = {
   latestReasoningInlineText: Ref<string>;
   toolStatusText: Ref<string>;
   streamToolCalls?: Ref<StreamToolCallView[]>;
+  streamActivityItems?: Ref<ChatActivityItem[]>;
   getSession: () => { apiConfigId: string; agentId: string; departmentId?: string } | null;
   getConversationId?: () => string;
   buildImageAttachmentPayload: (
@@ -47,6 +49,20 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     const meta = (draft?.providerMeta || {}) as Record<string, unknown>;
     const calls = normalizeStreamToolCallViews(meta._streamToolCalls);
     options.streamToolCalls.value = mergeStreamToolCallsForward(options.streamToolCalls.value, calls);
+  }
+
+  function loadStreamActivityItemsFromDraft(draftId: string) {
+    if (!options.streamActivityItems) return;
+    if (!draftId) {
+      options.streamActivityItems.value = [];
+      return;
+    }
+    const draft = options.allMessages.value.find((item) => item.id === draftId);
+    const meta = (draft?.providerMeta || {}) as Record<string, unknown>;
+    const items = normalizeChatActivityItems(meta._streamActivityItems);
+    if (items.length > 0 || options.streamActivityItems.value.length === 0) {
+      options.streamActivityItems.value = items;
+    }
   }
 
   function hasAssistantDraftInMessages(): boolean {
@@ -228,6 +244,22 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     });
   }
 
+  function syncStreamActivityItemsToDraft(draftId: string) {
+    if (!draftId || !options.streamActivityItems) return;
+    const items = normalizeChatActivityItems(options.streamActivityItems.value);
+    options.allMessages.value = options.allMessages.value.map((message) => {
+      if (message.id !== draftId) return message;
+      const meta = ((message.providerMeta || {}) as Record<string, unknown>);
+      return {
+        ...message,
+        providerMeta: {
+          ...meta,
+          _streamActivityItems: items,
+        },
+      };
+    });
+  }
+
   function updateDraftText(
     draftId: string,
     streamSegments?: string[],
@@ -246,6 +278,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
       && (
         !!String(options.toolStatusText.value || "").trim()
         || (options.streamToolCalls?.value.length || 0) > 0
+        || (options.streamActivityItems?.value.length || 0) > 0
       );
     if (shouldPreserveExistingDraftText) {
       options.latestAssistantText.value = existingDraftText;
@@ -260,7 +293,8 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
       || !!nextReasoningInline.trim()
       || nextStreamSegments.some((item) => !!String(item || "").trim())
       || !!String(nextStreamTail || "").trim()
-      || (options.streamToolCalls?.value.length || 0) > 0;
+      || (options.streamToolCalls?.value.length || 0) > 0
+      || (options.streamActivityItems?.value.length || 0) > 0;
     const preStreamingStatusText = hasVisibleStreamContent
       ? ""
       : String(options.toolStatusText.value || "").trim();
@@ -283,6 +317,9 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
         _streamToolCalls: Array.isArray(options.streamToolCalls?.value)
           ? options.streamToolCalls.value.map((item) => ({ ...item }))
           : [] as StreamToolCallView[],
+        _streamActivityItems: Array.isArray(options.streamActivityItems?.value)
+          ? normalizeChatActivityItems(options.streamActivityItems.value)
+          : [] as ChatActivityItem[],
       },
     };
     const cur = options.allMessages.value;
@@ -349,9 +386,11 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     hasAssistantDraftInMessages,
     insertDraft,
     insertUserDraft,
+    loadStreamActivityItemsFromDraft,
     loadStreamToolCallsFromDraft,
     removeAssistantDrafts,
     removeDraft,
+    syncStreamActivityItemsToDraft,
     syncStreamToolCallsToDraft,
     updateDraftText,
     updateQueuedAssistantDraftStatus,

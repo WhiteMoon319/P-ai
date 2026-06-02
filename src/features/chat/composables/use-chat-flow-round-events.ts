@@ -1,5 +1,5 @@
 import type { Ref } from "vue";
-import type { ChatMessage } from "../../../types/app";
+import type { ChatActivityItem, ChatMessage } from "../../../types/app";
 import {
   appendReasoningStandardDelta,
   readDeltaMessage,
@@ -22,6 +22,7 @@ type UseChatFlowRoundEventsOptions = {
   toolStatusText: Ref<string>;
   toolStatusState: Ref<"running" | "done" | "failed" | "">;
   streamToolCalls?: Ref<any[]>;
+  streamActivityItems?: Ref<ChatActivityItem[]>;
   reasoningStartedAtMs: Ref<number>;
   getRound: () => RoundState;
   setRound: (next: RoundState, frontendPhase?: "idle" | "queued" | "waiting" | "streaming") => void;
@@ -36,10 +37,12 @@ type UseChatFlowRoundEventsOptions = {
   sendStartedAtMsByGen: Map<number, number>;
   hasAssistantDraftInMessages: () => boolean;
   applyConversationStreamCacheToDisplay: (conversationId?: string | null) => boolean;
+  loadStreamActivityItemsFromDraft: (draftId: string) => void;
   loadStreamToolCallsFromDraft: (draftId: string) => void;
   updateQueuedAssistantDraftStatus: (draftId: string, statusText: string) => void;
   insertDraft: (gen: number, initialText?: string) => string;
   updateDraftText: (draftId: string) => void;
+  syncStreamActivityItemsToDraft: (draftId: string) => void;
   syncStreamToolCallsToDraft: (draftId: string) => void;
   applyPendingTerminalEvent: (gen: number) => boolean;
   promoteQueuedRoundToStreaming: (gen: number) => number;
@@ -144,6 +147,7 @@ export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
     options.latestAssistantText.value = "";
     options.latestReasoningStandardText.value = "";
     options.latestReasoningInlineText.value = "";
+    if (options.streamActivityItems) options.streamActivityItems.value = [];
     options.setPendingReasoningStandardBreak(false);
     options.setChatErrorText(options.formatRequestFailed(error));
     if (!options.toolStatusText.value) {

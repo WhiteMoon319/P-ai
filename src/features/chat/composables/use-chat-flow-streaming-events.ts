@@ -1,4 +1,9 @@
 import type { Ref } from "vue";
+import type { ChatActivityItem } from "../../../types/app";
+import {
+  appendReasoningToStreamActivityItems,
+  applyToolStatusToStreamActivityItems,
+} from "../../../utils/chat-message-semantics";
 import {
   appendReasoningStandardDelta,
   assistantEventHasVisibleProgress,
@@ -16,6 +21,7 @@ type UseChatFlowStreamingEventsOptions = {
   toolStatusText: Ref<string>;
   toolStatusState: Ref<"running" | "done" | "failed" | "">;
   streamToolCalls?: Ref<StreamToolCallView[]>;
+  streamActivityItems?: Ref<ChatActivityItem[]>;
   reasoningStartedAtMs: Ref<number>;
   getRound: () => RoundState;
   promoteQueuedRoundToStreaming: (gen: number) => number;
@@ -40,6 +46,7 @@ type UseChatFlowStreamingEventsOptions = {
   getStreamLastToolName: () => string;
   setStreamLastToolName: (value: string) => void;
   syncStreamToolCallsToDraft: (draftId: string) => void;
+  syncStreamActivityItemsToDraft: (draftId: string) => void;
   syncCurrentDisplayStateToConversationStreamCache: () => void;
   updateDraftText: (draftId: string) => void;
   enqueueStreamDelta: (gen: number, delta: string) => void;
@@ -118,8 +125,12 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
       } else if (parsed.toolStatus === "running" && toolName && parsed.toolCallId) {
         options.setStreamLastToolName(toolName);
       }
+      if (options.streamActivityItems) {
+        options.streamActivityItems.value = applyToolStatusToStreamActivityItems(options.streamActivityItems.value, parsed);
+      }
       if (currentRound.phase === "streaming") {
         options.syncStreamToolCallsToDraft(currentRound.draftId);
+        options.syncStreamActivityItemsToDraft(currentRound.draftId);
       }
       options.toolStatusText.value = parsed.message || "";
       options.toolStatusState.value =
@@ -140,6 +151,9 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
         dt,
         options.getPendingReasoningStandardBreak(),
       );
+      if (options.streamActivityItems) {
+        options.streamActivityItems.value = appendReasoningToStreamActivityItems(options.streamActivityItems.value, dt);
+      }
       if (dt.trim()) options.setPendingReasoningStandardBreak(false);
       options.syncCurrentDisplayStateToConversationStreamCache();
       if (currentRound.phase === "streaming") {
@@ -152,6 +166,9 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
       const dt = readDeltaMessage(parsed);
       if (dt && options.reasoningStartedAtMs.value === 0) options.reasoningStartedAtMs.value = Date.now();
       options.latestReasoningInlineText.value += dt;
+      if (options.streamActivityItems) {
+        options.streamActivityItems.value = appendReasoningToStreamActivityItems(options.streamActivityItems.value, dt);
+      }
       options.syncCurrentDisplayStateToConversationStreamCache();
       if (currentRound.phase === "streaming") {
         options.updateDraftText(currentRound.draftId);

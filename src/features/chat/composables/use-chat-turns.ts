@@ -4,7 +4,9 @@ import {
   estimateConversationTokens,
 } from "../../../utils/chat-message";
 import {
+  normalizeChatActivityItems,
   projectMessageForDisplay,
+  projectStreamingChatActivityForDisplay,
 } from "../../../utils/chat-message-semantics";
 
 function streamToolCallsFromProviderMeta(meta: Record<string, unknown>): Array<{ toolCallId?: string; name: string; argsText: string; status?: "doing" | "done" }> {
@@ -21,6 +23,30 @@ function streamToolCallsFromProviderMeta(meta: Record<string, unknown>): Array<{
       };
     })
     .filter((item) => !!item.toolCallId && !!item.name);
+}
+
+function baseActivityForMessage(
+  projection: ReturnType<typeof projectMessageForDisplay>,
+  isStreaming: boolean,
+  streamToolCalls: Array<{ toolCallId?: string; name: string; argsText: string; status?: "doing" | "done" }>,
+  streamActivityItems: ReturnType<typeof normalizeChatActivityItems>,
+) {
+  if (isStreaming) {
+    return projectStreamingChatActivityForDisplay({
+      reasoningStandard: projection.reasoningStandard,
+      reasoningInline: projection.reasoningInline,
+      toolCalls: streamToolCalls,
+      activityItems: streamActivityItems,
+      running: true,
+    });
+  }
+  return {
+    items: projection.activityItems,
+    activityReasoningCharCount: projection.activityReasoningCharCount,
+    activityToolCountsByName: projection.activityToolCountsByName,
+    activityRunning: projection.activityRunning,
+    activityStatus: projection.activityStatus,
+  };
 }
 
 function positiveNumberFromProviderMeta(meta: Record<string, unknown>, key: string): number | undefined {
@@ -117,6 +143,11 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
         toolCallCount: 0,
         lastToolName: "",
         toolCalls: [],
+        activityItems: [],
+        activityReasoningCharCount: 0,
+        activityToolCountsByName: {},
+        activityRunning: false,
+        activityStatus: "idle",
       }];
     }
     const signature = messageSignature(message);
@@ -135,6 +166,13 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
     const streamTail = String(meta._streamTail ?? "");
     const streamAnimatedDelta = String(meta._streamAnimatedDelta ?? "");
     const streamToolCalls = streamToolCallsFromProviderMeta(meta);
+    const streamActivityItems = normalizeChatActivityItems(meta._streamActivityItems);
+    const activity = baseActivityForMessage(
+      projection,
+      !!meta._streaming,
+      streamToolCalls,
+      streamActivityItems,
+    );
     const dispatchElapsedMs = positiveNumberFromProviderMeta(meta, "dispatchElapsedMs");
     const frontendDispatchElapsedMs = positiveNumberFromProviderMeta(meta, "_frontendDispatchElapsedMs");
     const extraTextReferences = buildExtraTextReferences(message);
@@ -167,6 +205,11 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
       toolCallCount: projection.toolCallCount,
       lastToolName: projection.lastToolName,
       toolCalls: streamToolCalls.length > 0 ? streamToolCalls : projection.toolCalls,
+      activityItems: activity.items,
+      activityReasoningCharCount: activity.activityReasoningCharCount,
+      activityToolCountsByName: activity.activityToolCountsByName,
+      activityRunning: activity.activityRunning,
+      activityStatus: activity.activityStatus,
     } satisfies ChatMessageBlock;
 
     const blocks: ChatMessageBlock[] = [];
@@ -179,9 +222,8 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
       || (baseBlock.extraTextReferences || []).length > 0
       || !!baseBlock.taskTrigger
       || !!baseBlock.planCard
-      || !!baseBlock.reasoningStandard
-      || !!baseBlock.reasoningInline
-      || baseBlock.toolCallCount > 0
+      || baseBlock.activityItems.length > 0
+      || baseBlock.activityRunning
     ) {
       blocks.push(baseBlock);
     }
@@ -218,6 +260,11 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
           toolCallCount: 0,
           lastToolName: "",
           toolCalls: [],
+          activityItems: [],
+          activityReasoningCharCount: 0,
+          activityToolCountsByName: {},
+          activityRunning: false,
+          activityStatus: "idle",
         });
       });
     }

@@ -1,4 +1,10 @@
 import type { Ref } from "vue";
+import type { ChatActivityItem } from "../../../types/app";
+import {
+  appendReasoningToStreamActivityItems,
+  applyToolStatusToStreamActivityItems,
+  normalizeChatActivityItems,
+} from "../../../utils/chat-message-semantics";
 import {
   appendReasoningStandardDelta,
   readDeltaMessage,
@@ -30,6 +36,7 @@ export type ConversationStreamCache = {
   toolStatusText: string;
   toolStatusState: "running" | "done" | "failed" | "";
   streamToolCalls: StreamToolCallView[];
+  streamActivityItems: ChatActivityItem[];
   streamToolCallCount: number;
   streamLastToolName: string;
   persistedAssistantMessageId?: string;
@@ -48,6 +55,7 @@ export type ConversationRuntimeStreamCacheSnapshot = {
   toolStatusText?: string;
   toolStatusState?: "running" | "done" | "failed" | "" | string;
   streamToolCalls?: Array<{ toolCallId?: string; name?: string; argsText?: string; status?: "doing" | "done" | string }>;
+  streamActivityItems?: ChatActivityItem[];
   streamToolCallCount?: number;
   streamLastToolName?: string;
   hasVisibleProgress?: boolean;
@@ -62,6 +70,7 @@ type UseChatFlowStreamCacheOptions = {
   toolStatusText: Ref<string>;
   toolStatusState: Ref<"running" | "done" | "failed" | "">;
   streamToolCalls?: Ref<StreamToolCallView[]>;
+  streamActivityItems?: Ref<ChatActivityItem[]>;
   getActiveActivationId: () => string;
   getFrontendDispatchStartedAtMs: () => number;
   getFrontendDispatchElapsedMs: () => number;
@@ -86,6 +95,7 @@ export function streamCacheHasVisibleProgress(
     || String(cache.toolStatusText || "").trim()
     || String(cache.toolStatusState || "").trim()
     || (Array.isArray(cache.streamToolCalls) && cache.streamToolCalls.length > 0)
+    || (Array.isArray(cache.streamActivityItems) && cache.streamActivityItems.length > 0)
   );
 }
 
@@ -104,6 +114,7 @@ function emptyConversationStreamCache(): ConversationStreamCache {
     toolStatusText: "",
     toolStatusState: "",
     streamToolCalls: [],
+    streamActivityItems: [],
     streamToolCallCount: 0,
     streamLastToolName: "",
   };
@@ -131,6 +142,7 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
       toolStatusText: cache.toolStatusText,
       toolStatusState: cache.toolStatusState,
       streamToolCalls: cache.streamToolCalls.map((item) => ({ ...item })),
+      streamActivityItems: normalizeChatActivityItems(cache.streamActivityItems),
       streamToolCallCount: cache.streamToolCallCount,
       streamLastToolName: cache.streamLastToolName,
     };
@@ -152,6 +164,7 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
       frontendDispatchStartedAtMs: positiveRoundedNumber(next.frontendDispatchStartedAtMs),
       frontendDispatchElapsedMs: positiveRoundedNumber(next.frontendDispatchElapsedMs),
       streamToolCalls: Array.isArray(next.streamToolCalls) ? next.streamToolCalls.map((item) => ({ ...item })) : [],
+      streamActivityItems: normalizeChatActivityItems(next.streamActivityItems),
     });
   }
 
@@ -181,6 +194,9 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
       streamToolCalls: Array.isArray(options.streamToolCalls?.value)
         ? options.streamToolCalls.value.map((item) => ({ ...item }))
         : [],
+      streamActivityItems: Array.isArray(options.streamActivityItems?.value)
+        ? normalizeChatActivityItems(options.streamActivityItems.value)
+        : normalizeChatActivityItems(current.streamActivityItems),
       streamToolCallCount: options.getStreamToolCallCount(),
       streamLastToolName: options.getStreamLastToolName(),
     }));
@@ -218,6 +234,11 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
         );
       }
     }
+    if (options.streamActivityItems) {
+      if (cache.streamActivityItems.length > 0 || options.streamActivityItems.value.length === 0) {
+        options.streamActivityItems.value = normalizeChatActivityItems(cache.streamActivityItems);
+      }
+    }
     options.setStreamToolCallCount(Math.max(options.getStreamToolCallCount(), cache.streamToolCallCount));
     if (cache.streamLastToolName) {
       options.setStreamLastToolName(cache.streamLastToolName);
@@ -248,6 +269,9 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
         current.streamToolCalls,
         normalizeStreamToolCallViews(snapshot.streamToolCalls),
       ),
+      streamActivityItems: normalizeChatActivityItems(snapshot.streamActivityItems).length > 0
+        ? normalizeChatActivityItems(snapshot.streamActivityItems)
+        : normalizeChatActivityItems(current.streamActivityItems),
       streamToolCallCount: Math.max(0, Math.round(Number(snapshot.streamToolCallCount || 0))),
       streamLastToolName: String(snapshot.streamLastToolName || ""),
       persistedAssistantMessageId: String(snapshot.persistedAssistantMessageId || current.persistedAssistantMessageId || "").trim(),
@@ -275,6 +299,7 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
           current.streamToolCalls,
           Array.isArray(options.streamToolCalls?.value) ? options.streamToolCalls.value : [],
         ),
+        streamActivityItems: normalizeChatActivityItems(current.streamActivityItems),
       };
       const delta = readDeltaMessage(parsed);
       if (parsed.kind === "tool_status") {
@@ -284,6 +309,7 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
           next.pendingReasoningStandardBreak = true;
         }
         next.streamToolCalls = statusUpdate.calls;
+        next.streamActivityItems = applyToolStatusToStreamActivityItems(next.streamActivityItems, parsed);
         if (parsed.toolStatus === "running" && toolName && parsed.toolCallId) {
           next.streamLastToolName = toolName;
           if (statusUpdate.appended) {
@@ -308,11 +334,13 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
         if (delta.trim()) {
           next.pendingReasoningStandardBreak = false;
         }
+        next.streamActivityItems = appendReasoningToStreamActivityItems(next.streamActivityItems, delta);
         changed = true;
         return next;
       }
       if (parsed.kind === "reasoning_inline" && delta) {
         next.reasoningInline += delta;
+        next.streamActivityItems = appendReasoningToStreamActivityItems(next.streamActivityItems, delta);
         changed = true;
         return next;
       }

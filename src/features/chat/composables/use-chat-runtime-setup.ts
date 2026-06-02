@@ -30,6 +30,7 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
       toolStatusText: bindings.toolStatusText,
       toolStatusState: bindings.toolStatusState,
       streamToolCalls: bindings.streamToolCalls,
+      streamActivityItems: bindings.streamActivityItems,
       chatErrorText: bindings.chatErrorText,
       setConversationChatError: bindings.setConversationChatErrorText,
       allMessages: bindings.allMessages,
