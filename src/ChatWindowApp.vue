@@ -17,6 +17,7 @@
       :chat-left-panel-mode="chatLeftPanelMode"
       :chat-right-panel-mode="chatRightPanelMode"
       :active-conversation-id="currentChatConversationId"
+      :current-department-id="currentForegroundDepartmentId"
       :conversation-items="chatConversationItems"
       :current-chat-workspaces="chatWorkspaceChoices"
       :user-alias="userAlias"

@@ -303,27 +303,47 @@
 
   <dialog v-if="viewMode === 'chat'" class="modal" :class="{ 'modal-open': createConversationDialogOpen }">
     <div class="modal-box max-w-lg">
-      <h3 class="text-base font-semibold">{{ t("chat.newConversation") }}</h3>
-      <div class="mt-4 flex flex-col gap-3">
-        <div class="flex flex-col gap-2">
+      <div class="flex items-center justify-between gap-3">
+        <h3 class="text-base font-semibold">{{ t("chat.newConversation") }}</h3>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm btn-square"
+          :disabled="importConversationLoading"
+          :title="t('chat.importConversationExternal')"
+          @click="importConversationFromExternal"
+        >
+          <span v-if="importConversationLoading" class="loading loading-spinner loading-xs"></span>
+          <Upload v-else class="h-4 w-4" />
+        </button>
+      </div>
+      <div class="mt-3 flex flex-col gap-2.5">
+        <div ref="createConversationTopicRootRef" class="relative flex flex-col gap-2">
           <input
             ref="createConversationInputRef"
             v-model="createConversationTitle"
             type="text"
             class="input input-bordered w-full"
             :placeholder="t('chat.newConversationTopicPlaceholder')"
+            @focus="handleCreateConversationTopicFocus"
+            @pointerdown="createConversationTopicSuggestionsOpen = true"
+            @input="createConversationTopicSuggestionsOpen = true"
             @keydown="handleCreateConversationDialogKeydown"
           />
-          <div v-if="recentConversationTopics.length > 0" class="flex flex-wrap gap-1.5">
+          <div
+            v-if="showCreateConversationTopicSuggestions"
+            class="absolute left-0 right-0 top-full z-50 mt-1 rounded-box border border-base-300 bg-base-100 p-2 shadow-xl"
+          >
+            <div class="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
             <button
-              v-for="topic in recentConversationTopics"
+              v-for="topic in filteredRecentConversationTopics"
               :key="topic"
               type="button"
-              class="btn btn-ghost btn-xs h-7 min-h-7 rounded-full px-3 text-xs font-medium text-base-content/75"
+              class="btn btn-ghost btn-xs h-7 min-h-7 rounded-full px-3 text-xs font-medium text-base-content/75 hover:bg-base-200 hover:text-base-content"
               @click="applyRecentConversationTopic(topic)"
             >
               {{ topic }}
             </button>
+            </div>
           </div>
         </div>
         <select
@@ -338,10 +358,6 @@
             {{ departmentOptionLabel(department) }}
           </option>
         </select>
-        <label class="flex h-10 cursor-pointer items-center justify-start gap-3 px-1">
-          <input v-model="createConversationCopyCurrent" type="checkbox" class="checkbox checkbox-sm" />
-          <span class="label-text text-sm">{{ t("chat.copyCurrentConversation") }}</span>
-        </label>
         <div class="grid grid-cols-[minmax(0,1fr)_5rem] gap-2">
           <div class="join min-w-0">
             <select
@@ -383,18 +399,22 @@
             <option value="read_only">{{ workspaceAccessLabel("read_only") }}</option>
           </select>
         </div>
+        <label class="flex h-9 cursor-pointer items-center justify-start gap-3">
+          <input v-model="createConversationCopyCurrent" type="checkbox" class="checkbox checkbox-sm" />
+          <span class="label-text flex min-w-0 items-center text-sm">
+            <span class="shrink-0">{{ t("chat.copyCurrentConversation") }}</span>
+            <span v-if="activeConversationCopySummary" class="ml-2 min-w-0 truncate text-xs text-base-content/55">
+              {{ activeConversationCopySummary }}
+            </span>
+          </span>
+        </label>
       </div>
-      <div class="modal-action mt-5 items-center justify-between gap-3">
-        <label class="label min-w-0 cursor-pointer justify-start gap-2 p-0">
+      <div class="modal-action mt-4 items-center justify-between gap-3">
+        <label class="label min-w-0 cursor-pointer justify-start gap-3 p-0">
           <input v-model="createConversationMaxPermission" type="checkbox" class="checkbox checkbox-sm" />
           <span class="label-text truncate text-sm">{{ t("chat.createConversationMaxPermission") }}</span>
         </label>
         <div class="flex shrink-0 items-center justify-end gap-2">
-          <button class="btn btn-sm btn-ghost gap-2 px-2" :disabled="importConversationLoading" @click="importConversationFromExternal">
-            <span v-if="importConversationLoading" class="loading loading-spinner loading-xs"></span>
-            <Upload v-else class="h-4 w-4" />
-            <span>{{ t("chat.importConversationExternal") }}</span>
-          </button>
           <button class="btn btn-sm" @click="closeCreateConversationDialog">{{ t("common.cancel") }}</button>
           <button class="btn btn-sm btn-primary" @click="confirmCreateConversation">{{ t("common.confirm") }}</button>
         </div>
@@ -518,6 +538,7 @@ const props = defineProps<{
   chatLeftPanelMode: "local" | "contact";
   chatRightPanelMode: "reader" | "review" | "delegate";
   activeConversationId: string;
+  currentDepartmentId?: string;
   conversationItems: ChatConversationOverviewItem[];
   currentChatWorkspaces?: ShellWorkspace[];
   userAlias: string;
@@ -635,7 +656,28 @@ const currentConversationTitle = computed(() => {
   });
 });
 
+const activeConversationCopySummary = computed(() => {
+  const activeId = String(props.activeConversationId || "").trim();
+  if (!activeId) return "";
+  const item = props.conversationItems.find((i) => i.conversationId === activeId);
+  if (!item) return "";
+  const title = resolveConversationDisplayTitle(item, {
+    locale: locale.value,
+    untitledLabel: t("chat.untitledConversation"),
+  });
+  const count = Math.max(0, Number(item.messageCount || 0));
+  return count > 0 ? `${title} · ${count} 条消息` : title;
+});
+
 const currentConversationDepartmentName = computed(() => {
+  const departmentId = String(props.currentDepartmentId || "").trim();
+  if (departmentId) {
+    const department = props.createConversationDepartmentOptions.find(
+      (item) => String(item.id || "").trim() === departmentId,
+    );
+    const departmentName = String(department?.name || "").trim();
+    if (departmentName) return departmentName;
+  }
   const activeId = String(props.activeConversationId || "").trim();
   if (!activeId) return "";
   const item = props.conversationItems.find((i) => i.conversationId === activeId);
@@ -647,11 +689,13 @@ const conversationUnreadTotal = computed(() =>
 );
 
 const combinedTitle = computed(() => {
-  return currentConversationTitle.value || props.currentPersonaName;
+  const title = currentConversationTitle.value || props.currentPersonaName;
+  const departmentName = currentConversationDepartmentName.value;
+  return title && departmentName ? `${title} · ${departmentName}` : title;
 });
 
 const combinedTitleTooltip = computed(() => {
-  return currentConversationTitle.value || props.currentPersonaName;
+  return combinedTitle.value;
 });
 
 watch(
@@ -662,11 +706,14 @@ watch(
 const configSearchPopoverRef = ref<HTMLElement | null>(null);
 const configSearchInputRef = ref<HTMLInputElement | null>(null);
 const createConversationInputRef = ref<HTMLInputElement | null>(null);
+const createConversationTopicRootRef = ref<HTMLElement | null>(null);
 const recentConversationTopics = ref<string[]>([]);
 const createConversationDialogOpen = ref(false);
 const createConversationTitle = ref("");
 const createConversationDepartmentId = ref("");
 const createConversationCopyCurrent = ref(false);
+const createConversationTopicSuggestionsOpen = ref(false);
+const suppressNextCreateConversationTopicFocus = ref(false);
 const createConversationWorkspacePath = ref("");
 const createConversationWorkspaceAccess = ref<ShellWorkspaceAccess>("approval");
 const createConversationCustomWorkspace = ref<ShellWorkspace | null>(null);
@@ -694,6 +741,18 @@ const selectableCreateConversationWorkspaces = computed<ShellWorkspace[]>(() =>
       access: normalizeWorkspaceAccess(item.access),
       builtIn: false,
     })),
+);
+
+const filteredRecentConversationTopics = computed(() => {
+  const query = String(createConversationTitle.value || "").trim().toLocaleLowerCase();
+  if (!query) return recentConversationTopics.value;
+  const matched = recentConversationTopics.value.filter((topic) => topic.toLocaleLowerCase().includes(query));
+  return matched.length > 0 ? matched : recentConversationTopics.value;
+});
+
+const showCreateConversationTopicSuggestions = computed(() =>
+  createConversationTopicSuggestionsOpen.value
+  && filteredRecentConversationTopics.value.length > 0,
 );
 
 function normalizeWorkspacePathKey(path: string): string {
@@ -884,6 +943,10 @@ function handleDocumentPointerDown(event: PointerEvent) {
   if (configSearchOpen.value && searchRoot && target && !searchRoot.contains(target)) {
     configSearchOpen.value = false;
   }
+  const topicRoot = createConversationTopicRootRef.value;
+  if (createConversationTopicSuggestionsOpen.value && topicRoot && target && !topicRoot.contains(target)) {
+    createConversationTopicSuggestionsOpen.value = false;
+  }
 }
 
 function handleWindowKeydown(event: KeyboardEvent) {
@@ -933,9 +996,42 @@ function handleCreateConversation() {
     || String(props.defaultCreateConversationDepartmentId || "").trim()
     || String(props.createConversationDepartmentOptions[0]?.id || "").trim();
   createConversationCopyCurrent.value = false;
+  createConversationTopicSuggestionsOpen.value = false;
+  suppressNextCreateConversationTopicFocus.value = true;
   resetCreateConversationWorkspace();
   createConversationDialogOpen.value = true;
   nextTick(() => createConversationInputRef.value?.focus());
+}
+
+function openCreateConversationDialogWithWorkspace(workspace: ShellWorkspace) {
+  handleCreateConversation();
+  const path = String(workspace.path || "").trim();
+  if (!path) return;
+  const existing = selectableCreateConversationWorkspaces.value.find((item) => item.path.toLowerCase() === path.toLowerCase());
+  const target: ShellWorkspace = existing || {
+    id: String(workspace.id || "").trim() || `conversation-workspace-${Date.now().toString(36)}`,
+    name: String(workspace.name || "").trim() || defaultWorkspaceNameFromPath(path) || path,
+    path,
+    level: "main",
+    access: normalizeWorkspaceAccess(workspace.access),
+    builtIn: false,
+  };
+  if (!existing) {
+    createConversationCustomWorkspace.value = target;
+  }
+  createConversationWorkspacePath.value = target.path;
+  createConversationWorkspaceAccess.value = normalizeWorkspaceAccess(target.access);
+  pushRecentCreateConversationWorkspace(target);
+}
+
+function handleOpenCreateConversationDialogEvent(event: Event) {
+  const detail = (event as CustomEvent<{ workspace?: ShellWorkspace }>).detail;
+  const workspace = detail?.workspace;
+  if (!workspace?.path) {
+    handleCreateConversation();
+    return;
+  }
+  openCreateConversationDialogWithWorkspace(workspace);
 }
 
 async function loadProjectChangelog(force = false) {
@@ -967,13 +1063,23 @@ function closeCreateConversationDialog() {
   createConversationTitle.value = "";
   createConversationDepartmentId.value = "";
   createConversationCopyCurrent.value = false;
+  createConversationTopicSuggestionsOpen.value = false;
   resetCreateConversationWorkspace();
   importConversationLoading.value = false;
 }
 
 function applyRecentConversationTopic(topic: string) {
   createConversationTitle.value = String(topic || "").trim();
+  createConversationTopicSuggestionsOpen.value = false;
   nextTick(() => createConversationInputRef.value?.focus());
+}
+
+function handleCreateConversationTopicFocus() {
+  if (suppressNextCreateConversationTopicFocus.value) {
+    suppressNextCreateConversationTopicFocus.value = false;
+    return;
+  }
+  createConversationTopicSuggestionsOpen.value = true;
 }
 
 function departmentOptionLabel(department: ConversationDepartmentOption): string {
@@ -993,6 +1099,7 @@ function confirmCreateConversation() {
   createConversationTitle.value = "";
   createConversationDepartmentId.value = "";
   createConversationCopyCurrent.value = false;
+  createConversationTopicSuggestionsOpen.value = false;
   const shellWorkspaces = createConversationWorkspacePayload();
   const shellAutonomousMode = createConversationMaxPermission.value;
   pushRecentCreateConversationWorkspace(shellWorkspaces?.[0]);
@@ -1027,6 +1134,7 @@ async function importConversationFromExternal() {
     createConversationTitle.value = "";
     createConversationDepartmentId.value = "";
     createConversationCopyCurrent.value = false;
+    createConversationTopicSuggestionsOpen.value = false;
     const shellWorkspaces = createConversationWorkspacePayload();
     const shellAutonomousMode = createConversationMaxPermission.value;
     pushRecentCreateConversationWorkspace(shellWorkspaces?.[0]);
@@ -1045,6 +1153,11 @@ async function importConversationFromExternal() {
 }
 
 function handleCreateConversationDialogKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape" && createConversationTopicSuggestionsOpen.value) {
+    event.preventDefault();
+    createConversationTopicSuggestionsOpen.value = false;
+    return;
+  }
   if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
     event.preventDefault();
     confirmCreateConversation();
@@ -1056,6 +1169,7 @@ onMounted(() => {
   loadRecentCreateConversationWorkspaces();
   document.addEventListener("pointerdown", handleDocumentPointerDown);
   window.addEventListener("keydown", handleWindowKeydown);
+  window.addEventListener("easy-call:open-create-conversation-dialog", handleOpenCreateConversationDialogEvent);
   updateWindowWidth();
   window.addEventListener("resize", updateWindowWidth, { passive: true });
 });
@@ -1063,6 +1177,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", handleDocumentPointerDown);
   window.removeEventListener("keydown", handleWindowKeydown);
+  window.removeEventListener("easy-call:open-create-conversation-dialog", handleOpenCreateConversationDialogEvent);
   window.removeEventListener("resize", updateWindowWidth);
 });
 </script>

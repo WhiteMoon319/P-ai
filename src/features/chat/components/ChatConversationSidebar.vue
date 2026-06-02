@@ -49,17 +49,29 @@
         :key="section.key"
         class="last:mb-0"
       >
-        <button
-          type="button"
-          class="flex h-9 w-full items-center gap-2 border-y border-base-300 bg-base-200 px-2.5 text-left text-xs font-semibold text-base-content/65 transition-colors hover:bg-base-300 hover:text-base-content"
+        <div
+          role="button"
+          tabindex="0"
+          class="group/section flex h-9 w-full items-center gap-2 border-y border-base-300 bg-base-200 px-2.5 text-left text-xs font-semibold text-base-content/65 transition-colors hover:bg-base-300 hover:text-base-content"
           :title="section.title"
           @click="toggleConversationSection(section.key)"
+          @keydown.enter.prevent="toggleConversationSection(section.key)"
+          @keydown.space.prevent="toggleConversationSection(section.key)"
         >
-          <ChevronRight v-if="isConversationSectionCollapsed(section.key)" class="h-4 w-4 shrink-0" />
-          <ChevronDown v-else class="h-4 w-4 shrink-0" />
+          <Folder v-if="isConversationSectionCollapsed(section.key)" class="h-4 w-4 shrink-0" />
+          <FolderOpen v-else class="h-4 w-4 shrink-0" />
           <span class="min-w-0 truncate">{{ section.title }}</span>
           <span class="shrink-0 tabular-nums text-base-content/45">{{ section.items.length }}</span>
-        </button>
+          <button
+            v-if="section.workspaceRootPath"
+            type="button"
+            class="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-base-content/55 opacity-0 transition hover:bg-base-100 hover:text-base-content group-hover/section:opacity-100"
+            :title="t('chat.newConversation')"
+            @click.stop="createConversationInSection(section)"
+          >
+            <SquarePen class="h-3.5 w-3.5" />
+          </button>
+        </div>
         <div v-if="!isConversationSectionCollapsed(section.key)">
           <div
             v-for="(item, itemIndex) in section.items"
@@ -239,7 +251,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
-import { Archive, ChevronDown, ChevronRight, Download, Ellipsis, PencilLine, Pin, PinOff, Search, Trash2 } from "@lucide/vue";
+import { Archive, Download, Ellipsis, Folder, FolderOpen, PencilLine, Pin, PinOff, Search, SquarePen, Trash2 } from "@lucide/vue";
 import type { ChatConversationOverviewItem, ConversationPreviewMessage } from "../../../types/app";
 import { usePipelineStatus } from "../../shell/composables/use-pipeline-status";
 import { formatConversationListTime } from "../utils/conversation-time";
@@ -286,7 +298,14 @@ const { conversationStatusById, markConversationRead } = usePipelineStatus({
 const conversationPreviewCache = computed(() => new Map(
   props.items.map((item) => [String(item.conversationId || "").trim(), Array.isArray(item.previewMessages) ? item.previewMessages : []]),
 ));
-const conversationSections = computed(() => {
+type ConversationSection = {
+  key: string;
+  title: string;
+  items: ChatConversationOverviewItem[];
+  workspaceRootPath?: string;
+};
+
+const conversationSections = computed<ConversationSection[]>(() => {
   const visibleItems = props.items.filter((item) => {
     const kind = String(item.kind || "local_unarchived").trim();
     return activeConversationTab.value === "contact"
@@ -295,7 +314,7 @@ const conversationSections = computed(() => {
   });
   const pinned = visibleItems.filter((item) => !!item.isPinned || !!item.isMainConversation);
   const others = visibleItems.filter((item) => !item.isPinned && !item.isMainConversation);
-  const sections: Array<{ key: string; title: string; items: ChatConversationOverviewItem[] }> = [];
+  const sections: ConversationSection[] = [];
   if (pinned.length > 0) {
     sections.push({
       key: "pinned",
@@ -363,9 +382,9 @@ function resetConversationTitleEdit() {
   editingTitleDraft.value = "";
 }
 
-function workspaceConversationSections(items: ChatConversationOverviewItem[]): Array<{ key: string; title: string; items: ChatConversationOverviewItem[] }> {
-  const sections: Array<{ key: string; title: string; items: ChatConversationOverviewItem[] }> = [];
-  const byWorkspace = new Map<string, { key: string; title: string; items: ChatConversationOverviewItem[] }>();
+function workspaceConversationSections(items: ChatConversationOverviewItem[]): ConversationSection[] {
+  const sections: ConversationSection[] = [];
+  const byWorkspace = new Map<string, ConversationSection>();
   for (const item of items) {
     const path = String(item.workspaceRootPath || "").trim();
     const title = String(item.workspaceLabel || "").trim() || workspaceNameFromPath(path) || t("chat.defaultWorkspace");
@@ -375,7 +394,7 @@ function workspaceConversationSections(items: ChatConversationOverviewItem[]): A
       existing.items.push(item);
       continue;
     }
-    const section = { key, title, items: [item] };
+    const section = { key, title, workspaceRootPath: path || undefined, items: [item] };
     byWorkspace.set(key, section);
     sections.push(section);
   }
@@ -397,6 +416,23 @@ function toggleConversationSection(key: string) {
     ...collapsedConversationSectionKeys.value,
     [key]: !collapsedConversationSectionKeys.value[key],
   };
+}
+
+function createConversationInSection(section: ConversationSection) {
+  const path = String(section.workspaceRootPath || "").trim();
+  if (!path) return;
+  window.dispatchEvent(new CustomEvent("easy-call:open-create-conversation-dialog", {
+    detail: {
+      workspace: {
+        id: `conversation-workspace-${path}`,
+        name: section.title,
+        path,
+        level: "main",
+        access: "approval",
+        builtIn: false,
+      },
+    },
+  }));
 }
 
 function setRenameInputRef(element: Element | { $el?: Element | null } | null) {
