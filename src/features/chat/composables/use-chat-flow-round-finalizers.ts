@@ -20,19 +20,11 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
       String(result.assistantText || ""),
     );
 
-    if (typeof result.reasoningStandard === "string") {
-      bindings.latestReasoningStandardText.value = result.reasoningStandard;
-      bindings.setPendingReasoningStandardBreak(false);
-    }
-    if (typeof result.reasoningInline === "string") {
-      bindings.latestReasoningInlineText.value = result.reasoningInline;
-    }
     bindings.clearChatErrorText();
     if (String(bindings.toolStatusState.value || "") === "running") {
       bindings.toolStatusState.value = "done";
       bindings.toolStatusText.value = formatToolCallsText(
-        bindings.getStreamToolCallCount(),
-        bindings.getStreamLastToolName(),
+        bindings.streamBlocks?.value || [],
       ) || bindings.t("status.toolCallDone");
     }
 
@@ -41,7 +33,7 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
     bindings.clearConversationStreamCache(bindings.getConversationId ? bindings.getConversationId() : "");
     bindings.clearFrontendDispatchTimer();
     bindings.setActiveActivationId("");
-    if (bindings.streamActivityItems) bindings.streamActivityItems.value = [];
+    if (bindings.streamBlocks) bindings.streamBlocks.value = [];
     bindings.setRound({ phase: "idle" });
     bindings.chatting.value = false;
     bindings.reasoningStartedAtMs.value = 0;
@@ -51,8 +43,6 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
     gen: number,
     result: {
       assistantText: string;
-      reasoningStandard?: string;
-      reasoningInline?: string;
       assistantMessage?: ChatMessage;
     },
   ) {
@@ -86,16 +76,12 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
     bindings.clearFrontendDispatchTimer();
     bindings.setActiveActivationId("");
     bindings.latestAssistantText.value = "";
-    bindings.latestReasoningStandardText.value = "";
-    bindings.latestReasoningInlineText.value = "";
-    if (bindings.streamActivityItems) bindings.streamActivityItems.value = [];
-    bindings.setPendingReasoningStandardBreak(false);
+    if (bindings.streamBlocks) bindings.streamBlocks.value = [];
     bindings.setChatErrorText(bindings.formatRequestFailed(error));
     if (!bindings.toolStatusText.value) {
       bindings.toolStatusState.value = "failed";
       bindings.toolStatusText.value = formatToolCallsText(
-        bindings.getStreamToolCallCount(),
-        bindings.getStreamLastToolName(),
+        bindings.streamBlocks?.value || [],
       ) || bindings.t("status.toolCallFailed");
     }
     const pendingUserDraftId = bindings.getPendingUserDraftId();

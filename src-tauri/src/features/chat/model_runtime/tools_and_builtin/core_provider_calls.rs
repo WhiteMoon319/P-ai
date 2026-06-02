@@ -2,8 +2,7 @@
 struct ModelReply {
     assistant_text: String,
     final_response_text: String,
-    reasoning_standard: String,
-    reasoning_inline: String,
+    activity_reasoning_text: String,
     assistant_provider_meta: Option<Value>,
     tool_history_events: Vec<Value>,
     suppress_assistant_message: bool,
@@ -619,7 +618,7 @@ async fn call_model_openai_non_stream(
         .await
         .map_err(|err| format!("genai openai non-stream failed: {err}"))?;
     let assistant_text = response.content.into_texts().join("\n");
-    let reasoning_standard = response.reasoning_content.unwrap_or_default();
+    let activity_reasoning_text = response.reasoning_content.unwrap_or_default();
     let trusted_input_tokens = response
         .usage
         .prompt_tokens
@@ -628,8 +627,7 @@ async fn call_model_openai_non_stream(
     Ok(ModelReply {
         assistant_text: assistant_text.clone(),
         final_response_text: assistant_text,
-        reasoning_standard,
-        reasoning_inline: String::new(),
+        activity_reasoning_text,
         assistant_provider_meta: None,
         tool_history_events: Vec::new(),
         suppress_assistant_message: false,
@@ -711,8 +709,7 @@ async fn call_model_gemini(
     Ok(ModelReply {
         assistant_text: assistant_text.clone(),
         final_response_text: assistant_text,
-        reasoning_standard: response.reasoning_content.unwrap_or_default(),
-        reasoning_inline: String::new(),
+        activity_reasoning_text: response.reasoning_content.unwrap_or_default(),
         assistant_provider_meta: None,
         tool_history_events: Vec::new(),
         suppress_assistant_message: false,
@@ -790,7 +787,7 @@ mod openai_responses_genai_request_tests {
             audios: Vec::new(),
             tool_calls: None,
             tool_call_id: None,
-            reasoning_content: message_reasoning_standard_fallback(message),
+            reasoning_content: None,
         });
         PreparedPrompt {
             preamble: "sys".to_string(),
@@ -1223,9 +1220,7 @@ mod openai_responses_genai_request_tests {
                 text: "终端版本是 PowerShell 7.5.4。".to_string(),
             }],
             extra_text_blocks: Vec::new(),
-            provider_meta: Some(serde_json::json!({
-                "reasoningStandard": "我已经拿到工具结果，现在直接回答用户终端版本。"
-            })),
+            provider_meta: None,
             tool_call: Some(vec![
                 serde_json::json!({
                     "role": "assistant",

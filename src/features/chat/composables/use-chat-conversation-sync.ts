@@ -6,6 +6,7 @@ import {
   useChatConversationMessageUtils,
 } from "./use-chat-conversation-message-utils";
 import { useChatConversationOverviewUtils } from "./use-chat-conversation-overview-utils";
+import { streamCacheHasVisibleProgress } from "./use-chat-flow-stream-cache";
 
 type ForegroundPaintTrace = {
   id: number;
@@ -63,10 +64,13 @@ export function useChatConversationSync(bindings: Record<string, any>) {
 
   function conversationRuntimeSnapshotIsBusy(snapshot?: any): boolean {
     if (!snapshot) return false;
+    // 切换/重绑时后端 streamCache 是最新显示真源；即使 runtimeState 已短暂回到 idle，
+    // 只要缓存里还有可见流式块，也必须恢复 draft 投影。
     return snapshot.runtimeState === "assistant_streaming"
       || !!snapshot.isProcessing
       || !!snapshot.hasPendingQueue
-      || Math.max(0, Number(snapshot.pendingQueueCount || 0)) > 0;
+      || Math.max(0, Number(snapshot.pendingQueueCount || 0)) > 0
+      || streamCacheHasVisibleProgress(snapshot.streamCache);
   }
 
   async function requestConversationRuntimeSnapshot(conversationId: string) {

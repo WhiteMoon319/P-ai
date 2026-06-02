@@ -9,7 +9,7 @@ import type {
   PersonaProfile,
   PromptCommandPreset,
   ToolLoadStatus,
-  ChatActivityItem,
+  AssistantStreamBlock,
 } from "../../../types/app";
 
 type UseChatWindowStateOptions = {
@@ -91,13 +91,10 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
   const latestUserText = ref("");
   const latestUserImages = ref<Array<{ mime: string; bytesBase64: string }>>([]);
   const latestAssistantText = ref("");
-  const latestReasoningStandardText = ref("");
-  const latestReasoningInlineText = ref("");
   const latestOwnMessageAlignRequest = ref(0);
   const toolStatusText = ref("");
   const toolStatusState = ref<"running" | "done" | "failed" | "">("");
-  const streamToolCalls = ref<Array<{ toolCallId?: string; name: string; argsText: string; status?: "doing" | "done" }>>([]);
-  const streamActivityItems = ref<ChatActivityItem[]>([]);
+  const streamBlocks = ref<AssistantStreamBlock[]>([]);
   const clipboardImages = ref<Array<{ mime: string; bytesBase64: string; savedPath?: string }>>([]);
   const queuedAttachmentNotices = ref<Array<{ id: string; fileName: string; relativePath: string; mime: string }>>([]);
   const allMessages = shallowRef<ChatMessage[]>([]);
@@ -134,7 +131,8 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
   const lastSavedConfigJson = ref("");
   const lastSavedPersonasJson = ref("");
   const PERF_DEBUG = import.meta.env.DEV;
-  const CHAT_STREAM_DEBUG = false;
+  const CHAT_STREAM_DEBUG = typeof window !== "undefined"
+    && window.localStorage.getItem("easy-call.debug.chat-stream") === "1";
   const toolReviewRefreshTick = ref(0);
   const currentChatTodos = ref<ChatTodoItem[]>([]);
   const foregroundTailLatestReady = ref(true);
@@ -172,13 +170,10 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
     latestUserText,
     latestUserImages,
     latestAssistantText,
-    latestReasoningStandardText,
-    latestReasoningInlineText,
     latestOwnMessageAlignRequest,
     toolStatusText,
     toolStatusState,
-    streamToolCalls,
-    streamActivityItems,
+    streamBlocks,
     clipboardImages,
     queuedAttachmentNotices,
     allMessages,

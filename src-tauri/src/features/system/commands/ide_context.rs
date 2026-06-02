@@ -212,9 +212,7 @@ struct IdeChatStopInput {
     #[serde(default)]
     partial_assistant_text: String,
     #[serde(default)]
-    partial_reasoning_standard: String,
-    #[serde(default)]
-    partial_reasoning_inline: String,
+    partial_stream_blocks: Vec<AssistantStreamBlock>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1560,14 +1558,31 @@ fn ide_chat_stop_conversation(state: &AppState, params: Value) -> Result<Value, 
     let _ = release_conversation_processing_claim(state, conversation_id);
     let _ = set_conversation_runtime_state(state, conversation_id, MainSessionState::Idle);
     let _ = set_conversation_remote_im_activation_sources(state, conversation_id, Vec::new());
+    let partial_stream_text = assistant_text_from_stream_blocks(&input.partial_stream_blocks);
     let partial_assistant_text = input.partial_assistant_text.trim().to_string();
-    let partial_reasoning_standard = input.partial_reasoning_standard.trim().to_string();
-    let partial_reasoning_inline = input.partial_reasoning_inline.trim().to_string();
+    let partial_assistant_text = if partial_assistant_text.is_empty() {
+        partial_stream_text.trim().to_string()
+    } else {
+        partial_assistant_text
+    };
+    let partial_activity_text = reasoning_text_from_stream_blocks(&input.partial_stream_blocks);
     let completed_tool_history = inflight_completed_tool_history(state, &chat_key)?;
+    let partial_tool_history =
+        merge_stream_block_tool_history(&completed_tool_history, &input.partial_stream_blocks);
     let should_persist = !partial_assistant_text.is_empty()
-        || !partial_reasoning_standard.is_empty()
-        || !partial_reasoning_inline.is_empty()
-        || !completed_tool_history.is_empty();
+        || !partial_activity_text.is_empty()
+        || !partial_tool_history.is_empty();
+    runtime_log_info(format!(
+        "[聊天流式块][侧边栏停止] 准备持久化 session={} conversation_id={} partial_text_len={} partial_reasoning_len={} partial_block_count={} partial_tool_history_count={} completed_tool_history_count={} should_persist={}",
+        chat_key,
+        conversation_id,
+        partial_assistant_text.chars().count(),
+        partial_activity_text.chars().count(),
+        input.partial_stream_blocks.len(),
+        partial_tool_history.len(),
+        completed_tool_history.len(),
+        should_persist,
+    ));
     let mut persisted = false;
     let mut assistant_message = None::<ChatMessage>;
     if should_persist {
@@ -1577,9 +1592,9 @@ fn ide_chat_stop_conversation(state: &AppState, params: Value) -> Result<Value, 
             Some(conversation.department_id.as_str()),
             &agent_id,
             &partial_assistant_text,
-            &partial_reasoning_standard,
-            &partial_reasoning_inline,
-            &completed_tool_history,
+            &partial_activity_text,
+            "",
+            &partial_tool_history,
         )?;
         persisted = result.persisted;
         assistant_message = result.assistant_message;
@@ -1590,8 +1605,6 @@ fn ide_chat_stop_conversation(state: &AppState, params: Value) -> Result<Value, 
         persisted,
         conversation_id: Some(conversation_id.to_string()),
         assistant_text: partial_assistant_text,
-        reasoning_standard: partial_reasoning_standard,
-        reasoning_inline: partial_reasoning_inline,
         assistant_message,
     };
     if stop_result.persisted {
@@ -1604,8 +1617,6 @@ fn ide_chat_stop_conversation(state: &AppState, params: Value) -> Result<Value, 
         "persisted": stop_result.persisted,
         "clearedQueueCount": cleared_queue_count,
         "assistantText": stop_result.assistant_text,
-        "reasoningStandard": stop_result.reasoning_standard,
-        "reasoningInline": stop_result.reasoning_inline,
         "assistantMessage": stop_result.assistant_message,
     });
     if !stop_result.persisted {

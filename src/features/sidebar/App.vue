@@ -38,12 +38,9 @@
       :messages="messages"
       :clipboard-images="clipboardImages"
       :streaming-text="streamingText"
-      :streaming-reasoning-standard="streamingReasoningStandard"
-      :streaming-reasoning-inline="streamingReasoningInline"
       :tool-status-text="toolStatusText"
       :tool-status-state="toolStatusState"
-      :stream-tool-calls="streamToolCalls"
-      :stream-activity-items="streamActivityItems"
+      :stream-blocks="streamBlocks"
       :busy="busy"
       :runtime-state="activeConversationRuntimeState"
       :has-prev-block="hasPrevBlock"
@@ -171,12 +168,12 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import type { ApiConfigItem, ChatActivityItem, ChatMessage, ChatTodoItem, IdeContextWorkspaceGroup } from "../../types/app";
+import type { ApiConfigItem, ChatMessage, ChatTodoItem, IdeContextWorkspaceGroup } from "../../types/app";
 import { removeBinaryPlaceholders, messageText } from "../../utils/chat-message";
 import {
-  appendReasoningToStreamActivityItems,
-  applyToolStatusToStreamActivityItems,
-  normalizeChatActivityItems,
+  applyAssistantToolEventToStreamBlocks,
+  assistantTextFromStreamBlocks,
+  normalizeAssistantStreamBlocks,
 } from "../../utils/chat-message-semantics";
 import { normalizeDepartmentChildIds } from "../config/utils/department-graph";
 import { formatConversationFallbackTitle } from "../chat/utils/conversation-title";
@@ -286,21 +283,11 @@ type SidebarModelPayload = {
   chatModelOptions?: ApiConfigItem[];
 };
 
-type SidebarStreamToolCallView = {
-  toolCallId?: string;
-  name: string;
-  argsText: string;
-  status?: "doing" | "done";
-};
-
 type SidebarStreamCachePayload = {
   assistantText?: string;
-  reasoningStandard?: string;
-  reasoningInline?: string;
   toolStatusText?: string;
   toolStatusState?: string;
-  streamToolCalls?: unknown[];
-  streamActivityItems?: unknown[];
+  streamBlocks?: unknown[];
 };
 
 type SidebarConversationRuntimePayload = {
@@ -318,6 +305,7 @@ type SidebarAssistantDeltaPayload = {
     toolStatus?: string;
     toolArgs?: string;
     message?: string;
+    streamCache?: SidebarStreamCachePayload;
   };
 };
 
@@ -368,12 +356,9 @@ const sidebarTodos = ref<ChatTodoItem[]>([]);
 const inputText = ref("");
 const clipboardImages = ref<SidebarClipboardImage[]>([]);
 const streamingText = ref("");
-const streamingReasoningStandard = ref("");
-const streamingReasoningInline = ref("");
 const toolStatusText = ref("");
 const toolStatusState = ref<"running" | "done" | "failed" | "">("");
-const streamToolCalls = ref<SidebarStreamToolCallView[]>([]);
-const streamActivityItems = ref<ChatActivityItem[]>([]);
+const streamBlocks = ref<ReturnType<typeof normalizeAssistantStreamBlocks>>([]);
 const busy = ref(false);
 const compacting = ref(false);
 const chatViewWrapperRef = ref<{ exitMessageSelectionMode: () => void; chatUsagePercent?: number } | null>(null);
@@ -594,79 +579,27 @@ function normalizeToolStatusState(value: unknown): "running" | "done" | "failed"
   return state === "running" || state === "done" || state === "failed" ? state : "";
 }
 
-function normalizeStreamToolCallView(value: unknown): SidebarStreamToolCallView | null {
-  const raw = value && typeof value === "object" ? value as Record<string, unknown> : null;
-  const toolCallId = String(raw?.toolCallId || "").trim();
-  const name = String(raw?.name || "").trim();
-  if (!toolCallId || !name) return null;
-  return {
-    toolCallId,
-    name,
-    argsText: String(raw?.argsText || ""),
-    status: String(raw?.status || "") === "doing" ? "doing" : "done",
-  };
-}
-
-function normalizeStreamToolCalls(values: unknown): SidebarStreamToolCallView[] {
-  return Array.isArray(values)
-    ? values
-      .map((item) => normalizeStreamToolCallView(item))
-      .filter((item): item is SidebarStreamToolCallView => !!item)
-    : [];
-}
-
-function upsertStreamToolCall(nextCall: SidebarStreamToolCallView) {
-  const toolCallId = String(nextCall.toolCallId || "").trim();
-  if (!toolCallId) return;
-  const index = streamToolCalls.value.findIndex((item) => String(item.toolCallId || "").trim() === toolCallId);
-  if (index >= 0) {
-    const current = streamToolCalls.value[index];
-    streamToolCalls.value.splice(index, 1, {
-      ...current,
-      ...nextCall,
-      argsText: nextCall.argsText || current.argsText,
-      status: nextCall.status,
-    });
-    return;
-  }
-  streamToolCalls.value.push(nextCall);
-}
-
 function clearStreamingState() {
   streamingText.value = "";
-  streamingReasoningStandard.value = "";
-  streamingReasoningInline.value = "";
   toolStatusText.value = "";
   toolStatusState.value = "";
-  streamToolCalls.value = [];
-  streamActivityItems.value = [];
+  streamBlocks.value = [];
 }
 
 function applyRuntimeStreamCache(runtime: SidebarConversationRuntimePayload | null | undefined) {
   const cache = runtime?.streamCache;
   if (!cache) return;
-  streamingText.value = String(cache.assistantText || "");
-  streamingReasoningStandard.value = String(cache.reasoningStandard || "");
-  streamingReasoningInline.value = String(cache.reasoningInline || "");
+  const blocks = normalizeAssistantStreamBlocks(cache.streamBlocks);
+  if (blocks.length > 0 || streamBlocks.value.length === 0) {
+    streamBlocks.value = blocks;
+  }
+  streamingText.value = assistantTextFromStreamBlocks(streamBlocks.value) || String(cache.assistantText || "");
   toolStatusText.value = String(cache.toolStatusText || "");
   toolStatusState.value = normalizeToolStatusState(cache.toolStatusState);
-  streamToolCalls.value = normalizeStreamToolCalls(cache.streamToolCalls);
-  streamActivityItems.value = normalizeChatActivityItems(cache.streamActivityItems);
 }
 
 function applyAssistantToolStatusEvent(event: NonNullable<SidebarAssistantDeltaPayload["event"]>) {
   const toolStatus = String(event.toolStatus || "").trim();
-  const toolName = String(event.toolName || "").trim();
-  const toolCallId = String(event.toolCallId || "").trim();
-  if (toolCallId && toolName && (toolStatus === "running" || toolStatus === "done" || toolStatus === "failed")) {
-    upsertStreamToolCall({
-      toolCallId,
-      name: toolName,
-      argsText: String(event.toolArgs || ""),
-      status: toolStatus === "running" ? "doing" : "done",
-    });
-  }
-  streamActivityItems.value = applyToolStatusToStreamActivityItems(streamActivityItems.value, event);
   toolStatusText.value = String(event.message || "");
   toolStatusState.value = normalizeToolStatusState(toolStatus);
 }
@@ -1247,8 +1180,7 @@ async function stop() {
   await transport.request("chat.stop", {
     conversationId: activeConversationId.value,
     partialAssistantText: streamingText.value,
-    partialReasoningStandard: streamingReasoningStandard.value,
-    partialReasoningInline: streamingReasoningInline.value,
+    partialStreamBlocks: normalizeAssistantStreamBlocks(streamBlocks.value),
   });
   busy.value = false;
 }
@@ -1569,19 +1501,27 @@ function registerNotifications() {
     if (value.conversationId !== activeConversationId.value) return;
     const delta = String(value.event?.delta || "");
     const kind = String(value.event?.kind || "").trim();
+    const hasStreamCache = !!value.event?.streamCache;
+    if (value.event?.streamCache) {
+      applyRuntimeStreamCache({ streamCache: value.event.streamCache });
+    }
     if (kind === "tool_status" && value.event) {
       applyAssistantToolStatusEvent(value.event);
       return;
     }
+    if (kind === "assistant_tool_event" && value.event) {
+      if (hasStreamCache) return;
+      streamBlocks.value = applyAssistantToolEventToStreamBlocks(streamBlocks.value, value.event.message || "");
+      return;
+    }
+    if (kind === "assistant_tool_result") return;
     if (!delta) return;
-    if (kind === "reasoning_standard") {
-      streamingReasoningStandard.value += delta;
-      streamActivityItems.value = appendReasoningToStreamActivityItems(streamActivityItems.value, delta);
-    } else if (kind === "reasoning_inline") {
-      streamingReasoningInline.value += delta;
-      streamActivityItems.value = appendReasoningToStreamActivityItems(streamActivityItems.value, delta);
-    } else {
+    if (kind === "activity_reasoning_delta") {
+      return;
+    } else if (!hasStreamCache) {
       streamingText.value += delta;
+    } else {
+      return;
     }
   });
   transport.onNotification("chat.roundFinished", (payload) => {

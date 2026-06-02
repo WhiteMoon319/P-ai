@@ -19,10 +19,17 @@ export function useChatConversationCtx(
     supervisionTitle: string;
     toolStatusState: "running" | "done" | "failed" | "";
     toolStatusText: string;
-    streamToolCalls: Array<{ name: string; argsText: string; status?: "doing" | "done" }>;
     chatErrorText: string;
     selectedMentions: ChatMentionTarget[];
-    messageBlocks: Array<{ isExtraTextBlock?: boolean; planCard?: { action?: string }; sourceMessageId?: string; id?: string; providerMeta?: Record<string, unknown> }>;
+    messageBlocks: Array<{
+      isExtraTextBlock?: boolean;
+      planCard?: { action?: string };
+      sourceMessageId?: string;
+      id?: string;
+      providerMeta?: Record<string, unknown>;
+      toolCalls?: Array<{ name: string; argsText: string; status?: "doing" | "done" }>;
+      activityItems?: Array<{ kind: string; name?: string; status?: "doing" | "done" }>;
+    }>;
   },
   isDarkAppTheme: (theme: string) => boolean,
   t: (key: string, params?: Record<string, unknown>) => string,
@@ -46,10 +53,6 @@ export function useChatConversationCtx(
       || value.toLowerCase().includes("compacting context")
     );
   }
-
-  const visibleStreamToolCalls = computed(() =>
-    props.streamToolCalls.filter((call) => !isOrganizeContextToolCall(call)),
-  );
 
   const VALID_TODO_STATUSES: ReadonlySet<string> = new Set(["pending", "in_progress", "completed"]);
 
@@ -98,7 +101,14 @@ export function useChatConversationCtx(
 
   const activeRunningToolCall = computed(() => {
     if (props.toolStatusState !== "running") return null;
-    const calls = Array.isArray(props.streamToolCalls) ? props.streamToolCalls : [];
+    const calls = props.messageBlocks.flatMap((block) => [
+      ...(Array.isArray(block.toolCalls) ? block.toolCalls : []),
+      ...(Array.isArray(block.activityItems)
+        ? block.activityItems
+          .filter((item) => item.kind === "tool")
+          .map((item) => ({ name: String(item.name || ""), argsText: "", status: item.status }))
+        : []),
+    ]);
     for (let idx = calls.length - 1; idx >= 0; idx -= 1) {
       const call = calls[idx];
       if (String(call?.status || "").trim() === "done") continue;
@@ -162,7 +172,6 @@ export function useChatConversationCtx(
 
   return {
     markdownIsDark,
-    visibleStreamToolCalls,
     normalizedConversationTodos,
     activeConversationSummary,
     isCurrentConversationCompacting,

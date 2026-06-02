@@ -1,17 +1,14 @@
 import type { Ref } from "vue";
-import type { ChatActivityItem, ChatMessage } from "../../../types/app";
+import type { AssistantStreamBlock, ChatMessage } from "../../../types/app";
 import type { RoundState } from "./use-chat-flow-types";
 
 type UseChatFlowForegroundResetOptions = {
   latestUserText: Ref<string>;
   latestUserImages: Ref<Array<{ mime: string; bytesBase64: string }>>;
   latestAssistantText: Ref<string>;
-  latestReasoningStandardText: Ref<string>;
-  latestReasoningInlineText: Ref<string>;
   toolStatusText: Ref<string>;
   toolStatusState: Ref<"running" | "done" | "failed" | "">;
-  streamToolCalls?: Ref<any[]>;
-  streamActivityItems?: Ref<ChatActivityItem[]>;
+  streamBlocks?: Ref<AssistantStreamBlock[]>;
   chatting: Ref<boolean>;
   getConversationId?: () => string;
   getRound: () => RoundState;
@@ -39,12 +36,9 @@ export function useChatFlowForegroundReset(options: UseChatFlowForegroundResetOp
     options.latestUserText.value = "";
     options.latestUserImages.value = [];
     options.latestAssistantText.value = "";
-    options.latestReasoningStandardText.value = "";
-    options.latestReasoningInlineText.value = "";
     options.toolStatusText.value = "";
     options.toolStatusState.value = "";
-    if (options.streamToolCalls) options.streamToolCalls.value = [];
-    if (options.streamActivityItems) options.streamActivityItems.value = [];
+    if (options.streamBlocks) options.streamBlocks.value = [];
   }
 
   function clearForegroundRoundState() {
@@ -103,8 +97,6 @@ export function useChatFlowForegroundReset(options: UseChatFlowForegroundResetOp
         conversationId,
         roundGen: round.gen,
         assistantTextLength: String(options.latestAssistantText.value || "").length,
-        reasoningStandardLength: String(options.latestReasoningStandardText.value || "").length,
-        reasoningInlineLength: String(options.latestReasoningInlineText.value || "").length,
       });
     } else if (round.phase === "queued") {
       options.clearFrontendDispatchTimer();

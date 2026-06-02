@@ -28,6 +28,7 @@ fn send_tool_status_event(
         tool_status: Some(tool_status.to_string()),
         tool_args: tool_args.map(|v| v.to_string()),
         message: Some(message.to_string()),
+        stream_cache: None,
     });
     let unified_status = match tool_status.trim().to_ascii_lowercase().as_str() {
         "start" | "running" | "begin" => "开始",
@@ -70,6 +71,7 @@ fn send_stream_rebind_required_event(
         tool_status: None,
         tool_args: None,
         message: None,
+        stream_cache: None,
     });
     match send_result {
         Ok(_) => runtime_log_info(format!(

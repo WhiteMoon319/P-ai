@@ -9,14 +9,8 @@ export function mergeAssistantText(currentText: string, finalText: string): stri
 
 export function hasAssistantVisibleOutput(result: {
   assistantText: string;
-  reasoningStandard?: string;
-  reasoningInline?: string;
 }): boolean {
-  return (
-    !!result.assistantText.trim() ||
-    !!(result.reasoningStandard || "").trim() ||
-    !!(result.reasoningInline || "").trim()
-  );
+  return !!result.assistantText.trim();
 }
 
 export function consumeClosedMarkdownBlocks(input: string): { chunks: string[]; tail: string } {

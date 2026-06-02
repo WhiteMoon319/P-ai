@@ -990,7 +990,6 @@ fn spawn_user_async_delegate(app_state: AppState, plan: UserAsyncDelegatePlan) -
                         "speakerAgentId": plan.target_agent_id,
                         "sourceAgentId": plan.source_agent_id,
                         "targetAgentId": plan.target_agent_id,
-                        "reasoningStandard": run.reasoning_standard,
                     }),
                 ) {
                     eprintln!(
@@ -1107,7 +1106,6 @@ fn spawn_user_mention_delegate(app_state: AppState, plan: UserMentionPlan) {
                         "speakerAgentId": plan.target_agent_id,
                         "sourceAgentId": plan.source_agent_id,
                         "targetAgentId": plan.target_agent_id,
-                        "reasoningStandard": run.reasoning_standard,
                     }),
                 ) {
                     eprintln!(
@@ -2069,10 +2067,17 @@ async fn stop_chat_message(
         );
     }
 
+    let partial_stream_text = assistant_text_from_stream_blocks(&input.partial_stream_blocks);
     let partial_assistant_text = input.partial_assistant_text.trim().to_string();
-    let partial_reasoning_standard = input.partial_reasoning_standard.trim().to_string();
-    let partial_reasoning_inline = input.partial_reasoning_inline.trim().to_string();
+    let partial_assistant_text = if partial_assistant_text.is_empty() {
+        partial_stream_text.trim().to_string()
+    } else {
+        partial_assistant_text
+    };
+    let partial_activity_text = reasoning_text_from_stream_blocks(&input.partial_stream_blocks);
     let completed_tool_history = inflight_completed_tool_history(state.inner(), &chat_key)?;
+    let partial_tool_history =
+        merge_stream_block_tool_history(&completed_tool_history, &input.partial_stream_blocks);
     let build_stop_result =
         |persisted: bool,
          conversation_id: Option<String>,
@@ -2083,15 +2088,24 @@ async fn stop_chat_message(
                 persisted,
                 conversation_id,
                 assistant_text: partial_assistant_text.clone(),
-                reasoning_standard: partial_reasoning_standard.clone(),
-                reasoning_inline: partial_reasoning_inline.clone(),
                 assistant_message,
             }
         };
     let should_persist = !partial_assistant_text.is_empty()
-        || !partial_reasoning_standard.is_empty()
-        || !partial_reasoning_inline.is_empty()
-        || !completed_tool_history.is_empty();
+        || !partial_activity_text.is_empty()
+        || !partial_tool_history.is_empty();
+    runtime_log_info(format!(
+        "[聊天流式块][后端停止] 准备持久化 session={} conversation_id={} aborted={} partial_text_len={} partial_reasoning_len={} partial_block_count={} partial_tool_history_count={} completed_tool_history_count={} should_persist={}",
+        chat_key,
+        requested_conversation_id.as_deref().unwrap_or(""),
+        aborted,
+        partial_assistant_text.chars().count(),
+        partial_activity_text.chars().count(),
+        input.partial_stream_blocks.len(),
+        partial_tool_history.len(),
+        completed_tool_history.len(),
+        should_persist,
+    ));
     if !should_persist {
         clear_inflight_completed_tool_history(state.inner(), &chat_key)?;
         return Ok(build_stop_result(false, None, None));
@@ -2103,9 +2117,9 @@ async fn stop_chat_message(
         requested_department_id.as_deref(),
         &agent_id,
         &partial_assistant_text,
-        &partial_reasoning_standard,
-        &partial_reasoning_inline,
-        &completed_tool_history,
+        &partial_activity_text,
+        "",
+        &partial_tool_history,
     )?;
     clear_inflight_completed_tool_history(state.inner(), &chat_key)?;
     let result = build_stop_result(
@@ -2234,6 +2248,159 @@ async fn get_main_session_state_snapshot(
     get_main_session_state(state.inner())
 }
 
+fn assistant_text_from_stream_blocks(blocks: &[AssistantStreamBlock]) -> String {
+    blocks
+        .iter()
+        .map(|block| block.text.as_str())
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+fn reasoning_text_from_stream_blocks(blocks: &[AssistantStreamBlock]) -> String {
+    blocks
+        .iter()
+        .map(|block| block.reasoning.trim())
+        .filter(|text| !text.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+fn tool_call_ids_from_history(events: &[Value]) -> std::collections::HashSet<String> {
+    events
+        .iter()
+        .filter_map(|event| event.get("tool_calls").and_then(Value::as_array))
+        .flat_map(|calls| calls.iter())
+        .filter_map(|call| call.get("id").and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn stream_blocks_to_tool_history_events(blocks: &[AssistantStreamBlock]) -> Vec<Value> {
+    let mut events = Vec::<Value>::new();
+    for block in blocks {
+        let tools = block
+            .tools
+            .iter()
+            .filter(|tool| !tool.tool_call_id.trim().is_empty() && !tool.name.trim().is_empty())
+            .collect::<Vec<_>>();
+        if tools.is_empty() {
+            continue;
+        }
+        let mut assistant_event = serde_json::Map::new();
+        assistant_event.insert("role".to_string(), Value::String("assistant".to_string()));
+        if block.text.trim().is_empty() {
+            assistant_event.insert("content".to_string(), Value::Null);
+        } else {
+            assistant_event.insert("content".to_string(), Value::String(block.text.clone()));
+        }
+        if !block.reasoning.trim().is_empty() {
+            assistant_event.insert(
+                "reasoning_content".to_string(),
+                Value::String(block.reasoning.trim().to_string()),
+            );
+        }
+        assistant_event.insert(
+            "tool_calls".to_string(),
+            Value::Array(
+                tools
+                    .iter()
+                    .map(|tool| {
+                        serde_json::json!({
+                            "id": tool.tool_call_id.trim(),
+                            "type": "function",
+                            "function": {
+                                "name": tool.name.trim(),
+                                "arguments": if tool.args_text.trim().is_empty() { "{}" } else { tool.args_text.trim() },
+                            }
+                        })
+                    })
+                    .collect(),
+            ),
+        );
+        events.push(Value::Object(assistant_event));
+        for tool in tools {
+            let result_text = tool.result_text.trim();
+            if result_text.is_empty() || tool.status.trim() == "doing" {
+                continue;
+            }
+            events.push(serde_json::json!({
+                "role": "tool",
+                "tool_call_id": tool.tool_call_id.trim(),
+                "content": result_text,
+            }));
+        }
+    }
+    events
+}
+
+fn merge_stream_block_tool_history(
+    completed_tool_history: &[Value],
+    partial_stream_blocks: &[AssistantStreamBlock],
+) -> Vec<Value> {
+    let mut merged = completed_tool_history.to_vec();
+    let existing_ids = tool_call_ids_from_history(&merged);
+    for event in stream_blocks_to_tool_history_events(partial_stream_blocks) {
+        if event
+            .get("role")
+            .and_then(Value::as_str)
+            .is_some_and(|role| role.eq_ignore_ascii_case("assistant"))
+        {
+            let has_new_tool = event
+                .get("tool_calls")
+                .and_then(Value::as_array)
+                .map(|calls| {
+                    calls.iter().any(|call| {
+                        call.get("id")
+                            .and_then(Value::as_str)
+                            .map(str::trim)
+                            .filter(|id| !id.is_empty())
+                            .is_some_and(|id| !existing_ids.contains(id))
+                    })
+                })
+                .unwrap_or(false);
+            if !has_new_tool {
+                continue;
+            }
+        }
+        merged.push(event);
+    }
+    merged
+}
+
+#[cfg(test)]
+mod stop_stream_block_tool_history_tests {
+    use super::*;
+
+    #[test]
+    fn stream_blocks_to_tool_history_should_keep_running_tool_call_for_interrupted_message() {
+        let events = stream_blocks_to_tool_history_events(&[AssistantStreamBlock {
+            reasoning: "打算用 operate 工具等待 3 秒。".to_string(),
+            text: String::new(),
+            tools: vec![AssistantStreamToolBlock {
+                tool_call_id: "tool-1".to_string(),
+                name: "operate".to_string(),
+                args_text: "{\"action\":\"wait\",\"seconds\":3}".to_string(),
+                result_text: String::new(),
+                status: "doing".to_string(),
+            }],
+        }]);
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["role"].as_str(), Some("assistant"));
+        assert_eq!(
+            events[0]["reasoning_content"].as_str(),
+            Some("打算用 operate 工具等待 3 秒。")
+        );
+        assert_eq!(
+            events[0]["tool_calls"][0]["function"]["name"].as_str(),
+            Some("operate")
+        );
+    }
+}
+
 #[tauri::command]
 async fn get_conversation_runtime_snapshot(
     conversation_id: String,
@@ -2245,15 +2412,14 @@ async fn get_conversation_runtime_snapshot(
     }
     let snapshot = read_conversation_runtime_snapshot(state.inner(), normalized_conversation_id)?;
     runtime_log_info(format!(
-        "[聊天运行态恢复] 完成，任务=读取会话运行态快照，conversation_id={}，runtime_state={:?}，is_processing={}，pending_queue_count={}，has_visible_progress={}，assistant_text_len={}，reasoning_standard_len={}，reasoning_inline_len={}",
+        "[聊天运行态恢复] 完成，任务=读取会话运行态快照，conversation_id={}，runtime_state={:?}，is_processing={}，pending_queue_count={}，has_visible_progress={}，assistant_text_len={}，stream_block_count={}",
         snapshot.conversation_id,
         snapshot.runtime_state,
         snapshot.is_processing,
         snapshot.pending_queue_count,
         snapshot.stream_cache.has_visible_progress,
         snapshot.stream_cache.assistant_text.chars().count(),
-        snapshot.stream_cache.reasoning_standard.chars().count(),
-        snapshot.stream_cache.reasoning_inline.chars().count()
+        snapshot.stream_cache.stream_blocks.len()
     ));
     Ok(snapshot)
 }

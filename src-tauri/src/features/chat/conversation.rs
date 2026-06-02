@@ -2920,11 +2920,7 @@ fn build_conversation_prompt_payload(
             audios,
             tool_calls: None,
             tool_call_id: None,
-            reasoning_content: if role == "assistant" {
-                message_reasoning_standard_fallback(message)
-            } else {
-                None
-            },
+            reasoning_content: None,
         });
     }
 

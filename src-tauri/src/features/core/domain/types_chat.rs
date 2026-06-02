@@ -177,28 +177,37 @@ struct ConversationStreamRuntimeCache {
     activation_id: String,
     request_id: String,
     assistant_text: String,
-    reasoning_standard: String,
-    reasoning_inline: String,
+    activity_reasoning_text: String,
     tool_status_text: String,
     tool_status_state: String,
-    stream_tool_calls: Vec<ConversationStreamToolCallRuntimeCache>,
-    stream_tool_call_count: usize,
-    stream_last_tool_name: String,
+    stream_blocks: Vec<AssistantStreamBlock>,
     started_at: String,
     started_at_ms: u64,
     updated_at: String,
     persisted_assistant_message_id: String,
 }
 
-#[derive(Debug, Clone, Serialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ConversationStreamToolCallRuntimeCache {
+pub(crate) struct AssistantStreamToolBlock {
+    tool_call_id: String,
     name: String,
     args_text: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_call_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    status: Option<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    result_text: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AssistantStreamBlock {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    reasoning: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    text: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    tools: Vec<AssistantStreamToolBlock>,
 }
 
 impl Default for ConversationRuntimeSlot {

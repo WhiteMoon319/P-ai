@@ -148,7 +148,7 @@ fn model_reply_content_state(reply: &ModelReply) -> ModelReplyContentState {
     {
         return ModelReplyContentState::Visible;
     }
-    if !reply.reasoning_standard.trim().is_empty() || !reply.reasoning_inline.trim().is_empty() {
+    if !reply.activity_reasoning_text.trim().is_empty() {
         return ModelReplyContentState::ReasoningOnly;
     }
     ModelReplyContentState::Empty

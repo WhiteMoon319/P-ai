@@ -25,12 +25,9 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
       latestUserText: bindings.latestUserText,
       latestUserImages: bindings.latestUserImages,
       latestAssistantText: bindings.latestAssistantText,
-      latestReasoningStandardText: bindings.latestReasoningStandardText,
-      latestReasoningInlineText: bindings.latestReasoningInlineText,
       toolStatusText: bindings.toolStatusText,
       toolStatusState: bindings.toolStatusState,
-      streamToolCalls: bindings.streamToolCalls,
-      streamActivityItems: bindings.streamActivityItems,
+      streamBlocks: bindings.streamBlocks,
       chatErrorText: bindings.chatErrorText,
       setConversationChatError: bindings.setConversationChatErrorText,
       allMessages: bindings.allMessages,
@@ -71,7 +68,7 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
             onDelta,
           },
         ),
-      invokeStopChatMessage: ({ session, partialAssistantText, partialReasoningStandard, partialReasoningInline }) =>
+      invokeStopChatMessage: ({ session, partialAssistantText, partialStreamBlocks }) =>
         invokeTauri("stop_chat_message", {
           input: {
             session: {
@@ -81,8 +78,7 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
               conversationId: session.conversationId || null,
             },
             partialAssistantText,
-            partialReasoningStandard,
-            partialReasoningInline,
+            partialStreamBlocks,
           },
         }),
       invokeBindActiveChatViewStream: ({ conversationId, onDelta }) =>

@@ -8,7 +8,6 @@ export type ShareRenderableEntry = {
   avatarSrc: string;
   createdAtText: string;
   text: string;
-  reasoningText: string;
   toolCalls: Array<{ name: string; argsText: string; status?: string }>;
   images: Array<{ src: string; alt: string }>;
   attachmentNames: string[];
@@ -60,7 +59,6 @@ export async function prepareShareEntries(
       avatarSrc: shareAvatarSrc(block, options.userAvatarUrl, options.personaAvatarUrlMap),
       createdAtText: formatShareTime(block.createdAt),
       text: String(block.text || "").trim(),
-      reasoningText: normalizeReasoningText(block),
       toolCalls: Array.isArray(block.toolCalls)
         ? block.toolCalls.map((call) => ({
           name: String(call?.name || "").trim(),
@@ -224,9 +222,6 @@ function buildShareBodyHtml(options: BuildShareDocumentOptions): string {
 }
 
 function renderShareEntryHtml(entry: ShareRenderableEntry): string {
-  const reasoningHtml = entry.reasoningText
-    ? `<div class="pai-share-extra pai-share-reasoning"><div class="pai-share-extra-label">思维链</div><div class="pai-share-extra-body">${renderTextHtml(entry.reasoningText)}</div></div>`
-    : "";
   const toolsHtml = entry.toolCalls.length > 0
     ? `<div class="pai-share-extra pai-share-tools"><div class="pai-share-extra-label">工具</div><div class="pai-share-tool-summary">${escapeHtml(summarizeShareToolCalls(entry.toolCalls))}</div></div>`
     : "";
@@ -256,7 +251,6 @@ function renderShareEntryHtml(entry: ShareRenderableEntry): string {
     </div>
     ${remoteLabel ? `<div class="chat-footer pai-share-remote-label">${remoteLabel}</div>` : ""}
     <div class="chat-bubble pai-share-bubble pai-share-bubble-${entry.align}">
-      ${reasoningHtml}
       ${toolsHtml}
       ${textHtml}
       ${imageHtml}
@@ -541,12 +535,6 @@ function isOwnShareBlock(block: ChatMessageBlock): boolean {
   if (block.role === "user") return true;
   const speakerAgentId = String(block.speakerAgentId || "").trim();
   return speakerAgentId === "user-persona";
-}
-
-function normalizeReasoningText(block: ChatMessageBlock): string {
-  const standard = String(block.reasoningStandard || "").trim();
-  if (standard) return standard;
-  return String(block.reasoningInline || "").trim();
 }
 
 function formatShareTime(input?: string): string {

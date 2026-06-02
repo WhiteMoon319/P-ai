@@ -4,39 +4,20 @@ import {
   estimateConversationTokens,
 } from "../../../utils/chat-message";
 import {
-  normalizeChatActivityItems,
+  normalizeAssistantStreamBlocks,
   projectMessageForDisplay,
   projectStreamingChatActivityForDisplay,
+  streamBlocksToToolCalls,
 } from "../../../utils/chat-message-semantics";
-
-function streamToolCallsFromProviderMeta(meta: Record<string, unknown>): Array<{ toolCallId?: string; name: string; argsText: string; status?: "doing" | "done" }> {
-  if (!Array.isArray(meta._streamToolCalls)) return [];
-  return (meta._streamToolCalls as unknown[])
-    .map((item) => {
-      const raw = item && typeof item === "object" ? item as Record<string, unknown> : null;
-      const toolCallId = String(raw?.toolCallId || "").trim();
-      return {
-        toolCallId: toolCallId || undefined,
-        name: String(raw?.name || "").trim(),
-        argsText: String(raw?.argsText || ""),
-        status: String(raw?.status || "") === "doing" ? "doing" as const : "done" as const,
-      };
-    })
-    .filter((item) => !!item.toolCallId && !!item.name);
-}
 
 function baseActivityForMessage(
   projection: ReturnType<typeof projectMessageForDisplay>,
   isStreaming: boolean,
-  streamToolCalls: Array<{ toolCallId?: string; name: string; argsText: string; status?: "doing" | "done" }>,
-  streamActivityItems: ReturnType<typeof normalizeChatActivityItems>,
+  streamBlocks: ReturnType<typeof normalizeAssistantStreamBlocks>,
 ) {
   if (isStreaming) {
     return projectStreamingChatActivityForDisplay({
-      reasoningStandard: projection.reasoningStandard,
-      reasoningInline: projection.reasoningInline,
-      toolCalls: streamToolCalls,
-      activityItems: streamActivityItems,
+      streamBlocks,
       running: true,
     });
   }
@@ -80,6 +61,7 @@ type UseChatMessageBlocksOptions = {
 export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
   let lastMessageBlockSignature = "";
   let lastMessageBlocks: ChatMessageBlock[] = [];
+  const streamProjectionDebugSignatures = new Map<string, string>();
   const messageSignatureCache = new WeakMap<ChatMessage, string>();
   const messageBlockCache = new WeakMap<ChatMessage, { signature: string; blocks: ChatMessageBlock[] }>();
 
@@ -93,6 +75,7 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
       JSON.stringify(message.extraTextBlocks || []),
       JSON.stringify(message.providerMeta || {}),
       JSON.stringify(message.toolCall || []),
+      JSON.stringify(message.activityItems || []),
     ].join("|");
     messageSignatureCache.set(message, signature);
     return signature;
@@ -137,8 +120,6 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
         taskTrigger: undefined,
         planCard: undefined,
         remoteImOrigin: undefined,
-        reasoningStandard: "",
-        reasoningInline: "",
         dispatchElapsedMs: undefined,
         toolCallCount: 0,
         lastToolName: "",
@@ -165,13 +146,14 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
       : [];
     const streamTail = String(meta._streamTail ?? "");
     const streamAnimatedDelta = String(meta._streamAnimatedDelta ?? "");
-    const streamToolCalls = streamToolCallsFromProviderMeta(meta);
-    const streamActivityItems = normalizeChatActivityItems(meta._streamActivityItems);
+    const streamBlocks = normalizeAssistantStreamBlocks(meta._streamBlocks);
+    const streamBlockToolCalls = streamBlocksToToolCalls(streamBlocks);
+    const displayToolCalls = streamBlockToolCalls.length > 0 ? streamBlockToolCalls : projection.toolCalls;
+    const lastDisplayToolName = displayToolCalls[displayToolCalls.length - 1]?.name || "";
     const activity = baseActivityForMessage(
       projection,
       !!meta._streaming,
-      streamToolCalls,
-      streamActivityItems,
+      streamBlocks,
     );
     const dispatchElapsedMs = positiveNumberFromProviderMeta(meta, "dispatchElapsedMs");
     const frontendDispatchElapsedMs = positiveNumberFromProviderMeta(meta, "_frontendDispatchElapsedMs");
@@ -198,19 +180,56 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
       taskTrigger: projection.taskTrigger,
       planCard: projection.planCard,
       remoteImOrigin: projection.remoteImOrigin,
-      reasoningStandard: projection.reasoningStandard,
-      reasoningInline: projection.reasoningInline,
       dispatchElapsedMs,
       frontendDispatchElapsedMs,
-      toolCallCount: projection.toolCallCount,
-      lastToolName: projection.lastToolName,
-      toolCalls: streamToolCalls.length > 0 ? streamToolCalls : projection.toolCalls,
+      toolCallCount: displayToolCalls.length,
+      lastToolName: lastDisplayToolName,
+      toolCalls: displayToolCalls,
       activityItems: activity.items,
       activityReasoningCharCount: activity.activityReasoningCharCount,
       activityToolCountsByName: activity.activityToolCountsByName,
       activityRunning: activity.activityRunning,
       activityStatus: activity.activityStatus,
     } satisfies ChatMessageBlock;
+
+    if (message.role === "assistant" && (baseBlock.isStreaming || streamBlocks.length > 0 || baseBlock.activityItems.length > 0)) {
+      const streamReasoningLen = streamBlocks.reduce((total, block) => total + String(block.reasoning || "").length, 0);
+      const streamTextLen = streamBlocks.reduce((total, block) => total + String(block.text || "").length, 0);
+      const streamToolCount = streamBlocks.reduce((total, block) => total + (block.tools || []).length, 0);
+      const debugSignature = [
+        String(message.id || ""),
+        baseBlock.isStreaming ? "1" : "0",
+        String(baseBlock.text || "").length,
+        streamBlocks.length,
+        streamReasoningLen,
+        streamTextLen,
+        streamToolCount,
+        baseBlock.activityItems.length,
+        baseBlock.activityReasoningCharCount,
+        baseBlock.activityRunning ? "1" : "0",
+        baseBlock.activityStatus,
+      ].join("|");
+      const previousDebugSignature = streamProjectionDebugSignatures.get(String(message.id || ""));
+      if (previousDebugSignature === debugSignature) {
+        // Avoid flooding the console while the virtual list recomputes unchanged blocks.
+      } else {
+        streamProjectionDebugSignatures.set(String(message.id || ""), debugSignature);
+        console.info("[聊天流式块][前端投影]", {
+          messageId: String(message.id || ""),
+          isStreaming: baseBlock.isStreaming,
+          textLength: String(baseBlock.text || "").length,
+          streamBlockCount: streamBlocks.length,
+          streamReasoningLen,
+          streamTextLen,
+          streamToolCount,
+          activityItemCount: baseBlock.activityItems.length,
+          activityReasoningCharCount: baseBlock.activityReasoningCharCount,
+          activityRunning: baseBlock.activityRunning,
+          activityStatus: baseBlock.activityStatus,
+          shouldShowActivityPanel: baseBlock.activityItems.length > 0 || baseBlock.activityRunning,
+        });
+      }
+    }
 
     const blocks: ChatMessageBlock[] = [];
     if (
@@ -254,8 +273,6 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
           taskTrigger: undefined,
           planCard: undefined,
           remoteImOrigin: projection.remoteImOrigin,
-          reasoningStandard: "",
-          reasoningInline: "",
           dispatchElapsedMs,
           toolCallCount: 0,
           lastToolName: "",

@@ -1,5 +1,6 @@
 import type { Ref } from "vue";
-import type { ChatMessage } from "../../../types/app";
+import type { AssistantStreamBlock, ChatMessage } from "../../../types/app";
+import { normalizeAssistantStreamBlocks } from "../../../utils/chat-message-semantics";
 import {
   DRAFT_ASSISTANT_ID_PREFIX,
   DRAFT_USER_ID_PREFIX,
@@ -11,25 +12,21 @@ import { readMessagePlainText } from "./use-chat-flow-utils";
 type UseChatFlowStopOptions = {
   chatting: Ref<boolean>;
   latestAssistantText: Ref<string>;
-  latestReasoningStandardText: Ref<string>;
-  latestReasoningInlineText: Ref<string>;
   toolStatusText: Ref<string>;
   toolStatusState: Ref<"running" | "done" | "failed" | "">;
+  streamBlocks?: Ref<AssistantStreamBlock[]>;
   allMessages: Ref<ChatMessage[]>;
   getSession: () => { apiConfigId: string; agentId: string; departmentId?: string } | null;
   getConversationId?: () => string;
   invokeStopChatMessage?: (input: {
     session: { apiConfigId: string; agentId: string; departmentId?: string; conversationId?: string };
     partialAssistantText: string;
-    partialReasoningStandard: string;
-    partialReasoningInline: string;
+    partialStreamBlocks: AssistantStreamBlock[];
   }) => Promise<{
     aborted: boolean;
     persisted: boolean;
     conversationId?: string | null;
     assistantText?: string;
-    reasoningStandard?: string;
-    reasoningInline?: string;
     assistantMessage?: ChatMessage;
   }>;
   onReloadMessages: () => Promise<void>;
@@ -45,8 +42,6 @@ type UseChatFlowStopOptions = {
   getPendingUserDraftId: () => string;
   removeDraft: (draftId: string) => void;
   deleteSendStartedAtMs: (gen: number) => void;
-  getStreamToolCallCount: () => number;
-  getStreamLastToolName: () => string;
   clearConversationStreamCache: (conversationId?: string | null) => void;
   reasoningStartedAtMs: Ref<number>;
 };
@@ -61,6 +56,15 @@ function stringifyStopError(error: unknown): string {
           return String(error);
         }
       })();
+}
+
+function streamBlockStopStats(blocks: AssistantStreamBlock[]) {
+  return {
+    blockCount: blocks.length,
+    reasoningLen: blocks.reduce((total, block) => total + String(block.reasoning || "").length, 0),
+    textLen: blocks.reduce((total, block) => total + String(block.text || "").length, 0),
+    toolCount: blocks.reduce((total, block) => total + (block.tools || []).length, 0),
+  };
 }
 
 export function useChatFlowStop(options: UseChatFlowStopOptions) {
@@ -91,7 +95,7 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
     options.reasoningStartedAtMs.value = 0;
     options.toolStatusState.value = statusState;
     options.toolStatusText.value = statusState
-      ? (summarizeToolCallsText(options.getStreamToolCallCount(), options.getStreamLastToolName()) || options.t("status.interrupted"))
+      ? (summarizeToolCallsText(options.streamBlocks?.value || []) || options.t("status.interrupted"))
       : "";
     options.clearConversationStreamCache(options.getConversationId ? options.getConversationId() : "");
     await options.onReloadMessages();
@@ -107,12 +111,17 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
     const activeDraft = activeDraftId
       ? options.allMessages.value.find((message) => String(message?.id || "") === activeDraftId)
       : undefined;
-    const activeDraftMeta = ((activeDraft?.providerMeta || {}) as Record<string, unknown>);
     const partialAssistantText = options.latestAssistantText.value || readMessagePlainText(activeDraft);
-    const partialReasoningStandard =
-      options.latestReasoningStandardText.value || String(activeDraftMeta.reasoningStandard || "");
-    const partialReasoningInline =
-      options.latestReasoningInlineText.value || String(activeDraftMeta.reasoningInline || "");
+    const partialStreamBlocks = normalizeAssistantStreamBlocks(options.streamBlocks?.value || []);
+    if (typeof window !== "undefined" && window.localStorage.getItem("easy-call.debug.chat-stream") === "1") {
+      console.info("[聊天流式块][前端停止] 准备停止", {
+        conversationId: cid,
+        roundPhase: round.phase,
+        draftId: activeDraftId,
+        partialAssistantTextLen: partialAssistantText.length,
+        ...streamBlockStopStats(partialStreamBlocks),
+      });
+    }
 
     if (round.phase === "queued") {
       await finishLocalStoppedRound();
@@ -121,8 +130,7 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
           .invokeStopChatMessage({
             session: cid ? { ...stopSession, conversationId: cid } : stopSession,
             partialAssistantText,
-            partialReasoningStandard,
-            partialReasoningInline,
+            partialStreamBlocks,
           })
           .catch((error) => {
             const et = stringifyStopError(error);
@@ -137,8 +145,7 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
         await options.invokeStopChatMessage({
           session: cid ? { ...stopSession, conversationId: cid } : stopSession,
           partialAssistantText,
-          partialReasoningStandard,
-          partialReasoningInline,
+          partialStreamBlocks,
         });
         await finishLocalStoppedRound();
         return;

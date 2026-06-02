@@ -73,9 +73,7 @@ struct StopChatRequest {
     #[serde(default)]
     partial_assistant_text: String,
     #[serde(default)]
-    partial_reasoning_standard: String,
-    #[serde(default)]
-    partial_reasoning_inline: String,
+    partial_stream_blocks: Vec<AssistantStreamBlock>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,7 +94,7 @@ struct SubmitChatResult {
     ingress: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SendChatResult {
     conversation_id: String,
@@ -104,8 +102,6 @@ struct SendChatResult {
     assistant_text: String,
     #[serde(default)]
     final_response_text: String,
-    reasoning_standard: String,
-    reasoning_inline: String,
     archived_before_send: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     assistant_message: Option<ChatMessage>,
@@ -137,10 +133,6 @@ struct StopChatResult {
     conversation_id: Option<String>,
     #[serde(default)]
     assistant_text: String,
-    #[serde(default)]
-    reasoning_standard: String,
-    #[serde(default)]
-    reasoning_inline: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     assistant_message: Option<ChatMessage>,
 }
@@ -435,14 +427,14 @@ struct AssistantDeltaEvent {
     tool_args: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default, skip_deserializing)]
+    stream_cache: Option<ConversationStreamRuntimeCacheSnapshot>,
 }
 
 fn round_completed_delta_event(
     conversation_id: &str,
     request_id: Option<&str>,
     assistant_text: &str,
-    reasoning_standard: &str,
-    reasoning_inline: &str,
     assistant_message: Option<&ChatMessage>,
 ) -> AssistantDeltaEvent {
     let normalized_request_id = request_id
@@ -454,8 +446,6 @@ fn round_completed_delta_event(
         "activationId": normalized_request_id,
         "requestId": normalized_request_id,
         "assistantText": assistant_text,
-        "reasoningStandard": reasoning_standard,
-        "reasoningInline": reasoning_inline,
         "archivedBeforeSend": false,
         "assistantMessage": assistant_message,
     })
@@ -472,6 +462,7 @@ fn round_completed_delta_event(
         tool_status: None,
         tool_args: None,
         message: Some(message),
+        stream_cache: None,
     }
 }
 

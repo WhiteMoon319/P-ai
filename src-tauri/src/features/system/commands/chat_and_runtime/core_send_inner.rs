@@ -2726,8 +2726,6 @@ async fn send_chat_message_inner(
                 &conversation_for_compaction.id,
                 runtime_context.request_id.as_deref(),
                 "",
-                "",
-                "",
                 None,
             ));
             if let Err(err) =
@@ -2979,13 +2977,12 @@ async fn send_chat_message_inner(
                     }
                     ModelReplyContentState::ReasoningOnly => {
                         runtime_log_warn(format!(
-                            "[聊天] 模型返回思维链但缺少最终回答，按空回重试: conversation_id={}，api_config_id={}，model={}，attempt={}，reasoning_standard_len={}，reasoning_inline_len={}",
+                            "[聊天] 模型返回思考但缺少最终回答，按空回重试: conversation_id={}，api_config_id={}，model={}，attempt={}，activity_reasoning_len={}",
                             conversation_id,
                             candidate_selected_api.id,
                             candidate_selected_api.model,
                             attempt + 1,
-                            reply.reasoning_standard.chars().count(),
-                            reply.reasoning_inline.chars().count()
+                            reply.activity_reasoning_text.chars().count()
                         ));
                         (
                             "模型只返回了思维链但没有最终回答".to_string(),
@@ -3062,6 +3059,7 @@ async fn send_chat_message_inner(
                     message: Some(format!(
                         "{reason_text}，正在重试 ({retry_index}/{max_failure_retries})，等待 {wait_seconds} 秒..."
                     )),
+                    stream_cache: None,
                 });
                 tokio::time::sleep(std::time::Duration::from_secs(wait_seconds)).await;
                 continue;
@@ -3094,6 +3092,7 @@ async fn send_chat_message_inner(
                     candidate_index + 2,
                     candidate_api_ids.len()
                 )),
+                stream_cache: None,
             });
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
@@ -3107,8 +3106,7 @@ async fn send_chat_message_inner(
             }
         })?;
     let assistant_text = model_reply.assistant_text;
-    let reasoning_standard = model_reply.reasoning_standard;
-    let reasoning_inline = model_reply.reasoning_inline;
+    let activity_reasoning_text = model_reply.activity_reasoning_text;
     let assistant_provider_meta_override = model_reply.assistant_provider_meta;
     let tool_history_events = model_reply.tool_history_events;
     let suppress_assistant_message = model_reply.suppress_assistant_message;
@@ -3157,7 +3155,7 @@ async fn send_chat_message_inner(
     let assistant_request_messages = assistant_request_sequence_from_tool_history(
         &tool_history_events,
         &assistant_text,
-        &reasoning_standard,
+        &activity_reasoning_text,
     );
     let folded_assistant =
         fold_request_messages_to_assistant_content(&assistant_request_messages);
@@ -3172,16 +3170,8 @@ async fn send_chat_message_inner(
         .as_millis()
         .min(u128::from(u64::MAX)) as u64;
     let mut provider_meta = {
-        let standard = folded_assistant
-            .reasoning_standard
-            .as_deref()
-            .map(str::trim)
-            .unwrap_or("");
-        let inline = reasoning_inline.trim();
         if !should_create_assistant_provider_meta(
             &active_selected_api.request_format,
-            standard,
-            inline,
             assistant_provider_meta_override.as_ref(),
             trusted_input_tokens,
             estimated_prompt_tokens,
@@ -3192,8 +3182,6 @@ async fn send_chat_message_inner(
             }))
         } else {
             let mut meta = serde_json::json!({
-                "reasoningStandard": standard,
-                "reasoningInline": inline,
                 "dispatchElapsedMs": dispatch_elapsed_ms,
                 "providerPromptTokens": trusted_input_tokens,
                 "estimatedPromptTokens": estimated_prompt_tokens,
@@ -3267,7 +3255,6 @@ async fn send_chat_message_inner(
                         &current_agent.id,
                         now.clone(),
                         &assistant_request_messages,
-                        &reasoning_inline,
                         provider_meta,
                     );
                     persisted_assistant_message = Some(conversation_upsert_final_assistant_message(
@@ -3296,7 +3283,6 @@ async fn send_chat_message_inner(
                             &current_agent.id,
                             now.clone(),
                             &assistant_request_messages,
-                            &reasoning_inline,
                             provider_meta,
                         );
                         persisted_assistant_message = Some(conversation_upsert_final_assistant_message(
@@ -3329,8 +3315,6 @@ async fn send_chat_message_inner(
             latest_user_text,
             assistant_text,
             final_response_text: model_reply.final_response_text,
-            reasoning_standard,
-            reasoning_inline,
             archived_before_send: archived_before_send_any,
             assistant_message: persisted_assistant_message,
             provider_prompt_tokens: trusted_input_tokens,
@@ -3453,8 +3437,6 @@ async fn send_chat_message_inner(
             .map(|value| serde_json::json!({
                 "conversationId": value.conversation_id,
                 "assistantTextLength": value.assistant_text.chars().count(),
-                "reasoningStandardLength": value.reasoning_standard.chars().count(),
-                "reasoningInlineLength": value.reasoning_inline.chars().count(),
                 "usage": {
                     "rigPromptTokens": value.provider_prompt_tokens,
                     "estimatedPromptTokens": value.estimated_prompt_tokens,
@@ -3476,16 +3458,12 @@ async fn send_chat_message_inner(
 
 fn should_create_assistant_provider_meta(
     request_format: &RequestFormat,
-    reasoning_standard: &str,
-    reasoning_inline: &str,
     assistant_provider_meta_override: Option<&Value>,
     trusted_input_tokens: Option<u64>,
     estimated_prompt_tokens: u64,
     remote_im_reply_decision_present: bool,
 ) -> bool {
-    !reasoning_standard.trim().is_empty()
-        || !reasoning_inline.trim().is_empty()
-        || assistant_provider_meta_override.is_some()
+    assistant_provider_meta_override.is_some()
         || trusted_input_tokens.is_some()
         || estimated_prompt_tokens > 0
         || remote_im_reply_decision_present
@@ -3716,13 +3694,12 @@ mod core_send_inner_tests {
     fn test_model_reply(
         assistant_text: &str,
         final_response_text: &str,
-        reasoning_standard: &str,
+        activity_reasoning_text: &str,
     ) -> ModelReply {
         ModelReply {
             assistant_text: assistant_text.to_string(),
             final_response_text: final_response_text.to_string(),
-            reasoning_standard: reasoning_standard.to_string(),
-            reasoning_inline: String::new(),
+            activity_reasoning_text: activity_reasoning_text.to_string(),
             assistant_provider_meta: None,
             tool_history_events: Vec::new(),
             suppress_assistant_message: false,
@@ -3821,7 +3798,6 @@ mod core_send_inner_tests {
                     "content": "最终回答"
                 }),
             ],
-            "",
             Some(serde_json::json!({
                 "effectivePromptTokens": 128_u64
             })),
@@ -3893,11 +3869,9 @@ mod core_send_inner_tests {
     }
 
     #[test]
-    fn should_create_assistant_provider_meta_should_preserve_empty_reasoning_for_deepseek() {
+    fn should_create_assistant_provider_meta_should_preserve_deepseek_meta_container() {
         assert!(should_create_assistant_provider_meta(
             &RequestFormat::DeepSeek,
-            "",
-            "",
             None,
             None,
             0,
@@ -3905,8 +3879,6 @@ mod core_send_inner_tests {
         ));
         assert!(!should_create_assistant_provider_meta(
             &RequestFormat::OpenAI,
-            "",
-            "",
             None,
             None,
             0,

@@ -120,12 +120,9 @@
         :latest-user-text="latestUserText"
         :latest-user-images="latestUserImages"
         :latest-assistant-text="latestAssistantText"
-        :latest-reasoning-standard-text="latestReasoningStandardText"
-        :latest-reasoning-inline-text="latestReasoningInlineText"
         :frontend-round-phase="frontendRoundPhase"
         :tool-status-text="toolStatusText"
         :tool-status-state="toolStatusState"
-        :stream-tool-calls="streamToolCalls"
         :chat-error-text="chatErrorText"
         :clipboard-images="clipboardImages"
         :queued-attachment-notices="queuedAttachmentNotices"
@@ -483,12 +480,9 @@ const props = defineProps<{
   latestUserText: string;
   latestUserImages: Array<{ mime: string; bytesBase64: string }>;
   latestAssistantText: string;
-  latestReasoningStandardText: string;
-  latestReasoningInlineText: string;
   frontendRoundPhase: "idle" | "queued" | "waiting" | "streaming";
   toolStatusText: string;
   toolStatusState: "running" | "done" | "failed" | "";
-  streamToolCalls: Array<{ name: string; argsText: string; status?: "doing" | "done" }>;
   chatErrorText: string;
   clipboardImages: Array<{ mime: string; bytesBase64: string }>;
   queuedAttachmentNotices: Array<{ id: string; fileName: string; relativePath: string; mime: string }>;

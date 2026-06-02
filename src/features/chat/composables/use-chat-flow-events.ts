@@ -1,4 +1,5 @@
 import type { ChatMessage } from "../../../types/app";
+import type { ConversationRuntimeStreamCacheSnapshot } from "./use-chat-flow-stream-cache";
 
 export type AssistantDeltaEvent = {
   delta?: string;
@@ -12,6 +13,7 @@ export type AssistantDeltaEvent = {
   toolStatus?: string;
   toolArgs?: string;
   message?: string;
+  streamCache?: ConversationRuntimeStreamCacheSnapshot;
 };
 
 export type HistoryFlushedPayload = {
@@ -38,8 +40,6 @@ export type RoundCompletedPayload = {
   activationId?: string;
   requestId?: string;
   assistantText: string;
-  reasoningStandard?: string;
-  reasoningInline?: string;
   archivedBeforeSend?: boolean;
   assistantMessage?: ChatMessage;
 };
@@ -106,8 +106,6 @@ export function readRoundCompletedPayload(raw: string | undefined): RoundComplet
       activationId: typeof parsed.activationId === "string" ? parsed.activationId : undefined,
       requestId: typeof parsed.requestId === "string" ? parsed.requestId : undefined,
       assistantText: String(parsed.assistantText || ""),
-      reasoningStandard: typeof parsed.reasoningStandard === "string" ? parsed.reasoningStandard : undefined,
-      reasoningInline: typeof parsed.reasoningInline === "string" ? parsed.reasoningInline : undefined,
       archivedBeforeSend: !!parsed.archivedBeforeSend,
       assistantMessage: (parsed.assistantMessage as ChatMessage | undefined) || undefined,
     };
@@ -141,17 +139,6 @@ export function readDeltaMessage(message: unknown): string {
   return "";
 }
 
-export function appendReasoningStandardDelta(current: string, delta: string, shouldStartNewSection: boolean): string {
-  if (!delta) return current;
-  if (!shouldStartNewSection || !current.trim() || !delta.trim()) return `${current}${delta}`;
-  const separator = current.endsWith("\n\n") || current.endsWith("\r\n\r\n")
-    ? ""
-    : current.endsWith("\n") || current.endsWith("\r\n")
-      ? "\n"
-      : "\n\n";
-  return `${current}${separator}${delta.trimStart()}`;
-}
-
 export function readAssistantEvent(message: unknown): AssistantDeltaEvent {
   if (!message || typeof message !== "object") return {};
   const m = message as Record<string, unknown>;
@@ -167,14 +154,18 @@ export function readAssistantEvent(message: unknown): AssistantDeltaEvent {
     toolStatus: typeof m.toolStatus === "string" ? m.toolStatus : undefined,
     toolArgs: typeof m.toolArgs === "string" ? m.toolArgs : undefined,
     message: typeof m.message === "string" ? m.message : undefined,
+    streamCache: m.streamCache && typeof m.streamCache === "object"
+      ? m.streamCache as ConversationRuntimeStreamCacheSnapshot
+      : undefined,
   };
 }
 
 export function assistantEventHasVisibleProgress(parsed: AssistantDeltaEvent): boolean {
   return (
     !!readDeltaMessage(parsed)
-    || parsed.kind === "reasoning_standard"
-    || parsed.kind === "reasoning_inline"
+    || parsed.kind === "activity_reasoning_delta"
+    || parsed.kind === "assistant_tool_event"
+    || parsed.kind === "assistant_tool_result"
     || parsed.kind === "tool_status"
   );
 }

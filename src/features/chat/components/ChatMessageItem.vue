@@ -96,7 +96,12 @@
             ]"
           >
             <div v-if="showActivityPanel(block)" class="flex flex-col opacity-90">
-              <details ref="activityDetailsRef" class="collapse rounded-none min-w-55" @toggle="onActivityToggle">
+              <details
+                ref="activityDetailsRef"
+                class="collapse rounded-none min-w-55"
+                :open="activityPanelOpen(block)"
+                @toggle="onActivityToggle"
+              >
                 <summary class="collapse-title py-1 px-1 min-h-0 text-xs font-semibold flex items-center gap-1.5 text-base-content/80 hover:bg-base-200">
                   <span
                     v-if="activityIsBusy(block)"
@@ -112,15 +117,16 @@
                   </span>
                 </summary>
                 <div
-                  v-if="activityExpanded"
+                  v-if="activityPanelOpen(block)"
                   class="collapse-content px-0 pb-1 pt-2 text-xs text-base-content/70"
                   @click="collapseDetailsFromContentClick"
                 >
-                  <div class="flex flex-col gap-1.5">
+                  <div class="flex flex-col">
                     <details
                       v-for="(item, idx) in block.activityItems"
                       :key="`${block.id}-activity-${item.id}-${idx}`"
                       class="collapse rounded-none border-l border-base-content/15 pl-2"
+                      :open="activityItemOpen(block, item)"
                       @toggle="onActivityItemToggle(item, $event)"
                     >
                       <summary class="collapse-title flex min-h-0 items-center gap-1.5 px-1 py-1 text-xs hover:bg-base-200">
@@ -141,7 +147,7 @@
                         </span>
                       </summary>
                       <div
-                        v-if="isActivityItemExpanded(item)"
+                        v-if="activityItemOpen(block, item)"
                         class="collapse-content px-1 pb-2 pt-1"
                       >
                         <div
@@ -200,12 +206,12 @@
           v-else-if="forcePlainMarkdownRender"
           @click="emit('assistantLinkClick', $event)"
         >
-          <SidebarLightMarkdown :text="splitThinkText(block.text).visible || block.text" />
+          <SidebarLightMarkdown :text="formatThinkAsMarkdown(block.text)" />
         </div>
         <div v-else ref="markdownContainerRef">
           <AppMarkdownRenderer
             class="ecall-markdown-content max-w-none"
-            :text="splitThinkText(block.text).visible || block.text"
+            :text="formatThinkAsMarkdown(block.text)"
             :is-dark="markdownIsDark"
             :streaming="!!block.isStreaming"
             @click="emit('assistantLinkClick', $event)"
@@ -543,7 +549,6 @@ const props = defineProps<{
   userAvatarUrl: string;
   personaNameMap: Record<string, string>;
   personaAvatarUrlMap: Record<string, string>;
-  streamToolCalls: Array<{ name: string; argsText: string; status?: "doing" | "done" }>;
   markdownIsDark: boolean;
   playingAudioId: string;
   activeTurnUser: boolean;
@@ -758,8 +763,6 @@ function showAssistantPreStreamingDots(block: ChatMessageBlock): boolean {
   const preStreamingStatusText = String(providerMeta._preStreamingStatusText || "").trim();
   if (!preStreamingStatusText) return false;
   return !hasStreamingSpeechContent(block)
-    && !String(block.reasoningStandard || "").trim()
-    && !String(resolvedInlineReasoning(block) || "").trim()
     && toolCallsForBlock(block).length === 0
     && !showActivityPanel(block)
     && block.images.length === 0
@@ -790,6 +793,15 @@ function showActivityPanel(block: ChatMessageBlock): boolean {
   return block.activityItems.length > 0 || !!block.activityRunning;
 }
 
+function activityShouldAutoExpand(block: ChatMessageBlock): boolean {
+  void block;
+  return false;
+}
+
+function activityPanelOpen(block: ChatMessageBlock): boolean {
+  return activityExpanded.value || activityShouldAutoExpand(block);
+}
+
 function activityIsBusy(block: ChatMessageBlock): boolean {
   if (!block.activityRunning) return false;
   return block.activityStatus === "requesting"
@@ -806,12 +818,7 @@ function activityStatusText(block: ChatMessageBlock): string {
   if (block.activityStatus === "running_tool") return "正在执行工具";
   if (block.activityStatus === "thinking") return "正在思考";
   if (block.activityStatus === "requesting") return "正在请求";
-  const hasReasoning = block.activityItems.some((item) => item.kind === "reasoning");
-  const hasTool = block.activityItems.some((item) => item.kind === "tool");
-  if (hasReasoning && hasTool) return "思考与工具";
-  if (hasReasoning) return "思考";
-  if (hasTool) return "工具执行";
-  return "活动";
+  return "思考与工具";
 }
 
 function activityToolCountsLabel(block: ChatMessageBlock): string {
@@ -847,6 +854,10 @@ function activityItemKey(item: ChatActivityItem): string {
 
 function isActivityItemExpanded(item: ChatActivityItem): boolean {
   return !!expandedActivityItemIds.value[activityItemKey(item)];
+}
+
+function activityItemOpen(block: ChatMessageBlock, item: ChatActivityItem): boolean {
+  return activityShouldAutoExpand(block) || isActivityItemExpanded(item);
 }
 
 function activityReasoningPreview(text: string): string {
@@ -1510,40 +1521,36 @@ function handleSelectionRowClick(event: MouseEvent): void {
   emit("toggleMessageSelected", props.selectionKey);
 }
 
-function splitThinkText(raw: string): { visible: string; inline: string } {
+function formatThinkAsMarkdown(raw: string): string {
   const input = raw || "";
   const openTag = "<think>";
   const closeTag = "</think>";
-  const blocks: string[] = [];
-  let visible = "";
+  let output = "";
   let cursor = 0;
 
   while (cursor < input.length) {
     const openIdx = input.indexOf(openTag, cursor);
     if (openIdx < 0) {
-      visible += input.slice(cursor);
+      output += input.slice(cursor);
       break;
     }
 
-    visible += input.slice(cursor, openIdx);
+    output += input.slice(cursor, openIdx);
     const afterOpen = openIdx + openTag.length;
     const closeIdx = input.indexOf(closeTag, afterOpen);
     if (closeIdx < 0) {
       const tail = input.slice(afterOpen).trim();
-      if (tail) blocks.push(tail);
+      if (tail) output += `\n\n*${tail}*`;
       cursor = input.length;
       break;
     }
 
     const inner = input.slice(afterOpen, closeIdx).trim();
-    if (inner) blocks.push(inner);
+    if (inner) output += `\n\n*${inner}*\n\n`;
     cursor = closeIdx + closeTag.length;
   }
 
-  return {
-    visible: visible.trim(),
-    inline: blocks.join("\n\n"),
-  };
+  return output.trim();
 }
 
 function normalizeRenderedLocalLinks() {
@@ -1560,40 +1567,15 @@ function normalizeRenderedLocalLinks() {
 }
 
 function blockHasMermaid(block: ChatMessageBlock): boolean {
-  const text = splitThinkText(block.text).visible;
-  return /```(?:\s*)mermaid\b/i.test(text);
+  return /```(?:\s*)mermaid\b/i.test(block.text);
 }
 
 function blockHasCodeFence(block: ChatMessageBlock): boolean {
-  const text = splitThinkText(block.text).visible;
-  return /```[\w-]*\s*[\r\n]/i.test(text);
+  return /```[\w-]*\s*[\r\n]/i.test(block.text);
 }
 
 function blockNeedsWideBubble(block: ChatMessageBlock): boolean {
   return blockHasMermaid(block) || blockHasCodeFence(block);
-}
-
-function resolvedInlineReasoning(block: ChatMessageBlock): string {
-  return splitThinkText(block.text).inline || block.reasoningInline || "";
-}
-
-function reasoningCharacterCount(block: ChatMessageBlock): number {
-  const standard = String(block.reasoningStandard || "");
-  const inline = String(resolvedInlineReasoning(block) || "");
-  return standard.length + inline.length;
-}
-
-function reasoningCharacterCountLabel(block: ChatMessageBlock): string {
-  const count = reasoningCharacterCount(block);
-  return count > 0 ? `（${count.toLocaleString("zh-CN")}）` : "";
-}
-
-function reasoningSummaryLabel(block: ChatMessageBlock): string {
-  if (block.isStreaming) return `正在思考中${reasoningCharacterCountLabel(block)}`;
-  const elapsedMs = Number((block as ChatMessageBlock & { reasoningElapsedMs?: number }).reasoningElapsedMs ?? 0);
-  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return `思考完成${reasoningCharacterCountLabel(block)}`;
-  const elapsedSeconds = Math.max(1, Math.round(elapsedMs / 1000));
-  return `思考了${elapsedSeconds}秒${reasoningCharacterCountLabel(block)}`;
 }
 
 function isImageMime(mime: string): boolean {

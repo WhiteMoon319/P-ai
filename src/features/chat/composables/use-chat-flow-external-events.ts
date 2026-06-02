@@ -34,17 +34,18 @@ type UseChatFlowExternalEventsOptions = {
   setChatErrorText: (text: string, conversationId?: string | null) => void;
   formatRequestFailed: (error: unknown) => string;
   latestAssistantText: { value: string };
-  latestReasoningStandardText: { value: string };
-  latestReasoningInlineText: { value: string };
   chatting: { value: boolean };
   reasoningStartedAtMs: { value: number };
   applyAssistantEventToConversationStreamCache: (conversationId: string, parsed: any) => boolean;
-  applyConversationStreamCacheToDisplay: (conversationId?: string | null) => boolean;
+  writeConversationStreamCacheSnapshot: (conversationId: string, snapshot?: any) => void;
+  applyConversationStreamCacheToDisplay: (
+    conversationId?: string | null,
+    input?: { ignoreActivationId?: boolean; skipStreamBlocks?: boolean },
+  ) => boolean;
   hasAssistantDraftInMessages: () => boolean;
   ensureForegroundStreamingRound: () => number;
   handleStreamingEvent: (gen: number, parsed: any) => void;
-  syncStreamToolCallsToDraft: (draftId: string) => void;
-  syncStreamActivityItemsToDraft: (draftId: string) => void;
+  syncStreamBlocksToDraft: (draftId: string) => void;
   updateDraftText: (draftId: string) => void;
 };
 
@@ -167,8 +168,6 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     }
     options.handleRoundCompleted(round.gen, {
       assistantText: String(parsed.assistantText || ""),
-      reasoningStandard: parsed.reasoningStandard,
-      reasoningInline: parsed.reasoningInline,
       assistantMessage: parsed.assistantMessage,
     });
   }
@@ -191,8 +190,6 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     const round = options.getRound();
     if (round.phase !== "streaming" && round.phase !== "queued") {
       options.latestAssistantText.value = "";
-      options.latestReasoningStandardText.value = "";
-      options.latestReasoningInlineText.value = "";
       options.chatting.value = false;
       options.reasoningStartedAtMs.value = 0;
       options.clearConversationStreamCache(payloadConversationId || currentConversationId);
@@ -230,14 +227,35 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     const eventActivationId = String(parsed.activationId || parsed.requestId || "").trim();
     const activeActivationId = options.getActiveActivationId();
     if (activeActivationId && eventActivationId && eventActivationId !== activeActivationId) {
+      console.warn("[聊天流式块][前端外部丢弃] activationId 不一致", {
+        currentConversationId,
+        payloadConversationId,
+        activeActivationId,
+        eventActivationId,
+        kind: parsed.kind || "delta",
+      });
       return;
     }
     if (currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId) {
+      console.warn("[聊天流式块][前端外部缓存] 非当前会话，仅写缓存", {
+        currentConversationId,
+        payloadConversationId,
+        kind: parsed.kind || "delta",
+      });
       if (cacheConversationId) {
-        options.applyAssistantEventToConversationStreamCache(cacheConversationId, parsed);
+        if (parsed.streamCache) {
+          options.writeConversationStreamCacheSnapshot(cacheConversationId, parsed.streamCache);
+          if (parsed.kind === "tool_status") {
+            options.applyAssistantEventToConversationStreamCache(cacheConversationId, parsed);
+          }
+        } else {
+          options.applyAssistantEventToConversationStreamCache(cacheConversationId, parsed);
+        }
       }
       return;
     }
+    // tool_status 是调度层信号，服务头像右侧/运行态提示；它不属于气泡流式结果。
+    // 后端将它作为 app-event-only 发送，所以即使 bound channel 已连接也不能在这里去重丢弃。
     if (
       parsed.kind !== "tool_status"
       && assistantEventHasVisibleProgress(parsed)
@@ -246,7 +264,14 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       return;
     }
     if (cacheConversationId) {
-      options.applyAssistantEventToConversationStreamCache(cacheConversationId, parsed);
+      if (parsed.streamCache) {
+        options.writeConversationStreamCacheSnapshot(cacheConversationId, parsed.streamCache);
+        if (parsed.kind === "tool_status") {
+          options.applyAssistantEventToConversationStreamCache(cacheConversationId, parsed);
+        }
+      } else {
+        options.applyAssistantEventToConversationStreamCache(cacheConversationId, parsed);
+      }
     }
     const round = options.getRound();
     const shouldProjectFromAppEvent =
@@ -264,26 +289,43 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       });
     }
     if (!shouldProjectFromAppEvent) {
+      if (parsed.kind === "activity_reasoning_delta" || parsed.kind === "assistant_tool_event" || parsed.kind === "assistant_tool_result") {
+        const delta = readDeltaMessage(parsed);
+        if (delta && options.reasoningStartedAtMs.value === 0) {
+          options.reasoningStartedAtMs.value = Date.now();
+        }
+        options.applyConversationStreamCacheToDisplay(cacheConversationId);
+        const latestRound = options.getRound();
+        if (latestRound.phase === "streaming") {
+          options.syncStreamBlocksToDraft(latestRound.draftId);
+          options.updateDraftText(latestRound.draftId);
+        }
+      }
       return;
     }
     const currentGen = shouldResumeForegroundRound
       ? options.ensureForegroundStreamingRound()
       : (round.phase === "streaming" ? round.gen : 0);
-    if (!currentGen) return;
-    if (parsed.kind === "reasoning_standard" || parsed.kind === "reasoning_inline") {
+    if (!currentGen) {
+      console.warn("[聊天流式块][前端外部丢弃] currentGen 为空", {
+        currentConversationId,
+        payloadConversationId,
+        cacheConversationId,
+        kind: parsed.kind || "delta",
+        round: options.getRound(),
+        shouldProjectFromAppEvent,
+        shouldResumeForegroundRound,
+      });
+      return;
+    }
+    if (parsed.kind === "activity_reasoning_delta") {
       const delta = readDeltaMessage(parsed);
       if (delta && options.reasoningStartedAtMs.value === 0) {
         options.reasoningStartedAtMs.value = Date.now();
       }
     }
     if (parsed.kind === "tool_status") {
-      options.applyConversationStreamCacheToDisplay(cacheConversationId);
-      const latestRound = options.getRound();
-      if (latestRound.phase === "streaming") {
-        options.syncStreamToolCallsToDraft(latestRound.draftId);
-        options.syncStreamActivityItemsToDraft(latestRound.draftId);
-        options.updateDraftText(latestRound.draftId);
-      }
+      options.applyConversationStreamCacheToDisplay(cacheConversationId, { skipStreamBlocks: true });
       return;
     }
     options.handleStreamingEvent(currentGen, parsed);

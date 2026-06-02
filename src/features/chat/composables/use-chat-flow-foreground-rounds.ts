@@ -1,4 +1,5 @@
 import type { ChatMessage } from "../../../types/app";
+import { normalizeAssistantStreamBlocks, streamBlocksToToolCalls } from "../../../utils/chat-message-semantics";
 import { DRAFT_ASSISTANT_ID_PREFIX } from "./use-chat-flow-drafts";
 import { streamCacheHasVisibleProgress } from "./use-chat-flow-stream-cache";
 import { applyStreamingHistoryOverlay } from "./use-chat-flow-stream-overlay";
@@ -32,18 +33,11 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     const queuedStreamingState = bindings.getQueuedStreamingState();
     if (!queuedStreamingState) return;
     bindings.latestAssistantText.value = queuedStreamingState.assistantText;
-    bindings.latestReasoningStandardText.value = queuedStreamingState.reasoningStandard;
-    bindings.latestReasoningInlineText.value = queuedStreamingState.reasoningInline;
     bindings.toolStatusText.value = queuedStreamingState.toolStatusText;
     bindings.toolStatusState.value = queuedStreamingState.toolStatusState;
-    if (bindings.streamToolCalls) {
-      bindings.streamToolCalls.value = queuedStreamingState.streamToolCalls;
+    if (bindings.streamBlocks) {
+      bindings.streamBlocks.value = queuedStreamingState.streamBlocks || [];
     }
-    if (bindings.streamActivityItems) {
-      bindings.streamActivityItems.value = queuedStreamingState.streamActivityItems || [];
-    }
-    bindings.setStreamToolCallCount(queuedStreamingState.streamToolCallCount);
-    bindings.setStreamLastToolName(queuedStreamingState.streamLastToolName);
     if (queuedStreamingState.frontendDispatchStartedAtMs || queuedStreamingState.frontendDispatchElapsedMs) {
       const round = bindings.getRound();
       bindings.startFrontendDispatchTimer(
@@ -155,20 +149,16 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     const round = bindings.getRound();
     if (round.phase === "streaming") {
       if (!bindings.hasAssistantDraftInMessages()) {
-        if (bindings.streamToolCalls) bindings.streamToolCalls.value = [];
-        if (bindings.streamActivityItems) bindings.streamActivityItems.value = [];
+        if (bindings.streamBlocks) bindings.streamBlocks.value = [];
         bindings.applyConversationStreamCacheToDisplay(conversationId);
         const draftId = bindings.insertDraft(round.gen);
         bindings.updateDraftText(draftId);
         bindings.setRound({ phase: "streaming", gen: round.gen, draftId });
-      } else {
-        bindings.loadStreamToolCallsFromDraft(round.draftId);
       }
       return round.gen;
     }
     const gen = bindings.nextGeneration();
-    if (bindings.streamToolCalls) bindings.streamToolCalls.value = [];
-    if (bindings.streamActivityItems) bindings.streamActivityItems.value = [];
+    if (bindings.streamBlocks) bindings.streamBlocks.value = [];
     const existingDraft = [...bindings.allMessages.value]
       .reverse()
       .find((message: ChatMessage) => String(message?.id || "").trim().startsWith(DRAFT_ASSISTANT_ID_PREFIX));
@@ -187,15 +177,11 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     });
     if (!restoredFromCache) {
       bindings.latestAssistantText.value = readMessagePlainText(existingDraft);
-      bindings.latestReasoningStandardText.value = String(existingDraftMeta.reasoningStandard || "");
-      bindings.latestReasoningInlineText.value = String(existingDraftMeta.reasoningInline || "");
-      bindings.setPendingReasoningStandardBreak(false);
     }
     bindings.setActiveHistoryMessageCount(formalizeMessages(bindings.allMessages.value).length);
     const draftId = existingDraftId || bindings.insertDraft(gen);
     if (existingDraftId) {
-      bindings.loadStreamActivityItemsFromDraft(draftId);
-      bindings.loadStreamToolCallsFromDraft(draftId);
+      bindings.loadStreamBlocksFromDraft(draftId);
     }
     if (existingDraftId || restoredFromCache) {
       bindings.updateDraftText(draftId);
@@ -214,6 +200,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
   function resumeForegroundRuntimeRound(input?: ResumeForegroundRuntimeRoundInput) {
     const conversationId = normalizeConversationId(input?.conversationId || (bindings.getConversationId ? bindings.getConversationId() : ""));
     if (!conversationId) return 0;
+    const snapshotBlocks = normalizeAssistantStreamBlocks(input?.streamCache?.streamBlocks || []);
     if (input?.streamCache) {
       bindings.writeConversationStreamCacheSnapshot(conversationId, input.streamCache);
     }
@@ -228,16 +215,20 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
       reason: String(input?.reason || ""),
       hasVisibleProgress,
       assistantTextLength: String(cache?.assistantText || input?.streamCache?.assistantText || "").length,
-      reasoningStandardLength: String(cache?.reasoningStandard || input?.streamCache?.reasoningStandard || "").length,
-      reasoningInlineLength: String(cache?.reasoningInline || input?.streamCache?.reasoningInline || "").length,
-      toolCallCount: Math.max(
-        Number(cache?.streamToolCallCount || 0),
-        Number(input?.streamCache?.streamToolCallCount || 0),
-      ),
+      toolCallCount: streamBlocksToToolCalls(snapshotBlocks.length > 0 ? snapshotBlocks : cache?.streamBlocks || []).length,
     });
-    return hasVisibleProgress
-      ? ensureForegroundStreamingRound()
-      : ensureForegroundWaitingRound(input?.statusText || bindings.t("chat.statusWaitingReply"));
+    if (!hasVisibleProgress) {
+      return ensureForegroundWaitingRound(input?.statusText || bindings.t("chat.statusWaitingReply"));
+    }
+    const gen = ensureForegroundStreamingRound();
+    const round = bindings.getRound();
+    if (round.phase === "streaming") {
+      const blocks = snapshotBlocks.length > 0 ? snapshotBlocks : normalizeAssistantStreamBlocks(cache?.streamBlocks || []);
+      if (bindings.streamBlocks) bindings.streamBlocks.value = blocks;
+      bindings.syncStreamBlocksToDraft(round.draftId, blocks);
+      bindings.updateDraftText(round.draftId, undefined, undefined, "", blocks);
+    }
+    return gen;
   }
 
   function resumeForegroundStreamCacheProjection(input?: ResumeForegroundStreamCacheProjectionInput) {
@@ -250,9 +241,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
       conversationId,
       reason: String(input?.reason || ""),
       assistantTextLength: String(cache?.assistantText || "").length,
-      reasoningStandardLength: String(cache?.reasoningStandard || "").length,
-      reasoningInlineLength: String(cache?.reasoningInline || "").length,
-      toolCallCount: Number(cache?.streamToolCallCount || 0),
+      toolCallCount: streamBlocksToToolCalls(cache?.streamBlocks || []).length,
     });
     return ensureForegroundStreamingRound();
   }
@@ -266,8 +255,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
       return 0;
     }
     const conversationId = bindings.getConversationId ? bindings.getConversationId() : "";
-    if (bindings.streamToolCalls) bindings.streamToolCalls.value = [];
-    if (bindings.streamActivityItems) bindings.streamActivityItems.value = [];
+    if (bindings.streamBlocks) bindings.streamBlocks.value = [];
     const existingDraft = [...bindings.allMessages.value]
       .reverse()
       .find((message: ChatMessage) => String(message?.id || "").trim().startsWith(DRAFT_ASSISTANT_ID_PREFIX));
@@ -279,15 +267,11 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     const existingDraftElapsedMs = existingDraftId ? positiveRoundedNumber(existingDraftMeta._frontendDispatchElapsedMs) : 0;
     if (!restoredFromCache) {
       bindings.latestAssistantText.value = readMessagePlainText(existingDraft);
-      bindings.latestReasoningStandardText.value = String(existingDraftMeta.reasoningStandard || "");
-      bindings.latestReasoningInlineText.value = String(existingDraftMeta.reasoningInline || "");
-      bindings.setPendingReasoningStandardBreak(false);
     }
     bindings.setActiveHistoryMessageCount(formalizeMessages(bindings.allMessages.value).length);
     const draftId = existingDraftId || bindings.insertDraft(gen);
     if (existingDraftId) {
-      bindings.loadStreamActivityItemsFromDraft(draftId);
-      bindings.loadStreamToolCallsFromDraft(draftId);
+      bindings.loadStreamBlocksFromDraft(draftId);
     }
     if (existingDraftId || restoredFromCache) {
       bindings.updateDraftText(draftId);

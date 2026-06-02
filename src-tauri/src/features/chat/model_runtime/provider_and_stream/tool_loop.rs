@@ -4,6 +4,7 @@ const REPEATED_TOOL_CALL_BLOCK_THRESHOLD: usize = 3;
 struct GenaiToolLoopRoundOutput {
     turn_text: String,
     turn_reasoning: String,
+    reasoning_delta_emitted: bool,
     turn_tool_calls: Vec<genai::chat::ToolCall>,
     trusted_input_tokens: Option<u64>,
 }
@@ -106,7 +107,7 @@ fn register_tool_repeat_attempt(
 }
 
 fn repeated_tool_call_block_reply(
-    full_reasoning_standard: String,
+    full_activity_reasoning_text: String,
     tool_history_events: Vec<Value>,
     trusted_input_tokens: Option<u64>,
     err_text: String,
@@ -114,8 +115,7 @@ fn repeated_tool_call_block_reply(
     ModelReply {
         assistant_text: err_text.clone(),
         final_response_text: err_text,
-        reasoning_standard: full_reasoning_standard,
-        reasoning_inline: String::new(),
+        activity_reasoning_text: full_activity_reasoning_text,
         assistant_provider_meta: None,
         tool_history_events,
         suppress_assistant_message: false,
@@ -146,13 +146,11 @@ fn tool_loop_round_tool_calls_json(tool_calls: &[genai::chat::ToolCall]) -> Vec<
 
 fn tool_loop_round_response_value(
     turn_text: &str,
-    turn_reasoning: &str,
+    _turn_reasoning: &str,
     turn_tool_calls: &[genai::chat::ToolCall],
 ) -> Value {
     serde_json::json!({
         "assistantText": turn_text,
-        "reasoningStandard": turn_reasoning,
-        "reasoningInline": "",
         "toolCalls": tool_loop_round_tool_calls_json(turn_tool_calls)
     })
 }
@@ -244,15 +242,14 @@ fn append_tool_loop_transient_history_to_prepared(
 }
 
 fn tool_loop_guided_close_reply(
-    reasoning_standard: String,
+    activity_reasoning_text: String,
     tool_history_events: Vec<Value>,
     trusted_input_tokens: Option<u64>,
 ) -> ModelReply {
     ModelReply {
         assistant_text: String::new(),
         final_response_text: String::new(),
-        reasoning_standard,
-        reasoning_inline: String::new(),
+        activity_reasoning_text,
         assistant_provider_meta: Some(serde_json::json!({
             "dispatchCloseReason": "guided_queue_ready"
         })),
@@ -288,7 +285,7 @@ fn deferred_tool_loop_outcome_from_result(
 
 fn finalize_deferred_tool_loop_outcome(
     outcome: DeferredToolLoopOutcome,
-    full_reasoning_standard: String,
+    full_activity_reasoning_text: String,
     tool_history_events: Vec<Value>,
     trusted_input_tokens: Option<u64>,
 ) -> ModelReply {
@@ -296,8 +293,7 @@ fn finalize_deferred_tool_loop_outcome(
         DeferredToolLoopOutcome::OrganizeContext => ModelReply {
             assistant_text: String::new(),
             final_response_text: String::new(),
-            reasoning_standard: full_reasoning_standard,
-            reasoning_inline: String::new(),
+            activity_reasoning_text: full_activity_reasoning_text,
             assistant_provider_meta: None,
             tool_history_events: tool_history_without_organize_context(tool_history_events),
             suppress_assistant_message: true,
@@ -307,8 +303,7 @@ fn finalize_deferred_tool_loop_outcome(
         DeferredToolLoopOutcome::TaskComplete(final_text) => ModelReply {
             assistant_text: final_text.clone(),
             final_response_text: final_text,
-            reasoning_standard: full_reasoning_standard,
-            reasoning_inline: String::new(),
+            activity_reasoning_text: full_activity_reasoning_text,
             assistant_provider_meta: None,
             tool_history_events,
             suppress_assistant_message: false,
@@ -319,8 +314,7 @@ fn finalize_deferred_tool_loop_outcome(
             ModelReply {
                 assistant_text: plan_result.assistant_text.clone(),
                 final_response_text: plan_result.assistant_text,
-                reasoning_standard: full_reasoning_standard,
-                reasoning_inline: String::new(),
+                activity_reasoning_text: full_activity_reasoning_text,
                 assistant_provider_meta: plan_result.provider_meta,
                 tool_history_events,
                 suppress_assistant_message: false,
@@ -350,6 +344,76 @@ fn send_text_delta_event(
         tool_status: None,
         tool_args: None,
         message: None,
+        stream_cache: None,
+    });
+}
+
+fn assistant_tool_event_value(
+    tool_call_id: &str,
+    tool_name: &str,
+    tool_args: &str,
+    turn_reasoning: &str,
+) -> Value {
+    let tc_json = serde_json::json!({
+        "id": tool_call_id,
+        "call_id": tool_call_id,
+        "type": "function",
+        "function": {
+            "name": tool_name,
+            "arguments": tool_args
+        }
+    });
+    let mut assistant_tool_event = serde_json::json!({
+        "role": "assistant",
+        "content": Value::Null,
+        "tool_calls": [tc_json]
+    });
+    if let Some(object) = assistant_tool_event.as_object_mut() {
+        object.insert(
+            "reasoning_content".to_string(),
+            Value::String(turn_reasoning.trim().to_string()),
+        );
+    }
+    assistant_tool_event
+}
+
+fn send_assistant_tool_event(
+    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    assistant_tool_event: &Value,
+) {
+    let _ = on_delta.send(AssistantDeltaEvent {
+        delta: String::new(),
+        kind: Some("assistant_tool_event".to_string()),
+        request_id: None,
+        activation_id: None,
+        phase_id: None,
+        reason: None,
+        tool_name: None,
+        tool_call_id: None,
+        tool_status: None,
+        tool_args: None,
+        message: Some(assistant_tool_event.to_string()),
+        stream_cache: None,
+    });
+}
+
+fn send_assistant_tool_result_event(
+    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    tool_result_event: &Value,
+) {
+    let _ = on_delta.send(AssistantDeltaEvent {
+        delta: String::new(),
+        kind: Some("assistant_tool_result".to_string()),
+        request_id: None,
+        activation_id: None,
+        phase_id: None,
+        reason: None,
+        tool_name: None,
+        tool_call_id: None,
+        tool_status: None,
+        tool_args: None,
+        message: Some(tool_result_event.to_string()),
+        stream_cache: None,
     });
 }
 
@@ -919,7 +983,7 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
     on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
     transient_tool_history: &[Value],
     partial_assistant_text: &str,
-    partial_reasoning_standard: &str,
+    partial_activity_reasoning_text: &str,
     chat_session_key: &str,
     pending_tool_pair_persists: &mut Vec<tauri::async_runtime::JoinHandle<Result<(), String>>>,
 ) -> Result<bool, String> {
@@ -984,7 +1048,7 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
         on_delta,
         &[],
         partial_assistant_text,
-        partial_reasoning_standard,
+        partial_activity_reasoning_text,
         chat_session_key,
         "auto_before_tool_continue",
     )?;
@@ -1039,13 +1103,13 @@ fn persist_tool_loop_compaction_checkpoint(
     on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
     transient_tool_history: &[Value],
     partial_assistant_text: &str,
-    partial_reasoning_standard: &str,
+    partial_activity_reasoning_text: &str,
     chat_session_key: &str,
     reason: &str,
 ) -> Result<Conversation, String> {
     let history_for_checkpoint = tool_history_without_organize_context(transient_tool_history.to_vec());
     let should_persist = !partial_assistant_text.trim().is_empty()
-        || !partial_reasoning_standard.trim().is_empty()
+        || !partial_activity_reasoning_text.trim().is_empty()
         || !history_for_checkpoint.is_empty();
     let persist_result = if should_persist {
         let persist_result = conversation_service().persist_stop_chat_partial_message(
@@ -1054,7 +1118,7 @@ fn persist_tool_loop_compaction_checkpoint(
             None,
             &context.agent.id,
             partial_assistant_text,
-            partial_reasoning_standard,
+            partial_activity_reasoning_text,
             "",
             &history_for_checkpoint,
         )?;
@@ -1087,8 +1151,6 @@ fn persist_tool_loop_compaction_checkpoint(
         &context.conversation_id,
         context.request_id.as_deref(),
         partial_assistant_text,
-        partial_reasoning_standard,
-        "",
         persist_result.assistant_message.as_ref(),
     ));
     if let Err(err) = clear_conversation_stream_runtime_cache(state, &context.conversation_id) {
@@ -1109,7 +1171,7 @@ async fn apply_organize_context_compaction_checkpoint(
     on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
     _transient_tool_history: &[Value],
     partial_assistant_text: &str,
-    partial_reasoning_standard: &str,
+    partial_activity_reasoning_text: &str,
     chat_session_key: &str,
     pending_tool_pair_persists: &mut Vec<tauri::async_runtime::JoinHandle<Result<(), String>>>,
 ) -> Result<(), String> {
@@ -1131,7 +1193,7 @@ async fn apply_organize_context_compaction_checkpoint(
         on_delta,
         &[],
         partial_assistant_text,
-        partial_reasoning_standard,
+        partial_activity_reasoning_text,
         chat_session_key,
         "organize_context",
     )?;
@@ -1203,7 +1265,7 @@ async fn run_genai_tool_loop(
 
     let genai_tools = runtime_tool_definitions_for_genai(&tool_assembly.tool_definitions, adapter_kind).await?;
     let mut full_assistant_text = String::new();
-    let mut full_reasoning_standard = String::new();
+    let mut full_activity_reasoning_text = String::new();
     let mut tool_history_events = Vec::<Value>::new();
     let mut pending_tool_pair_persists =
         Vec::<tauri::async_runtime::JoinHandle<Result<(), String>>>::new();
@@ -1225,7 +1287,7 @@ async fn run_genai_tool_loop(
                 on_delta,
                 &tool_history_events,
                 &full_assistant_text,
-                &full_reasoning_standard,
+                &full_activity_reasoning_text,
                 chat_session_key,
                 &mut pending_tool_pair_persists,
             )
@@ -1242,6 +1304,7 @@ async fn run_genai_tool_loop(
             .await?;
             let mut turn_text = String::new();
             let mut turn_reasoning = String::new();
+            let mut reasoning_delta_emitted = false;
             let mut turn_tool_calls = Vec::<genai::chat::ToolCall>::new();
             let mut round_trusted_input_tokens = None;
 
@@ -1280,20 +1343,9 @@ async fn run_genai_tool_loop(
                     Ok(genai::chat::ChatStreamEvent::ReasoningChunk(reasoning)) => {
                         if !reasoning.content.is_empty() {
                             turn_reasoning.push_str(&reasoning.content);
-                            full_reasoning_standard.push_str(&reasoning.content);
-                            let _ = on_delta.send(AssistantDeltaEvent {
-                                delta: reasoning.content,
-                                kind: Some("reasoning_standard".to_string()),
-                                request_id: None,
-                                activation_id: None,
-                                phase_id: None,
-                                reason: None,
-                                tool_name: None,
-                                tool_call_id: None,
-                                tool_status: None,
-                                tool_args: None,
-                                message: None,
-                            });
+                            full_activity_reasoning_text.push_str(&reasoning.content);
+                            send_reasoning_delta_event(on_delta, &reasoning.content);
+                            reasoning_delta_emitted = true;
                         }
                     }
                     Ok(genai::chat::ChatStreamEvent::ThoughtSignatureChunk(_)) => {}
@@ -1329,9 +1381,13 @@ async fn run_genai_tool_loop(
                                 .filter(|value| !value.is_empty())
                             {
                                 turn_reasoning = captured_reasoning.to_string();
-                                if full_reasoning_standard.is_empty() {
-                                    full_reasoning_standard = captured_reasoning.to_string();
+                                if full_activity_reasoning_text.is_empty() {
+                                    full_activity_reasoning_text = captured_reasoning.to_string();
+                                } else {
+                                    full_activity_reasoning_text.push_str(captured_reasoning);
                                 }
+                                send_reasoning_delta_event(on_delta, captured_reasoning);
+                                reasoning_delta_emitted = true;
                             }
                         }
                         if let Some(captured_content) = end.captured_content.as_ref() {
@@ -1348,6 +1404,7 @@ async fn run_genai_tool_loop(
             Ok::<GenaiToolLoopRoundOutput, String>(GenaiToolLoopRoundOutput {
                 turn_text,
                 turn_reasoning,
+                reasoning_delta_emitted,
                 turn_tool_calls,
                 trusted_input_tokens: round_trusted_input_tokens,
             })
@@ -1356,6 +1413,7 @@ async fn run_genai_tool_loop(
         let GenaiToolLoopRoundOutput {
             turn_text,
             turn_reasoning,
+            mut reasoning_delta_emitted,
             turn_tool_calls,
             trusted_input_tokens: round_trusted_input_tokens,
         } = round_output;
@@ -1396,8 +1454,7 @@ async fn run_genai_tool_loop(
             return Ok(ModelReply {
                 assistant_text: full_assistant_text,
                 final_response_text: turn_text,
-                reasoning_standard: full_reasoning_standard,
-                reasoning_inline: String::new(),
+                activity_reasoning_text: full_activity_reasoning_text,
                 assistant_provider_meta: final_assistant_provider_meta_override.clone(),
                 tool_history_events,
                 suppress_assistant_message: false,
@@ -1420,6 +1477,10 @@ async fn run_genai_tool_loop(
         let mut guided_close_requested = false;
 
         for tool_call in turn_tool_calls {
+            if !reasoning_delta_emitted && !turn_reasoning.trim().is_empty() {
+                send_reasoning_delta_event(on_delta, turn_reasoning.trim());
+                reasoning_delta_emitted = true;
+            }
             let genai::chat::ToolCall {
                 call_id: tool_call_id,
                 fn_name: tool_name,
@@ -1430,6 +1491,13 @@ async fn run_genai_tool_loop(
                 Value::String(raw) => raw,
                 other => other.to_string(),
             };
+            let assistant_tool_event = assistant_tool_event_value(
+                &tool_call_id,
+                &tool_name,
+                &tool_args,
+                &turn_reasoning,
+            );
+            send_assistant_tool_event(on_delta, &assistant_tool_event);
             let repeat_streak =
                 register_tool_repeat_attempt(&mut tool_repeat_guard, &tool_name, &tool_args);
             send_stream_rebind_required_event(
@@ -1460,8 +1528,15 @@ async fn run_genai_tool_loop(
                     Some(tool_call_id.as_str()),
                     &err_text,
                 );
+                let history_content = sanitize_tool_result_for_history(&tool_name, &err_text);
+                let tool_result_event = serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "content": history_content
+                });
+                send_assistant_tool_result_event(on_delta, &tool_result_event);
                 return Ok(repeated_tool_call_block_reply(
-                    full_reasoning_standard,
+                    full_activity_reasoning_text,
                     tool_history_events,
                     trusted_input_tokens,
                     err_text,
@@ -1512,27 +1587,6 @@ async fn run_genai_tool_loop(
                 }
             };
             let tool_result_text = tool_result.display_text.as_str();
-
-            let tc_json = serde_json::json!({
-                "id": tool_call_id,
-                "call_id": tool_call_id,
-                "type": "function",
-                "function": {
-                    "name": tool_name,
-                    "arguments": tool_args
-                }
-            });
-            let mut assistant_tool_event = serde_json::json!({
-                "role": "assistant",
-                "content": Value::Null,
-                "tool_calls": [tc_json]
-            });
-            if let Some(object) = assistant_tool_event.as_object_mut() {
-                object.insert(
-                    "reasoning_content".to_string(),
-                    Value::String(turn_reasoning.trim().to_string()),
-                );
-            }
             let assistant_tool_event_for_persist = assistant_tool_event.clone();
             tool_history_events.push(assistant_tool_event);
             let history_content = sanitize_tool_result_for_history(&tool_name, &tool_result_text);
@@ -1541,6 +1595,7 @@ async fn run_genai_tool_loop(
                 "tool_call_id": tool_call_id,
                 "content": history_content
             });
+            send_assistant_tool_result_event(on_delta, &tool_result_event);
             tool_history_events.push(tool_result_event.clone());
             sync_completed_tool_history_cache(
                 tool_abort_state,
@@ -1632,7 +1687,7 @@ async fn run_genai_tool_loop(
 
         if guided_close_requested {
             return Ok(tool_loop_guided_close_reply(
-                full_reasoning_standard,
+                full_activity_reasoning_text,
                 tool_history_events,
                 trusted_input_tokens,
             ));
@@ -1650,7 +1705,7 @@ async fn run_genai_tool_loop(
                 on_delta,
                 &tool_history_events,
                 &full_assistant_text,
-                &full_reasoning_standard,
+                &full_activity_reasoning_text,
                 chat_session_key,
                 &mut pending_tool_pair_persists,
             )
@@ -1661,7 +1716,7 @@ async fn run_genai_tool_loop(
         if let Some(outcome) = deferred_outcome {
             return Ok(finalize_deferred_tool_loop_outcome(
                 outcome,
-                full_reasoning_standard,
+                full_activity_reasoning_text,
                 tool_history_events,
                 trusted_input_tokens,
             ));
@@ -1691,8 +1746,7 @@ async fn run_genai_tool_loop(
             return Ok(ModelReply {
                 assistant_text: final_text.clone(),
                 final_response_text: final_text,
-                reasoning_standard: full_reasoning_standard,
-                reasoning_inline: String::new(),
+                activity_reasoning_text: full_activity_reasoning_text,
                 assistant_provider_meta: final_assistant_provider_meta_override.clone(),
                 tool_history_events,
                 suppress_assistant_message: false,
@@ -1713,8 +1767,7 @@ async fn run_genai_tool_loop(
     Ok(ModelReply {
         assistant_text: full_assistant_text,
         final_response_text: String::new(),
-        reasoning_standard: full_reasoning_standard,
-        reasoning_inline: String::new(),
+        activity_reasoning_text: full_activity_reasoning_text,
         assistant_provider_meta: final_assistant_provider_meta_override,
         tool_history_events,
         suppress_assistant_message: false,
@@ -1750,19 +1803,7 @@ async fn execute_genai_non_stream_round(
         .filter(|value| *value > 0);
 
     if !turn_reasoning.is_empty() {
-        let _ = on_delta.send(AssistantDeltaEvent {
-            delta: turn_reasoning.clone(),
-            kind: Some("reasoning_standard".to_string()),
-            request_id: None,
-            activation_id: None,
-            phase_id: None,
-            reason: None,
-            tool_name: None,
-            tool_call_id: None,
-            tool_status: None,
-            tool_args: None,
-            message: None,
-        });
+        send_reasoning_delta_event(on_delta, &turn_reasoning);
     }
     if !turn_text.is_empty() {
         if prefix_text_boundary {
@@ -1773,6 +1814,7 @@ async fn execute_genai_non_stream_round(
 
     Ok(GenaiToolLoopRoundOutput {
         turn_text,
+        reasoning_delta_emitted: !turn_reasoning.is_empty(),
         turn_reasoning,
         turn_tool_calls,
         trusted_input_tokens,
@@ -1815,7 +1857,7 @@ async fn run_genai_tool_loop_non_stream(
 
     let genai_tools = runtime_tool_definitions_for_genai(&tool_assembly.tool_definitions, adapter_kind).await?;
     let mut full_assistant_text = String::new();
-    let mut full_reasoning_standard = String::new();
+    let mut full_activity_reasoning_text = String::new();
     let mut tool_history_events = Vec::<Value>::new();
     let mut pending_tool_pair_persists =
         Vec::<tauri::async_runtime::JoinHandle<Result<(), String>>>::new();
@@ -1836,7 +1878,7 @@ async fn run_genai_tool_loop_non_stream(
                 on_delta,
                 &tool_history_events,
                 &full_assistant_text,
-                &full_reasoning_standard,
+                &full_activity_reasoning_text,
                 chat_session_key,
                 &mut pending_tool_pair_persists,
             )
@@ -1876,6 +1918,7 @@ async fn run_genai_tool_loop_non_stream(
         };
         let turn_text = round.turn_text;
         let turn_reasoning = round.turn_reasoning;
+        let mut reasoning_delta_emitted = round.reasoning_delta_emitted;
         let raw_turn_tool_calls = round.turn_tool_calls;
         let round_elapsed_ms = round_started_at
             .elapsed()
@@ -1896,7 +1939,7 @@ async fn run_genai_tool_loop_non_stream(
         );
         let turn_tool_calls = reorder_turn_tool_calls_for_contact_tail(raw_turn_tool_calls);
         if !turn_reasoning.is_empty() {
-            full_reasoning_standard.push_str(&turn_reasoning);
+            full_activity_reasoning_text.push_str(&turn_reasoning);
         }
 
         if !turn_text.is_empty() {
@@ -1910,8 +1953,7 @@ async fn run_genai_tool_loop_non_stream(
             return Ok(ModelReply {
                 assistant_text: full_assistant_text,
                 final_response_text: turn_text,
-                reasoning_standard: full_reasoning_standard,
-                reasoning_inline: String::new(),
+                activity_reasoning_text: full_activity_reasoning_text,
                 assistant_provider_meta: final_assistant_provider_meta_override.clone(),
                 tool_history_events,
                 suppress_assistant_message: false,
@@ -1934,6 +1976,10 @@ async fn run_genai_tool_loop_non_stream(
         let mut guided_close_requested = false;
 
         for tool_call in turn_tool_calls {
+            if !reasoning_delta_emitted && !turn_reasoning.trim().is_empty() {
+                send_reasoning_delta_event(on_delta, turn_reasoning.trim());
+                reasoning_delta_emitted = true;
+            }
             let genai::chat::ToolCall {
                 call_id: tool_call_id,
                 fn_name: tool_name,
@@ -1944,6 +1990,13 @@ async fn run_genai_tool_loop_non_stream(
                 Value::String(raw) => raw,
                 other => other.to_string(),
             };
+            let assistant_tool_event = assistant_tool_event_value(
+                &tool_call_id,
+                &tool_name,
+                &tool_args,
+                &turn_reasoning,
+            );
+            send_assistant_tool_event(on_delta, &assistant_tool_event);
             let repeat_streak =
                 register_tool_repeat_attempt(&mut tool_repeat_guard, &tool_name, &tool_args);
             send_stream_rebind_required_event(
@@ -1974,8 +2027,15 @@ async fn run_genai_tool_loop_non_stream(
                     Some(tool_call_id.as_str()),
                     &err_text,
                 );
+                let history_content = sanitize_tool_result_for_history(&tool_name, &err_text);
+                let tool_result_event = serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "content": history_content
+                });
+                send_assistant_tool_result_event(on_delta, &tool_result_event);
                 return Ok(repeated_tool_call_block_reply(
-                    full_reasoning_standard,
+                    full_activity_reasoning_text,
                     tool_history_events,
                     trusted_input_tokens,
                     err_text,
@@ -2026,26 +2086,6 @@ async fn run_genai_tool_loop_non_stream(
                 }
             };
             let tool_result_text = tool_result.display_text.as_str();
-            let tc_json = serde_json::json!({
-                "id": tool_call_id,
-                "call_id": tool_call_id,
-                "type": "function",
-                "function": {
-                    "name": tool_name,
-                    "arguments": tool_args
-                }
-            });
-            let mut assistant_tool_event = serde_json::json!({
-                "role": "assistant",
-                "content": Value::Null,
-                "tool_calls": [tc_json]
-            });
-            if let Some(object) = assistant_tool_event.as_object_mut() {
-                object.insert(
-                    "reasoning_content".to_string(),
-                    Value::String(turn_reasoning.trim().to_string()),
-                );
-            }
             let assistant_tool_event_for_persist = assistant_tool_event.clone();
             tool_history_events.push(assistant_tool_event);
             let history_content = sanitize_tool_result_for_history(&tool_name, &tool_result_text);
@@ -2054,6 +2094,7 @@ async fn run_genai_tool_loop_non_stream(
                 "tool_call_id": tool_call_id,
                 "content": history_content
             });
+            send_assistant_tool_result_event(on_delta, &tool_result_event);
             tool_history_events.push(tool_result_event.clone());
             sync_completed_tool_history_cache(
                 tool_abort_state,
@@ -2145,7 +2186,7 @@ async fn run_genai_tool_loop_non_stream(
 
         if guided_close_requested {
             return Ok(tool_loop_guided_close_reply(
-                full_reasoning_standard,
+                full_activity_reasoning_text,
                 tool_history_events,
                 trusted_input_tokens,
             ));
@@ -2163,7 +2204,7 @@ async fn run_genai_tool_loop_non_stream(
                 on_delta,
                 &tool_history_events,
                 &full_assistant_text,
-                &full_reasoning_standard,
+                &full_activity_reasoning_text,
                 chat_session_key,
                 &mut pending_tool_pair_persists,
             )
@@ -2174,7 +2215,7 @@ async fn run_genai_tool_loop_non_stream(
         if let Some(outcome) = deferred_outcome {
             return Ok(finalize_deferred_tool_loop_outcome(
                 outcome,
-                full_reasoning_standard,
+                full_activity_reasoning_text,
                 tool_history_events,
                 trusted_input_tokens,
             ));
@@ -2204,8 +2245,7 @@ async fn run_genai_tool_loop_non_stream(
             return Ok(ModelReply {
                 assistant_text: final_text.clone(),
                 final_response_text: final_text,
-                reasoning_standard: full_reasoning_standard,
-                reasoning_inline: String::new(),
+                activity_reasoning_text: full_activity_reasoning_text,
                 assistant_provider_meta: final_assistant_provider_meta_override.clone(),
                 tool_history_events,
                 suppress_assistant_message: false,
@@ -2226,8 +2266,7 @@ async fn run_genai_tool_loop_non_stream(
     Ok(ModelReply {
         assistant_text: full_assistant_text,
         final_response_text: String::new(),
-        reasoning_standard: full_reasoning_standard,
-        reasoning_inline: String::new(),
+        activity_reasoning_text: full_activity_reasoning_text,
         assistant_provider_meta: final_assistant_provider_meta_override,
         tool_history_events,
         suppress_assistant_message: false,

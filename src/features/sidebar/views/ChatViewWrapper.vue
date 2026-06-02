@@ -12,12 +12,9 @@
     latest-user-text=""
     :latest-user-images="[]"
     latest-assistant-text=""
-    latest-reasoning-standard-text=""
-    latest-reasoning-inline-text=""
     :frontend-round-phase="chatFrontendRoundPhase"
     :tool-status-text="toolStatusText"
     :tool-status-state="toolStatusState"
-    :stream-tool-calls="streamToolCalls"
     chat-error-text=""
     :clipboard-images="clipboardImages"
     :queued-attachment-notices="[]"
@@ -136,8 +133,13 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import type { ApiConfigItem, ChatActivityItem, ChatMentionEntry, ChatMessage, ChatTodoItem, IdeContextWorkspaceGroup } from "../../../types/app";
-import { normalizeChatActivityItems } from "../../../utils/chat-message-semantics";
+import type { ApiConfigItem, AssistantStreamBlock, ChatMentionEntry, ChatMessage, ChatTodoItem, IdeContextWorkspaceGroup } from "../../../types/app";
+import {
+  assistantTextFromStreamBlocks,
+  normalizeAssistantStreamBlocks,
+  streamBlocksToToolCalls,
+  streamBlocksToToolHistoryEvents,
+} from "../../../utils/chat-message-semantics";
 import ChatView from "../../chat/views/ChatView.vue";
 import { useChatMessageBlocks } from "../../chat/composables/use-chat-turns";
 import type { TerminalApprovalConversationItem } from "../../shell/composables/use-terminal-approval";
@@ -177,12 +179,9 @@ const props = defineProps<{
   messages: ChatMessage[];
   clipboardImages: Array<{ mime: string; bytesBase64: string }>;
   streamingText: string;
-  streamingReasoningStandard: string;
-  streamingReasoningInline: string;
   toolStatusText: string;
   toolStatusState: "running" | "done" | "failed" | "";
-  streamToolCalls: Array<{ toolCallId?: string; name: string; argsText: string; status?: "doing" | "done" }>;
-  streamActivityItems: ChatActivityItem[];
+  streamBlocks: AssistantStreamBlock[];
   busy: boolean;
   runtimeState?: string;
   hasPrevBlock: boolean;
@@ -305,32 +304,25 @@ watch(
     props.busy,
     props.messages,
     props.streamingText,
-    props.streamingReasoningStandard,
-    props.streamingReasoningInline,
     props.toolStatusText,
     props.toolStatusState,
-    props.streamToolCalls,
-    props.streamActivityItems,
+    props.streamBlocks,
   ] as const,
   () => {
     const next = [...props.messages];
     const text = String(props.streamingText || "");
-    const reasoningStandard = String(props.streamingReasoningStandard || "");
-    const reasoningInline = String(props.streamingReasoningInline || "");
     const toolStatusText = String(props.toolStatusText || "");
-    const streamToolCalls = Array.isArray(props.streamToolCalls)
-      ? props.streamToolCalls.map((item) => ({ ...item }))
-      : [];
-    const streamActivityItems = normalizeChatActivityItems(props.streamActivityItems);
+    const streamBlocks = normalizeAssistantStreamBlocks(props.streamBlocks);
+    const blockText = assistantTextFromStreamBlocks(streamBlocks);
+    const blockToolCalls = streamBlocksToToolCalls(streamBlocks);
     if (
       props.busy
       || text.trim()
-      || reasoningStandard.trim()
-      || reasoningInline.trim()
+      || blockText.trim()
       || toolStatusText.trim()
       || props.toolStatusState
-      || streamToolCalls.length > 0
-      || streamActivityItems.length > 0
+      || blockToolCalls.length > 0
+      || streamBlocks.length > 0
     ) {
       if (!streamingDraftCreatedAt.value) {
         streamingDraftCreatedAt.value = new Date().toISOString();
@@ -338,33 +330,29 @@ watch(
       }
       const hasStreamingContent = !!(
         text.trim()
-        || reasoningStandard.trim()
-        || reasoningInline.trim()
+        || blockText.trim()
         || toolStatusText.trim()
         || props.toolStatusState
-        || streamToolCalls.length > 0
-        || streamActivityItems.length > 0
+        || blockToolCalls.length > 0
+        || streamBlocks.length > 0
       );
       next.push({
         id: `sidebar-stream-${props.activeConversationId || "conversation"}`,
         role: "assistant",
         createdAt: streamingDraftCreatedAt.value,
         speakerAgentId: props.activeAgentId || undefined,
-        parts: [{ type: "text", text }],
+        parts: [{ type: "text", text: blockText || text }],
         extraTextBlocks: [],
         providerMeta: {
           _streaming: true,
           _streamSegments: [text],
-          reasoningStandard,
-          reasoningInline,
           _toolStatusText: toolStatusText,
           _toolStatusState: props.toolStatusState,
-          _streamToolCalls: streamToolCalls,
-          _streamActivityItems: streamActivityItems,
+          _streamBlocks: streamBlocks,
           _preStreamingStatusText: hasStreamingContent ? "" : "等待回复",
           _frontendDispatchElapsedMs: Date.now() - streamingDraftStartedAtMs.value,
         },
-        toolCall: [],
+        toolCall: streamBlocksToToolHistoryEvents(streamBlocks) || [],
       });
     } else {
       streamingDraftCreatedAt.value = "";

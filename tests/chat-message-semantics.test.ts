@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "../src/types/app";
 import {
+  appendReasoningDeltaToStreamBlocks,
+  appendTextDeltaToStreamBlocks,
   appendReasoningToStreamActivityItems,
-  applyToolStatusToStreamActivityItems,
+  applyAssistantToolEventToStreamBlocks,
+  assistantStreamBlocksFromMessageForDisplay,
   inspectUndoablePatchCalls,
   normalizeMessageToolHistoryEvents,
   projectChatActivityForDisplay,
   projectMessageForDisplay,
   projectStreamingChatActivityForDisplay,
+  streamBlocksToToolHistoryEvents,
 } from "../src/utils/chat-message-semantics";
 
 function textMessage(id: string, role: ChatMessage["role"], text: string): ChatMessage {
@@ -22,7 +26,7 @@ function textMessage(id: string, role: ChatMessage["role"], text: string): ChatM
 describe("chat-message semantics", () => {
   it("projects display fields from unified message semantics", () => {
     const message: ChatMessage = {
-      ...textMessage("a-1", "assistant", "我查好了\n[标准思考]\n先检查上下文"),
+      ...textMessage("a-1", "assistant", "我查好了"),
       providerMeta: {
         origin: {
           kind: "remote_im",
@@ -36,6 +40,7 @@ describe("chat-message semantics", () => {
       toolCall: [
         {
           role: "assistant",
+          reasoning_content: "先检查上下文",
           tool_calls: [{
             id: "fc_1",
             call_id: "call_1",
@@ -52,7 +57,7 @@ describe("chat-message semantics", () => {
     const projection = projectMessageForDisplay(message);
 
     expect(projection.text).toBe("我查好了");
-    expect(projection.reasoningStandard).toContain("先检查上下文");
+    expect(projection.activityItems[0]).toMatchObject({ kind: "reasoning", text: "先检查上下文" });
     expect(projection.toolCallCount).toBe(1);
     expect(projection.lastToolName).toBe("remote_im_send");
     expect(projection.toolCalls[0]).toEqual({
@@ -90,12 +95,9 @@ describe("chat-message semantics", () => {
     expect(normalizeMessageToolHistoryEvents(message, "prompt")).toHaveLength(0);
   });
 
-  it("stitches tool round reasoning with final answer reasoning for display only", () => {
+  it("uses only event-level reasoning for display activity", () => {
     const message: ChatMessage = {
       ...textMessage("a-4", "assistant", "终端版本是 PowerShell 7.5.4"),
-      providerMeta: {
-        reasoningStandard: "我已经拿到工具结果，现在直接回答用户终端版本。",
-      },
       toolCall: [
         {
           role: "assistant",
@@ -119,11 +121,53 @@ describe("chat-message semantics", () => {
 
     const projection = projectMessageForDisplay(message);
 
-    expect(projection.reasoningStandard).toBe([
-      "先调用终端工具查看 PowerShell 版本。",
-      "我已经拿到工具结果，现在直接回答用户终端版本。",
-    ].join("\n\n"));
-    expect(message.providerMeta?.reasoningStandard).toBe("我已经拿到工具结果，现在直接回答用户终端版本。");
+    expect(projection.activityItems).toHaveLength(2);
+    expect(projection.activityItems[0]).toMatchObject({
+      kind: "reasoning",
+      text: "先调用终端工具查看 PowerShell 版本。",
+    });
+  });
+
+  it("projects message-level activity when there are no tool events", () => {
+    const message: ChatMessage = {
+      ...textMessage("a-activity", "assistant", "不太确定，展开说说？"),
+      activityItems: [{
+        kind: "reasoning",
+        id: "stream-reasoning-0",
+        text: "先判断用户提到的工具指代。",
+      }],
+    };
+
+    const projection = projectMessageForDisplay(message);
+
+    expect(projection.text).toBe("不太确定，展开说说？");
+    expect(projection.activityItems).toHaveLength(1);
+    expect(projection.activityItems[0]).toMatchObject({
+      kind: "reasoning",
+      id: "stream-reasoning-0",
+      text: "先判断用户提到的工具指代。",
+    });
+    expect(projection.activityStatus).toBe("complete");
+  });
+
+  it("projects assistant-only activity events when there are no tools", () => {
+    const message: ChatMessage = {
+      ...textMessage("a-event-activity", "assistant", "不太确定，展开说说？"),
+      toolCall: [{
+        role: "assistant",
+        content: "不太确定，展开说说？",
+        reasoning_content: "先判断用户提到的工具指代。",
+      }],
+    };
+
+    const projection = projectMessageForDisplay(message);
+
+    expect(projection.activityItems).toHaveLength(1);
+    expect(projection.activityItems[0]).toMatchObject({
+      kind: "reasoning",
+      text: "先判断用户提到的工具指代。",
+    });
+    expect(projection.toolCallCount).toBe(0);
   });
 
   it("inspects undoable patch calls through normalized tool history", () => {
@@ -162,9 +206,6 @@ describe("chat-message semantics", () => {
   it("does not create activity items without event-level reasoning or tools", () => {
     const message: ChatMessage = {
       ...textMessage("a-5", "assistant", "直接回答"),
-      providerMeta: {
-        reasoningStandard: "旧汇总思考不作为活动来源",
-      },
     };
 
     const activity = projectChatActivityForDisplay(message);
@@ -263,13 +304,15 @@ describe("chat-message semantics", () => {
 
   it("prioritizes streaming activity status by tool, reasoning, then request", () => {
     expect(projectStreamingChatActivityForDisplay({
-      reasoningStandard: "正在分析",
-      toolCalls: [{ toolCallId: "t-1", name: "exec", argsText: "{}", status: "doing" }],
+      activityItems: [
+        { kind: "reasoning", id: "r-1", text: "正在分析" },
+        { kind: "tool", id: "t-1", toolCallId: "t-1", name: "exec", argsText: "{}", status: "doing" },
+      ],
       running: true,
     }).activityStatus).toBe("running_tool");
 
     expect(projectStreamingChatActivityForDisplay({
-      reasoningStandard: "正在分析",
+      activityItems: [{ kind: "reasoning", id: "r-1", text: "正在分析" }],
       running: true,
     }).activityStatus).toBe("thinking");
 
@@ -290,38 +333,9 @@ describe("chat-message semantics", () => {
     }]);
   });
 
-  it("keeps streaming tool update in place without changing event order", () => {
-    const withReasoning = appendReasoningToStreamActivityItems([], "先看文件。");
-    const withTool = applyToolStatusToStreamActivityItems(withReasoning, {
-      toolName: "exec",
-      toolCallId: "tool-1",
-      toolStatus: "running",
-      toolArgs: "{\"command\":\"ls\"}",
-    });
-    const withMoreReasoning = appendReasoningToStreamActivityItems(withTool, "再确认结果。");
-    const done = applyToolStatusToStreamActivityItems(withMoreReasoning, {
-      toolName: "exec",
-      toolCallId: "tool-1",
-      toolStatus: "done",
-      toolArgs: "",
-    });
-
-    expect(done.map((item) => item.kind === "tool" ? `${item.name}:${item.status}` : item.text)).toEqual([
-      "先看文件。",
-      "exec:done",
-      "再确认结果。",
-    ]);
-    expect(done[1]).toMatchObject({
-      kind: "tool",
-      argsText: "{\"command\":\"ls\"}",
-      status: "done",
-    });
-  });
-
-  it("uses event-level streaming activity items before legacy reasoning and tools", () => {
+  it("uses event-level streaming activity items before stream tool calls", () => {
     const activity = projectStreamingChatActivityForDisplay({
-      reasoningStandard: "旧拼接思考",
-      toolCalls: [{ toolCallId: "legacy-tool", name: "legacy", argsText: "{}", status: "done" }],
+      toolCalls: [{ toolCallId: "stream-tool", name: "stream", argsText: "{}", status: "done" }],
       activityItems: [
         { kind: "reasoning", id: "r-1", text: "事件思考。" },
         { kind: "tool", id: "tool-1", toolCallId: "tool-1", name: "exec", argsText: "{\"command\":\"pwd\"}", status: "done" },
@@ -334,5 +348,105 @@ describe("chat-message semantics", () => {
       "exec",
     ]);
     expect(activity.activityToolCountsByName).toEqual({ exec: 1 });
+  });
+
+  it("projects streaming blocks through the same activity semantics as persisted tool history", () => {
+    const streamBlocks = [{
+      reasoning: "先看文件。",
+      text: "结论",
+      tools: [{
+        toolCallId: "tool-1",
+        name: "read_file",
+        argsText: "{\"path\":\"README.md\"}",
+        resultText: "文件内容",
+        status: "done" as const,
+      }],
+    }];
+
+    const streaming = projectStreamingChatActivityForDisplay({
+      streamBlocks,
+      running: true,
+    });
+    const persisted = projectMessageForDisplay({
+      ...textMessage("a-block", "assistant", "结论"),
+      toolCall: streamBlocksToToolHistoryEvents(streamBlocks),
+    });
+
+    expect(streaming.items.map((item) => item.kind === "tool" ? item.name : item.text)).toEqual([
+      "先看文件。",
+      "read_file",
+    ]);
+    expect(persisted.activityItems.map((item) => item.kind === "tool" ? item.name : item.text)).toEqual([
+      "先看文件。",
+      "read_file",
+    ]);
+  });
+
+  it("reconstructs assistant display blocks from persisted tool history", () => {
+    const streamBlocks = [{
+      text: "先说明我要等待。",
+    }, {
+      reasoning: "准备调用等待工具。",
+      tools: [{
+        toolCallId: "tool-1",
+        name: "operate",
+        argsText: "{\"action\":\"wait\",\"seconds\":3}",
+        resultText: "等待完成",
+        status: "done" as const,
+      }],
+      text: "等待完成，现在汇报。",
+    }];
+
+    const message = {
+      ...textMessage("a-blocks", "assistant", "先说明我要等待。等待完成，现在汇报。"),
+      providerMeta: {
+        _streamBlocks: streamBlocks,
+      },
+      toolCall: streamBlocksToToolHistoryEvents(streamBlocks),
+    };
+
+    expect(assistantStreamBlocksFromMessageForDisplay(message, "先说明我要等待。等待完成，现在汇报。")).toEqual([{
+      reasoning: "准备调用等待工具。",
+      text: "等待完成，现在汇报。",
+      tools: [{
+        toolCallId: "tool-1",
+        name: "operate",
+        argsText: "{\"action\":\"wait\",\"seconds\":3}",
+        resultText: "等待完成",
+        status: "done",
+      }],
+    }]);
+  });
+
+  it("folds local streaming deltas into ordered assistant stream blocks", () => {
+    let blocks = appendReasoningDeltaToStreamBlocks([], "先想。");
+    blocks = appendTextDeltaToStreamBlocks(blocks, "正文");
+    blocks = appendReasoningDeltaToStreamBlocks(blocks, "后续思考。");
+    blocks = applyAssistantToolEventToStreamBlocks(blocks, JSON.stringify({
+      role: "assistant",
+      content: null,
+      tool_calls: [{
+        id: "tool-1",
+        type: "function",
+        function: {
+          name: "operate",
+          arguments: "{\"action\":\"wait\"}",
+        },
+      }],
+    }));
+
+    expect(blocks).toEqual([
+      { reasoning: "先想。", text: "正文", tools: [] },
+      {
+        reasoning: "后续思考。",
+        text: "",
+        tools: [{
+          toolCallId: "tool-1",
+          name: "operate",
+          argsText: "{\"action\":\"wait\"}",
+          status: "doing",
+        }],
+      },
+    ]);
   });
 });

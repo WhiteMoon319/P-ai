@@ -270,7 +270,6 @@ fn spawn_delegate_task(
                         "speakerAgentId": delegate_for_publish.target_agent_id,
                         "sourceAgentId": delegate_for_publish.source_agent_id,
                         "targetAgentId": delegate_for_publish.target_agent_id,
-                        "reasoningStandard": result.reasoning_standard,
                     }),
                     delegate_for_publish.notify_assistant_when_done,
                 ) {
@@ -546,7 +545,6 @@ async fn delegate_execute_sync(
             "delegate": delegate,
             "conversationId": preflight.root_conversation_id,
             "assistantText": if run.final_response_text.trim().is_empty() { run.assistant_text } else { run.final_response_text },
-            "reasoningStandard": run.reasoning_standard,
             "targetAgentId": preflight.target_agent_id,
         })),
         Err(err) => Ok(serde_json::json!({

@@ -2,35 +2,6 @@ import type { ChatMessage } from "../types/app";
 
 const MEDIA_REF_PREFIX = "@media:";
 
-// Internal parsing marker for reasoning block - DO NOT translate or change this value
-// This is a protocol marker used for text parsing, not a user-facing UI string
-const STANDARD_REASONING_MARKER = "[标准思考]";
-
-export function parseAssistantStoredText(rawText: string): {
-  assistantText: string;
-  reasoningStandard: string;
-  reasoningInline: string;
-} {
-  const raw = rawText || "";
-  const standardIdx = raw.indexOf(STANDARD_REASONING_MARKER);
-
-  if (standardIdx < 0) {
-    return {
-      assistantText: raw.trim(),
-      reasoningStandard: "",
-      reasoningInline: "",
-    };
-  }
-
-  const reasoningStandard = raw.slice(standardIdx + STANDARD_REASONING_MARKER.length).trim();
-
-  return {
-    assistantText: raw.slice(0, standardIdx).trim(),
-    reasoningStandard,
-    reasoningInline: "",
-  };
-}
-
 export function stripHiddenExtraBlocks(text: string): string {
   return (text || "")
     .replace(/<memory_board>[\s\S]*?<\/memory_board>/g, "")

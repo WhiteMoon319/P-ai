@@ -1,35 +1,24 @@
 import type { Ref } from "vue";
-import type { ChatActivityItem, ChatMessage } from "../../../types/app";
+import type { AssistantStreamBlock, ChatMessage } from "../../../types/app";
 import {
-  appendReasoningStandardDelta,
-  readDeltaMessage,
   readHistoryFlushedPayload,
-  readRoundCompletedPayload,
-  readRoundFailedPayload,
   type AssistantDeltaEvent,
-  type HistoryFlushedPayload,
-  type RoundCompletedPayload,
-  type RoundFailedPayload,
-  type RoundStartedPayload,
 } from "./use-chat-flow-events";
 import type { PendingTerminalEvent, RoundState } from "./use-chat-flow-types";
 
 type UseChatFlowRoundEventsOptions = {
   chatting: Ref<boolean>;
   latestAssistantText: Ref<string>;
-  latestReasoningStandardText: Ref<string>;
-  latestReasoningInlineText: Ref<string>;
   toolStatusText: Ref<string>;
   toolStatusState: Ref<"running" | "done" | "failed" | "">;
-  streamToolCalls?: Ref<any[]>;
-  streamActivityItems?: Ref<ChatActivityItem[]>;
+  streamBlocks?: Ref<AssistantStreamBlock[]>;
   reasoningStartedAtMs: Ref<number>;
   getRound: () => RoundState;
   setRound: (next: RoundState, frontendPhase?: "idle" | "queued" | "waiting" | "streaming") => void;
   getGeneration: () => number;
   setPendingTerminalEvent: (event: PendingTerminalEvent | null) => void;
   getPendingTerminalEvent: () => PendingTerminalEvent | null;
-  setDeferredRoundCompletion: (event: { gen: number; result: { assistantText: string; reasoningStandard?: string; reasoningInline?: string; assistantMessage?: ChatMessage } } | null) => void;
+  setDeferredRoundCompletion: (event: { gen: number; result: { assistantText: string; assistantMessage?: ChatMessage } } | null) => void;
   clearConversationStreamCache: (conversationId?: string | null) => void;
   clearFrontendDispatchTimer: () => void;
   setActiveActivationId: (value: string) => void;
@@ -37,28 +26,20 @@ type UseChatFlowRoundEventsOptions = {
   sendStartedAtMsByGen: Map<number, number>;
   hasAssistantDraftInMessages: () => boolean;
   applyConversationStreamCacheToDisplay: (conversationId?: string | null) => boolean;
-  loadStreamActivityItemsFromDraft: (draftId: string) => void;
-  loadStreamToolCallsFromDraft: (draftId: string) => void;
+  loadStreamBlocksFromDraft: (draftId: string) => void;
   updateQueuedAssistantDraftStatus: (draftId: string, statusText: string) => void;
   insertDraft: (gen: number, initialText?: string) => string;
   updateDraftText: (draftId: string) => void;
-  syncStreamActivityItemsToDraft: (draftId: string) => void;
-  syncStreamToolCallsToDraft: (draftId: string) => void;
+  syncStreamBlocksToDraft: (draftId: string) => void;
   applyPendingTerminalEvent: (gen: number) => boolean;
   promoteQueuedRoundToStreaming: (gen: number) => number;
   finalizeDeferredRoundCompletion: () => void;
   finalizeQueuedRoundWithoutDraft: (
     gen: number,
-    result: { assistantText: string; reasoningStandard?: string; reasoningInline?: string; assistantMessage?: ChatMessage },
+    result: { assistantText: string; assistantMessage?: ChatMessage },
   ) => Promise<void>;
   failQueuedRoundWithoutDraft: (gen: number, error: unknown) => Promise<void>;
   enqueueStreamDelta: (gen: number, delta: string) => void;
-  setPendingReasoningStandardBreak: (value: boolean) => void;
-  getPendingReasoningStandardBreak: () => boolean;
-  getStreamToolCallCount: () => number;
-  setStreamToolCallCount: (value: number) => void;
-  getStreamLastToolName: () => string;
-  setStreamLastToolName: (value: string) => void;
   setChatErrorText: (text: string, conversationId?: string | null) => void;
   formatRequestFailed: (error: unknown) => string;
   onReloadMessages: () => Promise<void>;
@@ -117,8 +98,6 @@ export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
     gen: number,
     result: {
       assistantText: string;
-      reasoningStandard?: string;
-      reasoningInline?: string;
       assistantMessage?: ChatMessage;
     },
   ) {
@@ -145,10 +124,7 @@ export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
     options.clearFrontendDispatchTimer();
     options.setActiveActivationId("");
     options.latestAssistantText.value = "";
-    options.latestReasoningStandardText.value = "";
-    options.latestReasoningInlineText.value = "";
-    if (options.streamActivityItems) options.streamActivityItems.value = [];
-    options.setPendingReasoningStandardBreak(false);
+    if (options.streamBlocks) options.streamBlocks.value = [];
     options.setChatErrorText(options.formatRequestFailed(error));
     if (!options.toolStatusText.value) {
       options.toolStatusState.value = "failed";

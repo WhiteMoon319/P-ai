@@ -1,26 +1,35 @@
 import type { Ref } from "vue";
-import type { ChatActivityItem, ChatMentionTarget, ChatMessage } from "../../../types/app";
-import { normalizeChatActivityItems } from "../../../utils/chat-message-semantics";
-import { consumeClosedMarkdownBlocks } from "./use-chat-flow-text";
+import type { AssistantStreamBlock, ChatMentionTarget, ChatMessage } from "../../../types/app";
 import {
-  mergeStreamToolCallsForward,
-  normalizeStreamToolCallViews,
-  type StreamToolCallView,
-} from "./use-chat-flow-tool-calls";
+  assistantTextFromStreamBlocks,
+  normalizeAssistantStreamBlocks,
+  normalizeChatActivityItems,
+  streamBlocksToToolCalls,
+  streamBlocksToToolHistoryEvents,
+} from "../../../utils/chat-message-semantics";
+import { consumeClosedMarkdownBlocks } from "./use-chat-flow-text";
 import { readMessagePlainText } from "./use-chat-flow-utils";
 
 export const DRAFT_ASSISTANT_ID_PREFIX = "__draft_assistant__:";
 export const DRAFT_USER_ID_PREFIX = "__draft_user__:";
 
+function messageHasActivityEvents(message: ChatMessage): boolean {
+  if (normalizeChatActivityItems(message.activityItems).length > 0) return true;
+  if (!Array.isArray(message.toolCall)) return false;
+  return message.toolCall.some((event) => {
+    const raw = event && typeof event === "object" ? event as Record<string, unknown> : null;
+    if (!raw) return false;
+    if (String(raw.reasoning_content || "").trim()) return true;
+    return Array.isArray(raw.tool_calls) && raw.tool_calls.length > 0;
+  });
+}
+
 type UseChatFlowDraftsOptions = {
   allMessages: Ref<ChatMessage[]>;
   latestUserText: Ref<string>;
   latestAssistantText: Ref<string>;
-  latestReasoningStandardText: Ref<string>;
-  latestReasoningInlineText: Ref<string>;
   toolStatusText: Ref<string>;
-  streamToolCalls?: Ref<StreamToolCallView[]>;
-  streamActivityItems?: Ref<ChatActivityItem[]>;
+  streamBlocks?: Ref<AssistantStreamBlock[]>;
   getSession: () => { apiConfigId: string; agentId: string; departmentId?: string } | null;
   getConversationId?: () => string;
   buildImageAttachmentPayload: (
@@ -39,29 +48,24 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     return pendingUserDraftId;
   }
 
-  function loadStreamToolCallsFromDraft(draftId: string) {
-    if (!options.streamToolCalls) return;
-    if (!draftId) {
-      options.streamToolCalls.value = [];
-      return;
-    }
+  function getDraftStreamBlocks(draftId: string): AssistantStreamBlock[] {
+    if (!draftId) return [];
     const draft = options.allMessages.value.find((item) => item.id === draftId);
     const meta = (draft?.providerMeta || {}) as Record<string, unknown>;
-    const calls = normalizeStreamToolCallViews(meta._streamToolCalls);
-    options.streamToolCalls.value = mergeStreamToolCallsForward(options.streamToolCalls.value, calls);
+    return normalizeAssistantStreamBlocks(meta._streamBlocks);
   }
 
-  function loadStreamActivityItemsFromDraft(draftId: string) {
-    if (!options.streamActivityItems) return;
+  function loadStreamBlocksFromDraft(draftId: string) {
+    if (!options.streamBlocks) return;
     if (!draftId) {
-      options.streamActivityItems.value = [];
+      options.streamBlocks.value = [];
       return;
     }
     const draft = options.allMessages.value.find((item) => item.id === draftId);
     const meta = (draft?.providerMeta || {}) as Record<string, unknown>;
-    const items = normalizeChatActivityItems(meta._streamActivityItems);
-    if (items.length > 0 || options.streamActivityItems.value.length === 0) {
-      options.streamActivityItems.value = items;
+    const blocks = normalizeAssistantStreamBlocks(meta._streamBlocks);
+    if (blocks.length > 0 || options.streamBlocks.value.length === 0) {
+      options.streamBlocks.value = blocks;
     }
   }
 
@@ -139,8 +143,6 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
       speakerAgentId: agentId || "assistant-draft",
       parts: [{ type: "text", text: "" }],
       providerMeta: {
-        reasoningStandard: "",
-        reasoningInline: "",
         _streaming: true,
         _streamSegments: [] as string[],
         _streamTail: "",
@@ -182,8 +184,6 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
       parts: [{ type: "text", text: "" }],
       providerMeta: {
         ...existingMeta,
-        reasoningStandard: "",
-        reasoningInline: "",
         _streaming: true,
         _streamSegments: [] as string[],
         _streamTail: "",
@@ -228,33 +228,19 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     return String(meta._streamTail ?? "");
   }
 
-  function syncStreamToolCallsToDraft(draftId: string) {
-    if (!draftId || !options.streamToolCalls) return;
-    const calls = options.streamToolCalls.value.map((item) => ({ ...item }));
+  function syncStreamBlocksToDraft(draftId: string, rawBlocks?: AssistantStreamBlock[]) {
+    if (!draftId) return;
+    const blocks = normalizeAssistantStreamBlocks(rawBlocks || options.streamBlocks?.value || []);
     options.allMessages.value = options.allMessages.value.map((message) => {
       if (message.id !== draftId) return message;
       const meta = ((message.providerMeta || {}) as Record<string, unknown>);
       return {
         ...message,
+        parts: [{ type: "text", text: assistantTextFromStreamBlocks(blocks) }],
+        toolCall: streamBlocksToToolHistoryEvents(blocks),
         providerMeta: {
           ...meta,
-          _streamToolCalls: calls,
-        },
-      };
-    });
-  }
-
-  function syncStreamActivityItemsToDraft(draftId: string) {
-    if (!draftId || !options.streamActivityItems) return;
-    const items = normalizeChatActivityItems(options.streamActivityItems.value);
-    options.allMessages.value = options.allMessages.value.map((message) => {
-      if (message.id !== draftId) return message;
-      const meta = ((message.providerMeta || {}) as Record<string, unknown>);
-      return {
-        ...message,
-        providerMeta: {
-          ...meta,
-          _streamActivityItems: items,
+          _streamBlocks: blocks,
         },
       };
     });
@@ -265,6 +251,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     streamSegments?: string[],
     streamTail?: string,
     streamAnimatedDelta = "",
+    rawBlocks?: AssistantStreamBlock[],
   ) {
     if (!draftId) return;
     const agentId = String(options.getSession()?.agentId || "").trim();
@@ -277,36 +264,31 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
       && !!existingDraftText
       && (
         !!String(options.toolStatusText.value || "").trim()
-        || (options.streamToolCalls?.value.length || 0) > 0
-        || (options.streamActivityItems?.value.length || 0) > 0
+        || (options.streamBlocks?.value.length || 0) > 0
       );
     if (shouldPreserveExistingDraftText) {
       options.latestAssistantText.value = existingDraftText;
     }
     const nextStreamSegments = streamSegments || readDraftStreamSegments(draftId);
     const nextStreamTail = streamTail ?? readDraftStreamTail(draftId);
-    const nextReasoningStandard = String(options.latestReasoningStandardText.value || "");
-    const nextReasoningInline = String(options.latestReasoningInlineText.value || "");
     const hasVisibleStreamContent =
       !!String(options.latestAssistantText.value || "").trim()
-      || !!nextReasoningStandard.trim()
-      || !!nextReasoningInline.trim()
       || nextStreamSegments.some((item) => !!String(item || "").trim())
       || !!String(nextStreamTail || "").trim()
-      || (options.streamToolCalls?.value.length || 0) > 0
-      || (options.streamActivityItems?.value.length || 0) > 0;
+      || (options.streamBlocks?.value.length || 0) > 0;
     const preStreamingStatusText = hasVisibleStreamContent
       ? ""
       : String(options.toolStatusText.value || "").trim();
+    const streamBlocks = normalizeAssistantStreamBlocks(rawBlocks || options.streamBlocks?.value || []);
+    const blockText = assistantTextFromStreamBlocks(streamBlocks);
     const msg: ChatMessage = {
       id: draftId,
       role: "assistant",
       createdAt: String(existingDraft?.createdAt || new Date().toISOString()),
       speakerAgentId: agentId || "assistant-draft",
-      parts: [{ type: "text", text: String(options.latestAssistantText.value || "") }],
+      parts: [{ type: "text", text: blockText || String(options.latestAssistantText.value || "") }],
+      toolCall: streamBlocksToToolHistoryEvents(streamBlocks),
       providerMeta: {
-        reasoningStandard: nextReasoningStandard,
-        reasoningInline: nextReasoningInline,
         _streaming: true,
         _streamSegments: nextStreamSegments,
         _streamTail: nextStreamTail,
@@ -314,12 +296,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
         _preStreamingStatusText: preStreamingStatusText,
         _frontendDispatchStartedAtMs: options.getFrontendDispatchStartedAtMs(),
         _frontendDispatchElapsedMs: options.currentFrontendDispatchElapsedMs(),
-        _streamToolCalls: Array.isArray(options.streamToolCalls?.value)
-          ? options.streamToolCalls.value.map((item) => ({ ...item }))
-          : [] as StreamToolCallView[],
-        _streamActivityItems: Array.isArray(options.streamActivityItems?.value)
-          ? normalizeChatActivityItems(options.streamActivityItems.value)
-          : [] as ChatActivityItem[],
+        _streamBlocks: streamBlocks,
       },
     };
     const cur = options.allMessages.value;
@@ -349,13 +326,14 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     if (draftIdx < 0) return;
 
     if (finalMessage) {
+      const messageToApply: ChatMessage = finalMessage;
       const deduped = current.filter((m, idx) => idx === draftIdx || m.id !== finalMessage.id);
       const nextDraftIdx = deduped.findIndex((m) => m.id === draftId);
       if (nextDraftIdx < 0) {
         options.allMessages.value = deduped;
         return;
       }
-      options.allMessages.value = deduped.map((m, idx) => (idx === nextDraftIdx ? finalMessage : m));
+      options.allMessages.value = deduped.map((m, idx) => (idx === nextDraftIdx ? messageToApply : m));
       return;
     }
 
@@ -382,25 +360,26 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
   return {
     applyAssistantDeltaToDraft,
     finalizeDraft,
+    getDraftStreamBlocks,
     getPendingUserDraftId,
     hasAssistantDraftInMessages,
     insertDraft,
     insertUserDraft,
-    loadStreamActivityItemsFromDraft,
-    loadStreamToolCallsFromDraft,
+    loadStreamBlocksFromDraft,
     removeAssistantDrafts,
     removeDraft,
-    syncStreamActivityItemsToDraft,
-    syncStreamToolCallsToDraft,
+    syncStreamBlocksToDraft,
     updateDraftText,
     updateQueuedAssistantDraftStatus,
   };
 }
 
-export function summarizeToolCallsText(streamToolCallCount: number, streamLastToolName: string): string {
-  if (streamToolCallCount <= 0) return "";
-  const extraCount = Math.max(0, streamToolCallCount - 1);
+export function summarizeToolCallsText(streamBlocks?: AssistantStreamBlock[]): string {
+  const toolCalls = streamBlocksToToolCalls(streamBlocks || []);
+  if (toolCalls.length <= 0) return "";
+  const lastToolName = toolCalls[toolCalls.length - 1]?.name || "";
+  const extraCount = Math.max(0, toolCalls.length - 1);
   return extraCount > 0
-    ? `调用 ${streamLastToolName || "-"} (+${extraCount})`
-    : `调用 ${streamLastToolName || "-"}`;
+    ? `调用 ${lastToolName || "-"} (+${extraCount})`
+    : `调用 ${lastToolName || "-"}`;
 }

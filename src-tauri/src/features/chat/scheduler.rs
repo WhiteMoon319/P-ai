@@ -174,19 +174,15 @@ pub(crate) struct ConversationRuntimeSnapshot {
     pub stream_cache: ConversationStreamRuntimeCacheSnapshot,
 }
 
-#[derive(Debug, Clone, Serialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ConversationStreamRuntimeCacheSnapshot {
     pub activation_id: String,
     pub request_id: String,
     pub assistant_text: String,
-    pub reasoning_standard: String,
-    pub reasoning_inline: String,
     pub tool_status_text: String,
     pub tool_status_state: String,
-    pub stream_tool_calls: Vec<ConversationStreamToolCallRuntimeCache>,
-    pub stream_tool_call_count: usize,
-    pub stream_last_tool_name: String,
+    pub stream_blocks: Vec<AssistantStreamBlock>,
     pub started_at: String,
     pub started_at_ms: u64,
     pub updated_at: String,
@@ -797,17 +793,31 @@ fn is_visible_stream_progress_event(event: &AssistantDeltaEvent) -> bool {
     }
     matches!(
         event.kind.as_deref(),
-        Some("reasoning_standard") | Some("reasoning_inline")
+        Some("activity_reasoning_delta") | Some("assistant_tool_event") | Some("assistant_tool_result")
     )
 }
 
 fn stream_cache_has_visible_progress(cache: &ConversationStreamRuntimeCache) -> bool {
     !cache.assistant_text.trim().is_empty()
-        || !cache.reasoning_standard.trim().is_empty()
-        || !cache.reasoning_inline.trim().is_empty()
         || !cache.tool_status_text.trim().is_empty()
         || !cache.tool_status_state.trim().is_empty()
-        || !cache.stream_tool_calls.is_empty()
+        || !cache.stream_blocks.is_empty()
+}
+
+fn stream_blocks_debug_counts(blocks: &[AssistantStreamBlock]) -> (usize, usize, usize, usize) {
+    let reasoning_len = blocks
+        .iter()
+        .map(|block| block.reasoning.chars().count())
+        .sum::<usize>();
+    let text_len = blocks
+        .iter()
+        .map(|block| block.text.chars().count())
+        .sum::<usize>();
+    let tool_count = blocks
+        .iter()
+        .map(|block| block.tools.len())
+        .sum::<usize>();
+    (blocks.len(), reasoning_len, text_len, tool_count)
 }
 
 fn now_unix_ms() -> u64 {
@@ -819,25 +829,266 @@ fn now_unix_ms() -> u64 {
     }
 }
 
-fn event_tool_call_id(event: &AssistantDeltaEvent) -> Option<&str> {
-    event
-        .tool_call_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
+fn stream_cache_current_block_mut(cache: &mut ConversationStreamRuntimeCache) -> &mut AssistantStreamBlock {
+    if cache.stream_blocks.is_empty() {
+        cache.stream_blocks.push(AssistantStreamBlock::default());
+    }
+    let index = cache.stream_blocks.len().saturating_sub(1);
+    &mut cache.stream_blocks[index]
 }
 
-fn find_stream_tool_call_cache_index(
-    calls: &[ConversationStreamToolCallRuntimeCache],
-    tool_call_id: &str,
-) -> Option<usize> {
-    calls.iter().position(|call| {
-        call.tool_call_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            == Some(tool_call_id)
-    })
+fn append_stream_text_block(cache: &mut ConversationStreamRuntimeCache, delta: &str) {
+    if delta.is_empty() {
+        return;
+    }
+    let block = stream_cache_current_block_mut(cache);
+    block.text.push_str(delta);
+}
+
+fn append_stream_reasoning_block(cache: &mut ConversationStreamRuntimeCache, delta: &str) {
+    if delta.is_empty() {
+        return;
+    }
+    if cache
+        .stream_blocks
+        .last()
+        .is_some_and(|block| !block.text.trim().is_empty() || !block.tools.is_empty())
+    {
+        cache.stream_blocks.push(AssistantStreamBlock::default());
+    }
+    let block = stream_cache_current_block_mut(cache);
+    block.reasoning.push_str(delta);
+}
+
+fn apply_tool_result_to_stream_blocks(
+    cache: &mut ConversationStreamRuntimeCache,
+    message: &str,
+) {
+    let Ok(event) = serde_json::from_str::<Value>(message) else {
+        return;
+    };
+    let role = event
+        .get("role")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+    if role != "tool" {
+        return;
+    }
+    let tool_call_id = event
+        .get("tool_call_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+    if tool_call_id.is_empty() {
+        return;
+    }
+    let result_text = event
+        .get("content")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    for block in &mut cache.stream_blocks {
+        if let Some(tool) = block
+            .tools
+            .iter_mut()
+            .find(|tool| tool.tool_call_id.trim() == tool_call_id)
+        {
+            tool.result_text = result_text;
+            tool.status = "done".to_string();
+            return;
+        }
+    }
+}
+
+fn assistant_tool_event_calls(event: &Value) -> Vec<AssistantStreamToolBlock> {
+    event
+        .get("tool_calls")
+        .and_then(Value::as_array)
+        .map(|calls| {
+            calls
+                .iter()
+                .filter_map(|call| {
+                    let tool_call_id = call
+                        .get("id")
+                        .or_else(|| call.get("call_id"))
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())?;
+                    let function = call.get("function")?;
+                    let name = function
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())?;
+                    let args_text = match function.get("arguments") {
+                        Some(Value::String(text)) => text.clone(),
+                        Some(value) => value.to_string(),
+                        None => String::new(),
+                    };
+                    Some(AssistantStreamToolBlock {
+                        tool_call_id: tool_call_id.to_string(),
+                        name: name.to_string(),
+                        args_text: args_text.trim().to_string(),
+                        result_text: String::new(),
+                        status: "doing".to_string(),
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn apply_assistant_tool_event_to_stream_blocks(
+    cache: &mut ConversationStreamRuntimeCache,
+    message: &str,
+) {
+    let Ok(event) = serde_json::from_str::<Value>(message) else {
+        return;
+    };
+    let reasoning = event
+        .get("reasoning_content")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+    let tools = assistant_tool_event_calls(&event);
+    if reasoning.is_empty() && tools.is_empty() {
+        return;
+    }
+    if cache
+        .stream_blocks
+        .last()
+        .is_some_and(|block| !block.text.trim().is_empty())
+    {
+        cache.stream_blocks.push(AssistantStreamBlock::default());
+    }
+    if !reasoning.is_empty() && cache.activity_reasoning_text.trim().is_empty() {
+        cache.activity_reasoning_text.push_str(reasoning);
+    }
+    let target_index = {
+        let block = stream_cache_current_block_mut(cache);
+        if !reasoning.is_empty() && block.reasoning.trim().is_empty() {
+            block.reasoning.push_str(reasoning);
+        }
+        cache.stream_blocks.len().saturating_sub(1)
+    };
+    for tool in tools {
+        if let Some(existing) = cache
+            .stream_blocks
+            .iter_mut()
+            .flat_map(|block| block.tools.iter_mut())
+            .find(|existing| existing.tool_call_id.trim() == tool.tool_call_id)
+        {
+            existing.name = tool.name;
+            if !tool.args_text.is_empty() {
+                existing.args_text = tool.args_text;
+            }
+            existing.status = tool.status;
+            continue;
+        }
+        if let Some(block) = cache.stream_blocks.get_mut(target_index) {
+            block.tools.push(tool);
+        }
+    }
+}
+
+#[cfg(test)]
+mod scheduler_stream_block_tests {
+    use super::*;
+
+    #[test]
+    fn assistant_tool_event_should_project_reasoning_and_tool_into_stream_block() {
+        let mut cache = ConversationStreamRuntimeCache::default();
+        apply_assistant_tool_event_to_stream_blocks(
+            &mut cache,
+            &serde_json::json!({
+                "role": "assistant",
+                "content": Value::Null,
+                "reasoning_content": "先说明要使用等待工具。",
+                "tool_calls": [{
+                    "id": "call-wait",
+                    "call_id": "call-wait",
+                    "type": "function",
+                    "function": {
+                        "name": "operate",
+                        "arguments": "{\"method\":\"wait3\"}"
+                    }
+                }]
+            })
+            .to_string(),
+        );
+
+        assert_eq!(cache.stream_blocks.len(), 1);
+        assert_eq!(cache.stream_blocks[0].reasoning, "先说明要使用等待工具。");
+        assert_eq!(cache.stream_blocks[0].tools.len(), 1);
+        assert_eq!(cache.stream_blocks[0].tools[0].tool_call_id, "call-wait");
+        assert_eq!(cache.stream_blocks[0].tools[0].name, "operate");
+        assert_eq!(cache.stream_blocks[0].tools[0].status, "doing");
+    }
+
+    #[test]
+    fn assistant_tool_result_should_complete_existing_stream_tool() {
+        let mut cache = ConversationStreamRuntimeCache::default();
+        apply_assistant_tool_event_to_stream_blocks(
+            &mut cache,
+            &serde_json::json!({
+                "role": "assistant",
+                "content": Value::Null,
+                "tool_calls": [{
+                    "id": "call-wait",
+                    "type": "function",
+                    "function": {
+                        "name": "operate",
+                        "arguments": "{\"method\":\"wait3\"}"
+                    }
+                }]
+            })
+            .to_string(),
+        );
+        apply_tool_result_to_stream_blocks(
+            &mut cache,
+            &serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call-wait",
+                "content": "等待完成"
+            })
+            .to_string(),
+        );
+
+        assert_eq!(cache.stream_blocks.len(), 1);
+        assert_eq!(cache.stream_blocks[0].tools.len(), 1);
+        assert_eq!(cache.stream_blocks[0].tools[0].result_text, "等待完成");
+        assert_eq!(cache.stream_blocks[0].tools[0].status, "done");
+    }
+
+    #[test]
+    fn reasoning_after_tool_should_start_following_stream_block() {
+        let mut cache = ConversationStreamRuntimeCache::default();
+        append_stream_reasoning_block(&mut cache, "思维链1");
+        apply_assistant_tool_event_to_stream_blocks(
+            &mut cache,
+            &serde_json::json!({
+                "role": "assistant",
+                "content": Value::Null,
+                "tool_calls": [{
+                    "id": "call-wait",
+                    "type": "function",
+                    "function": {
+                        "name": "operate",
+                        "arguments": "{\"method\":\"wait3\"}"
+                    }
+                }]
+            })
+            .to_string(),
+        );
+        append_stream_reasoning_block(&mut cache, "思维链2");
+
+        assert_eq!(cache.stream_blocks.len(), 2);
+        assert_eq!(cache.stream_blocks[0].reasoning, "思维链1");
+        assert_eq!(cache.stream_blocks[0].tools.len(), 1);
+        assert_eq!(cache.stream_blocks[1].reasoning, "思维链2");
+        assert!(cache.stream_blocks[1].tools.is_empty());
+    }
 }
 
 fn reset_conversation_stream_runtime_cache(
@@ -892,26 +1143,45 @@ fn clear_conversation_stream_runtime_cache(
     Ok(())
 }
 
+fn conversation_stream_runtime_cache_snapshot(
+    stream_cache: ConversationStreamRuntimeCache,
+) -> ConversationStreamRuntimeCacheSnapshot {
+    let has_visible_progress = stream_cache_has_visible_progress(&stream_cache);
+    ConversationStreamRuntimeCacheSnapshot {
+        activation_id: stream_cache.activation_id,
+        request_id: stream_cache.request_id,
+        assistant_text: stream_cache.assistant_text,
+        tool_status_text: stream_cache.tool_status_text,
+        tool_status_state: stream_cache.tool_status_state,
+        stream_blocks: stream_cache.stream_blocks,
+        started_at: stream_cache.started_at,
+        started_at_ms: stream_cache.started_at_ms,
+        updated_at: stream_cache.updated_at,
+        has_visible_progress,
+        persisted_assistant_message_id: stream_cache.persisted_assistant_message_id,
+    }
+}
+
 fn update_conversation_stream_runtime_cache(
     state: &AppState,
     conversation_id: &str,
     event: &AssistantDeltaEvent,
-) -> Result<(), String> {
+) -> Result<Option<ConversationStreamRuntimeCacheSnapshot>, String> {
     let cid = conversation_id.trim();
     if cid.is_empty() {
-        return Ok(());
+        return Ok(None);
     }
     if event.kind.as_deref() == Some("round_completed")
         || event.kind.as_deref() == Some("round_failed")
         || event.kind.as_deref() == Some("history_flushed")
         || event.kind.as_deref() == Some("stream_rebind_required")
     {
-        return Ok(());
+        return Ok(None);
     }
     let has_progress = is_visible_stream_progress_event(event)
         || event.kind.as_deref() == Some("tool_status");
     if !has_progress {
-        return Ok(());
+        return Ok(None);
     }
 
     let mut slots = lock_conversation_runtime_slots(state)?;
@@ -935,68 +1205,55 @@ fn update_conversation_stream_runtime_cache(
     }
     match event.kind.as_deref() {
         Some("tool_status") => {
-            let tool_name = event.tool_name.as_deref().map(str::trim).unwrap_or("");
+            // tool_status 是调度层信号，服务头像右侧/运行态提示；气泡与持久化只读取 stream_blocks。
             let tool_status = event.tool_status.as_deref().unwrap_or("").trim();
-            let tool_args = event.tool_args.clone().unwrap_or_default();
-            let tool_call_id = event_tool_call_id(event);
-            if let Some(tool_call_id) = tool_call_id {
-                if tool_status == "running" && !tool_name.is_empty() {
-                    cache.stream_last_tool_name = tool_name.to_string();
-                    if let Some(index) =
-                        find_stream_tool_call_cache_index(&cache.stream_tool_calls, tool_call_id)
-                    {
-                        if let Some(call) = cache.stream_tool_calls.get_mut(index) {
-                            call.name = tool_name.to_string();
-                            call.args_text = tool_args.clone();
-                            call.tool_call_id = Some(tool_call_id.to_string());
-                            call.status = Some("doing".to_string());
-                        }
-                    } else {
-                        cache.stream_tool_call_count += 1;
-                        cache
-                            .stream_tool_calls
-                            .push(ConversationStreamToolCallRuntimeCache {
-                                name: tool_name.to_string(),
-                                args_text: tool_args.clone(),
-                                tool_call_id: Some(tool_call_id.to_string()),
-                                status: Some("doing".to_string()),
-                            });
-                    }
-                } else if (tool_status == "done" || tool_status == "failed")
-                    && !tool_name.is_empty()
-                {
-                    if let Some(index) =
-                        find_stream_tool_call_cache_index(&cache.stream_tool_calls, tool_call_id)
-                    {
-                        if let Some(call) = cache.stream_tool_calls.get_mut(index) {
-                            call.name = tool_name.to_string();
-                            if !tool_args.is_empty() {
-                                call.args_text = tool_args.clone();
-                            }
-                            call.tool_call_id = Some(tool_call_id.to_string());
-                            call.status = Some("done".to_string());
-                        }
-                    }
-                }
-            }
             cache.tool_status_text = event.message.clone().unwrap_or_default();
             cache.tool_status_state = match tool_status {
                 "running" | "done" | "failed" => tool_status.to_string(),
                 _ => String::new(),
             };
         }
-        Some("reasoning_standard") => {
-            cache.reasoning_standard.push_str(&event.delta);
+        Some("activity_reasoning_delta") => {
+            cache.activity_reasoning_text.push_str(&event.delta);
+            append_stream_reasoning_block(cache, &event.delta);
         }
-        Some("reasoning_inline") => {
-            cache.reasoning_inline.push_str(&event.delta);
+        Some("assistant_tool_event") => {
+            apply_assistant_tool_event_to_stream_blocks(
+                cache,
+                event.message.as_deref().unwrap_or_default(),
+            );
+        }
+        Some("assistant_tool_result") => {
+            apply_tool_result_to_stream_blocks(
+                cache,
+                event.message.as_deref().unwrap_or_default(),
+            );
         }
         _ => {
             cache.assistant_text.push_str(&event.delta);
+            append_stream_text_block(cache, &event.delta);
         }
     }
     cache.updated_at = now_iso();
-    Ok(())
+    let snapshot = conversation_stream_runtime_cache_snapshot(cache.clone());
+    if matches!(
+        event.kind.as_deref(),
+        Some("assistant_tool_event") | Some("assistant_tool_result") | Some("tool_status")
+    ) {
+        let (block_count, reasoning_len, text_len, tool_count) =
+            stream_blocks_debug_counts(&snapshot.stream_blocks);
+        runtime_log_info(format!(
+            "[聊天流式块][后端缓存] 更新 conversation_id={} kind={} block_count={} reasoning_len={} text_len={} tool_count={} tool_status_state={}",
+            cid,
+            event.kind.as_deref().unwrap_or("delta"),
+            block_count,
+            reasoning_len,
+            text_len,
+            tool_count,
+            snapshot.tool_status_state.trim(),
+        ));
+    }
+    Ok(Some(snapshot))
 }
 
 fn dispatch_assistant_delta_to_active_view(
@@ -1015,6 +1272,7 @@ fn dispatch_assistant_delta_to_active_view(
     if targets.is_empty() {
         return;
     }
+    let target_count = targets.len();
 
     let mut delivered = false;
     let mut failed_labels = Vec::<String>::new();
@@ -1029,7 +1287,31 @@ fn dispatch_assistant_delta_to_active_view(
         }
     }
     prune_failed_active_chat_view_bindings(state, &failed_labels);
-    let _ = delivered;
+    if matches!(
+        event.kind.as_deref(),
+        Some("assistant_tool_event") | Some("assistant_tool_result") | Some("tool_status")
+    ) {
+        let stream_cache_blocks = event
+            .stream_cache
+            .as_ref()
+            .map(|cache| cache.stream_blocks.as_slice())
+            .unwrap_or(&[]);
+        let (block_count, reasoning_len, text_len, tool_count) =
+            stream_blocks_debug_counts(stream_cache_blocks);
+        runtime_log_info(format!(
+            "[聊天流式块][后端发送] conversation_id={} kind={} channel_targets={} delivered={} failed={} has_stream_cache={} block_count={} reasoning_len={} text_len={} tool_count={}",
+            conversation_id.trim(),
+            event.kind.as_deref().unwrap_or("delta"),
+            target_count,
+            delivered,
+            failed_labels.len(),
+            event.stream_cache.is_some(),
+            block_count,
+            reasoning_len,
+            text_len,
+            tool_count,
+        ));
+    }
 }
 
 fn emit_stream_rebind_required_event(
@@ -1329,24 +1611,7 @@ pub(crate) fn read_conversation_runtime_snapshot(
                 ConversationStreamRuntimeCache::default(),
             )
         });
-    let has_visible_progress = stream_cache_has_visible_progress(&stream_cache);
-    let stream_cache = ConversationStreamRuntimeCacheSnapshot {
-        activation_id: stream_cache.activation_id,
-        request_id: stream_cache.request_id,
-        assistant_text: stream_cache.assistant_text,
-        reasoning_standard: stream_cache.reasoning_standard,
-        reasoning_inline: stream_cache.reasoning_inline,
-        tool_status_text: stream_cache.tool_status_text,
-        tool_status_state: stream_cache.tool_status_state,
-        stream_tool_calls: stream_cache.stream_tool_calls,
-        stream_tool_call_count: stream_cache.stream_tool_call_count,
-        stream_last_tool_name: stream_cache.stream_last_tool_name,
-        started_at: stream_cache.started_at,
-        started_at_ms: stream_cache.started_at_ms,
-        updated_at: stream_cache.updated_at,
-        has_visible_progress,
-        persisted_assistant_message_id: stream_cache.persisted_assistant_message_id,
-    };
+    let stream_cache = conversation_stream_runtime_cache_snapshot(stream_cache);
     Ok(ConversationRuntimeSnapshot {
         conversation_id: cid.to_string(),
         runtime_state,
@@ -2268,8 +2533,6 @@ async fn process_conversation_batch(
                 latest_user_text,
                 assistant_text: String::new(),
                 final_response_text: String::new(),
-                reasoning_standard: String::new(),
-                reasoning_inline: String::new(),
                 archived_before_send: false,
                 assistant_message: None,
                 provider_prompt_tokens: None,
@@ -2447,18 +2710,24 @@ async fn activate_main_assistant(
                     serde_json::from_slice::<AssistantDeltaEvent>(&bytes).ok()
                 }
             };
-            if let Some(event) = parsed_event {
-                if let Err(err) = update_conversation_stream_runtime_cache(
+            if let Some(mut event) = parsed_event {
+                match update_conversation_stream_runtime_cache(
                     &state_for_delta,
                     &conversation_id_for_emit,
                     &event,
                 ) {
-                    runtime_log_warn(format!(
-                        "[聊天流式缓存] 更新失败，conversation_id={}，kind={}，error={}",
-                        conversation_id_for_emit.trim(),
-                        event.kind.as_deref().unwrap_or("delta"),
-                        err
-                    ));
+                    Ok(Some(snapshot)) => {
+                        event.stream_cache = Some(snapshot);
+                    }
+                    Ok(None) => {}
+                    Err(err) => {
+                        runtime_log_warn(format!(
+                            "[聊天流式缓存] 更新失败，conversation_id={}，kind={}，error={}",
+                            conversation_id_for_emit.trim(),
+                            event.kind.as_deref().unwrap_or("delta"),
+                            err
+                        ));
+                    }
                 }
                 let mut stream_start_rebind_guard =
                     stream_start_rebind_emitted_for_channel.lock().ok();
@@ -2731,8 +3000,6 @@ fn emit_round_completed_event(
         "requestId": request_id.map(str::trim).filter(|value| !value.is_empty()),
         "status": "completed",
         "assistantText": result.assistant_text,
-        "reasoningStandard": result.reasoning_standard,
-        "reasoningInline": result.reasoning_inline,
         "archivedBeforeSend": result.archived_before_send,
         "assistantMessage": result.assistant_message,
     });
@@ -2928,8 +3195,6 @@ fn emit_stop_chat_round_completed_event(
         "conversationId": conversation_id,
         "status": "stopped",
         "assistantText": result.assistant_text,
-        "reasoningStandard": result.reasoning_standard,
-        "reasoningInline": result.reasoning_inline,
         "archivedBeforeSend": false,
         "assistantMessage": result.assistant_message,
     });

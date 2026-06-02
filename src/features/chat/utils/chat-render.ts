@@ -71,6 +71,35 @@ export function estimateMessageBlockHeight(block: ChatMessageBlock, isOwn: boole
   return Math.max(64, estimate);
 }
 
+function activityItemsSignature(block: ChatMessageBlock): string {
+  return (block.activityItems || [])
+    .map((item) => {
+      if (item.kind === "reasoning") {
+        return ["r", item.id || "", String(item.text || "").length, item.running ? "1" : "0"].join(":");
+      }
+      return [
+        "t",
+        item.id || "",
+        item.toolCallId || "",
+        item.name || "",
+        item.status || "",
+        String(item.argsText || "").length,
+        String(item.resultText || "").length,
+      ].join(":");
+    })
+    .join("|");
+}
+
+function toolCallsSignature(block: ChatMessageBlock): string {
+  return (block.toolCalls || [])
+    .map((item) => [
+      item.name || "",
+      item.status || "",
+      String(item.argsText || "").length,
+    ].join(":"))
+    .join("|");
+}
+
 export function isCompactionBlock(block: ChatMessageBlock): boolean {
   if (block.remoteImOrigin) return false;
   const meta = (block.providerMeta || {}) as Record<string, unknown>;
@@ -99,6 +128,7 @@ export function blockSizeDependencies(block: ChatMessageBlock): unknown[] {
     String(block.id || ""),
     String(block.sourceMessageId || ""),
     String(block.text || ""),
+    activityItemsSignature(block),
     block.activityItems.length,
     block.activityReasoningCharCount,
     block.activityRunning,
@@ -106,6 +136,7 @@ export function blockSizeDependencies(block: ChatMessageBlock): unknown[] {
     block.images.length,
     block.audios.length,
     block.attachmentFiles.length,
+    toolCallsSignature(block),
     block.toolCalls.length,
     Array.isArray(block.memeSegments) ? block.memeSegments.length : 0,
     block.planCard?.action || "",

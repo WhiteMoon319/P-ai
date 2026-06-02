@@ -179,6 +179,7 @@ export function useChatVirtualList(options: UseChatVirtualListOptions) {
     const requiresInteractionState = canRegenerate || canConfirm;
     return [
       block, markdownIsDark.value, playingAudioId.value,
+      ...blockSizeDependencies(block),
       userAlias.value, userAvatarUrl.value, personaNameMap.value, personaAvatarUrlMap.value,
       conversationBusy.value, messageSelectionModeEnabled.value, selected,
       canRegenerate, canConfirm,

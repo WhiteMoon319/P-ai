@@ -1106,54 +1106,11 @@
     }
 
     #[test]
-    fn build_prompt_should_preserve_assistant_reasoning_from_provider_meta() {
-        let now = now_iso();
-        let agent = default_agent();
-        let mut assistant = test_text_message("assistant", "这是最终回复", &now);
-        assistant.speaker_agent_id = Some(agent.id.clone());
-        assistant.provider_meta = Some(serde_json::json!({
-            "reasoningStandard": "先分析用户问题，再整理答案"
-        }));
-        let messages = vec![
-            test_text_message("user", "帮我总结一下", &now),
-            assistant,
-            test_text_message("user", "继续", &now),
-        ];
-        let conv = test_active_conversation_with_messages(messages, Some(now));
-
-        let prepared = build_prompt(
-            &conv,
-            &agent,
-            &[agent.clone(), default_user_persona()],
-            &[],
-            "用户",
-            "我是...",
-            DEFAULT_RESPONSE_STYLE_ID,
-            "zh-CN",
-            None,
-            None,
-            None,
-            false,
-        );
-
-        assert!(
-            prepared.history_messages.iter().any(|message| {
-                message.role == "assistant"
-                    && message.text == "这是最终回复"
-                    && message.reasoning_content.as_deref() == Some("先分析用户问题，再整理答案")
-            })
-        );
-    }
-
-    #[test]
     fn build_prompt_should_replay_clean_tool_reasoning_chain_on_new_dispatch() {
         let now = now_iso();
         let agent = default_agent();
         let mut assistant = test_text_message("assistant", "我已经完成了工具阶段", &now);
         assistant.speaker_agent_id = Some(agent.id.clone());
-        assistant.provider_meta = Some(serde_json::json!({
-            "reasoningStandard": "整轮累计思考A。整轮累计思考A。整轮累计思考A。"
-        }));
         assistant.tool_call = Some(vec![
             serde_json::json!({
                 "role": "assistant",
@@ -1266,8 +1223,8 @@
             prepared.history_messages.iter().any(|message| {
                 message.role == "assistant"
                     && message.text == "我已经完成了工具阶段"
-                    && message.reasoning_content.as_deref() == Some("整轮累计思考A。整轮累计思考A。整轮累计思考A。")
-                })
+                    && message.reasoning_content.is_none()
+            })
         );
     }
 
@@ -1289,10 +1246,6 @@
                         }
                     ],
                     "extraTextBlocks":[],
-                    "providerMeta":{
-                        "reasoningInline":"",
-                        "reasoningStandard":"用户想让我调用一次终端命令，查看版本信息。这应该是指操作系统的终端信息，比如 PowerShell 版本之类的。"
-                    },
                     "toolCall":[
                         {
                             "content":null,
@@ -1598,14 +1551,7 @@
             ],
         );
 
-        assert_eq!(
-            message
-                .provider_meta
-                .as_ref()
-                .and_then(|meta| meta.get("reasoningStandard"))
-                .and_then(Value::as_str),
-            Some("我已经拿到工具结果，现在直接回答用户终端版本。")
-        );
+        assert!(message.provider_meta.is_none());
         assert_eq!(
             message
                 .tool_call
@@ -1647,13 +1593,7 @@
             ],
         );
 
-        assert!(
-            message
-                .provider_meta
-                .as_ref()
-                .and_then(|meta| meta.get("reasoningStandard"))
-                .is_none()
-        );
+        assert!(message.provider_meta.is_none());
         assert_eq!(
             message
                 .tool_call
@@ -1695,14 +1635,7 @@
             ],
         );
 
-        assert_eq!(
-            message
-                .provider_meta
-                .as_ref()
-                .and_then(|meta| meta.get("reasoningStandard"))
-                .and_then(Value::as_str),
-            Some("我已经拿到结果，准备组织最终答复。")
-        );
+        assert!(message.provider_meta.is_none());
         match message.parts.first() {
             Some(MessagePart::Text { text }) => assert!(text.is_empty()),
             other => panic!("unexpected message part: {:?}", other),
@@ -5598,8 +5531,6 @@
         let large_response = "响应片段。".repeat(220_000);
         let response = serde_json::json!({
             "assistantText": large_response,
-            "reasoningStandard": "",
-            "reasoningInline": "",
             "toolHistoryEvents": []
         });
 

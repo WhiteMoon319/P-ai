@@ -554,8 +554,6 @@ export type ChatMessage = {
   parts: MessagePart[];
   extraTextBlocks?: string[];
   providerMeta?: {
-    reasoningStandard?: string;
-    reasoningInline?: string;
     dispatchElapsedMs?: number;
     messageKind?: string;
     hiddenPromptText?: string;
@@ -566,6 +564,7 @@ export type ChatMessage = {
     [key: string]: unknown;
   };
   toolCall?: ToolCallMessage[];
+  activityItems?: ChatActivityItem[];
 };
 
 export type ChatActivityStatus = "idle" | "requesting" | "thinking" | "running_tool" | "complete";
@@ -586,6 +585,20 @@ export type ChatActivityItem =
     resultText?: string;
     status?: "doing" | "done";
   };
+
+export type AssistantStreamToolBlock = {
+  toolCallId: string;
+  name: string;
+  argsText: string;
+  resultText?: string;
+  status?: "doing" | "done";
+};
+
+export type AssistantStreamBlock = {
+  reasoning?: string;
+  text?: string;
+  tools?: AssistantStreamToolBlock[];
+};
 
 export type ChatSnapshot = {
   conversationId: string;
@@ -623,8 +636,6 @@ export type ChatMessageBlock = {
     channelId: string;
     contactId: string;
   };
-  reasoningStandard: string;
-  reasoningInline: string;
   dispatchElapsedMs?: number;
   frontendDispatchElapsedMs?: number;
   toolCallCount: number;

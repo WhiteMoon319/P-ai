@@ -1,6 +1,6 @@
 import { Channel } from "@tauri-apps/api/core";
 import type { Ref } from "vue";
-import type { ChatActivityItem, ChatMentionTarget, ChatMessage } from "../../../types/app";
+import type { AssistantStreamBlock, ChatMentionTarget, ChatMessage } from "../../../types/app";
 import {
   DRAFT_ASSISTANT_ID_PREFIX,
 } from "./use-chat-flow-drafts";
@@ -15,8 +15,7 @@ type UseChatFlowSendControllerOptions = {
   chatting: Ref<boolean>;
   toolStatusText: Ref<string>;
   toolStatusState: Ref<"running" | "done" | "failed" | "">;
-  streamToolCalls?: Ref<any[]>;
-  streamActivityItems?: Ref<ChatActivityItem[]>;
+  streamBlocks?: Ref<AssistantStreamBlock[]>;
   getConversationId?: () => string;
   getSession: () => { apiConfigId: string; agentId: string; departmentId?: string } | null;
   invokeSendChatMessage: (input: {
@@ -71,8 +70,6 @@ type UseChatFlowSendControllerOptions = {
   };
   handleRoundCompleted: (gen: number, result: {
     assistantText: string;
-    reasoningStandard?: string;
-    reasoningInline?: string;
     assistantMessage?: ChatMessage;
   }) => Promise<void>;
   sendRecovery: {
@@ -107,8 +104,7 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
       options.setActiveActivationId("");
       options.toolStatusText.value = "";
       options.toolStatusState.value = "";
-      if (options.streamToolCalls) options.streamToolCalls.value = [];
-      if (options.streamActivityItems) options.streamActivityItems.value = [];
+      if (options.streamBlocks) options.streamBlocks.value = [];
       options.clearChatErrorText(sendConversationId);
     }
 

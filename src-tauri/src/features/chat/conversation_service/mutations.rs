@@ -521,13 +521,14 @@ impl ConversationService {
         requested_department_id: Option<&str>,
         agent_id: &str,
         partial_assistant_text: &str,
-        partial_reasoning_standard: &str,
-        partial_reasoning_inline: &str,
+        partial_activity_reasoning_text: &str,
+        partial_inline_activity_text: &str,
         completed_tool_history: &[Value],
     ) -> Result<StopChatPersistResult, String> {
-        let should_persist = !partial_assistant_text.is_empty()
-            || !partial_reasoning_standard.is_empty()
-            || !partial_reasoning_inline.is_empty()
+        // 停止时 reasoning-only 也必须落盘：各供应商不会在正文为空时再补发
+        // 一个仅含思维链的完成回调；如果这里因正文/工具为空跳过，已流出的思维链会永久丢失。
+        let should_persist = !partial_assistant_text.trim().is_empty()
+            || !partial_activity_reasoning_text.trim().is_empty()
             || !completed_tool_history.is_empty();
         if !should_persist {
             return Ok(StopChatPersistResult {
@@ -560,8 +561,8 @@ impl ConversationService {
         let assistant_message = build_stop_chat_partial_assistant_message(
             agent_id,
             partial_assistant_text,
-            partial_reasoning_standard,
-            partial_reasoning_inline,
+            partial_activity_reasoning_text,
+            partial_inline_activity_text,
             completed_tool_history,
         );
         let conversation_id = apply_stop_chat_partial_message(target.conversation_mut(), &assistant_message);
@@ -1281,22 +1282,21 @@ fn build_stop_chat_skip_result(conversation: Option<&Conversation>) -> Option<St
 fn build_stop_chat_partial_assistant_message(
     agent_id: &str,
     partial_assistant_text: &str,
-    partial_reasoning_standard: &str,
-    partial_reasoning_inline: &str,
+    partial_activity_reasoning_text: &str,
+    _partial_inline_activity_text: &str,
     completed_tool_history: &[Value],
 ) -> ChatMessage {
     let now = now_iso();
     let request_messages = assistant_request_sequence_from_tool_history(
         completed_tool_history,
         partial_assistant_text,
-        partial_reasoning_standard,
+        partial_activity_reasoning_text,
     );
     build_assistant_message_from_request_sequence(
         Uuid::new_v4().to_string(),
         agent_id,
         now,
         &request_messages,
-        partial_reasoning_inline,
         None,
     )
 }

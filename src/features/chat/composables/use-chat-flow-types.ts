@@ -1,8 +1,7 @@
 import type { Channel } from "@tauri-apps/api/core";
 import type { Ref } from "vue";
-import type { ChatActivityItem, ChatMentionTarget, ChatMessage, PromptCommandPreset } from "../../../types/app";
+import type { AssistantStreamBlock, ChatMentionTarget, ChatMessage, PromptCommandPreset } from "../../../types/app";
 import type { AssistantDeltaEvent } from "./use-chat-flow-events";
-import type { StreamToolCallView } from "./use-chat-flow-tool-calls";
 import type { ConversationRuntimeStreamCacheSnapshot } from "./use-chat-flow-stream-cache";
 
 export type FrontendRoundPhase = "idle" | "queued" | "waiting" | "streaming";
@@ -20,12 +19,9 @@ export type UseChatFlowOptions = {
   latestUserText: Ref<string>;
   latestUserImages: Ref<Array<{ mime: string; bytesBase64: string }>>;
   latestAssistantText: Ref<string>;
-  latestReasoningStandardText: Ref<string>;
-  latestReasoningInlineText: Ref<string>;
   toolStatusText: Ref<string>;
   toolStatusState: Ref<"running" | "done" | "failed" | "">;
-  streamToolCalls?: Ref<StreamToolCallView[]>;
-  streamActivityItems?: Ref<ChatActivityItem[]>;
+  streamBlocks?: Ref<AssistantStreamBlock[]>;
   chatErrorText: Ref<string>;
   setConversationChatError?: (conversationId: string, text: string) => void;
   allMessages: Ref<ChatMessage[]>;
@@ -54,15 +50,12 @@ export type UseChatFlowOptions = {
   invokeStopChatMessage?: (input: {
     session: { apiConfigId: string; agentId: string; departmentId?: string; conversationId?: string };
     partialAssistantText: string;
-    partialReasoningStandard: string;
-    partialReasoningInline: string;
+    partialStreamBlocks: AssistantStreamBlock[];
   }) => Promise<{
     aborted: boolean;
     persisted: boolean;
     conversationId?: string | null;
     assistantText?: string;
-    reasoningStandard?: string;
-    reasoningInline?: string;
     assistantMessage?: ChatMessage;
   }>;
   invokeBindActiveChatViewStream?: (input: {
@@ -89,8 +82,6 @@ export type PendingTerminalEvent =
       gen: number;
       result: {
         assistantText: string;
-        reasoningStandard?: string;
-        reasoningInline?: string;
         assistantMessage?: ChatMessage;
       };
     }
@@ -104,8 +95,6 @@ export type DeferredRoundCompletion = {
   gen: number;
   result: {
     assistantText: string;
-    reasoningStandard?: string;
-    reasoningInline?: string;
     assistantMessage?: ChatMessage;
   };
 };

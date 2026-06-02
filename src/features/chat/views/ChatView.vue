@@ -100,7 +100,7 @@
                       :chatting="chatting" :busy="conversationBusy" :frozen="frozen"
                       :user-alias="userAlias" :user-avatar-url="userAvatarUrl"
                       :persona-name-map="personaNameMap" :persona-avatar-url-map="personaAvatarUrlMap"
-                      :stream-tool-calls="visibleStreamToolCalls" :markdown-is-dark="markdownIsDark"
+                      :markdown-is-dark="markdownIsDark"
                       :playing-audio-id="playingAudioId" :active-turn-user="false"
                       :compact-with-previous="entry.item.compactWithPrevious"
                       :can-regenerate="!sidebarMode && canRegenerateBlock(entry.item.block, entry.item.blockIndex)"
@@ -130,7 +130,7 @@
                         :chatting="chatting" :busy="conversationBusy" :frozen="frozen"
                         :user-alias="userAlias" :user-avatar-url="userAvatarUrl"
                         :persona-name-map="personaNameMap" :persona-avatar-url-map="personaAvatarUrlMap"
-                        :stream-tool-calls="visibleStreamToolCalls" :markdown-is-dark="markdownIsDark"
+                        :markdown-is-dark="markdownIsDark"
                         :playing-audio-id="playingAudioId" :active-turn-user="false"
                         :compact-with-previous="groupItem.compactWithPrevious"
                         :can-regenerate="!sidebarMode && canRegenerateBlock(groupItem.block, groupItem.blockIndex)"
@@ -417,10 +417,9 @@ const props = defineProps<{
   personaNameMap: Record<string, string>; personaAvatarUrlMap: Record<string, string>;
   mentionEntries: ChatMentionEntry[]; selectedMentions: ChatMentionTarget[];
   latestUserText: string; latestUserImages: Array<{ mime: string; bytesBase64: string }>;
-  latestAssistantText: string; latestReasoningStandardText: string; latestReasoningInlineText: string;
+  latestAssistantText: string;
   frontendRoundPhase: "idle" | "queued" | "waiting" | "streaming";
   toolStatusText: string; toolStatusState: "running" | "done" | "failed" | "";
-  streamToolCalls: Array<{ name: string; argsText: string; status?: "doing" | "done" }>;
   chatErrorText: string; clipboardImages: Array<{ mime: string; bytesBase64: string }>;
   queuedAttachmentNotices: Array<{ id: string; fileName: string; relativePath: string; mime: string }>;
   chatInput: string; instructionPresets: PromptCommandPreset[]; chatInputPlaceholder: string;
@@ -516,7 +515,7 @@ const composerPanelRef = ref<{ focusInput: (opts?: FocusOptions) => void } | nul
 // ==================== context computed ====================
 
 const {
-  markdownIsDark, visibleStreamToolCalls, normalizedConversationTodos,
+  markdownIsDark, normalizedConversationTodos,
   activeConversationSummary, isCurrentConversationCompacting,
   activeConversationTerminalApprovals, supervisionButtonTitle,
   isOrganizingContextBusy, chatStatusBanner, selectedMentionKeys,
