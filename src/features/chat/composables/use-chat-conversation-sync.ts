@@ -6,6 +6,7 @@ import {
   useChatConversationMessageUtils,
 } from "./use-chat-conversation-message-utils";
 import { useChatConversationOverviewUtils } from "./use-chat-conversation-overview-utils";
+import { applyStreamingHistoryOverlay } from "./use-chat-flow-stream-overlay";
 import { streamCacheHasVisibleProgress } from "./use-chat-flow-stream-cache";
 
 type ForegroundPaintTrace = {
@@ -497,13 +498,19 @@ export function useChatConversationSync(bindings: Record<string, any>) {
       return;
     }
     const previousMessages = Array.isArray(bindings.allMessages.value) ? bindings.allMessages.value : [];
-    const rawNextMessages = freezeConversationMessages(Array.isArray(snapshot.messages) ? snapshot.messages : []);
+    let rawNextMessages = freezeConversationMessages(Array.isArray(snapshot.messages) ? snapshot.messages : []);
     const nextRuntimeState = String(snapshot.runtimeState || "").trim();
     const hasAssistantDraftInSnapshot = rawNextMessages.some((message) => isAssistantDraftMessage(message));
     if (!hasAssistantDraftInSnapshot && nextRuntimeState === "assistant_streaming") {
       const preservedDraft = [...previousMessages].reverse().find((message) => isAssistantDraftMessage(message));
       if (preservedDraft) {
-        rawNextMessages.push(preservedDraft);
+        rawNextMessages = [...rawNextMessages, preservedDraft];
+        if (typeof bindings.readConversationStreamCache === "function") {
+          rawNextMessages = applyStreamingHistoryOverlay(
+            rawNextMessages,
+            bindings.readConversationStreamCache(nextConversationId),
+          ).messages;
+        }
       }
     }
     const nextMessages = reuseStableMessageReferences(rawNextMessages, bindings.allMessages.value);

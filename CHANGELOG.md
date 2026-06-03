@@ -2,6 +2,7 @@
 
 ## 未发布
 
+- 修复（chat-stream）：前端流式缓存读写改为保留 `persistedAssistantMessageId`，轻量快照在保留本地 streaming draft 前先按该标记去重，避免重连、切前后台或恢复运行态时偶发同时显示流式草稿与已持久化 assistant 历史消息。
 - 修复（chat）：并发工具调用按工具组保存与回放，流式工具事件不再重复携带思维链；请求体回放会裁剪 partial 工具组为闭合子组，并保证截图 sidecar 消息排在同组工具结果之后。最终普通 assistant 的正文与思维链写入 `parts`，不再把无 `tool_calls` 的普通 assistant 写进 `toolCall`。
 - 优化（chat）：气泡模式改用负 margin 左移手法，新增 `ecall-bubble-shift` 类以独立于隐藏气泡模式调整左偏移量；头像列增加 `z-index` 确保压于气泡上方。
 - 修复（chat）：工具结果回写不再走会话直写旁路，统一先更新内存会话再进入后台持久化；流式工具面板在正文增量输出时改用稳定折叠渲染，避免频繁闪烁。

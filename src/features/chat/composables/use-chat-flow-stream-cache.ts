@@ -77,16 +77,17 @@ export function streamCacheHasVisibleProgress(
 
 function emptyConversationStreamCache(): ConversationStreamCache {
   return {
-      activationId: "",
-      requestId: "",
-      startedAt: "",
-      startedAtMs: 0,
+    activationId: "",
+    requestId: "",
+    startedAt: "",
+    startedAtMs: 0,
     frontendDispatchStartedAtMs: 0,
     frontendDispatchElapsedMs: 0,
     assistantText: "",
     toolStatusText: "",
     toolStatusState: "",
     streamBlocks: [],
+    persistedAssistantMessageId: "",
   };
 }
 
@@ -109,6 +110,7 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
       toolStatusText: cache.toolStatusText,
       toolStatusState: cache.toolStatusState,
       streamBlocks: normalizeAssistantStreamBlocks(cache.streamBlocks),
+      persistedAssistantMessageId: String(cache.persistedAssistantMessageId || "").trim(),
     };
   }
 
@@ -128,6 +130,7 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
       frontendDispatchStartedAtMs: positiveRoundedNumber(next.frontendDispatchStartedAtMs),
       frontendDispatchElapsedMs: positiveRoundedNumber(next.frontendDispatchElapsedMs),
       streamBlocks: normalizeAssistantStreamBlocks(next.streamBlocks),
+      persistedAssistantMessageId: String(next.persistedAssistantMessageId || "").trim(),
     });
   }
 
@@ -154,6 +157,7 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
       streamBlocks: Array.isArray(options.streamBlocks?.value)
         ? normalizeAssistantStreamBlocks(options.streamBlocks.value)
         : normalizeAssistantStreamBlocks(current.streamBlocks),
+      persistedAssistantMessageId: current.persistedAssistantMessageId,
     }));
   }
 

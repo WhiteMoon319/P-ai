@@ -129,6 +129,8 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
       getPendingManualScrollToBottomRequestId: bindings.getPendingManualScrollToBottomRequestId,
       loadAllMessages,
       getChatFlow: () => bindings.getChatFlow(),
+      readConversationStreamCache: (conversationId?: string | null) =>
+        bindings.getChatFlow()?.readConversationStreamCache(conversationId) || null,
       setStatusError: bindings.setStatusError,
       perfNow: bindings.perfNow,
       tr: bindings.tr,

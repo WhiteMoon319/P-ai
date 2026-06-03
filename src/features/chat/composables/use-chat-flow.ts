@@ -670,6 +670,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     clearForegroundRoundState,
     clearForegroundRuntimeState,
     freezeForegroundRoundState,
+    readConversationStreamCache,
     resumeForegroundStreamingRound: ensureForegroundStreamingRound,
     resumeForegroundRuntimeRound,
     resumeForegroundStreamCacheProjection,

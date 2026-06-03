@@ -76,4 +76,40 @@ describe("useChatFlowStreamCache stream block snapshots", () => {
     }, { ignoreActivationId: true })).toBe(true);
     expect(streamBlocks.value).toEqual([{ reasoning: "R2", text: "", tools: [] }]);
   });
+
+  it("preserves persisted assistant ids across cache reads and later display sync writes", () => {
+    const latestAssistantText = ref("A1");
+    const toolStatusText = ref("");
+    const toolStatusState = ref<"running" | "done" | "failed" | "">("");
+    const streamBlocks = ref<AssistantStreamBlock[]>([]);
+
+    const cache = useChatFlowStreamCache({
+      getConversationId: () => "conversation-1",
+      latestAssistantText,
+      toolStatusText,
+      toolStatusState,
+      streamBlocks,
+      getActiveActivationId: () => "request-1",
+      getFrontendDispatchStartedAtMs: () => 100,
+      getFrontendDispatchElapsedMs: () => 8,
+      currentFrontendDispatchElapsedMs: () => 8,
+      restoreFrontendDispatchTimerFromCache: () => {},
+    });
+
+    cache.writeConversationStreamCacheSnapshot("conversation-1", {
+      activationId: "request-1",
+      requestId: "request-1",
+      persistedAssistantMessageId: "assistant-1",
+    });
+    expect(cache.readConversationStreamCache("conversation-1")?.persistedAssistantMessageId).toBe("assistant-1");
+
+    cache.syncCurrentDisplayStateToConversationStreamCache("conversation-1");
+    expect(cache.readConversationStreamCache("conversation-1")?.persistedAssistantMessageId).toBe("assistant-1");
+
+    cache.applyAssistantEventToConversationStreamCache("conversation-1", {
+      kind: "assistant_delta",
+      message: "delta-1",
+    });
+    expect(cache.readConversationStreamCache("conversation-1")?.persistedAssistantMessageId).toBe("assistant-1");
+  });
 });
