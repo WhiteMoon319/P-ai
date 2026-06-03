@@ -138,7 +138,7 @@ fn conversation_preview_title(conversation: &Conversation) -> String {
             m.parts
                 .iter()
                 .filter_map(|p| match p {
-                    MessagePart::Text { text } => Some(text.trim()),
+                    MessagePart::Text { text, .. } => Some(text.trim()),
                     _ => None,
                 })
                 .filter(|t| !t.is_empty())
@@ -165,7 +165,7 @@ fn build_conversation_preview_text(message: &ChatMessage) -> String {
         .parts
         .iter()
         .filter_map(|part| match part {
-            MessagePart::Text { text } => Some(text.trim()),
+            MessagePart::Text { text, .. } => Some(text.trim()),
             _ => None,
         })
         .filter(|text| !text.is_empty())

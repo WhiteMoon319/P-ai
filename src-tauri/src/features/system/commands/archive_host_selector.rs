@@ -97,6 +97,7 @@ mod archive_host_selection_tests {
             speaker_agent_id: Some(agent_id.to_string()),
             parts: vec![MessagePart::Text {
                 text: "x".to_string(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: Some(serde_json::json!({

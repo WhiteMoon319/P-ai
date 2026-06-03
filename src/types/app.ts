@@ -487,7 +487,7 @@ export type PersonaProfile = {
 };
 
 export type MessagePart =
-  | { type: "text"; text: string }
+  | { type: "text"; text: string; reasoningContent?: string; reasoning_content?: string }
   | { type: "image"; mime: string; bytesBase64: string; name?: string; compressed?: boolean }
   | { type: "audio"; mime: string; bytesBase64: string };
 

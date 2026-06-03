@@ -21,6 +21,25 @@ fn send_reasoning_delta_event(
     });
 }
 
+fn join_model_text_blocks<'a, I>(texts: I) -> String
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    let mut joined = Vec::<String>::new();
+    let mut previous: Option<String> = None;
+    for text in texts {
+        if text.is_empty() {
+            continue;
+        }
+        if previous.as_deref() == Some(text) {
+            continue;
+        }
+        joined.push(text.to_string());
+        previous = Some(text.to_string());
+    }
+    joined.join("\n")
+}
+
 async fn collect_streaming_model_reply_genai<S>(
     mut stream: S,
     on_delta: Option<&tauri::ipc::Channel<AssistantDeltaEvent>>,
@@ -71,7 +90,7 @@ where
                         .map(|content| content.texts())
                         .filter(|texts| !texts.is_empty())
                     {
-                        let joined = captured_texts.join("\n");
+                        let joined = join_model_text_blocks(captured_texts);
                         assistant_text = joined.clone();
                         if let Some(channel) = on_delta {
                             let _ = channel.send(AssistantDeltaEvent {
@@ -135,6 +154,22 @@ where
 #[cfg(test)]
 mod stream_collect_tests {
     use super::*;
+
+    #[test]
+    fn join_model_text_blocks_should_drop_consecutive_duplicate_blocks() {
+        let table = "三并发，都在1秒内返回：\n\n| 工具 | 版本 |\n|---|---|\n| Node | v24.2.0 |";
+
+        let joined = join_model_text_blocks([table, table]);
+
+        assert_eq!(joined, table);
+    }
+
+    #[test]
+    fn join_model_text_blocks_should_keep_distinct_blocks() {
+        let joined = join_model_text_blocks(["第一段", "第二段"]);
+
+        assert_eq!(joined, "第一段\n第二段");
+    }
 
     #[tokio::test]
     async fn captured_reasoning_at_stream_end_should_emit_reasoning_delta() {

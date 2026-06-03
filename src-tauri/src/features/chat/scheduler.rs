@@ -305,7 +305,7 @@ pub(crate) fn get_queue_snapshot(state: &AppState) -> Result<Vec<ChatQueueEventS
                 .first()
                 .and_then(|msg| {
                     msg.parts.iter().find_map(|part| match part {
-                        MessagePart::Text { text } => Some(text.clone()),
+                        MessagePart::Text { text, .. } => Some(text.clone()),
                         _ => None,
                     })
                 })
@@ -2897,7 +2897,7 @@ fn latest_user_text_from_events(events: &[ChatPendingEvent]) -> String {
                 return None;
             }
             message.parts.iter().find_map(|part| match part {
-                MessagePart::Text { text } => Some(text.clone()),
+                MessagePart::Text { text, .. } => Some(text.clone()),
                 _ => None,
             })
         })

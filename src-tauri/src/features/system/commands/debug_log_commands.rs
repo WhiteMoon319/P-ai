@@ -610,6 +610,7 @@ fn prepared_prompt_to_messages_json(prepared: &PreparedPrompt) -> Vec<Value> {
 fn model_reply_to_log_value(reply: &ModelReply) -> Value {
     serde_json::json!({
         "assistantText": reply.assistant_text,
+        "activityReasoningText": reply.activity_reasoning_text,
         "toolHistoryEvents": reply.tool_history_events
     })
 }

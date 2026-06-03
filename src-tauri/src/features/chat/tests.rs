@@ -62,6 +62,77 @@
     }
 
     #[test]
+    fn build_prompt_should_replay_final_parts_reasoning_after_tool_history() {
+        let now = now_iso();
+        let agent = default_agent();
+        let mut assistant = test_text_message("assistant", "最终回答", &now);
+        assistant.speaker_agent_id = Some(agent.id.clone());
+        assistant.tool_call = Some(vec![serde_json::json!({
+            "role": "assistant",
+            "content": null,
+            "reasoning_content": "工具思考",
+            "tool_calls": [{
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                    "name": "read",
+                    "arguments": "{}"
+                }
+            }]
+        }), serde_json::json!({
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "content": "工具结果"
+        })]);
+        if let Some(MessagePart::Text {
+            reasoning_content,
+            ..
+        }) = assistant.parts.first_mut()
+        {
+            *reasoning_content = Some("最终思考".to_string());
+        }
+
+        let messages = vec![
+            test_text_message("user", "上一轮问题", &now),
+            assistant,
+            test_text_message("user", "继续", &now),
+        ];
+        let conv = test_active_conversation_with_messages(messages, Some(now));
+
+        let prepared = build_prompt(
+            &conv,
+            &agent,
+            &[agent.clone(), default_user_persona()],
+            &[],
+            "用户",
+            "我是...",
+            DEFAULT_RESPONSE_STYLE_ID,
+            "zh-CN",
+            None,
+            None,
+            None,
+            false,
+        );
+
+        let final_assistant_messages = prepared
+            .history_messages
+            .iter()
+            .filter(|message| message.role == "assistant" && message.text == "最终回答")
+            .collect::<Vec<_>>();
+
+        assert_eq!(final_assistant_messages.len(), 1);
+        assert_eq!(
+            final_assistant_messages[0].reasoning_content.as_deref(),
+            Some("最终思考")
+        );
+        assert!(prepared.history_messages.iter().any(|message| {
+            message.role == "assistant"
+                && message.tool_calls.as_ref().is_some_and(|calls| !calls.is_empty())
+                && message.reasoning_content.as_deref() == Some("工具思考")
+        }));
+    }
+
+    #[test]
     fn conversation_prompt_service_snapshot_should_keep_cache_hits_stable() {
         let now = now_iso();
         let agent = default_agent();
@@ -197,7 +268,8 @@
                 speaker_agent_id: Some(system_persona.id.clone()),
                 parts: vec![MessagePart::Text {
                     text: "请检查今天的任务触发情况".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: None,
                 tool_call: None,
@@ -210,7 +282,8 @@
                 speaker_agent_id: Some(agent.id.clone()),
                 parts: vec![MessagePart::Text {
                     text: "我马上处理".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: None,
                 tool_call: None,
@@ -223,7 +296,8 @@
                 speaker_agent_id: Some(system_persona.id.clone()),
                 parts: vec![MessagePart::Text {
                     text: "现在补发第二次提醒".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: None,
                 tool_call: None,
@@ -393,7 +467,8 @@
                 speaker_agent_id: Some(USER_PERSONA_ID.to_string()),
                 parts: vec![MessagePart::Text {
                     text: "我家猫吐毛球怎么办？".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: Some(serde_json::json!({
                     "retrieved_memory_ids": [cat_memory_id]
@@ -408,7 +483,8 @@
                 speaker_agent_id: Some(agent.id.clone()),
                 parts: vec![MessagePart::Text {
                     text: "吐毛球可以先观察饮食和梳毛频率。".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: None,
                 tool_call: None,
@@ -421,7 +497,8 @@
                 speaker_agent_id: Some(USER_PERSONA_ID.to_string()),
                 parts: vec![MessagePart::Text {
                     text: "我想吃花生酱面包，可以吗？".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: Some(serde_json::json!({
                     "retrieved_memory_ids": [saved[0].id.clone().expect("dup cat id"), peanut_memory_id.clone(), peanut_memory_id]
@@ -1637,7 +1714,7 @@
 
         assert!(message.provider_meta.is_none());
         match message.parts.first() {
-            Some(MessagePart::Text { text }) => assert!(text.is_empty()),
+            Some(MessagePart::Text { text, .. }) => assert!(text.is_empty()),
             other => panic!("unexpected message part: {:?}", other),
         }
         assert_eq!(
@@ -1752,7 +1829,8 @@
                 speaker_agent_id: Some(SYSTEM_PERSONA_ID.to_string()),
                 parts: vec![MessagePart::Text {
                     text: "[上下文整理]\n触发原因：force_context_usage_82_after_reply\n整理摘要：\n保留关键上下文。".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: Some(serde_json::json!({
                     "message_meta": {
@@ -1803,7 +1881,8 @@
                 speaker_agent_id: Some(SYSTEM_PERSONA_ID.to_string()),
                 parts: vec![MessagePart::Text {
                     text: "[上下文整理]\n旧摘要".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: Some(serde_json::json!({
                     "message_meta": {
@@ -1823,7 +1902,8 @@
                 speaker_agent_id: Some(SYSTEM_PERSONA_ID.to_string()),
                 parts: vec![MessagePart::Text {
                     text: "[上下文整理]\n新摘要".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: Some(serde_json::json!({
                     "message_meta": {
@@ -1897,6 +1977,7 @@
             speaker_agent_id: Some(SYSTEM_PERSONA_ID.to_string()),
             parts: vec![MessagePart::Text {
                 text: "[上下文整理]\n整理摘要：已读取 README，接下来继续处理。".to_string(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: Some(serde_json::json!({
@@ -1965,7 +2046,8 @@
                 speaker_agent_id: Some(SYSTEM_PERSONA_ID.to_string()),
                 parts: vec![MessagePart::Text {
                     text: "[上下文整理]\n只保留最近有效上下文".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: Some(serde_json::json!({
                     "message_meta": {
@@ -2380,6 +2462,7 @@
             speaker_agent_id: Some(DEFAULT_AGENT_ID.to_string()),
             parts: vec![MessagePart::Text {
                 text: assistant_text.clone(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: Some(serde_json::json!({
@@ -2668,6 +2751,7 @@
             speaker_agent_id: Some(DEFAULT_AGENT_ID.to_string()),
             parts: vec![MessagePart::Text {
                 text: "这是最近一条助手消息".to_string(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: Some(serde_json::json!({
@@ -2732,6 +2816,7 @@
             speaker_agent_id: Some(DEFAULT_AGENT_ID.to_string()),
             parts: vec![MessagePart::Text {
                 text: "压缩前的一条助手消息".to_string(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: Some(serde_json::json!({
@@ -2749,6 +2834,7 @@
             speaker_agent_id: None,
             parts: vec![MessagePart::Text {
                 text: "上下文整理".to_string(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: Some(serde_json::json!({
@@ -2766,6 +2852,7 @@
             speaker_agent_id: None,
             parts: vec![MessagePart::Text {
                 text: "压缩后的用户消息".to_string(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: None,
@@ -2789,6 +2876,7 @@
             speaker_agent_id: Some(DEFAULT_AGENT_ID.to_string()),
             parts: vec![MessagePart::Text {
                 text: "这是最近一条没有 provider meta 的助手消息".to_string(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: None,
@@ -2845,6 +2933,7 @@
             speaker_agent_id: Some(DEFAULT_AGENT_ID.to_string()),
             parts: vec![MessagePart::Text {
                 text: "最近一次真实返回".to_string(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: Some(serde_json::json!({
@@ -3811,7 +3900,7 @@
             .expect("read remote im contact conversation as unarchived");
         assert_eq!(messages.len(), 1);
         match &messages[0].parts[0] {
-            MessagePart::Text { text } => assert_eq!(text, "历史消息"),
+            MessagePart::Text { text, .. } => assert_eq!(text, "历史消息"),
             _ => panic!("expected text message"),
         }
 
@@ -4379,7 +4468,8 @@
                 speaker_agent_id: Some("user-persona".to_string()),
                 parts: vec![MessagePart::Text {
                     text: "第一条".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: None,
                 tool_call: None,
@@ -4392,7 +4482,8 @@
                 speaker_agent_id: Some(DEFAULT_AGENT_ID.to_string()),
                 parts: vec![MessagePart::Text {
                     text: "第二条".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: None,
                 tool_call: None,
@@ -4405,7 +4496,8 @@
                 speaker_agent_id: Some("user-persona".to_string()),
                 parts: vec![MessagePart::Text {
                     text: "第三条".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: Some(serde_json::json!({
                     "attachments": [
@@ -4641,7 +4733,8 @@
                 speaker_agent_id: Some(SYSTEM_PERSONA_ID.to_string()),
                 parts: vec![MessagePart::Text {
                     text: "任务提醒".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: None,
                 tool_call: None,
@@ -5568,6 +5661,28 @@
     }
 
     #[test]
+    fn model_reply_log_value_should_keep_activity_reasoning_text() {
+        let reply = ModelReply {
+            assistant_text: "最终答复".to_string(),
+            final_response_text: "最终答复".to_string(),
+            activity_reasoning_text: "完整思维链".to_string(),
+            assistant_provider_meta: None,
+            tool_history_events: Vec::new(),
+            suppress_assistant_message: false,
+            trusted_input_tokens: None,
+            round_logs_recorded_internally: false,
+        };
+
+        let value = model_reply_to_log_value(&reply);
+
+        assert_eq!(value["assistantText"].as_str(), Some("最终答复"));
+        assert_eq!(
+            value["activityReasoningText"].as_str(),
+            Some("完整思维链")
+        );
+    }
+
+    #[test]
     #[ignore = "性能探针：本地按需运行 cargo test build_prepared_prompt_for_mode_perf_probe -- --ignored --nocapture"]
     fn build_prepared_prompt_for_mode_perf_probe() {
         let state = test_chat_runtime_state();
@@ -5623,6 +5738,7 @@
                 speaker_agent_id,
                 parts: vec![MessagePart::Text {
                     text: format!("这是第{}条{}消息，用于测量提示词主结构构建速度。", idx, role),
+                    reasoning_content: None,
                 }],
                 extra_text_blocks,
                 provider_meta,
@@ -5744,7 +5860,7 @@
 
         assert_eq!(parts.len(), 1);
         match &parts[0] {
-            MessagePart::Text { text } => {
+            MessagePart::Text { text, .. } => {
                 assert!(text.contains("用户发送了一个附件，位于 {Self Directory}/"));
                 assert!(text.contains("downloads/bad-image.png"));
             }

@@ -450,7 +450,7 @@ fn tool_review_user_message_text(message: &ChatMessage) -> String {
         .parts
         .iter()
         .filter_map(|part| match part {
-            MessagePart::Text { text } => Some(text.trim()),
+            MessagePart::Text { text, .. } => Some(text.trim()),
             _ => None,
         })
         .filter(|value| !value.is_empty())
@@ -1770,6 +1770,7 @@ mod tool_review_tests {
             speaker_agent_id: None,
             parts: vec![MessagePart::Text {
                 text: format!("{role}-{id}"),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: None,

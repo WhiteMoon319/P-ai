@@ -408,7 +408,7 @@
             .parts
             .iter()
             .find_map(|part| match part {
-                MessagePart::Text { text } => Some(text.clone()),
+                MessagePart::Text { text, .. } => Some(text.clone()),
                 _ => None,
             })
             .expect("compaction text");
@@ -440,7 +440,7 @@
             .parts
             .iter()
             .find_map(|part| match part {
-                MessagePart::Text { text } => Some(text.clone()),
+                MessagePart::Text { text, .. } => Some(text.clone()),
                 _ => None,
             })
             .expect("compaction text");
@@ -493,7 +493,8 @@
                     speaker_agent_id: Some(SYSTEM_PERSONA_ID.to_string()),
                     parts: vec![MessagePart::Text {
                         text: "[上下文整理]\n旧摘要".to_string(),
-                    }],
+                reasoning_content: None,
+            }],
                     extra_text_blocks: Vec::new(),
                     provider_meta: Some(serde_json::json!({
                         "message_meta": {
@@ -512,7 +513,8 @@
                     speaker_agent_id: Some(USER_PERSONA_ID.to_string()),
                     parts: vec![MessagePart::Text {
                         text: long_middle.clone(),
-                    }],
+                reasoning_content: None,
+            }],
                     extra_text_blocks: Vec::new(),
                     provider_meta: None,
                     tool_call: None,
@@ -525,7 +527,8 @@
                     speaker_agent_id: Some(USER_PERSONA_ID.to_string()),
                     parts: vec![MessagePart::Text {
                         text: latest_user.to_string(),
-                    }],
+                reasoning_content: None,
+            }],
                     extra_text_blocks: Vec::new(),
                     provider_meta: None,
                     tool_call: None,
@@ -538,7 +541,8 @@
                     speaker_agent_id: Some(DEFAULT_AGENT_ID.to_string()),
                     parts: vec![MessagePart::Text {
                         text: latest_assistant.to_string(),
-                    }],
+                reasoning_content: None,
+            }],
                     extra_text_blocks: Vec::new(),
                     provider_meta: None,
                     tool_call: None,

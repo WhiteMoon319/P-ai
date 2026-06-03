@@ -1169,7 +1169,7 @@ fn memory_recall_query_from_user_text(user_text: &str) -> String {
 fn render_message_parts_text_for_recall(parts: &[MessagePart]) -> String {
     parts.iter()
         .filter_map(|part| match part {
-            MessagePart::Text { text } => {
+            MessagePart::Text { text, .. } => {
                 let trimmed = text.trim();
                 if trimmed.is_empty() {
                     None
@@ -3742,7 +3742,8 @@ mod core_send_inner_tests {
                 speaker_agent_id: Some("agent-a".to_string()),
                 parts: vec![MessagePart::Text {
                     text: String::new(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: None,
                 tool_call: Some(vec![
@@ -3817,7 +3818,7 @@ mod core_send_inner_tests {
                 .parts
                 .first()
                 .and_then(|part| match part {
-                    MessagePart::Text { text } => Some(text.as_str()),
+                    MessagePart::Text { text, .. } => Some(text.as_str()),
                     _ => None,
                 }),
             Some("最终回答")

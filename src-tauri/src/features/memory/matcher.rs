@@ -385,7 +385,7 @@ fn conversation_search_text(conversation: &Conversation) -> String {
             continue;
         }
         for part in &msg.parts {
-            if let MessagePart::Text { text } = part {
+            if let MessagePart::Text { text, .. } = part {
                 if !text.trim().is_empty() {
                     lines.push(text.to_lowercase());
                 }

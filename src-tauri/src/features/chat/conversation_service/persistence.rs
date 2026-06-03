@@ -369,7 +369,7 @@ impl ConversationService {
         Ok(conversation)
     }
 
-    fn append_tool_call_result_pair(
+    fn append_tool_group_result(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -382,7 +382,7 @@ impl ConversationService {
         if normalized_conversation_id.is_empty() {
             return Err("conversationId is required.".to_string());
         }
-        let _guard = lock_conversation_with_metrics(state, "append_tool_call_result_pair")?;
+        let _guard = lock_conversation_with_metrics(state, "append_tool_group_result")?;
         let conversation = state_read_conversation_cached(state, normalized_conversation_id)?;
         self.ensure_unarchived_conversation(&conversation, normalized_conversation_id)?;
         let paths = message_store::message_store_paths(&state.data_path, normalized_conversation_id)?;
@@ -401,7 +401,7 @@ impl ConversationService {
                     &err,
                 )
             })?;
-        let append = message_store::append_message_store_tool_call_result_pair(
+        let append = message_store::append_message_store_tool_group_result(
             &paths,
             &conversation,
             agent_id,

@@ -36,6 +36,14 @@ export type NormalizedToolHistoryEvent = {
   toolCallId?: string;
 };
 
+function textPartReasoning(part: ChatMessage["parts"][number]): string {
+  if (!part || part.type !== "text") return "";
+  const textPart = part as Extract<ChatMessage["parts"][number], { type: "text" }> & {
+    reasoning_content?: string;
+  };
+  return String(textPart.reasoningContent || textPart.reasoning_content || "").trim();
+}
+
 export type ChatMessageDisplayProjection = {
   speakerAgentId?: string;
   mentions: ChatMentionTarget[];
@@ -73,7 +81,39 @@ function sanitizeStoredToolHistoryEvents(
 ): Array<Record<string, unknown>> {
   if (!Array.isArray(events) || events.length === 0) return [];
   const sanitized: Array<Record<string, unknown>> = [];
-  let pendingAssistantIndex: number | null = null;
+  let pendingAssistant:
+    | {
+        event: Record<string, unknown>;
+        allowedIds: string[];
+        matchedIds: string[];
+        outputIndex: number | null;
+        legacyWithoutIds: boolean;
+      }
+    | null = null;
+  const toolCallIdsFromAssistant = (event: Record<string, unknown>): string[] => {
+    const calls = Array.isArray(event.tool_calls) ? event.tool_calls : [];
+    return calls.flatMap((rawCall) => {
+      if (!rawCall || typeof rawCall !== "object") return [];
+      const call = rawCall as Record<string, unknown>;
+      return ["id", "call_id"]
+        .map((key) => String(call[key] || "").trim())
+        .filter(Boolean);
+    });
+  };
+  const assistantWithMatchedToolCalls = (
+    event: Record<string, unknown>,
+    matchedIds: string[],
+  ): Record<string, unknown> => {
+    const calls = Array.isArray(event.tool_calls) ? event.tool_calls : [];
+    return {
+      ...event,
+      tool_calls: calls.filter((rawCall) => {
+        if (!rawCall || typeof rawCall !== "object") return false;
+        const call = rawCall as Record<string, unknown>;
+        return ["id", "call_id"].some((key) => matchedIds.includes(String(call[key] || "").trim()));
+      }),
+    };
+  };
   for (const raw of events) {
     if (!raw || typeof raw !== "object") continue;
     const event = raw as Record<string, unknown>;
@@ -81,23 +121,52 @@ function sanitizeStoredToolHistoryEvents(
     if (role === "assistant") {
       const calls = Array.isArray(event.tool_calls) ? event.tool_calls : [];
       const hasToolCalls = calls.length > 0;
-      const index = sanitized.length;
-      sanitized.push(event);
-      pendingAssistantIndex = hasToolCalls ? index : null;
-      continue;
-    }
-    if (role === "tool") {
-      if (pendingAssistantIndex !== null) {
+      const allowedIds = toolCallIdsFromAssistant(event);
+      if (hasToolCalls) {
+        pendingAssistant = {
+          event,
+          allowedIds,
+          matchedIds: [],
+          outputIndex: null,
+          legacyWithoutIds: allowedIds.length === 0,
+        };
+      } else {
+        pendingAssistant = null;
         sanitized.push(event);
-        pendingAssistantIndex = null;
       }
       continue;
     }
-    pendingAssistantIndex = null;
+    if (role === "tool") {
+      if (pendingAssistant) {
+        const toolCallId = String(event.tool_call_id || "").trim();
+        const matchedIndex = pendingAssistant.allowedIds.indexOf(toolCallId);
+        const legacyWithoutIds = pendingAssistant.legacyWithoutIds && pendingAssistant.outputIndex === null;
+        if (legacyWithoutIds || matchedIndex >= 0) {
+          if (!pendingAssistant.matchedIds.includes(toolCallId)) {
+            pendingAssistant.matchedIds.push(toolCallId);
+          }
+          const assistantEvent = pendingAssistant.legacyWithoutIds
+            ? pendingAssistant.event
+            : assistantWithMatchedToolCalls(pendingAssistant.event, pendingAssistant.matchedIds);
+          if (pendingAssistant.outputIndex === null) {
+            pendingAssistant.outputIndex = sanitized.length;
+            sanitized.push(assistantEvent);
+          } else {
+            sanitized[pendingAssistant.outputIndex] = assistantEvent;
+          }
+          sanitized.push(event);
+          if (matchedIndex >= 0) {
+            pendingAssistant.allowedIds.splice(matchedIndex, 1);
+            if (pendingAssistant.allowedIds.length === 0) pendingAssistant = null;
+          } else {
+            pendingAssistant = null;
+          }
+        }
+      }
+      continue;
+    }
+    pendingAssistant = null;
     sanitized.push(event);
-  }
-  if (pendingAssistantIndex !== null) {
-    sanitized.length = pendingAssistantIndex;
   }
   return sanitized;
 }
@@ -143,6 +212,7 @@ export function normalizeMessageToolHistoryEvents(
     const role = String(event.role || "").trim().toLowerCase();
     if (role === "assistant") {
       const calls = Array.isArray(event.tool_calls) ? event.tool_calls : [];
+      if (view === "prompt" && calls.length === 0) continue;
       normalized.push({
         role: "assistant",
         text: typeof event.content === "string" ? event.content : "",
@@ -273,6 +343,20 @@ export function projectChatActivityForDisplay(message: ChatMessage): {
       });
     }
   }
+  const finalReasoning = Array.isArray(message.parts)
+    ? message.parts
+      .filter((part): part is Extract<ChatMessage["parts"][number], { type: "text" }> => part?.type === "text")
+      .map((part) => textPartReasoning(part))
+      .filter(Boolean)
+      .join("\n")
+    : "";
+  if (finalReasoning) {
+    items.push({
+      kind: "reasoning",
+      id: `final-reasoning-${items.length}`,
+      text: finalReasoning,
+    });
+  }
   return {
     items,
     ...chatActivityStats(items, false),
@@ -359,8 +443,9 @@ export function normalizeAssistantStreamBlocks(rawBlocks: unknown): AssistantStr
 
 export function assistantTextFromStreamBlocks(rawBlocks: unknown): string {
   return normalizeAssistantStreamBlocks(rawBlocks)
-    .map((block) => String(block.text || ""))
-    .join("");
+    .map((block) => String(block.text || "").trim())
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 export function assistantStreamBlocksFromMessageForDisplay(
@@ -394,17 +479,41 @@ export function assistantStreamBlocksFromMessageForDisplay(
 
   const normalized = normalizeAssistantStreamBlocks(blocks);
   const text = String(fallbackText || "");
+  const finalReasoning = Array.isArray(message.parts)
+    ? message.parts
+      .filter((part): part is Extract<ChatMessage["parts"][number], { type: "text" }> => part?.type === "text")
+      .map((part) => textPartReasoning(part))
+      .filter(Boolean)
+      .join("\n")
+    : "";
   if (!text.trim()) return normalized;
   if (normalized.length === 0) {
-    return normalizeAssistantStreamBlocks([{ text }]);
+    return normalizeAssistantStreamBlocks([{ reasoning: finalReasoning, text }]);
   }
   if (normalized.some((block) => String(block.text || "").trim())) {
     return normalized;
+  }
+  if (finalReasoning) {
+    return normalizeAssistantStreamBlocks([...normalized, { reasoning: finalReasoning, text }]);
   }
   const lastIndex = normalized.length - 1;
   return normalizeAssistantStreamBlocks(normalized.map((block, index) =>
     index === lastIndex ? { ...block, text } : block
   ));
+}
+
+function mergedAssistantDisplayText(message: ChatMessage, fallbackText: string): string {
+  const finalText = String(fallbackText || "");
+  const assistantHistoryTexts = normalizeMessageToolHistoryEvents(message, "display")
+    .filter((event) => event.role === "assistant")
+    .map((event) => String(event.text || "").trim())
+    .filter(Boolean);
+  if (assistantHistoryTexts.length === 0) return finalText;
+  if (!finalText.trim()) return assistantHistoryTexts.join("\n\n");
+  if (assistantHistoryTexts.every((text) => finalText.includes(text))) {
+    return finalText;
+  }
+  return [...assistantHistoryTexts, finalText].join("\n\n");
 }
 
 export function streamBlocksToActivityItems(rawBlocks: unknown, running = false): ChatActivityItem[] {
@@ -821,7 +930,7 @@ export function projectMessageForDisplay(
         return true;
       }).join("\n")
       : message.role === "assistant"
-        ? rendered.trim()
+        ? mergedAssistantDisplayText(message, rendered.trim())
         : rendered;
   return {
     speakerAgentId: resolveSpeakerAgentId(message) || undefined,

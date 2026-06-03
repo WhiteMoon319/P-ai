@@ -563,10 +563,10 @@ describe("useChatFlow stream isolation", () => {
         archivedBeforeSend: false,
         assistantMessage: {
           ...textMessage("a-final", "assistant", "不太确定，展开说说？"),
-          toolCall: [{
-            role: "assistant",
-            content: "不太确定，展开说说？",
-            reasoning_content: "先判断用户提到的工具指代。",
+          parts: [{
+            type: "text",
+            text: "不太确定，展开说说？",
+            reasoningContent: "先判断用户提到的工具指代。",
           }],
         },
       }),
@@ -574,10 +574,11 @@ describe("useChatFlow stream isolation", () => {
     await flushAsyncSteps();
 
     const finalMessage = allMessages.value.find((message) => message.id === "a-final");
-    expect(finalMessage?.activityItems).toBeUndefined();
-    expect(finalMessage?.toolCall?.[0]).toMatchObject({
-      role: "assistant",
-      reasoning_content: "先判断用户提到的工具指代。",
+    const projection = projectMessageForDisplay(finalMessage as ChatMessage);
+    expect(projection.activityItems).toHaveLength(1);
+    expect(projection.activityItems[0]).toMatchObject({
+      kind: "reasoning",
+      text: "先判断用户提到的工具指代。",
     });
     expect(streamBlocks.value).toEqual([]);
     expect(chatting.value).toBe(false);

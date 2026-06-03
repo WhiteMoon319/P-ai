@@ -109,6 +109,9 @@ fn normalize_message_tool_history_events(
                     .and_then(Value::as_array)
                     .map(|calls| normalize_prompt_tool_calls(calls))
                     .unwrap_or_default();
+                if matches!(view, MessageToolHistoryView::PromptReplay) && tool_calls.is_empty() {
+                    continue;
+                }
                 normalized.push(NormalizedMessageToolEvent {
                     role,
                     text: event
@@ -195,6 +198,9 @@ fn build_prepared_history_messages_from_tool_history(
                 .iter()
                 .filter_map(normalized_tool_call_to_history_value)
                 .collect::<Vec<_>>();
+            if tool_calls.is_empty() {
+                continue;
+            }
             history_messages.push(PreparedHistoryMessage {
                 role: "assistant".to_string(),
                 text: event.text,
@@ -369,24 +375,6 @@ fn normalize_assistant_provider_meta(provider_meta: Option<Value>) -> Option<Val
     Some(merged)
 }
 
-fn final_assistant_activity_event(assistant_text: &str, reasoning_text: &str) -> Value {
-    let mut event = serde_json::Map::new();
-    event.insert("role".to_string(), Value::String("assistant".to_string()));
-    if assistant_text.trim().is_empty() {
-        event.insert("content".to_string(), Value::Null);
-    } else {
-        event.insert(
-            "content".to_string(),
-            Value::String(assistant_text.to_string()),
-        );
-    }
-    event.insert(
-        "reasoning_content".to_string(),
-        Value::String(reasoning_text.to_string()),
-    );
-    Value::Object(event)
-}
-
 fn build_assistant_message_from_request_sequence(
     id: String,
     agent_id: &str,
@@ -395,13 +383,7 @@ fn build_assistant_message_from_request_sequence(
     provider_meta: Option<Value>,
 ) -> ChatMessage {
     let folded = fold_request_messages_to_assistant_content(request_messages);
-    let mut activity_events = folded.tool_history_events;
-    if let Some(reasoning_text) = folded.activity_reasoning_text.as_deref() {
-        activity_events.push(final_assistant_activity_event(
-            &folded.assistant_text,
-            reasoning_text,
-        ));
-    }
+    let activity_events = folded.tool_history_events;
     ChatMessage {
         id,
         role: "assistant".to_string(),
@@ -409,6 +391,7 @@ fn build_assistant_message_from_request_sequence(
         speaker_agent_id: Some(agent_id.to_string()),
         parts: vec![MessagePart::Text {
             text: folded.assistant_text,
+            reasoning_content: folded.activity_reasoning_text,
         }],
         extra_text_blocks: Vec::new(),
         provider_meta: normalize_assistant_provider_meta(provider_meta),
@@ -463,6 +446,7 @@ mod message_semantics_tests {
             speaker_agent_id: Some("agent".to_string()),
             parts: vec![MessagePart::Text {
                 text: text.to_string(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: None,
@@ -496,6 +480,56 @@ mod message_semantics_tests {
         assert_eq!(display_events.len(), 1);
         assert_eq!(display_events[0].tool_calls.len(), 1);
         assert!(prompt_events.is_empty());
+    }
+
+    #[test]
+    fn normalize_message_tool_history_events_should_trim_partial_group_for_prompt_replay() {
+        let now = now_iso();
+        let mut assistant = test_message("assistant", "处理中", &now);
+        assistant.tool_call = Some(vec![
+            serde_json::json!({
+                "role": "assistant",
+                "content": Value::Null,
+                "reasoning_content": "先同时读取两个文件",
+                "tool_calls": [
+                    {
+                        "id": "call-a",
+                        "call_id": "call-a",
+                        "type": "function",
+                        "function": {
+                            "name": "read",
+                            "arguments": "{\"path\":\"a.rs\"}"
+                        }
+                    },
+                    {
+                        "id": "call-b",
+                        "call_id": "call-b",
+                        "type": "function",
+                        "function": {
+                            "name": "read",
+                            "arguments": "{\"path\":\"b.rs\"}"
+                        }
+                    }
+                ]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call-a",
+                "content": "工具 A 结果"
+            }),
+        ]);
+
+        let display_events =
+            normalize_message_tool_history_events(&assistant, MessageToolHistoryView::Display);
+        let prompt_events =
+            normalize_message_tool_history_events(&assistant, MessageToolHistoryView::PromptReplay);
+
+        assert_eq!(display_events.len(), 2);
+        assert_eq!(display_events[0].tool_calls.len(), 2);
+        assert_eq!(prompt_events.len(), 2);
+        assert_eq!(prompt_events[0].tool_calls.len(), 1);
+        assert_eq!(prompt_events[0].tool_calls[0].invocation_id.as_deref(), Some("call-a"));
+        assert_eq!(prompt_events[1].tool_call_id.as_deref(), Some("call-a"));
     }
 
     #[test]
@@ -633,6 +667,65 @@ mod message_semantics_tests {
     }
 
     #[test]
+    fn build_prepared_history_messages_from_tool_history_should_keep_tool_group_as_single_assistant() {
+        let now = now_iso();
+        let mut assistant = test_message("assistant", "我查好了", &now);
+        assistant.tool_call = Some(vec![
+            serde_json::json!({
+                "role": "assistant",
+                "content": Value::Null,
+                "reasoning_content": "先同时读取两个文件",
+                "tool_calls": [
+                    {
+                        "id": "call-a",
+                        "call_id": "call-a",
+                        "type": "function",
+                        "function": {
+                            "name": "read",
+                            "arguments": "{\"path\":\"a.rs\"}"
+                        }
+                    },
+                    {
+                        "id": "call-b",
+                        "call_id": "call-b",
+                        "type": "function",
+                        "function": {
+                            "name": "read",
+                            "arguments": "{\"path\":\"b.rs\"}"
+                        }
+                    }
+                ]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call-a",
+                "content": "工具 A 结果"
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call-b",
+                "content": "工具 B 结果"
+            }),
+        ]);
+
+        let history = build_prepared_history_messages_from_tool_history(
+            &assistant,
+            MessageToolHistoryView::PromptReplay,
+        );
+
+        assert_eq!(history.len(), 3);
+        assert_eq!(history[0].role, "assistant");
+        assert_eq!(history[0].reasoning_content.as_deref(), Some("先同时读取两个文件"));
+        assert_eq!(history[0].tool_calls.as_ref().map(Vec::len), Some(2));
+        assert_eq!(history[1].role, "tool");
+        assert_eq!(history[1].tool_call_id.as_deref(), Some("call-a"));
+        assert_eq!(history[1].reasoning_content, None);
+        assert_eq!(history[2].role, "tool");
+        assert_eq!(history[2].tool_call_id.as_deref(), Some("call-b"));
+        assert_eq!(history[2].reasoning_content, None);
+    }
+
+    #[test]
     fn assistant_request_sequence_from_tool_history_should_keep_only_final_reasoning_on_last_assistant(
     ) {
         let tool_history_events = vec![
@@ -678,6 +771,70 @@ mod message_semantics_tests {
             folded.tool_history_events[0]["reasoning_content"].as_str(),
             Some("先调用终端工具查看 PowerShell 版本。")
         );
+    }
+
+    #[test]
+    fn assistant_request_sequence_from_tool_history_should_not_concat_tool_round_content_into_final_text(
+    ) {
+        let tool_history_events = vec![
+            serde_json::json!({
+                "role": "assistant",
+                "content": "三个并发 shell 跑完后我再汇总。",
+                "reasoning_content": "先同时跑 node/pnpm/rustc。",
+                "tool_calls": [{
+                    "id": "call_node",
+                    "type": "function",
+                    "function": {
+                        "name": "exec",
+                        "arguments": "{\"command\":\"node -v\"}"
+                    }
+                }]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call_node",
+                "content": "Node.js v24.2.0"
+            }),
+        ];
+
+        let request_messages = assistant_request_sequence_from_tool_history(
+            &tool_history_events,
+            "三个并发 shell 跑完，结果是：\n\nNode.js v24.2.0",
+            "先同时跑 node/pnpm/rustc。现在汇总结果。",
+        );
+        let message = build_assistant_message_from_request_sequence(
+            "assistant-final".to_string(),
+            "agent-a",
+            "2026-06-03T21:41:00Z".to_string(),
+            &request_messages,
+            None,
+        );
+
+        assert_eq!(request_messages.len(), 3);
+        assert_eq!(
+            request_messages[0]["content"].as_str(),
+            Some("三个并发 shell 跑完后我再汇总。")
+        );
+        assert_eq!(
+            request_messages[2]["content"].as_str(),
+            Some("三个并发 shell 跑完，结果是：\n\nNode.js v24.2.0")
+        );
+        assert_eq!(
+            message
+                .tool_call
+                .as_ref()
+                .and_then(|events| events.first())
+                .and_then(|event| event.get("content"))
+                .and_then(Value::as_str),
+            Some("三个并发 shell 跑完后我再汇总。")
+        );
+        match &message.parts[0] {
+            MessagePart::Text { text, .. } => {
+                assert_eq!(text, "三个并发 shell 跑完，结果是：\n\nNode.js v24.2.0");
+                assert!(!text.contains("后我再汇总"));
+            }
+            _ => panic!("expected text part"),
+        }
     }
 
     #[test]
@@ -872,7 +1029,16 @@ mod message_semantics_tests {
 
         assert_eq!(message.parts.len(), 1);
         match &message.parts[0] {
-            MessagePart::Text { text } => assert_eq!(text, "最终答案"),
+            MessagePart::Text {
+                text,
+                reasoning_content,
+            } => {
+                assert_eq!(text, "最终答案");
+                assert_eq!(
+                    reasoning_content.as_deref(),
+                    Some("我已经拿到结果，现在直接回答。")
+                );
+            }
             other => panic!("unexpected message part: {:?}", other),
         }
         assert_eq!(
@@ -895,7 +1061,7 @@ mod message_semantics_tests {
     }
 
     #[test]
-    fn build_assistant_message_from_request_sequence_should_keep_final_reasoning_activity_without_tools(
+    fn build_assistant_message_from_request_sequence_should_keep_final_reasoning_on_text_part_without_tools(
     ) {
         let request_messages = assistant_request_sequence_from_tool_history(
             &[],
@@ -911,16 +1077,18 @@ mod message_semantics_tests {
         );
 
         match &message.parts[0] {
-            MessagePart::Text { text } => assert_eq!(text, "不太确定，展开说说？"),
+            MessagePart::Text {
+                text,
+                reasoning_content,
+            } => {
+                assert_eq!(text, "不太确定，展开说说？");
+                assert_eq!(
+                    reasoning_content.as_deref(),
+                    Some("先判断用户提到的工具指代。")
+                );
+            }
             other => panic!("unexpected message part: {:?}", other),
         }
-        let events = message.tool_call.as_ref().expect("final reasoning activity");
-        assert_eq!(events.len(), 1);
-        assert_eq!(events[0]["role"].as_str(), Some("assistant"));
-        assert_eq!(events[0]["content"].as_str(), Some("不太确定，展开说说？"));
-        assert_eq!(
-            events[0]["reasoning_content"].as_str(),
-            Some("先判断用户提到的工具指代。")
-        );
+        assert!(message.tool_call.is_none());
     }
 }

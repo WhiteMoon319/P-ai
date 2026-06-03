@@ -1281,7 +1281,8 @@ model = "gpt-4.1"
                 speaker_agent_id: None,
                 parts: vec![MessagePart::Text {
                     text: "hello".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: None,
                 tool_call: None,

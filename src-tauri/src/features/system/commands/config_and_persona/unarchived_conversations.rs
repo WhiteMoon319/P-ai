@@ -1218,6 +1218,7 @@ fn conversation_delegate_stats_from_messages(
             speaker_agent_id: None,
             parts: vec![MessagePart::Text {
                 text: String::new(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: None,
@@ -2223,6 +2224,7 @@ mod unarchived_conversations_tests {
             speaker_agent_id: Some("agent-a".to_string()),
             parts: vec![MessagePart::Text {
                 text: text.to_string(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: None,
@@ -2379,7 +2381,8 @@ mod unarchived_conversations_tests {
                 speaker_agent_id: None,
                 parts: vec![MessagePart::Text {
                     text: "先做任务".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: None,
                 tool_call: None,
@@ -2400,7 +2403,8 @@ mod unarchived_conversations_tests {
                 speaker_agent_id: None,
                 parts: vec![MessagePart::Text {
                     text: "再做一轮".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: None,
                 tool_call: None,

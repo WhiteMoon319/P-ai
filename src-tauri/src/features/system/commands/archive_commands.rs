@@ -239,7 +239,7 @@ fn archive_first_user_preview(conversation: &Conversation, ui_language: &str) ->
             m.parts
                 .iter()
                 .filter_map(|p| match p {
-                    MessagePart::Text { text } => Some(text.trim()),
+                    MessagePart::Text { text, .. } => Some(text.trim()),
                     _ => None,
                 })
                 .filter(|t| !t.is_empty())

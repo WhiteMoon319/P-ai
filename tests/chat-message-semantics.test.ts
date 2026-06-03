@@ -5,6 +5,7 @@ import {
   appendTextDeltaToStreamBlocks,
   appendReasoningToStreamActivityItems,
   applyAssistantToolEventToStreamBlocks,
+  assistantTextFromStreamBlocks,
   assistantStreamBlocksFromMessageForDisplay,
   inspectUndoablePatchCalls,
   normalizeMessageToolHistoryEvents,
@@ -95,6 +96,43 @@ describe("chat-message semantics", () => {
     expect(normalizeMessageToolHistoryEvents(message, "prompt")).toHaveLength(0);
   });
 
+  it("trims partial tool groups only for prompt replay view", () => {
+    const message: ChatMessage = {
+      ...textMessage("a-2-partial", "assistant", "处理中"),
+      toolCall: [
+        {
+          role: "assistant",
+          reasoning_content: "先同时读取两个文件",
+          tool_calls: [
+            {
+              id: "call-a",
+              call_id: "call-a",
+              type: "function",
+              function: { name: "read", arguments: "{\"path\":\"a.rs\"}" },
+            },
+            {
+              id: "call-b",
+              call_id: "call-b",
+              type: "function",
+              function: { name: "read", arguments: "{\"path\":\"b.rs\"}" },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "call-a", content: "工具 A 结果" },
+      ],
+    };
+
+    const displayEvents = normalizeMessageToolHistoryEvents(message, "display");
+    const promptEvents = normalizeMessageToolHistoryEvents(message, "prompt");
+
+    expect(displayEvents).toHaveLength(2);
+    expect(displayEvents[0]?.toolCalls).toHaveLength(2);
+    expect(promptEvents).toHaveLength(2);
+    expect(promptEvents[0]?.toolCalls).toHaveLength(1);
+    expect(promptEvents[0]?.toolCalls[0]?.invocationId).toBe("call-a");
+    expect(promptEvents[1]).toMatchObject({ role: "tool", toolCallId: "call-a" });
+  });
+
   it("uses only event-level reasoning for display activity", () => {
     const message: ChatMessage = {
       ...textMessage("a-4", "assistant", "终端版本是 PowerShell 7.5.4"),
@@ -128,6 +166,39 @@ describe("chat-message semantics", () => {
     });
   });
 
+  it("projects final text part reasoning after tool activity", () => {
+    const message: ChatMessage = {
+      ...textMessage("a-final-reasoning", "assistant", "最终回答"),
+      parts: [{ type: "text", text: "最终回答", reasoning_content: "最终思考" }],
+      toolCall: [
+        {
+          role: "assistant",
+          reasoning_content: "工具思考",
+          tool_calls: [{
+            id: "fc_final",
+            type: "function",
+            function: {
+              name: "read",
+              arguments: "{}",
+            },
+          }],
+        },
+        {
+          role: "tool",
+          tool_call_id: "fc_final",
+          content: "工具结果",
+        },
+      ],
+    };
+
+    const blocks = assistantStreamBlocksFromMessageForDisplay(message, "最终回答");
+
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]).toMatchObject({ reasoning: "工具思考", text: "" });
+    expect(blocks[0]?.tools).toHaveLength(1);
+    expect(blocks[1]).toMatchObject({ reasoning: "最终思考", text: "最终回答", tools: [] });
+  });
+
   it("projects message-level activity when there are no tool events", () => {
     const message: ChatMessage = {
       ...textMessage("a-activity", "assistant", "不太确定，展开说说？"),
@@ -150,12 +221,12 @@ describe("chat-message semantics", () => {
     expect(projection.activityStatus).toBe("complete");
   });
 
-  it("projects assistant-only activity events when there are no tools", () => {
+  it("projects final text part reasoning when there are no tools", () => {
     const message: ChatMessage = {
       ...textMessage("a-event-activity", "assistant", "不太确定，展开说说？"),
-      toolCall: [{
-        role: "assistant",
-        content: "不太确定，展开说说？",
+      parts: [{
+        type: "text",
+        text: "不太确定，展开说说？",
         reasoning_content: "先判断用户提到的工具指代。",
       }],
     };
@@ -168,6 +239,79 @@ describe("chat-message semantics", () => {
       text: "先判断用户提到的工具指代。",
     });
     expect(projection.toolCallCount).toBe(0);
+  });
+
+  it("merges toolcall assistant texts with final assistant text for display", () => {
+    const message: ChatMessage = {
+      ...textMessage("a-toolcall-text", "assistant", "最后汇总"),
+      parts: [{ type: "text", text: "最后汇总" }],
+      toolCall: [
+        {
+          role: "assistant",
+          content: "先说明第一步",
+          tool_calls: [{
+            id: "call_1",
+            type: "function",
+            function: {
+              name: "read",
+              arguments: "{\"path\":\"a.txt\"}",
+            },
+          }],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_1",
+          content: "文件内容",
+        },
+        {
+          role: "assistant",
+          content: "再说明第二步",
+          tool_calls: [{
+            id: "call_2",
+            type: "function",
+            function: {
+              name: "read",
+              arguments: "{\"path\":\"b.txt\"}",
+            },
+          }],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_2",
+          content: "更多内容",
+        },
+      ],
+    };
+
+    expect(projectMessageForDisplay(message).text).toBe("先说明第一步\n\n再说明第二步\n\n最后汇总");
+  });
+
+  it("does not duplicate assistant history text when final text already contains it", () => {
+    const message: ChatMessage = {
+      ...textMessage("a-toolcall-legacy-text", "assistant", "先说明我要等待。等待完成，现在汇报。"),
+      parts: [{ type: "text", text: "先说明我要等待。等待完成，现在汇报。" }],
+      toolCall: [
+        {
+          role: "assistant",
+          content: "等待完成，现在汇报。",
+          tool_calls: [{
+            id: "call_wait",
+            type: "function",
+            function: {
+              name: "wait",
+              arguments: "{\"seconds\":3}",
+            },
+          }],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_wait",
+          content: "等待完成",
+        },
+      ],
+    };
+
+    expect(projectMessageForDisplay(message).text).toBe("先说明我要等待。等待完成，现在汇报。");
   });
 
   it("inspects undoable patch calls through normalized tool history", () => {
@@ -302,6 +446,65 @@ describe("chat-message semantics", () => {
     expect(activity.activityToolCountsByName).toEqual({ exec: 2, read: 1 });
   });
 
+  it("projects tool group reasoning once with multiple tool results", () => {
+    const message: ChatMessage = {
+      ...textMessage("a-7-group", "assistant", "完成"),
+      toolCall: [
+        {
+          role: "assistant",
+          content: null,
+          reasoning_content: "先同时读取两个文件",
+          tool_calls: [
+            {
+              id: "call-a",
+              call_id: "call-a",
+              type: "function",
+              function: { name: "read", arguments: "{\"path\":\"a.rs\"}" },
+            },
+            {
+              id: "call-b",
+              call_id: "call-b",
+              type: "function",
+              function: { name: "read", arguments: "{\"path\":\"b.rs\"}" },
+            },
+          ],
+        },
+        { role: "tool", tool_call_id: "call-a", content: "工具 A 结果" },
+        { role: "tool", tool_call_id: "call-b", content: "工具 B 结果" },
+      ],
+    };
+
+    const activity = projectChatActivityForDisplay(message);
+    const promptEvents = normalizeMessageToolHistoryEvents(message, "prompt");
+
+    expect(activity.items).toHaveLength(3);
+    expect(activity.items[0]).toMatchObject({
+      kind: "reasoning",
+      text: "先同时读取两个文件",
+    });
+    expect(activity.items[1]).toMatchObject({
+      kind: "tool",
+      toolCallId: "call-a",
+      name: "read",
+      resultText: "工具 A 结果",
+    });
+    expect(activity.items[2]).toMatchObject({
+      kind: "tool",
+      toolCallId: "call-b",
+      name: "read",
+      resultText: "工具 B 结果",
+    });
+    expect(activity.items.filter((item) => item.kind === "reasoning")).toHaveLength(1);
+    expect(promptEvents).toHaveLength(3);
+    expect(promptEvents[0]).toMatchObject({
+      role: "assistant",
+      reasoningContent: "先同时读取两个文件",
+    });
+    expect(promptEvents[0]?.toolCalls).toHaveLength(2);
+    expect(promptEvents[1]).toMatchObject({ role: "tool", toolCallId: "call-a" });
+    expect(promptEvents[2]).toMatchObject({ role: "tool", toolCallId: "call-b" });
+  });
+
   it("prioritizes streaming activity status by tool, reasoning, then request", () => {
     expect(projectStreamingChatActivityForDisplay({
       activityItems: [
@@ -380,6 +583,22 @@ describe("chat-message semantics", () => {
       "先看文件。",
       "read_file",
     ]);
+  });
+
+  it("joins streaming assistant texts with blank lines between blocks", () => {
+    expect(assistantTextFromStreamBlocks([
+      { text: "先说明我要等待。", tools: [] },
+      {
+        reasoning: "准备调用等待工具。",
+        text: "等待完成，现在汇报。",
+        tools: [{
+          toolCallId: "tool-1",
+          name: "wait",
+          argsText: "{\"seconds\":3}",
+          status: "done" as const,
+        }],
+      },
+    ])).toBe("先说明我要等待。\n\n等待完成，现在汇报。");
   });
 
   it("reconstructs assistant display blocks from persisted tool history", () => {

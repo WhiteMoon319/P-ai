@@ -520,6 +520,7 @@ mod summary_context_title_tests {
             speaker_agent_id: speaker_agent_id.map(ToOwned::to_owned),
             parts: vec![MessagePart::Text {
                 text: text.to_string(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta,
@@ -754,8 +755,65 @@ mod summary_context_title_tests {
 }
 
 fn sanitize_tool_history_events(events: &[Value]) -> Vec<Value> {
+    fn assistant_tool_call_ids(event: &Value) -> Vec<String> {
+        event
+            .get("tool_calls")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .flat_map(|item| {
+                        ["id", "call_id"]
+                            .into_iter()
+                            .filter_map(|key| item.get(key).and_then(Value::as_str))
+                            .map(str::trim)
+                            .filter(|value| !value.is_empty())
+                            .map(ToOwned::to_owned)
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    }
+
+    fn assistant_with_matched_tool_calls(event: &Value, matched_ids: &[String]) -> Value {
+        let mut next = event.clone();
+        let Some(object) = next.as_object_mut() else {
+            return next;
+        };
+        let filtered = event
+            .get("tool_calls")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter(|item| {
+                        ["id", "call_id"].into_iter().any(|key| {
+                            item.get(key)
+                                .and_then(Value::as_str)
+                                .map(str::trim)
+                                .is_some_and(|id| matched_ids.iter().any(|matched| matched == id))
+                        })
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        object.insert("tool_calls".to_string(), Value::Array(filtered));
+        next
+    }
+
+    #[derive(Debug, Clone)]
+    struct PendingAssistant {
+        event: Value,
+        allowed_ids: Vec<String>,
+        matched_ids: Vec<String>,
+        output_index: Option<usize>,
+        legacy_without_ids: bool,
+    }
+
     let mut sanitized = Vec::<Value>::new();
-    let mut pending_assistant_index: Option<usize> = None;
+    let mut pending_assistant: Option<PendingAssistant> = None;
     for event in events {
         let role = event
             .get("role")
@@ -770,24 +828,65 @@ fn sanitize_tool_history_events(events: &[Value]) -> Vec<Value> {
                     .and_then(Value::as_array)
                     .map(|items| !items.is_empty())
                     .unwrap_or(false);
-                let index = sanitized.len();
-                sanitized.push(event.clone());
-                pending_assistant_index = if has_tool_calls { Some(index) } else { None };
+                let tool_call_ids = assistant_tool_call_ids(event);
+                pending_assistant = if has_tool_calls {
+                    Some(PendingAssistant {
+                        event: event.clone(),
+                        legacy_without_ids: tool_call_ids.is_empty(),
+                        allowed_ids: tool_call_ids,
+                        matched_ids: Vec::new(),
+                        output_index: None,
+                    })
+                } else {
+                    sanitized.push(event.clone());
+                    None
+                };
             }
             "tool" => {
-                if pending_assistant_index.is_some() {
-                    sanitized.push(event.clone());
-                    pending_assistant_index = None;
+                if let Some(pending) = pending_assistant.as_mut() {
+                    let tool_call_id = event
+                        .get("tool_call_id")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .unwrap_or_default();
+                    let matched_index = pending
+                        .allowed_ids
+                        .iter()
+                        .position(|id| id == tool_call_id);
+                    let legacy_without_ids =
+                        pending.legacy_without_ids && pending.output_index.is_none();
+                    if legacy_without_ids || matched_index.is_some() {
+                        if !pending.matched_ids.iter().any(|id| id == tool_call_id) {
+                            pending.matched_ids.push(tool_call_id.to_string());
+                        }
+                        let assistant_event = if pending.legacy_without_ids {
+                            pending.event.clone()
+                        } else {
+                            assistant_with_matched_tool_calls(&pending.event, &pending.matched_ids)
+                        };
+                        if let Some(index) = pending.output_index {
+                            sanitized[index] = assistant_event;
+                        } else {
+                            pending.output_index = Some(sanitized.len());
+                            sanitized.push(assistant_event);
+                        }
+                        sanitized.push(event.clone());
+                        if let Some(index) = matched_index {
+                            pending.allowed_ids.remove(index);
+                            if pending.allowed_ids.is_empty() {
+                                pending_assistant = None;
+                            }
+                        } else {
+                            pending_assistant = None;
+                        }
+                    }
                 }
             }
             _ => {
-                pending_assistant_index = None;
+                pending_assistant = None;
                 sanitized.push(event.clone());
             }
         }
-    }
-    if let Some(index) = pending_assistant_index {
-        sanitized.truncate(index);
     }
     sanitized
 }
@@ -1330,7 +1429,8 @@ fn build_user_parts(
         }
         parts.push(MessagePart::Text {
             text: text.to_string(),
-        });
+                reasoning_content: None,
+            });
     }
 
     if let Some(images) = &payload.images {
@@ -1347,6 +1447,7 @@ fn build_user_parts(
                         &format!("不支持的图片 MIME：{}", image.mime.trim()),
                         image.saved_path.as_deref(),
                     ),
+                    reasoning_content: None,
                 });
                 continue;
             }
@@ -1360,6 +1461,7 @@ fn build_user_parts(
                             &format!("图片内容解码失败：{err}"),
                             image.saved_path.as_deref(),
                         ),
+                        reasoning_content: None,
                     });
                     continue;
                 }
@@ -1373,6 +1475,7 @@ fn build_user_parts(
                             &err,
                             image.saved_path.as_deref(),
                         ),
+                        reasoning_content: None,
                     });
                     continue;
                 }
@@ -1536,7 +1639,7 @@ fn render_message_content_for_model(message: &ChatMessage) -> String {
     let mut chunks = Vec::<String>::new();
     for part in &message.parts {
         match part {
-            MessagePart::Text { text } => chunks.push(text.clone()),
+            MessagePart::Text { text, .. } => chunks.push(text.clone()),
             MessagePart::Image { mime, .. } => {
                 if mime.trim().eq_ignore_ascii_case("application/pdf") {
                     chunks.push("[pdf attached]".to_string());
@@ -1871,10 +1974,32 @@ fn render_prompt_message_text(message: &ChatMessage) -> String {
     render_message_content_for_model(message)
 }
 
+fn render_prompt_message_reasoning(message: &ChatMessage) -> Option<String> {
+    let reasoning = message
+        .parts
+        .iter()
+        .filter_map(|part| match part {
+            MessagePart::Text {
+                reasoning_content,
+                ..
+            } => reasoning_content.as_deref(),
+            _ => None,
+        })
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+    if reasoning.is_empty() {
+        None
+    } else {
+        Some(reasoning)
+    }
+}
+
 fn render_prompt_user_text_only(message: &ChatMessage) -> String {
     let mut chunks = Vec::<String>::new();
     for part in &message.parts {
-        if let MessagePart::Text { text } = part {
+        if let MessagePart::Text { text, .. } = part {
             if !text.trim().is_empty() {
                 chunks.push(text.clone());
             }
@@ -2983,7 +3108,11 @@ fn build_conversation_prompt_payload(
             audios,
             tool_calls: None,
             tool_call_id: None,
-            reasoning_content: None,
+            reasoning_content: if is_self_message {
+                render_prompt_message_reasoning(message)
+            } else {
+                None
+            },
         });
     }
 

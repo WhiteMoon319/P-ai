@@ -161,7 +161,7 @@ fn chat_history_source_kind(conversation: &Conversation) -> Option<&'static str>
 fn chat_history_message_text(message: &ChatMessage) -> String {
     let mut parts = Vec::<String>::new();
     for part in &message.parts {
-        if let MessagePart::Text { text } = part {
+        if let MessagePart::Text { text, .. } = part {
             let trimmed = text.trim();
             if !trimmed.is_empty() {
                 parts.push(trimmed.to_string());

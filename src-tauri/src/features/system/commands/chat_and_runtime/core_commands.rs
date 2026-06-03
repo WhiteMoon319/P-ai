@@ -145,7 +145,8 @@ fn plan_continue_confirmation_message() -> ChatMessage {
         speaker_agent_id: None,
         parts: vec![MessagePart::Text {
             text: "我同意，请执行。".to_string(),
-        }],
+                reasoning_content: None,
+            }],
         extra_text_blocks: Vec::new(),
         provider_meta: Some(serde_json::json!({
             "messageKind": "plan_confirm_continue",
@@ -569,7 +570,7 @@ fn user_async_delegate_message_text(message: &ChatMessage) -> String {
     }
     let mut chunks = Vec::<String>::new();
     for part in &message.parts {
-        if let MessagePart::Text { text } = part {
+        if let MessagePart::Text { text, .. } = part {
             let text = text.trim();
             if !text.is_empty() {
                 chunks.push(text.to_string());
@@ -791,7 +792,8 @@ fn enqueue_user_mention_result_message(
         speaker_agent_id: Some(target_agent_id.to_string()),
         parts: vec![MessagePart::Text {
             text: text.to_string(),
-        }],
+                reasoning_content: None,
+            }],
         extra_text_blocks: Vec::new(),
         provider_meta: Some(provider_meta),
         tool_call: None,
@@ -1249,7 +1251,9 @@ async fn submit_chat_message_inner(
 
     let mut message_parts = Vec::new();
     if !text.is_empty() {
-        message_parts.push(MessagePart::Text { text: text.to_string() });
+        message_parts.push(MessagePart::Text { text: text.to_string(),
+                reasoning_content: None,
+            });
     }
     for img in images {
         message_parts.push(MessagePart::Image {
@@ -1522,7 +1526,9 @@ async fn send_chat_message(
 
     let mut message_parts = Vec::new();
     if !text.is_empty() {
-        message_parts.push(MessagePart::Text { text: text.to_string() });
+        message_parts.push(MessagePart::Text { text: text.to_string(),
+                reasoning_content: None,
+            });
     }
     for img in images {
         message_parts.push(MessagePart::Image {
@@ -1750,7 +1756,9 @@ async fn send_user_mention_message_inner(
 
     let mut message_parts = Vec::new();
     if !text.is_empty() {
-        message_parts.push(MessagePart::Text { text: text.to_string() });
+        message_parts.push(MessagePart::Text { text: text.to_string(),
+                reasoning_content: None,
+            });
     }
     for img in images {
         message_parts.push(MessagePart::Image {
@@ -2153,7 +2161,7 @@ async fn recall_chat_queue_event(
         .and_then(|event| {
             event.messages.first().and_then(|msg| {
                 msg.parts.iter().find_map(|part| match part {
-                    MessagePart::Text { text } => Some(text.clone()),
+                    MessagePart::Text { text, .. } => Some(text.clone()),
                     _ => None,
                 })
             })

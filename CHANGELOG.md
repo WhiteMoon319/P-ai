@@ -2,6 +2,9 @@
 
 ## 未发布
 
+- 修复（chat）：并发工具调用按工具组保存与回放，流式工具事件不再重复携带思维链；请求体回放会裁剪 partial 工具组为闭合子组，并保证截图 sidecar 消息排在同组工具结果之后。最终普通 assistant 的正文与思维链写入 `parts`，不再把无 `tool_calls` 的普通 assistant 写进 `toolCall`。
+- 优化（chat）：气泡模式改用负 margin 左移手法，新增 `ecall-bubble-shift` 类以独立于隐藏气泡模式调整左偏移量；头像列增加 `z-index` 确保压于气泡上方。
+
 ## 发布：v0.10.16
 
 - 优化（prompt）：系统准则迁移为 Markdown 源文件并按事实、上下文工具、执行边界、代码设计与输出风格分组；强化反谄媚、文件引用、工具搜索、计划、任务、Todo、记忆召回与 meme 贴纸规则的结构化提示。
@@ -551,7 +554,7 @@
 ## 发布：v0.9.62
 
 - 发布（release-0.9.62）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.62`，纳入本轮供应商草稿保存/还原与 Codex 本地平铺凭证兼容修复。
- 
+
 ## 发布：v0.9.61
 
 - 发布（release-0.9.61）：同步前端 `package.json`、Tauri `tauri.conf.json` 与 Rust `Cargo.toml` / `Cargo.lock` 版本号到 `0.9.61`，纳入本轮全局滚动条默认透明、聚焦/悬停显示的样式优化。

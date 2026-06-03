@@ -185,7 +185,7 @@ fn normalize_archive_for_import(archive: &mut ConversationArchive, data_path: &P
         }
         for part in &mut message.parts {
             match part {
-                MessagePart::Text { text } => {
+                MessagePart::Text { text, .. } => {
                     *text = clean_text(text.trim());
                 }
                 MessagePart::Image {
@@ -235,7 +235,7 @@ fn archive_message_plain_text(message: &ChatMessage) -> String {
         .parts
         .iter()
         .filter_map(|part| match part {
-            MessagePart::Text { text } => Some(text.trim().to_string()),
+            MessagePart::Text { text, .. } => Some(text.trim().to_string()),
             _ => None,
         })
         .filter(|text| !text.is_empty())

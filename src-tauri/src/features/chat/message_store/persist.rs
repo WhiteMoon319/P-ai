@@ -843,6 +843,7 @@ mod message_store_persist_tests {
             speaker_agent_id: None,
             parts: vec![MessagePart::Text {
                 text: format!("message {id}"),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: None,
@@ -1115,7 +1116,8 @@ mod message_store_persist_tests {
         let mut updated_message = test_message("m2");
         updated_message.parts = vec![MessagePart::Text {
             text: "message m2 with much longer replacement content".to_string(),
-        }];
+                reasoning_content: None,
+            }];
         let mut updated = conversation.clone();
         if let Some(message) = updated.messages.iter_mut().find(|item| item.id == "m2") {
             *message = updated_message.clone();
@@ -1138,7 +1140,7 @@ mod message_store_persist_tests {
             vec!["m1", "m2", "m3"]
         );
         match loaded.messages[1].parts.first() {
-            Some(MessagePart::Text { text }) => assert!(text.contains("longer replacement")),
+            Some(MessagePart::Text { text, .. }) => assert!(text.contains("longer replacement")),
             _ => panic!("expected replaced text message"),
         }
         assert_eq!(index.items.len(), 3);

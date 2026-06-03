@@ -563,7 +563,7 @@ fn build_summary_context_json_contract_block(scene: SummaryContextScene) -> Stri
 fn archive_pipeline_message_plain_text(message: &ChatMessage) -> String {
     let mut blocks = Vec::<String>::new();
     for part in &message.parts {
-        if let MessagePart::Text { text } = part {
+        if let MessagePart::Text { text, .. } = part {
             let cleaned = clean_text(text.trim());
             if !cleaned.is_empty() {
                 blocks.push(cleaned);
@@ -949,7 +949,7 @@ fn build_compaction_message(
         role: "user".to_string(),
         created_at: now,
         speaker_agent_id: Some(SYSTEM_PERSONA_ID.to_string()),
-        parts: vec![MessagePart::Text { text }],
+        parts: vec![MessagePart::Text { text, reasoning_content: None }],
         extra_text_blocks: Vec::new(),
         provider_meta: Some(serde_json::json!({
             "message_meta": {
@@ -1118,7 +1118,7 @@ fn build_initial_summary_context_message(
         role: "user".to_string(),
         created_at: now,
         speaker_agent_id: Some(SYSTEM_PERSONA_ID.to_string()),
-        parts: vec![MessagePart::Text { text }],
+        parts: vec![MessagePart::Text { text, reasoning_content: None }],
         extra_text_blocks: Vec::new(),
         provider_meta: Some(serde_json::json!({
             "message_meta": {
@@ -2123,6 +2123,7 @@ mod archive_pipeline_tests {
             speaker_agent_id: Some("agent-a".to_string()),
             parts: vec![MessagePart::Text {
                 text: text.to_string(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: None,

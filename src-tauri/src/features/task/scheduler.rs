@@ -495,7 +495,8 @@ async fn task_dispatch_due_task(
         speaker_agent_id: Some(SYSTEM_PERSONA_ID.to_string()),
         parts: vec![MessagePart::Text {
             text: build_task_trigger_hidden_prompt(task),
-        }],
+                reasoning_content: None,
+            }],
         extra_text_blocks: Vec::new(),
         provider_meta: Some(build_task_trigger_provider_meta(task)),
         tool_call: None,

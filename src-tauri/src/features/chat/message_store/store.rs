@@ -1001,7 +1001,7 @@ pub(super) fn read_message_store_compaction_segment_before_for_conversation(
         .read_compaction_segment_before(boundary_message_id)
 }
 
-pub(super) fn append_message_store_tool_call_result_pair(
+pub(super) fn append_message_store_tool_group_result(
     paths: &MessageStorePaths,
     conversation: &Conversation,
     agent_id: &str,
@@ -1010,7 +1010,7 @@ pub(super) fn append_message_store_tool_call_result_pair(
     provider_meta_patch: Option<Value>,
 ) -> Result<MessageStoreToolCallResultAppend, String> {
     let mut next = conversation.clone();
-    let append = append_tool_call_result_pair_to_conversation(
+    let append = append_tool_group_result_to_conversation(
         &mut next,
         agent_id,
         assistant_tool_call_event,
@@ -1027,22 +1027,22 @@ pub(super) fn append_message_store_tool_call_result_pair(
 }
 
 #[derive(Debug, Clone)]
-struct ToolCallResultPairAppend {
+struct ToolGroupResultAppend {
     assistant_message_id: String,
     created: bool,
     tool_event_count: usize,
 }
 
-fn append_tool_call_result_pair_to_conversation(
+fn append_tool_group_result_to_conversation(
     conversation: &mut Conversation,
     agent_id: &str,
     assistant_tool_call_event: Value,
     tool_result_event: Value,
     provider_meta_patch: Option<Value>,
-) -> Result<ToolCallResultPairAppend, String> {
-    validate_tool_call_result_pair(&assistant_tool_call_event, &tool_result_event)?;
-    let tool_call_id = tool_call_id_from_assistant_tool_event(&assistant_tool_call_event)?
-        .to_string();
+) -> Result<ToolGroupResultAppend, String> {
+    let tool_call_id =
+        validate_tool_group_result_append(&assistant_tool_call_event, &tool_result_event)?;
+    let group_call_ids = tool_call_ids_from_assistant_tool_event(&assistant_tool_call_event);
     let now = now_iso();
     let target_idx = conversation
         .messages
@@ -1063,15 +1063,17 @@ fn append_tool_call_result_pair_to_conversation(
             .get_mut(idx)
             .ok_or_else(|| "追加工具结果失败：目标助理消息不存在".to_string())?;
         let events = message.tool_call.get_or_insert_with(Vec::new);
-        if tool_history_contains_tool_call_id(events, &tool_call_id) {
+        if tool_history_contains_tool_result_id(events, &tool_call_id) {
             merge_provider_meta_patch(&mut message.provider_meta, provider_meta_patch);
-            return Ok(ToolCallResultPairAppend {
+            return Ok(ToolGroupResultAppend {
                 assistant_message_id: message.id.clone(),
                 created: false,
                 tool_event_count: events.len(),
             });
         }
-        events.push(assistant_tool_call_event);
+        if !tool_history_contains_assistant_tool_group(events, &group_call_ids) {
+            events.push(assistant_tool_call_event);
+        }
         events.push(tool_result_event);
         message.created_at = if message.created_at.trim().is_empty() {
             now.clone()
@@ -1088,6 +1090,7 @@ fn append_tool_call_result_pair_to_conversation(
             speaker_agent_id: Some(agent_id.trim().to_string()),
             parts: vec![MessagePart::Text {
                 text: String::new(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: provider_meta_patch.filter(|value| value.as_object().is_some_and(|obj| !obj.is_empty())),
@@ -1100,7 +1103,7 @@ fn append_tool_call_result_pair_to_conversation(
     };
     conversation.updated_at = now.clone();
     conversation.last_assistant_at = Some(now);
-    Ok(ToolCallResultPairAppend {
+    Ok(ToolGroupResultAppend {
         assistant_message_id,
         created,
         tool_event_count,
@@ -1131,44 +1134,65 @@ fn merge_provider_meta_patch(target: &mut Option<Value>, patch: Option<Value>) {
     *target = Some(current);
 }
 
-fn tool_call_id_from_assistant_tool_event(event: &Value) -> Result<&str, String> {
+fn tool_call_ids_from_assistant_tool_event(event: &Value) -> Vec<String> {
     event
         .get("tool_calls")
         .and_then(Value::as_array)
-        .and_then(|items| items.first())
-        .and_then(|item| item.get("id").or_else(|| item.get("call_id")))
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| "追加工具结果失败：tool_call 缺少 id".to_string())
-}
-
-fn tool_history_contains_tool_call_id(events: &[Value], tool_call_id: &str) -> bool {
-    events.iter().any(|event| {
-        event
-            .get("tool_calls")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .any(|call| {
-                call.get("id")
-                    .or_else(|| call.get("call_id"))
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    == Some(tool_call_id)
-            })
-            || event
-                .get("tool_call_id")
+        .into_iter()
+        .flatten()
+        .filter_map(|item| {
+            item.get("id")
+                .or_else(|| item.get("call_id"))
                 .and_then(Value::as_str)
                 .map(str::trim)
-                == Some(tool_call_id)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+        })
+        .collect()
+}
+
+fn tool_history_contains_assistant_tool_group(events: &[Value], group_call_ids: &[String]) -> bool {
+    if group_call_ids.is_empty() {
+        return false;
+    }
+    events.iter().any(|event| {
+        event
+            .get("role")
+            .and_then(Value::as_str)
+            .is_some_and(|role| role.trim().eq_ignore_ascii_case("assistant"))
+            && event
+                .get("tool_calls")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .any(|call| {
+                    call.get("id")
+                        .or_else(|| call.get("call_id"))
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .is_some_and(|id| group_call_ids.iter().any(|candidate| candidate == id))
+                })
     })
 }
 
-fn validate_tool_call_result_pair(
+fn tool_history_contains_tool_result_id(events: &[Value], tool_call_id: &str) -> bool {
+    events.iter().any(|event| {
+        event
+            .get("role")
+            .and_then(Value::as_str)
+            .is_some_and(|role| role.trim().eq_ignore_ascii_case("tool"))
+            && event
+            .get("tool_call_id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            == Some(tool_call_id)
+    })
+}
+
+fn validate_tool_group_result_append(
     assistant_tool_call_event: &Value,
     tool_result_event: &Value,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let assistant_role = assistant_tool_call_event
         .get("role")
         .and_then(Value::as_str)
@@ -1177,15 +1201,10 @@ fn validate_tool_call_result_pair(
     if assistant_role != "assistant" {
         return Err("追加工具结果失败：第一条事件必须是 assistant tool_call".to_string());
     }
-    let tool_calls = assistant_tool_call_event
-        .get("tool_calls")
-        .and_then(Value::as_array)
-        .filter(|items| !items.is_empty())
-        .ok_or_else(|| "追加工具结果失败：assistant 事件缺少 tool_calls".to_string())?;
-    if tool_calls.len() != 1 {
-        return Err("追加工具结果失败：一次只能追加一对 tool_call/tool_result".to_string());
+    let group_call_ids = tool_call_ids_from_assistant_tool_event(assistant_tool_call_event);
+    if group_call_ids.is_empty() {
+        return Err("追加工具结果失败：assistant 事件缺少 tool_calls".to_string());
     }
-    let tool_call_id = tool_call_id_from_assistant_tool_event(assistant_tool_call_event)?;
     let tool_role = tool_result_event
         .get("role")
         .and_then(Value::as_str)
@@ -1200,13 +1219,14 @@ fn validate_tool_call_result_pair(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| "追加工具结果失败：tool result 缺少 tool_call_id".to_string())?;
-    if result_call_id != tool_call_id {
+    if !group_call_ids.iter().any(|tool_call_id| tool_call_id == result_call_id) {
         return Err(format!(
-            "追加工具结果失败：tool_call_id 不匹配，tool_call_id={}，result_tool_call_id={}",
-            tool_call_id, result_call_id
+            "追加工具结果失败：tool_call_id 不在工具组内，group_tool_call_ids={}，result_tool_call_id={}",
+            group_call_ids.join(","),
+            result_call_id
         ));
     }
-    Ok(())
+    Ok(result_call_id.to_string())
 }
 
 fn ready_jsonl_snapshot_store(
@@ -2160,6 +2180,7 @@ mod message_store_reader_tests {
             speaker_agent_id: None,
             parts: vec![MessagePart::Text {
                 text: format!("message {id}"),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: None,
@@ -2178,7 +2199,7 @@ mod message_store_reader_tests {
         message
     }
 
-    fn test_tool_pair(call_id: &str, tool_name: &str) -> (Value, Value) {
+    fn test_single_tool_group_result(call_id: &str, tool_name: &str) -> (Value, Value) {
         (
             serde_json::json!({
                 "role": "assistant",
@@ -2196,6 +2217,46 @@ mod message_store_reader_tests {
                 "role": "tool",
                 "tool_call_id": call_id,
                 "content": "{\"ok\":true}"
+            }),
+        )
+    }
+
+    fn test_tool_group_with_two_results() -> (Value, Value, Value) {
+        (
+            serde_json::json!({
+                "role": "assistant",
+                "content": Value::Null,
+                "reasoning_content": "先同时读取两个文件",
+                "tool_calls": [
+                    {
+                        "id": "call-a",
+                        "call_id": "call-a",
+                        "type": "function",
+                        "function": {
+                            "name": "read",
+                            "arguments": "{\"path\":\"a.rs\"}"
+                        }
+                    },
+                    {
+                        "id": "call-b",
+                        "call_id": "call-b",
+                        "type": "function",
+                        "function": {
+                            "name": "read",
+                            "arguments": "{\"path\":\"b.rs\"}"
+                        }
+                    }
+                ]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call-a",
+                "content": "工具 A 结果"
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call-b",
+                "content": "工具 B 结果"
             }),
         )
     }
@@ -2253,23 +2314,23 @@ mod message_store_reader_tests {
     }
 
     #[test]
-    fn append_tool_call_result_pair_should_merge_into_last_same_assistant() {
+    fn append_tool_group_result_should_merge_into_last_same_assistant() {
         let mut assistant = test_message("assistant-1", "assistant");
         assistant.speaker_agent_id = Some("agent-a".to_string());
         let mut conversation = test_conversation(vec![
             test_message("user-1", "user"),
             assistant,
         ]);
-        let (call_event, result_event) = test_tool_pair("call-1", "read_file");
+        let (call_event, result_event) = test_single_tool_group_result("call-1", "read_file");
 
-        let append = append_tool_call_result_pair_to_conversation(
+        let append = append_tool_group_result_to_conversation(
             &mut conversation,
             "agent-a",
             call_event,
             result_event,
             None,
         )
-        .expect("append pair");
+        .expect("append group result");
 
         assert!(!append.created);
         assert_eq!(append.assistant_message_id, "assistant-1");
@@ -2285,20 +2346,20 @@ mod message_store_reader_tests {
     }
 
     #[test]
-    fn append_tool_call_result_pair_should_create_when_tail_is_not_same_assistant() {
+    fn append_tool_group_result_should_create_when_tail_is_not_same_assistant() {
         let mut assistant = test_message("assistant-1", "assistant");
         assistant.speaker_agent_id = Some("agent-b".to_string());
         let mut conversation = test_conversation(vec![assistant]);
-        let (call_event, result_event) = test_tool_pair("call-1", "read_file");
+        let (call_event, result_event) = test_single_tool_group_result("call-1", "read_file");
 
-        let append = append_tool_call_result_pair_to_conversation(
+        let append = append_tool_group_result_to_conversation(
             &mut conversation,
             "agent-a",
             call_event,
             result_event,
             None,
         )
-        .expect("append pair");
+        .expect("append group result");
 
         assert!(append.created);
         assert_ne!(append.assistant_message_id, "assistant-1");
@@ -2310,12 +2371,12 @@ mod message_store_reader_tests {
     }
 
     #[test]
-    fn append_tool_call_result_pair_should_reject_mismatched_pair() {
+    fn append_tool_group_result_should_reject_mismatched_result() {
         let mut conversation = test_conversation(vec![test_message("user-1", "user")]);
-        let (call_event, mut result_event) = test_tool_pair("call-1", "read_file");
+        let (call_event, mut result_event) = test_single_tool_group_result("call-1", "read_file");
         result_event["tool_call_id"] = Value::String("call-2".to_string());
 
-        let err = append_tool_call_result_pair_to_conversation(
+        let err = append_tool_group_result_to_conversation(
             &mut conversation,
             "agent-a",
             call_event,
@@ -2324,18 +2385,18 @@ mod message_store_reader_tests {
         )
         .expect_err("mismatch should fail");
 
-        assert!(err.contains("tool_call_id 不匹配"));
+        assert!(err.contains("tool_call_id 不在工具组内"));
     }
 
     #[test]
-    fn append_tool_call_result_pair_should_skip_existing_tool_call_id() {
+    fn append_tool_group_result_should_skip_existing_tool_call_id() {
         let mut assistant = test_message("assistant-1", "assistant");
         assistant.speaker_agent_id = Some("agent-a".to_string());
-        let (call_event, result_event) = test_tool_pair("call-1", "read_file");
+        let (call_event, result_event) = test_single_tool_group_result("call-1", "read_file");
         assistant.tool_call = Some(vec![call_event.clone(), result_event.clone()]);
         let mut conversation = test_conversation(vec![assistant]);
 
-        let append = append_tool_call_result_pair_to_conversation(
+        let append = append_tool_group_result_to_conversation(
             &mut conversation,
             "agent-a",
             call_event,
@@ -2346,7 +2407,7 @@ mod message_store_reader_tests {
                 "contextUsageRatio": 0.5,
             })),
         )
-        .expect("append pair");
+        .expect("append group result");
 
         assert!(!append.created);
         assert_eq!(append.tool_event_count, 2);
@@ -2365,6 +2426,50 @@ mod message_store_reader_tests {
                 .and_then(Value::as_u64),
             Some(123)
         );
+    }
+
+    #[test]
+    fn append_tool_group_result_should_keep_tool_group_reasoning_once() {
+        let mut assistant = test_message("assistant-1", "assistant");
+        assistant.speaker_agent_id = Some("agent-a".to_string());
+        let mut conversation = test_conversation(vec![assistant]);
+        let (group_event, result_a, result_b) = test_tool_group_with_two_results();
+
+        let first = append_tool_group_result_to_conversation(
+            &mut conversation,
+            "agent-a",
+            group_event.clone(),
+            result_a,
+            None,
+        )
+        .expect("append first group result");
+        let second = append_tool_group_result_to_conversation(
+            &mut conversation,
+            "agent-a",
+            group_event,
+            result_b,
+            None,
+        )
+        .expect("append second group result");
+
+        assert!(!first.created);
+        assert!(!second.created);
+        assert_eq!(conversation.messages.len(), 1);
+        let events = conversation.messages[0].tool_call.as_ref().expect("tool history");
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0]["role"].as_str(), Some("assistant"));
+        assert_eq!(events[0]["reasoning_content"].as_str(), Some("先同时读取两个文件"));
+        assert_eq!(
+            events[0]["tool_calls"].as_array().map(Vec::len),
+            Some(2)
+        );
+        assert_eq!(events[1]["tool_call_id"].as_str(), Some("call-a"));
+        assert_eq!(events[2]["tool_call_id"].as_str(), Some("call-b"));
+        let reasoning_event_count = events
+            .iter()
+            .filter(|event| event.get("reasoning_content").and_then(Value::as_str).is_some())
+            .count();
+        assert_eq!(reasoning_event_count, 1);
     }
 
     #[test]

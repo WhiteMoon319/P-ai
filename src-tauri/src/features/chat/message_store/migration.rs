@@ -205,6 +205,7 @@ mod message_store_tests {
             speaker_agent_id: None,
             parts: vec![MessagePart::Text {
                 text: format!("message {id}"),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: None,

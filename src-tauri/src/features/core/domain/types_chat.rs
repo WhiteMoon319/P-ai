@@ -35,6 +35,8 @@ struct SaveAgentsInput {
 enum MessagePart {
     Text {
         text: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reasoning_content: Option<String>,
     },
     Image {
         mime: String,

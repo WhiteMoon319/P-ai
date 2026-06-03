@@ -146,11 +146,12 @@ fn tool_loop_round_tool_calls_json(tool_calls: &[genai::chat::ToolCall]) -> Vec<
 
 fn tool_loop_round_response_value(
     turn_text: &str,
-    _turn_reasoning: &str,
+    turn_reasoning: &str,
     turn_tool_calls: &[genai::chat::ToolCall],
 ) -> Value {
     serde_json::json!({
         "assistantText": turn_text,
+        "reasoningContent": turn_reasoning,
         "toolCalls": tool_loop_round_tool_calls_json(turn_tool_calls)
     })
 }
@@ -217,7 +218,8 @@ fn tool_loop_transient_tool_history_message(events: &[Value]) -> Option<ChatMess
         speaker_agent_id: None,
         parts: vec![MessagePart::Text {
             text: String::new(),
-        }],
+                reasoning_content: None,
+            }],
         extra_text_blocks: Vec::new(),
         provider_meta: None,
         tool_call: Some(events.to_vec()),
@@ -348,33 +350,75 @@ fn send_text_delta_event(
     });
 }
 
-fn assistant_tool_event_value(
-    tool_call_id: &str,
-    tool_name: &str,
-    tool_args: &str,
+fn assistant_tool_group_history_event_value(
+    turn_text: &str,
+    tool_calls: &[genai::chat::ToolCall],
     turn_reasoning: &str,
 ) -> Value {
-    let tc_json = serde_json::json!({
-        "id": tool_call_id,
-        "call_id": tool_call_id,
-        "type": "function",
-        "function": {
-            "name": tool_name,
-            "arguments": tool_args
-        }
-    });
+    let tool_call_values = tool_loop_round_tool_calls_json(tool_calls);
+    let content = turn_text
+        .trim()
+        .is_empty()
+        .then_some(Value::Null)
+        .unwrap_or_else(|| Value::String(turn_text.to_string()));
     let mut assistant_tool_event = serde_json::json!({
         "role": "assistant",
-        "content": Value::Null,
-        "tool_calls": [tc_json]
+        "content": content,
+        "tool_calls": tool_call_values
     });
     if let Some(object) = assistant_tool_event.as_object_mut() {
-        object.insert(
-            "reasoning_content".to_string(),
-            Value::String(turn_reasoning.trim().to_string()),
-        );
+        let reasoning = turn_reasoning.trim();
+        if !reasoning.is_empty() {
+            object.insert(
+                "reasoning_content".to_string(),
+                Value::String(reasoning.to_string()),
+            );
+        }
     }
     assistant_tool_event
+}
+
+fn assistant_tool_group_stream_event_value(
+    turn_text: &str,
+    tool_calls: &[genai::chat::ToolCall],
+) -> Value {
+    let tool_call_values = tool_loop_round_tool_calls_json(tool_calls);
+    let content = turn_text
+        .trim()
+        .is_empty()
+        .then_some(Value::Null)
+        .unwrap_or_else(|| Value::String(turn_text.to_string()));
+    serde_json::json!({
+        "role": "assistant",
+        "content": content,
+        "tool_calls": tool_call_values
+    })
+}
+
+fn insert_before_trailing_user_history_events(events: &mut Vec<Value>, event: Value) {
+    let insert_at = events
+        .iter()
+        .rposition(|item| {
+            !item
+                .get("role")
+                .and_then(Value::as_str)
+                .is_some_and(|role| role.trim().eq_ignore_ascii_case("user"))
+        })
+        .map(|index| index + 1)
+        .unwrap_or(0);
+    events.insert(insert_at, event);
+}
+
+fn insert_before_trailing_user_messages(
+    messages: &mut Vec<genai::chat::ChatMessage>,
+    message: genai::chat::ChatMessage,
+) {
+    let insert_at = messages
+        .iter()
+        .rposition(|item| !matches!(item.role, genai::chat::ChatRole::User))
+        .map(|index| index + 1)
+        .unwrap_or(0);
+    messages.insert(insert_at, message);
 }
 
 fn send_assistant_tool_event(
@@ -729,7 +773,7 @@ fn sync_completed_tool_history_cache(
     }
 }
 
-fn persist_completed_tool_pair_async(
+fn persist_completed_tool_group_result_async(
     state: Option<&AppState>,
     context: Option<&ToolLoopAutoCompactionContext>,
     selected_api: &ApiConfig,
@@ -746,9 +790,9 @@ fn persist_completed_tool_pair_async(
     };
     let chat_session_key = chat_session_key.to_string();
     let provider_meta_patch =
-        tool_pair_provider_meta_patch(trusted_input_tokens, selected_api.context_window_tokens);
+        tool_result_provider_meta_patch(trusted_input_tokens, selected_api.context_window_tokens);
     Some(tauri::async_runtime::spawn(async move {
-        match conversation_service().append_tool_call_result_pair(
+        match conversation_service().append_tool_group_result(
             &state,
             &context.conversation_id,
             &context.agent.id,
@@ -763,7 +807,7 @@ fn persist_completed_tool_pair_async(
                     &result.assistant_message_id,
                 );
                 runtime_log_info(format!(
-                    "[聊天] 完成，任务=append_tool_call_result_pair，session={}，conversation_id={}，assistant_message_id={}，created={}，tool_event_count={}",
+                    "[聊天] 完成，任务=append_tool_group_result，session={}，conversation_id={}，assistant_message_id={}，created={}，tool_event_count={}",
                     chat_session_key,
                     context.conversation_id,
                     result.assistant_message_id,
@@ -774,7 +818,7 @@ fn persist_completed_tool_pair_async(
             }
             Err(err) => {
                 runtime_log_warn(format!(
-                    "[聊天] 失败，任务=append_tool_call_result_pair，session={}，conversation_id={}，error={}",
+                    "[聊天] 失败，任务=append_tool_group_result，session={}，conversation_id={}，error={}",
                     chat_session_key, context.conversation_id, err
                 ));
                 Err(err)
@@ -783,21 +827,21 @@ fn persist_completed_tool_pair_async(
     }))
 }
 
-async fn await_pending_tool_pair_persists(
-    pending_tool_pair_persists: &mut Vec<tauri::async_runtime::JoinHandle<Result<(), String>>>,
+async fn await_pending_tool_group_result_persists(
+    pending_tool_group_result_persists: &mut Vec<tauri::async_runtime::JoinHandle<Result<(), String>>>,
     chat_session_key: &str,
     reason: &str,
 ) -> Result<(), String> {
-    if pending_tool_pair_persists.is_empty() {
+    if pending_tool_group_result_persists.is_empty() {
         return Ok(());
     }
     runtime_log_info(format!(
-        "[聊天] 等待工具结果落盘，任务=drain_tool_pair_persist，session={}，reason={}，pending_count={}",
+        "[聊天] 等待工具结果落盘，任务=drain_tool_group_result_persist，session={}，reason={}，pending_count={}",
         chat_session_key,
         reason,
-        pending_tool_pair_persists.len()
+        pending_tool_group_result_persists.len()
     ));
-    for handle in pending_tool_pair_persists.drain(..) {
+    for handle in pending_tool_group_result_persists.drain(..) {
         handle
             .await
             .map_err(|err| format!("等待工具结果落盘任务失败：{err}"))?
@@ -806,7 +850,7 @@ async fn await_pending_tool_pair_persists(
     Ok(())
 }
 
-fn tool_pair_provider_meta_patch(
+fn tool_result_provider_meta_patch(
     trusted_input_tokens: Option<u64>,
     context_window_tokens: u32,
 ) -> Option<Value> {
@@ -985,7 +1029,7 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
     partial_assistant_text: &str,
     partial_activity_reasoning_text: &str,
     chat_session_key: &str,
-    pending_tool_pair_persists: &mut Vec<tauri::async_runtime::JoinHandle<Result<(), String>>>,
+    pending_tool_group_result_persists: &mut Vec<tauri::async_runtime::JoinHandle<Result<(), String>>>,
 ) -> Result<bool, String> {
     let Some(state) = state else {
         return Ok(false);
@@ -1035,8 +1079,8 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
     // barrier on every call. Context compaction is a history boundary: before
     // creating the summary, wait for the spawned appends to update the message
     // store and conversation cache, then read the refreshed conversation below.
-    await_pending_tool_pair_persists(
-        pending_tool_pair_persists,
+    await_pending_tool_group_result_persists(
+        pending_tool_group_result_persists,
         chat_session_key,
         "auto_before_tool_continue",
     )
@@ -1173,15 +1217,15 @@ async fn apply_organize_context_compaction_checkpoint(
     partial_assistant_text: &str,
     partial_activity_reasoning_text: &str,
     chat_session_key: &str,
-    pending_tool_pair_persists: &mut Vec<tauri::async_runtime::JoinHandle<Result<(), String>>>,
+    pending_tool_group_result_persists: &mut Vec<tauri::async_runtime::JoinHandle<Result<(), String>>>,
 ) -> Result<(), String> {
     let state = state.ok_or_else(|| "缺少应用状态，无法整理上下文。".to_string())?;
     let context = context.ok_or_else(|| "缺少当前调度上下文，无法整理上下文。".to_string())?;
     // Same boundary rule as automatic compaction: organize_context stops the
     // current dispatch and builds a summary from the durable conversation, so
     // any spawned tool-result appends from this dispatch must finish first.
-    await_pending_tool_pair_persists(
-        pending_tool_pair_persists,
+    await_pending_tool_group_result_persists(
+        pending_tool_group_result_persists,
         chat_session_key,
         "organize_context",
     )
@@ -1267,7 +1311,7 @@ async fn run_genai_tool_loop(
     let mut full_assistant_text = String::new();
     let mut full_activity_reasoning_text = String::new();
     let mut tool_history_events = Vec::<Value>::new();
-    let mut pending_tool_pair_persists =
+    let mut pending_tool_group_result_persists =
         Vec::<tauri::async_runtime::JoinHandle<Result<(), String>>>::new();
     let mut trusted_input_tokens: Option<u64> = None;
     let (system_prompt, mut messages) = build_genai_message_state(&prepared)?;
@@ -1289,7 +1333,7 @@ async fn run_genai_tool_loop(
                 &full_assistant_text,
                 &full_activity_reasoning_text,
                 chat_session_key,
-                &mut pending_tool_pair_persists,
+                &mut pending_tool_group_result_persists,
             )
             .await?;
         }
@@ -1364,7 +1408,7 @@ async fn run_genai_tool_loop(
                                 .map(|content| content.texts())
                                 .filter(|texts| !texts.is_empty())
                             {
-                                let joined = captured_texts.join("\n");
+                                let joined = join_model_text_blocks(captured_texts);
                                 turn_text = joined.clone();
                                 if emit_text_boundary_before_next_chunk && !joined.is_empty() {
                                     send_text_delta_event(on_delta, "\n");
@@ -1413,7 +1457,7 @@ async fn run_genai_tool_loop(
         let GenaiToolLoopRoundOutput {
             turn_text,
             turn_reasoning,
-            mut reasoning_delta_emitted,
+            reasoning_delta_emitted,
             turn_tool_calls,
             trusted_input_tokens: round_trusted_input_tokens,
         } = round_output;
@@ -1441,16 +1485,15 @@ async fn run_genai_tool_loop(
             );
         }
 
-        if !turn_text.is_empty() {
-            if !full_assistant_text.trim().is_empty() {
-                full_assistant_text.push_str("\n\n");
-            }
-            full_assistant_text.push_str(&turn_text);
-        }
-
         let turn_tool_calls = reorder_turn_tool_calls_for_contact_tail(turn_tool_calls);
 
         if turn_tool_calls.is_empty() {
+            if !turn_text.is_empty() {
+                if !full_assistant_text.trim().is_empty() {
+                    full_assistant_text.push_str("\n\n");
+                }
+                full_assistant_text.push_str(&turn_text);
+            }
             return Ok(ModelReply {
                 assistant_text: full_assistant_text,
                 final_response_text: turn_text,
@@ -1464,6 +1507,9 @@ async fn run_genai_tool_loop(
         }
 
         let mut assistant_parts = Vec::<genai::chat::ContentPart>::new();
+        if !turn_text.is_empty() {
+            assistant_parts.push(genai::chat::ContentPart::from_text(turn_text.clone()));
+        }
         for tool_call in &turn_tool_calls {
             assistant_parts.push(genai::chat::ContentPart::ToolCall(tool_call.clone()));
         }
@@ -1475,12 +1521,17 @@ async fn run_genai_tool_loop(
         messages.push(assistant_message);
         let mut deferred_outcome = None::<DeferredToolLoopOutcome>;
         let mut guided_close_requested = false;
+        let assistant_tool_group_history_event =
+            assistant_tool_group_history_event_value(&turn_text, &turn_tool_calls, &turn_reasoning);
+        let assistant_tool_group_stream_event =
+            assistant_tool_group_stream_event_value(&turn_text, &turn_tool_calls);
+        if !reasoning_delta_emitted && !turn_reasoning.trim().is_empty() {
+            send_reasoning_delta_event(on_delta, turn_reasoning.trim());
+        }
+        send_assistant_tool_event(on_delta, &assistant_tool_group_stream_event);
+        tool_history_events.push(assistant_tool_group_history_event.clone());
 
         for tool_call in turn_tool_calls {
-            if !reasoning_delta_emitted && !turn_reasoning.trim().is_empty() {
-                send_reasoning_delta_event(on_delta, turn_reasoning.trim());
-                reasoning_delta_emitted = true;
-            }
             let genai::chat::ToolCall {
                 call_id: tool_call_id,
                 fn_name: tool_name,
@@ -1491,13 +1542,6 @@ async fn run_genai_tool_loop(
                 Value::String(raw) => raw,
                 other => other.to_string(),
             };
-            let assistant_tool_event = assistant_tool_event_value(
-                &tool_call_id,
-                &tool_name,
-                &tool_args,
-                &turn_reasoning,
-            );
-            send_assistant_tool_event(on_delta, &assistant_tool_event);
             let repeat_streak =
                 register_tool_repeat_attempt(&mut tool_repeat_guard, &tool_name, &tool_args);
             send_stream_rebind_required_event(
@@ -1535,6 +1579,15 @@ async fn run_genai_tool_loop(
                     "content": history_content
                 });
                 send_assistant_tool_result_event(on_delta, &tool_result_event);
+                insert_before_trailing_user_history_events(
+                    &mut tool_history_events,
+                    tool_result_event.clone(),
+                );
+                sync_completed_tool_history_cache(
+                    tool_abort_state,
+                    chat_session_key,
+                    &tool_history_events,
+                );
                 return Ok(repeated_tool_call_block_reply(
                     full_activity_reasoning_text,
                     tool_history_events,
@@ -1587,8 +1640,6 @@ async fn run_genai_tool_loop(
                 }
             };
             let tool_result_text = tool_result.display_text.as_str();
-            let assistant_tool_event_for_persist = assistant_tool_event.clone();
-            tool_history_events.push(assistant_tool_event);
             let history_content = sanitize_tool_result_for_history(&tool_name, &tool_result_text);
             let tool_result_event = serde_json::json!({
                 "role": "tool",
@@ -1596,22 +1647,25 @@ async fn run_genai_tool_loop(
                 "content": history_content
             });
             send_assistant_tool_result_event(on_delta, &tool_result_event);
-            tool_history_events.push(tool_result_event.clone());
+            insert_before_trailing_user_history_events(
+                &mut tool_history_events,
+                tool_result_event.clone(),
+            );
             sync_completed_tool_history_cache(
                 tool_abort_state,
                 chat_session_key,
                 &tool_history_events,
             );
-            if let Some(handle) = persist_completed_tool_pair_async(
+            if let Some(handle) = persist_completed_tool_group_result_async(
                 tool_abort_state,
                 auto_compaction_context,
                 selected_api,
                 trusted_input_tokens,
                 chat_session_key,
-                assistant_tool_event_for_persist,
+                assistant_tool_group_history_event.clone(),
                 tool_result_event,
             ) {
-                pending_tool_pair_persists.push(handle);
+                pending_tool_group_result_persists.push(handle);
             }
 
             if tool_loop_should_close_for_guided_queue(tool_abort_state, auto_compaction_context) {
@@ -1644,9 +1698,12 @@ async fn run_genai_tool_loop(
 
             let (tool_result_for_model, screenshot_forward) =
                 enrich_screenshot_tool_result_with_cache(&tool_name, &tool_result_text);
-            messages.push(genai::chat::ChatMessage::from(
-                genai::chat::ToolResponse::new(tool_call_id, tool_result_for_model),
-            ));
+            insert_before_trailing_user_messages(
+                &mut messages,
+                genai::chat::ChatMessage::from(
+                    genai::chat::ToolResponse::new(tool_call_id, tool_result_for_model),
+                ),
+            );
             if let Some(message) = runtime_tool_result_followup_message(&tool_name, &tool_result) {
                 messages.push(message);
             }
@@ -1707,7 +1764,7 @@ async fn run_genai_tool_loop(
                 &full_assistant_text,
                 &full_activity_reasoning_text,
                 chat_session_key,
-                &mut pending_tool_pair_persists,
+                &mut pending_tool_group_result_persists,
             )
             .await?;
             return Err(CHAT_DISPATCH_RESTART_AFTER_COMPACTION.to_string());
@@ -1788,12 +1845,8 @@ async fn execute_genai_non_stream_round(
         .exec_chat(model_spec.clone(), request, Some(options))
         .await
         .map_err(|err| format!("GenAI 非流式请求失败：{err}"))?;
-    let turn_text = response
-        .texts()
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>()
-        .join("\n");
+    let response_texts = response.texts();
+    let turn_text = join_model_text_blocks(response_texts);
     let turn_reasoning = response.reasoning_content.clone().unwrap_or_default();
     let turn_tool_calls = response.tool_calls().into_iter().cloned().collect::<Vec<_>>();
     let trusted_input_tokens = response
@@ -1859,7 +1912,7 @@ async fn run_genai_tool_loop_non_stream(
     let mut full_assistant_text = String::new();
     let mut full_activity_reasoning_text = String::new();
     let mut tool_history_events = Vec::<Value>::new();
-    let mut pending_tool_pair_persists =
+    let mut pending_tool_group_result_persists =
         Vec::<tauri::async_runtime::JoinHandle<Result<(), String>>>::new();
     let mut trusted_input_tokens: Option<u64> = None;
     let (system_prompt, mut messages) = build_genai_message_state(&prepared)?;
@@ -1880,7 +1933,7 @@ async fn run_genai_tool_loop_non_stream(
                 &full_assistant_text,
                 &full_activity_reasoning_text,
                 chat_session_key,
-                &mut pending_tool_pair_persists,
+                &mut pending_tool_group_result_persists,
             )
             .await?;
         }
@@ -1918,7 +1971,7 @@ async fn run_genai_tool_loop_non_stream(
         };
         let turn_text = round.turn_text;
         let turn_reasoning = round.turn_reasoning;
-        let mut reasoning_delta_emitted = round.reasoning_delta_emitted;
+        let reasoning_delta_emitted = round.reasoning_delta_emitted;
         let raw_turn_tool_calls = round.turn_tool_calls;
         let round_elapsed_ms = round_started_at
             .elapsed()
@@ -1942,14 +1995,13 @@ async fn run_genai_tool_loop_non_stream(
             full_activity_reasoning_text.push_str(&turn_reasoning);
         }
 
-        if !turn_text.is_empty() {
-            if !full_assistant_text.trim().is_empty() {
-                full_assistant_text.push_str("\n\n");
-            }
-            full_assistant_text.push_str(&turn_text);
-        }
-
         if turn_tool_calls.is_empty() {
+            if !turn_text.is_empty() {
+                if !full_assistant_text.trim().is_empty() {
+                    full_assistant_text.push_str("\n\n");
+                }
+                full_assistant_text.push_str(&turn_text);
+            }
             return Ok(ModelReply {
                 assistant_text: full_assistant_text,
                 final_response_text: turn_text,
@@ -1963,6 +2015,9 @@ async fn run_genai_tool_loop_non_stream(
         }
 
         let mut assistant_parts = Vec::<genai::chat::ContentPart>::new();
+        if !turn_text.is_empty() {
+            assistant_parts.push(genai::chat::ContentPart::from_text(turn_text.clone()));
+        }
         for tool_call in &turn_tool_calls {
             assistant_parts.push(genai::chat::ContentPart::ToolCall(tool_call.clone()));
         }
@@ -1974,12 +2029,17 @@ async fn run_genai_tool_loop_non_stream(
         messages.push(assistant_message);
         let mut deferred_outcome = None::<DeferredToolLoopOutcome>;
         let mut guided_close_requested = false;
+        let assistant_tool_group_history_event =
+            assistant_tool_group_history_event_value(&turn_text, &turn_tool_calls, &turn_reasoning);
+        let assistant_tool_group_stream_event =
+            assistant_tool_group_stream_event_value(&turn_text, &turn_tool_calls);
+        if !reasoning_delta_emitted && !turn_reasoning.trim().is_empty() {
+            send_reasoning_delta_event(on_delta, turn_reasoning.trim());
+        }
+        send_assistant_tool_event(on_delta, &assistant_tool_group_stream_event);
+        tool_history_events.push(assistant_tool_group_history_event.clone());
 
         for tool_call in turn_tool_calls {
-            if !reasoning_delta_emitted && !turn_reasoning.trim().is_empty() {
-                send_reasoning_delta_event(on_delta, turn_reasoning.trim());
-                reasoning_delta_emitted = true;
-            }
             let genai::chat::ToolCall {
                 call_id: tool_call_id,
                 fn_name: tool_name,
@@ -1990,13 +2050,6 @@ async fn run_genai_tool_loop_non_stream(
                 Value::String(raw) => raw,
                 other => other.to_string(),
             };
-            let assistant_tool_event = assistant_tool_event_value(
-                &tool_call_id,
-                &tool_name,
-                &tool_args,
-                &turn_reasoning,
-            );
-            send_assistant_tool_event(on_delta, &assistant_tool_event);
             let repeat_streak =
                 register_tool_repeat_attempt(&mut tool_repeat_guard, &tool_name, &tool_args);
             send_stream_rebind_required_event(
@@ -2034,6 +2087,15 @@ async fn run_genai_tool_loop_non_stream(
                     "content": history_content
                 });
                 send_assistant_tool_result_event(on_delta, &tool_result_event);
+                insert_before_trailing_user_history_events(
+                    &mut tool_history_events,
+                    tool_result_event.clone(),
+                );
+                sync_completed_tool_history_cache(
+                    tool_abort_state,
+                    chat_session_key,
+                    &tool_history_events,
+                );
                 return Ok(repeated_tool_call_block_reply(
                     full_activity_reasoning_text,
                     tool_history_events,
@@ -2086,8 +2148,6 @@ async fn run_genai_tool_loop_non_stream(
                 }
             };
             let tool_result_text = tool_result.display_text.as_str();
-            let assistant_tool_event_for_persist = assistant_tool_event.clone();
-            tool_history_events.push(assistant_tool_event);
             let history_content = sanitize_tool_result_for_history(&tool_name, &tool_result_text);
             let tool_result_event = serde_json::json!({
                 "role": "tool",
@@ -2095,22 +2155,25 @@ async fn run_genai_tool_loop_non_stream(
                 "content": history_content
             });
             send_assistant_tool_result_event(on_delta, &tool_result_event);
-            tool_history_events.push(tool_result_event.clone());
+            insert_before_trailing_user_history_events(
+                &mut tool_history_events,
+                tool_result_event.clone(),
+            );
             sync_completed_tool_history_cache(
                 tool_abort_state,
                 chat_session_key,
                 &tool_history_events,
             );
-            if let Some(handle) = persist_completed_tool_pair_async(
+            if let Some(handle) = persist_completed_tool_group_result_async(
                 tool_abort_state,
                 auto_compaction_context,
                 selected_api,
                 trusted_input_tokens,
                 chat_session_key,
-                assistant_tool_event_for_persist,
+                assistant_tool_group_history_event.clone(),
                 tool_result_event,
             ) {
-                pending_tool_pair_persists.push(handle);
+                pending_tool_group_result_persists.push(handle);
             }
 
             if tool_loop_should_close_for_guided_queue(tool_abort_state, auto_compaction_context) {
@@ -2143,9 +2206,12 @@ async fn run_genai_tool_loop_non_stream(
 
             let (tool_result_for_model, screenshot_forward) =
                 enrich_screenshot_tool_result_with_cache(&tool_name, &tool_result_text);
-            messages.push(genai::chat::ChatMessage::from(
-                genai::chat::ToolResponse::new(tool_call_id, tool_result_for_model),
-            ));
+            insert_before_trailing_user_messages(
+                &mut messages,
+                genai::chat::ChatMessage::from(
+                    genai::chat::ToolResponse::new(tool_call_id, tool_result_for_model),
+                ),
+            );
             if let Some(message) = runtime_tool_result_followup_message(&tool_name, &tool_result) {
                 messages.push(message);
             }
@@ -2206,7 +2272,7 @@ async fn run_genai_tool_loop_non_stream(
                 &full_assistant_text,
                 &full_activity_reasoning_text,
                 chat_session_key,
-                &mut pending_tool_pair_persists,
+                &mut pending_tool_group_result_persists,
             )
             .await?;
             return Err(CHAT_DISPATCH_RESTART_AFTER_COMPACTION.to_string());
@@ -2589,6 +2655,129 @@ mod tool_loop_tests {
         assert_eq!(reply.tool_history_events.len(), 1);
         assert_eq!(reply.trusted_input_tokens, Some(12));
         assert!(reply.assistant_provider_meta.is_some());
+    }
+
+    #[test]
+    fn tool_loop_round_response_value_should_keep_reasoning_content() {
+        let response = tool_loop_round_response_value("准备调用工具", "先读取目标文件确认结构", &[]);
+
+        assert_eq!(response["assistantText"].as_str(), Some("准备调用工具"));
+        assert_eq!(
+            response["reasoningContent"].as_str(),
+            Some("先读取目标文件确认结构")
+        );
+        assert!(response["toolCalls"].as_array().is_some_and(|items| items.is_empty()));
+    }
+
+    #[test]
+    fn assistant_tool_group_history_event_value_should_keep_reasoning_once_for_multiple_tools() {
+        let tool_calls = vec![
+            genai::chat::ToolCall {
+                call_id: "call-a".to_string(),
+                fn_name: "read".to_string(),
+                fn_arguments: serde_json::json!({"path": "a.rs"}),
+                thought_signatures: None,
+            },
+            genai::chat::ToolCall {
+                call_id: "call-b".to_string(),
+                fn_name: "read".to_string(),
+                fn_arguments: serde_json::json!({"path": "b.rs"}),
+                thought_signatures: None,
+            },
+        ];
+
+        let event = assistant_tool_group_history_event_value(
+            "三个并发 shell 跑完后我再汇总。",
+            &tool_calls,
+            "先同时读取两个文件",
+        );
+
+        assert_eq!(event["role"].as_str(), Some("assistant"));
+        assert_eq!(
+            event["content"].as_str(),
+            Some("三个并发 shell 跑完后我再汇总。")
+        );
+        assert_eq!(event["reasoning_content"].as_str(), Some("先同时读取两个文件"));
+        assert_eq!(event["tool_calls"].as_array().map(Vec::len), Some(2));
+        assert_eq!(event["tool_calls"][0]["id"].as_str(), Some("call-a"));
+        assert_eq!(event["tool_calls"][1]["id"].as_str(), Some("call-b"));
+    }
+
+    #[test]
+    fn assistant_tool_group_stream_event_value_should_not_include_reasoning_content() {
+        let tool_calls = vec![genai::chat::ToolCall {
+            call_id: "call-a".to_string(),
+            fn_name: "read".to_string(),
+            fn_arguments: serde_json::json!({"path": "a.rs"}),
+            thought_signatures: None,
+        }];
+
+        let event = assistant_tool_group_stream_event_value(
+            "三个并发 shell 跑完后我再汇总。",
+            &tool_calls,
+        );
+
+        assert_eq!(event["role"].as_str(), Some("assistant"));
+        assert!(event.get("reasoning_content").is_none());
+        assert_eq!(event["tool_calls"].as_array().map(Vec::len), Some(1));
+    }
+
+    #[test]
+    fn insert_before_trailing_user_history_events_should_keep_tools_before_sidecars() {
+        let mut events = vec![
+            serde_json::json!({
+                "role": "assistant",
+                "tool_calls": [{"id": "call-a"}, {"id": "call-b"}]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call-a",
+                "content": "工具 A 结果"
+            }),
+            serde_json::json!({
+                "role": "user",
+                "content": "[desktop screenshot forwarded as user image]"
+            }),
+        ];
+
+        insert_before_trailing_user_history_events(
+            &mut events,
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call-b",
+                "content": "工具 B 结果"
+            }),
+        );
+
+        assert_eq!(events[0]["role"].as_str(), Some("assistant"));
+        assert_eq!(events[1]["tool_call_id"].as_str(), Some("call-a"));
+        assert_eq!(events[2]["tool_call_id"].as_str(), Some("call-b"));
+        assert_eq!(events[3]["role"].as_str(), Some("user"));
+    }
+
+    #[test]
+    fn insert_before_trailing_user_messages_should_keep_tool_responses_before_sidecars() {
+        let mut messages = vec![
+            genai::chat::ChatMessage::assistant("assistant"),
+            genai::chat::ChatMessage::from(genai::chat::ToolResponse::new(
+                "call-a",
+                "工具 A 结果",
+            )),
+            genai::chat::ChatMessage::user("sidecar"),
+        ];
+
+        insert_before_trailing_user_messages(
+            &mut messages,
+            genai::chat::ChatMessage::from(genai::chat::ToolResponse::new(
+                "call-b",
+                "工具 B 结果",
+            )),
+        );
+
+        assert!(matches!(messages[0].role, genai::chat::ChatRole::Assistant));
+        assert!(matches!(messages[1].role, genai::chat::ChatRole::Tool));
+        assert!(matches!(messages[2].role, genai::chat::ChatRole::Tool));
+        assert!(matches!(messages[3].role, genai::chat::ChatRole::User));
     }
 
     #[test]

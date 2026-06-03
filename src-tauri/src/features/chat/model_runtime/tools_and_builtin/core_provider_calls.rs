@@ -617,7 +617,8 @@ async fn call_model_openai_non_stream(
         .exec_chat(model_spec, request, Some(&options))
         .await
         .map_err(|err| format!("genai openai non-stream failed: {err}"))?;
-    let assistant_text = response.content.into_texts().join("\n");
+    let response_texts = response.content.into_texts();
+    let assistant_text = join_model_text_blocks(response_texts.iter().map(String::as_str));
     let activity_reasoning_text = response.reasoning_content.unwrap_or_default();
     let trusted_input_tokens = response
         .usage
@@ -705,7 +706,8 @@ async fn call_model_gemini(
         .exec_chat(model_spec, request, Some(&options))
         .await
         .map_err(|err| format!("genai gemini non-stream failed: {err}"))?;
-    let assistant_text = response.content.into_texts().join("\n");
+    let response_texts = response.content.into_texts();
+    let assistant_text = join_model_text_blocks(response_texts.iter().map(String::as_str));
     Ok(ModelReply {
         assistant_text: assistant_text.clone(),
         final_response_text: assistant_text,
@@ -1218,6 +1220,7 @@ mod openai_responses_genai_request_tests {
             speaker_agent_id: Some("agent-a".to_string()),
             parts: vec![MessagePart::Text {
                 text: "终端版本是 PowerShell 7.5.4。".to_string(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: None,

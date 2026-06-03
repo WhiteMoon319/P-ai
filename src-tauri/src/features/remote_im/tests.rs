@@ -444,7 +444,8 @@
                 speaker_agent_id: None,
                 parts: vec![MessagePart::Text {
                     text: "hello".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: Some(serde_json::json!({
                     "origin": {
@@ -513,7 +514,8 @@
                 speaker_agent_id: None,
                 parts: vec![MessagePart::Text {
                     text: "hello".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: Some(serde_json::json!({
                     "origin": {
@@ -1301,6 +1303,7 @@
                 },
                 parts: vec![MessagePart::Text {
                     text: format!("第{}条{}", idx, "很长的内容".repeat(30)),
+                    reasoning_content: None,
                 }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: if idx % 2 == 0 {
@@ -1907,6 +1910,7 @@
             speaker_agent_id: None,
             parts: vec![MessagePart::Text {
                 text: "之前的上下文".to_string(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: None,
@@ -1938,6 +1942,7 @@
             speaker_agent_id: None,
             parts: vec![MessagePart::Text {
                 text: "新的联系人消息".to_string(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: None,
@@ -2041,7 +2046,8 @@
                 speaker_agent_id: None,
                 parts: vec![MessagePart::Text {
                     text: "普通消息".to_string(),
-                }],
+                reasoning_content: None,
+            }],
                 extra_text_blocks: Vec::new(),
                 provider_meta: None,
                 tool_call: None,

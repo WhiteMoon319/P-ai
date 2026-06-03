@@ -308,7 +308,13 @@ fn slim_older_conversation_block_message(message: &ChatMessage) -> ChatMessage {
 
 fn slim_older_conversation_block_part(part: &MessagePart) -> Option<MessagePart> {
     match part {
-        MessagePart::Text { text } => Some(MessagePart::Text { text: text.clone() }),
+        MessagePart::Text {
+            text,
+            reasoning_content,
+        } => Some(MessagePart::Text {
+            text: text.clone(),
+            reasoning_content: reasoning_content.clone(),
+        }),
         MessagePart::Image {
             mime,
             bytes_base64,
@@ -379,6 +385,7 @@ mod jsonl_snapshot_conversation_block_tests {
             speaker_agent_id: None,
             parts: vec![MessagePart::Text {
                 text: text.to_string(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: None,
@@ -398,6 +405,27 @@ mod jsonl_snapshot_conversation_block_tests {
             },
         }));
         message
+    }
+
+    #[test]
+    fn slim_older_conversation_block_part_should_keep_text_reasoning_content() {
+        let part = MessagePart::Text {
+            text: "最终回答".to_string(),
+            reasoning_content: Some("最终思考".to_string()),
+        };
+
+        let slimmed = slim_older_conversation_block_part(&part).expect("slimmed text part");
+
+        match slimmed {
+            MessagePart::Text {
+                text,
+                reasoning_content,
+            } => {
+                assert_eq!(text, "最终回答");
+                assert_eq!(reasoning_content.as_deref(), Some("最终思考"));
+            }
+            other => panic!("unexpected part: {:?}", other),
+        }
     }
 
     #[test]

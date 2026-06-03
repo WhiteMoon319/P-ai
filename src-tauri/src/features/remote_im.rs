@@ -666,7 +666,7 @@ fn remote_im_message_text_len(message: &ChatMessage) -> usize {
         .parts
         .iter()
         .filter_map(|part| match part {
-            MessagePart::Text { text } => Some(text.chars().count()),
+            MessagePart::Text { text, .. } => Some(text.chars().count()),
             _ => None,
         })
         .sum::<usize>();
@@ -887,7 +887,7 @@ fn remote_im_secretary_message_digest(
     let mut chunks = Vec::<String>::new();
     for part in &message.parts {
         match part {
-            MessagePart::Text { text } => {
+            MessagePart::Text { text, .. } => {
                 let trimmed = text.trim();
                 if !trimmed.is_empty() {
                     chunks.push(trimmed.to_string());
@@ -1150,7 +1150,7 @@ fn remote_im_build_presence_boundary_message(
         role: "user".to_string(),
         created_at: now.to_string(),
         speaker_agent_id: Some(SYSTEM_PERSONA_ID.to_string()),
-        parts: vec![MessagePart::Text { text }],
+        parts: vec![MessagePart::Text { text, reasoning_content: None }],
         extra_text_blocks: Vec::new(),
         provider_meta: Some(serde_json::json!({
             "message_meta": {
@@ -2355,7 +2355,8 @@ fn build_chat_message_from_input(
     if !text.is_empty() {
         parts.push(MessagePart::Text {
             text: text.to_string(),
-        });
+                reasoning_content: None,
+            });
     }
     for img in images {
         let bytes_base64 =

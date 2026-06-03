@@ -505,6 +505,7 @@
             speaker_agent_id: speaker_agent_id.map(ToOwned::to_owned),
             parts: vec![MessagePart::Text {
                 text: text.to_string(),
+                reasoning_content: None,
             }],
             extra_text_blocks: Vec::new(),
             provider_meta: None,

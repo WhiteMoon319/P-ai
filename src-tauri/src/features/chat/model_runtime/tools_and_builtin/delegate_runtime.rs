@@ -92,7 +92,8 @@ fn delegate_enqueue_result_message(
         speaker_agent_id: Some(speaker_agent_id.to_string()),
         parts: vec![MessagePart::Text {
             text: text.to_string(),
-        }],
+                reasoning_content: None,
+            }],
         extra_text_blocks: Vec::new(),
         provider_meta: Some(provider_meta),
         tool_call: None,

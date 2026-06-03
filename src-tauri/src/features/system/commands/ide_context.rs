@@ -1451,7 +1451,9 @@ fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, Strin
     let mut parts = if text.is_empty() {
         Vec::new()
     } else {
-        vec![MessagePart::Text { text: text.clone() }]
+        vec![MessagePart::Text { text: text.clone(),
+                reasoning_content: None,
+            }]
     };
     for image in input.images {
         let mime = image.mime.trim().to_ascii_lowercase();
