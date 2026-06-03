@@ -7,7 +7,10 @@
       'chat group/user-turn rounded-2xl px-3 transition-colors',
       shouldAnimateEnter(block) ? 'ecall-message-enter' : '',
       isOwnMessage(block) ? 'chat-end' : 'chat-start',
-      !isOwnMessage(block) && bubbleBackgroundHidden && !selectionModeEnabled ? 'ecall-message-simple' : '',
+      isOwnMessage(block) && !selectionModeEnabled && !bubbleBackgroundHidden ? 'ecall-user-bubble-shift' : '',
+      !isOwnMessage(block) && !selectionModeEnabled
+        ? (bubbleBackgroundHidden ? 'ecall-message-simple' : 'ecall-bubble-shift')
+        : '',
       isOwnMessage(block) && compactWithPrevious ? 'ecall-message-continued' : '',
       selectionModeEnabled && selected ? 'ecall-message-selected bg-neutral/10 ring-1 ring-neutral/20 shadow-sm' : '',
     ]"
@@ -152,7 +155,7 @@
                       >
                         <div
                           v-if="item.kind === 'reasoning'"
-                          class="whitespace-pre-wrap break-words text-xs leading-relaxed text-base-content/70"
+                          class="whitespace-pre-wrap wrap-break-word text-xs leading-relaxed text-base-content/70"
                         >{{ item.text }}</div>
                         <pre
                           v-else-if="activityToolResultText(item)"
@@ -408,7 +411,7 @@
         'chat-bubble',
         bubbleBackgroundHidden ? 'ecall-message-bubble-bg-hidden text-base-content' : '',
         isOwnMessage(block)
-          ? ''
+          ? 'ecall-user-bubble'
           : [
             'self-start text-base-content assistant-markdown ecall-assistant-bubble max-w-full',
             bubbleBackgroundHidden ? '' : 'bg-base-100 border border-base-300/70',
@@ -487,7 +490,7 @@
       <div
         v-if="isOwnMessage(block) && !compactWithPrevious"
         :class="[
-          'flex justify-end transition-opacity',
+          'ecall-own-message-actions flex justify-end transition-opacity',
           selectionModeEnabled
             ? 'opacity-0 pointer-events-none'
             : 'opacity-0 pointer-events-none group-hover/user-turn:opacity-100 group-hover/user-turn:pointer-events-auto',
@@ -1732,6 +1735,12 @@ function openResolvedImagePreview(
 .ecall-message-simple {
   --ecall-chat-avatar-offset: calc(1.75rem + 0.75rem);
 }
+.ecall-bubble-shift {
+  --ecall-chat-avatar-offset: calc(1.75rem + 0.75rem);
+}
+.ecall-user-bubble-shift {
+  --ecall-chat-avatar-offset: calc(1.75rem + 0.75rem);
+}
 
 .ecall-message-simple .ecall-message-content {
   width: calc(100% + var(--ecall-chat-avatar-offset));
@@ -1742,10 +1751,23 @@ function openResolvedImagePreview(
 .ecall-message-simple .chat-header {
   margin-left: var(--ecall-chat-avatar-offset);
 }
-
 .ecall-message-simple .chat-bubble {
   width: 100%;
   max-width: none;
+}
+.ecall-bubble-shift .chat-bubble {
+  width: fit-content;
+  max-width: 100%;
+  margin-left: calc(var(--ecall-chat-avatar-offset) * -0.3);
+}
+.ecall-user-bubble-shift > .ecall-user-bubble {
+  width: fit-content;
+  max-width: 100%;
+  margin-right: calc(var(--ecall-chat-avatar-offset) * -0.3);
+}
+
+.ecall-user-bubble-shift > .ecall-own-message-actions {
+  margin-right: calc(var(--ecall-chat-avatar-offset) * -0.3);
 }
 
 .ecall-message-simple .ecall-message-bubble-bg-hidden {
