@@ -98,7 +98,11 @@
               blockNeedsWideBubble(block) ? 'ecall-assistant-bubble-wide' : '',
             ]"
           >
-            <div v-if="showActivityPanel(block)" class="flex flex-col opacity-90">
+            <div
+              v-if="showActivityPanel(block)"
+              v-memo="activityPanelMemoKey(block)"
+              class="flex flex-col opacity-90"
+            >
               <details
                 ref="activityDetailsRef"
                 class="collapse rounded-none min-w-55"
@@ -115,8 +119,17 @@
                     ></span>
                   </span>
                   <span v-else class="inline-block h-2 w-2 rounded-full bg-success"></span>
-                  <span class="block min-w-0 flex-1 truncate font-medium">
-                    {{ activitySummaryLabel(block) }}
+                  <span class="flex min-w-0 flex-1 items-baseline gap-1 font-medium">
+                    <span class="shrink-0">
+                      {{ `${activityStatusText(block)}${activityReasoningCountLabel(block)}` }}
+                    </span>
+                    <span
+                      v-if="activityToolCountsLabel(block)"
+                      v-memo="[activityToolCountsLabel(block)]"
+                      class="min-w-0 truncate text-base-content/55"
+                    >
+                      {{ `· ${activityToolCountsLabel(block)}` }}
+                    </span>
                   </span>
                 </summary>
                 <div
@@ -126,8 +139,8 @@
                 >
                   <div class="flex flex-col">
                     <details
-                      v-for="(item, idx) in block.activityItems"
-                      :key="`${block.id}-activity-${item.id}-${idx}`"
+                      v-for="item in block.activityItems"
+                      :key="`${block.id}-activity-${activityItemKey(item)}`"
                       class="collapse rounded-none border-l border-base-content/15 pl-2"
                       :open="activityItemOpen(block, item)"
                       @toggle="onActivityItemToggle(item, $event)"
@@ -530,6 +543,7 @@ import type { ChatActivityItem, ChatMessageBlock, MemeMessageSegment } from "../
 import { formatIsoToLocalHourMinute } from "../../../utils/time";
 import { AppMarkdownRenderer, initKatex } from "../markdown";
 import { normalizeLocalLinkHref } from "../utils/local-link";
+import { textContentSignature } from "../utils/text-signature";
 import SidebarLightMarkdown from "./SidebarLightMarkdown.vue";
 
 initKatex();
@@ -844,11 +858,49 @@ function activityToolCountsLabel(block: ChatMessageBlock): string {
     .join(" · ");
 }
 
-function activitySummaryLabel(block: ChatMessageBlock): string {
-  return joinNonEmpty([
-    `${activityStatusText(block)}${activityReasoningCountLabel(block)}`,
+function activityItemsSignature(block: ChatMessageBlock): string {
+  return block.activityItems
+    .map((item) => {
+      if (item.kind === "reasoning") {
+        return [
+          "r",
+          String(item.id || "").trim(),
+          textContentSignature(item.text),
+          item.running ? "1" : "0",
+        ].join(":");
+      }
+      return [
+        "t",
+        String(item.id || "").trim(),
+        String(item.toolCallId || "").trim(),
+        String(item.name || "").trim(),
+        String(item.status || "").trim(),
+        textContentSignature(item.argsText),
+        textContentSignature(item.resultText),
+      ].join(":");
+    })
+    .join("|");
+}
+
+function activityExpandedItemsSignature(block: ChatMessageBlock): string {
+  return block.activityItems
+    .map((item) => `${activityItemKey(item)}:${activityItemOpen(block, item) ? "1" : "0"}`)
+    .join("|");
+}
+
+function activityPanelMemoKey(block: ChatMessageBlock): unknown[] {
+  return [
+    String(block.id || "").trim(),
+    showActivityPanel(block),
+    activityExpanded.value,
+    activityPanelOpen(block),
+    activityIsBusy(block),
+    activityStatusText(block),
+    activityReasoningCountLabel(block),
     activityToolCountsLabel(block),
-  ]);
+    activityItemsSignature(block),
+    activityExpandedItemsSignature(block),
+  ];
 }
 
 function activityItemKey(item: ChatActivityItem): string {

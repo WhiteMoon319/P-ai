@@ -12,6 +12,7 @@ import {
   projectChatActivityForDisplay,
   projectMessageForDisplay,
   projectStreamingChatActivityForDisplay,
+  streamBlocksActivitySignature,
   streamBlocksToToolHistoryEvents,
 } from "../src/utils/chat-message-semantics";
 
@@ -583,6 +584,56 @@ describe("chat-message semantics", () => {
       "先看文件。",
       "read_file",
     ]);
+  });
+
+  it("prefers authoritative stream-block activity over stale cached streaming projection", () => {
+    const activity = projectStreamingChatActivityForDisplay({
+      activityItems: [
+        { kind: "reasoning", id: "r-1", text: "旧思考。" },
+        { kind: "tool", id: "tool-1", toolCallId: "tool-1", name: "operate", argsText: "{\"action\":\"wait\"}", status: "doing" },
+      ],
+      streamBlocks: [{
+        reasoning: "新思考。",
+        tools: [{
+          toolCallId: "tool-1",
+          name: "operate",
+          argsText: "{\"action\":\"wait\"}",
+          resultText: "等待完成",
+          status: "done" as const,
+        }],
+      }],
+      running: true,
+    });
+
+    expect(activity.items.map((item) => item.kind === "tool" ? item.name : item.text)).toEqual([
+      "新思考。",
+      "operate",
+    ]);
+    expect(activity.items[1]).toMatchObject({
+      kind: "tool",
+      status: "done",
+      resultText: "等待完成",
+    });
+  });
+
+  it("changes stream-block activity signatures when equal-length tool results differ", () => {
+    expect(streamBlocksActivitySignature([{
+      tools: [{
+        toolCallId: "tool-1",
+        name: "operate",
+        argsText: "{\"action\":\"wait\"}",
+        resultText: "result-old",
+        status: "done" as const,
+      }],
+    }])).not.toBe(streamBlocksActivitySignature([{
+      tools: [{
+        toolCallId: "tool-1",
+        name: "operate",
+        argsText: "{\"action\":\"wait\"}",
+        resultText: "result-new",
+        status: "done" as const,
+      }],
+    }]));
   });
 
   it("joins streaming assistant texts with blank lines between blocks", () => {

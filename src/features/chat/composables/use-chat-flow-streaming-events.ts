@@ -2,6 +2,7 @@ import type { Ref } from "vue";
 import type { AssistantStreamBlock } from "../../../types/app";
 import {
   normalizeAssistantStreamBlocks,
+  streamBlocksActivitySignature,
 } from "../../../utils/chat-message-semantics";
 import {
   assistantEventHasVisibleProgress,
@@ -45,6 +46,7 @@ type UseChatFlowStreamingEventsOptions = {
     streamTail?: string,
     streamAnimatedDelta?: string,
     rawBlocks?: AssistantStreamBlock[],
+    updateOptions?: { preserveActivityProjection?: boolean },
   ) => void;
   enqueueStreamDelta: (gen: number, delta: string) => void;
 };
@@ -58,6 +60,15 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
       textLen: blocks.reduce((total, block) => total + String(block.text || "").length, 0),
       toolCount: blocks.reduce((total, block) => total + (block.tools || []).length, 0),
     };
+  }
+
+  function shouldCorrectDraftProjectionFromSnapshot(
+    draftId: string,
+    snapshotBlocks: AssistantStreamBlock[],
+  ): boolean {
+    if (!draftId || snapshotBlocks.length <= 0) return false;
+    const currentDraftBlocks = options.getDraftStreamBlocks(draftId);
+    return streamBlocksActivitySignature(currentDraftBlocks) !== streamBlocksActivitySignature(snapshotBlocks);
   }
 
   function handleStreamingEvent(currentGen: number, parsed: AssistantDeltaEvent) {
@@ -136,11 +147,23 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
     }
 
     const conversationId = options.getConversationId ? options.getConversationId() : "";
+    const delta = readDeltaMessage(parsed);
+    const isActivityProjectionEvent =
+      parsed.kind === "activity_reasoning_delta"
+      || parsed.kind === "assistant_tool_event"
+      || parsed.kind === "assistant_tool_result";
+    let shouldCorrectProjectionFromSnapshot = false;
     let authoritativeBlocks: AssistantStreamBlock[] = currentRound.phase === "streaming"
       ? options.getDraftStreamBlocks(currentRound.draftId)
       : [];
     if (conversationId && parsed.streamCache) {
       const snapshotBlocks = normalizeAssistantStreamBlocks(parsed.streamCache.streamBlocks);
+      if (currentRound.phase === "streaming") {
+        shouldCorrectProjectionFromSnapshot = shouldCorrectDraftProjectionFromSnapshot(
+          currentRound.draftId,
+          snapshotBlocks,
+        );
+      }
       options.applyConversationStreamCacheSnapshotToDisplay(
         conversationId,
         parsed.streamCache,
@@ -161,21 +184,43 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
           ? parsed.toolStatus : "";
     }
 
-    if (parsed.kind === "activity_reasoning_delta" || parsed.kind === "assistant_tool_event" || parsed.kind === "assistant_tool_result") {
-      const dt = readDeltaMessage(parsed);
-      if (dt && options.reasoningStartedAtMs.value === 0) options.reasoningStartedAtMs.value = Date.now();
+    if (isActivityProjectionEvent) {
+      if (delta && options.reasoningStartedAtMs.value === 0) options.reasoningStartedAtMs.value = Date.now();
     }
 
     if (currentRound.phase === "streaming") {
-      options.syncStreamBlocksToDraft(currentRound.draftId, authoritativeBlocks);
-      options.updateDraftText(currentRound.draftId, undefined, undefined, "", authoritativeBlocks);
+      if (parsed.kind === "tool_status") {
+        options.updateDraftText(
+          currentRound.draftId,
+          undefined,
+          undefined,
+          "",
+          authoritativeBlocks,
+          { preserveActivityProjection: true },
+        );
+      } else if (isActivityProjectionEvent) {
+        options.syncStreamBlocksToDraft(currentRound.draftId, authoritativeBlocks);
+        options.updateDraftText(currentRound.draftId, undefined, undefined, "", authoritativeBlocks);
+      } else if (parsed.streamCache && shouldCorrectProjectionFromSnapshot) {
+        options.syncStreamBlocksToDraft(currentRound.draftId, authoritativeBlocks);
+        options.updateDraftText(currentRound.draftId, undefined, undefined, "", authoritativeBlocks);
+      } else if (parsed.streamCache && parsed.kind !== "tool_status") {
+        options.updateDraftText(
+          currentRound.draftId,
+          undefined,
+          undefined,
+          "",
+          authoritativeBlocks,
+          { preserveActivityProjection: true },
+        );
+      }
     }
 
-    if (parsed.kind === "tool_status" || parsed.kind === "activity_reasoning_delta" || parsed.kind === "assistant_tool_event" || parsed.kind === "assistant_tool_result" || parsed.streamCache) {
+    if (parsed.kind === "tool_status" || isActivityProjectionEvent || parsed.streamCache) {
       return;
     }
 
-    options.enqueueStreamDelta(currentGen, readDeltaMessage(parsed));
+    options.enqueueStreamDelta(currentGen, delta);
     options.syncCurrentDisplayStateToConversationStreamCache();
   }
 

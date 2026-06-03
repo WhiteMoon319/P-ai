@@ -17,6 +17,7 @@ function baseActivityForMessage(
 ) {
   if (isStreaming) {
     return projectStreamingChatActivityForDisplay({
+      activityItems: projection.activityItems,
       streamBlocks,
       running: true,
     });
@@ -148,7 +149,9 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
     const streamAnimatedDelta = String(meta._streamAnimatedDelta ?? "");
     const streamBlocks = normalizeAssistantStreamBlocks(meta._streamBlocks);
     const streamBlockToolCalls = streamBlocksToToolCalls(streamBlocks);
-    const displayToolCalls = streamBlockToolCalls.length > 0 ? streamBlockToolCalls : projection.toolCalls;
+    const displayToolCalls = !!meta._streaming && streamBlockToolCalls.length > 0
+      ? streamBlockToolCalls
+      : (projection.toolCalls.length > 0 ? projection.toolCalls : streamBlockToolCalls);
     const lastDisplayToolName = displayToolCalls[displayToolCalls.length - 1]?.name || "";
     const activity = baseActivityForMessage(
       projection,

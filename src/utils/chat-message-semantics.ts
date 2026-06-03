@@ -544,6 +544,23 @@ export function streamBlocksToActivityItems(rawBlocks: unknown, running = false)
   return items;
 }
 
+export function streamBlocksActivitySignature(rawBlocks: unknown): string {
+  return normalizeAssistantStreamBlocks(rawBlocks)
+    .map((block, blockIndex) => [
+      `b:${blockIndex}`,
+      `r:${String(block.reasoning || "")}`,
+      ...((block.tools || []).map((tool, toolIndex) => [
+        `t:${toolIndex}`,
+        String(tool.toolCallId || "").trim(),
+        String(tool.name || "").trim(),
+        String(tool.status || "").trim(),
+        String(tool.argsText || ""),
+        String(tool.resultText || ""),
+      ].join(":"))),
+    ].join("|"))
+    .join("||");
+}
+
 export function streamBlocksToToolCalls(
   rawBlocks: unknown,
 ): Array<{ toolCallId?: string; name: string; argsText: string; status?: "doing" | "done" }> {
@@ -653,6 +670,37 @@ export function applyAssistantToolEventToStreamBlocks(
   return normalizeAssistantStreamBlocks(blocks);
 }
 
+export function applyAssistantToolResultToStreamBlocks(
+  rawBlocks: unknown,
+  rawMessage: unknown,
+): AssistantStreamBlock[] {
+  const blocks = cloneAssistantStreamBlocks(rawBlocks);
+  const text = String(rawMessage || "").trim();
+  if (!text) return normalizeAssistantStreamBlocks(blocks);
+  let event: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== "object") return normalizeAssistantStreamBlocks(blocks);
+    event = parsed as Record<string, unknown>;
+  } catch {
+    return normalizeAssistantStreamBlocks(blocks);
+  }
+  if (String(event.role || "").trim() !== "tool") {
+    return normalizeAssistantStreamBlocks(blocks);
+  }
+  const toolCallId = String(event.tool_call_id || "").trim();
+  if (!toolCallId) return normalizeAssistantStreamBlocks(blocks);
+  const resultText = typeof event.content === "string" ? event.content : String(event.content || "");
+  for (const block of blocks) {
+    const tool = (block.tools || []).find((item) => String(item.toolCallId || "").trim() === toolCallId);
+    if (!tool) continue;
+    tool.resultText = resultText;
+    tool.status = "done";
+    return normalizeAssistantStreamBlocks(blocks);
+  }
+  return normalizeAssistantStreamBlocks(blocks);
+}
+
 export function streamBlocksToToolHistoryEvents(rawBlocks: unknown): ChatMessage["toolCall"] {
   const events: NonNullable<ChatMessage["toolCall"]> = [];
   for (const block of normalizeAssistantStreamBlocks(rawBlocks)) {
@@ -727,8 +775,9 @@ export function projectStreamingChatActivityForDisplay(input: {
   activityRunning: boolean;
   activityStatus: ChatActivityStatus;
 } {
+  const activityItems = normalizeChatActivityItems(input.activityItems);
   const blockItems = streamBlocksToActivityItems(input.streamBlocks, !!input.running);
-  const eventItems = blockItems.length > 0 ? blockItems : normalizeChatActivityItems(input.activityItems);
+  const eventItems = blockItems.length > 0 ? blockItems : activityItems;
   const usingEventItems = eventItems.length > 0;
   const items: ChatActivityItem[] = usingEventItems ? eventItems : [];
   const toolCalls = Array.isArray(input.toolCalls) ? input.toolCalls : [];

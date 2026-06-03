@@ -2,6 +2,7 @@ import type { Ref } from "vue";
 import type { AssistantStreamBlock } from "../../../types/app";
 import {
   applyAssistantToolEventToStreamBlocks,
+  applyAssistantToolResultToStreamBlocks,
   appendReasoningDeltaToStreamBlocks,
   appendTextDeltaToStreamBlocks,
   normalizeAssistantStreamBlocks,
@@ -246,6 +247,11 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
       }
       if (parsed.kind === "assistant_tool_event") {
         next.streamBlocks = applyAssistantToolEventToStreamBlocks(next.streamBlocks, parsed.message);
+        changed = true;
+        return next;
+      }
+      if (parsed.kind === "assistant_tool_result") {
+        next.streamBlocks = applyAssistantToolResultToStreamBlocks(next.streamBlocks, parsed.message);
         changed = true;
         return next;
       }

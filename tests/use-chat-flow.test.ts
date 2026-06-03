@@ -1188,6 +1188,151 @@ describe("useChatFlow stream isolation", () => {
     ]);
   });
 
+  it("corrects stale tool activity from a later stream snapshot after a missed result event", async () => {
+    const chatting = ref(false);
+    const trimming = ref(false);
+    const chatInput = ref("new question");
+    const clipboardImages = ref<Array<{ mime: string; bytesBase64: string }>>([]);
+    const latestUserText = ref("");
+    const latestUserImages = ref<Array<{ mime: string; bytesBase64: string }>>([]);
+    const latestAssistantText = ref("");
+    const toolStatusText = ref("");
+    const toolStatusState = ref<"running" | "done" | "failed" | "">("");
+    const chatErrorText = ref("");
+    const allMessages = shallowRef<ChatMessage[]>([]);
+    const visibleTurnCount = ref(1);
+    const onReloadMessages = vi.fn(async () => {});
+
+    type ChannelLike = {
+      emit: (event: AssistantDeltaEvent) => void;
+    };
+    let boundChannel: ChannelLike | null = null;
+
+    const flow = useChatFlow({
+      chatting,
+      trimming,
+      getConversationId: () => "conversation-1",
+      getSession: () => ({ apiConfigId: "api-1", agentId: "agent-1" }),
+      chatInput,
+      clipboardImages,
+      latestUserText,
+      latestUserImages,
+      latestAssistantText,
+      toolStatusText,
+      toolStatusState,
+      chatErrorText,
+      allMessages,
+      visibleMessageBlockCount: visibleTurnCount,
+      t: (key) => key,
+      formatRequestFailed: (error) => String(error),
+      removeBinaryPlaceholders: (text) => text,
+      invokeSendChatMessage: vi.fn(async () => ({
+        accepted: true,
+        duplicate: false,
+        eventId: "event-1",
+        conversationId: "conversation-1",
+        traceId: "trace-1",
+        ingress: "accepted",
+      })),
+      invokeBindActiveChatViewStream: vi.fn(async ({ onDelta }) => {
+        boundChannel = onDelta as unknown as ChannelLike;
+      }),
+      onReloadMessages,
+    });
+
+    await flow.bindActiveConversationStream("conversation-1");
+    await flow.sendChat();
+    boundChannel!.emit({
+      kind: "assistant_tool_event",
+      message: JSON.stringify({
+        role: "assistant",
+        content: null,
+        reasoning_content: "先等一下。",
+        tool_calls: [{
+          id: "tool-1",
+          call_id: "tool-1",
+          type: "function",
+          function: {
+            name: "operate",
+            arguments: "{\"action\":\"wait\"}",
+          },
+        }],
+      }),
+      streamCache: {
+        assistantText: "",
+        streamBlocks: [{
+          reasoning: "先等一下。",
+          tools: [{
+            toolCallId: "tool-1",
+            name: "operate",
+            argsText: "{\"action\":\"wait\"}",
+            status: "doing",
+          }],
+        }],
+      },
+    });
+    await flushAsyncSteps();
+
+    boundChannel!.emit({
+      delta: "等待完成，现在汇报。",
+      streamCache: {
+        assistantText: "等待完成，现在汇报。",
+        streamBlocks: [{
+          reasoning: "先等一下。",
+          text: "等待完成，现在汇报。",
+          tools: [{
+            toolCallId: "tool-1",
+            name: "operate",
+            argsText: "{\"action\":\"wait\"}",
+            resultText: "等待完成",
+            status: "done",
+          }],
+        }],
+      },
+    });
+    await flushAsyncSteps();
+
+    expect(latestAssistantText.value).toBe("等待完成，现在汇报。");
+
+    const draft = allMessages.value.find((message) => String(message.id || "").startsWith("__draft_assistant__:"));
+    expect(draft?.parts).toEqual([{ type: "text", text: "等待完成，现在汇报。" }]);
+    expect((draft?.providerMeta as Record<string, unknown> | undefined)?._streamBlocks).toEqual([{
+      reasoning: "先等一下。",
+      text: "等待完成，现在汇报。",
+      tools: [{
+        toolCallId: "tool-1",
+        name: "operate",
+        argsText: "{\"action\":\"wait\"}",
+        resultText: "等待完成",
+        status: "done",
+      }],
+    }]);
+
+    const projection = projectMessageForDisplay(draft as ChatMessage);
+    expect(projection.activityItems).toMatchObject([
+      { kind: "reasoning", text: "先等一下。" },
+      { kind: "tool", name: "operate", status: "done", resultText: "等待完成" },
+    ]);
+
+    const { visibleMessageBlocks } = useChatMessageBlocks({
+      allMessages,
+      activeChatApiConfig: computed(() => null),
+      perfDebug: false,
+      perfNow: () => 0,
+    });
+    const draftBlock = visibleMessageBlocks.value.find((block) => String(block.id || "").startsWith("__draft_assistant__:"));
+    expect(draftBlock?.toolCalls).toEqual([{
+      toolCallId: "tool-1",
+      name: "operate",
+      argsText: "{\"action\":\"wait\"}",
+      status: "done",
+    }]);
+    expect(draftBlock?.activityItems).toMatchObject([
+      { kind: "reasoning", text: "先等一下。" },
+      { kind: "tool", name: "operate", status: "done", resultText: "等待完成" },
+    ]);
+  });
+
   it("keeps prior reasoning when a tool snapshot and later reasoning arrive", async () => {
     const chatting = ref(false);
     const trimming = ref(false);

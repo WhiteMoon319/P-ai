@@ -2,8 +2,10 @@ import type { Ref } from "vue";
 import type { AssistantStreamBlock, ChatMentionTarget, ChatMessage } from "../../../types/app";
 import {
   assistantTextFromStreamBlocks,
+  appendTextDeltaToStreamBlocks,
   normalizeAssistantStreamBlocks,
   normalizeChatActivityItems,
+  streamBlocksToActivityItems,
   streamBlocksToToolCalls,
   streamBlocksToToolHistoryEvents,
 } from "../../../utils/chat-message-semantics";
@@ -12,6 +14,10 @@ import { readMessagePlainText } from "./use-chat-flow-utils";
 
 export const DRAFT_ASSISTANT_ID_PREFIX = "__draft_assistant__:";
 export const DRAFT_USER_ID_PREFIX = "__draft_user__:";
+
+type UpdateDraftTextOptions = {
+  preserveActivityProjection?: boolean;
+};
 
 function messageHasActivityEvents(message: ChatMessage): boolean {
   if (normalizeChatActivityItems(message.activityItems).length > 0) return true;
@@ -231,6 +237,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
   function syncStreamBlocksToDraft(draftId: string, rawBlocks?: AssistantStreamBlock[]) {
     if (!draftId) return;
     const blocks = normalizeAssistantStreamBlocks(rawBlocks || options.streamBlocks?.value || []);
+    const nextActivityItems = streamBlocksToActivityItems(blocks, true);
     options.allMessages.value = options.allMessages.value.map((message) => {
       if (message.id !== draftId) return message;
       const meta = ((message.providerMeta || {}) as Record<string, unknown>);
@@ -238,6 +245,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
         ...message,
         parts: [{ type: "text", text: assistantTextFromStreamBlocks(blocks) }],
         toolCall: streamBlocksToToolHistoryEvents(blocks),
+        activityItems: nextActivityItems.length > 0 ? nextActivityItems : undefined,
         providerMeta: {
           ...meta,
           _streamBlocks: blocks,
@@ -252,6 +260,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     streamTail?: string,
     streamAnimatedDelta = "",
     rawBlocks?: AssistantStreamBlock[],
+    updateOptions?: UpdateDraftTextOptions,
   ) {
     if (!draftId) return;
     const agentId = String(options.getSession()?.agentId || "").trim();
@@ -281,13 +290,21 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
       : String(options.toolStatusText.value || "").trim();
     const streamBlocks = normalizeAssistantStreamBlocks(rawBlocks || options.streamBlocks?.value || []);
     const blockText = assistantTextFromStreamBlocks(streamBlocks);
+    const preserveActivityProjection = !!updateOptions?.preserveActivityProjection;
+    const existingActivityItems = normalizeChatActivityItems(existingDraft?.activityItems);
+    const nextActivityItems = preserveActivityProjection
+      ? existingActivityItems
+      : streamBlocksToActivityItems(streamBlocks, true);
     const msg: ChatMessage = {
       id: draftId,
       role: "assistant",
       createdAt: String(existingDraft?.createdAt || new Date().toISOString()),
       speakerAgentId: agentId || "assistant-draft",
       parts: [{ type: "text", text: blockText || String(options.latestAssistantText.value || "") }],
-      toolCall: streamBlocksToToolHistoryEvents(streamBlocks),
+      toolCall: preserveActivityProjection
+        ? existingDraft?.toolCall
+        : streamBlocksToToolHistoryEvents(streamBlocks),
+      activityItems: nextActivityItems.length > 0 ? nextActivityItems : undefined,
       providerMeta: {
         _streaming: true,
         _streamSegments: nextStreamSegments,
@@ -348,13 +365,18 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
   function applyAssistantDeltaToDraft(draftId: string, delta: string) {
     if (!draftId || !delta) return;
     options.latestAssistantText.value += delta;
+    if (options.streamBlocks) {
+      options.streamBlocks.value = appendTextDeltaToStreamBlocks(options.streamBlocks.value, delta);
+    }
     const currentSegments = readDraftStreamSegments(draftId);
     const currentTail = readDraftStreamTail(draftId);
     const parsed = consumeClosedMarkdownBlocks(`${currentTail}${delta}`);
     const nextStreamSegments = parsed.chunks.length > 0
       ? [...currentSegments, ...parsed.chunks]
       : currentSegments;
-    updateDraftText(draftId, nextStreamSegments, parsed.tail, delta);
+    updateDraftText(draftId, nextStreamSegments, parsed.tail, delta, undefined, {
+      preserveActivityProjection: true,
+    });
   }
 
   return {
