@@ -59,9 +59,8 @@ export function blockRenderId(block: ChatMessageBlock, ephemeralMap?: WeakMap<Ch
 
 export function blockGroupRenderId(block: ChatMessageBlock, ephemeralMap?: WeakMap<ChatMessageBlock, string>, ephemeralSeqRef?: { value: number }): string {
   const createdAt = String(block.createdAt || "").trim();
-  const textPreview = String(block.text || "").trim().slice(0, 48);
   const renderId = blockRenderId(block, ephemeralMap, ephemeralSeqRef);
-  if (createdAt || textPreview) return `${renderId}:${createdAt || "no-time"}:${textPreview || "no-text"}`;
+  if (createdAt) return `${renderId}:${createdAt}`;
   return `group-${renderId}`;
 }
 

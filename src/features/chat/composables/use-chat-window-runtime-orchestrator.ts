@@ -241,6 +241,8 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     extractMessageImages: bindings.extractMessageImages,
     requestRecallMode: shellDialogFlows.requestRecallMode,
     setConversationPlanMode: bindings.setConversationPlanMode,
+    FOREGROUND_SNAPSHOT_RECENT_LIMIT: bindings.FOREGROUND_SNAPSHOT_RECENT_LIMIT,
+    applyConversationSnapshot: conversationOrchestrator.applyConversationSnapshot,
   });
 
   return {

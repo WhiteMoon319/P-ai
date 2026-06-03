@@ -35,6 +35,7 @@ type UseChatRewindActionsOptions = {
   messageText: (message: ChatMessage) => string;
   extractMessageImages: (message: ChatMessage) => Array<{ mime: string; bytesBase64?: string; mediaRef?: string }>;
   requestRecallMode: (payload: { turnId: string }) => Promise<RecallConfirmMode>;
+  refreshForegroundConversationAfterRewind: (conversationId: string) => Promise<void>;
 };
 
 export function useChatRewindActions(options: UseChatRewindActionsOptions) {
@@ -156,24 +157,17 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
           undoApplyPatch,
         },
       });
-      const keepCountFromLocal = target.keepCountFromLocal;
-      const keepCountFromBackend = Math.max(0, Math.min(currentMessages.length, Number(result.remainingCount) || 0));
-      const keepCount = keepCountFromLocal >= 0 ? keepCountFromLocal : keepCountFromBackend;
-      const nextMessages = currentMessages.slice(0, keepCount);
-      options.allMessages.value = nextMessages;
-      options.maybeUpdateConversationOverviewFromLoadedMessages(
-        conversationId,
-        nextMessages,
-        Number(result.remainingCount) || nextMessages.length,
-      );
+      if (conversationId) {
+        await options.refreshForegroundConversationAfterRewind(conversationId);
+      }
       console.info("[会话撤回] 完成", {
         removedCount: Number(result.removedCount) || 0,
-        remainingCount: Number(result.remainingCount) || nextMessages.length,
-        localKeepCount: keepCountFromLocal,
+        remainingCount: Number(result.remainingCount) || 0,
+        localKeepCount: target.keepCountFromLocal,
         elapsedMs: Date.now() - startedAt,
       });
       return result.recalledUserMessage
-        ?? currentMessages[keepCount]
+        ?? currentMessages[target.keepCountFromLocal]
         ?? currentMessages.find((item) => item.id === target.targetUserMessageId && item.role === "user")
         ?? null;
     } catch (error) {

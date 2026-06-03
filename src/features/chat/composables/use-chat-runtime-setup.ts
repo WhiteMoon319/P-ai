@@ -210,6 +210,19 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
       messageText: bindings.messageText,
       extractMessageImages: bindings.extractMessageImages,
       requestRecallMode: bindings.requestRecallMode,
+      refreshForegroundConversationAfterRewind: async (conversationId: string) => {
+        const normalizedConversationId = String(conversationId || "").trim();
+        if (!normalizedConversationId) return;
+        chatFlowRef?.clearForegroundRuntimeState();
+        const snapshot = await invokeTauri<any>("get_foreground_conversation_light_snapshot", {
+          input: {
+            conversationId: normalizedConversationId,
+            agentId: String(bindings.currentForegroundAgentId.value || "").trim() || null,
+            limit: bindings.FOREGROUND_SNAPSHOT_RECENT_LIMIT,
+          },
+        });
+        bindings.applyConversationSnapshot(snapshot);
+      },
   });
 
   chatFlowRef = chatFlow;
