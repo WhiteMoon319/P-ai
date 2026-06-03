@@ -108,10 +108,10 @@
                 <summary class="collapse-title py-1 px-1 min-h-0 text-xs font-semibold flex items-center gap-1.5 text-base-content/80 hover:bg-base-200">
                   <span
                     v-if="activityIsBusy(block)"
-                    class="relative inline-flex h-2 w-2 shrink-0 overflow-visible text-success"
+                    class="inline-flex h-4 w-4 shrink-0 items-center justify-center text-success"
                   >
                     <span
-                      class="loading loading-spinner loading-md absolute left-1/2 top-1/2 h-5 w-5 max-h-none max-w-none -translate-x-1/2 -translate-y-1/2 text-success"
+                      class="loading loading-spinner h-4 w-4 text-success"
                     ></span>
                   </span>
                   <span v-else class="inline-block h-2 w-2 rounded-full bg-success"></span>
@@ -120,7 +120,7 @@
                   </span>
                 </summary>
                 <div
-                  v-if="activityPanelOpen(block)"
+                  v-show="activityPanelOpen(block)"
                   class="collapse-content px-0 pb-1 pt-2 text-xs text-base-content/70"
                   @click="collapseDetailsFromContentClick"
                 >
@@ -150,7 +150,7 @@
                         </span>
                       </summary>
                       <div
-                        v-if="activityItemOpen(block, item)"
+                        v-show="activityItemOpen(block, item)"
                         class="collapse-content px-1 pb-2 pt-1"
                       >
                         <div
