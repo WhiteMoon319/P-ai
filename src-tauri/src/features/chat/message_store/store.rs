@@ -1026,6 +1026,29 @@ pub(super) fn append_message_store_tool_group_result(
     })
 }
 
+pub(super) fn apply_message_store_tool_group_result(
+    conversation: &Conversation,
+    agent_id: &str,
+    assistant_tool_call_event: Value,
+    tool_result_event: Value,
+    provider_meta_patch: Option<Value>,
+) -> Result<MessageStoreToolCallResultAppend, String> {
+    let mut next = conversation.clone();
+    let append = append_tool_group_result_to_conversation(
+        &mut next,
+        agent_id,
+        assistant_tool_call_event,
+        tool_result_event,
+        provider_meta_patch,
+    )?;
+    Ok(MessageStoreToolCallResultAppend {
+        conversation: next,
+        assistant_message_id: append.assistant_message_id,
+        created: append.created,
+        tool_event_count: append.tool_event_count,
+    })
+}
+
 #[derive(Debug, Clone)]
 struct ToolGroupResultAppend {
     assistant_message_id: String,

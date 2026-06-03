@@ -773,7 +773,7 @@ fn sync_completed_tool_history_cache(
     }
 }
 
-fn persist_completed_tool_group_result_async(
+fn persist_completed_tool_group_result(
     state: Option<&AppState>,
     context: Option<&ToolLoopAutoCompactionContext>,
     selected_api: &ApiConfig,
@@ -781,50 +781,47 @@ fn persist_completed_tool_group_result_async(
     chat_session_key: &str,
     assistant_tool_call_event: Value,
     tool_result_event: Value,
-) -> Option<tauri::async_runtime::JoinHandle<Result<(), String>>> {
-    let Some(state) = state.cloned() else {
-        return None;
+) -> Result<(), String> {
+    let Some(state) = state else {
+        return Ok(());
     };
-    let Some(context) = context.cloned() else {
-        return None;
+    let Some(context) = context else {
+        return Ok(());
     };
-    let chat_session_key = chat_session_key.to_string();
     let provider_meta_patch =
         tool_result_provider_meta_patch(trusted_input_tokens, selected_api.context_window_tokens);
-    Some(tauri::async_runtime::spawn(async move {
-        match conversation_service().append_tool_group_result(
-            &state,
-            &context.conversation_id,
-            &context.agent.id,
-            assistant_tool_call_event,
-            tool_result_event,
-            provider_meta_patch,
-        ) {
-            Ok(result) => {
-                set_stream_cache_persisted_assistant_message_id(
-                    &state,
-                    &context.conversation_id,
-                    &result.assistant_message_id,
-                );
-                runtime_log_info(format!(
-                    "[聊天] 完成，任务=append_tool_group_result，session={}，conversation_id={}，assistant_message_id={}，created={}，tool_event_count={}",
-                    chat_session_key,
-                    context.conversation_id,
-                    result.assistant_message_id,
-                    result.created,
-                    result.tool_event_count
-                ));
-                Ok(())
-            }
-            Err(err) => {
-                runtime_log_warn(format!(
-                    "[聊天] 失败，任务=append_tool_group_result，session={}，conversation_id={}，error={}",
-                    chat_session_key, context.conversation_id, err
-                ));
-                Err(err)
-            }
+    match conversation_service().append_tool_group_result(
+        state,
+        &context.conversation_id,
+        &context.agent.id,
+        assistant_tool_call_event,
+        tool_result_event,
+        provider_meta_patch,
+    ) {
+        Ok(result) => {
+            set_stream_cache_persisted_assistant_message_id(
+                state,
+                &context.conversation_id,
+                &result.assistant_message_id,
+            );
+            runtime_log_info(format!(
+                "[聊天] 完成，任务=append_tool_group_result，session={}，conversation_id={}，assistant_message_id={}，created={}，tool_event_count={}",
+                chat_session_key,
+                context.conversation_id,
+                result.assistant_message_id,
+                result.created,
+                result.tool_event_count
+            ));
+            Ok(())
         }
-    }))
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[聊天] 失败，任务=append_tool_group_result，session={}，conversation_id={}，error={}",
+                chat_session_key, context.conversation_id, err
+            ));
+            Err(err)
+        }
+    }
 }
 
 async fn await_pending_tool_group_result_persists(
@@ -1656,7 +1653,7 @@ async fn run_genai_tool_loop(
                 chat_session_key,
                 &tool_history_events,
             );
-            if let Some(handle) = persist_completed_tool_group_result_async(
+            persist_completed_tool_group_result(
                 tool_abort_state,
                 auto_compaction_context,
                 selected_api,
@@ -1664,9 +1661,7 @@ async fn run_genai_tool_loop(
                 chat_session_key,
                 assistant_tool_group_history_event.clone(),
                 tool_result_event,
-            ) {
-                pending_tool_group_result_persists.push(handle);
-            }
+            )?;
 
             if tool_loop_should_close_for_guided_queue(tool_abort_state, auto_compaction_context) {
                 runtime_log_info(format!(
@@ -2164,7 +2159,7 @@ async fn run_genai_tool_loop_non_stream(
                 chat_session_key,
                 &tool_history_events,
             );
-            if let Some(handle) = persist_completed_tool_group_result_async(
+            persist_completed_tool_group_result(
                 tool_abort_state,
                 auto_compaction_context,
                 selected_api,
@@ -2172,9 +2167,7 @@ async fn run_genai_tool_loop_non_stream(
                 chat_session_key,
                 assistant_tool_group_history_event.clone(),
                 tool_result_event,
-            ) {
-                pending_tool_group_result_persists.push(handle);
-            }
+            )?;
 
             if tool_loop_should_close_for_guided_queue(tool_abort_state, auto_compaction_context) {
                 runtime_log_info(format!(
