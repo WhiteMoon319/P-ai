@@ -55,15 +55,15 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
     emit,
   } = options;
 
-  const LOAD_OLDER_HISTORY_THRESHOLD_PX = 96;
+  const LOAD_OLDER_HISTORY_THRESHOLD_PX = 8;
   const activeJumpToBottomRequest = sharedActiveJumpToBottomRequest ?? ref(0);
   const olderHistoryRequestPending = ref(false);
-  const olderHistoryTriggerReady = ref(true);
   const suppressOlderHistoryPaginationOnce = ref(false);
   const pendingOlderHistoryAnchor = ref<{ messageId: string; edge: "top" | "bottom"; offset: number } | null>(null);
   const pendingOlderHistoryScrollRestore = ref<{ scrollTop: number; scrollHeight: number } | null>(null);
-  let lastConversationScrollTop = 0;
   let pendingProgrammaticScrollPaginationResetFrame = 0;
+  let pendingAutoOlderHistoryFrame = 0;
+  let autoOlderHistoryScheduled = false;
 
   function armProgrammaticScrollPaginationSuppression() {
     suppressOlderHistoryPaginationOnce.value = true;
@@ -83,15 +83,23 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
     const scrollEl = scrollContainer.value;
     if (!scrollEl) return;
     if (!props.hasMoreHistory.value || props.loadingOlderHistory.value || olderHistoryRequestPending.value) return;
-    if (!olderHistoryTriggerReady.value) return;
     if (scrollEl.scrollTop > LOAD_OLDER_HISTORY_THRESHOLD_PX) return;
-    const isMovingUpward = scrollEl.scrollTop <= lastConversationScrollTop;
-    if (!isMovingUpward) return;
     pendingOlderHistoryScrollRestore.value = { scrollTop: scrollEl.scrollTop, scrollHeight: scrollEl.scrollHeight };
     pendingOlderHistoryAnchor.value = captureVisibleAnchor("bottom");
     olderHistoryRequestPending.value = true;
-    olderHistoryTriggerReady.value = false;
     emit.loadOlderHistory();
+  }
+
+  function scheduleAutoRequestOlderHistory() {
+    if (autoOlderHistoryScheduled) return;
+    autoOlderHistoryScheduled = true;
+    void nextTick(() => {
+      pendingAutoOlderHistoryFrame = requestAnimationFrame(() => {
+        pendingAutoOlderHistoryFrame = 0;
+        autoOlderHistoryScheduled = false;
+        maybeRequestOlderHistory();
+      });
+    });
   }
 
   function onConversationScroll() {
@@ -106,8 +114,6 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
     } else {
       maybeRequestOlderHistory();
     }
-    const scrollEl = scrollContainer.value;
-    if (scrollEl) lastConversationScrollTop = scrollEl.scrollTop;
     syncVisibleStreamingVirtualItemViewportTops();
   }
 
@@ -140,12 +146,11 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
     () => {
       chatScrollbarRef.value?.hide?.();
       olderHistoryRequestPending.value = false;
-      lastConversationScrollTop = 0;
-      olderHistoryTriggerReady.value = true;
       pendingOlderHistoryAnchor.value = null;
       pendingOlderHistoryScrollRestore.value = null;
       armProgrammaticScrollPaginationSuppression();
       void prepareBottomAlignmentLayout?.();
+      scheduleAutoRequestOlderHistory();
     },
     { immediate: true },
   );
@@ -174,7 +179,10 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
     () => props.messageBlocks.value,
     () => {
       refreshObservedVirtualItemElements();
-      void nextTick(() => chatScrollbarRef.value?.updateThumb());
+      void nextTick(() => {
+        chatScrollbarRef.value?.updateThumb();
+        scheduleAutoRequestOlderHistory();
+      });
     },
   );
 
@@ -209,11 +217,10 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
           }
         }
       }
-      lastConversationScrollTop = scrollEl.scrollTop;
       olderHistoryRequestPending.value = false;
-      olderHistoryTriggerReady.value = true;
       pendingOlderHistoryAnchor.value = null;
       pendingOlderHistoryScrollRestore.value = null;
+      scheduleAutoRequestOlderHistory();
     },
   );
 
@@ -222,6 +229,11 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
       cancelAnimationFrame(pendingProgrammaticScrollPaginationResetFrame);
       pendingProgrammaticScrollPaginationResetFrame = 0;
     }
+    if (pendingAutoOlderHistoryFrame) {
+      cancelAnimationFrame(pendingAutoOlderHistoryFrame);
+      pendingAutoOlderHistoryFrame = 0;
+    }
+    autoOlderHistoryScheduled = false;
   });
 
   return {
@@ -231,8 +243,6 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
     alignLatestOwnMessageToTop,
     activeConversationChangedCleanup: () => {
       olderHistoryRequestPending.value = false;
-      lastConversationScrollTop = 0;
-      olderHistoryTriggerReady.value = true;
       pendingOlderHistoryAnchor.value = null;
       pendingOlderHistoryScrollRestore.value = null;
     },
