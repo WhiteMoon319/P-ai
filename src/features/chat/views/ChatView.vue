@@ -288,11 +288,31 @@
         />
       </div>
 
-      <div
-        v-if="leftPaneOverlay || rightPaneOverlay"
-        class="absolute inset-0 z-40 bg-base-300/20 backdrop-blur-[1px]"
-        @click="closeOverlayPanes"
-      ></div>
+    <div
+      v-if="leftPaneOverlay || rightPaneOverlay"
+      class="absolute inset-0 z-40 bg-base-300/20 backdrop-blur-[1px]"
+      @click="closeOverlayPanes"
+    ></div>
+
+    <div
+      v-if="collapsePreviewSide === 'left'"
+      class="pointer-events-none absolute bottom-0 left-0 top-0 z-[58] flex items-center justify-center border-r border-error/20 bg-error/12 backdrop-blur-[1px]"
+      :style="{ width: `${collapsePreviewWidth}px` }"
+    >
+      <div class="rounded-full border border-error/25 bg-base-100/90 px-3 py-1.5 text-sm font-semibold text-error shadow-sm">
+        {{ t("common.collapse") }}
+      </div>
+    </div>
+
+    <div
+      v-if="collapsePreviewSide === 'right'"
+      class="pointer-events-none absolute bottom-0 right-0 top-0 z-[58] flex items-center justify-center border-l border-error/20 bg-error/12 backdrop-blur-[1px]"
+      :style="{ width: `${collapsePreviewWidth}px` }"
+    >
+      <div class="rounded-full border border-error/25 bg-base-100/90 px-3 py-1.5 text-sm font-semibold text-error shadow-sm">
+        {{ t("common.collapse") }}
+      </div>
+    </div>
 
       <div v-if="effectiveToolReviewPanelOpen"
         :class="rightPaneInLayout ? 'flex h-full min-h-0 shrink-0 border-l border-base-300 bg-base-100' : 'absolute bottom-0 right-0 top-0 z-50 flex h-full min-h-0 border-l border-base-300 bg-base-100 shadow-2xl'"
@@ -776,6 +796,7 @@ const panesCleanupFns: Array<() => void> = [];
 const {
   leftPaneInLayout, rightPaneInLayout,
   leftPaneOverlay, rightPaneOverlay, leftPaneVisibleWidth, rightPaneVisibleWidth, activePaneResizeSide,
+  collapsePreviewSide, collapsePreviewWidth,
   startPaneResize, adjustPaneWidthByKeyboard,
 } = useChatPanes({
   chatLayoutRoot, toolReviewPanelOpen: effectiveToolReviewPanelOpen,
@@ -783,6 +804,13 @@ const {
   syncViewportMetrics,
   onPaneWidthsChange: (left, right) => emit("sidePanelWidthsChange", { leftWidth: left, rightWidth: right }),
   onPaneWidthsCommit: (left, right) => emit("sidePanelWidthsCommit", { leftWidth: left, rightWidth: right }),
+  onPaneCloseRequest: (side) => {
+    if (side === "left") {
+      emit("sideConversationListVisibleChange", false);
+      return;
+    }
+    emit("toolReviewPanelOpenChange", false);
+  },
   onBeforeUnmountCleanup: (fn) => panesCleanupFns.push(fn),
 });
 

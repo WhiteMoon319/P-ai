@@ -2,8 +2,11 @@ import { computed, nextTick, ref, watch, type Ref } from "vue";
 
 type PaneResizeSide = "left" | "right";
 
+const PANE_RESIZE_MOVE_THRESHOLD = 4;
+const PANE_COLLAPSE_EDGE_RATIO = 0.1;
+
 export const PANE_WIDTH_LIMITS = {
-  left: { min: 260, max: 10000, default: 320 },
+  left: { min: 160, max: 360, default: 320 },
   right: { min: 260, max: 10000, default: 320 },
 } as const;
 
@@ -34,15 +37,17 @@ export interface UseChatPanesOptions {
   syncViewportMetrics: () => void;
   onPaneWidthsChange: (leftWidth: number, rightWidth: number) => void;
   onPaneWidthsCommit: (leftWidth: number, rightWidth: number) => void;
+  onPaneCloseRequest: (side: PaneResizeSide) => void;
   onBeforeUnmountCleanup: (fn: () => void) => void;
 }
 
 export function useChatPanes(options: UseChatPanesOptions) {
-  const { chatLayoutRoot, toolReviewPanelOpen, showSideConversationList, detachedChatWindow, syncViewportMetrics, onPaneWidthsChange, onPaneWidthsCommit, onBeforeUnmountCleanup } = options;
+  const { chatLayoutRoot, toolReviewPanelOpen, showSideConversationList, detachedChatWindow, syncViewportMetrics, onPaneWidthsChange, onPaneWidthsCommit, onPaneCloseRequest, onBeforeUnmountCleanup } = options;
 
   const leftSidebarWidth = ref(loadStoredPaneWidth("left"));
   const rightSidebarWidth = ref(loadStoredPaneWidth("right"));
   const activePaneResizeSide = ref<PaneResizeSide | null>(null);
+  const collapsePreviewSide = ref<PaneResizeSide | null>(null);
   const resizeLockedLeftPaneInLayout = ref<boolean | null>(null);
   const resizeLockedRightPaneInLayout = ref<boolean | null>(null);
   const lastOpenedPane = ref<PaneResizeSide | null>(null);
@@ -50,6 +55,9 @@ export function useChatPanes(options: UseChatPanesOptions) {
   let paneResizeStartWidth = 0;
   let paneResizePreviousBodyCursor = "";
   let paneResizePreviousBodyUserSelect = "";
+  let paneResizeMoved = false;
+  let paneResizeHandle: HTMLElement | null = null;
+  let paneResizePointerId: number | null = null;
 
   // ========== responsive layout measurement ==========
 
@@ -64,7 +72,7 @@ export function useChatPanes(options: UseChatPanesOptions) {
   function effectivePaneWidth(side: PaneResizeSide): number {
     const limits = PANE_WIDTH_LIMITS[side];
     const width = side === "left" ? leftSidebarWidth.value : rightSidebarWidth.value;
-    return Math.max(limits.min, Math.round(width || limits.default));
+    return Math.min(limits.max, Math.max(limits.min, Math.round(width || limits.default)));
   }
 
   function overlayVisibleWidth(side: PaneResizeSide): number {
@@ -74,13 +82,19 @@ export function useChatPanes(options: UseChatPanesOptions) {
   }
 
   function overlayMaxWidth(side: PaneResizeSide): number {
-    if (containerWidth.value <= 0) return PANE_WIDTH_LIMITS[side].max;
-    return Math.max(PANE_WIDTH_LIMITS[side].min, containerWidth.value - PANE_OVERLAY_VISIBLE_MARGIN);
+    const limits = PANE_WIDTH_LIMITS[side];
+    if (containerWidth.value <= 0) return limits.max;
+    return Math.min(limits.max, Math.max(limits.min, containerWidth.value - PANE_OVERLAY_VISIBLE_MARGIN));
   }
 
   function canFitInLayout(leftW: number, rightW: number): boolean {
     return containerWidth.value <= 0 || leftW + PANE_CENTER_MIN_WIDTH + rightW <= containerWidth.value;
   }
+
+  const collapsePreviewWidth = computed(() => {
+    if (containerWidth.value <= 0) return 0;
+    return Math.max(48, Math.round(containerWidth.value * PANE_COLLAPSE_EDGE_RATIO));
+  });
 
   // ========== layout mode computeds ==========
 
@@ -163,7 +177,10 @@ export function useChatPanes(options: UseChatPanesOptions) {
         ? (rightPaneInLayout.value ? rightSidebarWidth.value : 0)
         : (leftPaneInLayout.value ? leftSidebarWidth.value : 0);
     const layoutMax = cw > 0 ? cw - otherPaneWidth - PANE_CENTER_MIN_WIDTH : limits.max;
-    const effectiveMax = Math.max(limits.min, layoutMax > 0 ? layoutMax : limits.max);
+    const effectiveMax = Math.min(
+      limits.max,
+      Math.max(limits.min, layoutMax > 0 ? layoutMax : limits.max),
+    );
     return Math.round(Math.min(effectiveMax, Math.max(limits.min, width)));
   }
 
@@ -189,6 +206,11 @@ export function useChatPanes(options: UseChatPanesOptions) {
     resizeLockedRightPaneInLayout.value = rightPaneInLayout.value;
     paneResizeStartX = event.clientX;
     paneResizeStartWidth = side === "left" ? leftPaneVisibleWidth.value : rightPaneVisibleWidth.value;
+    paneResizeMoved = false;
+    paneResizeHandle = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    paneResizePointerId = Number.isFinite(event.pointerId) ? event.pointerId : null;
+    paneResizeHandle?.setPointerCapture?.(event.pointerId);
+    collapsePreviewSide.value = null;
     paneResizePreviousBodyCursor = document.body.style.cursor;
     paneResizePreviousBodyUserSelect = document.body.style.userSelect;
     document.body.style.cursor = "col-resize";
@@ -202,6 +224,9 @@ export function useChatPanes(options: UseChatPanesOptions) {
     const side = activePaneResizeSide.value;
     if (!side) return;
     const pointerDelta = event.clientX - paneResizeStartX;
+    if (!paneResizeMoved && Math.abs(pointerDelta) >= PANE_RESIZE_MOVE_THRESHOLD) {
+      paneResizeMoved = true;
+    }
     const nextWidth = side === "left" ? paneResizeStartWidth + pointerDelta : paneResizeStartWidth - pointerDelta;
     const nextWidthClamped = clampPaneWidth(side, nextWidth);
     if (side === "left") {
@@ -209,22 +234,63 @@ export function useChatPanes(options: UseChatPanesOptions) {
     } else {
       rightSidebarWidth.value = nextWidthClamped;
     }
+    collapsePreviewSide.value = shouldCollapsePaneFromClientX(side, event.clientX) ? side : null;
   }
 
-  async function stopPaneResize() {
+  function shouldCollapsePaneFromClientX(side: PaneResizeSide, clientX: number): boolean {
+    const root = chatLayoutRoot.value;
+    if (!root) return false;
+    const rect = root.getBoundingClientRect();
+    if (!(rect.width > 0)) return false;
+    const threshold = rect.width * PANE_COLLAPSE_EDGE_RATIO;
+    if (side === "left") {
+      return clientX <= rect.left + threshold;
+    }
+    return clientX >= rect.right - threshold;
+  }
+
+  function shouldCollapsePaneFromRelease(side: PaneResizeSide, event?: PointerEvent): boolean {
+    if (!paneResizeMoved || !event || event.type !== "pointerup") return false;
+    return shouldCollapsePaneFromClientX(side, event.clientX);
+  }
+
+  async function stopPaneResize(event?: PointerEvent) {
     const side = activePaneResizeSide.value;
+    const shouldCollapse = side ? shouldCollapsePaneFromRelease(side, event) : false;
+    const restoreWidthOnCollapse = side
+      ? clampPaneWidth(side, paneResizeStartWidth)
+      : 0;
     window.removeEventListener("pointermove", handlePaneResizeMove);
     window.removeEventListener("pointerup", stopPaneResize);
     window.removeEventListener("pointercancel", stopPaneResize);
     document.body.style.cursor = paneResizePreviousBodyCursor;
     document.body.style.userSelect = paneResizePreviousBodyUserSelect;
+    if (paneResizeHandle && paneResizePointerId !== null && paneResizeHandle.hasPointerCapture?.(paneResizePointerId)) {
+      paneResizeHandle.releasePointerCapture(paneResizePointerId);
+    }
+    paneResizeHandle = null;
+    paneResizePointerId = null;
+    collapsePreviewSide.value = null;
     activePaneResizeSide.value = null;
     resizeLockedLeftPaneInLayout.value = null;
     resizeLockedRightPaneInLayout.value = null;
     if (side) {
-      storePaneWidth(side, side === "left" ? leftSidebarWidth.value : rightSidebarWidth.value);
-      onPaneWidthsCommit(leftSidebarWidth.value, rightSidebarWidth.value);
+      if (shouldCollapse) {
+        if (side === "left") {
+          leftSidebarWidth.value = restoreWidthOnCollapse;
+        } else {
+          rightSidebarWidth.value = restoreWidthOnCollapse;
+        }
+        storePaneWidth(side, restoreWidthOnCollapse);
+        onPaneWidthsCommit(leftSidebarWidth.value, rightSidebarWidth.value);
+        onPaneCloseRequest(side);
+        void nextTick(() => syncViewportMetrics());
+      } else {
+        storePaneWidth(side, side === "left" ? leftSidebarWidth.value : rightSidebarWidth.value);
+        onPaneWidthsCommit(leftSidebarWidth.value, rightSidebarWidth.value);
+      }
     }
+    paneResizeMoved = false;
   }
 
   function adjustPaneWidthByKeyboard(side: PaneResizeSide, delta: number) {
@@ -282,6 +348,8 @@ export function useChatPanes(options: UseChatPanesOptions) {
     leftPaneVisibleWidth,
     rightPaneVisibleWidth,
     activePaneResizeSide,
+    collapsePreviewSide,
+    collapsePreviewWidth,
     clampPaneWidth,
     setPaneWidth,
     startPaneResize,
