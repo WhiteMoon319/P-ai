@@ -273,6 +273,9 @@ fn remap_legacy_api_config_id_to_endpoint(config: &AppConfig, raw_id: &str) -> S
     if trimmed.is_empty() {
         return String::new();
     }
+    if is_model_role_api_config_id(trimmed) {
+        return trimmed.to_string();
+    }
     if config.api_configs.iter().any(|api| api.id == trimmed) {
         return trimmed.to_string();
     }
@@ -876,12 +879,14 @@ fn normalize_departments(config: &mut AppConfig) {
         .unwrap_or_default();
     let mut out = Vec::<DepartmentConfig>::new();
     let mut seen_ids = std::collections::HashSet::<String>::new();
-    let valid_text_chat_api_ids = config
+    let mut valid_text_chat_api_ids = config
         .api_configs
         .iter()
         .filter(|a| is_text_chat_api(a))
         .map(|a| a.id.clone())
         .collect::<std::collections::HashSet<_>>();
+    valid_text_chat_api_ids.insert(MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string());
+    valid_text_chat_api_ids.insert(MODEL_ROLE_QUICK_API_CONFIG_ID.to_string());
     for raw in &config.departments {
         let id = raw.id.trim().to_string();
         if id.is_empty() {
@@ -896,12 +901,8 @@ fn normalize_departments(config: &mut AppConfig) {
             .map(|id| remap_legacy_api_config_id_to_endpoint(config, &id))
             .filter(|id| valid_text_chat_api_ids.contains(id))
             .collect::<Vec<_>>();
-        if api_config_ids.is_empty()
-            && !raw.api_config_id.trim().is_empty()
-            && !fallback_api_id.trim().is_empty()
-            && raw.id == REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID
-        {
-            api_config_ids.push(fallback_api_id.clone());
+        if api_config_ids.is_empty() && !fallback_api_id.trim().is_empty() {
+            api_config_ids.push(MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string());
         }
         let api_config_id = api_config_ids
             .first()
@@ -961,18 +962,18 @@ fn normalize_departments(config: &mut AppConfig) {
     }
 
     if !out.iter().any(|item| item.is_built_in_assistant || item.id == ASSISTANT_DEPARTMENT_ID) {
-        out.push(default_assistant_department(&fallback_api_id));
+        out.push(default_assistant_department(MODEL_ROLE_EXPERT_API_CONFIG_ID));
     }
     let injected_missing_deputy =
         !out.iter().any(|item| item.id == DEPUTY_DEPARTMENT_ID);
     if injected_missing_deputy {
-        out.push(default_deputy_department(&fallback_api_id));
+        out.push(default_deputy_department(MODEL_ROLE_EXPERT_API_CONFIG_ID));
     }
     if !out
         .iter()
         .any(|item| item.id == REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID)
     {
-        out.push(default_remote_customer_service_department(&fallback_api_id));
+        out.push(default_remote_customer_service_department(MODEL_ROLE_EXPERT_API_CONFIG_ID));
     }
 
     let normalize_department_api_bindings =
@@ -982,7 +983,11 @@ fn normalize_departments(config: &mut AppConfig) {
                 .map(|id| remap_legacy_api_config_id_to_endpoint(config, &id))
                 .filter(|id| valid_text_chat_api_ids.contains(id))
                 .collect::<Vec<_>>();
-            item.api_config_ids = ids;
+            item.api_config_ids = if ids.is_empty() && !fallback_api_id.trim().is_empty() {
+                vec![MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string()]
+            } else {
+                ids
+            };
             item.api_config_id = item.api_config_ids.first().cloned().unwrap_or_default();
         };
 
@@ -1001,7 +1006,7 @@ fn normalize_departments(config: &mut AppConfig) {
             }
         } else if item.id == DEPUTY_DEPARTMENT_ID {
             item.is_deputy = false;
-            let defaults = default_deputy_department(&fallback_api_id);
+            let defaults = default_deputy_department(MODEL_ROLE_EXPERT_API_CONFIG_ID);
             item.name = defaults.name;
             item.summary = defaults.summary;
             item.guide = defaults.guide;
@@ -1067,7 +1072,10 @@ fn normalize_departments(config: &mut AppConfig) {
     }
     config.departments = out;
     if let Some(dept) = assistant_department(config) {
-        config.assistant_department_api_config_id = department_primary_api_config_id(dept);
+        let primary_id = department_primary_api_config_id(dept);
+        if !is_model_role_api_config_id(&primary_id) {
+            config.assistant_department_api_config_id = primary_id;
+        }
     }
 }
 
@@ -1566,6 +1574,8 @@ fn resolve_selected_api_config(
         .map(str::trim)
         .filter(|v| !v.is_empty())
         .unwrap_or(app_config.assistant_department_api_config_id.as_str());
+    let target_id = resolve_model_role_api_config_id(app_config, target_id)
+        .unwrap_or_else(|| app_config.assistant_department_api_config_id.trim().to_string());
 
     if let Some(found) = app_config.api_configs.iter().find(|p| p.id == target_id) {
         return Some(found.clone());

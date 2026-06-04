@@ -300,14 +300,23 @@
           "howToMissing": "去「LLM」頁面新增一個配置，填好連結、API Key、模型名，並確保開啟文字能力。",
           "action": "去設定 LLM"
         },
-        "assistantDepartment": {
-          "title": "主部門驅動模型",
-          "summary": "主部門必須綁定至少一個驅動模型，否則助理無法正常工作。",
-          "currentOk": "主部門已經綁定驅動模型鏈：{names}",
-          "currentMissing": "主部門還沒有綁定任何可用驅動模型。",
-          "howToOk": "如果你希望更穩，可以繼續在主部門裡增加候選模型，失敗時會依序往後嘗試。",
-          "howToMissing": "去「部門」頁面，選中主部門，然後給它新增至少一個驅動模型。",
-          "action": "去設定部門"
+        "expertModel": {
+          "title": "專家模型",
+          "summary": "主要對話和專家任務預設使用這裡。",
+          "currentOk": "已設定：{name}",
+          "currentMissing": "尚未設定專家模型。",
+          "howToOk": "其他可選模型位置預設會優先使用專家模型。",
+          "howToMissing": "去「對話」頁面，在模型分工裡選擇專家模型。",
+          "action": "去設定模型分工"
+        },
+        "quickModel": {
+          "title": "快速模型",
+          "summary": "工具審查、聯絡人秘書等輕量流程預設使用這裡。",
+          "currentOk": "已設定：{name}",
+          "currentMissing": "尚未設定快速模型。",
+          "howToOk": "輕量固定流程會直接使用快速模型。",
+          "howToMissing": "去「對話」頁面，在模型分工裡選擇快速模型。",
+          "action": "去設定模型分工"
         },
         "voice": {
           "title": "語音辨識",
@@ -657,13 +666,24 @@
       "previewTitle": "關係圖預覽",
       "previewHint": "下方使用 Mermaid 自動排布所有部門關係，上級在上，下級在下。"
     },
+    "modelRoles": {
+      "expert": "專家模型",
+      "quick": "快速模型"
+    },
     "chatSettings": {
       "chatLlmProvider": "助理部門驅動模型",
-      "visionApi": "图转文AI（可选）",
-      "visionApiHint": "僅當目前驅動模型不支援圖片輸入時，才會使用這裡配置的圖轉文 AI 把圖片轉成文字；驅動模型支援圖片時會直接發送圖片。",
-      "toolReviewApi": "快速模型（可選）",
-      "toolReviewApiHint": "用於處理簡短、輕量、追求速度的任務。目前預定包括三類功能：工具評估、標題生成、遠端聯絡人離場觀測。\n推薦使用 token 計費的模型，不要使用次數計費的模型。",
-      "sttTitle": "語音轉寫（STT）",
+      "defaultModelsTitle": "模型分工",
+      "defaultModelsHint": "這裡設定各類預設模型，其他地方沒設定時優先使用這裡。",
+      "visionApi": "圖轉文 AI（可選）",
+      "visionApiHint": "主模型不支援圖片且未單獨指定時，優先用這裡。",
+      "toolReviewApi": "快速模型",
+      "toolReviewApiHint": "輕量任務未單獨指定時，優先用這裡。",
+      "expertChatModelTitle": "專家模型",
+      "expertChatModelStatus": "即將支援",
+      "expertChatModelPlaceholder": "尚未啟用",
+      "expertChatModelHint": "主要對話預設用這裡，專家任務未單獨指定時也優先用這裡。",
+      "sttTitle": "語音轉文字模型",
+      "sttHint": "未單獨指定語音轉文字時，優先使用這裡。",
       "sttLocalWebSpeech": "本地（Web Speech）",
       "sttAutoSend": "完成後發送",
       "noVision": "不配置",

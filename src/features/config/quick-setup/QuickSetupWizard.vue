@@ -352,6 +352,7 @@ import { useAvatarCache } from "../../chat/composables/use-avatar-cache";
 import { isDarkAppTheme, useAppTheme } from "../../shell/composables/use-app-theme";
 import { defaultToolBindings } from "../utils/builtin-tools";
 import { normalizeApiRequestFormat } from "../utils/api-request-format";
+import { MODEL_ROLE_EXPERT_API_CONFIG_ID } from "../utils/model-role-options";
 import { hasUsableTextLlm } from "./usable-text-llm";
 
 type StepId = "voice-theme" | "llm" | "style" | "identity" | "workspace" | "hotkey" | "finish" | "advanced-rerank" | "advanced-embedding" | "advanced-stt";
@@ -1026,11 +1027,12 @@ function applyLlmDraft() {
   const endpointId = upsertProvider(llmDraft, { providerId: QUICK_LLM_PROVIDER_ID, modelId: QUICK_LLM_MODEL_ID });
   config.selectedApiConfigId = endpointId;
   config.assistantDepartmentApiConfigId = endpointId;
+  config.toolReviewApiConfigId = endpointId;
   const department = assistantDepartment();
   if (department) {
     department.name = identityDraft.departmentName.trim() || department.name;
-    department.apiConfigId = endpointId;
-    department.apiConfigIds = [endpointId];
+    department.apiConfigId = MODEL_ROLE_EXPERT_API_CONFIG_ID;
+    department.apiConfigIds = [MODEL_ROLE_EXPERT_API_CONFIG_ID];
     department.updatedAt = new Date().toISOString();
   }
 }

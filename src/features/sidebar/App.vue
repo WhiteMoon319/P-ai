@@ -59,7 +59,7 @@
       @stop="stop"
       @remove-clipboard-image="removeClipboardImage"
       @load-prev-block="loadPrevBlock"
-      @update:conversation-preferred-api-config-id="selectChatModel"
+      @update:conversation-preferred-api-config-id="selectConversationPreferredModel"
       @update-workspace-access="selectWorkspaceAccess"
       @recall-turn="recallTurn"
       @confirm-plan="confirmPlan"
@@ -1009,12 +1009,12 @@ function applyModelPayload(payload: SidebarModelPayload) {
   chatModelOptions.value = Array.isArray(payload.chatModelOptions) ? payload.chatModelOptions : [];
 }
 
-async function selectChatModel(apiConfigId: string) {
+async function selectConversationPreferredModel(apiConfigId: string) {
   const nextId = String(apiConfigId || "").trim();
   if (!activeConversationId.value || nextId === preferredChatModelId.value) return;
   const previousId = conversationCallPrimaryApiConfigId.value;
   const previousPreferredId = preferredChatModelId.value;
-  console.info("[会话模型] VS Code sidebar 切换首选模型", {
+  console.info("[会话首选模型] VS Code sidebar 切换会话首选模型", {
     conversationId: activeConversationId.value,
     preferredApiConfigId: nextId || null,
   });
@@ -1027,12 +1027,12 @@ async function selectChatModel(apiConfigId: string) {
     });
     applyModelPayload(result);
     if (busy.value) {
-      transport.errorText.value = "模型已切换，将在下一次调度开始时生效。";
+      transport.errorText.value = "会话首选模型已切换，将在下一次调度开始时生效。";
     }
   } catch (error) {
     conversationCallPrimaryApiConfigId.value = previousId;
     preferredChatModelId.value = previousPreferredId;
-    transport.errorText.value = String(error || "切换模型失败");
+    transport.errorText.value = String(error || "切换会话首选模型失败");
   }
 }
 

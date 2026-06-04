@@ -1,5 +1,6 @@
 import { computed } from "vue";
 import type { ApiRequestFormat, AppConfig } from "../../../types/app";
+import { isModelRoleApiConfigId, resolveModelRoleApiConfigId } from "../../config/utils/model-role-options";
 
 export function useChatConfigDerivedState(config: AppConfig) {
   const TEXT_REQUEST_FORMATS = new Set<ApiRequestFormat>([
@@ -71,7 +72,7 @@ export function useChatConfigDerivedState(config: AppConfig) {
     department?: { id?: string; isBuiltInAssistant?: boolean; apiConfigId?: string; apiConfigIds?: string[] } | null,
   ): string {
     const directId = departmentPrimaryApiConfigId(department);
-    if (directId) return directId;
+    if (directId) return resolveModelRoleApiConfigId(directId, config);
     if (department?.id === "assistant-department" || department?.isBuiltInAssistant) {
       return String(config.assistantDepartmentApiConfigId || "").trim();
     }
@@ -87,8 +88,10 @@ export function useChatConfigDerivedState(config: AppConfig) {
     if (!nextId) return false;
     const next = departmentOrderedApiConfigIds(department);
     if ((next[0] || "") === nextId) {
-      config.selectedApiConfigId = nextId;
-      if (department.id === "assistant-department" || department.isBuiltInAssistant) {
+      if (!isModelRoleApiConfigId(nextId)) {
+        config.selectedApiConfigId = nextId;
+      }
+      if ((department.id === "assistant-department" || department.isBuiltInAssistant) && !isModelRoleApiConfigId(nextId)) {
         config.assistantDepartmentApiConfigId = nextId;
       }
       return false;
@@ -103,10 +106,12 @@ export function useChatConfigDerivedState(config: AppConfig) {
     department.apiConfigIds = deduped;
     department.apiConfigId = deduped[0] || "";
     department.updatedAt = new Date().toISOString();
-    if (department.id === "assistant-department" || department.isBuiltInAssistant) {
+    if ((department.id === "assistant-department" || department.isBuiltInAssistant) && !isModelRoleApiConfigId(department.apiConfigId)) {
       config.assistantDepartmentApiConfigId = department.apiConfigId;
     }
-    config.selectedApiConfigId = nextId;
+    if (!isModelRoleApiConfigId(nextId)) {
+      config.selectedApiConfigId = nextId;
+    }
     return true;
   }
 

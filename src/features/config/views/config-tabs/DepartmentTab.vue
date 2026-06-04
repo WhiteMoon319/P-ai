@@ -144,7 +144,7 @@
                     :value="apiId"
                     @change="updateDepartmentApiConfigAt(idx, ($event.target as HTMLSelectElement).value)"
                   >
-                    <option value="">{{ t("config.memory.notConfigured") }}</option>
+                    <option v-for="role in availableDepartmentRoleOptionsForIndex(idx)" :key="role.id" :value="role.id">{{ role.name }}</option>
                     <option v-for="api in availableDepartmentApiConfigsForIndex(idx)" :key="api.id" :value="api.id">{{ api.name }}</option>
                   </select>
 
@@ -182,7 +182,7 @@
                 <button
                   class="btn btn-sm"
                   type="button"
-                  :disabled="remainingDepartmentApiConfigs.length <= 0"
+                  :disabled="remainingDepartmentRoleOptions.length <= 0 && remainingDepartmentApiConfigs.length <= 0"
                   @click="addDepartmentApiConfig"
                 >
                   {{ t("config.department.addModel") }}
@@ -415,6 +415,7 @@ import {
 } from "../../utils/department-basic-editor";
 import { validateDepartmentConfig } from "../../utils/department-validation";
 import { normalizeDepartmentChildIds } from "../../utils/department-graph";
+import { MODEL_ROLE_EXPERT_API_CONFIG_ID, MODEL_ROLE_QUICK_API_CONFIG_ID, isModelRoleApiConfigId } from "../../utils/model-role-options";
 import { EXPLORER_DEPARTMENT_DEFAULT, REMOTE_CUSTOMER_SERVICE_DEPARTMENT_DEFAULT } from "../../constants/department-defaults";
 import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
 
@@ -557,12 +558,20 @@ const selectedDepartmentIsPrivateWorkspace = computed(() => selectedDepartment.v
 const textDepartmentApiConfigs = computed(() =>
   props.apiConfigs.filter((api) => !!api.enableText && isTextRequestFormat(api.requestFormat)),
 );
+const departmentRoleApiConfigOptions = computed(() => [
+  { id: MODEL_ROLE_EXPERT_API_CONFIG_ID, name: roleModelDisplayName(MODEL_ROLE_EXPERT_API_CONFIG_ID) },
+  { id: MODEL_ROLE_QUICK_API_CONFIG_ID, name: roleModelDisplayName(MODEL_ROLE_QUICK_API_CONFIG_ID) },
+]);
 const selectedDepartmentApiConfigIds = computed(() =>
   currentDepartmentApiConfigIdsForEditor(selectedDepartment.value),
 );
 const remainingDepartmentApiConfigs = computed(() => {
   const selectedIds = new Set(selectedDepartmentApiConfigIds.value);
   return textDepartmentApiConfigs.value.filter((api) => !selectedIds.has(api.id));
+});
+const remainingDepartmentRoleOptions = computed(() => {
+  const selectedIds = new Set(selectedDepartmentApiConfigIds.value);
+  return departmentRoleApiConfigOptions.value.filter((role) => !selectedIds.has(role.id));
 });
 const departmentNameCounts = computed(() => {
   const counts = new Map<string, number>();
@@ -905,8 +914,8 @@ function addDepartment() {
     name: nextDepartmentName(),
     summary: "",
     guide: "",
-    apiConfigId: "",
-    apiConfigIds: [],
+    apiConfigId: MODEL_ROLE_EXPERT_API_CONFIG_ID,
+    apiConfigIds: [MODEL_ROLE_EXPERT_API_CONFIG_ID],
     agentIds: [],
     childDepartmentIds: defaultChildDepartmentIds,
     createdAt: now,
@@ -997,15 +1006,39 @@ function currentDepartmentApiConfigIds(target: DepartmentConfig | null | undefin
   return ids.map((id) => String(id || "").trim()).filter(Boolean);
 }
 
+function apiConfigName(apiConfigId: string): string {
+  const id = String(apiConfigId || "").trim();
+  if (!id) return "";
+  const apiConfig = textDepartmentApiConfigs.value.find((api) => String(api.id || "").trim() === id);
+  return String(apiConfig?.name || "").trim();
+}
+
+function roleModelDisplayName(roleId: string): string {
+  const roleLabel = roleId === MODEL_ROLE_QUICK_API_CONFIG_ID
+    ? t("config.modelRoles.quick")
+    : t("config.modelRoles.expert");
+  const concreteId = roleId === MODEL_ROLE_QUICK_API_CONFIG_ID
+    ? props.config.toolReviewApiConfigId
+    : props.config.assistantDepartmentApiConfigId;
+  const concreteName = apiConfigName(String(concreteId || "").trim());
+  return concreteName ? `${roleLabel}（${concreteName}）` : roleLabel;
+}
+
 function currentDepartmentApiConfigIdsForEditor(target: DepartmentConfig | null | undefined) {
   const ids = currentDepartmentApiConfigIds(target);
-  return ids.length > 0 ? Array.from(new Set(ids)) : [""];
+  return ids.length > 0 ? Array.from(new Set(ids)) : [MODEL_ROLE_EXPERT_API_CONFIG_ID];
 }
 
 function availableDepartmentApiConfigsForIndex(index: number) {
   const currentIds = currentDepartmentApiConfigIds(selectedDepartment.value);
   const currentId = currentIds[index];
   return textDepartmentApiConfigs.value.filter((api) => api.id === currentId || !currentIds.includes(api.id));
+}
+
+function availableDepartmentRoleOptionsForIndex(index: number) {
+  const currentIds = currentDepartmentApiConfigIds(selectedDepartment.value);
+  const currentId = currentIds[index];
+  return departmentRoleApiConfigOptions.value.filter((role) => role.id === currentId || !currentIds.includes(role.id));
 }
 
 function updateDepartmentApiConfigAt(index: number, apiId: string) {
@@ -1020,6 +1053,9 @@ function updateDepartmentApiConfigAt(index: number, apiId: string) {
     next[index] = trimmedApiId;
   }
   target.apiConfigIds = Array.from(new Set(next.filter(Boolean)));
+  if (target.apiConfigIds.length === 0) {
+    target.apiConfigIds = [MODEL_ROLE_EXPERT_API_CONFIG_ID];
+  }
   target.apiConfigId = target.apiConfigIds[0] || "";
   touchSelectedDepartment();
 }
@@ -1027,10 +1063,11 @@ function updateDepartmentApiConfigAt(index: number, apiId: string) {
 function addDepartmentApiConfig() {
   const target = selectedDepartment.value;
   if (!target) return;
+  const nextRole = remainingDepartmentRoleOptions.value[0];
   const nextApi = remainingDepartmentApiConfigs.value[0];
-  if (!nextApi) return;
+  if (!nextRole && !nextApi) return;
   const next = currentDepartmentApiConfigIds(target);
-  next.push(nextApi.id);
+  next.push(nextRole?.id || nextApi?.id || MODEL_ROLE_EXPERT_API_CONFIG_ID);
   target.apiConfigIds = next;
   target.apiConfigId = next[0] || "";
   touchSelectedDepartment();
@@ -1041,7 +1078,7 @@ function removeDepartmentApiConfigAt(index: number) {
   if (!target) return;
   const next = currentDepartmentApiConfigIds(target);
   next.splice(index, 1);
-  target.apiConfigIds = next;
+  target.apiConfigIds = next.length > 0 ? next : [MODEL_ROLE_EXPERT_API_CONFIG_ID];
   target.apiConfigId = target.apiConfigIds[0] || "";
   touchSelectedDepartment();
 }
@@ -1114,7 +1151,9 @@ async function saveDepartments() {
   const assistantState = resolveAssistantDepartmentState(nextDepartments);
 
   props.config.departments = nextDepartments;
-  props.config.assistantDepartmentApiConfigId = assistantState.apiConfigId;
+  if (assistantState.apiConfigId && !isModelRoleApiConfigId(assistantState.apiConfigId)) {
+    props.config.assistantDepartmentApiConfigId = assistantState.apiConfigId;
+  }
 
   if (assistantState.agentId && assistantState.agentId !== previousAssistantAgentId) {
     emit("update:assistantDepartmentAssigneeId", assistantState.agentId);

@@ -3,6 +3,60 @@ mod git_ghost_snapshot;
 use git_ghost_snapshot::read_git_snapshot_record_from_provider_meta;
 use git_ghost_snapshot::restore_main_workspace_from_git_ghost_snapshot;
 
+fn conversation_preferred_model_repair_candidate(
+    config: &AppConfig,
+    conversation: &Conversation,
+) -> Option<String> {
+    let current = conversation
+        .preferred_api_config_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if let Some(resolved_current) = current
+        .and_then(|value| resolve_model_role_api_config_id(config, value))
+        .filter(|resolved_id| config.api_configs.iter().any(|api| api.id == *resolved_id && is_text_chat_api(api)))
+    {
+        return Some(resolved_current);
+    }
+
+    let department_primary_id = config
+        .departments
+        .iter()
+        .find(|department| department.id.trim() == conversation.department_id.trim())
+        .map(department_primary_api_config_id)
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| config.assistant_department_api_config_id.trim().to_string());
+    resolve_model_role_api_config_id(config, &department_primary_id)
+        .filter(|resolved_id| config.api_configs.iter().any(|api| api.id == *resolved_id && is_text_chat_api(api)))
+}
+
+fn repair_conversation_preferred_model_for_snapshot(
+    state: &AppState,
+    conversation: &Conversation,
+) -> Result<Option<String>, String> {
+    let config = state_read_config_cached(state)?;
+    let repaired = conversation_preferred_model_repair_candidate(&config, conversation);
+    let current = conversation
+        .preferred_api_config_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if repaired.as_deref() != current {
+        conversation_service().set_conversation_preferred_api_config_id(
+            state,
+            &conversation.id,
+            repaired.clone(),
+        )?;
+        runtime_log_info(format!(
+            "[会话首选模型] 完成，任务=加载快照自动修复，conversation_id={}，旧值={}，新值={}",
+            conversation.id,
+            current.unwrap_or(""),
+            repaired.as_deref().unwrap_or("")
+        ));
+    }
+    Ok(repaired)
+}
+
 #[tauri::command]
 fn switch_active_conversation_snapshot(
     input: SwitchActiveConversationSnapshotInput,
@@ -11,7 +65,11 @@ fn switch_active_conversation_snapshot(
     let started_at = std::time::Instant::now();
     let result =
         conversation_service().switch_active_conversation_snapshot(state.inner(), &input)?;
-    let snapshot = result.snapshot;
+    let mut snapshot = result.snapshot;
+    if let Ok(conversation) = state_read_conversation_cached(state.inner(), &snapshot.conversation_id) {
+        snapshot.preferred_api_config_id =
+            repair_conversation_preferred_model_for_snapshot(state.inner(), &conversation)?;
+    }
     let unarchived_conversations = result.unarchived_conversations;
     runtime_log_info(format!(
         "[前台重型快照] 完成，conversation_id={}，message_count={}，has_more_history={}，summary_count={}，duration_ms={}",
@@ -54,10 +112,11 @@ fn get_foreground_conversation_light_snapshot(
         .mark_conversation_read(state.inner(), &snapshot.conversation_id)?
         .conversation
     {
+        snapshot.preferred_api_config_id =
+            repair_conversation_preferred_model_for_snapshot(state.inner(), &conversation)?;
         snapshot.runtime_state = unarchived_conversation_runtime_state(state.inner(), &conversation.id);
         snapshot.current_todo = conversation_current_todo_text(&conversation);
         snapshot.current_todos = conversation.current_todos;
-        snapshot.preferred_api_config_id = conversation.preferred_api_config_id;
     }
     runtime_log_info(format!(
         "[前台轻量快照] 完成，conversation_id={}，message_count={}，has_more_history={}，duration_ms={}",
@@ -153,12 +212,14 @@ fn set_conversation_preferred_model(
     runtime_log_info(format!(
         "[会话模型] 开始，任务=切换会话首选模型，入口=tauri，会话ID={}，api_config_id={}",
         conversation_id,
-        preferred_api_config_id.as_deref().unwrap_or("跟随部门")
+        preferred_api_config_id.as_deref().unwrap_or("部门模型")
     ));
 
     if let Some(api_config_id) = preferred_api_config_id.as_deref() {
         let config = state_read_config_cached(state.inner())?;
-        let Some(api_config) = config.api_configs.iter().find(|api| api.id == api_config_id) else {
+        let resolved_api_config_id = resolve_model_role_api_config_id(&config, api_config_id)
+            .ok_or_else(|| format!("会话首选模型角色未配置：api_config_id={api_config_id}"))?;
+        let Some(api_config) = config.api_configs.iter().find(|api| api.id == resolved_api_config_id) else {
             return Err(format!("会话首选模型不存在：api_config_id={api_config_id}"));
         };
         if !api_config.enable_text || !api_config.request_format.is_chat_text() {
@@ -182,7 +243,7 @@ fn set_conversation_preferred_model(
     runtime_log_info(format!(
         "[会话模型] 完成，任务=切换会话首选模型，会话ID={}，api_config_id={}",
         conversation_id,
-        preferred_api_config_id.as_deref().unwrap_or("跟随部门")
+        preferred_api_config_id.as_deref().unwrap_or("部门模型")
     ));
 
     Ok(SetConversationPreferredModelOutput {

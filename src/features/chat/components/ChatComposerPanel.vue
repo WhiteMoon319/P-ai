@@ -256,7 +256,7 @@
                   type="button"
                   class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm hover:bg-base-200 transition-colors truncate"
                   :class="{ 'bg-primary/10': item.id === activeModelOptionId }"
-                  @click="selectChatModel(item.id)"
+                  @click="selectConversationPreferredModel(item.id)"
                 >
                   {{ item.name }}
                 </button>
@@ -854,7 +854,7 @@ watch(compactModelButton, (compact) => {
   }
 });
 
-function selectChatModel(id: string) {
+function selectConversationPreferredModel(id: string) {
   const nextId = String(id || "").trim();
   if (!nextId || nextId === localModelOptionId.value) return;
   localModelSelectionTouched.value = true;

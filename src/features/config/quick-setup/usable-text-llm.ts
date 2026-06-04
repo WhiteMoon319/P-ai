@@ -1,4 +1,5 @@
 import type { ApiConfigItem, AppConfig } from "../../../types/app";
+import { resolveModelRoleApiConfigId } from "../utils/model-role-options";
 
 export function isTextRequestFormat(value: unknown): boolean {
   return ![
@@ -41,5 +42,5 @@ export function hasUsableTextLlm(config: AppConfig): boolean {
   const ids = Array.isArray(assistant?.apiConfigIds) && assistant?.apiConfigIds.length
     ? assistant.apiConfigIds
     : (assistant?.apiConfigId ? [assistant.apiConfigId] : []);
-  return ids.some((id) => usableIds.has(String(id || "").trim()));
+  return ids.some((id) => usableIds.has(resolveModelRoleApiConfigId(id, config)));
 }

@@ -236,10 +236,6 @@ onMounted(() => {
   void loadWelcomeRuntimeState();
 });
 
-const assistantDepartment = computed(() =>
-  props.config.departments.find((item) => item.id === "assistant-department" || item.isBuiltInAssistant),
-);
-
 const cards = computed(() => {
   const apiConfigs = props.config.apiConfigs || [];
   const textModel = firstTextModel(apiConfigs);
@@ -247,13 +243,8 @@ const cards = computed(() => {
   const sttModel = firstSttModel(apiConfigs);
   const embeddingModel = firstEmbeddingModel(apiConfigs);
   const rerankModel = firstRerankModel(apiConfigs);
-  const assistant = assistantDepartment.value;
-  const assistantModelIds = Array.isArray(assistant?.apiConfigIds) && assistant?.apiConfigIds.length
-    ? assistant.apiConfigIds
-    : (assistant?.apiConfigId ? [assistant.apiConfigId] : []);
-  const assistantModels = assistantModelIds
-    .map((id) => apiConfigs.find((api) => api.id === id && api.enableText))
-    .filter((item): item is ApiConfigItem => !!item);
+  const expertModel = apiConfigs.find((api) => api.id === String(props.config.assistantDepartmentApiConfigId || "").trim() && api.enableText) ?? null;
+  const quickModel = apiConfigs.find((api) => api.id === String(props.config.toolReviewApiConfigId || "").trim() && api.enableText) ?? null;
   const customPersonaCount = Math.max(0, (props.personas || []).filter((item) => !item.isBuiltInUser && !item.isBuiltInSystem).length);
   const customDepartmentCount = Math.max(0, (props.config.departments || []).filter((item) => !item.isBuiltInAssistant).length);
   const enabledMcpCount = Math.max(0, (props.config.mcpServers || []).filter((item) => item.enabled).length);
@@ -310,16 +301,28 @@ const cards = computed(() => {
       targetTab: "api" as ConfigTab,
     },
     {
-      id: "assistant-department-model",
-      title: t("config.welcome.cards.assistantDepartment.title"),
+      id: "expert-model",
+      title: t("config.welcome.cards.expertModel.title"),
       level: "required" as WelcomeCardLevel,
-      ok: assistantModels.length > 0,
-      summary: t("config.welcome.cards.assistantDepartment.summary"),
-      current: assistantModels.length > 0
-        ? t("config.welcome.cards.assistantDepartment.currentOk", { names: assistantModels.map((item) => item.name).join(" -> ") })
-        : t("config.welcome.cards.assistantDepartment.currentMissing"),
-      action: t("config.welcome.cards.assistantDepartment.action"),
-      targetTab: "department" as ConfigTab,
+      ok: !!expertModel,
+      summary: t("config.welcome.cards.expertModel.summary"),
+      current: expertModel
+        ? t("config.welcome.cards.expertModel.currentOk", { name: expertModel.name })
+        : t("config.welcome.cards.expertModel.currentMissing"),
+      action: t("config.welcome.cards.expertModel.action"),
+      targetTab: "chatSettings" as ConfigTab,
+    },
+    {
+      id: "quick-model",
+      title: t("config.welcome.cards.quickModel.title"),
+      level: "required" as WelcomeCardLevel,
+      ok: !!quickModel,
+      summary: t("config.welcome.cards.quickModel.summary"),
+      current: quickModel
+        ? t("config.welcome.cards.quickModel.currentOk", { name: quickModel.name })
+        : t("config.welcome.cards.quickModel.currentMissing"),
+      action: t("config.welcome.cards.quickModel.action"),
+      targetTab: "chatSettings" as ConfigTab,
     },
     {
       id: "rerank",

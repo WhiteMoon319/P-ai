@@ -1,4 +1,5 @@
 import { invokeTauri } from "../../../services/tauri-api";
+import { resolveModelRoleApiConfigId } from "../../config/utils/model-role-options";
 
 export function useChatWindowLocalTools(bindings: Record<string, any>) {
   const preferredModelPersistPending = new Map<string, Promise<boolean>>();
@@ -78,18 +79,19 @@ export function useChatWindowLocalTools(bindings: Record<string, any>) {
 
   async function updateConversationPreferredApiConfig(value: string) {
     const nextId = String(value || "").trim();
-    if (nextId && !bindings.config.apiConfigs.some((item: any) => item.id === nextId && item.enableText)) {
-      bindings.setStatus("当前模型不可用，请重新选择。");
+    const resolvedId = resolveModelRoleApiConfigId(nextId, bindings.config);
+    if (nextId && !bindings.config.apiConfigs.some((item: any) => item.id === resolvedId && item.enableText)) {
+      bindings.setStatus("当前会话首选模型不可用，请重新选择。");
       return;
     }
     const conversationId = String(bindings.currentChatConversationId.value || "").trim();
     if (!conversationId) {
-      bindings.setStatus("当前没有可切换模型的会话。");
+      bindings.setStatus("当前没有可切换会话首选模型的会话。");
       return;
     }
     const previousId = String(bindings.currentChatPreferredApiConfigId?.value || "").trim();
     if (previousId === nextId) return;
-    console.info("[会话模型] 前端切换首选模型", {
+    console.info("[会话首选模型] 前端切换会话首选模型", {
       conversationId,
       preferredApiConfigId: nextId || null,
       detached: !!bindings.detachedChatWindow.value,
@@ -108,7 +110,7 @@ export function useChatWindowLocalTools(bindings: Record<string, any>) {
           },
         });
         if (bindings.chatting.value) {
-          bindings.setStatus("模型已切换，将在下一次调度开始时生效。");
+          bindings.setStatus("会话首选模型已切换，将在下一次调度开始时生效。");
         }
         return true;
       } catch (error) {

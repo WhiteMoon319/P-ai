@@ -1,47 +1,57 @@
 <template>
   <div class="grid gap-3">
-    <!-- 视觉API -->
     <div class="card bg-base-100 border border-base-300">
-      <div class="card-body p-4">
-        <h3 class="card-title text-base mb-3">{{ t("config.chatSettings.visionApi") }}</h3>
-        <select :value="config.visionApiConfigId ?? ''" class="select select-bordered select-sm" @change="onVisionSelectChange">
-          <option value="">{{ t("config.chatSettings.noVision") }}</option>
-          <option v-for="a in imageCapableApiConfigs" :key="a.id" :value="a.id">{{ a.name }}</option>
-        </select>
-        <div class="mt-3 text-xs opacity-70">{{ t("config.chatSettings.visionApiHint") }}</div>
-      </div>
-    </div>
+      <div class="card-body p-4 gap-4">
+        <div>
+          <h3 class="card-title text-base">{{ t("config.chatSettings.defaultModelsTitle") }}</h3>
+          <div class="mt-1 text-xs opacity-70">{{ t("config.chatSettings.defaultModelsHint") }}</div>
+        </div>
+        <div class="grid gap-5">
+          <div>
+            <h4 class="text-sm font-semibold">{{ t("config.chatSettings.visionApi") }}</h4>
+            <select :value="config.visionApiConfigId ?? ''" class="select select-bordered select-sm mt-3 w-full" @change="onVisionSelectChange">
+              <option value="">{{ t("config.chatSettings.noVision") }}</option>
+              <option v-for="a in imageCapableApiConfigs" :key="a.id" :value="a.id">{{ a.name }}</option>
+            </select>
+            <div class="mt-3 text-xs opacity-70">{{ t("config.chatSettings.visionApiHint") }}</div>
+          </div>
 
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body p-4">
-        <h3 class="card-title text-base mb-3">{{ t("config.chatSettings.toolReviewApi") }}</h3>
-        <select :value="config.toolReviewApiConfigId ?? ''" class="select select-bordered select-sm" @change="onToolReviewSelectChange">
-          <option value="">{{ t("config.chatSettings.noToolReview") }}</option>
-          <option v-for="a in textCapableApiConfigs" :key="a.id" :value="a.id">{{ a.name }}</option>
-        </select>
-        <div class="mt-3 text-xs opacity-70 whitespace-pre-line">{{ t("config.chatSettings.toolReviewApiHint") }}</div>
-      </div>
-    </div>
+          <div>
+            <h4 class="text-sm font-semibold">{{ t("config.chatSettings.toolReviewApi") }}</h4>
+            <select :value="config.toolReviewApiConfigId ?? ''" class="select select-bordered select-sm mt-3 w-full" @change="onToolReviewSelectChange">
+              <option v-for="a in textCapableApiConfigs" :key="a.id" :value="a.id">{{ a.name }}</option>
+            </select>
+            <div class="mt-3 text-xs opacity-70">{{ t("config.chatSettings.toolReviewApiHint") }}</div>
+          </div>
 
-    <!-- 语音转写（STT） -->
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body p-4">
-        <h3 class="card-title text-base mb-3">{{ t("config.chatSettings.sttTitle") }}</h3>
-        <div class="flex items-center gap-2">
-          <select :value="config.sttApiConfigId ?? ''" class="select select-bordered select-sm flex-1" @change="onSttSelectChange">
-            <option value="">{{ t("config.chatSettings.sttLocalWebSpeech") }}</option>
-            <option v-for="a in sttCapableApiConfigs" :key="a.id" :value="a.id">{{ a.name }}</option>
-          </select>
-          <label class="inline-flex cursor-pointer items-center gap-1 py-0">
-            <span class="text-sm">{{ t("config.chatSettings.sttAutoSend") }}</span>
-            <input
-              :checked="!!config.sttAutoSend"
-              type="checkbox"
-              class="toggle toggle-sm"
-              :disabled="!config.sttApiConfigId"
-              @change="onSttAutoSendChange"
-            />
-          </label>
+          <div>
+            <h4 class="text-sm font-semibold">{{ t("config.chatSettings.expertChatModelTitle") }}</h4>
+            <select :value="config.assistantDepartmentApiConfigId || ''" class="select select-bordered select-sm mt-3 w-full" @change="onExpertSelectChange">
+              <option v-for="a in textCapableApiConfigs" :key="a.id" :value="a.id">{{ a.name }}</option>
+            </select>
+            <div class="mt-3 text-xs opacity-70">{{ t("config.chatSettings.expertChatModelHint") }}</div>
+          </div>
+
+          <div>
+            <h4 class="text-sm font-semibold">{{ t("config.chatSettings.sttTitle") }}</h4>
+            <div class="mt-3 flex items-center gap-2">
+              <select :value="config.sttApiConfigId ?? ''" class="select select-bordered select-sm flex-1" @change="onSttSelectChange">
+                <option value="">{{ t("config.chatSettings.sttLocalWebSpeech") }}</option>
+                <option v-for="a in sttCapableApiConfigs" :key="a.id" :value="a.id">{{ a.name }}</option>
+              </select>
+              <label class="inline-flex cursor-pointer items-center gap-1 py-0">
+                <span class="text-sm">{{ t("config.chatSettings.sttAutoSend") }}</span>
+                <input
+                  :checked="!!config.sttAutoSend"
+                  type="checkbox"
+                  class="toggle toggle-sm"
+                  :disabled="!config.sttApiConfigId"
+                  @change="onSttAutoSendChange"
+                />
+              </label>
+            </div>
+            <div class="mt-3 text-xs opacity-70">{{ t("config.chatSettings.sttHint") }}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -229,6 +239,13 @@ function onToolReviewSelectChange(event: Event) {
   props.config.toolReviewApiConfigId = ((event.target as HTMLSelectElement).value || undefined);
   emit("patchConversationApiSettings", {
     toolReviewApiConfigId: props.config.toolReviewApiConfigId ?? null,
+  });
+}
+
+function onExpertSelectChange(event: Event) {
+  props.config.assistantDepartmentApiConfigId = (event.target as HTMLSelectElement).value || "";
+  emit("patchConversationApiSettings", {
+    assistantDepartmentApiConfigId: props.config.assistantDepartmentApiConfigId,
   });
 }
 

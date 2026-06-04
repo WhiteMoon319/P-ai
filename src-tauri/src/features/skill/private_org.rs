@@ -185,6 +185,7 @@ fn default_private_department_api_config_id(base_config: &AppConfig) -> String {
     assistant_department(base_config)
         .map(|item| item.api_config_id.trim().to_string())
         .filter(|value| !value.is_empty())
+        .map(|_| MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string())
         .or_else(|| {
             let value = base_config.assistant_department_api_config_id.trim().to_string();
             if value.is_empty() { None } else { Some(value) }
@@ -416,10 +417,13 @@ fn load_private_departments_from_workspace(
             continue;
         }
         let invalid_api_config_id = api_config_ids.iter().find(|api_config_id| {
+            let Some(resolved_api_config_id) = resolve_model_role_api_config_id(base_config, api_config_id) else {
+                return true;
+            };
             !base_config
                 .api_configs
                 .iter()
-                .any(|api| api.id == **api_config_id && api.enable_text && api.request_format.is_chat_text())
+                .any(|api| api.id == resolved_api_config_id && api.enable_text && api.request_format.is_chat_text())
         });
         if let Some(invalid_api_config_id) = invalid_api_config_id {
             errors.push(WorkspaceLoadError::with_hint(

@@ -300,14 +300,23 @@
           "howToMissing": "Go to LLM, add a config, fill in base URL, API key, and model name, then make sure text is enabled.",
           "action": "Open LLM"
         },
-        "assistantDepartment": {
-          "title": "Primary Department Model",
-          "summary": "The primary department must have at least one driver model, otherwise the assistant cannot run normally.",
-          "currentOk": "The primary department currently uses this model chain: {names}",
-          "currentMissing": "The primary department does not have any usable driver model yet.",
-          "howToOk": "You can add more fallback models to make the primary department more stable.",
-          "howToMissing": "Go to Departments, select the primary department, and add at least one driver model.",
-          "action": "Open Departments"
+        "expertModel": {
+          "title": "Expert Model",
+          "summary": "Used by default for main chat and expert tasks.",
+          "currentOk": "Set to: {name}",
+          "currentMissing": "The expert model is not set yet.",
+          "howToOk": "Other selectable model fields default to the expert model.",
+          "howToMissing": "Open Chat settings and choose an expert model under Model Roles.",
+          "action": "Open Model Roles"
+        },
+        "quickModel": {
+          "title": "Fast Model",
+          "summary": "Used by default for tool review, contact secretary, and lightweight fixed flows.",
+          "currentOk": "Set to: {name}",
+          "currentMissing": "The fast model is not set yet.",
+          "howToOk": "Lightweight fixed flows will use the fast model directly.",
+          "howToMissing": "Open Chat settings and choose a fast model under Model Roles.",
+          "action": "Open Model Roles"
         },
         "voice": {
           "title": "Speech Recognition",
@@ -657,13 +666,24 @@
       "previewTitle": "Diagram Preview",
       "previewHint": "The Mermaid diagram below auto-arranges every department relation with parents above children."
     },
+    "modelRoles": {
+      "expert": "Expert Model",
+      "quick": "Fast Model"
+    },
     "chatSettings": {
       "chatLlmProvider": "Assistant Department Model",
-      "visionApi": "Vision API (Optional)",
-      "visionApiHint": "Used only when the active driving model does not support image input. If the driving model supports images, images are sent directly.",
-      "toolReviewApi": "Fast Model (Optional)",
-      "toolReviewApiHint": "Used for short, lightweight tasks where speed matters. The currently planned uses are tool assessment, title generation, and remote contact departure detection.\nA token-based model is recommended. Do not use a per-request priced model.",
-      "sttTitle": "Speech-to-Text (STT)",
+      "defaultModelsTitle": "Model Roles",
+      "defaultModelsHint": "Set the default model for each role here when nothing more specific is configured.",
+      "visionApi": "Image-to-Text AI (Optional)",
+      "visionApiHint": "Preferred when the main model lacks image support and no specific image model is set.",
+      "toolReviewApi": "Fast Model",
+      "toolReviewApiHint": "Preferred for lightweight tasks when no specific fast model is set.",
+      "expertChatModelTitle": "Expert Model",
+      "expertChatModelStatus": "Coming Soon",
+      "expertChatModelPlaceholder": "Not available yet",
+      "expertChatModelHint": "This is the default main chat model and is also preferred for expert tasks.",
+      "sttTitle": "Speech-to-Text Model",
+      "sttHint": "Used first when no STT model is set elsewhere.",
       "sttLocalWebSpeech": "Local (Web Speech)",
       "sttAutoSend": "Send on completion",
       "noVision": "Not set",

@@ -1,6 +1,7 @@
 import { computed } from "vue";
 import type { ChatMentionEntry } from "../../../types/app";
 import { departmentDirectChildIds } from "../../config/utils/department-graph";
+import { resolveModelRoleApiConfigId } from "../../config/utils/model-role-options";
 
 export function useChatPersonaConversationDerivedState(bindings: Record<string, any>) {
   const userPersona = computed(
@@ -49,8 +50,9 @@ export function useChatPersonaConversationDerivedState(bindings: Record<string, 
   const currentConversationPreferredApiConfigId = computed(() => {
     const apiConfigId = String(bindings.currentChatPreferredApiConfigId?.value || "").trim();
     if (!apiConfigId) return "";
-    return bindings.config.apiConfigs.some((item: any) => item.id === apiConfigId && item.enableText)
-      ? apiConfigId
+    const resolvedId = resolveModelRoleApiConfigId(apiConfigId, bindings.config);
+    return bindings.config.apiConfigs.some((item: any) => item.id === resolvedId && item.enableText)
+      ? resolvedId
       : "";
   });
   const currentForegroundApiConfigIds = computed(() => {
@@ -66,7 +68,10 @@ export function useChatPersonaConversationDerivedState(bindings: Record<string, 
     },
   );
   const currentForegroundApiConfig = computed(
-    () => bindings.config.apiConfigs.find((a: any) => a.id === currentForegroundApiConfigId.value) ?? null,
+    () => {
+      const resolvedId = resolveModelRoleApiConfigId(currentForegroundApiConfigId.value, bindings.config);
+      return bindings.config.apiConfigs.find((a: any) => a.id === resolvedId) ?? null;
+    },
   );
   const currentForegroundPersona = computed(
     () =>
@@ -179,7 +184,10 @@ export function useChatPersonaConversationDerivedState(bindings: Record<string, 
 
       for (const department of boundDepartments) {
         const isCurrentRuntimeAgent = department.departmentId === currentDepartmentId && agentId === currentAgentId;
-        const hasTextModel = department.apiConfigIds.some((apiConfigId: string) => textCapableApiIds.has(apiConfigId));
+        const hasTextModel = department.apiConfigIds.some((apiConfigId: string) => {
+          const resolvedId = resolveModelRoleApiConfigId(apiConfigId, bindings.config);
+          return textCapableApiIds.has(resolvedId);
+        });
         let mentionable = true;
         let unavailableReason = "";
         if (agentId === "user-persona" || persona.isBuiltInUser) {

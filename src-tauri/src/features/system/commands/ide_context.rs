@@ -348,16 +348,12 @@ fn ide_chat_model_payload_for_conversation(state: &AppState, conversation: &Conv
         .map(department_primary_api_config_id)
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| config.assistant_department_api_config_id.trim().to_string());
-    let preferred_id = conversation
-        .preferred_api_config_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .filter(|value| config.api_configs.iter().any(|api| api.id == *value && is_text_chat_api(api)))
-        .map(ToOwned::to_owned);
+    let resolved_department_primary_id = resolve_model_role_api_config_id(&config, &department_primary_id)
+        .unwrap_or_else(|| department_primary_id.clone());
+    let preferred_id = repair_conversation_preferred_model_for_snapshot(state, conversation)?;
     let conversation_call_primary_id = preferred_id
         .as_deref()
-        .unwrap_or(department_primary_id.as_str())
+        .unwrap_or(resolved_department_primary_id.as_str())
         .to_string();
     let options = config
         .api_configs
@@ -1766,16 +1762,18 @@ fn ide_chat_select_model(state: &AppState, _app: &AppHandle, params: Value) -> R
     runtime_log_info(format!(
         "[会话模型] 开始，任务=切换会话首选模型，入口=vscode_sidebar，会话ID={}，api_config_id={}",
         conversation_id,
-        if api_config_id.is_empty() { "跟随部门" } else { api_config_id }
+        if api_config_id.is_empty() { "部门模型" } else { api_config_id }
     ));
     let preferred_api_config_id = if api_config_id.is_empty() {
         None
     } else {
         let config = state_read_config_cached(state)?;
+        let resolved_api_config_id = resolve_model_role_api_config_id(&config, api_config_id)
+            .ok_or_else(|| format!("Model role '{api_config_id}' is not configured."))?;
         let selected_api = config
             .api_configs
             .iter()
-            .find(|item| item.id.trim() == api_config_id)
+            .find(|item| item.id.trim() == resolved_api_config_id)
             .ok_or_else(|| format!("API config '{api_config_id}' not found."))?;
         if !is_text_chat_api(selected_api) {
             return Err(format!("API config '{api_config_id}' does not support chat text."));
@@ -1798,7 +1796,7 @@ fn ide_chat_select_model(state: &AppState, _app: &AppHandle, params: Value) -> R
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .unwrap_or("跟随部门")
+            .unwrap_or("部门模型")
     ));
     ide_chat_model_payload_for_conversation(state, &updated_conversation)
 }

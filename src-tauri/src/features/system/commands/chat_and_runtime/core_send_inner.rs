@@ -1087,12 +1087,14 @@ fn prepend_required_chat_api_id(
     candidate_api_ids: &mut Vec<String>,
     app_config: &AppConfig,
 ) -> Result<(), String> {
-    let Some(api_id) = api_id
+    let Some(raw_api_id) = api_id
         .map(str::trim)
         .filter(|value| !value.is_empty())
     else {
         return Ok(());
     };
+    let api_id = resolve_model_role_api_config_id(app_config, raw_api_id)
+        .ok_or_else(|| format!("模型角色未配置：api_config_id={raw_api_id}"))?;
 
     let Some(api_config) = app_config
         .api_configs
@@ -1111,7 +1113,7 @@ fn prepend_required_chat_api_id(
         ));
     }
 
-    if let Some(index) = candidate_api_ids.iter().position(|id| id == api_id) {
+    if let Some(index) = candidate_api_ids.iter().position(|id| id == &api_id) {
         if index > 0 {
             let existing_api_id = candidate_api_ids.remove(index);
             candidate_api_ids.insert(0, existing_api_id);
@@ -1119,7 +1121,7 @@ fn prepend_required_chat_api_id(
         return Ok(());
     }
 
-    candidate_api_ids.insert(0, api_id.to_string());
+    candidate_api_ids.insert(0, api_id);
     Ok(())
 }
 
@@ -1128,10 +1130,17 @@ fn prepend_optional_preferred_chat_api_id(
     candidate_api_ids: &mut Vec<String>,
     app_config: &AppConfig,
 ) -> Result<bool, String> {
-    let Some(preferred_api_id) = preferred_api_id
+    let Some(raw_preferred_api_id) = preferred_api_id
         .map(str::trim)
         .filter(|value| !value.is_empty())
     else {
+        return Ok(false);
+    };
+    let Some(preferred_api_id) = resolve_model_role_api_config_id(app_config, raw_preferred_api_id) else {
+        runtime_log_warn(format!(
+            "[会话模型] 跳过，任务=应用会话首选模型，原因=模型角色未配置，api_config_id={}",
+            raw_preferred_api_id
+        ));
         return Ok(false);
     };
 
@@ -1156,7 +1165,7 @@ fn prepend_optional_preferred_chat_api_id(
         return Ok(false);
     }
 
-    prepend_required_chat_api_id(Some(preferred_api_id), candidate_api_ids, app_config)?;
+    prepend_required_chat_api_id(Some(&preferred_api_id), candidate_api_ids, app_config)?;
     Ok(true)
 }
 
@@ -1907,13 +1916,16 @@ async fn send_chat_message_inner(
         let candidate_models_started = std::time::Instant::now();
         let mut candidate_api_ids = department_api_config_ids(effective_department)
             .into_iter()
-            .filter(|api_id| {
+            .filter_map(|api_id| {
+                let resolved_id = resolve_model_role_api_config_id(&app_config, &api_id)?;
                 app_config
                     .api_configs
                     .iter()
-                    .any(|api| api.id == *api_id && api.request_format.is_chat_text())
+                    .any(|api| api.id == resolved_id && api.request_format.is_chat_text())
+                    .then_some(resolved_id)
             })
             .collect::<Vec<_>>();
+        candidate_api_ids.dedup();
         if candidate_api_ids.is_empty() {
             let fallback = resolve_selected_api_config(&app_config, None)
                 .ok_or_else(|| "No API config configured. Please add one.".to_string())?;
@@ -1955,8 +1967,8 @@ async fn send_chat_message_inner(
                 .as_deref()
                 .or(runtime_main_conversation_id.as_deref())
                 .unwrap_or("未知"),
-            requested_api_config_id_snapshot.unwrap_or("无"),
-            conversation_preferred_api_config_id.as_deref().unwrap_or("跟随部门"),
+            requested_api_config_id_snapshot.unwrap_or("未指定"),
+            conversation_preferred_api_config_id.as_deref().unwrap_or("部门模型"),
             preferred_model_applied,
             candidate_api_ids.join(" -> ")
         ));

@@ -17,6 +17,8 @@ fn default_shell_workspace_access() -> String {
 const CODEX_AUTH_MODE_READ_LOCAL: &str = "read_local";
 const CODEX_AUTH_MODE_MANAGED_OAUTH: &str = "managed_oauth";
 const DEFAULT_CODEX_BASE_URL: &str = "https://chatgpt.com/backend-api/codex";
+const MODEL_ROLE_EXPERT_API_CONFIG_ID: &str = "role:expert";
+const MODEL_ROLE_QUICK_API_CONFIG_ID: &str = "role:quick";
 
 fn default_codex_auth_mode() -> String {
     CODEX_AUTH_MODE_READ_LOCAL.to_string()
@@ -288,11 +290,41 @@ fn built_in_department_rank(id: &str) -> i32 {
 }
 
 fn default_departments(api_config_id: &str) -> Vec<DepartmentConfig> {
+    let default_api_config_id = if api_config_id.trim().is_empty() {
+        ""
+    } else {
+        MODEL_ROLE_EXPERT_API_CONFIG_ID
+    };
     vec![
-        default_assistant_department(api_config_id),
-        default_deputy_department(api_config_id),
-        default_remote_customer_service_department(api_config_id),
+        default_assistant_department(default_api_config_id),
+        default_deputy_department(default_api_config_id),
+        default_remote_customer_service_department(default_api_config_id),
     ]
+}
+
+fn is_model_role_api_config_id(api_config_id: &str) -> bool {
+    matches!(
+        api_config_id.trim(),
+        MODEL_ROLE_EXPERT_API_CONFIG_ID | MODEL_ROLE_QUICK_API_CONFIG_ID
+    )
+}
+
+fn resolve_model_role_api_config_id(app_config: &AppConfig, api_config_id: &str) -> Option<String> {
+    let api_config_id = api_config_id.trim();
+    match api_config_id {
+        MODEL_ROLE_EXPERT_API_CONFIG_ID => {
+            let expert_id = app_config.assistant_department_api_config_id.trim();
+            (!expert_id.is_empty()).then(|| expert_id.to_string())
+        }
+        MODEL_ROLE_QUICK_API_CONFIG_ID => app_config
+            .tool_review_api_config_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned),
+        _ if !api_config_id.is_empty() => Some(api_config_id.to_string()),
+        _ => None,
+    }
 }
 
 fn normalize_department_child_ids(values: &[String], self_id: &str) -> Vec<String> {

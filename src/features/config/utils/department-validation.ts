@@ -1,5 +1,6 @@
 import type { ApiConfigItem, AppConfig } from "../../../types/app";
 import { findDepartmentGraphCycle, normalizeDepartmentChildIds } from "./department-graph";
+import { isModelRoleApiConfigId, resolveModelRoleApiConfigId } from "./model-role-options";
 
 type TrFn = (key: string, params?: Record<string, unknown>) => string;
 
@@ -72,7 +73,11 @@ export function validateDepartmentConfig(
       ? department.apiConfigIds
       : (department.apiConfigId ? [department.apiConfigId] : []);
     for (const id of ids.map((item) => String(item || "").trim()).filter(Boolean)) {
-      if (!validApiIds.has(id)) {
+      const resolvedId = resolveModelRoleApiConfigId(id, config);
+      if (!isModelRoleApiConfigId(id) && !validApiIds.has(resolvedId)) {
+        return t("config.department.validation.invalidModel", { name: department.name || department.id });
+      }
+      if (isModelRoleApiConfigId(id) && (!resolvedId || !validApiIds.has(resolvedId))) {
         return t("config.department.validation.invalidModel", { name: department.name || department.id });
       }
     }

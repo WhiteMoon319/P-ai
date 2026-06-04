@@ -228,6 +228,7 @@ fn delegate_target_chat_api_config_ids(
         .collect::<std::collections::HashSet<_>>();
     department_api_config_ids(target_department)
         .into_iter()
+        .filter_map(|id| resolve_model_role_api_config_id(config, &id))
         .filter(|id| valid_text_chat_api_ids.contains(id))
         .collect::<Vec<_>>()
 }

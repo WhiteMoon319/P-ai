@@ -764,6 +764,8 @@ impl ConversationService {
                 conversation_title,
             )
         };
+        conversation.preferred_api_config_id = resolve_model_role_api_config_id(&app_config, &api_config_id)
+            .filter(|value| !value.trim().is_empty());
         if let Some(shell_workspaces) = input.shell_workspaces.as_ref() {
             conversation.shell_workspaces =
                 normalize_conversation_shell_workspaces(state, shell_workspaces);
@@ -775,11 +777,12 @@ impl ConversationService {
         let conversation_id = conversation.id.clone();
         let persist_seq = state_schedule_conversation_persist(state, &conversation)?;
         runtime_log_info(format!(
-            "[会话] 完成，任务=新建未归档会话，阶段=调度持久化，conversation_id={}，persist_seq={}，department_id={}，agent_id={}，message_count={}，duration_ms={}",
+            "[会话] 完成，任务=新建未归档会话，阶段=调度持久化，conversation_id={}，persist_seq={}，department_id={}，agent_id={}，preferred_api_config_id={}，message_count={}，duration_ms={}",
             conversation_id,
             persist_seq,
             conversation.department_id,
             conversation.agent_id,
+            conversation.preferred_api_config_id.as_deref().unwrap_or(""),
             conversation.messages.len(),
             started_at.elapsed().as_millis()
         ));

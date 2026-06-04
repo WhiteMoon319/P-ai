@@ -300,14 +300,23 @@
           "howToMissing": "去「LLM」页面新增一个配置，填好链接、API Key、模型名，并确保开启文本能力。",
           "action": "去设置 LLM"
         },
-        "assistantDepartment": {
-          "title": "主部门驱动模型",
-          "summary": "主部门是 PAI 默认的「执行小组」。给它绑上模型，PAI 就知道用谁的大脑来干活。绑多个的话，一个临时不可用还能自动换下一个。",
-          "currentOk": "已绑定：{names}",
-          "currentMissing": "还没绑定。去部门页面，选中主部门，加上一个模型就行。",
-          "howToOk": "如果你希望更稳，可以继续在主部门里增加候选模型，失败时会依序往后尝试。",
-          "howToMissing": "去「部门」页面，选中主部门，然后给它新增至少一个驱动模型。",
-          "action": "去设置部门"
+        "expertModel": {
+          "title": "专家模型",
+          "summary": "主要对话和专家任务默认使用这里。",
+          "currentOk": "已设置：{name}",
+          "currentMissing": "还没设置专家模型。",
+          "howToOk": "其他可选模型位置默认会优先使用专家模型。",
+          "howToMissing": "去「对话」页面，在模型分工里选择专家模型。",
+          "action": "去设置模型分工"
+        },
+        "quickModel": {
+          "title": "快速模型",
+          "summary": "工具审查、联系人秘书等轻量流程默认使用这里。",
+          "currentOk": "已设置：{name}",
+          "currentMissing": "还没设置快速模型。",
+          "howToOk": "轻量固定流程会直接使用快速模型。",
+          "howToMissing": "去「对话」页面，在模型分工里选择快速模型。",
+          "action": "去设置模型分工"
         },
         "voice": {
           "title": "语音识别",
@@ -657,13 +666,24 @@
       "previewTitle": "关系图预览",
       "previewHint": "下方使用 Mermaid 自动排布所有部门关系，上级在上，下级在下。"
     },
+    "modelRoles": {
+      "expert": "专家模型",
+      "quick": "快速模型"
+    },
     "chatSettings": {
       "chatLlmProvider": "助理部门驱动模型",
+      "defaultModelsTitle": "模型分工",
+      "defaultModelsHint": "这里设置各类默认模型，其他地方没设置时优先使用这里。",
       "visionApi": "图转文AI（可选）",
-      "visionApiHint": "仅当当前驱动模型不支持图片输入时，才会使用这里配置的图转文AI把图片转成文本；驱动模型支持图片时会直接发送图片。",
-      "toolReviewApi": "快速模型（可选）",
-      "toolReviewApiHint": "用于处理简短、轻量、追求速度的任务。目前预定包括三类功能：工具评估、标题生成、远程联系人离场观测。\n推荐使用 token 计费的模型，不要使用次数计费的模型。",
-      "sttTitle": "语音转写（STT）",
+      "visionApiHint": "主模型不支持图片且未单独指定时，优先用这里。",
+      "toolReviewApi": "快速模型",
+      "toolReviewApiHint": "轻量任务未单独指定时，优先用这里。",
+      "expertChatModelTitle": "专家模型",
+      "expertChatModelStatus": "即将支持",
+      "expertChatModelPlaceholder": "暂未启用",
+      "expertChatModelHint": "主要对话默认用这里，专家任务未单独指定时也优先用这里。",
+      "sttTitle": "语音转文字模型",
+      "sttHint": "未单独指定语音转文字时，优先使用这里。",
       "sttLocalWebSpeech": "本地（Web Speech）",
       "sttAutoSend": "完成后发送",
       "noVision": "不配置",
