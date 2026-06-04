@@ -482,6 +482,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { ArrowUpDown, Download, FoldVertical, FolderOpen, History, LayoutList, LayoutPanelLeft, Minus, ScrollText, Search, Settings, Square, SquarePen, Upload, X } from "@lucide/vue";
 import type { ChatConversationOverviewItem, ShellWorkspace, ShellWorkspaceAccess } from "../../../types/app";
 import { defaultWorkspaceNameFromPath } from "../../../utils/shell-workspaces";
+import { buildWorkspaceConversationSections } from "../../chat/utils/conversation-sections";
 import { resolveConversationDisplayTitle } from "../../chat/utils/conversation-title";
 import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
 import type { ConfigSearchResult, ConfigSearchTab } from "../../config/search/config-search";
@@ -513,8 +514,6 @@ type CreateConversationInput = {
 
 const RECENT_CONVERSATION_TOPICS_STORAGE_KEY = "easy_call.recent_conversation_topics.v1";
 const RECENT_CONVERSATION_TOPICS_LIMIT = 7;
-const RECENT_CREATE_CONVERSATION_WORKSPACES_STORAGE_KEY = "easy_call.recent_create_conversation_workspaces.v1";
-const RECENT_CREATE_CONVERSATION_WORKSPACES_LIMIT = 12;
 
 const { markConversationRead } = usePipelineStatus({
   activeConversationId: computed(() => String(props.activeConversationId || "").trim()),
@@ -718,7 +717,6 @@ const createConversationWorkspacePath = ref("");
 const createConversationWorkspaceAccess = ref<ShellWorkspaceAccess>("approval");
 const createConversationCustomWorkspace = ref<ShellWorkspace | null>(null);
 const createConversationMaxPermission = ref(false);
-const recentCreateConversationWorkspaces = ref<ShellWorkspace[]>([]);
 const importConversationLoading = ref(false);
 const configSearchOpen = ref(false);
 const changelogDialogOpen = ref(false);
@@ -727,21 +725,39 @@ const changelogError = ref("");
 const changelogMarkdown = ref("");
 const changelogLoaded = ref(false);
 
-const selectableCreateConversationWorkspaces = computed<ShellWorkspace[]>(() =>
-  mergeCreateConversationWorkspaces([
-    ...(props.currentChatWorkspaces || []),
-    ...recentCreateConversationWorkspaces.value,
-  ])
-    .filter((item) => item.level !== "system" && String(item.path || "").trim())
-    .map((item) => ({
-      id: String(item.id || "").trim() || `conversation-workspace-${String(item.path || "").trim()}`,
-      name: String(item.name || "").trim() || defaultWorkspaceNameFromPath(item.path) || item.path,
-      path: String(item.path || "").trim(),
-      level: item.level === "main" ? "main" : "secondary",
-      access: normalizeWorkspaceAccess(item.access),
+const currentWorkspaceAccessByPath = computed(() => {
+  const map = new Map<string, ShellWorkspaceAccess>();
+  for (const workspace of Array.isArray(props.currentChatWorkspaces) ? props.currentChatWorkspaces : []) {
+    const path = String(workspace?.path || "").trim();
+    const key = normalizeWorkspacePathKey(path);
+    if (!path || map.has(key)) continue;
+    map.set(key, normalizeWorkspaceAccess(workspace?.access));
+  }
+  return map;
+});
+
+const selectableCreateConversationWorkspaces = computed<ShellWorkspace[]>(() => {
+  const localConversationItems = props.conversationItems.filter((item) =>
+    item.kind !== "remote_im_contact" && !item.isPinned && !item.isMainConversation,
+  );
+  const options: ShellWorkspace[] = [];
+  for (const section of buildWorkspaceConversationSections(localConversationItems, {
+    defaultWorkspaceTitle: t("chat.defaultWorkspace"),
+    locale: locale.value,
+  })) {
+    const path = String(section.workspaceRootPath || "").trim();
+    if (!path) continue;
+    options.push({
+      id: `conversation-workspace-${path}`,
+      name: String(section.title || "").trim() || defaultWorkspaceNameFromPath(path) || path,
+      path,
+      level: "main",
+      access: currentWorkspaceAccessByPath.value.get(normalizeWorkspacePathKey(path)) || "approval",
       builtIn: false,
-    })),
-);
+    });
+  }
+  return options;
+});
 
 const filteredRecentConversationTopics = computed(() => {
   const query = String(createConversationTitle.value || "").trim().toLocaleLowerCase();
@@ -757,19 +773,6 @@ const showCreateConversationTopicSuggestions = computed(() =>
 
 function normalizeWorkspacePathKey(path: string): string {
   return String(path || "").trim().toLowerCase();
-}
-
-function mergeCreateConversationWorkspaces(items: ShellWorkspace[]): ShellWorkspace[] {
-  const merged: ShellWorkspace[] = [];
-  const seen = new Set<string>();
-  for (const item of items) {
-    const path = String(item.path || "").trim();
-    const key = normalizeWorkspacePathKey(path);
-    if (!path || seen.has(key)) continue;
-    seen.add(key);
-    merged.push({ ...item, path });
-  }
-  return merged;
 }
 
 function normalizeWorkspaceAccess(value: unknown): ShellWorkspaceAccess {
@@ -814,54 +817,6 @@ function createConversationWorkspacePayload(): ShellWorkspace[] | undefined {
   return workspace ? [workspace] : undefined;
 }
 
-function loadRecentCreateConversationWorkspaces() {
-  try {
-    const raw = window.localStorage.getItem(RECENT_CREATE_CONVERSATION_WORKSPACES_STORAGE_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return;
-    recentCreateConversationWorkspaces.value = mergeCreateConversationWorkspaces(parsed.map((item): ShellWorkspace => ({
-      id: String(item?.id || "").trim(),
-      name: String(item?.name || "").trim(),
-      path: String(item?.path || "").trim(),
-      level: "secondary",
-      access: normalizeWorkspaceAccess(item?.access),
-      builtIn: false,
-    }))).slice(0, RECENT_CREATE_CONVERSATION_WORKSPACES_LIMIT);
-  } catch {
-    recentCreateConversationWorkspaces.value = [];
-  }
-}
-
-function saveRecentCreateConversationWorkspaces() {
-  try {
-    window.localStorage.setItem(
-      RECENT_CREATE_CONVERSATION_WORKSPACES_STORAGE_KEY,
-      JSON.stringify(recentCreateConversationWorkspaces.value),
-    );
-  } catch {
-    // ignore persistence failures
-  }
-}
-
-function pushRecentCreateConversationWorkspace(workspace: ShellWorkspace | undefined) {
-  if (!workspace?.path) return;
-  const normalized: ShellWorkspace = {
-    id: workspace.id || `conversation-workspace-${Date.now().toString(36)}`,
-    name: workspace.name || defaultWorkspaceNameFromPath(workspace.path) || workspace.path,
-    path: workspace.path,
-    level: "secondary",
-    access: normalizeWorkspaceAccess(workspace.access),
-    builtIn: false,
-  };
-  const targetKey = normalizeWorkspacePathKey(normalized.path);
-  recentCreateConversationWorkspaces.value = [
-    normalized,
-    ...recentCreateConversationWorkspaces.value.filter((item) => normalizeWorkspacePathKey(item.path) !== targetKey),
-  ].slice(0, RECENT_CREATE_CONVERSATION_WORKSPACES_LIMIT);
-  saveRecentCreateConversationWorkspaces();
-}
-
 function handleCreateConversationWorkspaceChange() {
   const path = String(createConversationWorkspacePath.value || "").trim();
   if (!path) {
@@ -884,7 +839,6 @@ async function pickCreateConversationWorkspace() {
   if (existing) {
     createConversationWorkspacePath.value = existing.path;
     createConversationWorkspaceAccess.value = normalizeWorkspaceAccess(existing.access);
-    pushRecentCreateConversationWorkspace(existing);
     return;
   }
   const workspace: ShellWorkspace = {
@@ -898,7 +852,6 @@ async function pickCreateConversationWorkspace() {
   createConversationCustomWorkspace.value = workspace;
   createConversationWorkspacePath.value = workspace.path;
   createConversationWorkspaceAccess.value = workspace.access;
-  pushRecentCreateConversationWorkspace(workspace);
 }
 
 function loadRecentConversationTopics() {
@@ -1021,7 +974,6 @@ function openCreateConversationDialogWithWorkspace(workspace: ShellWorkspace) {
   }
   createConversationWorkspacePath.value = target.path;
   createConversationWorkspaceAccess.value = normalizeWorkspaceAccess(target.access);
-  pushRecentCreateConversationWorkspace(target);
 }
 
 function handleOpenCreateConversationDialogEvent(event: Event) {
@@ -1102,7 +1054,6 @@ function confirmCreateConversation() {
   createConversationTopicSuggestionsOpen.value = false;
   const shellWorkspaces = createConversationWorkspacePayload();
   const shellAutonomousMode = createConversationMaxPermission.value;
-  pushRecentCreateConversationWorkspace(shellWorkspaces?.[0]);
   resetCreateConversationWorkspace();
   emit("create-conversation", {
     title,
@@ -1137,7 +1088,6 @@ async function importConversationFromExternal() {
     createConversationTopicSuggestionsOpen.value = false;
     const shellWorkspaces = createConversationWorkspacePayload();
     const shellAutonomousMode = createConversationMaxPermission.value;
-    pushRecentCreateConversationWorkspace(shellWorkspaces?.[0]);
     resetCreateConversationWorkspace();
     emit("create-conversation", {
       title,
@@ -1166,7 +1116,6 @@ function handleCreateConversationDialogKeydown(event: KeyboardEvent) {
 
 onMounted(() => {
   loadRecentConversationTopics();
-  loadRecentCreateConversationWorkspaces();
   document.addEventListener("pointerdown", handleDocumentPointerDown);
   window.addEventListener("keydown", handleWindowKeydown);
   window.addEventListener("easy-call:open-create-conversation-dialog", handleOpenCreateConversationDialogEvent);

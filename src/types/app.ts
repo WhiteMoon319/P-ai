@@ -765,6 +765,8 @@ export type ChatConversationOverviewItem = {
   kind?: "local_unarchived" | "remote_im_contact";
   remoteContactId?: string;
   remoteContactDisplayName?: string;
+  channelId?: string;
+  channelName?: string;
   messageCount: number;
   unreadCount?: number;
   agentId?: string;

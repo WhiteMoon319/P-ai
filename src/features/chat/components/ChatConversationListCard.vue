@@ -120,7 +120,7 @@
                       </button>
                       <ul
                         tabindex="0"
-                        class="menu dropdown-content z-[60] mt-2 w-40 rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
+                        class="menu dropdown-content z-60 mt-2 w-40 rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
                         @click.stop
                         @mousedown.stop
                       >

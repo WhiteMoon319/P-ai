@@ -52,20 +52,19 @@
         <div
           role="button"
           tabindex="0"
-          class="group/section flex h-9 w-full items-center gap-2 border-y border-base-300 bg-base-200 px-2.5 text-left text-xs font-semibold text-base-content/65 transition-colors hover:bg-base-300 hover:text-base-content"
+          class="group/section mx-1 flex h-9 items-center gap-2 rounded-lg bg-transparent px-2 text-left text-xs font-semibold text-base-content transition-colors hover:bg-base-300/70"
           :title="section.title"
           @click="toggleConversationSection(section.key)"
           @keydown.enter.prevent="toggleConversationSection(section.key)"
           @keydown.space.prevent="toggleConversationSection(section.key)"
         >
-          <Folder v-if="isConversationSectionCollapsed(section.key)" class="h-4 w-4 shrink-0" />
-          <FolderOpen v-else class="h-4 w-4 shrink-0" />
+          <ChevronRight v-if="isConversationSectionCollapsed(section.key)" class="h-4 w-4 shrink-0" />
+          <ChevronDown v-else class="h-4 w-4 shrink-0" />
           <span class="min-w-0 truncate">{{ section.title }}</span>
-          <span class="shrink-0 tabular-nums text-base-content/45">{{ section.items.length }}</span>
           <button
             v-if="section.workspaceRootPath"
             type="button"
-            class="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-base-content/55 opacity-0 transition hover:bg-base-100 hover:text-base-content group-hover/section:opacity-100"
+            class="btn btn-ghost btn-xs ml-auto h-6 min-h-6 w-6 min-w-6 shrink-0 p-0 text-base-content opacity-0 transition-opacity group-hover/section:opacity-100"
             :title="t('chat.newConversation')"
             @click.stop="createConversationInSection(section)"
           >
@@ -76,12 +75,12 @@
           <div
             v-for="(item, itemIndex) in section.items"
             :key="item.conversationId"
-            class="group relative"
+            class="group relative mx-1"
           >
             <div
-              class="block w-full rounded-none text-left transition-colors hover:bg-base-100"
+              class="block rounded-lg px-2 text-left transition-colors hover:bg-base-100/70"
               :class="[
-                item.conversationId === activeConversationId ? 'bg-base-300 hover:bg-base-300' : '',
+                item.conversationId === activeConversationId ? 'bg-base-300 hover:bg-base-300' : 'bg-transparent',
                 isConversationDisabled(item) ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
               ]"
               :role="isCurrentConversation(item) || isConversationDisabled(item) ? undefined : 'button'"
@@ -91,7 +90,7 @@
               @keydown.enter.prevent="handleConversationCardClick(item)"
               @keydown.space.prevent="handleConversationCardClick(item)"
             >
-              <div class="flex items-center gap-2 p-2">
+              <div class="flex items-center gap-2 py-2">
               <div class="shrink-0">
                 <div class="indicator">
                   <span
@@ -251,10 +250,15 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
-import { Archive, Download, Ellipsis, Folder, FolderOpen, PencilLine, Pin, PinOff, Search, SquarePen, Trash2 } from "@lucide/vue";
+import { Archive, ChevronDown, ChevronRight, Download, Ellipsis, PencilLine, Pin, PinOff, Search, SquarePen, Trash2 } from "@lucide/vue";
 import type { ChatConversationOverviewItem, ConversationPreviewMessage } from "../../../types/app";
 import { usePipelineStatus } from "../../shell/composables/use-pipeline-status";
 import { formatConversationListTime } from "../utils/conversation-time";
+import {
+  buildRemoteConversationSections,
+  buildWorkspaceConversationSections,
+  type ConversationSection,
+} from "../utils/conversation-sections";
 import { resolveConversationDisplayTitle } from "../utils/conversation-title";
 import ChatConversationFloatingScroll from "./ChatConversationFloatingScroll.vue";
 
@@ -298,12 +302,6 @@ const { conversationStatusById, markConversationRead } = usePipelineStatus({
 const conversationPreviewCache = computed(() => new Map(
   props.items.map((item) => [String(item.conversationId || "").trim(), Array.isArray(item.previewMessages) ? item.previewMessages : []]),
 ));
-type ConversationSection = {
-  key: string;
-  title: string;
-  items: ChatConversationOverviewItem[];
-  workspaceRootPath?: string;
-};
 
 const conversationSections = computed<ConversationSection[]>(() => {
   const visibleItems = props.items.filter((item) => {
@@ -323,18 +321,20 @@ const conversationSections = computed<ConversationSection[]>(() => {
     });
   }
   if (activeConversationTab.value === "contact") {
-    if (others.length > 0) {
-      sections.push({
-        key: "others",
-        title: t("chat.otherConversations"),
-        items: others,
-      });
-    }
-    return sections;
+    return [
+      ...sections,
+      ...buildRemoteConversationSections(others, {
+        fallbackTitle: t("chat.otherConversations"),
+        locale: locale.value,
+      }),
+    ];
   }
   return [
     ...sections,
-    ...workspaceConversationSections(others),
+    ...buildWorkspaceConversationSections(others, {
+      defaultWorkspaceTitle: t("chat.defaultWorkspace"),
+      locale: locale.value,
+    }),
   ];
 });
 
@@ -380,31 +380,6 @@ watch(showSearch, async (visible) => {
 function resetConversationTitleEdit() {
   editingConversationId.value = "";
   editingTitleDraft.value = "";
-}
-
-function workspaceConversationSections(items: ChatConversationOverviewItem[]): ConversationSection[] {
-  const sections: ConversationSection[] = [];
-  const byWorkspace = new Map<string, ConversationSection>();
-  for (const item of items) {
-    const path = String(item.workspaceRootPath || "").trim();
-    const title = String(item.workspaceLabel || "").trim() || workspaceNameFromPath(path) || t("chat.defaultWorkspace");
-    const key = `workspace:${path || title}`;
-    const existing = byWorkspace.get(key);
-    if (existing) {
-      existing.items.push(item);
-      continue;
-    }
-    const section = { key, title, workspaceRootPath: path || undefined, items: [item] };
-    byWorkspace.set(key, section);
-    sections.push(section);
-  }
-  return sections;
-}
-
-function workspaceNameFromPath(path: string): string {
-  const normalized = path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
-  if (!normalized) return "";
-  return normalized.split("/").filter(Boolean).pop() || normalized;
 }
 
 function isConversationSectionCollapsed(key: string): boolean {

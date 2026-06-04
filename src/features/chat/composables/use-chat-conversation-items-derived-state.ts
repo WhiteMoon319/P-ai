@@ -89,10 +89,12 @@ export function useChatConversationItemsDerivedState(bindings: Record<string, an
       kind: "remote_im_contact",
       remoteContactId: String(item.contactId || "").trim(),
       remoteContactDisplayName: String(item.contactDisplayName || "").trim(),
+      channelId: String(item.channelId || item.channel_id || "").trim() || undefined,
+      channelName: String(item.channelName || item.channel_name || "").trim() || undefined,
       messageCount: Number(item.messageCount || 0),
       departmentId: String(item.boundDepartmentId || "").trim() || undefined,
       departmentName: [
-        String(item.channelName || "").trim(),
+        String(item.channelName || item.channel_name || "").trim(),
         resolveRemoteConversationDepartmentName(item.boundDepartmentId),
       ].filter(Boolean).join(" · "),
       updatedAt: item.lastMessageAt || item.updatedAt || "",
