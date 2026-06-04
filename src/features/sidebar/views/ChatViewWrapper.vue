@@ -63,7 +63,6 @@
     :unarchived-conversation-items="[]"
     :conversation-items="[]"
     :create-conversation-department-options="createConversationDepartmentOptions"
-    :delegate-department-ids="delegateDepartmentIds"
     :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
     :ide-context-groups="ideContextGroups"
     :attached-ide-context-references="[]"
@@ -186,7 +185,6 @@ const props = defineProps<{
   runtimeState?: string;
   hasPrevBlock: boolean;
   createConversationDepartmentOptions: Array<{ id: string; name: string; ownerAgentId?: string; ownerName: string; providerName?: string; modelName?: string; childDepartmentIds?: string[] }>;
-  delegateDepartmentIds: string[];
   defaultCreateConversationDepartmentId: string;
   currentDepartmentId: string;
   currentWorkspaceName: string;

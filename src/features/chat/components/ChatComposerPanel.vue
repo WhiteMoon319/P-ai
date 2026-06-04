@@ -21,7 +21,6 @@
       :active-conversation-id="activeConversationId"
       :unarchived-conversation-items="unarchivedConversationItems"
       :create-conversation-department-options="createConversationDepartmentOptions"
-      :delegate-department-ids="delegateDepartmentIds"
       @exit-selection-mode="emit('exitSelectionMode')"
       @selection-action-branch="emit('selectionActionBranch')"
       @selection-action-forward="emit('selectionActionForward', $event)"
@@ -358,7 +357,6 @@ const props = defineProps<{
   personaNameMap: Record<string, string>;
   personaAvatarUrlMap: Record<string, string>;
   createConversationDepartmentOptions: ConversationDepartmentOption[];
-  delegateDepartmentIds: string[];
   defaultCreateConversationDepartmentId: string;
   ideContextGroups: IdeContextWorkspaceGroup[];
   attachedIdeContextReferences: IdeContextReferenceItem[];

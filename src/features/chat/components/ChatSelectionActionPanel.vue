@@ -136,7 +136,6 @@ const props = defineProps<{
   activeConversationId: string;
   unarchivedConversationItems: ChatConversationOverviewItem[];
   createConversationDepartmentOptions: ConversationDepartmentOption[];
-  delegateDepartmentIds: string[];
 }>();
 
 const emit = defineEmits<{
@@ -191,11 +190,8 @@ const selectionDeliverTargetOptions = computed(() =>
     .filter((item) => !!item.conversationId),
 );
 
-const allowedDelegateDepartmentIds = computed(() =>
-  new Set((Array.isArray(props.delegateDepartmentIds) ? props.delegateDepartmentIds : []).map((id) => String(id || "").trim()).filter(Boolean)),
-);
-
 const delegateDepartmentOptions = computed(() =>
+  // 用户主动发起异步委托不受 AI delegate 工具的“直接下级部门”限制。
   (Array.isArray(props.createConversationDepartmentOptions) ? props.createConversationDepartmentOptions : [])
     .map((item) => ({
       id: String(item.id || "").trim(),
@@ -205,7 +201,7 @@ const delegateDepartmentOptions = computed(() =>
       providerName: String(item.providerName || "").trim() || undefined,
       modelName: String(item.modelName || "").trim() || undefined,
     }))
-    .filter((item) => !!item.id && allowedDelegateDepartmentIds.value.has(item.id)),
+    .filter((item) => !!item.id),
 );
 
 const preferredDelegateDepartmentId = computed(() => String(delegateDepartmentOptions.value[0]?.id || "").trim());

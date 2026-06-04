@@ -1,6 +1,5 @@
 import { computed } from "vue";
 import type { ChatMentionEntry } from "../../../types/app";
-import { departmentDirectChildIds } from "../../config/utils/department-graph";
 import { resolveModelRoleApiConfigId } from "../../config/utils/model-role-options";
 
 export function useChatPersonaConversationDerivedState(bindings: Record<string, any>) {
@@ -255,10 +254,6 @@ export function useChatPersonaConversationDerivedState(bindings: Record<string, 
         };
       }),
   );
-  const delegateDepartmentIds = computed(() =>
-    departmentDirectChildIds(currentForegroundDepartment.value, bindings.config.departments || []),
-  );
-
   return {
     userPersona,
     assistantPersonas,
@@ -284,6 +279,5 @@ export function useChatPersonaConversationDerivedState(bindings: Record<string, 
     chatPersonaAvatarUrlMap,
     chatMentionEntries,
     createConversationDepartmentOptions,
-    delegateDepartmentIds,
   };
 }

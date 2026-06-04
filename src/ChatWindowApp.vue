@@ -179,7 +179,6 @@
       :chat-unarchived-conversation-items="chatUnarchivedConversationItems"
       :chat-conversation-items="chatConversationItems"
       :create-conversation-department-options="createConversationDepartmentOptions"
-      :delegate-department-ids="delegateDepartmentIds"
       :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
       :archives="archives"
       :selected-archive-id="selectedArchiveId"

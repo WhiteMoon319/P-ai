@@ -45,7 +45,6 @@
       :runtime-state="activeConversationRuntimeState"
       :has-prev-block="hasPrevBlock"
       :create-conversation-department-options="createConversationDepartmentOptions"
-      :delegate-department-ids="sidebarDelegateDepartmentIds"
       :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
       :current-department-id="activeDepartmentId"
       :current-workspace-name="currentWorkspaceName"
@@ -175,7 +174,6 @@ import {
   assistantTextFromStreamBlocks,
   normalizeAssistantStreamBlocks,
 } from "../../utils/chat-message-semantics";
-import { normalizeDepartmentChildIds } from "../config/utils/department-graph";
 import { formatConversationFallbackTitle } from "../chat/utils/conversation-title";
 import { useI18n } from "vue-i18n";
 import SidebarLayout from "./layouts/SidebarLayout.vue";
@@ -411,19 +409,6 @@ const activeDepartmentId = computed(() => String(activeSummary.value?.department
 const activeConversationTerminalApprovals = computed<TerminalApprovalConversationItem[]>(() =>
   listConversationTerminalApprovals(activeConversationId.value),
 );
-const sidebarDelegateDepartmentIds = computed(() => {
-  const currentDept = createConversationDepartmentOptions.value.find(
-    (item) => String(item.id || "").trim() === activeDepartmentId.value,
-  );
-  if (!currentDept) return [];
-  const existingIds = new Set(
-    createConversationDepartmentOptions.value
-      .map((item) => String(item.id || "").trim())
-      .filter(Boolean),
-  );
-  return normalizeDepartmentChildIds(currentDept.childDepartmentIds, currentDept.id)
-    .filter((id: string) => existingIds.has(id));
-});
 
 function normalizeDiscovery(payload: DiscoveryPayload): SidebarBridgeConfig | null {
   const chatUrl = String(payload.chatUrl || "").trim() || String(payload.url || "").trim().replace(/\/ide-context$/, "/chat");

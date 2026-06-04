@@ -244,7 +244,6 @@
             :user-alias="userAlias" :user-avatar-url="userAvatarUrl"
             :persona-name-map="personaNameMap" :persona-avatar-url-map="personaAvatarUrlMap"
             :create-conversation-department-options="createConversationDepartmentOptions"
-            :delegate-department-ids="delegateDepartmentIds"
             :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
             :ide-context-groups="mergedVisibleIdeContextGroups" :attached-ide-context-references="attachedIdeContextReferences"
             :sidebar-mode="sidebarMode"
@@ -464,7 +463,7 @@ const props = defineProps<{
   chatLeftPanelMode: "local" | "contact";
   chatRightPanelMode: "reader" | "review" | "delegate";
   createConversationDepartmentOptions: Array<{ id: string; name: string; ownerAgentId?: string; ownerName: string; providerName?: string; modelName?: string; childDepartmentIds?: string[] }>;
-  delegateDepartmentIds: string[]; defaultCreateConversationDepartmentId: string;
+  defaultCreateConversationDepartmentId: string;
   ideContextGroups: IdeContextWorkspaceGroup[]; attachedIdeContextReferences: IdeContextReferenceItem[];
   detachedChatWindow?: boolean; terminalApprovals?: TerminalApprovalConversationItem[];
   terminalApprovalResolving?: boolean;
@@ -542,10 +541,10 @@ const {
   latestPendingPlanMessageId,
 } = useChatConversationCtx(props, isDarkAppTheme, t);
 
-const toolReviewDepartmentOptions = computed(() => {
-  const allowed = new Set((Array.isArray(props.delegateDepartmentIds) ? props.delegateDepartmentIds : []).map((id) => String(id || "").trim()).filter(Boolean));
-  return (Array.isArray(props.createConversationDepartmentOptions) ? props.createConversationDepartmentOptions : []).filter((item) => allowed.has(String(item.id || "").trim()));
-});
+const toolReviewDepartmentOptions = computed(() =>
+  // 用户主动发起代码审查不受 AI delegate 工具的“直接下级部门”限制。
+  (Array.isArray(props.createConversationDepartmentOptions) ? props.createConversationDepartmentOptions : []),
+);
 
 const chatFileReaderSessionKey = computed(() => {
   const conversationId = String(props.activeConversationId || "").trim();

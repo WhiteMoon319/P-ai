@@ -172,7 +172,6 @@
         :unarchived-conversation-items="chatUnarchivedConversationItems"
         :conversation-items="chatConversationItems || chatUnarchivedConversationItems"
         :create-conversation-department-options="createConversationDepartmentOptions"
-        :delegate-department-ids="delegateDepartmentIds"
         :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
         :ide-context-groups="[]"
         :attached-ide-context-references="[]"
@@ -543,7 +542,6 @@ const props = defineProps<{
   chatUnarchivedConversationItems: ChatConversationOverviewItem[];
   chatConversationItems?: ChatConversationOverviewItem[];
   createConversationDepartmentOptions: Array<{ id: string; name: string; ownerAgentId?: string; ownerName: string; providerName?: string; modelName?: string }>;
-  delegateDepartmentIds: string[];
   defaultCreateConversationDepartmentId: string;
   archives: ArchiveSummary[];
   selectedArchiveId: string;
