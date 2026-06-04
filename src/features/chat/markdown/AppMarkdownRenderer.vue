@@ -70,7 +70,10 @@
 
 <script setup lang="ts">
 import { computed, defineComponent, h, onBeforeUnmount, ref, watch, type PropType, type VNodeChild } from "vue";
+import { useI18n } from "vue-i18n";
+import { Maximize2 } from "@lucide/vue";
 import { parseMarkdownBlocks, parseInlineSegments, normalizedTableRow, type MarkdownBlock, type InlineSegment } from "./parse-markdown";
+import CodeBlockPreviewDialog from "../components/dialogs/CodeBlockPreviewDialog.vue";
 
 const props = defineProps<{
   text: string;
@@ -78,6 +81,8 @@ const props = defineProps<{
   streaming?: boolean;
   variant?: "chat" | "document";
 }>();
+
+const { t } = useI18n();
 
 // ==================== Streaming Throttle ====================
 
@@ -334,6 +339,7 @@ const CodeBlock = defineComponent({
   setup(codeProps) {
     const highlightedHtml = ref("");
     const copied = ref(false);
+    const previewOpen = ref(false);
     let copyTimer = 0;
     let highlightAbort: AbortController | null = null;
 
@@ -386,6 +392,14 @@ const CodeBlock = defineComponent({
       }
     }
 
+    function openPreview() {
+      previewOpen.value = true;
+    }
+
+    function closePreview() {
+      previewOpen.value = false;
+    }
+
     onBeforeUnmount(() => {
       if (copyTimer) {
         clearTimeout(copyTimer);
@@ -405,11 +419,19 @@ const CodeBlock = defineComponent({
       // 标题栏：左边语言名，右边复制按钮
       const titleBar = h("div", { class: "ecall-md-code-title" }, [
         h("span", { class: "ecall-md-code-lang" }, codeProps.lang || "text"),
-        h("button", {
-          type: "button",
-          class: "ecall-md-code-copy",
-          onClick: copyCode,
-        }, copied.value ? "已复制" : "复制"),
+        h("div", { class: "ecall-md-code-actions" }, [
+          h("button", {
+            type: "button",
+            class: "ecall-md-code-action",
+            title: t("common.expand"),
+            onClick: openPreview,
+          }, [h(Maximize2, { class: "ecall-md-code-action-icon" })]),
+          h("button", {
+            type: "button",
+            class: "ecall-md-code-copy",
+            onClick: copyCode,
+          }, copied.value ? "已复制" : "复制"),
+        ]),
       ]);
 
       // 代码区
@@ -418,7 +440,16 @@ const CodeBlock = defineComponent({
         : h("pre", { class: "ecall-md-code-body ecall-md-code-plain" }, [h("code", null, codeProps.code)]);
 
       // 圆角外壳
-      return h("div", { class: "ecall-md-code-block" }, [titleBar, codeArea]);
+      return h("div", { class: "ecall-md-code-block" }, [
+        titleBar,
+        codeArea,
+        h(CodeBlockPreviewDialog, {
+          open: previewOpen.value,
+          lang: codeProps.lang,
+          code: codeProps.code,
+          onClose: closePreview,
+        }),
+      ]);
     };
   },
 });
@@ -634,6 +665,13 @@ ul.ecall-md-list {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
+.ecall-md-code-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.ecall-md-code-action,
 .ecall-md-code-copy {
   border: none;
   background: none;
@@ -644,6 +682,19 @@ ul.ecall-md-list {
   border-radius: 0.25rem;
 }
 
+.ecall-md-code-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.18rem;
+}
+
+.ecall-md-code-action-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.ecall-md-code-action:hover,
 .ecall-md-code-copy:hover {
   background: color-mix(in srgb, currentColor 10%, transparent);
   color: currentColor;

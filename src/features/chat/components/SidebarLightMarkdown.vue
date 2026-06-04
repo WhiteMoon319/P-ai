@@ -40,14 +40,24 @@
         </table>
       </div>
       <div v-else-if="block.type === 'code'" class="ecall-sidebar-light-code-wrap">
-        <button
-          type="button"
-          class="ecall-sidebar-light-copy"
-          :title="copiedCodeKey === block.key ? '已复制' : '复制代码'"
-          @click="copyCodeBlock(block.key, block.text)"
-        >
-          {{ copiedCodeKey === block.key ? "已复制" : "复制" }}
-        </button>
+        <div class="ecall-sidebar-light-code-actions">
+          <button
+            type="button"
+            class="ecall-sidebar-light-expand"
+            :title="t('common.expand')"
+            @click="openPreview(block)"
+          >
+            <Maximize2 class="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            class="ecall-sidebar-light-copy"
+            :title="copiedCodeKey === block.key ? '已复制' : '复制代码'"
+            @click="copyCodeBlock(block.key, block.text)"
+          >
+            {{ copiedCodeKey === block.key ? "已复制" : "复制" }}
+          </button>
+        </div>
         <pre class="ecall-sidebar-light-code"><code>{{ block.text }}</code></pre>
       </div>
       <hr v-else-if="block.type === 'hr'" class="ecall-sidebar-light-hr" />
@@ -56,10 +66,19 @@
       </p>
     </template>
   </div>
+  <CodeBlockPreviewDialog
+    :open="previewDialogOpen"
+    :lang="previewDialogLang"
+    :code="previewDialogCode"
+    @close="closePreview"
+  />
 </template>
 
 <script setup lang="ts">
 import { computed, defineComponent, h, onBeforeUnmount, ref, type VNodeChild } from "vue";
+import { useI18n } from "vue-i18n";
+import { Maximize2 } from "@lucide/vue";
+import CodeBlockPreviewDialog from "./dialogs/CodeBlockPreviewDialog.vue";
 
 type LightMarkdownBlock =
   | { type: "paragraph"; text: string; key: string }
@@ -83,9 +102,13 @@ const props = defineProps<{
   text: string;
 }>();
 
+const { t } = useI18n();
 const URL_PATTERN = /(https?:\/\/[^\s<>()]+|file:\/\/\/[^\s<>()]+)/g;
 const MARKDOWN_LINK_PATTERN = /!?\[([^\]\n]+)\]\(([^)\n]+)\)/g;
 const copiedCodeKey = ref("");
+const previewDialogOpen = ref(false);
+const previewDialogLang = ref("");
+const previewDialogCode = ref("");
 let copiedCodeTimer = 0;
 
 async function copyCodeBlock(key: string, text: string) {
@@ -100,6 +123,16 @@ async function copyCodeBlock(key: string, text: string) {
   } catch {
     copiedCodeKey.value = "";
   }
+}
+
+function openPreview(block: Extract<LightMarkdownBlock, { type: "code" }>) {
+  previewDialogLang.value = String(block.lang || "").trim();
+  previewDialogCode.value = String(block.text || "");
+  previewDialogOpen.value = true;
+}
+
+function closePreview() {
+  previewDialogOpen.value = false;
 }
 
 onBeforeUnmount(() => {
@@ -612,11 +645,18 @@ ol.ecall-sidebar-light-list {
   line-height: 1.45;
 }
 
-.ecall-sidebar-light-copy {
+.ecall-sidebar-light-code-actions {
   position: absolute;
   right: 0.4rem;
   top: 0.35rem;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.ecall-sidebar-light-expand,
+.ecall-sidebar-light-copy {
   border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
   border-radius: 0.3rem;
   background: color-mix(in srgb, currentColor 8%, var(--color-base-100, transparent));
@@ -626,6 +666,14 @@ ol.ecall-sidebar-light-list {
   color: color-mix(in srgb, currentColor 78%, transparent);
 }
 
+.ecall-sidebar-light-expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.18rem;
+}
+
+.ecall-sidebar-light-expand:hover,
 .ecall-sidebar-light-copy:hover {
   background: color-mix(in srgb, currentColor 13%, var(--color-base-100, transparent));
   color: currentColor;
