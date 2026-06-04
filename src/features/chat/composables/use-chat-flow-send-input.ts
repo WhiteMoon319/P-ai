@@ -20,7 +20,6 @@ type UseChatFlowSendInputOptions = {
   buildImageAttachmentPayload: (
     images: ImageAttachment[],
   ) => Array<{ fileName: string; relativePath: string; mime: string }>;
-  buildInstructionExtraTextBlocks: () => string[];
 };
 
 export type PreparedChatSendInput = {
@@ -55,14 +54,9 @@ export function useChatFlowSendInput(options: UseChatFlowSendInputOptions) {
       ? String(overrides.text || "").trim()
       : options.chatInput.value.trim();
     const queuedAttachments = useOverrideMessage ? [] : options.buildQueuedAttachmentPayload();
-    const instructionExtraTextBlocks = overrides?.skipInstructionPrompts
-      ? []
-      : options.buildInstructionExtraTextBlocks();
     const selectedMentions = normalizeSelectedMentions();
-    const extraTextBlocks = [
-      ...instructionExtraTextBlocks,
-      ...(Array.isArray(overrides?.extraTextBlocks) ? overrides.extraTextBlocks : []),
-    ].filter((item) => !!String(item || "").trim());
+    const extraTextBlocks = (Array.isArray(overrides?.extraTextBlocks) ? overrides.extraTextBlocks : [])
+      .filter((item) => !!String(item || "").trim());
     const sentImages = useOverrideMessage ? [] : [...options.clipboardImages.value];
     if (!plainText && sentImages.length === 0 && queuedAttachments.length === 0 && extraTextBlocks.length === 0) {
       return null;

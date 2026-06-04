@@ -18,7 +18,6 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
       },
       getConversationId: () => String(bindings.currentChatConversationId.value || "").trim(),
       chatInput: bindings.chatInput,
-      selectedInstructionPrompts: bindings.selectedInstructionPrompts,
       selectedMentions: bindings.selectedChatMentions,
       clipboardImages: bindings.clipboardImages,
       queuedAttachmentNotices: bindings.queuedAttachmentNotices,

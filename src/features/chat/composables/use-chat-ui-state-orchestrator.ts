@@ -1,6 +1,6 @@
 import { computed, ref, watch, type Ref } from "vue";
 import type { ConfigSearchTab, ConfigSearchResult } from "../../config/search/config-search";
-import type { ChatMentionTarget, PromptCommandPreset } from "../../../types/app";
+import type { ChatMentionTarget } from "../../../types/app";
 import type { ConversationPipelineStatus } from "../../shell/composables/use-pipeline-status";
 import type { searchConfigTabs } from "../../config/search/config-search";
 
@@ -81,7 +81,6 @@ export type ChatUiStateBindings = {
 export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
   const configTab = ref<ConfigSearchTab>("hotkey");
   const configSearchQuery = ref("");
-  const selectedInstructionPrompts = ref<PromptCommandPreset[]>([]);
   const selectedChatMentions = ref<ChatMentionTarget[]>([]);
   const chatInput = ref("");
 
@@ -162,18 +161,6 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
   function handleSelectConfigSearchResult(tab: ConfigSearchTab) {
     configTab.value = tab;
     configSearchQuery.value = "";
-  }
-
-  function updateSelectedInstructionPrompts(value: PromptCommandPreset[]) {
-    selectedInstructionPrompts.value = Array.isArray(value)
-      ? value
-          .map((item) => ({
-            id: String(item?.id || "").trim(),
-            name: String(item?.prompt || item?.name || "").trim(),
-            prompt: String(item?.prompt || item?.name || "").trim(),
-          }))
-          .filter((item) => !!item.id && !!item.prompt)
-      : [];
   }
 
   function addChatMention(value: ChatMentionTarget) {
@@ -299,7 +286,6 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     configTab,
     configSearchQuery,
     configSearchResults,
-    selectedInstructionPrompts,
     selectedChatMentions,
     chatInput,
     conversationListTab,
@@ -312,7 +298,6 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     handleChatInputUpdate,
     updateConfigSearchQuery,
     handleSelectConfigSearchResult,
-    updateSelectedInstructionPrompts,
     addChatMention,
     removeChatMention,
     handleSideConversationListVisibleChange,

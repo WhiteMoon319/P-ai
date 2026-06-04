@@ -1,6 +1,6 @@
 import type { Channel } from "@tauri-apps/api/core";
 import type { Ref } from "vue";
-import type { AssistantStreamBlock, ChatMentionTarget, ChatMessage, PromptCommandPreset } from "../../../types/app";
+import type { AssistantStreamBlock, ChatMentionTarget, ChatMessage } from "../../../types/app";
 import type { AssistantDeltaEvent } from "./use-chat-flow-events";
 import type { ConversationRuntimeStreamCacheSnapshot } from "./use-chat-flow-stream-cache";
 
@@ -13,7 +13,6 @@ export type UseChatFlowOptions = {
   getConversationId?: () => string;
   chatInput: Ref<string>;
   selectedMentions?: Ref<ChatMentionTarget[]>;
-  selectedInstructionPrompts?: Ref<PromptCommandPreset[]>;
   clipboardImages: Ref<Array<{ mime: string; bytesBase64: string; savedPath?: string }>>;
   queuedAttachmentNotices?: Ref<Array<{ id: string; fileName: string; relativePath: string; mime: string }>>;
   latestUserText: Ref<string>;
@@ -103,7 +102,6 @@ export type SendChatOverrides = {
   text?: string;
   displayText?: string;
   extraTextBlocks?: string[];
-  skipInstructionPrompts?: boolean;
   suppressInitialReload?: boolean;
 };
 

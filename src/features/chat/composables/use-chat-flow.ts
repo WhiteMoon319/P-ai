@@ -76,10 +76,8 @@ export function useChatFlow(options: UseChatFlowOptions) {
   const {
     buildQueuedAttachmentPayload,
     buildImageAttachmentPayload,
-    buildInstructionExtraTextBlocks,
   } = useChatFlowSendPayloads({
     queuedAttachmentNotices: options.queuedAttachmentNotices,
-    selectedInstructionPrompts: options.selectedInstructionPrompts,
   });
   const sendInput = useChatFlowSendInput({
     chatInput: options.chatInput,
@@ -92,7 +90,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
     getConversationId: options.getConversationId,
     buildQueuedAttachmentPayload,
     buildImageAttachmentPayload,
-    buildInstructionExtraTextBlocks,
   });
   const frontendDispatch = useChatFlowFrontendDispatch({
     allMessages: options.allMessages,

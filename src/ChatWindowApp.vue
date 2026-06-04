@@ -273,7 +273,6 @@
       :save-agent-avatar="saveAgentAvatar"
       :clear-agent-avatar="clearAgentAvatar"
       :update-chat-input="handleChatInputUpdate"
-      :update-selected-instruction-prompts="updateSelectedInstructionPrompts"
       :add-chat-mention="addChatMention"
       :remove-chat-mention="removeChatMention"
       :update-conversation-preferred-api-config-id="updateConversationPreferredApiConfigId"

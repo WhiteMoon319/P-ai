@@ -1,5 +1,4 @@
 import type { Ref } from "vue";
-import type { PromptCommandPreset } from "../../../types/app";
 
 type QueuedAttachmentNotice = {
   id: string;
@@ -22,7 +21,6 @@ type AttachmentPayload = {
 
 type UseChatFlowSendPayloadsOptions = {
   queuedAttachmentNotices?: Ref<QueuedAttachmentNotice[]>;
-  selectedInstructionPrompts?: Ref<PromptCommandPreset[]>;
 };
 
 export function useChatFlowSendPayloads(options: UseChatFlowSendPayloadsOptions) {
@@ -56,21 +54,8 @@ export function useChatFlowSendPayloads(options: UseChatFlowSendPayloadsOptions)
     return Array.from(dedup.values());
   }
 
-  function buildInstructionExtraTextBlocks(): string[] {
-    const list = options.selectedInstructionPrompts?.value || [];
-    if (list.length === 0) return [];
-    return list
-      .map((item) => {
-        const prompt = String(item?.prompt || "").trim();
-        if (!prompt) return "";
-        return `<user instruction>\n${prompt}\n</user instruction>`;
-      })
-      .filter((item) => !!item);
-  }
-
   return {
     buildQueuedAttachmentPayload,
     buildImageAttachmentPayload,
-    buildInstructionExtraTextBlocks,
   };
 }

@@ -73,19 +73,6 @@
         </button>
       </span>
     </div>
-    <div v-if="selectedInstructionPrompts.length > 0" class="mb-2 flex flex-wrap gap-1">
-      <div
-        v-for="item in selectedInstructionPrompts"
-        :key="item.id"
-        class="badge badge-outline gap-1 py-3"
-      >
-        <Layers2 class="h-3.5 w-3.5" />
-        <span class="max-w-48 truncate text-[11px]" :title="item.prompt">{{ item.prompt }}</span>
-        <button class="btn btn-ghost btn-sm btn-square" :disabled="chatting || frozen" @click="removeSelectedInstructionPreset(item.id)">
-          <X class="h-3 w-3" />
-        </button>
-      </div>
-    </div>
     <div v-if="attachedIdeContextReferences.length > 0 || mergedIdeContextGroups.length > 0" class="mb-2 flex flex-col gap-2">
       <div v-for="group in mergedIdeContextGroups" :key="group.workspacePath" class="flex flex-col gap-1">
         <div v-if="showIdeWorkspaceGroupLabel" class="px-1 text-[11px] opacity-60">{{ group.workspaceName }}</div>
@@ -388,7 +375,6 @@ const emit = defineEmits<{
   (e: "selectionActionCopy"): void;
   (e: "selectionActionShare", format: "html" | "png"): void;
   (e: "update:chatInput", value: string): void;
-  (e: "update:selectedInstructionPrompts", value: PromptCommandPreset[]): void;
   (e: "addMention", value: ChatMentionTarget): void;
   (e: "removeMention", value: string | { agentId: string; departmentId?: string }): void;
   (e: "removeClipboardImage", index: number): void;
@@ -468,7 +454,6 @@ const chatInputHistoryApplying = ref(false);
 const resizeInputRaf = ref(0);
 const instructionPanelOpen = ref(false);
 const instructionFocusIndex = ref(0);
-const selectedInstructionPrompts = ref<PromptCommandPreset[]>([]);
 const mentionPanelOpen = ref(false);
 const mentionQuery = ref("");
 const mentionFocusIndex = ref(0);
@@ -674,10 +659,6 @@ function pushChatInputHistory(rawText: string) {
   chatInputHistoryDraft.value = "";
 }
 
-function emitSelectedInstructionPrompts() {
-  emit("update:selectedInstructionPrompts", selectedInstructionPrompts.value);
-}
-
 function openInstructionPanel() {
   instructionPanelOpen.value = true;
   if (instructionFocusIndex.value >= normalizedInstructionPresets.value.length) {
@@ -715,13 +696,30 @@ function toggleInstructionPanel() {
   openInstructionPanel();
 }
 
+function buildInstructionPresetInput(currentText: string, prompt: string): string {
+  const current = String(currentText || "");
+  const nextPrompt = String(prompt || "").trim();
+  if (!nextPrompt) return current;
+  if (!current) return nextPrompt;
+  return `${current}\n\n${nextPrompt}`;
+}
+
 function applyInstructionPreset(item: PromptCommandPreset | undefined) {
   if (!item) return;
-  if (!selectedInstructionPrompts.value.some((entry) => entry.id === item.id)) {
-    selectedInstructionPrompts.value = [...selectedInstructionPrompts.value, item];
-    emitSelectedInstructionPrompts();
-  }
+  const prompt = String(item.prompt || item.name || "").trim();
+  if (!prompt) return;
+  const nextValue = buildInstructionPresetInput(localChatInput.value, prompt);
+  localChatInput.value = nextValue;
   closeInstructionPanel();
+  closeMentionPanel();
+  nextTick(() => {
+    scheduleResizeChatInput();
+    const el = chatInputRef.value;
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    const cursor = nextValue.length;
+    el.setSelectionRange(cursor, cursor);
+  });
 }
 
 function selectInstructionPresetByIndex(index: number) {
@@ -737,17 +735,6 @@ function moveInstructionFocus(delta: number) {
   if (list.length === 0) return;
   const next = instructionFocusIndex.value + delta;
   instructionFocusIndex.value = Math.max(0, Math.min(list.length - 1, next));
-}
-
-function removeSelectedInstructionPreset(id: string) {
-  selectedInstructionPrompts.value = selectedInstructionPrompts.value.filter((item) => item.id !== id);
-  emitSelectedInstructionPrompts();
-}
-
-function clearSelectedInstructionPrompts() {
-  if (selectedInstructionPrompts.value.length === 0) return;
-  selectedInstructionPrompts.value = [];
-  emitSelectedInstructionPrompts();
 }
 
 function removeSelectedMention(item: ChatMentionTarget | undefined) {
@@ -967,7 +954,6 @@ function handleSendChat() {
   const plainText = String(localChatInput.value || "").trim();
   emit("sendChat");
   recordSentTextIfNeeded(plainText);
-  clearSelectedInstructionPrompts();
   closeInstructionPanel();
   closeMentionPanel();
 }
@@ -1166,7 +1152,6 @@ watch(
   () => {
     closeInstructionPanel();
     closeMentionPanel();
-    clearSelectedInstructionPrompts();
     nextTick(() => scheduleResizeChatInput());
   },
 );
@@ -1176,18 +1161,12 @@ watch(
   (list) => {
     if (list.length === 0) {
       instructionFocusIndex.value = 0;
-      selectedInstructionPrompts.value = [];
-      emitSelectedInstructionPrompts();
       instructionPanelOpen.value = false;
       return;
     }
     if (instructionFocusIndex.value >= list.length) {
       instructionFocusIndex.value = list.length - 1;
     }
-    selectedInstructionPrompts.value = selectedInstructionPrompts.value.filter((item) =>
-      list.some((entry) => entry.id === item.id),
-    );
-    emitSelectedInstructionPrompts();
   },
   { deep: true },
 );

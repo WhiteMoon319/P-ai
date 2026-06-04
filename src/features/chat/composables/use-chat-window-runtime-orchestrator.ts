@@ -208,7 +208,6 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     currentForegroundDepartmentId: bindings.currentForegroundDepartmentId,
     currentChatConversationId: bindings.currentChatConversationId,
     chatInput: bindings.chatInput,
-    selectedInstructionPrompts: bindings.selectedInstructionPrompts,
     selectedChatMentions: bindings.selectedChatMentions,
     clipboardImages: bindings.clipboardImages,
     queuedAttachmentNotices: bindings.queuedAttachmentNotices,

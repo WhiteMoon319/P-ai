@@ -184,7 +184,6 @@
         :chat-left-panel-mode="chatLeftPanelMode"
         :chat-right-panel-mode="chatRightPanelMode"
         @update:chat-input="updateChatInput"
-        @update:selected-instruction-prompts="updateSelectedInstructionPrompts"
         @add-mention="addChatMention"
         @remove-mention="removeChatMention"
         @side-conversation-list-visible-change="setSideConversationListVisible"
@@ -636,7 +635,6 @@ const props = defineProps<{
   saveAgentAvatar: (input: { agentId: string; mime: string; bytesBase64: string }) => void;
   clearAgentAvatar: (input: { agentId: string }) => void;
   updateChatInput: (value: string) => void;
-  updateSelectedInstructionPrompts: (value: PromptCommandPreset[]) => void;
   addChatMention: (value: ChatMentionTarget) => void;
   removeChatMention: (value: string | { agentId?: string; departmentId?: string }) => void;
   updateConversationPreferredApiConfigId: (value: string) => void;
