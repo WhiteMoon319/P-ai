@@ -162,8 +162,8 @@
                 <button
                   type="button"
                   class="inline-flex shrink-0 items-center rounded px-1.5 py-1 hover:bg-base-200 hover:text-base-content"
-                  :title="`浏览目录：${segment.path}`"
-                  @click="openDirectoryTree(segment.path)"
+                  :title="`预览目录：${segment.path}`"
+                  @click="showHoverDirectoryTree(segment.path, $event)"
                   @mouseenter="showHoverDirectoryTree(segment.path, $event)"
                   @mouseleave="hideHoverDirectoryTree"
                 >
@@ -609,9 +609,8 @@ const initialDirectoryPath = computed(() => normalizePath(props.initialRootPath 
 const directoryToggleTargetPath = computed(() => {
   const currentRoot = normalizePath(directoryRootPath.value);
   if (currentRoot) return currentRoot;
-  const activeDirectory = activeDirectoryPath.value;
-  if (activeDirectory) return activeDirectory;
-  return initialDirectoryPath.value;
+  if (initialDirectoryPath.value) return initialDirectoryPath.value;
+  return props.directoryOnly ? activeDirectoryPath.value : "";
 });
 
 // ==================== Watchers ====================
@@ -1088,7 +1087,9 @@ async function restoreFileReaderSession(key = props.sessionKey, fallbackRootPath
     const restoredActivePath = normalizePath(state.activePath || "");
     activePath.value = restoredTabs.includes(restoredActivePath) ? restoredActivePath : restoredTabs[0] || "";
 
-    const restoredDirectoryRoot = normalizePath(state.directoryRootPath || "");
+    const restoredDirectoryRoot = props.directoryOnly
+      ? normalizePath(state.directoryRootPath || fallbackRoot)
+      : fallbackRoot;
     if (restoredDirectoryRoot) {
       directoryRootPath.value = restoredDirectoryRoot;
     }
@@ -1514,37 +1515,81 @@ function cancelHideHoverDirectoryTree() {
 
 async function loadDirectoryForHover(path: string) {
   const dirName = path.split(/[\\/]/).filter(Boolean).pop() || path;
-  hoverDirectoryTreeRoot.value = { path, name: dirName, entries: [], loaded: false, loading: true, error: "", expanded: true };
-  hoverDirectoryTreeNodes.value[path] = hoverDirectoryTreeRoot.value;
+  hoverDirectoryTreeRoot.value = updateHoverDirectoryNode(path, {
+    name: dirName,
+    entries: [],
+    loaded: false,
+    loading: true,
+    error: "",
+    expanded: true,
+  });
 
   try {
     const payload = await invokeTauri<FileReaderDirectoryPayload>("list_file_reader_directory", { path });
     const resolvedPath = normalizePath(payload.path || path);
     const resolvedName = String(payload.name || dirName);
     const normalizedEntries = normalizeDirectoryEntries(payload.entries || []);
-    hoverDirectoryTreeRoot.value = { path: resolvedPath, name: resolvedName, entries: normalizedEntries, loaded: true, loading: false, error: "", expanded: true };
-    hoverDirectoryTreeNodes.value[resolvedPath] = hoverDirectoryTreeRoot.value;
-    hoverDirectoryTreeNodes.value[path] = hoverDirectoryTreeRoot.value;
+    hoverDirectoryTreeRoot.value = updateHoverDirectoryNode(resolvedPath, {
+      name: resolvedName,
+      entries: normalizedEntries,
+      loaded: true,
+      loading: false,
+      error: "",
+      expanded: true,
+    });
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    hoverDirectoryTreeRoot.value = { path, name: dirName, entries: [], loaded: true, loading: false, error: errorMsg, expanded: true };
-    hoverDirectoryTreeNodes.value[path] = hoverDirectoryTreeRoot.value;
+    hoverDirectoryTreeRoot.value = updateHoverDirectoryNode(path, {
+      name: dirName,
+      entries: [],
+      loaded: true,
+      loading: false,
+      error: errorMsg,
+      expanded: true,
+    });
   }
+}
+
+function updateHoverDirectoryNode(path: string, patch: Partial<DirectoryNode>) {
+  const normalizedPath = normalizePath(path);
+  const current = hoverDirectoryTreeNodes.value[normalizedPath] || {
+    path: normalizedPath,
+    name: titleFromPath(normalizedPath),
+    entries: [],
+    loaded: false,
+    loading: false,
+    error: "",
+    expanded: false,
+  };
+  const next = { ...current, ...patch, path: normalizedPath };
+  hoverDirectoryTreeNodes.value = {
+    ...hoverDirectoryTreeNodes.value,
+    [normalizedPath]: next,
+  };
+  if (hoverDirectoryTreeRoot.value?.path === normalizedPath) {
+    hoverDirectoryTreeRoot.value = next;
+  }
+  return next;
 }
 
 function toggleHoverDirectory(entry: FileReaderDirectoryEntry) {
   if (!entry.isDirectory) return;
   const normalizedPath = normalizePath(entry.path);
   const node = hoverDirectoryTreeNodes.value[normalizedPath];
-  if (!node) return;
 
-  if (node.expanded) {
-    hoverDirectoryTreeNodes.value[normalizedPath] = { ...node, expanded: false };
-    hoverDirectoryTreeRoot.value = hoverDirectoryTreeRoot.value?.path === normalizedPath ? { ...hoverDirectoryTreeRoot.value, expanded: false } : hoverDirectoryTreeRoot.value;
-  } else if (node.loaded) {
-    hoverDirectoryTreeNodes.value[normalizedPath] = { ...node, expanded: true };
+  if (node?.expanded) {
+    updateHoverDirectoryNode(normalizedPath, { expanded: false });
+  } else if (node?.loaded) {
+    updateHoverDirectoryNode(normalizedPath, { expanded: true });
   } else {
-    hoverDirectoryTreeNodes.value[normalizedPath] = { ...node, loading: true };
+    updateHoverDirectoryNode(normalizedPath, {
+      name: String(entry.name || titleFromPath(normalizedPath)),
+      entries: [],
+      loaded: false,
+      error: "",
+      loading: true,
+      expanded: true,
+    });
     loadHoverSubDirectory(entry);
   }
 }
@@ -1554,16 +1599,10 @@ async function loadHoverSubDirectory(entry: FileReaderDirectoryEntry) {
   try {
     const payload = await invokeTauri<FileReaderDirectoryPayload>("list_file_reader_directory", { path: normalizedPath });
     const normalizedEntries = normalizeDirectoryEntries(payload.entries || []);
-    const currentNode = hoverDirectoryTreeNodes.value[normalizedPath];
-    if (currentNode) {
-      hoverDirectoryTreeNodes.value[normalizedPath] = { ...currentNode, entries: normalizedEntries, loaded: true, loading: false, error: "", expanded: true };
-    }
+    updateHoverDirectoryNode(normalizedPath, { entries: normalizedEntries, loaded: true, loading: false, error: "", expanded: true });
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    const currentNode = hoverDirectoryTreeNodes.value[normalizedPath];
-    if (currentNode) {
-      hoverDirectoryTreeNodes.value[normalizedPath] = { ...currentNode, loading: false, error: errorMsg };
-    }
+    updateHoverDirectoryNode(normalizedPath, { loading: false, loaded: true, error: errorMsg });
   }
 }
 
