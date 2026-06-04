@@ -5,18 +5,18 @@
         <button
           type="button"
           role="tab"
-          class="tab h-8 px-3"
+          class="tab h-8 px-3 transition-[color,border-color,background-color] duration-200 ease-out"
           :class="activeTab === 'local' ? 'tab-active font-semibold' : ''"
-          @click="emit('update:activeTab', 'local')"
+          @click="requestConversationTabChange('local')"
         >
           {{ t('chat.localConversationTab') }}
         </button>
         <button
           type="button"
           role="tab"
-          class="tab h-8 px-3"
+          class="tab h-8 px-3 transition-[color,border-color,background-color] duration-200 ease-out"
           :class="activeTab === 'contact' ? 'tab-active font-semibold' : ''"
-          @click="emit('update:activeTab', 'contact')"
+          @click="requestConversationTabChange('contact')"
         >
           {{ t('chat.contactConversationTab') }}
         </button>
@@ -43,206 +43,220 @@
         />
       </label>
     </div>
-    <ChatConversationFloatingScroll class="flex-1 min-h-0">
-      <section
-        v-for="section in filteredConversationSections"
-        :key="section.key"
-        class="last:mb-0"
-      >
-        <div
-          role="button"
-          tabindex="0"
-          class="group/section mx-1 flex h-9 items-center gap-2 rounded-lg bg-transparent px-2 text-left text-xs font-semibold text-base-content transition-colors hover:bg-base-300/70"
-          :title="section.title"
-          @click="toggleConversationSection(section.key)"
-          @keydown.enter.prevent="toggleConversationSection(section.key)"
-          @keydown.space.prevent="toggleConversationSection(section.key)"
-        >
-          <ChevronRight v-if="isConversationSectionCollapsed(section.key)" class="h-4 w-4 shrink-0" />
-          <ChevronDown v-else class="h-4 w-4 shrink-0" />
-          <span class="min-w-0 truncate">{{ section.title }}</span>
-          <button
-            v-if="section.workspaceRootPath"
-            type="button"
-            class="btn btn-ghost btn-xs ml-auto h-6 min-h-6 w-6 min-w-6 shrink-0 p-0 text-base-content opacity-0 transition-opacity group-hover/section:opacity-100"
-            :title="t('chat.newConversation')"
-            @click.stop="createConversationInSection(section)"
-          >
-            <SquarePen class="h-3.5 w-3.5" />
-          </button>
-        </div>
-        <div v-if="!isConversationSectionCollapsed(section.key)">
-          <div
-            v-for="(item, itemIndex) in section.items"
-            :key="item.conversationId"
-            class="group relative mx-1"
+    <ChatConversationFloatingScroll ref="conversationFloatingScrollRef" class="flex-1 min-h-0">
+      <Transition :name="conversationTabTransitionName" mode="out-in" @after-enter="handleConversationTabTransitionSettled">
+        <div :key="activeConversationTab" class="conversation-tab-panel">
+          <section
+            v-for="section in filteredConversationSections"
+            :key="section.key"
+            class="last:mb-0"
           >
             <div
-              class="block rounded-lg px-2 text-left transition-colors hover:bg-base-100/70"
-              :class="[
-                item.conversationId === activeConversationId ? 'bg-base-300 hover:bg-base-300' : 'bg-transparent',
-                isConversationDisabled(item) ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
-              ]"
-              :role="isCurrentConversation(item) || isConversationDisabled(item) ? undefined : 'button'"
-              :tabindex="isCurrentConversation(item) || isConversationDisabled(item) ? undefined : 0"
-              :title="conversationItemTitle(item)"
-              @click="handleConversationCardClick(item)"
-              @keydown.enter.prevent="handleConversationCardClick(item)"
-              @keydown.space.prevent="handleConversationCardClick(item)"
+              role="button"
+              tabindex="0"
+              class="group/section mx-1 flex h-9 items-center gap-2 rounded-lg bg-transparent px-2 text-left text-xs font-semibold text-base-content transition-colors hover:bg-base-300/70"
+              :title="section.title"
+              @click="toggleConversationSection(section.key)"
+              @keydown.enter.prevent="toggleConversationSection(section.key)"
+              @keydown.space.prevent="toggleConversationSection(section.key)"
             >
-              <div class="flex items-center gap-2 py-2">
-              <div class="shrink-0">
-                <div class="indicator">
-                  <span
-                    v-if="conversationIndicatorTone(item)"
-                    class="indicator-item indicator-top indicator-end z-10 h-2.5 w-2.5 translate-x-0.5 -translate-y-0.5 rounded-full"
-                    :class="conversationIndicatorClass(conversationIndicatorTone(item))"
-                    aria-hidden="true"
-                  ></span>
-                  <div class="avatar">
-                    <div class="flex h-10 w-10 items-center justify-center rounded-full bg-neutral text-neutral-content">
-                      <img
-                        v-if="sideListLastSpeakerAvatarUrl(item)"
-                        :src="sideListLastSpeakerAvatarUrl(item)"
-                        :alt="sideListLastSpeakerLabel(item)"
-                        class="w-10 h-10 rounded-full object-cover"
-                      />
-                      <span v-else class="text-sm font-bold">{{ sideListLastSpeakerInitial(item) }}</span>
+              <ChevronRight
+                class="h-4 w-4 shrink-0 transition-transform duration-200 ease-out"
+                :class="isConversationSectionCollapsed(section.key) ? '' : 'rotate-90'"
+              />
+              <span class="min-w-0 truncate">{{ section.title }}</span>
+              <button
+                v-if="section.workspaceRootPath"
+                type="button"
+                class="btn btn-ghost btn-xs ml-auto h-6 min-h-6 w-6 min-w-6 shrink-0 p-0 text-base-content opacity-0 transition-opacity group-hover/section:opacity-100"
+                :title="t('chat.newConversation')"
+                @click.stop="createConversationInSection(section)"
+              >
+                <SquarePen class="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <Transition
+              :css="false"
+              @enter="animateConversationSectionEnter"
+              @leave="animateConversationSectionLeave"
+              @enter-cancelled="cleanupConversationSectionAnimation"
+              @leave-cancelled="cleanupConversationSectionAnimation"
+            >
+              <div v-if="!isConversationSectionCollapsed(section.key)" class="conversation-section-shell">
+                <div
+                  v-for="(item, itemIndex) in section.items"
+                  :key="item.conversationId"
+                  class="group relative mx-1"
+                >
+                  <div
+                    class="block rounded-lg px-2 text-left transition-colors hover:bg-base-100/70"
+                    :class="[
+                      item.conversationId === activeConversationId ? 'bg-base-300 hover:bg-base-300' : 'bg-transparent',
+                      isConversationDisabled(item) ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
+                    ]"
+                    :role="isCurrentConversation(item) || isConversationDisabled(item) ? undefined : 'button'"
+                    :tabindex="isCurrentConversation(item) || isConversationDisabled(item) ? undefined : 0"
+                    :title="conversationItemTitle(item)"
+                    @click="handleConversationCardClick(item)"
+                    @keydown.enter.prevent="handleConversationCardClick(item)"
+                    @keydown.space.prevent="handleConversationCardClick(item)"
+                  >
+                    <div class="flex items-center gap-2 py-2">
+                    <div class="shrink-0">
+                      <div class="indicator">
+                        <span
+                          v-if="conversationIndicatorTone(item)"
+                          class="indicator-item indicator-top indicator-end z-10 h-2.5 w-2.5 translate-x-0.5 -translate-y-0.5 rounded-full"
+                          :class="conversationIndicatorClass(conversationIndicatorTone(item))"
+                          aria-hidden="true"
+                        ></span>
+                        <div class="avatar">
+                          <div class="flex h-10 w-10 items-center justify-center rounded-full bg-neutral text-neutral-content">
+                            <img
+                              v-if="sideListLastSpeakerAvatarUrl(item)"
+                              :src="sideListLastSpeakerAvatarUrl(item)"
+                              :alt="sideListLastSpeakerLabel(item)"
+                              class="w-10 h-10 rounded-full object-cover"
+                            />
+                            <span v-else class="text-sm font-bold">{{ sideListLastSpeakerInitial(item) }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-start justify-between gap-1.5">
+                        <div class="flex min-w-0 items-center gap-1.5">
+                          <input
+                            v-if="isEditingTitle(item)"
+                            :ref="setRenameInputRef"
+                            v-model="editingTitleDraft"
+                            type="text"
+                            class="input input-bordered input-sm h-8 min-h-0 w-full max-w-full text-sm font-medium"
+                            @click.stop
+                            @mousedown.stop
+                            @keydown.enter.prevent="commitConversationTitleEdit(item)"
+                            @keydown.esc.prevent="cancelConversationTitleEdit()"
+                            @blur="handleConversationTitleBlur(item)"
+                          />
+                          <div v-else class="min-w-0 truncate text-sm font-medium">
+                            {{ conversationDisplayTitle(item) }}
+                          </div>
+                        </div>
+                        <div class="flex shrink-0 items-center gap-1">
+                          <span class="text-[11px] text-base-content/60">
+                            {{ formatConversationTime(item.updatedAt) }}
+                          </span>
+                          <div
+                            v-if="shouldShowConversationMenu(item) && !isEditingTitle(item)"
+                            class="dropdown dropdown-end"
+                            :class="conversationMenuPlacementClass(itemIndex, section.items.length)"
+                          >
+                            <button
+                              type="button"
+                              tabindex="0"
+                              class="btn btn-ghost btn-xs h-6 min-h-6 w-6 min-w-6 p-0 text-base-content/55 opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto hover:text-base-content"
+                              :title="t('common.more')"
+                              @click.stop
+                              @mousedown.stop
+                            >
+                              <Ellipsis class="h-3.5 w-3.5" />
+                            </button>
+                            <ul
+                              tabindex="0"
+                              class="menu dropdown-content z-60 mt-2 w-40 rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
+                              @click.stop
+                              @mousedown.stop
+                            >
+                              <li v-if="!item.isMainConversation">
+                                <button
+                                  type="button"
+                                  :disabled="!canToggleConversationPin(item)"
+                                  @click.stop="toggleConversationPin(item)"
+                                >
+                                  <PinOff v-if="item.isPinned" class="h-4 w-4" />
+                                  <Pin v-else class="h-4 w-4" />
+                                  <span>{{ pinConversationTitle(item) }}</span>
+                                </button>
+                              </li>
+                              <li>
+                                <button
+                                  type="button"
+                                  :disabled="!canRenameConversation(item)"
+                                  @click.stop="startConversationTitleEdit(item)"
+                                >
+                                  <PencilLine class="h-4 w-4" />
+                                  <span>{{ t("common.rename") }}</span>
+                                </button>
+                              </li>
+                              <li>
+                                <button
+                                  type="button"
+                                  :disabled="!canExportConversation(item)"
+                                  @click.stop="requestConversationExport(item)"
+                                >
+                                  <Download class="h-4 w-4" />
+                                  <span>{{ t("chat.exportConversation") }}</span>
+                                </button>
+                              </li>
+                              <li v-if="!item.isMainConversation">
+                                <button
+                                  type="button"
+                                  :disabled="!canArchiveConversation(item)"
+                                  @click.stop="requestConversationArchive(item)"
+                                >
+                                  <Archive class="h-4 w-4" />
+                                  <span>{{ t("common.archive") }}</span>
+                                </button>
+                              </li>
+                              <li v-if="!item.isMainConversation">
+                                <button
+                                  type="button"
+                                  :disabled="!canDeleteConversation(item)"
+                                  class="text-error"
+                                  @click.stop="requestConversationDelete(item)"
+                                >
+                                  <Trash2 class="h-4 w-4" />
+                                  <span>{{ t("common.delete") }}</span>
+                                </button>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="mt-1 flex items-center justify-between gap-2 text-xs">
+                        <span class="min-w-0 truncate opacity-60">
+                          {{ conversationStatusText(item) || latestPreviewLine(item) }}
+                        </span>
+                        <div class="flex shrink-0 items-center gap-2">
+                          <span v-if="conversationPipelineStatus(item) === 'busy' || conversationRuntimeBusy(item)" class="loading loading-spinner loading-xs text-primary" :title="conversationStatusText(item)"></span>
+                          <span v-else-if="conversationPipelineStatus(item) === 'error'" class="badge badge-error badge-xs">{{ t("common.failed") }}</span>
+                          <span v-else-if="conversationStatusText(item)" class="text-[11px] text-base-content/60">{{ conversationStatusText(item) }}</span>
+                          <span
+                            v-if="unreadCountBadge(item)"
+                            class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-error px-1.5 text-[11px] font-medium text-error-content"
+                          >
+                            {{ unreadCountBadge(item) }}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
+                  </div>
+
                 </div>
               </div>
-
-              <div class="flex-1 min-w-0">
-                <div class="flex items-start justify-between gap-1.5">
-                  <div class="flex min-w-0 items-center gap-1.5">
-                    <input
-                      v-if="isEditingTitle(item)"
-                      :ref="setRenameInputRef"
-                      v-model="editingTitleDraft"
-                      type="text"
-                      class="input input-bordered input-sm h-8 min-h-0 w-full max-w-full text-sm font-medium"
-                      @click.stop
-                      @mousedown.stop
-                      @keydown.enter.prevent="commitConversationTitleEdit(item)"
-                      @keydown.esc.prevent="cancelConversationTitleEdit()"
-                      @blur="handleConversationTitleBlur(item)"
-                    />
-                    <div v-else class="min-w-0 truncate text-sm font-medium">
-                      {{ conversationDisplayTitle(item) }}
-                    </div>
-                  </div>
-                  <div class="flex shrink-0 items-center gap-1">
-                    <span class="text-[11px] text-base-content/60">
-                      {{ formatConversationTime(item.updatedAt) }}
-                    </span>
-                    <div
-                      v-if="shouldShowConversationMenu(item) && !isEditingTitle(item)"
-                      class="dropdown dropdown-end"
-                      :class="conversationMenuPlacementClass(itemIndex, section.items.length)"
-                    >
-                      <button
-                        type="button"
-                        tabindex="0"
-                        class="btn btn-ghost btn-xs h-6 min-h-6 w-6 min-w-6 p-0 text-base-content/55 opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto hover:text-base-content"
-                        :title="t('common.more')"
-                        @click.stop
-                        @mousedown.stop
-                      >
-                        <Ellipsis class="h-3.5 w-3.5" />
-                      </button>
-                      <ul
-                        tabindex="0"
-                        class="menu dropdown-content z-60 mt-2 w-40 rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
-                        @click.stop
-                        @mousedown.stop
-                      >
-                        <li v-if="!item.isMainConversation">
-                          <button
-                            type="button"
-                            :disabled="!canToggleConversationPin(item)"
-                            @click.stop="toggleConversationPin(item)"
-                          >
-                            <PinOff v-if="item.isPinned" class="h-4 w-4" />
-                            <Pin v-else class="h-4 w-4" />
-                            <span>{{ pinConversationTitle(item) }}</span>
-                          </button>
-                        </li>
-                        <li>
-                          <button
-                            type="button"
-                            :disabled="!canRenameConversation(item)"
-                            @click.stop="startConversationTitleEdit(item)"
-                          >
-                            <PencilLine class="h-4 w-4" />
-                            <span>{{ t("common.rename") }}</span>
-                          </button>
-                        </li>
-                        <li>
-                          <button
-                            type="button"
-                            :disabled="!canExportConversation(item)"
-                            @click.stop="requestConversationExport(item)"
-                          >
-                            <Download class="h-4 w-4" />
-                            <span>{{ t("chat.exportConversation") }}</span>
-                          </button>
-                        </li>
-                        <li v-if="!item.isMainConversation">
-                          <button
-                            type="button"
-                            :disabled="!canArchiveConversation(item)"
-                            @click.stop="requestConversationArchive(item)"
-                          >
-                            <Archive class="h-4 w-4" />
-                            <span>{{ t("common.archive") }}</span>
-                          </button>
-                        </li>
-                        <li v-if="!item.isMainConversation">
-                          <button
-                            type="button"
-                            :disabled="!canDeleteConversation(item)"
-                            class="text-error"
-                            @click.stop="requestConversationDelete(item)"
-                          >
-                            <Trash2 class="h-4 w-4" />
-                            <span>{{ t("common.delete") }}</span>
-                          </button>
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="mt-1 flex items-center justify-between gap-2 text-xs">
-                  <span class="min-w-0 truncate opacity-60">
-                    {{ conversationStatusText(item) || latestPreviewLine(item) }}
-                  </span>
-                  <div class="flex shrink-0 items-center gap-2">
-                    <span v-if="conversationPipelineStatus(item) === 'busy' || conversationRuntimeBusy(item)" class="loading loading-spinner loading-xs text-primary" :title="conversationStatusText(item)"></span>
-                    <span v-else-if="conversationPipelineStatus(item) === 'error'" class="badge badge-error badge-xs">{{ t("common.failed") }}</span>
-                    <span v-else-if="conversationStatusText(item)" class="text-[11px] text-base-content/60">{{ conversationStatusText(item) }}</span>
-                    <span
-                      v-if="unreadCountBadge(item)"
-                      class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-error px-1.5 text-[11px] font-medium text-error-content"
-                    >
-                      {{ unreadCountBadge(item) }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            </div>
-
+            </Transition>
+          </section>
+          <div
+            v-if="filteredConversationSections.length === 0"
+            class="px-3 py-4 text-center text-sm text-base-content/60"
+          >
+            {{ t("chat.conversationSearchEmpty") }}
           </div>
         </div>
-      </section>
-      <div
-        v-if="filteredConversationSections.length === 0"
-        class="px-3 py-4 text-center text-sm text-base-content/60"
-      >
-        {{ t("chat.conversationSearchEmpty") }}
-      </div>
+      </Transition>
     </ChatConversationFloatingScroll>
   </aside>
 </template>
@@ -250,7 +264,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
-import { Archive, ChevronDown, ChevronRight, Download, Ellipsis, PencilLine, Pin, PinOff, Search, SquarePen, Trash2 } from "@lucide/vue";
+import { Archive, ChevronRight, Download, Ellipsis, PencilLine, Pin, PinOff, Search, SquarePen, Trash2 } from "@lucide/vue";
 import type { ChatConversationOverviewItem, ConversationPreviewMessage } from "../../../types/app";
 import { usePipelineStatus } from "../../shell/composables/use-pipeline-status";
 import { formatConversationListTime } from "../utils/conversation-time";
@@ -290,7 +304,9 @@ const editingTitleDraft = ref("");
 const conversationSearchQuery = ref("");
 const showSearch = ref(false);
 const searchInputRef = ref<HTMLInputElement | null>(null);
+const conversationFloatingScrollRef = ref<InstanceType<typeof ChatConversationFloatingScroll> | null>(null);
 const collapsedConversationSectionKeys = ref<Record<string, boolean>>({});
+const conversationTabTransitionName = ref("conversation-tab-slide-left");
 const activeConversationTab = computed({
   get: () => props.activeTab === "contact" ? "contact" : "local",
   set: (value: "local" | "contact") => emit("update:activeTab", value),
@@ -368,6 +384,16 @@ watch(
   { immediate: true },
 );
 
+watch(
+  () => activeConversationTab.value,
+  (nextValue, previousValue) => {
+    if (!previousValue || nextValue === previousValue) return;
+    conversationTabTransitionName.value = nextValue === "contact"
+      ? "conversation-tab-slide-left"
+      : "conversation-tab-slide-right";
+  },
+);
+
 watch(showSearch, async (visible) => {
   if (visible) {
     await nextTick();
@@ -391,6 +417,92 @@ function toggleConversationSection(key: string) {
     ...collapsedConversationSectionKeys.value,
     [key]: !collapsedConversationSectionKeys.value[key],
   };
+}
+
+function requestConversationTabChange(value: "local" | "contact") {
+  if (value === activeConversationTab.value) return;
+  conversationTabTransitionName.value = value === "contact"
+    ? "conversation-tab-slide-left"
+    : "conversation-tab-slide-right";
+  emit("update:activeTab", value);
+}
+
+function scheduleConversationListScrollbarUpdate() {
+  void nextTick(() => {
+    requestAnimationFrame(() => conversationFloatingScrollRef.value?.updateThumb());
+  });
+}
+
+function cleanupConversationSectionAnimation(element: Element) {
+  const sectionElement = element as HTMLElement;
+  sectionElement.style.height = "";
+  sectionElement.style.opacity = "";
+  sectionElement.style.transform = "";
+  sectionElement.style.overflow = "";
+  sectionElement.style.willChange = "";
+  sectionElement.style.transition = "";
+}
+
+function animateConversationSectionEnter(element: Element, done: () => void) {
+  const sectionElement = element as HTMLElement;
+  cleanupConversationSectionAnimation(sectionElement);
+  sectionElement.style.height = "0px";
+  sectionElement.style.opacity = "0";
+  sectionElement.style.transform = "translateY(-6px)";
+  sectionElement.style.overflow = "hidden";
+  sectionElement.style.willChange = "height, opacity, transform";
+  void sectionElement.offsetHeight;
+  const onTransitionEnd = (event: TransitionEvent) => {
+    if (event.target !== sectionElement || event.propertyName !== "height") return;
+    sectionElement.removeEventListener("transitionend", onTransitionEnd);
+    cleanupConversationSectionAnimation(sectionElement);
+    scheduleConversationListScrollbarUpdate();
+    done();
+  };
+  sectionElement.addEventListener("transitionend", onTransitionEnd);
+  sectionElement.style.transition = [
+    "height 180ms cubic-bezier(0.22, 1, 0.36, 1)",
+    "opacity 140ms ease-out",
+    "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)",
+  ].join(", ");
+  requestAnimationFrame(() => {
+    sectionElement.style.height = `${sectionElement.scrollHeight}px`;
+    sectionElement.style.opacity = "1";
+    sectionElement.style.transform = "translateY(0)";
+  });
+}
+
+function animateConversationSectionLeave(element: Element, done: () => void) {
+  const sectionElement = element as HTMLElement;
+  cleanupConversationSectionAnimation(sectionElement);
+  sectionElement.style.height = `${sectionElement.scrollHeight}px`;
+  sectionElement.style.opacity = "1";
+  sectionElement.style.transform = "translateY(0)";
+  sectionElement.style.overflow = "hidden";
+  sectionElement.style.willChange = "height, opacity, transform";
+  void sectionElement.offsetHeight;
+  const onTransitionEnd = (event: TransitionEvent) => {
+    if (event.target !== sectionElement || event.propertyName !== "height") return;
+    sectionElement.removeEventListener("transitionend", onTransitionEnd);
+    cleanupConversationSectionAnimation(sectionElement);
+    scheduleConversationListScrollbarUpdate();
+    done();
+  };
+  sectionElement.addEventListener("transitionend", onTransitionEnd);
+  sectionElement.style.transition = [
+    "height 160ms cubic-bezier(0.4, 0, 1, 1)",
+    "opacity 110ms ease-in",
+    "transform 160ms cubic-bezier(0.4, 0, 1, 1)",
+  ].join(", ");
+  requestAnimationFrame(() => {
+    sectionElement.style.height = "0px";
+    sectionElement.style.opacity = "0";
+    sectionElement.style.transform = "translateY(-6px)";
+  });
+}
+
+function handleConversationTabTransitionSettled() {
+  scheduleConversationListScrollbarUpdate();
 }
 
 function createConversationInSection(section: ConversationSection) {
@@ -666,3 +778,34 @@ function sideListLastSpeakerAvatarUrl(item: ChatConversationOverviewItem): strin
   return props.personaAvatarUrlMap?.[speakerId] || "";
 }
 </script>
+
+<style scoped>
+.conversation-tab-panel {
+  min-height: 100%;
+}
+
+.conversation-section-shell {
+  transform-origin: top;
+}
+
+.conversation-tab-slide-left-enter-active,
+.conversation-tab-slide-left-leave-active,
+.conversation-tab-slide-right-enter-active,
+.conversation-tab-slide-right-leave-active {
+  transition:
+    opacity 120ms ease,
+    transform 120ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.conversation-tab-slide-left-enter-from,
+.conversation-tab-slide-right-leave-to {
+  opacity: 0;
+  transform: translateX(12px);
+}
+
+.conversation-tab-slide-left-leave-to,
+.conversation-tab-slide-right-enter-from {
+  opacity: 0;
+  transform: translateX(-12px);
+}
+</style>

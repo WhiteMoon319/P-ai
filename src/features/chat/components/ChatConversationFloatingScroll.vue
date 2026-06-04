@@ -13,6 +13,10 @@ import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 
 const scrollerRef = ref<HTMLElement | null>(null);
 const scrollbarRef = ref<InstanceType<typeof FloatingScrollbar> | null>(null);
+
+defineExpose({
+  updateThumb: () => scrollbarRef.value?.updateThumb(),
+});
 </script>
 
 <style scoped>
