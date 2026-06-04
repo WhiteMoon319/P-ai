@@ -1,5 +1,5 @@
 <template>
-  <aside class="flex h-full w-full shrink-0 flex-col border-r border-base-300 bg-base-200">
+  <aside class="conversation-time-container flex h-full w-full shrink-0 flex-col border-r border-base-300 bg-base-200">
     <div class="flex items-center gap-2 p-2 pb-0">
       <div role="tablist" class="tabs tabs-border min-w-0 shrink-0">
         <button
@@ -144,7 +144,7 @@
                           </div>
                         </div>
                         <div class="flex shrink-0 items-center gap-1">
-                          <span class="text-[11px] text-base-content/60">
+                          <span class="conversation-time-label text-[11px] text-base-content/60">
                             {{ formatConversationTime(item.updatedAt) }}
                           </span>
                           <div
@@ -749,7 +749,7 @@ function latestPreviewLine(item: ChatConversationOverviewItem): string {
   const previews = normalizedPreviewMessages(item);
   const latestPreview = previews[previews.length - 1];
   if (!latestPreview) return t("chat.conversationNoPreview");
-  return `${speakerLabel(latestPreview)}: ${previewText(latestPreview)}`;
+  return previewText(latestPreview);
 }
 
 function formatConversationTime(value?: string): string {
@@ -784,8 +784,18 @@ function sideListLastSpeakerAvatarUrl(item: ChatConversationOverviewItem): strin
   min-height: 100%;
 }
 
+.conversation-time-container {
+  container-type: inline-size;
+}
+
 .conversation-section-shell {
   transform-origin: top;
+}
+
+@container (max-width: 229px) {
+  .conversation-time-label {
+    display: none;
+  }
 }
 
 .conversation-tab-slide-left-enter-active,

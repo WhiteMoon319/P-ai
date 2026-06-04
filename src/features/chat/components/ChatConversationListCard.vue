@@ -1,5 +1,5 @@
 <template>
-  <div class="flex h-[80vh] w-80 max-h-[calc(100vh-1rem)] max-w-[calc(100vw-1rem)] flex-col rounded-box border border-base-300 bg-base-100 shadow-xl">
+  <div class="conversation-time-container flex h-[80vh] w-80 max-h-[calc(100vh-1rem)] max-w-[calc(100vw-1rem)] flex-col rounded-box border border-base-300 bg-base-100 shadow-xl">
     <ChatConversationListHeader
       v-model:search-query="conversationSearchQuery"
       v-model:active-tab="activeConversationTab"
@@ -100,7 +100,7 @@
                     </div>
                   </div>
                   <div class="flex shrink-0 items-center gap-1">
-                    <span class="text-[11px] text-base-content/60">
+                    <span class="conversation-time-label text-[11px] text-base-content/60">
                       {{ formatConversationTime(item.updatedAt) }}
                     </span>
                     <div
@@ -627,7 +627,7 @@ function latestPreviewLine(item: ChatConversationOverviewItem): string {
   const previews = normalizedPreviewMessages(item);
   const latestPreview = previews[previews.length - 1];
   if (!latestPreview) return t("chat.conversationNoPreview");
-  return `${speakerLabel(latestPreview)}: ${previewText(latestPreview)}`;
+  return previewText(latestPreview);
 }
 
 function formatConversationTime(value?: string): string {
@@ -665,3 +665,15 @@ function lastSpeakerAvatarUrl(item: ChatConversationOverviewItem): string {
   return props.personaAvatarUrlMap?.[speakerId] || "";
 }
 </script>
+
+<style scoped>
+.conversation-time-container {
+  container-type: inline-size;
+}
+
+@container (max-width: 359px) {
+  .conversation-time-label {
+    display: none;
+  }
+}
+</style>
