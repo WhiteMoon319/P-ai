@@ -16,6 +16,26 @@ struct ToolRepeatGuard {
     same_call_streak: usize,
 }
 
+#[derive(Debug, Clone)]
+struct PreparedToolCall {
+    tool_call_id: String,
+    tool_name: String,
+    tool_args: String,
+}
+
+#[derive(Debug)]
+struct ExecutedToolCall {
+    tool_call_id: String,
+    tool_name: String,
+    tool_args: String,
+    tool_result: ProviderToolResult,
+}
+
+#[derive(Debug)]
+struct PreparedToolCallBatch {
+    calls: Vec<PreparedToolCall>,
+}
+
 fn canonical_json_signature(value: &Value) -> String {
     match value {
         Value::Null => "null".to_string(),
@@ -867,40 +887,6 @@ fn tool_result_provider_meta_patch(
     }))
 }
 
-async fn call_tool_with_user_abort<F, T, E>(
-    app_state: Option<&AppState>,
-    chat_session_key: &str,
-    future: F,
-) -> Result<T, String>
-where
-    F: std::future::Future<Output = Result<T, E>>,
-    E: std::fmt::Display,
-{
-    if let Some(state) = app_state {
-        let (abort_handle, abort_registration) = AbortHandle::new_pair();
-        register_inflight_tool_abort_handle(state, chat_session_key, abort_handle)?;
-        let result = futures_util::future::Abortable::new(future, abort_registration).await;
-        if let Err(err) = clear_inflight_tool_abort_handle(state, chat_session_key) {
-            eprintln!(
-                "[聊天] 清理进行中工具中断句柄失败 (session={}): {}",
-                chat_session_key, err
-            );
-        }
-        match result {
-            Ok(inner) => inner.map_err(|err| err.to_string()),
-            Err(_) => {
-                eprintln!(
-                    "[聊天] 用户中止工具调用 (session={})",
-                    chat_session_key
-                );
-                Err(CHAT_ABORTED_BY_USER_ERROR.to_string())
-            }
-        }
-    } else {
-        future.await.map_err(|err| err.to_string())
-    }
-}
-
 async fn runtime_tool_definitions_for_genai(
     definitions: &[ProviderToolDefinition],
     adapter_kind: genai::adapter::AdapterKind,
@@ -950,6 +936,264 @@ async fn call_runtime_tool_by_name(
         }
     } else {
         tool.call_json(tool_args.to_string()).await
+    }
+}
+
+fn normalize_runtime_tool_name(name: &str) -> String {
+    name.trim().to_ascii_lowercase()
+}
+
+fn runtime_tool_by_name<'a>(
+    tools: &'a [Box<dyn RuntimeToolDyn>],
+    tool_name: &str,
+) -> Option<&'a Box<dyn RuntimeToolDyn>> {
+    tools.iter().find(|tool| {
+        let name = tool.name();
+        name == tool_name || (tool_name == "read_file" && name == READ_TOOL_NAME)
+    })
+}
+
+fn runtime_tool_definition_by_name<'a>(
+    definitions: &'a [ProviderToolDefinition],
+    tool_name: &str,
+) -> Option<&'a ProviderToolDefinition> {
+    definitions.iter().find(|definition| {
+        definition.name == tool_name || (tool_name == "read_file" && definition.name == READ_TOOL_NAME)
+    })
+}
+
+fn text_contains_runtime_tool_keyword(text: &str, keyword: &str) -> bool {
+    let keyword = keyword.trim().to_ascii_lowercase();
+    if keyword.is_empty() {
+        return false;
+    }
+    let text = text.to_ascii_lowercase();
+    let mut start = 0usize;
+    while let Some(offset) = text[start..].find(&keyword) {
+        let idx = start + offset;
+        let before = text[..idx]
+            .chars()
+            .next_back()
+            .map(|ch| ch.is_ascii_alphanumeric())
+            .unwrap_or(false);
+        let after_idx = idx + keyword.len();
+        let after = text[after_idx..]
+            .chars()
+            .next()
+            .map(|ch| ch.is_ascii_alphanumeric())
+            .unwrap_or(false);
+        if !before && !after {
+            return true;
+        }
+        start = after_idx;
+    }
+    false
+}
+
+fn mcp_tool_definition_looks_mutating(definition: Option<&ProviderToolDefinition>, tool_name: &str) -> bool {
+    let mut haystacks = vec![tool_name.to_string()];
+    if let Some(definition) = definition {
+        haystacks.push(definition.description.clone());
+        haystacks.push(definition.parameters.to_string());
+    }
+    let text = haystacks.join("\n");
+    const SERIAL_WORDS: &[&str] = &[
+        "shell", "exec", "terminal", "command", "edit", "write", "patch", "apply", "file",
+        "filesystem", "fs", "delete", "remove", "move", "rename", "create", "save",
+        "update", "replace", "insert", "append", "modify", "mkdir", "rmdir",
+    ];
+    SERIAL_WORDS
+        .iter()
+        .any(|keyword| text_contains_runtime_tool_keyword(&text, keyword))
+}
+
+fn runtime_tool_call_requires_serial_execution(
+    tools: &[Box<dyn RuntimeToolDyn>],
+    definitions: &[ProviderToolDefinition],
+    tool_name: &str,
+) -> bool {
+    let normalized = normalize_runtime_tool_name(tool_name);
+    if matches!(
+        normalized.as_str(),
+        "exec"
+            | "shell_exec"
+            | "apply_patch"
+            | "todo"
+            | "task"
+            | "remember"
+            | "plan"
+            | "remote_im_send"
+            | "contact_reply"
+            | "contact_send_files"
+            | "contact_no_reply"
+    ) {
+        return true;
+    }
+    let Some(tool) = runtime_tool_by_name(tools, tool_name) else {
+        return false;
+    };
+    if !tool.is_mcp_tool() {
+        return false;
+    }
+    let definition = runtime_tool_definition_by_name(definitions, tool_name);
+    mcp_tool_definition_looks_mutating(definition, tool_name)
+}
+
+fn prepared_tool_call_from_genai(tool_call: genai::chat::ToolCall) -> PreparedToolCall {
+    let genai::chat::ToolCall {
+        call_id,
+        fn_name,
+        fn_arguments,
+        ..
+    } = tool_call;
+    let tool_args = match fn_arguments {
+        Value::String(raw) => raw,
+        other => other.to_string(),
+    };
+    PreparedToolCall {
+        tool_call_id: call_id,
+        tool_name: fn_name,
+        tool_args,
+    }
+}
+
+fn split_prepared_tool_calls_into_execution_batches(
+    tools: &[Box<dyn RuntimeToolDyn>],
+    definitions: &[ProviderToolDefinition],
+    tool_calls: Vec<PreparedToolCall>,
+) -> Vec<PreparedToolCallBatch> {
+    let mut batches = Vec::<PreparedToolCallBatch>::new();
+    let mut pending_parallel_calls = Vec::<PreparedToolCall>::new();
+
+    for call in tool_calls {
+        if runtime_tool_call_requires_serial_execution(tools, definitions, &call.tool_name) {
+            if !pending_parallel_calls.is_empty() {
+                batches.push(PreparedToolCallBatch {
+                    calls: std::mem::take(&mut pending_parallel_calls),
+                });
+            }
+            batches.push(PreparedToolCallBatch { calls: vec![call] });
+        } else {
+            pending_parallel_calls.push(call);
+        }
+    }
+
+    if !pending_parallel_calls.is_empty() {
+        batches.push(PreparedToolCallBatch {
+            calls: pending_parallel_calls,
+        });
+    }
+
+    batches
+}
+
+async fn execute_prepared_tool_call(
+    tools: &[Box<dyn RuntimeToolDyn>],
+    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    call: PreparedToolCall,
+) -> Result<ExecutedToolCall, String> {
+    let tool_result = match call_runtime_tool_by_name(tools, &call.tool_name, &call.tool_args).await {
+        Ok(output) => {
+            let status_message = if output.is_error {
+                format!("工具返回错误结果：{}", call.tool_name)
+            } else {
+                format!("工具调用完成：{}", call.tool_name)
+            };
+            send_tool_status_event(
+                on_delta,
+                &call.tool_name,
+                if output.is_error { "failed" } else { "done" },
+                Some(call.tool_args.as_str()),
+                Some(call.tool_call_id.as_str()),
+                &status_message,
+            );
+            output
+        }
+        Err(err) => {
+            if err == CHAT_ABORTED_BY_USER_ERROR {
+                return Err(err);
+            }
+            let err_text = err.to_string();
+            send_tool_status_event(
+                on_delta,
+                &call.tool_name,
+                "failed",
+                Some(call.tool_args.as_str()),
+                Some(call.tool_call_id.as_str()),
+                &format!("工具调用失败：{} ({})", call.tool_name, err_text),
+            );
+            ProviderToolResult::error(tool_failure_result_json(&call.tool_name, &err_text))
+        }
+    };
+    Ok(ExecutedToolCall {
+        tool_call_id: call.tool_call_id,
+        tool_name: call.tool_name,
+        tool_args: call.tool_args,
+        tool_result,
+    })
+}
+
+async fn execute_prepared_tool_call_group_inner(
+    tools: &[Box<dyn RuntimeToolDyn>],
+    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    calls: Vec<PreparedToolCall>,
+) -> Result<Vec<ExecutedToolCall>, String> {
+    let futures = calls
+        .into_iter()
+        .map(|call| execute_prepared_tool_call(tools, on_delta, call))
+        .collect::<Vec<_>>();
+    let mut output = Vec::<ExecutedToolCall>::new();
+    for result in futures_util::future::join_all(futures).await {
+        output.push(result?);
+    }
+    Ok(output)
+}
+
+async fn execute_prepared_tool_call_group(
+    tool_abort_state: Option<&AppState>,
+    chat_session_key: &str,
+    tools: &[Box<dyn RuntimeToolDyn>],
+    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    request_id: Option<&str>,
+    calls: Vec<PreparedToolCall>,
+) -> Result<Vec<ExecutedToolCall>, String> {
+    if calls.is_empty() {
+        return Ok(Vec::new());
+    }
+    for call in &calls {
+        send_stream_rebind_required_event(on_delta, request_id, "tool_start");
+        send_tool_status_event(
+            on_delta,
+            &call.tool_name,
+            "running",
+            Some(call.tool_args.as_str()),
+            Some(call.tool_call_id.as_str()),
+            &format!("正在调用工具：{}", call.tool_name),
+        );
+    }
+    let run_group = execute_prepared_tool_call_group_inner(tools, on_delta, calls);
+    if let Some(state) = tool_abort_state {
+        let (abort_handle, abort_registration) = AbortHandle::new_pair();
+        register_inflight_tool_abort_handle(state, chat_session_key, abort_handle)?;
+        let result = futures_util::future::Abortable::new(run_group, abort_registration).await;
+        if let Err(err) = clear_inflight_tool_abort_handle(state, chat_session_key) {
+            eprintln!(
+                "[聊天] 清理进行中工具组中断句柄失败 (session={}): {}",
+                chat_session_key, err
+            );
+        }
+        match result {
+            Ok(inner) => inner,
+            Err(_) => {
+                eprintln!(
+                    "[聊天] 用户中止工具组调用 (session={})",
+                    chat_session_key
+                );
+                Err(CHAT_ABORTED_BY_USER_ERROR.to_string())
+            }
+        }
+    } else {
+        run_group.await
     }
 }
 
@@ -1528,114 +1772,56 @@ async fn run_genai_tool_loop(
         send_assistant_tool_event(on_delta, &assistant_tool_group_stream_event);
         tool_history_events.push(assistant_tool_group_history_event.clone());
 
-        for tool_call in turn_tool_calls {
-            let genai::chat::ToolCall {
-                call_id: tool_call_id,
-                fn_name: tool_name,
-                fn_arguments,
-                ..
-            } = tool_call;
-            let tool_args = match fn_arguments {
-                Value::String(raw) => raw,
-                other => other.to_string(),
-            };
-            let repeat_streak =
-                register_tool_repeat_attempt(&mut tool_repeat_guard, &tool_name, &tool_args);
-            send_stream_rebind_required_event(
+        let prepared_turn_tool_calls = turn_tool_calls
+            .into_iter()
+            .map(prepared_tool_call_from_genai)
+            .collect::<Vec<_>>();
+        for batch in split_prepared_tool_calls_into_execution_batches(
+            &tool_assembly.tools,
+            &tool_assembly.tool_definitions,
+            prepared_turn_tool_calls,
+        ) {
+            let mut executable_calls = Vec::<PreparedToolCall>::new();
+            let mut repeat_block = None::<(PreparedToolCall, String)>;
+            for call in batch.calls {
+                let repeat_streak = register_tool_repeat_attempt(
+                    &mut tool_repeat_guard,
+                    &call.tool_name,
+                    &call.tool_args,
+                );
+                if repeat_streak > REPEATED_TOOL_CALL_BLOCK_THRESHOLD {
+                    let err_text = repeated_tool_call_block_message(
+                        &call.tool_name,
+                        &call.tool_args,
+                        repeat_streak,
+                    );
+                    runtime_log_info(format!(
+                        "[聊天] 工具循环触发重复调用熔断: session={}, tool_name={}, streak={}, threshold={}, args={}",
+                        chat_session_key, call.tool_name, repeat_streak, REPEATED_TOOL_CALL_BLOCK_THRESHOLD, call.tool_args
+                    ));
+                    repeat_block = Some((call, err_text));
+                    break;
+                }
+                executable_calls.push(call);
+            }
+
+            let executed_tool_calls = execute_prepared_tool_call_group(
+                tool_abort_state,
+                chat_session_key,
+                &tool_assembly.tools,
                 on_delta,
                 auto_compaction_context.and_then(|ctx| ctx.request_id.as_deref()),
-                "tool_start",
-            );
-            send_tool_status_event(
-                on_delta,
-                &tool_name,
-                "running",
-                Some(tool_args.as_str()),
-                Some(tool_call_id.as_str()),
-                &format!("正在调用工具：{}", tool_name),
-            );
+                executable_calls,
+            )
+            .await?;
 
-            let tool_result = if repeat_streak > REPEATED_TOOL_CALL_BLOCK_THRESHOLD {
-                let err_text = repeated_tool_call_block_message(&tool_name, &tool_args, repeat_streak);
-                runtime_log_info(format!(
-                    "[聊天] 工具循环触发重复调用熔断: session={}, tool_name={}, streak={}, threshold={}, args={}",
-                    chat_session_key, tool_name, repeat_streak, REPEATED_TOOL_CALL_BLOCK_THRESHOLD, tool_args
-                ));
-                send_tool_status_event(
-                    on_delta,
-                    &tool_name,
-                    "failed",
-                    Some(tool_args.as_str()),
-                    Some(tool_call_id.as_str()),
-                    &err_text,
-                );
-                let history_content = sanitize_tool_result_for_history(&tool_name, &err_text);
-                let tool_result_event = serde_json::json!({
-                    "role": "tool",
-                    "tool_call_id": tool_call_id,
-                    "content": history_content
-                });
-                send_assistant_tool_result_event(on_delta, &tool_result_event);
-                insert_before_trailing_user_history_events(
-                    &mut tool_history_events,
-                    tool_result_event.clone(),
-                );
-                sync_completed_tool_history_cache(
-                    tool_abort_state,
-                    chat_session_key,
-                    &tool_history_events,
-                );
-                return Ok(repeated_tool_call_block_reply(
-                    full_activity_reasoning_text,
-                    tool_history_events,
-                    trusted_input_tokens,
-                    err_text,
-                ));
-            } else {
-                match call_tool_with_user_abort(
-                    tool_abort_state,
-                    chat_session_key,
-                    call_runtime_tool_by_name(&tool_assembly.tools, &tool_name, &tool_args),
-                )
-                .await
-                {
-                    Ok(output) => {
-                        let status_message = if output.is_error {
-                            format!("工具返回错误结果：{}", tool_name)
-                        } else {
-                            format!("工具调用完成：{}", tool_name)
-                        };
-                        send_tool_status_event(
-                            on_delta,
-                            &tool_name,
-                            if output.is_error { "failed" } else { "done" },
-                            Some(tool_args.as_str()),
-                            Some(tool_call_id.as_str()),
-                            &status_message,
-                        );
-                        output
-                    }
-                    Err(err) => {
-                        if err == CHAT_ABORTED_BY_USER_ERROR {
-                            eprintln!(
-                                "[聊天] 收到停止请求，立即退出工具循环 (session={})",
-                                chat_session_key
-                            );
-                            return Err(err);
-                        }
-                        let err_text = err.to_string();
-                        send_tool_status_event(
-                            on_delta,
-                            &tool_name,
-                            "failed",
-                            Some(tool_args.as_str()),
-                            Some(tool_call_id.as_str()),
-                            &format!("工具调用失败：{} ({})", tool_name, err_text),
-                        );
-                        ProviderToolResult::error(tool_failure_result_json(&tool_name, &err_text))
-                    }
-                }
-            };
+            for executed_tool_call in executed_tool_calls {
+            let ExecutedToolCall {
+                tool_call_id,
+                tool_name,
+                tool_args,
+                tool_result,
+            } = executed_tool_call;
             let tool_result_text = tool_result.display_text.as_str();
             let history_content = sanitize_tool_result_for_history(&tool_name, &tool_result_text);
             let tool_result_event = serde_json::json!({
@@ -1734,6 +1920,54 @@ async fn run_genai_tool_loop(
                     chat_session_key,
                     &tool_history_events,
                 );
+            }
+            }
+
+            if let Some((call, err_text)) = repeat_block {
+                send_stream_rebind_required_event(
+                    on_delta,
+                    auto_compaction_context.and_then(|ctx| ctx.request_id.as_deref()),
+                    "tool_start",
+                );
+                send_tool_status_event(
+                    on_delta,
+                    &call.tool_name,
+                    "running",
+                    Some(call.tool_args.as_str()),
+                    Some(call.tool_call_id.as_str()),
+                    &format!("正在调用工具：{}", call.tool_name),
+                );
+                send_tool_status_event(
+                    on_delta,
+                    &call.tool_name,
+                    "failed",
+                    Some(call.tool_args.as_str()),
+                    Some(call.tool_call_id.as_str()),
+                    &err_text,
+                );
+                let history_content =
+                    sanitize_tool_result_for_history(&call.tool_name, &err_text);
+                let tool_result_event = serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": call.tool_call_id,
+                    "content": history_content
+                });
+                send_assistant_tool_result_event(on_delta, &tool_result_event);
+                insert_before_trailing_user_history_events(
+                    &mut tool_history_events,
+                    tool_result_event.clone(),
+                );
+                sync_completed_tool_history_cache(
+                    tool_abort_state,
+                    chat_session_key,
+                    &tool_history_events,
+                );
+                return Ok(repeated_tool_call_block_reply(
+                    full_activity_reasoning_text,
+                    tool_history_events,
+                    trusted_input_tokens,
+                    err_text,
+                ));
             }
         }
 
@@ -2034,114 +2268,56 @@ async fn run_genai_tool_loop_non_stream(
         send_assistant_tool_event(on_delta, &assistant_tool_group_stream_event);
         tool_history_events.push(assistant_tool_group_history_event.clone());
 
-        for tool_call in turn_tool_calls {
-            let genai::chat::ToolCall {
-                call_id: tool_call_id,
-                fn_name: tool_name,
-                fn_arguments,
-                ..
-            } = tool_call;
-            let tool_args = match fn_arguments {
-                Value::String(raw) => raw,
-                other => other.to_string(),
-            };
-            let repeat_streak =
-                register_tool_repeat_attempt(&mut tool_repeat_guard, &tool_name, &tool_args);
-            send_stream_rebind_required_event(
+        let prepared_turn_tool_calls = turn_tool_calls
+            .into_iter()
+            .map(prepared_tool_call_from_genai)
+            .collect::<Vec<_>>();
+        for batch in split_prepared_tool_calls_into_execution_batches(
+            &tool_assembly.tools,
+            &tool_assembly.tool_definitions,
+            prepared_turn_tool_calls,
+        ) {
+            let mut executable_calls = Vec::<PreparedToolCall>::new();
+            let mut repeat_block = None::<(PreparedToolCall, String)>;
+            for call in batch.calls {
+                let repeat_streak = register_tool_repeat_attempt(
+                    &mut tool_repeat_guard,
+                    &call.tool_name,
+                    &call.tool_args,
+                );
+                if repeat_streak > REPEATED_TOOL_CALL_BLOCK_THRESHOLD {
+                    let err_text = repeated_tool_call_block_message(
+                        &call.tool_name,
+                        &call.tool_args,
+                        repeat_streak,
+                    );
+                    runtime_log_info(format!(
+                        "[聊天] 工具循环触发重复调用熔断: session={}, tool_name={}, streak={}, threshold={}, args={}",
+                        chat_session_key, call.tool_name, repeat_streak, REPEATED_TOOL_CALL_BLOCK_THRESHOLD, call.tool_args
+                    ));
+                    repeat_block = Some((call, err_text));
+                    break;
+                }
+                executable_calls.push(call);
+            }
+
+            let executed_tool_calls = execute_prepared_tool_call_group(
+                tool_abort_state,
+                chat_session_key,
+                &tool_assembly.tools,
                 on_delta,
                 auto_compaction_context.and_then(|ctx| ctx.request_id.as_deref()),
-                "tool_start",
-            );
-            send_tool_status_event(
-                on_delta,
-                &tool_name,
-                "running",
-                Some(tool_args.as_str()),
-                Some(tool_call_id.as_str()),
-                &format!("正在调用工具：{}", tool_name),
-            );
+                executable_calls,
+            )
+            .await?;
 
-            let tool_result = if repeat_streak > REPEATED_TOOL_CALL_BLOCK_THRESHOLD {
-                let err_text = repeated_tool_call_block_message(&tool_name, &tool_args, repeat_streak);
-                runtime_log_info(format!(
-                    "[聊天] 工具循环触发重复调用熔断: session={}, tool_name={}, streak={}, threshold={}, args={}",
-                    chat_session_key, tool_name, repeat_streak, REPEATED_TOOL_CALL_BLOCK_THRESHOLD, tool_args
-                ));
-                send_tool_status_event(
-                    on_delta,
-                    &tool_name,
-                    "failed",
-                    Some(tool_args.as_str()),
-                    Some(tool_call_id.as_str()),
-                    &err_text,
-                );
-                let history_content = sanitize_tool_result_for_history(&tool_name, &err_text);
-                let tool_result_event = serde_json::json!({
-                    "role": "tool",
-                    "tool_call_id": tool_call_id,
-                    "content": history_content
-                });
-                send_assistant_tool_result_event(on_delta, &tool_result_event);
-                insert_before_trailing_user_history_events(
-                    &mut tool_history_events,
-                    tool_result_event.clone(),
-                );
-                sync_completed_tool_history_cache(
-                    tool_abort_state,
-                    chat_session_key,
-                    &tool_history_events,
-                );
-                return Ok(repeated_tool_call_block_reply(
-                    full_activity_reasoning_text,
-                    tool_history_events,
-                    trusted_input_tokens,
-                    err_text,
-                ));
-            } else {
-                match call_tool_with_user_abort(
-                    tool_abort_state,
-                    chat_session_key,
-                    call_runtime_tool_by_name(&tool_assembly.tools, &tool_name, &tool_args),
-                )
-                .await
-                {
-                    Ok(output) => {
-                        let status_message = if output.is_error {
-                            format!("工具返回错误结果：{}", tool_name)
-                        } else {
-                            format!("工具调用完成：{}", tool_name)
-                        };
-                        send_tool_status_event(
-                            on_delta,
-                            &tool_name,
-                            if output.is_error { "failed" } else { "done" },
-                            Some(tool_args.as_str()),
-                            Some(tool_call_id.as_str()),
-                            &status_message,
-                        );
-                        output
-                    }
-                    Err(err) => {
-                        if err == CHAT_ABORTED_BY_USER_ERROR {
-                            eprintln!(
-                                "[聊天] 收到停止请求，立即退出工具循环 (session={})",
-                                chat_session_key
-                            );
-                            return Err(err);
-                        }
-                        let err_text = err.to_string();
-                        send_tool_status_event(
-                            on_delta,
-                            &tool_name,
-                            "failed",
-                            Some(tool_args.as_str()),
-                            Some(tool_call_id.as_str()),
-                            &format!("工具调用失败：{} ({})", tool_name, err_text),
-                        );
-                        ProviderToolResult::error(tool_failure_result_json(&tool_name, &err_text))
-                    }
-                }
-            };
+            for executed_tool_call in executed_tool_calls {
+            let ExecutedToolCall {
+                tool_call_id,
+                tool_name,
+                tool_args,
+                tool_result,
+            } = executed_tool_call;
             let tool_result_text = tool_result.display_text.as_str();
             let history_content = sanitize_tool_result_for_history(&tool_name, &tool_result_text);
             let tool_result_event = serde_json::json!({
@@ -2241,6 +2417,54 @@ async fn run_genai_tool_loop_non_stream(
                     &tool_history_events,
                 );
             }
+            }
+
+            if let Some((call, err_text)) = repeat_block {
+                send_stream_rebind_required_event(
+                    on_delta,
+                    auto_compaction_context.and_then(|ctx| ctx.request_id.as_deref()),
+                    "tool_start",
+                );
+                send_tool_status_event(
+                    on_delta,
+                    &call.tool_name,
+                    "running",
+                    Some(call.tool_args.as_str()),
+                    Some(call.tool_call_id.as_str()),
+                    &format!("正在调用工具：{}", call.tool_name),
+                );
+                send_tool_status_event(
+                    on_delta,
+                    &call.tool_name,
+                    "failed",
+                    Some(call.tool_args.as_str()),
+                    Some(call.tool_call_id.as_str()),
+                    &err_text,
+                );
+                let history_content =
+                    sanitize_tool_result_for_history(&call.tool_name, &err_text);
+                let tool_result_event = serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": call.tool_call_id,
+                    "content": history_content
+                });
+                send_assistant_tool_result_event(on_delta, &tool_result_event);
+                insert_before_trailing_user_history_events(
+                    &mut tool_history_events,
+                    tool_result_event.clone(),
+                );
+                sync_completed_tool_history_cache(
+                    tool_abort_state,
+                    chat_session_key,
+                    &tool_history_events,
+                );
+                return Ok(repeated_tool_call_block_reply(
+                    full_activity_reasoning_text,
+                    tool_history_events,
+                    trusted_input_tokens,
+                    err_text,
+                ));
+            }
         }
 
         if guided_close_requested {
@@ -2337,6 +2561,160 @@ async fn run_genai_tool_loop_non_stream(
 #[cfg(test)]
 mod tool_loop_tests {
     use super::*;
+
+    struct TestRuntimeTool {
+        name: &'static str,
+        mcp: bool,
+    }
+
+    impl RuntimeToolDyn for TestRuntimeTool {
+        fn name(&self) -> String {
+            self.name.to_string()
+        }
+
+        fn is_mcp_tool(&self) -> bool {
+            self.mcp
+        }
+
+        fn call_json(&self, _args_json: String) -> RuntimeToolCallFuture<'_> {
+            Box::pin(async { Ok(ProviderToolResult::text("{}".to_string())) })
+        }
+    }
+
+    fn test_tool(name: &'static str, mcp: bool) -> Box<dyn RuntimeToolDyn> {
+        Box::new(TestRuntimeTool { name, mcp })
+    }
+
+    #[test]
+    fn stateful_builtin_tools_should_be_serial_tools() {
+        let tools = vec![
+            test_tool("exec", false),
+            test_tool("shell_exec", false),
+            test_tool("apply_patch", false),
+            test_tool("todo", false),
+            test_tool("task", false),
+            test_tool("remember", false),
+            test_tool("plan", false),
+            test_tool("remote_im_send", false),
+            test_tool("contact_reply", false),
+            test_tool("contact_send_files", false),
+            test_tool("contact_no_reply", false),
+            test_tool("read", false),
+            test_tool("fetch", false),
+            test_tool("websearch", false),
+            test_tool("recall", false),
+        ];
+        let definitions = Vec::<ProviderToolDefinition>::new();
+
+        assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "exec"));
+        assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "shell_exec"));
+        assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "apply_patch"));
+        assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "todo"));
+        assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "task"));
+        assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "remember"));
+        assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "plan"));
+        assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "remote_im_send"));
+        assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "contact_reply"));
+        assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "contact_send_files"));
+        assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "contact_no_reply"));
+        assert!(!runtime_tool_call_requires_serial_execution(&tools, &definitions, "read"));
+        assert!(!runtime_tool_call_requires_serial_execution(&tools, &definitions, "fetch"));
+        assert!(!runtime_tool_call_requires_serial_execution(&tools, &definitions, "websearch"));
+        assert!(!runtime_tool_call_requires_serial_execution(&tools, &definitions, "recall"));
+    }
+
+    fn prepared_test_call(id: &str, name: &str) -> PreparedToolCall {
+        PreparedToolCall {
+            tool_call_id: id.to_string(),
+            tool_name: name.to_string(),
+            tool_args: "{}".to_string(),
+        }
+    }
+
+    #[test]
+    fn serial_tool_should_split_parallel_batches() {
+        let tools = vec![
+            test_tool("read", false),
+            test_tool("fetch", false),
+            test_tool("exec", false),
+            test_tool("todo", false),
+            test_tool("mcp_lookup", true),
+            test_tool("recall", false),
+        ];
+        let definitions = vec![ProviderToolDefinition::new(
+            "mcp_lookup",
+            "Search external data without changing state.",
+            serde_json::json!({"type":"object"}),
+        )];
+
+        let batches = split_prepared_tool_calls_into_execution_batches(
+            &tools,
+            &definitions,
+            vec![
+                prepared_test_call("1", "read"),
+                prepared_test_call("2", "fetch"),
+                prepared_test_call("3", "exec"),
+                prepared_test_call("4", "todo"),
+                prepared_test_call("5", "mcp_lookup"),
+                prepared_test_call("6", "recall"),
+            ],
+        );
+        let grouped_ids = batches
+            .into_iter()
+            .map(|batch| {
+                batch
+                    .calls
+                    .into_iter()
+                    .map(|call| call.tool_call_id)
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            grouped_ids,
+            vec![
+                vec!["1".to_string(), "2".to_string()],
+                vec!["3".to_string()],
+                vec!["4".to_string()],
+                vec!["5".to_string(), "6".to_string()],
+            ]
+        );
+    }
+
+    #[test]
+    fn mcp_tools_with_mutating_file_or_shell_semantics_should_be_serial() {
+        let tools = vec![
+            test_tool("workspace_edit", true),
+            test_tool("repo_lookup", true),
+            test_tool("profile_lookup", true),
+        ];
+        let definitions = vec![
+            ProviderToolDefinition::new(
+                "workspace_edit",
+                "Edit files in the workspace.",
+                serde_json::json!({"type":"object"}),
+            ),
+            ProviderToolDefinition::new(
+                "repo_lookup",
+                "Search repository metadata.",
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "file_path": { "type": "string" }
+                    }
+                }),
+            ),
+            ProviderToolDefinition::new(
+                "profile_lookup",
+                "Search profile settings without changing state.",
+                serde_json::json!({"type":"object"}),
+            ),
+        ];
+
+        assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "workspace_edit"));
+        assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "repo_lookup"));
+        assert!(!runtime_tool_call_requires_serial_execution(&tools, &definitions, "profile_lookup"));
+    }
 
     #[test]
     fn contact_no_reply_should_stop_on_snake_case_stop_tool_loop() {
