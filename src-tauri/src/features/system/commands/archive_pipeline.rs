@@ -179,14 +179,16 @@ fn resolve_archive_owner_context(
     state: &AppState,
     source: &Conversation,
 ) -> Result<(AgentProfile, String, String), String> {
-    let mut config = state_read_config_cached(state)?;
+    let runtime_snapshot = load_runtime_organization_snapshot(state)?;
     let runtime = state_read_runtime_state_cached(state)?;
     let user_alias = runtime.user_alias.clone();
-    let mut agents = state_read_agents_cached(state)?;
-    merge_private_organization_into_runtime(&state.data_path, &mut config, &mut agents)?;
-
-    let owner_agent_id = resolve_archive_owner_agent_id(&config, &agents, source)?;
-    let owner_agent = agents
+    let owner_agent_id = resolve_archive_owner_agent_id(
+        &runtime_snapshot.config,
+        &runtime_snapshot.agents,
+        source,
+    )?;
+    let owner_agent = runtime_snapshot
+        .agents
         .iter()
         .find(|agent| agent.id == owner_agent_id)
         .cloned()
@@ -406,8 +408,9 @@ async fn summarize_archived_conversation_with_model_v2(
     memories: &[MemoryEntry],
     _recall_table: &[String],
 ) -> Result<MemoryCurationDraft, SummaryContextModelError> {
-    let app_config = state_read_config_cached(state)?;
-    let agents = state_read_agents_cached(state)?;
+    let runtime_snapshot = load_runtime_organization_snapshot(state)?;
+    let app_config = runtime_snapshot.config;
+    let agents = runtime_snapshot.agents;
     let mut prepared = build_prepared_prompt_for_mode(
         PromptBuildMode::SummaryContext,
         source_conversation,

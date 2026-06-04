@@ -4,6 +4,10 @@ impl ConversationService {
         state: &AppState,
         app_config: &AppConfig,
     ) -> Result<Vec<UnarchivedConversationSummary>, String> {
+        let runtime_agents = state_read_agents_cached(state)?;
+        let runtime_app_config =
+            build_runtime_organization_snapshot_from_parts(&state.data_path, app_config, &runtime_agents)?
+                .config;
         let runtime = state_read_runtime_state_cached(state)?;
         let main_conversation_id = runtime
             .main_conversation_id
@@ -50,7 +54,7 @@ impl ConversationService {
             .map(|conversation| {
                 build_unarchived_conversation_summary(
                     state,
-                    app_config,
+                    &runtime_app_config,
                     &main_conversation_id,
                     &pinned_conversation_ids,
                     conversation,
@@ -99,8 +103,10 @@ impl ConversationService {
         assistant_department_agent_id: &str,
         requested_agent_id: &str,
     ) -> Result<String, String> {
-        let mut runtime_agents = runtime_agents.to_vec();
-        merge_private_organization_into_runtime(&state.data_path, app_config, &mut runtime_agents)?;
+        let runtime_snapshot =
+            build_runtime_organization_snapshot_from_parts(&state.data_path, app_config, runtime_agents)?;
+        *app_config = runtime_snapshot.config.clone();
+        let runtime_agents = runtime_snapshot.agents;
         let requested_agent_id = requested_agent_id.trim();
         if !requested_agent_id.is_empty() {
             if runtime_agents

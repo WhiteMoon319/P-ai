@@ -1,10 +1,9 @@
 #[tauri::command]
 fn load_agents(state: State<'_, AppState>) -> Result<Vec<AgentProfile>, String> {
-    let mut config = state_read_config_cached(&state)?;
+    let config = state_read_config_cached(&state)?;
     let data = state_read_agents_runtime_snapshot(&state)?;
-    let mut runtime_data = data.clone();
-    merge_private_organization_into_runtime_data(&state.data_path, &mut config, &mut runtime_data)?;
-    Ok(runtime_data.agents)
+    build_runtime_organization_snapshot_from_parts(&state.data_path, &config, &data.agents)
+        .map(|snapshot| snapshot.agents)
 }
 
 #[tauri::command]
@@ -469,7 +468,7 @@ fn import_agent_memories(
 
 #[tauri::command]
 fn load_chat_settings(state: State<'_, AppState>) -> Result<ChatSettings, String> {
-    let mut config = read_config(&state.config_path)?;
+    let config = read_config(&state.config_path)?;
     let mut data = state_read_agents_runtime_snapshot(&state)?;
     let assistant_agent_id = assistant_department_agent_id(&config).unwrap_or_else(default_assistant_department_agent_id);
     let runtime_changed = if data.assistant_department_agent_id != assistant_agent_id {
@@ -481,8 +480,10 @@ fn load_chat_settings(state: State<'_, AppState>) -> Result<ChatSettings, String
     if runtime_changed {
         state_write_runtime_state_cached(&state, &build_runtime_state_file(&data))?;
     }
+    let runtime_snapshot =
+        build_runtime_organization_snapshot_from_parts(&state.data_path, &config, &data.agents)?;
     let mut runtime_data = data.clone();
-    merge_private_organization_into_runtime_data(&state.data_path, &mut config, &mut runtime_data)?;
+    runtime_data.agents = runtime_snapshot.agents;
 
     Ok(ChatSettings {
         assistant_department_agent_id: data.assistant_department_agent_id.clone(),
@@ -515,9 +516,10 @@ struct ChatSettingsPatch {
 }
 
 fn build_chat_settings_payload(state: &AppState, data: &AppData, config: &AppConfig) -> Result<ChatSettings, String> {
-    let mut runtime_config = config.clone();
+    let runtime_snapshot =
+        build_runtime_organization_snapshot_from_parts(&state.data_path, config, &data.agents)?;
     let mut runtime_data = data.clone();
-    merge_private_organization_into_runtime_data(&state.data_path, &mut runtime_config, &mut runtime_data)?;
+    runtime_data.agents = runtime_snapshot.agents;
     Ok(ChatSettings {
         assistant_department_agent_id: data.assistant_department_agent_id.clone(),
         user_alias: user_persona_name(&runtime_data),
@@ -548,12 +550,15 @@ fn apply_chat_settings_patch(
                 trimmed.to_string()
             }
         });
-        let mut runtime_config = config.clone();
         let mut runtime_data = AppData::default();
         runtime_data.agents = agents.clone();
         apply_runtime_state_to_app_data(&mut runtime_data, runtime);
-        merge_private_organization_into_runtime_data(&state.data_path, &mut runtime_config, &mut runtime_data)?;
-        if !runtime_data
+        let runtime_snapshot = build_runtime_organization_snapshot_from_parts(
+            &state.data_path,
+            config,
+            &runtime_data.agents,
+        )?;
+        if !runtime_snapshot
             .agents
             .iter()
             .any(|a| a.id == target_agent_id && !a.is_built_in_user)

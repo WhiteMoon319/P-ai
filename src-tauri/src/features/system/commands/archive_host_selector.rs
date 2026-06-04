@@ -201,4 +201,41 @@ mod archive_host_selection_tests {
 
         assert!(err.contains("归档记忆归属人格不存在"));
     }
+
+    #[test]
+    fn archive_owner_should_accept_private_runtime_department() {
+        let root = std::env::temp_dir().join(format!(
+            "eca-archive-owner-private-{}",
+            Uuid::new_v4()
+        ));
+        let data_path = root.join("data").join("app_data.json");
+        let departments_dir = app_root_from_data_path(&data_path)
+            .join("llm-workspace")
+            .join("private-organization")
+            .join("departments");
+        std::fs::create_dir_all(&departments_dir).expect("create private departments dir");
+        std::fs::write(
+            departments_dir.join("dept-private.json"),
+            r#"{
+  "id": "dept-private",
+  "name": "私域归档部门",
+  "agentIds": ["private-owner"]
+}"#,
+        )
+        .expect("write private department");
+
+        let snapshot = build_runtime_organization_snapshot_from_parts(
+            &data_path,
+            &AppConfig::default(),
+            &[mk_agent("private-owner"), default_user_persona()],
+        )
+        .expect("build runtime snapshot");
+        let source = mk_source("dept-private", "private-owner", Vec::new());
+
+        let owner =
+            resolve_archive_owner_agent_id(&snapshot.config, &snapshot.agents, &source).unwrap();
+
+        assert_eq!(owner, "private-owner");
+        let _ = std::fs::remove_dir_all(root);
+    }
 }

@@ -4697,6 +4697,78 @@
     }
 
     #[test]
+    fn task_resolve_dispatch_session_should_use_private_department_for_runtime_assistant() {
+        let state = test_chat_runtime_state();
+        write_config(&state.config_path, &AppConfig::default()).expect("write config");
+        let private_departments_dir = app_root_from_data_path(&state.data_path)
+            .join("llm-workspace")
+            .join("private-organization")
+            .join("departments");
+        std::fs::create_dir_all(&private_departments_dir)
+            .expect("create private departments dir");
+        std::fs::write(
+            private_departments_dir.join("dept-private.json"),
+            r#"{
+  "id": "dept-private",
+  "name": "私域任务部门",
+  "agentIds": ["private-agent"]
+}"#,
+        )
+        .expect("write private department");
+        state_write_agents_cached(
+            &state,
+            &[{
+                let mut agent = default_agent();
+                agent.id = "private-agent".to_string();
+                agent.name = "私域任务助理".to_string();
+                agent
+            }, default_user_persona()],
+        )
+        .expect("write agents");
+        let mut runtime = RuntimeStateFile::default();
+        runtime.assistant_department_agent_id = "private-agent".to_string();
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime state");
+        let task = TaskRecordStored {
+            task_id: "task-private-dept".to_string(),
+            conversation_id: None,
+            target_scope: TASK_TARGET_SCOPE_DESKTOP.to_string(),
+            order_index: 1,
+            title: "t".to_string(),
+            cause: String::new(),
+            goal: String::new(),
+            flow: String::new(),
+            todos: Vec::new(),
+            status_summary: String::new(),
+            completion_state: TASK_STATE_ACTIVE.to_string(),
+            completion_conclusion: String::new(),
+            progress_notes: Vec::new(),
+            stage_key: String::new(),
+            stage_updated_at_utc: None,
+            trigger: TaskTriggerStored {
+                run_at_utc: None,
+                cron_expression: None,
+                legacy_every_minutes: None,
+                end_at_utc: None,
+                next_run_at_utc: None,
+            },
+            created_at_utc: now_utc_rfc3339(),
+            updated_at_utc: now_utc_rfc3339(),
+            last_triggered_at_utc: None,
+            completed_at_utc: None,
+        };
+
+        let session = task_resolve_dispatch_session(&state, &task)
+            .expect("resolve task session")
+            .expect("dispatch session");
+        let conversation =
+            state_read_conversation_cached(&state, &session.conversation_id).expect("read conversation");
+
+        assert_eq!(session.department_id, "dept-private");
+        assert_eq!(conversation.department_id, "dept-private");
+        assert_eq!(conversation.agent_id, "private-agent");
+    }
+
+    #[test]
     fn task_conversation_last_message_is_system_persona_should_detect_system_message() {
         let state = test_chat_runtime_state();
         let now = now_iso();
@@ -5039,6 +5111,183 @@
                 "dept-child".to_string(),
                 "dept-grandchild".to_string(),
             ]
+        );
+    }
+
+    #[test]
+    fn common_delegate_preflight_should_accept_private_child_department_agent() {
+        let state = test_chat_runtime_state();
+        let private_departments_dir = app_root_from_data_path(&state.data_path)
+            .join("llm-workspace")
+            .join("private-organization")
+            .join("departments");
+        std::fs::create_dir_all(&private_departments_dir)
+            .expect("create private departments dir");
+        std::fs::write(
+            private_departments_dir.join("dept-private.json"),
+            r#"{
+  "id": "dept-private",
+  "name": "私域子部门",
+  "agentIds": ["private-agent"]
+}"#,
+        )
+        .expect("write private department");
+
+        let mut parent_agent = default_agent();
+        parent_agent.id = "parent-agent".to_string();
+        parent_agent.name = "主部门人格".to_string();
+
+        let mut private_agent = default_agent();
+        private_agent.id = "private-agent".to_string();
+        private_agent.name = "私域部门人格".to_string();
+
+        let mut parent = default_assistant_department("api-a");
+        parent.id = "dept-parent".to_string();
+        parent.name = "主部门".to_string();
+        parent.is_built_in_assistant = false;
+        parent.agent_ids = vec![parent_agent.id.clone()];
+        parent.child_department_ids = vec!["dept-private".to_string()];
+
+        let config = AppConfig {
+            departments: vec![parent],
+            ..AppConfig::default()
+        };
+        write_config(&state.config_path, &config).expect("write config");
+        state_write_agents_cached(
+            &state,
+            &[
+                parent_agent.clone(),
+                private_agent.clone(),
+                default_user_persona(),
+            ],
+        )
+        .expect("write agents");
+
+        let conversation = build_conversation_record(
+            "api-a",
+            &parent_agent.id,
+            "dept-parent",
+            "主部门会话",
+            CONVERSATION_KIND_CHAT,
+            None,
+            None,
+        );
+        state_schedule_conversation_persist(&state, &conversation)
+            .expect("persist conversation");
+
+        let preflight = common_delegate_preflight(
+            &state,
+            &parent_agent.id,
+            Some(&conversation.id),
+            "dept-private",
+        )
+        .expect("resolve private child delegate preflight");
+
+        assert_eq!(preflight.source_department.id, "dept-parent");
+        assert_eq!(preflight.target_department.id, "dept-private");
+        assert_eq!(preflight.target_agent_id, private_agent.id);
+        assert_eq!(preflight.root_conversation_id, conversation.id);
+    }
+
+    #[test]
+    fn resolve_user_async_delegate_plan_should_accept_private_child_department() {
+        let state = test_chat_runtime_state();
+        let private_departments_dir = app_root_from_data_path(&state.data_path)
+            .join("llm-workspace")
+            .join("private-organization")
+            .join("departments");
+        std::fs::create_dir_all(&private_departments_dir)
+            .expect("create private departments dir");
+        std::fs::write(
+            private_departments_dir.join("dept-private.json"),
+            r#"{
+  "id": "dept-private",
+  "name": "私域子部门",
+  "agentIds": ["private-agent"]
+}"#,
+        )
+        .expect("write private department");
+
+        let mut selected_api = ApiConfig::default();
+        selected_api.id = "api-a".to_string();
+        selected_api.name = "测试模型".to_string();
+        selected_api.request_format = RequestFormat::OpenAI;
+        selected_api.enable_text = true;
+        selected_api.enable_tools = true;
+        selected_api.base_url = "https://api.openai.com/v1".to_string();
+        selected_api.api_key = "k".to_string();
+        selected_api.model = "gpt-4o-mini".to_string();
+
+        let mut parent_agent = default_agent();
+        parent_agent.id = "parent-agent".to_string();
+        parent_agent.name = "主部门人格".to_string();
+
+        let mut private_agent = default_agent();
+        private_agent.id = "private-agent".to_string();
+        private_agent.name = "私域部门人格".to_string();
+
+        let mut parent = default_assistant_department(&selected_api.id);
+        parent.id = "dept-parent".to_string();
+        parent.name = "主部门".to_string();
+        parent.is_built_in_assistant = false;
+        parent.agent_ids = vec![parent_agent.id.clone()];
+        parent.child_department_ids = vec!["dept-private".to_string()];
+
+        let config = AppConfig {
+            departments: vec![parent],
+            api_configs: vec![selected_api.clone()],
+            api_providers: Vec::new(),
+            selected_api_config_id: selected_api.id.clone(),
+            assistant_department_api_config_id: selected_api.id.clone(),
+            ..AppConfig::default()
+        };
+        write_config(&state.config_path, &config).expect("write config");
+        state_write_agents_cached(
+            &state,
+            &[
+                parent_agent.clone(),
+                private_agent.clone(),
+                default_user_persona(),
+            ],
+        )
+        .expect("write agents");
+
+        let conversation = build_conversation_record(
+            &selected_api.id,
+            &parent_agent.id,
+            "dept-parent",
+            "主部门会话",
+            CONVERSATION_KIND_CHAT,
+            None,
+            None,
+        );
+        state_schedule_conversation_persist(&state, &conversation)
+            .expect("persist conversation");
+
+        let (plan, selected_count) = resolve_user_async_delegate_plan(
+            &state,
+            &SubmitUserAsyncDelegateInput {
+                conversation_id: conversation.id.clone(),
+                target_department_id: "dept-private".to_string(),
+                preset_id: None,
+                background: String::new(),
+                question: "请调查这个问题".to_string(),
+                focus: String::new(),
+                selected_message_ids: Vec::new(),
+            },
+        )
+        .expect("resolve async delegate plan");
+
+        assert_eq!(selected_count, 0);
+        assert_eq!(plan.root_conversation_id, conversation.id);
+        assert_eq!(plan.source_department_id, "dept-parent");
+        assert_eq!(plan.source_agent_id, parent_agent.id);
+        assert_eq!(plan.target_department_id, "dept-private");
+        assert_eq!(plan.target_agent_id, private_agent.id);
+        assert_eq!(plan.target_agent_name, "私域部门人格");
+        assert_eq!(
+            plan.target_api_config_ids,
+            vec![api_endpoint_id("api-a", "api-a-model-default")]
         );
     }
 

@@ -69,6 +69,7 @@ fn task_resolve_main_dispatch_conversation_id(
     state: &AppState,
     runtime: &mut RuntimeStateFile,
     api_config_id: &str,
+    department_id: &str,
     agent_id: &str,
     fallback_to_main: bool,
 ) -> Result<TaskResolvedConversation, String> {
@@ -94,7 +95,7 @@ fn task_resolve_main_dispatch_conversation_id(
         let conversation = build_conversation_record(
             api_config_id,
             agent_id,
-            ASSISTANT_DEPARTMENT_ID,
+            department_id,
             "",
             CONVERSATION_KIND_CHAT,
             None,
@@ -117,6 +118,7 @@ fn task_resolve_dispatch_conversation(
     state: &AppState,
     runtime: &mut RuntimeStateFile,
     api_config_id: &str,
+    department_id: &str,
     agent_id: &str,
     requested_conversation_id: Option<&str>,
     stored_target_scope: &str,
@@ -143,6 +145,7 @@ fn task_resolve_dispatch_conversation(
             state,
             runtime,
             api_config_id,
+            department_id,
             agent_id,
             true,
         )
@@ -152,18 +155,26 @@ fn task_resolve_dispatch_conversation(
     if task_target_scope_normalized(stored_target_scope) == TASK_TARGET_SCOPE_CONTACT {
         return Ok(None);
     }
-    task_resolve_main_dispatch_conversation_id(state, runtime, api_config_id, agent_id, false)
-        .map(Some)
+    task_resolve_main_dispatch_conversation_id(
+        state,
+        runtime,
+        api_config_id,
+        department_id,
+        agent_id,
+        false,
+    )
+    .map(Some)
 }
 
 fn task_resolve_dispatch_session(
     state: &AppState,
     task: &TaskRecordStored,
 ) -> Result<Option<TaskDispatchSessionResolved>, String> {
-    let app_config = read_config(&state.config_path)?;
+    let runtime_snapshot = load_runtime_organization_snapshot(state)?;
+    let app_config = runtime_snapshot.config.clone();
+    let agents = runtime_snapshot.agents.clone();
     let selected_api = resolve_selected_api_config(&app_config, None)
         .ok_or_else(|| "No API config configured for task dispatch.".to_string())?;
-    let agents = state_read_agents_cached(state)?;
     let mut runtime = state_read_runtime_state_cached(state)?;
     let before_main_conversation_id = runtime.main_conversation_id.clone();
     let agent_id = if agents
@@ -178,6 +189,10 @@ fn task_resolve_dispatch_session(
             .map(|a| a.id.clone())
             .ok_or_else(|| "No assistant agent configured for task dispatch.".to_string())?
     };
+    let department_id = runtime_department_for_agent(&runtime_snapshot, &agent_id)
+        .or_else(|| runtime_department_by_id(&runtime_snapshot, ASSISTANT_DEPARTMENT_ID))
+        .map(|item| item.id.clone())
+        .unwrap_or_else(|| ASSISTANT_DEPARTMENT_ID.to_string());
     let requested_conversation_id = task
         .conversation_id
         .as_deref()
@@ -187,13 +202,11 @@ fn task_resolve_dispatch_session(
         state,
         &mut runtime,
         &selected_api.id,
+        &department_id,
         &agent_id,
         requested_conversation_id,
         &task.target_scope,
     )?;
-    let department_id = department_for_agent_id(&app_config, &agent_id)
-        .map(|item| item.id.clone())
-        .unwrap_or_else(|| ASSISTANT_DEPARTMENT_ID.to_string());
     if runtime.main_conversation_id != before_main_conversation_id {
         state_write_runtime_state_cached(state, &runtime)?;
     }

@@ -1026,11 +1026,6 @@ fn normalize_departments(config: &mut AppConfig) {
             }
         }
     }
-    let valid_department_ids = out
-        .iter()
-        .map(|item| item.id.trim().to_string())
-        .filter(|id| !id.is_empty())
-        .collect::<std::collections::HashSet<_>>();
     for item in &mut out {
         item.is_deputy = false;
         item.child_department_ids = normalize_department_child_ids(
@@ -1038,7 +1033,6 @@ fn normalize_departments(config: &mut AppConfig) {
             &item.id,
         )
         .into_iter()
-        .filter(|id| valid_department_ids.contains(id))
         .collect::<Vec<_>>();
         if (item.id == ASSISTANT_DEPARTMENT_ID || item.is_built_in_assistant)
             && item.agent_ids.is_empty()

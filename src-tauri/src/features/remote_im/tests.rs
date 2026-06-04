@@ -247,9 +247,8 @@
             state_write_conversation_cached(&state, conversation).expect("write conversation");
         }
 
-        let config = AppConfig::default();
         let (_, _, conversation_id) =
-            resolve_contact_session_target(&state, &config, &mut runtime, &mut contact)
+            resolve_contact_session_target(&state, &mut runtime, &mut contact)
                 .expect("resolve route");
 
         assert_ne!(conversation_id, "conversation-main");
@@ -393,9 +392,8 @@
             state_write_conversation_cached(&state, conversation).expect("write conversation");
         }
 
-        let config = AppConfig::default();
         let (_, _, conversation_id) =
-            resolve_contact_session_target(&state, &config, &mut runtime, &mut contact)
+            resolve_contact_session_target(&state, &mut runtime, &mut contact)
                 .expect("resolve route");
 
         assert_ne!(conversation_id, "conversation-main");
@@ -1223,49 +1221,103 @@
 
     #[test]
     fn remote_im_resolve_contact_assistant_context_should_require_bound_department() {
+        let state = remote_im_test_state();
+        write_config(&state.config_path, &AppConfig::default()).expect("write config");
+        state_write_agents_cached(
+            &state,
+            &[remote_im_test_agent(DEFAULT_AGENT_ID, "主助理"), default_user_persona()],
+        )
+        .expect("write agents");
         let mut contact = remote_im_test_contact("contact-a", "conversation-a");
         contact.bound_department_id = None;
 
-        let err = remote_im_resolve_contact_assistant_context(
-            &AppConfig::default(),
-            &[remote_im_test_agent(DEFAULT_AGENT_ID, "主助理")],
-            &contact,
-        )
-        .expect_err("missing department should fail");
+        let err = remote_im_resolve_contact_assistant_context(&state, &contact)
+            .expect_err("missing department should fail");
 
         assert!(err.contains("未设置应答部门"));
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
     }
 
     #[test]
     fn remote_im_resolve_contact_assistant_context_should_resolve_department_and_agent_names() {
+        let state = remote_im_test_state();
+        write_config(&state.config_path, &AppConfig::default()).expect("write config");
+        state_write_agents_cached(
+            &state,
+            &[remote_im_test_agent(DEFAULT_AGENT_ID, "主助理"), default_user_persona()],
+        )
+        .expect("write agents");
         let contact = remote_im_test_contact("contact-a", "conversation-a");
 
-        let resolved = remote_im_resolve_contact_assistant_context(
-            &AppConfig::default(),
-            &[remote_im_test_agent(DEFAULT_AGENT_ID, "主助理")],
-            &contact,
-        )
-        .expect("resolve assistant context");
+        let resolved = remote_im_resolve_contact_assistant_context(&state, &contact)
+            .expect("resolve assistant context");
 
         assert_eq!(resolved.department_id, REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID);
         assert_eq!(resolved.department_name, "远程客服");
         assert_eq!(resolved.agent_id, DEFAULT_AGENT_ID);
         assert_eq!(resolved.agent_name, "主助理");
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
     }
 
     #[test]
     fn remote_im_resolve_contact_assistant_context_should_reject_missing_agent_profile() {
+        let state = remote_im_test_state();
+        write_config(&state.config_path, &AppConfig::default()).expect("write config");
+        state_write_agents_cached(
+            &state,
+            &[remote_im_test_agent("agent-other", "其他助理"), default_user_persona()],
+        )
+        .expect("write agents");
         let contact = remote_im_test_contact("contact-a", "conversation-a");
 
-        let err = remote_im_resolve_contact_assistant_context(
-            &AppConfig::default(),
-            &[remote_im_test_agent("agent-other", "其他助理")],
-            &contact,
-        )
-        .expect_err("missing agent profile should fail");
+        let err = remote_im_resolve_contact_assistant_context(&state, &contact)
+            .expect_err("missing agent profile should fail");
 
         assert!(err.contains("路由人格不存在"));
         assert!(err.contains(DEFAULT_AGENT_ID));
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn ensure_remote_im_contact_conversation_id_should_accept_private_bound_department() {
+        let state = remote_im_test_state();
+        write_config(&state.config_path, &AppConfig::default()).expect("write config");
+        let private_departments_dir = app_root_from_data_path(&state.data_path)
+            .join("llm-workspace")
+            .join("private-organization")
+            .join("departments");
+        std::fs::create_dir_all(&private_departments_dir)
+            .expect("create private departments dir");
+        std::fs::write(
+            private_departments_dir.join("dept-private.json"),
+            r#"{
+  "id": "dept-private",
+  "name": "私域客服",
+  "agentIds": ["private-agent"]
+}"#,
+        )
+        .expect("write private department");
+        state_write_agents_cached(
+            &state,
+            &[
+                remote_im_test_agent("private-agent", "私域助理"),
+                default_user_persona(),
+            ],
+        )
+        .expect("write agents");
+
+        let mut contact = remote_im_test_contact("contact-private", "");
+        contact.bound_department_id = Some("dept-private".to_string());
+        contact.bound_conversation_id = None;
+
+        let conversation_id = ensure_remote_im_contact_conversation_id(&state, &mut contact)
+            .expect("ensure contact conversation");
+        let conversation =
+            state_read_conversation_cached(&state, &conversation_id).expect("read conversation");
+
+        assert_eq!(conversation.department_id, "dept-private");
+        assert_eq!(conversation.agent_id, "private-agent");
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
     }
 
     #[test]

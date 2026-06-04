@@ -3,10 +3,10 @@ fn check_tools_status(
     input: CheckToolsStatusInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<ToolLoadStatus>, String> {
-    let mut config = state_read_config_cached(&state)?;
+    let runtime_org = load_runtime_organization_snapshot(&state)?;
+    let mut config = runtime_org.config.clone();
     normalize_api_tools(&mut config);
-    let mut agents = state_read_agents_cached(&state)?;
-    merge_private_organization_into_runtime(&state.data_path, &mut config, &mut agents)?;
+    let agents = runtime_org.agents.clone();
 
     let target_agent_id = input
         .agent_id
@@ -21,11 +21,11 @@ fn check_tools_status(
         .cloned()
         .ok_or_else(|| format!("未找到人格：{target_agent_id}"))?;
     let selected_tools = default_agent_tools();
-    let current_department = department_for_agent_id(&config, &target_agent_id);
+    let current_department = runtime_department_for_agent(&runtime_org, &target_agent_id);
     let delegate_unavailable_reason =
         delegate_builtin_tool_unavailable_reason(&config, current_department);
 
-    let effective_api_id = department_for_agent_id(&config, &target_agent_id)
+    let effective_api_id = current_department
         .map(|item| item.api_config_id.clone())
         .or_else(|| input.api_config_id.clone());
     let selected = effective_api_id

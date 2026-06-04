@@ -19,13 +19,13 @@ async fn get_prompt_preview(
     preview_mode: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<PromptPreview, String> {
-    let mut app_config = read_config(&state.config_path)?;
+    let mut data = state_read_agents_runtime_snapshot(&state)?;
+    let runtime_snapshot = load_runtime_organization_snapshot(state.inner())?;
+    let app_config = runtime_snapshot.config;
+    data.agents = runtime_snapshot.agents;
     let api_config = resolve_selected_api_config(&app_config, input.api_config_id.as_deref())
         .ok_or_else(|| "No API config available".to_string())?;
     let mut resolved_api = resolve_api_config(&app_config, Some(&api_config.id))?;
-
-    let mut data = state_read_agents_runtime_snapshot(&state)?;
-    merge_private_organization_into_runtime_data(&state.data_path, &mut app_config, &mut data)?;
     let preview_mode = parse_prompt_preview_mode(preview_mode.as_deref());
     let requested_conversation_id = input
         .conversation_id

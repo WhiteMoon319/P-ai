@@ -756,21 +756,25 @@ fn remote_im_secretary_current_assistant_context(
 }
 
 fn remote_im_resolve_contact_assistant_context(
-    config: &AppConfig,
-    agents: &[AgentProfile],
+    state: &AppState,
     contact: &RemoteImContact,
 ) -> Result<RemoteImConversationAssistantContext, String> {
+    let runtime_snapshot = load_runtime_organization_snapshot(state)?;
     let requested_department_id = contact
         .bound_department_id
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(|| format!("联系人未设置应答部门: {}", contact.id))?;
-    let (department_id, agent_id) =
-        resolve_department_agent_pair(Some(requested_department_id), None, config)?;
-    let department = department_by_id(config, &department_id)
+    let (department_id, agent_id) = resolve_department_agent_pair(
+        Some(requested_department_id),
+        None,
+        &runtime_snapshot.config,
+    )?;
+    let department = runtime_department_by_id(&runtime_snapshot, &department_id)
         .ok_or_else(|| format!("路由部门不存在: {department_id}"))?;
-    let agent = agents
+    let agent = runtime_snapshot
+        .agents
         .iter()
         .find(|item| item.id == agent_id)
         .ok_or_else(|| format!("路由人格不存在: {agent_id}"))?;
@@ -2205,11 +2209,11 @@ fn ensure_remote_im_contact_conversation_id(
     state: &AppState,
     contact: &mut RemoteImContact,
 ) -> Result<String, String> {
-    let config = state_read_config_cached(state)?;
+    let runtime_snapshot = load_runtime_organization_snapshot(state)?;
     let binding_pair = match resolve_department_agent_pair(
         contact.bound_department_id.as_deref(),
         None,
-        &config,
+        &runtime_snapshot.config,
     ) {
         Ok(pair) => Some(pair),
         Err(err) => {
@@ -2323,17 +2327,18 @@ fn sync_remote_im_contact_conversation_binding(
 
 fn resolve_contact_session_target(
     state: &AppState,
-    config: &AppConfig,
     _runtime: &mut RuntimeStateFile,
     contact: &mut RemoteImContact,
 ) -> Result<(String, String, String), String> {
-    let effective_route_mode = remote_im_resolve_effective_route_mode(config, contact);
+    let runtime_snapshot = load_runtime_organization_snapshot(state)?;
+    let effective_route_mode =
+        remote_im_resolve_effective_route_mode(&runtime_snapshot.config, contact);
     contact.route_mode = effective_route_mode.clone();
 
     let (department_id, agent_id) = resolve_department_agent_pair(
         contact.bound_department_id.as_deref(),
         None,
-        config,
+        &runtime_snapshot.config,
     )?;
     let conversation_id = ensure_remote_im_contact_conversation_id(state, contact)?;
     Ok((department_id, agent_id, conversation_id))
@@ -2609,8 +2614,7 @@ fn remote_im_update_contact_department_binding(
     input: RemoteImContactDepartmentBindingUpdateInput,
     state: State<'_, AppState>,
 ) -> Result<RemoteImContact, String> {
-    let config = state_read_config_cached(&state)?;
-    let agents = state_read_agents_cached(&state)?;
+    let runtime_snapshot = load_runtime_organization_snapshot(state.inner())?;
     let mut runtime = state_read_runtime_state_cached(&state)?;
     let contact = runtime
         .remote_im_contacts
@@ -2626,10 +2630,11 @@ fn remote_im_update_contact_department_binding(
     if let Some(department_id) = next_department_id.as_deref() {
         let mut candidate_contact = contact.clone();
         candidate_contact.bound_department_id = Some(department_id.to_string());
-        remote_im_resolve_contact_assistant_context(&config, &agents, &candidate_contact)?;
+        remote_im_resolve_contact_assistant_context(state.inner(), &candidate_contact)?;
     }
     contact.bound_department_id = next_department_id;
-    contact.route_mode = remote_im_resolve_effective_route_mode(&config, contact);
+    contact.route_mode =
+        remote_im_resolve_effective_route_mode(&runtime_snapshot.config, contact);
     let conversation_id = ensure_remote_im_contact_conversation_id(state.inner(), contact)?;
     let output = contact.clone();
     state_write_runtime_state_cached(&state, &runtime)?;
@@ -2914,8 +2919,7 @@ pub(crate) fn remote_im_enqueue_message_internal(
             .get(contact_idx)
             .cloned()
             .ok_or_else(|| format!("联系人不存在: {contact_id}"))?;
-        let resolved =
-            resolve_contact_session_target(state, &config, &mut runtime, &mut detached_contact)?;
+        let resolved = resolve_contact_session_target(state, &mut runtime, &mut detached_contact)?;
         runtime.remote_im_contacts[contact_idx] = detached_contact;
         resolved
     };

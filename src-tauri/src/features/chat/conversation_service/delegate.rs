@@ -8,10 +8,10 @@ impl ConversationService {
             .conversation_lock
             .lock()
             .map_err(|err| state_lock_error_with_panic(file!(), line!(), module_path!(), &err))?;
-        let config = read_config(&state.config_path)?;
-        let assistant_agent_id = assistant_department_agent_id(&config)
+        let runtime_snapshot = load_runtime_organization_snapshot(state)?;
+        let assistant_agent_id = assistant_department_agent_id(&runtime_snapshot.config)
             .ok_or_else(|| "未找到助理部门委任人".to_string())?;
-        let department_id = department_for_agent_id(&config, &assistant_agent_id)
+        let department_id = runtime_department_for_agent(&runtime_snapshot, &assistant_agent_id)
             .map(|item| item.id.clone())
             .unwrap_or_else(|| ASSISTANT_DEPARTMENT_ID.to_string());
         let target_conversation_id = if state_read_conversation_cached(state, root_conversation_id)
@@ -72,13 +72,7 @@ impl ConversationService {
             .conversation_lock
             .lock()
             .map_err(|err| state_lock_error_with_panic(file!(), line!(), module_path!(), &err))?;
-        let mut config = read_config(&app_state.config_path)?;
-        let mut agents = state_read_agents_cached(app_state)?;
-        merge_private_organization_into_runtime(
-            &app_state.data_path,
-            &mut config,
-            &mut agents,
-        )?;
+        let runtime_snapshot = load_runtime_organization_snapshot(app_state)?;
         let requested_source_conversation_id = source_conversation_id
             .map(str::trim)
             .filter(|value| !value.is_empty());
@@ -111,15 +105,19 @@ impl ConversationService {
                 if department_id.is_empty() {
                     None
                 } else {
-                    department_by_id(&config, department_id).cloned()
+                    runtime_department_by_id(&runtime_snapshot, department_id).cloned()
                 }
             })
-            .or_else(|| department_for_agent_id(&config, source_agent_id).cloned())
+            .or_else(|| runtime_department_for_agent(&runtime_snapshot, source_agent_id).cloned())
             .ok_or_else(|| format!("未找到发起部门，agentId={source_agent_id}"))?;
-        let target_department = department_by_id(&config, target_department_id)
+        let target_department = runtime_department_by_id(&runtime_snapshot, target_department_id)
             .cloned()
             .ok_or_else(|| format!("目标部门不存在，departmentId={target_department_id}"))?;
-        if !department_has_direct_child(&config, &source_department.id, &target_department.id) {
+        if !runtime_department_has_direct_child(
+            &runtime_snapshot,
+            &source_department.id,
+            &target_department.id,
+        ) {
             drop(guard);
             return Err(format!(
                 "目标部门不是当前部门的直接下级，sourceDepartmentId={}，targetDepartmentId={}",
@@ -132,7 +130,8 @@ impl ConversationService {
             .find(|id| !id.trim().is_empty())
             .cloned()
             .ok_or_else(|| format!("目标部门没有可用委任人，departmentId={target_department_id}"))?;
-        if !agents
+        if !runtime_snapshot
+            .agents
             .iter()
             .any(|agent| agent.id == target_agent_id && !agent.is_built_in_user)
         {
@@ -149,8 +148,8 @@ impl ConversationService {
         };
         drop(guard);
         Ok(DelegateContextResolution {
-            config,
-            agents,
+            config: runtime_snapshot.config,
+            agents: runtime_snapshot.agents,
             source_department,
             target_department,
             target_agent_id,

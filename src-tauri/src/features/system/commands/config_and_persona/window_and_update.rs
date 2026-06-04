@@ -469,10 +469,8 @@ fn runtime_config_with_private_organization(
     config: &AppConfig,
     data: &AppData,
 ) -> Result<AppConfig, String> {
-    let mut runtime_config = config.clone();
-    let mut runtime_data = data.clone();
-    merge_private_organization_into_runtime_data(&state.data_path, &mut runtime_config, &mut runtime_data)?;
-    Ok(runtime_config)
+    build_runtime_organization_snapshot_from_parts(&state.data_path, config, &data.agents)
+        .map(|snapshot| snapshot.config)
 }
 
 fn runtime_agents_with_private_organization(
@@ -480,10 +478,8 @@ fn runtime_agents_with_private_organization(
     config: &AppConfig,
     data: &AppData,
 ) -> Result<Vec<AgentProfile>, String> {
-    let mut runtime_config = config.clone();
-    let mut runtime_data = data.clone();
-    merge_private_organization_into_runtime_data(&state.data_path, &mut runtime_config, &mut runtime_data)?;
-    Ok(runtime_data.agents)
+    build_runtime_organization_snapshot_from_parts(&state.data_path, config, &data.agents)
+        .map(|snapshot| snapshot.agents)
 }
 
 fn private_agent_operation_error(agent_id: &str) -> String {
@@ -591,9 +587,10 @@ fn load_config(state: State<'_, AppState>) -> Result<AppConfig, String> {
     if workspace_changed || remote_im_private_state_migrated {
         state_write_config_cached(&state, &result)?;
     }
-    let mut runtime_data = state_read_agents_runtime_snapshot(&state)?;
-    merge_private_organization_into_runtime_data(&state.data_path, &mut result, &mut runtime_data)?;
-    Ok(result)
+    let runtime_agents = state_read_agents_cached(&state)?;
+    let snapshot =
+        build_runtime_organization_snapshot_from_parts(&state.data_path, &result, &runtime_agents)?;
+    Ok(snapshot.config)
 }
 
 fn read_app_bootstrap_snapshot(state: &AppState) -> Result<AppBootstrapSnapshot, String> {
@@ -619,14 +616,10 @@ fn read_app_bootstrap_snapshot(state: &AppState) -> Result<AppBootstrapSnapshot,
     if runtime_changed {
         state_write_runtime_state_cached(state, &build_runtime_state_file(&data))?;
     }
-    let runtime_config = runtime_config_with_private_organization(state, &config, &data)?;
-    let mut runtime_config_for_agents = config.clone();
+    let runtime_snapshot =
+        build_runtime_organization_snapshot_from_parts(&state.data_path, &config, &data.agents)?;
     let mut runtime_data = data.clone();
-    merge_private_organization_into_runtime_data(
-        &state.data_path,
-        &mut runtime_config_for_agents,
-        &mut runtime_data,
-    )?;
+    runtime_data.agents = runtime_snapshot.agents.clone();
     let chat_settings = ChatSettings {
         assistant_department_agent_id: data.assistant_department_agent_id.clone(),
         user_alias: user_persona_name(&runtime_data),
@@ -637,7 +630,7 @@ fn read_app_bootstrap_snapshot(state: &AppState) -> Result<AppBootstrapSnapshot,
         instruction_presets: data.instruction_presets.clone(),
     };
     Ok(AppBootstrapSnapshot {
-        config: runtime_config,
+        config: runtime_snapshot.config,
         agents: runtime_data.agents,
         chat_settings,
     })

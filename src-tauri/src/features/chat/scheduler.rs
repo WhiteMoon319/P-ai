@@ -2130,12 +2130,7 @@ async fn process_conversation_batch(
     let mut activating_session_info = events.first().map(|event| event.session_info.clone());
     if should_activate && !activated_remote_im_sources.is_empty() {
         if let Some(contact) = remote_im_resolve_secretary_contact(state, &activated_remote_im_sources)? {
-            let scheduler_config = state_read_config_cached(state)?;
-            match remote_im_resolve_contact_assistant_context(
-                &scheduler_config,
-                &scheduler_agents,
-                &contact,
-            ) {
+            match remote_im_resolve_contact_assistant_context(state, &contact) {
                 Ok(resolved_assistant) => {
                     set_conversation_remote_im_assistant_context(
                         state,

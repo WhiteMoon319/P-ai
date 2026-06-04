@@ -1048,26 +1048,24 @@ fn update_remote_im_reply_decision_for_message(
         message.provider_meta = Some(meta);
     };
 
-    match conversation_service().read_persisted_conversation(state, conversation_id) {
-        Ok(mut conversation) => {
-            if conversation.summary.trim().is_empty() {
-                if let Some(message) = conversation.messages.iter_mut().rev().find(|message| {
-                    message.role.trim() == "assistant"
-                        && assistant_message_id
-                            .map(|target_id| message.id == target_id)
-                            .unwrap_or(true)
-                }) {
-                    update_message(message);
-                    conversation_service().persist_conversation(
-                        state,
-                        &conversation,
-                    )?;
-                    return Ok(());
-                }
-            }
+    if let Ok(Some(mut conversation)) = conversation_service().try_read_unarchived_conversation(
+        state,
+        conversation_id,
+    ) {
+        if let Some(message) = conversation.messages.iter_mut().rev().find(|message| {
+            message.role.trim() == "assistant"
+                && assistant_message_id
+                    .map(|target_id| message.id == target_id)
+                    .unwrap_or(true)
+        }) {
+            update_message(message);
+            conversation_service().sync_conversation_metadata_from_snapshot(state, &conversation)?;
+            conversation_service().persist_conversation(
+                state,
+                &conversation,
+            )?;
+            return Ok(());
         }
-        Err(err) if !err.contains("not found") => return Err(err),
-        Err(_) => {}
     }
 
     if let Some(mut conversation) = delegate_runtime_thread_conversation_get(state, conversation_id)? {
@@ -1823,18 +1821,20 @@ async fn send_chat_message_inner(
         log_chat_stage("runtime_and_session_ready.app_data_read_done");
         prepare_detail_parts.push(format!("运行时人格列表就绪=0ms(count={})", runtime_agents.len()));
         log_chat_stage("runtime_and_session_ready.runtime_data_cloned");
-        let private_org_started = std::time::Instant::now();
-        merge_private_organization_into_runtime(
+        let runtime_org_started = std::time::Instant::now();
+        let runtime_org = build_runtime_organization_snapshot_from_parts(
             &state.data_path,
-            &mut app_config,
-            &mut runtime_agents,
+            &app_config,
+            &runtime_agents,
         )?;
-        let private_org_ms = private_org_started
+        let runtime_org_ms = runtime_org_started
             .elapsed()
             .as_millis()
             .min(u128::from(u64::MAX)) as u64;
-        prepare_detail_parts.push(format!("私有组织合并={}ms", private_org_ms));
-        log_chat_stage("runtime_and_session_ready.private_org_merged");
+        app_config = runtime_org.config.clone();
+        runtime_agents = runtime_org.agents.clone();
+        prepare_detail_parts.push(format!("组织运行态构建={}ms", runtime_org_ms));
+        log_chat_stage("runtime_and_session_ready.runtime_org_ready");
         let agent_resolve_started = std::time::Instant::now();
         let effective_agent_id = if let Some(agent_id) = requested_agent_id.as_deref() {
             if runtime_agents
@@ -1865,10 +1865,10 @@ async fn send_chat_message_inner(
         log_chat_stage("runtime_and_session_ready.agent_resolved");
         let department_resolve_started = std::time::Instant::now();
         let effective_department = if let Some(department_id) = requested_department_id.as_deref() {
-            department_by_id(&app_config, department_id)
+            runtime_department_by_id(&runtime_org, department_id)
                 .ok_or_else(|| format!("Department '{department_id}' not found."))?
         } else {
-            department_for_agent_id(&app_config, &effective_agent_id)
+            runtime_department_for_agent(&runtime_org, &effective_agent_id)
                 .or_else(|| assistant_department(&app_config))
                 .ok_or_else(|| "No assistant department configured.".to_string())?
         };
@@ -2457,29 +2457,16 @@ async fn send_chat_message_inner(
                 log_run_stage("prepare_context.user_message_committed");
                 updated_conversation
             } else {
-                let updated_conversation = {
-                    let mut conversation = conversation_service().read_persisted_conversation(
-                        &state,
-                        &updated_conversation.id,
-                    )?;
-                    if !conversation.summary.trim().is_empty() {
-                        return Err(format!(
-                            "指定会话不存在或不可用：{}",
-                            updated_conversation.id
-                        ));
-                    }
-                    conversation = updated_conversation.clone();
-                    for memory_id in &recall_payload.raw_ids {
-                        conversation.memory_recall_table.push(memory_id.clone());
-                    }
-                    conversation_service()
-                        .sync_conversation_metadata_from_snapshot(&state, &conversation)?;
-                    conversation_service().persist_conversation(
-                        &state,
-                        &conversation,
-                    )?;
-                    conversation
-                };
+                let mut updated_conversation = updated_conversation;
+                for memory_id in &recall_payload.raw_ids {
+                    updated_conversation.memory_recall_table.push(memory_id.clone());
+                }
+                conversation_service()
+                    .sync_conversation_metadata_from_snapshot(&state, &updated_conversation)?;
+                conversation_service().persist_conversation(
+                    &state,
+                    &updated_conversation,
+                )?;
                 log_run_stage("prepare_context.user_message_committed");
                 log_run_stage("prepare_context.state_persist_scheduled");
                 updated_conversation
@@ -3243,58 +3230,51 @@ async fn send_chat_message_inner(
 
     let mut persisted_assistant_message: Option<ChatMessage> = None;
     {
-        match conversation_service().read_persisted_conversation(&state, &conversation_id) {
-            Ok(mut conversation) => {
-                if !conversation.summary.trim().is_empty() {
-                    return Err(format!("指定会话不存在或不可用：{}", conversation_id));
-                }
-                let now = now_iso();
-                if !suppress_assistant_message {
-                    let assistant_message = build_assistant_message_from_request_sequence(
-                        assistant_message_id.clone(),
-                        &current_agent.id,
-                        now.clone(),
-                        &assistant_request_messages,
-                        provider_meta,
-                    );
-                    persisted_assistant_message = Some(conversation_upsert_final_assistant_message(
-                        &mut conversation,
-                        &current_agent.id,
-                        assistant_message,
-                        &now,
-                    ));
-                    conversation_service()
-                        .sync_conversation_metadata_from_snapshot(&state, &conversation)?;
-                }
-                conversation_service().persist_conversation(
-                    &state,
-                    &conversation,
-                )?;
+        if let Ok(Some(mut conversation)) =
+            conversation_service().try_read_unarchived_conversation(&state, &conversation_id)
+        {
+            let now = now_iso();
+            if !suppress_assistant_message {
+                let assistant_message = build_assistant_message_from_request_sequence(
+                    assistant_message_id.clone(),
+                    &current_agent.id,
+                    now.clone(),
+                    &assistant_request_messages,
+                    provider_meta,
+                );
+                persisted_assistant_message = Some(conversation_upsert_final_assistant_message(
+                    &mut conversation,
+                    &current_agent.id,
+                    assistant_message,
+                    &now,
+                ));
+                conversation_service()
+                    .sync_conversation_metadata_from_snapshot(&state, &conversation)?;
             }
-            Err(err) if !err.contains("not found") => return Err(err),
-            Err(_) => {
-                if let Some(mut conversation) =
-                    delegate_runtime_thread_conversation_get(&state, &conversation_id)?
-                {
-                    let now = now_iso();
-                    if !suppress_assistant_message {
-                        let assistant_message = build_assistant_message_from_request_sequence(
-                            assistant_message_id.clone(),
-                            &current_agent.id,
-                            now.clone(),
-                            &assistant_request_messages,
-                            provider_meta,
-                        );
-                        persisted_assistant_message = Some(conversation_upsert_final_assistant_message(
-                            &mut conversation,
-                            &current_agent.id,
-                            assistant_message,
-                            &now,
-                        ));
-                    }
-                    delegate_runtime_thread_conversation_update(&state, &conversation_id, conversation)?;
-                }
+            conversation_service().persist_conversation(
+                &state,
+                &conversation,
+            )?;
+        } else if let Some(mut conversation) =
+            delegate_runtime_thread_conversation_get(&state, &conversation_id)?
+        {
+            let now = now_iso();
+            if !suppress_assistant_message {
+                let assistant_message = build_assistant_message_from_request_sequence(
+                    assistant_message_id.clone(),
+                    &current_agent.id,
+                    now.clone(),
+                    &assistant_request_messages,
+                    provider_meta,
+                );
+                persisted_assistant_message = Some(conversation_upsert_final_assistant_message(
+                    &mut conversation,
+                    &current_agent.id,
+                    assistant_message,
+                    &now,
+                ));
             }
+            delegate_runtime_thread_conversation_update(&state, &conversation_id, conversation)?;
         }
     }
     log_run_stage("assistant_message_persist_scheduled");

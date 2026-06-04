@@ -539,7 +539,7 @@ impl ConversationService {
         }
 
         let _guard = lock_conversation_with_metrics(state, "stop_chat_generation_persist_partial")?;
-        let app_config = state_read_config_cached(state)?;
+        let app_config = load_runtime_organization_snapshot(state)?.config;
         let api_config_id =
             resolve_stop_chat_api_config_id(&app_config, requested_department_id, agent_id)?;
         if !app_config.api_configs.iter().any(|api| api.id == api_config_id) {
@@ -694,16 +694,17 @@ impl ConversationService {
             .conversation_lock
             .lock()
             .map_err(|err| format!("Failed to lock state mutex at {}:{} {}: {err}", file!(), line!(), module_path!()))?;
-        let app_config = state_read_config_cached(state)?;
+        let runtime_snapshot = load_runtime_organization_snapshot(state)?;
+        let app_config = runtime_snapshot.config.clone();
         let mut runtime = state_read_runtime_state_cached(state)?;
-        let agents = state_read_agents_cached(state)?;
+        let agents = runtime_snapshot.agents.clone();
         let requested_department_id = input
             .department_id
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty());
         let department = if let Some(department_id) = requested_department_id {
-            department_by_id(&app_config, department_id)
+            runtime_department_by_id(&runtime_snapshot, department_id)
                 .ok_or_else(|| format!("Department '{department_id}' not found."))?
         } else {
             assistant_department(&app_config)
@@ -827,9 +828,10 @@ impl ConversationService {
             .conversation_lock
             .lock()
             .map_err(|err| format!("Failed to lock state mutex at {}:{} {}: {err}", file!(), line!(), module_path!()))?;
-        let app_config = state_read_config_cached(state)?;
+        let runtime_snapshot = load_runtime_organization_snapshot(state)?;
+        let app_config = runtime_snapshot.config.clone();
         let mut runtime = state_read_runtime_state_cached(state)?;
-        let agents = state_read_agents_cached(state)?;
+        let agents = runtime_snapshot.agents.clone();
         let source_conversation = state_read_conversation_cached(state, source_conversation_id)
             .ok()
             .filter(|conversation| {
@@ -843,7 +845,7 @@ impl ConversationService {
             drop(guard);
             return Err("未找到可创建会话分支的已选消息".to_string());
         }
-        let department = department_by_id(&app_config, source_conversation.department_id.trim())
+        let department = runtime_department_by_id(&runtime_snapshot, source_conversation.department_id.trim())
             .cloned()
             .ok_or_else(|| "源会话所属部门不存在".to_string())?;
         let branched_title = build_branch_conversation_title(

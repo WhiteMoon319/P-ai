@@ -215,12 +215,13 @@ async fn confirm_plan_and_continue_inner(
             (!department_id.is_empty()).then(|| department_id.to_string())
         });
     let (selected_api, resolved_api, department_id, agent_id) = {
-        let app_config = state_read_config_cached(state)?;
+        let runtime_org = load_runtime_organization_snapshot(state)?;
+        let app_config = &runtime_org.config;
         let department = requested_department_id
             .as_deref()
-            .and_then(|department_id| department_by_id(&app_config, department_id))
-            .or_else(|| department_for_agent_id(&app_config, &requested_agent_id))
-            .or_else(|| department_by_id(&app_config, ASSISTANT_DEPARTMENT_ID))
+            .and_then(|department_id| runtime_department_by_id(&runtime_org, department_id))
+            .or_else(|| runtime_department_for_agent(&runtime_org, &requested_agent_id))
+            .or_else(|| runtime_department_by_id(&runtime_org, ASSISTANT_DEPARTMENT_ID))
             .ok_or_else(|| "找不到可用于继续执行计划的部门。".to_string())?;
         let api_config_id = department_primary_api_config_id(department);
         if api_config_id.trim().is_empty() {
@@ -702,8 +703,9 @@ fn resolve_user_async_delegate_plan(
         .filter(|item| !item.is_empty())
         .collect::<Vec<_>>();
 
-    let app_config = state_read_config_cached(app_state)?;
-    let agents = state_read_agents_cached(app_state)?;
+    let runtime_org = load_runtime_organization_snapshot(app_state)?;
+    let app_config = &runtime_org.config;
+    let agents = &runtime_org.agents;
     let conversation = state_read_conversation_cached(app_state, conversation_id)
         .ok()
         .filter(|conversation| {
@@ -713,7 +715,7 @@ fn resolve_user_async_delegate_plan(
         })
         .ok_or_else(|| "当前会话不存在或已归档".to_string())?;
     let source_department_id = conversation.department_id.trim();
-    let source_department = department_by_id(&app_config, source_department_id)
+    let source_department = runtime_department_by_id(&runtime_org, source_department_id)
         .ok_or_else(|| format!("当前会话所属部门不存在，departmentId={source_department_id}"))?;
     let conversation_agent_id = conversation.agent_id.trim();
     let source_agent_id = if !conversation_agent_id.is_empty()
@@ -731,9 +733,9 @@ fn resolve_user_async_delegate_plan(
             .map(|id| id.trim().to_string())
             .ok_or_else(|| format!("当前会话所属部门没有可用负责人，departmentId={source_department_id}"))?
     };
-    let target_department = department_by_id(&app_config, target_department_id)
+    let target_department = runtime_department_by_id(&runtime_org, target_department_id)
         .ok_or_else(|| format!("目标部门不存在，departmentId={target_department_id}"))?;
-    if !department_has_direct_child(&app_config, source_department_id, target_department_id) {
+    if !runtime_department_has_direct_child(&runtime_org, source_department_id, target_department_id) {
         return Err("目标部门不是当前部门的直接下级".to_string());
     }
     let target_agent_id = target_department
@@ -749,13 +751,13 @@ fn resolve_user_async_delegate_plan(
         .iter()
         .find(|agent| agent.id == target_agent_id && !agent.is_built_in_user)
         .ok_or_else(|| format!("目标委任人不存在，agentId={target_agent_id}"))?;
-    let target_api_config_ids = delegate_target_chat_api_config_ids(&app_config, target_department);
+    let target_api_config_ids = delegate_target_chat_api_config_ids(app_config, target_department);
     if target_api_config_ids.is_empty() {
         return Err(format!("目标部门没有可用模型，departmentId={target_department_id}"));
     }
 
     let (selected_context, selected_count) =
-        build_user_async_delegate_selected_context(&conversation, &agents, &selected_message_ids);
+        build_user_async_delegate_selected_context(&conversation, agents, &selected_message_ids);
     let background = build_user_async_delegate_background(&input.background, &selected_context);
     let title = user_async_delegate_title(question, input.preset_id.as_deref());
     Ok((
@@ -1337,13 +1339,13 @@ async fn submit_chat_message_inner(
     let prepare_started_at = std::time::Instant::now();
     let (department_id, agent_id, model_config_id, mention_plans, mention_failures) = {
         let config_started_at = std::time::Instant::now();
-        let app_config = state_read_config_cached(state)?;
+        let runtime_org = load_runtime_organization_snapshot(state)?;
+        let app_config = runtime_org.config.clone();
         let config_elapsed_ms = config_started_at.elapsed().as_millis();
-        let app_data_started_at = std::time::Instant::now();
-        let agents = state_read_agents_cached(state)?;
-        let app_data_elapsed_ms = app_data_started_at.elapsed().as_millis();
+        let agents = runtime_org.agents.clone();
+        let app_data_elapsed_ms = 0u128;
         let department_started_at = std::time::Instant::now();
-        let department = department_by_id(&app_config, requested_department_id.as_str())
+        let department = runtime_department_by_id(&runtime_org, requested_department_id.as_str())
             .ok_or_else(|| format!("部门已经消失：{}", requested_department_id))?;
         let agent_id = requested_agent_id.clone();
         let department_elapsed_ms = department_started_at.elapsed().as_millis();
@@ -1595,13 +1597,13 @@ async fn send_chat_message(
     let prepare_started_at = std::time::Instant::now();
     let (department_id, agent_id, model_config_id, mention_plans, mention_failures) = {
         let config_started_at = std::time::Instant::now();
-        let app_config = state_read_config_cached(&state)?;
+        let runtime_org = load_runtime_organization_snapshot(&state)?;
+        let app_config = runtime_org.config.clone();
         let config_elapsed_ms = config_started_at.elapsed().as_millis();
-        let app_data_started_at = std::time::Instant::now();
-        let agents = state_read_agents_cached(&state)?;
-        let app_data_elapsed_ms = app_data_started_at.elapsed().as_millis();
+        let agents = runtime_org.agents.clone();
+        let app_data_elapsed_ms = 0u128;
         let department_started_at = std::time::Instant::now();
-        let department = department_by_id(&app_config, requested_department_id.as_str())
+        let department = runtime_department_by_id(&runtime_org, requested_department_id.as_str())
             .ok_or_else(|| format!("部门已经消失：{}", requested_department_id))?;
         let agent_id = requested_agent_id.clone();
         let department_elapsed_ms = department_started_at.elapsed().as_millis();
@@ -1824,13 +1826,13 @@ async fn send_user_mention_message_inner(
     let prepare_started_at = std::time::Instant::now();
     let (department_id, agent_id, model_config_id, mention_plans, mention_failures) = {
         let config_started_at = std::time::Instant::now();
-        let app_config = state_read_config_cached(state)?;
+        let runtime_org = load_runtime_organization_snapshot(state)?;
+        let app_config = runtime_org.config.clone();
         let config_elapsed_ms = config_started_at.elapsed().as_millis();
-        let app_data_started_at = std::time::Instant::now();
-        let agents = state_read_agents_cached(state)?;
-        let app_data_elapsed_ms = app_data_started_at.elapsed().as_millis();
+        let agents = runtime_org.agents.clone();
+        let app_data_elapsed_ms = 0u128;
         let department_started_at = std::time::Instant::now();
-        let department = department_by_id(&app_config, requested_department_id.as_str())
+        let department = runtime_department_by_id(&runtime_org, requested_department_id.as_str())
             .ok_or_else(|| format!("部门已经消失：{}", requested_department_id))?;
         let agent_id = requested_agent_id.clone();
         let department_elapsed_ms = department_started_at.elapsed().as_millis();

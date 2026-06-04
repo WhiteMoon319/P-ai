@@ -4,7 +4,7 @@ impl ConversationService {
             named_lock_error("conversation_lock", file!(), line!(), module_path!(), &err)
         })?;
 
-        let app_config = read_config(&state.config_path)?;
+        let runtime_snapshot = load_runtime_organization_snapshot(state)?;
         let chat_index = state_read_chat_index_cached(state)?;
         let mut summaries = chat_index
             .conversations
@@ -22,7 +22,11 @@ impl ConversationService {
             })
             .filter(|conversation| conversation_is_archived(conversation))
             .map(|archive| {
-                let api_config_id = department_for_agent_id(&app_config, &archive.agent_id)
+                let api_config_id = runtime_department_by_id(
+                    &runtime_snapshot,
+                    archive.department_id.trim(),
+                )
+                .or_else(|| runtime_department_for_agent(&runtime_snapshot, &archive.agent_id))
                     .map(department_primary_api_config_id)
                     .unwrap_or_default();
                 ArchiveSummary {
@@ -32,7 +36,7 @@ impl ConversationService {
                         .clone()
                         .unwrap_or_else(|| archive.updated_at.clone()),
                     title: if archive.title.trim().is_empty() {
-                        archive_first_user_preview(&archive, &app_config.ui_language)
+                        archive_first_user_preview(&archive, &runtime_snapshot.config.ui_language)
                     } else {
                         archive.title.trim().to_string()
                     },
@@ -187,15 +191,10 @@ impl ConversationService {
                 module_path!()
             )
         })?;
-        let mut app_config = read_config(&state.config_path)?;
+        let runtime_snapshot = load_runtime_organization_snapshot(state)?;
+        let app_config = runtime_snapshot.config;
         let runtime = state_read_runtime_state_cached(state)?;
-        let agents = state_read_agents_cached(state)?;
-        let mut runtime_agents = agents.clone();
-        merge_private_organization_into_runtime(
-            &state.data_path,
-            &mut app_config,
-            &mut runtime_agents,
-        )?;
+        let runtime_agents = runtime_snapshot.agents;
         let selected_api = resolve_selected_api_config(&app_config, input.api_config_id.as_deref())
             .ok_or_else(|| "No API config configured. Please add one.".to_string())?;
         let resolved_api = resolve_api_config(&app_config, Some(selected_api.id.as_str()))?;

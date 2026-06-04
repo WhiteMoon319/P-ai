@@ -328,7 +328,7 @@
     }
 
     #[test]
-    fn normalize_app_config_should_preserve_shared_child_departments_and_drop_invalid_refs() {
+    fn normalize_app_config_should_preserve_shared_child_departments_and_keep_unresolved_refs() {
         let mut cfg = AppConfig::default();
         let mut primary = default_assistant_department("");
         primary.id = "department-primary".to_string();
@@ -365,7 +365,10 @@
             .expect("primary department");
         assert_eq!(
             primary.child_department_ids,
-            vec!["department-shared".to_string()]
+            vec![
+                "department-shared".to_string(),
+                "missing-department".to_string()
+            ]
         );
 
         let parent_b = cfg
@@ -377,6 +380,62 @@
             parent_b.child_department_ids,
             vec!["department-shared".to_string()]
         );
+    }
+
+    #[test]
+    fn runtime_organization_snapshot_should_filter_missing_children_after_private_merge() {
+        let root = std::env::temp_dir().join(format!("eca-runtime-org-{}", Uuid::new_v4()));
+        let data_path = root.join("config").join("app_data.json");
+        let departments_dir = root
+            .join("llm-workspace")
+            .join("private-organization")
+            .join("departments");
+        std::fs::create_dir_all(&departments_dir).expect("create private departments dir");
+        std::fs::write(
+            departments_dir.join("department-private.json"),
+            r#"{
+  "id": "department-private",
+  "name": "私域部门",
+  "agentIds": ["private-agent"]
+}"#,
+        )
+        .expect("write private department");
+
+        let mut cfg = AppConfig::default();
+        let mut primary = default_assistant_department(&cfg.assistant_department_api_config_id);
+        primary.id = "department-primary".to_string();
+        primary.name = "主部门".to_string();
+        primary.is_built_in_assistant = false;
+        primary.agent_ids = vec!["parent-agent".to_string()];
+        primary.child_department_ids = vec![
+            "department-private".to_string(),
+            "missing-department".to_string(),
+            "department-primary".to_string(),
+        ];
+        cfg.departments.push(primary);
+
+        let mut parent_agent = default_agent();
+        parent_agent.id = "parent-agent".to_string();
+        parent_agent.name = "主部门人格".to_string();
+        let mut private_agent = default_agent();
+        private_agent.id = "private-agent".to_string();
+        private_agent.name = "私域部门人格".to_string();
+
+        let snapshot = build_runtime_organization_snapshot_from_parts(
+            &data_path,
+            &cfg,
+            &[parent_agent, private_agent, default_user_persona()],
+        )
+        .expect("build runtime organization snapshot");
+        let primary = runtime_department_by_id(&snapshot, "department-primary")
+            .expect("runtime primary department");
+
+        assert_eq!(
+            primary.child_department_ids,
+            vec!["department-private".to_string()]
+        );
+
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

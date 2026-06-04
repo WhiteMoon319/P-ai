@@ -331,6 +331,7 @@ fn department_direct_child_departments<'a>(
         .collect::<Vec<_>>()
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn department_has_direct_child(
     config: &AppConfig,
     source_department_id: &str,
