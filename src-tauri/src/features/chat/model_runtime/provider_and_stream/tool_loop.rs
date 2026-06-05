@@ -1,4 +1,4 @@
-const INTERNAL_MAX_TOOL_LOOP_ROUNDS: usize = 100;
+const INTERNAL_MAX_TOOL_LOOP_ROUNDS: usize = 10000;
 const REPEATED_TOOL_CALL_BLOCK_THRESHOLD: usize = 3;
 
 struct GenaiToolLoopRoundOutput {
