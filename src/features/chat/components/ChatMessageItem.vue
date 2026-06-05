@@ -235,40 +235,11 @@
         </div>
       </div>
       <div v-if="block.planCard" class="space-y-3" :class="hasRenderableMemeSegments(block) || block.text ? 'mt-3' : ''">
-        <div class="flex items-center gap-2">
-          <span class="badge badge-sm badge-ghost">
-            {{ block.planCard.action === "complete" ? t("chat.plan.completeBadge") : t("chat.plan.badge") }}
-          </span>
+        <div class="text-xs italic opacity-60 mb-1">{{ t("chat.plan.sidebarHint") }}</div>
+        <div @click="emit('assistantLinkClick', $event)">
+          <a :href="block.planCard.path" class="link link-primary text-sm" :title="block.planCard.path">{{ t("chat.plan.linkLabel") }}{{ block.planCard.path.split(/[/\\]/).filter(Boolean).pop() }}</a>
         </div>
-        <div class="font-mono text-[11px] leading-5 break-all text-base-content/55">{{ block.planCard.path }}</div>
-        <div v-if="block.planCard.action === 'present'" class="space-y-2">
-          <div
-            v-if="planMarkdownLoading"
-            class="flex items-center gap-2 text-sm leading-6 text-base-content/65"
-          >
-            <span class="loading loading-spinner loading-xs"></span>
-            <span>正在读取计划文件</span>
-          </div>
-          <div
-            v-else-if="planMarkdownError"
-            class="whitespace-pre-wrap text-sm leading-6 text-warning"
-          >{{ planMarkdownError }}</div>
-          <div
-            v-else-if="planMarkdownText && forcePlainMarkdownRender"
-            @click="emit('assistantLinkClick', $event)"
-          >
-            <SidebarLightMarkdown :text="planMarkdownText" />
-          </div>
-          <div v-else-if="planMarkdownText" ref="markdownContainerRef">
-            <AppMarkdownRenderer
-              class="ecall-markdown-content max-w-none"
-              :text="planMarkdownText"
-              :is-dark="markdownIsDark"
-              @click="emit('assistantLinkClick', $event)"
-            />
-          </div>
-        </div>
-        <div v-if="block.planCard.action === 'present'" class="space-y-2">
+        <div v-if="block.providerMeta?.planCard && block.planCard.action === 'present'" class="space-y-2">
           <button
             type="button"
             class="ecall-plan-confirm-action btn btn-sm btn-primary"

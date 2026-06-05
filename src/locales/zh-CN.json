@@ -1238,7 +1238,9 @@
       "badge": "执行计划",
       "completeBadge": "计划完成",
       "confirmAction": "我同意，并执行计划",
-      "confirmHint": "不同意，请直接告诉我你的想法"
+      "confirmHint": "不同意，请直接告诉我你的想法",
+      "sidebarHint": "点击下方链接在侧边栏阅读计划",
+      "linkLabel": "计划："
     },
     "supervision": {
       "button": "目标任务",

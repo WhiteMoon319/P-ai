@@ -846,6 +846,25 @@ function stripGoalTaskPrefix(value: string): string {
 }
 
 function resolvePlanCard(message: ChatMessage): PlanMessageCard | undefined {
+  // fallback: providerMeta 无 planCard 时从 tool call 历史找
+  if (!(message.providerMeta || {}).planCard) {
+    try {
+      const events = Array.isArray(message.toolCall) ? message.toolCall : [];
+      for (const event of events) {
+        const role = String(event?.role || "").trim().toLowerCase();
+        if (role !== "assistant") continue;
+        const calls = Array.isArray(event?.tool_calls) ? event.tool_calls : [];
+        for (const call of calls) {
+          const func = (call?.function || {}) as Record<string, unknown>;
+          if (String(func.name || "").trim().toLowerCase() !== "plan") continue;
+          const args = JSON.parse(String(func.arguments || "{}").trim());
+          const action = String(args.action || "").trim().toLowerCase();
+          const path = String(args.path || "").trim();
+          if (action === "present" && path) return { action, path };
+        }
+      }
+    } catch { /* ignore */ }
+  }
   const meta = (message.providerMeta || {}) as Record<string, unknown>;
   const raw = meta.planCard;
   if (!raw || typeof raw !== "object") return undefined;

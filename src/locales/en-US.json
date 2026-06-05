@@ -1244,7 +1244,9 @@
       "badge": "Execution Plan",
       "completeBadge": "Plan Completed",
       "confirmAction": "I agree, execute the plan",
-      "confirmHint": "If you disagree, just tell me your thoughts."
+      "confirmHint": "If you disagree, just tell me your thoughts.",
+      "sidebarHint": "Click the link below to read the plan in the sidebar",
+      "linkLabel": "Plan: "
     },
     "supervision": {
       "button": "Goal Task",
