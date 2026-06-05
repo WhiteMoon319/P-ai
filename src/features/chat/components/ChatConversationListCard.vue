@@ -95,6 +95,14 @@
                       @keydown.esc.prevent="cancelConversationTitleEdit()"
                       @blur="handleConversationTitleBlur(item)"
                     />
+                    <button
+                      v-else-if="canRenameConversation(item)"
+                      type="button"
+                      class="min-w-0 truncate rounded px-0.5 text-left text-sm font-medium hover:bg-base-300/70"
+                      @click.stop="startConversationTitleEdit(item)"
+                    >
+                      {{ conversationDisplayTitle(item) }}
+                    </button>
                     <div v-else class="min-w-0 truncate text-sm font-medium">
                       {{ conversationDisplayTitle(item) }}
                     </div>
