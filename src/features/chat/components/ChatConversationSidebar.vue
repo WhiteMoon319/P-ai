@@ -587,7 +587,7 @@ function shouldShowConversationMenu(item: ChatConversationOverviewItem): boolean
 }
 
 function canRenameConversation(item: ChatConversationOverviewItem): boolean {
-  return isLocalConversation(item) && !isConversationDisabled(item);
+  return isLocalConversation(item) && !isConversationDisabled(item) && isCurrentConversation(item);
 }
 
 function isEditingTitle(item: ChatConversationOverviewItem): boolean {
