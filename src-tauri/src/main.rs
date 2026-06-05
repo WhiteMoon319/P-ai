@@ -974,6 +974,7 @@ fn main() {
             list_tool_review_commit_options,
             get_tool_review_item_detail,
             run_tool_review_for_call,
+            set_tool_review_item_user_decision,
             run_tool_review_for_batch,
             submit_tool_review_code,
             request_conversation_messages_after_async,

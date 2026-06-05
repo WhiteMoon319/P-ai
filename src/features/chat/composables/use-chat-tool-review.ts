@@ -98,6 +98,13 @@ type DeleteToolReviewReportInput = {
   reportId: string;
 };
 
+type ToolReviewItemDecisionInput = {
+  conversationId: string;
+  callId: string;
+  allow: boolean;
+  opinion?: string;
+};
+
 type ListToolReviewCommitOptionsOutput = {
   total: number;
   page: number;
@@ -120,6 +127,7 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
   const toolReviewDetailMap = ref<Record<string, ToolReviewItemDetail>>({});
   const toolReviewDetailLoadingCallId = ref("");
   const toolReviewReviewingCallId = ref("");
+  const toolReviewDecisionCallId = ref("");
   const toolReviewBatchReviewingKey = ref("");
   const toolReviewSubmittingBatchKey = ref("");
   const toolReviewErrorText = ref("");
@@ -389,6 +397,38 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
     }
   }
 
+  async function setToolReviewItemUserDecision(input: ToolReviewItemDecisionInput): Promise<ToolReviewItemDetail | null> {
+    const conversationId = String(input.conversationId || options.activeConversationId.value || "").trim();
+    const callId = String(input.callId || "").trim();
+    if (!conversationId || !callId) return null;
+    toolReviewDecisionCallId.value = callId;
+    try {
+      const detail = await invokeTauri<ToolReviewItemDetail>("set_tool_review_item_user_decision", {
+        input: {
+          conversationId,
+          callId,
+          allow: !!input.allow,
+          opinion: String(input.opinion || "").trim(),
+        },
+      });
+      toolReviewDetailMap.value = { ...toolReviewDetailMap.value, [callId]: detail };
+      toolReviewErrorText.value = "";
+      await refreshToolReviewBatches();
+      await refreshMessagesAfterReviewMutation(
+        conversationId,
+        [String(detail?.messageId || "").trim()].filter(Boolean),
+      );
+      return detail;
+    } catch (error) {
+      toolReviewErrorText.value = options.t("chat.toolReview.loadFailed", { err: formatToolReviewError(error) });
+      return null;
+    } finally {
+      if (toolReviewDecisionCallId.value === callId) {
+        toolReviewDecisionCallId.value = "";
+      }
+    }
+  }
+
   function toggleToolReviewPanel() {
     toolReviewPanelOpen.value = !toolReviewPanelOpen.value;
   }
@@ -444,6 +484,7 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
     toolReviewReviewingCallId,
     toolReviewBatchReviewingKey,
     toolReviewSubmittingBatchKey,
+    toolReviewDecisionCallId,
     toolReviewErrorText,
     toolReviewReportErrorText,
     toolReviewReports,
@@ -458,5 +499,6 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
     submitToolReviewCode,
     deleteToolReviewReport,
     listToolReviewCommitOptions,
+    setToolReviewItemUserDecision,
   };
 }

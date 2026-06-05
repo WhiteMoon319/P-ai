@@ -4,6 +4,13 @@ import { useI18n } from "vue-i18n";
 import type { TerminalApprovalRequestPayload } from "../composables/use-terminal-approval";
 import TerminalApprovalImpactPanel from "./TerminalApprovalImpactPanel.vue";
 import TerminalApprovalPatchSample from "./TerminalApprovalPatchSample.vue";
+import {
+  countTerminalApprovalDiffLines,
+  getTerminalApprovalPatchKind,
+  splitTerminalApprovalPatches,
+  terminalApprovalImpactFromPatchText,
+  type TerminalApprovalImpactItem,
+} from "../utils/terminal-approval-preview";
 
 const props = withDefaults(defineProps<{
   open: boolean;
@@ -22,96 +29,8 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 
-type TerminalApprovalImpactItem = {
-  path: string;
-  adds: number;
-  removes: number;
-  kind: "update" | "add" | "delete" | "other";
-};
-
-function splitTerminalApprovalPatches(raw: string): string[][] {
-  const normalized = String(raw || "").replace(/\r/g, "");
-  const lines = normalized.split("\n");
-  if (!normalized.trim()) return [[]];
-
-  const patches: string[][] = [];
-  let currentPatch: string[] = [];
-  let inPatchBlock = false;
-
-  for (const rawLine of lines) {
-    const line = String(rawLine || "");
-    const trimmedLine = line.trim();
-    if (trimmedLine.startsWith("*** Begin Patch")) {
-      if (currentPatch.length > 0) {
-        patches.push(currentPatch);
-      }
-      currentPatch = [line];
-      inPatchBlock = true;
-      continue;
-    }
-
-    if (inPatchBlock && trimmedLine.startsWith("*** End Patch")) {
-      currentPatch.push(line);
-      patches.push(currentPatch);
-      currentPatch = [];
-      inPatchBlock = false;
-      continue;
-    }
-
-    currentPatch.push(line);
-  }
-
-  if (currentPatch.length > 0) {
-    patches.push(currentPatch);
-  }
-
-  return patches.length > 0 ? patches : [lines];
-}
-
 function getTerminalApprovalPayloadText(payload: TerminalApprovalRequestPayload | null): string {
   return String(payload?.callPreview || payload?.command || payload?.summary || payload?.message || "").replace(/\r/g, "");
-}
-
-function getTerminalApprovalPatchPath(lines: string[]): string {
-  for (const rawLine of lines) {
-    const line = String(rawLine || "").trim();
-    if (line.startsWith("*** Update File:")) {
-      return line.replace("*** Update File:", "").trim();
-    }
-    if (line.startsWith("*** Add File:")) {
-      return line.replace("*** Add File:", "").trim();
-    }
-    if (line.startsWith("*** Delete File:")) {
-      return line.replace("*** Delete File:", "").trim();
-    }
-  }
-  return "";
-}
-
-function getTerminalApprovalPatchKind(lines: string[]): "update" | "add" | "delete" | "other" {
-  for (const rawLine of lines) {
-    const line = String(rawLine || "").trim();
-    if (line.startsWith("*** Update File:")) return "update";
-    if (line.startsWith("*** Add File:")) return "add";
-    if (line.startsWith("*** Delete File:")) return "delete";
-  }
-  return "other";
-}
-
-function countTerminalApprovalPatchDelta(lines: string[]) {
-  let adds = 0;
-  let removes = 0;
-  for (const rawLine of lines) {
-    const line = String(rawLine || "");
-    if (line.startsWith("+") && !line.startsWith("+++")) {
-      adds += 1;
-      continue;
-    }
-    if (line.startsWith("-") && !line.startsWith("---")) {
-      removes += 1;
-    }
-  }
-  return { adds, removes };
 }
 
 const terminalApprovalDialogTitle = computed(() => {
@@ -131,17 +50,7 @@ const terminalApprovalPreviewLines = computed(() => {
 });
 
 const terminalApprovalImpactSummary = computed<TerminalApprovalImpactItem[]>(() => {
-  const patchItems = terminalApprovalPatchBlocks.value
-    .map((lines) => {
-      const path = getTerminalApprovalPatchPath(lines);
-      if (!path) return null;
-      return {
-        path,
-        kind: getTerminalApprovalPatchKind(lines),
-        ...countTerminalApprovalPatchDelta(lines),
-      };
-    })
-    .filter((item): item is TerminalApprovalImpactItem => !!item);
+  const patchItems = terminalApprovalImpactFromPatchText(getTerminalApprovalPayloadText(props.payload));
   if (patchItems.length > 0) return patchItems;
 
   const current = props.payload;
@@ -177,16 +86,7 @@ const terminalApprovalPatchKinds = computed(() =>
 const terminalApprovalReviewOpinion = computed(() => String(props.payload?.reviewOpinion || "").trim());
 
 const terminalApprovalCurrentDiffLineCount = computed(() =>
-  terminalApprovalCurrentPatchLines.value.reduce((count, rawLine) => {
-    const line = String(rawLine || "");
-    if (line.startsWith("+") && !line.startsWith("+++")) {
-      return count + 1;
-    }
-    if (line.startsWith("-") && !line.startsWith("---")) {
-      return count + 1;
-    }
-    return count;
-  }, 0),
+  countTerminalApprovalDiffLines(terminalApprovalCurrentPatchLines.value),
 );
 
 const terminalApprovalShowDiffOnly = computed(() =>

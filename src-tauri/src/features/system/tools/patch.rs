@@ -1072,21 +1072,50 @@ fn apply_patch_similar_line_ranges(content: &str, old_string: &str, limit: usize
         .collect()
 }
 
+fn apply_patch_preview_lines(prefix: &str, text: &str, max_chars: usize) -> Vec<String> {
+    let preview = apply_patch_preview_text(text, max_chars);
+    if preview.is_empty() {
+        return Vec::new();
+    }
+    preview
+        .lines()
+        .map(|line| format!("{prefix}{line}"))
+        .collect()
+}
+
 fn apply_patch_build_preview(ops: &[ApplyPatchResolvedOp]) -> Result<String, String> {
     let mut lines = Vec::<String>::new();
+    lines.push("*** Begin Patch".to_string());
     for op in ops {
         match op {
-            ApplyPatchResolvedOp::Add { path, .. } => lines.push(format!("  add    {}", terminal_path_for_user(path))),
-            ApplyPatchResolvedOp::Delete { path } => lines.push(format!("  delete {}", terminal_path_for_user(path))),
-            ApplyPatchResolvedOp::Update { from, to, .. } => {
+            ApplyPatchResolvedOp::Add { path, content } => {
+                lines.push(format!("*** Add File: {}", terminal_path_for_user(path)));
+                lines.extend(apply_patch_preview_lines("+", content, 4_000));
+            }
+            ApplyPatchResolvedOp::Delete { path } => {
+                lines.push(format!("*** Delete File: {}", terminal_path_for_user(path)));
+                match apply_patch_read_text_file(path) {
+                    Ok(content) => lines.extend(apply_patch_preview_lines("-", &content, 4_000)),
+                    Err(err) => lines.push(format!("Error! 无法读取待删除文件内容：{err}")),
+                }
+            }
+            ApplyPatchResolvedOp::Update { from, to, old_string, new_string, .. } => {
                 if let Some(dest) = to {
-                    lines.push(format!("  move   {} -> {}", terminal_path_for_user(from), terminal_path_for_user(dest)));
+                    lines.push(format!("*** Update File: {}", terminal_path_for_user(from)));
+                    lines.push(format!("*** Move to: {}", terminal_path_for_user(dest)));
                 } else {
-                    lines.push(format!("  update {}", terminal_path_for_user(from)));
+                    lines.push(format!("*** Update File: {}", terminal_path_for_user(from)));
+                }
+                if old_string.is_empty() && new_string.is_empty() {
+                    lines.push("  move only".to_string());
+                } else {
+                    lines.extend(apply_patch_preview_lines("-", old_string, 4_000));
+                    lines.extend(apply_patch_preview_lines("+", new_string, 4_000));
                 }
             }
         }
     }
+    lines.push("*** End Patch".to_string());
     Ok(lines.join("\n"))
 }
 
@@ -1658,6 +1687,43 @@ mod apply_patch_tool_tests {
         assert_eq!(old_string, "before");
         assert_eq!(new_string, "after");
         assert!(*replace_all);
+    }
+
+    #[test]
+    fn build_preview_should_include_patch_content_for_review() {
+        let cwd = std::env::temp_dir().join(format!("eca-apply-patch-preview-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&cwd).expect("create cwd");
+        let delete_file = cwd.join("delete.txt");
+        std::fs::write(&delete_file, "obsolete\n").expect("seed delete file");
+        let update_file = cwd.join("update.rs");
+        let add_file = cwd.join("new.rs");
+        let ops = vec![
+            ApplyPatchResolvedOp::Update {
+                from: update_file,
+                to: None,
+                old_string: "let value = ;".to_string(),
+                new_string: "let value = 1;".to_string(),
+                replace_all: false,
+            },
+            ApplyPatchResolvedOp::Add {
+                path: add_file,
+                content: "pub fn added() {}\n".to_string(),
+            },
+            ApplyPatchResolvedOp::Delete { path: delete_file },
+        ];
+
+        let preview = apply_patch_build_preview(&ops).expect("build preview");
+
+        assert!(preview.contains("*** Begin Patch"));
+        assert!(preview.contains("*** Update File:"));
+        assert!(preview.contains("-let value = ;"));
+        assert!(preview.contains("+let value = 1;"));
+        assert!(preview.contains("*** Add File:"));
+        assert!(preview.contains("+pub fn added() {}"));
+        assert!(preview.contains("*** Delete File:"));
+        assert!(preview.contains("-obsolete"));
+        assert!(preview.contains("*** End Patch"));
+        let _ = std::fs::remove_dir_all(&cwd);
     }
 
     #[test]

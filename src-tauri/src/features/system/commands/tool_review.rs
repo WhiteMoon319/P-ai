@@ -235,6 +235,17 @@ fn tool_review_patch_paths_for_item(item: &ToolReviewCollectedItem) -> Vec<Strin
         }
     }
     if out.is_empty() {
+        if let Some(operations) = item.args_value.get("operations").and_then(Value::as_array) {
+            for operation in operations {
+                for key in ["path", "to"] {
+                    if let Some(path) = tool_review_json_string_field(operation, key) {
+                        out.push(path.to_string());
+                    }
+                }
+            }
+        }
+    }
+    if out.is_empty() {
         let (_, preview_text) = tool_review_preview_for_item(item);
         out.extend(tool_review_extract_patch_paths_from_text(&preview_text));
     }
@@ -260,6 +271,22 @@ fn tool_review_patch_operation_for_item(item: &ToolReviewCollectedItem) -> Optio
                     _ => "update",
                 };
                 operations.push(normalized.to_string());
+            }
+        }
+    }
+    if operations.is_empty() {
+        if let Some(raw_operations) = item.args_value.get("operations").and_then(Value::as_array) {
+            for operation in raw_operations {
+                if let Some(action) = tool_review_json_string_field(operation, "action") {
+                    let normalized = match action {
+                        "add" => "add",
+                        "delete" => "delete",
+                        "move" => "update",
+                        "update" => "update",
+                        _ => "update",
+                    };
+                    operations.push(normalized.to_string());
+                }
             }
         }
     }
@@ -538,9 +565,86 @@ fn delete_tool_review_report_internal(
     Ok(())
 }
 
+fn tool_review_patch_operations_summary(args: &Value) -> Option<Vec<Value>> {
+    let operations = args.get("operations")?.as_array()?;
+    let mut out = Vec::<Value>::new();
+    for operation in operations {
+        let action = tool_review_json_string_field(operation, "action").unwrap_or("");
+        let path = tool_review_json_string_field(operation, "path").unwrap_or("");
+        let to = tool_review_json_string_field(operation, "to").unwrap_or("");
+        let old_string = tool_review_json_string_field(operation, "old_string")
+            .or_else(|| tool_review_json_string_field(operation, "oldString"))
+            .unwrap_or("");
+        let new_string = tool_review_json_string_field(operation, "new_string")
+            .or_else(|| tool_review_json_string_field(operation, "newString"))
+            .unwrap_or("");
+        let content = tool_review_json_string_field(operation, "content").unwrap_or("");
+        let replace_all = operation
+            .get("replace_all")
+            .or_else(|| operation.get("replaceAll"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        out.push(serde_json::json!({
+            "action": action,
+            "path": path,
+            "to": to,
+            "replace_all": replace_all,
+            "old_preview": apply_patch_preview_text(old_string, 800),
+            "new_preview": apply_patch_preview_text(new_string, 800),
+            "content_preview": apply_patch_preview_text(content, 800),
+        }));
+    }
+    Some(out)
+}
+
+fn tool_review_prefixed_preview_lines(prefix: &str, text: &str) -> Vec<String> {
+    apply_patch_preview_text(text, 4_000)
+        .lines()
+        .map(|line| format!("{prefix}{line}"))
+        .collect()
+}
+
+fn tool_review_patch_operations_preview(args: &Value) -> Option<String> {
+    let operations = args.get("operations")?.as_array()?;
+    let mut lines = vec!["*** Begin Patch".to_string()];
+    for operation in operations {
+        let action = tool_review_json_string_field(operation, "action").unwrap_or("");
+        let path = tool_review_json_string_field(operation, "path").unwrap_or("");
+        let to = tool_review_json_string_field(operation, "to").unwrap_or("");
+        let old_string = tool_review_json_string_field(operation, "old_string")
+            .or_else(|| tool_review_json_string_field(operation, "oldString"))
+            .unwrap_or("");
+        let new_string = tool_review_json_string_field(operation, "new_string")
+            .or_else(|| tool_review_json_string_field(operation, "newString"))
+            .unwrap_or("");
+        let content = tool_review_json_string_field(operation, "content").unwrap_or("");
+        match action {
+            "add" => {
+                lines.push(format!("*** Add File: {path}"));
+                lines.extend(tool_review_prefixed_preview_lines("+", content));
+            }
+            "delete" => lines.push(format!("*** Delete File: {path}")),
+            "move" => {
+                lines.push(format!("*** Update File: {path}"));
+                lines.push(format!("*** Move to: {to}"));
+            }
+            _ => {
+                lines.push(format!("*** Update File: {path}"));
+                lines.extend(tool_review_prefixed_preview_lines("-", old_string));
+                lines.extend(tool_review_prefixed_preview_lines("+", new_string));
+            }
+        }
+    }
+    lines.push("*** End Patch".to_string());
+    Some(lines.join("\n"))
+}
+
 fn tool_review_preview_for_item(item: &ToolReviewCollectedItem) -> (String, String) {
     match item.tool_name.as_str() {
         "apply_patch" => {
+            if let Some(preview) = tool_review_patch_operations_preview(&item.args_value) {
+                return ("patch".to_string(), preview);
+            }
             let preview = tool_review_json_string_field(&item.args_value, "input")
                 .or_else(|| tool_review_json_string_field(&item.args_value, "patch"))
                 .unwrap_or(item.args_text.trim());
@@ -811,6 +915,7 @@ fn tool_review_build_context(item: &ToolReviewCollectedItem) -> Value {
             let (_, preview_text) = tool_review_preview_for_item(item);
             serde_json::json!({
                 "patch_preview": preview_text,
+                "operations": tool_review_patch_operations_summary(&item.args_value).unwrap_or_default(),
                 "result": item.result_value.clone().unwrap_or_else(|| Value::String(item.result_text.clone())),
             })
         }
@@ -843,6 +948,7 @@ async fn tool_review_run_for_call_internal(
 
     let item = tool_review_find_item(&conversation, call_id)?;
     let context = tool_review_build_context(&item);
+    let timeout_opinion = "快速模型请求超时，劳烦亲自审查";
     let review_value = match run_tool_smart_review(
         state,
         &review_api_config_id,
@@ -850,21 +956,32 @@ async fn tool_review_run_for_call_internal(
         "Tool safety review",
         context,
     )
-    .await?
+    .await
     {
-        TerminalSmartReviewOutcome::Decision(review) => serde_json::json!({
-            "kind": "decision",
-            "allow": review.allow,
-            "reviewOpinion": review.review_opinion,
-            "modelName": review.model_name,
-        }),
-        TerminalSmartReviewOutcome::RawJson { raw_json, model_name } => serde_json::json!({
-            "kind": "raw_json",
-            "allow": false,
-            "reviewOpinion": "当前工具评估模型返回了不符合约定的结果，请直接查看原始返回内容。",
-            "modelName": model_name,
-            "rawContent": raw_json,
-        }),
+        Ok(result) => match result {
+            TerminalSmartReviewOutcome::Decision(review) => serde_json::json!({
+                "kind": "decision",
+                "allow": review.allow,
+                "reviewOpinion": review.review_opinion,
+                "modelName": review.model_name,
+            }),
+            TerminalSmartReviewOutcome::RawJson { raw_json, model_name } => serde_json::json!({
+                "kind": "raw_json",
+                "allow": false,
+                "reviewOpinion": "当前工具评估模型返回了不符合约定的结果，请直接查看原始返回内容。",
+                "modelName": model_name,
+                "rawContent": raw_json,
+            }),
+        },
+        Err(error) => {
+            let is_timeout = error.contains("timed out") || error.contains("timeout");
+            serde_json::json!({
+                "kind": if is_timeout { "timeout" } else { "error" },
+                "allow": false,
+                "reviewOpinion": if is_timeout { timeout_opinion.to_string() } else { error.clone() },
+                "error": error,
+            })
+        }
     };
 
     conversation_service().update_unarchived_conversation_by_id(
@@ -1426,6 +1543,48 @@ async fn run_tool_review_for_call(
     tool_review_run_for_call_internal(state.inner(), conversation_id, call_id).await
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ToolReviewSetUserDecisionInput {
+    conversation_id: String,
+    call_id: String,
+    allow: bool,
+    #[serde(default)]
+    opinion: String,
+}
+
+#[tauri::command]
+fn set_tool_review_item_user_decision(
+    input: ToolReviewSetUserDecisionInput,
+    state: State<'_, AppState>,
+) -> Result<ToolReviewItemDetail, String> {
+    let conversation_id = input.conversation_id.trim().to_string();
+    let call_id = input.call_id.trim().to_string();
+    if conversation_id.is_empty() || call_id.is_empty() {
+        return Err("conversationId 和 callId 不能为空。".to_string());
+    }
+    let opinion = input.opinion.trim().to_string();
+    let user_decision_review = serde_json::json!({
+        "kind": "user_decision",
+        "allow": input.allow,
+        "reviewOpinion": if opinion.is_empty() {
+            if input.allow { "用户已批准本次工具执行" } else { "用户已否决本次工具执行" }
+        } else {
+            opinion.as_str()
+        },
+        "userOpinion": opinion,
+    });
+    conversation_service().update_unarchived_conversation_by_id(
+        state.inner(),
+        &conversation_id,
+        |conversation| {
+            tool_review_write_call_review(conversation, &call_id, &user_decision_review)?;
+            let refreshed = tool_review_find_item(conversation, &call_id)?;
+            Ok(tool_review_item_detail_from_collected(&refreshed))
+        },
+    )
+}
+
 async fn tool_review_run_missing_reviews_for_batch(
     state: &AppState,
     conversation_id: &str,
@@ -1757,7 +1916,7 @@ async fn submit_tool_review_code_internal(
 
 #[cfg(test)]
 mod tool_review_tests {
-    use super::{tool_review_cleanup_legacy_artifacts, tool_review_prune_legacy_batch_report_records, ChatMessage, Conversation, MessagePart, ToolReviewReportRecord};
+    use super::{tool_review_build_context, tool_review_cleanup_legacy_artifacts, tool_review_preview_for_item, tool_review_prune_legacy_batch_report_records, ChatMessage, Conversation, MessagePart, ToolReviewCollectedItem, ToolReviewReportRecord};
     use crate::{app_root_from_data_path, ASSISTANT_DEPARTMENT_ID, DEFAULT_AGENT_ID};
     use std::{env, fs};
     use uuid::Uuid;
@@ -1821,6 +1980,43 @@ mod tool_review_tests {
             plan_mode_enabled: false,
             preferred_api_config_id: None,
         }
+    }
+
+    #[test]
+    fn tool_review_apply_patch_context_should_include_operation_content() {
+        let args_value = serde_json::json!({
+            "operations": [
+                {
+                    "action": "update",
+                    "path": "E:/github/easy_call_ai/src/main.rs",
+                    "old_string": "let value = ;",
+                    "new_string": "let value = 1;",
+                    "replace_all": false
+                }
+            ]
+        });
+        let item = ToolReviewCollectedItem {
+            batch_key: "batch-1".to_string(),
+            call_id: "call-1".to_string(),
+            message_id: "message-1".to_string(),
+            tool_name: "apply_patch".to_string(),
+            order_index: 0,
+            args_text: args_value.to_string(),
+            args_value,
+            result_text: "{}".to_string(),
+            result_value: Some(serde_json::json!({ "ok": true })),
+            review_value: None,
+        };
+
+        let (_, preview_text) = tool_review_preview_for_item(&item);
+        let context = tool_review_build_context(&item);
+
+        assert!(preview_text.contains("*** Update File: E:/github/easy_call_ai/src/main.rs"));
+        assert!(preview_text.contains("-let value = ;"));
+        assert!(preview_text.contains("+let value = 1;"));
+        assert_eq!(context["operations"][0]["action"], "update");
+        assert_eq!(context["operations"][0]["old_preview"], "let value = ;");
+        assert_eq!(context["operations"][0]["new_preview"], "let value = 1;");
     }
 
     #[test]

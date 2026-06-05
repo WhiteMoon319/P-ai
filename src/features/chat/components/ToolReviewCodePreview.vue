@@ -33,5 +33,22 @@ const normalizedLines = computed(() =>
   height: 100%;
   max-height: none;
   border-radius: 0;
+  background-color: var(--color-base-200, oklch(21% 0.006 56.043));
+  scrollbar-color: color-mix(in srgb, var(--color-base-content) 30%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+:deep(.mockup-code::-webkit-scrollbar) {
+  width: 6px;
+  height: 6px;
+}
+
+:deep(.mockup-code::-webkit-scrollbar-thumb) {
+  background: color-mix(in srgb, var(--color-base-content) 30%, transparent);
+  border-radius: 3px;
+}
+
+:deep(.mockup-code::-webkit-scrollbar-track) {
+  background: transparent;
 }
 </style>

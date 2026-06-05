@@ -665,15 +665,17 @@ fn tool_safety_review_system_prompt(language: &str) -> String {
     format!(
         "请使用{language}完成工具执行评估。\n\
 你负责判断当前工具执行结果是否可以直接放行，还是必须先交给用户确认。\n\
-你的目标是让不会编程的普通人也能看明白这次工具执行大概要做什么、可能影响什么、为什么建议直接执行或先确认。\n\
-请优先使用简单人话，而不是技术术语；如果看不清影响范围，就直接说明无法确认。\n\
+评估重点是工具的实际效果：具体改了什么、修复了什么、删除/新增/重命名了什么、改变了哪条执行路径或配置语义；不要复述工具天然属性。\n\
+禁止输出“这个工具会修改文件”“请仔细查看”“存在风险需确认”这类空泛提示；必须结合输入内容说明具体变化。证据不足时直接写“证据不足”，并说明缺失哪项信息。\n\
+对于 apply_patch，必须逐项拆解补丁：add 说明新增文件和核心内容；delete 说明删除对象；move 说明原路径和目标路径；update 对比 old_preview 与 new_preview，指出具体替换导致的语法、逻辑、配置或文案变化。若补丁是在修复语法错误，必须精确说明是哪种语法错误，例如缺逗号、括号不闭合、字符串未闭合、赋值/比较误用等。\n\
+对于 apply_patch，allow=false 只用于无法判断补丁语义、删除/覆盖高价值内容、修改安全/权限/密钥/发布链路、或存在明确破坏性后果；普通小修、明确修复、文案调整应 allow=true，并在 review_opinion 说明实际效果。\n\
 对于 shell_exec，若命令虽不在白名单中，但可以明确判断为只读取、只查询、只检查、只测试、只输出结果，且不会写入或修改本地文件、不会修改 Git 状态、不会修改系统配置、也不会把网络内容保存到本地文件，则应返回 allow=true。\n\
 对于 shell_exec，各类测试、检查、编译校验命令只要只是运行并输出结果、不修改本地项目文件，应返回 allow=true；curl、wget、Invoke-WebRequest 等命令只要只是获取内容并输出到终端、不写入本地文件，也应返回 allow=true。\n\
 对于 shell_exec，如果命令会新增、覆盖、删除、重命名本地文件，修改 Git 工作区、索引、提交历史、分支指向或 stash 状态，修改系统配置、环境变量或其他持久化状态，下载内容到本地文件，使用输出重定向写文件，或通过管道直接执行脚本，则应返回 allow=false。\n\
 对于 shell_exec，如果无法确认命令是否存在副作用，也应返回 allow=false，不要猜测放行。\n\
 只返回一个 JSON 对象，不要输出 Markdown、代码块或额外解释。\n\
 JSON 只能包含这些字段：allow, review_opinion。\n\
-其中：allow 表示是否放行，review_opinion 表示给普通用户看的评估意见。"
+其中：allow 表示是否放行，review_opinion 表示给用户看的具体评估意见。"
     )
 }
 
@@ -717,7 +719,7 @@ async fn run_tool_smart_review(
         prepared,
         CallPolicy {
             scene,
-            timeout_secs: Some(12),
+            timeout_secs: Some(120),
             json_only: true,
         },
         Some(state),
