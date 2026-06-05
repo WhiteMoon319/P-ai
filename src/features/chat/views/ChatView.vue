@@ -44,6 +44,7 @@
             :class="chatting || frozen || conversationBusy ? 'pointer-events-auto' : ''"
             :data-chat-interaction-locked="chatting || frozen || conversationBusy ? 'true' : undefined"
             @scroll="onConversationScroll"
+            @wheel="handleShiftWheel"
           >
           <div
             v-if="loadingOlderHistory"
@@ -909,6 +910,38 @@ function handleConversationPinToggle(id: string) { emit("togglePinConversation",
 function handleConversationArchive(id: string) { emit("archiveConversation", String(id || "").trim()); }
 function handleConversationExport(id: string) { emit("exportConversation", String(id || "").trim()); }
 function handleConversationDelete(id: string) { emit("deleteConversation", String(id || "").trim()); }
+
+function handleShiftWheel(event: WheelEvent) {
+  if (!event.shiftKey) return;
+  event.preventDefault();
+  const items = props.conversationItems || props.unarchivedConversationItems;
+  if (!items || items.length === 0) return;
+  const currentId = String(props.activeConversationId || "").trim();
+  const currentIndex = items.findIndex((item) => String(item.conversationId || "").trim() === currentId);
+  if (currentIndex < 0) return;
+  const direction = event.deltaY > 0 ? 1 : -1;
+  let step = direction;
+  // 沿方向搜索第一个可切换的会话（跳过当前和不可用）
+  const maxSteps = items.length;
+  while (Math.abs(step) <= maxSteps) {
+    const targetIndex = currentIndex + step;
+    if (targetIndex < 0 || targetIndex >= items.length) break;
+    const target = items[targetIndex];
+    const isDisabled = target.runtimeState === "organizing_context"
+      || target.runtimeState === "archiving"
+      || target.runtimeState === "compacting"
+      || !!target.detachedWindowOpen;
+    if (!isDisabled) {
+      emit("switchConversation", {
+        conversationId: String(target.conversationId || "").trim(),
+        kind: target.kind,
+        remoteContactId: String(target.remoteContactId || "").trim() || undefined,
+      });
+      break;
+    }
+    step += direction;
+  }
+}
 
 // ==================== link / copy ====================
 
