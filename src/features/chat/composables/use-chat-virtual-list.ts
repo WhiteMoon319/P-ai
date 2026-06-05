@@ -93,8 +93,45 @@ export function useChatVirtualList(options: UseChatVirtualListOptions) {
   const ephemeralSeq = { value: 0 };
   const rid = (block: ChatMessageBlock) => blockRenderId(block, ephemeralMap, ephemeralSeq);
 
+  let previousBlockIds: string[] = [];
+  let previousTimeDividerIds = new Set<string>();
+
+  const blockIdentity = (block: ChatMessageBlock): string => {
+    const rawId = String(block.id || "").trim();
+    if (rawId) return rawId;
+    const sourceMessageId = String(block.sourceMessageId || "").trim();
+    if (sourceMessageId) return block.isExtraTextBlock ? `${sourceMessageId}::extra` : sourceMessageId;
+    return [
+      String(block.role || ""),
+      String(block.speakerAgentId || ""),
+      String(block.createdAt || ""),
+      block.isExtraTextBlock ? "extra" : "base",
+      String(block.text || "").trim().slice(0, 64),
+    ].join(":");
+  };
+
+  const startsWithIds = (current: string[], previous: string[]): boolean => {
+    if (previous.length <= 0 || current.length < previous.length) return false;
+    return previous.every((id, index) => current[index] === id);
+  };
+
+  const endsWithIds = (current: string[], previous: string[]): boolean => {
+    if (previous.length <= 0 || current.length < previous.length) return false;
+    const offset = current.length - previous.length;
+    return previous.every((id, index) => current[offset + index] === id);
+  };
+
+  const sameLengthWithOverlap = (current: string[], previous: string[]): boolean => {
+    if (current.length !== previous.length || current.length <= 0) return false;
+    return current.some((id, index) => id === previous[index]);
+  };
+
   const chatRenderItems = computed<ChatRenderItem[]>(() => {
     const items: ChatRenderItem[] = [];
+    const currentBlockIds = messageBlocks.value.map(blockIdentity);
+    const isTailOnlyChange = startsWithIds(currentBlockIds, previousBlockIds) || sameLengthWithOverlap(currentBlockIds, previousBlockIds);
+    const allowNewTimeDividers = previousBlockIds.length <= 0 || endsWithIds(currentBlockIds, previousBlockIds) || !isTailOnlyChange;
+    const nextTimeDividerIds = new Set<string>();
     let currentGroup: Extract<ChatRenderItem, { kind: "group" }> | null = null;
     let previousMessageBlock: ChatMessageBlock | null = null;
     let previousMessageTimeMs = 0;
@@ -115,13 +152,17 @@ export function useChatVirtualList(options: UseChatVirtualListOptions) {
     const maybePushTimeDivider = (block: ChatMessageBlock, renderId: string) => {
       const currentTimeMs = blockTimeMs(block);
       if (previousMessageTimeMs > 0 && currentTimeMs > 0 && currentTimeMs - previousMessageTimeMs >= TIME_DIVIDER_GAP_MS) {
-        flushGroup();
-        previousMessageBlock = null;
-        items.push({
-          kind: "time_divider",
-          id: `time-divider-${renderId}-${String(block.createdAt || "").trim()}`,
-          createdAt: String(block.createdAt || "").trim(),
-        });
+        const dividerId = `time-divider-${renderId}-${String(block.createdAt || "").trim()}`;
+        if (allowNewTimeDividers || previousTimeDividerIds.has(dividerId)) {
+          flushGroup();
+          previousMessageBlock = null;
+          items.push({
+            kind: "time_divider",
+            id: dividerId,
+            createdAt: String(block.createdAt || "").trim(),
+          });
+          nextTimeDividerIds.add(dividerId);
+        }
       }
       if (currentTimeMs > 0) {
         previousMessageTimeMs = currentTimeMs;
@@ -168,6 +209,8 @@ export function useChatVirtualList(options: UseChatVirtualListOptions) {
       previousMessageBlock = block;
     });
     flushGroup();
+    previousBlockIds = currentBlockIds;
+    previousTimeDividerIds = nextTimeDividerIds;
     return items;
   });
 
