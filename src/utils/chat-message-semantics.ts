@@ -443,8 +443,8 @@ export function normalizeAssistantStreamBlocks(rawBlocks: unknown): AssistantStr
 
 export function assistantTextFromStreamBlocks(rawBlocks: unknown): string {
   return normalizeAssistantStreamBlocks(rawBlocks)
-    .map((block) => String(block.text || "").trim())
-    .filter(Boolean)
+    .map((block) => String(block.text || ""))
+    .filter((text) => text.length > 0)
     .join("\n\n");
 }
 

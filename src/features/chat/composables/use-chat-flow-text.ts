@@ -46,8 +46,7 @@ export function consumeClosedMarkdownBlocks(input: string): { chunks: string[]; 
     if (!inFence && prevBlank && !isBlank) {
       const splitAt = lineStart;
       if (splitAt > cursor) {
-        const chunk = input.slice(cursor, splitAt).trim();
-        if (chunk) chunks.push(chunk);
+        chunks.push(input.slice(cursor, splitAt));
         cursor = splitAt;
         lastSafe = splitAt;
       }
@@ -59,8 +58,7 @@ export function consumeClosedMarkdownBlocks(input: string): { chunks: string[]; 
   }
 
   if (lastSafe > cursor) {
-    const chunk = input.slice(cursor, lastSafe).trim();
-    if (chunk) chunks.push(chunk);
+    chunks.push(input.slice(cursor, lastSafe));
     cursor = lastSafe;
   }
 

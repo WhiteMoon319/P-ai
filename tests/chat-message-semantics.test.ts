@@ -636,12 +636,12 @@ describe("chat-message semantics", () => {
     }]));
   });
 
-  it("joins streaming assistant texts with blank lines between blocks", () => {
+  it("joins streaming assistant text blocks without trimming block text", () => {
     expect(assistantTextFromStreamBlocks([
       { text: "先说明我要等待。", tools: [] },
       {
         reasoning: "准备调用等待工具。",
-        text: "等待完成，现在汇报。",
+        text: "  - **优先级本来就有**\n- 现在要做的是...\n",
         tools: [{
           toolCallId: "tool-1",
           name: "wait",
@@ -649,7 +649,7 @@ describe("chat-message semantics", () => {
           status: "done" as const,
         }],
       },
-    ])).toBe("先说明我要等待。\n\n等待完成，现在汇报。");
+    ])).toBe("先说明我要等待。\n\n  - **优先级本来就有**\n- 现在要做的是...\n");
   });
 
   it("reconstructs assistant display blocks from persisted tool history", () => {
