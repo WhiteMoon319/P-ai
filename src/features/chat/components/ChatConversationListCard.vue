@@ -16,7 +16,7 @@
         <div
           role="button"
           tabindex="0"
-          class="group/section flex h-9 w-full items-center gap-2 border-y border-base-300 bg-base-100 px-2.5 text-left text-xs font-semibold text-base-content/65 transition-colors hover:bg-base-200 hover:text-base-content"
+          class="group/section sticky top-0 z-20 flex h-9 w-full items-center gap-2 border-y border-base-300 bg-base-100/95 px-2.5 text-left text-xs font-semibold text-base-content/65 backdrop-blur transition-colors hover:bg-base-200 hover:text-base-content"
           :title="section.title"
           @click="toggleConversationSection(section.key)"
           @keydown.enter.prevent="toggleConversationSection(section.key)"
