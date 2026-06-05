@@ -3,7 +3,7 @@ import { invokeTauri } from "../../../services/tauri-api";
 import type { ConversationDelegateStatusSummary } from "../../../types/app";
 
 const ARCHIVE_FOCUS_REQUEST_STORAGE_KEY = "easy_call.archives.focus_request.v1";
-const POLL_INTERVAL_MS = 1000;
+const POLL_INTERVAL_MS = 5000;
 
 interface UseDelegateStatusOptions {
   activeConversationId: Ref<string>;
@@ -28,7 +28,10 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
       return;
     }
     const seq = ++requestSeq;
-    delegateStatusesLoading.value = true;
+    // 仅首次（列表为空）显示 loading，常规轮询不闪烁
+    if (delegateStatuses.value.length === 0) {
+      delegateStatusesLoading.value = true;
+    }
     try {
       const statuses = await invokeTauri<ConversationDelegateStatusSummary[]>(
         "list_conversation_delegate_statuses",

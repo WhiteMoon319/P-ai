@@ -7,7 +7,7 @@
       <span class="loading loading-spinner loading-sm mr-2"></span>
       {{ t("chat.toolReview.delegateLoading") }}
     </div>
-    <div v-else-if="statuses.length === 0" class="px-4 py-4 text-sm text-base-content/65">
+    <div v-else-if="statuses.length === 0" class="flex min-h-0 flex-1 items-center justify-center px-4 py-8 text-sm text-base-content/65">
       {{ t("chat.toolReview.delegateEmpty") }}
     </div>
     <div v-else class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3">

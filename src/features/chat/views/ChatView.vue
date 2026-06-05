@@ -86,7 +86,7 @@
                 </div>
                 <div v-else-if="entry.item.kind === 'time_divider'" class="my-3 flex items-center gap-3 px-3 text-[11px] text-base-content/45">
                   <div class="h-px flex-1 bg-base-300/70"></div>
-                  <time class="shrink-0 rounded-full border border-base-300/70 bg-base-100/90 px-3 py-1 text-base-content/55 shadow-sm"
+                  <time class="shrink-0 text-[11px] font-semibold text-base-content/50"
                     :datetime="entry.item.createdAt">{{ formatTimeDividerLabel(entry.item.createdAt) }}</time>
                   <div class="h-px flex-1 bg-base-300/70"></div>
                 </div>

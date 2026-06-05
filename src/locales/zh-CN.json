@@ -1120,7 +1120,7 @@
     "recording": "录音中 {seconds}s",
     "transcribing": "语音转写中...",
     "holdRecord": "按住{hotkey}或按钮录音",
-    "placeholder": "向PAI说话吧",
+    "placeholder": "跟PAI说话吧",
     "trimTip": "点击选择压缩或归档当前对话",
     "alwaysOnTopOff": "取消总在最前",
     "alwaysOnTopOn": "总在最前窗口",
