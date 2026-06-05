@@ -2,6 +2,7 @@
 
 ## 发布：v0.10.20
 
+- 优化（chat）：无标题会话从首条 10~100 字用户发言开始使用快速模型异步探测 summaryTitle，替代旧的第 5 条消息固定生成策略；已有会话标题或 summaryTitle 时不再重复触发。
 - 修复（runtime）：工具调用按批调度，只读工具并发执行、写操作工具串行执行，替换旧的逐个串行逻辑；新增 `PreparedToolCallBatch` 批次抽象与 `runtime_tool_call_requires_serial_execution` 动态判定。
 - 修复（reader）：区分侧边目录和浮动目录，文件浏览器面板目录树交互更清晰。
 - 修复（chat）：放开手动委托部门选择，用户发起委托时可自由选择目标部门。

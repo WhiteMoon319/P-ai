@@ -876,30 +876,55 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
     });
 }
 
-fn should_schedule_conversation_auto_title_generation(conversation: &Conversation) -> bool {
-    conversation_is_local_normal_chat(conversation)
-        && conversation.title.trim().is_empty()
-        && conversation_real_user_messages(conversation).len() == 5
+fn conversation_has_visible_title(conversation: &Conversation) -> bool {
+    !conversation.title.trim().is_empty() || conversation_latest_summary_title(conversation).is_some()
 }
 
-fn build_auto_conversation_title_prepared_prompt(user_messages: &[String]) -> PreparedPrompt {
-    let history_block = user_messages
-        .iter()
-        .enumerate()
-        .map(|(idx, text)| format!("{}. {}", idx + 1, text.trim()))
-        .collect::<Vec<_>>()
-        .join("\n");
+fn auto_title_generation_inflight(
+) -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
+    static INFLIGHT: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashSet<String>>,
+    > = std::sync::OnceLock::new();
+    INFLIGHT.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
+}
+
+fn auto_title_generation_try_mark_inflight(conversation_id: &str) -> bool {
+    let normalized_id = conversation_id.trim();
+    if normalized_id.is_empty() {
+        return false;
+    }
+    match auto_title_generation_inflight().lock() {
+        Ok(mut guard) => guard.insert(normalized_id.to_string()),
+        Err(_) => false,
+    }
+}
+
+fn auto_title_generation_clear_inflight(conversation_id: &str) {
+    if let Ok(mut guard) = auto_title_generation_inflight().lock() {
+        guard.remove(conversation_id.trim());
+    }
+}
+
+fn should_schedule_conversation_auto_title_generation(
+    conversation: &Conversation,
+    latest_user_text: &str,
+) -> bool {
+    let char_count = latest_user_text.trim().chars().count();
+    conversation_is_local_normal_chat(conversation)
+        && !conversation_has_visible_title(conversation)
+        && (10..=100).contains(&char_count)
+}
+
+fn build_auto_conversation_title_prepared_prompt(user_message: &str) -> PreparedPrompt {
     PreparedPrompt {
-        preamble: "你是会话标题生成器。请根据用户前 5 次发言生成一个简洁标题。\
-只输出标题本身，不要解释，不要引号，不要句号或其他收尾标点。\
-标题要准确概括当前主题，尽量控制在 10 个汉字以内，绝不要超过 20 个字。\
-请使用当前用户本轮使用的语言。"
+        preamble: "你是会话话题探测器。只根据本次用户发言判断是否能提取明确话题。\
+只能输出 JSON，不要解释，不要 Markdown。\
+能提取则返回 {\"has_topic\":true,\"title\":\"简洁标题\"}。\
+不能提取、内容模糊、寒暄或承接上文但无法独立成题，则返回 {\"has_topic\":false,\"title\":\"\"}。\
+title 尽量 10 个汉字以内，绝不超过 20 个字，不要引号外文本，不要收尾标点。"
             .to_string(),
         history_messages: Vec::new(),
-        latest_user_text: format!(
-            "以下是当前会话截至目前的前 5 次用户发言：\n{}\n\n请直接输出一个标题。",
-            history_block
-        ),
+        latest_user_text: format!("用户发言：\n{}", user_message.trim()),
         latest_user_meta_text: String::new(),
         latest_user_extra_text: String::new(),
         latest_user_extra_blocks: Vec::new(),
@@ -908,9 +933,31 @@ fn build_auto_conversation_title_prepared_prompt(user_messages: &[String]) -> Pr
     }
 }
 
+fn parse_auto_conversation_title_probe_result(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let value = serde_json::from_str::<Value>(trimmed).ok().or_else(|| {
+        extract_best_json_object_value(trimmed, "---JSON---", &["has_topic"], &["title"])
+    })?;
+    let has_topic = value
+        .get("has_topic")
+        .or_else(|| value.get("hasTopic"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if !has_topic {
+        return None;
+    }
+    value
+        .get("title")
+        .and_then(Value::as_str)
+        .and_then(normalize_summary_context_title)
+}
+
 async fn run_auto_conversation_title_generation(
     state: &AppState,
-    user_messages: &[String],
+    user_message: &str,
 ) -> Result<String, String> {
     let review_api_config_id = current_tool_review_api_config_id(state)?
         .ok_or_else(|| "未配置快速模型".to_string())?;
@@ -929,11 +976,11 @@ async fn run_auto_conversation_title_generation(
     let execution = invoke_model_with_policy(
         &resolved_api,
         &model_name,
-        build_auto_conversation_title_prepared_prompt(user_messages),
+        build_auto_conversation_title_prepared_prompt(user_message),
         CallPolicy {
             scene: "Conversation auto title",
             timeout_secs: Some(12),
-            json_only: false,
+            json_only: true,
         },
         Some(state),
     )
@@ -945,64 +992,82 @@ async fn run_auto_conversation_title_generation(
     } else {
         reply.final_response_text.trim()
     };
-    normalize_summary_context_title(candidate)
+    parse_auto_conversation_title_probe_result(candidate)
         .ok_or_else(|| "快速模型未返回有效标题".to_string())
 }
 
 fn spawn_conversation_auto_title_generation(
     state: AppState,
     conversation_id: String,
-    user_messages: Vec<String>,
+    user_message: String,
 ) {
     tauri::async_runtime::spawn(async move {
         let started_at = std::time::Instant::now();
         let conversation_id = conversation_id.trim().to_string();
-        if conversation_id.is_empty() || user_messages.len() != 5 {
+        if conversation_id.is_empty() {
             return;
         }
-        match run_auto_conversation_title_generation(&state, &user_messages).await {
-            Ok(title) => match conversation_service().update_unarchived_conversation_latest_summary_title(
-                &state,
-                &conversation_id,
-                &title,
-            ) {
-                Ok(changed) => {
-                    if changed {
-                        if let Err(err) =
-                            emit_unarchived_conversation_overview_updated_from_state(&state)
-                        {
-                            runtime_log_warn(format!(
-                                "[会话标题] 警告，任务=刷新会话概览，conversation_id={}，error={}",
-                                conversation_id, err
-                            ));
+        if !auto_title_generation_try_mark_inflight(&conversation_id) {
+            return;
+        }
+        let result = async {
+            match state_read_conversation_cached(&state, &conversation_id) {
+                Ok(conversation) if conversation_has_visible_title(&conversation) => {
+                    return Ok::<(), String>(());
+                }
+                Ok(_) => {}
+                Err(err) => return Err(err),
+            }
+            match run_auto_conversation_title_generation(&state, &user_message).await {
+                Ok(title) => {
+                    match state_read_conversation_cached(&state, &conversation_id) {
+                        Ok(conversation) if conversation_has_visible_title(&conversation) => {
+                            return Ok(());
                         }
+                        Ok(_) => {}
+                        Err(err) => return Err(err),
                     }
-                    runtime_log_info(format!(
-                        "[会话标题] 完成，任务=自动生成标题，conversation_id={}，title={}，changed={}，elapsed_ms={}",
-                        conversation_id,
-                        title,
-                        changed,
-                        started_at.elapsed().as_millis()
-                    ));
+                    match conversation_service().update_unarchived_conversation_latest_summary_title(
+                        &state,
+                        &conversation_id,
+                        &title,
+                    ) {
+                        Ok(changed) => {
+                            if changed {
+                                if let Err(err) =
+                                    emit_unarchived_conversation_overview_updated_from_state(&state)
+                                {
+                                    runtime_log_warn(format!(
+                                        "[会话标题] 警告，任务=刷新会话概览，conversation_id={}，error={}",
+                                        conversation_id, err
+                                    ));
+                                }
+                            }
+                            runtime_log_info(format!(
+                                "[会话标题] 完成，任务=自动生成标题，conversation_id={}，title={}，changed={}，elapsed_ms={}",
+                                conversation_id,
+                                title,
+                                changed,
+                                started_at.elapsed().as_millis()
+                            ));
+                            Ok(())
+                        }
+                        Err(err) => Err(err),
+                    }
                 }
-                Err(err) => {
-                    runtime_log_warn(format!(
-                        "[会话标题] 失败，任务=回写摘要标题，conversation_id={}，error={}，elapsed_ms={}",
-                        conversation_id,
-                        err,
-                        started_at.elapsed().as_millis()
-                    ));
-                }
-            },
-            Err(err) => {
-                runtime_log_warn(format!(
-                    "[会话标题] 跳过，任务=自动生成标题，conversation_id={}，error={}，elapsed_ms={}",
-                    conversation_id,
-                    err,
-                    started_at.elapsed().as_millis()
-                ));
+                Err(err) => Err(err),
             }
         }
+        .await;
+        if let Err(err) = result {
+            runtime_log_warn(format!(
+                "[会话标题] 跳过，任务=自动生成标题，conversation_id={}，error={}，elapsed_ms={}",
+                conversation_id,
+                err,
+                started_at.elapsed().as_millis()
+            ));
+        }
+        auto_title_generation_clear_inflight(&conversation_id);
     });
 }
 
@@ -2484,15 +2549,19 @@ async fn send_chat_message_inner(
                 updated_conversation
             }
         };
-        if should_schedule_conversation_auto_title_generation(&storage_conversation) {
-            let user_messages = conversation_real_user_message_texts(&storage_conversation);
-            if user_messages.len() == 5 {
-                spawn_conversation_auto_title_generation(
-                    state.clone(),
-                    storage_conversation.id.clone(),
-                    user_messages,
-                );
-            }
+        let latest_user_message_for_title = conversation_real_user_message_texts(&storage_conversation)
+            .into_iter()
+            .last()
+            .unwrap_or_default();
+        if should_schedule_conversation_auto_title_generation(
+            &storage_conversation,
+            &latest_user_message_for_title,
+        ) {
+            spawn_conversation_auto_title_generation(
+                state.clone(),
+                storage_conversation.id.clone(),
+                latest_user_message_for_title,
+            );
         }
         let conversation = trim_conversation_for_prompt_request(&storage_conversation);
         let (latest_user_text, effective_images, effective_audios) = if trigger_only {
@@ -3681,6 +3750,74 @@ mod core_send_inner_tests {
         assert!(!missing_applied);
         assert!(!disabled_applied);
         assert_eq!(candidate_api_ids, vec!["text-a".to_string()]);
+    }
+
+    #[test]
+    fn auto_title_probe_result_should_parse_json_title_only_when_has_topic() {
+        assert_eq!(
+            parse_auto_conversation_title_probe_result(
+                r#"{"has_topic":true,"title":" 自动压缩标题。 "}"#,
+            )
+            .as_deref(),
+            Some("自动压缩标题")
+        );
+        assert!(parse_auto_conversation_title_probe_result(
+            r#"{"has_topic":false,"title":"自动压缩标题"}"#,
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn auto_title_schedule_should_require_no_visible_title_and_user_text_length_range() {
+        let mut conversation = build_conversation_record(
+            "api-a",
+            "agent-a",
+            ASSISTANT_DEPARTMENT_ID,
+            "",
+            CONVERSATION_KIND_CHAT,
+            None,
+            None,
+        );
+
+        assert!(!should_schedule_conversation_auto_title_generation(
+            &conversation,
+            "太短"
+        ));
+        assert!(should_schedule_conversation_auto_title_generation(
+            &conversation,
+            "请帮我检查标题自动生成逻辑"
+        ));
+        assert!(!should_schedule_conversation_auto_title_generation(
+            &conversation,
+            &"过长".repeat(51)
+        ));
+
+        conversation.title = "用户标题".to_string();
+        assert!(!should_schedule_conversation_auto_title_generation(
+            &conversation,
+            "请帮我检查标题自动生成逻辑"
+        ));
+    }
+
+    #[test]
+    fn auto_title_schedule_should_skip_when_summary_title_exists() {
+        let mut conversation = build_conversation_record(
+            "api-a",
+            "agent-a",
+            ASSISTANT_DEPARTMENT_ID,
+            "",
+            CONVERSATION_KIND_CHAT,
+            None,
+            None,
+        );
+        conversation
+            .messages
+            .push(build_initial_summary_context_message(None, None, Some("已有摘要标题")));
+
+        assert!(!should_schedule_conversation_auto_title_generation(
+            &conversation,
+            "请帮我检查标题自动生成逻辑"
+        ));
     }
 
     fn test_model_reply(
