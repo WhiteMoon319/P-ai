@@ -449,6 +449,7 @@ const CodeBlock = defineComponent({
           open: previewOpen.value,
           lang: codeProps.lang,
           code: codeProps.code,
+          isDark: codeProps.isDark,
           onClose: closePreview,
         }),
       ]);

@@ -7,6 +7,7 @@ const props = defineProps<{
   open: boolean;
   lang?: string;
   code: string;
+  isDark?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -21,6 +22,7 @@ let highlightAbort: AbortController | null = null;
 
 const languageLabel = computed(() => String(props.lang || "").trim() || "text");
 const previewIsDark = computed(() => {
+  if (props.isDark !== undefined) return props.isDark;
   if (typeof window === "undefined" || typeof document === "undefined") return false;
   return String(window.getComputedStyle(document.documentElement).colorScheme || "").toLowerCase().includes("dark");
 });
