@@ -1,6 +1,6 @@
 # 变更日志
 
-## 未发布
+## 发布：v0.10.20
 
 - 修复（runtime）：工具调用按批调度，只读工具并发执行、写操作工具串行执行，替换旧的逐个串行逻辑；新增 `PreparedToolCallBatch` 批次抽象与 `runtime_tool_call_requires_serial_execution` 动态判定。
 - 修复（reader）：区分侧边目录和浮动目录，文件浏览器面板目录树交互更清晰。
