@@ -216,6 +216,21 @@ fn common_delegate_preflight(
     })
 }
 
+fn validate_delegate_tool_direct_child_target(preflight: &DelegatePreflight) -> Result<(), String> {
+    if preflight
+        .source_department
+        .child_department_ids
+        .iter()
+        .any(|id| id.trim() == preflight.target_department.id)
+    {
+        return Ok(());
+    }
+    Err(format!(
+        "目标部门不是当前部门的直接下级，sourceDepartmentId={}，targetDepartmentId={}",
+        preflight.source_department.id, preflight.target_department.id
+    ))
+}
+
 fn delegate_target_chat_api_config_ids(
     config: &AppConfig,
     target_department: &DepartmentConfig,
@@ -401,10 +416,6 @@ async fn builtin_delegate(
         Ok(value) => value,
         Err(err) => return Ok(delegate_failed_result(err)),
     };
-    if validated.mode == DelegateMode::Sync {
-        return delegate_execute_sync(app_state, session_id, args).await;
-    }
-
     let (_, source_agent_id, source_conversation_id) = delegate_parse_session_parts(session_id);
     let preflight = match common_delegate_preflight(
         app_state,
@@ -415,6 +426,12 @@ async fn builtin_delegate(
         Ok(value) => value,
         Err(err) => return Ok(delegate_failed_result(err)),
     };
+    if let Err(err) = validate_delegate_tool_direct_child_target(&preflight) {
+        return Ok(delegate_failed_result(err));
+    }
+    if validated.mode == DelegateMode::Sync {
+        return delegate_execute_sync(app_state, session_id, args).await;
+    }
 
     if preflight.current_thread.is_some() {
         eprintln!(

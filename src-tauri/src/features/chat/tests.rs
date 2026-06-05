@@ -5115,6 +5115,72 @@
     }
 
     #[test]
+    fn common_delegate_preflight_should_not_require_direct_child_department() {
+        let state = test_chat_runtime_state();
+        let mut source_agent = default_agent();
+        source_agent.id = "source-agent".to_string();
+        source_agent.name = "源部门人格".to_string();
+
+        let mut target_agent = default_agent();
+        target_agent.id = "target-agent".to_string();
+        target_agent.name = "目标部门人格".to_string();
+
+        let mut source_department = default_assistant_department("api-a");
+        source_department.id = "dept-source".to_string();
+        source_department.name = "源部门".to_string();
+        source_department.is_built_in_assistant = false;
+        source_department.agent_ids = vec![source_agent.id.clone()];
+        source_department.child_department_ids = Vec::new();
+
+        let mut target_department = default_assistant_department("api-a");
+        target_department.id = "dept-target".to_string();
+        target_department.name = "目标部门".to_string();
+        target_department.is_built_in_assistant = false;
+        target_department.agent_ids = vec![target_agent.id.clone()];
+
+        let config = AppConfig {
+            departments: vec![source_department, target_department],
+            ..AppConfig::default()
+        };
+        write_config(&state.config_path, &config).expect("write config");
+        state_write_agents_cached(
+            &state,
+            &[
+                source_agent.clone(),
+                target_agent.clone(),
+                default_user_persona(),
+            ],
+        )
+        .expect("write agents");
+
+        let conversation = build_conversation_record(
+            "api-a",
+            &source_agent.id,
+            "dept-source",
+            "源部门会话",
+            CONVERSATION_KIND_CHAT,
+            None,
+            None,
+        );
+        state_schedule_conversation_persist(&state, &conversation)
+            .expect("persist conversation");
+
+        let preflight = common_delegate_preflight(
+            &state,
+            &source_agent.id,
+            Some(&conversation.id),
+            "dept-target",
+        )
+        .expect("delegate scheduling should allow any target department");
+
+        assert_eq!(preflight.source_department.id, "dept-source");
+        assert_eq!(preflight.target_department.id, "dept-target");
+        assert_eq!(preflight.target_agent_id, target_agent.id);
+        assert_eq!(preflight.root_conversation_id, conversation.id);
+        assert!(validate_delegate_tool_direct_child_target(&preflight).is_err());
+    }
+
+    #[test]
     fn common_delegate_preflight_should_accept_private_child_department_agent() {
         let state = test_chat_runtime_state();
         let private_departments_dir = app_root_from_data_path(&state.data_path)

@@ -4,7 +4,6 @@ struct RuntimeOrganizationSnapshot {
     agents: Vec<AgentProfile>,
     departments_by_id: std::collections::HashMap<String, DepartmentConfig>,
     department_ids_by_agent: std::collections::HashMap<String, String>,
-    direct_child_ids_by_parent: std::collections::HashMap<String, Vec<String>>,
 }
 
 fn normalize_runtime_organization_department_children(config: &mut AppConfig) {
@@ -38,18 +37,12 @@ fn build_runtime_organization_snapshot_from_parts(
 
     let mut departments_by_id = std::collections::HashMap::<String, DepartmentConfig>::new();
     let mut department_ids_by_agent = std::collections::HashMap::<String, String>::new();
-    let mut direct_child_ids_by_parent = std::collections::HashMap::<String, Vec<String>>::new();
-
     for department in &config.departments {
         let department_id = department.id.trim();
         if department_id.is_empty() {
             continue;
         }
         departments_by_id.insert(department_id.to_string(), department.clone());
-        direct_child_ids_by_parent.insert(
-            department_id.to_string(),
-            department.child_department_ids.clone(),
-        );
         for agent_id in &department.agent_ids {
             let agent_id = agent_id.trim();
             if agent_id.is_empty() {
@@ -66,7 +59,6 @@ fn build_runtime_organization_snapshot_from_parts(
         agents: runtime_data.agents,
         departments_by_id,
         department_ids_by_agent,
-        direct_child_ids_by_parent,
     })
 }
 
@@ -108,33 +100,4 @@ fn runtime_department_for_agent<'a>(
                 None
             }
         })
-}
-
-fn runtime_department_direct_child_ids(
-    snapshot: &RuntimeOrganizationSnapshot,
-    department_id: &str,
-) -> Vec<String> {
-    let department_id = department_id.trim();
-    if department_id.is_empty() {
-        return Vec::new();
-    }
-    snapshot
-        .direct_child_ids_by_parent
-        .get(department_id)
-        .cloned()
-        .unwrap_or_default()
-}
-
-fn runtime_department_has_direct_child(
-    snapshot: &RuntimeOrganizationSnapshot,
-    source_department_id: &str,
-    target_department_id: &str,
-) -> bool {
-    let target_department_id = target_department_id.trim();
-    if target_department_id.is_empty() {
-        return false;
-    }
-    runtime_department_direct_child_ids(snapshot, source_department_id)
-        .iter()
-        .any(|child_id| child_id == target_department_id)
 }

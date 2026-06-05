@@ -1793,7 +1793,7 @@ async fn submit_tool_review_code_internal(
             source_agent_id_owned,
             target_department_id_owned
         ));
-        let delegate_result = match builtin_delegate(&app_state, &session_id, delegate_args).await {
+        let delegate_result = match delegate_execute_sync(&app_state, &session_id, delegate_args).await {
             Ok(result) => result,
             Err(err) => {
                 let _ = tool_review_update_report_record(

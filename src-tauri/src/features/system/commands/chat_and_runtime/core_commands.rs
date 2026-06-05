@@ -735,9 +735,6 @@ fn resolve_user_async_delegate_plan(
     };
     let target_department = runtime_department_by_id(&runtime_org, target_department_id)
         .ok_or_else(|| format!("目标部门不存在，departmentId={target_department_id}"))?;
-    if !runtime_department_has_direct_child(&runtime_org, source_department_id, target_department_id) {
-        return Err("目标部门不是当前部门的直接下级".to_string());
-    }
     let target_agent_id = target_department
         .agent_ids
         .iter()

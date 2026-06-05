@@ -20,6 +20,7 @@
 - 重构（tool-review）：输入面板审批卡布局统一为 [查看详情]+摘要 → 评估意见 → [拒绝][批准]；去掉 summaryText 对 message 的 fallback 避免评估意见重复显示；折叠区改用 callPreview（diff 内容）+ 红绿高亮渲染。
 - 修复（tool-review）：侧边栏 ToolReviewItemCard 撤回批准/否决按钮（审批只在输入面板），保留折叠详情 + 评估意见 + 查看变更 + 重新评估；超时自动展开详情。
 - 修复（ui）：详情弹窗 mockup-code 组件在暗色主题下背景色泛白，改用 base-200 变量覆盖；滚动条样式适配暗色主题。
+- 修复（delegate）：用户发起委托不再要求目标部门是直接下级；直接下级校验仅保留在工具调用 delegate 路径；清理 runtime_organization 中废弃的 direct_child_ids_by_parent 快照字段。
 
 ## 发布：v0.10.19
 
