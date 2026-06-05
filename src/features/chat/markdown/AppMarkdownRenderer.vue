@@ -71,7 +71,7 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, onBeforeUnmount, ref, watch, type PropType, type VNodeChild } from "vue";
 import { useI18n } from "vue-i18n";
-import { Maximize2 } from "@lucide/vue";
+import { Check, Copy, Maximize2 } from "@lucide/vue";
 import { parseMarkdownBlocks, parseInlineSegments, normalizedTableRow, type MarkdownBlock, type InlineSegment } from "./parse-markdown";
 import CodeBlockPreviewDialog from "../components/dialogs/CodeBlockPreviewDialog.vue";
 
@@ -428,9 +428,11 @@ const CodeBlock = defineComponent({
           }, [h(Maximize2, { class: "ecall-md-code-action-icon" })]),
           h("button", {
             type: "button",
-            class: "ecall-md-code-copy",
+            class: "ecall-md-code-action ecall-md-code-copy",
+            title: copied.value ? "已复制" : t("common.copy"),
+            "aria-label": copied.value ? "已复制" : t("common.copy"),
             onClick: copyCode,
-          }, copied.value ? "已复制" : "复制"),
+          }, [h(copied.value ? Check : Copy, { class: "ecall-md-code-action-icon" })]),
         ]),
       ]);
 

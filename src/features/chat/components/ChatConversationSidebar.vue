@@ -203,7 +203,7 @@
                                   :disabled="!canExportConversation(item)"
                                   @click.stop="requestConversationExport(item)"
                                 >
-                                  <Download class="h-4 w-4" />
+                                  <Upload class="h-4 w-4" />
                                   <span>{{ t("chat.exportConversation") }}</span>
                                 </button>
                               </li>
@@ -272,7 +272,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
-import { Archive, ChevronRight, Download, Ellipsis, PencilLine, Pin, PinOff, Search, SquarePen, Trash2 } from "@lucide/vue";
+import { Archive, ChevronRight, Ellipsis, PencilLine, Pin, PinOff, Search, SquarePen, Trash2, Upload } from "@lucide/vue";
 import type { ChatConversationOverviewItem, ConversationPreviewMessage } from "../../../types/app";
 import { usePipelineStatus } from "../../shell/composables/use-pipeline-status";
 import { formatConversationListTime } from "../utils/conversation-time";

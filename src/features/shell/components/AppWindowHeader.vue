@@ -313,7 +313,7 @@
           @click="importConversationFromExternal"
         >
           <span v-if="importConversationLoading" class="loading loading-spinner loading-xs"></span>
-          <Upload v-else class="h-4 w-4" />
+          <Download v-else class="h-4 w-4" />
         </button>
       </div>
       <div class="mt-3 flex flex-col gap-2.5">
@@ -479,7 +479,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { ArrowUpDown, Download, FoldVertical, FolderOpen, History, LayoutList, LayoutPanelLeft, Minus, ScrollText, Search, Settings, Square, SquarePen, Upload, X } from "@lucide/vue";
+import { ArrowUpDown, Download, FoldVertical, FolderOpen, History, LayoutList, LayoutPanelLeft, Minus, ScrollText, Search, Settings, Square, SquarePen, X } from "@lucide/vue";
 import type { ChatConversationOverviewItem, ShellWorkspace, ShellWorkspaceAccess } from "../../../types/app";
 import { defaultWorkspaceNameFromPath } from "../../../utils/shell-workspaces";
 import { buildWorkspaceConversationSections } from "../../chat/utils/conversation-sections";
