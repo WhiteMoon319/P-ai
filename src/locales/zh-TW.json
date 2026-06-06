@@ -985,6 +985,22 @@
       "mainConversationNotAllowed": "主會話不能獨立打開，請選擇一個子會話。",
       "detachedRequestSent": "已發送獨立聊天窗口請求"
     },
+    "delegateStatus": {
+      "elapsed": "用時 {elapsed}",
+      "steps": "{count}步",
+      "lastTool": "最近工具 {name}",
+      "usage": "用量 {tokens}",
+      "abort": "打斷",
+      "viewDetail": "查看詳情",
+      "statusRunning": "執行中",
+      "statusCompleted": "已完成",
+      "statusFailed": "失敗",
+      "statusUnknown": "未知",
+      "durationZero": "0秒",
+      "durationHoursMinutes": "{hours}時{minutes}分",
+      "durationMinutesSeconds": "{minutes}分{seconds}秒",
+      "durationSeconds": "{seconds}秒"
+    },
     "voice": "語音{index}",
     "jumpToBottom": "回到底部",
     "image": "圖片{index}",

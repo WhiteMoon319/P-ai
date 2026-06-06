@@ -26,12 +26,12 @@
         </div>
         <div class="mt-3 flex flex-col gap-2 text-xs text-base-content/70">
           <div class="flex min-w-0 items-center justify-between gap-3">
-            <span class="shrink-0">用时 {{ formatElapsedMs(delegate.elapsedMs) }}</span>
-            <span class="shrink-0">{{ delegate.requestCount }}步</span>
+            <span class="shrink-0">{{ t('chat.delegateStatus.elapsed', { elapsed: formatElapsedMs(delegate.elapsedMs) }) }}</span>
+            <span class="shrink-0">{{ t('chat.delegateStatus.steps', { count: delegate.requestCount }) }}</span>
           </div>
           <div class="flex min-w-0 items-center justify-between gap-3">
-            <span class="min-w-0 truncate">最近工具 {{ delegate.lastToolName || "-" }}</span>
-            <span class="shrink-0">用量 {{ formatTokenK(delegate.tokenCount) }}</span>
+            <span class="min-w-0 truncate">{{ t('chat.delegateStatus.lastTool', { name: delegate.lastToolName || '-' }) }}</span>
+            <span class="shrink-0">{{ t('chat.delegateStatus.usage', { tokens: formatTokenK(delegate.tokenCount) }) }}</span>
           </div>
         </div>
         <div class="mt-3 flex justify-end gap-2">
@@ -40,12 +40,12 @@
             type="button"
             class="btn btn-sm btn-error btn-outline gap-1.5 font-normal"
             @click="emit('abortDelegate', delegate)"
-          >打断</button>
+          >{{ t('chat.delegateStatus.abort') }}</button>
           <button
             type="button"
             class="btn btn-sm gap-1.5 border-base-300 bg-base-100 font-normal hover:bg-base-100"
             @click="emit('openDelegateDetail', delegate)"
-          >查看详情</button>
+          >{{ t('chat.delegateStatus.viewDetail') }}</button>
         </div>
       </section>
     </div>
@@ -70,10 +70,10 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 function formatDelegateStatus(status: string) {
-  if (status === "running" || status === "delivered") return "执行中";
-  if (status === "completed") return "已完成";
-  if (status === "failed") return "失败";
-  return "未知";
+  if (status === "running" || status === "delivered") return t('chat.delegateStatus.statusRunning');
+  if (status === "completed") return t('chat.delegateStatus.statusCompleted');
+  if (status === "failed") return t('chat.delegateStatus.statusFailed');
+  return t('chat.delegateStatus.statusUnknown');
 }
 
 function isDelegateRunning(status: string) {
@@ -95,13 +95,13 @@ function formatTokenK(value: number) {
 }
 
 function formatElapsedMs(value: number) {
-  if (!Number.isFinite(value) || value <= 0) return "0秒";
+  if (!Number.isFinite(value) || value <= 0) return t('chat.delegateStatus.durationZero');
   const totalSeconds = Math.floor(value / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  if (hours > 0) return `${hours}时${minutes}分`;
-  if (minutes > 0) return `${minutes}分${seconds}秒`;
-  return `${seconds}秒`;
+  if (hours > 0) return t('chat.delegateStatus.durationHoursMinutes', { hours, minutes });
+  if (minutes > 0) return t('chat.delegateStatus.durationMinutesSeconds', { minutes, seconds });
+  return t('chat.delegateStatus.durationSeconds', { seconds });
 }
 </script>
