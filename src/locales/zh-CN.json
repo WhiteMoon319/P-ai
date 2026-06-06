@@ -1460,7 +1460,21 @@
     "memoryCompositeScore": "综合",
     "memoryOperationFailed": "操作失败：{error}",
     "memorySearching": "搜索中...",
-    "memorySearchResult": "找到 {count} 条，耗时 {ms}ms"
+    "memorySearchResult": "找到 {count} 条，耗时 {ms}ms",
+    "quickSetupSiliconFlow": "硅基流动",
+    "quickSetupTestPrompt": "这是一个连通性测试。请回复一个OK。",
+    "quickSetupUserAlias": "用户",
+    "quickSetupAssistantName": "派师傅",
+    "quickSetupDepartmentName": "助理部门",
+    "quickSetupLoadFailed": "加载配置失败：{error}",
+    "quickSetupDefaultWorkspace": "默认会话目录",
+    "quickSetupLlmRequired": "LLM 供应商需要 base_url、模型和 API Key。",
+    "quickSetupIdentityRequired": "用户、助理、主部门名称都不能为空。",
+    "quickSetupWorkspaceRequired": "Shell 工作目录不能为空。",
+    "quickSetupHotkeyRequired": "呼唤热键和录音键不能为空。",
+    "quickSetupSaveFailed": "配置保存失败：{error}",
+    "quickSetupAdvancedModelHint": "高级模型需要填写 base_url、API Key 和模型；不需要可点跳过。",
+    "quickSetupNoLlmDetected": "配置已保存，但仍未检测到可用文本 LLM。请检查 API Key、base_url、模型和主部门绑定。"
   },
   "archives": {
     "refresh": "刷新归档",

@@ -383,15 +383,15 @@ const providerOptions: QuickProviderPreset[] = [
   { id: "openrouter", label: "OpenRouter", requestFormat: "openai", baseUrl: "https://openrouter.ai/api/v1", keyUrl: "https://openrouter.ai/", defaultModel: "openai/gpt-4o-mini" },
   { id: "custom", label: "Custom", requestFormat: "auto", baseUrl: "https://api.openai.com/v1", keyUrl: "https://platform.openai.com", defaultModel: "gpt-4o-mini" },
 ];
-const rerankPresetOptions: AdvancedProviderPreset[] = [
-  { id: "siliconflow", label: "硅基流动", name: "SiliconFlow Rerank", requestFormat: "openai_rerank", baseUrl: "https://api.siliconflow.cn/v1", apiKey: "", model: "BAAI/bge-reranker-v2-m3" },
-];
-const embeddingPresetOptions: AdvancedProviderPreset[] = [
-  { id: "siliconflow", label: "硅基流动", name: "SiliconFlow Embedding", requestFormat: "openai_embedding", baseUrl: "https://api.siliconflow.cn/v1", apiKey: "", model: "BAAI/bge-m3" },
-  { id: "google", label: "Google", name: "Google Embedding", requestFormat: "gemini_embedding", baseUrl: "https://generativelanguage.googleapis.com", apiKey: "", model: "gemini-embedding-001" },
-];
 const appWindow = getCurrentWindow();
 const { locale, t } = useI18n();
+const rerankPresetOptions: AdvancedProviderPreset[] = [
+  { id: "siliconflow", label: t('sidebar.quickSetupSiliconFlow'), name: "SiliconFlow Rerank", requestFormat: "openai_rerank", baseUrl: "https://api.siliconflow.cn/v1", apiKey: "", model: "BAAI/bge-reranker-v2-m3" },
+];
+const embeddingPresetOptions: AdvancedProviderPreset[] = [
+  { id: "siliconflow", label: t('sidebar.quickSetupSiliconFlow'), name: "SiliconFlow Embedding", requestFormat: "openai_embedding", baseUrl: "https://api.siliconflow.cn/v1", apiKey: "", model: "BAAI/bge-m3" },
+  { id: "google", label: "Google", name: "Google Embedding", requestFormat: "gemini_embedding", baseUrl: "https://generativelanguage.googleapis.com", apiKey: "", model: "gemini-embedding-001" },
+];
 const { currentTheme, restoreThemeFromStorage, setTheme } = useAppTheme();
 const languageOptions = computed<Array<{ value: AppConfig["uiLanguage"]; label: string }>>(() => [
   { value: "zh-CN", label: t("quickSetup.languages.zhCN") },
@@ -419,7 +419,7 @@ const ADVANCED_STEP_DEFS: StepDefinition[] = [
 const QUICK_LLM_PROVIDER_ID = "quick-setup-provider";
 const QUICK_LLM_MODEL_ID = "quick-setup-model";
 const QUICK_LLM_ENDPOINT_ID = `${QUICK_LLM_PROVIDER_ID}::${QUICK_LLM_MODEL_ID}`;
-const QUICK_SETUP_TEST_PROMPT = "这是一个连通性测试。请回复一个OK。";
+const QUICK_SETUP_TEST_PROMPT = t('sidebar.quickSetupTestPrompt');
 
 const AdvancedPresetButtons = defineComponent({
   props: {
@@ -509,7 +509,7 @@ const config = reactive<AppConfig>(defaultConfig());
 const chatSettings = reactive<ChatSettings>(defaultChatSettings());
 const personas = ref<PersonaProfile[]>([]);
 const { resolveAvatarUrl, ensureAvatarCached, preloadPersonaAvatars } = useAvatarCache({ personas });
-const identityDraft = reactive({ userAlias: "用户", assistantName: "派师傅", departmentName: "助理部门" });
+const identityDraft = reactive({ userAlias: t('sidebar.quickSetupUserAlias'), assistantName: t('sidebar.quickSetupAssistantName'), departmentName: t('sidebar.quickSetupDepartmentName') });
 const workspaceDraft = reactive({ name: "easy_call_ai", path: "" });
 const llmDraft = reactive<AdvancedDraft>({
   name: "DeepSeek",
@@ -585,7 +585,7 @@ onMounted(async () => {
     applySnapshot(snapshot);
     await preloadPersonaAvatars();
   } catch (error) {
-    errorText.value = `加载配置失败：${String(error ?? "unknown")}`;
+    errorText.value = t('sidebar.quickSetupLoadFailed', { error: String(error ?? "unknown") });
   } finally {
     loading.value = false;
   }
@@ -621,7 +621,7 @@ function defaultConfig(): AppConfig {
 function defaultChatSettings(): ChatSettings {
   return {
     assistantDepartmentAgentId: "default-agent",
-    userAlias: "用户",
+    userAlias: t('sidebar.quickSetupUserAlias'),
     responseStyleId: "concise",
     pdfReadMode: "text",
     backgroundVoiceScreenshotKeywords: "",
@@ -637,12 +637,12 @@ function applySnapshot(snapshot: AppBootstrapSnapshot) {
     chatSettings.responseStyleId = "concise";
   }
   personas.value = Array.isArray(snapshot.agents) ? snapshot.agents : [];
-  identityDraft.userAlias = String(chatSettings.userAlias || "用户").trim() || "用户";
+  identityDraft.userAlias = String(chatSettings.userAlias || t('sidebar.quickSetupUserAlias')).trim() || t('sidebar.quickSetupUserAlias');
   const assistantAgent = assistantPersona();
-  identityDraft.assistantName = String(assistantAgent?.name || "派师傅").trim() || "派师傅";
+  identityDraft.assistantName = String(assistantAgent?.name || t('sidebar.quickSetupAssistantName')).trim() || t('sidebar.quickSetupAssistantName');
   identityDraft.departmentName = String(assistantDepartment()?.name || "助理部门").trim() || "助理部门";
   const workspace = config.shellWorkspaces?.[0];
-  workspaceDraft.name = String(workspace?.name || "默认会话目录").trim() || "默认会话目录";
+  workspaceDraft.name = String(workspace?.name || t('sidebar.quickSetupDefaultWorkspace')).trim() || t('sidebar.quickSetupDefaultWorkspace');
   workspaceDraft.path = String(workspace?.path || "").trim();
   const existing = findQuickLlmConfig() || (config.apiConfigs || []).find(isUsableTextLlmConfig);
   if (existing) {
@@ -856,22 +856,22 @@ function validateCurrentStep(): boolean {
   errorText.value = "";
   if (currentStep.value.id === "llm") {
     if (!llmDraft.baseUrl.trim() || !llmDraft.model.trim() || !llmDraft.apiKey.trim()) {
-      errorText.value = "LLM 供应商需要 base_url、模型和 API Key。";
+      errorText.value = t('sidebar.quickSetupLlmRequired');
       return false;
     }
   }
   if (currentStep.value.id === "identity") {
     if (!identityDraft.userAlias.trim() || !identityDraft.assistantName.trim() || !identityDraft.departmentName.trim()) {
-      errorText.value = "用户、助理、主部门名称都不能为空。";
+      errorText.value = t('sidebar.quickSetupIdentityRequired');
       return false;
     }
   }
   if (currentStep.value.id === "workspace" && !workspaceDraft.path.trim()) {
-    errorText.value = "Shell 工作目录不能为空。";
+    errorText.value = t('sidebar.quickSetupWorkspaceRequired');
     return false;
   }
   if (currentStep.value.id === "hotkey" && (!config.hotkey.trim() || !config.recordHotkey.trim())) {
-    errorText.value = "呼唤热键和录音键不能为空。";
+    errorText.value = t('sidebar.quickSetupHotkeyRequired');
     return false;
   }
   return true;
@@ -1042,7 +1042,7 @@ function applyLlmDraft() {
 function applyWorkspaceDraft() {
   config.shellWorkspaces = [{
     id: "system-workspace",
-    name: workspaceDraft.name.trim() || "默认会话目录",
+    name: workspaceDraft.name.trim() || t('sidebar.quickSetupDefaultWorkspace'),
     path: workspaceDraft.path.trim(),
     level: "system",
     access: "full_access",
@@ -1090,7 +1090,7 @@ async function saveConfigOnly() {
     const saved = await invokeTauri<AppConfig>("save_config", { config: { ...config } });
     Object.assign(config, saved);
   } catch (error) {
-    throw new Error(`配置保存失败：${String(error ?? "unknown")}`);
+    throw new Error(t('sidebar.quickSetupSaveFailed', { error: String(error ?? "unknown") }));
   }
 }
 
@@ -1106,7 +1106,7 @@ async function saveAdvancedCurrentStep() {
 
 async function saveAdvancedProvider(draft: AdvancedDraft, kind: "rerank" | "embedding" | "stt") {
   if (!draft.apiKey.trim() || !draft.baseUrl.trim() || !draft.model.trim()) {
-    throw new Error("高级模型需要填写 base_url、API Key 和模型；不需要可点跳过。");
+    throw new Error(t('sidebar.quickSetupAdvancedModelHint'));
   }
   const endpointId = upsertProvider(draft);
   if (kind === "stt") {
@@ -1132,7 +1132,7 @@ async function finishBasicSetup() {
     await saveChatSettingsOnly();
     await saveConfigOnly();
     if (!hasUsableTextLlm(config)) {
-      throw new Error("配置已保存，但仍未检测到可用文本 LLM。请检查 API Key、base_url、模型和主部门绑定。");
+      throw new Error(t('sidebar.quickSetupNoLlmDetected'));
     }
     await invokeTauri("complete_quick_setup_and_open_chat");
   } catch (error) {
