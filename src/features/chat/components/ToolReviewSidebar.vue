@@ -25,23 +25,14 @@
             </button>
           </div>
           <div class="flex min-h-0 flex-1 flex-col py-2">
-            <section v-for="group in reviewGroups" :key="group.key">
-              <div
-                role="button"
-                tabindex="0"
-                class="group/section sticky top-0 z-20 mx-1 flex h-9 items-center gap-2 rounded-lg bg-base-200/95 px-2 text-left text-xs font-semibold text-base-content backdrop-blur transition-colors hover:bg-base-300/70"
-                :title="group.title"
-                @click="toggleToolAssessmentSection(group.key)"
-                @keydown.enter.prevent="toggleToolAssessmentSection(group.key)"
-                @keydown.space.prevent="toggleToolAssessmentSection(group.key)"
-              >
-                <ChevronRight
-                  class="h-4 w-4 shrink-0 transition-transform duration-200 ease-out"
-                  :class="isToolAssessmentSectionCollapsed(group.key) ? '' : 'rotate-90'"
-                />
-                <span class="min-w-0 truncate">{{ group.title }}</span>
-                <span class="shrink-0 tabular-nums text-base-content/45">{{ group.items.length }}</span>
-              </div>
+            <CollapsibleGroup
+              v-for="group in reviewGroups"
+              :key="group.key"
+              :title="group.title"
+              :count="group.items.length"
+              :model-value="isToolAssessmentSectionCollapsed(group.key)"
+              @update:model-value="toggleToolAssessmentSection(group.key)"
+            >
               <div v-if="!isToolAssessmentSectionCollapsed(group.key)">
                 <ToolAssessmentCard
                   v-for="item in group.items"
@@ -53,7 +44,7 @@
                   @load-detail="emit('loadItemDetail', $event)"
                 />
               </div>
-            </section>
+            </CollapsibleGroup>
           </div>
           <div v-if="props.batches.length > 1" class="px-4 py-3">
             <div class="join flex justify-center">
@@ -100,23 +91,14 @@
         <div v-else-if="delegateStatuses.length === 0" class="flex min-h-0 flex-1 items-center justify-center px-4 py-8 text-sm text-base-content/65">
           {{ t("chat.toolReview.delegateEmpty") }}
         </div>
-        <section v-for="section in delegateStatusSections" :key="section.key">
-          <div
-            role="button"
-            tabindex="0"
-            class="group/section sticky top-0 z-20 mx-1 flex h-9 items-center gap-2 rounded-lg bg-base-200/95 px-2 text-left text-xs font-semibold text-base-content backdrop-blur transition-colors hover:bg-base-300/70"
-            :title="section.title"
-            @click="toggleDelegateSection(section.key)"
-            @keydown.enter.prevent="toggleDelegateSection(section.key)"
-            @keydown.space.prevent="toggleDelegateSection(section.key)"
-          >
-            <ChevronRight
-              class="h-4 w-4 shrink-0 transition-transform duration-200 ease-out"
-              :class="isDelegateSectionCollapsed(section.key) ? '' : 'rotate-90'"
-            />
-            <span class="min-w-0 truncate">{{ section.title }}</span>
-            <span class="shrink-0 tabular-nums text-base-content/45">{{ section.items.length }}</span>
-          </div>
+        <CollapsibleGroup
+          v-for="section in delegateStatusSections"
+          :key="section.key"
+          :title="section.title"
+          :count="section.items.length"
+          :model-value="isDelegateSectionCollapsed(section.key)"
+          @update:model-value="toggleDelegateSection(section.key)"
+        >
           <div v-if="!isDelegateSectionCollapsed(section.key)">
             <section v-for="delegate in section.items" :key="delegate.delegateId">
               <DelegateCard
@@ -133,7 +115,7 @@
               />
             </section>
           </div>
-        </section>
+        </CollapsibleGroup>
       </template>
       <div v-else class="flex min-h-0 flex-1 flex-col">
         <div class="sticky top-0 z-30 bg-base-200 px-4">
@@ -153,23 +135,14 @@
           </div>
         </div>
         <div v-else class="flex min-h-0 flex-1 flex-col py-2">
-          <section v-for="section in codeReviewSections" :key="section.key">
-            <div
-              role="button"
-              tabindex="0"
-              class="group/section sticky top-0 z-20 mx-1 flex h-9 items-center gap-2 rounded-lg bg-base-200/95 px-2 text-left text-xs font-semibold text-base-content backdrop-blur transition-colors hover:bg-base-300/70"
-              :title="section.title"
-              @click="toggleCodeReviewSection(section.key)"
-              @keydown.enter.prevent="toggleCodeReviewSection(section.key)"
-              @keydown.space.prevent="toggleCodeReviewSection(section.key)"
-            >
-              <ChevronRight
-                class="h-4 w-4 shrink-0 transition-transform duration-200 ease-out"
-                :class="isCodeReviewSectionCollapsed(section.key) ? '' : 'rotate-90'"
-              />
-              <span class="min-w-0 truncate">{{ section.title }}</span>
-              <span class="shrink-0 tabular-nums text-base-content/45">{{ section.items.length }}</span>
-            </div>
+          <CollapsibleGroup
+            v-for="section in codeReviewSections"
+            :key="section.key"
+            :title="section.title"
+            :count="section.items.length"
+            :model-value="isCodeReviewSectionCollapsed(section.key)"
+            @update:model-value="toggleCodeReviewSection(section.key)"
+          >
             <div v-if="!isCodeReviewSectionCollapsed(section.key)">
               <CodeReviewCard
                 v-for="report in section.items"
@@ -183,7 +156,7 @@
                 @open-detail="openReportDetail(report.id)"
               />
             </div>
-          </section>
+          </CollapsibleGroup>
         </div>
         <div v-if="props.reports.length > reportPageSize" class="px-4 py-3">
           <div class="join flex justify-center">
@@ -373,7 +346,7 @@ import ToolReviewTargetDialog from "./ToolReviewTargetDialog.vue";
 import DelegateCard from "./DelegateCard.vue";
 import DelegateProgressLine from "./DelegateProgressLine.vue";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
-import { ChevronRight } from "@lucide/vue";
+import CollapsibleGroup from "./CollapsibleGroup.vue";
 
 initKatex();
 

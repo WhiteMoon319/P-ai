@@ -46,25 +46,17 @@
     <ChatConversationFloatingScroll ref="conversationFloatingScrollRef" class="flex-1 min-h-0">
       <Transition :name="conversationTabTransitionName" mode="out-in" @after-enter="handleConversationTabTransitionSettled">
         <div :key="activeConversationTab" class="conversation-tab-panel">
-          <section
+          <CollapsibleGroup
             v-for="section in filteredConversationSections"
             :key="section.key"
-            class="last:mb-0"
+            :title="section.title"
+            :count="section.items.length"
+            :model-value="isConversationSectionCollapsed(section.key)"
+            @update:model-value="toggleConversationSection(section.key)"
+            @after-enter="scheduleConversationListScrollbarUpdate"
+            @after-leave="scheduleConversationListScrollbarUpdate"
           >
-            <div
-              role="button"
-              tabindex="0"
-              class="group/section sticky top-0 z-20 mx-1 flex h-9 items-center gap-2 rounded-lg bg-base-200/95 px-2 text-left text-xs font-semibold text-base-content backdrop-blur transition-colors hover:bg-base-300/70"
-              :title="section.title"
-              @click="toggleConversationSection(section.key)"
-              @keydown.enter.prevent="toggleConversationSection(section.key)"
-              @keydown.space.prevent="toggleConversationSection(section.key)"
-            >
-              <ChevronRight
-                class="h-4 w-4 shrink-0 transition-transform duration-200 ease-out"
-                :class="isConversationSectionCollapsed(section.key) ? '' : 'rotate-90'"
-              />
-              <span class="min-w-0 truncate">{{ section.title }}</span>
+            <template #actions>
               <button
                 v-if="section.workspaceRootPath"
                 type="button"
@@ -74,20 +66,12 @@
               >
                 <SquarePen class="h-3.5 w-3.5" />
               </button>
-            </div>
-            <Transition
-              :css="false"
-              @enter="animateConversationSectionEnter"
-              @leave="animateConversationSectionLeave"
-              @enter-cancelled="cleanupConversationSectionAnimation"
-              @leave-cancelled="cleanupConversationSectionAnimation"
+            </template>
+            <div
+              v-for="(item, itemIndex) in section.items"
+              :key="item.conversationId"
+              class="group relative mx-1"
             >
-              <div v-if="!isConversationSectionCollapsed(section.key)" class="conversation-section-shell">
-                <div
-                  v-for="(item, itemIndex) in section.items"
-                  :key="item.conversationId"
-                  class="group relative mx-1"
-                >
                   <div
                     class="block rounded-lg px-2 text-left transition-colors hover:bg-base-100/70"
                     :class="[
@@ -254,9 +238,7 @@
                   </div>
 
                 </div>
-              </div>
-            </Transition>
-          </section>
+              </CollapsibleGroup>
           <div
             v-if="filteredConversationSections.length === 0"
             class="px-3 py-4 text-center text-sm text-base-content/60"
@@ -272,7 +254,8 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
-import { Archive, ChevronRight, Ellipsis, PencilLine, Pin, PinOff, Search, SquarePen, Trash2, Upload } from "@lucide/vue";
+import { Archive, Ellipsis, PencilLine, Pin, PinOff, Search, SquarePen, Trash2, Upload } from "@lucide/vue";
+import CollapsibleGroup from "./CollapsibleGroup.vue";
 import type { ChatConversationOverviewItem, ConversationPreviewMessage } from "../../../types/app";
 import { usePipelineStatus } from "../../shell/composables/use-pipeline-status";
 import { formatConversationListTime } from "../utils/conversation-time";
@@ -438,74 +421,6 @@ function requestConversationTabChange(value: "local" | "contact") {
 function scheduleConversationListScrollbarUpdate() {
   void nextTick(() => {
     requestAnimationFrame(() => conversationFloatingScrollRef.value?.updateThumb());
-  });
-}
-
-function cleanupConversationSectionAnimation(element: Element) {
-  const sectionElement = element as HTMLElement;
-  sectionElement.style.height = "";
-  sectionElement.style.opacity = "";
-  sectionElement.style.transform = "";
-  sectionElement.style.overflow = "";
-  sectionElement.style.willChange = "";
-  sectionElement.style.transition = "";
-}
-
-function animateConversationSectionEnter(element: Element, done: () => void) {
-  const sectionElement = element as HTMLElement;
-  cleanupConversationSectionAnimation(sectionElement);
-  sectionElement.style.height = "0px";
-  sectionElement.style.opacity = "0";
-  sectionElement.style.transform = "translateY(-6px)";
-  sectionElement.style.overflow = "hidden";
-  sectionElement.style.willChange = "height, opacity, transform";
-  void sectionElement.offsetHeight;
-  const onTransitionEnd = (event: TransitionEvent) => {
-    if (event.target !== sectionElement || event.propertyName !== "height") return;
-    sectionElement.removeEventListener("transitionend", onTransitionEnd);
-    cleanupConversationSectionAnimation(sectionElement);
-    scheduleConversationListScrollbarUpdate();
-    done();
-  };
-  sectionElement.addEventListener("transitionend", onTransitionEnd);
-  sectionElement.style.transition = [
-    "height 180ms cubic-bezier(0.22, 1, 0.36, 1)",
-    "opacity 140ms ease-out",
-    "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)",
-  ].join(", ");
-  requestAnimationFrame(() => {
-    sectionElement.style.height = `${sectionElement.scrollHeight}px`;
-    sectionElement.style.opacity = "1";
-    sectionElement.style.transform = "translateY(0)";
-  });
-}
-
-function animateConversationSectionLeave(element: Element, done: () => void) {
-  const sectionElement = element as HTMLElement;
-  cleanupConversationSectionAnimation(sectionElement);
-  sectionElement.style.height = `${sectionElement.scrollHeight}px`;
-  sectionElement.style.opacity = "1";
-  sectionElement.style.transform = "translateY(0)";
-  sectionElement.style.overflow = "hidden";
-  sectionElement.style.willChange = "height, opacity, transform";
-  void sectionElement.offsetHeight;
-  const onTransitionEnd = (event: TransitionEvent) => {
-    if (event.target !== sectionElement || event.propertyName !== "height") return;
-    sectionElement.removeEventListener("transitionend", onTransitionEnd);
-    cleanupConversationSectionAnimation(sectionElement);
-    scheduleConversationListScrollbarUpdate();
-    done();
-  };
-  sectionElement.addEventListener("transitionend", onTransitionEnd);
-  sectionElement.style.transition = [
-    "height 160ms cubic-bezier(0.4, 0, 1, 1)",
-    "opacity 110ms ease-in",
-    "transform 160ms cubic-bezier(0.4, 0, 1, 1)",
-  ].join(", ");
-  requestAnimationFrame(() => {
-    sectionElement.style.height = "0px";
-    sectionElement.style.opacity = "0";
-    sectionElement.style.transform = "translateY(-6px)";
   });
 }
 
@@ -794,10 +709,6 @@ function sideListLastSpeakerAvatarUrl(item: ChatConversationOverviewItem): strin
 
 .conversation-time-container {
   container-type: inline-size;
-}
-
-.conversation-section-shell {
-  transform-origin: top;
 }
 
 @container (max-width: 229px) {
