@@ -86,7 +86,7 @@
               </summary>
               <div class="collapse-content flex flex-col gap-3 px-3 pb-3">
                 <div class="whitespace-pre-wrap wrap-break-word text-sm leading-7 text-base-content/75">
-                  最近工具：{{ delegate.lastToolName || "-" }}
+                  {{ t('chat.toolReview.lastTool', { name: delegate.lastToolName || '-' }) }}
                 </div>
                 <div class="flex items-center justify-end gap-3">
                   <button
@@ -94,12 +94,12 @@
                     type="button"
                     class="btn btn-sm btn-error btn-outline gap-1.5 font-normal"
                     @click="emit('abortDelegate', delegate)"
-                  >打断</button>
+                  >{{ t('chat.toolReview.abort') }}</button>
                   <button
                     type="button"
                     class="btn btn-sm gap-1.5 border-base-300 bg-base-100 font-normal hover:bg-base-100"
                     @click="emit('openDelegateDetail', delegate)"
-                  >查看详情</button>
+                  >{{ t('chat.toolReview.viewDetail') }}</button>
                 </div>
               </div>
             </details>
@@ -149,7 +149,7 @@
                 />
                 <DelegateProgressLine
                   v-else-if="report.status === 'pending'"
-                  text="生成中..."
+                  text="{{ t('chat.toolReview.generating') }}"
                 />
               </summary>
               <div class="collapse-content flex flex-col gap-3 px-3 pb-3">
@@ -162,20 +162,20 @@
                     class="btn btn-sm gap-1.5 border-base-300 bg-base-100 font-normal hover:bg-base-100"
                     :disabled="submitting"
                     @click.prevent.stop="deleteReport(report)"
-                  >删除</button>
+                  >{{ t('chat.toolReview.delete') }}</button>
                   <div class="flex items-center justify-end gap-3">
                     <button
                       type="button"
                       class="btn btn-sm gap-1.5 border-base-300 bg-base-100 font-normal hover:bg-base-100"
                       @click.prevent.stop="openReportDetail(report.id)"
-                    >查看详情</button>
+                    >{{ t('chat.toolReview.viewDetail') }}</button>
                     <button
                       v-if="canRetryReport(report)"
                       type="button"
                       class="btn btn-sm gap-1.5 border-base-300 bg-base-100 font-normal hover:bg-base-100"
                       :disabled="submitting"
                       @click.prevent.stop="retryFailedReport(report)"
-                    >重新生成</button>
+                    >{{ t('chat.toolReview.regenerate') }}</button>
                   </div>
                 </div>
               </div>
@@ -269,7 +269,7 @@
             {{ currentReportOverallText }}
           </div>
           <div v-if="currentReportFindings.length === 0" class="rounded-box border border-base-300 bg-base-200 px-3 py-3 text-sm text-base-content/70">
-            未发现问题。
+            {{ t('chat.toolReview.noIssues') }}
           </div>
           <details v-for="finding in currentReportFindings" :key="finding.id" class="collapse collapse-arrow rounded-box border border-base-300 bg-base-200">
             <summary class="collapse-title min-h-0 px-3 py-3 pr-10">
@@ -292,7 +292,7 @@
                   {{ finding.title }}
                 </div>
                 <div v-if="finding.confidence" class="badge badge-sm shrink-0 whitespace-nowrap">
-                  置信度 {{ finding.confidence }}
+                  {{ t('chat.toolReview.confidence', { value: finding.confidence }) }}
                 </div>
               </div>
             </summary>
@@ -775,16 +775,16 @@ function parseFindingPriority(value: unknown) {
       ? Number.parseInt(value.trim().replace(/^p/i, ""), 10)
       : null;
   if (raw === 0) {
-    return { label: "P0", title: "P0：严重破坏、数据损坏、重大安全问题、核心功能不可用", dotClass: "bg-error" };
+    return { label: "P0", title: t('chat.toolReview.severityP0'), dotClass: "bg-error" };
   }
   if (raw === 1) {
-    return { label: "P1", title: "P1：高概率功能错误或明显错误行为", dotClass: "bg-warning" };
+    return { label: "P1", title: t('chat.toolReview.severityP1'), dotClass: "bg-warning" };
   }
   if (raw === 2) {
-    return { label: "P2", title: "P2：局部缺陷、边界错误、可复现但影响较小", dotClass: "bg-info" };
+    return { label: "P2", title: t('chat.toolReview.severityP2'), dotClass: "bg-info" };
   }
   if (raw === 3) {
-    return { label: "P3", title: "P3：低风险但仍属真实问题", dotClass: "bg-success" };
+    return { label: "P3", title: t('chat.toolReview.severityP3'), dotClass: "bg-success" };
   }
   return { label: "", title: "", dotClass: "" };
 }
@@ -824,9 +824,9 @@ const currentReportOverallText = computed(() => {
   const explanation = stringField(parsed.raw.overall_explanation);
   const confidence = numberField(parsed.raw.overall_confidence_score);
   return [
-    correctness ? `整体判定：${formatJsonCorrectness(correctness)}` : "",
-    explanation ? `判定说明：${explanation}` : "",
-    confidence === null ? "" : `整体置信度：${confidence.toFixed(2)}`,
+    correctness ? t('chat.toolReview.overallJudgment', { value: formatJsonCorrectness(correctness) }) : "",
+    explanation ? t('chat.toolReview.judgmentExplanation', { value: explanation }) : "",
+    confidence === null ? "" : t('chat.toolReview.overallConfidence', { value: confidence.toFixed(2) }),
   ].filter(Boolean).join("\n");
 });
 
@@ -844,14 +844,14 @@ const selectedReportText = computed(() => {
 function formatSelectedFindingText(finding: ReportFindingView) {
   return [
     `[${finding.title}]`,
-    finding.location ? `位置：${finding.location}` : "",
+    finding.location ? t('chat.toolReview.findingLocation', { location: finding.location }) : "",
     finding.body || "No description.",
   ].filter(Boolean).join("\n");
 }
 
 function formatJsonCorrectness(value: string) {
-  if (value === "patch is correct") return "通过";
-  if (value === "patch is incorrect") return "存在问题";
+  if (value === "patch is correct") return t('chat.toolReview.patchCorrect');
+  if (value === "patch is incorrect") return t('chat.toolReview.patchIncorrect');
   return value;
 }
 
@@ -934,9 +934,9 @@ function deleteReport(report: ToolReviewReportRecord) {
 }
 
 function formatReportStatus(status: string) {
-  if (status === "success") return "已完成";
-  if (status === "failed") return "生成失败";
-  return "生成中";
+  if (status === "success") return t('chat.toolReview.statusCompleted');
+  if (status === "failed") return t('chat.toolReview.statusFailed');
+  return t('chat.toolReview.statusGenerating');
 }
 
 function reportStatusBadgeClass(status: string) {
@@ -946,10 +946,10 @@ function reportStatusBadgeClass(status: string) {
 }
 
 function formatDelegateStatus(status: string) {
-  if (status === "running" || status === "delivered") return "执行中";
-  if (status === "completed") return "已完成";
-  if (status === "failed") return "失败";
-  return "未知";
+  if (status === "running" || status === "delivered") return t('chat.toolReview.statusRunning');
+  if (status === "completed") return t('chat.toolReview.statusCompleted');
+  if (status === "failed") return t('chat.toolReview.statusFailed');
+  return t('chat.toolReview.statusUnknown');
 }
 
 function isDelegateRunning(status: string) {
@@ -971,22 +971,22 @@ function formatTokenK(value: number) {
 }
 
 function formatElapsedMs(value: number) {
-  if (!Number.isFinite(value) || value <= 0) return "0秒";
+  if (!Number.isFinite(value) || value <= 0) return t('chat.toolReview.durationZero');
   const totalSeconds = Math.floor(value / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  if (hours > 0) return `${hours}时${minutes}分`;
-  if (minutes > 0) return `${minutes}分${seconds}秒`;
-  return `${seconds}秒`;
+  if (hours > 0) return t('chat.toolReview.durationHoursMinutes', { hours, minutes });
+  if (minutes > 0) return t('chat.toolReview.durationMinutesSeconds', { minutes, seconds });
+  return t('chat.toolReview.durationSeconds', { seconds });
 }
 
 function formatReportScope(scope: string) {
   if (scope === "commit") return "commit";
-  if (scope === "main") return "主分支差异";
-  if (scope === "uncommitted") return "未提交改动";
-  if (scope === "custom") return "自定义";
-  return scope || "未知范围";
+  if (scope === "main") return t('chat.toolReview.scopeMain');
+  if (scope === "uncommitted") return t('chat.toolReview.scopeUncommitted');
+  if (scope === "custom") return t('chat.toolReview.scopeCustom');
+  return scope || t('chat.toolReview.scopeUnknown');
 }
 
 function reportMarkdownField(report: ToolReviewReportRecord, label: string) {
@@ -999,18 +999,18 @@ function reportMarkdownField(report: ToolReviewReportRecord, label: string) {
 function reportJudgementSummary(report: ToolReviewReportRecord) {
   const parsed = parseToolReviewJson(report.reportText);
   if (parsed) {
-    const judgement = formatJsonCorrectness(stringField(parsed.raw.overall_correctness) || "未知判定");
+    const judgement = formatJsonCorrectness(stringField(parsed.raw.overall_correctness) || t('chat.toolReview.unknownJudgment'));
     const confidence = numberField(parsed.raw.overall_confidence_score);
-    return confidence === null ? judgement : `${judgement} · 置信度 ${confidence.toFixed(2)}`;
+    return confidence === null ? judgement : t('chat.toolReview.judgmentWithConfidence', { judgement, confidence: confidence.toFixed(2) });
   }
-  const judgement = reportMarkdownField(report, "整体判定") || "未知判定";
-  const confidence = reportMarkdownField(report, "整体置信度");
-  return confidence ? `${judgement} · 置信度 ${confidence}` : judgement;
+  const judgement = reportMarkdownField(report, "整体判定") || t('chat.toolReview.unknownJudgment');
+  const confidence = reportMarkdownField(report, t('chat.toolReview.overallConfidenceLabel'));
+  return confidence ? t('chat.toolReview.judgmentWithConfidence', { judgement, confidence }) : judgement;
 }
 
 function reportExpandedText(report: ToolReviewReportRecord) {
-  if (report.status === "pending") return "生成中";
-  if (report.status === "failed") return report.errorText || "生成失败";
+  if (report.status === "pending") return t('chat.toolReview.statusGenerating');
+  if (report.status === "failed") return report.errorText || t('chat.toolReview.statusFailed');
   const parsed = parseToolReviewJson(report.reportText);
   if (parsed) return stringField(parsed.raw.overall_explanation) || report.reportText || t("chat.toolReview.noReportContent");
   return reportMarkdownField(report, "判定说明") || report.reportText || t("chat.toolReview.noReportContent");
