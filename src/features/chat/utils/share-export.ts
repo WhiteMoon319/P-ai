@@ -148,7 +148,7 @@ export async function renderShareDocumentToPngDataUrl(
       await waitForImages(host);
       page = host.querySelector(".pai-share-page") as HTMLElement | null;
       if (!page) {
-        throw new Error("分享预览渲染失败：未找到渲染页面节点");
+        throw new Error(t('chat.shareExport.renderFailed'));
       }
       width = Math.max(SHARE_EXPORT_WIDTH, Math.ceil(page.scrollWidth));
       height = Math.max(200, Math.ceil(page.scrollHeight));
@@ -167,7 +167,7 @@ export async function renderShareDocumentToPngDataUrl(
       canvas.height = Math.max(1, Math.round(height * pixelRatio));
       const context = canvas.getContext("2d");
       if (!context) {
-        throw new Error("创建分享画布失败：无法获取 2D 绘图上下文");
+        throw new Error(t('chat.shareExport.canvasFailed'));
       }
       context.scale(pixelRatio, pixelRatio);
       context.fillStyle = theme.pageBackground;
@@ -223,7 +223,7 @@ function buildShareBodyHtml(options: BuildShareDocumentOptions): string {
 
 function renderShareEntryHtml(entry: ShareRenderableEntry): string {
   const toolsHtml = entry.toolCalls.length > 0
-    ? `<div class="pai-share-extra pai-share-tools"><div class="pai-share-extra-label">工具</div><div class="pai-share-tool-summary">${escapeHtml(summarizeShareToolCalls(entry.toolCalls))}</div></div>`
+    ? `<div class="pai-share-extra pai-share-tools"><div class="pai-share-extra-label">${t('chat.shareExport.toolLabel')}</div><div class="pai-share-tool-summary">${escapeHtml(summarizeShareToolCalls(entry.toolCalls))}</div></div>`
     : "";
   const textHtml = entry.text
     ? `<div class="pai-share-text">${renderTextHtml(entry.text)}</div>`
@@ -232,7 +232,7 @@ function renderShareEntryHtml(entry: ShareRenderableEntry): string {
     ? `<div class="pai-share-images">${entry.images.map((image) => `<img class="pai-share-image" src="${escapeHtmlAttribute(image.src)}" alt="${escapeHtmlAttribute(image.alt)}" />`).join("")}</div>`
     : "";
   const filesHtml = entry.attachmentNames.length > 0 || entry.audioCount > 0
-    ? `<div class="pai-share-meta-row">${entry.attachmentNames.map((name) => `<span class="pai-share-chip">附件 · ${escapeHtml(name)}</span>`).join("")}${entry.audioCount > 0 ? `<span class="pai-share-chip">语音 × ${entry.audioCount}</span>` : ""}</div>`
+    ? `<div class="pai-share-meta-row">${entry.attachmentNames.map((name) => `<span class="pai-share-chip">${t('chat.shareExport.attachmentLabel', { name: escapeHtml(name) })}</span>`).join("")}${entry.audioCount > 0 ? `<span class="pai-share-chip">${t('chat.shareExport.audioLabel', { count: entry.audioCount })}</span>` : ""}</div>`
     : "";
   const remoteLabel = entry.remoteContactLabel
     ? escapeHtml(entry.remoteContactLabel)
@@ -518,12 +518,12 @@ function shareDisplayName(
     return String(
       block.remoteImOrigin.senderName
       || block.remoteImOrigin.remoteContactName
-      || "联系人",
+      || t('chat.shareExport.contact'),
     ).trim();
   }
   const speakerAgentId = String(block.speakerAgentId || "").trim();
   if (!speakerAgentId || speakerAgentId === "user-persona" || block.role === "user") {
-    return String(userAlias || "用户").trim() || "用户";
+    return String(userAlias || t('chat.shareExport.user')).trim() || t('chat.shareExport.user');
   }
   const mapped = String(personaNameMap[speakerAgentId] || "").trim();
   if (mapped) return mapped;
@@ -562,7 +562,7 @@ function summarizeShareToolCalls(toolCalls: ShareRenderableEntry["toolCalls"]): 
   if (names.length === 0) return "";
   const first = names[0];
   const extra = names.length - 1;
-  return extra > 0 ? `调用了 ${first}（+${extra}）` : `调用了 ${first}`;
+  return extra > 0 ? t('chat.shareExport.toolCallsSummary', { first, extra: `（+${extra}）` }) : t('chat.shareExport.toolCallsSummary', { first, extra: '' });
 }
 
 function shareAvatarText(displayName: string): string {

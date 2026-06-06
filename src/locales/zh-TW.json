@@ -998,6 +998,16 @@
     "forwardingConversationSelection": "正在轉發到會話...",
     "forwardingConversationSelectionDetail": "請稍候，正在把選中的消息插入目標會話。",
     "shareDialogTitle": "分享已選訊息",
+    "shareExport": {
+      "renderFailed": "分享預覽渲染失敗：未找到渲染頁面節點",
+      "canvasFailed": "建立分享畫布失敗：無法取得 2D 繪圖上下文",
+      "toolLabel": "工具",
+      "attachmentLabel": "附件 · {name}",
+      "audioLabel": "語音 × {count}",
+      "contact": "聯繫人",
+      "user": "用戶",
+      "toolCallsSummary": "調用了 {first}{extra}"
+    },
     "shareDialogMessage": "目前已選擇 {count} 條訊息，請選擇匯出方式。",
     "shareDialogHint": "HTML 會匯出靜態歷史頁，圖片會匯出目前選中訊息的長圖。",
     "shareAsImage": "分享圖片",

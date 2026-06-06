@@ -999,6 +999,16 @@
     "forwardingConversationSelection": "正在转发到会话...",
     "forwardingConversationSelectionDetail": "请稍候，正在把选中的消息插入目标会话。",
     "shareDialogTitle": "分享已选消息",
+    "shareExport": {
+      "renderFailed": "分享预览渲染失败：未找到渲染页面节点",
+      "canvasFailed": "创建分享画布失败：无法获取 2D 绘图上下文",
+      "toolLabel": "工具",
+      "attachmentLabel": "附件 · {name}",
+      "audioLabel": "语音 × {count}",
+      "contact": "联系人",
+      "user": "用户",
+      "toolCallsSummary": "调用了 {first}{extra}"
+    },
     "shareDialogMessage": "当前已选择 {count} 条消息，选择导出方式。",
     "shareDialogHint": "HTML 会导出静态历史页，图片会导出当前选中消息的长图。",
     "shareAsImage": "分享图片",

@@ -1062,6 +1062,16 @@
     "forwardingConversationSelection": "Forwarding to conversation...",
     "forwardingConversationSelectionDetail": "Please wait while the selected messages are inserted into the target conversation.",
     "shareDialogTitle": "Share selected messages",
+    "shareExport": {
+      "renderFailed": "Share preview render failed: render page node not found",
+      "canvasFailed": "Failed to create share canvas: cannot get 2D drawing context",
+      "toolLabel": "Tools",
+      "attachmentLabel": "Attachment · {name}",
+      "audioLabel": "Audio × {count}",
+      "contact": "Contact",
+      "user": "User",
+      "toolCallsSummary": "Called {first}{extra}"
+    },
     "shareDialogMessage": "{count} messages selected. Choose an export format.",
     "shareDialogHint": "HTML exports a standalone static history page, while image exports a long screenshot of the selected messages.",
     "shareAsImage": "Share image",
