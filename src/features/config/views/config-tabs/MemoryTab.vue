@@ -86,23 +86,23 @@
       <div class="card-body p-3 gap-3">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div class="text-sm font-medium">聊天记录</div>
-            <div class="text-xs opacity-60">按人格搜索已压缩/归档的对话切片</div>
+            <div class="text-sm font-medium">{{ t('config.memory.chatHistory') }}</div>
+            <div class="text-xs opacity-60">{{ t('config.memory.chatHistoryHint') }}</div>
           </div>
           <div v-if="chatHistoryStats" class="flex flex-wrap items-center gap-2 text-xs opacity-70">
-            <span class="badge badge-sm badge-ghost">全部 {{ chatHistoryStats.totalSlices }}</span>
-            <span class="badge badge-sm badge-ghost">可见 {{ chatHistoryStats.visibleSlices }}</span>
-            <span class="badge badge-sm badge-ghost">本地 {{ chatHistoryStats.localConversationSlices }}</span>
-            <span class="badge badge-sm badge-ghost">归档 {{ chatHistoryStats.archiveSlices }}</span>
-            <span class="badge badge-sm badge-ghost">联系人 {{ chatHistoryStats.contactSlices }}</span>
-            <span class="badge badge-sm badge-ghost">索引 {{ formatBytes(chatHistoryStats.indexStorageBytes) }}</span>
-            <span class="badge badge-sm badge-ghost">缓存 {{ formatBytes(chatHistoryStats.cachedSliceBytes) }}</span>
+            <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeAll') }} {{ chatHistoryStats.totalSlices }}</span>
+            <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeVisible') }} {{ chatHistoryStats.visibleSlices }}</span>
+            <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeLocal') }} {{ chatHistoryStats.localConversationSlices }}</span>
+            <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeArchive') }} {{ chatHistoryStats.archiveSlices }}</span>
+            <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeContact') }} {{ chatHistoryStats.contactSlices }}</span>
+            <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeIndex') }} {{ formatBytes(chatHistoryStats.indexStorageBytes) }}</span>
+            <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeCache') }} {{ formatBytes(chatHistoryStats.cachedSliceBytes) }}</span>
           </div>
         </div>
 
         <div class="grid grid-cols-1 gap-2 md:grid-cols-[180px_minmax(0,1fr)_auto]">
           <select v-model="chatHistoryAgentId" class="select select-bordered select-sm" :disabled="chatHistoryLoading">
-            <option value="">选择人格</option>
+            <option value="">{{ t('config.memory.selectPersona') }}</option>
             <option v-for="agent in personaOptions" :key="agent.id" :value="agent.id">
               {{ agent.name || agent.id }}
             </option>
@@ -110,7 +110,7 @@
           <input
             v-model.trim="chatHistoryQuery"
             class="input input-bordered input-sm"
-            placeholder="搜索压缩后的聊天记录"
+            placeholder="{{ t('config.memory.chatHistorySearchPlaceholder') }}"
             :disabled="chatHistoryLoading"
             @keyup.enter="searchChatHistory"
           />
@@ -120,7 +120,7 @@
             @click="searchChatHistory"
           >
             <span v-if="chatHistoryLoading" class="loading loading-spinner loading-xs"></span>
-            {{ chatHistoryLoading ? "搜索中" : "搜索聊天记录" }}
+            {{ chatHistoryLoading ? t('config.memory.searching') : t('config.memory.searchChatHistory') }}
           </button>
         </div>
 
@@ -741,9 +741,9 @@ async function searchMemories() {
 
 function chatHistorySourceLabel(sourceKind: string): string {
   const labels: Record<string, string> = {
-    localConversation: "本地",
-    archive: "归档",
-    contact: "联系人",
+    localConversation: t('config.memory.sourceLocal'),
+    archive: t('config.memory.sourceArchive'),
+    contact: t('config.memory.sourceContact'),
   };
   return labels[sourceKind] || sourceKind;
 }
@@ -770,7 +770,7 @@ async function searchChatHistory() {
     chatHistoryStats.value = result.stats;
     chatHistoryMessage.value = `找到 ${result.hits.length} 条，耗时 ${result.elapsedMs}ms`;
   } catch (err) {
-    chatHistoryMessage.value = `聊天记录搜索失败：${String(err)}`;
+    chatHistoryMessage.value = `${t('config.memory.chatHistorySearchFailed')}: ${String(err)}`;
   } finally {
     chatHistoryLoading.value = false;
   }
