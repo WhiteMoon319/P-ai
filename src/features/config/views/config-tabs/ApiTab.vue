@@ -624,14 +624,14 @@ const providerPresets: ProviderPreset[] = [
   { id: "ollama-local", name: "Ollama (Local)", category: "local", urls: { ollama: "http://localhost:11434", openai: "http://localhost:11434/v1", openai_responses: "http://localhost:11434/v1" }, docsUrl: "https://github.com/ollama/ollama/blob/main/docs/openai.md" },
 ];
 const reasoningEffortOptions = [
-  { value: "low", label: "低" },
-  { value: "medium", label: "中" },
-  { value: "high", label: "高" },
-  { value: "xhigh", label: "极高" },
+  { value: "low", label: t('sidebar.apiPriorityLow') },
+  { value: "medium", label: t('sidebar.apiPriorityMedium') },
+  { value: "high", label: t('sidebar.apiPriorityHigh') },
+  { value: "xhigh", label: t('sidebar.apiPriorityXhigh') },
 ];
 const codexAuthModeOptions: Array<{ value: CodexAuthMode; label: string }> = [
-  { value: "read_local", label: "读取本地" },
-  { value: "managed_oauth", label: "自行登录" },
+  { value: "read_local", label: t('sidebar.apiCredentialLocal') },
+  { value: "managed_oauth", label: t('sidebar.apiCredentialOauth') },
 ];
 
 const TEXT_REQUEST_FORMATS = new Set<ApiRequestFormat>([
@@ -1421,7 +1421,7 @@ function storeCodexAuthStatus(status: CodexAuthStatus) {
 }
 
 function codexAuthFailureStatus(provider: ApiProviderConfigItem, error: unknown): CodexAuthStatus {
-  const message = String(error || "Codex 登录状态检查失败。");
+  const message = String(error || t('sidebar.apiCodexCheckFailed'));
   const normalized = message.toLowerCase();
   const status = normalized.includes("auth.json")
     || normalized.includes("读取托管 codex 凭证失败")
@@ -1510,7 +1510,7 @@ async function logoutCodex() {
       authMode: (String(provider.codexAuthMode || DEFAULT_CODEX_AUTH_MODE).trim() || DEFAULT_CODEX_AUTH_MODE) as CodexAuthMode,
       authenticated: false,
       status: "unauthenticated",
-      message: "已退出 Codex 登录。",
+      message: t('sidebar.apiCodexLoggedOut'),
       email: "",
       accountId: "",
       accessTokenPreview: "",

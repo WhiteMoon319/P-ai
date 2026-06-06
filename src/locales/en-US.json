@@ -1474,7 +1474,15 @@
     "quickSetupHotkeyRequired": "Hotkey and recording key cannot be empty.",
     "quickSetupSaveFailed": "Config save failed: {error}",
     "quickSetupAdvancedModelHint": "Advanced model requires base_url, API Key, and model. Click skip if not needed.",
-    "quickSetupNoLlmDetected": "Config saved, but no usable text LLM detected. Please check API Key, base_url, model, and main department binding."
+    "quickSetupNoLlmDetected": "Config saved, but no usable text LLM detected. Please check API Key, base_url, model, and main department binding.",
+    "apiPriorityLow": "Low",
+    "apiPriorityMedium": "Medium",
+    "apiPriorityHigh": "High",
+    "apiPriorityXhigh": "Very High",
+    "apiCredentialLocal": "Read local",
+    "apiCredentialOauth": "OAuth login",
+    "apiCodexCheckFailed": "Codex login status check failed.",
+    "apiCodexLoggedOut": "Logged out of Codex."
   },
   "archives": {
     "refresh": "Refresh Archives",

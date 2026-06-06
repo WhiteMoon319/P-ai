@@ -1474,7 +1474,15 @@
     "quickSetupHotkeyRequired": "呼唤热键和录音键不能为空。",
     "quickSetupSaveFailed": "配置保存失败：{error}",
     "quickSetupAdvancedModelHint": "高级模型需要填写 base_url、API Key 和模型；不需要可点跳过。",
-    "quickSetupNoLlmDetected": "配置已保存，但仍未检测到可用文本 LLM。请检查 API Key、base_url、模型和主部门绑定。"
+    "quickSetupNoLlmDetected": "配置已保存，但仍未检测到可用文本 LLM。请检查 API Key、base_url、模型和主部门绑定。",
+    "apiPriorityLow": "低",
+    "apiPriorityMedium": "中",
+    "apiPriorityHigh": "高",
+    "apiPriorityXhigh": "极高",
+    "apiCredentialLocal": "读取本地",
+    "apiCredentialOauth": "自行登录",
+    "apiCodexCheckFailed": "Codex 登录状态检查失败。",
+    "apiCodexLoggedOut": "已退出 Codex 登录。"
   },
   "archives": {
     "refresh": "刷新归档",
