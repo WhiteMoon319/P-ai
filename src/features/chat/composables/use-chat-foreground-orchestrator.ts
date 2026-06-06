@@ -80,7 +80,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
   function syncCurrentConversationWorkspaceLabel() {
     const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
     if (!currentConversationId) return;
-    const nextLabel = String(bindings.chatWorkspaceName.value || "").trim() || "默认会话目录";
+    const nextLabel = String(bindings.chatWorkspaceName.value || "").trim() || t('chat.foregroundOrchestrator.defaultWorkspace');
     let changed = false;
     const nextItems = bindings.unarchivedConversations.value.map((item: any) => {
       if (String(item.conversationId || "").trim() !== currentConversationId) {
@@ -212,7 +212,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
       const info = await invokeTauri<any>("get_detached_chat_window_info");
       const conversationId = String(info?.conversationId || "").trim();
       if (!info?.detached || !conversationId) {
-        bindings.setStatus("独立聊天窗口缺少绑定会话，窗口即将关闭。");
+        bindings.setStatus(t('chat.foregroundOrchestrator.missingBinding'));
         try {
           await getCurrentWindow().close();
         } catch (closeError) {
@@ -254,7 +254,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
       compactingConversation: bindings.compactingConversation.value,
       isMainConversation: !!bindings.currentForegroundConversationSummary.value?.isMainConversation,
     });
-    bindings.setStatus("正在打开独立聊天窗口...");
+    bindings.setStatus(t('chat.foregroundOrchestrator.openingDetached'));
     if (bindings.detachedChatWindow.value) {
       console.warn("[独立聊天窗口][前端链路] 当前已经是独立窗口，忽略独立窗口请求");
       return;
@@ -271,7 +271,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
     }
     if (bindings.currentForegroundConversationSummary.value?.isMainConversation) {
       console.warn("[独立聊天窗口][前端链路] 主会话不允许独立窗口", { conversationId });
-      bindings.setStatus("主会话不能独立打开，请选择一个子会话。");
+      bindings.setStatus(t('chat.foregroundOrchestrator.mainConversationNotAllowed'));
       return;
     }
     try {
@@ -295,7 +295,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
       } else {
         await refreshChatUnarchivedConversations();
       }
-      bindings.setStatus("已发送独立聊天窗口请求");
+      bindings.setStatus(t('chat.foregroundOrchestrator.detachedRequestSent'));
     } catch (error) {
       console.error("[独立聊天窗口][前端链路] 打开独立窗口失败", error);
       bindings.setStatusError("status.loadMessagesFailed", error);

@@ -978,6 +978,13 @@
       "durationMinutes": "{minutes}分{seconds}秒",
       "durationSeconds": "{seconds}秒"
     },
+    "foregroundOrchestrator": {
+      "defaultWorkspace": "默認會話目錄",
+      "missingBinding": "獨立聊天窗口缺少綁定會話，窗口即將關閉。",
+      "openingDetached": "正在打開獨立聊天窗口...",
+      "mainConversationNotAllowed": "主會話不能獨立打開，請選擇一個子會話。",
+      "detachedRequestSent": "已發送獨立聊天窗口請求"
+    },
     "voice": "語音{index}",
     "jumpToBottom": "回到底部",
     "image": "圖片{index}",

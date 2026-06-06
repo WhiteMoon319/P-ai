@@ -1035,6 +1035,13 @@
       "durationMinutes": "{minutes}m{seconds}s",
       "durationSeconds": "{seconds}s"
     },
+    "foregroundOrchestrator": {
+      "defaultWorkspace": "Default session directory",
+      "missingBinding": "Detached chat window missing bound session, window will close.",
+      "openingDetached": "Opening detached chat window...",
+      "mainConversationNotAllowed": "Main conversation cannot be detached, please select a sub-conversation.",
+      "detachedRequestSent": "Detached chat window request sent"
+    },
     "queue": {
       "queued": "Queued",
       "recallToInput": "Recall to input",
