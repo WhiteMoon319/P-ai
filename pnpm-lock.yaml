@@ -15,8 +15,8 @@ importers:
         specifier: 1.16.0
         version: 1.16.0(vue@3.5.34(typescript@6.0.3))
       '@tanstack/vue-virtual':
-        specifier: ^3.13.25
-        version: 3.13.25(vue@3.5.34(typescript@6.0.3))
+        specifier: ^3.13.28
+        version: 3.13.28(vue@3.5.34(typescript@6.0.3))
       '@tauri-apps/api':
         specifier: ^2.11.0
         version: 2.11.0
@@ -467,11 +467,11 @@ packages:
     peerDependencies:
       tailwindcss: '>=3.0.0 || insiders || >=4.0.0-alpha.20 || >=4.0.0-beta.1'
 
-  '@tanstack/virtual-core@3.15.0':
-    resolution: {integrity: sha512-0AwPGx0I8QxPYjAxShT/+z+ZOe9u8mW5rsXvivCTjRfRmz9a43+3mRyi4wwlyoUqOC56q/jatKa0Bh9M99BEHQ==}
+  '@tanstack/virtual-core@3.17.0':
+    resolution: {integrity: sha512-gOxY/hFkPh/XQYhnThBHzkbkX3Ed+z/iushyz+R+JAr213aXxUDgQoTgTdrDpBSRsjFM73P/KfUyWmaF9WHMkQ==}
 
-  '@tanstack/vue-virtual@3.13.25':
-    resolution: {integrity: sha512-/ez+t68a5O4CgVysvk7Bav0XbSYSYufOVHZveXF+DYO9hvtg2UheYzR0YkniCeUtXmMjDne1dDqwBMkOmEUOow==}
+  '@tanstack/vue-virtual@3.13.28':
+    resolution: {integrity: sha512-A+jWpXtMpWXKhGLKQrXeC9mk1VgYeMWSJ+o0CTCEi+HLYMSQFdVmPG9lJz7d4XJyIkc5xVwZU9QY67QpScqnxA==}
     peerDependencies:
       vue: ^2.7.0 || ^3.0.0
 
@@ -1886,11 +1886,11 @@ snapshots:
       postcss-selector-parser: 6.0.10
       tailwindcss: 4.3.0
 
-  '@tanstack/virtual-core@3.15.0': {}
+  '@tanstack/virtual-core@3.17.0': {}
 
-  '@tanstack/vue-virtual@3.13.25(vue@3.5.34(typescript@6.0.3))':
+  '@tanstack/vue-virtual@3.13.28(vue@3.5.34(typescript@6.0.3))':
     dependencies:
-      '@tanstack/virtual-core': 3.15.0
+      '@tanstack/virtual-core': 3.17.0
       vue: 3.5.34(typescript@6.0.3)
 
   '@tauri-apps/api@2.11.0': {}

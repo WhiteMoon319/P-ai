@@ -1,16 +1,12 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from "vue";
 import { useVirtualizer } from "@tanstack/vue-virtual";
-import type { ChatMessageBlock } from "../../../types/app";
 import type { ChatRenderItem } from "../utils/chat-render";
 import { estimateChatRenderItemHeight } from "./use-chat-virtual-list";
 
 interface UseChatVirtualScrollOptions {
   renderItems: Ref<ChatRenderItem[]>;
-  renderItemById: Ref<Map<string, ChatRenderItem>>;
-  blockChronologicalIndexMap: Ref<Map<string, number>>;
   scrollContainer: Ref<HTMLElement | null>;
   scrollbarRef: Ref<{ updateThumb: () => void } | null>;
-  activeJumpToBottomRequest: Ref<number>;
   activeConversationId: Ref<string>;
   latestOwnElasticItemId: Ref<string>;
   latestOwnElasticMinHeight: Ref<number>;
@@ -22,11 +18,8 @@ interface UseChatVirtualScrollOptions {
 export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
   const {
     renderItems,
-    renderItemById,
-    blockChronologicalIndexMap,
     scrollContainer,
     scrollbarRef,
-    activeJumpToBottomRequest,
     activeConversationId,
     latestOwnElasticItemId,
     latestOwnElasticMinHeight,
@@ -38,7 +31,6 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
   const observedVirtualItemElements = new Map<string, HTMLElement>();
   const observedVirtualItemResizeElements = new Map<string, HTMLElement>();
   const measuredVirtualItemHeights = new Map<string, number>();
-  const streamingVirtualItemViewportTop = new Map<string, number>();
   const measuredVirtualItemRevision = ref(0);
 
   let pendingMeasureFrame = 0;
@@ -46,10 +38,10 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
   const pendingVirtualResizeElements = new Set<HTMLElement>();
   let virtualItemResizeObserver: ResizeObserver | null = null;
 
-  let pendingJumpToBottomFrame = 0;
   const initialBottomOffset = ref(0);
   let conversationVirtualizerResetRequest = 0;
   let debugTraceRequest = 0;
+  let pendingConversationBottomInitializationId = "";
 
   // ==================== virtualizer ====================
 
@@ -129,6 +121,7 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       getItemKey: (index: number) => renderItems.value[index]?.id ?? `row-${index}`,
       estimateSize: estimateRenderItemSize,
       initialOffset: () => initialBottomOffset.value,
+      anchorTo: "end",
       measureElement: (element: Element, _entry: unknown, instance: any) => {
         const measuredHeight = (element as HTMLElement).scrollHeight;
         if (instance?.scrollDirection !== "backward") return measuredHeight;
@@ -180,84 +173,21 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
 
   // ==================== helpers ====================
 
-  function isStreamingAssistantBlock(block: ChatMessageBlock): boolean {
-    return !!block.isStreaming && !(block as any).isRightAligned;
-  }
-
-  function renderItemContainsStreamingAssistant(item: ChatRenderItem | undefined): boolean {
-    if (!item) return false;
-    if (item.kind === "message") return isStreamingAssistantBlock(item.block);
-    if (item.kind === "group") return item.items.some((g) => isStreamingAssistantBlock(g.block));
-    return false;
-  }
-
-  function elementTopInScrollViewport(scrollEl: HTMLElement, element: HTMLElement): number {
-    const containerRect = scrollEl.getBoundingClientRect();
-    return element.getBoundingClientRect().top - containerRect.top;
-  }
-
-  function elementVisibleInScrollViewport(scrollEl: HTMLElement, element: HTMLElement): boolean {
-    const containerRect = scrollEl.getBoundingClientRect();
-    const rect = element.getBoundingClientRect();
-    return rect.bottom > containerRect.top + 1 && rect.top < containerRect.bottom - 1;
-  }
-
-  function isNearBottomForStability(scrollEl: HTMLElement): boolean {
-    return scrollEl.scrollHeight - (scrollEl.scrollTop + scrollEl.clientHeight) <= 24;
-  }
-
-  function updateStreamingVirtualItemViewportTop(itemId: string, element?: HTMLElement | null) {
-    const normalizedItemId = String(itemId || "").trim();
-    if (!normalizedItemId) return;
-    const scrollEl = scrollContainer.value;
-    const target = element || observedVirtualItemElements.get(normalizedItemId) || null;
-    const item = renderItemById.value.get(normalizedItemId);
-    if (!scrollEl || !target || !target.isConnected || !renderItemContainsStreamingAssistant(item) || !elementVisibleInScrollViewport(scrollEl, target)) {
-      streamingVirtualItemViewportTop.delete(normalizedItemId);
-      return;
-    }
-    streamingVirtualItemViewportTop.set(normalizedItemId, elementTopInScrollViewport(scrollEl, target));
-  }
-
-  function syncVisibleStreamingVirtualItemViewportTops() {
-    for (const [itemId, element] of observedVirtualItemElements.entries()) {
-      updateStreamingVirtualItemViewportTop(itemId, element);
-    }
-  }
-
   // ==================== resize handling ====================
 
   function handleVirtualItemResize(element: HTMLElement) {
     const itemId = String(element.getAttribute("data-render-item-id") || "").trim();
     if (!itemId) return;
-    const scrollEl = scrollContainer.value;
-    const previousTop = streamingVirtualItemViewportTop.get(itemId);
     const nextHeight = Math.round(element.getBoundingClientRect().height);
     const previousHeight = measuredVirtualItemHeights.get(itemId);
     if (previousHeight === nextHeight) {
       observedVirtualItemElements.set(itemId, element);
-      updateStreamingVirtualItemViewportTop(itemId, element);
       return;
     }
     virtualizer.value.measureElement(element);
     measuredVirtualItemHeights.set(itemId, nextHeight);
     measuredVirtualItemRevision.value += 1;
     observedVirtualItemElements.set(itemId, element);
-    if (
-      scrollEl
-      && previousTop !== undefined
-      && !isNearBottomForStability(scrollEl)
-      && renderItemContainsStreamingAssistant(renderItemById.value.get(itemId))
-      && elementVisibleInScrollViewport(scrollEl, element)
-    ) {
-      const nextTop = elementTopInScrollViewport(scrollEl, element);
-      const delta = nextTop - previousTop;
-      if (Math.abs(delta) >= 1) {
-        scrollEl.scrollTop += delta;
-        onUserScroll();
-      }
-    }
-    updateStreamingVirtualItemViewportTop(itemId, element);
   }
 
   function scheduleVirtualMeasure() {
@@ -267,10 +197,7 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       pendingMeasureFrame = requestAnimationFrame(() => {
         pendingMeasureFrame = 0;
         refreshObservedVirtualItemElements();
-        syncVisibleStreamingVirtualItemViewportTops();
         virtualizer.value.measure();
-        syncVisibleStreamingVirtualItemViewportTops();
-        if (activeJumpToBottomRequest.value) scrollConversationToBottomOnce();
       });
     });
   }
@@ -308,7 +235,6 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
         if (measuredVirtualItemHeights.delete(normalizedItemId)) {
           measuredVirtualItemRevision.value += 1;
         }
-        streamingVirtualItemViewportTop.delete(normalizedItemId);
       }
       return;
     }
@@ -324,7 +250,6 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
         if (measuredVirtualItemHeights.delete(normalizedItemId)) {
           measuredVirtualItemRevision.value += 1;
         }
-        streamingVirtualItemViewportTop.delete(normalizedItemId);
       }
       return;
     }
@@ -345,7 +270,6 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
         measuredVirtualItemRevision.value += 1;
       }
       observedVirtualItemElements.set(resolvedItemId, target);
-      updateStreamingVirtualItemViewportTop(resolvedItemId, target);
     }
   }
 
@@ -374,7 +298,6 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
         if (measuredVirtualItemHeights.delete(itemId)) {
           measuredVirtualItemRevision.value += 1;
         }
-        streamingVirtualItemViewportTop.delete(itemId);
       }
     }
   }
@@ -387,13 +310,11 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     observedVirtualItemResizeElements.clear();
     measuredVirtualItemHeights.clear();
     measuredVirtualItemRevision.value += 1;
-    streamingVirtualItemViewportTop.clear();
     pendingVirtualResizeElements.clear();
   }
 
   function resetVirtualizerAtConversationBottom() {
     const requestId = ++conversationVirtualizerResetRequest;
-    activeJumpToBottomRequest.value = 0;
     clearMeasuredVirtualState();
     initialBottomOffset.value = estimateTotalRenderSize();
     virtualizer.value.measure();
@@ -401,9 +322,12 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       if (requestId !== conversationVirtualizerResetRequest) return;
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       if (requestId !== conversationVirtualizerResetRequest) return;
+      if (renderItems.value.length > 0) {
+        virtualizer.value.scrollToEnd({ behavior: "auto" });
+      }
       const scrollEl = scrollContainer.value;
       if (scrollEl) {
-        scrollEl.scrollTop = scrollEl.scrollHeight;
+        scrollEl.scrollTop = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
       }
       scrollbarRef.value?.updateThumb();
     });
@@ -411,64 +335,27 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
 
   function beginConversationBottomInitialization() {
     const conversationId = String(activeConversationId.value || "").trim();
-    activeJumpToBottomRequest.value = 0;
+    pendingConversationBottomInitializationId = conversationId;
     clearMeasuredVirtualState();
-    initialBottomOffset.value = 0;
-    void nextTick(() => {
-      if (String(activeConversationId.value || "").trim() !== conversationId) return;
-      if (renderItems.value.length <= 0) return;
-      resetVirtualizerAtConversationBottom();
-    });
+    initialBottomOffset.value = estimateTotalRenderSize();
+  }
+
+  function renderListReadyKey() {
+    const items = renderItems.value;
+    const firstId = String(items[0]?.id || "").trim();
+    const lastId = String(items[items.length - 1]?.id || "").trim();
+    return `${items.length}:${firstId}:${lastId}`;
+  }
+
+  function resolvePendingConversationBottomInitialization() {
+    const conversationId = String(activeConversationId.value || "").trim();
+    if (!pendingConversationBottomInitializationId || pendingConversationBottomInitializationId !== conversationId) return;
+    if (renderItems.value.length <= 0) return;
+    pendingConversationBottomInitializationId = "";
+    resetVirtualizerAtConversationBottom();
   }
 
   // ==================== scroll helpers ====================
-
-  function scrollConversationToBottomOnce() {
-    const scrollEl = scrollContainer.value;
-    if (!scrollEl) return;
-    scrollEl.scrollTop = scrollEl.scrollHeight;
-    onUserScroll();
-    scrollbarRef.value?.updateThumb();
-  }
-
-  function scrollToLastItem() {
-    const count = renderItems.value.length;
-    if (count <= 0) return;
-    virtualizer.value.scrollToIndex(count - 1, { align: "end" });
-    onUserScroll();
-    scrollbarRef.value?.updateThumb();
-  }
-
-  function scheduleJumpToBottomStep(requestId: number, remainingFrames: number) {
-    if (activeJumpToBottomRequest.value !== requestId) return;
-    if (pendingJumpToBottomFrame) {
-      cancelAnimationFrame(pendingJumpToBottomFrame);
-      pendingJumpToBottomFrame = 0;
-    }
-    pendingJumpToBottomFrame = requestAnimationFrame(() => {
-      pendingJumpToBottomFrame = 0;
-      if (activeJumpToBottomRequest.value !== requestId) return;
-      scheduleVirtualMeasure();
-      scrollConversationToBottomOnce();
-      if (remainingFrames > 0) {
-        scheduleJumpToBottomStep(requestId, remainingFrames - 1);
-        return;
-      }
-      activeJumpToBottomRequest.value = 0;
-    });
-  }
-
-  function startJumpToBottomTransaction() {
-    activeJumpToBottomRequest.value += 1;
-    scheduleVirtualMeasure();
-    void nextTick(() => {
-      scrollConversationToBottomOnce();
-      requestAnimationFrame(() => {
-        scrollConversationToBottomOnce();
-        activeJumpToBottomRequest.value = 0;
-      });
-    });
-  }
 
   function syncViewportMetrics() {
     scheduleVirtualMeasure();
@@ -490,63 +377,6 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     onUserScroll();
   }
 
-  function escapeCssString(value: string): string {
-    return value.replace(/["\\]/g, "\\$&");
-  }
-
-  function findRenderedMessageElement(messageId: string): HTMLElement | null {
-    const scrollEl = scrollContainer.value;
-    const normalizedId = String(messageId || "").trim();
-    if (!scrollEl || !normalizedId) return null;
-    const escapedId = typeof CSS !== "undefined" && typeof CSS.escape === "function"
-      ? CSS.escape(normalizedId)
-      : escapeCssString(normalizedId);
-    return scrollEl.querySelector(`[data-message-id="${escapedId}"]`) as HTMLElement | null;
-  }
-
-  function resolveMessageAnchorElement(messageElement: HTMLElement | null): HTMLElement | null {
-    if (!messageElement) return null;
-    return (messageElement.querySelector("[data-message-avatar-anchor='true']") as HTMLElement | null) || messageElement;
-  }
-
-  function captureVisibleAnchor(edge: "top" | "bottom"): { messageId: string; edge: "top" | "bottom"; offset: number } | null {
-    const scrollEl = scrollContainer.value;
-    if (!scrollEl) return null;
-    const containerRect = scrollEl.getBoundingClientRect();
-    let anchor: { messageId: string; offset: number; chronologicalIndex: number } | null = null;
-    for (const entry of virtualEntries.value) {
-      const itemId = String(entry.item.id || "").trim();
-      if (!itemId) continue;
-      const wrapper = observedVirtualItemElements.get(itemId);
-      if (!wrapper || !wrapper.isConnected) continue;
-      const messageElements = Array.from(wrapper.querySelectorAll("[data-message-id]")) as HTMLElement[];
-      for (const element of messageElements) {
-        const messageId = String(element.getAttribute("data-message-id") || "").trim();
-        if (!messageId) continue;
-        const anchorElement = resolveMessageAnchorElement(element);
-        if (!anchorElement) continue;
-        const rect = anchorElement.getBoundingClientRect();
-        if (rect.bottom <= containerRect.top + 1 || rect.top >= containerRect.bottom - 1) continue;
-        const chronologicalIndex = blockChronologicalIndexMap.value.get(messageId);
-        if (chronologicalIndex === undefined) continue;
-        const offset = edge === "bottom"
-          ? containerRect.bottom - rect.bottom
-          : rect.top - containerRect.top;
-        if (!anchor) {
-          anchor = { messageId, offset, chronologicalIndex };
-          continue;
-        }
-        const shouldReplace = edge === "bottom"
-          ? chronologicalIndex > anchor.chronologicalIndex
-          : chronologicalIndex < anchor.chronologicalIndex;
-        if (shouldReplace) {
-          anchor = { messageId, offset, chronologicalIndex };
-        }
-      }
-    }
-    return anchor ? { messageId: anchor.messageId, edge, offset: anchor.offset } : null;
-  }
-
   // ==================== lifecycle ====================
 
   onMounted(() => {
@@ -558,7 +388,6 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
         if (!element.isConnected) continue;
         virtualItemResizeObserver.observe(element);
       }
-      syncVisibleStreamingVirtualItemViewportTops();
     }
   });
 
@@ -570,9 +399,18 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     { immediate: true, flush: "post" },
   );
 
+  watch(
+    renderListReadyKey,
+    () => {
+      void nextTick(() => resolvePendingConversationBottomInitialization());
+    },
+    { immediate: true, flush: "post" },
+  );
+
   onBeforeUnmount(() => {
     conversationVirtualizerResetRequest += 1;
     debugTraceRequest += 1;
+    pendingConversationBottomInitializationId = "";
     virtualItemResizeObserver?.disconnect();
     virtualItemResizeObserver = null;
     if (pendingMeasureFrame) {
@@ -584,14 +422,9 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       pendingVirtualResizeFrame = 0;
     }
     pendingVirtualResizeElements.clear();
-    if (pendingJumpToBottomFrame) {
-      cancelAnimationFrame(pendingJumpToBottomFrame);
-      pendingJumpToBottomFrame = 0;
-    }
     observedVirtualItemElements.clear();
     observedVirtualItemResizeElements.clear();
     measuredVirtualItemHeights.clear();
-    streamingVirtualItemViewportTop.clear();
   });
 
   return {
@@ -606,16 +439,7 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     refreshObservedVirtualItemElements,
     scheduleVirtualMeasure,
     syncViewportMetrics,
-    scrollConversationToBottomOnce,
-    scrollToLastItem,
-    scheduleJumpToBottomStep,
-    startJumpToBottomTransaction,
     resetVirtualizerAtConversationBottom,
     alignItemToTop,
-    captureVisibleAnchor,
-    findRenderedMessageElement,
-    resolveMessageAnchorElement,
-    updateStreamingVirtualItemViewportTop,
-    syncVisibleStreamingVirtualItemViewportTops,
   };
 }

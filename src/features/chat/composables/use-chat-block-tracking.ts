@@ -51,27 +51,9 @@ export function useChatBlockTracking(
     return "";
   });
 
-  const blockChronologicalIndexMap = computed(() => {
-    const map = new Map<string, number>();
-    messageBlocks.value.forEach((block, index) => {
-      const blockId = String(block.id || "").trim();
-      if (!blockId || map.has(blockId)) return;
-      map.set(blockId, index);
-    });
-    return map;
-  });
-
-  const renderItemById = computed(() => {
-    const map = new Map<string, ChatRenderItem>();
-    chatRenderItems.value.forEach((item) => map.set(item.id, item));
-    return map;
-  });
-
   return {
     isOwnMessage,
     latestOwnMessageId,
     latestOwnElasticItemId,
-    blockChronologicalIndexMap,
-    renderItemById,
   };
 }

@@ -4,17 +4,12 @@ import type { ChatMessageBlock } from "../../../types/app";
 export interface UseChatScrollOrchestrationOptions {
   scrollContainer: Ref<HTMLElement | null>;
   chatScrollbarRef: Ref<{ updateThumb: () => void; hide?: () => void } | null>;
-  activeJumpToBottomRequest?: Ref<number>;
   prepareBottomAlignmentLayout?: () => Promise<void> | void;
   onScroll: () => void;
   scheduleVirtualMeasure: () => void;
   syncViewportMetrics: () => void;
   resetConversationToBottom: () => void;
   alignItemToTop: (itemId: string, behavior?: ScrollBehavior) => void;
-  captureVisibleAnchor: (edge: "top" | "bottom") => { messageId: string; edge: "top" | "bottom"; offset: number } | null;
-  findRenderedMessageElement: (messageId: string) => HTMLElement | null;
-  resolveMessageAnchorElement: (element: HTMLElement | null) => HTMLElement | null;
-  syncVisibleStreamingVirtualItemViewportTops: () => void;
   refreshObservedVirtualItemElements: () => void;
   latestOwnElasticItemId: Ref<string>;
   props: {
@@ -38,17 +33,12 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
   const {
     scrollContainer,
     chatScrollbarRef,
-    activeJumpToBottomRequest: sharedActiveJumpToBottomRequest,
     prepareBottomAlignmentLayout,
     onScroll,
     scheduleVirtualMeasure,
     syncViewportMetrics,
     resetConversationToBottom,
     alignItemToTop,
-    captureVisibleAnchor,
-    findRenderedMessageElement,
-    resolveMessageAnchorElement,
-    syncVisibleStreamingVirtualItemViewportTops,
     refreshObservedVirtualItemElements,
     latestOwnElasticItemId,
     props,
@@ -56,11 +46,8 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
   } = options;
 
   const LOAD_OLDER_HISTORY_THRESHOLD_PX = 8;
-  const activeJumpToBottomRequest = sharedActiveJumpToBottomRequest ?? ref(0);
   const olderHistoryRequestPending = ref(false);
   const suppressOlderHistoryPaginationOnce = ref(false);
-  const pendingOlderHistoryAnchor = ref<{ messageId: string; edge: "top" | "bottom"; offset: number } | null>(null);
-  const pendingOlderHistoryScrollRestore = ref<{ scrollTop: number; scrollHeight: number } | null>(null);
   let pendingProgrammaticScrollPaginationResetFrame = 0;
   let pendingAutoOlderHistoryFrame = 0;
   let autoOlderHistoryScheduled = false;
@@ -84,8 +71,6 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
     if (!scrollEl) return;
     if (!props.hasMoreHistory.value || props.loadingOlderHistory.value || olderHistoryRequestPending.value) return;
     if (scrollEl.scrollTop > LOAD_OLDER_HISTORY_THRESHOLD_PX) return;
-    pendingOlderHistoryScrollRestore.value = { scrollTop: scrollEl.scrollTop, scrollHeight: scrollEl.scrollHeight };
-    pendingOlderHistoryAnchor.value = captureVisibleAnchor("bottom");
     olderHistoryRequestPending.value = true;
     emit.loadOlderHistory();
   }
@@ -114,14 +99,10 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
     } else {
       maybeRequestOlderHistory();
     }
-    syncVisibleStreamingVirtualItemViewportTops();
   }
 
   function doScrollToBottom() {
-    activeJumpToBottomRequest.value += 1;
     armProgrammaticScrollPaginationSuppression();
-    pendingOlderHistoryAnchor.value = null;
-    pendingOlderHistoryScrollRestore.value = null;
     scheduleVirtualMeasure();
     void nextTick(async () => {
       await prepareBottomAlignmentLayout?.();
@@ -146,8 +127,6 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
     () => {
       chatScrollbarRef.value?.hide?.();
       olderHistoryRequestPending.value = false;
-      pendingOlderHistoryAnchor.value = null;
-      pendingOlderHistoryScrollRestore.value = null;
       armProgrammaticScrollPaginationSuppression();
       void prepareBottomAlignmentLayout?.();
       scheduleAutoRequestOlderHistory();
@@ -191,35 +170,11 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
     async (loading, wasLoading) => {
       if (loading) return;
       if (!wasLoading) return;
-      const scrollEl = scrollContainer.value;
-      if (!scrollEl) return;
-      await nextTick();
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      if (!scrollContainer.value) return;
       await nextTick();
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       refreshObservedVirtualItemElements();
-      const scrollRestore = pendingOlderHistoryScrollRestore.value;
-      if (scrollRestore) {
-        const deltaHeight = scrollEl.scrollHeight - scrollRestore.scrollHeight;
-        scrollEl.scrollTop = Math.max(0, scrollRestore.scrollTop + deltaHeight);
-      }
-      const anchor = pendingOlderHistoryAnchor.value;
-      if (anchor) {
-        const anchorMessageElement = findRenderedMessageElement(anchor.messageId);
-        const anchorElement = resolveMessageAnchorElement(anchorMessageElement);
-        if (anchorElement && anchorElement.isConnected) {
-          const containerRect = scrollEl.getBoundingClientRect();
-          const rect = anchorElement.getBoundingClientRect();
-          if (anchor.edge === "bottom") {
-            scrollEl.scrollTop += anchor.offset - (containerRect.bottom - rect.bottom);
-          } else {
-            scrollEl.scrollTop += (rect.top - containerRect.top) - anchor.offset;
-          }
-        }
-      }
       olderHistoryRequestPending.value = false;
-      pendingOlderHistoryAnchor.value = null;
-      pendingOlderHistoryScrollRestore.value = null;
       scheduleAutoRequestOlderHistory();
     },
   );
@@ -237,14 +192,11 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
   });
 
   return {
-    activeJumpToBottomRequest,
     onConversationScroll,
     handleJumpToBottom,
     alignLatestOwnMessageToTop,
     activeConversationChangedCleanup: () => {
       olderHistoryRequestPending.value = false;
-      pendingOlderHistoryAnchor.value = null;
-      pendingOlderHistoryScrollRestore.value = null;
     },
     armProgrammaticScrollPaginationSuppression,
   };

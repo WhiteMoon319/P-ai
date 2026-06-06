@@ -686,7 +686,7 @@ const virtualRenderItems = computed<ChatRenderItem[]>(() => [...chatRenderItems.
 
 // ==================== block tracking ====================
 
-const { isOwnMessage, latestOwnMessageId, latestOwnElasticItemId, blockChronologicalIndexMap, renderItemById } =
+const { isOwnMessage, latestOwnMessageId, latestOwnElasticItemId } =
   useChatBlockTracking(toRef(props, "messageBlocks"), chatRenderItems);
 
 // ==================== selection mode ====================
@@ -732,17 +732,13 @@ const {
 
 // ==================== virtual scroll ====================
 
-const activeJumpToBottomRequest = ref(0);
-
 const {
   virtualizer, virtualEntries, totalVirtualSize, measureVirtualRow,
   latestOwnTailContentHeight, scheduleVirtualMeasure, syncViewportMetrics,
-  resetVirtualizerAtConversationBottom, alignItemToTop, captureVisibleAnchor, findRenderedMessageElement,
-  resolveMessageAnchorElement, syncVisibleStreamingVirtualItemViewportTops, refreshObservedVirtualItemElements,
+  resetVirtualizerAtConversationBottom, alignItemToTop, refreshObservedVirtualItemElements,
 } = useChatVirtualScroll({
-  renderItems: virtualRenderItems, renderItemById, blockChronologicalIndexMap,
+  renderItems: virtualRenderItems,
   scrollContainer, scrollbarRef: chatScrollbarRef as Ref<{ updateThumb: () => void } | null>,
-  activeJumpToBottomRequest,
   activeConversationId: toRef(props, "activeConversationId"),
   latestOwnElasticItemId,
   latestOwnElasticMinHeight,
@@ -819,38 +815,6 @@ function closeOverlayPanes() {
   if (rightPaneOverlay.value) emit("toolReviewPanelOpenChange", false);
 }
 
-// 滚动容器宽度变化时保持滚动百分比
-let _scrollWidthPrev = 0;
-let _scrollResizeObserver: ResizeObserver | null = null;
-watch(scrollContainer, (el, _oldEl, onCleanup) => {
-  _scrollResizeObserver?.disconnect();
-  _scrollResizeObserver = null;
-  if (!el) return;
-  _scrollWidthPrev = el.clientWidth;
-  _scrollResizeObserver = new ResizeObserver((entries) => {
-    const entry = entries[0];
-    if (!entry) return;
-    const newWidth = Math.round(entry.contentRect.width);
-    if (newWidth === _scrollWidthPrev || _scrollWidthPrev === 0) {
-      _scrollWidthPrev = newWidth;
-      return;
-    }
-    const maxScroll = el.scrollHeight - el.clientHeight;
-    const ratio = maxScroll > 0 ? el.scrollTop / maxScroll : -1;
-    _scrollWidthPrev = newWidth;
-    if (ratio < 0) return;
-    requestAnimationFrame(() => {
-      const newMax = el.scrollHeight - el.clientHeight;
-      if (newMax > 0) el.scrollTop = Math.round(ratio * newMax);
-    });
-  });
-  _scrollResizeObserver.observe(el);
-  onCleanup(() => {
-    _scrollResizeObserver?.disconnect();
-    _scrollResizeObserver = null;
-  });
-}, { immediate: true });
-
 // ==================== scroll orchestration ====================
 
 const {
@@ -858,12 +822,10 @@ const {
   alignLatestOwnMessageToTop,
 } = useChatScrollOrchestration({
   scrollContainer, chatScrollbarRef: chatScrollbarRef as Ref<{ updateThumb: () => void; hide?: () => void } | null>,
-  activeJumpToBottomRequest,
   prepareBottomAlignmentLayout,
   onScroll, scheduleVirtualMeasure, syncViewportMetrics,
   resetConversationToBottom: resetVirtualizerAtConversationBottom,
-  alignItemToTop, captureVisibleAnchor, findRenderedMessageElement, resolveMessageAnchorElement,
-  syncVisibleStreamingVirtualItemViewportTops,
+  alignItemToTop,
   refreshObservedVirtualItemElements,
   latestOwnElasticItemId,
   props: {

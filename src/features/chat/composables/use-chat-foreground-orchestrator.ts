@@ -136,6 +136,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
       bindings.clearConversationBadge(cid);
       bindings.markConversationReadPersisted(cid);
       await nextTick();
+      bindings.triggerConversationScrollToBottom(cid, "switch_snapshot_ready");
       bindings.logForegroundPaintTrace(trace, "前台轻量快照已接管最新消息", {
         conversationId: cid,
         snapshotCount: Array.isArray(snapshot?.messages) ? snapshot.messages.length : 0,
