@@ -20,12 +20,14 @@
           :mode="previewMode"
           :title="previewMode === 'patch' ? '' : t('chat.toolReview.commandPreview')"
           :code="previewText"
+          :is-dark="isDark"
         />
         <ToolReviewCodePreview
           v-if="rawReview"
           mode="plain"
           :title="t('chat.toolReview.rawReview')"
           :code="rawReview"
+          :is-dark="isDark"
         />
       </div>
     </div>
@@ -47,8 +49,10 @@ withDefaults(defineProps<{
   previewMode: "plain" | "patch";
   previewText: string;
   rawReview?: string;
+  isDark?: boolean;
 }>(), {
   rawReview: "",
+  isDark: false,
 });
 
 const { t } = useI18n();

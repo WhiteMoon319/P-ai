@@ -1155,6 +1155,7 @@ struct ConversationDelegateStatusSummary {
     root_conversation_id: String,
     title: String,
     status: String,
+    active: bool,
     started_at: String,
     updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1166,6 +1167,8 @@ struct ConversationDelegateStatusSummary {
     tool_call_count: usize,
     last_tool_name: String,
     token_count: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    target_agent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1384,6 +1387,7 @@ fn conversation_delegate_summary_from_thread(
             Some(&thread.title),
         ),
         status,
+        active,
         started_at: started_at.clone(),
         updated_at: thread.conversation.updated_at.clone(),
         completed_at: completed_at.clone(),
@@ -1393,6 +1397,9 @@ fn conversation_delegate_summary_from_thread(
         tool_call_count: stats.tool_call_count,
         last_tool_name: stats.last_tool_name,
         token_count: stats.token_count,
+        target_agent_id: delegate_store_get_delegate(&app_state.data_path, &delegate_id)
+            .ok()
+            .map(|entry| entry.target_agent_id),
     })
 }
 
@@ -1414,7 +1421,7 @@ fn conversation_delegate_summary_from_persisted(
     };
     let completed_at = stored_completed_at.or_else(|| conversation.archived_at.clone());
     Ok(ConversationDelegateStatusSummary {
-        delegate_id,
+        delegate_id: delegate_id.clone(),
         conversation_id: conversation.id.clone(),
         root_conversation_id: conversation.root_conversation_id.clone().unwrap_or_default(),
         title: delegate_display_title_from_id(
@@ -1424,6 +1431,7 @@ fn conversation_delegate_summary_from_persisted(
             Some(&conversation.title),
         ),
         status,
+        active: false,
         started_at: started_at.clone(),
         updated_at: conversation.updated_at.clone(),
         completed_at: completed_at.clone(),
@@ -1433,6 +1441,9 @@ fn conversation_delegate_summary_from_persisted(
         tool_call_count: stats.tool_call_count,
         last_tool_name: stats.last_tool_name,
         token_count: stats.token_count,
+        target_agent_id: delegate_store_get_delegate(&app_state.data_path, &delegate_id)
+            .ok()
+            .map(|entry| entry.target_agent_id),
     })
 }
 

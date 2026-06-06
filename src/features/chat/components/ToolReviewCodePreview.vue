@@ -8,6 +8,7 @@
       :diff-only="true"
       highlight-style="background"
       :show-prefixes="false"
+      :class="isDark ? 'tool-review-code-preview-dark' : 'tool-review-code-preview-light'"
     />
     <pre v-else class="h-full min-h-0 overflow-auto rounded-box border border-base-300 bg-base-200/40 p-3 text-[12px] leading-6"><code>{{ code }}</code></pre>
   </div>
@@ -21,6 +22,7 @@ const props = defineProps<{
   title?: string;
   code: string;
   mode?: "plain" | "patch";
+  isDark?: boolean;
 }>();
 
 const normalizedLines = computed(() =>
@@ -33,9 +35,18 @@ const normalizedLines = computed(() =>
   height: 100%;
   max-height: none;
   border-radius: 0;
-  background-color: var(--color-base-200, oklch(21% 0.006 56.043));
+  background-color: var(--color-base-100);
+  color: var(--color-base-content);
   scrollbar-color: color-mix(in srgb, var(--color-base-content) 30%, transparent) transparent;
   scrollbar-width: thin;
+}
+
+:deep(.tool-review-code-preview-light code) {
+  color: var(--color-base-content);
+}
+
+:deep(.tool-review-code-preview-dark code) {
+  color: var(--color-base-content);
 }
 
 :deep(.mockup-code::-webkit-scrollbar) {

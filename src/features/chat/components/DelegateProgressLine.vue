@@ -1,18 +1,22 @@
 <template>
   <div class="mt-1 text-xs text-base-content/65">
     <template v-if="running">
-      <span>用时 {{ elapsedText }}</span>
+      <span>{{ elapsedText }}</span>
       <span class="mx-1">·</span>
       <span>{{ requestCount }}步</span>
       <span class="mx-1">·</span>
-      <span>用量 {{ tokenText }}</span>
+      <span>{{ tokenText }}</span>
       <template v-if="lastToolName">
         <span class="mx-1">·</span>
         <span>{{ lastToolName }}</span>
       </template>
     </template>
-    <template v-else-if="text">
-      {{ text }}
+    <template v-else>
+      <span>--</span>
+      <span class="mx-1">·</span>
+      <span>--步</span>
+      <span class="mx-1">·</span>
+      <span>--K</span>
     </template>
   </div>
 </template>

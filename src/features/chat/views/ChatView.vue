@@ -350,6 +350,7 @@
           :delegate-statuses="delegateStatuses"
           :delegate-statuses-loading="delegateStatusesLoading"
           :delegate-statuses-error-text="delegateStatusesErrorText"
+          :persona-avatar-url-map="personaAvatarUrlMap"
           @select-batch="setToolReviewCurrentBatchKey" @load-item-detail="loadToolReviewItemDetail"
           @review-item="runToolReviewForCall" @review-batch="runToolReviewForBatch"
           @pick-commit-review="handlePickCommitReview" @review-code="handleToolReviewCode"

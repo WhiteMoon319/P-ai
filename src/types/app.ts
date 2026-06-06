@@ -815,6 +815,7 @@ export type ConversationDelegateStatusSummary = {
   rootConversationId: string;
   title: string;
   status: string;
+  active: boolean;
   startedAt: string;
   updatedAt: string;
   completedAt?: string;
@@ -824,6 +825,7 @@ export type ConversationDelegateStatusSummary = {
   toolCallCount: number;
   lastToolName: string;
   tokenCount: number;
+  targetAgentId?: string;
 };
 
 export type AgentWorkSignalPayload = {

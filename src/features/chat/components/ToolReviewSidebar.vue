@@ -1,50 +1,86 @@
 <template>
-  <aside v-bind="rootAttrs" class="flex h-full min-h-0 flex-col overflow-x-hidden">
-    <div class="px-4 pb-2">
-      <div role="tablist" class="tabs tabs-border">
-        <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'reports' }" @click="activeTab = 'reports'">{{ t("chat.toolReview.resultsTab") }}</button>
-        <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'tools' }" @click="activeTab = 'tools'">{{ t("chat.toolReview.toolsTab") }}</button>
-        <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'delegates' }" @click="activeTab = 'delegates'">{{ t("chat.toolReview.delegatesTab") }}</button>
-      </div>
+  <aside v-bind="rootAttrs" class="w-full flex h-full min-h-0 flex-col bg-base-200">
+    <div role="tablist" class="tabs tabs-border px-2 pb-2">
+      <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'reports' }" @click="activeTab = 'reports'">{{ t("chat.toolReview.resultsTab") }}</button>
+      <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'tools' }" @click="activeTab = 'tools'">{{ t("chat.toolReview.toolsTab") }}</button>
+      <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'delegates' }" @click="activeTab = 'delegates'">{{ t("chat.toolReview.delegatesTab") }}</button>
     </div>
-    <div class="flex min-h-0 flex-1 flex-col overflow-x-hidden">
+
+    <div ref="contentScroller" class="ecall-chat-scroll-container flex min-h-0 flex-1 flex-col overflow-y-auto p-1">
       <div v-if="errorText" class="mx-4 my-4 rounded-box border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
         {{ errorText }}
       </div>
 
       <template v-if="activeTab === 'tools' && currentBatch">
         <div class="flex min-h-full flex-col">
-          <div class="sticky top-0 z-10 border-b border-base-300 bg-base-100 px-4 py-3">
+          <div class="sticky top-0 z-30 bg-base-200 px-4 py-3">
             <button
               type="button"
-              class="btn btn-sm w-full"
-              :disabled="batchReviewing"
+              class="btn btn-sm w-full bg-base-100 hover:bg-base-100"
+              :disabled="batchReviewing || currentBatchUnreviewedCount <= 0"
               @click="emit('reviewBatch', currentBatch.batchKey)"
             >
               <span v-if="batchReviewing" class="loading loading-spinner loading-xs"></span>
               {{ t("chat.toolReview.evaluateBatchWithCount", { count: currentBatchUnreviewedCount }) }}
             </button>
           </div>
-          <div class="flex flex-col gap-3 py-2">
-            <section v-for="group in reviewGroups" :key="group.key" class="flex flex-col gap-2">
-              <div class="px-4 text-xs font-medium text-base-content/60">
-                {{ group.title }}
-              </div>
+          <div class="flex min-h-0 flex-1 flex-col py-2">
+            <section v-for="group in reviewGroups" :key="group.key">
               <div
-                v-for="item in group.items"
-                :key="`${group.key}:${item.callId}`"
-                class="px-4"
+                role="button"
+                tabindex="0"
+                class="group/section sticky top-14 z-20 mx-1 flex h-9 items-center gap-2 rounded-lg bg-base-200/95 px-2 text-left text-xs font-semibold text-base-content backdrop-blur transition-colors hover:bg-base-300/70"
+                :title="group.title"
+                @click="toggleToolAssessmentSection(group.key)"
+                @keydown.enter.prevent="toggleToolAssessmentSection(group.key)"
+                @keydown.space.prevent="toggleToolAssessmentSection(group.key)"
               >
-                <ToolReviewItemCard
+                <ChevronRight
+                  class="h-4 w-4 shrink-0 transition-transform duration-200 ease-out"
+                  :class="isToolAssessmentSectionCollapsed(group.key) ? '' : 'rotate-90'"
+                />
+                <span class="min-w-0 truncate">{{ group.title }}</span>
+                <span class="shrink-0 tabular-nums text-base-content/45">{{ group.items.length }}</span>
+              </div>
+              <div v-if="!isToolAssessmentSectionCollapsed(group.key)">
+                <ToolAssessmentCard
+                  v-for="item in group.items"
+                  :key="`${group.key}:${item.callId}`"
                   :item="item"
                   :detail="detailMap[item.callId]"
                   :loading="detailLoadingCallId === item.callId"
-                  :reviewing="reviewingCallId === item.callId"
+                  :is-dark="markdownIsDark"
                   @load-detail="emit('loadItemDetail', $event)"
-                  @review="emit('reviewItem', $event)"
                 />
               </div>
             </section>
+          </div>
+          <div v-if="props.batches.length > 1" class="px-4 py-3">
+            <div class="join flex justify-center">
+              <button
+                type="button"
+                class="join-item btn btn-sm bg-base-100 hover:bg-base-100"
+                :disabled="!previousBatch"
+                @click="previousBatch && emit('selectBatch', previousBatch.batchKey)"
+              >
+                «
+              </button>
+              <button
+                type="button"
+                class="join-item btn btn-sm bg-base-100 hover:bg-base-100"
+                @click.prevent
+              >
+                {{ t("chat.toolReview.pageLabel", { current: currentBatchIndex + 1, total: props.batches.length }) }}
+              </button>
+              <button
+                type="button"
+                class="join-item btn btn-sm bg-base-100 hover:bg-base-100"
+                :disabled="!nextBatch"
+                @click="nextBatch && emit('selectBatch', nextBatch.batchKey)"
+              >
+                »
+              </button>
+            </div>
           </div>
         </div>
       </template>
@@ -53,64 +89,57 @@
         {{ t("chat.toolReview.empty") }}
       </div>
 
-      <div v-else-if="activeTab === 'delegates'" class="flex min-h-0 flex-1 flex-col">
+      <template v-else-if="activeTab === 'delegates'">
         <div v-if="delegateStatusesErrorText" class="mx-4 my-4 rounded-box border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
           {{ delegateStatusesErrorText }}
         </div>
-        <div v-if="delegateStatusesLoading && delegateStatuses.length === 0" class="flex min-h-0 flex-1 items-center justify-center text-sm text-base-content/65">
+        <div v-else-if="delegateStatusesLoading && delegateStatuses.length === 0" class="flex min-h-0 flex-1 items-center justify-center text-sm text-base-content/65">
           <span class="loading loading-spinner loading-sm mr-2"></span>
           {{ t("chat.toolReview.delegateLoading") }}
         </div>
         <div v-else-if="delegateStatuses.length === 0" class="flex min-h-0 flex-1 items-center justify-center px-4 py-8 text-sm text-base-content/65">
           {{ t("chat.toolReview.delegateEmpty") }}
         </div>
-        <div v-else class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-2">
-          <section v-for="delegate in delegateStatuses" :key="delegate.delegateId">
-            <details class="collapse collapse-arrow w-full rounded-box border border-base-300 bg-base-200">
-              <summary class="collapse-title min-h-0 px-3 py-3 pr-10">
-                <div class="flex items-center justify-between gap-3">
-                  <div class="min-w-0 flex items-center gap-2">
-                    <div class="truncate text-sm">{{ delegate.title || delegate.delegateId }}</div>
-                  </div>
-                  <div class="badge badge-sm min-w-14 shrink-0 justify-center whitespace-nowrap" :class="delegateStatusBadgeClass(delegate.status)">
-                    {{ formatDelegateStatus(delegate.status) }}
-                  </div>
-                </div>
-                <DelegateProgressLine
-                  :running="isDelegateRunning(delegate.status)"
-                  :elapsed-ms="delegate.elapsedMs"
-                  :request-count="delegate.requestCount"
-                  :token-count="delegate.tokenCount"
-                  :last-tool-name="delegate.lastToolName"
-                />
-              </summary>
-              <div class="collapse-content flex flex-col gap-3 px-3 pb-3">
-                <div class="whitespace-pre-wrap wrap-break-word text-sm leading-7 text-base-content/75">
-                  {{ t('chat.toolReview.lastTool', { name: delegate.lastToolName || '-' }) }}
-                </div>
-                <div class="flex items-center justify-end gap-3">
-                  <button
-                    v-if="isDelegateRunning(delegate.status)"
-                    type="button"
-                    class="btn btn-sm btn-error btn-outline gap-1.5 font-normal"
-                    @click="emit('abortDelegate', delegate)"
-                  >{{ t('chat.toolReview.abort') }}</button>
-                  <button
-                    type="button"
-                    class="btn btn-sm gap-1.5 border-base-300 bg-base-100 font-normal hover:bg-base-100"
-                    @click="emit('openDelegateDetail', delegate)"
-                  >{{ t('chat.toolReview.viewDetail') }}</button>
-                </div>
-              </div>
-            </details>
-          </section>
-        </div>
-      </div>
+        <section v-for="section in delegateStatusSections" :key="section.key">
+          <div
+            role="button"
+            tabindex="0"
+            class="group/section sticky top-0 z-20 mx-1 flex h-9 items-center gap-2 rounded-lg bg-base-200/95 px-2 text-left text-xs font-semibold text-base-content backdrop-blur transition-colors hover:bg-base-300/70"
+            :title="section.title"
+            @click="toggleDelegateSection(section.key)"
+            @keydown.enter.prevent="toggleDelegateSection(section.key)"
+            @keydown.space.prevent="toggleDelegateSection(section.key)"
+          >
+            <ChevronRight
+              class="h-4 w-4 shrink-0 transition-transform duration-200 ease-out"
+              :class="isDelegateSectionCollapsed(section.key) ? '' : 'rotate-90'"
+            />
+            <span class="min-w-0 truncate">{{ section.title }}</span>
+            <span class="shrink-0 tabular-nums text-base-content/45">{{ section.items.length }}</span>
+          </div>
+          <div v-if="!isDelegateSectionCollapsed(section.key)">
+            <section v-for="delegate in section.items" :key="delegate.delegateId">
+              <DelegateCard
+                :title="delegate.title || delegate.delegateId"
+                :running="isDelegateRunning(delegate)"
+                :elapsed-ms="delegate.elapsedMs"
+                :request-count="delegate.requestCount"
+                :token-count="delegate.tokenCount"
+                :last-tool-name="delegate.lastToolName"
+                :show-result="canShowDelegateResult(delegate)"
+                :avatar-url="personaAvatarUrlMap[delegate.targetAgentId || ''] || ''"
+                @abort="emit('abortDelegate', delegate)"
+                @open-detail="openDelegateResult(delegate)"
+              />
+            </section>
+          </div>
+        </section>
+      </template>
       <div v-else class="flex min-h-0 flex-1 flex-col">
-        <div class="border-b border-base-300 bg-base-100 px-4 py-3">
+        <div class="sticky top-0 z-30 bg-base-200 px-4 py-3">
           <button
             type="button"
-            class="btn btn-sm w-full"
+            class="btn btn-sm w-full bg-base-100 hover:bg-base-100"
             :disabled="submitting"
             @click="reviewTargetDialogOpen = true"
           >
@@ -123,123 +152,92 @@
             {{ t("chat.toolReview.reportUnavailable") }}
           </div>
         </div>
-        <div v-else class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-2">
-          <section v-for="report in pagedReports" :key="report.id">
-            <details class="collapse collapse-arrow w-full rounded-box border border-base-300 bg-base-200">
-              <summary class="collapse-title min-h-0 px-3 py-3 pr-10">
-                <div class="flex items-center justify-between gap-3">
-                  <div class="min-w-0 flex items-center gap-2">
-                    <div class="truncate text-sm">{{ report.title || report.target || formatReportScope(report.scope) }}</div>
-                  </div>
-                  <div class="badge badge-sm min-w-14 shrink-0 justify-center whitespace-nowrap" :class="reportStatusBadgeClass(report.status)">
-                    {{ formatReportStatus(report.status) }}
-                  </div>
-                </div>
-                <DelegateProgressLine
-                  v-if="report.status === 'success'"
-                  :text="reportJudgementSummary(report)"
-                />
-                <DelegateProgressLine
-                  v-else-if="report.status === 'pending' && matchedReportProgress(report)"
-                  :running="true"
-                  :elapsed-ms="matchedReportProgress(report)!.elapsedMs"
-                  :request-count="matchedReportProgress(report)!.requestCount"
-                  :token-count="matchedReportProgress(report)!.tokenCount"
-                  :last-tool-name="matchedReportProgress(report)!.lastToolName"
-                />
-                <DelegateProgressLine
-                  v-else-if="report.status === 'pending'"
-                  text="{{ t('chat.toolReview.generating') }}"
-                />
-              </summary>
-              <div class="collapse-content flex flex-col gap-3 px-3 pb-3">
-                <div class="whitespace-pre-wrap wrap-break-word text-sm leading-7 text-base-content/75">
-                  {{ reportExpandedText(report) }}
-                </div>
-                <div class="flex items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    class="btn btn-sm gap-1.5 border-base-300 bg-base-100 font-normal hover:bg-base-100"
-                    :disabled="submitting"
-                    @click.prevent.stop="deleteReport(report)"
-                  >{{ t('chat.toolReview.delete') }}</button>
-                  <div class="flex items-center justify-end gap-3">
-                    <button
-                      type="button"
-                      class="btn btn-sm gap-1.5 border-base-300 bg-base-100 font-normal hover:bg-base-100"
-                      @click.prevent.stop="openReportDetail(report.id)"
-                    >{{ t('chat.toolReview.viewDetail') }}</button>
-                    <button
-                      v-if="canRetryReport(report)"
-                      type="button"
-                      class="btn btn-sm gap-1.5 border-base-300 bg-base-100 font-normal hover:bg-base-100"
-                      :disabled="submitting"
-                      @click.prevent.stop="retryFailedReport(report)"
-                    >{{ t('chat.toolReview.regenerate') }}</button>
-                  </div>
-                </div>
-              </div>
-            </details>
+        <div v-else class="flex min-h-0 flex-1 flex-col py-2">
+          <section v-for="section in codeReviewSections" :key="section.key">
+            <div
+              role="button"
+              tabindex="0"
+              class="group/section sticky top-14 z-20 mx-1 flex h-9 items-center gap-2 rounded-lg bg-base-200/95 px-2 text-left text-xs font-semibold text-base-content backdrop-blur transition-colors hover:bg-base-300/70"
+              :title="section.title"
+              @click="toggleCodeReviewSection(section.key)"
+              @keydown.enter.prevent="toggleCodeReviewSection(section.key)"
+              @keydown.space.prevent="toggleCodeReviewSection(section.key)"
+            >
+              <ChevronRight
+                class="h-4 w-4 shrink-0 transition-transform duration-200 ease-out"
+                :class="isCodeReviewSectionCollapsed(section.key) ? '' : 'rotate-90'"
+              />
+              <span class="min-w-0 truncate">{{ section.title }}</span>
+              <span class="shrink-0 tabular-nums text-base-content/45">{{ section.items.length }}</span>
+            </div>
+            <div v-if="!isCodeReviewSectionCollapsed(section.key)">
+              <CodeReviewCard
+                v-for="report in section.items"
+                :key="report.id"
+                :report="report"
+                :title="report.title || report.target || formatReportScope(report.scope)"
+                :summary="reportSummary(report)"
+                :running="report.status === 'pending' && !!matchedReportProgress(report)"
+                :progress="matchedReportProgress(report)"
+                :avatar-url="codeReviewAvatarUrl(report)"
+                @open-detail="openReportDetail(report.id)"
+              />
+            </div>
           </section>
+        </div>
+        <div v-if="props.reports.length > reportPageSize" class="px-4 py-3">
+          <div class="join flex justify-center">
+            <button
+              type="button"
+              class="join-item btn btn-sm bg-base-100 hover:bg-base-100"
+              :disabled="reportPage <= 1"
+              @click="reportPage = Math.max(1, reportPage - 1)"
+            >
+              «
+            </button>
+            <button
+              type="button"
+              class="join-item btn btn-sm bg-base-100 hover:bg-base-100"
+              @click.prevent
+            >
+              {{ t("chat.toolReview.pageLabel", { current: reportPage, total: reportTotalPages }) }}
+            </button>
+            <button
+              type="button"
+              class="join-item btn btn-sm bg-base-100 hover:bg-base-100"
+              :disabled="reportPage >= reportTotalPages"
+              @click="reportPage = Math.min(reportTotalPages, reportPage + 1)"
+            >
+              »
+            </button>
+          </div>
         </div>
       </div>
     </div>
-
-    <div v-if="activeTab === 'tools' && currentBatch && props.batches.length > 1" class="border-t border-base-300 px-4 py-3">
-      <div class="join flex justify-center">
-        <button
-          type="button"
-          class="join-item btn btn-sm"
-          :disabled="!previousBatch"
-          @click="previousBatch && emit('selectBatch', previousBatch.batchKey)"
-        >
-          «
-        </button>
-        <button
-          type="button"
-          class="join-item btn btn-sm"
-          @click.prevent
-        >
-          {{ t("chat.toolReview.pageLabel", { current: currentBatchIndex + 1, total: props.batches.length }) }}
-        </button>
-        <button
-          type="button"
-          class="join-item btn btn-sm"
-          :disabled="!nextBatch"
-          @click="nextBatch && emit('selectBatch', nextBatch.batchKey)"
-        >
-          »
-        </button>
-      </div>
-    </div>
-    <div v-if="activeTab === 'reports' && props.reports.length > reportPageSize" class="border-t border-base-300 px-4 py-3">
-      <div class="join flex justify-center">
-        <button
-          type="button"
-          class="join-item btn btn-sm"
-          :disabled="reportPage <= 1"
-          @click="reportPage = Math.max(1, reportPage - 1)"
-        >
-          «
-        </button>
-        <button
-          type="button"
-          class="join-item btn btn-sm"
-          @click.prevent
-        >
-          {{ t("chat.toolReview.pageLabel", { current: reportPage, total: reportTotalPages }) }}
-        </button>
-        <button
-          type="button"
-          class="join-item btn btn-sm"
-          :disabled="reportPage >= reportTotalPages"
-          @click="reportPage = Math.min(reportTotalPages, reportPage + 1)"
-        >
-          »
-        </button>
-      </div>
-    </div>
+    <FloatingScrollbar :target="contentScroller" />
   </aside>
+
+  <dialog class="modal" :class="{ 'modal-open': delegateResultDialogOpen }">
+    <div class="modal-box max-h-[80vh] max-w-2xl overflow-y-auto">
+      <div class="mb-3 flex items-center justify-between gap-3">
+        <div class="min-w-0 truncate text-sm font-semibold text-base-content">{{ delegateResultTitle }}</div>
+        <button type="button" class="btn btn-ghost btn-sm" @click="delegateResultDialogOpen = false">×</button>
+      </div>
+      <div v-if="delegateResultLoading" class="flex items-center gap-2 text-sm text-base-content/65">
+        <span class="loading loading-spinner loading-sm"></span>
+        加载中
+      </div>
+      <div v-else-if="delegateResultText" class="tool-review-report-markdown assistant-markdown text-sm leading-7 text-base-content/80">
+        <AppMarkdownRenderer :text="delegateResultText" :is-dark="markdownIsDark" />
+      </div>
+      <div v-else class="whitespace-pre-wrap wrap-break-word text-sm leading-7 text-base-content/80">
+        没有可显示的结果
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+      <button type="button" @click="delegateResultDialogOpen = false">close</button>
+    </form>
+  </dialog>
 
   <dialog class="modal" :class="{ 'modal-open': reportDialogOpen }">
     <div class="modal-box h-[90vh] w-[90vw] max-w-none p-0">
@@ -364,13 +362,18 @@
 <script setup lang="ts">
 import { computed, ref, useAttrs, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import type { ShellWorkspace } from "../../../types/app";
+import { invokeTauri } from "../../../services/tauri-api";
+import type { ChatMessage, ConversationDelegateStatusSummary, ShellWorkspace } from "../../../types/app";
 import { defaultWorkspaceNameFromPath, inferWorkspaceName, isLegacyGenericWorkspaceName, normalizeWorkspaceLevel } from "../../../utils/shell-workspaces";
 import type { ToolReviewBatchSummary, ToolReviewCodeReviewScope, ToolReviewCommitOption, ToolReviewItemDetail, ToolReviewItemSummary, ToolReviewReportRecord } from "../composables/use-chat-tool-review";
 import { AppMarkdownRenderer, initKatex } from "../markdown";
-import ToolReviewItemCard from "./ToolReviewItemCard.vue";
+import ToolAssessmentCard from "./ToolAssessmentCard.vue";
+import CodeReviewCard from "./CodeReviewCard.vue";
 import ToolReviewTargetDialog from "./ToolReviewTargetDialog.vue";
+import DelegateCard from "./DelegateCard.vue";
 import DelegateProgressLine from "./DelegateProgressLine.vue";
+import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
+import { ChevronRight } from "@lucide/vue";
 
 initKatex();
 
@@ -392,9 +395,10 @@ const props = defineProps<{
   workspaces: ShellWorkspace[];
   currentDepartmentId: string;
   departmentOptions: Array<{ id: string; name: string; ownerName: string; providerName?: string; modelName?: string }>;
-  delegateStatuses: import("../../../types/app").ConversationDelegateStatusSummary[];
+  delegateStatuses: ConversationDelegateStatusSummary[];
   delegateStatusesLoading: boolean;
   delegateStatusesErrorText: string;
+  personaAvatarUrlMap: Record<string, string>;
 }>();
 
 const emit = defineEmits<{
@@ -408,14 +412,19 @@ const emit = defineEmits<{
   (e: "deleteReport", report: ToolReviewReportRecord): void;
   (e: "copyReport", reportText: string): void;
   (e: "attachReport", reportText: string): void;
-  (e: "openDelegateDetail", status: import("../../../types/app").ConversationDelegateStatusSummary): void;
-  (e: "abortDelegate", status: import("../../../types/app").ConversationDelegateStatusSummary): void;
+  (e: "openDelegateDetail", status: ConversationDelegateStatusSummary): void;
+  (e: "abortDelegate", status: ConversationDelegateStatusSummary): void;
 }>();
 
 const { t } = useI18n();
 const reportDialogOpen = ref(false);
 const reviewTargetDialogOpen = ref(false);
 const activeTab = ref<"tools" | "reports" | "delegates">("reports");
+const contentScroller = ref<HTMLElement | null>(null);
+const delegateResultDialogOpen = ref(false);
+const delegateResultLoading = ref(false);
+const delegateResultTitle = ref("");
+const delegateResultText = ref("");
 const localCurrentReportId = ref("");
 const rootAttrs = useAttrs();
 const commitOptions = ref<ToolReviewCommitOption[]>([]);
@@ -426,6 +435,111 @@ const commitPageSize = ref(30);
 const commitTotal = ref(0);
 const reportPage = ref(1);
 const reportPageSize = 10;
+const collapsedToolAssessmentSectionKeys = ref<Record<string, boolean>>({});
+const collapsedDelegateSectionKeys = ref<Record<string, boolean>>({
+  running: true,
+  interrupted: true,
+  failed: true,
+});
+const collapsedCodeReviewSectionKeys = ref<Record<string, boolean>>({
+  completed: true,
+  failed: true,
+});
+
+type DelegateStatusSection = {
+  key: string;
+  title: string;
+  items: ConversationDelegateStatusSummary[];
+};
+
+type CodeReviewSection = {
+  key: string;
+  title: string;
+  items: ToolReviewReportRecord[];
+};
+
+const delegateStatusSections = computed<DelegateStatusSection[]>(() => {
+  const sections: DelegateStatusSection[] = [
+    { key: "running", title: "正在运行中", items: [] },
+    { key: "completed", title: "已完成", items: [] },
+    { key: "interrupted", title: "被中断", items: [] },
+    { key: "failed", title: "已失败", items: [] },
+  ];
+  for (const delegate of props.delegateStatuses) {
+    sections[delegateStatusSectionIndex(delegate)].items.push(delegate);
+  }
+  return sections.filter((section) => section.items.length > 0);
+});
+
+const codeReviewSections = computed<CodeReviewSection[]>(() => {
+  const sections: CodeReviewSection[] = [
+    { key: "running", title: "进行中", items: [] },
+    { key: "completed", title: "已完成", items: [] },
+    { key: "failed", title: "已失败", items: [] },
+  ];
+  for (const report of pagedReports.value) {
+    sections[codeReviewSectionIndex(report)].items.push(report);
+  }
+  return sections.filter((section) => section.items.length > 0);
+});
+
+function delegateStatusSectionIndex(delegate: ConversationDelegateStatusSummary) {
+  const status = String(delegate.status || "").trim();
+  if (status === "failed") return 3;
+  if ((status === "running" || status === "delivered") && delegate.active) return 0;
+  if (status === "running" || status === "delivered") return 2;
+  return 1;
+}
+
+function codeReviewSectionIndex(report: ToolReviewReportRecord) {
+  if (report.status === "failed") return 2;
+  if (report.status === "pending") return 0;
+  return 1;
+}
+
+function isToolAssessmentSectionCollapsed(key: string) {
+  return !!collapsedToolAssessmentSectionKeys.value[key];
+}
+
+function toggleToolAssessmentSection(key: string) {
+  collapsedToolAssessmentSectionKeys.value = {
+    ...collapsedToolAssessmentSectionKeys.value,
+    [key]: !collapsedToolAssessmentSectionKeys.value[key],
+  };
+}
+
+function isDelegateSectionCollapsed(key: string) {
+  return !!collapsedDelegateSectionKeys.value[key];
+}
+
+function toggleDelegateSection(key: string) {
+  collapsedDelegateSectionKeys.value = {
+    ...collapsedDelegateSectionKeys.value,
+    [key]: !collapsedDelegateSectionKeys.value[key],
+  };
+}
+
+function isCodeReviewSectionCollapsed(key: string) {
+  return !!collapsedCodeReviewSectionKeys.value[key];
+}
+
+function toggleCodeReviewSection(key: string) {
+  collapsedCodeReviewSectionKeys.value = {
+    ...collapsedCodeReviewSectionKeys.value,
+    [key]: !collapsedCodeReviewSectionKeys.value[key],
+  };
+}
+
+function reportSummary(report: ToolReviewReportRecord) {
+  if (report.status === "pending") return t("chat.toolReview.generating");
+  if (report.status === "failed") return report.errorText || t("chat.toolReview.statusFailed");
+  return reportJudgementSummary(report);
+}
+
+function codeReviewAvatarUrl(report: ToolReviewReportRecord) {
+  const progress = matchedReportProgress(report);
+  return props.personaAvatarUrlMap[progress?.targetAgentId || ""] || "";
+}
 
 const currentBatchIndex = computed(() => {
   const currentKey = String(props.currentBatchKey || "").trim();
@@ -465,6 +579,50 @@ const submitting = computed(() =>
 const reportActionLabel = computed(() => {
   return t("chat.toolReview.generateReviewReport");
 });
+
+async function openDelegateResult(status: import("../../../types/app").ConversationDelegateStatusSummary) {
+  const conversationId = String(status?.conversationId || "").trim();
+  if (!conversationId) return;
+  delegateResultTitle.value = String(status?.title || status?.delegateId || "委托结果");
+  delegateResultText.value = "";
+  delegateResultDialogOpen.value = true;
+  delegateResultLoading.value = true;
+  try {
+    const messages = await invokeTauri<ChatMessage[]>("get_delegate_conversation_messages", {
+      input: { conversationId },
+    });
+    delegateResultText.value = formatDelegateResultText(findLastAssistantText(messages));
+  } catch (error) {
+    delegateResultText.value = `读取委托结果失败：${String(error)}`;
+  } finally {
+    delegateResultLoading.value = false;
+  }
+}
+
+function findLastAssistantText(messages: ChatMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role !== "assistant") continue;
+    const text = message.parts
+      ?.filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n")
+      .trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function formatDelegateResultText(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+  try {
+    const parsed = JSON.parse(trimmed);
+    return `\`\`\`json\n${JSON.stringify(parsed, null, 2)}\n\`\`\``;
+  } catch {
+    return text;
+  }
+}
 
 type ToolReviewGroup = {
   key: string;
@@ -952,8 +1110,16 @@ function formatDelegateStatus(status: string) {
   return t('chat.toolReview.statusUnknown');
 }
 
-function isDelegateRunning(status: string) {
-  return status === "running" || status === "delivered";
+function isDelegateRunning(delegate: ConversationDelegateStatusSummary) {
+  const status = String(delegate.status || "").trim();
+  return delegate.active && (status === "running" || status === "delivered");
+}
+
+function canShowDelegateResult(delegate: ConversationDelegateStatusSummary) {
+  const status = String(delegate.status || "").trim();
+  if (status === "failed") return false;
+  if (status === "running" || status === "delivered") return false;
+  return true;
 }
 
 function delegateStatusBadgeClass(status: string) {
