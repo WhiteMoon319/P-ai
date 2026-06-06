@@ -1067,6 +1067,13 @@
       "screenshotResultEmpty": "Screenshot result is empty",
       "screenshotFailed": "Background voice screenshot failed: {error}"
     },
+    "toolbar": {
+      "codeReview": "Initiate code review",
+      "personaList": "Persona list",
+      "persona": "Persona: {name}",
+      "department": "Department: {name}",
+      "unavailable": "Unavailable: {reason}"
+    },
     "queue": {
       "queued": "Queued",
       "recallToInput": "Recall to input",

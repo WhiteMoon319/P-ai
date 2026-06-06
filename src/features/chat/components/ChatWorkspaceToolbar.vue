@@ -36,7 +36,7 @@
           <li v-if="showCodeReviewMenuItem && !busy">
             <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openCodeReview')">
               <ClipboardCheck class="h-4 w-4 shrink-0" />
-              <span class="leading-5">发起代码审查</span>
+              <span class="leading-5">{{ t('chat.toolbar.codeReview') }}</span>
             </button>
           </li>
           <li v-if="!busy">
@@ -91,7 +91,7 @@
           tabindex="0"
           class="btn btn-ghost btn-sm btn-circle shrink-0 border border-base-300/70 bg-base-100/70 hover:border-base-300 hover:bg-base-200"
           :disabled="chatting || frozen || uniqueMentionEntries.length === 0"
-          title="人格列表"
+          title="{{ t('chat.toolbar.personaList') }}"
         >
           <Users class="h-4 w-4" />
         </button>
@@ -500,11 +500,11 @@ function mentionEntryKey(entry: ChatMentionEntry): string {
 
 function mentionEntryTitle(entry: ChatMentionEntry): string {
   const lines = [
-    `人格：${entry.agentName}`,
-    `部门：${entry.departmentName}`,
+    `${t('chat.toolbar.persona', { name: entry.agentName })}`,
+    `${t('chat.toolbar.department', { name: entry.departmentName })}`,
   ];
   const reason = String(entry.unavailableReason || "").trim();
-  if (reason) lines.push(`不可用：${reason}`);
+  if (reason) lines.push(t('chat.toolbar.unavailable', { reason }));
   return lines.join("\n");
 }
 

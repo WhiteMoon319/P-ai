@@ -1010,6 +1010,13 @@
       "screenshotResultEmpty": "截圖結果為空",
       "screenshotFailed": "後台語音截圖失敗：{error}"
     },
+    "toolbar": {
+      "codeReview": "發起代碼審查",
+      "personaList": "人格列表",
+      "persona": "人格：{name}",
+      "department": "部門：{name}",
+      "unavailable": "不可用：{reason}"
+    },
     "voice": "語音{index}",
     "jumpToBottom": "回到底部",
     "image": "圖片{index}",

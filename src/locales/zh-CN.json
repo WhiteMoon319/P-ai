@@ -1010,6 +1010,13 @@
       "screenshotResultEmpty": "截图结果为空",
       "screenshotFailed": "后台语音截图失败：{error}"
     },
+    "toolbar": {
+      "codeReview": "发起代码审查",
+      "personaList": "人格列表",
+      "persona": "人格：{name}",
+      "department": "部门：{name}",
+      "unavailable": "不可用：{reason}"
+    },
     "voice": "语音{index}",
     "jumpToBottom": "回到底部",
     "image": "图片{index}",
