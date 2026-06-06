@@ -1,8 +1,11 @@
 import { ref, type Ref } from "vue";
+import { i18n } from "../../../i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ChatMessage, RuntimeLogEntry, UnarchivedConversationSummary } from "../../../types/app";
 import { inspectUndoablePatchCalls } from "../../../utils/chat-message-semantics";
 import { useConfigSaveErrorDialog } from "./use-config-save-error-dialog";
+
+const t = i18n.global.t;
 
 export type TrimPreviewResult = {
   conversationId: string;
@@ -110,15 +113,15 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
     const assistantReplyPresent = hasAssistantReply(messages);
     const isEmpty = messages.length === 0;
     const archiveDisabledReason = isMainConversation
-      ? "主会话暂不支持归档。"
+      ? t('sidebar.archiveMainNotAllowed')
       : summary?.runtimeState === "organizing_context"
-      ? "当前会话正在后台归档或整理上下文，请稍候。"
+      ? t('sidebar.archiveRunning')
       : isEmpty
-        ? "当前会话为空，不能归档。"
+        ? t('sidebar.archiveEmpty')
         : !assistantReplyPresent
-          ? "当前会话还没有助理回复，不能归档。"
+          ? t('sidebar.archiveNoAssistant')
           : messageCount <= SHORT_CONVERSATION_DELETE_THRESHOLD
-            ? `当前会话过短（仅 ${messageCount} 条用户/助理消息），暂不建议归档。`
+            ? t('sidebar.archiveTooShort', { count: messageCount })
             : null;
     return {
       conversationId,
@@ -141,15 +144,15 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
     const conversationLongEnough = messageCount >= SHORT_CONVERSATION_COMPACTION_THRESHOLD;
     const contextUsageHighEnough = contextUsagePercent >= 10;
     const compactionDisabledReason = summary?.runtimeState === "organizing_context"
-      ? "当前会话正在整理上下文或归档处理中，请稍候。"
+      ? t('sidebar.compactRunning')
       : isEmpty
-        ? "当前会话为空，无需整理。"
+        ? t('sidebar.compactEmpty')
         : !assistantReplyPresent
-          ? "当前会话还没有助理回复，暂不建议压缩。"
+          ? t('sidebar.compactNoAssistant')
           : !conversationLongEnough && !contextUsageHighEnough
             ? contextUsagePercent > 0
-              ? `当前会话较短（仅 ${messageCount} 条用户/助理消息），且上下文占用仅 ${contextUsagePercent}%，暂不建议压缩。`
-              : `当前会话较短（仅 ${messageCount} 条用户/助理消息），暂不建议压缩。`
+              ? t('sidebar.compactShortWithUsage', { count: messageCount, percent: contextUsagePercent })
+              : t('sidebar.compactShort', { count: messageCount })
             : null;
     return {
       conversationId,
@@ -165,7 +168,7 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
   async function openTrimActionDialog() {
     const conversationId = String(options.currentChatConversationId.value || "").trim();
     if (!conversationId) {
-      options.setStatus("当前没有可处理的会话。");
+      options.setStatus(t('sidebar.noConversation'));
       return;
     }
     trimActionDialogOpen.value = false;
@@ -203,7 +206,7 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
     if (!conversationId) return;
     if (currentUnarchivedConversationSummary()?.isMainConversation) {
       closeTrimActionDialog();
-      options.setStatus("主会话暂不支持删除。");
+      options.setStatus(t('sidebar.deleteMainNotAllowed'));
       return;
     }
     closeTrimActionDialog();
@@ -308,7 +311,7 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
       const items = await invokeTauri<RuntimeLogEntry[]>("list_recent_runtime_logs");
       runtimeLogs.value = items;
     } catch (error) {
-      runtimeLogsError.value = `加载运行日志失败：${String(error)}`;
+      runtimeLogsError.value = t('sidebar.loadRuntimeLogsFailed', { error: String(error) });
     } finally {
       runtimeLogsLoading.value = false;
     }
@@ -331,7 +334,7 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
       await invokeTauri("clear_recent_runtime_logs");
       runtimeLogs.value = [];
     } catch (error) {
-      runtimeLogsError.value = `清空运行日志失败：${String(error)}`;
+      runtimeLogsError.value = t('sidebar.clearRuntimeLogsFailed', { error: String(error) });
     } finally {
       runtimeLogsLoading.value = false;
     }

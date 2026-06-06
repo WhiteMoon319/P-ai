@@ -1,8 +1,11 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { computed, onBeforeUnmount, ref, type Ref } from "vue";
+import { i18n } from "../../../i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { GithubUpdateInfo, UpdateProgressPayload } from "../types/update";
 import type { GithubUpdateMethod } from "../../../types/app";
+
+const t = i18n.global.t;
 
 type ViewModeRef = Ref<"chat" | "archives" | "config">;
 
@@ -30,7 +33,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   const updateInProgress = ref(false);
   const updateReadyToRestart = ref(false);
   const updateDialogOpen = ref(false);
-  const updateDialogTitle = ref("检查更新");
+  const updateDialogTitle = ref(t('about.dialogTitleCheck'));
   const updateDialogBody = ref("");
   const updateDialogKind = ref<"info" | "error">("info");
   const updateDialogReleaseUrl = ref("");
@@ -47,7 +50,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   let dailyCheckStarted = false;
 
   function runtimeLabel(kind: "installer" | "portable") {
-    return kind === "portable" ? "便携版" : "安装版";
+    return kind === "portable" ? t('about.runtimePortable') : t('about.runtimeInstaller');
   }
 
   function closeUpdateDialog() {
@@ -55,7 +58,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   }
 
   function openUpdateDialog(text: string, kind: "info" | "error", releaseUrl?: string) {
-    updateDialogTitle.value = "检查更新";
+    updateDialogTitle.value = t('about.dialogTitleCheck');
     updateDialogBody.value = text;
     updateDialogKind.value = kind;
     updateDialogReleaseUrl.value = releaseUrl || "";
@@ -72,14 +75,14 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
 
   function buildCheckDialogBody(result: GithubUpdateInfo) {
     const lines = [
-      `当前版本：${result.currentVersion}`,
-      `最新版本：${result.latestVersion}`,
-      `当前形态：${runtimeLabel(result.runtimeKind)}`,
+      t('about.currentVersion', { version: result.currentVersion }),
+      t('about.latestVersion', { version: result.latestVersion }),
+      t('about.currentRuntime', { kind: runtimeLabel(result.runtimeKind) }),
     ];
     const notes = String(result.releaseNotes || "").trim();
     if (notes) {
       lines.push("");
-      lines.push("更新说明：");
+      lines.push(t('about.releaseNotes'));
       lines.push(notes);
     }
     return lines.join("\n");
@@ -94,7 +97,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     updateDialogKind.value = "info";
     updateDialogPrimaryAction.value = result.hasUpdate ? "download" : "force";
     updateProgressPercent.value = null;
-    updateDialogTitle.value = result.hasUpdate ? "发现可更新版本" : "当前已是最新版本";
+    updateDialogTitle.value = result.hasUpdate ? t('about.foundUpdate') : t('about.alreadyLatest');
     updateDialogOpen.value = true;
   }
 
@@ -140,7 +143,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       updateUiMode.value = null;
       updateDialogPrimaryAction.value = null;
       updateDialogKind.value = "error";
-      updateDialogTitle.value = "更新失败";
+      updateDialogTitle.value = t('about.updateFailed');
       updateDialogBody.value = payload.error ? `${payload.message}\n\n${payload.error}` : payload.message;
       if (previousUiMode !== "background") {
         updateDialogOpen.value = true;
@@ -161,21 +164,21 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
         updateDialogOpen.value = true;
       }
       updateDialogKind.value = "info";
-      updateDialogTitle.value = "更新已下载完成";
+      updateDialogTitle.value = t('about.updateDownloaded');
       updateDialogBody.value = payload.message;
       updateDialogPrimaryAction.value = "restart";
       updateProgressPercent.value = 100;
       return;
     }
     updateDialogKind.value = "info";
-    updateDialogTitle.value = payload.stage === "completed" ? "更新完成" : "正在下载更新";
+    updateDialogTitle.value = payload.stage === "completed" ? t('about.updateCompleted') : t('about.downloading');
     const progressLine =
       Number.isFinite(payload.downloadedBytes) || Number.isFinite(payload.contentLength)
-        ? `\n\n下载进度：${formatBytes(payload.downloadedBytes)} / ${formatBytes(payload.contentLength)}${
+        ? `\n\n${t('about.downloadProgress', { current: formatBytes(payload.downloadedBytes), total: formatBytes(payload.contentLength) })}${
             Number.isFinite(payload.percent) ? ` (${Math.max(0, Math.min(100, payload.percent || 0)).toFixed(1)}%)` : ""
           }`
         : "";
-    updateDialogBody.value = `${payload.message}\n\n当前形态：${runtimeLabel(payload.runtimeKind)}${progressLine}`;
+    updateDialogBody.value = `${payload.message}\n\n${t('about.currentRuntime', { kind: runtimeLabel(payload.runtimeKind) })}${progressLine}`;
     if (payload.stage === "completed") {
       updateInProgress.value = false;
       updateReadyToRestart.value = false;
@@ -196,7 +199,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     checkingUpdateRequest.value = true;
     try {
       if (!silent) {
-        options.status.value = "检查更新中...";
+        options.status.value = t('about.checking');
       }
       const result = await invokeTauri<GithubUpdateInfo>("check_github_update", { updateMethod: currentUpdateMethod() });
       latestCheckResult.value = result;
@@ -204,18 +207,18 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       if (!result?.hasUpdate) {
         updateReadyToRestart.value = false;
         if (!silent) {
-          options.status.value = `当前已是最新版本 ${result.currentVersion}`;
+          options.status.value = t('about.alreadyLatestWithVersion', { version: result.currentVersion });
           openCheckResultDialog(result);
         }
         return result;
       }
-      options.status.value = `发现新版本 ${result.latestVersion}（当前 ${result.currentVersion}）`;
+      options.status.value = t('about.foundNewVersion', { latest: result.latestVersion, current: result.currentVersion });
       return result;
     } catch (error) {
       if (!silent) {
-        options.status.value = `检查更新失败: ${String(error)}`;
+        options.status.value = t('about.checkFailed', { error: String(error) });
         updateDialogPrimaryAction.value = null;
-        openUpdateDialog(`检查更新失败：${String(error)}`, "error");
+        openUpdateDialog(t('about.checkFailedDialog', { error: String(error) }), "error");
       }
       console.warn("[UPDATE] check_github_update failed:", error);
     } finally {
@@ -230,10 +233,10 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     updateUiMode.value = silent ? "background" : "foreground";
     updateDialogPrimaryAction.value = null;
     updateDialogKind.value = "info";
-    updateDialogTitle.value = force ? "准备强制下载更新" : "准备下载更新";
-    updateDialogBody.value = force ? "正在准备强制下载更新..." : "正在准备下载更新...";
+    updateDialogTitle.value = force ? t('about.prepareForceDownload') : t('about.prepareDownload');
+    updateDialogBody.value = force ? t('about.preparingForceDownload') : t('about.preparingDownload');
     updateProgressPercent.value = null;
-    options.status.value = force ? "正在准备强制下载更新..." : "正在准备下载更新...";
+    options.status.value = force ? t('about.preparingForceDownload') : t('about.preparingDownload');
     if (!silent) {
       updateDialogOpen.value = true;
     }
@@ -243,12 +246,12 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       updateInProgress.value = false;
       updateUiMode.value = null;
       updateDialogKind.value = "error";
-      updateDialogTitle.value = "更新失败";
-      updateDialogBody.value = `启动更新失败：${String(error)}`;
+      updateDialogTitle.value = t('about.updateFailed');
+      updateDialogBody.value = t('about.startUpdateFailed', { error: String(error) });
       if (!silent) {
         updateDialogOpen.value = true;
       }
-      options.status.value = `更新失败：${String(error)}`;
+      options.status.value = t('about.startUpdateFailedStatus', { error: String(error) });
       console.warn("[UPDATE] start_github_update failed:", error);
     }
   }
@@ -260,19 +263,19 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     updateDialogOpen.value = true;
     updateDialogKind.value = "info";
     updateDialogPrimaryAction.value = null;
-    updateDialogTitle.value = "更新并重启";
-    updateDialogBody.value = "正在应用已下载的更新...";
+    updateDialogTitle.value = t('about.updateAndRestartTitle');
+    updateDialogBody.value = t('about.applyingUpdate');
     updateProgressPercent.value = null;
-    options.status.value = "正在应用已下载的更新...";
+    options.status.value = t('about.applyingUpdate');
     try {
       await invokeTauri("apply_prepared_github_update");
     } catch (error) {
       updateInProgress.value = false;
       updateUiMode.value = null;
       updateDialogKind.value = "error";
-      updateDialogTitle.value = "更新失败";
-      updateDialogBody.value = `应用更新失败：${String(error)}`;
-      options.status.value = `更新失败：${String(error)}`;
+      updateDialogTitle.value = t('about.updateFailed');
+      updateDialogBody.value = t('about.applyUpdateFailed', { error: String(error) });
+      options.status.value = t('about.applyUpdateFailedStatus', { error: String(error) });
       console.warn("[UPDATE] apply_prepared_github_update failed:", error);
     }
   }

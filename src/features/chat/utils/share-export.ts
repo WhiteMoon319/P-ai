@@ -1,5 +1,8 @@
+import { i18n } from "../../../i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ChatMessageBlock } from "../../../types/app";
+
+const t = i18n.global.t;
 
 export type ShareRenderableEntry = {
   id: string;

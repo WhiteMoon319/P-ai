@@ -657,7 +657,7 @@ function enqueueTerminalApprovalRequest(payload: TerminalApprovalRequestPayload)
   terminalApprovalQueue.value.push({
     ...payload,
     requestId,
-    title: String(payload.title || "终端审批"),
+    title: String(payload.title || t('sidebar.terminalApproval')),
     message: String(payload.message || ""),
     approvalKind: String(payload.approvalKind || "unknown"),
     sessionId: String(payload.sessionId || ""),
@@ -692,7 +692,7 @@ async function resolveTerminalApproval(approved: boolean, requestId?: string) {
     });
     terminalApprovalQueue.value.splice(targetIndex, 1);
   } catch (error) {
-    transport.errorText.value = String(error || "处理审批失败");
+    transport.errorText.value = String(error || t('sidebar.approvalFailed'));
   } finally {
     terminalApprovalResolving.value = false;
   }
@@ -725,7 +725,7 @@ async function openCreateConversationDialog() {
     await loadCreateConversationOptions();
     createConversationDialogOpen.value = true;
   } catch (error) {
-    createConversationErrorText.value = String(error || "加载部门列表失败");
+    createConversationErrorText.value = String(error || t('sidebar.loadDepartmentFailed'));
     createConversationDialogOpen.value = true;
   }
 }
@@ -750,7 +750,7 @@ async function createConversation(input: { title?: string; departmentId: string 
     await openConversation(result.conversationId);
     createConversationDialogOpen.value = false;
   } catch (error) {
-    createConversationErrorText.value = String(error || "创建会话失败");
+    createConversationErrorText.value = String(error || t('sidebar.createConversationFailed'));
   } finally {
     creatingConversation.value = false;
   }
@@ -760,7 +760,7 @@ async function openSettings() {
   try {
     await transport.request("settings.open", {});
   } catch (error) {
-    transport.errorText.value = String(error || "打开设置失败");
+    transport.errorText.value = String(error || t('sidebar.openSettingsFailed'));
   }
 }
 
@@ -772,7 +772,7 @@ async function openCodeReview() {
     }
     codeReviewDialogOpen.value = true;
   } catch (error) {
-    codeReviewErrorText.value = String(error || "加载审查部门失败");
+    codeReviewErrorText.value = String(error || t('sidebar.loadReviewDepartmentFailed'));
     codeReviewDialogOpen.value = true;
   }
 }
@@ -799,7 +799,7 @@ async function loadCodeReviewCommitOptions(page = 1) {
     codeReviewErrorText.value = "";
   } catch (error) {
     commitOptions.value = [];
-    codeReviewErrorText.value = String(error || "读取 commit 失败");
+    codeReviewErrorText.value = String(error || t('sidebar.readCommitFailed'));
   } finally {
     commitOptionsLoading.value = false;
   }
@@ -819,7 +819,7 @@ async function submitCodeReview(input: { scope: ToolReviewCodeReviewScope; targe
     codeReviewDialogOpen.value = false;
     if (reviewPanelOpen.value) loadReviewReports();
   } catch (error) {
-    codeReviewErrorText.value = String(error || "发起代码审查失败");
+    codeReviewErrorText.value = String(error || t('sidebar.startCodeReviewFailed'));
   } finally {
     codeReviewSubmitting.value = false;
   }
@@ -848,7 +848,7 @@ async function loadReviewReports() {
     });
     reviewReports.value = Array.isArray(result.reports) ? result.reports : [];
   } catch (error) {
-    reviewErrorText.value = String(error || "加载审查报告失败");
+    reviewErrorText.value = String(error || t('sidebar.loadReviewReportFailed'));
   } finally {
     reviewReportsLoading.value = false;
   }
@@ -864,7 +864,7 @@ async function deleteReviewReport(report: ToolReviewReportRecord) {
     });
     await loadReviewReports();
   } catch (error) {
-    reviewErrorText.value = String(error || "删除审查报告失败");
+    reviewErrorText.value = String(error || t('sidebar.deleteReviewReportFailed'));
   } finally {
     reviewReportDeleting.value = false;
   }
@@ -883,7 +883,7 @@ async function retryReviewReport(report: ToolReviewReportRecord) {
     });
     await loadReviewReports();
   } catch (error) {
-    reviewErrorText.value = String(error || "重新生成审查报告失败");
+    reviewErrorText.value = String(error || t('sidebar.regenerateReviewReportFailed'));
   } finally {
     codeReviewSubmitting.value = false;
   }
@@ -902,7 +902,7 @@ async function branchConversationFromSelection(payload: { count: number; message
     await refreshList();
     await openConversation(result.conversationId);
   } catch (error) {
-    transport.errorText.value = String(error || "创建会话分支失败");
+    transport.errorText.value = String(error || t('sidebar.createBranchFailed'));
   }
 }
 
@@ -925,13 +925,13 @@ async function delegateFromSelection(payload: { count: number; messageIds: strin
     });
     chatViewWrapperRef.value?.exitMessageSelectionMode();
   } catch (error) {
-    transport.errorText.value = String(error || "发起委托失败");
+    transport.errorText.value = String(error || t('sidebar.startDelegateFailed'));
   }
 }
 
 function openSupervisionTask() {
   if (!activeConversationId.value) {
-    transport.errorText.value = "当前没有会话，无法创建目标任务";
+    transport.errorText.value = t('sidebar.noConversationForTask');
     return;
   }
   supervisionErrorText.value = "";
@@ -982,7 +982,7 @@ async function saveSupervisionTask(payload: { durationHours: number; goal: strin
     }
     supervisionDialogOpen.value = false;
   } catch (error) {
-    supervisionErrorText.value = String(error || "目标任务保存失败");
+    supervisionErrorText.value = String(error || t('sidebar.taskSaveFailed'));
   } finally {
     supervisionSaving.value = false;
   }
@@ -1012,12 +1012,12 @@ async function selectConversationPreferredModel(apiConfigId: string) {
     });
     applyModelPayload(result);
     if (busy.value) {
-      transport.errorText.value = "会话首选模型已切换，将在下一次调度开始时生效。";
+      transport.errorText.value = t('sidebar.modelSwitched');
     }
   } catch (error) {
     conversationCallPrimaryApiConfigId.value = previousId;
     preferredChatModelId.value = previousPreferredId;
-    transport.errorText.value = String(error || "切换会话首选模型失败");
+    transport.errorText.value = String(error || t('sidebar.modelSwitchFailed'));
   }
 }
 
@@ -1038,7 +1038,7 @@ async function selectWorkspaceAccess(access: "read_only" | "approval" | "full_ac
     applyWorkspacePermission(result);
   } catch (error) {
     workspaceAccess.value = previous;
-    transport.errorText.value = String(error || "切换权限失败");
+    transport.errorText.value = String(error || t('sidebar.permissionSwitchFailed'));
   }
 }
 
@@ -1053,7 +1053,7 @@ async function openCompactionDialog() {
       conversationId: activeConversationId.value,
     });
   } catch (error) {
-    compactionErrorText.value = String(error || "加载压缩预览失败");
+    compactionErrorText.value = String(error || t('sidebar.loadCompactionPreviewFailed'));
   } finally {
     compactionPreviewLoading.value = false;
   }
@@ -1079,7 +1079,7 @@ async function confirmCompaction() {
     await openConversation(activeConversationId.value);
     compactionDialogOpen.value = false;
   } catch (error) {
-    compactionErrorText.value = String(error || "压缩失败");
+    compactionErrorText.value = String(error || t('sidebar.compactionFailed'));
   } finally {
     compacting.value = false;
   }
@@ -1125,7 +1125,7 @@ async function appendClipboardImagesFromPaste(event: ClipboardEvent) {
       });
     }
   } catch (error) {
-    transport.errorText.value = String(error || "读取剪贴板图片失败");
+    transport.errorText.value = String(error || t('sidebar.readClipboardImageFailed'));
   }
 }
 
@@ -1156,7 +1156,7 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
     clearStreamingState();
     if (!inputText.value.trim()) inputText.value = text;
     clipboardImages.value = [...images, ...clipboardImages.value];
-    transport.errorText.value = String(error || "发送失败");
+    transport.errorText.value = String(error || t('sidebar.sendFailed'));
   }
 }
 
@@ -1189,12 +1189,12 @@ function resolveRewindTargetUserMessage(turnId: string): { targetUserMessageId: 
 async function recallTurn(payload: { turnId: string }) {
   if (!activeConversationId.value) return;
   if (busy.value || compacting.value) {
-    transport.errorText.value = "撤回失败：当前会话正在运行或整理上下文，完成后再撤回。";
+    transport.errorText.value = t('sidebar.rewindRunning');
     return;
   }
   const target = resolveRewindTargetUserMessage(payload.turnId);
   if (!target?.targetUserMessageId) {
-    transport.errorText.value = "撤回失败：未找到可撤回的用户消息";
+    transport.errorText.value = t('sidebar.rewindNotFound');
     return;
   }
   const mode = await requestRecallMode(target.keepCount);
@@ -1221,7 +1221,7 @@ async function recallTurn(payload: { turnId: string }) {
     hasPrevBlock.value = true;
     await refreshList();
   } catch (error) {
-    transport.errorText.value = String(error || "撤回失败");
+    transport.errorText.value = String(error || t('sidebar.rewindFailed'));
   }
 }
 
@@ -1245,7 +1245,7 @@ async function confirmPlan(payload: { messageId: string }) {
     });
   } catch (error) {
     busy.value = false;
-    transport.errorText.value = String(error || "确认计划失败");
+    transport.errorText.value = String(error || t('sidebar.confirmPlanFailed'));
   }
 }
 
@@ -1427,7 +1427,7 @@ async function saveWorkspacePicker() {
     await refreshWorkspacePermission();
     await refreshWorkspaceList();
   } catch (error) {
-    transport.errorText.value = String(error || "保存工作区设置失败");
+    transport.errorText.value = String(error || t('sidebar.saveWorkspaceFailed'));
   } finally {
     workspacePickerSaving.value = false;
   }
@@ -1523,7 +1523,7 @@ function registerNotifications() {
 async function bootstrap() {
   const config = await loadDiscovery();
   if (!config) {
-    transport.errorText.value = "PAI 未运行";
+    transport.errorText.value = t('sidebar.paiNotRunning');
     return;
   }
   await transport.connect(config);
@@ -1548,7 +1548,7 @@ function refreshDiscovery() {
     discoveryRefreshTimer = null;
     if (transport.connected.value) return;
     transport.connecting.value = false;
-    transport.errorText.value = "PAI 未运行";
+    transport.errorText.value = t('sidebar.paiNotRunning');
   }, 3000);
 }
 
@@ -1568,7 +1568,7 @@ function handleWindowMessage(event: MessageEvent) {
     });
     else {
       transport.connecting.value = false;
-      transport.errorText.value = "PAI 未运行";
+      transport.errorText.value = t('sidebar.paiNotRunning');
     }
   }
 }

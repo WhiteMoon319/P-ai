@@ -8,7 +8,7 @@
         v-if="showPickFileButton"
         class="btn btn-ghost btn-sm shrink-0"
         type="button"
-        title="打开文件"
+        :title="t('fileReader.openFile')"
         @click.stop="pickFile"
       >
         <FilePlus class="h-4 w-4" />
@@ -32,7 +32,7 @@
           <button
             type="button"
             class="btn btn-ghost btn-xs h-5 min-h-5 w-5 p-0 opacity-60 hover:opacity-100"
-            title="关闭"
+            :title="t('fileReader.close')"
             @click.stop="closeTab(tab.path)"
           >
             <X class="h-3.5 w-3.5" />
@@ -43,7 +43,7 @@
         type="button"
         class="btn btn-ghost btn-sm h-8 min-h-8 w-8 shrink-0 px-0"
         :disabled="!directoryToggleTargetPath"
-        :title="directoryTreeRoot ? '收起文件树' : `展开文件树：${directoryToggleTargetPath}`"
+        :title="directoryTreeRoot ? t('fileReader.collapseTree') : t('fileReader.expandTree', { path: directoryToggleTargetPath })"
         @click="toggleDirectoryTree"
       >
         <ListIndentIncrease v-if="directoryTreeRoot" class="h-4 w-4" />
@@ -68,7 +68,7 @@
             class="btn btn-ghost btn-xs h-7 min-h-7 w-7 shrink-0 px-0"
             type="button"
             :disabled="directoryTreeRoot.loading"
-            title="在当前目录打开 Shell"
+            :title="t('fileReader.openShellHere')"
             @click="openShellAtDirectoryTreeRoot"
           >
             <SquareTerminal class="h-4 w-4" />
@@ -77,7 +77,7 @@
             class="btn btn-ghost btn-xs h-7 min-h-7 w-7 shrink-0 px-0"
             type="button"
             :class="directoryTreeSearchVisible ? 'text-primary' : ''"
-            title="展开或收起搜索栏"
+            :title="t('fileReader.toggleSearch')"
             @click="toggleDirectoryTreeSearch"
           >
             <Search class="h-4 w-4" />
@@ -88,20 +88,20 @@
             v-model="directoryTreeFilter"
             class="input input-bordered input-xs w-full"
             type="search"
-            placeholder="过滤文件"
+            :placeholder="t('fileReader.filterFiles')"
           />
         </div>
         <div class="relative min-h-0 flex-1" @mouseenter="directoryScrollbarRef?.reveal()" @mouseleave="directoryScrollbarRef?.hide()">
         <div ref="directoryScroller" class="file-reader-scroll-container min-h-0 h-full overflow-auto py-1 text-sm">
           <div v-if="directoryTreeRoot.loading" class="flex items-center gap-2 px-3 py-2 text-xs opacity-65">
             <span class="loading loading-spinner loading-xs"></span>
-            正在读取目录
+            {{ t('fileReader.loadingDirectory') }}
           </div>
           <div v-else-if="directoryTreeRoot.error" class="px-3 py-2 text-xs text-error">
             {{ directoryTreeRoot.error }}
           </div>
           <div v-else-if="visibleTreeRows.length === 0" class="px-3 py-2 text-xs opacity-60">
-            {{ directoryTreeFilter.trim() ? "没有匹配项" : "空目录" }}
+            {{ directoryTreeFilter.trim() ? t('fileReader.noMatches') : t('fileReader.emptyDirectory') }}
           </div>
           <template v-else>
             <div
@@ -116,7 +116,7 @@
                   v-if="row.entry.isDirectory"
                   class="btn btn-ghost btn-xs h-5 min-h-5 w-5 shrink-0 px-0"
                   type="button"
-                  :title="isTreeDirectoryExpanded(row.entry.path) ? '收起目录' : '展开目录'"
+                  :title="isTreeDirectoryExpanded(row.entry.path) ? t('fileReader.collapseDirectory') : t('fileReader.expandDirectory')"
                   @click.stop="toggleTreeDirectory(row.entry)"
                 >
                   <ChevronDown v-if="isTreeDirectoryExpanded(row.entry.path)" class="h-3.5 w-3.5" />
@@ -162,7 +162,7 @@
                 <button
                   type="button"
                   class="inline-flex shrink-0 items-center rounded px-1.5 py-1 hover:bg-base-200 hover:text-base-content"
-                  :title="`预览目录：${segment.path}`"
+                  :title="t('fileReader.previewDirectory', { path: segment.path })"
                   @click="showHoverDirectoryTree(segment.path, $event)"
                   @mouseenter="showHoverDirectoryTree(segment.path, $event)"
                   @mouseleave="hideHoverDirectoryTree"
@@ -192,20 +192,20 @@
             class="btn btn-ghost btn-xs h-6 min-h-6 w-6 shrink-0 px-0"
             type="button"
             :disabled="!activeTab"
-            title="用默认程序打开"
+            :title="t('fileReader.openWithDefault')"
             @click.stop="openWithDefaultProgram"
           >
             <ExternalLink class="h-4 w-4" />
           </button>
-          <button class="btn btn-ghost btn-xs h-6 min-h-6 w-6 shrink-0 px-0" type="button" :disabled="!activeTab" title="刷新" @click.stop="refreshActiveTab">
+          <button class="btn btn-ghost btn-xs h-6 min-h-6 w-6 shrink-0 px-0" type="button" :disabled="!activeTab" :title="t('fileReader.refresh')" @click.stop="refreshActiveTab">
             <RefreshCw class="h-4 w-4" />
           </button>
           <button
             class="btn btn-ghost btn-xs h-6 min-h-6 w-6 shrink-0 px-0"
             type="button"
             :disabled="!activeTab"
-            :title="activeTab?.rawMode ? '切换到渲染视图' : '切换到原文视图'"
-            :aria-label="activeTab?.rawMode ? '当前为原文视图' : '当前为渲染视图'"
+            :title="activeTab?.rawMode ? t('fileReader.switchToRendered') : t('fileReader.switchToRaw')"
+            :aria-label="activeTab?.rawMode ? t('fileReader.currentRawView') : t('fileReader.currentRenderedView')"
             @click.stop="toggleActiveRawMode"
           >
             <Code2 v-if="activeTab?.rawMode" class="h-4 w-4" />
@@ -223,12 +223,12 @@
         >
           <div v-if="!activeTab" class="flex h-full items-center justify-center text-sm text-base-content/55">
             <slot name="empty">
-              <span>还没有打开文件。</span>
+              <span>{{ t('fileReader.noFileOpen') }}</span>
             </slot>
           </div>
           <div v-else-if="activeTab.loading" class="flex h-full items-center justify-center gap-3 text-sm text-base-content/65">
             <span class="loading loading-spinner loading-sm"></span>
-            正在读取文件
+            {{ t('fileReader.loadingFile') }}
           </div>
           <div v-else-if="activeTab.error" class="m-4 rounded-box border border-error/30 bg-error/10 p-4 text-sm text-error">
             {{ activeTab.error }}
@@ -251,7 +251,7 @@
       </main>
       <main v-else-if="!directoryTreeRoot" class="flex min-h-0 flex-1 items-center justify-center bg-base-100 px-4 text-center text-sm text-base-content/55">
         <slot name="empty">
-          <span>当前会话还没有可浏览的工作目录。</span>
+          <span>{{ t('fileReader.noWorkspace') }}</span>
         </slot>
       </main>
     </div>
@@ -261,7 +261,7 @@
       class="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-base-100/70 backdrop-blur-[1px]"
     >
       <div class="rounded-box border border-primary/30 bg-base-100 px-5 py-3 text-sm font-medium text-primary shadow-lg">
-        松开打开文件
+        {{ t('fileReader.dropToOpen') }}
       </div>
     </div>
 
@@ -292,13 +292,13 @@
           <div ref="hoverDirectoryScroller" class="flex-1 overflow-auto py-1 text-sm">
             <div v-if="hoverDirectoryTreeRoot?.loading" class="flex items-center gap-2 px-3 py-2 text-xs opacity-65">
               <span class="loading loading-spinner loading-xs"></span>
-              正在读取目录
+              {{ t('fileReader.loadingDirectory') }}
             </div>
             <div v-else-if="hoverDirectoryTreeRoot?.error" class="px-3 py-2 text-xs text-error">
               {{ hoverDirectoryTreeRoot.error }}
             </div>
             <div v-else-if="hoverDirectoryTreeRows.length === 0" class="px-3 py-2 text-xs opacity-60">
-              空目录
+              {{ t('fileReader.emptyDirectory') }}
             </div>
             <template v-else>
               <div
@@ -313,7 +313,7 @@
                     v-if="row.entry.isDirectory"
                     class="btn btn-ghost btn-xs h-5 min-h-5 w-5 shrink-0 px-0"
                     type="button"
-                    :title="isHoverDirectoryExpanded(row.entry.path) ? '收起目录' : '展开目录'"
+                    :title="isHoverDirectoryExpanded(row.entry.path) ? t('fileReader.collapseDirectory') : t('fileReader.expandDirectory')"
                     @click.stop="toggleHoverDirectory(row.entry)"
                   >
                     <ChevronDown v-if="isHoverDirectoryExpanded(row.entry.path)" class="h-3.5 w-3.5" />
@@ -354,7 +354,10 @@ import { bundledLanguagesInfo, codeToHtml } from "shiki";
 import { invokeTauri } from "../../../services/tauri-api";
 import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
+import { useI18n } from "vue-i18n";
 import type { IdeContextReferenceItem } from "../../../types/app";
+
+const { t } = useI18n();
 
 initKatex();
 
@@ -1010,10 +1013,10 @@ function buildContextTextBlock(input: {
   const location = `${input.filePath}${formatLineSuffix(input.lineRange.startLine, input.lineRange.endLine)}`;
   const contentLength = input.content.length;
   if (contentLength > CONTEXT_TEXT_BLOCK_CONTENT_LIMIT) {
-    return `用户引用了文件片段：${location}（引用内容共 ${contentLength} 字符，超过 2000 字符，未附加正文）`;
+    return `${t('fileReader.referenceFile', { location })}${t('fileReader.referenceTruncated', { count: contentLength })}`;
   }
   return [
-    `用户引用了文件片段：${location}`,
+    t('fileReader.referenceFile', { location }),
     "```text",
     input.content,
     "```",
@@ -1325,9 +1328,9 @@ function migrateTabPath(tab: FileTab, fromPath: string, toPath: string) {
 function reportFileReaderActionFailure(action: string, path: string, error: unknown) {
   const detail = error instanceof Error ? error.message : String(error);
   console.error(`[文件阅读器] ${action}失败`, { path, error });
-  actionErrorMessage.value = `${action}失败：${path}；${detail}`;
+  actionErrorMessage.value = t('fileReader.actionFailed', { action, path, detail });
   window.setTimeout(() => {
-    if (actionErrorMessage.value === `${action}失败：${path}；${detail}`) {
+    if (actionErrorMessage.value === t('fileReader.actionFailed', { action, path, detail })) {
       actionErrorMessage.value = "";
     }
   }, 4500);
@@ -1407,12 +1410,12 @@ async function openWithDefaultProgram() {
   try {
     await invokeTauri("open_file_with_default_program", { path: tab.path });
   } catch (error) {
-    reportFileReaderActionFailure("用默认程序打开", tab.path, error);
+    reportFileReaderActionFailure(t('fileReader.actionOpenDefault'), tab.path, error);
   }
 }
 
 async function pickFile() {
-  const picked = await open({ multiple: false, directory: false, title: "打开文件" });
+  const picked = await open({ multiple: false, directory: false, title: t('fileReader.openFile') });
   if (!picked || Array.isArray(picked)) return;
   await openPath(String(picked));
 }
@@ -1639,7 +1642,7 @@ async function openShellAtDirectoryTreeRoot() {
   try {
     await invokeTauri("open_file_reader_directory_shell", { path: root.path });
   } catch (error) {
-    reportFileReaderActionFailure("打开 Shell", root.path, error);
+    reportFileReaderActionFailure(t('fileReader.actionOpenShell'), root.path, error);
   }
 }
 
@@ -1649,7 +1652,7 @@ async function openDirectoryInFileManager(path: string) {
   try {
     await invokeTauri("open_local_file_directory", { path: normalizedPath });
   } catch (error) {
-    reportFileReaderActionFailure("打开目录", normalizedPath, error);
+    reportFileReaderActionFailure(t('fileReader.actionOpenDirectory'), normalizedPath, error);
   }
 }
 
@@ -1714,11 +1717,11 @@ function flattenDirectoryEntries(entries: FileReaderDirectoryEntry[], depth: num
     if (!entry.isDirectory || !isTreeDirectoryExpanded(normalizedPath)) continue;
     const node = treeDirectoryNode(normalizedPath);
     if (!node || node.loading) {
-      rows.push({ kind: "status", key: `loading:${normalizedPath}`, depth: depth + 1, text: "正在读取目录" });
+      rows.push({ kind: "status", key: `loading:${normalizedPath}`, depth: depth + 1, text: t('fileReader.loadingDirectory') });
     } else if (node.error) {
       rows.push({ kind: "status", key: `error:${normalizedPath}`, depth: depth + 1, text: node.error });
     } else if (node.loaded && node.entries.length === 0) {
-      rows.push({ kind: "status", key: `empty:${normalizedPath}`, depth: depth + 1, text: "空目录" });
+      rows.push({ kind: "status", key: `empty:${normalizedPath}`, depth: depth + 1, text: t('fileReader.emptyDirectory') });
     } else if (node.loaded) {
       rows.push(...flattenDirectoryEntries(node.entries, depth + 1));
     }
@@ -1744,11 +1747,11 @@ function flattenDirectoryEntriesFromNodes(entries: FileReaderDirectoryEntry[], r
     if (!entry.isDirectory || !isExpanded) continue;
     if (!node) continue;
     if (node.loading) {
-      rows.push({ kind: "status", key: `loading:${normalizedPath}`, depth: depth + 1, text: "正在读取目录" });
+      rows.push({ kind: "status", key: `loading:${normalizedPath}`, depth: depth + 1, text: t('fileReader.loadingDirectory') });
     } else if (node.error) {
       rows.push({ kind: "status", key: `error:${normalizedPath}`, depth: depth + 1, text: node.error });
     } else if (node.loaded && node.entries.length === 0) {
-      rows.push({ kind: "status", key: `empty:${normalizedPath}`, depth: depth + 1, text: "空目录" });
+      rows.push({ kind: "status", key: `empty:${normalizedPath}`, depth: depth + 1, text: t('fileReader.emptyDirectory') });
     } else if (node.loaded) {
       rows.push(...flattenDirectoryEntriesFromNodes(node.entries, normalizedPath, nodes, depth + 1));
     }

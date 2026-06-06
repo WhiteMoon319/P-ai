@@ -2305,7 +2305,7 @@ function buildContactLogDisplayItem(log: ChannelLogEntry): ContactLogDisplayItem
     return {
       timestamp: log.timestamp,
       level: log.level,
-      kind: "消息",
+      kind: t('config.remoteIm.logKindMessage'),
       title: "",
       summary: `${senderId ? `[${senderName}/${senderId}]` : `[${senderName}]`}${preview}`,
       detail: extras.length > 0 ? extras.join("，") : undefined,
@@ -2315,9 +2315,9 @@ function buildContactLogDisplayItem(log: ChannelLogEntry): ContactLogDisplayItem
     return {
       timestamp: log.timestamp,
       level: log.level,
-      kind: "去重",
-      title: "重复消息已跳过",
-      summary: contactLogField(message, "preview") || "这条消息之前已经处理过",
+      kind: t('config.remoteIm.logKindDedup'),
+      title: t('config.remoteIm.logDedupTitle'),
+      summary: contactLogField(message, "preview") || t('config.remoteIm.logDedupSummary'),
     };
   }
   if (message.startsWith("[联系人消息] 入队:")) {
@@ -2325,9 +2325,9 @@ function buildContactLogDisplayItem(log: ChannelLogEntry): ContactLogDisplayItem
       ? {
           timestamp: log.timestamp,
           level: log.level,
-          kind: "系统",
-          title: "消息入队失败",
-          summary: contactLogField(message, "reason") || "消息没有成功进入处理链路",
+          kind: t('config.remoteIm.logKindSystem'),
+          title: t('config.remoteIm.logEnqueueFailed'),
+          summary: contactLogField(message, "reason") || t('config.remoteIm.logEnqueueFailedSummary'),
         }
       : null;
   }
@@ -2336,9 +2336,9 @@ function buildContactLogDisplayItem(log: ChannelLogEntry): ContactLogDisplayItem
     return {
       timestamp: log.timestamp,
       level: log.level,
-      kind: "状态",
+      kind: t('config.remoteIm.logKindStatus'),
       title: contactLogStateSummary(message),
-      summary: reason ? `原因：${reason}` : "",
+      summary: reason ? t('config.remoteIm.logReason', { reason }) : "",
     };
   }
   if (message.startsWith("[联系人状态] 历史落地:")) {
@@ -2346,9 +2346,9 @@ function buildContactLogDisplayItem(log: ChannelLogEntry): ContactLogDisplayItem
       ? {
           timestamp: log.timestamp,
           level: log.level,
-          kind: "系统",
-          title: "消息写入历史失败",
-          summary: contactLogField(message, "reason") || "历史落地失败",
+          kind: t('config.remoteIm.logKindSystem'),
+          title: t('config.remoteIm.logHistoryWriteFailed'),
+          summary: contactLogField(message, "reason") || t('config.remoteIm.logHistoryWriteFailedSummary'),
         }
       : null;
   }
@@ -2356,9 +2356,9 @@ function buildContactLogDisplayItem(log: ChannelLogEntry): ContactLogDisplayItem
     return {
       timestamp: log.timestamp,
       level: log.level,
-      kind: "发送",
-      title: "[发送失败]",
-      summary: contactLogField(message, "preview") || "发送内容已省略",
+      kind: t('config.remoteIm.logKindSend'),
+      title: t('config.remoteIm.logSendFailed'),
+      summary: contactLogField(message, "preview") || t('config.remoteIm.logSendContentOmitted'),
       detail: contactLogField(message, "error") || undefined,
     };
   }
@@ -2366,18 +2366,18 @@ function buildContactLogDisplayItem(log: ChannelLogEntry): ContactLogDisplayItem
     return {
       timestamp: log.timestamp,
       level: log.level,
-      kind: "发送",
-      title: "[跳过发送]",
-      summary: contactLogField(message, "reason") || "本次没有对外发送",
+      kind: t('config.remoteIm.logKindSend'),
+      title: t('config.remoteIm.logSendSkipped'),
+      summary: contactLogField(message, "reason") || t('config.remoteIm.logSendSkippedSummary'),
     };
   }
   if (message.startsWith("[联系人消息] 发出:")) {
     return {
       timestamp: log.timestamp,
       level: log.level,
-      kind: "发送",
+      kind: t('config.remoteIm.logKindSend'),
       title: "",
-      summary: `[发送消息]${contactLogField(message, "preview") || "发送内容已省略"}`,
+      summary: t('config.remoteIm.logSentMessage', { preview: contactLogField(message, "preview") || t('config.remoteIm.logSendContentOmitted') }),
     };
   }
   if (message.startsWith("[联系人状态] 轮次结束:")) {
@@ -2386,17 +2386,17 @@ function buildContactLogDisplayItem(log: ChannelLogEntry): ContactLogDisplayItem
     return {
       timestamp: log.timestamp,
       level: log.level,
-      kind: "状态",
+      kind: t('config.remoteIm.logKindStatus'),
       title: contactLogStateSummary(message),
       summary: contactLogStateSummary(message),
-      detail: `本轮处理：${decision}；继续跟进：${followUp}`,
+      detail: t('config.remoteIm.logTurnDetail', { decision, followUp }),
     };
   }
   if (message.startsWith("[联系人状态] 轮次收尾失败:")) {
     return {
       timestamp: log.timestamp,
       level: log.level,
-      kind: "状态",
+      kind: t('config.remoteIm.logKindStatus'),
       title: contactLogStateSummary(message),
       summary: contactLogStateSummary(message),
       detail: contactLogField(message, "error") || undefined,
@@ -2409,9 +2409,9 @@ function buildContactLogDisplayItem(log: ChannelLogEntry): ContactLogDisplayItem
     ? {
         timestamp: log.timestamp,
         level: log.level,
-        kind: "系统",
-        title: "系统记录了一条异常日志",
-        summary: "这条日志还没有整理成人话格式，但因为它是异常，所以保留显示。",
+        kind: t('config.remoteIm.logKindSystem'),
+        title: t('config.remoteIm.logAbnormalTitle'),
+        summary: t('config.remoteIm.logAbnormalSummary'),
       }
     : null;
 }
@@ -2420,7 +2420,7 @@ async function deleteContact(item: RemoteImContact) {
   if (contactsDisabled.value) return;
   if (contactDeleting.value) return;
   const displayName = contactSafeDisplayName(item);
-  const confirmed = window.confirm(`确定删除联系人“${displayName}”吗？\n仅删除联系人记录，不清理已有会话历史。`);
+  const confirmed = window.confirm(t('config.remoteIm.deleteContactConfirm', { name: displayName }));
   if (!confirmed) return;
   contactDeleting.value = true;
   try {
@@ -2428,7 +2428,7 @@ async function deleteContact(item: RemoteImContact) {
       input: { contactId: item.id },
     });
     if (!removed) {
-      props.setStatusAction(`删除联系人失败：未找到 ${displayName}`);
+      props.setStatusAction(t('config.remoteIm.deleteContactNotFound', { name: displayName }));
       return;
     }
     if (selectedContactId.value === item.id) {
@@ -2438,9 +2438,9 @@ async function deleteContact(item: RemoteImContact) {
       contactDraftSnapshot.value = "";
     }
     await refreshContacts();
-    props.setStatusAction(`已删除联系人：${displayName}。已有会话历史已保留。`);
+    props.setStatusAction(t('config.remoteIm.deleteContactSuccess', { name: displayName }));
   } catch (error) {
-    props.setStatusAction(`删除联系人失败：${String(error)}`);
+    props.setStatusAction(t('config.remoteIm.deleteContactFailed', { error: String(error) }));
   } finally {
     contactDeleting.value = false;
   }
@@ -2485,7 +2485,7 @@ function contactAvatarUrl(item: RemoteImContact): string {
 function contactAvatarFallbackText(item: RemoteImContact): string {
   const name = contactSafeDisplayName(item).trim();
   if (name) return Array.from(name)[0] || "?";
-  return item.remoteContactType === "group" ? "群" : "私";
+  return item.remoteContactType === "group" ? t('config.remoteIm.avatarGroup') : t('config.remoteIm.avatarPrivate');
 }
 
 function contactProcessingModeBadgeClass(item: RemoteImContact): string {
@@ -2611,22 +2611,22 @@ function onebotStatusText(status: ChannelConnectionStatus | null): string {
 function channelStatusPreview(channel: RemoteImChannelConfig): string {
   if (channel.platform === "weixin_oc") {
     const status = channelRuntimeStates.value[channel.id];
-    if (!status) return "未初始化";
-    if (status.connected) return "已连接";
+    if (!status) return t('config.remoteIm.statusUninitialized');
+    if (status.connected) return t('config.remoteIm.statusWeixinConnected');
     if (!channel.enabled) {
       if (status.statusText === "confirmed" || status.statusText === "logged_in") {
-        return "已登录未启用";
+        return t('config.remoteIm.statusWeixinLoggedInNotEnabled');
       }
-      if (status.accountId) return "已登录未启用";
-      if (status.statusText === "need_login") return "未启用（待扫码登录）";
+      if (status.accountId) return t('config.remoteIm.statusWeixinLoggedInNotEnabled');
+      if (status.statusText === "need_login") return t('config.remoteIm.statusWeixinNotEnabledScan');
       return t("config.remoteIm.disabledState");
     }
-    if (status.statusText === "need_login") return "待扫码登录";
+    if (status.statusText === "need_login") return t('config.remoteIm.statusWeixinWaitingScan');
     if (status.statusText === "confirmed" || status.statusText === "logged_in") {
-      return "已登录";
+      return t('config.remoteIm.statusWeixinLoggedIn');
     }
-    if (status.statusText === "wait" || status.statusText === "scaned") return "等待扫码确认";
-    return status.lastError || status.statusText || "未连接";
+    if (status.statusText === "wait" || status.statusText === "scaned") return t('config.remoteIm.statusWeixinWaitingConfirm');
+    return status.lastError || status.statusText || t('config.remoteIm.statusWeixinNotConnected');
   }
   if (channel.platform === "dingtalk") {
     const status = channelRuntimeStates.value[channel.id];
@@ -2662,12 +2662,12 @@ function channelListStatusBadgeText(channel: RemoteImChannelConfig): string {
   if (channel.platform === "onebot_v11" || channel.platform === "dingtalk" || channel.platform === "weixin_oc") {
     const status = channelRuntimeStates.value[channel.id];
     if (status?.connected) return t("config.remoteIm.connected");
-    if (channel.platform === "onebot_v11" && status?.statusText === "binding_retry") return "重试绑定";
-    if (channel.platform === "onebot_v11" && status?.statusText === "bind_failed") return "绑定失败";
-    if (channel.platform === "onebot_v11" && status?.statusText === "disabled") return "已禁用";
-    if (channel.platform === "onebot_v11" && status?.statusText === "binding") return "绑定中";
-    if (channel.platform === "onebot_v11" && status?.listenAddr) return "等待连接";
-    if (channel.platform === "weixin_oc" && status?.statusText === "need_login") return "待登录";
+    if (channel.platform === "onebot_v11" && status?.statusText === "binding_retry") return t('config.remoteIm.statusRetryBinding');
+    if (channel.platform === "onebot_v11" && status?.statusText === "bind_failed") return t('config.remoteIm.statusBindFailed');
+    if (channel.platform === "onebot_v11" && status?.statusText === "disabled") return t('config.remoteIm.statusDisabled');
+    if (channel.platform === "onebot_v11" && status?.statusText === "binding") return t('config.remoteIm.statusBinding');
+    if (channel.platform === "onebot_v11" && status?.listenAddr) return t('config.remoteIm.statusWaitingConnection');
+    if (channel.platform === "weixin_oc" && status?.statusText === "need_login") return t('config.remoteIm.statusWaitingLogin');
     return t("config.remoteIm.enabledState");
   }
   return t("config.remoteIm.enabledState");

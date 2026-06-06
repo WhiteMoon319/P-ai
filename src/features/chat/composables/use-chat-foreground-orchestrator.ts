@@ -1,6 +1,9 @@
 import { nextTick } from "vue";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { i18n } from "../../../i18n";
 import { invokeTauri } from "../../../services/tauri-api";
+
+const t = i18n.global.t;
 
 export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
   async function requestConversationLightSnapshot(conversationId?: string | null) {

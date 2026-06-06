@@ -1,5 +1,8 @@
+import { i18n } from "../../../i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import { resolveModelRoleApiConfigId } from "../../config/utils/model-role-options";
+
+const t = i18n.global.t;
 
 export function useChatWindowLocalTools(bindings: Record<string, any>) {
   const preferredModelPersistPending = new Map<string, Promise<boolean>>();

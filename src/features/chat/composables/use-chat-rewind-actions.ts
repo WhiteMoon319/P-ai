@@ -1,6 +1,9 @@
 import { type Ref, type ShallowRef } from "vue";
+import { i18n } from "../../../i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ChatMentionTarget, ChatMessage } from "../../../types/app";
+
+const t = i18n.global.t;
 
 type RewindConversationResult = {
   removedCount: number;

@@ -6,7 +6,7 @@
     <div class="flex-1 bg-base-content/20" @click="emit('close')"></div>
     <div class="flex h-full w-80 min-w-0 flex-col border-l border-base-300 bg-base-100 shadow-lg">
       <div class="flex h-10 shrink-0 items-center justify-between border-b border-base-300 px-3">
-        <span class="text-sm font-semibold">审查</span>
+        <span class="text-sm font-semibold">{{ t('sidebar.reviewTitle') }}</span>
         <button
           type="button"
           class="btn btn-ghost btn-sm h-7 min-h-7 w-7 px-0"
@@ -34,11 +34,11 @@
 
       <div v-if="loading && reports.length === 0" class="flex flex-1 items-center justify-center text-sm text-base-content/65">
         <span class="loading loading-spinner loading-sm mr-2"></span>
-        加载中
+        {{ t('sidebar.reviewLoading') }}
       </div>
 
       <div v-else-if="reports.length === 0" class="flex flex-1 items-center justify-center px-4 text-center text-sm text-base-content/65">
-        暂无审查报告
+        {{ t('sidebar.reviewEmpty') }}
       </div>
 
       <div v-else class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto py-2 px-3">
@@ -67,14 +67,14 @@
                   class="btn btn-sm gap-1.5 border-base-300 bg-base-100 font-normal hover:bg-base-100"
                   :disabled="deleting"
                   @click.prevent.stop="emit('deleteReport', report)"
-                >删除</button>
+                >{{ t('sidebar.reviewDelete') }}</button>
                 <button
                   v-if="canRetryReport(report)"
                   type="button"
                   class="btn btn-sm gap-1.5 border-base-300 bg-base-100 font-normal hover:bg-base-100"
                   :disabled="submitting"
                   @click.prevent.stop="emit('retryReport', report)"
-                >重新生成</button>
+                >{{ t('sidebar.reviewRegenerate') }}</button>
               </div>
             </div>
           </details>
@@ -112,9 +112,9 @@ function canRetryReport(report: ToolReviewReportRecord) {
 }
 
 function formatReportStatus(status: string) {
-  if (status === "success") return "已完成";
-  if (status === "failed") return "生成失败";
-  return "生成中";
+  if (status === "success") return t('sidebar.reviewStatusSuccess');
+  if (status === "failed") return t('sidebar.reviewStatusFailed');
+  return t('sidebar.reviewStatusGenerating');
 }
 
 function reportStatusBadgeClass(status: string) {
@@ -125,29 +125,29 @@ function reportStatusBadgeClass(status: string) {
 
 function formatReportScope(scope: string) {
   if (scope === "commit") return "commit";
-  if (scope === "main") return "主分支差异";
-  if (scope === "uncommitted") return "未提交改动";
-  if (scope === "custom") return "自定义";
-  return scope || "未知范围";
+  if (scope === "main") return t('sidebar.reviewScopeMain');
+  if (scope === "uncommitted") return t('sidebar.reviewScopeUncommitted');
+  if (scope === "custom") return t('sidebar.reviewScopeCustom');
+  return scope || t('sidebar.reviewScopeUnknown');
 }
 
 function reportJudgementSummary(report: ToolReviewReportRecord) {
-  if (report.status === "pending") return "生成中...";
-  if (report.status === "failed") return report.errorText || "生成失败";
+  if (report.status === "pending") return t('sidebar.reviewGenerating');
+  if (report.status === "failed") return report.errorText || t('sidebar.reviewStatusFailed');
   const parsed = parseToolReviewJson(report.reportText);
   if (parsed) {
-    const judgement = formatJsonCorrectness(stringField(parsed.raw.overall_correctness) || "未知判定");
+    const judgement = formatJsonCorrectness(stringField(parsed.raw.overall_correctness) || t('sidebar.reviewUnknownJudgement'));
     const confidence = numberField(parsed.raw.overall_confidence_score);
-    return confidence === null ? judgement : `${judgement} · 置信度 ${confidence.toFixed(2)}`;
+    return confidence === null ? judgement : `${judgement} · ${t('sidebar.reviewConfidence', { value: confidence.toFixed(2) })}`;
   }
-  const judgement = reportMarkdownField(report, "整体判定") || "未知判定";
+  const judgement = reportMarkdownField(report, "整体判定") || t('sidebar.reviewUnknownJudgement');
   const confidence = reportMarkdownField(report, "整体置信度");
-  return confidence ? `${judgement} · 置信度 ${confidence}` : judgement;
+  return confidence ? `${judgement} · ${t('sidebar.reviewConfidence', { value: confidence })}` : judgement;
 }
 
 function reportExpandedText(report: ToolReviewReportRecord) {
-  if (report.status === "pending") return "生成中";
-  if (report.status === "failed") return report.errorText || "生成失败";
+  if (report.status === "pending") return t('sidebar.reviewStatusGenerating');
+  if (report.status === "failed") return report.errorText || t('sidebar.reviewStatusFailed');
   const parsed = parseToolReviewJson(report.reportText);
   if (parsed) return stringField(parsed.raw.overall_explanation) || report.reportText || t("chat.toolReview.noReportContent");
   return reportMarkdownField(report, "判定说明") || report.reportText || t("chat.toolReview.noReportContent");
@@ -188,9 +188,9 @@ function numberField(value: unknown): number | null {
 
 function formatJsonCorrectness(raw: string) {
   const lower = String(raw || "").toLowerCase().trim();
-  if (lower === "correct" || lower === "yes") return "代码正确";
-  if (lower === "incorrect" || lower === "no") return "代码有误";
-  if (lower === "partially_correct" || lower === "partial") return "部分正确";
-  return raw || "未知判定";
+  if (lower === "correct" || lower === "yes") return t('sidebar.reviewCorrect');
+  if (lower === "incorrect" || lower === "no") return t('sidebar.reviewIncorrect');
+  if (lower === "partially_correct" || lower === "partial") return t('sidebar.reviewPartiallyCorrect');
+  return raw || t('sidebar.reviewUnknownJudgement');
 }
 </script>
