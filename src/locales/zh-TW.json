@@ -368,7 +368,8 @@
       "resetWorkspacePathDone": "已恢復為預設自我目錄路徑: {path}（請點擊儲存）",
       "resetWorkspacePathFailed": "重置自我目錄路徑失敗: {err}",
       "systemCatalogTitle": "系統工具目錄",
-      "systemCatalogReadonly": "部門權限到部門去修改"
+      "systemCatalogReadonly": "部門權限到部門去修改",
+      "workspaceAlreadyExists": "同名目錄已存在，請換一個名稱"
     },
     "persona": {
       "title": "人格",
@@ -569,7 +570,7 @@
         "dingtalk": "釘釘",
         "weixinOc": "個人微信"
       },
-      "allowSendFiles": "允許發送文件",
+      "allowSendFiles": "可發檔案",
       "credentialsJson": "憑證(JSON)",
       "dingtalkCredentials": "釘釘憑證",
       "dingtalkClientId": "Client ID",
@@ -590,7 +591,7 @@
       "allowSend": "允許發送",
       "allowReceive": "允許收信",
       "contactSettingsTitle": "聯絡人設定 · {name}",
-      "weixinContact": "微信聯絡人",
+      "weixinContact": "微信聯繫人",
       "processingDepartment": "處理部門",
       "processingMode": "處理模式",
       "processingModeContinuous": "視窗式上下文",
@@ -680,7 +681,6 @@
       "channelToggleFailed": "渠道重啟失敗，開關未完全生效: {error}",
       "channelSaveFailed": "儲存失敗，渠道狀態未生效。",
       "contactContinueSession": "聯繫人消息將繼續使用該聯繫人的獨立會話。",
-      "allowSendFiles": "可發檔案",
       "denySendFiles": "禁發檔案",
       "channelDisabledBadge": "渠道已禁用",
       "portOccupiedRetry": "固定端口被占用，正在重試",
@@ -699,7 +699,6 @@
       "weixinLoggedOut": "個人微信已退出登錄。",
       "weixinLogoutFailed": "個人微信退出登錄失敗: {error}",
       "weixinScanLoginFailed": "個人微信掃碼登錄失敗: {error}",
-      "weixinContact": "微信聯繫人",
       "weixinGroupContact": "微信群聯繫人",
       "weixinPrivateContact": "微信個人聯繫人",
       "logKindMessage": "消息",
@@ -1213,9 +1212,9 @@
       "evaluateBatchWithCount": "評估未評估（{count}）",
       "generateReviewReport": "發起代碼審查",
       "scopeUncommitted": "未提交改動",
-      "scopeMain": "與主分支差異",
+      "scopeMain": "主分支差異",
       "scopeCommit": "指定 commit",
-      "scopeCustom": "自訂範圍",
+      "scopeCustom": "自定義",
       "commitPickerLoading": "正在載入 commit 列表...",
       "commitPickerEmpty": "目前沒有可選 commit。",
       "customDialogPlaceholder": "例如 只審查最近一次重構涉及的視窗切換邏輯",
@@ -1262,9 +1261,6 @@
       "durationHoursMinutes": "{hours}時{minutes}分",
       "durationMinutesSeconds": "{minutes}分{seconds}秒",
       "durationSeconds": "{seconds}秒",
-      "scopeMain": "主分支差異",
-      "scopeUncommitted": "未提交改動",
-      "scopeCustom": "自定義",
       "scopeUnknown": "未知範圍"
     },
     "selection": {

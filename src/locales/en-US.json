@@ -368,7 +368,8 @@
       "resetWorkspacePathDone": "Self directory path restored to default: {path} (click Save to persist)",
       "resetWorkspacePathFailed": "Failed to reset self directory path: {err}",
       "systemCatalogTitle": "System Tool Catalog",
-      "systemCatalogReadonly": "Edit department permissions in Department settings"
+      "systemCatalogReadonly": "Edit department permissions in Department settings",
+      "workspaceAlreadyExists": "A workspace with this name already exists. Please choose a different name."
     },
     "persona": {
       "title": "Persona",
@@ -569,7 +570,7 @@
         "dingtalk": "DingTalk",
         "weixinOc": "Personal WeChat"
       },
-      "allowSendFiles": "Allow Sending Files",
+      "allowSendFiles": "Allow sending files",
       "credentialsJson": "Credentials (JSON)",
       "dingtalkCredentials": "DingTalk Credentials",
       "dingtalkClientId": "Client ID",
@@ -590,7 +591,7 @@
       "allowSend": "Allow Send",
       "allowReceive": "Allow Receive",
       "contactSettingsTitle": "Contact Settings · {name}",
-      "weixinContact": "WeChat Contact",
+      "weixinContact": "WeChat contact",
       "processingDepartment": "Processing Department",
       "processingMode": "Processing Mode",
       "processingModeContinuous": "Windowed Context",
@@ -680,7 +681,6 @@
       "channelToggleFailed": "Channel restart failed, toggle not fully applied: {error}",
       "channelSaveFailed": "Save failed, channel status not applied.",
       "contactContinueSession": "Contact messages will continue to use this contact's independent session.",
-      "allowSendFiles": "Allow sending files",
       "denySendFiles": "Deny sending files",
       "channelDisabledBadge": "Channel disabled",
       "portOccupiedRetry": "Port occupied, retrying",
@@ -699,7 +699,6 @@
       "weixinLoggedOut": "WeChat logged out.",
       "weixinLogoutFailed": "WeChat logout failed: {error}",
       "weixinScanLoginFailed": "WeChat scan login failed: {error}",
-      "weixinContact": "WeChat contact",
       "weixinGroupContact": "WeChat group contact",
       "weixinPrivateContact": "WeChat private contact",
       "logKindMessage": "Message",
@@ -1219,9 +1218,9 @@
       "evaluateBatchWithCount": "Assess unassessed ({count})",
       "generateReviewReport": "Start code review",
       "scopeUncommitted": "Uncommitted changes",
-      "scopeMain": "Diff vs main",
+      "scopeMain": "Diff from main",
       "scopeCommit": "Specific commit",
-      "scopeCustom": "Custom range",
+      "scopeCustom": "Custom",
       "commitPickerLoading": "Loading commit list...",
       "commitPickerEmpty": "No commits available.",
       "customDialogPlaceholder": "e.g. Review only the recent window switching refactor",
@@ -1268,9 +1267,6 @@
       "durationHoursMinutes": "{hours}h{minutes}m",
       "durationMinutesSeconds": "{minutes}m{seconds}s",
       "durationSeconds": "{seconds}s",
-      "scopeMain": "Diff from main",
-      "scopeUncommitted": "Uncommitted changes",
-      "scopeCustom": "Custom",
       "scopeUnknown": "Unknown scope"
     },
     "selection": {

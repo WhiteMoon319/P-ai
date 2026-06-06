@@ -368,7 +368,8 @@
       "resetWorkspacePathDone": "已恢复为默认自我目录路径: {path}（请点击保存）",
       "resetWorkspacePathFailed": "重置自我目录路径失败: {err}",
       "systemCatalogTitle": "系统工具目录",
-      "systemCatalogReadonly": "部门权限到部门去修改"
+      "systemCatalogReadonly": "部门权限到部门去修改",
+      "workspaceAlreadyExists": "同名目录已存在，请换一个名称"
     },
     "persona": {
       "title": "人格",
@@ -569,7 +570,7 @@
         "dingtalk": "钉钉",
         "weixinOc": "个人微信"
       },
-      "allowSendFiles": "允许发送文件",
+      "allowSendFiles": "可发文件",
       "credentialsJson": "凭证(JSON)",
       "dingtalkCredentials": "钉钉凭证",
       "dingtalkClientId": "Client ID",
@@ -680,7 +681,6 @@
       "channelToggleFailed": "渠道重启失败，开关未完全生效: {error}",
       "channelSaveFailed": "保存失败，渠道状态未生效。",
       "contactContinueSession": "联系人消息将继续使用该联系人的独立会话。",
-      "allowSendFiles": "可发文件",
       "denySendFiles": "禁发文件",
       "channelDisabledBadge": "渠道已禁用",
       "portOccupiedRetry": "固定端口被占用，正在重试",
@@ -699,7 +699,6 @@
       "weixinLoggedOut": "个人微信已退出登录。",
       "weixinLogoutFailed": "个人微信退出登录失败: {error}",
       "weixinScanLoginFailed": "个人微信扫码登录失败: {error}",
-      "weixinContact": "微信联系人",
       "weixinGroupContact": "微信群联系人",
       "weixinPrivateContact": "微信个人联系人",
       "logKindMessage": "消息",
@@ -1213,9 +1212,9 @@
       "evaluateBatchWithCount": "评估未评估（{count}）",
       "generateReviewReport": "发起代码审查",
       "scopeUncommitted": "未提交改动",
-      "scopeMain": "与主分支差异",
+      "scopeMain": "主分支差异",
       "scopeCommit": "指定 commit",
-      "scopeCustom": "自定义范围",
+      "scopeCustom": "自定义",
       "commitPickerLoading": "正在加载 commit 列表...",
       "commitPickerEmpty": "当前没有可选 commit。",
       "customDialogPlaceholder": "例如 只审查最近一次重构涉及的窗口切换逻辑",
@@ -1262,9 +1261,6 @@
       "durationHoursMinutes": "{hours}时{minutes}分",
       "durationMinutesSeconds": "{minutes}分{seconds}秒",
       "durationSeconds": "{seconds}秒",
-      "scopeMain": "主分支差异",
-      "scopeUncommitted": "未提交改动",
-      "scopeCustom": "自定义",
       "scopeUnknown": "未知范围"
     },
     "selection": {

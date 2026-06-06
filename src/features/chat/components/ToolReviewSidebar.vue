@@ -13,7 +13,7 @@
 
       <template v-if="activeTab === 'tools' && currentBatch">
         <div class="flex min-h-full flex-col">
-          <div class="sticky top-0 z-30 bg-base-200 px-4 py-3">
+          <div class="sticky top-0 z-30 bg-base-200 px-4">
             <button
               type="button"
               class="btn btn-sm w-full bg-base-100 hover:bg-base-100"
@@ -29,7 +29,7 @@
               <div
                 role="button"
                 tabindex="0"
-                class="group/section sticky top-14 z-20 mx-1 flex h-9 items-center gap-2 rounded-lg bg-base-200/95 px-2 text-left text-xs font-semibold text-base-content backdrop-blur transition-colors hover:bg-base-300/70"
+                class="group/section sticky top-0 z-20 mx-1 flex h-9 items-center gap-2 rounded-lg bg-base-200/95 px-2 text-left text-xs font-semibold text-base-content backdrop-blur transition-colors hover:bg-base-300/70"
                 :title="group.title"
                 @click="toggleToolAssessmentSection(group.key)"
                 @keydown.enter.prevent="toggleToolAssessmentSection(group.key)"
@@ -136,7 +136,7 @@
         </section>
       </template>
       <div v-else class="flex min-h-0 flex-1 flex-col">
-        <div class="sticky top-0 z-30 bg-base-200 px-4 py-3">
+        <div class="sticky top-0 z-30 bg-base-200 px-4">
           <button
             type="button"
             class="btn btn-sm w-full bg-base-100 hover:bg-base-100"
@@ -157,7 +157,7 @@
             <div
               role="button"
               tabindex="0"
-              class="group/section sticky top-14 z-20 mx-1 flex h-9 items-center gap-2 rounded-lg bg-base-200/95 px-2 text-left text-xs font-semibold text-base-content backdrop-blur transition-colors hover:bg-base-300/70"
+              class="group/section sticky top-0 z-20 mx-1 flex h-9 items-center gap-2 rounded-lg bg-base-200/95 px-2 text-left text-xs font-semibold text-base-content backdrop-blur transition-colors hover:bg-base-300/70"
               :title="section.title"
               @click="toggleCodeReviewSection(section.key)"
               @keydown.enter.prevent="toggleCodeReviewSection(section.key)"
