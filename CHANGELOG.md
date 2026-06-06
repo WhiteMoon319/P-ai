@@ -1,5 +1,10 @@
 # 变更日志
 
+## 发布：v0.10.22
+
+- 修复（chat）：上下文压缩 token 估算虚高，跳过 reasoning_content、tool_calls 只算 function.name + arguments。
+- 修复（chat）：缓存误消费导致工具续调前全量估算，consume_* 改为 resolve_* 保留缓存值。
+
 ## 发布：v0.10.21
 
 - 修复（tool-review）：工具评估超时从 12s 硬编码改为 120s，超时后写回可读结论而非直接报错。
