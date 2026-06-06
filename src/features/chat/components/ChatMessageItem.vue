@@ -27,7 +27,7 @@
         :class="selected
           ? 'border-primary bg-primary text-primary-content'
           : 'border-base-300 bg-base-100 text-transparent hover:border-primary/60'"
-        :title="selected ? '取消选择' : '选择消息'"
+        :title="selected ? t('chat.messageItem.cancelSelect') : t('chat.messageItem.selectMessage')"
         @click.stop="emit('toggleMessageSelected', selectionKey)"
       >
         <span class="text-[10px] leading-none">✓</span>
@@ -60,7 +60,7 @@
           :class="selected
             ? 'border-primary bg-primary text-primary-content'
             : 'border-base-300 bg-base-100 text-transparent hover:border-primary/60'"
-          :title="selected ? '取消选择' : '选择消息'"
+          :title="selected ? t('chat.messageItem.cancelSelect') : t('chat.messageItem.selectMessage')"
           @click.stop="emit('toggleMessageSelected', selectionKey)"
         >
           <span class="text-[10px] leading-none">✓</span>
@@ -174,7 +174,7 @@
                           v-else-if="activityToolResultText(item)"
                           class="m-0 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded bg-base-200/60 p-2 text-xs leading-relaxed text-base-content/75"
                         ><code>{{ activityToolResultText(item) }}</code></pre>
-                        <div v-else class="text-xs text-base-content/45">暂无工具结果</div>
+                        <div v-else class="text-xs text-base-content/45">{{ t('chat.messageItem.noToolResult') }}</div>
                       </div>
                     </details>
                   </div>
@@ -266,7 +266,7 @@
             class="flex h-28 w-28 items-center justify-center rounded bg-base-200/70 text-[11px] text-base-content/55"
           >
             <span class="loading loading-spinner loading-xs mr-2"></span>
-            <span>图片加载中</span>
+            <span>{{ t('chat.messageItem.imageLoading') }}</span>
           </div>
           <div v-else-if="isPdfMime(img.mime)" class="badge badge-ghost gap-1 py-3 w-fit">
             <FileText class="h-3.5 w-3.5" />
@@ -331,7 +331,7 @@
               v-if="!selectionModeEnabled"
               type="button"
               class="ecall-message-footer-action inline-flex h-6 min-w-6 items-center justify-center rounded px-1 text-[11px] text-base-content/55 hover:text-base-content"
-              :title="'多选'"
+              :title="t('chat.messageItem.multiSelect')"
               :class="!block.isStreaming ? '' : 'opacity-0 pointer-events-none'"
               :disabled="block.isStreaming"
               @click="emit('enterSelectionMode', selectionKey)"
@@ -352,7 +352,7 @@
               v-if="hideToggleEnabled && !selectionModeEnabled"
               type="button"
               class="ecall-message-footer-action inline-flex h-6 w-6 items-center justify-center rounded text-base-content/55 hover:text-base-content"
-              :title="bubbleBackgroundHidden ? '显示气泡背景' : '隐藏气泡背景'"
+              :title="bubbleBackgroundHidden ? t('chat.messageItem.showBubble') : t('chat.messageItem.hideBubble')"
               :disabled="block.isStreaming"
               @click="emit('toggleBubbleBackground', selectionKey)"
             >
@@ -373,9 +373,9 @@
             <span
               v-if="finalDispatchElapsedLabel(block) && !selectionModeEnabled"
               class="inline-flex h-6 shrink-0 items-center rounded px-1 text-[11px] font-medium text-base-content/60"
-              :title="`本次调度用时 ${finalDispatchElapsedLabel(block)}`"
+              :title="t('chat.messageItem.dispatchElapsed', { elapsed: finalDispatchElapsedLabel(block) })"
             >
-              {{ `用时 ${finalDispatchElapsedLabel(block)}` }}
+              {{ t('chat.messageItem.elapsed', { elapsed: finalDispatchElapsedLabel(block) }) }}
             </span>
           </div>
         </div>
@@ -436,7 +436,7 @@
               class="flex h-28 w-28 items-center justify-center rounded bg-base-200/70 text-[11px] text-base-content/55"
             >
               <span class="loading loading-spinner loading-xs mr-2"></span>
-              <span>图片加载中</span>
+              <span>{{ t('chat.messageItem.imageLoading') }}</span>
             </div>
             <div v-else-if="isPdfMime(img.mime)" class="badge badge-ghost gap-1 py-3 w-fit">
               <FileText class="h-3.5 w-3.5" />
@@ -484,7 +484,7 @@
           v-if="hideToggleEnabled"
           type="button"
           class="ecall-message-recall-action inline-flex h-5 w-5 items-center justify-center rounded text-base-content/40 hover:text-base-content"
-          :title="bubbleBackgroundHidden ? '显示气泡背景' : '隐藏气泡背景'"
+          :title="bubbleBackgroundHidden ? t('chat.messageItem.showBubble') : t('chat.messageItem.hideBubble')"
           :disabled="selectionModeEnabled || block.isStreaming"
           @click="emit('toggleBubbleBackground', selectionKey)"
         >
@@ -605,7 +605,7 @@ watch(
     } catch (error) {
       if (cancelled || disposed) return;
       const message =
-        error instanceof Error ? error.message : String(error || "读取计划文件失败");
+        error instanceof Error ? error.message : String(error || t('chat.messageItem.readPlanFailed'));
       planMarkdownError.value = message;
     } finally {
       if (!cancelled && !disposed) {
@@ -735,7 +735,7 @@ function assistantStreamingHeaderStatus(block: ChatMessageBlock): string {
   if (preStreamingStatusText) return withElapsed(preStreamingStatusText);
   const toolCalls = toolCallsForBlock(block);
   const doingTool = toolCalls.find((call) => call.status === "doing");
-  if (doingTool?.name) return withElapsed(`正在执行 ${doingTool.name} 中`);
+  if (doingTool?.name) return withElapsed(t('chat.messageItem.executingTool', { name: doingTool.name }));
   if (hasStreamingSpeechContent(block)) {
     return withElapsed(t("chat.statusSpeaking"));
   }
@@ -803,10 +803,10 @@ function activityReasoningCountLabel(block: ChatMessageBlock): string {
 }
 
 function activityStatusText(block: ChatMessageBlock): string {
-  if (block.activityStatus === "running_tool") return "正在执行工具";
-  if (block.activityStatus === "thinking") return "正在思考";
-  if (block.activityStatus === "requesting") return "正在请求";
-  return "思考与工具";
+  if (block.activityStatus === "running_tool") return t('chat.messageItem.runningTool');
+  if (block.activityStatus === "thinking") return t('chat.messageItem.thinking');
+  if (block.activityStatus === "requesting") return t('chat.messageItem.requesting');
+  return t('chat.messageItem.thinkingAndTools');
 }
 
 function activityToolCountsLabel(block: ChatMessageBlock): string {
@@ -906,8 +906,8 @@ function activityItemTitle(item: ChatActivityItem): string {
 }
 
 function toolStatusLabel(block: ChatMessageBlock): string {
-  if (!showStreamingUi(block)) return "工具执行毕";
-  return toolSummaryDoing(block) ? "工具执行中" : "工具执行毕";
+  if (!showStreamingUi(block)) return t('chat.messageItem.toolDone');
+  return toolSummaryDoing(block) ? t('chat.messageItem.toolRunning') : t('chat.messageItem.toolDone');
 }
 
 function toolSummaryDoing(block: ChatMessageBlock): boolean {
@@ -1503,10 +1503,10 @@ function formatDispatchElapsed(ms: number): string {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   const padded = (value: number) => String(value).padStart(2, "0");
-  if (days > 0) return `${days}天${padded(hours)}小时${padded(minutes)}分${padded(seconds)}秒`;
-  if (hours > 0) return `${hours}小时${padded(minutes)}分${padded(seconds)}秒`;
-  if (minutes > 0) return `${minutes}分${padded(seconds)}秒`;
-  return `${seconds}秒`;
+  if (days > 0) return t('chat.messageItem.durationDays', { days, hours: padded(hours), minutes: padded(minutes), seconds: padded(seconds) });
+  if (hours > 0) return t('chat.messageItem.durationHours', { hours: padded(hours), minutes: padded(minutes), seconds: padded(seconds) });
+  if (minutes > 0) return t('chat.messageItem.durationMinutes', { minutes: padded(minutes), seconds: padded(seconds) });
+  return t('chat.messageItem.durationSeconds', { seconds: padded(seconds) });
 }
 
 function numericMetaValue(block: ChatMessageBlock, key: string): number {
