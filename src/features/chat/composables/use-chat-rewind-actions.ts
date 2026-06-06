@@ -125,8 +125,8 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
     });
     if (!agentId) {
       console.warn("[会话撤回] 失败：缺少 agentId");
-      options.setChatErrorText("撤回失败：缺少会话信息（agentId）");
-      options.setStatusError("status.rewindConversationFailed", "缺少会话信息（agentId）");
+      options.setChatErrorText(t('dialogs.rewind.failedMissingAgentId'));
+      options.setStatusError("status.rewindConversationFailed", t('dialogs.rewind.failedMissingAgentId'));
       return null;
     }
     const currentMessages = [...options.allMessages.value];
@@ -136,8 +136,8 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
         turnId,
         messageCount: currentMessages.length,
       });
-      options.setChatErrorText("撤回失败：未找到可撤回的用户消息");
-      options.setStatusError("status.rewindConversationFailed", "未找到可撤回的用户消息");
+      options.setChatErrorText(t('dialogs.rewind.failedNoTarget'));
+      options.setStatusError("status.rewindConversationFailed", t('dialogs.rewind.failedNoTarget'));
       return null;
     }
     try {
@@ -180,9 +180,9 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
       });
       options.setStatusError(
         "status.rewindConversationFailed",
-        `撤回失败：${detail || "未知错误"}（可查看运行日志）`,
+        t('dialogs.rewind.failedBackendError', { error: detail || t('dialogs.rewind.failedBackendError') }),
       );
-      options.setChatErrorText(`撤回失败：${detail || "未知错误"}`);
+      options.setChatErrorText(t('dialogs.rewind.failedBackendError', { error: detail || t('dialogs.rewind.failedBackendError') }));
       return null;
     }
   }
@@ -203,7 +203,7 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
       compactingConversation: options.compactingConversation.value,
     });
     if (options.chatting.value || options.trimming.value || options.compactingConversation.value) {
-      const message = "当前会话正在运行或整理上下文，完成后再撤回。";
+      const message = t('dialogs.rewind.failedBusy');
       console.info("[会话撤回] 失败：当前会话处于忙碌状态", {
         turnId: payload?.turnId,
         chatting: options.chatting.value,
@@ -223,8 +223,8 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
       console.warn("[会话撤回] 结束：未拿到可回填消息", { turnId: payload.turnId, mode });
       if (options.chatErrorText.value.trim()) return;
       const message = mode === "with_patch"
-        ? "撤回失败：文件状况改变，修改工具不可逆，请选择仅撤回"
-        : "撤回失败：未找到可回填的用户消息";
+        ? t('dialogs.rewind.failedFileChanged')
+        : t('dialogs.rewind.failedNoMessage');
       options.setChatErrorText(message);
       options.setStatusError("status.rewindConversationFailed", `${message}（可查看运行日志）`);
       return;
@@ -242,7 +242,7 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
 
   async function handleRegenerateTurn(payload: { turnId: string }) {
     if (options.chatting.value || options.trimming.value || options.compactingConversation.value) {
-      const message = "当前会话正在运行或整理上下文，完成后再重新生成。";
+      const message = t('dialogs.rewind.regenerateBusy');
       options.setChatErrorText(`重新生成失败：${message}`);
       options.setStatusError("status.rewindConversationFailed", message);
       return;

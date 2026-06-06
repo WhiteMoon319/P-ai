@@ -1471,7 +1471,14 @@
       "title": "撤回选项",
       "hint": "请选择本次撤回要执行的范围：",
       "withPatch": "撤回消息并撤回修改",
-      "messageOnly": "仅撤回消息"
+      "messageOnly": "仅撤回消息",
+      "failedMissingAgentId": "撤回失败：缺少会话信息（agentId）",
+      "failedNoTarget": "撤回失败：未找到可撤回的用户消息",
+      "failedBackendError": "撤回失败：{error}（可查看运行日志）",
+      "failedBusy": "当前会话正在运行或整理上下文，完成后再撤回。",
+      "failedFileChanged": "撤回失败：文件状况改变，修改工具不可逆，请选择仅撤回",
+      "failedNoMessage": "撤回失败：未找到可回填的用户消息",
+      "regenerateBusy": "当前会话正在运行或整理上下文，完成后再重新生成。"
     },
     "skill": {
       "title": "Skill 列表",

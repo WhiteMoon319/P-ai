@@ -1471,7 +1471,14 @@
       "title": "Rewind Options",
       "hint": "Choose what this rewind should affect:",
       "withPatch": "Rewind message and revert changes",
-      "messageOnly": "Rewind message only"
+      "messageOnly": "Rewind message only",
+      "failedMissingAgentId": "Rewind failed: Missing session info (agentId)",
+      "failedNoTarget": "Rewind failed: No rewoundable user message found",
+      "failedBackendError": "Rewind failed: {error} (check runtime logs)",
+      "failedBusy": "Current session is running or compacting context, please wait.",
+      "failedFileChanged": "Rewind failed: File status changed, patch tool is irreversible, please select message-only rewind",
+      "failedNoMessage": "Rewind failed: No user message to fill back",
+      "regenerateBusy": "Current session is running or compacting context, please wait."
     },
     "skill": {
       "title": "Skill List",
