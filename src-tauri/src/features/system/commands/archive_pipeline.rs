@@ -1253,44 +1253,149 @@ async fn summarize_archive_summary_with_fallback(
     }
 }
 
-async fn summarize_compaction_with_fallback(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CompactionSummaryModelRole {
+    Conversation,
+    Quick,
+}
+
+impl CompactionSummaryModelRole {
+    fn label(self) -> &'static str {
+        match self {
+            CompactionSummaryModelRole::Conversation => "会话模型",
+            CompactionSummaryModelRole::Quick => "快速模型",
+        }
+    }
+}
+
+fn empty_memory_curation_draft() -> MemoryCurationDraft {
+    MemoryCurationDraft {
+        title: String::new(),
+        summary: String::new(),
+        open_loops: Vec::new(),
+        useful_memory_ids: Vec::new(),
+        memory_actions: Vec::new(),
+    }
+}
+
+fn resolve_context_compaction_primary_model_from_config(
+    app_config: &AppConfig,
+    source: &Conversation,
+    fallback_api: &ApiConfig,
+) -> Result<ApiConfig, String> {
+    let Some(preferred_api_config_id) = source
+        .preferred_api_config_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(fallback_api.clone());
+    };
+    let resolved_api_config_id = resolve_model_role_api_config_id(app_config, preferred_api_config_id)
+        .ok_or_else(|| format!("会话模型角色未配置：{}", preferred_api_config_id))?;
+    app_config
+        .api_configs
+        .iter()
+        .find(|api| {
+            api.id.trim() == resolved_api_config_id
+                && api.enable_text
+                && api.request_format.is_chat_text()
+        })
+        .cloned()
+        .ok_or_else(|| format!("会话模型不可用于文本对话：{}", preferred_api_config_id))
+}
+
+fn resolve_context_compaction_primary_model(
+    state: &AppState,
+    selected_api: &ApiConfig,
+    resolved_api: &ResolvedApiConfig,
+    source: &Conversation,
+    trace_id: &str,
+) -> Result<(ApiConfig, ResolvedApiConfig), String> {
+    let app_config = state_read_config_cached(state)?;
+    let primary_api =
+        match resolve_context_compaction_primary_model_from_config(&app_config, source, selected_api)
+        {
+            Ok(api) => api,
+            Err(err) => {
+                eprintln!(
+                    "[SummaryContext] 会话模型解析失败，沿用调用方模型: trace_id={}, conversation_id={}, fallback_api_id={}, err={}",
+                    trace_id, source.id, selected_api.id, err
+                );
+                selected_api.clone()
+            }
+        };
+    if primary_api.id.trim() == selected_api.id.trim() {
+        return Ok((selected_api.clone(), resolved_api.clone()));
+    }
+    let primary_resolved_api = resolve_api_config(&app_config, Some(primary_api.id.as_str()))?;
+    eprintln!(
+        "[SummaryContext] 使用会话模型执行压缩: trace_id={}, conversation_id={}, conversation_api_id={}, incoming_api_id={}",
+        trace_id, source.id, primary_api.id, selected_api.id
+    );
+    Ok((primary_api, primary_resolved_api))
+}
+
+fn resolve_compaction_quick_model_from_config(
+    app_config: &AppConfig,
+    quick_api_config_id: Option<&str>,
+    conversation_api_id: &str,
+) -> Result<Option<ApiConfig>, String> {
+    let Some(quick_api_config_id) = quick_api_config_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(None);
+    };
+    let selected_api = app_config
+        .api_configs
+        .iter()
+        .find(|api| api.id.trim() == quick_api_config_id)
+        .cloned()
+        .ok_or_else(|| format!("快速模型配置不存在：{}", quick_api_config_id))?;
+    if selected_api.id.trim() == conversation_api_id.trim() {
+        return Ok(None);
+    }
+    if !selected_api.enable_text || !selected_api.request_format.is_chat_text() {
+        return Err(format!("快速模型不支持文本对话：{}", selected_api.id));
+    }
+    Ok(Some(selected_api))
+}
+
+fn resolve_compaction_quick_model(
+    state: &AppState,
+    conversation_api_id: &str,
+) -> Result<Option<(ApiConfig, ResolvedApiConfig)>, String> {
+    let app_config = state_read_config_cached(state)?;
+    let Some(selected_api) = resolve_compaction_quick_model_from_config(
+        &app_config,
+        app_config.tool_review_api_config_id.as_deref(),
+        conversation_api_id,
+    )?
+    else {
+        return Ok(None);
+    };
+    let resolved_api = resolve_api_config(&app_config, Some(selected_api.id.as_str()))?;
+    Ok(Some((selected_api, resolved_api)))
+}
+
+async fn summarize_compaction_with_model_attempt(
     state: &AppState,
     selected_api: &ApiConfig,
     resolved_api: &ResolvedApiConfig,
     host_agent: &AgentProfile,
     user_alias: &str,
     source: &Conversation,
+    visible_memories: &[MemoryEntry],
+    deduped_recall: &[String],
+    model_role: CompactionSummaryModelRole,
     trace_id: &str,
-) -> (MemoryCurationDraft, Option<String>) {
+) -> Result<MemoryCurationDraft, String> {
     const MAX_ATTEMPTS: usize = 3;
     const RETRY_DELAY_SECS: u64 = 5;
 
     let mut last_err = String::new();
-    let empty_draft = || MemoryCurationDraft {
-        title: String::new(),
-        summary: String::new(),
-        open_loops: Vec::new(),
-        useful_memory_ids: Vec::new(),
-        memory_actions: Vec::new(),
-    };
     for attempt in 1..=MAX_ATTEMPTS {
-        let visible_memories = match memory_store_list_memories_visible_for_agent(
-            &state.data_path,
-            &host_agent.id,
-            host_agent.private_memory_enabled,
-        ) {
-            Ok(items) => items,
-            Err(err) => {
-                return (
-                    empty_draft(),
-                    Some(format!(
-                        "SummaryContext 读取可见记忆失败，压缩摘要留空：{}",
-                        err
-                    )),
-                )
-            }
-        };
-        let deduped_recall = archive_pipeline_dedup_recall_table(&source.memory_recall_table);
         match summarize_archived_conversation_with_model_v2(
             state,
             resolved_api,
@@ -1299,36 +1404,38 @@ async fn summarize_compaction_with_fallback(
             user_alias,
             source,
             SummaryContextScene::Compaction,
-            &visible_memories,
-            &deduped_recall,
+            visible_memories,
+            deduped_recall,
         )
         .await
         {
-            Ok(summary) => return (summary, None),
+            Ok(summary) => return Ok(summary),
             Err(err) => {
                 let is_empty_reply = err.is_empty_reply();
                 last_err = err.to_string();
                 if !is_empty_reply {
                     eprintln!(
-                        "[SummaryContext] 上下文整理失败，不重试非空回错误: trace_id={}, conversation_id={}, attempt={}，err={}",
+                        "[SummaryContext] 上下文整理失败，不重试非空回复错误: trace_id={}, conversation_id={}, model_role={}, api_id={}, attempt={}，err={}",
                         trace_id,
                         source.id,
+                        model_role.label(),
+                        selected_api.id,
                         attempt,
                         last_err
                     );
-                    return (
-                        empty_draft(),
-                        Some(format!(
-                            "SummaryContext 上下文整理失败（非空回不重试），压缩摘要留空：{}",
-                            last_err
-                        )),
-                    );
+                    return Err(format!(
+                        "{}失败（非空回复不重试）：{}",
+                        model_role.label(),
+                        last_err
+                    ));
                 }
                 if attempt < MAX_ATTEMPTS {
                     eprintln!(
-                        "[ARCHIVE-PIPELINE] 上下文整理模型空回，准备重试: trace_id={}, conversation_id={}, attempt={}，next_retry_secs={}，error={}",
+                        "[ARCHIVE-PIPELINE] 上下文整理模型空回，准备重试: trace_id={}, conversation_id={}, model_role={}, api_id={}, attempt={}，next_retry_secs={}，error={}",
                         trace_id,
                         source.id,
+                        model_role.label(),
+                        selected_api.id,
                         attempt,
                         RETRY_DELAY_SECS,
                         last_err
@@ -1340,14 +1447,123 @@ async fn summarize_compaction_with_fallback(
     }
 
     eprintln!(
-        "[SummaryContext] 上下文整理失败，压缩摘要留空继续主流程: trace_id={}, conversation_id={}, attempts={}, err={}",
-        trace_id, source.id, MAX_ATTEMPTS, last_err
+        "[SummaryContext] 上下文整理失败: trace_id={}, conversation_id={}, model_role={}, api_id={}, attempts={}, err={}",
+        trace_id,
+        source.id,
+        model_role.label(),
+        selected_api.id,
+        MAX_ATTEMPTS,
+        last_err
+    );
+    Err(format!(
+        "{}失败（空回已尝试{}次）：{}",
+        model_role.label(),
+        MAX_ATTEMPTS,
+        last_err
+    ))
+}
+
+async fn summarize_compaction_with_fallback(
+    state: &AppState,
+    selected_api: &ApiConfig,
+    resolved_api: &ResolvedApiConfig,
+    host_agent: &AgentProfile,
+    user_alias: &str,
+    source: &Conversation,
+    trace_id: &str,
+) -> (MemoryCurationDraft, Option<String>) {
+    let visible_memories = match memory_store_list_memories_visible_for_agent(
+        &state.data_path,
+        &host_agent.id,
+        host_agent.private_memory_enabled,
+    ) {
+        Ok(items) => items,
+        Err(err) => {
+            return (
+                empty_memory_curation_draft(),
+                Some(format!(
+                    "SummaryContext 读取可见记忆失败，压缩摘要留空：{}",
+                    err
+                )),
+            )
+        }
+    };
+    let deduped_recall = archive_pipeline_dedup_recall_table(&source.memory_recall_table);
+    let mut failures = Vec::<String>::new();
+
+    match summarize_compaction_with_model_attempt(
+        state,
+        selected_api,
+        resolved_api,
+        host_agent,
+        user_alias,
+        source,
+        &visible_memories,
+        &deduped_recall,
+        CompactionSummaryModelRole::Conversation,
+        trace_id,
+    )
+    .await
+    {
+        Ok(summary) => return (summary, None),
+        Err(err) => failures.push(err),
+    }
+
+    match resolve_compaction_quick_model(state, &selected_api.id) {
+        Ok(Some((quick_selected_api, quick_resolved_api))) => {
+            eprintln!(
+                "[SummaryContext] 会话模型压缩失败，切换快速模型: trace_id={}, conversation_id={}, conversation_api_id={}, quick_api_id={}, reason={}",
+                trace_id,
+                source.id,
+                selected_api.id,
+                quick_selected_api.id,
+                failures.last().map(String::as_str).unwrap_or("")
+            );
+            match summarize_compaction_with_model_attempt(
+                state,
+                &quick_selected_api,
+                &quick_resolved_api,
+                host_agent,
+                user_alias,
+                source,
+                &visible_memories,
+                &deduped_recall,
+                CompactionSummaryModelRole::Quick,
+                trace_id,
+            )
+            .await
+            {
+                Ok(summary) => return (summary, None),
+                Err(err) => failures.push(err),
+            }
+        }
+        Ok(None) => {
+            eprintln!(
+                "[SummaryContext] 快速模型跳过: trace_id={}, conversation_id={}, conversation_api_id={}, reason=not_configured_or_same_as_conversation",
+                trace_id, source.id, selected_api.id
+            );
+            failures.push("快速模型未配置或与会话模型相同，已跳过".to_string());
+        }
+        Err(err) => {
+            eprintln!(
+                "[SummaryContext] 快速模型解析失败: trace_id={}, conversation_id={}, conversation_api_id={}, err={}",
+                trace_id, source.id, selected_api.id, err
+            );
+            failures.push(format!("快速模型解析失败：{}", err));
+        }
+    }
+
+    eprintln!(
+        "[SummaryContext] 上下文整理失败，压缩摘要留空继续主流程: trace_id={}, conversation_id={}, errors={}",
+        trace_id,
+        source.id,
+        failures.join("；")
     );
     (
-        empty_draft(),
+        empty_memory_curation_draft(),
         Some(format!(
-            "SummaryContext 上下文整理失败（空回已尝试{}次），压缩摘要留空：{}",
-            MAX_ATTEMPTS, last_err
+            "SummaryContext 上下文整理失败（会话模型失败后快速模型仍不可用），压缩摘要留空：{}",
+            failures.join("；")
         )),
     )
 }
@@ -1626,6 +1842,13 @@ pub(crate) async fn run_context_compaction_pipeline(
 ) -> Result<ForceArchiveResult, String> {
     let started_at = std::time::Instant::now();
     let trace_id = Uuid::new_v4().to_string();
+    let (selected_api, resolved_api) = resolve_context_compaction_primary_model(
+        state,
+        selected_api,
+        resolved_api,
+        source,
+        &trace_id,
+    )?;
 
     set_conversation_runtime_state(state, &source.id, MainSessionState::OrganizingContext)?;
     emit_conversation_runtime_state_updated_payload(
@@ -1642,8 +1865,8 @@ pub(crate) async fn run_context_compaction_pipeline(
 
     let result = run_context_compaction_pipeline_inner(
         state,
-        selected_api,
-        resolved_api,
+        &selected_api,
+        &resolved_api,
         source,
         effective_agent_id,
         compaction_reason,
@@ -2171,6 +2394,151 @@ mod archive_pipeline_tests {
             plan_mode_enabled: false,
             preferred_api_config_id: None,
         }
+    }
+
+    fn test_api_config(id: &str, model: &str) -> ApiConfig {
+        let mut api = ApiConfig::default();
+        api.id = id.to_string();
+        api.name = id.to_string();
+        api.api_key = "k".to_string();
+        api.model = model.to_string();
+        api
+    }
+
+    fn test_compaction_app_config(conversation_api_id: &str, quick_api_id: &str) -> AppConfig {
+        AppConfig {
+            api_configs: vec![
+                test_api_config(conversation_api_id, "conversation-model"),
+                test_api_config(quick_api_id, "quick-model"),
+            ],
+            assistant_department_api_config_id: conversation_api_id.to_string(),
+            tool_review_api_config_id: Some(quick_api_id.to_string()),
+            ..AppConfig::default()
+        }
+    }
+
+    #[test]
+    fn context_compaction_primary_model_should_prefer_conversation_model() {
+        let session_api = test_api_config("session-api", "session-model");
+        let config = AppConfig {
+            api_configs: vec![
+                session_api.clone(),
+                test_api_config("conversation-api", "conversation-model"),
+            ],
+            assistant_department_api_config_id: "session-api".to_string(),
+            ..AppConfig::default()
+        };
+        let mut source = test_conversation();
+        source.preferred_api_config_id = Some("conversation-api".to_string());
+
+        let selected =
+            resolve_context_compaction_primary_model_from_config(&config, &source, &session_api)
+                .expect("resolve primary model");
+
+        assert_eq!(selected.id, "conversation-api");
+        assert_eq!(selected.model, "conversation-model");
+    }
+
+    #[test]
+    fn context_compaction_primary_model_should_keep_session_model_without_conversation_preference() {
+        let session_api = test_api_config("session-api", "session-model");
+        let config = AppConfig {
+            api_configs: vec![session_api.clone()],
+            assistant_department_api_config_id: "session-api".to_string(),
+            ..AppConfig::default()
+        };
+        let source = test_conversation();
+
+        let selected =
+            resolve_context_compaction_primary_model_from_config(&config, &source, &session_api)
+                .expect("resolve primary model");
+
+        assert_eq!(selected.id, "session-api");
+    }
+
+    #[test]
+    fn compaction_quick_model_should_resolve_configured_fast_model() {
+        let config = test_compaction_app_config("conversation-api", "quick-api");
+
+        let selected = resolve_compaction_quick_model_from_config(
+            &config,
+            config.tool_review_api_config_id.as_deref(),
+            "conversation-api",
+        )
+        .expect("resolve quick model")
+        .expect("quick model");
+
+        assert_eq!(selected.id, "quick-api");
+        assert_eq!(selected.model, "quick-model");
+    }
+
+    #[test]
+    fn compaction_quick_model_should_skip_when_same_as_conversation_model() {
+        let config = AppConfig {
+            api_configs: vec![test_api_config("same-api", "same-model")],
+            assistant_department_api_config_id: "same-api".to_string(),
+            tool_review_api_config_id: Some("same-api".to_string()),
+            ..AppConfig::default()
+        };
+
+        let selected = resolve_compaction_quick_model_from_config(
+            &config,
+            config.tool_review_api_config_id.as_deref(),
+            "same-api",
+        )
+        .expect("resolve quick model");
+
+        assert!(selected.is_none());
+    }
+
+    #[test]
+    fn compaction_quick_model_should_skip_when_not_configured() {
+        let mut config = test_compaction_app_config("conversation-api", "quick-api");
+        config.tool_review_api_config_id = None;
+
+        let selected = resolve_compaction_quick_model_from_config(
+            &config,
+            config.tool_review_api_config_id.as_deref(),
+            "conversation-api",
+        )
+        .expect("resolve quick model");
+
+        assert!(selected.is_none());
+    }
+
+    #[test]
+    fn compaction_quick_model_should_not_fallback_when_configured_id_is_stale() {
+        let config = test_compaction_app_config("conversation-api", "quick-api");
+
+        let err = resolve_compaction_quick_model_from_config(
+            &config,
+            Some("deleted-quick-api"),
+            "conversation-api",
+        )
+        .expect_err("stale quick model should not fallback");
+
+        assert!(err.contains("快速模型配置不存在"));
+    }
+
+    #[test]
+    fn compaction_quick_model_should_reject_non_text_model() {
+        let mut quick_api = test_api_config("quick-api", "quick-model");
+        quick_api.enable_text = false;
+        let config = AppConfig {
+            api_configs: vec![test_api_config("conversation-api", "conversation-model"), quick_api],
+            assistant_department_api_config_id: "conversation-api".to_string(),
+            tool_review_api_config_id: Some("quick-api".to_string()),
+            ..AppConfig::default()
+        };
+
+        let err = resolve_compaction_quick_model_from_config(
+            &config,
+            config.tool_review_api_config_id.as_deref(),
+            "conversation-api",
+        )
+        .expect_err("non text quick model should fail");
+
+        assert!(err.contains("快速模型不支持文本对话"));
     }
 
     #[test]

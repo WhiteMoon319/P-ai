@@ -2,6 +2,7 @@
 
 ## 发布：v0.10.22
 
+- 修复（chat）：上下文压缩统一由后端按会话模型优先执行；会话模型失败后才精确尝试配置中的快速模型，快速模型缺失、失效或仍失败时直接降级为空摘要继续主流程，避免手动触发压缩或快速模型配置过期时取错模型。
 - 修复（config）：新增 MiniMax 协议链路并修正 Auto 模式模型适配识别；模型名仅按 `/` 切分供应商前缀，保留 `:free` 等后缀且大小写无关，避免 `minimax-m3:free` 被误判为 OpenAI。
 - 修复（chat）：上下文压缩 token 估算虚高，跳过 reasoning_content、tool_calls 只算 function.name + arguments。
 - 修复（chat）：缓存误消费导致工具续调前全量估算，consume_* 改为 resolve_* 保留缓存值。
