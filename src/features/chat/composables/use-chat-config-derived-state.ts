@@ -61,12 +61,13 @@ export function useChatConfigDerivedState(config: AppConfig) {
   }
 
   function departmentOrderedApiConfigIds(
-    department?: { apiConfigId?: string; apiConfigIds?: string[] } | null,
+    department?: { apiConfigId?: string; apiConfigIds?: string[]; modelFailureFallbackEnabled?: boolean } | null,
   ): string[] {
-    return Array.from(new Set([
+    const ordered = Array.from(new Set([
       ...((Array.isArray(department?.apiConfigIds) ? department.apiConfigIds : []).map((id) => String(id || "").trim()).filter(Boolean)),
       String(department?.apiConfigId || "").trim(),
     ].filter(Boolean)));
+    return department?.modelFailureFallbackEnabled ? ordered : ordered.slice(0, 1);
   }
 
   function departmentConversationApiConfigId(
@@ -81,7 +82,7 @@ export function useChatConfigDerivedState(config: AppConfig) {
   }
 
   function applyDepartmentPrimaryApiConfigLocally(
-    department: { id?: string; isBuiltInAssistant?: boolean; apiConfigId?: string; apiConfigIds?: string[]; updatedAt?: string } | null | undefined,
+    department: { id?: string; isBuiltInAssistant?: boolean; apiConfigId?: string; apiConfigIds?: string[]; modelFailureFallbackEnabled?: boolean; updatedAt?: string } | null | undefined,
     apiConfigId: string,
   ): boolean {
     if (!department) return false;
@@ -97,12 +98,10 @@ export function useChatConfigDerivedState(config: AppConfig) {
       }
       return false;
     }
-    const filtered = next.filter((item) => item.toLowerCase() !== nextId.toLowerCase());
-    if (filtered.length === 0) {
-      filtered.push(nextId);
-    } else {
-      filtered[0] = nextId;
-    }
+    const filtered = department.modelFailureFallbackEnabled
+      ? next.filter((item) => item.toLowerCase() !== nextId.toLowerCase())
+      : [];
+    filtered.unshift(nextId);
     const deduped = Array.from(new Set(filtered.filter(Boolean)));
     department.apiConfigIds = deduped;
     department.apiConfigId = deduped[0] || "";

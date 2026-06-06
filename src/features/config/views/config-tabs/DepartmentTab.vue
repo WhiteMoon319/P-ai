@@ -135,7 +135,7 @@
               <div class="mb-2 text-[11px] uppercase tracking-wide opacity-40">{{ t("config.department.model") }}</div>
               <div class="grid min-w-0 gap-3">
                 <div
-                  v-for="(apiId, idx) in selectedDepartmentApiConfigIds"
+                  v-for="(apiId, idx) in selectedDepartmentVisibleApiConfigIds"
                   :key="`${selectedDepartment.id}-api-${idx}`"
                   class="flex items-center gap-2"
                 >
@@ -150,6 +150,7 @@
 
                   <div class="join">
                     <button
+                      v-if="selectedDepartmentModelFailureFallbackEnabled"
                       class="btn btn-sm btn-square join-item opacity-60 hover:opacity-100"
                       type="button"
                       :disabled="idx <= 0"
@@ -159,6 +160,7 @@
                       ↑
                     </button>
                     <button
+                      v-if="selectedDepartmentModelFailureFallbackEnabled"
                       class="btn btn-sm btn-square join-item opacity-60 hover:opacity-100"
                       type="button"
                       :disabled="idx >= selectedDepartmentApiConfigIds.length - 1"
@@ -168,6 +170,7 @@
                       ↓
                     </button>
                     <button
+                      v-if="selectedDepartmentModelFailureFallbackEnabled"
                       class="btn btn-sm btn-square join-item opacity-60 hover:opacity-100"
                       type="button"
                       :disabled="selectedDepartmentApiConfigIds.length <= 1"
@@ -180,6 +183,7 @@
                 </div>
 
                 <button
+                  v-if="selectedDepartmentModelFailureFallbackEnabled"
                   class="btn btn-sm"
                   type="button"
                   :disabled="remainingDepartmentRoleOptions.length <= 0 && remainingDepartmentApiConfigs.length <= 0"
@@ -189,7 +193,31 @@
                 </button>
               </div>
 
-              <div class="mt-2 text-[11px] opacity-50">{{ t("config.department.modelFallbackHint") }}</div>
+              <label
+                v-if="selectedDepartmentCanEnableModelFailureFallback"
+                class="mt-3 flex items-start gap-2 rounded-box border border-base-300/60 px-2.5 py-2 text-base-content/70"
+              >
+                <input
+                  class="checkbox checkbox-xs mt-0.5 opacity-70"
+                  type="checkbox"
+                  :checked="selectedDepartmentModelFailureFallbackEnabled"
+                  @change="updateDepartmentModelFailureFallback(($event.target as HTMLInputElement).checked)"
+                />
+                <span class="min-w-0">
+                  <span class="block text-xs font-normal">{{ t("config.department.modelFailureFallback") }}</span>
+                  <span class="block text-[11px] opacity-55">
+                    {{ selectedDepartmentModelFailureFallbackEnabled
+                      ? t("config.department.modelFallbackHint")
+                      : t("config.department.singleModelHint") }}
+                  </span>
+                </span>
+              </label>
+              <div
+                v-if="selectedDepartmentModelFailureFallbackEnabled"
+                class="mt-2 rounded-box border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
+              >
+                {{ t("config.department.modelSwitchCostWarning") }}
+              </div>
               <div class="mt-1 text-[11px] opacity-40">{{ t("config.department.allowedModelsNote") }}</div>
             </div>
 
@@ -515,6 +543,7 @@ function cloneDepartment(department: DepartmentConfig): DepartmentConfig {
     guide: String(department.guide || ""),
     apiConfigId: apiConfigIds[0] || "",
     apiConfigIds,
+    modelFailureFallbackEnabled: !!department.modelFailureFallbackEnabled,
     agentIds,
     childDepartmentIds: normalizeDepartmentChildIds(department.childDepartmentIds, id),
     createdAt: String(department.createdAt || "").trim(),
@@ -565,6 +594,17 @@ const departmentRoleApiConfigOptions = computed(() => [
 ]);
 const selectedDepartmentApiConfigIds = computed(() =>
   currentDepartmentApiConfigIdsForEditor(selectedDepartment.value),
+);
+const selectedDepartmentCanEnableModelFailureFallback = computed(() =>
+  !selectedDepartmentIsPrivateWorkspace.value,
+);
+const selectedDepartmentModelFailureFallbackEnabled = computed(() =>
+  selectedDepartmentCanEnableModelFailureFallback.value && !!selectedDepartment.value?.modelFailureFallbackEnabled,
+);
+const selectedDepartmentVisibleApiConfigIds = computed(() =>
+  selectedDepartmentModelFailureFallbackEnabled.value
+    ? selectedDepartmentApiConfigIds.value
+    : selectedDepartmentApiConfigIds.value.slice(0, 1),
 );
 const remainingDepartmentApiConfigs = computed(() => {
   const selectedIds = new Set(selectedDepartmentApiConfigIds.value);
@@ -917,6 +957,7 @@ function addDepartment() {
     guide: "",
     apiConfigId: MODEL_ROLE_EXPERT_API_CONFIG_ID,
     apiConfigIds: [MODEL_ROLE_EXPERT_API_CONFIG_ID],
+    modelFailureFallbackEnabled: false,
     agentIds: [],
     childDepartmentIds: defaultChildDepartmentIds,
     createdAt: now,
@@ -1007,6 +1048,10 @@ function currentDepartmentApiConfigIds(target: DepartmentConfig | null | undefin
   return ids.map((id) => String(id || "").trim()).filter(Boolean);
 }
 
+function departmentCanEnableModelFailureFallback(target: DepartmentConfig | null | undefined) {
+  return String(target?.source || "").trim() !== "private_workspace";
+}
+
 function apiConfigName(apiConfigId: string): string {
   const id = String(apiConfigId || "").trim();
   if (!id) return "";
@@ -1028,6 +1073,11 @@ function roleModelDisplayName(roleId: string): string {
 function currentDepartmentApiConfigIdsForEditor(target: DepartmentConfig | null | undefined) {
   const ids = currentDepartmentApiConfigIds(target);
   return ids.length > 0 ? Array.from(new Set(ids)) : [MODEL_ROLE_EXPERT_API_CONFIG_ID];
+}
+
+function departmentModelIdsForSave(target: DepartmentConfig): string[] {
+  const ids = currentDepartmentApiConfigIdsForEditor(target);
+  return departmentCanEnableModelFailureFallback(target) && target.modelFailureFallbackEnabled ? ids : ids.slice(0, 1);
 }
 
 function availableDepartmentApiConfigsForIndex(index: number) {
@@ -1058,6 +1108,18 @@ function updateDepartmentApiConfigAt(index: number, apiId: string) {
     target.apiConfigIds = [MODEL_ROLE_EXPERT_API_CONFIG_ID];
   }
   target.apiConfigId = target.apiConfigIds[0] || "";
+  touchSelectedDepartment();
+}
+
+function updateDepartmentModelFailureFallback(enabled: boolean) {
+  const target = selectedDepartment.value;
+  if (!target || target.modelFailureFallbackEnabled === enabled) return;
+  if (!departmentCanEnableModelFailureFallback(target)) return;
+  target.modelFailureFallbackEnabled = enabled;
+  if (currentDepartmentApiConfigIds(target).length === 0) {
+    target.apiConfigIds = [MODEL_ROLE_EXPERT_API_CONFIG_ID];
+    target.apiConfigId = MODEL_ROLE_EXPERT_API_CONFIG_ID;
+  }
   touchSelectedDepartment();
 }
 
@@ -1136,6 +1198,18 @@ function applyUpdatedAtToChangedDepartments(
   });
 }
 
+function prepareDepartmentsForSave(departments: DepartmentConfig[]) {
+  return departments.map((department) => {
+    const apiConfigIds = departmentModelIdsForSave(department);
+    return {
+      ...department,
+      apiConfigIds,
+      apiConfigId: apiConfigIds[0] || "",
+      modelFailureFallbackEnabled: departmentCanEnableModelFailureFallback(department) && department.modelFailureFallbackEnabled,
+    };
+  });
+}
+
 async function saveDepartments() {
   if (!selectedDepartment.value || departmentValidationMessage.value) return;
 
@@ -1144,7 +1218,7 @@ async function saveDepartments() {
   const previousAssistantAgentId = String(props.assistantDepartmentAgentId || "").trim();
   const nextDepartments = applyUpdatedAtToChangedDepartments(
     mergeDepartmentChildIdsFromSource(
-      cloneDepartmentList(departmentDrafts.value),
+      prepareDepartmentsForSave(cloneDepartmentList(departmentDrafts.value)),
       previousDepartments,
     ),
     previousDepartments,

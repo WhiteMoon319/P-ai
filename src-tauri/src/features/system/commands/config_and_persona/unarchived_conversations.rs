@@ -2600,6 +2600,7 @@ mod unarchived_conversations_tests {
             agent_ids: vec!["agent-a".to_string()],
             api_config_id: "api-a".to_string(),
             api_config_ids: vec!["api-a".to_string()],
+            model_failure_fallback_enabled: false,
             child_department_ids: Vec::new(),
             order_index: 0,
             is_built_in_assistant: false,

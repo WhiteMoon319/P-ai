@@ -153,6 +153,8 @@ struct DepartmentConfig {
     #[serde(default)]
     api_config_id: String,
     #[serde(default)]
+    model_failure_fallback_enabled: bool,
+    #[serde(default)]
     agent_ids: Vec<String>,
     #[serde(default)]
     child_department_ids: Vec<String>,
@@ -182,6 +184,14 @@ fn default_private_workspace_source() -> String {
     "private_workspace".to_string()
 }
 
+fn is_private_workspace_department(department: &DepartmentConfig) -> bool {
+    department.source.trim() == default_private_workspace_source()
+}
+
+fn department_model_failure_fallback_enabled(department: &DepartmentConfig) -> bool {
+    department.model_failure_fallback_enabled && !is_private_workspace_department(department)
+}
+
 fn default_global_scope() -> String {
     "global".to_string()
 }
@@ -204,6 +214,7 @@ fn default_assistant_department(api_config_id: &str) -> DepartmentConfig {
             vec![api_config_id.clone()]
         },
         api_config_id,
+        model_failure_fallback_enabled: false,
         agent_ids: vec![DEFAULT_AGENT_ID.to_string()],
         child_department_ids: vec![DEPUTY_DEPARTMENT_ID.to_string()],
         created_at: now.clone(),
@@ -232,6 +243,7 @@ fn default_deputy_department(api_config_id: &str) -> DepartmentConfig {
             vec![api_config_id.clone()]
         },
         api_config_id,
+        model_failure_fallback_enabled: false,
         agent_ids: vec![DEPUTY_AGENT_ID.to_string()],
         child_department_ids: Vec::new(),
         created_at: now.clone(),
@@ -259,6 +271,7 @@ fn default_remote_customer_service_department(api_config_id: &str) -> Department
             vec![api_config_id.clone()]
         },
         api_config_id,
+        model_failure_fallback_enabled: false,
         agent_ids: vec![DEFAULT_AGENT_ID.to_string()],
         child_department_ids: Vec::new(),
         created_at: now.clone(),
@@ -371,6 +384,41 @@ fn department_primary_api_config_id(department: &DepartmentConfig) -> String {
         .into_iter()
         .next()
         .unwrap_or_else(|| department.api_config_id.trim().to_string())
+}
+
+fn resolve_department_chat_api_config_id(
+    app_config: &AppConfig,
+    raw_api_config_id: &str,
+) -> Option<String> {
+    let resolved_id = resolve_model_role_api_config_id(app_config, raw_api_config_id)?;
+    app_config
+        .api_configs
+        .iter()
+        .any(|api| api.id == resolved_id && is_text_chat_api(api))
+        .then_some(resolved_id)
+}
+
+fn department_effective_chat_api_config_ids(
+    app_config: &AppConfig,
+    department: &DepartmentConfig,
+) -> Vec<String> {
+    let raw_ids = department_api_config_ids(department);
+    let raw_ids = if department_model_failure_fallback_enabled(department) {
+        raw_ids
+    } else {
+        raw_ids.into_iter().take(1).collect()
+    };
+    let mut out = Vec::<String>::new();
+    let mut seen = std::collections::HashSet::<String>::new();
+    for raw_id in raw_ids {
+        let Some(resolved_id) = resolve_department_chat_api_config_id(app_config, &raw_id) else {
+            continue;
+        };
+        if seen.insert(resolved_id.clone()) {
+            out.push(resolved_id);
+        }
+    }
+    out
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

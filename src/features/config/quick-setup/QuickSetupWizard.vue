@@ -1034,6 +1034,7 @@ function applyLlmDraft() {
     department.name = identityDraft.departmentName.trim() || department.name;
     department.apiConfigId = MODEL_ROLE_EXPERT_API_CONFIG_ID;
     department.apiConfigIds = [MODEL_ROLE_EXPERT_API_CONFIG_ID];
+    department.modelFailureFallbackEnabled = false;
     department.updatedAt = new Date().toISOString();
   }
 }

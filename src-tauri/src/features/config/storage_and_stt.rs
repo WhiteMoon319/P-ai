@@ -921,6 +921,10 @@ fn normalize_departments(config: &mut AppConfig) {
                 agent_ids.push(agent_id);
             }
         }
+        let source = if raw.source.trim().is_empty() { default_main_source() } else { raw.source.trim().to_string() };
+        if source.trim() == default_private_workspace_source() {
+            api_config_ids.truncate(1);
+        }
         let mut item = DepartmentConfig {
             id: id.clone(),
             name: raw.name.trim().to_string(),
@@ -928,6 +932,8 @@ fn normalize_departments(config: &mut AppConfig) {
             guide: raw.guide.trim().to_string(),
             api_config_ids,
             api_config_id,
+            model_failure_fallback_enabled: raw.model_failure_fallback_enabled
+                && source.trim() != default_private_workspace_source(),
             agent_ids,
             child_department_ids: normalize_department_child_ids(
                 &raw.child_department_ids,
@@ -938,7 +944,7 @@ fn normalize_departments(config: &mut AppConfig) {
             order_index: raw.order_index,
             is_built_in_assistant: raw.is_built_in_assistant || id == ASSISTANT_DEPARTMENT_ID,
             is_deputy: raw.is_deputy,
-            source: if raw.source.trim().is_empty() { default_main_source() } else { raw.source.trim().to_string() },
+            source,
             scope: if raw.scope.trim().is_empty() { default_global_scope() } else { raw.scope.trim().to_string() },
             permission_control: normalize_department_permission_control(&raw.permission_control),
         };

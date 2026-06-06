@@ -235,17 +235,7 @@ fn delegate_target_chat_api_config_ids(
     config: &AppConfig,
     target_department: &DepartmentConfig,
 ) -> Vec<String> {
-    let valid_text_chat_api_ids = config
-        .api_configs
-        .iter()
-        .filter(|api| api.enable_text && api.request_format.is_chat_text())
-        .map(|api| api.id.clone())
-        .collect::<std::collections::HashSet<_>>();
-    department_api_config_ids(target_department)
-        .into_iter()
-        .filter_map(|id| resolve_model_role_api_config_id(config, &id))
-        .filter(|id| valid_text_chat_api_ids.contains(id))
-        .collect::<Vec<_>>()
+    department_effective_chat_api_config_ids(config, target_department)
 }
 
 fn spawn_delegate_task(

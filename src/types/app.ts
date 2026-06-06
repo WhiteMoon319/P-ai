@@ -226,6 +226,7 @@ export type DepartmentConfig = {
   guide: string;
   apiConfigId: string;
   apiConfigIds: string[];
+  modelFailureFallbackEnabled: boolean;
   agentIds: string[];
   childDepartmentIds: string[];
   createdAt: string;

@@ -70,9 +70,12 @@ export function validateDepartmentConfig(
   }
 
   for (const department of departments) {
-    const ids = Array.isArray(department.apiConfigIds) && department.apiConfigIds.length > 0
+    const rawIds = Array.isArray(department.apiConfigIds) && department.apiConfigIds.length > 0
       ? department.apiConfigIds
       : (department.apiConfigId ? [department.apiConfigId] : []);
+    const source = String(department.source || "").trim();
+    const fallbackEnabled = !!department.modelFailureFallbackEnabled && source !== "private_workspace";
+    const ids = fallbackEnabled ? rawIds : rawIds.slice(0, 1);
     for (const id of ids.map((item) => String(item || "").trim()).filter(Boolean)) {
       const resolvedId = resolveModelRoleApiConfigId(id, config);
       if (!isModelRoleApiConfigId(id) && !validApiIds.has(resolvedId)) {

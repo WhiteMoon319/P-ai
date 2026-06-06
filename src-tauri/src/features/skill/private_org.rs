@@ -463,13 +463,15 @@ fn load_private_departments_from_workspace(
         let now = now_iso();
         let normalized_child_department_ids =
             normalize_department_child_ids(&file.child_department_ids, &id);
+        let primary_api_config_id = api_config_ids[0].clone();
         merged.push(DepartmentConfig {
             id: id.clone(),
             name,
             summary: file.summary.trim().to_string(),
             guide: file.guide.trim().to_string(),
-            api_config_ids: api_config_ids.clone(),
-            api_config_id: api_config_ids[0].clone(),
+            api_config_ids: vec![primary_api_config_id.clone()],
+            api_config_id: primary_api_config_id,
+            model_failure_fallback_enabled: false,
             agent_ids,
             child_department_ids: normalized_child_department_ids,
             created_at: now.clone(),

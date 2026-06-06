@@ -1234,6 +1234,32 @@ fn prepend_optional_preferred_chat_api_id(
     Ok(true)
 }
 
+fn build_chat_candidate_api_ids(
+    app_config: &AppConfig,
+    effective_department: &DepartmentConfig,
+    requested_api_config_id: Option<&str>,
+    conversation_preferred_api_config_id: Option<&str>,
+) -> Result<(Vec<String>, bool), String> {
+    let mut candidate_api_ids =
+        department_effective_chat_api_config_ids(app_config, effective_department);
+    let preferred_model_applied = if let Some(requested_api_config_id) =
+        requested_api_config_id.map(str::trim).filter(|value| !value.is_empty())
+    {
+        prepend_required_chat_api_id(Some(requested_api_config_id), &mut candidate_api_ids, app_config)?;
+        false
+    } else {
+        prepend_optional_preferred_chat_api_id(
+            conversation_preferred_api_config_id,
+            &mut candidate_api_ids,
+            app_config,
+        )?
+    };
+    if !department_model_failure_fallback_enabled(effective_department) {
+        candidate_api_ids.truncate(1);
+    }
+    Ok((candidate_api_ids, preferred_model_applied))
+}
+
 fn memory_recall_query_from_user_text(user_text: &str) -> String {
     clean_text(user_text.trim())
 }
@@ -1979,23 +2005,8 @@ async fn send_chat_message_inner(
         prepare_detail_parts.push(format!("部门解析={}ms", department_resolve_ms));
         log_chat_stage("runtime_and_session_ready.department_resolved");
         let candidate_models_started = std::time::Instant::now();
-        let mut candidate_api_ids = department_api_config_ids(effective_department)
-            .into_iter()
-            .filter_map(|api_id| {
-                let resolved_id = resolve_model_role_api_config_id(&app_config, &api_id)?;
-                app_config
-                    .api_configs
-                    .iter()
-                    .any(|api| api.id == resolved_id && api.request_format.is_chat_text())
-                    .then_some(resolved_id)
-            })
-            .collect::<Vec<_>>();
-        candidate_api_ids.dedup();
-        if candidate_api_ids.is_empty() {
-            let fallback = resolve_selected_api_config(&app_config, None)
-                .ok_or_else(|| "No API config configured. Please add one.".to_string())?;
-            candidate_api_ids.push(fallback.id.clone());
-        }
+        let department_model_fallback_enabled =
+            department_model_failure_fallback_enabled(effective_department);
         let conversation_preferred_api_config_id = requested_conversation_id_for_prepare
             .as_deref()
             .or(runtime_main_conversation_id.as_deref())
@@ -2007,27 +2018,19 @@ async fn send_chat_message_inner(
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty());
-        let preferred_model_applied = if let Some(requested_api_config_id_snapshot) = requested_api_config_id_snapshot {
-            prepend_required_chat_api_id(
-                Some(requested_api_config_id_snapshot),
-                &mut candidate_api_ids,
-                &app_config,
-            )?;
-            false
-        } else {
-            prepend_optional_preferred_chat_api_id(
-                conversation_preferred_api_config_id.as_deref(),
-                &mut candidate_api_ids,
-                &app_config,
-            )?
-        };
+        let (candidate_api_ids, preferred_model_applied) = build_chat_candidate_api_ids(
+            &app_config,
+            effective_department,
+            requested_api_config_id_snapshot,
+            conversation_preferred_api_config_id.as_deref(),
+        )?;
         let candidate_models_ms = candidate_models_started
             .elapsed()
             .as_millis()
             .min(u128::from(u64::MAX)) as u64;
         prepare_detail_parts.push(format!("候选模型构建={}ms(count={})", candidate_models_ms, candidate_api_ids.len()));
         runtime_log_info(format!(
-            "[会话模型] 调度，任务=构建候选模型，会话ID={}，单次指定模型={}，会话首选模型={}，会话首选已应用={}，候选队列={}",
+            "[会话模型] 调度，任务=构建候选模型，会话ID={}，单次指定模型={}，会话首选模型={}，会话首选已应用={}，部门失败自动切换={}，候选队列={}",
             requested_conversation_id_for_prepare
                 .as_deref()
                 .or(runtime_main_conversation_id.as_deref())
@@ -2035,6 +2038,7 @@ async fn send_chat_message_inner(
             requested_api_config_id_snapshot.unwrap_or("未指定"),
             conversation_preferred_api_config_id.as_deref().unwrap_or("部门模型"),
             preferred_model_applied,
+            department_model_fallback_enabled,
             candidate_api_ids.join(" -> ")
         ));
         let selected_api_started = std::time::Instant::now();
@@ -3567,6 +3571,35 @@ mod core_send_inner_tests {
         }
     }
 
+    fn test_department_with_models(
+        api_config_ids: Vec<&str>,
+        model_failure_fallback_enabled: bool,
+    ) -> DepartmentConfig {
+        let ids = api_config_ids
+            .into_iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+        DepartmentConfig {
+            id: "dept-a".to_string(),
+            name: "部门 A".to_string(),
+            summary: String::new(),
+            guide: String::new(),
+            api_config_ids: ids.clone(),
+            api_config_id: ids.first().cloned().unwrap_or_default(),
+            model_failure_fallback_enabled,
+            agent_ids: vec![DEFAULT_AGENT_ID.to_string()],
+            child_department_ids: Vec::new(),
+            created_at: now_iso(),
+            updated_at: now_iso(),
+            order_index: 1,
+            is_built_in_assistant: false,
+            is_deputy: false,
+            source: default_main_source(),
+            scope: default_global_scope(),
+            permission_control: DepartmentPermissionControl::default(),
+        }
+    }
+
     fn test_prepared_prompt_with_user_image_history(
         history_user_count: usize,
         latest_user_text: &str,
@@ -3755,6 +3788,106 @@ mod core_send_inner_tests {
         assert!(!missing_applied);
         assert!(!disabled_applied);
         assert_eq!(candidate_api_ids, vec!["text-a".to_string()]);
+    }
+
+    #[test]
+    fn build_chat_candidate_api_ids_should_keep_only_required_model_when_fallback_disabled() {
+        let app_config = AppConfig {
+            api_configs: vec![
+                test_chat_api("api-a", false),
+                test_chat_api("api-b", false),
+                test_chat_api("api-c", false),
+            ],
+            api_providers: Vec::new(),
+            ..AppConfig::default()
+        };
+        let department = test_department_with_models(vec!["api-a", "api-b"], false);
+
+        let (candidate_api_ids, preferred_applied) = build_chat_candidate_api_ids(
+            &app_config,
+            &department,
+            Some("api-c"),
+            None,
+        )
+        .expect("build candidates");
+
+        assert!(!preferred_applied);
+        assert_eq!(candidate_api_ids, vec!["api-c".to_string()]);
+    }
+
+    #[test]
+    fn build_chat_candidate_api_ids_should_keep_only_conversation_model_when_fallback_disabled() {
+        let app_config = AppConfig {
+            api_configs: vec![
+                test_chat_api("api-a", false),
+                test_chat_api("api-b", false),
+                test_chat_api("api-c", false),
+            ],
+            api_providers: Vec::new(),
+            ..AppConfig::default()
+        };
+        let department = test_department_with_models(vec!["api-a", "api-b"], false);
+
+        let (candidate_api_ids, preferred_applied) = build_chat_candidate_api_ids(
+            &app_config,
+            &department,
+            None,
+            Some("api-c"),
+        )
+        .expect("build candidates");
+
+        assert!(preferred_applied);
+        assert_eq!(candidate_api_ids, vec!["api-c".to_string()]);
+    }
+
+    #[test]
+    fn build_chat_candidate_api_ids_should_keep_department_queue_when_fallback_enabled() {
+        let app_config = AppConfig {
+            api_configs: vec![
+                test_chat_api("api-a", false),
+                test_chat_api("api-b", false),
+                test_chat_api("api-c", false),
+            ],
+            api_providers: Vec::new(),
+            ..AppConfig::default()
+        };
+        let department = test_department_with_models(vec!["api-a", "api-b"], true);
+
+        let (candidate_api_ids, preferred_applied) = build_chat_candidate_api_ids(
+            &app_config,
+            &department,
+            None,
+            Some("api-c"),
+        )
+        .expect("build candidates");
+
+        assert!(preferred_applied);
+        assert_eq!(
+            candidate_api_ids,
+            vec!["api-c".to_string(), "api-a".to_string(), "api-b".to_string()]
+        );
+    }
+
+    #[test]
+    fn build_chat_candidate_api_ids_should_not_fallback_for_private_workspace_department() {
+        let app_config = AppConfig {
+            api_configs: vec![test_chat_api("api-a", false), test_chat_api("api-b", false)],
+            api_providers: Vec::new(),
+            ..AppConfig::default()
+        };
+        let mut department = test_department_with_models(vec!["api-a", "api-b"], true);
+        department.source = default_private_workspace_source();
+
+        let (candidate_api_ids, preferred_applied) = build_chat_candidate_api_ids(
+            &app_config,
+            &department,
+            None,
+            None,
+        )
+        .expect("build candidates");
+
+        assert!(!preferred_applied);
+        assert_eq!(candidate_api_ids, vec!["api-a".to_string()]);
     }
 
     #[test]

@@ -68,6 +68,11 @@ function mapDepartmentConfig(item: unknown): AppConfig["departments"][number] {
     : [];
   const legacyApiConfigId = String((item as { apiConfigId?: unknown })?.apiConfigId || "").trim();
   const normalizedApiConfigIds = Array.from(new Set((apiConfigIds.length > 0 ? apiConfigIds : [legacyApiConfigId]).filter(Boolean)));
+  const source = String((item as { source?: unknown })?.source || "").trim() || "main_config";
+  const isPrivateWorkspaceDepartment = source === "private_workspace";
+  const effectiveApiConfigIds = isPrivateWorkspaceDepartment
+    ? normalizedApiConfigIds.slice(0, 1)
+    : normalizedApiConfigIds;
   const permissionControlRaw = (item as { permissionControl?: Record<string, unknown> | null })?.permissionControl;
   const normalizeNameList = (value: unknown): string[] =>
     Array.isArray(value)
@@ -78,8 +83,9 @@ function mapDepartmentConfig(item: unknown): AppConfig["departments"][number] {
     name: String((item as { name?: unknown })?.name || "").trim(),
     summary: String((item as { summary?: unknown })?.summary || "").trim(),
     guide: String((item as { guide?: unknown })?.guide || "").trim(),
-    apiConfigId: normalizedApiConfigIds[0] || "",
-    apiConfigIds: normalizedApiConfigIds,
+    apiConfigId: effectiveApiConfigIds[0] || "",
+    apiConfigIds: effectiveApiConfigIds,
+    modelFailureFallbackEnabled: !isPrivateWorkspaceDepartment && !!(item as { modelFailureFallbackEnabled?: unknown })?.modelFailureFallbackEnabled,
     agentIds: Array.isArray((item as { agentIds?: unknown[] })?.agentIds)
       ? ((item as { agentIds?: unknown[] }).agentIds || []).map((v) => String(v || "").trim()).filter(Boolean)
       : [],
@@ -91,7 +97,7 @@ function mapDepartmentConfig(item: unknown): AppConfig["departments"][number] {
     updatedAt: String((item as { updatedAt?: unknown })?.updatedAt || "").trim(),
     orderIndex: Math.max(1, Number((item as { orderIndex?: unknown })?.orderIndex || 1)),
     isBuiltInAssistant: !!(item as { isBuiltInAssistant?: unknown })?.isBuiltInAssistant,
-    source: String((item as { source?: unknown })?.source || "").trim() || "main_config",
+    source,
     scope: String((item as { scope?: unknown })?.scope || "").trim() || "global",
     permissionControl: {
       enabled: !!permissionControlRaw?.enabled,
