@@ -2923,7 +2923,7 @@
     }
 
     #[test]
-    fn runtime_trusted_prompt_usage_should_be_consumed_once_then_estimate() {
+    fn runtime_trusted_prompt_usage_should_be_reused_during_dispatch() {
         let now = now_iso();
         let mut conversation = test_chat_conversation("conversation-main", "active", &now);
         conversation.messages.push(ChatMessage {
@@ -2970,14 +2970,17 @@
             latest_audios: Vec::new(),
         };
         let mut runtime_context = RuntimeContext::default();
-        conversation_prompt_service().prime_runtime_trusted_prompt_usage(
+        let primed = conversation_prompt_service().prime_runtime_trusted_prompt_usage(
             &mut runtime_context,
             &conversation,
+            &prepared,
             &ApiConfig::default(),
+            &agent,
         );
+        assert_eq!(primed.source, "assistant_message_effective_prompt_tokens");
 
-        let first = conversation_prompt_service().consume_runtime_trusted_prompt_usage_or_estimate(
-            &mut runtime_context,
+        let first = conversation_prompt_service().resolve_runtime_trusted_prompt_usage_or_estimate(
+            &runtime_context,
             &prepared,
             &ApiConfig::default(),
             &agent,
@@ -2985,16 +2988,17 @@
         assert_eq!(first.source, "trusted_prompt_usage");
         assert_eq!(first.effective_prompt_tokens, 640);
         assert!(first.estimated_prompt_tokens.is_none());
-        assert!(runtime_context.trusted_prompt_usage.is_none());
+        assert!(runtime_context.trusted_prompt_usage.is_some());
 
-        let second = conversation_prompt_service().consume_runtime_trusted_prompt_usage_or_estimate(
-            &mut runtime_context,
+        let second = conversation_prompt_service().resolve_runtime_trusted_prompt_usage_or_estimate(
+            &runtime_context,
             &prepared,
             &ApiConfig::default(),
             &agent,
         );
-        assert_eq!(second.source, "estimated_prompt_tokens");
-        assert!(second.estimated_prompt_tokens.is_some());
+        assert_eq!(second.source, "trusted_prompt_usage");
+        assert_eq!(second.effective_prompt_tokens, 640);
+        assert!(second.estimated_prompt_tokens.is_none());
     }
 
     #[test]
@@ -3032,7 +3036,7 @@
             Some(640),
             &ApiConfig::default(),
         );
-        let first = conversation_prompt_service().consume_shared_trusted_prompt_usage_or_estimate(
+        let first = conversation_prompt_service().resolve_shared_trusted_prompt_usage_or_estimate(
             &trusted,
             &prepared,
             &ApiConfig::default(),
@@ -3042,14 +3046,30 @@
         assert_eq!(first.effective_prompt_tokens, 640);
         assert!(first.estimated_prompt_tokens.is_none());
 
-        let second = conversation_prompt_service().consume_shared_trusted_prompt_usage_or_estimate(
+        let second = conversation_prompt_service().resolve_shared_trusted_prompt_usage_or_estimate(
             &trusted,
             &prepared,
             &ApiConfig::default(),
             &agent,
         );
-        assert_eq!(second.source, "estimated_prompt_tokens");
-        assert!(second.estimated_prompt_tokens.is_some());
+        assert_eq!(second.source, "trusted_prompt_usage");
+        assert_eq!(second.effective_prompt_tokens, 640);
+        assert!(second.estimated_prompt_tokens.is_none());
+
+        conversation_prompt_service().refresh_shared_trusted_prompt_usage(
+            &trusted,
+            None,
+            &ApiConfig::default(),
+        );
+        let after_missing_provider_usage = conversation_prompt_service()
+            .resolve_shared_trusted_prompt_usage_or_estimate(
+                &trusted,
+                &prepared,
+                &ApiConfig::default(),
+                &agent,
+            );
+        assert_eq!(after_missing_provider_usage.source, "trusted_prompt_usage");
+        assert_eq!(after_missing_provider_usage.effective_prompt_tokens, 640);
     }
 
     #[test]

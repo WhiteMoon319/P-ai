@@ -2759,19 +2759,18 @@ async fn send_chat_message_inner(
             );
         }
     } else {
-        conversation_prompt_service().prime_runtime_trusted_prompt_usage(
+        let usage_resolution = conversation_prompt_service().prime_runtime_trusted_prompt_usage(
             &mut runtime_context,
             &conversation_for_compaction,
-            &selected_api,
-        );
-        let latest_real_usage = runtime_context.trusted_prompt_usage.as_ref().copied();
-        let usage_resolution = conversation_prompt_service()
-            .consume_runtime_trusted_prompt_usage_or_estimate(
-            &mut runtime_context,
             &prepared_context.1,
             &selected_api,
             &prepared_context.4,
         );
+        let latest_real_usage = runtime_context
+            .trusted_prompt_usage
+            .as_ref()
+            .copied()
+            .filter(|usage| !usage.estimated);
         let (decision, decision_source) = decide_archive_before_send_from_usage(
             &usage_resolution,
             conversation_for_compaction.last_user_at.as_deref(),
@@ -2881,7 +2880,7 @@ async fn send_chat_message_inner(
             "trusted_prompt_usage",
             &context.trusted_prompt_usage,
         );
-        *guard = runtime_context.trusted_prompt_usage.take();
+        *guard = runtime_context.trusted_prompt_usage;
     }
     log_run_stage("prompt_ready");
 
@@ -3219,6 +3218,12 @@ async fn send_chat_message_inner(
     let context_usage_ratio =
         effective_prompt_tokens as f64 / f64::from(active_selected_api.context_window_tokens.max(1));
     let context_usage_percent = context_usage_ratio.mul_add(100.0, 0.0).round().clamp(0.0, 100.0) as u32;
+    conversation_prompt_service().update_runtime_trusted_prompt_usage_from_request(
+        &mut runtime_context,
+        trusted_input_tokens,
+        Some(estimated_prompt_tokens),
+        &active_selected_api,
+    );
 
     let assistant_request_messages = assistant_request_sequence_from_tool_history(
         &tool_history_events,

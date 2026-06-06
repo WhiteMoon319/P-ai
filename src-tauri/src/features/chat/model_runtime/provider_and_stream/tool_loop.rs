@@ -263,6 +263,47 @@ fn append_tool_loop_transient_history_to_prepared(
     normalize_prepared_history_messages_in_place(prepared);
 }
 
+fn estimate_latest_tool_result_content_tokens(events: &[Value]) -> u64 {
+    let start = events
+        .iter()
+        .rposition(|event| {
+            event
+                .get("role")
+                .and_then(Value::as_str)
+                .is_some_and(|role| role.trim().eq_ignore_ascii_case("assistant"))
+                && event
+                    .get("tool_calls")
+                    .and_then(Value::as_array)
+                    .is_some_and(|items| !items.is_empty())
+        })
+        .map(|index| index + 1)
+        .unwrap_or(0);
+    let mut total = 0.0f64;
+    let mut count = 0usize;
+    for event in events.iter().skip(start) {
+        if !event
+            .get("role")
+            .and_then(Value::as_str)
+            .is_some_and(|role| role.trim().eq_ignore_ascii_case("tool"))
+        {
+            continue;
+        }
+        let Some(content) = event.get("content").and_then(Value::as_str) else {
+            continue;
+        };
+        count += 1;
+        total += estimated_tokens_for_text(content);
+    }
+    let tokens = total.ceil().max(0.0).min(u64::MAX as f64) as u64;
+    if tokens > 0 {
+        runtime_log_debug(format!(
+            "[估算Token] 工具结果增量 tool_result_count={} estimated_tokens={}",
+            count, tokens
+        ));
+    }
+    tokens
+}
+
 fn tool_loop_guided_close_reply(
     activity_reasoning_text: String,
     tool_history_events: Vec<Value>,
@@ -1297,22 +1338,43 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
         return Ok(false);
     };
 
-    let usage = conversation_prompt_service().consume_shared_trusted_prompt_usage_or_estimate(
+    let base_usage = conversation_prompt_service().resolve_shared_trusted_prompt_usage_or_estimate(
         &context.trusted_prompt_usage,
         &prepared_before,
         selected_api,
         &context.agent,
+    );
+    let latest_tool_result_tokens = estimate_latest_tool_result_content_tokens(transient_tool_history);
+    let usage = conversation_prompt_service().add_estimated_prompt_tokens_to_usage(
+        base_usage,
+        latest_tool_result_tokens,
+        selected_api,
+        "prompt_usage_plus_estimated_tool_results",
     );
     let (decision, decision_source) = decide_archive_before_send_from_usage(
         &usage,
         source.last_user_at.as_deref(),
         archive_pipeline_has_assistant_reply(&source),
     );
+    runtime_log_info(format!(
+        "[聊天] 工具续调前上下文整理检查 conversation_id={} should_archive={} forced={} usage_ratio={:.4} source={} reason={} effective_prompt_tokens={} context_window_tokens={} estimated={} latest_tool_result_estimated_tokens={}",
+        context.conversation_id,
+        decision.should_archive,
+        decision.forced,
+        decision.usage_ratio,
+        decision_source,
+        decision.reason,
+        usage.effective_prompt_tokens,
+        selected_api.context_window_tokens,
+        usage.estimated_prompt_tokens.is_some(),
+        latest_tool_result_tokens,
+    ));
     if !decision.should_archive {
-        runtime_log_info(format!(
-            "[聊天] 工具续调前上下文整理检查 跳过 conversation_id={} usage_ratio={:.4} source={} reason={}",
-            context.conversation_id, decision.usage_ratio, decision_source, decision.reason
-        ));
+        conversation_prompt_service().store_shared_prompt_usage_resolution(
+            &context.trusted_prompt_usage,
+            &usage,
+            selected_api,
+        );
         return Ok(false);
     }
 
@@ -1719,9 +1781,13 @@ async fn run_genai_tool_loop(
         );
 
         if let Some(context) = auto_compaction_context {
+            runtime_log_info(format!(
+                "[聊天] 工具循环刷新缓存 conversation_id={} trusted_input_tokens={:?} context_window_tokens={}",
+                context.conversation_id, round_trusted_input_tokens, selected_api.context_window_tokens,
+            ));
             conversation_prompt_service().refresh_shared_trusted_prompt_usage(
                 &context.trusted_prompt_usage,
-                trusted_input_tokens,
+                round_trusted_input_tokens,
                 selected_api,
             );
         }
@@ -2202,11 +2268,12 @@ async fn run_genai_tool_loop_non_stream(
         let turn_reasoning = round.turn_reasoning;
         let reasoning_delta_emitted = round.reasoning_delta_emitted;
         let raw_turn_tool_calls = round.turn_tool_calls;
+        let round_trusted_input_tokens = round.trusted_input_tokens;
         let round_elapsed_ms = round_started_at
             .elapsed()
             .as_millis()
             .min(u128::from(u64::MAX)) as u64;
-        if let Some(value) = round.trusted_input_tokens {
+        if let Some(value) = round_trusted_input_tokens {
             trusted_input_tokens = Some(value);
         }
         push_tool_loop_round_log(
@@ -2219,6 +2286,17 @@ async fn run_genai_tool_loop_non_stream(
             tool_loop_round_response_value(&turn_text, &turn_reasoning, &raw_turn_tool_calls),
             round_elapsed_ms,
         );
+        if let Some(context) = auto_compaction_context {
+            runtime_log_info(format!(
+                "[聊天] 工具循环刷新缓存 conversation_id={} trusted_input_tokens={:?} context_window_tokens={}",
+                context.conversation_id, round_trusted_input_tokens, selected_api.context_window_tokens,
+            ));
+            conversation_prompt_service().refresh_shared_trusted_prompt_usage(
+                &context.trusted_prompt_usage,
+                round_trusted_input_tokens,
+                selected_api,
+            );
+        }
         let turn_tool_calls = reorder_turn_tool_calls_for_contact_tail(raw_turn_tool_calls);
         if !turn_reasoning.is_empty() {
             full_activity_reasoning_text.push_str(&turn_reasoning);
@@ -3072,6 +3150,38 @@ mod tool_loop_tests {
         assert_eq!(event["tool_calls"].as_array().map(Vec::len), Some(2));
         assert_eq!(event["tool_calls"][0]["id"].as_str(), Some("call-a"));
         assert_eq!(event["tool_calls"][1]["id"].as_str(), Some("call-b"));
+    }
+
+    #[test]
+    fn latest_tool_result_estimate_should_only_count_current_tool_group() {
+        let events = vec![
+            serde_json::json!({
+                "role": "assistant",
+                "tool_calls": [{"id": "call-a"}]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call-a",
+                "content": "上一轮工具结果应该已经进入模型用量"
+            }),
+            serde_json::json!({
+                "role": "assistant",
+                "tool_calls": [{"id": "call-b"}]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call-b",
+                "content": "当前工具结果"
+            }),
+        ];
+
+        let latest = estimate_latest_tool_result_content_tokens(&events);
+        let all_results =
+            estimated_tokens_for_text("上一轮工具结果应该已经进入模型用量当前工具结果")
+                .ceil() as u64;
+
+        assert!(latest > 0);
+        assert!(latest < all_results);
     }
 
     #[test]

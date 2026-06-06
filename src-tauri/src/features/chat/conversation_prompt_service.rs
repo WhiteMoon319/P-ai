@@ -187,56 +187,92 @@ impl ConversationPromptService {
         Some(TrustedPromptUsage {
             effective_prompt_tokens: usage.effective_prompt_tokens,
             context_usage_ratio: usage.usage_ratio,
+            estimated: false,
         })
+    }
+
+    fn trusted_prompt_usage_from_tokens(
+        &self,
+        effective_prompt_tokens: u64,
+        selected_api: &ApiConfig,
+        estimated: bool,
+    ) -> Option<TrustedPromptUsage> {
+        if effective_prompt_tokens == 0 {
+            return None;
+        }
+        Some(TrustedPromptUsage {
+            effective_prompt_tokens,
+            context_usage_ratio: effective_prompt_tokens as f64
+                / f64::from(selected_api.context_window_tokens.max(1)),
+            estimated,
+        })
+    }
+
+    fn prompt_usage_from_runtime_usage(
+        &self,
+        usage: TrustedPromptUsage,
+        trusted_source: &'static str,
+    ) -> PromptUsageResolution {
+        PromptUsageResolution {
+            effective_prompt_tokens: usage.effective_prompt_tokens,
+            usage_ratio: usage.context_usage_ratio,
+            estimated_prompt_tokens: usage.estimated.then_some(usage.effective_prompt_tokens),
+            source: if usage.estimated {
+                "estimated_prompt_tokens"
+            } else {
+                trusted_source
+            },
+        }
     }
 
     fn prime_runtime_trusted_prompt_usage(
         &self,
         runtime_context: &mut RuntimeContext,
         conversation: &Conversation,
-        selected_api: &ApiConfig,
-    ) {
-        if runtime_context.trusted_prompt_usage.is_some() {
-            return;
-        }
-        runtime_context.trusted_prompt_usage = self
-            .latest_real_prompt_usage(conversation, selected_api)
-            .and_then(|usage| self.trusted_prompt_usage_from_real_usage(usage));
-    }
-
-    fn consume_runtime_trusted_prompt_usage_or_estimate(
-        &self,
-        runtime_context: &mut RuntimeContext,
         prepared: &PreparedPrompt,
         selected_api: &ApiConfig,
         current_agent: &AgentProfile,
     ) -> PromptUsageResolution {
-        if let Some(usage) = runtime_context.trusted_prompt_usage.take() {
-            return PromptUsageResolution {
-                effective_prompt_tokens: usage.effective_prompt_tokens,
-                usage_ratio: usage.context_usage_ratio,
-                estimated_prompt_tokens: None,
-                source: "trusted_prompt_usage",
-            };
+        if let Some(usage) = runtime_context.trusted_prompt_usage {
+            return self.prompt_usage_from_runtime_usage(usage, "trusted_prompt_usage");
+        }
+        if let Some(usage) = self.latest_real_prompt_usage(conversation, selected_api) {
+            runtime_context.trusted_prompt_usage =
+                self.trusted_prompt_usage_from_real_usage(usage);
+            return usage;
+        }
+        let usage = self.resolve_prompt_usage_from_estimate(prepared, selected_api, current_agent);
+        runtime_context.trusted_prompt_usage = self.trusted_prompt_usage_from_tokens(
+            usage.effective_prompt_tokens,
+            selected_api,
+            true,
+        );
+        usage
+    }
+
+    fn resolve_runtime_trusted_prompt_usage_or_estimate(
+        &self,
+        runtime_context: &RuntimeContext,
+        prepared: &PreparedPrompt,
+        selected_api: &ApiConfig,
+        current_agent: &AgentProfile,
+    ) -> PromptUsageResolution {
+        if let Some(usage) = runtime_context.trusted_prompt_usage {
+            return self.prompt_usage_from_runtime_usage(usage, "trusted_prompt_usage");
         }
         self.resolve_prompt_usage_from_estimate(prepared, selected_api, current_agent)
     }
 
-    fn consume_shared_trusted_prompt_usage_or_estimate(
+    fn resolve_shared_trusted_prompt_usage_or_estimate(
         &self,
         trusted_prompt_usage: &std::sync::Mutex<Option<TrustedPromptUsage>>,
         prepared: &PreparedPrompt,
         selected_api: &ApiConfig,
         current_agent: &AgentProfile,
     ) -> PromptUsageResolution {
-        let mut guard = cache_lock_recover("trusted_prompt_usage", trusted_prompt_usage);
-        if let Some(usage) = guard.take() {
-            return PromptUsageResolution {
-                effective_prompt_tokens: usage.effective_prompt_tokens,
-                usage_ratio: usage.context_usage_ratio,
-                estimated_prompt_tokens: None,
-                source: "trusted_prompt_usage",
-            };
+        let guard = cache_lock_recover("trusted_prompt_usage", trusted_prompt_usage);
+        if let Some(usage) = *guard {
+            return self.prompt_usage_from_runtime_usage(usage, "trusted_prompt_usage");
         }
         drop(guard);
         self.resolve_prompt_usage_from_estimate(prepared, selected_api, current_agent)
@@ -248,15 +284,73 @@ impl ConversationPromptService {
         provider_prompt_tokens: Option<u64>,
         selected_api: &ApiConfig,
     ) {
+        let Some(next) = provider_prompt_tokens
+            .filter(|value| *value > 0)
+            .and_then(|value| self.trusted_prompt_usage_from_tokens(value, selected_api, false))
+        else {
+            return;
+        };
+        let mut guard = cache_lock_recover("trusted_prompt_usage", trusted_prompt_usage);
+        *guard = Some(next);
+    }
+
+    fn update_runtime_trusted_prompt_usage_from_request(
+        &self,
+        runtime_context: &mut RuntimeContext,
+        provider_prompt_tokens: Option<u64>,
+        estimated_prompt_tokens: Option<u64>,
+        selected_api: &ApiConfig,
+    ) {
         let next = provider_prompt_tokens
             .filter(|value| *value > 0)
-            .map(|effective_prompt_tokens| TrustedPromptUsage {
-                effective_prompt_tokens,
-                context_usage_ratio: effective_prompt_tokens as f64
-                    / f64::from(selected_api.context_window_tokens.max(1)),
+            .and_then(|value| self.trusted_prompt_usage_from_tokens(value, selected_api, false))
+            .or_else(|| {
+                estimated_prompt_tokens
+                    .filter(|value| *value > 0)
+                    .and_then(|value| self.trusted_prompt_usage_from_tokens(value, selected_api, true))
             });
+        if let Some(next) = next {
+            runtime_context.trusted_prompt_usage = Some(next);
+        }
+    }
+
+    fn store_shared_prompt_usage_resolution(
+        &self,
+        trusted_prompt_usage: &std::sync::Mutex<Option<TrustedPromptUsage>>,
+        usage: &PromptUsageResolution,
+        selected_api: &ApiConfig,
+    ) {
+        let Some(next) = self.trusted_prompt_usage_from_tokens(
+            usage.effective_prompt_tokens,
+            selected_api,
+            usage.estimated_prompt_tokens.is_some(),
+        ) else {
+            return;
+        };
         let mut guard = cache_lock_recover("trusted_prompt_usage", trusted_prompt_usage);
-        *guard = next;
+        *guard = Some(next);
+    }
+
+    fn add_estimated_prompt_tokens_to_usage(
+        &self,
+        usage: PromptUsageResolution,
+        additional_tokens: u64,
+        selected_api: &ApiConfig,
+        source: &'static str,
+    ) -> PromptUsageResolution {
+        if additional_tokens == 0 {
+            return usage;
+        }
+        let effective_prompt_tokens = usage
+            .effective_prompt_tokens
+            .saturating_add(additional_tokens);
+        PromptUsageResolution {
+            effective_prompt_tokens,
+            usage_ratio: effective_prompt_tokens as f64
+                / f64::from(selected_api.context_window_tokens.max(1)),
+            estimated_prompt_tokens: Some(effective_prompt_tokens),
+            source,
+        }
     }
 
     fn latest_real_prompt_usage(
@@ -317,24 +411,45 @@ impl ConversationPromptService {
         current_agent: &AgentProfile,
     ) -> u64 {
         let mut total = 0.0f64;
-        total += estimated_tokens_for_text(&prepared.preamble);
+        let preamble_tokens = estimated_tokens_for_text(&prepared.preamble);
+        total += preamble_tokens;
+        let mut history_overhead = 0.0f64;
+        let mut history_text = 0.0f64;
+        let mut history_tool_calls = 0.0f64;
         for hm in &prepared.history_messages {
-            total += 10.0;
-            total += estimated_tokens_for_text(&hm.text);
+            history_overhead += 4.0;  // 每条消息格式化开销
+            history_text += estimated_tokens_for_text(&hm.text);
             for block in &hm.extra_text_blocks {
-                total += estimated_tokens_for_text(block);
+                history_text += estimated_tokens_for_text(block);
             }
             if let Some(v) = hm.user_time_text.as_deref() {
-                total += estimated_tokens_for_text(v);
+                history_text += estimated_tokens_for_text(v);
             }
-            if let Some(v) = hm.reasoning_content.as_deref() {
-                total += estimated_tokens_for_text(v);
-            }
+            // reasoning_content 是输出，不算输入 token
             if let Some(calls) = hm.tool_calls.as_ref() {
-                let text = serde_json::to_string(calls).unwrap_or_default();
-                total += estimated_tokens_for_text(&text);
+                // 只算 function.name + function.arguments，不算 call_id/id/type
+                for call in calls {
+                    if let Some(function) = call.get("function") {
+                        if let Some(name) = function.get("name").and_then(|v| v.as_str()) {
+                            history_tool_calls += estimated_tokens_for_text(name);
+                        }
+                        if let Some(arguments) = function.get("arguments").and_then(|v| v.as_str()) {
+                            history_tool_calls += estimated_tokens_for_text(arguments);
+                        }
+                    }
+                }
             }
         }
+        total += history_overhead + history_text + history_tool_calls;
+        runtime_log_debug(format!(
+            "[估算Token] preamble={:.0} history_count={} overhead={:.0} text={:.0} tool_calls={:.0} total_so_far={:.0}",
+            preamble_tokens,
+            prepared.history_messages.len(),
+            history_overhead,
+            history_text,
+            history_tool_calls,
+            total,
+        ));
         for text_block in prepared_prompt_latest_user_text_blocks(prepared) {
             total += estimated_tokens_for_text(&text_block);
         }

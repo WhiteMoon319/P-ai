@@ -182,6 +182,8 @@ struct RuntimeContext {
 struct TrustedPromptUsage {
     effective_prompt_tokens: u64,
     context_usage_ratio: f64,
+    #[serde(default)]
+    estimated: bool,
 }
 
 fn runtime_context_trimmed(value: Option<&str>) -> Option<String> {
