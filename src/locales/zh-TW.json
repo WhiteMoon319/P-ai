@@ -1001,6 +1001,15 @@
       "durationMinutesSeconds": "{minutes}分{seconds}秒",
       "durationSeconds": "{seconds}秒"
     },
+    "localTools": {
+      "modelNotAvailable": "當前會話首選模型不可用，請重新選擇。",
+      "noSwitchableSession": "當前沒有可切換會話首選模型的會話。",
+      "modelSwitched": "會話首選模型已切換，將在下一次調度開始時生效。",
+      "screenshotModeFocused": "前台窗口",
+      "screenshotModeFullscreen": "全屏",
+      "screenshotResultEmpty": "截圖結果為空",
+      "screenshotFailed": "後台語音截圖失敗：{error}"
+    },
     "voice": "語音{index}",
     "jumpToBottom": "回到底部",
     "image": "圖片{index}",

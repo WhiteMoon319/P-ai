@@ -1058,6 +1058,15 @@
       "durationMinutesSeconds": "{minutes}m{seconds}s",
       "durationSeconds": "{seconds}s"
     },
+    "localTools": {
+      "modelNotAvailable": "Current session preferred model is not available, please select again.",
+      "noSwitchableSession": "No session with switchable preferred model.",
+      "modelSwitched": "Session preferred model switched, will take effect at next dispatch.",
+      "screenshotModeFocused": "Focused window",
+      "screenshotModeFullscreen": "Fullscreen",
+      "screenshotResultEmpty": "Screenshot result is empty",
+      "screenshotFailed": "Background voice screenshot failed: {error}"
+    },
     "queue": {
       "queued": "Queued",
       "recallToInput": "Recall to input",

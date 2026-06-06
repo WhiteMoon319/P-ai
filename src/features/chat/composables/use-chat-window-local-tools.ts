@@ -81,12 +81,12 @@ export function useChatWindowLocalTools(bindings: Record<string, any>) {
     const nextId = String(value || "").trim();
     const resolvedId = resolveModelRoleApiConfigId(nextId, bindings.config);
     if (nextId && !bindings.config.apiConfigs.some((item: any) => item.id === resolvedId && item.enableText)) {
-      bindings.setStatus("当前会话首选模型不可用，请重新选择。");
+      bindings.setStatus(t('chat.localTools.modelNotAvailable'));
       return;
     }
     const conversationId = String(bindings.currentChatConversationId.value || "").trim();
     if (!conversationId) {
-      bindings.setStatus("当前没有可切换会话首选模型的会话。");
+      bindings.setStatus(t('chat.localTools.noSwitchableSession'));
       return;
     }
     const previousId = String(bindings.currentChatPreferredApiConfigId?.value || "").trim();
@@ -110,7 +110,7 @@ export function useChatWindowLocalTools(bindings: Record<string, any>) {
           },
         });
         if (bindings.chatting.value) {
-          bindings.setStatus("会话首选模型已切换，将在下一次调度开始时生效。");
+          bindings.setStatus(t('chat.localTools.modelSwitched'));
         }
         return true;
       } catch (error) {
@@ -195,7 +195,7 @@ export function useChatWindowLocalTools(bindings: Record<string, any>) {
       console.warn("[后台语音截图] 跳过：当前无可用对话模型配置");
       return;
     }
-    const screenshotModeLabel = input.mode === "focused_window" ? "前台窗口" : "全屏";
+    const screenshotModeLabel = input.mode === "focused_window" ? t('chat.localTools.screenshotModeFocused') : t('chat.localTools.screenshotModeFullscreen');
     try {
       let imageMime = "";
       let imageBase64 = "";
@@ -218,7 +218,7 @@ export function useChatWindowLocalTools(bindings: Record<string, any>) {
         imageBase64 = String(output?.imageBase64 || "").trim();
       }
       if (!imageBase64) {
-        throw new Error("截图结果为空");
+        throw new Error(t('chat.localTools.screenshotResultEmpty'));
       }
       const queued = await invokeTauri<{
         mime: string;
@@ -277,7 +277,7 @@ export function useChatWindowLocalTools(bindings: Record<string, any>) {
         elapsedMs,
         String(error),
       );
-      bindings.setStatus(`后台语音截图失败：${String(error)}`);
+      bindings.setStatus(t('chat.localTools.screenshotFailed', { error: String(error) }));
     }
   }
 
