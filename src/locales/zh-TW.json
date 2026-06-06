@@ -1446,7 +1446,21 @@
     "noConversation": "目前沒有可處理的會話。",
     "deleteMainNotAllowed": "主會話暫不支援刪除。",
     "loadRuntimeLogsFailed": "載入執行日誌失敗：{error}",
-    "clearRuntimeLogsFailed": "清空執行日誌失敗：{error}"
+    "clearRuntimeLogsFailed": "清空執行日誌失敗：{error}",
+    "memoryRefresh": "重新整理",
+    "memoryToggleView": "切換到簡要",
+    "memoryToggleViewDetailed": "切換到詳細",
+    "memoryFilter": "篩選",
+    "memoryResultBadge": "結果",
+    "memoryAllPersonas": "全人格",
+    "memoryGlobal": "全域",
+    "memoryProfileAttribute": "畫像屬性",
+    "memoryType": "記憶類型",
+    "memoryVectorScore": "向量",
+    "memoryCompositeScore": "綜合",
+    "memoryOperationFailed": "操作失敗：{error}",
+    "memorySearching": "搜尋中...",
+    "memorySearchResult": "找到 {count} 條，耗時 {ms}ms"
   },
   "archives": {
     "refresh": "刷新归档",

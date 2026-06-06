@@ -163,7 +163,7 @@
           <span class="text-sm font-medium">{{ t('config.memory.list') }}</span>
           <div class="flex items-center gap-2">
             <div class="join">
-              <button class="btn btn-sm join-item btn-ghost" :disabled="loading" @click="refreshMemories" title="刷新">
+              <button class="btn btn-sm join-item btn-ghost" :disabled="loading" @click="refreshMemories" :title="t('sidebar.memoryRefresh')">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
               </button>
               <MemoryExportCard class="join-item" @exported="handleMemoryExportDone" />
@@ -176,7 +176,7 @@
             <button
               class="btn btn-sm bg-base-200 hover:bg-base-300 shrink-0"
               :disabled="loading"
-              :title="memoryViewMode === 'detailed' ? '切换到简要' : '切换到详细'"
+              :title="memoryViewMode === 'detailed' ? t('sidebar.memoryToggleView') : t('sidebar.memoryToggleViewDetailed')"
               @click="toggleMemoryViewMode"
             >
               <LayoutList v-if="memoryViewMode === 'detailed'" class="h-3.5 w-3.5" />
@@ -186,7 +186,7 @@
               class="btn btn-sm bg-base-200 hover:bg-base-300 shrink-0"
               :class="{ 'text-primary': filterPanelOpen }"
               :disabled="loading"
-              title="筛选"
+              :title="t('sidebar.memoryFilter')"
               @click="toggleFilterPanel"
             >
               <SlidersHorizontal class="h-3.5 w-3.5" />
@@ -201,7 +201,7 @@
                 />
               </div>
               <div class="indicator">
-                <span v-if="isSearchMode" class="indicator-item badge badge-secondary badge-sm">结果</span>
+                <span v-if="isSearchMode" class="indicator-item badge badge-secondary badge-sm">{{ t('sidebar.memoryResultBadge') }}</span>
                 <button
                   class="btn btn-sm join-item"
                   :class="searchQuery ? 'btn-primary' : 'bg-base-200'"
@@ -238,8 +238,8 @@
               class="select select-bordered select-sm w-32"
               @change="resetMemoryPage"
             >
-              <option value="">全人格</option>
-              <option value="__global__">全局</option>
+              <option value="">{{ t('sidebar.memoryAllPersonas') }}</option>
+              <option value="__global__">{{ t('sidebar.memoryGlobal') }}</option>
               <option v-for="option in ownerFilterOptions" :key="option.value" :value="option.value">
                 {{ option.label }}
               </option>
@@ -249,7 +249,7 @@
               class="select select-bordered select-sm w-32"
               @change="resetMemoryPage"
             >
-              <option value="">画像属性</option>
+              <option value="">{{ t('sidebar.memoryProfileAttribute') }}</option>
               <option v-for="tag in PROFILE_ATTRIBUTE_TAGS" :key="tag" :value="tag">
                 {{ tag }}
               </option>
@@ -259,7 +259,7 @@
               class="select select-bordered select-sm w-32"
               @change="resetMemoryPage"
             >
-              <option value="">记忆类型</option>
+              <option value="">{{ t('sidebar.memoryType') }}</option>
               <option v-for="option in memoryTypeFilterOptions" :key="option.value" :value="option.value">
                 {{ option.label }}
               </option>
@@ -344,8 +344,8 @@
                         <div v-if="isSearchMode" class="pt-2">
                           <div class="flex flex-wrap gap-3 text-[11px] opacity-60">
                             <span>BM25: {{ (memory.bm25Score ?? 0).toFixed(3) }}</span>
-                            <span>向量: {{ (memory.vectorScore ?? 0).toFixed(3) }}</span>
-                            <span class="text-primary font-medium">综合: {{ (memory.finalScore ?? 0).toFixed(3) }}</span>
+                            <span>{{ t('sidebar.memoryVectorScore') }}: {{ (memory.vectorScore ?? 0).toFixed(3) }}</span>
+                            <span class="text-primary font-medium">{{ t('sidebar.memoryCompositeScore') }}: {{ (memory.finalScore ?? 0).toFixed(3) }}</span>
                           </div>
                           <div class="mt-1.5 h-1.5 bg-base-300 rounded-full overflow-hidden">
                             <div
@@ -682,7 +682,7 @@ async function withLoading<T>(fn: () => Promise<T>): Promise<T | null> {
   try {
     return await fn();
   } catch (err) {
-    opMessage.value = `操作失败：${String(err)}`;
+    opMessage.value = t('sidebar.memoryOperationFailed', { error: String(err) });
     return null;
   } finally {
     loading.value = false;
@@ -753,7 +753,7 @@ async function searchChatHistory() {
   const query = chatHistoryQuery.value.trim();
   if (!agentId || !query || chatHistoryLoading.value) return;
   chatHistoryLoading.value = true;
-  chatHistoryMessage.value = "搜索中...";
+  chatHistoryMessage.value = t('sidebar.memorySearching');
   try {
     const result = await invokeTauri<{
       hits: ChatHistorySearchHit[];
@@ -768,7 +768,7 @@ async function searchChatHistory() {
     });
     chatHistoryHits.value = result.hits;
     chatHistoryStats.value = result.stats;
-    chatHistoryMessage.value = `找到 ${result.hits.length} 条，耗时 ${result.elapsedMs}ms`;
+    chatHistoryMessage.value = t('sidebar.memorySearchResult', { count: result.hits.length, ms: result.elapsedMs });
   } catch (err) {
     chatHistoryMessage.value = `${t('config.memory.chatHistorySearchFailed')}: ${String(err)}`;
   } finally {

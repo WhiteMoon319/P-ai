@@ -1446,7 +1446,21 @@
     "noConversation": "No conversation available to process.",
     "deleteMainNotAllowed": "Main conversation cannot be deleted.",
     "loadRuntimeLogsFailed": "Failed to load runtime logs: {error}",
-    "clearRuntimeLogsFailed": "Failed to clear runtime logs: {error}"
+    "clearRuntimeLogsFailed": "Failed to clear runtime logs: {error}",
+    "memoryRefresh": "Refresh",
+    "memoryToggleView": "Switch to brief",
+    "memoryToggleViewDetailed": "Switch to detailed",
+    "memoryFilter": "Filter",
+    "memoryResultBadge": "Results",
+    "memoryAllPersonas": "All personas",
+    "memoryGlobal": "Global",
+    "memoryProfileAttribute": "Profile attribute",
+    "memoryType": "Memory type",
+    "memoryVectorScore": "Vector",
+    "memoryCompositeScore": "Composite",
+    "memoryOperationFailed": "Operation failed: {error}",
+    "memorySearching": "Searching...",
+    "memorySearchResult": "Found {count} results in {ms}ms"
   },
   "archives": {
     "refresh": "Refresh Archives",

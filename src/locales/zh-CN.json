@@ -1446,7 +1446,21 @@
     "noConversation": "当前没有可处理的会话。",
     "deleteMainNotAllowed": "主会话暂不支持删除。",
     "loadRuntimeLogsFailed": "加载运行日志失败：{error}",
-    "clearRuntimeLogsFailed": "清空运行日志失败：{error}"
+    "clearRuntimeLogsFailed": "清空运行日志失败：{error}",
+    "memoryRefresh": "刷新",
+    "memoryToggleView": "切换到简要",
+    "memoryToggleViewDetailed": "切换到详细",
+    "memoryFilter": "筛选",
+    "memoryResultBadge": "结果",
+    "memoryAllPersonas": "全人格",
+    "memoryGlobal": "全局",
+    "memoryProfileAttribute": "画像属性",
+    "memoryType": "记忆类型",
+    "memoryVectorScore": "向量",
+    "memoryCompositeScore": "综合",
+    "memoryOperationFailed": "操作失败：{error}",
+    "memorySearching": "搜索中...",
+    "memorySearchResult": "找到 {count} 条，耗时 {ms}ms"
   },
   "archives": {
     "refresh": "刷新归档",
