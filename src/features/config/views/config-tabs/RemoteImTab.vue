@@ -168,10 +168,10 @@
                     <span
                       v-if="contactKeywordModeMissingKeywords(item)"
                       class="badge badge-sm badge-warning shrink-0 gap-1.5"
-                      title="关键词入场已启用，但关键词为空。请补充关键词，否则不会触发入场。"
+                      title="{{ t('config.remoteIm.keywordMissingHint') }}"
                     >
                       <AlertTriangle class="h-3.5 w-3.5" />
-                      关键词空
+                      {{ t('config.remoteIm.keywordEmpty') }}
                     </span>
                     <div>
                       <button
@@ -299,7 +299,7 @@
       <div class="modal-box max-w-4xl">
         <div class="flex items-center justify-between">
           <div class="font-semibold">
-            联系人日志 · {{ contactLogsTitle }}
+            {{ t('config.remoteIm.contactLogs') }} · {{ contactLogsTitle }}
           </div>
           <div class="flex items-center gap-2">
             <button class="btn btn-sm btn-ghost" :title="t('common.refresh')" @click="refreshContactLogs">
@@ -309,7 +309,7 @@
           </div>
         </div>
         <div class="mt-3 max-h-[60vh] overflow-y-auto">
-          <div v-if="contactLogs.length === 0" class="opacity-60 italic text-xs">暂无该联系人的相关日志</div>
+          <div v-if="contactLogs.length === 0" class="opacity-60 italic text-xs">{{ t('config.remoteIm.noContactLogs') }}</div>
           <pre v-else class="bg-base-200 rounded-box p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all m-0"><template v-for="(line, idx) in contactLogDisplayLines" :key="`${idx}-${line}`"><span>{{ line }}</span>{{ '\n' }}</template></pre>
         </div>
       </div>
@@ -374,7 +374,7 @@
                   <option value="onebot_v11">{{ t("config.remoteIm.platformOptions.onebotV11") }}</option>
                   <option value="feishu">{{ t("config.remoteIm.platformOptions.feishu") }}</option>
                   <option value="dingtalk">{{ t("config.remoteIm.platformOptions.dingtalk") }}</option>
-                  <option value="weixin_oc">个人微信</option>
+                  <option value="weixin_oc">{{ t('config.remoteIm.weixinPlatform') }}</option>
                 </select>
               </div>
 
@@ -424,7 +424,7 @@
                       type="button"
                       @click="showDingtalkSecret = !showDingtalkSecret"
                     >
-                      {{ showDingtalkSecret ? "隐藏" : "显示" }}
+                      {{ showDingtalkSecret ? t('config.remoteIm.hide') : t('config.remoteIm.show') }}
                     </button>
                   </div>
                 </div>
@@ -432,25 +432,25 @@
 
               <template v-else-if="selectedChannel.platform === 'weixin_oc'">
                 <div class="border-b-base-content/5 flex flex-col gap-2 border-b border-dashed py-2 mt-2">
-                  <span class="font-semibold">个人微信扫码登录</span>
+                  <span class="font-semibold">{{ t('config.remoteIm.weixinScanLogin') }}</span>
                 </div>
                 <div class="border-b-base-content/5 flex items-start justify-between gap-2 border-b border-dashed py-2">
                   <div class="flex flex-col gap-1">
-                    <span>登录状态</span>
+                    <span>{{ t('config.remoteIm.loginStatus') }}</span>
                     <span class="opacity-70 break-all">{{ weixinStatusText }}</span>
                     <span v-if="weixinStatusMessage" class="opacity-60 break-all">{{ weixinStatusMessage }}</span>
                   </div>
                   <div class="flex items-center gap-2">
                     <button class="btn btn-primary" :disabled="weixinLoginBusy" @click="onWeixinLoginButtonClick">
-                      {{ weixinLoginBusy ? "处理中" : (isWeixinLoggedIn ? "退出登录并重新扫码" : "扫码登录") }}
+                      {{ weixinLoginBusy ? t('config.remoteIm.processing') : (isWeixinLoggedIn ? t('config.remoteIm.logoutAndRescan') : t('config.remoteIm.scanLogin')) }}
                     </button>
                   </div>
                 </div>
                 <div v-if="isWeixinLoggedIn" class="border-b-base-content/5 flex items-center gap-2 border-b border-dashed py-2 text-success">
-                  <span class="font-semibold">已登录，可直接使用</span>
+                  <span class="font-semibold">{{ t('config.remoteIm.loggedInReady') }}</span>
                 </div>
                 <div v-else-if="weixinLoginState.qrcodeImgContent" class="border-b-base-content/5 flex flex-col gap-2 border-b border-dashed py-2">
-                  <span class="font-semibold">扫码二维码</span>
+                  <span class="font-semibold">{{ t('config.remoteIm.scanQrCode') }}</span>
                   <img :src="weixinQrImageSrc" alt="weixin login qr" class="w-48 h-48 rounded-box border border-base-300 object-contain bg-white p-2" />
                 </div>
               </template>
@@ -943,24 +943,24 @@ const weixinRuntimeStatus = computed(() =>
   selectedChannel.value ? channelRuntimeStates.value[selectedChannel.value.id] ?? null : null,
 );
 const weixinStatusText = computed(() => {
-  if (weixinRuntimeStatus.value?.connected) return "已连接";
-  if (isWeixinLoggedIn.value) return "已登录";
+  if (weixinRuntimeStatus.value?.connected) return t('config.remoteIm.weixinConnected');
+  if (isWeixinLoggedIn.value) return t('config.remoteIm.weixinLoggedIn');
   const status = String(weixinLoginState.value.status || "").trim().toLowerCase();
-  if (status === "wait" || status === "scanned" || status === "scaned") return "等待扫码确认";
-  if (status === "need_login" || status === "idle") return "待扫码登录";
-  if (status === "confirmed" || status === "logged_in") return "已登录";
-  return "待扫码登录";
+  if (status === "wait" || status === "scanned" || status === "scaned") return t('config.remoteIm.waitingScanConfirm');
+  if (status === "need_login" || status === "idle") return t('config.remoteIm.waitingScan');
+  if (status === "confirmed" || status === "logged_in") return t('config.remoteIm.weixinLoggedIn');
+  return t('config.remoteIm.waitingScan');
 });
 const weixinStatusMessage = computed(() => {
   if (weixinRuntimeStatus.value?.connected) {
-    return "凭证已保存";
+    return t('config.remoteIm.credentialsSaved');
   }
   if (isWeixinLoggedIn.value) {
-    return "凭证已保存";
+    return t('config.remoteIm.credentialsSaved');
   }
   const status = String(weixinLoginState.value.status || "").trim().toLowerCase();
   if (status === "wait" || status === "scanned" || status === "scaned") {
-    return "请在微信中确认登录";
+    return t('config.remoteIm.confirmLoginInWeixin');
   }
   const errorMessage = String(weixinLoginState.value.lastError || "").trim();
   return errorMessage || "";
@@ -1036,24 +1036,24 @@ const currentChannelContacts = computed(() => {
 const contactsDisabledReason = computed(() => {
   const channel = selectedChannel.value;
   if (!channel) return "";
-  if (!channel.enabled) return "当前渠道未启用，联系人列表不可操作。";
+  if (!channel.enabled) return t('config.remoteIm.channelDisabledHint');
   if (channel.platform === "feishu") return "";
   if (channel.platform === "onebot_v11" || channel.platform === "dingtalk" || channel.platform === "weixin_oc") {
     const status = channelRuntimeStates.value[channel.id];
     if (status?.connected) return "";
     if (channel.platform === "onebot_v11" && status?.statusText === "binding_retry") {
-      return status.lastError || "OneBot 固定端口被占用，正在按原端口重试绑定。";
+      return status.lastError || t('config.remoteIm.onebotPortOccupied');
     }
     if (channel.platform === "onebot_v11" && status?.statusText === "bind_failed") {
-      return status.lastError || "OneBot 端口绑定失败，请换一个可用端口后保存并重启渠道。";
+      return status.lastError || t('config.remoteIm.onebotBindFailed');
     }
     if (channel.platform === "onebot_v11" && status?.statusText === "binding") {
-      return "OneBot 正在绑定固定端口，连接成功前联系人列表不可操作。";
+      return t('config.remoteIm.onebotBinding');
     }
     if (channel.platform === "onebot_v11" && status?.listenAddr) {
-      return `OneBot 服务端已监听 ${status.listenAddr}，等待 NapCat/协议端连接后联系人列表可操作。`;
+      return t('config.remoteIm.onebotListening', { addr: status.listenAddr });
     }
-    return "渠道尚未真正连接，连接成功前联系人列表不可操作。";
+    return t('config.remoteIm.channelNotConnected');
   }
   return "";
 });
@@ -1249,7 +1249,7 @@ function validateChannelBeforeEnable(channel: RemoteImChannelConfig): string {
 function defaultChannelName(platform: RemoteImPlatform): string {
   if (platform === "feishu") return "Feishu";
   if (platform === "dingtalk") return "DingTalk";
-  if (platform === "weixin_oc") return "个人微信";
+  if (platform === "weixin_oc") return t('config.remoteIm.weixinPlatform');
   return "OneBot v11";
 }
 
@@ -1413,7 +1413,7 @@ async function saveChannels() {
 async function toggleChannelEnabled(channel: RemoteImChannelConfig, enabled: boolean) {
   if (saving.value || isChannelOperationBusy(channel.id)) return;
   const previousEnabled = channel.enabled;
-  props.setStatusAction(`正在${enabled ? "启用" : "停用"}渠道：${channel.name || channel.id}`);
+  props.setStatusAction(t('config.remoteIm.togglingChannel', { action: enabled ? t('config.remoteIm.show') : t('config.remoteIm.hide'), name: channel.name || channel.id }));
   if (enabled) {
     const validationError = validateChannelBeforeEnable(channel);
     if (validationError) {
@@ -1427,7 +1427,7 @@ async function toggleChannelEnabled(channel: RemoteImChannelConfig, enabled: boo
   try {
     const result = await Promise.resolve(props.saveConfigAction());
     if (result) {
-      props.setStatusAction(enabled ? "渠道已启用" : "渠道已停用");
+      props.setStatusAction(enabled ? t('config.remoteIm.channelEnabled') : t('config.remoteIm.channelToggled'));
       if (channel.platform === "onebot_v11" || channel.platform === "dingtalk" || channel.platform === "weixin_oc") {
         try {
           const status = await invokeTauri<ChannelConnectionStatus>(
@@ -1441,7 +1441,7 @@ async function toggleChannelEnabled(channel: RemoteImChannelConfig, enabled: boo
           };
         } catch (err) {
           console.warn("[RemoteImTab] restart channel failed:", err);
-          props.setStatusAction(`渠道重启失败，开关未完全生效: ${String(err)}`);
+          props.setStatusAction(t('config.remoteIm.channelToggleFailed', { error: String(err) }));
           void refreshChannelStatus();
         }
       }
@@ -1449,7 +1449,7 @@ async function toggleChannelEnabled(channel: RemoteImChannelConfig, enabled: boo
       lastSavedChannelSnapshot.value = channelSnapshot.value;
     } else {
       channel.enabled = previousEnabled;
-      props.setStatusAction("保存失败，渠道状态未生效。");
+      props.setStatusAction(t('config.remoteIm.channelSaveFailed'));
     }
   } catch (error) {
     channel.enabled = previousEnabled;
@@ -1755,7 +1755,7 @@ async function onContactDepartmentChange(
         departmentId: nextDepartmentId || null,
       },
     });
-    props.setStatusAction("联系人消息将继续使用该联系人的独立会话。");
+    props.setStatusAction(t('config.remoteIm.contactContinueSession'));
     await refreshContacts();
   } catch (error) {
     item.boundDepartmentId = oldValue;
@@ -1842,13 +1842,13 @@ async function cycleContactResponseStrategy(item: RemoteImContact) {
 
 function contactSendFilesOptions(): Array<{ value: boolean; label: string }> {
   return [
-    { value: true, label: "可发文件" },
-    { value: false, label: "禁发文件" },
+    { value: true, label: t('config.remoteIm.allowSendFiles') },
+    { value: false, label: t('config.remoteIm.denySendFiles') },
   ];
 }
 
 function contactSendFilesLabel(item: RemoteImContact): string {
-  return item.allowSendFiles ? "可发文件" : "禁发文件";
+  return item.allowSendFiles ? t('config.remoteIm.allowSendFiles') : t('config.remoteIm.denySendFiles');
 }
 
 async function selectContactAllowSendFiles(item: RemoteImContact, enabled: boolean) {
@@ -2057,7 +2057,7 @@ async function startWeixinLogin() {
       void pollWeixinLoginStatus();
     }, 2500);
   } catch (error) {
-    props.setStatusAction(`个人微信扫码登录失败: ${String(error)}`);
+    props.setStatusAction(t('config.remoteIm.weixinScanLoginFailed', { error: String(error) }));
   } finally {
     weixinLoginBusy.value = false;
   }
@@ -2066,10 +2066,10 @@ async function startWeixinLogin() {
 async function onWeixinLoginButtonClick() {
   if (weixinLoginBusy.value) return;
   if (channelDirty.value) {
-    props.setStatusAction("正在保存微信渠道配置...");
+    props.setStatusAction(t('config.remoteIm.savingWeixinConfig'));
     const saved = await saveChannels();
     if (!saved) {
-      props.setStatusAction("请先保存当前微信渠道配置，再进行扫码登录。");
+      props.setStatusAction(t('config.remoteIm.saveWeixinFirst'));
       return;
     }
   }
@@ -2101,7 +2101,7 @@ async function pollWeixinLoginStatus() {
       }
     }
   } catch (error) {
-    const errMsg = `个人微信登录状态查询失败: ${String(error)}`;
+    const errMsg = t('config.remoteIm.weixinStatusQueryFailed', { error: String(error) });
     weixinLoginStates.value = {
       ...weixinLoginStates.value,
       [channelId]: {
@@ -2135,7 +2135,7 @@ async function syncWeixinContacts() {
     props.setStatusAction(result.message);
     await refreshContacts();
   } catch (error) {
-    props.setStatusAction(`个人微信联系人同步失败: ${String(error)}`);
+    props.setStatusAction(t('config.remoteIm.weixinContactSyncFailed', { error: String(error) }));
   }
 }
 
@@ -2151,13 +2151,13 @@ async function logoutWeixin() {
         channelId: selectedChannel.value.id,
         connected: false,
         status: "logged_out",
-        message: "已退出登录",
+        message: t('config.remoteIm.loggedOut'),
       },
     };
     await refreshChannelStatus();
-    props.setStatusAction("个人微信已退出登录。");
+    props.setStatusAction(t('config.remoteIm.weixinLoggedOut'));
   } catch (error) {
-    props.setStatusAction(`个人微信退出登录失败: ${String(error)}`);
+    props.setStatusAction(t('config.remoteIm.weixinLogoutFailed', { error: String(error) }));
   }
 }
 
@@ -2210,14 +2210,14 @@ function contactSafeDisplayName(item: RemoteImContact): string {
     if (remark) return remark;
     const remoteName = String(item.remoteContactName || "").trim();
     if (remoteName && !remoteName.includes("@")) return remoteName;
-    return "微信联系人";
+    return t('config.remoteIm.weixinContact');
   }
   return contactDisplayName(item);
 }
 
 function contactSecondaryText(item: RemoteImContact): string {
   if (item.platform === "weixin_oc") {
-    return item.remoteContactType === "group" ? "微信群联系人" : "微信个人联系人";
+    return item.remoteContactType === "group" ? t('config.remoteIm.weixinGroupContact') : t('config.remoteIm.weixinPrivateContact');
   }
   return item.remoteContactId;
 }
@@ -2291,16 +2291,16 @@ function buildContactLogDisplayItem(log: ChannelLogEntry): ContactLogDisplayItem
   const message = String(log.message || "").trim();
   if (message.startsWith("[联系人消息] 收到:")) {
     const senderRaw = contactLogField(message, "sender");
-    const senderName = contactLogHumanName(senderRaw) || "对方";
+    const senderName = contactLogHumanName(senderRaw) || t('config.remoteIm.otherParty');
     const senderId = contactLogHumanId(senderRaw);
-    const preview = contactLogField(message, "preview") || "收到一条消息";
+    const preview = contactLogField(message, "preview") || t('config.remoteIm.receivedMessage');
     const imageCount = Number(contactLogField(message, "image_count") || 0);
     const audioCount = Number(contactLogField(message, "audio_count") || 0);
     const attachmentCount = Number(contactLogField(message, "attachment_count") || 0);
     const extras = [
-      imageCount > 0 ? `图片 ${imageCount}` : "",
-      audioCount > 0 ? `音频 ${audioCount}` : "",
-      attachmentCount > 0 ? `附件 ${attachmentCount}` : "",
+      imageCount > 0 ? t('config.remoteIm.imageCount', { count: imageCount }) : "",
+      audioCount > 0 ? t('config.remoteIm.audioCount', { count: audioCount }) : "",
+      attachmentCount > 0 ? t('config.remoteIm.attachmentCount', { count: attachmentCount }) : "",
     ].filter(Boolean);
     return {
       timestamp: log.timestamp,
@@ -2600,11 +2600,11 @@ async function refreshAllChannelStatuses() {
 function onebotStatusText(status: ChannelConnectionStatus | null): string {
   if (!status) return t("config.remoteIm.serverNotStarted");
   if (status.connected) return `${t("config.remoteIm.connected")} (${status.peerAddr})`;
-  if (status.statusText === "binding_retry") return status.lastError || "固定端口被占用，正在重试";
-  if (status.statusText === "bind_failed") return status.lastError || "端口绑定失败";
-  if (status.statusText === "disabled") return "渠道已禁用";
-  if (status.statusText === "binding") return "正在绑定固定端口";
-  if (status.listenAddr) return `服务端已监听 ${status.listenAddr}，等待 NapCat/OneBot 客户端连接`;
+  if (status.statusText === "binding_retry") return status.lastError || t('config.remoteIm.portOccupiedRetry');
+  if (status.statusText === "bind_failed") return status.lastError || t('config.remoteIm.portBindFailed');
+  if (status.statusText === "disabled") return t('config.remoteIm.channelDisabledBadge');
+  if (status.statusText === "binding") return t('config.remoteIm.bindingPort');
+  if (status.listenAddr) return t('config.remoteIm.onebotListening', { addr: status.listenAddr });
   return t("config.remoteIm.serverNotStarted");
 }
 
@@ -2650,11 +2650,11 @@ function channelStatusPreview(channel: RemoteImChannelConfig): string {
   if (status.connected) {
     return t("config.remoteIm.connected");
   }
-  if (status.statusText === "binding_retry") return status.lastError || "固定端口被占用，正在重试";
-  if (status.statusText === "bind_failed") return status.lastError || "端口绑定失败";
-  if (status.statusText === "disabled") return "渠道已禁用";
-  if (status.statusText === "binding") return "正在绑定固定端口";
-  return status.listenAddr ? `已监听 ${status.listenAddr}，等待客户端连接` : t("config.remoteIm.serverNotStarted");
+  if (status.statusText === "binding_retry") return status.lastError || t('config.remoteIm.portOccupiedRetry');
+  if (status.statusText === "bind_failed") return status.lastError || t('config.remoteIm.portBindFailed');
+  if (status.statusText === "disabled") return t('config.remoteIm.channelDisabledBadge');
+  if (status.statusText === "binding") return t('config.remoteIm.bindingPort');
+  return status.listenAddr ? t('config.remoteIm.onebotListening', { addr: status.listenAddr }) : t("config.remoteIm.serverNotStarted");
 }
 
 function channelListStatusBadgeText(channel: RemoteImChannelConfig): string {
