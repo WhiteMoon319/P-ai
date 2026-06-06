@@ -458,6 +458,7 @@ export function useChatWindowApp() {
     syncUserAliasFromPersona,
     isLocalOwnUserMessage,
     isOptimisticOwnUserDraft,
+    applyStableRenderIdFromDraft,
     applySingleOwnUserHistoryFlushFastPath,
   } = contentOrchestrator.messageHelpers;
   
@@ -596,6 +597,7 @@ export function useChatWindowApp() {
     toolStatusState,
     setConversationChatErrorText,
     bumpOwnUserDraftAlign,
+    applyStableRenderIdFromDraft,
     applySingleOwnUserHistoryFlushFastPath,
     consumeOrQueueOwnMessageAlign,
     isOptimisticOwnUserDraft,

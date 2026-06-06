@@ -1,9 +1,10 @@
 import type { ChatMessage } from "../../../types/app";
+import { providerMetaWithoutStableRenderId } from "./stable-render-id";
 
 const SYNTHETIC_MESSAGE_ID_PREFIX = "__synthetic_message__:";
 
 function sanitizeProviderMeta(providerMeta: ChatMessage["providerMeta"] | undefined): Record<string, unknown> {
-  const nextMeta = { ...((providerMeta || {}) as Record<string, unknown>) };
+  const nextMeta = providerMetaWithoutStableRenderId(providerMeta);
   delete nextMeta._streaming;
   delete nextMeta._streamSegments;
   delete nextMeta._streamTail;

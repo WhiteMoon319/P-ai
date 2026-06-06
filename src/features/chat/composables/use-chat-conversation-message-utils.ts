@@ -1,3 +1,9 @@
+import {
+  messageWithoutStableRenderId,
+  preserveStableRenderId,
+  providerMetaWithoutStableRenderId,
+} from "../utils/stable-render-id";
+
 type ConversationMessageUtilsOptions = {
   draftAssistantIdPrefix: string;
   ensureConversationMessageIds: (messages: any[]) => any[];
@@ -10,19 +16,21 @@ export function useChatConversationMessageUtils(options: ConversationMessageUtil
 
   function formalizeConversationMessages(messages: any[]): any[] {
     return options.ensureConversationMessageIds(messages)
-      .filter((item: any) => !isAssistantDraftMessage(item));
+      .filter((item: any) => !isAssistantDraftMessage(item))
+      .map((item: any) => messageWithoutStableRenderId(item));
   }
 
   function freezeConversationMessages(messages: any[]): any[] {
     return options.ensureConversationMessageIds(messages).map((message: any) => {
       const messageId = String(message?.id || "").trim();
       if (!messageId.startsWith(options.draftAssistantIdPrefix)) {
-        return message;
+        return messageWithoutStableRenderId(message);
       }
       const providerMeta = { ...((message.providerMeta || {}) as Record<string, unknown>) };
       delete providerMeta._streaming;
       delete providerMeta._streamSegments;
       delete providerMeta._streamTail;
+      delete providerMeta._stableRenderId;
       return {
         ...message,
         providerMeta,
@@ -55,8 +63,8 @@ export function useChatConversationMessageUtils(options: ConversationMessageUtil
       const leftCreatedAt = String(leftMessage?.createdAt || "").trim();
       const rightCreatedAt = String(rightMessage?.createdAt || "").trim();
       if (leftCreatedAt !== rightCreatedAt) return false;
-      const leftMeta = JSON.stringify(leftMessage?.providerMeta || {});
-      const rightMeta = JSON.stringify(rightMessage?.providerMeta || {});
+      const leftMeta = JSON.stringify(providerMetaWithoutStableRenderId(leftMessage?.providerMeta));
+      const rightMeta = JSON.stringify(providerMetaWithoutStableRenderId(rightMessage?.providerMeta));
       if (leftMeta !== rightMeta) return false;
       const leftParts = JSON.stringify(leftMessage?.parts || []);
       const rightParts = JSON.stringify(rightMessage?.parts || []);
@@ -71,7 +79,7 @@ export function useChatConversationMessageUtils(options: ConversationMessageUtil
       String(message?.createdAt || "").trim(),
       String(message?.role || "").trim(),
       String(message?.speakerAgentId || "").trim(),
-      JSON.stringify(message?.providerMeta || {}),
+      JSON.stringify(providerMetaWithoutStableRenderId(message?.providerMeta)),
       JSON.stringify(message?.parts || []),
       JSON.stringify(message?.extraTextBlocks || []),
       JSON.stringify(message?.toolCall || []),
@@ -93,9 +101,10 @@ export function useChatConversationMessageUtils(options: ConversationMessageUtil
       if (!messageId) return message;
       const previous = previousById.get(messageId);
       if (!previous) return message;
+      const nextMessage = preserveStableRenderId(message, previous);
       return messageContentSignature(previous) === messageContentSignature(message)
         ? previous
-        : message;
+        : nextMessage;
     });
   }
 

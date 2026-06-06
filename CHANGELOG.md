@@ -1,5 +1,9 @@
 # 变更日志
 
+## 未发布
+
+- 优化（chat）：引入 stable render ID 机制，draft 转正式消息时保留渲染 key，避免虚拟列表因 ID 变化触发全量重渲染；新建 `stable-render-id.ts` 工具函数，draft 创建/更新/flush 全链路写入并传递 `_stableRenderId`。
+
 ## 发布：v0.10.22
 
 - 优化（chat）：升级 `@tanstack/vue-virtual` 并启用末尾锚定，切换会话时直接显示最新消息；移除历史加载、宽度变化与流式高度变化中的手动滚动高度修正，仅保留用户新消息上推与必要的底部初始化。

@@ -11,6 +11,7 @@ import {
 } from "../../../utils/chat-message-semantics";
 import { consumeClosedMarkdownBlocks } from "./use-chat-flow-text";
 import { readMessagePlainText } from "./use-chat-flow-utils";
+import { messageWithStableRenderId, stableRenderIdFromMessage } from "../utils/stable-render-id";
 
 export const DRAFT_ASSISTANT_ID_PREFIX = "__draft_assistant__:";
 export const DRAFT_USER_ID_PREFIX = "__draft_user__:";
@@ -123,9 +124,10 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
         _optimistic: true,
       },
     };
+    const stableMsg = messageWithStableRenderId(msg, draftId);
     const cur = options.allMessages.value;
     const idx = cur.findIndex((m) => m.id === draftId);
-    options.allMessages.value = idx < 0 ? [...cur, msg] : cur.map((m, i) => (i === idx ? msg : m));
+    options.allMessages.value = idx < 0 ? [...cur, stableMsg] : cur.map((m, i) => (i === idx ? stableMsg : m));
     pendingUserDraftId = draftId;
     return draftId;
   }
@@ -142,7 +144,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
       latestUserTextLength: String(options.latestUserText.value || "").length,
     });
     const agentId = String(options.getSession()?.agentId || "").trim();
-    const msg: ChatMessage = {
+    const msg = messageWithStableRenderId({
       id: draftId,
       role: "assistant",
       createdAt: new Date().toISOString(),
@@ -156,7 +158,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
         _frontendDispatchStartedAtMs: options.getFrontendDispatchStartedAtMs(),
         _frontendDispatchElapsedMs: options.currentFrontendDispatchElapsedMs(),
       },
-    };
+    } satisfies ChatMessage, draftId);
     const cur = options.allMessages.value;
     const idx = cur.findIndex((m) => m.id === draftId);
     if (idx >= 0) {
@@ -182,7 +184,8 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     const agentId = String(options.getSession()?.agentId || "").trim();
     const existingDraft = options.allMessages.value.find((item) => item.id === draftId);
     const existingMeta = ((existingDraft?.providerMeta || {}) as Record<string, unknown>);
-    const msg: ChatMessage = {
+    const stableRenderId = stableRenderIdFromMessage(existingDraft) || draftId;
+    const msg = messageWithStableRenderId({
       id: draftId,
       role: "assistant",
       createdAt: String(existingDraft?.createdAt || new Date().toISOString()),
@@ -198,7 +201,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
         _frontendDispatchStartedAtMs: options.getFrontendDispatchStartedAtMs(),
         _frontendDispatchElapsedMs: options.currentFrontendDispatchElapsedMs(),
       },
-    };
+    } satisfies ChatMessage, stableRenderId);
     const cur = options.allMessages.value;
     const idx = cur.findIndex((m) => m.id === draftId);
     if (idx >= 0) {
@@ -295,7 +298,8 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     const nextActivityItems = preserveActivityProjection
       ? existingActivityItems
       : streamBlocksToActivityItems(streamBlocks, true);
-    const msg: ChatMessage = {
+    const stableRenderId = stableRenderIdFromMessage(existingDraft) || draftId;
+    const msg = messageWithStableRenderId({
       id: draftId,
       role: "assistant",
       createdAt: String(existingDraft?.createdAt || new Date().toISOString()),
@@ -315,7 +319,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
         _frontendDispatchElapsedMs: options.currentFrontendDispatchElapsedMs(),
         _streamBlocks: streamBlocks,
       },
-    };
+    } satisfies ChatMessage, stableRenderId);
     const cur = options.allMessages.value;
     const idx = cur.findIndex((m) => m.id === draftId);
     options.allMessages.value = idx < 0 ? [...cur, msg] : cur.map((m, i) => (i === idx ? msg : m));
@@ -341,9 +345,11 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     const current = options.allMessages.value;
     const draftIdx = current.findIndex((m) => m.id === draftId);
     if (draftIdx < 0) return;
+    const draft = current[draftIdx];
+    const stableRenderId = stableRenderIdFromMessage(draft) || draftId;
 
     if (finalMessage) {
-      const messageToApply: ChatMessage = finalMessage;
+      const messageToApply = messageWithStableRenderId(finalMessage, stableRenderId);
       const deduped = current.filter((m, idx) => idx === draftIdx || m.id !== finalMessage.id);
       const nextDraftIdx = deduped.findIndex((m) => m.id === draftId);
       if (nextDraftIdx < 0) {
@@ -354,7 +360,6 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
       return;
     }
 
-    const draft = current[draftIdx];
     const draftMeta = ((draft.providerMeta || {}) as Record<string, unknown>);
     const nextMeta = { ...draftMeta };
     delete (nextMeta as Record<string, unknown>)._streaming;

@@ -1,4 +1,5 @@
 import type { ChatMessage, PersonaProfile } from "../../../types/app";
+import { messageWithStableRenderId, stableRenderIdFromMessage } from "../utils/stable-render-id";
 
 export function buildPersonasSnapshotJson(personas: PersonaProfile[]) {
   return JSON.stringify(
@@ -55,6 +56,11 @@ export function useChatWindowMessageHelpers(bindings: Record<string, any>) {
     return String(messageMeta.kind || meta.messageKind || "").trim();
   }
 
+  function applyStableRenderIdFromDraft(committedMessage: ChatMessage, draftMessage?: ChatMessage | null): ChatMessage {
+    const stableRenderId = stableRenderIdFromMessage(draftMessage);
+    return stableRenderId ? messageWithStableRenderId(committedMessage, stableRenderId) : committedMessage;
+  }
+
   function applySingleOwnUserHistoryFlushFastPath(messages: ChatMessage[]): { messageId: string } | null {
     if (messages.length !== 1) return null;
     const committedMessage = messages[0];
@@ -63,6 +69,8 @@ export function useChatWindowMessageHelpers(bindings: Record<string, any>) {
 
     const draftIndex = bindings.allMessages.value.findIndex((message: ChatMessage) => isOptimisticOwnUserDraft(message));
     if (draftIndex < 0) return null;
+    const draftMessage = bindings.allMessages.value[draftIndex] as ChatMessage | undefined;
+    const committedMessageForDisplay = applyStableRenderIdFromDraft(committedMessage, draftMessage);
 
     const committedId = String(committedMessage.id || "").trim();
     if (committedId) {
@@ -70,13 +78,18 @@ export function useChatWindowMessageHelpers(bindings: Record<string, any>) {
         (message: ChatMessage, index: number) => index !== draftIndex && String(message.id || "").trim() === committedId,
       );
       if (existingIndex >= 0) {
-        bindings.allMessages.value.splice(draftIndex, 1);
+        const nextMessages = bindings.allMessages.value
+          .map((message: ChatMessage, index: number) => index === existingIndex ? committedMessageForDisplay : message)
+          .filter((_message: ChatMessage, index: number) => index !== draftIndex);
+        bindings.allMessages.value = nextMessages;
         bindings.foregroundTailLatestReady.value = true;
         return { messageId: committedId };
       }
     }
 
-    bindings.allMessages.value.splice(draftIndex, 1, committedMessage);
+    bindings.allMessages.value = bindings.allMessages.value.map((message: ChatMessage, index: number) =>
+      index === draftIndex ? committedMessageForDisplay : message
+    );
     bindings.foregroundTailLatestReady.value = true;
     return { messageId: committedId };
   }
@@ -86,6 +99,7 @@ export function useChatWindowMessageHelpers(bindings: Record<string, any>) {
     isLocalOwnUserMessage,
     isOptimisticOwnUserDraft,
     historyFlushedMessageKind,
+    applyStableRenderIdFromDraft,
     applySingleOwnUserHistoryFlushFastPath,
   };
 }

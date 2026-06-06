@@ -8,6 +8,7 @@ import {
   estimateMessageBlockHeight,
   blockSizeDependencies,
 } from "../utils/chat-render";
+import { stableRenderIdFromBlock } from "../utils/stable-render-id";
 
 const MAX_GROUP_ITEM_COUNT = 2;
 const TIME_DIVIDER_GAP_MS = 15 * 60 * 1000;
@@ -35,6 +36,8 @@ interface UseChatVirtualListOptions {
 
 // 注意：ephemeral map 由调用方（composable 实例）持有，避免多实例共享
 export function blockRenderId(block: ChatMessageBlock, ephemeralMap?: WeakMap<ChatMessageBlock, string>, ephemeralSeqRef?: { value: number }): string {
+  const stableRenderId = stableRenderIdFromBlock(block);
+  if (stableRenderId) return block.isExtraTextBlock ? `${stableRenderId}::extra` : stableRenderId;
   const rawId = String(block.id || "").trim();
   if (rawId) return rawId;
   const sourceMessageId = String(block.sourceMessageId || "").trim();
@@ -58,6 +61,8 @@ export function blockRenderId(block: ChatMessageBlock, ephemeralMap?: WeakMap<Ch
 }
 
 export function blockGroupRenderId(block: ChatMessageBlock, ephemeralMap?: WeakMap<ChatMessageBlock, string>, ephemeralSeqRef?: { value: number }): string {
+  const stableRenderId = stableRenderIdFromBlock(block);
+  if (stableRenderId) return stableRenderId;
   const createdAt = String(block.createdAt || "").trim();
   const renderId = blockRenderId(block, ephemeralMap, ephemeralSeqRef);
   if (createdAt) return `${renderId}:${createdAt}`;
@@ -115,7 +120,10 @@ export function useChatVirtualList(options: UseChatVirtualListOptions) {
     const maybePushTimeDivider = (block: ChatMessageBlock, renderId: string) => {
       const currentTimeMs = blockTimeMs(block);
       if (previousMessageTimeMs > 0 && currentTimeMs > 0 && currentTimeMs - previousMessageTimeMs >= TIME_DIVIDER_GAP_MS) {
-        const dividerId = `time-divider-${renderId}-${String(block.createdAt || "").trim()}`;
+        const stableRenderId = stableRenderIdFromBlock(block);
+        const dividerId = stableRenderId
+          ? `time-divider-${renderId}`
+          : `time-divider-${renderId}-${String(block.createdAt || "").trim()}`;
         flushGroup();
         previousMessageBlock = null;
         items.push({

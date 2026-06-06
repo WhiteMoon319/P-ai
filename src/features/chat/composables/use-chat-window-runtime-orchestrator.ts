@@ -226,6 +226,7 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     reloadForegroundConversationMessages: conversationOrchestrator.reloadForegroundConversationMessages,
     tauriWindowLabel: bindings.tauriWindowLabel,
     isChatWindowActiveNow: bindings.isChatWindowActiveNow,
+    applyStableRenderIdFromDraft: bindings.applyStableRenderIdFromDraft,
     applySingleOwnUserHistoryFlushFastPath: bindings.applySingleOwnUserHistoryFlushFastPath,
     consumeOrQueueOwnMessageAlign: bindings.consumeOrQueueOwnMessageAlign,
     cacheConversationMessages: conversationOrchestrator.cacheConversationMessages,

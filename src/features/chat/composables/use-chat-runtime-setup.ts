@@ -140,7 +140,7 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
             nextMessages = nextMessages.flatMap((message: any) => {
               if (!replacedOwnDraft && bindings.isOptimisticOwnUserDraft(message)) {
                 replacedOwnDraft = true;
-                return [remainingOwnIncoming.shift()!];
+                return [bindings.applyStableRenderIdFromDraft(remainingOwnIncoming.shift()!, message)];
               }
               return [message];
             });
