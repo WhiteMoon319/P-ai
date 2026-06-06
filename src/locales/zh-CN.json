@@ -1464,7 +1464,7 @@
     "quickSetupSiliconFlow": "硅基流动",
     "quickSetupTestPrompt": "这是一个连通性测试。请回复一个OK。",
     "quickSetupUserAlias": "用户",
-    "quickSetupAssistantName": "派师傅",
+    "quickSetupAssistantName": "PAI",
     "quickSetupDepartmentName": "助理部门",
     "quickSetupLoadFailed": "加载配置失败：{error}",
     "quickSetupDefaultWorkspace": "默认会话目录",

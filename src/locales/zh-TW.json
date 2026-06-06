@@ -1464,7 +1464,7 @@
     "quickSetupSiliconFlow": "矽基流動",
     "quickSetupTestPrompt": "這是一個連通性測試。請回覆一個OK。",
     "quickSetupUserAlias": "使用者",
-    "quickSetupAssistantName": "派師傅",
+    "quickSetupAssistantName": "PAI",
     "quickSetupDepartmentName": "助理部門",
     "quickSetupLoadFailed": "載入設定失敗：{error}",
     "quickSetupDefaultWorkspace": "預設會話目錄",
