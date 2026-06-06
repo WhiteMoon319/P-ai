@@ -453,6 +453,7 @@ const TEXT_REQUEST_FORMATS = new Set([
   "together",
   "groq",
   "mimo",
+  "minimax",
   "moonshot",
   "nebius",
   "xai",

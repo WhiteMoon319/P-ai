@@ -361,7 +361,7 @@ type StepItem = { id: StepId; title: string; summary: string; advanced?: boolean
 type AdvancedDraft = { name: string; requestFormat: AppConfig["apiProviders"][number]["requestFormat"]; baseUrl: string; apiKey: string; model: string };
 type AdvancedPresetId = "siliconflow" | "google";
 type AdvancedProviderPreset = AdvancedDraft & { id: AdvancedPresetId; label: string };
-type QuickProviderId = "deepseek" | "kimi" | "baidu" | "zai" | "gemini" | "openai" | "openrouter" | "custom";
+type QuickProviderId = "deepseek" | "kimi" | "baidu" | "zai" | "minimax" | "gemini" | "openai" | "openrouter" | "custom";
 type QuickProviderPreset = {
   id: QuickProviderId;
   label: string;
@@ -377,6 +377,7 @@ const providerOptions: QuickProviderPreset[] = [
   { id: "kimi", label: "Kimi", requestFormat: "moonshot", baseUrl: "https://api.moonshot.cn/v1", keyUrl: "https://platform.moonshot.cn/console/api-keys", defaultModel: "kimi-k2.5" },
   { id: "baidu", label: "百度千帆", requestFormat: "baidu", baseUrl: "https://qianfan.baidubce.com/v2", keyUrl: "https://console.bce.baidu.com/iam/#/iam/apikey/list", defaultModel: "ERNIE-4.0-8K-Latest" },
   { id: "zai", label: "Zai", requestFormat: "zai", baseUrl: "https://api.z.ai/api/paas/v4", keyUrl: "https://bigmodel.cn/glm-coding", defaultModel: "glm-4.7" },
+  { id: "minimax", label: "MiniMax", requestFormat: "minimax", baseUrl: "https://api.minimax.io/anthropic/v1", keyUrl: "https://platform.minimax.io/", defaultModel: "MiniMax-M3" },
   { id: "gemini", label: "Gemini", requestFormat: "gemini", baseUrl: "https://generativelanguage.googleapis.com", keyUrl: "https://aistudio.google.com/api-keys", defaultModel: "gemini-2.5-flash" },
   { id: "openai", label: "OpenAI", requestFormat: "openai", baseUrl: "https://api.openai.com/v1", keyUrl: "https://platform.openai.com", defaultModel: "gpt-4o-mini" },
   { id: "openrouter", label: "OpenRouter", requestFormat: "openai", baseUrl: "https://openrouter.ai/api/v1", keyUrl: "https://openrouter.ai/", defaultModel: "openai/gpt-4o-mini" },

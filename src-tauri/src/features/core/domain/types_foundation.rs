@@ -121,6 +121,8 @@ enum RequestFormat {
     Groq,
     #[serde(rename = "mimo")]
     Mimo,
+    #[serde(rename = "minimax")]
+    MiniMax,
     #[serde(rename = "moonshot")]
     Moonshot,
     #[serde(rename = "nebius")]
@@ -178,6 +180,7 @@ impl RequestFormat {
             "together" => Some(Self::Together),
             "groq" => Some(Self::Groq),
             "mimo" => Some(Self::Mimo),
+            "minimax" => Some(Self::MiniMax),
             "moonshot" => Some(Self::Moonshot),
             "nebius" => Some(Self::Nebius),
             "xai" => Some(Self::Xai),
@@ -204,6 +207,7 @@ impl RequestFormat {
                 }
                 "deepseek_kimi" => Some(Self::DeepSeekKimi),
                 "kimi" | "moonshot_kimi" => Some(Self::Moonshot),
+                "mini_max" => Some(Self::MiniMax),
                 "openai_responses" | "responses" => Some(Self::OpenAIResponses),
                 "claude" => Some(Self::Anthropic),
                 "google" | "google_gemini" => Some(Self::Gemini),
@@ -236,6 +240,7 @@ impl RequestFormat {
             Self::Together => "together",
             Self::Groq => "groq",
             Self::Mimo => "mimo",
+            Self::MiniMax => "minimax",
             Self::Moonshot => "moonshot",
             Self::Nebius => "nebius",
             Self::Xai => "xai",
@@ -282,6 +287,7 @@ impl RequestFormat {
             Self::Together => Some(genai::adapter::AdapterKind::Together),
             Self::Groq => Some(genai::adapter::AdapterKind::Groq),
             Self::Mimo => Some(genai::adapter::AdapterKind::Mimo),
+            Self::MiniMax => Some(genai::adapter::AdapterKind::MiniMax),
             Self::Moonshot => Some(genai::adapter::AdapterKind::Moonshot),
             Self::Nebius => Some(genai::adapter::AdapterKind::Nebius),
             Self::Xai => Some(genai::adapter::AdapterKind::Xai),

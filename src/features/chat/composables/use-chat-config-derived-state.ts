@@ -15,6 +15,7 @@ export function useChatConfigDerivedState(config: AppConfig) {
     "together",
     "groq",
     "mimo",
+    "minimax",
     "moonshot",
     "nebius",
     "xai",

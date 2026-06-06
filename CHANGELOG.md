@@ -2,6 +2,7 @@
 
 ## 发布：v0.10.22
 
+- 修复（config）：新增 MiniMax 协议链路并修正 Auto 模式模型适配识别；模型名仅按 `/` 切分供应商前缀，保留 `:free` 等后缀且大小写无关，避免 `minimax-m3:free` 被误判为 OpenAI。
 - 修复（chat）：上下文压缩 token 估算虚高，跳过 reasoning_content、tool_calls 只算 function.name + arguments。
 - 修复（chat）：缓存误消费导致工具续调前全量估算，consume_* 改为 resolve_* 保留缓存值。
 

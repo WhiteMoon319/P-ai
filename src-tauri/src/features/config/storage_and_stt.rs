@@ -395,7 +395,7 @@ fn is_codex_spark_model(model_id: &str) -> bool {
 
 fn strip_model_namespace_for_request_format(value: &str) -> &str {
     value
-        .split(['/', ':'])
+        .split('/')
         .last()
         .map(str::trim)
         .filter(|part| !part.is_empty())
@@ -409,8 +409,9 @@ fn request_format_uses_gemini_reasoning_effort(request_format: RequestFormat, mo
     if !request_format.is_auto() {
         return false;
     }
+    let adapter_probe = strip_model_namespace_for_request_format(model).to_ascii_lowercase();
     matches!(
-        genai::adapter::AdapterKind::from_model(strip_model_namespace_for_request_format(model)),
+        genai::adapter::AdapterKind::from_model(&adapter_probe),
         Ok(genai::adapter::AdapterKind::Gemini)
     )
 }

@@ -34,7 +34,7 @@ axum = { version = "0.8", features = ["ws"] }
 dingtalk-stream = "0.1.5"
 reqwest = { version = "0.13.2", default-features = false, features = ["json", "stream", "multipart", "query", "form", "rustls"] }
 async-openai = { version = "0.34.0", default-features = false, features = ["rustls", "chat-completion", "byot"] }
-genai = { git = "https://github.com/jeremychone/rust-genai", rev = "ea79a86" }
+genai = { git = "https://github.com/kawayiYokami/rust-genai", rev = "c1e1e91" }
 base64 = "0.22"
 aes = "0.8"
 md5 = "0.8"

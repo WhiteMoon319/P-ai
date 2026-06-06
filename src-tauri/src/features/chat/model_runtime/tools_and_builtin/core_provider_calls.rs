@@ -339,6 +339,20 @@ fn normalize_anthropic_genai_base_url(raw: &str) -> String {
     }
 }
 
+fn normalize_minimax_genai_base_url(raw: &str) -> String {
+    let trimmed = raw.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return "https://api.minimax.io/anthropic/v1/".to_string();
+    }
+    let without_messages = trimmed.trim_end_matches("/messages").trim_end_matches('/');
+    let with_version = if without_messages.ends_with("/v1") {
+        without_messages.to_string()
+    } else {
+        format!("{without_messages}/v1")
+    };
+    format!("{with_version}/")
+}
+
 fn normalize_provider_genai_base_url(
     adapter_kind: genai::adapter::AdapterKind,
     raw: &str,
@@ -351,6 +365,7 @@ fn normalize_provider_genai_base_url(
         }
         genai::adapter::AdapterKind::Gemini => normalize_gemini_genai_base_url(raw),
         genai::adapter::AdapterKind::Anthropic => normalize_anthropic_genai_base_url(raw),
+        genai::adapter::AdapterKind::MiniMax => normalize_minimax_genai_base_url(raw),
         _ => {
             let trimmed = raw.trim().trim_end_matches('/');
             if trimmed.is_empty() {
@@ -404,7 +419,7 @@ fn build_provider_genai_service_target(
 
 fn strip_model_namespace(model_name: &str) -> &str {
     model_name
-        .split(['/', ':'])
+        .split('/')
         .last()
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -413,7 +428,8 @@ fn strip_model_namespace(model_name: &str) -> &str {
 
 fn resolve_model_adapter_for_auto(model_name: &str) -> genai::adapter::AdapterKind {
     let stripped = strip_model_namespace(model_name);
-    match genai::adapter::AdapterKind::from_model(stripped) {
+    let adapter_probe = stripped.to_ascii_lowercase();
+    match genai::adapter::AdapterKind::from_model(&adapter_probe) {
         // Ollama 在本应用里走 OpenAI-compatible 协议，由 base_url 指向 Ollama 服务。
         Ok(genai::adapter::AdapterKind::Ollama) => genai::adapter::AdapterKind::OpenAI,
         Ok(kind) => kind,
@@ -1283,6 +1299,57 @@ mod openai_responses_genai_request_tests {
         assert_eq!(
             normalize_anthropic_genai_base_url("https://open.bigmodel.cn/api/anthropic/v1"),
             "https://open.bigmodel.cn/api/anthropic/v1/"
+        );
+    }
+
+    #[test]
+    fn strip_model_namespace_should_only_split_slash() {
+        assert_eq!(strip_model_namespace("openrouter/minimax-m3:free"), "minimax-m3:free");
+        assert_eq!(strip_model_namespace("minimax-m3:free"), "minimax-m3:free");
+        assert_eq!(strip_model_namespace("minimax::MiniMax-M3"), "minimax::MiniMax-M3");
+    }
+
+    #[test]
+    fn resolve_model_adapter_for_auto_should_keep_minimax_colon_suffix() {
+        assert_eq!(
+            resolve_model_adapter_for_auto("minimax-m3:free"),
+            genai::adapter::AdapterKind::MiniMax
+        );
+        assert_eq!(
+            resolve_model_adapter_for_auto("openrouter/minimax-m3:free"),
+            genai::adapter::AdapterKind::MiniMax
+        );
+        assert_eq!(
+            resolve_model_adapter_for_auto("OpenRouter/MiniMax-M3:free"),
+            genai::adapter::AdapterKind::MiniMax
+        );
+        assert_eq!(
+            resolve_model_adapter_for_auto("MINIMAX-M3:FREE"),
+            genai::adapter::AdapterKind::MiniMax
+        );
+    }
+
+    #[test]
+    fn normalize_minimax_genai_base_url_should_preserve_prefix_and_append_v1() {
+        assert_eq!(
+            normalize_minimax_genai_base_url(""),
+            "https://api.minimax.io/anthropic/v1/"
+        );
+        assert_eq!(
+            normalize_minimax_genai_base_url("https://api.minimax.io"),
+            "https://api.minimax.io/v1/"
+        );
+        assert_eq!(
+            normalize_minimax_genai_base_url("https://api.minimaxi.com/anthropic"),
+            "https://api.minimaxi.com/anthropic/v1/"
+        );
+        assert_eq!(
+            normalize_minimax_genai_base_url("https://example.com/custom/prefix"),
+            "https://example.com/custom/prefix/v1/"
+        );
+        assert_eq!(
+            normalize_minimax_genai_base_url("https://api.minimax.io/anthropic/v1/messages"),
+            "https://api.minimax.io/anthropic/v1/"
         );
     }
 }

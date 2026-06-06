@@ -11,6 +11,7 @@ export type ApiRequestFormat =
   | "together"
   | "groq"
   | "mimo"
+  | "minimax"
   | "moonshot"
   | "nebius"
   | "xai"

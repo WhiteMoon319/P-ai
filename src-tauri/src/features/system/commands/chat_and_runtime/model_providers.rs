@@ -650,18 +650,18 @@ async fn quick_genai_chat(
     Ok(text)
 }
 
-#[tauri::command]
-async fn resolve_model_adapter_kind(model_name: String) -> Result<String, String> {
+fn resolve_model_adapter_kind_label(model_name: &str) -> String {
     let stripped = model_name
-        .split(['/', ':'])
+        .split('/')
         .last()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .unwrap_or(&model_name);
-    match genai::adapter::AdapterKind::from_model(stripped) {
+        .unwrap_or(model_name);
+    let adapter_probe = stripped.to_ascii_lowercase();
+    match genai::adapter::AdapterKind::from_model(&adapter_probe) {
         // Ollama 在本应用里使用 OpenAI-compatible 接口刷新/调用模型。
-        Ok(genai::adapter::AdapterKind::Ollama) => Ok(genai::adapter::AdapterKind::OpenAI.to_string()),
-        Ok(kind) => Ok(kind.to_string()),
+        Ok(genai::adapter::AdapterKind::Ollama) => genai::adapter::AdapterKind::OpenAI.to_string(),
+        Ok(kind) => kind.to_string(),
         Err(err) => {
             eprintln!(
                 "[模型适配器] 状态=回退 模型={} 适配器={} 原因={:?}",
@@ -669,8 +669,25 @@ async fn resolve_model_adapter_kind(model_name: String) -> Result<String, String
                 genai::adapter::AdapterKind::OpenAI,
                 err
             );
-            Ok(genai::adapter::AdapterKind::OpenAI.to_string())
+            genai::adapter::AdapterKind::OpenAI.to_string()
         }
+    }
+}
+
+#[tauri::command]
+async fn resolve_model_adapter_kind(model_name: String) -> Result<String, String> {
+    Ok(resolve_model_adapter_kind_label(&model_name))
+}
+
+#[cfg(test)]
+mod model_adapter_kind_tests {
+    use super::*;
+
+    #[test]
+    fn resolve_model_adapter_kind_label_should_keep_minimax_colon_suffix() {
+        assert_eq!(resolve_model_adapter_kind_label("minimax-m3:free"), "MiniMax");
+        assert_eq!(resolve_model_adapter_kind_label("minimax free/minimax-m3:free"), "MiniMax");
+        assert_eq!(resolve_model_adapter_kind_label("MINIMAX-M3:FREE"), "MiniMax");
     }
 }
 
