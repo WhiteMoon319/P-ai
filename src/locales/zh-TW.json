@@ -1202,7 +1202,19 @@
       "shareHint": "把目前選中的訊息匯出為可分享檔案。",
       "exportImage": "匯出圖片",
       "exportHtml": "匯出 HTML",
-      "copied": "已複製 {count} 條訊息"
+      "copied": "已複製 {count} 條訊息",
+      "unnamedConversation": "未命名會話",
+      "streaming": "流式中",
+      "organizing": "整理中",
+      "codeReviewPrompt": "請結合選中訊息，按內置 code-review 審查規則檢查當前工作區代碼改動。",
+      "codeReviewFocus": "先確認明確 diff，再只報告真實、可復現、會影響正確性/穩定性/安全性的缺陷；沒有確認到缺陷時直接說明未發現。",
+      "codeReviewSkillPrefix": "請嚴格遵守以下 code-review skill 內容：",
+      "codeReviewOutputConstraint": "補充輸出約束：當前任務是用戶手動發起的異步委託，結果會直接寫回原會話；請用自然語言報告審查結論，不要輸出工具評估 JSON，除非用戶明確要求 JSON。",
+      "codeReviewCoreRequirements": "核心要求：",
+      "codeReviewRequirement1": "- 審查當前工作區代碼改動，而不是審查單條工具調用。",
+      "codeReviewRequirement2": "- 先拿到明確 diff，再做缺陷判斷。",
+      "codeReviewRequirement3": "- 只報告真實、可復現、會影響正確性/穩定性/安全性的缺陷。",
+      "codeReviewRequirement4": "- 不要把風格建議、命名偏好或無法從 diff 證明的推測當成缺陷。"
     },
     "queue": {
       "queued": "排隊",

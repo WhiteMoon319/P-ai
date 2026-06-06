@@ -152,15 +152,15 @@ const sidebarMode = computed(() => !!props.sidebarMode);
 const USER_ASYNC_DELEGATE_RECENT_STORAGE_KEY = "easy_call.user_async_delegate_recent.v1";
 const USER_ASYNC_DELEGATE_RECENT_LIMIT = 3;
 const DELEGATE_REVIEW_FALLBACK_BACKGROUND = [
-  "请严格遵守内置 code-review skill 执行审查。",
+  t('chat.selection.codeReviewSkillPrefix'),
   "",
-  "核心要求：",
-  "- 审查当前工作区代码改动，而不是审查单条工具调用。",
-  "- 先拿到明确 diff，再做缺陷判断。",
-  "- 只报告真实、可复现、会影响正确性/稳定性/安全性的缺陷。",
-  "- 不要把风格建议、命名偏好或无法从 diff 证明的推测当成缺陷。",
+  t('chat.selection.codeReviewCoreRequirements'),
+  t('chat.selection.codeReviewRequirement1'),
+  t('chat.selection.codeReviewRequirement2'),
+  t('chat.selection.codeReviewRequirement3'),
+  t('chat.selection.codeReviewRequirement4'),
   "",
-  "补充输出约束：当前任务是用户手动发起的异步委托，结果会直接写回原会话；请用自然语言报告审查结论，不要输出工具评估 JSON，除非用户明确要求 JSON。",
+  t('chat.selection.codeReviewOutputConstraint'),
 ].join("\n");
 let delegateReviewBackgroundCache = "";
 
@@ -211,11 +211,11 @@ const canSubmitSelectionDelegate = computed(() =>
 );
 
 function selectionDeliverOptionLabel(item: { title: string; departmentName?: string; runtimeState?: ChatConversationOverviewItem["runtimeState"] }): string {
-  const parts = [String(item.title || "").trim() || "未命名会话"];
+  const parts = [String(item.title || "").trim() || t('chat.selection.unnamedConversation')];
   const departmentName = String(item.departmentName || "").trim();
   if (departmentName) parts.push(departmentName);
-  if (item.runtimeState === "assistant_streaming") parts.push("流式中");
-  if (item.runtimeState === "organizing_context") parts.push("整理中");
+  if (item.runtimeState === "assistant_streaming") parts.push(t('chat.selection.streaming'));
+  if (item.runtimeState === "organizing_context") parts.push(t('chat.selection.organizing'));
   return parts.join(" / ");
 }
 
@@ -255,8 +255,8 @@ function delegateReviewPreset() {
   return {
     presetId: "review",
     background: delegateReviewBackgroundCache || DELEGATE_REVIEW_FALLBACK_BACKGROUND,
-    question: "请结合选中消息，按内置 code-review 审查规则检查当前工作区代码改动。",
-    focus: "先确认明确 diff，再只报告真实、可复现、会影响正确性/稳定性/安全性的缺陷；没有确认到缺陷时直接说明未发现。",
+    question: t('chat.selection.codeReviewPrompt'),
+    focus: t('chat.selection.codeReviewFocus'),
   };
 }
 
@@ -272,11 +272,11 @@ async function loadDelegateReviewBackground(): Promise<string> {
     const content = String(skill?.content || "").trim();
     if (content) {
       delegateReviewBackgroundCache = [
-        "请严格遵守以下 code-review skill 内容：",
+        t('chat.selection.codeReviewSkillPrefix'),
         "",
         content,
         "",
-        "补充输出约束：当前任务是用户手动发起的异步委托，结果会直接写回原会话；请用自然语言报告审查结论，不要输出工具评估 JSON，除非用户明确要求 JSON。",
+        t('chat.selection.codeReviewOutputConstraint'),
       ].join("\n");
       return delegateReviewBackgroundCache;
     }
