@@ -2685,6 +2685,18 @@ fn build_builtin_tool_rule_block(tool_id: &str) -> Option<String> {
              - 当前前端识别盘符开头的绝对本地路径；`file:///E:/...` 容易被当成普通网页链接或被错误解析。\n\
              - 远程联系人需要发送文件时，必须使用 `contact_send_files` 发送附件，不要只在文本里粘贴本地路径。",
         ),
+        "image_reference" => (
+            "image reference rule",
+            "## 在回复中展示本地图片\n\
+             - 当本地已经有一张图片文件时（比如截图、脚本输出图表、分析结果图），在回复正文中使用标准 Markdown 图片语法 `![说明](路径)`，就能直接把本地图片展示在对话里。\n\
+             - 示例：`![结果图](E:/path/to/result.png)`、`![结果图](outputs/result.png)`\n\
+             - 路径可以是绝对路径或相对于工作区目录的相对路径。\n\
+             - 只能引用已经存在的本地图片文件，不要编造路径。\n\
+             - 支持的格式：png、jpg/jpeg、webp、gif、bmp。\n\n\
+             ## 不要这样做\n\
+             - 不要输出 `file://` 链接来引用图片；直接写本地路径或相对路径。\n\
+             - 不要把本地图片写成普通文本链接 `[说明](路径)`；图片必须使用 `![说明](路径)`。",
+        ),
         _ => return None,
     };
     Some(prompt_xml_block(block_name, body))

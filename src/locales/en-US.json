@@ -1171,6 +1171,7 @@
       "sidebarHint": "Click the link below to read the plan in the sidebar",
       "linkLabel": "Plan: "
     },
+    "localImageUnavailable": "Image unavailable",
     "supervision": {
       "buttonTitle": "Create Goal Task",
       "activeButtonTitle": "This conversation already has an active Goal Task. Click to overwrite it.",

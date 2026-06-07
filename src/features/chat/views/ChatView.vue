@@ -107,6 +107,7 @@
                       :can-regenerate="!sidebarMode && canRegenerateBlock(entry.item.block, entry.item.blockIndex)"
                       :can-confirm-plan="canConfirmPlan(entry.item.block)"
                       :read-plan-file-content="readPlanFileContent"
+                      :current-workspace-root-path="currentWorkspaceRootPath"
                       :bubble-background-hidden="isBubbleBackgroundHidden(entry.item.block)"
                       :hide-toggle-enabled="canToggleBubbleBackground(entry.item.block)"
                       :disable-markdown-render="sidebarMode"
@@ -137,6 +138,7 @@
                         :can-regenerate="!sidebarMode && canRegenerateBlock(groupItem.block, groupItem.blockIndex)"
                         :can-confirm-plan="canConfirmPlan(groupItem.block)"
                         :read-plan-file-content="readPlanFileContent"
+                        :current-workspace-root-path="currentWorkspaceRootPath"
                         :bubble-background-hidden="isBubbleBackgroundHidden(groupItem.block)"
                         :hide-toggle-enabled="canToggleBubbleBackground(groupItem.block)"
                         :disable-markdown-render="sidebarMode"
@@ -275,9 +277,13 @@
           :open="imagePreviewOpen" :data-url="imagePreviewDataUrl" :zoom="imagePreviewZoom"
           :min-zoom="IMAGE_PREVIEW_MIN_ZOOM" :max-zoom="IMAGE_PREVIEW_MAX_ZOOM"
           :offset-x="previewOffsetX" :offset-y="previewOffsetY" :dragging="previewDragging"
+          :local-path="imagePreviewLocalPath"
+          :copy-status="imagePreviewCopyStatus as any"
+          :save-status="imagePreviewSaveStatus as any"
           @close="closeImagePreview" @zoom-in="zoomInPreview" @zoom-out="zoomOutPreview"
           @reset="resetPreviewZoom" @wheel="onPreviewWheel" @pointer-down="onPreviewPointerDown"
           @pointer-move="onPreviewPointerMove" @pointer-up="onPreviewPointerUp"
+          @copy-image="handleCopyLocalImage" @save-image="handleSaveLocalImage"
         />
 
         <ChatSupervisionTaskDialog
@@ -296,7 +302,7 @@
 
     <div
       v-if="collapsePreviewSide === 'left'"
-      class="pointer-events-none absolute bottom-0 left-0 top-0 z-[58] flex items-center justify-center border-r border-error/20 bg-error/12 backdrop-blur-[1px]"
+      class="pointer-events-none absolute bottom-0 left-0 top-0 z-58 flex items-center justify-center border-r border-error/20 bg-error/12 backdrop-blur-[1px]"
       :style="{ width: `${collapsePreviewWidth}px` }"
     >
       <div class="rounded-full border border-error/25 bg-base-100/90 px-3 py-1.5 text-sm font-semibold text-error shadow-sm">
@@ -306,7 +312,7 @@
 
     <div
       v-if="collapsePreviewSide === 'right'"
-      class="pointer-events-none absolute bottom-0 right-0 top-0 z-[58] flex items-center justify-center border-l border-error/20 bg-error/12 backdrop-blur-[1px]"
+      class="pointer-events-none absolute bottom-0 right-0 top-0 z-58 flex items-center justify-center border-l border-error/20 bg-error/12 backdrop-blur-[1px]"
       :style="{ width: `${collapsePreviewWidth}px` }"
     >
       <div class="rounded-full border border-error/25 bg-base-100/90 px-3 py-1.5 text-sm font-semibold text-error shadow-sm">
@@ -364,7 +370,7 @@
 
     <div
       v-if="showSideConversationList && !detachedChatWindow"
-      class="ecall-pane-splitter ecall-pane-splitter-left absolute bottom-0 top-0 z-[60]"
+      class="ecall-pane-splitter ecall-pane-splitter-left absolute bottom-0 top-0 z-60"
       :class="{ 'ecall-pane-splitter-active': activePaneResizeSide === 'left' }"
       :style="{ left: `${leftPaneVisibleWidth - 2}px` }"
       role="separator"
@@ -380,7 +386,7 @@
 
     <div
       v-if="effectiveToolReviewPanelOpen"
-      class="ecall-pane-splitter ecall-pane-splitter-right absolute bottom-0 top-0 z-[60]"
+      class="ecall-pane-splitter ecall-pane-splitter-right absolute bottom-0 top-0 z-60"
       :class="{ 'ecall-pane-splitter-active': activePaneResizeSide === 'right' }"
       :style="{ right: `${rightPaneVisibleWidth - 2}px` }"
       role="separator" tabindex="0" aria-orientation="vertical"
@@ -843,13 +849,38 @@ const {
 // ==================== image preview ====================
 
 const {
-  imagePreviewOpen, imagePreviewDataUrl, imagePreviewZoom,
+  imagePreviewOpen, imagePreviewDataUrl, imagePreviewLocalPath, imagePreviewZoom,
   IMAGE_PREVIEW_MIN_ZOOM, IMAGE_PREVIEW_MAX_ZOOM,
   previewOffsetX, previewOffsetY, previewDragging,
   zoomInPreview, zoomOutPreview, resetPreviewZoom,
   onPreviewWheel, openImagePreview, closeImagePreview,
   onPreviewPointerDown, onPreviewPointerMove, onPreviewPointerUp,
 } = useChatImagePreview();
+
+const imagePreviewCopyStatus = ref<string>('idle');
+const imagePreviewSaveStatus = ref<string>('idle');
+
+async function handleCopyLocalImage(path: string) {
+  imagePreviewCopyStatus.value = 'doing';
+  try {
+    await invokeTauri('copy_local_chat_image_to_clipboard', { input: { path } });
+  } catch (error) {
+    console.warn('[预览] 复制图片失败', error);
+  } finally {
+    imagePreviewCopyStatus.value = 'idle';
+  }
+}
+
+async function handleSaveLocalImage(path: string) {
+  imagePreviewSaveStatus.value = 'doing';
+  try {
+    await invokeTauri('save_local_chat_image_as', { input: { path } });
+  } catch (error) {
+    console.warn('[预览] 保存图片失败', error);
+  } finally {
+    imagePreviewSaveStatus.value = 'idle';
+  }
+}
 
 // ==================== conversation actions ====================
 
@@ -916,6 +947,29 @@ async function copyToolReviewReport(reportText: string) {
 
 async function handleAssistantLinkClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null;
+  const localImage = target?.closest("[data-local-image-path]") as HTMLElement | null;
+  if (localImage) {
+    const rawPath = localImage.getAttribute("data-local-image-path") || "";
+    let path = normalizeLocalLinkHref(rawPath);
+    if (!path) return;
+    if (!isAbsoluteLocalPath(path)) {
+      const root = String(props.currentWorkspaceRootPath || "").trim().replace(/\\/g, "/").replace(/\/$/, "");
+      if (root) path = `${root}/${path.replace(/^\.\//, "")}`;
+    }
+    event.preventDefault(); event.stopPropagation();
+    try {
+      const result = await invokeTauri<{ dataUrl: string; mime: string }>("read_local_chat_image_original", {
+        input: { path },
+      });
+      const dataUrl = String(result?.dataUrl || "").trim();
+      if (!dataUrl) return;
+      openImagePreview({ mime: result.mime, dataUrl, localPath: path });
+      linkOpenErrorText.value = "";
+    } catch (error) {
+      linkOpenErrorText.value = t("status.openLinkFailed", { err: String(error) });
+    }
+    return;
+  }
   const anchor = target?.closest("a") as HTMLAnchorElement | null;
   if (!anchor) return;
   const rawHref = anchor.getAttribute("data-href") || anchor.getAttribute("href")?.trim() || "";

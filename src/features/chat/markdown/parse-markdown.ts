@@ -17,6 +17,7 @@ export type InlineSegment =
   | { type: "code"; text: string }
   | { type: "math"; text: string }
   | { type: "link"; text: string; href: string }
+  | { type: "image"; alt: string; src: string }
   | { type: "strong"; children: InlineSegment[] }
   | { type: "em"; children: InlineSegment[] }
   | { type: "strongEm"; children: InlineSegment[] }
@@ -233,7 +234,7 @@ export function parseMarkdownBlocks(input: string, streaming = false): MarkdownB
 // ==================== Inline Parser ====================
 
 const URL_PATTERN = /(https?:\/\/[^\s<>()]+|file:\/\/\/[^\s<>()]+)/g;
-const MARKDOWN_LINK_PATTERN = /!?\[([^\]\n]+)\]\(([^)\n]+)\)/g;
+const MARKDOWN_LINK_PATTERN = /!?\[([^\]\n]*)\]\(([^)\n]+)\)/g;
 
 function trimTrailingUrlPunctuation(value: string): { href: string; trailing: string } {
   let href = value;
@@ -256,7 +257,7 @@ function pushTextSegment(segments: InlineSegment[], text: string) {
 }
 
 type LinkMatch =
-  | { kind: "markdown"; start: number; end: number; raw: string; text: string; href: string }
+  | { kind: "markdown"; start: number; end: number; raw: string; text: string; href: string; image: boolean }
   | { kind: "auto"; start: number; end: number; href: string };
 
 function pickEarlierLink(left: LinkMatch | null, right: LinkMatch | null): LinkMatch | null {
@@ -276,6 +277,7 @@ function nextMarkdownLink(input: string, from: number): LinkMatch | null {
     raw: match[0],
     text: match[1],
     href: match[2],
+    image: match[0].startsWith("!"),
   };
 }
 
@@ -364,7 +366,11 @@ function parseLinksIntoSegments(input: string, segments: InlineSegment[]) {
     if (next.kind === "markdown") {
       const href = normalizeMarkdownHref(next.href);
       if (href) {
-        segments.push({ type: "link", href, text: next.text });
+        if (next.image) {
+          segments.push({ type: "image", src: href, alt: next.text });
+        } else {
+          segments.push({ type: "link", href, text: next.text });
+        }
       } else {
         pushEmphasisIntoSegments(next.raw, segments);
       }

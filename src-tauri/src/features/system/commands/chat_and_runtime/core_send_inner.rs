@@ -314,7 +314,7 @@ fn build_remote_im_activation_runtime_block(
         .join("\n");
     let block = match (ui_language.trim(), sources.len()) {
         ("en-US", 1) => format!(
-            "This round was activated by exactly one remote IM source, and this round is now bound to that current contact.\n{}\nIf you do not call `contact_no_reply`, the system may automatically send your final assistant reply to the bound current contact at the end of this round.\nUse `contact_reply` for an immediate short acknowledgement, and `contact_send_files` when you need to send files or images first. When sending files, pass real local file paths in `contact_send_files.file_paths` instead of pasting file links into your reply body.",
+            "This round was activated by exactly one remote IM source, and this round is now bound to that current contact.\n{}\nIf you do not call `contact_no_reply`, the system may automatically send your final assistant reply to the bound current contact at the end of this round.\nUse `contact_reply` for an immediate short acknowledgement. To send an inline local image with text, write standard Markdown image syntax like `![description](local/path.png)` in `contact_reply.text`; for non-image files, use `contact_send_files` with real local file paths.",
             source_lines
         ),
         ("en-US", _) => format!(
@@ -322,7 +322,7 @@ fn build_remote_im_activation_runtime_block(
             source_lines
         ),
         ("zh-TW", 1) => format!(
-            "本輪由唯一一個遠端 IM 來源啟動，且本輪已綁定該目前聯絡人。\n{}\n若你未呼叫 `contact_no_reply`，系統可能會在本輪結束後自動將最終回覆發送給本輪綁定聯絡人。\n若你只是要先回一句、告知正在處理，請使用 `contact_reply`；若要先發圖片或檔案，請使用 `contact_send_files`。傳送檔案時，應把真實本機檔案路徑放進 `contact_send_files.file_paths`，不要把檔案連結直接貼在正文裡。",
+            "本輪由唯一一個遠端 IM 來源啟動，且本輪已綁定該目前聯絡人。\n{}\n若你未呼叫 `contact_no_reply`，系統可能會在本輪結束後自動將最終回覆發送給本輪綁定聯絡人。\n若你只是要先回一句、告知正在處理，請使用 `contact_reply`；若要把本機圖片和文字一起發出，請在 `contact_reply.text` 使用標準 Markdown 圖片語法 `![說明](本機路徑)`；若要發非圖片檔案，請使用 `contact_send_files` 並傳真實本機檔案路徑。",
             source_lines
         ),
         ("zh-TW", _) => format!(
@@ -330,7 +330,7 @@ fn build_remote_im_activation_runtime_block(
             source_lines
         ),
         (_, 1) => format!(
-            "本轮由唯一一个远程 IM 来源激活，且本轮已绑定该当前联系人。\n{}\n如果你没有调用 `contact_no_reply`，系统可能会在本轮结束后自动将最终回复发送给本轮绑定联系人。\n如果你只是要先回一句、告知正在处理，请使用 `contact_reply`；如果要先发图片或文件，请使用 `contact_send_files`。发送文件时，应把真实本地文件路径放进 `contact_send_files.file_paths`，不要把文件链接直接贴进正文。",
+            "本轮由唯一一个远程 IM 来源激活，且本轮已绑定该当前联系人。\n{}\n如果你没有调用 `contact_no_reply`，系统可能会在本轮结束后自动将最终回复发送给本轮绑定联系人。\n如果你只是要先回一句、告知正在处理，请使用 `contact_reply`；如果要把本地图片和文字一起发出，请在 `contact_reply.text` 使用标准 Markdown 图片语法 `![说明](本地路径)`；如果要发非图片文件，请使用 `contact_send_files` 并传真实本地文件路径。",
             source_lines
         ),
         _ => format!(
@@ -684,7 +684,8 @@ async fn remote_im_auto_send_assistant_reply_to_source(
 ) -> Result<Option<(String, Vec<Value>)>, String> {
     let trimmed_text = assistant_text.trim();
     let persisted_segments = assistant_message
-        .and_then(|message| provider_meta_meme_segments(message.provider_meta.as_ref()));
+        .and_then(|message| provider_meta_inline_segments(message.provider_meta.as_ref()))
+        .or_else(|| assistant_message.and_then(|message| provider_meta_meme_segments(message.provider_meta.as_ref()).map(|segs| segs.into_iter().map(inline_segment_from_meme_segment).collect())));
     if trimmed_text.is_empty() && persisted_segments.is_none() {
         return Ok(None);
     }
@@ -717,7 +718,7 @@ async fn remote_im_auto_send_assistant_reply_to_source(
         ));
     }
     let content = if let Some(segments) = persisted_segments.as_ref() {
-        remote_im_text_content_items_from_segments(segments)
+        inline_segments_to_remote_im_content_items(state, segments).await?
     } else {
         remote_im_build_text_content_items(
             state,
@@ -3310,12 +3311,18 @@ async fn send_chat_message_inner(
         provider_meta = Some(merged);
     }
     let assistant_message_id = Uuid::new_v4().to_string();
-    let persisted_meme_segments =
-        resolve_text_to_persisted_meme_segments(&state, &assistant_text_for_storage, &assistant_message_id)?;
-    persist_meme_segments_into_provider_meta(
+    let persisted_inline_segments =
+        resolve_text_to_persisted_inline_segments(&state, &assistant_text_for_storage, &assistant_message_id)?;
+    persist_inline_segments_into_provider_meta(
         &mut provider_meta,
-        persisted_meme_segments.as_deref(),
+        persisted_inline_segments.as_deref(),
     );
+    if let Some(meme_segments) = persisted_inline_segments.as_ref().and_then(|s| inline_segments_to_meme_segments(s)) {
+        persist_meme_segments_into_provider_meta(
+            &mut provider_meta,
+            Some(&meme_segments),
+        );
+    }
     log_run_stage("model_reply_ready");
 
     let mut persisted_assistant_message: Option<ChatMessage> = None;

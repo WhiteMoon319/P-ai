@@ -6,21 +6,21 @@
         v-if="block.type === 'heading'"
         class="ecall-md-heading"
       >
-        <InlineRenderer :segments="parseInlineSegments(block.text)" />
+        <InlineRenderer :segments="parseInlineSegments(block.text)" :local-image-base-path="localImageBasePath" />
       </component>
 
       <blockquote v-else-if="block.type === 'quote'" class="ecall-md-quote">
-        <InlineRenderer :segments="parseInlineSegments(block.text)" />
+        <InlineRenderer :segments="parseInlineSegments(block.text)" :local-image-base-path="localImageBasePath" />
       </blockquote>
 
       <ul v-else-if="block.type === 'list' && !block.ordered" class="ecall-md-list">
         <li v-for="(item, itemIndex) in block.items" :key="`${index}-${itemIndex}`">
-          <InlineRenderer :segments="parseInlineSegments(item)" />
+          <InlineRenderer :segments="parseInlineSegments(item)" :local-image-base-path="localImageBasePath" />
         </li>
       </ul>
       <ol v-else-if="block.type === 'list'" class="ecall-md-list ecall-md-list-ordered">
         <li v-for="(item, itemIndex) in block.items" :key="`${index}-${itemIndex}`">
-          <InlineRenderer :segments="parseInlineSegments(item)" />
+          <InlineRenderer :segments="parseInlineSegments(item)" :local-image-base-path="localImageBasePath" />
         </li>
       </ol>
 
@@ -29,14 +29,14 @@
           <thead>
             <tr>
               <th v-for="(cell, ci) in block.headers" :key="`${index}-h-${ci}`">
-                <InlineRenderer :segments="parseInlineSegments(cell)" />
+                <InlineRenderer :segments="parseInlineSegments(cell)" :local-image-base-path="localImageBasePath" />
               </th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="(row, ri) in block.rows" :key="`${index}-r-${ri}`">
               <td v-for="(cell, ci) in normalizedTableRow(row, block.headers.length)" :key="`${index}-r-${ri}-c-${ci}`">
-                <InlineRenderer :segments="parseInlineSegments(cell)" />
+                <InlineRenderer :segments="parseInlineSegments(cell)" :local-image-base-path="localImageBasePath" />
               </td>
             </tr>
           </tbody>
@@ -62,7 +62,7 @@
       <hr v-else-if="block.type === 'hr'" class="ecall-md-hr" />
 
       <p v-else class="ecall-md-paragraph">
-        <InlineRenderer :segments="parseInlineSegments(block.text)" />
+        <InlineRenderer :segments="parseInlineSegments(block.text)" :local-image-base-path="localImageBasePath" />
       </p>
     </template>
   </div>
@@ -72,6 +72,8 @@
 import { computed, defineComponent, h, onBeforeUnmount, ref, watch, type PropType, type VNodeChild } from "vue";
 import { useI18n } from "vue-i18n";
 import { Check, Copy, Maximize2 } from "@lucide/vue";
+import { invokeTauri } from "../../../services/tauri-api";
+import { isAbsoluteLocalPath, normalizeLocalLinkHref } from "../utils/local-link";
 import { parseMarkdownBlocks, parseInlineSegments, normalizedTableRow, type MarkdownBlock, type InlineSegment } from "./parse-markdown";
 import CodeBlockPreviewDialog from "../components/dialogs/CodeBlockPreviewDialog.vue";
 
@@ -80,6 +82,7 @@ const props = defineProps<{
   isDark?: boolean;
   streaming?: boolean;
   variant?: "chat" | "document";
+  localImageBasePath?: string;
 }>();
 
 const { t } = useI18n();
@@ -223,13 +226,135 @@ const InlineRenderer = defineComponent({
       type: Array as PropType<InlineSegment[]>,
       required: true,
     },
+    localImageBasePath: { type: String, default: "" },
   },
   setup(inlineProps) {
-    return () => renderSegments(inlineProps.segments, "root");
+    return () => renderSegments(inlineProps.segments, "root", inlineProps.localImageBasePath);
   },
 });
 
-function renderSegments(segments: InlineSegment[], keyPrefix: string): VNodeChild[] {
+type MarkdownImageSource =
+  | { kind: "remote"; src: string }
+  | { kind: "local"; path: string }
+  | { kind: "blocked"; label: string };
+
+const markdownImageThumbnailCache = new Map<string, string>();
+const markdownImageThumbnailPromiseCache = new Map<string, Promise<string>>();
+
+function hasUrlScheme(value: string): boolean {
+  return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value);
+}
+
+function normalizeBaseLocalPath(value: string): string {
+  return String(value || "").trim().replace(/\\/g, "/").replace(/\/$/, "");
+}
+
+function resolveMarkdownImageSource(rawSrc: string, basePath: string): MarkdownImageSource {
+  const src = String(rawSrc || "").trim();
+  if (!src) return { kind: "blocked", label: "" };
+  if (/^(https?:|data:image\/)/i.test(src)) return { kind: "remote", src };
+  if (/^(blob:|javascript:|mailto:)/i.test(src)) return { kind: "blocked", label: src };
+  const normalized = normalizeLocalLinkHref(src);
+  if (isAbsoluteLocalPath(normalized)) return { kind: "local", path: normalized };
+  if (hasUrlScheme(normalized)) return { kind: "blocked", label: normalized };
+  const root = normalizeBaseLocalPath(basePath);
+  if (!root) return { kind: "local", path: normalized };
+  return { kind: "local", path: `${root}/${normalized.replace(/^\.\//, "")}` };
+}
+
+const MarkdownImage = defineComponent({
+  name: "MarkdownImage",
+  props: {
+    src: { type: String, required: true },
+    alt: { type: String, default: "" },
+    localImageBasePath: { type: String, default: "" },
+  },
+  setup(imageProps) {
+    const thumbnailSrc = ref("");
+    const loadError = ref(false);
+    const source = computed(() => resolveMarkdownImageSource(imageProps.src, imageProps.localImageBasePath));
+
+    watch(
+      source,
+      (next, _previous, onCleanup) => {
+        thumbnailSrc.value = "";
+        loadError.value = false;
+        if (next.kind !== "local" || !next.path.trim()) return;
+        const path = next.path.trim();
+        const cached = markdownImageThumbnailCache.get(path);
+        if (cached) {
+          thumbnailSrc.value = cached;
+          return;
+        }
+        let cancelled = false;
+        onCleanup(() => {
+          cancelled = true;
+        });
+        const existing = markdownImageThumbnailPromiseCache.get(path);
+        const task = existing || invokeTauri<{ dataUrl: string }>("read_local_chat_image_thumbnail", {
+          input: { path },
+        })
+          .then((result) => {
+            const dataUrl = String(result?.dataUrl || "").trim();
+            if (dataUrl) markdownImageThumbnailCache.set(path, dataUrl);
+            markdownImageThumbnailPromiseCache.delete(path);
+            return dataUrl;
+          })
+          .catch((error) => {
+            markdownImageThumbnailPromiseCache.delete(path);
+            console.warn("[Markdown图片] 本地缩略图加载失败", { path, error });
+            return "";
+          });
+        if (!existing) markdownImageThumbnailPromiseCache.set(path, task);
+        void task.then((dataUrl) => {
+          if (cancelled) return;
+          if (dataUrl) {
+            thumbnailSrc.value = dataUrl;
+          } else {
+            loadError.value = true;
+          }
+        });
+      },
+      { immediate: true },
+    );
+
+    return () => {
+      const current = source.value;
+      const alt = String(imageProps.alt || "").trim();
+      if (current.kind === "remote") {
+        return h("img", {
+          class: "ecall-md-image",
+          src: current.src,
+          alt,
+          loading: "lazy",
+          decoding: "async",
+        });
+      }
+      if (current.kind === "local") {
+        const title = alt || current.path;
+        if (thumbnailSrc.value) {
+          return h("img", {
+            class: "ecall-md-image ecall-md-local-image",
+            src: thumbnailSrc.value,
+            alt: title,
+            title,
+            loading: "lazy",
+            decoding: "async",
+            "data-local-image-path": current.path,
+          });
+        }
+        return h("span", {
+          class: ["ecall-md-image-placeholder", loadError.value ? "ecall-md-image-error" : ""],
+          title,
+          "data-local-image-path": current.path,
+        }, alt || current.path.split(/[\\/]/).filter(Boolean).pop() || current.path);
+      }
+      return h("span", { class: "ecall-md-image-placeholder ecall-md-image-error" }, alt || current.label || imageProps.src);
+    };
+  },
+});
+
+function renderSegments(segments: InlineSegment[], keyPrefix: string, localImageBasePath = ""): VNodeChild[] {
   return segments.map((segment, index) => {
     if (segment.type === "code") {
       return h("code", { key: `${keyPrefix}-c-${index}`, class: "ecall-md-inline-code" }, segment.text);
@@ -251,19 +376,27 @@ function renderSegments(segments: InlineSegment[], keyPrefix: string): VNodeChil
         ...(isExternalUrl ? { target: "_blank", rel: "noopener noreferrer" } : {}),
       }, segment.text);
     }
+    if (segment.type === "image") {
+      return h(MarkdownImage, {
+        key: `${keyPrefix}-img-${index}`,
+        src: segment.src,
+        alt: segment.alt,
+        localImageBasePath,
+      });
+    }
     if (segment.type === "strong") {
-      return h("strong", { key: `${keyPrefix}-b-${index}`, class: "ecall-md-strong" }, renderSegments(segment.children, `${keyPrefix}-b-${index}`));
+      return h("strong", { key: `${keyPrefix}-b-${index}`, class: "ecall-md-strong" }, renderSegments(segment.children, `${keyPrefix}-b-${index}`, localImageBasePath));
     }
     if (segment.type === "em") {
-      return h("em", { key: `${keyPrefix}-i-${index}`, class: "ecall-md-em" }, renderSegments(segment.children, `${keyPrefix}-i-${index}`));
+      return h("em", { key: `${keyPrefix}-i-${index}`, class: "ecall-md-em" }, renderSegments(segment.children, `${keyPrefix}-i-${index}`, localImageBasePath));
     }
     if (segment.type === "strongEm") {
       return h("strong", { key: `${keyPrefix}-bi-${index}`, class: "ecall-md-strong" }, [
-        h("em", { class: "ecall-md-em" }, renderSegments(segment.children, `${keyPrefix}-bi-${index}`)),
+        h("em", { class: "ecall-md-em" }, renderSegments(segment.children, `${keyPrefix}-bi-${index}`, localImageBasePath)),
       ]);
     }
     if (segment.type === "delete") {
-      return h("del", { key: `${keyPrefix}-d-${index}`, class: "ecall-md-del" }, renderSegments(segment.children, `${keyPrefix}-d-${index}`));
+      return h("del", { key: `${keyPrefix}-d-${index}`, class: "ecall-md-del" }, renderSegments(segment.children, `${keyPrefix}-d-${index}`, localImageBasePath));
     }
     return segment.text;
   });
@@ -779,6 +912,42 @@ ul.ecall-md-list {
   text-decoration: underline;
   text-decoration-thickness: 0.08em;
   text-underline-offset: 0.18em;
+}
+
+/* ==================== Images ==================== */
+.ecall-md-image {
+  display: inline-block;
+  max-width: min(28rem, 80vw);
+  max-height: 18rem;
+  border-radius: 0.5rem;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.ecall-md-local-image {
+  cursor: zoom-in;
+}
+
+.ecall-md-image-placeholder {
+  display: inline-flex;
+  min-width: 4rem;
+  max-width: min(16rem, 60vw);
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.55rem;
+  border: 1px dashed color-mix(in srgb, currentColor 28%, transparent);
+  border-radius: 0.5rem;
+  color: color-mix(in srgb, currentColor 62%, transparent);
+  font-size: 0.78rem;
+  line-height: 1.25;
+  vertical-align: middle;
+  cursor: zoom-in;
+}
+
+.ecall-md-image-error {
+  cursor: default;
+  color: color-mix(in srgb, currentColor 42%, transparent);
 }
 
 /* ==================== Emphasis ==================== */

@@ -186,14 +186,13 @@ async fn remote_im_build_file_content_items(
             .unwrap_or("application/octet-stream")
             .to_string();
         if mime.starts_with("image/") {
-            let raw = tokio::fs::read(&path).await.map_err(|err| {
-                format!("读取图片失败: path={}, err={err}", path.to_string_lossy())
-            })?;
+            let render = local_image_read_for_display(&path, LOCAL_IMAGE_REMOTE_MAX_EDGE)?;
+            let send_name = remote_im_local_image_send_name(&file_name, &render.mime);
             out.push(serde_json::json!({
                 "type": "image",
-                "mime": mime,
-                "name": file_name,
-                "bytesBase64": B64.encode(raw)
+                "mime": render.mime,
+                "name": send_name,
+                "bytesBase64": B64.encode(&render.bytes)
             }));
         } else {
             out.push(serde_json::json!({
@@ -222,8 +221,74 @@ async fn remote_im_outbound_contains_non_image_file(
     Ok(false)
 }
 
-fn remote_im_text_content_items_from_segments(segments: &[PersistedMemeSegment]) -> Vec<Value> {
-    meme_segments_to_remote_im_content_items(segments)
+fn remote_im_local_image_send_name(file_name: &str, mime: &str) -> String {
+    let trimmed = file_name.trim();
+    if mime.trim().eq_ignore_ascii_case("image/webp")
+        && !trimmed.to_ascii_lowercase().ends_with(".webp")
+    {
+        let stem = std::path::Path::new(trimmed)
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("image");
+        return format!("{stem}.webp");
+    }
+    if trimmed.is_empty() {
+        "image".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+async fn inline_segments_to_remote_im_content_items(
+    _state: &AppState,
+    segments: &[PersistedInlineMessageSegment],
+) -> Result<Vec<Value>, String> {
+    let mut out = Vec::<Value>::new();
+    for segment in segments {
+        match segment {
+            PersistedInlineMessageSegment::Text { text } => {
+                if !text.is_empty() {
+                    out.push(serde_json::json!({ "type": "text", "text": text }));
+                }
+            }
+            PersistedInlineMessageSegment::Meme {
+                name,
+                category: _,
+                mime,
+                relative_path: _,
+                bytes_base64,
+            } => {
+                let file_name = name.clone();
+                out.push(serde_json::json!({
+                    "type": "image",
+                    "mime": mime,
+                    "name": file_name,
+                    "bytesBase64": bytes_base64,
+                }));
+            }
+            PersistedInlineMessageSegment::LocalImage {
+                path,
+                file_name,
+                mime: _,
+                alt: _,
+                width: _,
+                height: _,
+            } => {
+                let resolved = PathBuf::from(path);
+                let render = local_image_read_for_display(&resolved, LOCAL_IMAGE_REMOTE_MAX_EDGE)?;
+                let send_name = remote_im_local_image_send_name(file_name, &render.mime);
+                out.push(serde_json::json!({
+                    "type": "image",
+                    "mime": render.mime,
+                    "name": send_name,
+                    "bytesBase64": B64.encode(&render.bytes),
+                }));
+            }
+        }
+    }
+    Ok(out)
 }
 
 async fn remote_im_build_text_content_items(
@@ -231,8 +296,8 @@ async fn remote_im_build_text_content_items(
     text: &str,
     seed_source: &str,
 ) -> Result<Vec<Value>, String> {
-    if let Some(segments) = meme_segments_from_remote_im_text(state, text, seed_source)? {
-        let items = remote_im_text_content_items_from_segments(&segments);
+    if let Some(segments) = resolve_text_to_persisted_inline_segments(state, text, seed_source)? {
+        let items = inline_segments_to_remote_im_content_items(state, &segments).await?;
         if !items.is_empty() {
             return Ok(items);
         }
@@ -429,4 +494,25 @@ fn builtin_contact_no_reply(args: ContactNoReplyToolArgs) -> Result<Value, Strin
         "stop_tool_loop": true,
         "reason": reason.unwrap_or_default()
     }))
+}
+
+#[cfg(test)]
+mod remote_im_local_image_tests {
+    use super::*;
+
+    #[test]
+    fn remote_im_local_image_send_name_should_match_webp_mime() {
+        assert_eq!(
+            remote_im_local_image_send_name("result.png", "image/webp"),
+            "result.webp"
+        );
+        assert_eq!(
+            remote_im_local_image_send_name("result.webp", "image/webp"),
+            "result.webp"
+        );
+        assert_eq!(
+            remote_im_local_image_send_name("result.png", "image/png"),
+            "result.png"
+        );
+    }
 }

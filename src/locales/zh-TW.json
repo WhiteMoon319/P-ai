@@ -1165,6 +1165,7 @@
       "sidebarHint": "點擊下方連結在側邊欄閱讀計劃",
       "linkLabel": "計劃："
     },
+    "localImageUnavailable": "圖片不可用",
     "supervision": {
       "buttonTitle": "建立目標任務",
       "activeButtonTitle": "目前會話已有啟用中的目標任務，點擊可覆蓋",

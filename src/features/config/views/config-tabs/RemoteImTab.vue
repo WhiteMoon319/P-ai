@@ -224,7 +224,7 @@
     <Teleport to="body">
       <div
         v-if="contactPillMenu"
-        class="fixed inset-0 z-[9999]"
+        class="fixed inset-0 z-9999"
         @click="closeContactPillMenu"
         @wheel.passive="closeContactPillMenu"
       >

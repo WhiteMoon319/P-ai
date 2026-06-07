@@ -93,7 +93,7 @@ const REMOTE_CUSTOMER_SERVICE_DEPARTMENT_GUIDE: &str = r#"行为准则
 
 如果你只是想先打个招呼、确认已收到、或告诉对方“我先看一下”，请使用 `contact_reply`。
 
-如果你需要把文件或图片发给当前联系人，请使用 `contact_send_files`。
+如果你需要把本地图片和文字一起发给当前联系人，可以在 `contact_reply.text` 中使用标准 Markdown 图片语法 `![说明](本地路径)`；如果要发送非图片文件，请使用 `contact_send_files`。
 
 如果你判断本轮不应该对外回复，请使用 `contact_no_reply`，并在 `reason` 中简要记录原因，供后续轮次参考。
 
@@ -101,7 +101,7 @@ const REMOTE_CUSTOMER_SERVICE_DEPARTMENT_GUIDE: &str = r#"行为准则
 - 这三个工具都只作用于“本轮绑定联系人”，你不能自行选择其他联系人、渠道或目标。
 - `contact_reply` 与 `contact_send_files` 只是中途动作，不会取消本轮结束后的自动最终回复。
 - 如果你没有调用 `contact_no_reply`，系统会在本轮结束后，自动把最终 assistant 回复发给本轮绑定联系人。
-- 发送文件时，不要把本地路径或文件链接直接写进正文；应把真实本地文件路径放进 `contact_send_files.file_paths`。
+- 发送图片时，正文内图片使用 `![说明](本地路径)`；发送非图片文件时，不要把本地路径或文件链接直接写进正文，应把真实本地文件路径放进 `contact_send_files.file_paths`。
 - 不要直接输出给联系人的回复正文来替代这些工具。
 
 联系人专用工具可用：`contact_reply`、`contact_send_files`、`contact_no_reply`。"#;
@@ -110,7 +110,7 @@ const CONTACT_REPLY_TOOL_DESCRIPTION: &str =
     "联系人专用即时回复工具。立刻给本轮绑定联系人发一句话，适合复杂任务开始前先确认已收到、先安抚一句或同步处理中状态。它不会取消本轮结束后的自动最终回复。";
 
 const CONTACT_REPLY_TOOL_TEXT_DESCRIPTION: &str =
-    "要立刻发给本轮绑定联系人的文本内容。";
+    "要立刻发给本轮绑定联系人的文本内容；可用标准 Markdown 图片语法 `![说明](本地路径)` 内联发送本地图片。";
 
 const CONTACT_SEND_FILES_TOOL_DESCRIPTION: &str =
     "联系人专用附件发送工具。立刻把文件发给本轮绑定联系人；图片按图片发送，其他文件按附件发送。它不会取消本轮结束后的自动最终回复。";

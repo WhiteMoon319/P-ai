@@ -1,7 +1,7 @@
 <template>
   <dialog class="modal" :class="{ 'modal-open': open }">
-    <div class="modal-box w-11/12 max-w-6xl p-2 bg-base-100">
-      <div class="mb-2 flex items-center justify-end gap-1">
+    <div class="modal-box flex h-[90vh] max-h-[90vh] w-[90vw] max-w-[90vw] flex-col p-2 bg-base-100">
+      <div class="mb-2 flex shrink-0 items-center justify-end gap-1">
         <button class="btn btn-xs" :disabled="zoom <= minZoom" @click="emit('zoomOut')">
           <Minus class="h-3 w-3" />
         </button>
@@ -11,9 +11,17 @@
         <button class="btn btn-xs" :disabled="Math.abs(zoom - 1) < 0.001" @click="emit('reset')">
           {{ Math.round(zoom * 100) }}%
         </button>
+        <template v-if="localPath">
+          <button class="btn btn-xs" :disabled="copyStatus === 'doing'" @click="emit('copyImage', localPath)">
+            <Copy class="h-3 w-3" />
+          </button>
+          <button class="btn btn-xs" :disabled="saveStatus === 'doing'" @click="emit('saveImage', localPath)">
+            <Download class="h-3 w-3" />
+          </button>
+        </template>
       </div>
       <div
-        class="max-h-[80vh] overflow-hidden flex items-center justify-center"
+        class="flex min-h-0 flex-1 items-center justify-center overflow-hidden"
         :class="zoom > 1 ? (dragging ? 'cursor-grabbing' : 'cursor-grab') : ''"
         @wheel.prevent="emit('wheel', $event)"
         @pointermove="emit('pointerMove', $event)"
@@ -24,7 +32,7 @@
         <img
           v-if="dataUrl"
           :src="dataUrl"
-          class="max-h-[80vh] max-w-full object-contain rounded select-none"
+          class="max-h-full max-w-full object-contain rounded select-none"
           :style="{ transform: `translate(${offsetX}px, ${offsetY}px) scale(${zoom})`, transformOrigin: 'center center' }"
           @pointerdown="emit('pointerDown', $event)"
         />
@@ -37,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import { Minus, Plus } from "@lucide/vue";
+import { Copy, Download, Minus, Plus } from "@lucide/vue";
 
 defineProps<{
   open: boolean;
@@ -48,6 +56,9 @@ defineProps<{
   offsetX: number;
   offsetY: number;
   dragging: boolean;
+  localPath?: string;
+  copyStatus?: "idle" | "doing";
+  saveStatus?: "idle" | "doing";
 }>();
 
 const emit = defineEmits<{
@@ -59,5 +70,7 @@ const emit = defineEmits<{
   (e: "pointerDown", event: PointerEvent): void;
   (e: "pointerMove", event: PointerEvent): void;
   (e: "pointerUp", event: PointerEvent): void;
+  (e: "copyImage", path: string): void;
+  (e: "saveImage", path: string): void;
 }>();
 </script>

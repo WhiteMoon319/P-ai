@@ -168,21 +168,25 @@
             </div>
             <div class="chat-bubble max-w-[82%]" :class="archiveMessageBubbleClass(m)">
               <div
-                v-if="messageMemeSegments(m).length > 0"
+                v-if="messageInlineSegments(m).length > 0"
                 class="archive-meme-segment-flow"
               >
-                <template v-for="(segment, index) in messageMemeSegments(m)" :key="`${m.id}-meme-${index}`">
+                <template v-for="(segment, index) in messageInlineSegments(m)" :key="`${m.id}-inline-${index}`">
                   <div
-                    v-if="segment.type === 'text' && archiveMemeText(segment)"
+                    v-if="segment.type === 'text' && archiveInlineText(segment)"
                     class="whitespace-pre-wrap break-words text-sm leading-7"
-                  >{{ archiveMemeText(segment) }}</div>
+                  >{{ archiveInlineText(segment) }}</div>
                   <img
-                    v-else-if="segment.type === 'meme'"
-                    :src="archiveMemeSegmentDataUrl(segment)"
-                    :alt="archiveMemeName(segment)"
-                    :title="`:${archiveMemeName(segment)}:`"
-                    class="archive-inline-meme"
+                    v-else-if="isArchiveInlineImageSegment(segment) && archiveInlineImageSrc(segment)"
+                    :src="archiveInlineImageSrc(segment)"
+                    :alt="archiveInlineImageAlt(segment)"
+                    :title="archiveInlineImageAlt(segment)"
+                    :class="archiveInlineImageClass(segment)"
                   />
+                  <div
+                    v-else-if="segment.type === 'localImage'"
+                    class="archive-local-image-unavailable"
+                  >{{ segment.alt || segment.fileName || t('chat.localImageUnavailable') }}</div>
                 </template>
               </div>
               <details
@@ -263,6 +267,7 @@ import type {
   DelegateConversationSummary,
   RemoteImContactConversationSummary,
   MessagePart,
+  InlineMessageSegment,
   MemeMessageSegment,
   UnarchivedConversationSummary,
 } from "../../../types/app";
@@ -322,6 +327,10 @@ const ARCHIVE_FOCUS_REQUEST_TTL_MS = 30_000;
 const archiveImageDataUrlCache = new Map<string, string>();
 const archiveImagePendingCache = new Map<string, Promise<string>>();
 const archiveResolvedImageMap = ref<Record<string, string>>({});
+const archiveLocalImageThumbnailCache = new Map<string, string>();
+const archiveLocalImagePendingCache = new Map<string, Promise<string>>();
+const archiveLocalImageThumbnailMap = ref<Record<string, string>>({});
+const archiveLocalImageErrorMap = ref<Record<string, boolean>>({});
 const messageScrollerRef = ref<HTMLElement | null>(null);
 const confirmDialog = ref<HTMLDialogElement | null>(null);
 const confirmDialogState = ref({
@@ -662,7 +671,7 @@ function collapsibleArchiveMessageTitle(msg: ChatMessage): string {
 function isArchiveDialogueMessage(msg: ChatMessage): boolean {
   if (msg.role !== "user" && msg.role !== "assistant") return false;
   return !!messageText(msg)
-    || messageMemeSegments(msg).length > 0
+    || messageInlineSegments(msg).length > 0
     || messageAttachments(msg).length > 0
     || messageImages(msg).length > 0;
 }
@@ -711,17 +720,106 @@ function messageMemeSegments(msg: ChatMessage): MemeMessageSegment[] {
     .filter((item): item is MemeMessageSegment => !!item);
 }
 
+function messageInlineSegments(msg: ChatMessage): InlineMessageSegment[] {
+  const raw = Array.isArray(msg.providerMeta?.inlineSegments) ? msg.providerMeta.inlineSegments : [];
+  const segments = raw
+    .map((item) => {
+      if (!item || typeof item !== "object") return undefined;
+      const segment = item as Record<string, unknown>;
+      const type = String(segment.type || "").trim().toLowerCase();
+      if (type === "text") {
+        return { type: "text", text: String(segment.text || "") } satisfies InlineMessageSegment;
+      }
+      if (type === "meme") {
+        const name = String(segment.name || "").trim();
+        const category = String(segment.category || "").trim();
+        const mime = String(segment.mime || "").trim();
+        const relativePath = String(segment.relativePath || "").trim();
+        const bytesBase64 = String(segment.bytesBase64 || "").trim();
+        if (!name || !category || !mime || !relativePath || !bytesBase64) return undefined;
+        return { type: "meme", name, category, mime, relativePath, bytesBase64 } satisfies InlineMessageSegment;
+      }
+      if (type === "localimage") {
+        const path = String(segment.path || "").trim();
+        const fileName = String(segment.fileName || "").trim();
+        const mime = String(segment.mime || "").trim();
+        const alt = String(segment.alt || "").trim() || undefined;
+        const width = typeof segment.width === "number" ? segment.width : undefined;
+        const height = typeof segment.height === "number" ? segment.height : undefined;
+        if (!path || !fileName) return undefined;
+        return { type: "localImage", path, fileName, mime, alt, width, height } satisfies InlineMessageSegment;
+      }
+      return undefined;
+    })
+    .filter((item): item is InlineMessageSegment => !!item);
+  return segments.length > 0 ? segments : messageMemeSegments(msg);
+}
+
 function archiveMemeSegmentDataUrl(segment: MemeMessageSegment): string {
   if (segment.type !== "meme") return "";
   return `data:${segment.mime};base64,${segment.bytesBase64}`;
 }
 
-function archiveMemeText(segment: MemeMessageSegment): string {
+function archiveInlineText(segment: InlineMessageSegment): string {
   return segment.type === "text" ? segment.text : "";
 }
 
 function archiveMemeName(segment: MemeMessageSegment): string {
   return segment.type === "meme" ? segment.category : "";
+}
+
+function archiveLocalImageKey(path: string): string {
+  return String(path || "").trim();
+}
+
+function archiveInlineImageSrc(segment: InlineMessageSegment): string {
+  if (segment.type === "meme") return archiveMemeSegmentDataUrl(segment);
+  if (segment.type !== "localImage") return "";
+  return archiveLocalImageThumbnailMap.value[archiveLocalImageKey(segment.path)] || "";
+}
+
+function archiveInlineImageAlt(segment: InlineMessageSegment): string {
+  if (segment.type === "meme") return `:${segment.category}:`;
+  if (segment.type === "localImage") return segment.alt || segment.fileName;
+  return "";
+}
+
+function archiveInlineImageClass(segment: InlineMessageSegment): string {
+  return segment.type === "localImage" ? "archive-local-image-thumbnail" : "archive-inline-meme";
+}
+
+function isArchiveInlineImageSegment(segment: InlineMessageSegment): boolean {
+  return segment.type === "meme" || segment.type === "localImage";
+}
+
+function ensureArchiveLocalImageThumbnail(path: string): void {
+  const key = archiveLocalImageKey(path);
+  if (!key || archiveLocalImageThumbnailMap.value[key] || archiveLocalImageErrorMap.value[key]) return;
+  const cached = archiveLocalImageThumbnailCache.get(key);
+  if (cached) {
+    archiveLocalImageThumbnailMap.value = { ...archiveLocalImageThumbnailMap.value, [key]: cached };
+    return;
+  }
+  if (archiveLocalImagePendingCache.has(key)) return;
+  const task = invokeTauri<{ dataUrl: string }>("read_local_chat_image_thumbnail", {
+    input: { path: key },
+  })
+    .then((result) => {
+      const dataUrl = String(result?.dataUrl || "").trim();
+      if (dataUrl) {
+        archiveLocalImageThumbnailCache.set(key, dataUrl);
+        archiveLocalImageThumbnailMap.value = { ...archiveLocalImageThumbnailMap.value, [key]: dataUrl };
+      }
+      archiveLocalImagePendingCache.delete(key);
+      return dataUrl;
+    })
+    .catch((error) => {
+      console.warn("[归档本地图片] 缩略图加载失败", { path: key, error });
+      archiveLocalImageErrorMap.value = { ...archiveLocalImageErrorMap.value, [key]: true };
+      archiveLocalImagePendingCache.delete(key);
+      return "";
+    });
+  archiveLocalImagePendingCache.set(key, task);
 }
 
 function remoteImOriginOfMessage(msg: ChatMessage): {
@@ -838,6 +936,9 @@ async function readArchiveImageDataUrl(
 
 watchEffect(() => {
   for (const message of visibleMessages.value) {
+    for (const segment of messageInlineSegments(message)) {
+      if (segment.type === "localImage") ensureArchiveLocalImageThumbnail(segment.path);
+    }
     const images = messageImages(message);
     images.forEach((image, index) => {
       const key = archiveImageKey(message.id, index);
@@ -888,6 +989,30 @@ function resolvedArchiveImageSrc(
   border-radius: 0.75rem;
   object-fit: contain;
   vertical-align: bottom;
+}
+
+.archive-local-image-thumbnail {
+  display: inline-block;
+  max-width: min(28rem, 100%);
+  max-height: 18rem;
+  border-radius: 0.5rem;
+  object-fit: contain;
+  vertical-align: bottom;
+}
+
+.archive-local-image-unavailable {
+  display: inline-flex;
+  min-width: 5rem;
+  max-width: min(16rem, 100%);
+  min-height: 3rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.55rem;
+  border: 1px dashed currentColor;
+  border-radius: 0.5rem;
+  opacity: 0.45;
+  font-size: 0.78rem;
+  line-height: 1.25;
 }
 
 .archive-markdown-content:deep(.markdown-renderer),

@@ -503,3 +503,119 @@ fn queue_inline_file_attachment(
         &raw,
     )
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReadLocalChatImageThumbnailInput {
+    path: String,
+    #[serde(default)]
+    max_edge: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReadLocalChatImageOutput {
+    data_url: String,
+    mime: String,
+    width: u32,
+    height: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReadLocalChatImageThumbnailOutput {
+    data_url: String,
+    mime: String,
+    width: u32,
+    height: u32,
+    original_width: u32,
+    original_height: u32,
+}
+
+#[tauri::command]
+fn read_local_chat_image_thumbnail(
+    input: ReadLocalChatImageThumbnailInput,
+) -> Result<ReadLocalChatImageThumbnailOutput, String> {
+    let path = std::path::PathBuf::from(input.path.trim());
+    let max_edge = input.max_edge.unwrap_or(LOCAL_IMAGE_THUMBNAIL_MAX_EDGE);
+    let render = local_image_read_for_display(&path, max_edge)?;
+    let data_url = format!("data:{};base64,{}", render.mime, B64.encode(&render.bytes));
+    Ok(ReadLocalChatImageThumbnailOutput {
+        data_url,
+        mime: render.mime,
+        width: render.output_width,
+        height: render.output_height,
+        original_width: render.original_width,
+        original_height: render.original_height,
+    })
+}
+
+#[tauri::command]
+fn read_local_chat_image_original(
+    input: ReadLocalChatImageThumbnailInput,
+) -> Result<ReadLocalChatImageOutput, String> {
+    let path = std::path::PathBuf::from(input.path.trim());
+    let render = local_image_read_original(&path)?;
+    let data_url = format!("data:{};base64,{}", render.mime, B64.encode(&render.bytes));
+    Ok(ReadLocalChatImageOutput {
+        data_url,
+        mime: render.mime,
+        width: render.output_width,
+        height: render.output_height,
+    })
+}
+
+#[tauri::command]
+fn copy_local_chat_image_to_clipboard(
+    input: ReadLocalChatImageThumbnailInput,
+) -> Result<Value, String> {
+    let path = std::path::PathBuf::from(input.path.trim());
+    let raw = local_image_read_raw(&path)?;
+    let (_, mime) = local_image_detect_format(&raw, &path)?;
+    let mut clipboard = arboard::Clipboard::new()
+        .map_err(|err| format!("初始化剪贴板失败: {err}"))?;
+
+    if matches!(mime.as_str(), "image/gif" | "image/webp") {
+        clipboard
+            .set()
+            .file_list(&[path.as_path()])
+            .map_err(|err| format!("复制图片文件到剪贴板失败: {err}"))?;
+        return Ok(serde_json::json!({ "ok": true, "mode": "file" }));
+    }
+
+    let (dynamic, _) = local_image_decode_dynamic(&raw, &path)?;
+    let rgba = dynamic.to_rgba8();
+    let image_data = arboard::ImageData {
+        width: rgba.width() as usize,
+        height: rgba.height() as usize,
+        bytes: rgba.as_raw().clone().into(),
+    };
+    clipboard.set_image(image_data)
+        .map_err(|err| format!("复制图片到剪贴板失败: {err}"))?;
+    Ok(serde_json::json!({ "ok": true, "mode": "bitmap" }))
+}
+
+#[tauri::command]
+async fn save_local_chat_image_as(
+    input: ReadLocalChatImageThumbnailInput,
+    app: AppHandle,
+) -> Result<Value, String> {
+    let source_path = std::path::PathBuf::from(input.path.trim());
+    if !source_path.exists() {
+        return Err(format!("源文件不存在: {}", source_path.to_string_lossy()));
+    }
+    let file_name = source_path
+        .file_name()
+        .and_then(|v| v.to_str())
+        .unwrap_or("image.webp");
+    let dest = app.dialog()
+        .file()
+        .set_file_name(file_name)
+        .blocking_save_file();
+    let dest_path = dest
+        .and_then(|fp| fp.as_path().map(ToOwned::to_owned))
+        .ok_or_else(|| "用户取消了保存".to_string())?;
+    std::fs::copy(&source_path, &dest_path)
+        .map_err(|err| format!("复制文件失败: {err}"))?;
+    Ok(serde_json::json!({ "ok": true }))
+}

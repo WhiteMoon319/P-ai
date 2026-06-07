@@ -624,6 +624,9 @@ impl ConversationPromptService {
                 tool_rule_blocks.push(meme_block.trim().to_string());
             }
         }
+        if let Some(image_ref_block) = build_builtin_tool_rule_block("image_reference") {
+            tool_rule_blocks.push(image_ref_block);
+        }
         if conversation_is_remote_im_contact(conversation)
             || chat_overrides
                 .and_then(|overrides| {

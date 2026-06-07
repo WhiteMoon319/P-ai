@@ -1,10 +1,11 @@
 import { ref } from "vue";
 
-type BinaryAttachment = { mime: string; bytesBase64?: string; dataUrl?: string };
+type BinaryAttachment = { mime: string; bytesBase64?: string; dataUrl?: string; localPath?: string };
 
 export function useChatImagePreview() {
   const imagePreviewOpen = ref(false);
   const imagePreviewDataUrl = ref("");
+  const imagePreviewLocalPath = ref("");
   const imagePreviewZoom = ref(1);
   const previewOffsetX = ref(0);
   const previewOffsetY = ref(0);
@@ -55,12 +56,14 @@ export function useChatImagePreview() {
     const mime = String(image.mime || "").trim() || "image/webp";
     const dataUrl = String(image.dataUrl || "").trim();
     const bytes = String(image.bytesBase64 || "").trim();
+    const localPath = String(image.localPath || "").trim();
     if (dataUrl) {
       imagePreviewDataUrl.value = dataUrl;
     } else {
       if (!bytes) return;
       imagePreviewDataUrl.value = `data:${mime};base64,${bytes}`;
     }
+    imagePreviewLocalPath.value = localPath;
     imagePreviewZoom.value = 1;
     previewOffsetX.value = 0;
     previewOffsetY.value = 0;
@@ -72,6 +75,7 @@ export function useChatImagePreview() {
   function closeImagePreview() {
     imagePreviewOpen.value = false;
     imagePreviewDataUrl.value = "";
+    imagePreviewLocalPath.value = "";
     imagePreviewZoom.value = 1;
     previewOffsetX.value = 0;
     previewOffsetY.value = 0;
@@ -107,6 +111,7 @@ export function useChatImagePreview() {
   return {
     imagePreviewOpen,
     imagePreviewDataUrl,
+    imagePreviewLocalPath,
     imagePreviewZoom,
     IMAGE_PREVIEW_MIN_ZOOM,
     IMAGE_PREVIEW_MAX_ZOOM,
