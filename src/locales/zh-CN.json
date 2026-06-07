@@ -974,7 +974,12 @@
       "noError": "无错误"
     }
   },
-  "responseStyle": {},
+  "responseStyle": {
+    "concise": "简洁",
+    "academic": "学术",
+    "teaching": "教学",
+    "abstract": "抽象"
+  },
   "chat": {
     "loadingOlderMessages": "加载更早消息中",
     "command": "指令",

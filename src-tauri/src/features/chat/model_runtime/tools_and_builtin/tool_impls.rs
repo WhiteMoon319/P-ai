@@ -615,8 +615,8 @@ impl RuntimeToolMetadata for BuiltinTaskTool {
             serde_json::json!({
               "type": "object",
               "properties": {
-                "action": { "type": "string", "enum": ["list", "get", "create", "update", "complete"], "description": "要执行的动作。" },
-                "task_id": { "type": "string", "description": "任务 ID。get、update、complete 时必填。" },
+                "action": { "type": "string", "enum": ["list", "get", "create", "complete"], "description": "要执行的动作。" },
+                "task_id": { "type": "string", "description": "任务 ID。get、complete 时必填。" },
                 "goal": { "type": "string", "description": "任务目标，也是列表标题。" },
                 "how": { "type": "string", "description": "当前下一步要做什么，或准备如何推进；重点写下一步。" },
                 "why": { "type": "string", "description": "为什么要做这件事，用来避免后续推进走偏。" },

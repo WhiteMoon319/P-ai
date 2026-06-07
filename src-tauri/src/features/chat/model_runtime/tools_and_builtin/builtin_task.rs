@@ -223,36 +223,6 @@ async fn builtin_task(
             .await?;
             serde_json::to_value(task).map_err(|err| format!("Serialize task create failed: {err}"))
         }
-        "update" => {
-            let task_id = args
-                .task_id
-                .clone()
-                .ok_or_else(|| "task.taskId is required for action=update".to_string())?;
-            let update_input = TaskUpdateInput {
-                task_id,
-                conversation_id: None,
-                target_scope: None,
-                goal: task_tool_goal_from_args(&args),
-                why: task_tool_why_from_args(&args),
-                todo: task_tool_how_from_args(&args),
-                trigger: args.trigger.clone(),
-            };
-            eprintln!(
-                "[任务] 状态=开始 action=update task_id={} changed_fields=goal:{},how:{},why:{},trigger:{}",
-                update_input.task_id,
-                update_input.goal.is_some(),
-                update_input.todo.is_some(),
-                update_input.why.is_some(),
-                update_input.trigger.is_some(),
-            );
-            let data_path = app_state.data_path.clone();
-            let update_input_for_io = update_input.clone();
-            let task = run_task_store_io(move || {
-                task_store_update_task(&data_path, &update_input_for_io)
-            })
-            .await?;
-            serde_json::to_value(task).map_err(|err| format!("Serialize task update failed: {err}"))
-        }
         "complete" => {
             let task_id = args
                 .task_id
@@ -279,6 +249,6 @@ async fn builtin_task(
             serde_json::to_value(task)
                 .map_err(|err| format!("Serialize task complete failed: {err}"))
         }
-        _ => Err("task.action must be one of: list, get, create, update, complete".to_string()),
+        _ => Err("task.action must be one of: list, get, create, complete".to_string()),
     }
 }

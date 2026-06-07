@@ -404,50 +404,24 @@ fn build_hidden_task_board_block(state: &AppState) -> Option<String> {
 }
 
 fn build_task_trigger_hidden_prompt(task: &TaskRecordStored) -> String {
-    let mut lines = Vec::<String>::new();
     let goal = task_goal_from_legacy_fields(&task.title, &task.goal);
     let why = task_why_from_legacy_record(task);
     let todo = task_todo_from_legacy_fields(&task.status_summary, &task.todos);
-    lines.push(format!("task_id: {}", task.task_id.trim()));
-    lines.push(format!("target: {}", goal.trim()));
-    if !todo.trim().is_empty() {
-        lines.push(format!("how: {}", todo.trim()));
-    }
-    if !why.trim().is_empty() {
-        lines.push(format!("why: {}", why.trim()));
-    }
-    if let Some(run_at_utc) = task.trigger.run_at_utc.as_deref() {
-        lines.push(format!(
-            "run_at: {}",
-            format_utc_storage_time_to_local_rfc3339(run_at_utc)
-        ));
-    }
-    if let Some(cron_expression) = task
-        .trigger
-        .cron_expression
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        lines.push(format!("cron_expression: {}", cron_expression));
-    }
-    if let Some(end_at_utc) = task.trigger.end_at_utc.as_deref() {
-        lines.push(format!(
-            "end_at: {}",
-            format_utc_storage_time_to_local_rfc3339(end_at_utc)
-        ));
-    }
-    lines.push(String::new());
-    lines.push("请立刻继续推进这个任务，直到任务全部成功或者明确无法完成。".to_string());
-    lines.push("不管成功与否，最终都必须调用 task 工具使任务 complete。".to_string());
-    lines.push(format!(
-        "成功时调用：{{\"action\":\"complete\",\"task_id\":\"{}\",\"completion_state\":\"completed\",\"completion_conclusion\":\"<简洁说明最终结果>\"}}",
-        task.task_id.trim()
-    ));
-    lines.push(format!(
-        "失败或明确无法完成时调用：{{\"action\":\"complete\",\"task_id\":\"{}\",\"completion_state\":\"failed_completed\",\"completion_conclusion\":\"<简洁说明失败原因或阻塞点>\"}}",
-        task.task_id.trim()
-    ));
+    let lines = if why.trim().is_empty() {
+        vec![
+            "背景：用户希望你能独立完成任务达成目标".to_string(),
+            format!("目标：{}", goal.trim()),
+            "要求：一直持续工作，直到达成目标，最后进行工作汇报。明确已经完成任务并且做出汇报之后，才允许 complete 本任务，否则禁止调用 task 工具。".to_string(),
+        ]
+    } else {
+        vec![
+            format!("背景：{}", why.trim()),
+            format!("目标：{}", goal.trim()),
+            format!("要求：{}", todo.trim()),
+            String::new(),
+            format!("完成：task complete(id={})", task.task_id.trim()),
+        ]
+    };
     format!("<task_remind>\n{}\n</task_remind>", lines.join("\n"))
 }
 

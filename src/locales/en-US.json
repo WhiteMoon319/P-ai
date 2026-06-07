@@ -974,7 +974,12 @@
       "noError": "No error"
     }
   },
-  "responseStyle": {},
+  "responseStyle": {
+    "concise": "Concise",
+    "academic": "Academic",
+    "teaching": "Teaching",
+    "abstract": "Abstract"
+  },
   "chat": {
     "loadingOlderMessages": "Loading older messages",
     "command": "Command",
