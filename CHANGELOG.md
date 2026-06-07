@@ -1,5 +1,12 @@
 # 变更日志
 
+## 发布：v0.11.1
+
+- 重构（task）：删除 LLM task 工具的 update action，LLM 只能 create/complete 来管理任务，不再支持原地修改。
+- 优化（task）：task_remind 提示词改为「背景：目标：要求：」三段格式，区分用户发起（goal）与 LLM 自建任务，去掉冗余的调度元数据。
+- 功能（supervision）：督工任务对话框新增「停止」按钮，可将运行中的任务标记为 failed_completed。
+- 修复（i18n）：GOAL_TASK_WHY 清空以对齐新的 task_remind 来源判断。
+
 ## 发布：v0.11.0
 
 - 功能（chat）：LLM 回复支持标准 Markdown 图片语法 `![说明](路径)` 引用本地图片；聊天内显示缩略图、单击打开 90% 视口原图预览，预览支持复制/保存原图，远程联系人回复按同一语法发送图片并在超大图时压缩。
