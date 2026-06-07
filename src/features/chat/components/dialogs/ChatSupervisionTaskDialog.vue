@@ -57,6 +57,14 @@
             </div>
           </div>
           <div class="ml-auto flex shrink-0 items-center justify-end gap-2">
+            <button
+              v-if="activeTask"
+              class="btn btn-error btn-outline"
+              :disabled="saving"
+              @click="emit('stop')"
+            >
+              {{ t("chat.supervision.stopAction") }}
+            </button>
             <button class="btn btn-ghost" :disabled="saving" @click="emit('close')">
               {{ t("common.cancel") }}
             </button>
@@ -106,11 +114,12 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "close"): void;
   (e: "save", payload: { durationHours: number; goal: string; why: string; todo: string }): void;
+  (e: "stop"): void;
 }>();
 
 const { t } = useI18n();
 
-const GOAL_TASK_WHY = "用户希望你完成目标之前持续推进";
+const GOAL_TASK_WHY = "";
 const GOAL_TASK_TODO = "请自行判断";
 const goal = ref("");
 

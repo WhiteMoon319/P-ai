@@ -295,6 +295,7 @@
       :on-detach-conversation="detachCurrentConversationToWindow"
       :close-supervision-task-dialog="closeSupervisionTaskDialog"
       :save-supervision-task="saveSupervisionTask"
+      :stop-supervision-task="stopSupervisionTask"
       :on-reached-chat-bottom="() => undefined"
       :on-recall-turn="handleRecallTurn"
       :on-regenerate-turn="handleRegenerateTurn"

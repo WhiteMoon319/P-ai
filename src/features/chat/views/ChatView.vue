@@ -291,6 +291,7 @@
           :open="supervisionDialogOpen" :saving="supervisionTaskSaving" :error-text="supervisionTaskError"
           :active-task="activeSupervisionTask" :recent-history="recentSupervisionTaskHistory"
           @close="$emit('closeSupervisionTask')" @save="$emit('saveSupervisionTask', $event)"
+          @stop="$emit('stopSupervisionTask')"
         />
       </div>
 
@@ -507,6 +508,7 @@ const emit = defineEmits<{
   (e: "lockWorkspace"): void; (e: "openSupervisionTask"): void; (e: "openCodeReview"): void;
   (e: "detachConversation"): void; (e: "closeSupervisionTask"): void;
   (e: "saveSupervisionTask", payload: { durationHours: number; goal: string; why: string; todo: string }): void;
+  (e: "stopSupervisionTask"): void;
   (e: "switchConversation", payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }): void;
   (e: "renameConversation", payload: { conversationId: string; title: string }): void;
   (e: "togglePinConversation", conversationId: string): void;

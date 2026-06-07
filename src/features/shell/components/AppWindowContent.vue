@@ -223,6 +223,7 @@
         @detach-conversation="handleDetachConversation"
         @close-supervision-task="closeSupervisionTaskDialog"
         @save-supervision-task="saveSupervisionTask"
+        @stop-supervision-task="stopSupervisionTask"
         @refresh-tool-review-message="onRefreshToolReviewMessage"
         @switch-conversation="onSwitchConversation"
         @rename-conversation="onRenameConversation"
@@ -662,6 +663,7 @@ const props = defineProps<{
   onDetachConversation: () => void;
   closeSupervisionTaskDialog: () => void;
   saveSupervisionTask: (payload: { durationHours: number; goal: string; why: string; todo: string }) => void;
+  stopSupervisionTask: () => void;
   onRefreshToolReviewMessage: (payload: { conversationId: string; messageId: string }) => void;
   onSwitchConversation: (payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }) => void;
   onRenameConversation: (payload: { conversationId: string; title: string }) => void;

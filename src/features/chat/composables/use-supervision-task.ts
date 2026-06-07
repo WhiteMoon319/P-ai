@@ -294,6 +294,34 @@ export function useSupervisionTask(options: UseSupervisionTaskOptions) {
     }
   }
 
+  async function stopSupervisionTask() {
+    if (supervisionTaskSaving.value) return;
+    const taskId = String(activeSupervisionTask.value?.taskId || "").trim();
+    if (!taskId) {
+      supervisionTaskError.value = options.t("chat.supervision.noActiveTask");
+      return;
+    }
+    supervisionTaskSaving.value = true;
+    supervisionTaskError.value = "";
+    try {
+      await invokeTauri<TaskEntry>("task_complete_task", {
+        input: {
+          taskId,
+          completionState: "failed_completed",
+          completionConclusion: options.t("chat.supervision.stoppedConclusion"),
+        },
+      });
+      options.setStatus(options.t("chat.supervision.stoppedStatus"));
+      activeSupervisionTask.value = null;
+      supervisionTaskDialogOpen.value = false;
+      await refreshActiveSupervisionTask({ silent: true });
+    } catch (error) {
+      supervisionTaskError.value = `${options.t("chat.supervision.stopFailed")}: ${toErrorMessage(error)}`;
+    } finally {
+      supervisionTaskSaving.value = false;
+    }
+  }
+
   function startSupervisionTaskPolling() {
     clearSupervisionTaskPollTimer();
     supervisionTaskPollTimer = window.setInterval(() => {
@@ -320,6 +348,7 @@ export function useSupervisionTask(options: UseSupervisionTaskOptions) {
     openSupervisionTaskDialog,
     closeSupervisionTaskDialog,
     saveSupervisionTask,
+    stopSupervisionTask,
     refreshActiveSupervisionTask,
     startSupervisionTaskPolling,
     clearSupervisionTaskPollTimer,
