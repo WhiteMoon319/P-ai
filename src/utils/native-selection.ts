@@ -1,21 +1,21 @@
 const INSTALL_KEY = "__easyCallNativeSelectionGuardInstalled";
 const DIALOG_PATCH_KEY = "__easyCallNativeSelectionDialogPatched";
+const DIALOG_OBSERVER_KEY = "__easyCallNativeSelectionDialogObserver";
 
-const INTERACTIVE_SELECTOR = [
-  "button",
-  "summary",
-  "label",
-  "a[href]",
-  "input[type='button']",
-  "input[type='submit']",
-  "input[type='reset']",
-  "[role='button']",
-  "[data-clear-selection-before-open]",
+const EXPLICIT_OPEN_TRIGGER_SELECTOR = "[data-clear-selection-before-open]";
+
+const EDITABLE_SELECTOR = [
+  "textarea",
+  "select",
+  "option",
+  "input:not([type='button']):not([type='submit']):not([type='reset'])",
+  "[contenteditable]:not([contenteditable='false'])",
 ].join(",");
 
 type GuardedWindow = Window & typeof globalThis & {
   [INSTALL_KEY]?: boolean;
   [DIALOG_PATCH_KEY]?: boolean;
+  [DIALOG_OBSERVER_KEY]?: MutationObserver;
 };
 
 export function clearNativeTextSelection() {
@@ -32,7 +32,8 @@ export function clearNativeTextSelection() {
 function shouldClearSelectionForTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
   if (target.closest("[data-preserve-native-selection]")) return false;
-  return !!target.closest(INTERACTIVE_SELECTOR);
+  if (target.closest(EDITABLE_SELECTOR)) return false;
+  return !!target.closest(EXPLICIT_OPEN_TRIGGER_SELECTOR);
 }
 
 function clearBeforeInteractiveAction(event: Event) {
@@ -71,11 +72,75 @@ function patchDialogOpenMethods(win: GuardedWindow) {
   win[DIALOG_PATCH_KEY] = true;
 }
 
+function isDialogVisiblyOpen(dialog: HTMLDialogElement): boolean {
+  return dialog.open || dialog.classList.contains("modal-open");
+}
+
+function installDialogOpenObserver(win: GuardedWindow) {
+  if (win[DIALOG_OBSERVER_KEY]) return;
+
+  const dialogOpenStates = new WeakMap<HTMLDialogElement, boolean>();
+  const rememberDialog = (dialog: HTMLDialogElement) => {
+    dialogOpenStates.set(dialog, isDialogVisiblyOpen(dialog));
+  };
+  const handleDialogStateChange = (dialog: HTMLDialogElement) => {
+    const wasOpen = dialogOpenStates.get(dialog) ?? false;
+    const isOpen = isDialogVisiblyOpen(dialog);
+    dialogOpenStates.set(dialog, isOpen);
+    if (!wasOpen && isOpen) {
+      clearNativeTextSelection();
+    }
+  };
+  const handleAddedDialog = (dialog: HTMLDialogElement) => {
+    const isOpen = isDialogVisiblyOpen(dialog);
+    dialogOpenStates.set(dialog, isOpen);
+    if (isOpen) {
+      clearNativeTextSelection();
+    }
+  };
+  const handleAddedNode = (node: Node) => {
+    if (!(node instanceof Element)) return;
+    if (node instanceof HTMLDialogElement) {
+      handleAddedDialog(node);
+    }
+    node.querySelectorAll("dialog").forEach((dialog) => {
+      if (dialog instanceof HTMLDialogElement) {
+        handleAddedDialog(dialog);
+      }
+    });
+  };
+
+  document.querySelectorAll("dialog").forEach((dialog) => {
+    if (dialog instanceof HTMLDialogElement) {
+      rememberDialog(dialog);
+    }
+  });
+
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      if (record.type === "attributes" && record.target instanceof HTMLDialogElement) {
+        handleDialogStateChange(record.target);
+        continue;
+      }
+      record.addedNodes.forEach(handleAddedNode);
+    }
+  });
+
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["class", "open"],
+    childList: true,
+    subtree: true,
+  });
+  win[DIALOG_OBSERVER_KEY] = observer;
+}
+
 export function installNativeSelectionGuard() {
   if (typeof window === "undefined" || typeof document === "undefined") return;
 
   const win = window as GuardedWindow;
   patchDialogOpenMethods(win);
+  installDialogOpenObserver(win);
 
   if (win[INSTALL_KEY]) return;
   document.addEventListener("pointerdown", clearBeforeInteractiveAction, true);
