@@ -224,7 +224,7 @@
       "tableFilesValue": "{files} 檔案 / {directories} 目錄",
       "openAction": "打開",
       "cleanupAction": "清理",
-      "cleanupConfirm": "確認清理「{name}」中已完成遷移的舊檔案？預計釋放 {size}。",
+      "cleanupConfirm": "確認清理「{name}」中的可清理項？預計釋放 {size}。",
       "cleanupSuccess": "已完成清理，釋放 {size}。",
       "categories": {
         "configuration": "配置檔案",
@@ -232,6 +232,7 @@
         "chatMetadata": "會話索引與元資料",
         "conversationStores": "目前普通會話",
         "legacyConversations": "舊普通會話 JSON",
+        "abnormalConversations": "異常會話殘留",
         "conversationOther": "普通會話其他檔案",
         "delegateRecords": "委託記錄",
         "delegateConversationStores": "目前委託會話",

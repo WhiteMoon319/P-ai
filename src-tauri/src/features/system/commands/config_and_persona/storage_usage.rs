@@ -1,5 +1,6 @@
 const STORAGE_CLEANUP_LEGACY_CONVERSATIONS: &str = "legacyConversations";
 const STORAGE_CLEANUP_LEGACY_DELEGATE_CONVERSATIONS: &str = "legacyDelegateConversations";
+const STORAGE_CLEANUP_ABNORMAL_CONVERSATIONS: &str = "abnormalConversations";
 
 #[derive(Debug, Clone, Default)]
 struct StorageSizeStats {
@@ -154,6 +155,19 @@ struct StorageLegacyCleanupScan {
     total_file_count: usize,
     cleanable_paths: Vec<PathBuf>,
     cleanable_bytes: u64,
+}
+
+#[derive(Debug, Clone)]
+struct StorageAbnormalConversationCandidate {
+    conversation_id: String,
+    shard_dir: PathBuf,
+    stats: StorageSizeStats,
+}
+
+#[derive(Debug, Clone, Default)]
+struct StorageAbnormalConversationScan {
+    candidates: Vec<StorageAbnormalConversationCandidate>,
+    stats: StorageSizeStats,
 }
 
 fn storage_usage_item(
@@ -341,8 +355,31 @@ fn storage_current_conversation_store_stats(
     data_path: &PathBuf,
     scope: StorageLegacyConversationScope,
 ) -> Result<StorageSizeStats, String> {
+    storage_current_conversation_store_stats_excluding_ids(
+        data_path,
+        scope,
+        &std::collections::HashSet::new(),
+    )
+}
+
+fn storage_current_conversation_store_stats_excluding_ids(
+    data_path: &PathBuf,
+    scope: StorageLegacyConversationScope,
+    excluded_conversation_ids: &std::collections::HashSet<String>,
+) -> Result<StorageSizeStats, String> {
     let dir = storage_conversation_dir(data_path, scope);
-    storage_stats_for_directory_entries(&dir, |_path, file_type| file_type.is_dir())
+    storage_stats_for_directory_entries(&dir, |path, file_type| {
+        if !file_type.is_dir() {
+            return false;
+        }
+        let conversation_id = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        !conversation_id.is_empty() && !excluded_conversation_ids.contains(&conversation_id)
+    })
 }
 
 fn storage_conversation_other_stats(
@@ -355,6 +392,90 @@ fn storage_conversation_other_stats(
     })
 }
 
+fn storage_abnormal_conversation_scan(
+    data_path: &PathBuf,
+) -> Result<StorageAbnormalConversationScan, String> {
+    let runtime = read_runtime_state_shard(data_path)?;
+    let active_bound_ids = runtime
+        .remote_im_contacts
+        .iter()
+        .filter_map(|contact| contact.bound_conversation_id.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .collect::<std::collections::HashSet<_>>();
+    let conversation_dir = app_layout_chat_conversations_dir(data_path);
+    let mut scan = StorageAbnormalConversationScan::default();
+    if !conversation_dir.exists() {
+        return Ok(scan);
+    }
+    let entries = fs::read_dir(&conversation_dir).map_err(|err| {
+        format!(
+            "读取异常会话目录失败，path={}，error={err}",
+            conversation_dir.display()
+        )
+    })?;
+    for entry in entries {
+        let entry = entry.map_err(|err| {
+            format!(
+                "读取异常会话目录项失败，path={}，error={err}",
+                conversation_dir.display()
+            )
+        })?;
+        let file_type = entry.file_type().map_err(|err| {
+            format!(
+                "读取异常会话目录项类型失败，path={}，error={err}",
+                entry.path().display()
+            )
+        })?;
+        if !file_type.is_dir() {
+            continue;
+        }
+        let shard_dir = entry.path();
+        let conversation_id = shard_dir
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        if conversation_id.is_empty() || active_bound_ids.contains(&conversation_id) {
+            continue;
+        }
+        let conversation_meta = match read_conversation_meta_shard(data_path, &conversation_id) {
+            Ok(value) => value,
+            Err(err) => {
+                eprintln!(
+                    "[存储] 跳过，任务=识别异常会话，conversation_id={}，reason=读取会话元数据失败，error={}",
+                    conversation_id, err
+                );
+                continue;
+            }
+        };
+        if conversation_meta.conversation_kind().trim() != CONVERSATION_KIND_REMOTE_IM_CONTACT {
+            continue;
+        }
+        let store_paths = message_store::message_store_paths(data_path, &conversation_id)?;
+        let manifest_status = message_store::read_message_store_manifest_status(&store_paths)?;
+        let is_abnormal = manifest_status
+            .as_ref()
+            .map(|status| status.migration_state.trim() != "ready" || !status.ready_jsonl)
+            .unwrap_or(true);
+        if !is_abnormal {
+            continue;
+        }
+        let stats = storage_stats_for_paths(vec![shard_dir.clone()])?;
+        scan.stats.bytes = scan.stats.bytes.saturating_add(stats.bytes);
+        scan.stats.file_count += stats.file_count;
+        scan.stats.directory_count += stats.directory_count;
+        scan.candidates.push(StorageAbnormalConversationCandidate {
+            conversation_id,
+            shard_dir,
+            stats,
+        });
+    }
+    Ok(scan)
+}
+
 fn storage_usage_target_path(state: &AppState, item_id: &str) -> Option<PathBuf> {
     let app_root = app_root_from_data_path(&state.data_path);
     let path = match item_id {
@@ -365,7 +486,7 @@ fn storage_usage_target_path(state: &AppState, item_id: &str) -> Option<PathBuf>
             .unwrap_or_else(|| app_root.clone()),
         "runtimeState" => app_layout_state_dir(&state.data_path),
         "chatMetadata" => app_layout_chat_dir(&state.data_path),
-        "conversationStores" | "legacyConversations" | "conversationOther" => {
+        "conversationStores" | "legacyConversations" | "abnormalConversations" | "conversationOther" => {
             app_layout_chat_conversations_dir(&state.data_path)
         }
         "delegateRecords" => app_root.join("delegate"),
@@ -439,6 +560,12 @@ fn build_storage_usage_overview(state: &AppState) -> Result<StorageUsageOverview
         storage_legacy_conversation_stats(&state.data_path, StorageLegacyConversationScope::Normal)?;
     let (legacy_delegate_stats, legacy_delegate_scan) =
         storage_legacy_conversation_stats(&state.data_path, StorageLegacyConversationScope::Delegate)?;
+    let abnormal_conversation_scan = storage_abnormal_conversation_scan(&state.data_path)?;
+    let abnormal_conversation_ids = abnormal_conversation_scan
+        .candidates
+        .iter()
+        .map(|item| item.conversation_id.clone())
+        .collect::<std::collections::HashSet<_>>();
 
     let mut items = vec![
         storage_usage_item(
@@ -468,9 +595,10 @@ fn build_storage_usage_overview(state: &AppState) -> Result<StorageUsageOverview
         storage_usage_item(
             "conversationStores",
             storage_usage_target_path(state, "conversationStores").unwrap_or_else(|| app_root.clone()),
-            storage_current_conversation_store_stats(
+            storage_current_conversation_store_stats_excluding_ids(
                 &state.data_path,
                 StorageLegacyConversationScope::Normal,
+                &abnormal_conversation_ids,
             )?,
             None,
             0,
@@ -483,6 +611,14 @@ fn build_storage_usage_overview(state: &AppState) -> Result<StorageUsageOverview
             Some(STORAGE_CLEANUP_LEGACY_CONVERSATIONS),
             legacy_conversation_scan.cleanable_bytes,
             legacy_conversation_scan.cleanable_paths.len(),
+        ),
+        storage_usage_item(
+            "abnormalConversations",
+            storage_usage_target_path(state, "abnormalConversations").unwrap_or_else(|| app_root.clone()),
+            abnormal_conversation_scan.stats.clone(),
+            Some(STORAGE_CLEANUP_ABNORMAL_CONVERSATIONS),
+            abnormal_conversation_scan.stats.bytes,
+            abnormal_conversation_scan.candidates.len(),
         ),
         storage_usage_item(
             "conversationOther",
@@ -1513,6 +1649,30 @@ fn cleanup_storage_legacy_scope(
     })
 }
 
+fn cleanup_storage_abnormal_conversations(state: &AppState) -> Result<StorageCleanupResult, String> {
+    let scan = storage_abnormal_conversation_scan(&state.data_path)?;
+    let expected_dir = app_layout_chat_conversations_dir(&state.data_path);
+    let mut deleted_file_count = 0;
+    let mut freed_bytes = 0_u64;
+    for candidate in scan.candidates {
+        if candidate.shard_dir.parent() != Some(expected_dir.as_path()) {
+            return Err(format!(
+                "拒绝清理异常会话目录：候选路径不在预期目录内，path={}，expected_dir={}",
+                candidate.shard_dir.display(),
+                expected_dir.display()
+            ));
+        }
+        state_delete_conversation_cached(state, &candidate.conversation_id)?;
+        deleted_file_count += 1;
+        freed_bytes = freed_bytes.saturating_add(candidate.stats.bytes);
+    }
+    Ok(StorageCleanupResult {
+        deleted_file_count,
+        skipped_file_count: 0,
+        freed_bytes,
+    })
+}
+
 #[tauri::command]
 fn cleanup_storage_legacy_items(
     state: State<'_, AppState>,
@@ -1528,6 +1688,32 @@ fn cleanup_storage_legacy_items(
             StorageLegacyConversationScope::Delegate,
             "旧委托会话 JSON",
         ),
+        STORAGE_CLEANUP_ABNORMAL_CONVERSATIONS => {
+            let _migration_guard = lock_message_store_migration();
+            eprintln!(
+                "[存储] 开始，任务=清理异常会话目录，cleanup_kind={}",
+                cleanup_kind
+            );
+            let started_at = std::time::Instant::now();
+            let result = cleanup_storage_abnormal_conversations(&state);
+            match &result {
+                Ok(report) => eprintln!(
+                    "[存储] 完成，任务=清理异常会话目录，cleanup_kind={}，删除文件数={}，跳过文件数={}，释放字节={}，耗时毫秒={}",
+                    cleanup_kind,
+                    report.deleted_file_count,
+                    report.skipped_file_count,
+                    report.freed_bytes,
+                    started_at.elapsed().as_millis()
+                ),
+                Err(err) => eprintln!(
+                    "[存储] 失败，任务=清理异常会话目录，cleanup_kind={}，error={}，耗时毫秒={}",
+                    cleanup_kind,
+                    err,
+                    started_at.elapsed().as_millis()
+                ),
+            }
+            return result;
+        }
         _ => return Err(format!("未知存储清理类型：{cleanup_kind}")),
     };
     let _migration_guard = lock_message_store_migration();
@@ -1562,6 +1748,42 @@ fn cleanup_storage_legacy_items(
 #[cfg(test)]
 mod storage_usage_tests {
     use super::*;
+
+    fn storage_usage_test_remote_contact(bound_conversation_id: Option<&str>) -> RemoteImContact {
+        RemoteImContact {
+            id: "contact-a".to_string(),
+            channel_id: "channel-a".to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            remote_contact_type: "group".to_string(),
+            remote_contact_id: "remote-a".to_string(),
+            remote_contact_name: "测试群".to_string(),
+            avatar_url: String::new(),
+            remark_name: String::new(),
+            allow_send: true,
+            allow_send_files: false,
+            allow_receive: true,
+            activation_mode: "never".to_string(),
+            activation_keywords: Vec::new(),
+            mute_keywords: default_remote_im_contact_mute_keywords(),
+            unmute_keywords: default_remote_im_contact_unmute_keywords(),
+            patience_seconds: default_remote_im_contact_patience_seconds(),
+            mute_duration_seconds: default_remote_im_contact_mute_duration_seconds(),
+            activation_cooldown_seconds: 0,
+            route_mode: "dedicated_contact_conversation".to_string(),
+            bound_department_id: Some(REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID.to_string()),
+            bound_agent_id: None,
+            bound_conversation_id: bound_conversation_id.map(str::to_string),
+            processing_mode: "continuous".to_string(),
+            response_strategy: default_remote_im_contact_response_strategy(),
+            response_guidance: default_remote_im_contact_response_guidance(),
+            last_activated_at: None,
+            last_message_at: Some(now_iso()),
+            dingtalk_session_webhook: None,
+            dingtalk_session_webhook_expired_time: None,
+            onebot_group_members: Vec::new(),
+            shell_workspaces: Vec::new(),
+        }
+    }
 
     fn storage_usage_test_message(id: &str, role: &str) -> ChatMessage {
         ChatMessage {
@@ -1692,6 +1914,45 @@ mod storage_usage_tests {
         assert_eq!(scan.total_file_count, 2);
         assert_eq!(scan.cleanable_paths.len(), 1);
         assert_eq!(scan.cleanable_paths[0], ready_legacy_path);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn storage_abnormal_conversation_scan_should_only_collect_unbound_remote_building_shards() {
+        let root = std::env::temp_dir().join(format!(
+            "easy-call-storage-abnormal-conversations-{}",
+            Uuid::new_v4()
+        ));
+        let data_path = root.join("app_data.json");
+        let mut stale =
+            storage_usage_test_conversation("remote-stale", CONVERSATION_KIND_REMOTE_IM_CONTACT);
+        stale.root_conversation_id = Some("remote_im_contact:channel-a:group:remote-a".to_string());
+        let mut active =
+            storage_usage_test_conversation("remote-active", CONVERSATION_KIND_REMOTE_IM_CONTACT);
+        active.root_conversation_id = Some("remote_im_contact:channel-a:group:remote-a".to_string());
+
+        let stale_paths =
+            message_store::message_store_paths(&data_path, &stale.id).expect("stale paths");
+        let active_paths =
+            message_store::message_store_paths(&data_path, &active.id).expect("active paths");
+        message_store::write_jsonl_snapshot_directory_shard_if_changed(&stale_paths, &stale)
+            .expect("write stale shard");
+        message_store::write_jsonl_snapshot_directory_shard_if_changed(&active_paths, &active)
+            .expect("write active shard");
+        message_store::write_jsonl_snapshot_building_manifest(&stale_paths, &stale)
+            .expect("downgrade stale manifest to building");
+
+        let mut runtime = RuntimeStateFile::default();
+        runtime
+            .remote_im_contacts
+            .push(storage_usage_test_remote_contact(Some(&active.id)));
+        write_runtime_state_shard(&data_path, &runtime).expect("write runtime state");
+
+        let scan = storage_abnormal_conversation_scan(&data_path).expect("scan abnormal conversations");
+
+        assert_eq!(scan.candidates.len(), 1);
+        assert_eq!(scan.candidates[0].conversation_id, stale.id);
+        assert!(scan.stats.bytes > 0);
         let _ = fs::remove_dir_all(root);
     }
 }

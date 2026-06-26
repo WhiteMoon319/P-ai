@@ -224,7 +224,7 @@
       "tableFilesValue": "{files} files / {directories} dirs",
       "openAction": "Open",
       "cleanupAction": "Clean",
-      "cleanupConfirm": "Clean migrated legacy files in \"{name}\"? Estimated space to free: {size}.",
+      "cleanupConfirm": "Clean reclaimable items in \"{name}\"? Estimated space to free: {size}.",
       "cleanupSuccess": "Cleanup finished and freed {size}.",
       "categories": {
         "configuration": "Configuration",
@@ -232,6 +232,7 @@
         "chatMetadata": "Chat Index and Metadata",
         "conversationStores": "Current Conversations",
         "legacyConversations": "Legacy Conversation JSON",
+        "abnormalConversations": "Abnormal Conversation Residue",
         "conversationOther": "Conversation Other Files",
         "delegateRecords": "Delegate Records",
         "delegateConversationStores": "Current Delegate Conversations",
