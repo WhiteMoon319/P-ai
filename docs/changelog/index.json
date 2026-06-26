@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-06-26T03:39:09.707Z",
-  "latestVersion": "v0.15.0",
+  "generatedAt": "2026-06-26T07:26:36.454Z",
+  "latestVersion": "v0.15.1",
   "releases": [
+    {
+      "version": "v0.15.1",
+      "path": "docs/changelog/releases/v0.15.1.md",
+      "summary": "**聊天右侧栏**：委托、任务和工具评估项统一改为整项点击打开，补齐和任务一致的悬停高亮，并复用现有会话列表时间格式显示开始/完成时间。"
+    },
     {
       "version": "v0.15.0",
       "path": "docs/changelog/releases/v0.15.0.md",
