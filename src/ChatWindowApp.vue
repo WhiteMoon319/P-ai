@@ -259,6 +259,7 @@
       :on-tools-changed="handleToolsChanged"
       :save-config="saveConfig"
       :update-record-hotkey="updateRecordHotkey"
+      :update-record-background-wake-enabled="updateRecordBackgroundWakeEnabled"
       :restore-config="restoreLastSavedConfigSnapshot"
       :add-api-config="addApiConfig"
       :remove-selected-api-config="removeSelectedApiConfig"

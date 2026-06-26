@@ -89,6 +89,8 @@
             :hotkey-test-audio-ready="hotkeyTestAudioReady"
             :microphone-permission-state="microphonePermissionState"
             :microphone-permission-requesting="microphonePermissionRequesting"
+            :background-voice-screenshot-keywords="backgroundVoiceScreenshotKeywords"
+            :background-voice-screenshot-mode="backgroundVoiceScreenshotMode"
             @start-hotkey-record-test="$emit('startHotkeyRecordTest')"
             @stop-hotkey-record-test="$emit('stopHotkeyRecordTest')"
             @play-hotkey-record-test="$emit('playHotkeyRecordTest')"
@@ -99,6 +101,9 @@
             @update:record-background-wake-enabled="onRecordBackgroundWakeChanged"
             @update:min-record-seconds="onMinRecordSecondsChanged"
             @update:max-record-seconds="onMaxRecordSecondsChanged"
+            @update:background-voice-screenshot-keywords="$emit('update:backgroundVoiceScreenshotKeywords', $event)"
+            @update:background-voice-screenshot-mode="$emit('update:backgroundVoiceScreenshotMode', $event)"
+            @patch-chat-settings="$emit('patchChatSettings', $event)"
           />
 
           <ToolsTab
@@ -148,15 +153,11 @@
             :response-style-options="responseStyleOptions"
             :response-style-id="responseStyleId"
             :pdf-read-mode="pdfReadMode"
-            :background-voice-screenshot-keywords="backgroundVoiceScreenshotKeywords"
-            :background-voice-screenshot-mode="backgroundVoiceScreenshotMode"
             :instruction-presets="instructionPresets"
             :cache-stats="cacheStats"
             :cache-stats-loading="cacheStatsLoading"
             @update:response-style-id="$emit('update:responseStyleId', $event)"
             @update:pdf-read-mode="$emit('update:pdfReadMode', $event)"
-            @update:background-voice-screenshot-keywords="$emit('update:backgroundVoiceScreenshotKeywords', $event)"
-            @update:background-voice-screenshot-mode="$emit('update:backgroundVoiceScreenshotMode', $event)"
             @update:instruction-presets="$emit('update:instructionPresets', $event)"
             @patch-conversation-api-settings="$emit('patchConversationApiSettings', $event)"
             @patch-chat-settings="$emit('patchChatSettings', $event)"
@@ -493,6 +494,7 @@ const props = defineProps<{
   hasAvailableUpdate: boolean;
   saveConfigAction: () => Promise<boolean> | boolean;
   updateRecordHotkeyAction: (value: string) => Promise<boolean> | boolean;
+  updateRecordBackgroundWakeEnabledAction: (value: boolean) => Promise<boolean> | boolean;
   restoreConfigAction: () => boolean;
   lastSavedConfigJson: string;
   setStatusAction: (text: string) => void;
@@ -739,10 +741,10 @@ async function onRecordHotkeyChanged(value: string) {
   await Promise.resolve(props.updateRecordHotkeyAction(next));
 }
 
-function onRecordBackgroundWakeChanged(value: boolean) {
+async function onRecordBackgroundWakeChanged(value: boolean) {
   const next = !!value;
   if (!!props.config.recordBackgroundWakeEnabled === next) return;
-  props.config.recordBackgroundWakeEnabled = next;
+  await Promise.resolve(props.updateRecordBackgroundWakeEnabledAction(next));
 }
 
 function onMinRecordSecondsChanged(value: number) {

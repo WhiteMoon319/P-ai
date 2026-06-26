@@ -62,6 +62,7 @@
       :has-available-update="hasAvailableUpdate"
       :save-config-action="saveConfig"
       :update-record-hotkey-action="updateRecordHotkey"
+      :update-record-background-wake-enabled-action="updateRecordBackgroundWakeEnabled"
       :restore-config-action="restoreConfig"
       :last-saved-config-json="lastSavedConfigJson"
       :set-status-action="setStatus"
@@ -643,6 +644,7 @@ const props = defineProps<{
   refreshModels: () => void;
   saveConfig: () => Promise<boolean> | boolean;
   updateRecordHotkey: (value: string) => Promise<boolean> | boolean;
+  updateRecordBackgroundWakeEnabled: (value: boolean) => Promise<boolean> | boolean;
   restoreConfig: () => boolean;
   lastSavedConfigJson: string;
   onToolsChanged: () => void;

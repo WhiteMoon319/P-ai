@@ -101,6 +101,7 @@
         :has-available-update="hasAvailableUpdate"
         :save-config-action="saveConfig"
         :update-record-hotkey-action="updateRecordHotkey"
+        :update-record-background-wake-enabled-action="updateRecordBackgroundWakeEnabled"
         :restore-config-action="restoreLastSavedConfigSnapshot"
         :last-saved-config-json="lastSavedConfigJson"
         :set-status-action="setStatus"
@@ -637,6 +638,7 @@ const {
   saveConfig,
   captureHotkey,
   updateRecordHotkey,
+  updateRecordBackgroundWakeEnabled,
   loadPersonas,
   savePersonas,
   saveChatPreferences,

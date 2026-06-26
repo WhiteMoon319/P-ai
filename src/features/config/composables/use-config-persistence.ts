@@ -630,6 +630,41 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
     }
   }
 
+  async function updateRecordBackgroundWakeEnabled(value: boolean) {
+    const next = !!value;
+    const previous = !!options.config.recordBackgroundWakeEnabled;
+    if (next === previous) return true;
+    options.saving.value = true;
+    try {
+      const saved = await invokeTauri<RecordHotkeyUpdateResult>("update_record_background_wake", {
+        input: {
+          enabled: next,
+        },
+      });
+      options.config.recordHotkey = String(saved.recordHotkey || "");
+      options.config.recordBackgroundWakeEnabled = !!saved.recordBackgroundWakeEnabled;
+      const normalizedConfigNumbers = normalizeConfigNumberFields(
+        saved.minRecordSeconds,
+        saved.maxRecordSeconds,
+        {
+          minRecordSeconds: options.config.minRecordSeconds,
+          maxRecordSeconds: options.config.maxRecordSeconds,
+        },
+      );
+      options.config.minRecordSeconds = normalizedConfigNumbers.minRecordSeconds;
+      options.config.maxRecordSeconds = normalizedConfigNumbers.maxRecordSeconds;
+      options.lastSavedConfigJson.value = options.buildConfigSnapshotJson();
+      options.setStatus(options.t("status.configSaved"));
+      return true;
+    } catch (error) {
+      options.config.recordBackgroundWakeEnabled = previous;
+      options.setStatus(options.t("status.saveConfigFailed", { err: String(error ?? "unknown") }));
+      return false;
+    } finally {
+      options.saving.value = false;
+    }
+  }
+
   async function loadPersonas() {
     options.suppressAutosave.value = true;
     try {
@@ -960,6 +995,7 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
     saveConfig,
     captureHotkey,
     updateRecordHotkey,
+    updateRecordBackgroundWakeEnabled,
     loadPersonas,
     loadChatSettings,
     savePersonas,

@@ -49,6 +49,12 @@ struct UpdateRecordHotkeyInput {
     record_hotkey: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateRecordBackgroundWakeInput {
+    enabled: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RecordHotkeyUpdateResult {
@@ -844,6 +850,35 @@ fn update_record_hotkey(
     let _ = app.emit("easy-call:config-updated", &runtime_config);
     Ok(RecordHotkeyUpdateResult {
         record_hotkey: normalized,
+        record_background_wake_enabled: config.record_background_wake_enabled,
+        min_record_seconds: config.min_record_seconds,
+        max_record_seconds: config.max_record_seconds,
+    })
+}
+
+#[tauri::command]
+fn update_record_background_wake(
+    input: UpdateRecordBackgroundWakeInput,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<RecordHotkeyUpdateResult, String> {
+    let mut config = state_read_config_cached(&state)?;
+    normalize_app_config(&mut config);
+    let next_enabled = input.enabled;
+    if config.record_background_wake_enabled != next_enabled {
+        config.record_background_wake_enabled = next_enabled;
+        state_write_config_cached(&state, &config)?;
+    }
+    set_record_hotkey_probe_background_wake_enabled(config.record_background_wake_enabled);
+    runtime_log_info(format!(
+        "[录音热键] 完成，任务=后台唤醒切换，enabled={}",
+        config.record_background_wake_enabled
+    ));
+    let data = state_read_agents_runtime_snapshot(&state)?;
+    let runtime_config = runtime_config_with_private_organization(&state, &config, &data)?;
+    let _ = app.emit("easy-call:config-updated", &runtime_config);
+    Ok(RecordHotkeyUpdateResult {
+        record_hotkey: config.record_hotkey.clone(),
         record_background_wake_enabled: config.record_background_wake_enabled,
         min_record_seconds: config.min_record_seconds,
         max_record_seconds: config.max_record_seconds,

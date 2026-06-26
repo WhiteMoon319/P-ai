@@ -949,6 +949,7 @@ fn main() {
             debug_crash_webview,
             list_system_fonts,
             update_record_hotkey,
+            update_record_background_wake,
             set_webview_zoom_percent,
             set_chat_side_panels_window_expanded,
             save_config,

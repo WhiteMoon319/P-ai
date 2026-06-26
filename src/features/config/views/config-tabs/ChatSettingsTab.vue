@@ -83,37 +83,6 @@
       </div>
     </div>
 
-    <!-- 语音截图关键词 -->
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body p-4">
-        <h3 class="card-title text-base mb-3">{{ t("config.chatSettings.backgroundVoiceScreenshotKeywords") }}</h3>
-        <div class="flex items-center gap-2">
-          <input
-            v-model="backgroundVoiceScreenshotKeywordsDraft"
-            type="text"
-            class="input input-bordered input-sm flex-1"
-            :placeholder="t('config.chatSettings.backgroundVoiceScreenshotKeywordsPlaceholder')"
-          />
-          <button class="btn btn-sm btn-primary shrink-0" :disabled="!backgroundVoiceScreenshotDirty" @click="saveBackgroundVoiceScreenshotSettings">保存</button>
-        </div>
-        <div class="mt-3 text-xs opacity-70">{{ t("config.chatSettings.backgroundVoiceScreenshotKeywordsHint") }}</div>
-      </div>
-    </div>
-
-    <!-- 语音截图模式 -->
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body p-4">
-        <h3 class="card-title text-base mb-3">{{ t("config.chatSettings.backgroundVoiceScreenshotMode") }}</h3>
-        <SegmentedControl
-          :model-value="backgroundVoiceScreenshotMode"
-          :options="backgroundVoiceScreenshotModeOptions"
-          size="sm"
-          @change="onBackgroundVoiceScreenshotModeChange"
-        />
-        <div class="mt-3 text-xs opacity-70">{{ t("config.chatSettings.backgroundVoiceScreenshotModeHint") }}</div>
-      </div>
-    </div>
-
     <div class="card bg-base-100 border border-base-300">
       <div class="card-body p-4 gap-3">
         <div class="flex items-center justify-between gap-2">
@@ -191,8 +160,6 @@ const props = defineProps<{
   responseStyleOptions: ResponseStyleOption[];
   responseStyleId: string;
   pdfReadMode: "text" | "image";
-  backgroundVoiceScreenshotKeywords: string;
-  backgroundVoiceScreenshotMode: "desktop" | "focused_window";
   instructionPresets: PromptCommandPreset[];
   cacheStats: ImageTextCacheStats;
   cacheStatsLoading: boolean;
@@ -209,15 +176,9 @@ const pdfReadModeOptions = computed(() => [
   { value: "text" as const, label: t("config.chatSettings.pdfReadModeText") },
   { value: "image" as const, label: t("config.chatSettings.pdfReadModeImage") },
 ]);
-const backgroundVoiceScreenshotModeOptions = computed(() => [
-  { value: "desktop" as const, label: t("config.chatSettings.backgroundVoiceScreenshotModeDesktop") },
-  { value: "focused_window" as const, label: t("config.chatSettings.backgroundVoiceScreenshotModeFocusedWindow") },
-]);
 const emit = defineEmits<{
   (e: "update:responseStyleId", value: string): void;
   (e: "update:pdfReadMode", value: "text" | "image"): void;
-  (e: "update:backgroundVoiceScreenshotKeywords", value: string): void;
-  (e: "update:backgroundVoiceScreenshotMode", value: "desktop" | "focused_window"): void;
   (e: "update:instructionPresets", value: PromptCommandPreset[]): void;
   (e: "patchConversationApiSettings", value: ConversationApiSettingsPatch): void;
   (e: "patchChatSettings", value: ChatSettingsPatch): void;
@@ -287,33 +248,6 @@ function onSttAutoSendChange(event: Event) {
   props.config.sttAutoSend = (event.target as HTMLInputElement).checked;
   emit("patchConversationApiSettings", {
     sttAutoSend: !!props.config.sttAutoSend,
-  });
-}
-
-const backgroundVoiceScreenshotKeywordsDraft = ref(String(props.backgroundVoiceScreenshotKeywords || ""));
-
-watch(
-  () => props.backgroundVoiceScreenshotKeywords,
-  (value) => {
-    backgroundVoiceScreenshotKeywordsDraft.value = String(value || "");
-  },
-);
-
-const backgroundVoiceScreenshotDirty = computed(
-  () => backgroundVoiceScreenshotKeywordsDraft.value !== String(props.backgroundVoiceScreenshotKeywords || ""),
-);
-
-function saveBackgroundVoiceScreenshotSettings() {
-  emit("update:backgroundVoiceScreenshotKeywords", backgroundVoiceScreenshotKeywordsDraft.value);
-  emit("patchChatSettings", {
-    backgroundVoiceScreenshotKeywords: backgroundVoiceScreenshotKeywordsDraft.value,
-  });
-}
-
-function onBackgroundVoiceScreenshotModeChange(value: "desktop" | "focused_window") {
-  emit("update:backgroundVoiceScreenshotMode", value);
-  emit("patchChatSettings", {
-    backgroundVoiceScreenshotMode: value,
   });
 }
 

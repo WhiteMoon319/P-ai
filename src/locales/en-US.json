@@ -75,6 +75,7 @@
       "captureNeedModifierHint": "Global hotkey requires at least one modifier (Ctrl/Alt/Shift/Meta).",
       "captureUnrecognizedHint": "Key not recognized, please try again.",
       "captureCapturedHint": "Captured: {combo}",
+      "voiceTitle": "Voice",
       "recordKey": "Record Key",
       "backgroundWakeHint": "Enable background voice wake (hold record hotkey)",
       "backgroundWakeOn": "Background Wake: On",
