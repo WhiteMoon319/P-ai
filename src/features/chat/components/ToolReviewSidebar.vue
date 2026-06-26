@@ -108,6 +108,9 @@
                 :token-count="delegate.tokenCount"
                 :last-tool-name="delegate.lastToolName"
                 :show-result="canShowDelegateResult(delegate)"
+                :time-date-label="delegateTimeLabel(delegate).dateLabel"
+                :time-minute-label="delegateTimeLabel(delegate).timeLabel"
+                :started-label="delegateStartedLabel(delegate)"
                 :avatar-url="personaAvatarUrlMap[delegate.targetAgentId || ''] || ''"
                 @abort="emit('abortDelegate', delegate)"
                 @open-detail="openDelegateResult(delegate)"
@@ -143,7 +146,8 @@
               :label="taskListTitle(task)"
               :description="taskListTodo(task)"
               :title="taskListTitle(task)"
-              :time-label="taskListTime(task)"
+              :time-date-label="taskListTime(task).dateLabel"
+              :time-minute-label="taskListTime(task).timeLabel"
               :disabled="!canEditTaskInSidebar"
               @click="openTaskEditor(task)"
             />
@@ -198,7 +202,7 @@ import type { ArchiveBlockPage, ChatMessage, ConversationDelegateStatusSummary, 
 import { toErrorMessage } from "../../../utils/error";
 import { defaultWorkspaceNameFromPath, inferWorkspaceName, isLegacyGenericWorkspaceName, normalizeWorkspaceLevel } from "../../../utils/shell-workspaces";
 import type { ToolReviewBatchSummary, ToolReviewItemDetail, ToolReviewItemSummary } from "../composables/use-chat-tool-review";
-import { formatConversationListTime } from "../utils/conversation-time";
+import { formatConversationListTime, formatConversationListTimeWithMinuteDetails } from "../utils/conversation-time";
 import { AppMarkdownRenderer, initKatex } from "../markdown";
 import ToolAssessmentCard from "./ToolAssessmentCard.vue";
 import DelegateCard from "./DelegateCard.vue";
@@ -393,17 +397,29 @@ function taskListTodo(task: TaskEntry) {
 }
 
 function taskListTime(task: TaskEntry) {
-  const raw = String(task.trigger?.next_run_at || task.trigger?.run_at || task.updatedAtLocal || "").trim();
-  return raw ? formatConversationListTime(raw, locale.value) : "";
+  const raw = String(task.completedAtLocal || task.updatedAtLocal || "").trim();
+  return raw ? formatConversationListTimeWithMinuteDetails(raw, locale.value) : { dateLabel: "", timeLabel: "" };
 }
 
 function compareTaskForSidebar(left: TaskEntry, right: TaskEntry) {
-  const leftRaw = String(left.trigger?.next_run_at || left.trigger?.run_at || left.updatedAtLocal || "").trim();
-  const rightRaw = String(right.trigger?.next_run_at || right.trigger?.run_at || right.updatedAtLocal || "").trim();
+  const leftRaw = String(left.completedAtLocal || left.updatedAtLocal || "").trim();
+  const rightRaw = String(right.completedAtLocal || right.updatedAtLocal || "").trim();
   const leftTime = leftRaw ? new Date(leftRaw).getTime() : Number.POSITIVE_INFINITY;
   const rightTime = rightRaw ? new Date(rightRaw).getTime() : Number.POSITIVE_INFINITY;
   if (leftTime !== rightTime) return leftTime - rightTime;
   return Number(left.orderIndex || 0) - Number(right.orderIndex || 0);
+}
+
+function delegateTimeLabel(delegate: ConversationDelegateStatusSummary) {
+  const raw = String(delegate.completedAt || delegate.archivedAt || delegate.updatedAt || "").trim();
+  return raw ? formatConversationListTimeWithMinuteDetails(raw, locale.value) : { dateLabel: "", timeLabel: "" };
+}
+
+function delegateStartedLabel(delegate: ConversationDelegateStatusSummary) {
+  const raw = String(delegate.startedAt || "").trim();
+  if (!raw) return "";
+  const parts = formatConversationListTimeWithMinuteDetails(raw, locale.value);
+  return parts.timeLabel ? `${parts.dateLabel} ${parts.timeLabel}` : parts.dateLabel;
 }
 
 const currentBatchIndex = computed(() => {

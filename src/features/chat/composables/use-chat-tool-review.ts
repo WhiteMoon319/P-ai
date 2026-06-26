@@ -18,6 +18,7 @@ export type ToolReviewItemSummary = {
   affectedPaths?: string[];
   patchOperation?: "add" | "update" | "delete" | "mixed" | string;
   command?: string;
+  finishedAt?: string;
 };
 
 export type ToolReviewReportRecord = {

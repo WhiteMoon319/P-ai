@@ -374,6 +374,8 @@ struct ToolReviewItemSummary {
     patch_operation: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     command: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    finished_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -457,6 +459,7 @@ struct ToolReviewCollectedItem {
     batch_key: String,
     call_id: String,
     message_id: String,
+    finished_at: Option<String>,
     tool_name: String,
     order_index: usize,
     args_value: Value,
@@ -818,6 +821,7 @@ fn collect_tool_review_batches_internal(conversation: &Conversation) -> Vec<Tool
                         batch_key: batch_key.clone(),
                         call_id: call_id.clone(),
                         message_id: String::new(),
+                        finished_at: None,
                         tool_name,
                         order_index,
                         args_value: call.arguments_value,
@@ -847,6 +851,7 @@ fn collect_tool_review_batches_internal(conversation: &Conversation) -> Vec<Tool
             };
             let item = &mut batches[pending_batch_idx].items[pending_item_idx];
             item.message_id = message.id.clone();
+            item.finished_at = Some(message.created_at.clone());
             item.result_text = event.text.trim().to_string();
             item.result_value = serde_json::from_str::<Value>(event.text.trim()).ok();
             item.review_value = item
@@ -923,6 +928,7 @@ fn tool_review_batch_summary_from_collected(batch: &ToolReviewCollectedBatch) ->
                 } else {
                     None
                 },
+                finished_at: item.finished_at.clone(),
             })
             .collect(),
     }

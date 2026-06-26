@@ -1,6 +1,10 @@
 <template>
-  <div class="mt-1 text-xs text-base-content/65">
+  <div class="text-xs text-base-content/65">
     <template v-if="hasProgress">
+      <template v-if="startedLabel">
+        <span>{{ startedLabel }}</span>
+        <span class="mx-1">·</span>
+      </template>
       <span>{{ elapsedText }}</span>
       <span class="mx-1">·</span>
       <span>{{ requestCount }}步</span>
@@ -25,6 +29,7 @@ const props = defineProps<{
   lastToolName?: string;
   text?: string;
   running?: boolean;
+  startedLabel?: string;
 }>();
 
 const elapsedText = computed(() => formatElapsedMs(props.elapsedMs ?? 0));

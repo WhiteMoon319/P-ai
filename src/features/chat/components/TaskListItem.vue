@@ -13,15 +13,20 @@
         </div>
         <div class="min-w-0 flex-1">
           <div class="flex min-w-0 items-start justify-between gap-2">
-            <div class="min-w-0 truncate text-sm font-medium">
+            <div class="min-w-0 flex-1 truncate whitespace-nowrap text-sm font-medium">
               {{ label }}
             </div>
-            <span v-if="timeLabel" class="shrink-0 text-[11px] text-base-content/55">
-              {{ timeLabel }}
-            </span>
+            <div v-if="timeDateLabel" class="shrink-0 text-right text-[11px] leading-4 text-base-content/55">
+              {{ timeDateLabel }}
+            </div>
           </div>
-          <div class="mt-1 truncate text-xs text-base-content/55">
-            {{ description }}
+          <div class="mt-1 flex min-w-0 items-start justify-between gap-2 text-xs text-base-content/55">
+            <div class="min-w-0 flex-1 truncate">
+              {{ description }}
+            </div>
+            <div v-if="timeMinuteLabel" class="shrink-0 text-right leading-4">
+              {{ timeMinuteLabel }}
+            </div>
           </div>
         </div>
       </div>
@@ -36,7 +41,8 @@ defineProps<{
   label: string;
   description: string;
   title?: string;
-  timeLabel?: string;
+  timeDateLabel?: string;
+  timeMinuteLabel?: string;
   disabled?: boolean;
 }>();
 

@@ -7,13 +7,14 @@
         <span class="block truncate text-xs font-normal text-base-content">{{ title }}</span>
         <DelegateProgressLine
           v-if="running && progress"
+          class="mt-1"
           :running="true"
           :elapsed-ms="progress.elapsedMs"
           :request-count="progress.requestCount"
           :token-count="progress.tokenCount"
           :last-tool-name="progress.lastToolName"
         />
-        <DelegateProgressLine v-else :text="summary" />
+        <DelegateProgressLine v-else class="mt-1" :text="summary" />
       </div>
       <button
         type="button"

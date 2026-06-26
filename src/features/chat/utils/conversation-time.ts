@@ -33,3 +33,29 @@ export function formatConversationListTime(value?: string, locale?: string): str
     day: "2-digit",
   });
 }
+
+export function formatConversationListTimeWithMinuteDetails(
+  value?: string,
+  locale?: string,
+): { dateLabel: string; timeLabel: string } {
+  if (!value) {
+    return { dateLabel: "", timeLabel: "" };
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return { dateLabel: value, timeLabel: "" };
+  }
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const nextStartOfToday = new Date(startOfToday);
+  nextStartOfToday.setDate(nextStartOfToday.getDate() + 1);
+  const isToday = date >= startOfToday && date < nextStartOfToday;
+  return {
+    dateLabel: formatConversationListTime(value, locale),
+    timeLabel: isToday ? "" : date.toLocaleTimeString(locale, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }),
+  };
+}
