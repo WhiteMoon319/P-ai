@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-06-26T07:26:36.454Z",
-  "latestVersion": "v0.15.1",
+  "generatedAt": "2026-06-26T23:54:20.957Z",
+  "latestVersion": "v0.15.2",
   "releases": [
+    {
+      "version": "v0.15.2",
+      "path": "docs/changelog/releases/v0.15.2.md",
+      "summary": "**快捷键设置**：快捷键页将录音键、录音测试、后台语音截图关键词与截图范围合并为“语音”卡片，聊天设置页不再重复展示后台语音截图设置。"
+    },
     {
       "version": "v0.15.1",
       "path": "docs/changelog/releases/v0.15.1.md",
