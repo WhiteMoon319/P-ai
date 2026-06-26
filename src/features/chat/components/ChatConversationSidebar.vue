@@ -272,8 +272,10 @@ import type { TaskEntry } from "../../config/views/config-tabs/task-editor";
 import { usePipelineStatus } from "../../shell/composables/use-pipeline-status";
 import { formatConversationListTime } from "../utils/conversation-time";
 import {
+  buildRecentConversationSection,
   buildRemoteConversationSections,
   buildWorkspaceConversationSections,
+  RECENT_CONVERSATION_SECTION_KEY,
   type ConversationSection,
 } from "../utils/conversation-sections";
 import { resolveConversationDisplayTitle } from "../utils/conversation-title";
@@ -341,6 +343,7 @@ const conversationSections = computed<ConversationSection[]>(() => {
   });
   const pinned = visibleItems.filter((item) => !!item.isPinned || !!item.isSystemNotificationConversation);
   const others = visibleItems.filter((item) => !item.isPinned && !item.isSystemNotificationConversation);
+  const recentSection = buildRecentConversationSection(visibleItems, t("chat.recentConversations"));
   const sections: ConversationSection[] = [];
   if (pinned.length > 0) {
     sections.push({
@@ -348,6 +351,9 @@ const conversationSections = computed<ConversationSection[]>(() => {
       title: t("chat.pinnedConversations"),
       items: pinned,
     });
+  }
+  if (recentSection) {
+    sections.push(recentSection);
   }
   if (activeConversationTab.value === "contact") {
     return [
@@ -431,13 +437,14 @@ function resetConversationTitleEdit() {
 }
 
 function isConversationSectionCollapsed(key: string): boolean {
-  return !!collapsedConversationSectionKeys.value[key];
+  if (normalizedConversationSearchQuery.value) return false;
+  return collapsedConversationSectionKeys.value[key] ?? key !== RECENT_CONVERSATION_SECTION_KEY;
 }
 
 function toggleConversationSection(key: string) {
   collapsedConversationSectionKeys.value = {
     ...collapsedConversationSectionKeys.value,
-    [key]: !collapsedConversationSectionKeys.value[key],
+    [key]: !isConversationSectionCollapsed(key),
   };
   scheduleConversationListScrollbarUpdate();
 }

@@ -220,6 +220,7 @@ import { Archive, Folder, FolderOpen, PencilLine, Pin, PinOff, SquarePen, Trash2
 import type { ChatConversationOverviewItem, ConversationPreviewMessage } from "../../../types/app";
 import { usePipelineStatus } from "../../shell/composables/use-pipeline-status";
 import { formatConversationListTime } from "../utils/conversation-time";
+import { buildRecentConversationSection, RECENT_CONVERSATION_SECTION_KEY } from "../utils/conversation-sections";
 import { resolveConversationDisplayTitle } from "../utils/conversation-title";
 import ChatConversationFloatingScroll from "./ChatConversationFloatingScroll.vue";
 import ChatConversationListHeader from "./ChatConversationListHeader.vue";
@@ -288,6 +289,7 @@ const conversationSections = computed<ConversationSection[]>(() => {
   });
   const pinned = visibleItems.filter((item) => !!item.isPinned || !!item.isSystemNotificationConversation);
   const others = visibleItems.filter((item) => !item.isPinned && !item.isSystemNotificationConversation);
+  const recentSection = buildRecentConversationSection(visibleItems, t("chat.recentConversations"));
   const sections: ConversationSection[] = [];
   if (pinned.length > 0) {
     sections.push({
@@ -295,6 +297,9 @@ const conversationSections = computed<ConversationSection[]>(() => {
       title: t("chat.pinnedConversations"),
       items: pinned,
     });
+  }
+  if (recentSection) {
+    sections.push(recentSection);
   }
   if (activeConversationTab.value === "contact") {
     if (others.length > 0) {
@@ -367,13 +372,14 @@ function workspaceNameFromPath(path: string): string {
 }
 
 function isConversationSectionCollapsed(key: string): boolean {
-  return !!collapsedConversationSectionKeys.value[key];
+  if (normalizedConversationSearchQuery.value) return false;
+  return collapsedConversationSectionKeys.value[key] ?? key !== RECENT_CONVERSATION_SECTION_KEY;
 }
 
 function toggleConversationSection(key: string) {
   collapsedConversationSectionKeys.value = {
     ...collapsedConversationSectionKeys.value,
-    [key]: !collapsedConversationSectionKeys.value[key],
+    [key]: !isConversationSectionCollapsed(key),
   };
 }
 

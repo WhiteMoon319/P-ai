@@ -1204,6 +1204,7 @@
     "conversationList": "Conversation List",
     "untitledConversation": "Untitled",
     "mainConversationPinned": "System notification conversation is always pinned",
+    "recentConversations": "Recent",
     "pinnedConversations": "Pinned",
     "otherConversations": "Others",
     "localConversationTab": "Local",

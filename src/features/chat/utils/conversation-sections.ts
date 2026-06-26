@@ -8,6 +8,10 @@ export type ConversationSection = {
   workspaceRootPath?: string;
 };
 
+export const RECENT_CONVERSATION_SECTION_KEY = "recent";
+const RECENT_CONVERSATION_LIMIT = 5;
+const RECENT_TIME_EXTRA_WINDOW_MS = 60 * 60 * 1000;
+
 type BuildWorkspaceConversationSectionsOptions = {
   defaultWorkspaceTitle: string;
   locale?: string | string[];
@@ -27,6 +31,22 @@ function compareWorkspaceSectionText(left: string, right: string, locale?: strin
     numeric: true,
     sensitivity: "base",
   });
+}
+
+function conversationRecencyMs(item: ChatConversationOverviewItem): number {
+  const raw = String(item.lastMessageAt || item.updatedAt || "").trim();
+  if (!raw) return 0;
+  const time = Date.parse(raw);
+  return Number.isFinite(time) ? time : 0;
+}
+
+function shouldIncludeRecentTimeExtra(item: ChatConversationOverviewItem, nowMs: number): boolean {
+  const recencyMs = conversationRecencyMs(item);
+  return recencyMs > 0 && nowMs - recencyMs <= RECENT_TIME_EXTRA_WINDOW_MS;
+}
+
+function shouldIncludeRecentUnreadExtra(item: ChatConversationOverviewItem): boolean {
+  return Number(item.unreadCount || 0) > 0;
 }
 
 export function workspaceNameFromPath(path: string): string {
@@ -158,4 +178,34 @@ export function buildRemoteConversationSections(
         || compareWorkspaceSectionText(left.sortKey, right.sortKey, options.locale);
     })
     .map((entry) => entry.section);
+}
+
+export function buildRecentConversationSection(
+  items: ChatConversationOverviewItem[],
+  title: string,
+): ConversationSection | null {
+  const sortedItems = [...items]
+    .sort((left, right) => conversationRecencyMs(right) - conversationRecencyMs(left));
+  const recentItemsById = new Map<string, ChatConversationOverviewItem>();
+  const addItem = (item: ChatConversationOverviewItem) => {
+    const id = String(item.conversationId || "").trim();
+    if (id) {
+      recentItemsById.set(id, item);
+    }
+  };
+
+  sortedItems.slice(0, RECENT_CONVERSATION_LIMIT).forEach(addItem);
+  const nowMs = Date.now();
+  sortedItems
+    .filter((item) => shouldIncludeRecentTimeExtra(item, nowMs) || shouldIncludeRecentUnreadExtra(item))
+    .forEach(addItem);
+
+  const recentItems = Array.from(recentItemsById.values())
+    .sort((left, right) => conversationRecencyMs(right) - conversationRecencyMs(left));
+  if (recentItems.length === 0) return null;
+  return {
+    key: RECENT_CONVERSATION_SECTION_KEY,
+    title,
+    items: recentItems,
+  };
 }
