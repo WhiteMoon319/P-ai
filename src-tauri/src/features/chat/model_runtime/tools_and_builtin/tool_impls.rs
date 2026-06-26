@@ -205,7 +205,8 @@ impl RuntimeToolMetadata for BuiltinRecallTool {
                 "time": { "type": "string", "description": "可选的时间过滤。传 YYYY 表示该年，传 YYYY-MM 表示该月，传 YYYY-MM-DD 表示该日。" },
                 "offset": { "type": "integer", "minimum": 0, "description": "跳过多少条结果。默认 0。" },
                 "limit": { "type": "integer", "minimum": 1, "maximum": 50, "description": "返回多少条结果。默认 7，最大 50。" }
-              }
+              },
+              "required": []
             }),
         )
     }
@@ -290,6 +291,7 @@ impl RuntimeToolMetadata for BuiltinReloadTool {
             serde_json::json!({
               "type": "object",
               "properties": {},
+              "required": [],
               "additionalProperties": false
             }),
         )
@@ -1208,6 +1210,7 @@ impl RuntimeToolMetadata for BuiltinGetSessionTool {
               "properties": {
                 "keyword": { "type": "string", "description": "可选，会话检索关键字。" }
               },
+              "required": [],
               "additionalProperties": false
             }),
         )
