@@ -2200,6 +2200,11 @@ impl ConversationServiceV2 {
             None,
         );
         conversation.status = "inactive".to_string();
+        let summary_message =
+            build_initial_summary_context_message(Some(&conversation.current_todos), None);
+        conversation.last_user_at = Some(summary_message.created_at.clone());
+        conversation.updated_at = summary_message.created_at.clone();
+        conversation.messages.push(summary_message);
         state_schedule_conversation_persist(state, &conversation)?;
         Ok(conversation)
     }
@@ -6014,7 +6019,6 @@ impl ConversationServiceV2 {
             && conversation.messages.is_empty()
             && !has_summary_context
             && !conversation_is_delegate(conversation)
-            && !conversation_is_remote_im_contact(conversation)
         {
             let summary_message = build_initial_summary_context_message(
                 Some(&conversation.current_todos),

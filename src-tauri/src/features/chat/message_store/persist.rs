@@ -872,7 +872,7 @@ fn plan_appended_message_blocks(
             .map(|prev| appended_message_starts_new_block(prev, message, allow_remote_im_day_blocks))
             .unwrap_or(false);
         if idx == 0 {
-            continue_last_block = !start_new_block;
+            continue_last_block = previous.is_some() && !start_new_block;
         }
         if start_new_block && !current.is_empty() {
             groups.push(current);
@@ -1321,6 +1321,40 @@ mod message_store_persist_tests {
         assert_eq!(
             loaded.messages.iter().map(|message| message.id.as_str()).collect::<Vec<_>>(),
             vec!["m1", "m2", "m3"]
+        );
+        assert_eq!(loaded.updated_at, appended.created_at);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn message_store_persist_should_append_first_message_to_empty_ready_snapshot() {
+        let root = std::env::temp_dir().join(format!(
+            "easy-call-message-store-append-empty-{}",
+            Uuid::new_v4()
+        ));
+        let data_path = root.join("app_data.json");
+        let paths = message_store_paths(&data_path, "conversation-persist").expect("paths");
+        let conversation = test_conversation(Vec::new());
+        write_jsonl_snapshot_directory_shard(&paths, &conversation)
+            .expect("write empty directory snapshot");
+
+        let appended = test_message("m1");
+        let mut updated = conversation.clone();
+        updated.updated_at = appended.created_at.clone();
+        updated.last_assistant_at = Some(appended.created_at.clone());
+        updated.messages.push(appended.clone());
+        let meta = ConversationPersistMeta::from_conversation(&updated);
+
+        let write = write_jsonl_snapshot_appended_message_shard(&paths, &meta, &appended)
+            .expect("append first message");
+        let loaded = read_message_store_directory_conversation(&paths)
+            .expect("read directory snapshot");
+
+        assert_eq!(write.message_count, 1);
+        assert_eq!(write.last_message_id, "m1");
+        assert_eq!(
+            loaded.messages.iter().map(|message| message.id.as_str()).collect::<Vec<_>>(),
+            vec!["m1"]
         );
         assert_eq!(loaded.updated_at, appended.created_at);
         let _ = fs::remove_dir_all(root);

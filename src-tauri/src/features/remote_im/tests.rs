@@ -1413,6 +1413,35 @@
     }
 
     #[test]
+    fn ensure_remote_im_contact_conversation_id_should_seed_initial_summary_context() {
+        let state = remote_im_test_state();
+        write_config(&state.config_path, &AppConfig::default()).expect("write config");
+        let mut contact = remote_im_test_contact("contact-seed", "");
+        contact.bound_conversation_id = None;
+
+        let conversation_id = ensure_remote_im_contact_conversation_id(&state, &mut contact)
+            .expect("ensure contact conversation");
+        let conversation =
+            state_read_conversation_cached(&state, &conversation_id).expect("read conversation");
+
+        assert_eq!(conversation.messages.len(), 1);
+        let seeded = &conversation.messages[0];
+        assert_eq!(seeded.role, "user");
+        let kind = seeded
+            .provider_meta
+            .as_ref()
+            .and_then(|meta| meta.get("message_meta"))
+            .and_then(|meta| meta.get("kind"))
+            .and_then(Value::as_str);
+        assert_eq!(kind, Some("summary_context_seed"));
+        match &seeded.parts[0] {
+            MessagePart::Text { text, .. } => assert!(text.contains("这是新会话的初始背景")),
+            _ => panic!("expected text message"),
+        }
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
     fn remote_im_collect_secretary_recent_messages_should_keep_last_seven_and_truncate_each_item() {
         let mut contact = remote_im_test_contact("contact-a", "conversation-a");
         contact.remote_contact_type = "private".to_string();
