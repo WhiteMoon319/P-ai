@@ -365,6 +365,7 @@ export type RemoteImContactConversationSummary = {
   updatedAt: string;
   lastMessageAt?: string;
   messageCount: number;
+  runtimeState?: "idle" | "assistant_streaming" | "organizing_context" | "archiving" | "compacting";
   channelId: string;
   channelName?: string;
   channelEnabled?: boolean;

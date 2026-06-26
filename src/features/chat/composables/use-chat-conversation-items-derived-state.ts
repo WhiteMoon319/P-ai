@@ -103,6 +103,7 @@ export function useChatConversationItemsDerivedState(bindings: Record<string, an
         String(item.channelName || item.channel_name || "").trim(),
         resolveRemoteConversationDepartmentName(item.boundDepartmentId),
       ].filter(Boolean).join(" · "),
+      runtimeState: String(item.runtimeState || "").trim() || undefined,
       updatedAt: item.lastMessageAt || item.updatedAt || "",
       lastMessageAt: item.lastMessageAt || item.updatedAt || "",
       previewMessages: Array.isArray(item.previewMessages) ? item.previewMessages : [],

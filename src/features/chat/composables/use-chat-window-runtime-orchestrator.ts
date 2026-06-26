@@ -119,6 +119,7 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
       detachedChatWindow: bindings.detachedChatWindow,
       tauriWindowLabel: bindings.tauriWindowLabel,
       unarchivedConversations: bindings.unarchivedConversations,
+      remoteImContactConversations: bindings.remoteImContactConversations,
       allMessages: bindings.allMessages,
       hasMoreBackendHistory: bindings.hasMoreBackendHistory,
       loadingOlderConversationHistory: bindings.loadingOlderConversationHistory,
@@ -134,6 +135,7 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
       getChatFlow: () => bindings.getChatFlow(),
       readConversationStreamCache: (conversationId?: string | null) =>
         bindings.getChatFlow()?.readConversationStreamCache(conversationId) || null,
+      refreshRemoteImConversationOverview: bindings.refreshRemoteImConversationOverview,
       setStatusError: bindings.setStatusError,
       perfNow: bindings.perfNow,
       tr: bindings.tr,

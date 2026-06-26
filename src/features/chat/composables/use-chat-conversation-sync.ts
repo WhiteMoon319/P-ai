@@ -644,22 +644,57 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     if (runtimeState !== "idle" && runtimeState !== "assistant_streaming" && runtimeState !== "organizing_context") {
       return;
     }
-    let changed = false;
+    let localChanged = false;
+    let localMatched = false;
     const nextItems = bindings.unarchivedConversations.value.map((item: any) => {
       if (String(item.conversationId || "").trim() !== conversationId) {
         return item;
       }
+      localMatched = true;
       if (item.runtimeState === runtimeState) {
         return item;
       }
-      changed = true;
+      localChanged = true;
       return {
         ...item,
         runtimeState,
       };
     });
-    if (!changed) return;
-    bindings.unarchivedConversations.value = nextItems;
+    if (localChanged) {
+      bindings.unarchivedConversations.value = nextItems;
+    }
+
+    let remoteChanged = false;
+    let remoteMatched = false;
+    const nextRemoteItems = Array.isArray(bindings.remoteImContactConversations?.value)
+      ? bindings.remoteImContactConversations.value.map((item: any) => {
+        if (String(item.conversationId || "").trim() !== conversationId) {
+          return item;
+        }
+        remoteMatched = true;
+        if (String(item.runtimeState || "").trim() === runtimeState) {
+          return item;
+        }
+        remoteChanged = true;
+        return {
+          ...item,
+          runtimeState,
+        };
+      })
+      : [];
+    if (remoteChanged) {
+      bindings.remoteImContactConversations.value = nextRemoteItems;
+    }
+
+    if (!localMatched && !remoteMatched && typeof bindings.refreshRemoteImConversationOverview === "function") {
+      void bindings.refreshRemoteImConversationOverview().catch((error: unknown) => {
+        console.warn("[远程会话] 运行态事件命中缺失会话，重拉远程列表失败", {
+          conversationId,
+          runtimeState,
+          error,
+        });
+      });
+    }
   }
 
   function updateForegroundConversationOverviewFromMessages(conversationId: string, assistantMessage?: any) {
