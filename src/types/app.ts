@@ -994,12 +994,6 @@ export type FrontendToolDefinition = {
   function: FrontendToolFunctionDefinition;
 };
 
-export type ImageTextCacheStats = {
-  entries: number;
-  totalChars: number;
-  latestUpdatedAt?: string;
-};
-
 export type UsageOverviewTotals = {
   conversationCount: number;
   archivedConversationCount: number;

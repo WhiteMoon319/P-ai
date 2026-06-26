@@ -5,7 +5,6 @@ import type {
   AppConfig,
   ChatMessage,
   ChatTodoItem,
-  ImageTextCacheStats,
   PersonaProfile,
   PromptCommandPreset,
   ToolLoadStatus,
@@ -126,8 +125,6 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
   const modelRefreshOkFlags = ref<Record<string, boolean>>({});
   const checkingToolsStatus = ref(false);
   const toolStatuses = ref<ToolLoadStatus[]>([]);
-  const imageCacheStats = ref<ImageTextCacheStats>({ entries: 0, totalChars: 0 });
-  const imageCacheStatsLoading = ref(false);
   const avatarSaving = ref(false);
   const avatarError = ref("");
   const personaSaving = ref(false);
@@ -206,8 +203,6 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
     modelRefreshOkFlags,
     checkingToolsStatus,
     toolStatuses,
-    imageCacheStats,
-    imageCacheStatsLoading,
     avatarSaving,
     avatarError,
     personaSaving,

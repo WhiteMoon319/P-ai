@@ -35,8 +35,6 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     toolApiConfig: bindings.toolApiConfig,
     checkingToolsStatus: bindings.checkingToolsStatus,
     toolStatuses: bindings.toolStatuses,
-    imageCacheStats: bindings.imageCacheStats,
-    imageCacheStatsLoading: bindings.imageCacheStatsLoading,
     ensureAvatarCached: bindings.ensureAvatarCached,
     openSettingsSaveErrorDialog: (...args: unknown[]) => openSettingsSaveErrorDialog(...args),
     config: bindings.config,

@@ -2183,6 +2183,7 @@ mod tool_review_tests {
             batch_key: "batch-1".to_string(),
             call_id: "call-1".to_string(),
             message_id: "message-1".to_string(),
+            finished_at: None,
             tool_name: "apply_patch".to_string(),
             order_index: 0,
             args_text: args_value.to_string(),
@@ -2220,6 +2221,7 @@ mod tool_review_tests {
             batch_key: "batch-1".to_string(),
             call_id: "call-1".to_string(),
             message_id: "message-1".to_string(),
+            finished_at: None,
             tool_name: "apply_patch".to_string(),
             order_index: 0,
             args_text: args_value.to_string(),
@@ -2251,6 +2253,7 @@ mod tool_review_tests {
             batch_key: "batch-1".to_string(),
             call_id: "call-1".to_string(),
             message_id: "message-1".to_string(),
+            finished_at: None,
             tool_name: "write".to_string(),
             order_index: 0,
             args_text: serde_json::json!({

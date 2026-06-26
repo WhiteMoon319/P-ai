@@ -230,6 +230,7 @@
       "categories": {
         "configuration": "配置文件",
         "runtimeState": "运行状态",
+        "imageTextCache": "多媒体解析缓存",
         "chatMetadata": "会话索引与元数据",
         "conversationStores": "当前普通会话",
         "legacyConversations": "旧普通会话 JSON",
@@ -636,12 +637,7 @@
       "quickActionsTitle": "快捷操作",
       "openConversationList": "会话列表",
       "previewRequest": "预览请求体",
-      "previewSystemPrompt": "系统提示词",
-      "imageCacheTitle": "多媒体解析缓存",
-      "clearCache": "清理",
-      "cacheEntries": "条目: {entries} | 字符: {chars}",
-      "cacheUpdatedAt": "最近更新: {value}",
-      "cacheHint": "缓存按「多模态分析模型 + 解析描述」隔离，重复解析相同媒体时会优先命中缓存。"
+      "previewSystemPrompt": "系统提示词"
     },
     "networkAccess": {
       "title": "网络访问",
@@ -1664,7 +1660,6 @@
     "avatarClearFailed": "清除头像失败: {err}",
     "modelListRefreshed": "模型列表已刷新（{count}）。",
     "refreshModelsFailed": "刷新模型失败: {err}",
-    "imageCacheCleared": "多媒体解析缓存已清理。",
     "conversationActionNoTarget": "当前未选择可用的对话LLM供应商配置或人格，暂无法处理当前会话。",
     "conversationActionInProgress": "当前会话操作正在进行中，请稍候。",
     "conversationActionBusy": "当前正在对话生成中，请稍后再试。",

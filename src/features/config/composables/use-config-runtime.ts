@@ -3,7 +3,6 @@ import { invokeTauri } from "../../../services/tauri-api";
 import type {
   ApiConfigItem,
   ApiProviderConfigItem,
-  ImageTextCacheStats,
   PersonaProfile,
   ToolLoadStatus,
 } from "../../../types/app";
@@ -28,8 +27,6 @@ type UseConfigRuntimeOptions = {
   toolApiConfig: ComputedRef<ApiConfigItem | null>;
   checkingToolsStatus: Ref<boolean>;
   toolStatuses: Ref<ToolLoadStatus[]>;
-  imageCacheStats: Ref<ImageTextCacheStats>;
-  imageCacheStatsLoading: Ref<boolean>;
   ensureAvatarCached: (path?: string, updatedAt?: string) => Promise<void>;
 };
 
@@ -221,36 +218,11 @@ export function useConfigRuntime(options: UseConfigRuntimeOptions) {
     }
   }
 
-  async function refreshImageCacheStats() {
-    options.imageCacheStatsLoading.value = true;
-    try {
-      options.imageCacheStats.value = await invokeTauri<ImageTextCacheStats>("get_image_text_cache_stats");
-    } catch (e) {
-      options.setStatusError("status.loadImageCacheStatsFailed", e);
-    } finally {
-      options.imageCacheStatsLoading.value = false;
-    }
-  }
-
-  async function clearImageCache() {
-    options.imageCacheStatsLoading.value = true;
-    try {
-      options.imageCacheStats.value = await invokeTauri<ImageTextCacheStats>("clear_image_text_cache");
-      options.setStatus(options.t("status.imageCacheCleared"));
-    } catch (e) {
-      options.setStatusError("status.clearImageCacheFailed", e);
-    } finally {
-      options.imageCacheStatsLoading.value = false;
-    }
-  }
-
   return {
     syncTrayIcon,
     saveAgentAvatar,
     clearAgentAvatar,
     refreshModels,
     refreshToolsStatus,
-    refreshImageCacheStats,
-    clearImageCache,
   };
 }

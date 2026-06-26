@@ -230,6 +230,7 @@
       "categories": {
         "configuration": "配置檔案",
         "runtimeState": "執行狀態",
+        "imageTextCache": "多媒體解析快取",
         "chatMetadata": "會話索引與元資料",
         "conversationStores": "目前普通會話",
         "legacyConversations": "舊普通會話 JSON",
@@ -637,12 +638,7 @@
       "quickActionsTitle": "快捷操作",
       "openConversationList": "會話列表",
       "previewRequest": "预览请求体",
-      "previewSystemPrompt": "系统提示词",
-      "imageCacheTitle": "多媒體解析快取",
-      "clearCache": "清理",
-      "cacheEntries": "条目: {entries} | 字符: {chars}",
-      "cacheUpdatedAt": "最近更新: {value}",
-      "cacheHint": "快取按「多模態分析模型 + 解析描述」隔離，重複解析相同媒體時會優先命中快取。"
+      "previewSystemPrompt": "系统提示词"
     },
     "networkAccess": {
       "title": "網路訪問",
@@ -1656,7 +1652,6 @@
     "avatarClearFailed": "清除头像失败: {err}",
     "modelListRefreshed": "模型列表已刷新（{count}）。",
     "refreshModelsFailed": "刷新模型失败: {err}",
-    "imageCacheCleared": "多媒體解析快取已清理。",
     "conversationActionNoTarget": "當前未選擇可用的對話 LLM 供應商設定或人格，暫無法處理當前會話。",
     "conversationActionInProgress": "當前會話操作正在進行中，請稍候。",
     "conversationActionBusy": "當前正在對話生成中，請稍後再試。",

@@ -8,7 +8,6 @@ type UseViewRefreshOptions = {
   loadBootstrapSnapshot?: () => Promise<boolean>;
   loadPersonas: () => Promise<void>;
   loadChatSettings: () => Promise<void>;
-  refreshImageCacheStats: () => Promise<void>;
   refreshConversationHistory: () => Promise<void>;
   loadDelegateConversations: () => Promise<void>;
   loadArchives: () => Promise<void>;
@@ -82,11 +81,6 @@ export function useViewRefresh(options: UseViewRefreshOptions) {
       const tLoadChatSettings = options.perfNow();
       await runRefreshStep("loadChatSettings", options.loadChatSettings, options.onRefreshStepSlow, options.onRefreshStepFailed);
       options.perfLog("refreshAll/loadChatSettings", tLoadChatSettings);
-      }
-      if (options.viewMode.value === "config") {
-        const tRefreshCache = options.perfNow();
-        await runRefreshStep("refreshImageCacheStats", options.refreshImageCacheStats, options.onRefreshStepSlow, options.onRefreshStepFailed);
-        options.perfLog("refreshAll/refreshImageCacheStats", tRefreshCache);
       }
       if (options.viewMode.value === "chat") {
         const tMessages = options.perfNow();

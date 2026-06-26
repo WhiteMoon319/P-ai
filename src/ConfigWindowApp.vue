@@ -83,8 +83,6 @@
         :text-capable-api-configs="textCapableApiConfigs"
         :image-capable-api-configs="imageCapableApiConfigs"
         :stt-capable-api-configs="sttCapableApiConfigs"
-        :cache-stats="imageCacheStats"
-        :cache-stats-loading="imageCacheStatsLoading"
         :avatar-saving="avatarSaving"
         :avatar-error="avatarError"
         :persona-saving="personaSaving"
@@ -138,8 +136,6 @@
         @open-prompt-preview="openPromptPreviewFromConfig"
         @open-system-prompt-preview="openSystemPromptPreviewFromConfig"
         @open-memory-viewer="openMemoryViewer"
-        @refresh-image-cache-stats="refreshImageCacheStats"
-        @clear-image-cache="clearImageCache"
         @open-runtime-logs="openRuntimeLogs"
         @start-hotkey-record-test="startHotkeyRecordTest"
         @stop-hotkey-record-test="stopHotkeyRecordTest"
@@ -381,8 +377,6 @@ const modelRefreshOkFlags = ref<Record<string, boolean>>({});
 const apiModelOptions = ref<Record<string, string[]>>({});
 const checkingToolsStatus = ref(false);
 const toolStatuses = ref([] as import("./types/app").ToolLoadStatus[]);
-const imageCacheStats = ref<import("./types/app").ImageTextCacheStats>({ entries: 0, totalChars: 0 });
-const imageCacheStatsLoading = ref(false);
 const avatarSaving = ref(false);
 const avatarError = ref("");
 
@@ -534,8 +528,6 @@ const {
   clearAgentAvatar,
   refreshModels,
   refreshToolsStatus,
-  refreshImageCacheStats,
-  clearImageCache,
 } = useConfigRuntime({
   t: tr,
   setStatus,
@@ -554,8 +546,6 @@ const {
   toolApiConfig,
   checkingToolsStatus,
   toolStatuses,
-  imageCacheStats,
-  imageCacheStatsLoading,
   ensureAvatarCached,
 });
 

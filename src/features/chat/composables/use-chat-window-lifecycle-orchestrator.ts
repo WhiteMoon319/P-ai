@@ -14,7 +14,6 @@ export function useChatWindowLifecycleOrchestrator(bindings: Record<string, any>
     loadBootstrapSnapshot: bindings.loadBootstrapSnapshot,
     loadPersonas: bindings.loadPersonas,
     loadChatSettings: bindings.loadChatSettings,
-    refreshImageCacheStats: bindings.refreshImageCacheStats,
     refreshConversationHistory: bindings.refreshConversationHistory,
     loadDelegateConversations: bindings.loadDelegateConversations,
     loadArchives: bindings.loadArchives,
@@ -191,6 +190,5 @@ export function useChatWindowLifecycleOrchestrator(bindings: Record<string, any>
     syncUserAliasFromPersona: bindings.syncUserAliasFromPersona,
     syncTrayIcon: bindings.syncTrayIcon,
     refreshToolsStatus: bindings.refreshToolsStatus,
-    refreshImageCacheStats: bindings.refreshImageCacheStats,
   });
 }

@@ -154,8 +154,6 @@
             :response-style-id="responseStyleId"
             :pdf-read-mode="pdfReadMode"
             :instruction-presets="instructionPresets"
-            :cache-stats="cacheStats"
-            :cache-stats-loading="cacheStatsLoading"
             @update:response-style-id="$emit('update:responseStyleId', $event)"
             @update:pdf-read-mode="$emit('update:pdfReadMode', $event)"
             @update:instruction-presets="$emit('update:instructionPresets', $event)"
@@ -164,8 +162,6 @@
             @open-conversation-list="$emit('openConversationList')"
             @open-prompt-preview="$emit('openPromptPreview')"
             @open-system-prompt-preview="$emit('openSystemPromptPreview')"
-            @refresh-image-cache-stats="$emit('refreshImageCacheStats')"
-            @clear-image-cache="$emit('clearImageCache')"
           />
           <NotificationTab
             v-else-if="props.configTab === 'notification'"
@@ -375,7 +371,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Component } from "vue";
 import { useI18n } from "vue-i18n";
-import type { ApiConfigItem, AppConfig, ChatSettingsPatch, ConversationApiSettingsPatch, ImageTextCacheStats, PersonaProfile, PromptCommandPreset, ResponseStyleOption, ToolLoadStatus } from "../../../types/app";
+import type { ApiConfigItem, AppConfig, ChatSettingsPatch, ConversationApiSettingsPatch, PersonaProfile, PromptCommandPreset, ResponseStyleOption, ToolLoadStatus } from "../../../types/app";
 import type { GeneratedThemeControls, GeneratedThemeTokens } from "../../shell/theme/theme-types";
 import Cropper from "cropperjs";
 import SettingsStickyLayout from "../components/SettingsStickyLayout.vue";
@@ -476,8 +472,6 @@ const props = defineProps<{
   textCapableApiConfigs: ApiConfigItem[];
   imageCapableApiConfigs: ApiConfigItem[];
   sttCapableApiConfigs: ApiConfigItem[];
-  cacheStats: ImageTextCacheStats;
-  cacheStatsLoading: boolean;
   avatarSaving: boolean;
   avatarError: string;
   personaSaving: boolean;
@@ -534,8 +528,6 @@ const emit = defineEmits<{
   (e: "openConversationList"): void;
   (e: "openPromptPreview"): void;
   (e: "openSystemPromptPreview"): void;
-  (e: "refreshImageCacheStats"): void;
-  (e: "clearImageCache"): void;
   (e: "openRuntimeLogs"): void;
   (e: "startHotkeyRecordTest"): void;
   (e: "stopHotkeyRecordTest"): void;

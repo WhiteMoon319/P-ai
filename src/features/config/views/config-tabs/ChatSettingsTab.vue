@@ -127,30 +127,15 @@
       </div>
     </div>
 
-    <!-- 图片缓存 -->
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body p-4 text-sm">
-        <div class="flex items-center justify-between">
-          <span class="font-medium">{{ t("config.chatSettings.imageCacheTitle") }}</span>
-          <div class="flex gap-1">
-            <button class="btn btn-sm bg-base-200" :class="{ loading: cacheStatsLoading }" @click="$emit('refreshImageCacheStats')">{{ t("common.refresh") }}</button>
-            <button class="btn btn-sm bg-base-200" :disabled="cacheStats.entries === 0" @click="$emit('clearImageCache')">{{ t("config.chatSettings.clearCache") }}</button>
-          </div>
-        </div>
-        <div class="mt-1 opacity-80">{{ t("config.chatSettings.cacheEntries", { entries: cacheStats.entries, chars: cacheStats.totalChars }) }}</div>
-        <div class="mt-1 opacity-70">{{ t("config.chatSettings.cacheUpdatedAt", { value: cacheStats.latestUpdatedAt || "-" }) }}</div>
-        <div class="mt-1 opacity-60">{{ t("config.chatSettings.cacheHint") }}</div>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { Plus, Trash2 } from "@lucide/vue";
 import SegmentedControl from "../../components/SegmentedControl.vue";
-import type { AppConfig, ApiConfigItem, ChatSettingsPatch, ConversationApiSettingsPatch, ImageTextCacheStats, PromptCommandPreset, ResponseStyleOption } from "../../../../types/app";
+import type { AppConfig, ApiConfigItem, ChatSettingsPatch, ConversationApiSettingsPatch, PromptCommandPreset, ResponseStyleOption } from "../../../../types/app";
 
 const props = defineProps<{
   config: AppConfig;
@@ -161,8 +146,6 @@ const props = defineProps<{
   responseStyleId: string;
   pdfReadMode: "text" | "image";
   instructionPresets: PromptCommandPreset[];
-  cacheStats: ImageTextCacheStats;
-  cacheStatsLoading: boolean;
 }>();
 
 const { t } = useI18n();
@@ -185,8 +168,6 @@ const emit = defineEmits<{
   (e: "openConversationList"): void;
   (e: "openPromptPreview"): void;
   (e: "openSystemPromptPreview"): void;
-  (e: "refreshImageCacheStats"): void;
-  (e: "clearImageCache"): void;
 }>();
 
 function onVisionSelectChange(event: Event) {
@@ -308,8 +289,4 @@ function saveInstructionPresets() {
     instructionPresets: normalized,
   });
 }
-
-onMounted(() => {
-  emit("refreshImageCacheStats");
-});
 </script>

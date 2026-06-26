@@ -1,6 +1,7 @@
 const STORAGE_CLEANUP_LEGACY_CONVERSATIONS: &str = "legacyConversations";
 const STORAGE_CLEANUP_LEGACY_DELEGATE_CONVERSATIONS: &str = "legacyDelegateConversations";
 const STORAGE_CLEANUP_ABNORMAL_CONVERSATIONS: &str = "abnormalConversations";
+const STORAGE_CLEANUP_IMAGE_TEXT_CACHE: &str = "imageTextCache";
 
 #[derive(Debug, Clone, Default)]
 struct StorageSizeStats {
@@ -476,6 +477,37 @@ fn storage_abnormal_conversation_scan(
     Ok(scan)
 }
 
+fn storage_subtract_bytes(mut stats: StorageSizeStats, bytes: u64) -> StorageSizeStats {
+    stats.bytes = stats.bytes.saturating_sub(bytes);
+    stats
+}
+
+fn storage_image_text_cache_estimated_freed_bytes(runtime: &RuntimeStateFile) -> Result<u64, String> {
+    if runtime.image_text_cache.is_empty() {
+        return Ok(0);
+    }
+    let before_bytes = serde_json::to_vec_pretty(runtime)
+        .map_err(|err| format!("序列化多媒体解析缓存统计失败：{err}"))?
+        .len() as u64;
+    let mut cleared = runtime.clone();
+    cleared.image_text_cache.clear();
+    let after_bytes = serde_json::to_vec_pretty(&cleared)
+        .map_err(|err| format!("序列化多媒体解析缓存统计失败：{err}"))?
+        .len() as u64;
+    Ok(before_bytes.saturating_sub(after_bytes))
+}
+
+fn storage_image_text_cache_stats(state: &AppState) -> Result<StorageSizeStats, String> {
+    let runtime = state_read_runtime_state_cached(state)?;
+    let entries = runtime.image_text_cache.len();
+    let bytes = storage_image_text_cache_estimated_freed_bytes(&runtime)?;
+    Ok(StorageSizeStats {
+        bytes,
+        file_count: entries,
+        directory_count: 0,
+    })
+}
+
 fn storage_usage_target_path(state: &AppState, item_id: &str) -> Option<PathBuf> {
     let app_root = app_root_from_data_path(&state.data_path);
     let path = match item_id {
@@ -484,7 +516,7 @@ fn storage_usage_target_path(state: &AppState, item_id: &str) -> Option<PathBuf>
             .parent()
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| app_root.clone()),
-        "runtimeState" => app_layout_state_dir(&state.data_path),
+        "runtimeState" | "imageTextCache" => app_layout_state_dir(&state.data_path),
         "chatMetadata" => app_layout_chat_dir(&state.data_path),
         "conversationStores" | "legacyConversations" | "abnormalConversations" | "conversationOther" => {
             app_layout_chat_conversations_dir(&state.data_path)
@@ -561,6 +593,11 @@ fn build_storage_usage_overview(state: &AppState) -> Result<StorageUsageOverview
     let (legacy_delegate_stats, legacy_delegate_scan) =
         storage_legacy_conversation_stats(&state.data_path, StorageLegacyConversationScope::Delegate)?;
     let abnormal_conversation_scan = storage_abnormal_conversation_scan(&state.data_path)?;
+    let image_text_cache_stats = storage_image_text_cache_stats(state)?;
+    let runtime_state_stats = storage_subtract_bytes(
+        storage_stats_for_paths(vec![app_layout_state_dir(&state.data_path)])?,
+        image_text_cache_stats.bytes,
+    );
     let abnormal_conversation_ids = abnormal_conversation_scan
         .candidates
         .iter()
@@ -579,10 +616,18 @@ fn build_storage_usage_overview(state: &AppState) -> Result<StorageUsageOverview
         storage_usage_item(
             "runtimeState",
             storage_usage_target_path(state, "runtimeState").unwrap_or_else(|| app_root.clone()),
-            storage_stats_for_paths(vec![app_layout_state_dir(&state.data_path)])?,
+            runtime_state_stats,
             None,
             0,
             0,
+        ),
+        storage_usage_item(
+            "imageTextCache",
+            storage_usage_target_path(state, "imageTextCache").unwrap_or_else(|| app_root.clone()),
+            image_text_cache_stats.clone(),
+            Some(STORAGE_CLEANUP_IMAGE_TEXT_CACHE),
+            image_text_cache_stats.bytes,
+            image_text_cache_stats.file_count,
         ),
         storage_usage_item(
             "chatMetadata",
@@ -1673,6 +1718,19 @@ fn cleanup_storage_abnormal_conversations(state: &AppState) -> Result<StorageCle
     })
 }
 
+fn cleanup_storage_image_text_cache(state: &AppState) -> Result<StorageCleanupResult, String> {
+    let mut runtime = state_read_runtime_state_cached(state)?;
+    let deleted_file_count = runtime.image_text_cache.len();
+    let freed_bytes = storage_image_text_cache_estimated_freed_bytes(&runtime)?;
+    runtime.image_text_cache.clear();
+    state_write_runtime_state_cached(state, &runtime)?;
+    Ok(StorageCleanupResult {
+        deleted_file_count,
+        skipped_file_count: 0,
+        freed_bytes,
+    })
+}
+
 #[tauri::command]
 fn cleanup_storage_legacy_items(
     state: State<'_, AppState>,
@@ -1707,6 +1765,31 @@ fn cleanup_storage_legacy_items(
                 ),
                 Err(err) => eprintln!(
                     "[存储] 失败，任务=清理异常会话目录，cleanup_kind={}，error={}，耗时毫秒={}",
+                    cleanup_kind,
+                    err,
+                    started_at.elapsed().as_millis()
+                ),
+            }
+            return result;
+        }
+        STORAGE_CLEANUP_IMAGE_TEXT_CACHE => {
+            eprintln!(
+                "[存储] 开始，任务=清理多媒体解析缓存，cleanup_kind={}",
+                cleanup_kind
+            );
+            let started_at = std::time::Instant::now();
+            let result = cleanup_storage_image_text_cache(&state);
+            match &result {
+                Ok(report) => eprintln!(
+                    "[存储] 完成，任务=清理多媒体解析缓存，cleanup_kind={}，删除文件数={}，跳过文件数={}，释放字节={}，耗时毫秒={}",
+                    cleanup_kind,
+                    report.deleted_file_count,
+                    report.skipped_file_count,
+                    report.freed_bytes,
+                    started_at.elapsed().as_millis()
+                ),
+                Err(err) => eprintln!(
+                    "[存储] 失败，任务=清理多媒体解析缓存，cleanup_kind={}，error={}，耗时毫秒={}",
                     cleanup_kind,
                     err,
                     started_at.elapsed().as_millis()
@@ -1845,6 +1928,28 @@ mod storage_usage_tests {
     }
 
     #[test]
+    fn storage_image_text_cache_estimated_freed_bytes_should_track_runtime_payload() {
+        let mut runtime = RuntimeStateFile::default();
+        assert_eq!(
+            storage_image_text_cache_estimated_freed_bytes(&runtime).expect("empty cache bytes"),
+            0
+        );
+
+        runtime.image_text_cache.push(ImageTextCacheEntry {
+            hash: "hash-a".to_string(),
+            model_api_id: "vision-a".to_string(),
+            media_type: "image".to_string(),
+            description: "截图解析".to_string(),
+            text: "这是一段多媒体解析结果。".repeat(8),
+            updated_at: "2026-06-08T00:00:00Z".to_string(),
+        });
+
+        assert!(
+            storage_image_text_cache_estimated_freed_bytes(&runtime).expect("cache bytes") > 0
+        );
+    }
+
+    #[test]
     fn storage_cleanup_candidates_require_ready_normal_message_store() {
         let root = std::env::temp_dir().join(format!(
             "easy-call-storage-cleanup-normal-{}",
@@ -1918,7 +2023,7 @@ mod storage_usage_tests {
     }
 
     #[test]
-    fn storage_abnormal_conversation_scan_should_only_collect_unbound_remote_building_shards() {
+    fn storage_abnormal_conversation_scan_should_skip_recoverable_building_shards() {
         let root = std::env::temp_dir().join(format!(
             "easy-call-storage-abnormal-conversations-{}",
             Uuid::new_v4()
@@ -1950,9 +2055,11 @@ mod storage_usage_tests {
 
         let scan = storage_abnormal_conversation_scan(&data_path).expect("scan abnormal conversations");
 
-        assert_eq!(scan.candidates.len(), 1);
-        assert_eq!(scan.candidates[0].conversation_id, stale.id);
-        assert!(scan.stats.bytes > 0);
+        assert_eq!(scan.candidates.len(), 0);
+        let stale_status = message_store::read_message_store_manifest_status(&stale_paths)
+            .expect("read stale manifest")
+            .expect("stale manifest");
+        assert!(stale_status.ready_jsonl);
         let _ = fs::remove_dir_all(root);
     }
 }

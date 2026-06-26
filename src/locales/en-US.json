@@ -230,6 +230,7 @@
       "categories": {
         "configuration": "Configuration",
         "runtimeState": "Runtime State",
+        "imageTextCache": "Media Analysis Cache",
         "chatMetadata": "Chat Index and Metadata",
         "conversationStores": "Current Conversations",
         "legacyConversations": "Legacy Conversation JSON",
@@ -636,12 +637,7 @@
       "quickActionsTitle": "Quick Actions",
       "openConversationList": "Conversation List",
       "previewRequest": "Request",
-      "previewSystemPrompt": "System Prompt",
-      "imageCacheTitle": "Media Analysis Cache",
-      "clearCache": "Clear",
-      "cacheEntries": "Entries: {entries} | Chars: {chars}",
-      "cacheUpdatedAt": "Updated at: {value}",
-      "cacheHint": "Cache is namespaced by multimodal model plus description, so repeated analysis of the same media can be reused."
+      "previewSystemPrompt": "System Prompt"
     },
     "networkAccess": {
       "title": "Network Access",
@@ -1657,7 +1653,6 @@
     "avatarClearFailed": "Clear avatar failed: {err}",
     "modelListRefreshed": "Model list refreshed ({count}).",
     "refreshModelsFailed": "Refresh models failed: {err}",
-    "imageCacheCleared": "Media analysis cache cleared.",
     "conversationActionNoTarget": "No valid chat LLM provider/persona is selected, cannot process the current conversation.",
     "conversationActionInProgress": "A conversation action is already running, please wait.",
     "conversationActionBusy": "Chat generation is in progress, please try again later.",

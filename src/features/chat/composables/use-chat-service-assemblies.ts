@@ -27,8 +27,6 @@ export function useChatServiceAssemblies(bindings: Record<string, any>) {
     toolApiConfig: bindings.toolApiConfig,
     checkingToolsStatus: bindings.checkingToolsStatus,
     toolStatuses: bindings.toolStatuses,
-    imageCacheStats: bindings.imageCacheStats,
-    imageCacheStatsLoading: bindings.imageCacheStatsLoading,
     ensureAvatarCached: bindings.ensureAvatarCached,
   });
   const configPersistence = useConfigPersistence({

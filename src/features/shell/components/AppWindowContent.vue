@@ -44,8 +44,6 @@
       :text-capable-api-configs="textCapableApiConfigs"
       :image-capable-api-configs="imageCapableApiConfigs"
       :stt-capable-api-configs="sttCapableApiConfigs"
-      :cache-stats="imageCacheStats"
-      :cache-stats-loading="imageCacheStatsLoading"
       :avatar-saving="avatarSaving"
       :avatar-error="avatarError"
       :persona-saving="personaSaving"
@@ -98,8 +96,6 @@
       @open-prompt-preview="openPromptPreview"
       @open-system-prompt-preview="openSystemPromptPreview"
       @open-memory-viewer="openMemoryViewer"
-      @refresh-image-cache-stats="refreshImageCacheStats"
-      @clear-image-cache="clearImageCache"
       @open-runtime-logs="openRuntimeLogs"
       @start-hotkey-record-test="startHotkeyRecordTest"
       @stop-hotkey-record-test="stopHotkeyRecordTest"
@@ -403,7 +399,6 @@ import type {
   ChatTodoItem,
   DelegateConversationSummary,
   RemoteImContactConversationSummary,
-  ImageTextCacheStats,
   PersonaProfile,
   PromptCommandPreset,
   ResponseStyleOption,
@@ -478,8 +473,6 @@ const props = defineProps<{
   textCapableApiConfigs: ApiConfigItem[];
   imageCapableApiConfigs: ApiConfigItem[];
   sttCapableApiConfigs: ApiConfigItem[];
-  imageCacheStats: ImageTextCacheStats;
-  imageCacheStatsLoading: boolean;
   avatarSaving: boolean;
   avatarError: string;
   personaSaving: boolean;
@@ -663,8 +656,6 @@ const props = defineProps<{
   openPromptPreview: () => void;
   openSystemPromptPreview: () => void;
   openMemoryViewer: () => void;
-  refreshImageCacheStats: () => void;
-  clearImageCache: () => void;
   openRuntimeLogs: () => void;
   startHotkeyRecordTest: () => void;
   stopHotkeyRecordTest: () => void;
