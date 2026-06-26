@@ -220,6 +220,50 @@
             :approvals="activeConversationTerminalApprovals" :resolving="terminalApprovalResolving"
             @approve="$emit('approveTerminalApproval', $event)" @deny="$emit('denyTerminalApproval', $event)"
           />
+          <div
+            v-else-if="activeConversationRecipientMissing"
+            class="rounded-box border border-warning/30 bg-warning/10 p-3 text-sm"
+          >
+            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div class="min-w-0">
+                <div class="font-medium">{{ t("chat.recipientMissingTitle") }}</div>
+                <div class="mt-1 text-xs opacity-70">
+                  {{ t("chat.recipientMissingHint") }}
+                </div>
+              </div>
+              <div class="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
+                <div class="w-full min-w-64 sm:w-72">
+                  <DepartmentPersonaSelect
+                    v-model:department-id="repairRecipientDepartmentId"
+                    v-model:agent-id="repairRecipientAgentId"
+                    :options="repairRecipientOptions"
+                    :persona-avatar-url-map="props.personaAvatarUrlMap"
+                    :show-model="false"
+                    :auto-select-first="true"
+                    :preserve-current="false"
+                  />
+                </div>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-primary gap-2"
+                  :disabled="conversationInteractionBusy || !repairRecipientSelectedOption"
+                  @click="handleRebindConversationRecipient"
+                >
+                  <Check class="h-3.5 w-3.5" />
+                  <span>{{ t("chat.recipientMissingApply") }}</span>
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-error gap-2"
+                  :disabled="conversationInteractionBusy"
+                  @click="handleConversationDelete(activeConversationId)"
+                >
+                  <Trash2 class="h-3.5 w-3.5" />
+                  <span>{{ t("common.delete") }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
           <ChatComposerPanel
             v-else ref="composerPanelRef" :selection-mode-enabled="messageSelectionModeEnabled"
             :selected-message-count="selectedMessageBlocks.length"
@@ -432,12 +476,13 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch, type ComponentPublicInstance, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { isDarkAppTheme } from "../../shell/composables/use-app-theme";
-import { ChevronsDown, History, X } from "@lucide/vue";
+import { Check, ChevronsDown, History, Trash2, X } from "@lucide/vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ChatMessageBlock, ChatPersonaPresenceChip, ChatTodoItem, ConversationDelegateStatusSummary, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption, ShellWorkspace } from "../../../types/app";
 import ChatMessageItem from "../components/ChatMessageItem.vue";
 import ChatApprovalPanel from "../components/ChatApprovalPanel.vue";
 import ChatComposerPanel from "../components/ChatComposerPanel.vue";
+import DepartmentPersonaSelect from "../../shared/components/DepartmentPersonaSelect.vue";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import ChatConversationSidebar from "../components/ChatConversationSidebar.vue";
 import ChatWorkspaceToolbar from "../components/ChatWorkspaceToolbar.vue";
@@ -558,6 +603,7 @@ const emit = defineEmits<{
   (e: "archiveConversation", conversationId: string): void;
   (e: "exportConversation", conversationId: string): void;
   (e: "deleteConversation", conversationId: string): void;
+  (e: "rebindConversationRecipient", payload: { conversationId: string; departmentId: string; agentId: string }): void;
   (e: "createConversation", input?: { title?: string; departmentId?: string; agentId?: string; copyCurrent?: boolean; importPath?: string; shellWorkspaces?: ShellWorkspace[]; shellAutonomousMode?: boolean }): void;
   (e: "loadOlderHistory"): void; (e: "reachedBottom"): void;
   (e: "jumpToConversationBottom"): void;
@@ -620,6 +666,64 @@ const activeConversationIsSystemNotification = computed(() =>
 );
 const activeConversationIsRemoteContact = computed(() =>
   activeConversationSummary.value?.kind === 'remote_im_contact',
+);
+const repairRecipientDepartmentId = ref("");
+const repairRecipientAgentId = ref("");
+const repairRecipientOptions = computed(() =>
+  (Array.isArray(props.createConversationDepartmentOptions) ? props.createConversationDepartmentOptions : [])
+    .filter((option) =>
+      !option.unavailable
+      && !!String(option.departmentId || "").trim()
+      && !!String(option.agentId || "").trim()
+    ),
+);
+
+function findRecipientOption(departmentId: string, agentId: string): DepartmentPersonaOption | null {
+  const normalizedDepartmentId = String(departmentId || "").trim();
+  const normalizedAgentId = String(agentId || "").trim();
+  if (!normalizedDepartmentId || !normalizedAgentId) return null;
+  return repairRecipientOptions.value.find((option) =>
+    String(option.departmentId || "").trim() === normalizedDepartmentId
+    && String(option.agentId || "").trim() === normalizedAgentId
+  ) || null;
+}
+
+const activeConversationRecipientMissing = computed(() => {
+  if (activeConversationIsSystemNotification.value || activeConversationIsRemoteContact.value) return false;
+  const conversationId = String(props.activeConversationId || "").trim();
+  if (!conversationId) return false;
+  const summary = activeConversationSummary.value;
+  if (!summary) return false;
+  const departmentId = String(summary.departmentId || "").trim();
+  const agentId = String(summary.agentId || "").trim();
+  return !findRecipientOption(departmentId, agentId);
+});
+const repairRecipientSelectedOption = computed(() =>
+  findRecipientOption(repairRecipientDepartmentId.value, repairRecipientAgentId.value),
+);
+
+function defaultRepairRecipientOption(): DepartmentPersonaOption | null {
+  const defaultDepartmentId = String(props.defaultCreateConversationDepartmentId || "").trim();
+  return repairRecipientOptions.value.find((option) =>
+    defaultDepartmentId && String(option.departmentId || "").trim() === defaultDepartmentId
+  ) || repairRecipientOptions.value[0] || null;
+}
+
+watch(
+  () => [
+    activeConversationRecipientMissing.value,
+    props.activeConversationId,
+    props.defaultCreateConversationDepartmentId,
+    repairRecipientOptions.value.map((option) => `${option.departmentId}:${option.agentId}`).join("|"),
+  ] as const,
+  () => {
+    if (!activeConversationRecipientMissing.value) return;
+    if (repairRecipientSelectedOption.value) return;
+    const option = defaultRepairRecipientOption();
+    repairRecipientDepartmentId.value = String(option?.departmentId || "").trim();
+    repairRecipientAgentId.value = String(option?.agentId || "").trim();
+  },
+  { immediate: true },
 );
 
 watch(
@@ -1137,6 +1241,14 @@ function handleConversationPinToggle(id: string) { emit("togglePinConversation",
 function handleConversationArchive(id: string) { emit("archiveConversation", String(id || "").trim()); }
 function handleConversationExport(id: string) { emit("exportConversation", String(id || "").trim()); }
 function handleConversationDelete(id: string) { emit("deleteConversation", String(id || "").trim()); }
+function handleRebindConversationRecipient() {
+  const option = repairRecipientSelectedOption.value;
+  const conversationId = String(props.activeConversationId || "").trim();
+  const departmentId = String(option?.departmentId || repairRecipientDepartmentId.value || "").trim();
+  const agentId = String(option?.agentId || repairRecipientAgentId.value || "").trim();
+  if (!conversationId || !departmentId || !agentId) return;
+  emit("rebindConversationRecipient", { conversationId, departmentId, agentId });
+}
 
 function handleShiftWheel(event: WheelEvent) {
   if (!event.shiftKey) return;

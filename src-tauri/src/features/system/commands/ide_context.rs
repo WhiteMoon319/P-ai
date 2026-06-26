@@ -4887,6 +4887,19 @@ fn ide_chat_delete_conversation(state: &AppState, params: Value) -> Result<Value
     }))
 }
 
+fn ide_chat_rebind_conversation_recipient(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<RebindUnarchivedConversationRecipientInput>(params)?;
+    let output = rebind_unarchived_conversation_recipient_inner(input, state)?;
+    let overview_payload = conversation_service_v2().refresh_unarchived_conversation_overview(state)?;
+    Ok(serde_json::json!({
+        "conversationId": output.conversation_id,
+        "departmentId": output.department_id,
+        "agentId": output.agent_id,
+        "preferredApiConfigId": output.preferred_api_config_id,
+        "unarchivedConversations": overview_payload.unarchived_conversations,
+    }))
+}
+
 fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatSendInput>(params)?;
     let conversation_id = input.conversation_id.trim().to_string();
@@ -5597,6 +5610,7 @@ async fn ide_chat_handle_jsonrpc_request(
         })(),
         "conversation.createOptions" => ide_chat_create_conversation_options(state),
         "conversation.delete" => ide_chat_delete_conversation(state, request.params),
+        "conversation.rebindRecipient" => ide_chat_rebind_conversation_recipient(state, request.params),
         "conversation.rewindPreview" => ide_chat_rewind_preview(state, request.params).await,
         "conversation.rewind" => ide_chat_rewind_conversation(state, request.params).await,
         "conversation.branchFromMessage" => ide_chat_branch_conversation_from_message(state, request.params).await,

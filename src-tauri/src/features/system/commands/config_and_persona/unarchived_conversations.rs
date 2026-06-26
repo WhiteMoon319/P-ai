@@ -730,6 +730,23 @@ struct RenameUnarchivedConversationOutput {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct RebindUnarchivedConversationRecipientInput {
+    conversation_id: String,
+    department_id: String,
+    agent_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RebindUnarchivedConversationRecipientOutput {
+    conversation_id: String,
+    department_id: String,
+    agent_id: String,
+    preferred_api_config_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ToggleUnarchivedConversationPinInput {
     conversation_id: String,
 }
@@ -1532,6 +1549,88 @@ fn rename_unarchived_conversation(
         conversation_id: conversation_id.to_string(),
         title: next_title,
     })
+}
+
+fn rebind_unarchived_conversation_recipient_inner(
+    input: RebindUnarchivedConversationRecipientInput,
+    state: &AppState,
+) -> Result<RebindUnarchivedConversationRecipientOutput, String> {
+    let conversation_id = input.conversation_id.trim();
+    let department_id = input.department_id.trim();
+    let agent_id = input.agent_id.trim();
+    if conversation_id.is_empty() {
+        return Err("conversationId 不能为空".to_string());
+    }
+    if department_id.is_empty() || agent_id.is_empty() {
+        return Err("新的接收人不能为空".to_string());
+    }
+
+    let runtime_org = load_runtime_organization_snapshot(state)?;
+    let department = runtime_department_by_id(&runtime_org, department_id)
+        .ok_or_else(|| format!("目标部门不存在：{department_id}"))?;
+    if !department.agent_ids.iter().any(|id| id.trim() == agent_id) {
+        return Err(format!(
+            "目标人格不属于目标部门：department_id={}，agent_id={}",
+            department_id,
+            agent_id
+        ));
+    }
+    let agent = runtime_org
+        .agents
+        .iter()
+        .find(|item| item.id.trim() == agent_id)
+        .ok_or_else(|| format!("目标人格不存在：{agent_id}"))?;
+    if agent.is_built_in_user
+        || agent.is_built_in_system
+        || agent.id.trim() == USER_PERSONA_ID
+        || agent.id.trim() == SYSTEM_PERSONA_ID
+    {
+        return Err("目标接收人不能是用户或系统人格".to_string());
+    }
+
+    let preferred_api_config_id = conversation_service_v2().update_unarchived_conversation_by_id(
+        state,
+        conversation_id,
+        |conversation| {
+            if conversation_is_system_notification(conversation) {
+                return Err("系统通知会话不能手动修改接收人".to_string());
+            }
+            if conversation.conversation_kind.trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT {
+                return Err("远程联系人会话不能手动修改接收人".to_string());
+            }
+            conversation.department_id = department_id.to_string();
+            conversation.agent_id = agent_id.to_string();
+            conversation.updated_at = now_iso();
+            conversation.preferred_api_config_id = conversation_preferred_model_repair_candidate(
+                &runtime_org.config,
+                department_id,
+                conversation.preferred_api_config_id.as_deref(),
+            );
+            Ok(conversation.preferred_api_config_id.clone())
+        },
+    )?;
+    emit_unarchived_conversation_overview_item_updated_from_state(state, conversation_id)?;
+    runtime_log_info(format!(
+        "[会话] 完成，任务=修复会话接收人，conversation_id={}，department_id={}，agent_id={}，preferred_api_config_id={}",
+        conversation_id,
+        department_id,
+        agent_id,
+        preferred_api_config_id.as_deref().unwrap_or("")
+    ));
+    Ok(RebindUnarchivedConversationRecipientOutput {
+        conversation_id: conversation_id.to_string(),
+        department_id: department_id.to_string(),
+        agent_id: agent_id.to_string(),
+        preferred_api_config_id,
+    })
+}
+
+#[tauri::command]
+fn rebind_unarchived_conversation_recipient(
+    input: RebindUnarchivedConversationRecipientInput,
+    state: State<'_, AppState>,
+) -> Result<RebindUnarchivedConversationRecipientOutput, String> {
+    rebind_unarchived_conversation_recipient_inner(input, state.inner())
 }
 
 #[tauri::command]

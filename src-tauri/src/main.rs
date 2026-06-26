@@ -990,6 +990,7 @@ fn main() {
             forward_unarchived_conversation_selection,
             forward_selection_to_remote_im_contact,
             rename_unarchived_conversation,
+            rebind_unarchived_conversation_recipient,
             toggle_unarchived_conversation_pin,
             get_unarchived_conversation_messages,
             get_unarchived_conversation_block_page,

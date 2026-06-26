@@ -103,6 +103,7 @@
       @deny-terminal-approval="denyTerminalApproval"
       @switch-conversation="openConversation($event.conversationId)"
       @delete-conversation="deleteConversation"
+      @rebind-conversation-recipient="rebindConversationRecipient"
       @create-conversation="handleCreateConversationRequest"
       @selection-action-branch="branchConversationFromSelection"
       @selection-action-delegate="delegateFromSelection"
@@ -1465,6 +1466,45 @@ async function deleteConversation(conversationId: string) {
     workspaceRootName.value = "";
   } catch (error) {
     transport.errorText.value = String(error || t("chat.deleteConversationFailed"));
+  }
+}
+
+async function rebindConversationRecipient(payload: { conversationId: string; departmentId: string; agentId: string }) {
+  const conversationId = String(payload?.conversationId || "").trim();
+  const departmentId = String(payload?.departmentId || "").trim();
+  const agentId = String(payload?.agentId || "").trim();
+  if (!conversationId || !departmentId || !agentId) return;
+  try {
+    const result = await transport.request<{
+      conversationId?: string;
+      departmentId?: string;
+      agentId?: string;
+      preferredApiConfigId?: string | null;
+      unarchivedConversations?: ConversationSummary[];
+    }>("conversation.rebindRecipient", {
+      conversationId,
+      departmentId,
+      agentId,
+    });
+    if (Array.isArray(result.unarchivedConversations)) {
+      conversations.value = result.unarchivedConversations;
+      clearCompletedRuntimeStateForConversation(conversationId);
+      syncConversationTabForRemoteContacts();
+    } else {
+      await refreshList();
+    }
+    if (String(activeConversationId.value || "").trim() === conversationId) {
+      activeAgentId.value = agentId;
+      const preferredApiConfigId = String(result.preferredApiConfigId || "").trim();
+      if (preferredApiConfigId) {
+        conversationCallPrimaryApiConfigId.value = preferredApiConfigId;
+        preferredChatModelId.value = preferredApiConfigId;
+      }
+      await openConversation(conversationId);
+    }
+  } catch (error) {
+    const detail = String(error || t("status.requestUnknownReason"));
+    transport.errorText.value = t("status.rebindConversationRecipientFailed", { err: detail });
   }
 }
 

@@ -122,6 +122,7 @@
     @toggle-pin-conversation="noop"
     @archive-conversation="noop"
     @delete-conversation="$emit('deleteConversation', $event)"
+    @rebind-conversation-recipient="$emit('rebindConversationRecipient', $event)"
     @create-conversation="$emit('createConversation', $event)"
     @refresh-tool-review-message="noop"
     @attach-tool-review-report="noop"
@@ -240,6 +241,7 @@ defineEmits<{
   denyTerminalApproval: [requestId: string];
   switchConversation: [payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }];
   deleteConversation: [conversationId: string];
+  rebindConversationRecipient: [payload: { conversationId: string; departmentId: string; agentId: string }];
   createConversation: [input?: { title?: string; departmentId?: string; agentId?: string; copyCurrent?: boolean; importPath?: string }];
   selectionActionBranch: [payload: { count: number; messageIds: string[] }];
   selectionActionDelegate: [payload: { count: number; messageIds: string[]; departmentId: string; agentId: string; presetId: string; why: string; goal: string; todo: string }];

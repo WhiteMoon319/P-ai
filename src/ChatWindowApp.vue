@@ -319,6 +319,7 @@
       :on-toggle-conversation-pin="toggleConversationPin"
       :on-archive-conversation="archiveConversationFromList"
       :on-delete-conversation="deleteUnarchivedConversationFromArchives"
+      :on-rebind-conversation-recipient="rebindConversationRecipient"
       :on-create-conversation="createUnarchivedConversation"
       :on-branch-conversation-from-selection="branchConversationFromSelection"
       :on-forward-conversation-from-selection="forwardConversationFromSelection"

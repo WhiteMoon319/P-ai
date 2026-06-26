@@ -2,6 +2,7 @@ import { computed, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { emit } from "@tauri-apps/api/event";
+import { invokeTauri } from "../../../services/tauri-api";
 import { useAppCore } from "../../shell/composables/use-app-core";
 import { useAppTheme } from "../../shell/composables/use-app-theme";
 import { useWebviewZoomOrchestrator } from "../../shell/composables/use-webview-zoom-orchestrator";
@@ -738,6 +739,33 @@ export function useChatWindowApp() {
     void emit("code-review-requested");
   }
 
+  async function rebindConversationRecipient(payload: { conversationId: string; departmentId: string; agentId: string }) {
+    const conversationId = String(payload?.conversationId || "").trim();
+    const departmentId = String(payload?.departmentId || "").trim();
+    const agentId = String(payload?.agentId || "").trim();
+    if (!conversationId || !departmentId || !agentId) return;
+    try {
+      const result = await invokeTauri<{
+        conversationId: string;
+        departmentId: string;
+        agentId: string;
+        preferredApiConfigId?: string | null;
+      }>("rebind_unarchived_conversation_recipient", {
+        input: { conversationId, departmentId, agentId },
+      });
+      if (String(currentChatConversationId.value || "").trim() === conversationId) {
+        currentChatPreferredApiConfigId.value = String(result.preferredApiConfigId || "").trim();
+      }
+      await refreshChatUnarchivedConversations();
+      if (String(currentChatConversationId.value || "").trim() === conversationId) {
+        await restoreForegroundConversationProjection(conversationId, "rebind_conversation_recipient");
+      }
+      setStatus(t("status.conversationRecipientRebound"));
+    } catch (error) {
+      setStatusError("status.rebindConversationRecipientFailed", error);
+    }
+  }
+
   return {
     messageText,
     extractMessageImages,
@@ -843,6 +871,7 @@ export function useChatWindowApp() {
     scrollToBottomBehavior,
     handleConfirmPlan,
     deleteUnarchivedConversation,
+    rebindConversationRecipient,
     handleCreateConversationBranchFromTurn,
     handleRecallTurn,
     handleRegenerateTurn,
