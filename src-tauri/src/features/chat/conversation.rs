@@ -2567,35 +2567,6 @@ fn build_builtin_tool_rule_block(tool_id: &str) -> Option<String> {
              - 移动或重命名文件时，使用 `move`。\n\
              - 如果 `update` 的目标片段不唯一，应扩大 `old_string` 上下文，或明确设置 `replace_all: true`。 ",
         ),
-        "file_reference" => (
-            "file reference rule",
-            "## 何时必须引用\n\
-             - 回复里提到本地文件、目录、代码位置、配置、日志、计划文档或其他现有路径。\n\
-             - 你知道该对象的绝对路径。\n\
-             - 你在说明改了哪个文件、建议用户查看哪个文件、总结代码位置或列举相关文件。\n\n\
-             ## 不要硬造引用\n\
-             - 只是泛指文件类型。\n\
-             - 还不知道具体绝对路径。\n\
-             - 当前对象是远程联系人，且本地路径不应暴露。\n\n\
-             ## 正确格式\n\
-             - 本地文件：`[file.rs](/abs/path/file.rs)`\n\
-             - 本地文件带行号：`[file.rs](/abs/path/file.rs:12)`\n\
-             - 网页：`[文档](https://example.com)`\n\n\
-             ## 注意\n\
-             - 当前前端识别盘符开头的绝对本地路径；`file:///E:/...` 容易被当成普通网页链接或被错误解析。",
-        ),
-        "image_reference" => (
-            "image reference rule",
-            "## 在回复中展示本地图片\n\
-             - 当本地已经有一张图片文件时（比如截图、脚本输出图表、分析结果图），在回复正文中使用语法 `![说明](路径)`，就能直接把本地图片展示在对话里。\n\
-             - 示例：`![结果图](E:/path/to/result.png)`、`![结果图](outputs/result.png)`\n\
-             - 路径可以是绝对路径或相对于工作区目录的相对路径。\n\
-             - 只能引用已经存在的本地图片文件，不要编造路径。\n\
-             - 支持的格式：png、jpg/jpeg、webp、gif、bmp。\n\n\
-             ## 不要这样做\n\
-             - 不要输出 `file://` 链接来引用图片；直接写本地路径或相对路径。\n\
-             - 不要把本地图片写成普通文本链接 `[说明](路径)`；图片必须使用 `![说明](路径)`。",
-        ),
         _ => return None,
     };
     Some(prompt_xml_block(block_name, body))
@@ -2650,15 +2621,6 @@ fn build_system_tools_rule_blocks(
     {
         any_builtin_enabled = true;
         if let Some(block) = build_builtin_tool_rule_block("file_edit") {
-            blocks.push(block);
-        }
-    }
-    if ["exec", "read", "read_file", "write", "delete", "update", "move"]
-        .into_iter()
-        .any(|tool_id| department_builtin_tool_enabled(&department_config, current_department, tool_id))
-    {
-        any_builtin_enabled = true;
-        if let Some(block) = build_builtin_tool_rule_block("file_reference") {
             blocks.push(block);
         }
     }
