@@ -3146,6 +3146,7 @@ mod unarchived_conversations_tests {
             shell_autonomous_mode: false,
             archived_at: None,
             messages: vec![build_test_message("m1", "hello"), build_test_message("m2", "world")],
+            fast_request_turns: Vec::new(),
             current_todos: Vec::new(),
             memory_recall_table: Vec::new(),
             plan_mode_enabled: true,
@@ -3444,6 +3445,7 @@ mod unarchived_conversations_tests {
                 build_test_compaction_message("seed-2"),
                 build_test_message("m2", "world"),
             ],
+            fast_request_turns: Vec::new(),
             ..build_test_conversation()
         };
         let department = DepartmentConfig {

@@ -120,6 +120,7 @@ struct ConversationMetaView {
     shell_autonomous_mode: bool,
     current_todos: Vec<ConversationTodoItem>,
     active_goal: Option<ConversationGoalState>,
+    fast_request_turns: Vec<FastRequestTurn>,
     preview_messages: Vec<ConversationMetaPreviewMessage>,
 }
 
@@ -285,6 +286,7 @@ impl ConversationMetaView {
             shell_autonomous_mode: meta.shell_autonomous_mode(),
             current_todos: meta.current_todos().to_vec(),
             active_goal: meta.active_goal().cloned(),
+            fast_request_turns: meta.fast_request_turns().to_vec(),
             preview_messages: meta
                 .preview_messages()
                 .iter()
@@ -1250,6 +1252,7 @@ impl ConversationServiceV2 {
             conversation_meta.auto_push_remote_contact_id.clone();
         conversation.cumulative_usage = conversation_meta.cumulative_usage.clone();
         conversation.active_goal = conversation_meta.active_goal.clone();
+        conversation.fast_request_turns = conversation_meta.fast_request_turns.clone();
         conversation
     }
 
@@ -3326,6 +3329,7 @@ impl ConversationServiceV2 {
                 |conversation| {
                     conversation.status = "archived".to_string();
                     conversation.summary.clear();
+                    conversation.fast_request_turns.clear();
                     conversation.archived_at = Some(now.clone());
                     conversation.updated_at = now.clone();
                     Ok(())
@@ -4915,6 +4919,44 @@ impl ConversationServiceV2 {
         state_schedule_conversation_persist(state, &conversation)?;
         drop(guard);
         Ok(result)
+    }
+
+    fn append_fast_request_turn_if_unarchived_exists(
+        &self,
+        state: &AppState,
+        conversation_id: &str,
+        turn: FastRequestTurn,
+    ) -> Result<bool, String> {
+        let normalized_conversation_id = conversation_id.trim();
+        if normalized_conversation_id.is_empty() {
+            return Ok(false);
+        }
+        let _guard = lock_conversation_with_metrics(state, "conversation_v2_append_fast_request_turn")?;
+        let conversation_meta = match self.get_conversation_meta(state, normalized_conversation_id) {
+            Ok(conversation_meta) => conversation_meta,
+            Err(_) => return Ok(false),
+        };
+        if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
+            return Ok(false);
+        }
+        state_update_conversation_meta_cached(state, normalized_conversation_id, |meta| {
+            meta.push_fast_request_turn(turn);
+            Ok(())
+        })?;
+        Ok(true)
+    }
+
+    fn get_conversation_fast_request_turns(
+        &self,
+        state: &AppState,
+        conversation_id: &str,
+    ) -> Result<Vec<FastRequestTurn>, String> {
+        let normalized_conversation_id = conversation_id.trim();
+        if normalized_conversation_id.is_empty() {
+            return Err("conversationId is required".to_string());
+        }
+        let meta = state_read_conversation_metadata_cached(state, normalized_conversation_id)?;
+        Ok(meta.fast_request_turns().to_vec())
     }
 
     fn get_active_goal(

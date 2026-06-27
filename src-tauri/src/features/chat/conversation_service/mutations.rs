@@ -696,6 +696,7 @@ fn read_conversation_for_backup_cleanup(
         shell_autonomous_mode: conversation_meta.shell_autonomous_mode,
         archived_at: conversation_meta.archived_at,
         messages,
+        fast_request_turns: conversation_meta.fast_request_turns,
         current_todos: conversation_meta.current_todos,
         memory_recall_table: Vec::new(),
         plan_mode_enabled: conversation_meta.plan_mode_enabled,

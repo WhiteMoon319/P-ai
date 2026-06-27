@@ -161,6 +161,7 @@ fn normalize_archive_for_import(archive: &mut ConversationArchive, data_path: &P
         conversation.updated_at = conversation.created_at.clone();
     }
     conversation.status = "archived".to_string();
+    conversation.fast_request_turns.clear();
     if conversation.last_user_at.as_ref().map(|v| v.trim().is_empty()).unwrap_or(false) {
         conversation.last_user_at = None;
     }

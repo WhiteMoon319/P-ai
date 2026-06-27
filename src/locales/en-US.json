@@ -1564,6 +1564,26 @@
       "durationSeconds": "{seconds}s",
       "scopeUnknown": "Unknown scope"
     },
+    "fastRequest": {
+      "tab": "Fast Requests",
+      "title": "Fast Requests",
+      "count": "{count} record(s)",
+      "refresh": "Refresh fast request records",
+      "empty": "No fast request records in this conversation yet.",
+      "noConversation": "No conversation is available to read.",
+      "loadFailed": "Failed to load fast requests: {error}",
+      "request": "Request",
+      "response": "Response",
+      "error": "Error",
+      "success": "Success",
+      "failed": "Failed",
+      "unknownKind": "Fast request",
+      "kindRemoteIm": "Remote IM",
+      "kindTitleGeneration": "Title generation",
+      "kindTaskOptimization": "Task optimization",
+      "kindToolReview": "Tool assessment",
+      "durationMs": "{ms} ms"
+    },
     "selection": {
       "selectedCount": "{count} message(s) selected",
       "branch": "Select Messages to Create a Conversation Branch",

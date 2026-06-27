@@ -514,7 +514,13 @@ async fn task_optimize_draft_internal(
     ));
     let result = async {
         let prompt = task_optimize_draft_prompt(&input)?;
-        let value = invoke_quick_model_json(
+        let conversation_id = input
+            .conversation_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned);
+        let output = match invoke_quick_model_json_result(
             state,
             "Task draft optimization",
             &prompt,
@@ -522,8 +528,45 @@ async fn task_optimize_draft_internal(
             &["content"],
             &["title"],
         )
-        .await?;
-        task_optimize_draft_output_from_value(&value, &input)
+        .await
+        {
+            Ok(output) => output,
+            Err(err) => {
+                if let Some(conversation_id) = conversation_id.as_deref() {
+                    record_fast_request_turn_best_effort(
+                        state,
+                        conversation_id,
+                        build_fast_request_turn(
+                            "task_optimization",
+                            &prompt,
+                            err.raw_text.as_deref().unwrap_or(""),
+                            false,
+                            Some(err.message.clone()),
+                            err.model_name,
+                            err.duration_ms,
+                        ),
+                    );
+                }
+                return Err(err.message);
+            }
+        };
+        let parsed = task_optimize_draft_output_from_value(&output.value, &input);
+        if let Some(conversation_id) = conversation_id.as_deref() {
+            record_fast_request_turn_best_effort(
+                state,
+                conversation_id,
+                build_fast_request_turn(
+                    "task_optimization",
+                    &prompt,
+                    &output.raw_text,
+                    parsed.is_ok(),
+                    parsed.as_ref().err().cloned(),
+                    Some(output.model_name),
+                    Some(output.duration_ms),
+                ),
+            );
+        }
+        parsed
     }
     .await;
     match result {

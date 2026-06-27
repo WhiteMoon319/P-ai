@@ -1553,6 +1553,26 @@
       "durationSeconds": "{seconds}秒",
       "scopeUnknown": "未知范围"
     },
+    "fastRequest": {
+      "tab": "轻量请求",
+      "title": "轻量请求",
+      "count": "{count} 条记录",
+      "refresh": "刷新轻量请求记录",
+      "empty": "当前会话暂无轻量请求记录。",
+      "noConversation": "当前没有可读取的会话。",
+      "loadFailed": "加载轻量请求失败：{error}",
+      "request": "请求",
+      "response": "回复",
+      "error": "错误",
+      "success": "成功",
+      "failed": "失败",
+      "unknownKind": "轻量请求",
+      "kindRemoteIm": "远程 IM",
+      "kindTitleGeneration": "标题生成",
+      "kindTaskOptimization": "任务优化",
+      "kindToolReview": "工具评估",
+      "durationMs": "{ms} ms"
+    },
     "selection": {
       "selectedCount": "已选择 {count} 条消息",
       "branch": "选择消息创建会话分支",

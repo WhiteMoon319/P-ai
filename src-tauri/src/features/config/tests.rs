@@ -1635,6 +1635,7 @@ model = "gpt-4.1"
                 mcp_call: None,
             meme_annotations: None,
             }],
+            fast_request_turns: Vec::new(),
             current_todos: Vec::new(),
             memory_recall_table: Vec::new(),
             plan_mode_enabled: false,

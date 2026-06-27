@@ -2364,6 +2364,21 @@ async fn get_chat_queue_snapshot(
     get_queue_snapshot(state.inner())
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GetConversationFastRequestTurnsInput {
+    conversation_id: String,
+}
+
+#[tauri::command]
+fn get_conversation_fast_request_turns(
+    input: GetConversationFastRequestTurnsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<FastRequestTurn>, String> {
+    conversation_service_v2()
+        .get_conversation_fast_request_turns(state.inner(), &input.conversation_id)
+}
+
 #[tauri::command]
 async fn recall_chat_queue_event(
     event_id: String,

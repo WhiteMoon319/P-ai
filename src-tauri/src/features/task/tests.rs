@@ -27,6 +27,7 @@
 
     fn task_optimize_input(title: &str, content: &str) -> TaskOptimizeDraftInput {
         TaskOptimizeDraftInput {
+            conversation_id: None,
             title: title.to_string(),
             content: content.to_string(),
             schedule_mode: "once".to_string(),

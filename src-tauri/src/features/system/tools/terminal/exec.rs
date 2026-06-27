@@ -699,6 +699,7 @@ async fn run_tool_smart_review(
     tool_name: &str,
     scene: &'static str,
     context: Value,
+    record_target: Option<FastRequestRecordTarget>,
 ) -> Result<TerminalSmartReviewOutcome, String> {
     let app_config = state_read_config_cached(state)?;
     let selected_api = resolve_selected_api_config(&app_config, Some(review_api_config_id))
@@ -709,21 +710,63 @@ async fn run_tool_smart_review(
             review_api_config_id
         ));
     }
+    let resolved_api = resolve_api_config(&app_config, Some(review_api_config_id))?;
+    let model_name = resolved_model_name_for_quick_request(&selected_api, &resolved_api);
     let language = terminal_smart_review_language(&app_config.ui_language);
     let prepared = conversation_prompt_service()
         .build_tool_safety_review_prepared_prompt(language, tool_name, &context);
+    let request_text = prepared_prompt_to_fast_request_text(&prepared);
     let _ = scene;
-    let reply = invoke_quick_model_reply_with_prepared_prompt(
+    let started_at = std::time::Instant::now();
+    let reply = match invoke_quick_model_reply_with_prepared_prompt(
         state,
         review_api_config_id,
         prepared,
         Some(120),
     )
-    .await?;
-    let raw_json = terminal_smart_review_extract_json(&reply.assistant_text);
+    .await
+    {
+        Ok(reply) => reply,
+        Err(err) => {
+            if let Some(target) = record_target.as_ref() {
+                record_fast_request_turn_best_effort(
+                    state,
+                    &target.conversation_id,
+                    build_fast_request_turn(
+                        target.kind,
+                        &request_text,
+                        "",
+                        false,
+                        Some(err.clone()),
+                        Some(model_name.clone()),
+                        Some(elapsed_ms_u64(started_at)),
+                    ),
+                );
+            }
+            return Err(err);
+        }
+    };
+    let duration_ms = elapsed_ms_u64(started_at);
+    let raw_response_text = fast_request_response_text_from_reply(&reply);
+    let raw_json = terminal_smart_review_extract_json(&raw_response_text);
     let parsed_value = match serde_json::from_str::<Value>(raw_json) {
         Ok(value) => value,
         Err(_) => {
+            if let Some(target) = record_target.as_ref() {
+                record_fast_request_turn_best_effort(
+                    state,
+                    &target.conversation_id,
+                    build_fast_request_turn(
+                        target.kind,
+                        &request_text,
+                        &raw_response_text,
+                        false,
+                        Some("工具评估模型返回了不符合约定的 JSON".to_string()),
+                        Some(model_name.clone()),
+                        Some(duration_ms),
+                    ),
+                );
+            }
             return Ok(TerminalSmartReviewOutcome::RawJson {
                 raw_json: raw_json.trim().to_string(),
                 model_name: selected_api.name.trim().to_string(),
@@ -735,12 +778,42 @@ async fn run_tool_smart_review(
     let parsed = match serde_json::from_value::<TerminalSmartReviewReply>(parsed_value) {
         Ok(value) => value,
         Err(_) => {
+            if let Some(target) = record_target.as_ref() {
+                record_fast_request_turn_best_effort(
+                    state,
+                    &target.conversation_id,
+                    build_fast_request_turn(
+                        target.kind,
+                        &request_text,
+                        &raw_response_text,
+                        false,
+                        Some("工具评估模型返回 JSON 结构不符合约定".to_string()),
+                        Some(model_name.clone()),
+                        Some(duration_ms),
+                    ),
+                );
+            }
             return Ok(TerminalSmartReviewOutcome::RawJson {
                 raw_json: pretty_json,
                 model_name: selected_api.name.trim().to_string(),
             });
         }
     };
+    if let Some(target) = record_target.as_ref() {
+        record_fast_request_turn_best_effort(
+            state,
+            &target.conversation_id,
+            build_fast_request_turn(
+                target.kind,
+                &request_text,
+                &raw_response_text,
+                true,
+                None,
+                Some(model_name),
+                Some(duration_ms),
+            ),
+        );
+    }
     Ok(TerminalSmartReviewOutcome::Decision(TerminalSmartReviewDecision {
         allow: parsed.allow,
         review_opinion: parsed.review_opinion.trim().to_string(),
@@ -773,6 +846,7 @@ async fn terminal_run_smart_review(
         "shell_exec",
         "Tool safety review",
         context,
+        None,
     )
     .await
 }
@@ -1667,6 +1741,7 @@ mod terminal_exec_tests {
             shell_autonomous_mode: false,
             archived_at: None,
             messages: Vec::new(),
+            fast_request_turns: Vec::new(),
             current_todos: Vec::new(),
             memory_recall_table: Vec::new(),
             plan_mode_enabled: false,

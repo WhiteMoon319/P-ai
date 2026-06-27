@@ -1114,6 +1114,10 @@ async fn tool_review_run_for_call_internal(
         &item.tool_name,
         "Tool safety review",
         context,
+        Some(FastRequestRecordTarget {
+            conversation_id: conversation_id.trim().to_string(),
+            kind: "tool_review",
+        }),
     )
     .await
     {
@@ -2218,6 +2222,7 @@ mod tool_review_tests {
             shell_autonomous_mode: false,
             archived_at: None,
             messages,
+            fast_request_turns: Vec::new(),
             current_todos: Vec::new(),
             memory_recall_table: Vec::new(),
             plan_mode_enabled: false,

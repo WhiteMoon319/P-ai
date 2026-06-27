@@ -1,9 +1,10 @@
 <template>
   <aside v-bind="rootAttrs" class="w-full flex h-full min-h-0 flex-col bg-base-200">
-    <div role="tablist" class="tabs tabs-border px-2 pb-2">
+    <div role="tablist" class="tabs tabs-border overflow-x-auto whitespace-nowrap px-2 pb-2">
       <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'delegates' }" @click="activeTab = 'delegates'">{{ t("chat.toolReview.delegatesTab") }}</button>
       <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'tasks' }" @click="activeTab = 'tasks'">{{ t("chat.toolReview.tasksTab") }}</button>
       <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'tools' }" @click="activeTab = 'tools'">{{ t("chat.toolReview.toolsTab") }}</button>
+      <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'fastRequests' }" @click="activeTab = 'fastRequests'">{{ t("chat.fastRequest.tab") }}</button>
     </div>
 
     <div ref="contentScroller" class="ecall-chat-scroll-container flex min-h-0 flex-1 flex-col overflow-y-auto p-1">
@@ -144,6 +145,13 @@
           </div>
         </CollapsibleGroup>
       </template>
+
+      <FastRequestTurnsPanel
+        v-else-if="activeTab === 'fastRequests'"
+        :conversation-id="activeConversationId"
+        active
+        :bridge-request="bridgeRequest"
+      />
     </div>
     <FloatingScrollbar :target="contentScroller" />
   </aside>
@@ -199,6 +207,7 @@ import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import CollapsibleGroup from "./CollapsibleGroup.vue";
 import TaskListItem from "./TaskListItem.vue";
 import TaskCreateCard from "./dialogs/TaskCreateCard.vue";
+import FastRequestTurnsPanel from "./FastRequestTurnsPanel.vue";
 import type { TaskEntry } from "../../config/views/config-tabs/task-editor";
 
 initKatex();
@@ -234,7 +243,7 @@ const emit = defineEmits<{
 }>();
 
 const { t, locale } = useI18n();
-const activeTab = ref<"tools" | "delegates" | "tasks">("delegates");
+const activeTab = ref<"tools" | "delegates" | "tasks" | "fastRequests">("delegates");
 const contentScroller = ref<HTMLElement | null>(null);
 const delegateResultDialogOpen = ref(false);
 const delegateResultLoading = ref(false);

@@ -269,6 +269,8 @@ fn archive_time_label(raw: &str) -> String {
 }
 
 fn conversation_to_archive(conversation: &Conversation) -> ConversationArchive {
+    let mut source_conversation = conversation.clone();
+    source_conversation.fast_request_turns.clear();
     ConversationArchive {
         archive_id: conversation.id.clone(),
         archived_at: conversation
@@ -276,7 +278,7 @@ fn conversation_to_archive(conversation: &Conversation) -> ConversationArchive {
             .clone()
             .unwrap_or_else(|| conversation.updated_at.clone()),
         reason: "conversation_summary".to_string(),
-        source_conversation: conversation.clone(),
+        source_conversation,
     }
 }
 
@@ -298,6 +300,7 @@ fn archive_to_conversation(archive: ConversationArchive) -> Conversation {
         conversation.archived_at = Some(archive.archived_at);
     }
     conversation.status = "archived".to_string();
+    conversation.fast_request_turns.clear();
     conversation
 }
 
@@ -389,4 +392,61 @@ fn get_archive_summary(archive_id: String, state: State<'_, AppState>) -> Result
 #[tauri::command]
 fn delete_archive(archive_id: String, state: State<'_, AppState>) -> Result<(), String> {
     conversation_service_v2().delete_archive(state.inner(), &archive_id)
+}
+
+#[cfg(test)]
+mod fast_request_archive_tests {
+    use super::*;
+
+    fn test_fast_request_turn() -> FastRequestTurn {
+        FastRequestTurn {
+            id: "fast-request-a".to_string(),
+            kind: "remote_im".to_string(),
+            request_text: "request".to_string(),
+            response_text: "response".to_string(),
+            success: true,
+            error: None,
+            model_name: Some("quick-model".to_string()),
+            duration_ms: Some(42),
+            created_at: "2026-06-28T00:00:00Z".to_string(),
+        }
+    }
+
+    fn test_conversation_with_fast_request() -> Conversation {
+        let mut conversation = build_conversation_record(
+            "",
+            DEFAULT_AGENT_ID,
+            ASSISTANT_DEPARTMENT_ID,
+            "测试会话",
+            CONVERSATION_KIND_CHAT,
+            None,
+            None,
+        );
+        conversation.fast_request_turns.push(test_fast_request_turn());
+        conversation
+    }
+
+    #[test]
+    fn conversation_to_archive_should_clear_fast_request_turns() {
+        let conversation = test_conversation_with_fast_request();
+        let archive = conversation_to_archive(&conversation);
+
+        assert_eq!(conversation.fast_request_turns.len(), 1);
+        assert!(archive.source_conversation.fast_request_turns.is_empty());
+    }
+
+    #[test]
+    fn archive_to_conversation_should_clear_fast_request_turns() {
+        let conversation = test_conversation_with_fast_request();
+        let archive = ConversationArchive {
+            archive_id: conversation.id.clone(),
+            archived_at: now_iso(),
+            reason: "test".to_string(),
+            source_conversation: conversation,
+        };
+        let restored = archive_to_conversation(archive);
+
+        assert_eq!(restored.status, "archived");
+        assert!(restored.fast_request_turns.is_empty());
+    }
 }

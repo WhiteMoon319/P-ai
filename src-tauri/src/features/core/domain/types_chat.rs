@@ -142,6 +142,29 @@ struct ConversationTodoItem {
     status: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FastRequestTurn {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    kind: String,
+    #[serde(default)]
+    request_text: String,
+    #[serde(default)]
+    response_text: String,
+    #[serde(default)]
+    success: bool,
+    #[serde(default)]
+    error: Option<String>,
+    #[serde(default)]
+    model_name: Option<String>,
+    #[serde(default)]
+    duration_ms: Option<u64>,
+    #[serde(default)]
+    created_at: String,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ConversationUsageBucket {
@@ -477,6 +500,8 @@ struct Conversation {
     #[serde(default)]
     archived_at: Option<String>,
     messages: Vec<ChatMessage>,
+    #[serde(default)]
+    fast_request_turns: Vec<FastRequestTurn>,
     #[serde(default)]
     current_todos: Vec<ConversationTodoItem>,
     #[serde(default)]

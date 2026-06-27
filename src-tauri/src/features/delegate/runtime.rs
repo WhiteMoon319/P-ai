@@ -139,6 +139,7 @@ fn delegate_parent_shell_workspace(
             shell_workspaces: conversation_meta.shell_workspaces,
             shell_autonomous_mode: conversation_meta.shell_autonomous_mode,
             messages: Vec::new(),
+            fast_request_turns: conversation_meta.fast_request_turns,
             current_todos: conversation_meta.current_todos,
             memory_recall_table: Vec::new(),
             plan_mode_enabled: false,

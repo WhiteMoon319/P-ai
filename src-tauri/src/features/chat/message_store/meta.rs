@@ -33,6 +33,7 @@ pub(super) struct ConversationPersistMeta {
     auto_push_remote_contact_id: Option<String>,
     cumulative_usage: ConversationCumulativeUsage,
     active_goal: Option<ConversationGoalState>,
+    fast_request_turns: Vec<FastRequestTurn>,
     last_message_at: Option<String>,
     message_count: usize,
     body_message_count: usize,
@@ -146,6 +147,8 @@ pub(super) struct ConversationShardMeta {
     cumulative_usage: ConversationCumulativeUsage,
     #[serde(default)]
     active_goal: Option<ConversationGoalState>,
+    #[serde(default)]
+    fast_request_turns: Vec<FastRequestTurn>,
     #[serde(default)]
     last_message_at: Option<String>,
     #[serde(default)]
@@ -308,6 +311,14 @@ impl ConversationShardMeta {
         self.active_goal.as_ref()
     }
 
+    pub(super) fn fast_request_turns(&self) -> &[FastRequestTurn] {
+        self.fast_request_turns.as_slice()
+    }
+
+    pub(super) fn push_fast_request_turn(&mut self, turn: FastRequestTurn) {
+        self.fast_request_turns.push(turn);
+    }
+
     pub(super) fn cumulative_usage(&self) -> &ConversationCumulativeUsage {
         &self.cumulative_usage
     }
@@ -351,6 +362,7 @@ impl ConversationShardMeta {
         target.auto_push_remote_contact_id = self.auto_push_remote_contact_id.clone();
         target.cumulative_usage = self.cumulative_usage.clone();
         target.active_goal = self.active_goal.clone();
+        target.fast_request_turns = self.fast_request_turns.clone();
     }
 
     pub(super) fn apply_metadata_fields_from_conversation(&mut self, source: &Conversation) {
@@ -383,6 +395,7 @@ impl ConversationShardMeta {
         self.auto_push_remote_contact_id = source.auto_push_remote_contact_id.clone();
         self.cumulative_usage = source.cumulative_usage.clone();
         self.active_goal = source.active_goal.clone();
+        self.fast_request_turns = source.fast_request_turns.clone();
     }
 
     pub(super) fn apply_metadata_fields_from_meta(&mut self, source: &ConversationShardMeta) {
@@ -594,6 +607,7 @@ impl ConversationShardMeta {
             auto_push_remote_contact_id: conversation.auto_push_remote_contact_id.clone(),
             cumulative_usage: conversation.cumulative_usage.clone(),
             active_goal: conversation.active_goal.clone(),
+            fast_request_turns: conversation.fast_request_turns.clone(),
             last_message_at: conversation.messages.last().map(|message| message.created_at.clone()),
             message_count: conversation.messages.len(),
             body_message_count: super::conversation_body_message_count(conversation),
@@ -682,6 +696,7 @@ impl ConversationShardMeta {
             auto_push_remote_contact_id: meta.auto_push_remote_contact_id.clone(),
             cumulative_usage: meta.cumulative_usage.clone(),
             active_goal: meta.active_goal.clone(),
+            fast_request_turns: meta.fast_request_turns.clone(),
             last_message_at: meta.last_message_at.clone(),
             message_count: meta.message_count,
             body_message_count: meta.body_message_count,
@@ -726,6 +741,7 @@ impl ConversationShardMeta {
             auto_push_remote_contact_id: self.auto_push_remote_contact_id.clone(),
             cumulative_usage: self.cumulative_usage.clone(),
             active_goal: self.active_goal.clone(),
+            fast_request_turns: self.fast_request_turns.clone(),
             last_message_at: self.last_message_at.clone(),
             message_count: self.message_count,
             body_message_count: self.body_message_count,
@@ -763,6 +779,7 @@ impl ConversationShardMeta {
             shell_autonomous_mode: self.shell_autonomous_mode,
             archived_at: self.archived_at,
             messages,
+            fast_request_turns: self.fast_request_turns,
             current_todos: self.current_todos,
             memory_recall_table: self.memory_recall_table,
             plan_mode_enabled: self.plan_mode_enabled,
@@ -849,6 +866,17 @@ mod message_store_meta_tests {
             shell_autonomous_mode: false,
             archived_at: None,
             messages: vec![test_message("m1"), test_message("m2")],
+            fast_request_turns: vec![FastRequestTurn {
+                id: "fast-request-a".to_string(),
+                kind: "title_generation".to_string(),
+                request_text: "request".to_string(),
+                response_text: "response".to_string(),
+                success: true,
+                error: None,
+                model_name: Some("quick-model".to_string()),
+                duration_ms: Some(12),
+                created_at: "2026-04-24T00:00:50Z".to_string(),
+            }],
             current_todos: vec![ConversationTodoItem {
                 content: "todo".to_string(),
                 status: "pending".to_string(),
@@ -896,6 +924,8 @@ mod message_store_meta_tests {
         );
         assert_eq!(restored.cumulative_usage, conversation.cumulative_usage);
         assert_eq!(restored.active_goal, conversation.active_goal);
+        assert_eq!(restored.fast_request_turns, conversation.fast_request_turns);
+        assert_eq!(persist_meta.fast_request_turns, conversation.fast_request_turns);
     }
 
     #[test]

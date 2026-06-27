@@ -262,6 +262,7 @@ type TaskDeleteInputWire = {
 };
 
 type TaskOptimizeDraftInputWire = {
+  conversationId?: string;
   title: string;
   content: string;
   scheduleMode: TaskScheduleMode;
@@ -856,6 +857,7 @@ async function handleOptimizeDraft() {
     return;
   }
   const payload: TaskOptimizeDraftInputWire = {
+    conversationId: String(props.conversationId || "").trim(),
     title: title.value.trim(),
     content: normalizedContent,
     scheduleMode: scheduleMode.value,

@@ -770,6 +770,18 @@ export type ConversationGoalState = {
   usageEnd?: ConversationGoalUsage | null;
 };
 
+export type FastRequestTurn = {
+  id: string;
+  kind: string;
+  requestText: string;
+  responseText: string;
+  success: boolean;
+  error?: string | null;
+  modelName?: string | null;
+  durationMs?: number | null;
+  createdAt: string;
+};
+
 export type UnarchivedConversationSummary = {
   conversationId: string;
   title: string;

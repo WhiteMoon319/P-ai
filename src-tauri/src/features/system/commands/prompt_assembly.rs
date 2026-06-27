@@ -613,6 +613,7 @@ mod prompt_assembly_tests {
             shell_autonomous_mode: false,
             archived_at: None,
             messages: Vec::new(),
+            fast_request_turns: Vec::new(),
             current_todos: Vec::new(),
             memory_recall_table: Vec::new(),
             plan_mode_enabled: false,

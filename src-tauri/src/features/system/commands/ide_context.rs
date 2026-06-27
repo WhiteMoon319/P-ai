@@ -516,6 +516,7 @@ fn ide_chat_conversation_from_meta_view(conversation_meta: &ConversationMetaView
         shell_autonomous_mode: conversation_meta.shell_autonomous_mode,
         archived_at: conversation_meta.archived_at.clone(),
         messages: Vec::new(),
+        fast_request_turns: conversation_meta.fast_request_turns.clone(),
         current_todos: conversation_meta.current_todos.clone(),
         memory_recall_table: Vec::new(),
         plan_mode_enabled: false,
@@ -4814,6 +4815,15 @@ fn ide_chat_conversation_block_page(state: &AppState, params: Value) -> Result<V
     }))
 }
 
+fn ide_chat_conversation_fast_request_turns(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<GetConversationFastRequestTurnsInput>(params)?;
+    serde_json::to_value(
+        conversation_service_v2()
+            .get_conversation_fast_request_turns(state, &input.conversation_id)?,
+    )
+    .map_err(|err| format!("Serialize fast request turns failed: {err}"))
+}
+
 fn ide_chat_create_conversation(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatCreateConversationInput>(params)?;
     let normalized_shell_workspaces = input
@@ -5589,8 +5599,9 @@ async fn ide_chat_handle_jsonrpc_request(
                     let _ = ide_chat_ensure_sidebar_workspace(state, &input.conversation_id, workspace_path, input.workspace_name.as_deref());
                 }
                 Ok(result)
-            }),
+        }),
         "conversation.blockPage" => ide_chat_conversation_block_page(state, request.params),
+        "conversation.fastRequestTurns" => ide_chat_conversation_fast_request_turns(state, request.params),
         "conversation.create" => (|| {
             let result = ide_chat_create_conversation(state, request.params)?;
             if let Some(conversation_id) = result

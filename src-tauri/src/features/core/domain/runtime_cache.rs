@@ -683,6 +683,82 @@ fn state_update_conversation_metadata_cached<T>(
     Ok((conversation, result, seq))
 }
 
+fn state_update_conversation_meta_cached<T>(
+    state: &AppState,
+    conversation_id: &str,
+    updater: impl FnOnce(&mut message_store::ConversationShardMeta) -> Result<T, String>,
+) -> Result<(message_store::ConversationShardMeta, T, u64), String> {
+    let normalized_conversation_id = conversation_id.trim();
+    if normalized_conversation_id.is_empty() {
+        return Err("Conversation id is empty".to_string());
+    }
+    let mut conversation_meta =
+        state_read_conversation_metadata_cached(state, normalized_conversation_id)?;
+    let result = updater(&mut conversation_meta)?;
+    let seq = state
+        .conversation_persist_latest_seq
+        .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
+        + 1;
+    let disk_mtime = conversation_shard_modified_time(&state.data_path, normalized_conversation_id);
+    {
+        let mut metadata = state
+            .cached_conversation_metadata
+            .lock()
+            .map_err(|_| "Failed to lock cached conversation metadata".to_string())?;
+        metadata.insert(normalized_conversation_id.to_string(), conversation_meta.clone());
+    }
+    {
+        let mut cached_mtimes = state
+            .cached_conversation_mtimes
+            .lock()
+            .map_err(|_| "Failed to lock cached conversation mtimes".to_string())?;
+        cached_mtimes.insert(normalized_conversation_id.to_string(), disk_mtime);
+    }
+    {
+        let mut deleted_ids = state
+            .cached_deleted_conversation_ids
+            .lock()
+            .map_err(|_| "Failed to lock cached deleted conversation ids".to_string())?;
+        deleted_ids.remove(normalized_conversation_id);
+    }
+    {
+        let mut dirty_ids = state
+            .cached_conversation_dirty_ids
+            .lock()
+            .map_err(|_| "Failed to lock cached conversation dirty ids".to_string())?;
+        dirty_ids.insert(normalized_conversation_id.to_string());
+    }
+    {
+        let mut pending = state
+            .conversation_persist_pending
+            .lock()
+            .map_err(|_| "Failed to lock pending conversation persist".to_string())?;
+        let slot = pending.get_or_insert_with(|| PendingConversationPersist {
+            seq,
+            conversations: std::collections::HashMap::new(),
+            metadata_conversation_ids: std::collections::HashSet::new(),
+            deleted_conversation_ids: std::collections::HashSet::new(),
+        });
+        slot.seq = seq;
+        if let Some(conversation) = slot.conversations.get_mut(normalized_conversation_id) {
+            conversation_meta.apply_to_conversation(conversation);
+            slot.metadata_conversation_ids
+                .remove(normalized_conversation_id);
+        } else {
+            slot.metadata_conversation_ids
+                .insert(normalized_conversation_id.to_string());
+        }
+        slot.deleted_conversation_ids
+            .remove(normalized_conversation_id);
+    }
+    let metadata_conversation =
+        conversation_service_v2().build_conversation_snapshot_from_meta(&conversation_meta, Vec::new());
+    sync_cached_app_data_conversation_metadata(state, &metadata_conversation)?;
+    refresh_cached_app_data_dirty(state);
+    state.conversation_persist_notify.notify_one();
+    Ok((conversation_meta, result, seq))
+}
+
 fn has_pending_app_data_persist(state: &AppState) -> bool {
     state
         .app_data_persist_pending
@@ -850,6 +926,7 @@ fn preserve_field_level_conversation_metadata(
     target.preferred_api_config_id = source.preferred_api_config_id.clone();
     target.auto_push_remote_contact_id = source.auto_push_remote_contact_id.clone();
     target.active_goal = source.active_goal.clone();
+    target.fast_request_turns = source.fast_request_turns.clone();
 }
 
 #[allow(dead_code)]

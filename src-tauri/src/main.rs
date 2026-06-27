@@ -1064,6 +1064,7 @@ fn main() {
             bind_active_chat_view_stream,
              stop_chat_message,
              get_chat_queue_snapshot,
+             get_conversation_fast_request_turns,
              recall_chat_queue_event,
              mark_chat_queue_event_guided,
              interrupt_conversation_runtime,

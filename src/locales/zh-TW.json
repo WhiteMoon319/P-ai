@@ -1557,6 +1557,26 @@
       "durationSeconds": "{seconds}秒",
       "scopeUnknown": "未知範圍"
     },
+    "fastRequest": {
+      "tab": "輕量請求",
+      "title": "輕量請求",
+      "count": "{count} 條記錄",
+      "refresh": "刷新輕量請求記錄",
+      "empty": "目前會話暫無輕量請求記錄。",
+      "noConversation": "目前沒有可讀取的會話。",
+      "loadFailed": "載入輕量請求失敗：{error}",
+      "request": "請求",
+      "response": "回覆",
+      "error": "錯誤",
+      "success": "成功",
+      "failed": "失敗",
+      "unknownKind": "輕量請求",
+      "kindRemoteIm": "遠程 IM",
+      "kindTitleGeneration": "標題生成",
+      "kindTaskOptimization": "任務優化",
+      "kindToolReview": "工具評估",
+      "durationMs": "{ms} ms"
+    },
     "selection": {
       "selectedCount": "已選擇 {count} 條訊息",
       "branch": "選擇訊息建立會話分支",

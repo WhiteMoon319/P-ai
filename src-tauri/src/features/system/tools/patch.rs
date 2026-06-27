@@ -1373,6 +1373,7 @@ async fn builtin_apply_patch_with_name(
                 tool_name,
                 "Tool safety review",
                 context,
+                None,
             )
             .await
             {

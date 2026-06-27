@@ -37,6 +37,7 @@ fn migrate_app_data_archives_into_conversations(
         if conv.status.trim() != "archived" {
             conv.status = "archived".to_string();
         }
+        conv.fast_request_turns.clear();
 
         if let Some(existing_idx) = data.conversations.iter().position(|c| c.id == conv.id) {
             let should_replace = {

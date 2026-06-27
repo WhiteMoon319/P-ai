@@ -1748,6 +1748,7 @@ mod archive_pipeline_tests {
                 test_message("m3", "user", "分叉后的新问题"),
                 test_message("m4", "assistant", "分叉后的最终结论"),
             ],
+            fast_request_turns: Vec::new(),
             current_todos: Vec::new(),
             memory_recall_table: Vec::new(),
             plan_mode_enabled: false,

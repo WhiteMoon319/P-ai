@@ -66,6 +66,127 @@ fn push_model_call_log_parts(state: Option<&AppState>, execution: &ModelCallExec
     );
 }
 
+fn elapsed_ms_u64(started_at: std::time::Instant) -> u64 {
+    started_at
+        .elapsed()
+        .as_millis()
+        .min(u128::from(u64::MAX)) as u64
+}
+
+fn fast_request_response_text_from_reply(reply: &ModelReply) -> String {
+    let final_response_text = reply.final_response_text.trim();
+    if !final_response_text.is_empty() {
+        return final_response_text.to_string();
+    }
+    reply.assistant_text.trim().to_string()
+}
+
+fn prepared_prompt_to_fast_request_text(prepared: &PreparedPrompt) -> String {
+    let mut blocks = Vec::<String>::new();
+    if !prepared.preamble.trim().is_empty() {
+        blocks.push(format!("system:\n{}", prepared.preamble.trim()));
+    }
+    for (index, message) in prepared.history_messages.iter().enumerate() {
+        let mut message_blocks = Vec::<String>::new();
+        if !message.text.trim().is_empty() {
+            message_blocks.push(message.text.trim().to_string());
+        }
+        for extra in &message.extra_text_blocks {
+            if !extra.trim().is_empty() {
+                message_blocks.push(extra.trim().to_string());
+            }
+        }
+        if !message_blocks.is_empty() {
+            blocks.push(format!(
+                "history {} {}:\n{}",
+                index + 1,
+                message.role.trim(),
+                message_blocks.join("\n\n")
+            ));
+        }
+    }
+    let mut latest_blocks = Vec::<String>::new();
+    for item in [
+        prepared.latest_user_meta_text.trim(),
+        prepared.latest_user_text.trim(),
+        prepared.latest_user_extra_text.trim(),
+    ] {
+        if !item.is_empty() {
+            latest_blocks.push(item.to_string());
+        }
+    }
+    for extra in &prepared.latest_user_extra_blocks {
+        if !extra.trim().is_empty() {
+            latest_blocks.push(extra.trim().to_string());
+        }
+    }
+    if !prepared.latest_images.is_empty() {
+        latest_blocks.push(format!("images: {}", prepared.latest_images.len()));
+    }
+    if !prepared.latest_audios.is_empty() {
+        latest_blocks.push(format!("audios: {}", prepared.latest_audios.len()));
+    }
+    if !latest_blocks.is_empty() {
+        blocks.push(format!("user:\n{}", latest_blocks.join("\n\n")));
+    }
+    blocks.join("\n\n---\n\n")
+}
+
+fn build_fast_request_turn(
+    kind: &str,
+    request_text: &str,
+    response_text: &str,
+    success: bool,
+    error: Option<String>,
+    model_name: Option<String>,
+    duration_ms: Option<u64>,
+) -> FastRequestTurn {
+    FastRequestTurn {
+        id: Uuid::new_v4().to_string(),
+        kind: kind.trim().to_string(),
+        request_text: request_text.trim().to_string(),
+        response_text: response_text.trim().to_string(),
+        success,
+        error: error
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
+        model_name: model_name
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
+        duration_ms,
+        created_at: now_iso(),
+    }
+}
+
+fn record_fast_request_turn_best_effort(
+    state: &AppState,
+    conversation_id: &str,
+    turn: FastRequestTurn,
+) {
+    let normalized_conversation_id = conversation_id.trim();
+    if normalized_conversation_id.is_empty() {
+        return;
+    }
+    let kind = turn.kind.clone();
+    match conversation_service_v2()
+        .append_fast_request_turn_if_unarchived_exists(state, normalized_conversation_id, turn)
+    {
+        Ok(_) => {}
+        Err(err) => runtime_log_warn(format!(
+            "[快速请求记录] 失败，任务=追加会话快速请求记录，conversation_id={}，kind={}，error={}",
+            normalized_conversation_id,
+            kind,
+            err
+        )),
+    }
+}
+
+#[derive(Debug, Clone)]
+struct FastRequestRecordTarget {
+    conversation_id: String,
+    kind: &'static str,
+}
+
 impl CallPolicy {
     fn archive_json(timeout_secs: u64) -> Self {
         Self {
@@ -651,6 +772,33 @@ fn quick_request_adapter_kind(
     resolve_provider_genai_adapter_kind(resolved_api, model_name, default_adapter)
 }
 
+#[derive(Debug, Clone)]
+struct QuickModelJsonCallOutput {
+    value: Value,
+    raw_text: String,
+    model_name: String,
+    duration_ms: u64,
+}
+
+#[derive(Debug, Clone)]
+struct QuickModelJsonCallError {
+    message: String,
+    raw_text: Option<String>,
+    model_name: Option<String>,
+    duration_ms: Option<u64>,
+}
+
+impl QuickModelJsonCallError {
+    fn from_message(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            raw_text: None,
+            model_name: None,
+            duration_ms: None,
+        }
+    }
+}
+
 async fn invoke_quick_model_reply_with_prepared_prompt(
     state: &AppState,
     api_config_id: &str,
@@ -706,6 +854,62 @@ async fn invoke_quick_model_reply_with_prepared_prompt(
     }
 }
 
+async fn invoke_quick_model_json_result_with_prepared_prompt(
+    state: &AppState,
+    scene: &'static str,
+    prepared: PreparedPrompt,
+    timeout_secs: Option<u64>,
+    required_fields: &[&str],
+    optional_fields: &[&str],
+) -> Result<QuickModelJsonCallOutput, QuickModelJsonCallError> {
+    let quick_api_config_id = current_tool_review_api_config_id(state)
+        .map_err(QuickModelJsonCallError::from_message)?
+        .ok_or_else(|| QuickModelJsonCallError::from_message("未配置快速模型"))?;
+    let app_config =
+        state_read_config_cached(state).map_err(QuickModelJsonCallError::from_message)?;
+    let selected_api = resolve_selected_api_config(&app_config, Some(&quick_api_config_id))
+        .ok_or_else(|| {
+            QuickModelJsonCallError::from_message(format!(
+                "快速模型配置不存在：{}",
+                quick_api_config_id
+            ))
+        })?;
+    let resolved_api = resolve_api_config(&app_config, Some(&quick_api_config_id))
+        .map_err(QuickModelJsonCallError::from_message)?;
+    let model_name = resolved_model_name_for_quick_request(&selected_api, &resolved_api);
+    let _ = scene;
+    let started_at = std::time::Instant::now();
+    let reply = invoke_quick_model_reply_with_prepared_prompt(
+        state,
+        &quick_api_config_id,
+        prepared,
+        timeout_secs,
+    )
+    .await
+    .map_err(|message| QuickModelJsonCallError {
+        message,
+        raw_text: None,
+        model_name: Some(model_name.clone()),
+        duration_ms: Some(elapsed_ms_u64(started_at)),
+    })?;
+    let duration_ms = elapsed_ms_u64(started_at);
+    let raw_text = fast_request_response_text_from_reply(&reply);
+    let value = parse_quick_model_json_response(&raw_text, required_fields, optional_fields)
+        .map_err(|message| QuickModelJsonCallError {
+            message,
+            raw_text: Some(raw_text.clone()),
+            model_name: Some(model_name.clone()),
+            duration_ms: Some(duration_ms),
+        })?;
+    Ok(QuickModelJsonCallOutput {
+        value,
+        raw_text,
+        model_name,
+        duration_ms,
+    })
+}
+
+#[allow(dead_code)]
 async fn invoke_quick_model_json_with_prepared_prompt(
     state: &AppState,
     scene: &'static str,
@@ -714,24 +918,44 @@ async fn invoke_quick_model_json_with_prepared_prompt(
     required_fields: &[&str],
     optional_fields: &[&str],
 ) -> Result<Value, String> {
-    let quick_api_config_id = current_tool_review_api_config_id(state)?
-        .ok_or_else(|| "未配置快速模型".to_string())?;
-    let _ = scene;
-    let reply = invoke_quick_model_reply_with_prepared_prompt(
+    invoke_quick_model_json_result_with_prepared_prompt(
         state,
-        &quick_api_config_id,
+        scene,
         prepared,
         timeout_secs,
+        required_fields,
+        optional_fields,
     )
-    .await?;
-    let candidate = if reply.final_response_text.trim().is_empty() {
-        reply.assistant_text.trim()
-    } else {
-        reply.final_response_text.trim()
-    };
-    parse_quick_model_json_response(candidate, required_fields, optional_fields)
+    .await
+    .map(|output| output.value)
+    .map_err(|err| err.message)
 }
 
+async fn invoke_quick_model_json_result(
+    state: &AppState,
+    scene: &'static str,
+    prompt: &str,
+    timeout_secs: Option<u64>,
+    required_fields: &[&str],
+    optional_fields: &[&str],
+) -> Result<QuickModelJsonCallOutput, QuickModelJsonCallError> {
+    if prompt.trim().is_empty() {
+        return Err(QuickModelJsonCallError::from_message(
+            "快速模型 JSON 请求提示词不能为空",
+        ));
+    }
+    invoke_quick_model_json_result_with_prepared_prompt(
+        state,
+        scene,
+        quick_json_prepared_prompt(prompt),
+        timeout_secs,
+        required_fields,
+        optional_fields,
+    )
+    .await
+}
+
+#[allow(dead_code)]
 async fn invoke_quick_model_json(
     state: &AppState,
     scene: &'static str,

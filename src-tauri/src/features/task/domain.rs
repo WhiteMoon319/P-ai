@@ -217,6 +217,8 @@ struct TaskDeleteInput {
 #[serde(rename_all = "camelCase")]
 struct TaskOptimizeDraftInput {
     #[serde(default)]
+    conversation_id: Option<String>,
+    #[serde(default)]
     title: String,
     content: String,
     #[serde(default)]

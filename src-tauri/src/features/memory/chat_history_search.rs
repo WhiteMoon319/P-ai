@@ -525,6 +525,7 @@ fn chat_history_collect_slices_for_state(
             shell_autonomous_mode: conversation_meta.shell_autonomous_mode,
             archived_at: conversation_meta.archived_at.clone(),
             messages: Vec::new(),
+            fast_request_turns: conversation_meta.fast_request_turns.clone(),
             current_todos: conversation_meta.current_todos.clone(),
             memory_recall_table: Vec::new(),
             plan_mode_enabled: false,

@@ -3495,6 +3495,7 @@
             shell_autonomous_mode: false,
             archived_at: None,
             messages: Vec::new(),
+            fast_request_turns: Vec::new(),
             current_todos: Vec::new(),
             memory_recall_table: Vec::new(),
             plan_mode_enabled: false,
@@ -3687,6 +3688,61 @@
         assert!(pending.conversations.is_empty());
         assert!(pending.metadata_conversation_ids.contains(&conversation.id));
         assert!(!pending.deleted_conversation_ids.contains(&conversation.id));
+    }
+
+    #[test]
+    fn append_fast_request_turn_should_schedule_meta_only_persist() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let mut conversation = test_chat_conversation("conversation-fast-request", "active", &now);
+        conversation
+            .messages
+            .push(test_text_message("user", "hello", &now));
+        write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
+        state_mark_conversation_direct_persisted(&state, &conversation)
+            .expect("mark persisted");
+
+        let turn = FastRequestTurn {
+            id: "fast-request-a".to_string(),
+            kind: "title_generation".to_string(),
+            request_text: "request".to_string(),
+            response_text: "response".to_string(),
+            success: true,
+            error: None,
+            model_name: Some("quick-model".to_string()),
+            duration_ms: Some(12),
+            created_at: now.clone(),
+        };
+        let appended = conversation_service_v2()
+            .append_fast_request_turn_if_unarchived_exists(&state, &conversation.id, turn.clone())
+            .expect("append fast request turn");
+
+        assert!(appended);
+        assert_eq!(
+            conversation_service_v2()
+                .get_conversation_fast_request_turns(&state, &conversation.id)
+                .expect("read fast request turns"),
+            vec![turn]
+        );
+        {
+            let pending = state
+                .conversation_persist_pending
+                .lock()
+                .expect("lock pending");
+            let pending = pending.as_ref().expect("pending meta persist");
+            assert!(pending.conversations.is_empty());
+            assert!(pending.metadata_conversation_ids.contains(&conversation.id));
+            assert!(!pending.deleted_conversation_ids.contains(&conversation.id));
+        }
+
+        let wrote = flush_pending_persists_blocking(&state).expect("flush pending");
+        let restored = read_conversation_shard(&state.data_path, &conversation.id)
+            .expect("read restored conversation");
+
+        assert!(wrote);
+        assert_eq!(restored.messages.len(), 1);
+        assert_eq!(restored.fast_request_turns.len(), 1);
+        assert_eq!(restored.fast_request_turns[0].id, "fast-request-a");
     }
 
     #[test]
@@ -7217,6 +7273,7 @@
             shell_autonomous_mode: false,
             archived_at: None,
             messages: Vec::new(),
+            fast_request_turns: Vec::new(),
             current_todos: Vec::new(),
             memory_recall_table: Vec::new(),
             plan_mode_enabled: false,
@@ -8885,6 +8942,7 @@
             shell_autonomous_mode: false,
             archived_at: None,
             messages: Vec::new(),
+            fast_request_turns: Vec::new(),
             current_todos: Vec::new(),
             memory_recall_table: Vec::new(),
             plan_mode_enabled: false,
@@ -8958,6 +9016,7 @@
             shell_autonomous_mode: false,
             archived_at: None,
             messages: Vec::new(),
+            fast_request_turns: Vec::new(),
             current_todos: vec![ConversationTodoItem {
                 content: "旧步骤".to_string(),
                 status: "in_progress".to_string(),

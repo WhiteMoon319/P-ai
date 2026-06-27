@@ -1025,19 +1025,56 @@ fn sync_codex_conversation_request_key(
 
 async fn run_auto_conversation_title_generation(
     state: &AppState,
+    conversation_id: &str,
     user_message: &str,
 ) -> Result<String, String> {
-    let value = invoke_quick_model_json(
+    let prompt = build_auto_conversation_title_prompt(user_message);
+    let output = match invoke_quick_model_json_result(
         state,
         "Conversation auto title",
-        &build_auto_conversation_title_prompt(user_message),
+        &prompt,
         Some(12),
         &["has_topic"],
         &["title"],
     )
-    .await?;
-    parse_auto_conversation_title_probe_value(&value)
-        .ok_or_else(|| "快速模型未返回有效标题".to_string())
+    .await
+    {
+        Ok(output) => output,
+        Err(err) => {
+            record_fast_request_turn_best_effort(
+                state,
+                conversation_id,
+                build_fast_request_turn(
+                    "title_generation",
+                    &prompt,
+                    err.raw_text.as_deref().unwrap_or(""),
+                    false,
+                    Some(err.message.clone()),
+                    err.model_name,
+                    err.duration_ms,
+                ),
+            );
+            return Err(err.message);
+        }
+    };
+    let title = parse_auto_conversation_title_probe_value(&output.value);
+    let error = title
+        .is_none()
+        .then(|| "快速模型未返回有效标题".to_string());
+    record_fast_request_turn_best_effort(
+        state,
+        conversation_id,
+        build_fast_request_turn(
+            "title_generation",
+            &prompt,
+            &output.raw_text,
+            title.is_some(),
+            error.clone(),
+            Some(output.model_name),
+            Some(output.duration_ms),
+        ),
+    );
+    title.ok_or_else(|| error.unwrap_or_else(|| "快速模型未返回有效标题".to_string()))
 }
 
 fn spawn_conversation_auto_title_generation(
@@ -1063,7 +1100,7 @@ fn spawn_conversation_auto_title_generation(
                 }
                 Err(err) => return Err(err),
             }
-            match run_auto_conversation_title_generation(&state, &user_message).await {
+            match run_auto_conversation_title_generation(&state, &conversation_id, &user_message).await {
                 Ok(title) => {
                     match conversation_service_v2().get_conversation_meta(&state, &conversation_id) {
                         Ok(conversation_meta) => {
@@ -2058,6 +2095,7 @@ async fn send_chat_message_inner(
             shell_autonomous_mode: false,
             archived_at: None,
             messages: Vec::new(),
+            fast_request_turns: Vec::new(),
             current_todos: Vec::new(),
             memory_recall_table: Vec::new(),
             plan_mode_enabled: false,
@@ -2162,6 +2200,7 @@ async fn send_chat_message_inner(
                     shell_autonomous_mode: false,
                     archived_at: summary_item.archived_at.clone(),
                     messages: Vec::new(),
+                    fast_request_turns: Vec::new(),
                     current_todos: Vec::new(),
                     memory_recall_table: Vec::new(),
                     plan_mode_enabled: false,
@@ -2232,6 +2271,7 @@ async fn send_chat_message_inner(
                 shell_autonomous_mode: false,
                 archived_at: summary_item.archived_at.clone(),
                 messages: Vec::new(),
+                fast_request_turns: Vec::new(),
                 current_todos: Vec::new(),
                 memory_recall_table: Vec::new(),
                 plan_mode_enabled: false,
@@ -4331,6 +4371,7 @@ mod core_send_inner_tests {
             shell_autonomous_mode: false,
             archived_at: None,
             messages,
+            fast_request_turns: Vec::new(),
             current_todos: Vec::new(),
             memory_recall_table: Vec::new(),
             plan_mode_enabled: false,
@@ -4911,6 +4952,7 @@ mod core_send_inner_tests {
                 mcp_call: None,
             meme_annotations: None,
             }],
+            fast_request_turns: Vec::new(),
             current_todos: Vec::new(),
             memory_recall_table: Vec::new(),
             plan_mode_enabled: false,

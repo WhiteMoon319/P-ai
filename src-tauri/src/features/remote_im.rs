@@ -1065,25 +1065,33 @@ async fn run_remote_im_secretary_guided_decision(
         selected_api.model.trim().to_string()
     };
     let language = terminal_smart_review_language(&app_config.ui_language);
+    let prepared = PreparedPrompt {
+        preamble: build_remote_im_secretary_guided_goal(
+            language,
+            contact,
+            current_assistant,
+            current_work_message,
+            new_message,
+        ),
+        history_messages: Vec::new(),
+        latest_user_text: String::new(),
+        latest_user_meta_text: String::new(),
+        latest_user_extra_text: String::new(),
+        latest_user_extra_blocks: Vec::new(),
+        latest_images: Vec::new(),
+        latest_audios: Vec::new(),
+    };
+    let request_text = prepared_prompt_to_fast_request_text(&prepared);
+    let record_conversation_id = contact
+        .bound_conversation_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
     let execution = invoke_model_with_policy(
         &resolved_api,
         &model_name,
-        PreparedPrompt {
-            preamble: build_remote_im_secretary_guided_goal(
-                language,
-                contact,
-                current_assistant,
-                current_work_message,
-                new_message,
-            ),
-            history_messages: Vec::new(),
-            latest_user_text: String::new(),
-            latest_user_meta_text: String::new(),
-            latest_user_extra_text: String::new(),
-            latest_user_extra_blocks: Vec::new(),
-            latest_images: Vec::new(),
-            latest_audios: Vec::new(),
-        },
+        prepared,
         CallPolicy {
             scene: "Remote IM secretary guided review",
             timeout_secs: Some(12),
@@ -1093,16 +1101,75 @@ async fn run_remote_im_secretary_guided_decision(
     )
     .await;
     push_model_call_log_parts(Some(state), &execution);
-    let reply = execution.result?;
+    let duration_ms = execution.log_parts.elapsed_ms;
+    let reply = match execution.result {
+        Ok(reply) => reply,
+        Err(err) => {
+            if let Some(conversation_id) = record_conversation_id.as_deref() {
+                record_fast_request_turn_best_effort(
+                    state,
+                    conversation_id,
+                    build_fast_request_turn(
+                        "remote_im",
+                        &request_text,
+                        "",
+                        false,
+                        Some(err.clone()),
+                        Some(model_name.clone()),
+                        Some(duration_ms),
+                    ),
+                );
+            }
+            return Err(err);
+        }
+    };
     let raw_text = if reply.final_response_text.trim().is_empty() {
         reply.assistant_text.trim()
     } else {
         reply.final_response_text.trim()
     };
-    let parsed = serde_json::from_str::<RemoteImSecretaryGuideDecisionReply>(
+    let parsed = match serde_json::from_str::<RemoteImSecretaryGuideDecisionReply>(
         remote_im_secretary_extract_json(raw_text),
     )
-    .map_err(|err| format!("解析秘书引导 JSON 失败: {err}; raw={}", raw_text.trim()))?;
+    {
+        Ok(parsed) => {
+            if let Some(conversation_id) = record_conversation_id.as_deref() {
+                record_fast_request_turn_best_effort(
+                    state,
+                    conversation_id,
+                    build_fast_request_turn(
+                        "remote_im",
+                        &request_text,
+                        raw_text,
+                        true,
+                        None,
+                        Some(model_name.clone()),
+                        Some(duration_ms),
+                    ),
+                );
+            }
+            parsed
+        }
+        Err(err) => {
+            let message = format!("解析秘书引导 JSON 失败: {err}; raw={}", raw_text.trim());
+            if let Some(conversation_id) = record_conversation_id.as_deref() {
+                record_fast_request_turn_best_effort(
+                    state,
+                    conversation_id,
+                    build_fast_request_turn(
+                        "remote_im",
+                        &request_text,
+                        raw_text,
+                        false,
+                        Some(message.clone()),
+                        Some(model_name.clone()),
+                        Some(duration_ms),
+                    ),
+                );
+            }
+            return Err(message);
+        }
+    };
     runtime_log_debug(format!(
         "[远程联系人秘书] 忙碌引导快速判断完成: contact_id={} model_name={} should_interrupt={}",
         contact.id,
@@ -1165,16 +1232,24 @@ async fn run_remote_im_secretary_decision(
         selected_api.model.trim().to_string()
     };
     let language = terminal_smart_review_language(&app_config.ui_language);
+    let prepared = build_remote_im_secretary_prepared_prompt(
+        language,
+        contact,
+        current_assistant,
+        history_messages,
+        new_batch_messages,
+    );
+    let request_text = prepared_prompt_to_fast_request_text(&prepared);
+    let record_conversation_id = contact
+        .bound_conversation_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
     let execution = invoke_model_with_policy(
         &resolved_api,
         &model_name,
-        build_remote_im_secretary_prepared_prompt(
-            language,
-            contact,
-            current_assistant,
-            history_messages,
-            new_batch_messages,
-        ),
+        prepared,
         CallPolicy {
             scene: "Remote IM secretary review",
             timeout_secs: Some(12),
@@ -1184,16 +1259,75 @@ async fn run_remote_im_secretary_decision(
     )
     .await;
     push_model_call_log_parts(Some(state), &execution);
-    let reply = execution.result?;
+    let duration_ms = execution.log_parts.elapsed_ms;
+    let reply = match execution.result {
+        Ok(reply) => reply,
+        Err(err) => {
+            if let Some(conversation_id) = record_conversation_id.as_deref() {
+                record_fast_request_turn_best_effort(
+                    state,
+                    conversation_id,
+                    build_fast_request_turn(
+                        "remote_im",
+                        &request_text,
+                        "",
+                        false,
+                        Some(err.clone()),
+                        Some(model_name.clone()),
+                        Some(duration_ms),
+                    ),
+                );
+            }
+            return Err(err);
+        }
+    };
     let raw_text = if reply.final_response_text.trim().is_empty() {
         reply.assistant_text.trim()
     } else {
         reply.final_response_text.trim()
     };
-    let parsed = serde_json::from_str::<RemoteImSecretaryDecisionReply>(
+    let parsed = match serde_json::from_str::<RemoteImSecretaryDecisionReply>(
         remote_im_secretary_extract_json(raw_text),
     )
-    .map_err(|err| format!("解析秘书 JSON 失败: {err}; raw={}", raw_text.trim()))?;
+    {
+        Ok(parsed) => {
+            if let Some(conversation_id) = record_conversation_id.as_deref() {
+                record_fast_request_turn_best_effort(
+                    state,
+                    conversation_id,
+                    build_fast_request_turn(
+                        "remote_im",
+                        &request_text,
+                        raw_text,
+                        true,
+                        None,
+                        Some(model_name.clone()),
+                        Some(duration_ms),
+                    ),
+                );
+            }
+            parsed
+        }
+        Err(err) => {
+            let message = format!("解析秘书 JSON 失败: {err}; raw={}", raw_text.trim());
+            if let Some(conversation_id) = record_conversation_id.as_deref() {
+                record_fast_request_turn_best_effort(
+                    state,
+                    conversation_id,
+                    build_fast_request_turn(
+                        "remote_im",
+                        &request_text,
+                        raw_text,
+                        false,
+                        Some(message.clone()),
+                        Some(model_name.clone()),
+                        Some(duration_ms),
+                    ),
+                );
+            }
+            return Err(message);
+        }
+    };
     Ok(RemoteImSecretaryDecision {
         should_reply: parsed.should_reply,
         reason: parsed.reason.trim().to_string(),

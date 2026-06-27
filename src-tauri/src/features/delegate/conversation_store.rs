@@ -577,6 +577,7 @@ mod delegate_conversation_store_tests {
             shell_autonomous_mode: false,
             archived_at: None,
             messages: vec![test_message("m1", "user"), test_message("m2", "assistant")],
+            fast_request_turns: Vec::new(),
             current_todos: Vec::new(),
             memory_recall_table: Vec::new(),
             plan_mode_enabled: false,
