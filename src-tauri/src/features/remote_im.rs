@@ -627,6 +627,16 @@ fn remote_im_prepare_enqueue_runtime_state(
     Ok((activate_assistant, reason))
 }
 
+fn remote_im_secretary_should_upgrade_guided(
+    state: &AppState,
+    conversation_id: &str,
+) -> Result<bool, String> {
+    Ok(matches!(
+        get_conversation_runtime_state(state, conversation_id)?,
+        MainSessionState::AssistantStreaming
+    ))
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RemoteImSecretaryMessageDigest {
@@ -3034,30 +3044,63 @@ pub(crate) fn remote_im_enqueue_message_internal(
             .await
             {
                 Ok(decision) => {
-                    remote_im_append_channel_log(
-                        &channel_id_for_guided,
-                        "info",
-                        format!(
-                            "[联系人秘书] 忙碌引导判断: contact={}, conversation_id={}, result={}, reason={}",
-                            contact_log_label,
-                            conversation_id_for_guided,
-                            if decision.should_interrupt { "升级引导" } else { "继续排队" },
-                            decision.reason
-                        ),
-                    );
-                    if decision.should_interrupt {
-                        if let Err(err) = mark_queue_event_guided(&state_clone, &event_id_for_guided) {
+                    let should_upgrade_guided = match remote_im_secretary_should_upgrade_guided(
+                        &state_clone,
+                        &conversation_id_for_guided,
+                    ) {
+                        Ok(value) => value,
+                        Err(err) => {
                             remote_im_append_channel_log(
                                 &channel_id_for_guided,
                                 "warn",
                                 format!(
-                                    "[联系人秘书] 忙碌引导升级失败: contact={}, conversation_id={}, event_id={}, error={}",
+                                    "[联系人秘书] 忙碌引导状态判断失败: contact={}, conversation_id={}, event_id={}, error={}",
                                     contact_log_label,
                                     conversation_id_for_guided,
                                     event_id_for_guided,
                                     err
                                 ),
                             );
+                            false
+                        }
+                    };
+                    remote_im_append_channel_log(
+                        &channel_id_for_guided,
+                        "info",
+                        format!(
+                            "[联系人秘书] 忙碌引导判断: contact={}, conversation_id={}, result={}, route={}, reason={}",
+                            contact_log_label,
+                            conversation_id_for_guided,
+                            if decision.should_interrupt { "需要优先处理" } else { "继续排队" },
+                            if decision.should_interrupt {
+                                if should_upgrade_guided {
+                                    "升级引导"
+                                } else {
+                                    "直接激活"
+                                }
+                            } else {
+                                "继续排队"
+                            },
+                            decision.reason
+                        ),
+                    );
+                    if decision.should_interrupt {
+                        if should_upgrade_guided {
+                            if let Err(err) = mark_queue_event_guided(&state_clone, &event_id_for_guided) {
+                                remote_im_append_channel_log(
+                                    &channel_id_for_guided,
+                                    "warn",
+                                    format!(
+                                        "[联系人秘书] 忙碌引导升级失败: contact={}, conversation_id={}, event_id={}, error={}",
+                                        contact_log_label,
+                                        conversation_id_for_guided,
+                                        event_id_for_guided,
+                                        err
+                                    ),
+                                );
+                            }
+                        } else {
+                            trigger_chat_queue_processing(&state_clone);
                         }
                     }
                 }
