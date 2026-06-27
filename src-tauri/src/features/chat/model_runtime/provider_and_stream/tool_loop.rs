@@ -236,6 +236,7 @@ fn push_tool_loop_round_log(
 struct ToolLoopAutoCompactionContext {
     conversation_id: String,
     request_id: Option<String>,
+    remote_im_auto_send_source: Option<RemoteImActivationSource>,
     prompt_mode: PromptBuildMode,
     agent: AgentProfile,
     agents: Vec<AgentProfile>,
@@ -685,6 +686,140 @@ fn remote_im_result_action(tool_result: &str) -> Option<String> {
         .and_then(|value| value.get("action").and_then(Value::as_str).map(str::to_string))
 }
 
+fn tool_loop_assistant_tool_event_text(event: &Value) -> String {
+    match event.get("content") {
+        Some(Value::String(text)) => text.trim().to_string(),
+        Some(Value::Null) | None => String::new(),
+        Some(other) => other.to_string().trim().to_string(),
+    }
+}
+
+fn tool_loop_tool_event_action(event: &Value) -> Option<String> {
+    event
+        .get("content")
+        .and_then(Value::as_str)
+        .and_then(remote_im_result_action)
+        .map(|action| action.trim().to_ascii_lowercase())
+        .filter(|action| !action.is_empty())
+}
+
+fn tool_loop_first_assistant_tool_call_id(event: &Value) -> Option<String> {
+    event
+        .get("tool_calls")
+        .and_then(Value::as_array)
+        .and_then(|calls| calls.first())
+        .and_then(|call| call.get("id"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn tool_loop_tool_result_call_id(event: &Value) -> Option<String> {
+    event
+        .get("tool_call_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn tool_loop_is_first_tool_result_in_group(
+    assistant_tool_call_event: &Value,
+    tool_result_event: &Value,
+) -> bool {
+    let Some(first_call_id) = tool_loop_first_assistant_tool_call_id(assistant_tool_call_event) else {
+        return false;
+    };
+    tool_loop_tool_result_call_id(tool_result_event)
+        .map(|call_id| call_id == first_call_id)
+        .unwrap_or(false)
+}
+
+fn tool_loop_tool_group_has_remote_im_reply_decision(
+    assistant_tool_call_event: &Value,
+    tool_result_event: &Value,
+) -> bool {
+    let action = tool_loop_tool_event_action(tool_result_event);
+    assistant_tool_call_event
+        .get("tool_calls")
+        .and_then(Value::as_array)
+        .map(|calls| {
+            calls.iter().any(|call| {
+                let tool_name = call
+                    .get("function")
+                    .and_then(|function| function.get("name"))
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .unwrap_or_default();
+                let argument_action = call
+                    .get("function")
+                    .and_then(|function| function.get("arguments"))
+                    .and_then(remote_im_extract_action_from_tool_arguments);
+                matches!(tool_name, "contact_reply" | "contact_send_files" | "contact_no_reply")
+                    || (tool_name == "remote_im_send"
+                        && (argument_action
+                            .as_deref()
+                            .is_some_and(remote_im_is_reply_decision_action)
+                            || action.as_deref().is_some_and(remote_im_is_reply_decision_action)))
+            })
+        })
+        .unwrap_or(false)
+}
+
+fn maybe_spawn_remote_im_tool_persist_auto_send(
+    state: &AppState,
+    context: &ToolLoopAutoCompactionContext,
+    assistant_message_id: &str,
+    assistant_tool_call_event: &Value,
+    tool_result_event: &Value,
+) {
+    let Some(activation_source) = context.remote_im_auto_send_source.clone() else {
+        return;
+    };
+    if !tool_loop_is_first_tool_result_in_group(assistant_tool_call_event, tool_result_event) {
+        runtime_log_debug(format!(
+            "[远程IM][工具持久化自动发送] 跳过，任务=tool_persist_auto_send，conversation_id={}，assistant_message_id={}，contact_id={}，reason=not_first_tool_result",
+            context.conversation_id,
+            assistant_message_id,
+            activation_source.remote_contact_id
+        ));
+        return;
+    }
+    let assistant_text = tool_loop_assistant_tool_event_text(assistant_tool_call_event);
+    if assistant_text.is_empty() {
+        runtime_log_info(format!(
+            "[远程IM][工具持久化自动发送] 跳过，任务=tool_persist_auto_send，conversation_id={}，assistant_message_id={}，contact_id={}，reason=empty_text",
+            context.conversation_id,
+            assistant_message_id,
+            activation_source.remote_contact_id
+        ));
+        return;
+    }
+    if tool_loop_tool_group_has_remote_im_reply_decision(
+        assistant_tool_call_event,
+        tool_result_event,
+    ) {
+        runtime_log_info(format!(
+            "[远程IM][工具持久化自动发送] 跳过，任务=tool_persist_auto_send，conversation_id={}，assistant_message_id={}，contact_id={}，reason=contact_tool_decision，text_len={}",
+            context.conversation_id,
+            assistant_message_id,
+            activation_source.remote_contact_id,
+            assistant_text.chars().count()
+        ));
+        return;
+    }
+
+    spawn_remote_im_auto_send_contact_assistant_reply(
+        state.clone(),
+        activation_source,
+        context.conversation_id.clone(),
+        assistant_text,
+        None,
+        Some(assistant_message_id.to_string()),
+    );
+}
+
 fn json_string_field(value: &Value, keys: &[&str]) -> Option<String> {
     keys.iter().find_map(|key| {
         value.get(*key)
@@ -942,8 +1077,8 @@ fn persist_completed_tool_group_result(
             &AssistantMessageToolAppendInput {
                 conversation_id: context.conversation_id.clone(),
                 assistant_message_id: bootstrap_message_id,
-                assistant_tool_event: assistant_tool_call_event,
-                tool_result_event,
+                assistant_tool_event: assistant_tool_call_event.clone(),
+                tool_result_event: tool_result_event.clone(),
                 provider_meta_patch,
             },
         )
@@ -955,6 +1090,13 @@ fn persist_completed_tool_group_result(
                 state,
                 &context.conversation_id,
                 &result.0,
+            );
+            maybe_spawn_remote_im_tool_persist_auto_send(
+                state,
+                context,
+                &result.0,
+                &assistant_tool_call_event,
+                &tool_result_event,
             );
             runtime_log_info(format!(
                 "[聊天] 完成，任务=append_tool_group_result，session={}，conversation_id={}，assistant_message_id={}，tool_event_count={}，tool_name={}，has_backup_record_id={}",

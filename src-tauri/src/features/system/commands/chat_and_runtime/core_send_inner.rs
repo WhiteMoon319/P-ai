@@ -3175,6 +3175,10 @@ async fn send_chat_message_inner(
                     .map(str::trim)
                     .filter(|value| !value.is_empty())
                     .map(ToOwned::to_owned),
+                remote_im_auto_send_source: effective_bound_remote_im_activation_source(
+                    Some(&runtime_context),
+                    &remote_im_activation_sources,
+                ),
                 prompt_mode,
                 agent: current_agent.clone(),
                 agents: snapshot.agents.clone(),
@@ -3739,6 +3743,7 @@ async fn send_chat_message_inner(
             }
         })?;
     let assistant_text = model_reply.assistant_text;
+    let final_response_text = model_reply.final_response_text;
     let activity_reasoning_text = model_reply.activity_reasoning_text;
     let assistant_provider_meta_override = model_reply.assistant_provider_meta;
     let tool_history_events = model_reply.tool_history_events;
@@ -3746,7 +3751,7 @@ async fn send_chat_message_inner(
     let mut remote_im_reply_decision =
         remote_im_extract_reply_decision_from_tool_history(&tool_history_events);
     let pending_remote_im_auto_send_target = resolve_remote_im_auto_send_target(
-        &assistant_text,
+        &final_response_text,
         effective_bound_remote_im_activation_source(
             Some(&runtime_context),
             &remote_im_activation_sources,
@@ -4043,12 +4048,23 @@ async fn send_chat_message_inner(
     }
 
     if let Some(activation_source) = pending_remote_im_auto_send_target {
+        let final_auto_send_message = persisted_assistant_message.clone().filter(|message| {
+            message
+                .parts
+                .iter()
+                .find_map(|part| match part {
+                    MessagePart::Text { text, .. } => Some(text.trim()),
+                    _ => None,
+                })
+                .map(|text| text == final_response_text.trim())
+                .unwrap_or(false)
+        });
         spawn_remote_im_auto_send_contact_assistant_reply(
             state.clone(),
             activation_source,
             conversation_id.clone(),
-            assistant_text.clone(),
-            persisted_assistant_message.clone(),
+            final_response_text.clone(),
+            final_auto_send_message.clone(),
             persisted_assistant_message.as_ref().map(|message| message.id.clone()),
         );
     }
@@ -4057,7 +4073,7 @@ async fn send_chat_message_inner(
             conversation_id,
             latest_user_text,
             assistant_text,
-            final_response_text: model_reply.final_response_text,
+            final_response_text,
             archived_before_send: archived_before_send_any,
             assistant_message: persisted_assistant_message,
             provider_prompt_tokens: trusted_input_tokens,
