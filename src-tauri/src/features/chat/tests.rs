@@ -6095,6 +6095,46 @@
     }
 
     #[test]
+    fn mark_queue_event_guided_should_allow_remote_im_queue_event() {
+        let state = test_chat_runtime_state();
+        set_conversation_runtime_state(&state, "conversation-a", MainSessionState::AssistantStreaming)
+            .expect("set streaming state");
+        let mut event = test_pending_event("conversation-a");
+        event.source = ChatEventSource::RemoteIm;
+        event.runtime_context = Some(runtime_context_new("remote_im", "remote_im_enqueue"));
+
+        let ingress = ingress_chat_event(&state, event).expect("queue event");
+        let event_id = match ingress {
+            ChatEventIngress::Queued { event_id } => event_id,
+            _ => panic!("expected queued remote im candidate"),
+        };
+
+        let updated_conversation_id =
+            mark_queue_event_guided(&state, &event_id).expect("mark guided");
+        assert_eq!(updated_conversation_id.as_deref(), Some("conversation-a"));
+
+        let slots = state
+            .conversation_runtime_slots
+            .lock()
+            .expect("lock slots");
+        let slot = slots.get("conversation-a").expect("conversation slot");
+        let queued = slot
+            .pending_queue
+            .iter()
+            .find(|item| item.id == event_id)
+            .expect("guided event still queued");
+        assert_eq!(queued.queue_mode, ChatQueueMode::Guided);
+        assert!(queued.activate_assistant);
+        assert_eq!(
+            queued
+                .runtime_context
+                .as_ref()
+                .and_then(|ctx| ctx.dispatch_reason.as_deref()),
+            Some("guided_queue")
+        );
+    }
+
+    #[test]
     fn claim_guided_queue_events_for_conversation_should_remove_guided_and_keep_normal_events() {
         let state = test_chat_runtime_state();
         set_conversation_runtime_state(&state, "conversation-a", MainSessionState::AssistantStreaming)

@@ -415,8 +415,8 @@ pub(crate) fn mark_queue_event_guided(
     let mut updated_conversation_id = None::<String>;
     for slot in slots.values_mut() {
         if let Some(event) = slot.pending_queue.iter_mut().find(|item| item.id == event_id) {
-            if !matches!(event.source, ChatEventSource::User) {
-                return Err("只有用户队列消息可以设置为引导".to_string());
+            if !matches!(event.source, ChatEventSource::User | ChatEventSource::RemoteIm) {
+                return Err("只有用户或远程联系人队列消息可以设置为引导".to_string());
             }
             if event.queue_mode == ChatQueueMode::Guided {
                 updated_conversation_id = Some(event.conversation_id.clone());
@@ -424,10 +424,14 @@ pub(crate) fn mark_queue_event_guided(
             }
             event.queue_mode = ChatQueueMode::Guided;
             event.activate_assistant = true;
+            let guided_event_source = match event.source {
+                ChatEventSource::RemoteIm => "remote_im",
+                _ => "user_message",
+            };
             if let Some(runtime_context) = event.runtime_context.as_mut() {
                 runtime_context.dispatch_reason = Some("guided_queue".to_string());
             } else {
-                event.runtime_context = Some(runtime_context_new("user_message", "guided_queue"));
+                event.runtime_context = Some(runtime_context_new(guided_event_source, "guided_queue"));
             }
             updated_conversation_id = Some(event.conversation_id.clone());
             break;
