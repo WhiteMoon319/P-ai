@@ -24,6 +24,9 @@ struct RemoteImEnqueueInput {
     payload: ChatInputPayload,
 }
 
+const FAST_REQUEST_KIND_REMOTE_IM_REPLY_DECISION: &str = "remote_im_reply_decision";
+const FAST_REQUEST_KIND_REMOTE_IM_INTERRUPT_DECISION: &str = "remote_im_interrupt_decision";
+
 fn provider_meta_string(meta: &Option<Value>, key: &str) -> Option<String> {
     meta.as_ref()
         .and_then(|value| value.get(key))
@@ -1153,7 +1156,7 @@ async fn run_remote_im_secretary_guided_decision(
                     state,
                     conversation_id,
                     build_fast_request_turn(
-                        "remote_im",
+                        FAST_REQUEST_KIND_REMOTE_IM_INTERRUPT_DECISION,
                         &request_text,
                         "",
                         false,
@@ -1181,7 +1184,7 @@ async fn run_remote_im_secretary_guided_decision(
                     state,
                     conversation_id,
                     build_fast_request_turn(
-                        "remote_im",
+                        FAST_REQUEST_KIND_REMOTE_IM_INTERRUPT_DECISION,
                         &request_text,
                         raw_text,
                         true,
@@ -1200,7 +1203,7 @@ async fn run_remote_im_secretary_guided_decision(
                     state,
                     conversation_id,
                     build_fast_request_turn(
-                        "remote_im",
+                        FAST_REQUEST_KIND_REMOTE_IM_INTERRUPT_DECISION,
                         &request_text,
                         raw_text,
                         false,
@@ -1311,7 +1314,7 @@ async fn run_remote_im_secretary_decision(
                     state,
                     conversation_id,
                     build_fast_request_turn(
-                        "remote_im",
+                        FAST_REQUEST_KIND_REMOTE_IM_REPLY_DECISION,
                         &request_text,
                         "",
                         false,
@@ -1339,7 +1342,7 @@ async fn run_remote_im_secretary_decision(
                     state,
                     conversation_id,
                     build_fast_request_turn(
-                        "remote_im",
+                        FAST_REQUEST_KIND_REMOTE_IM_REPLY_DECISION,
                         &request_text,
                         raw_text,
                         true,
@@ -1358,7 +1361,7 @@ async fn run_remote_im_secretary_decision(
                     state,
                     conversation_id,
                     build_fast_request_turn(
-                        "remote_im",
+                        FAST_REQUEST_KIND_REMOTE_IM_REPLY_DECISION,
                         &request_text,
                         raw_text,
                         false,

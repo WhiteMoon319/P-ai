@@ -1572,6 +1572,8 @@
       "failed": "失敗",
       "unknownKind": "輕量請求",
       "kindRemoteIm": "遠程 IM",
+      "kindRemoteImReplyDecision": "回覆判斷",
+      "kindRemoteImInterruptDecision": "忙碌打斷判斷",
       "kindTitleGeneration": "標題生成",
       "kindTaskOptimization": "任務優化",
       "kindToolReview": "工具評估",
