@@ -1517,7 +1517,7 @@
         assert_eq!(digests.len(), 7);
         assert_eq!(
             digests.first().map(|item| item.speaker.as_str()),
-            Some("你 售前助理(agent-sales)")
+            Some("售前助理")
         );
         assert!(digests.iter().all(|item| item.text.chars().count() <= 100));
     }
@@ -1557,7 +1557,7 @@
         }, &contact, &Vec::new(), &current_assistant)
         .expect("digest");
 
-        assert_eq!(digest.speaker, "群友 张三(user-7)");
+        assert_eq!(digest.speaker, "群友 张三/user-7");
         assert_eq!(digest.text, "[图片]");
     }
 
@@ -1570,21 +1570,25 @@
         let current_assistant = remote_im_test_secretary_assistant_context();
         let history_messages = vec![
             RemoteImSecretaryMessageDigest {
-                speaker: "群友 张三(user-7)".to_string(),
+                time_text: "2026-06-28 10:00:00".to_string(),
+                speaker: "群友 张三/user-7".to_string(),
                 text: "这个报价我先看一下".to_string(),
             },
             RemoteImSecretaryMessageDigest {
-                speaker: "你 售前助理(agent-sales)".to_string(),
+                time_text: "2026-06-28 10:01:00".to_string(),
+                speaker: "售前助理".to_string(),
                 text: "好的，有问题随时提".to_string(),
             },
         ];
         let new_batch_messages = vec![
             RemoteImSecretaryMessageDigest {
-                speaker: "群友 李四(user-8)".to_string(),
+                time_text: "2026-06-28 10:02:00".to_string(),
+                speaker: "群友 李四/user-8".to_string(),
                 text: "交期今天能不能定".to_string(),
             },
             RemoteImSecretaryMessageDigest {
-                speaker: "群友 张三(user-7)".to_string(),
+                time_text: "2026-06-28 10:03:00".to_string(),
+                speaker: "群友 张三/user-7".to_string(),
                 text: "老板现在就等结论".to_string(),
             },
         ];
@@ -1599,13 +1603,10 @@
 
         assert!(prompt.latest_user_text.contains("当前应答部门："));
         assert!(prompt.latest_user_text.contains("名称：售前部门"));
-        assert!(prompt.latest_user_text.contains("ID：dept-sales"));
         assert!(prompt.latest_user_text.contains("当前助理："));
         assert!(prompt.latest_user_text.contains("名称：售前助理"));
-        assert!(prompt.latest_user_text.contains("ID：agent-sales"));
         assert!(prompt.latest_user_text.contains("当前联系人："));
         assert!(prompt.latest_user_text.contains("名称：项目群"));
-        assert!(prompt.latest_user_text.contains("ID：group-88"));
         assert!(!prompt.latest_user_text.contains("当前人格："));
         assert!(prompt.latest_user_text.contains("最近 7 条已处理历史消息"));
         assert!(prompt
@@ -1614,7 +1615,7 @@
         assert!(prompt.latest_user_text.contains("最后一条是最新消息"));
         assert!(prompt
             .latest_user_text
-            .contains("2. 群友 张三(user-7)（最新）：老板现在就等结论"));
+            .contains("[群友 张三/user-7](2026-06-28 10:03:00)（最新）：老板现在就等结论"));
     }
 
 

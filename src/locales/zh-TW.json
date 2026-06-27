@@ -1479,7 +1479,7 @@
       "title": "工具評估",
       "empty": "目前還沒有可評估的終端或補丁改動。",
       "resultsTab": "代碼審查",
-      "toolsTab": "工具評估",
+      "toolsTab": "工具",
       "delegatesTab": "委託",
       "tasksTab": "任務",
       "delegateEmpty": "目前會話暫無委託",
@@ -1558,7 +1558,7 @@
       "scopeUnknown": "未知範圍"
     },
     "fastRequest": {
-      "tab": "輕量請求",
+      "tab": "雜務",
       "title": "輕量請求",
       "count": "{count} 條記錄",
       "refresh": "刷新輕量請求記錄",

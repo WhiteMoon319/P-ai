@@ -1,21 +1,5 @@
 <template>
-  <div class="flex min-h-0 flex-1 flex-col">
-    <div class="flex items-center justify-between gap-2 px-3 py-2">
-      <div class="min-w-0">
-        <div class="text-sm font-semibold text-base-content">{{ t("chat.fastRequest.title") }}</div>
-        <div class="text-xs text-base-content/55">{{ countLabel }}</div>
-      </div>
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm btn-square h-8 min-h-8 w-8"
-        :disabled="loading || !normalizedConversationId"
-        :title="t('chat.fastRequest.refresh')"
-        @click="loadTurns"
-      >
-        <RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': loading }" />
-      </button>
-    </div>
-
+  <div class="flex min-h-0 flex-1 flex-col py-2">
     <div v-if="errorText" class="mx-4 my-3 rounded-box border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
       {{ errorText }}
     </div>
@@ -32,65 +16,106 @@
       {{ t("chat.fastRequest.empty") }}
     </div>
 
-    <div v-else class="space-y-2 px-2 pb-3">
-      <section
-        v-for="turn in sortedTurns"
-        :key="turn.id || `${turn.createdAt}:${turn.kind}`"
-        class="rounded-lg border border-base-300 bg-base-100 p-3"
+    <template v-else>
+      <CollapsibleGroup
+        v-for="section in fastRequestSections"
+        :key="section.key"
+        :title="section.title"
+        :count="section.items.length"
+        :model-value="isFastRequestSectionCollapsed(section.key)"
+        @update:model-value="toggleFastRequestSection(section.key)"
+        @collapse-all="collapseAllFastRequestSections"
       >
-        <div class="flex min-w-0 items-start justify-between gap-3">
-          <div class="min-w-0">
-            <div class="flex min-w-0 items-center gap-2">
-              <span
-                class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
-                :class="turn.success ? 'bg-success/12 text-success' : 'bg-error/12 text-error'"
+        <div v-if="!isFastRequestSectionCollapsed(section.key)">
+          <section
+            v-for="turn in section.items"
+            :key="turnKey(turn)"
+            class="last:mb-0 mx-1"
+          >
+            <div class="group/card rounded-lg px-2 py-2 transition-colors hover:bg-base-100/70">
+              <button
+                type="button"
+                class="flex w-full min-w-0 items-center gap-2 text-left"
+                :title="turnItemTitle(turn)"
+                @click="openTurnDialog(turn)"
               >
-                <CheckCircle2 v-if="turn.success" class="h-3.5 w-3.5" />
-                <XCircle v-else class="h-3.5 w-3.5" />
-              </span>
-              <div class="min-w-0">
-                <div class="truncate text-sm font-medium text-base-content">{{ kindLabel(turn.kind) }}</div>
-                <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-base-content/55">
-                  <span>{{ turn.success ? t("chat.fastRequest.success") : t("chat.fastRequest.failed") }}</span>
-                  <span v-if="turn.modelName" class="truncate">{{ turn.modelName }}</span>
-                  <span v-if="turn.durationMs !== null && turn.durationMs !== undefined" class="inline-flex items-center gap-1">
-                    <Clock3 class="h-3 w-3" />
-                    {{ durationLabel(turn.durationMs) }}
-                  </span>
+                <span
+                  class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-base-100"
+                  :class="turn.success ? 'text-success' : 'text-error'"
+                >
+                  <CheckCircle2 v-if="turn.success" class="h-4 w-4" />
+                  <XCircle v-else class="h-4 w-4" />
+                </span>
+                <div class="min-w-0 flex-1 overflow-hidden">
+                  <div class="flex min-w-0 items-start justify-between gap-2">
+                    <span class="block min-w-0 flex-1 truncate whitespace-nowrap text-xs font-normal text-base-content">
+                      {{ kindLabel(turn.kind) }}
+                    </span>
+                    <div v-if="timeLabel(turn.createdAt).dateLabel" class="shrink-0 text-right text-[11px] leading-4 text-base-content/55">
+                      {{ timeLabel(turn.createdAt).dateLabel }}
+                    </div>
+                  </div>
+                  <div class="mt-1 flex min-w-0 items-start justify-between gap-2 text-xs text-base-content/65">
+                    <div class="min-w-0 flex-1 truncate">
+                      {{ turnMetaLabel(turn) }}
+                    </div>
+                    <div v-if="timeLabel(turn.createdAt).timeLabel" class="shrink-0 text-right leading-4">
+                      {{ timeLabel(turn.createdAt).timeLabel }}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              </button>
             </div>
-          </div>
-          <div class="shrink-0 text-right text-[11px] leading-4 text-base-content/55">
-            {{ timeLabel(turn.createdAt) }}
+          </section>
+        </div>
+      </CollapsibleGroup>
+    </template>
+  </div>
+
+  <dialog class="modal" :class="{ 'modal-open': !!selectedTurn }">
+    <div class="modal-box max-h-[80vh] max-w-2xl overflow-y-auto">
+      <div class="mb-3 flex items-start justify-between gap-3">
+        <div v-if="selectedTurn" class="min-w-0">
+          <div class="truncate text-sm font-semibold text-base-content">{{ kindLabel(selectedTurn.kind) }}</div>
+          <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-base-content/55">
+            <span>{{ turnMetaLabel(selectedTurn) }}</span>
+            <span v-if="selectedTurn.createdAt">{{ timeLabel(selectedTurn.createdAt).dateLabel }}</span>
+            <span v-if="timeLabel(selectedTurn.createdAt).timeLabel">{{ timeLabel(selectedTurn.createdAt).timeLabel }}</span>
           </div>
         </div>
+        <button type="button" class="btn btn-ghost btn-sm h-8 min-h-8 w-8 min-w-8 p-0" @click="closeTurnDialog">×</button>
+      </div>
 
-        <details class="mt-3 rounded-lg bg-base-200/70">
-          <summary class="cursor-pointer px-2 py-1.5 text-xs font-medium text-base-content/70">
+      <div v-if="selectedTurn" class="space-y-3">
+        <section class="rounded-lg bg-base-200/70">
+          <div class="px-2 py-1.5 text-xs font-medium text-base-content/70">
             {{ t("chat.fastRequest.request") }}
-          </summary>
-          <pre class="max-h-48 overflow-auto whitespace-pre-wrap break-words px-2 pb-2 text-xs leading-5 text-base-content/75">{{ displayText(turn.requestText) }}</pre>
-        </details>
-
-        <details class="mt-2 rounded-lg bg-base-200/70" :open="!turn.success">
-          <summary class="cursor-pointer px-2 py-1.5 text-xs font-medium text-base-content/70">
-            {{ turn.success ? t("chat.fastRequest.response") : t("chat.fastRequest.error") }}
-          </summary>
-          <pre class="max-h-48 overflow-auto whitespace-pre-wrap break-words px-2 pb-2 text-xs leading-5 text-base-content/75">{{ displayText(turn.success ? turn.responseText : (turn.error || turn.responseText)) }}</pre>
-        </details>
-      </section>
+          </div>
+          <pre class="max-h-56 overflow-auto whitespace-pre-wrap break-words px-2 pb-2 text-xs leading-5 text-base-content/75">{{ displayText(selectedTurn.requestText) }}</pre>
+        </section>
+        <section class="rounded-lg bg-base-200/70">
+          <div class="px-2 py-1.5 text-xs font-medium text-base-content/70">
+            {{ selectedTurn.success ? t("chat.fastRequest.response") : t("chat.fastRequest.error") }}
+          </div>
+          <pre class="max-h-56 overflow-auto whitespace-pre-wrap break-words px-2 pb-2 text-xs leading-5 text-base-content/75">{{ displayText(selectedTurn.success ? selectedTurn.responseText : (selectedTurn.error || selectedTurn.responseText)) }}</pre>
+        </section>
+      </div>
     </div>
-  </div>
+    <form method="dialog" class="modal-backdrop">
+      <button type="button" @click="closeTurnDialog">close</button>
+    </form>
+  </dialog>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { CheckCircle2, Clock3, RefreshCw, XCircle } from "@lucide/vue";
+import { CheckCircle2, XCircle } from "@lucide/vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { FastRequestTurn } from "../../../types/app";
 import { toErrorMessage } from "../../../utils/error";
+import { formatConversationListTimeWithMinuteDetails } from "../utils/conversation-time";
+import CollapsibleGroup from "./CollapsibleGroup.vue";
 
 const props = defineProps<{
   conversationId: string;
@@ -102,7 +127,16 @@ const { t, locale } = useI18n();
 const turns = ref<FastRequestTurn[]>([]);
 const loading = ref(false);
 const errorText = ref("");
+const collapsedFastRequestSectionKeys = ref<Record<string, boolean>>({});
+const selectedTurn = ref<FastRequestTurn | null>(null);
 let requestSeq = 0;
+
+type FastRequestSection = {
+  key: string;
+  title: string;
+  items: FastRequestTurn[];
+  order: number;
+};
 
 const normalizedConversationId = computed(() => String(props.conversationId || "").trim());
 
@@ -112,9 +146,23 @@ const sortedTurns = computed(() =>
     .sort((left, right) => timestamp(right.createdAt) - timestamp(left.createdAt)),
 );
 
-const countLabel = computed(() => {
-  const count = sortedTurns.value.length;
-  return t("chat.fastRequest.count", { count });
+const fastRequestSections = computed<FastRequestSection[]>(() => {
+  const sections = new Map<string, FastRequestSection>();
+  for (const turn of sortedTurns.value) {
+    const key = fastRequestSectionKey(turn.kind);
+    const section = sections.get(key) || {
+      key,
+      title: kindLabel(turn.kind),
+      items: [],
+      order: fastRequestKindOrder(turn.kind),
+    };
+    section.items.push(turn);
+    sections.set(key, section);
+  }
+  return Array.from(sections.values()).sort((left, right) => {
+    if (left.order !== right.order) return left.order - right.order;
+    return left.title.localeCompare(right.title, locale.value);
+  });
 });
 
 async function loadTurns() {
@@ -161,12 +209,59 @@ function normalizeTurn(turn: FastRequestTurn): FastRequestTurn {
 }
 
 function kindLabel(kind: string) {
-  const normalized = String(kind || "").trim();
+  const normalized = normalizeKind(kind);
   if (normalized === "remote_im") return t("chat.fastRequest.kindRemoteIm");
   if (normalized === "title_generation") return t("chat.fastRequest.kindTitleGeneration");
   if (normalized === "task_optimization") return t("chat.fastRequest.kindTaskOptimization");
   if (normalized === "tool_review") return t("chat.fastRequest.kindToolReview");
   return normalized || t("chat.fastRequest.unknownKind");
+}
+
+function normalizeKind(kind: string) {
+  return String(kind || "").trim();
+}
+
+function fastRequestSectionKey(kind: string) {
+  return `kind:${normalizeKind(kind) || "unknown"}`;
+}
+
+function fastRequestKindOrder(kind: string) {
+  const normalized = normalizeKind(kind);
+  if (normalized === "remote_im") return 0;
+  if (normalized === "title_generation") return 1;
+  if (normalized === "task_optimization") return 2;
+  if (normalized === "tool_review") return 3;
+  return 99;
+}
+
+function isFastRequestSectionCollapsed(key: string) {
+  return !!collapsedFastRequestSectionKeys.value[key];
+}
+
+function toggleFastRequestSection(key: string) {
+  collapsedFastRequestSectionKeys.value = {
+    ...collapsedFastRequestSectionKeys.value,
+    [key]: !collapsedFastRequestSectionKeys.value[key],
+  };
+}
+
+function collapseAllFastRequestSections() {
+  collapsedFastRequestSectionKeys.value = fastRequestSections.value.reduce((next, section) => {
+    next[section.key] = true;
+    return next;
+  }, { ...collapsedFastRequestSectionKeys.value } as Record<string, boolean>);
+}
+
+function turnKey(turn: FastRequestTurn) {
+  return turn.id || `${turn.createdAt}:${turn.kind}:${String(turn.requestText || "").slice(0, 32)}`;
+}
+
+function openTurnDialog(turn: FastRequestTurn) {
+  selectedTurn.value = turn;
+}
+
+function closeTurnDialog() {
+  selectedTurn.value = null;
 }
 
 function durationLabel(value: number | null | undefined) {
@@ -175,17 +270,22 @@ function durationLabel(value: number | null | undefined) {
   return t("chat.fastRequest.durationMs", { ms: Math.round(ms) });
 }
 
+function turnMetaLabel(turn: FastRequestTurn) {
+  const parts = [
+    turn.success ? t("chat.fastRequest.success") : t("chat.fastRequest.failed"),
+    durationLabel(turn.durationMs),
+    String(turn.modelName || "").trim(),
+  ].filter((item) => String(item || "").trim());
+  return parts.join(" · ");
+}
+
+function turnItemTitle(turn: FastRequestTurn) {
+  return `${kindLabel(turn.kind)}\n${turnMetaLabel(turn)}`;
+}
+
 function timeLabel(raw: string) {
   const value = String(raw || "").trim();
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(locale.value, {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+  return value ? formatConversationListTimeWithMinuteDetails(value, locale.value) : { dateLabel: "", timeLabel: "" };
 }
 
 function timestamp(raw: string) {
@@ -201,6 +301,7 @@ function displayText(text: string | null | undefined) {
 watch(
   () => [props.active !== false, normalizedConversationId.value] as const,
   ([active]) => {
+    selectedTurn.value = null;
     if (!active) return;
     void loadTurns();
   },

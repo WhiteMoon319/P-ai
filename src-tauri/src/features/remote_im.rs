@@ -640,6 +640,7 @@ fn remote_im_secretary_should_upgrade_guided(
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RemoteImSecretaryMessageDigest {
+    time_text: String,
     speaker: String,
     text: String,
 }
@@ -686,26 +687,57 @@ fn remote_im_secretary_contact_type_label(contact_type: &str) -> &str {
     }
 }
 
-fn remote_im_secretary_named_label(prefix: &str, name: &str, id: &str, fallback_name: &str) -> String {
+fn remote_im_secretary_contact_display_name(contact: &RemoteImContact) -> String {
+    let remote_id = contact.remote_contact_id.trim();
+    let remark_name = contact.remark_name.trim();
+    if !remark_name.is_empty() && remark_name != remote_id {
+        return remark_name.to_string();
+    }
+    let remote_name = contact.remote_contact_name.trim();
+    if !remote_name.is_empty() && remote_name != remote_id {
+        return remote_name.to_string();
+    }
+    remote_im_secretary_contact_type_label(&contact.remote_contact_type).to_string()
+}
+
+fn remote_im_secretary_context_display_name(name: &str, id: &str, fallback_name: &str) -> String {
     let name = name.trim();
     let id = id.trim();
-    let resolved_name = if !name.is_empty() {
+    if !name.is_empty() && name != id {
+        name.to_string()
+    } else {
+        fallback_name.to_string()
+    }
+}
+
+fn remote_im_secretary_named_label(
+    prefix: &str,
+    name: &str,
+    id: &str,
+    fallback_name: &str,
+    include_id: bool,
+) -> String {
+    let prefix = prefix.trim();
+    let name = name.trim();
+    let id = id.trim();
+    let resolved_name = if !name.is_empty() && name != id {
         name
-    } else if !id.is_empty() {
-        id
+    } else if !fallback_name.trim().is_empty() {
+        fallback_name.trim()
+    } else if !prefix.is_empty() {
+        prefix
     } else {
-        fallback_name
+        "未知"
     };
-    if prefix.trim().is_empty() {
-        if id.is_empty() {
-            resolved_name.to_string()
-        } else {
-            format!("{resolved_name}({id})")
-        }
-    } else if id.is_empty() {
-        format!("{} {}", prefix.trim(), resolved_name)
+    let base_label = if prefix.is_empty() || prefix == resolved_name {
+        resolved_name.to_string()
     } else {
-        format!("{} {}({})", prefix.trim(), resolved_name, id)
+        format!("{prefix} {resolved_name}")
+    };
+    if include_id && !id.is_empty() {
+        format!("{base_label}/{id}")
+    } else {
+        base_label
     }
 }
 
@@ -787,10 +819,11 @@ fn remote_im_secretary_message_speaker_label(
                     }
                 });
             Some(remote_im_secretary_named_label(
-                "你",
+                "",
                 &speaker_name,
                 speaker_id,
                 "当前助理",
+                false,
             ))
         }
         "user" => {
@@ -805,26 +838,29 @@ fn remote_im_secretary_message_speaker_label(
                         sender_name,
                         sender_id,
                         "群友",
+                        true,
                     ));
                 }
-                let fallback_contact_name = remote_im_contact_display_name(contact);
+                let fallback_contact_name = remote_im_secretary_contact_display_name(contact);
                 let contact_name = remote_im_origin_string(origin, "contact_name")
                     .unwrap_or(fallback_contact_name.as_str());
                 let contact_id = remote_im_origin_string(origin, "contact_id")
                     .unwrap_or(contact.remote_contact_id.as_str());
                 return Some(remote_im_secretary_named_label(
-                    "联系人",
+                    "",
                     contact_name,
                     contact_id,
                     "联系人",
+                    true,
                 ));
             }
-            let fallback_contact_name = remote_im_contact_display_name(contact);
+            let fallback_contact_name = remote_im_secretary_contact_display_name(contact);
             Some(remote_im_secretary_named_label(
-                "联系人",
+                "",
                 &fallback_contact_name,
                 contact.remote_contact_id.as_str(),
                 "联系人",
+                true,
             ))
         }
         _ => None,
@@ -833,6 +869,25 @@ fn remote_im_secretary_message_speaker_label(
 
 fn remote_im_secretary_truncate_text(text: &str, max_chars: usize) -> String {
     text.chars().take(max_chars).collect::<String>()
+}
+
+fn remote_im_secretary_message_time_text(created_at: &str) -> String {
+    let time_text = format_utc_storage_time_to_local_relative_label(created_at);
+    if time_text.trim().is_empty() {
+        "时间未知".to_string()
+    } else {
+        time_text
+    }
+}
+
+fn remote_im_secretary_message_line(
+    item: &RemoteImSecretaryMessageDigest,
+    latest_suffix: &str,
+) -> String {
+    format!(
+        "[{}]({}){}：{}",
+        item.speaker, item.time_text, latest_suffix, item.text
+    )
 }
 
 fn remote_im_secretary_message_digest(
@@ -873,6 +928,7 @@ fn remote_im_secretary_message_digest(
         return None;
     }
     Some(RemoteImSecretaryMessageDigest {
+        time_text: remote_im_secretary_message_time_text(&message.created_at),
         speaker,
         text: remote_im_secretary_truncate_text(&chunks.join("\n"), 100),
     })
@@ -919,7 +975,7 @@ fn remote_im_secretary_messages_to_text(
             } else {
                 ""
             };
-            format!("{}. {}{}：{}", idx + 1, item.speaker, latest_suffix, item.text)
+            remote_im_secretary_message_line(item, latest_suffix)
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -933,13 +989,23 @@ fn build_remote_im_secretary_prepared_prompt(
     new_batch_messages: &[RemoteImSecretaryMessageDigest],
 ) -> PreparedPrompt {
     let guidance = normalize_contact_response_guidance(&contact.response_guidance);
-    let contact_name = remote_im_contact_display_name(contact);
+    let contact_name = remote_im_secretary_contact_display_name(contact);
     let contact_type = remote_im_secretary_contact_type_label(&contact.remote_contact_type);
+    let department_name = remote_im_secretary_context_display_name(
+        &current_assistant.department_name,
+        &current_assistant.department_id,
+        "当前部门",
+    );
+    let agent_name = remote_im_secretary_context_display_name(
+        &current_assistant.agent_name,
+        &current_assistant.agent_id,
+        "当前助理",
+    );
     PreparedPrompt {
         preamble: format!(
             "请使用{language}完成远程联系人应答判断。\n\
 你是正式处理部门入场前的秘书，只负责判断这一次是否应该回应，不负责代写回复。\n\
-你会收到两段内容：最近 7 条已处理历史消息，以及本次未处理新消息。每条消息都只保留了前 100 个字，信息不足时不要过度推断。\n\
+你会收到两段内容：最近 7 条已处理历史消息，以及本次未处理新消息。每条消息以 [发言人/ID](本地差异时间标签) 开头，助理消息可能没有 ID；正文只保留了前 100 个字，信息不足时不要过度推断。\n\
 “未处理边界”之后的消息按时间从旧到新排列，最后一条就是最新消息，应优先围绕它判断是否需要回应。\n\
 请优先遵守“什么时候应该回答”这段规则；如果规则不够，再按常识判断。\n\
 如果无法确定，倾向于 shouldReply=true。\n\
@@ -949,37 +1015,19 @@ JSON 只能包含字段：shouldReply, reason。"
         history_messages: Vec::new(),
         latest_user_text: format!(
             "当前应答部门：\n\
-- 名称：{}\n\
-- ID：{}\n\n\
+- 名称：{}\n\n\
 当前助理：\n\
-- 名称：{}\n\
-- ID：{}\n\n\
+- 名称：{}\n\n\
 当前联系人：\n\
 - 名称：{contact_name}\n\
-- ID：{}\n\
 - 类型：{contact_type}\n\n\
 什么时候应该回答：\n{guidance}\n\n\
 最近 7 条已处理历史消息\n{}\n\n\
 ================ 未处理边界 ================\n\
 以下是本次未处理新消息，按时间从旧到新排列，最后一条是最新消息\n{}\n\n\
 请直接输出 JSON。",
-            current_assistant.department_name,
-            if current_assistant.department_id.trim().is_empty() {
-                "（无）"
-            } else {
-                current_assistant.department_id.as_str()
-            },
-            current_assistant.agent_name,
-            if current_assistant.agent_id.trim().is_empty() {
-                "（无）"
-            } else {
-                current_assistant.agent_id.as_str()
-            },
-            if contact.remote_contact_id.trim().is_empty() {
-                "（无）"
-            } else {
-                contact.remote_contact_id.trim()
-            },
+            department_name,
+            agent_name,
             remote_im_secretary_messages_to_text(history_messages, false),
             remote_im_secretary_messages_to_text(new_batch_messages, true),
         ),
@@ -999,11 +1047,22 @@ fn build_remote_im_secretary_guided_goal(
     new_message: &RemoteImSecretaryMessageDigest,
 ) -> String {
     let guidance = normalize_contact_response_guidance(&contact.response_guidance);
-    let contact_name = remote_im_contact_display_name(contact);
+    let contact_name = remote_im_secretary_contact_display_name(contact);
     let contact_type = remote_im_secretary_contact_type_label(&contact.remote_contact_type);
+    let department_name = remote_im_secretary_context_display_name(
+        &current_assistant.department_name,
+        &current_assistant.department_id,
+        "当前部门",
+    );
+    let agent_name = remote_im_secretary_context_display_name(
+        &current_assistant.agent_name,
+        &current_assistant.agent_id,
+        "当前助理",
+    );
     let current_work_text = current_work_message
-        .map(|item| format!("{}：{}", item.speaker, item.text))
+        .map(|item| remote_im_secretary_message_line(item, ""))
         .unwrap_or_else(|| "（无）".to_string());
+    let new_message_text = remote_im_secretary_message_line(new_message, "（最新）");
     format!(
         "请使用{language}完成远程联系人忙碌中的引导判断。\n\
 你是秘书。助理正在处理当前激活消息，此时又来了新消息。\n\
@@ -1013,33 +1072,17 @@ fn build_remote_im_secretary_guided_goal(
 请优先遵守“什么时候应该回答”这段规则；如果规则不够，再按常识判断。\n\
 只返回一个 JSON 对象，不要输出 Markdown、代码块或额外解释。\n\
 JSON 只能包含字段：shouldInterrupt, reason。\n\n\
-当前应答部门：\n- 名称：{}\n- ID：{}\n\n\
-当前助理：\n- 名称：{}\n- ID：{}\n\n\
-当前联系人：\n- 名称：{contact_name}\n- ID：{}\n- 类型：{contact_type}\n\n\
+当前应答部门：\n- 名称：{}\n\n\
+当前助理：\n- 名称：{}\n\n\
+当前联系人：\n- 名称：{contact_name}\n- 类型：{contact_type}\n\n\
 什么时候应该回答：\n{guidance}\n\n\
 助理当前正在处理的激活消息：\n{}\n\n\
-刚到的新消息：\n{}（最新）：{}\n\n\
+刚到的新消息：\n{}\n\n\
 请直接输出 JSON。",
-        current_assistant.department_name,
-        if current_assistant.department_id.trim().is_empty() {
-            "（无）"
-        } else {
-            current_assistant.department_id.as_str()
-        },
-        current_assistant.agent_name,
-        if current_assistant.agent_id.trim().is_empty() {
-            "（无）"
-        } else {
-            current_assistant.agent_id.as_str()
-        },
-        if contact.remote_contact_id.trim().is_empty() {
-            "（无）"
-        } else {
-            contact.remote_contact_id.trim()
-        },
+        department_name,
+        agent_name,
         current_work_text,
-        new_message.speaker,
-        new_message.text,
+        new_message_text,
     )
 }
 

@@ -1486,7 +1486,7 @@
       "title": "Tool Assessment",
       "empty": "No terminal or patch changes are available for assessment yet.",
       "resultsTab": "Code review",
-      "toolsTab": "Tool assessment",
+      "toolsTab": "Tools",
       "delegatesTab": "Delegates",
       "tasksTab": "Tasks",
       "delegateEmpty": "No delegates in this conversation",
@@ -1565,7 +1565,7 @@
       "scopeUnknown": "Unknown scope"
     },
     "fastRequest": {
-      "tab": "Fast Requests",
+      "tab": "Misc",
       "title": "Fast Requests",
       "count": "{count} record(s)",
       "refresh": "Refresh fast request records",

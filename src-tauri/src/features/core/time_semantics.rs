@@ -112,3 +112,41 @@ fn format_utc_storage_time_to_local_text(raw: &str) -> String {
         normalized
     }
 }
+
+// 与前端 ChatView 的时间分隔标签规则保持一致。
+fn format_offset_datetime_to_local_relative_label(dt: OffsetDateTime) -> String {
+    let now = now_utc();
+    let local = to_local_datetime(dt);
+    let now_local = to_local_datetime(now);
+    let elapsed_minutes = (now - dt).whole_minutes();
+    let clock = format!("{:02}:{:02}", local.hour(), local.minute());
+
+    if local.date() == now_local.date()
+        && local.hour() == now_local.hour()
+        && elapsed_minutes > 0
+    {
+        return format!("{elapsed_minutes} 分钟前");
+    }
+
+    if local.date() == now_local.date() {
+        return clock;
+    }
+
+    let month_day = format!("{:02}-{:02}", local.month() as u8, local.day());
+    if local.year() == now_local.year() {
+        return format!("{month_day} {clock}");
+    }
+
+    format!("{:04}-{month_day} {clock}", local.year())
+}
+
+fn format_utc_storage_time_to_local_relative_label(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if let Some(dt) = parse_rfc3339_time(trimmed) {
+        return format_offset_datetime_to_local_relative_label(dt);
+    }
+    trimmed.to_string()
+}
