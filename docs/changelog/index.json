@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-06-26T23:54:20.957Z",
-  "latestVersion": "v0.15.2",
+  "generatedAt": "2026-06-27T23:34:52.380Z",
+  "latestVersion": "v0.15.3",
   "releases": [
+    {
+      "version": "v0.15.3",
+      "path": "docs/changelog/releases/v0.15.3.md",
+      "summary": "**会话快速请求**：统一记录远程 IM、标题生成、任务优化和工具评估等会话级轻量请求，并在右侧栏新增「杂务」页用于查看请求、回复和错误记录。"
+    },
     {
       "version": "v0.15.2",
       "path": "docs/changelog/releases/v0.15.2.md",
