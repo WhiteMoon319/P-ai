@@ -536,6 +536,54 @@ fn tool_review_value_to_stored_review(raw: &Value) -> Option<ToolReviewStoredRev
     })
 }
 
+fn tool_review_normalize_review_value(raw: Option<Value>) -> Option<Value> {
+    let value = raw?;
+    match &value {
+        Value::Null => None,
+        Value::Object(object) if object.is_empty() => None,
+        _ => Some(value),
+    }
+}
+
+fn tool_review_log_review_kind(review_value: Option<&Value>) -> String {
+    review_value
+        .and_then(|value| value.get("kind").and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("none")
+        .to_string()
+}
+
+fn tool_review_log_review_opinion(review_value: Option<&Value>) -> String {
+    review_value
+        .and_then(|value| {
+            value
+                .get("reviewOpinion")
+                .or_else(|| value.get("review_opinion"))
+                .and_then(Value::as_str)
+        })
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("")
+        .to_string()
+}
+
+fn tool_review_log_item_state(label: &str, conversation_id: &str, item: &ToolReviewCollectedItem) {
+    runtime_log_info(format!(
+        "[工具审查][{}] conversation_id={} batch_key={} call_id={} tool={} order_index={} message_id={} has_review={} review_kind={} review_opinion={}",
+        label,
+        conversation_id,
+        item.batch_key,
+        item.call_id,
+        item.tool_name,
+        item.order_index,
+        item.message_id.trim(),
+        item.review_value.is_some(),
+        tool_review_log_review_kind(item.review_value.as_ref()),
+        tool_review_log_review_opinion(item.review_value.as_ref()),
+    ));
+}
+
 #[tauri::command]
 fn delete_tool_review_report(
     input: DeleteToolReviewReportInput,
@@ -854,11 +902,12 @@ fn collect_tool_review_batches_internal(conversation: &Conversation) -> Vec<Tool
             item.finished_at = Some(message.created_at.clone());
             item.result_text = event.text.trim().to_string();
             item.result_value = serde_json::from_str::<Value>(event.text.trim()).ok();
-            item.review_value = item
-                .result_value
-                .as_ref()
-                .and_then(|value| value.get("toolReview"))
-                .cloned();
+            item.review_value = tool_review_normalize_review_value(
+                item.result_value
+                    .as_ref()
+                    .and_then(|value| value.get("toolReview"))
+                    .cloned(),
+            );
         }
     }
 
@@ -1636,6 +1685,18 @@ fn list_tool_review_batches(
         batches.len(),
         message_count
     ));
+    for batch in &batches {
+        runtime_log_info(format!(
+            "[工具审查][列表] conversation_id={} batch_key={} item_count={} unreviewed_count={}",
+            conversation_id,
+            batch.batch_key,
+            batch.items.len(),
+            batch.items.iter().filter(|item| item.review_value.is_none()).count(),
+        ));
+        for item in &batch.items {
+            tool_review_log_item_state("列表项", conversation_id, item);
+        }
+    }
     Ok(ListToolReviewBatchesOutput {
         current_batch_key,
         batches: batches
@@ -1657,6 +1718,7 @@ fn get_tool_review_item_detail(
     }
     with_tool_review_conversation(state.inner(), conversation_id, |conversation| {
         let item = tool_review_find_item(conversation, call_id)?;
+        tool_review_log_item_state("详情", conversation_id, &item);
         Ok(tool_review_item_detail_from_collected(&item))
     })
 }

@@ -1489,6 +1489,7 @@
       "location": "位置：{location}",
       "noReportContent": "暫無代碼審查內容",
       "evaluated": "已評估",
+      "evaluate": "評估",
       "unevaluated": "未評估",
       "terminalGroup": "終端",
       "terminalCommand": "命令",

@@ -2,11 +2,16 @@
   <div class="flex h-full min-h-0 w-full flex-col gap-2">
     <div v-if="title" class="px-4 pt-3 text-xs text-base-content/65">{{ title }}</div>
     <div
-      class="tool-review-code-main min-h-0 flex-1 overflow-auto"
-      :class="{ 'tool-review-code-main-with-lines': shouldShowLineNumbers }"
+      class="tool-review-code-main relative min-h-0 flex-1 overflow-hidden"
+      :class="{ 'tool-review-code-main-with-lines': isPatchMode }"
+      @mouseenter="scrollbarRef?.reveal()"
+      @mouseleave="scrollbarRef?.hide()"
     >
-      <pre v-if="!highlightedHtml" class="tool-review-raw-pre">{{ code }}</pre>
-      <div v-else class="tool-review-code-view" v-html="highlightedHtml"></div>
+      <div ref="scrollerRef" class="tool-review-code-scroller h-full overflow-auto">
+        <pre v-if="!highlightedHtml" class="tool-review-raw-pre">{{ code }}</pre>
+        <div v-else class="tool-review-code-view" v-html="highlightedHtml"></div>
+      </div>
+      <FloatingScrollbar ref="scrollbarRef" :target="scrollerRef" variant="code-dark" />
     </div>
   </div>
 </template>
@@ -14,6 +19,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { bundledLanguagesInfo, codeToHtml } from "shiki";
+import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 
 const props = defineProps<{
   title?: string;
@@ -22,6 +28,8 @@ const props = defineProps<{
   isDark?: boolean;
 }>();
 
+const scrollerRef = ref<HTMLElement | null>(null);
+const scrollbarRef = ref<InstanceType<typeof FloatingScrollbar> | null>(null);
 const highlightedHtml = ref("");
 let highlightAbort: AbortController | null = null;
 
@@ -29,9 +37,7 @@ const SHIKI_LANGUAGE_KEYS = new Set(
   bundledLanguagesInfo.flatMap((item) => [item.id, ...(item.aliases || [])]).map((item) => item.toLowerCase()),
 );
 
-const shouldShowLineNumbers = computed(() =>
-  props.mode === "patch" && /^@@\s+line\b|^@@\s+lines\b/m.test(String(props.code || ""))
-);
+const isPatchMode = computed(() => props.mode === "patch");
 
 async function updateHighlightedCode() {
   const code = String(props.code || "");
@@ -49,7 +55,7 @@ async function updateHighlightedCode() {
       theme: "github-dark",
     });
     if (signal.aborted) return;
-    highlightedHtml.value = normalizeShikiLineHtml(html);
+    highlightedHtml.value = normalizeShikiLineHtml(html, code, props.mode);
   } catch {
     if (signal.aborted) return;
     highlightedHtml.value = "";
@@ -61,8 +67,73 @@ function resolveLanguage() {
   return SHIKI_LANGUAGE_KEYS.has(key) ? key : "text";
 }
 
-function normalizeShikiLineHtml(html: string) {
-  return html.replace(/<\/span>\s+<span class="line"/g, '</span><span class="line"');
+function normalizeShikiLineHtml(html: string, code: string, mode?: "plain" | "patch") {
+  const compactHtml = html.replace(/<\/span>\s+<span class="line"/g, '</span><span class="line"');
+  if (mode !== "patch") return compactHtml;
+  const lineMeta = buildPatchLineMeta(code);
+  let lineIndex = 0;
+  return compactHtml.replace(/<span class="line"/g, () => {
+    const meta = lineMeta[lineIndex] || { gutter: "", kindClass: "" };
+    lineIndex += 1;
+    return `<span class="line ${meta.kindClass}" data-gutter="${escapeHtmlAttribute(meta.gutter)}"`;
+  });
+}
+
+function buildPatchLineMeta(code: string) {
+  const lines = String(code || "").split("\n");
+  const out = [] as Array<{ gutter: string; kindClass: string }>;
+  let oldLineNumber: number | null = null;
+  let newLineNumber: number | null = null;
+  for (const line of lines) {
+    const headerMatch = line.match(/^@@\s+lines?\s+(\d+)(?:-\d+)?(?:\s*,\s*\d+(?:-\d+)?)?\s+@@/i);
+    if (headerMatch) {
+      const start = Number(headerMatch[1]);
+      oldLineNumber = Number.isFinite(start) ? start : null;
+      newLineNumber = Number.isFinite(start) ? start : null;
+      out.push({ gutter: "", kindClass: "tool-review-patch-line-header" });
+      continue;
+    }
+
+    if (line.startsWith("-")) {
+      out.push({
+        gutter: formatPatchGutter(oldLineNumber, null),
+        kindClass: "tool-review-patch-line-delete",
+      });
+      if (oldLineNumber != null) oldLineNumber += 1;
+      continue;
+    }
+
+    if (line.startsWith("+")) {
+      out.push({
+        gutter: formatPatchGutter(null, newLineNumber),
+        kindClass: "tool-review-patch-line-add",
+      });
+      if (newLineNumber != null) newLineNumber += 1;
+      continue;
+    }
+
+    out.push({
+      gutter: formatPatchGutter(oldLineNumber, newLineNumber),
+      kindClass: "tool-review-patch-line-context",
+    });
+    if (oldLineNumber != null) oldLineNumber += 1;
+    if (newLineNumber != null) newLineNumber += 1;
+  }
+  return out;
+}
+
+function formatPatchGutter(oldLineNumber: number | null, newLineNumber: number | null) {
+  const left = oldLineNumber == null ? "" : String(oldLineNumber);
+  const right = newLineNumber == null ? "" : String(newLineNumber);
+  return `${left.padStart(4, " ")} ${right.padStart(4, " ")}`;
+}
+
+function escapeHtmlAttribute(value: string) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 watch(
@@ -84,6 +155,16 @@ onBeforeUnmount(() => {
 <style scoped>
 .tool-review-code-main {
   background: #101828;
+}
+
+.tool-review-code-scroller {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.tool-review-code-scroller::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .tool-review-code-view {
@@ -127,28 +208,33 @@ onBeforeUnmount(() => {
 
 :deep(.tool-review-code-view .line::before) {
   display: inline-block;
-  width: 2.75rem;
-  padding-right: 0.75rem;
+  width: 5.75rem;
+  padding: 0 0.75rem 0 0.5rem;
   text-align: right;
   color: #64748b;
   user-select: none;
-}
-
-.tool-review-code-main-with-lines :deep(.tool-review-code-view .shiki) {
-  counter-reset: tool-review-code-line;
-}
-
-.tool-review-code-main-with-lines :deep(.tool-review-code-view .line) {
-  counter-increment: tool-review-code-line;
+  white-space: pre;
 }
 
 .tool-review-code-main-with-lines :deep(.tool-review-code-view .line::before) {
-  content: counter(tool-review-code-line);
+  content: attr(data-gutter);
 }
 
 .tool-review-code-main:not(.tool-review-code-main-with-lines) :deep(.tool-review-code-view .line::before) {
   content: "";
   width: 0;
-  padding-right: 0;
+  padding: 0;
+}
+
+.tool-review-code-main-with-lines :deep(.tool-review-code-view .line.tool-review-patch-line-delete) {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.tool-review-code-main-with-lines :deep(.tool-review-code-view .line.tool-review-patch-line-add) {
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.tool-review-code-main-with-lines :deep(.tool-review-code-view .line.tool-review-patch-line-header) {
+  color: #c084fc;
 }
 </style>

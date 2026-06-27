@@ -13,18 +13,6 @@
 
       <template v-if="activeTab === 'tools' && currentBatch">
         <div class="flex min-h-full flex-col">
-          <div class="sticky top-0 z-30 bg-base-200 px-4">
-            <button
-              type="button"
-              class="btn btn-sm w-full gap-1.5 bg-base-100 hover:bg-base-100"
-              :disabled="batchReviewing || currentBatchUnreviewedCount <= 0"
-              @click="emit('reviewBatch', currentBatch.batchKey)"
-            >
-              <span v-if="batchReviewing" class="loading loading-spinner loading-xs"></span>
-              <CircleCheckBig v-else class="size-4" aria-hidden="true" />
-              <span>{{ t("chat.toolReview.evaluateBatchWithCount", { count: currentBatchUnreviewedCount }) }}</span>
-            </button>
-          </div>
           <div class="flex min-h-0 flex-1 flex-col py-2">
             <CollapsibleGroup
               v-for="group in reviewGroups"
@@ -42,8 +30,10 @@
                   :item="item"
                   :detail="detailMap[item.callId]"
                   :loading="detailLoadingCallId === item.callId"
+                  :reviewing="reviewingCallId === item.callId"
                   :is-dark="markdownIsDark"
                   @load-detail="emit('loadItemDetail', $event)"
+                  @review="emit('reviewItem', $event)"
                 />
               </div>
             </CollapsibleGroup>
@@ -196,7 +186,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, useAttrs } from "vue";
 import { useI18n } from "vue-i18n";
-import { CircleCheckBig } from "@lucide/vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ArchiveBlockPage, ChatMessage, ConversationDelegateStatusSummary, ShellWorkspace } from "../../../types/app";
 import { toErrorMessage } from "../../../utils/error";
@@ -449,10 +438,6 @@ const nextBatch = computed(() => {
   return props.batches[index + 1] || null;
 });
 
-const batchReviewing = computed(() =>
-  !!currentBatch.value && props.batchReviewingKey === currentBatch.value.batchKey
-);
-
 async function openDelegateResult(status: import("../../../types/app").ConversationDelegateStatusSummary) {
   const conversationId = String(status?.conversationId || "").trim();
   if (!conversationId) return;
@@ -579,10 +564,6 @@ const reviewGroups = computed<ToolReviewGroup[]>(() => {
   );
   return groups;
 });
-
-const currentBatchUnreviewedCount = computed(() =>
-  currentBatch.value?.items.filter((item) => !item.hasReview).length ?? 0
-);
 
 function sortByOrderIndex(left: ToolReviewItemSummary, right: ToolReviewItemSummary) {
   return Number(left.orderIndex || 0) - Number(right.orderIndex || 0);

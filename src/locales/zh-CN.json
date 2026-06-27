@@ -1485,6 +1485,7 @@
       "location": "位置：{location}",
       "noReportContent": "暂无代码审查内容",
       "evaluated": "已评估",
+      "evaluate": "评估",
       "unevaluated": "未评估",
       "terminalGroup": "终端",
       "terminalCommand": "命令",

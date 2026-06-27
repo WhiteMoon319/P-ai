@@ -1496,6 +1496,7 @@
       "location": "Location: {location}",
       "noReportContent": "No code review content",
       "evaluated": "Assessed",
+      "evaluate": "Assess",
       "unevaluated": "Not assessed",
       "terminalGroup": "Terminal",
       "terminalCommand": "Command",

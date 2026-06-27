@@ -1,28 +1,66 @@
 <template>
   <section class="last:mb-0 mx-1">
-    <button
-      type="button"
-      class="group/card flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-base-100/70"
-      :disabled="loading"
-      @click="openChanges"
+    <div
+      class="group/card relative flex items-center gap-2 rounded-lg px-2 py-2 transition-colors hover:bg-base-100/70"
+      @contextmenu.prevent="openContextMenu"
     >
-      <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-base-100 text-xs font-semibold text-base-content/65">
-        #{{ item.orderIndex }}
-      </div>
-      <div class="min-w-0 flex-1 overflow-hidden">
-        <div class="flex min-w-0 items-start justify-between gap-2">
-          <span class="block min-w-0 flex-1 truncate whitespace-nowrap text-xs font-normal text-base-content">{{ title }}</span>
-          <div v-if="timeDateLabel" class="shrink-0 text-right text-[11px] leading-4 text-base-content/55">{{ timeDateLabel }}</div>
+      <button
+        type="button"
+        class="flex min-w-0 flex-1 items-center gap-2 text-left"
+        :disabled="loading"
+        @click="openChanges"
+      >
+        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-base-100 text-xs font-semibold text-base-content/65">
+          #{{ item.orderIndex }}
         </div>
-        <div class="mt-1 flex min-w-0 items-start justify-between gap-2 text-xs text-base-content/65">
-          <div class="min-w-0 flex-1 truncate">{{ reviewOpinionText }}</div>
-          <div v-if="timeMinuteLabel" class="shrink-0 text-right leading-4">
-            {{ timeMinuteLabel }}
+        <div class="min-w-0 flex-1 overflow-hidden">
+          <div class="flex min-w-0 items-start justify-between gap-2">
+            <span class="block min-w-0 flex-1 truncate whitespace-nowrap text-xs font-normal text-base-content">{{ title }}</span>
+            <div v-if="timeDateLabel" class="shrink-0 text-right text-[11px] leading-4 text-base-content/55">{{ timeDateLabel }}</div>
+          </div>
+          <div class="mt-1 flex min-w-0 items-start justify-between gap-2 text-xs text-base-content/65">
+            <div class="min-w-0 flex-1 truncate">{{ reviewOpinionText }}</div>
+            <div v-if="timeMinuteLabel" class="shrink-0 text-right leading-4">
+              {{ timeMinuteLabel }}
+            </div>
           </div>
         </div>
+        <span v-if="loading" class="loading loading-spinner loading-xs shrink-0 text-base-content/55"></span>
+      </button>
+      <div v-if="item.hasReview" class="shrink-0 text-[11px] leading-5 text-base-content/45">
+        {{ t("chat.toolReview.evaluated") }}
       </div>
-      <span v-if="loading" class="loading loading-spinner loading-xs shrink-0 text-base-content/55"></span>
-    </button>
+      <div
+        v-else
+        class="shrink-0 text-[11px] leading-5 text-base-content/45"
+      >
+        {{ t("chat.toolReview.unevaluated") }}
+      </div>
+
+      <div
+        v-if="contextMenuOpen"
+        class="fixed z-50 w-36 rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
+        :style="{ left: `${contextMenuPosition.x}px`, top: `${contextMenuPosition.y}px` }"
+        @pointerdown.stop
+      >
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm h-8 w-full justify-start px-2 text-sm font-normal"
+          @click.stop="handleViewAction"
+        >
+          {{ t("chat.toolReview.view") }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm h-8 w-full justify-start px-2 text-sm font-normal"
+          :disabled="item.hasReview || loading || reviewing"
+          @click.stop="handleReviewAction"
+        >
+          <span v-if="reviewing" class="loading loading-spinner loading-xs"></span>
+          <span v-else>{{ t("chat.toolReview.evaluate") }}</span>
+        </button>
+      </div>
+    </div>
   </section>
 
   <ToolReviewChangesDialog
@@ -40,7 +78,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import type { ToolReviewItemDetail, ToolReviewItemSummary } from "../composables/use-chat-tool-review";
 import ToolReviewChangesDialog from "./ToolReviewChangesDialog.vue";
@@ -50,19 +88,24 @@ const props = withDefaults(defineProps<{
   item: ToolReviewItemSummary;
   detail?: ToolReviewItemDetail;
   loading: boolean;
+  reviewing?: boolean;
   isDark?: boolean;
 }>(), {
   detail: undefined,
+  reviewing: false,
   isDark: false,
 });
 
 const emit = defineEmits<{
   (e: "loadDetail", callId: string): void;
+  (e: "review", callId: string): void;
 }>();
 
 const { t, locale } = useI18n();
 const changesDialogRef = ref<{ openChangesDialog: () => void; closeChangesDialog: () => void } | null>(null);
 const pendingOpen = ref(false);
+const contextMenuOpen = ref(false);
+const contextMenuPosition = ref({ x: 0, y: 0 });
 
 function isTerminalTool(toolName: string) {
   const normalized = String(toolName || "").trim();
@@ -114,6 +157,7 @@ watch(() => props.detail, (detail) => {
 });
 
 function openChanges() {
+  closeContextMenu();
   if (props.detail) {
     changesDialogRef.value?.openChangesDialog();
     return;
@@ -121,6 +165,49 @@ function openChanges() {
   pendingOpen.value = true;
   emit("loadDetail", props.item.callId);
 }
+
+function openContextMenu(event: MouseEvent) {
+  contextMenuPosition.value = {
+    x: Math.max(8, Math.min(event.clientX, window.innerWidth - 160)),
+    y: Math.max(8, Math.min(event.clientY, window.innerHeight - 96)),
+  };
+  contextMenuOpen.value = true;
+}
+
+function closeContextMenu() {
+  contextMenuOpen.value = false;
+}
+
+function handleViewAction() {
+  closeContextMenu();
+  openChanges();
+}
+
+function handleReviewAction() {
+  closeContextMenu();
+  if (props.item.hasReview || props.loading || props.reviewing) return;
+  emit("review", props.item.callId);
+}
+
+function handleGlobalPointerDown() {
+  closeContextMenu();
+}
+
+function handleGlobalEscape(event: KeyboardEvent) {
+  if (event.key === "Escape") {
+    closeContextMenu();
+  }
+}
+
+onMounted(() => {
+  window.addEventListener("pointerdown", handleGlobalPointerDown);
+  window.addEventListener("keydown", handleGlobalEscape);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("pointerdown", handleGlobalPointerDown);
+  window.removeEventListener("keydown", handleGlobalEscape);
+});
 
 function patchFileName() {
   const paths = Array.isArray(props.item.affectedPaths) ? props.item.affectedPaths : [];
