@@ -403,9 +403,10 @@ pub(crate) fn recall_queue_event(
     Ok(removed)
 }
 
-pub(crate) fn mark_queue_event_guided(
+pub(crate) fn mark_queue_event_guided_with_log(
     state: &AppState,
     event_id: &str,
+    emit_log: bool,
 ) -> Result<Option<String>, String> {
     let _dequeue_guard = state
         .dequeue_lock
@@ -439,13 +440,22 @@ pub(crate) fn mark_queue_event_guided(
     }
     drop(slots);
     if let Some(conversation_id) = updated_conversation_id.as_deref() {
-        runtime_log_info(format!(
-            "[引导投送] 开始，任务=mark_queue_event_guided，conversation_id={}，event_id={}",
-            conversation_id, event_id
-        ));
+        if emit_log {
+            runtime_log_info(format!(
+                "[引导投送] 开始，任务=mark_queue_event_guided，conversation_id={}，event_id={}",
+                conversation_id, event_id
+            ));
+        }
         emit_chat_queue_snapshot(state);
     }
     Ok(updated_conversation_id)
+}
+
+pub(crate) fn mark_queue_event_guided(
+    state: &AppState,
+    event_id: &str,
+) -> Result<Option<String>, String> {
+    mark_queue_event_guided_with_log(state, event_id, true)
 }
 
 pub(crate) fn clear_conversation_queue(
@@ -2565,57 +2575,58 @@ async fn process_conversation_batch(
                     department_id: current_assistant.department_id.clone(),
                     agent_id: current_assistant.agent_id.clone(),
                 });
-                if remote_im_contact_uses_smart_judge(&contact) {
-                    let previous_history_messages = persisted_conversation_before_flush
-                        .as_ref()
-                        .map(|conversation| conversation.messages.as_slice())
-                        .unwrap_or(&[]);
-                    let secretary_recent_history = remote_im_collect_secretary_recent_messages(
-                        previous_history_messages,
-                        7,
-                        &contact,
-                        &scheduler_agents,
-                        &current_assistant,
-                    );
-                    let secretary_new_batch_messages = remote_im_collect_secretary_recent_messages(
-                        &persisted_batch_messages,
-                        persisted_batch_messages.len(),
-                        &contact,
-                        &scheduler_agents,
-                        &current_assistant,
-                    );
-                    let decision = match run_remote_im_secretary_decision(
-                        state,
-                        &contact,
-                        &current_assistant,
-                        &secretary_recent_history,
-                        &secretary_new_batch_messages,
-                    )
-                    .await
-                    {
-                        Ok(result) => result,
-                        Err(err) => {
-                            runtime_log_warn(format!(
-                                "[远程联系人秘书] 判断失败，降级为始终回复: conversation_id={}, contact_id={}, error={}",
-                                conversation_id, contact.id, err
-                            ));
-                            remote_im_append_channel_log(
-                                &contact.channel_id,
-                                "warn",
-                                format!(
-                                    "[联系人秘书] 智能判断失败: contact={}, conversation_id={}, strategy=smart_judge, fallback=always_reply, error={}",
-                                    remote_im_contact_log_label(&contact),
-                                    conversation_id,
-                                    err
-                                ),
-                            );
-                            RemoteImSecretaryDecision {
-                                should_reply: true,
-                                reason: format!("秘书判断失败，已降级为始终回复：{err}"),
-                                model_name: String::new(),
-                            }
+                let previous_history_messages = persisted_conversation_before_flush
+                    .as_ref()
+                    .map(|conversation| conversation.messages.as_slice())
+                    .unwrap_or(&[]);
+                let secretary_recent_history = remote_im_collect_secretary_recent_messages(
+                    previous_history_messages,
+                    7,
+                    &contact,
+                    &scheduler_agents,
+                    &current_assistant,
+                );
+                let secretary_new_batch_messages = remote_im_collect_secretary_recent_messages(
+                    &persisted_batch_messages,
+                    persisted_batch_messages.len(),
+                    &contact,
+                    &scheduler_agents,
+                    &current_assistant,
+                );
+                let decision = match run_remote_im_secretary_decision(
+                    state,
+                    &contact,
+                    &current_assistant,
+                    &secretary_recent_history,
+                    &secretary_new_batch_messages,
+                )
+                .await
+                {
+                    Ok(result) => result,
+                    Err(err) => {
+                        runtime_log_warn(format!(
+                            "[远程联系人秘书] 判断失败，降级为始终回复: conversation_id={}, contact_id={}, error={}",
+                            conversation_id, contact.id, err
+                        ));
+                        remote_im_append_channel_log(
+                            &contact.channel_id,
+                            "warn",
+                            format!(
+                                "[联系人秘书] 智能判断失败: contact={}, conversation_id={}, strategy=smart_judge, fallback=always_reply, error={}",
+                                remote_im_contact_log_label(&contact),
+                                conversation_id,
+                                err
+                            ),
+                        );
+                        RemoteImSecretaryDecision {
+                            should_reply: true,
+                            reason: format!("秘书判断失败，已降级为始终回复：{err}"),
+                            model_name: String::new(),
+                            emit_log: true,
                         }
-                    };
+                    }
+                };
+                if decision.emit_log {
                     eprintln!(
                         "[远程联系人秘书] 决策完成: conversation_id={}, contact_id={}, should_reply={}, model={}, reason={}",
                         conversation_id,
@@ -2646,24 +2657,24 @@ async fn process_conversation_batch(
                             decision.reason
                         ),
                     );
-                    if !decision.should_reply {
-                        should_activate = false;
-                        remote_im_skip_decision = Some("no_reply".to_string());
-                        let follow_up_sources = remote_im_finalize_round_completion(
-                            state,
-                            &activated_remote_im_sources,
-                            Some("no_reply"),
-                            None,
-                            None,
-                            &history_flush_time,
-                        )?;
-                        if !follow_up_sources.is_empty() {
-                            runtime_log_warn(format!(
-                                "[远程联系人秘书] 判定不回复后仍出现待办续跑，当前先跳过: conversation_id={}, source_count={}",
-                                conversation_id,
-                                follow_up_sources.len()
-                            ));
-                        }
+                }
+                if !decision.should_reply {
+                    should_activate = false;
+                    remote_im_skip_decision = Some("no_reply".to_string());
+                    let follow_up_sources = remote_im_finalize_round_completion(
+                        state,
+                        &activated_remote_im_sources,
+                        Some("no_reply"),
+                        None,
+                        None,
+                        &history_flush_time,
+                    )?;
+                    if !follow_up_sources.is_empty() {
+                        runtime_log_warn(format!(
+                            "[远程联系人秘书] 判定不回复后仍出现待办续跑，当前先跳过: conversation_id={}, source_count={}",
+                            conversation_id,
+                            follow_up_sources.len()
+                        ));
                     }
                 }
             }

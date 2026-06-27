@@ -662,6 +662,7 @@ struct RemoteImSecretaryDecision {
     should_reply: bool,
     reason: String,
     model_name: String,
+    emit_log: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -677,9 +678,7 @@ struct RemoteImSecretaryGuideDecisionReply {
 struct RemoteImSecretaryGuideDecision {
     should_interrupt: bool,
     reason: String,
-}
-fn remote_im_contact_uses_smart_judge(contact: &RemoteImContact) -> bool {
-    normalize_contact_response_strategy(&contact.response_strategy) == "smart_judge"
+    emit_log: bool,
 }
 
 fn remote_im_secretary_contact_type_label(contact_type: &str) -> &str {
@@ -1096,6 +1095,14 @@ async fn run_remote_im_secretary_guided_decision(
     current_work_message: Option<&RemoteImSecretaryMessageDigest>,
     new_message: &RemoteImSecretaryMessageDigest,
 ) -> Result<RemoteImSecretaryGuideDecision, String> {
+    if normalize_contact_response_strategy(&contact.response_strategy) == "always_reply" {
+        return Ok(RemoteImSecretaryGuideDecision {
+            should_interrupt: true,
+            reason: String::new(),
+            emit_log: false,
+        });
+    }
+
     let review_api_config_id = current_tool_review_api_config_id(state)?
         .ok_or_else(|| "未配置快速模型".to_string())?;
     let app_config = state_read_config_cached(state)?;
@@ -1225,6 +1232,7 @@ async fn run_remote_im_secretary_guided_decision(
     Ok(RemoteImSecretaryGuideDecision {
         should_interrupt: parsed.should_interrupt,
         reason: parsed.reason.trim().to_string(),
+        emit_log: true,
     })
 }
 fn remote_im_secretary_extract_json(raw: &str) -> &str {
@@ -1263,6 +1271,15 @@ async fn run_remote_im_secretary_decision(
     history_messages: &[RemoteImSecretaryMessageDigest],
     new_batch_messages: &[RemoteImSecretaryMessageDigest],
 ) -> Result<RemoteImSecretaryDecision, String> {
+    if normalize_contact_response_strategy(&contact.response_strategy) == "always_reply" {
+        return Ok(RemoteImSecretaryDecision {
+            should_reply: true,
+            reason: String::new(),
+            model_name: String::new(),
+            emit_log: false,
+        });
+    }
+
     let review_api_config_id = current_tool_review_api_config_id(state)?
         .ok_or_else(|| "未配置快速模型".to_string())?;
     let app_config = state_read_config_cached(state)?;
@@ -1378,6 +1395,7 @@ async fn run_remote_im_secretary_decision(
         should_reply: parsed.should_reply,
         reason: parsed.reason.trim().to_string(),
         model_name,
+        emit_log: true,
     })
 }
 
@@ -3101,7 +3119,7 @@ pub(crate) fn remote_im_enqueue_message_internal(
         &runtime.remote_im_contacts[contact_idx],
         &text,
     )?;
-    let should_run_busy_guided_secretary = {
+    let should_handle_busy_guided_entry = {
         let runtime_states = lock_remote_im_contact_runtime_states(state)?;
         runtime_states
             .get(&contact_id)
@@ -3159,10 +3177,9 @@ pub(crate) fn remote_im_enqueue_message_internal(
             state_reason
         ),
     );
-    if should_run_busy_guided_secretary
-        && normalize_contact_response_strategy(&runtime.remote_im_contacts[contact_idx].response_strategy)
-            == "smart_judge"
-    {
+    let busy_guided_candidate =
+        should_handle_busy_guided_entry && matches!(&ingress, ChatEventIngress::Queued { .. });
+    if busy_guided_candidate {
         let state_clone = state.clone();
         let contact_for_guided = runtime.remote_im_contacts[contact_idx].clone();
         let channel_id_for_guided = input.channel_id.trim().to_string();
@@ -3244,29 +3261,35 @@ pub(crate) fn remote_im_enqueue_message_internal(
                             false
                         }
                     };
-                    remote_im_append_channel_log(
-                        &channel_id_for_guided,
-                        "info",
-                        format!(
-                            "[联系人秘书] 忙碌引导判断: contact={}, conversation_id={}, result={}, route={}, reason={}",
-                            contact_log_label,
-                            conversation_id_for_guided,
-                            if decision.should_interrupt { "需要优先处理" } else { "继续排队" },
-                            if decision.should_interrupt {
-                                if should_upgrade_guided {
-                                    "升级引导"
+                    if decision.emit_log {
+                        remote_im_append_channel_log(
+                            &channel_id_for_guided,
+                            "info",
+                            format!(
+                                "[联系人秘书] 忙碌引导判断: contact={}, conversation_id={}, result={}, route={}, reason={}",
+                                contact_log_label,
+                                conversation_id_for_guided,
+                                if decision.should_interrupt { "需要优先处理" } else { "继续排队" },
+                                if decision.should_interrupt {
+                                    if should_upgrade_guided {
+                                        "升级引导"
+                                    } else {
+                                        "直接激活"
+                                    }
                                 } else {
-                                    "直接激活"
-                                }
-                            } else {
-                                "继续排队"
-                            },
-                            decision.reason
-                        ),
-                    );
+                                    "继续排队"
+                                },
+                                decision.reason
+                            ),
+                        );
+                    }
                     if decision.should_interrupt {
                         if should_upgrade_guided {
-                            if let Err(err) = mark_queue_event_guided(&state_clone, &event_id_for_guided) {
+                            if let Err(err) = mark_queue_event_guided_with_log(
+                                &state_clone,
+                                &event_id_for_guided,
+                                decision.emit_log,
+                            ) {
                                 remote_im_append_channel_log(
                                     &channel_id_for_guided,
                                     "warn",
