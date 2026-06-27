@@ -467,19 +467,6 @@ fn remote_im_is_mute_expired(mute_until: &str, now: time::OffsetDateTime) -> boo
     parse_iso(mute_until).map(|value| value <= now).unwrap_or(true)
 }
 
-fn remote_im_patience_exhausted(
-    contact: &RemoteImContact,
-    runtime: &RemoteImContactRuntimeState,
-) -> bool {
-    let Some(last_success_at) = runtime.last_success_reply_at.as_deref() else {
-        return false;
-    };
-    let elapsed_seconds = parse_iso(last_success_at)
-        .map(|last| (now_utc() - last).whole_seconds().max(0) as u64)
-        .unwrap_or_default();
-    elapsed_seconds > contact.patience_seconds
-}
-
 fn remote_im_should_activate_while_away(
     contact: &RemoteImContact,
     message_text: &str,
@@ -598,27 +585,17 @@ fn remote_im_prepare_enqueue_runtime_state(
             (activate, format!("{mute_prefix}{reason}"))
         }
         RemoteImPresenceState::Present => {
-            let keyword_mode = contact.activation_mode.trim().eq_ignore_ascii_case("keyword");
-            let keyword_matched = !keyword_mode || remote_im_keyword_matched(contact, message_text);
-            if runtime.work_state == RemoteImWorkState::Idle
-                && keyword_mode
-                && !keyword_matched
-                && remote_im_patience_exhausted(contact, runtime)
-            {
-                runtime.presence_state = RemoteImPresenceState::Away;
-                runtime.has_pending = false;
-                (
-                    false,
-                    format!("{mute_prefix}present + idle 未命中 keyword 且耐心耗尽，切换为离场"),
-                )
-            } else if runtime.work_state == RemoteImWorkState::Busy {
+            if runtime.work_state == RemoteImWorkState::Busy {
                 runtime.has_pending = true;
                 (
                     true,
                     format!("{mute_prefix}present + busy，新消息入队，等待当前轮次收尾后出队激活"),
                 )
             } else {
-                (true, format!("{mute_prefix}present + idle，等待本轮调度"))
+                (
+                    true,
+                    format!("{mute_prefix}present + idle，当前波次已收尾，下一波消息先过秘书门卫"),
+                )
             }
         }
     };

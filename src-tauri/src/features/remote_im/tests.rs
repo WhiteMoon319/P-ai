@@ -1632,3 +1632,31 @@
         assert!(runtime.mute_until.is_some());
         assert_eq!(runtime.presence_state, RemoteImPresenceState::Away);
     }
+
+    #[test]
+    fn remote_im_prepare_enqueue_runtime_state_should_activate_secretary_for_next_wave_when_present_idle() {
+        let state = remote_im_test_state();
+        let contact = remote_im_test_contact("contact-a", "conversation-a");
+        {
+            let mut runtime_states =
+                lock_remote_im_contact_runtime_states(&state).expect("lock runtime states");
+            let runtime = remote_im_contact_runtime_state_mut(&mut runtime_states, &contact.id);
+            runtime.presence_state = RemoteImPresenceState::Present;
+            runtime.work_state = RemoteImWorkState::Idle;
+            runtime.has_pending = false;
+            runtime.last_success_reply_at = Some(now_iso());
+        }
+
+        let (activate_assistant, reason) =
+            remote_im_prepare_enqueue_runtime_state(&state, &contact, "普通新消息")
+                .expect("prepare runtime state");
+
+        assert!(activate_assistant);
+        assert!(reason.contains("先过秘书门卫"));
+        let runtime_states =
+            lock_remote_im_contact_runtime_states(&state).expect("lock runtime states");
+        let runtime = runtime_states.get("contact-a").expect("runtime exists");
+        assert_eq!(runtime.presence_state, RemoteImPresenceState::Present);
+        assert_eq!(runtime.work_state, RemoteImWorkState::Idle);
+        assert!(!runtime.has_pending);
+    }
