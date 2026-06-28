@@ -13,6 +13,8 @@ type UseGithubUpdateOptions = {
   viewMode: ViewModeRef;
   status: Ref<string>;
   updateMethod: Ref<GithubUpdateMethod | undefined>;
+  skippedVersion: Ref<string | undefined>;
+  onSkippedVersionSaved: (config: { skippedGithubUpdateVersion?: string }) => void;
 };
 
 function formatBytes(value?: number) {
@@ -28,12 +30,17 @@ function formatBytes(value?: number) {
   return `${size.toFixed(digits)} ${units[idx]}`;
 }
 
+function normalizeSkippedVersion(value: string | undefined) {
+  return String(value || "").trim();
+}
+
 export function useGithubUpdate(options: UseGithubUpdateOptions) {
   const checkingUpdateRequest = ref(false);
   const updateInProgress = ref(false);
+  const updateCancelPending = ref(false);
   const updateReadyToRestart = ref(false);
   const updateDialogOpen = ref(false);
-  const updateDialogTitle = ref(t('about.dialogTitleCheck'));
+  const updateDialogTitle = ref(t("about.dialogTitleCheck"));
   const updateDialogBody = ref("");
   const updateDialogKind = ref<"info" | "error">("info");
   const updateDialogReleaseUrl = ref("");
@@ -41,9 +48,32 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   const updateProgressPercent = ref<number | null>(null);
   const updateRuntimeKind = ref<"installer" | "portable">("installer");
   const latestCheckResult = ref<GithubUpdateInfo | null>(null);
-  const hasAvailableUpdate = computed(() => updateReadyToRestart.value || !!latestCheckResult.value?.hasUpdate);
   const checkingUpdate = computed(() => checkingUpdateRequest.value || updateInProgress.value);
   const updateUiMode = ref<"foreground" | "background" | null>(null);
+  const skippedVersion = computed(() => normalizeSkippedVersion(options.skippedVersion.value));
+
+  const reminderSuppressedBySkip = computed(() => {
+    const latestVersion = String(latestCheckResult.value?.latestVersion || "").trim();
+    return !!latestVersion && !!skippedVersion.value && latestVersion === skippedVersion.value;
+  });
+  const shouldShowUpdateReminder = computed(() => {
+    if (updateReadyToRestart.value || updateInProgress.value) return true;
+    return !!latestCheckResult.value?.hasUpdate && !reminderSuppressedBySkip.value;
+  });
+  const hasAvailableUpdate = computed(() => shouldShowUpdateReminder.value);
+  const showUpdateToLatestButton = computed(() => shouldShowUpdateReminder.value);
+  const reminderAccessModeLabel = computed(() =>
+    latestCheckResult.value?.accessMode === "direct" ? t("about.updateMethodDirect") : t("about.updateMethodProxy"),
+  );
+  const reminderActionVersion = computed(() => String(latestCheckResult.value?.latestVersion || "").trim());
+  const reminderProgressText = computed(() => {
+    if (!updateInProgress.value) return "";
+    if (updateCancelPending.value) return t("about.cancellingUpdate");
+    if (!Number.isFinite(updateProgressPercent.value ?? NaN)) return t("about.updating");
+    return t("about.downloadProgressPercent", {
+      percent: Math.max(0, Math.min(100, updateProgressPercent.value || 0)).toFixed(1),
+    });
+  });
 
   let updateProgressUnlisten: UnlistenFn | null = null;
   let webUpdateProgressUnlisten: (() => void) | null = null;
@@ -51,7 +81,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   let dailyCheckStarted = false;
 
   function runtimeLabel(kind: "installer" | "portable") {
-    return kind === "portable" ? t('about.runtimePortable') : t('about.runtimeInstaller');
+    return kind === "portable" ? t("about.runtimePortable") : t("about.runtimeInstaller");
   }
 
   function closeUpdateDialog() {
@@ -59,7 +89,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   }
 
   function openUpdateDialog(text: string, kind: "info" | "error", releaseUrl?: string) {
-    updateDialogTitle.value = t('about.dialogTitleCheck');
+    updateDialogTitle.value = t("about.dialogTitleCheck");
     updateDialogBody.value = text;
     updateDialogKind.value = kind;
     updateDialogReleaseUrl.value = releaseUrl || "";
@@ -72,34 +102,6 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     const url = updateDialogReleaseUrl.value.trim();
     if (!url) return;
     void invokeTauri("open_external_url", { url });
-  }
-
-  function buildCheckDialogBody(result: GithubUpdateInfo) {
-    const lines = [
-      t('about.currentVersion', { version: result.currentVersion }),
-      t('about.latestVersion', { version: result.latestVersion }),
-      t('about.currentRuntime', { kind: runtimeLabel(result.runtimeKind) }),
-    ];
-    const notes = String(result.releaseNotes || "").trim();
-    if (notes) {
-      lines.push("");
-      lines.push(t('about.releaseNotes'));
-      lines.push(notes);
-    }
-    return lines.join("\n");
-  }
-
-  function openCheckResultDialog(result: GithubUpdateInfo) {
-    updateReadyToRestart.value = false;
-    latestCheckResult.value = result;
-    updateRuntimeKind.value = result.runtimeKind;
-    updateDialogReleaseUrl.value = result.releaseUrl || "";
-    updateDialogBody.value = buildCheckDialogBody(result);
-    updateDialogKind.value = "info";
-    updateDialogPrimaryAction.value = result.hasUpdate ? "download" : "force";
-    updateProgressPercent.value = null;
-    updateDialogTitle.value = result.hasUpdate ? t('about.foundUpdate') : t('about.alreadyLatest');
-    updateDialogOpen.value = true;
   }
 
   function clearDailyCheckTimer() {
@@ -133,6 +135,17 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     return value === "direct" || value === "proxy" ? value : "auto";
   }
 
+  function applySkippedVersion(version: string) {
+    options.onSkippedVersionSaved({
+      skippedGithubUpdateVersion: String(version || "").trim(),
+    });
+  }
+
+  async function saveSkippedVersion(version: string) {
+    const saved = await invokeTauri<{ skippedGithubUpdateVersion?: string }>("set_skipped_github_update_version", { version });
+    applySkippedVersion(saved.skippedGithubUpdateVersion || "");
+  }
+
   function syncDialogFromProgress(payload: UpdateProgressPayload) {
     const previousUiMode = updateUiMode.value;
     updateRuntimeKind.value = payload.runtimeKind;
@@ -140,19 +153,31 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     updateProgressPercent.value = Number.isFinite(payload.percent) ? payload.percent ?? null : null;
     if (payload.stage === "failed") {
       updateInProgress.value = false;
+      updateCancelPending.value = false;
       updateReadyToRestart.value = false;
       updateUiMode.value = null;
       updateDialogPrimaryAction.value = null;
       updateDialogKind.value = "error";
-      updateDialogTitle.value = t('about.updateFailed');
+      updateDialogTitle.value = t("about.updateFailed");
       updateDialogBody.value = payload.error ? `${payload.message}\n\n${payload.error}` : payload.message;
       if (previousUiMode !== "background") {
         updateDialogOpen.value = true;
       }
       return;
     }
+    if (payload.stage === "cancelled") {
+      updateInProgress.value = false;
+      updateCancelPending.value = false;
+      updateReadyToRestart.value = false;
+      updateUiMode.value = null;
+      updateDialogPrimaryAction.value = null;
+      updateProgressPercent.value = null;
+      updateDialogOpen.value = false;
+      return;
+    }
     if (payload.stage === "ready") {
       updateInProgress.value = false;
+      updateCancelPending.value = false;
       updateReadyToRestart.value = true;
       updateUiMode.value = null;
       if (latestCheckResult.value) {
@@ -165,23 +190,24 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
         updateDialogOpen.value = true;
       }
       updateDialogKind.value = "info";
-      updateDialogTitle.value = t('about.updateDownloaded');
+      updateDialogTitle.value = t("about.updateDownloaded");
       updateDialogBody.value = payload.message;
       updateDialogPrimaryAction.value = "restart";
       updateProgressPercent.value = 100;
       return;
     }
     updateDialogKind.value = "info";
-    updateDialogTitle.value = payload.stage === "completed" ? t('about.updateCompleted') : t('about.downloading');
+    updateDialogTitle.value = payload.stage === "completed" ? t("about.updateCompleted") : t("about.downloading");
     const progressLine =
       Number.isFinite(payload.downloadedBytes) || Number.isFinite(payload.contentLength)
-        ? `\n\n${t('about.downloadProgress', { current: formatBytes(payload.downloadedBytes), total: formatBytes(payload.contentLength) })}${
+        ? `\n\n${t("about.downloadProgress", { current: formatBytes(payload.downloadedBytes), total: formatBytes(payload.contentLength) })}${
             Number.isFinite(payload.percent) ? ` (${Math.max(0, Math.min(100, payload.percent || 0)).toFixed(1)}%)` : ""
           }`
         : "";
-    updateDialogBody.value = `${payload.message}\n\n${t('about.currentRuntime', { kind: runtimeLabel(payload.runtimeKind) })}${progressLine}`;
+    updateDialogBody.value = `${payload.message}\n\n${t("about.currentRuntime", { kind: runtimeLabel(payload.runtimeKind) })}${progressLine}`;
     if (payload.stage === "completed") {
       updateInProgress.value = false;
+      updateCancelPending.value = false;
       updateReadyToRestart.value = false;
       updateUiMode.value = null;
       updateDialogOpen.value = true;
@@ -200,18 +226,18 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
 
   function handleUpdateProgressPayload(payload: UpdateProgressPayload | null | undefined) {
     if (!payload) return;
-    updateInProgress.value = !["failed", "completed", "ready"].includes(payload.stage);
+    updateInProgress.value = !["failed", "completed", "ready", "cancelled"].includes(payload.stage);
     syncDialogFromProgress(payload);
     options.status.value = payload.error ? payload.error : payload.message;
   }
 
   async function checkGithubUpdate(silent: boolean) {
-    if (options.viewMode.value !== "config") return;
+    if (options.viewMode.value === "archives") return;
     if (checkingUpdate.value) return;
     checkingUpdateRequest.value = true;
     try {
       if (!silent) {
-        options.status.value = t('about.checking');
+        options.status.value = t("about.checking");
       }
       const result = await invokeTauri<GithubUpdateInfo>("check_github_update", { updateMethod: currentUpdateMethod() });
       latestCheckResult.value = result;
@@ -219,18 +245,26 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       if (!result?.hasUpdate) {
         updateReadyToRestart.value = false;
         if (!silent) {
-          options.status.value = t('about.alreadyLatestWithVersion', { version: result.currentVersion });
-          openCheckResultDialog(result);
+          options.status.value = t("about.alreadyLatestWithVersion", { version: result.currentVersion });
+          openUpdateDialog(
+            [
+              t("about.currentVersion", { version: result.currentVersion }),
+              t("about.latestVersion", { version: result.latestVersion }),
+              t("about.currentRuntime", { kind: runtimeLabel(result.runtimeKind) }),
+            ].join("\n"),
+            "info",
+            result.releaseUrl,
+          );
         }
         return result;
       }
-      options.status.value = t('about.foundNewVersion', { latest: result.latestVersion, current: result.currentVersion });
+      options.status.value = t("about.foundNewVersion", { latest: result.latestVersion, current: result.currentVersion });
       return result;
     } catch (error) {
       if (!silent) {
-        options.status.value = t('about.checkFailed', { error: String(error) });
+        options.status.value = t("about.checkFailed", { error: String(error) });
         updateDialogPrimaryAction.value = null;
-        openUpdateDialog(t('about.checkFailedDialog', { error: String(error) }), "error");
+        openUpdateDialog(t("about.checkFailedDialog", { error: String(error) }), "error");
       }
       console.warn("[UPDATE] check_github_update failed:", error);
     } finally {
@@ -241,53 +275,79 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   async function startGithubUpdate(force: boolean, silent: boolean) {
     if (checkingUpdate.value) return;
     updateInProgress.value = true;
+    updateCancelPending.value = false;
     updateReadyToRestart.value = false;
     updateUiMode.value = silent ? "background" : "foreground";
     updateDialogPrimaryAction.value = null;
     updateDialogKind.value = "info";
-    updateDialogTitle.value = force ? t('about.prepareForceDownload') : t('about.prepareDownload');
-    updateDialogBody.value = force ? t('about.preparingForceDownload') : t('about.preparingDownload');
+    updateDialogTitle.value = force ? t("about.prepareForceDownload") : t("about.prepareDownload");
+    updateDialogBody.value = force ? t("about.preparingForceDownload") : t("about.preparingDownload");
     updateProgressPercent.value = null;
-    options.status.value = force ? t('about.preparingForceDownload') : t('about.preparingDownload');
+    options.status.value = force ? t("about.preparingForceDownload") : t("about.preparingDownload");
     if (!silent) {
       updateDialogOpen.value = true;
     }
     try {
       await invokeTauri("start_github_update", { force, updateMethod: currentUpdateMethod() });
     } catch (error) {
+      if (String(error || "").includes("用户已取消更新")) {
+        updateInProgress.value = false;
+        updateCancelPending.value = false;
+        updateUiMode.value = null;
+        updateDialogOpen.value = false;
+        updateProgressPercent.value = null;
+        options.status.value = t("about.cancellingUpdate");
+        return;
+      }
       updateInProgress.value = false;
+      updateCancelPending.value = false;
       updateUiMode.value = null;
       updateDialogKind.value = "error";
-      updateDialogTitle.value = t('about.updateFailed');
-      updateDialogBody.value = t('about.startUpdateFailed', { error: String(error) });
+      updateDialogTitle.value = t("about.updateFailed");
+      updateDialogBody.value = t("about.startUpdateFailed", { error: String(error) });
       if (!silent) {
         updateDialogOpen.value = true;
       }
-      options.status.value = t('about.startUpdateFailedStatus', { error: String(error) });
+      options.status.value = t("about.startUpdateFailedStatus", { error: String(error) });
       console.warn("[UPDATE] start_github_update failed:", error);
+    }
+  }
+
+  async function cancelGithubUpdate() {
+    if (!updateInProgress.value || updateCancelPending.value) return;
+    updateCancelPending.value = true;
+    options.status.value = t("about.cancellingUpdate");
+    try {
+      await invokeTauri("cancel_github_update");
+    } catch (error) {
+      updateCancelPending.value = false;
+      options.status.value = t("about.cancelUpdateFailed", { error: String(error) });
+      openUpdateDialog(t("about.cancelUpdateFailed", { error: String(error) }), "error");
     }
   }
 
   async function applyPreparedGithubUpdate() {
     if (checkingUpdate.value) return;
     updateInProgress.value = true;
+    updateCancelPending.value = false;
     updateUiMode.value = "foreground";
     updateDialogOpen.value = true;
     updateDialogKind.value = "info";
     updateDialogPrimaryAction.value = null;
-    updateDialogTitle.value = t('about.updateAndRestartTitle');
-    updateDialogBody.value = t('about.applyingUpdate');
+    updateDialogTitle.value = t("about.updateAndRestartTitle");
+    updateDialogBody.value = t("about.applyingUpdate");
     updateProgressPercent.value = null;
-    options.status.value = t('about.applyingUpdate');
+    options.status.value = t("about.applyingUpdate");
     try {
       await invokeTauri("apply_prepared_github_update");
     } catch (error) {
       updateInProgress.value = false;
+      updateCancelPending.value = false;
       updateUiMode.value = null;
       updateDialogKind.value = "error";
-      updateDialogTitle.value = t('about.updateFailed');
-      updateDialogBody.value = t('about.applyUpdateFailed', { error: String(error) });
-      options.status.value = t('about.applyUpdateFailedStatus', { error: String(error) });
+      updateDialogTitle.value = t("about.updateFailed");
+      updateDialogBody.value = t("about.applyUpdateFailed", { error: String(error) });
+      options.status.value = t("about.applyUpdateFailedStatus", { error: String(error) });
       console.warn("[UPDATE] apply_prepared_github_update failed:", error);
     }
   }
@@ -306,21 +366,22 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     }
   }
 
+  async function skipCurrentUpdateVersion() {
+    const version = reminderActionVersion.value;
+    if (!version) return;
+    await saveSkippedVersion(version);
+    options.status.value = t("about.skipVersionSaved", { version });
+  }
+
   async function autoCheckGithubUpdate() {
     if (dailyCheckStarted) return;
     dailyCheckStarted = true;
-    const result = await checkGithubUpdate(true);
-    if (result?.hasUpdate && !updateReadyToRestart.value && !updateInProgress.value) {
-      await startGithubUpdate(false, true);
-    }
+    await checkGithubUpdate(true);
     scheduleNextDailyCheck();
   }
 
   async function manualCheckGithubUpdate() {
-    const result = await checkGithubUpdate(false);
-    if (result?.hasUpdate && !updateReadyToRestart.value) {
-      await startGithubUpdate(false, false);
-    }
+    await checkGithubUpdate(false);
   }
 
   async function triggerUpdateToLatest() {
@@ -335,10 +396,18 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       return;
     }
     if (latestCheckResult.value?.hasUpdate) {
-      await startGithubUpdate(false, false);
+      if (reminderSuppressedBySkip.value) {
+        await saveSkippedVersion("");
+      }
+      await startGithubUpdate(false, true);
       return;
     }
-    await manualCheckGithubUpdate();
+    const result = await checkGithubUpdate(false);
+    if (result?.hasUpdate) {
+      if (reminderSuppressedBySkip.value) {
+        await saveSkippedVersion("");
+      }
+    }
   }
 
   if (isTauriRuntimeAvailable()) {
@@ -372,6 +441,8 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     checkingUpdate,
     hasAvailableUpdate,
     updateReadyToRestart,
+    updateInProgress,
+    updateCancelPending,
     latestCheckResult,
     updateDialogOpen,
     updateDialogTitle,
@@ -380,11 +451,18 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     updateDialogReleaseUrl,
     updateDialogPrimaryAction,
     updateProgressPercent,
+    shouldShowUpdateReminder,
+    reminderAccessModeLabel,
+    reminderActionVersion,
+    reminderProgressText,
     closeUpdateDialog,
     openUpdateRelease,
     confirmUpdateDialogPrimary,
     autoCheckGithubUpdate,
     manualCheckGithubUpdate,
     triggerUpdateToLatest,
+    cancelGithubUpdate,
+    skipCurrentUpdateVersion,
+    showUpdateToLatestButton,
   };
 }

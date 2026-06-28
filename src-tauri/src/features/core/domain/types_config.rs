@@ -851,6 +851,14 @@ fn normalize_github_update_method(value: &str) -> String {
     }
 }
 
+fn default_skipped_github_update_version() -> String {
+    String::new()
+}
+
+fn normalize_skipped_github_update_version(value: &str) -> String {
+    value.trim().to_string()
+}
+
 fn normalize_webview_zoom_percent(value: u32) -> u32 {
     const OPTIONS: [u32; 6] = [80, 90, 100, 110, 120, 150];
     OPTIONS
@@ -1009,6 +1017,8 @@ struct AppConfig {
     web_access_password: String,
     #[serde(default = "default_github_update_method")]
     github_update_method: String,
+    #[serde(default = "default_skipped_github_update_version")]
+    skipped_github_update_version: String,
     #[serde(default = "default_record_hotkey")]
     record_hotkey: String,
     #[serde(default = "default_record_background_wake_enabled")]
@@ -1066,6 +1076,7 @@ impl Default for AppConfig {
             web_access_enabled: default_web_access_enabled(),
             web_access_password: default_web_access_password(),
             github_update_method: default_github_update_method(),
+            skipped_github_update_version: default_skipped_github_update_version(),
             record_hotkey: default_record_hotkey(),
             record_background_wake_enabled: default_record_background_wake_enabled(),
             min_record_seconds: default_min_record_seconds(),

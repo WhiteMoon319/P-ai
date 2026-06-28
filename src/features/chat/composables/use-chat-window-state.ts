@@ -34,6 +34,7 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
     webAccessEnabled: true,
     webAccessPassword: "",
     githubUpdateMethod: "auto",
+    skippedGithubUpdateVersion: "",
     recordHotkey: options.isMacPlatform ? "Option+Space" : "Alt",
     recordBackgroundWakeEnabled: true,
     minRecordSeconds: 1,

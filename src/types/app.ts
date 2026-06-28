@@ -280,6 +280,7 @@ export type AppConfig = {
   webAccessEnabled?: boolean;
   webAccessPassword?: string;
   githubUpdateMethod?: GithubUpdateMethod;
+  skippedGithubUpdateVersion?: string;
   recordHotkey: string;
   recordBackgroundWakeEnabled: boolean;
   minRecordSeconds: number;

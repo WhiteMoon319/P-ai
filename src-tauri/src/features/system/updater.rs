@@ -40,9 +40,11 @@ const UPDATE_STAGE_INSTALLING: &str = "installing";
 const UPDATE_STAGE_REPLACING: &str = "replacing";
 const UPDATE_STAGE_READY: &str = "ready";
 const UPDATE_STAGE_COMPLETED: &str = "completed";
+const UPDATE_STAGE_CANCELLED: &str = "cancelled";
 const UPDATE_STAGE_FAILED: &str = "failed";
 
 static UPDATE_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
+static UPDATE_CANCEL_REQUESTED: AtomicBool = AtomicBool::new(false);
 static PREPARED_GITHUB_UPDATE: Mutex<Option<PreparedGithubUpdate>> = Mutex::new(None);
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -86,6 +88,7 @@ struct GithubUpdateInfo {
     has_update: bool,
     release_url: String,
     update_source: String,
+    access_mode: String,
     release_notes: String,
     published_at: Option<String>,
     runtime_kind: String,
@@ -255,6 +258,40 @@ fn clear_prepared_github_update() {
     }
 }
 
+fn reset_update_cancel_requested() {
+    UPDATE_CANCEL_REQUESTED.store(false, Ordering::SeqCst);
+}
+
+fn request_update_cancel() {
+    UPDATE_CANCEL_REQUESTED.store(true, Ordering::SeqCst);
+}
+
+fn is_update_cancel_requested() -> bool {
+    UPDATE_CANCEL_REQUESTED.load(Ordering::SeqCst)
+}
+
+fn is_update_cancelled_error(message: &str) -> bool {
+    message.contains("用户已取消更新")
+}
+
+fn ensure_update_not_cancelled() -> Result<(), String> {
+    if is_update_cancel_requested() {
+        return Err("用户已取消更新".to_string());
+    }
+    Ok(())
+}
+
+fn endpoint_access_mode(url: &str) -> &'static str {
+    if url.starts_with(UPDATER_GITHUB_PROXY_PREFIX)
+        || url.starts_with(UPDATER_GITHUB_EDGEONE_PROXY_PREFIX)
+        || url.starts_with(UPDATER_GITHUB_HK_PROXY_PREFIX)
+    {
+        "proxy"
+    } else {
+        "direct"
+    }
+}
+
 fn store_prepared_github_update(update: PreparedGithubUpdate) -> Result<(), String> {
     let mut guard = PREPARED_GITHUB_UPDATE
         .lock()
@@ -396,7 +433,7 @@ fn normalize_release_version(input: &str) -> String {
 
 async fn fetch_latest_release_payload(
     method: GithubUpdateMethod,
-) -> Result<GithubLatestReleasePayload, String> {
+) -> Result<(GithubLatestReleasePayload, String), String> {
     let client = reqwest::Client::builder()
         .timeout(StdDuration::from_secs(8))
         .build()
@@ -404,6 +441,7 @@ async fn fetch_latest_release_payload(
     let mut last_error = String::new();
     for endpoint in updater_release_api_fallback_urls(method) {
         for attempt in 1..=3 {
+            ensure_update_not_cancelled()?;
             let response = client
                 .get(&endpoint)
                 .header(
@@ -429,14 +467,15 @@ async fn fetch_latest_release_payload(
                 );
                 continue;
             }
-            return response
+            let payload = response
                 .json::<GithubLatestReleasePayload>()
                 .await
                 .map_err(|err| {
                     format!(
                         "解析 GitHub 更新响应失败（地址：{endpoint}，第 {attempt} 次）：{err}"
                     )
-                });
+                })?;
+            return Ok((payload, endpoint_access_mode(&endpoint).to_string()));
         }
     }
     Err(last_error)
@@ -450,6 +489,7 @@ async fn fetch_remote_changelog_markdown(origin: &str, method: GithubUpdateMetho
     let mut last_error = String::new();
     for endpoint in updater_changelog_api_fallback_urls(origin, method) {
         for attempt in 1..=3 {
+            ensure_update_not_cancelled()?;
             let response = client
                 .get(&endpoint)
                 .header(
@@ -506,7 +546,7 @@ async fn fetch_project_changelog_markdown() -> Result<String, String> {
 async fn check_github_update(update_method: Option<String>) -> Result<GithubUpdateInfo, String> {
     let method = GithubUpdateMethod::from_raw(update_method);
     let runtime = detect_update_runtime_paths()?;
-    let payload = fetch_latest_release_payload(method).await?;
+    let (payload, access_mode) = fetch_latest_release_payload(method).await?;
     let latest_version = payload
         .tag_name
         .as_deref()
@@ -538,6 +578,7 @@ async fn check_github_update(update_method: Option<String>) -> Result<GithubUpda
             method,
         ),
         update_source: "github".to_string(),
+        access_mode,
         release_notes,
         published_at: payload.published_at,
         runtime_kind: runtime.runtime_kind.as_str().to_string(),
@@ -806,6 +847,7 @@ async fn check_updater_with_manifest_fallbacks(
     let mut last_error = String::new();
     for endpoint in updater_manifest_fallback_urls(manifest_origin, method) {
         for attempt in 1..=3 {
+            ensure_update_not_cancelled()?;
             let mut builder = app.updater_builder().pubkey(updater_public_key()?);
             if let Some(ref target) = target {
                 builder = builder.target(target.clone());
@@ -880,34 +922,72 @@ where
     C: FnMut(usize, Option<u64>),
     D: FnOnce(),
 {
+    use futures_util::StreamExt as _;
+
+    let client = reqwest::Client::builder()
+        .build()
+        .map_err(|err| format!("初始化更新下载客户端失败：{err}"))?;
     let origin_url = strip_known_proxy_prefix(update.download_url.as_str()).to_string();
     let mut on_download_finish = Some(on_download_finish);
     let mut last_error = String::new();
     for endpoint in updater_download_fallback_urls(&origin_url, method) {
         for attempt in 1..=3 {
-            let mut retry_update = update.clone();
-            retry_update.download_url = reqwest::Url::parse(&endpoint)
-                .map_err(|err| format!("解析下载地址失败（地址：{endpoint}，第 {attempt} 次）：{err}"))?;
-            match retry_update
-                .download(
-                    |chunk_length, content_length| {
-                        on_chunk(chunk_length, content_length);
-                    },
-                    || {
-                        if let Some(callback) = on_download_finish.take() {
-                            callback();
-                        }
-                    },
+            ensure_update_not_cancelled()?;
+            let response = match client
+                .get(&endpoint)
+                .header(
+                    reqwest::header::USER_AGENT,
+                    format!("p-ai/{}", env!("CARGO_PKG_VERSION")),
                 )
+                .send()
                 .await
             {
-                Ok(bytes) => return Ok(bytes),
+                Ok(response) => response,
                 Err(err) => {
                     last_error = format!(
                         "{download_failed_prefix}（地址：{endpoint}，第 {attempt} 次）：{err}"
                     );
+                    continue;
+                }
+            };
+            if !response.status().is_success() {
+                last_error = format!(
+                    "{download_failed_prefix}（地址：{endpoint}，第 {attempt} 次）：HTTP {}",
+                    response.status().as_u16()
+                );
+                continue;
+            }
+            let content_length = response.content_length();
+            let mut stream = response.bytes_stream();
+            let mut bytes = Vec::<u8>::new();
+            let mut download_error: Option<String> = None;
+            while let Some(chunk) = stream.next().await {
+                if let Err(err) = ensure_update_not_cancelled() {
+                    download_error = Some(err);
+                    break;
+                }
+                match chunk {
+                    Ok(chunk) => {
+                        on_chunk(chunk.len(), content_length);
+                        bytes.extend_from_slice(&chunk);
+                    }
+                    Err(err) => {
+                        download_error = Some(format!(
+                            "{download_failed_prefix}（地址：{endpoint}，第 {attempt} 次）：{err}"
+                        ));
+                        break;
+                    }
                 }
             }
+            if let Some(err) = download_error {
+                last_error = err;
+                continue;
+            }
+            ensure_update_not_cancelled()?;
+            if let Some(callback) = on_download_finish.take() {
+                callback();
+            }
+            return Ok(bytes);
         }
     }
     Err(last_error)
@@ -918,6 +998,7 @@ async fn prepare_installer_update(
     force: bool,
     method: GithubUpdateMethod,
 ) -> Result<(), String> {
+    ensure_update_not_cancelled()?;
     let current_version = env!("CARGO_PKG_VERSION").to_string();
     let runtime_kind = UpdateRuntimeKind::Installer;
     let update = check_updater_with_manifest_fallbacks(
@@ -997,6 +1078,7 @@ async fn prepare_installer_update(
     )
     .await
     .map_err(|err| format!("下载安装版更新失败：{err}"))?;
+    ensure_update_not_cancelled()?;
     store_prepared_github_update(PreparedGithubUpdate::Installer(PreparedInstallerUpdate {
         update,
         bytes,
@@ -1024,6 +1106,7 @@ async fn prepare_portable_update(
     force: bool,
     method: GithubUpdateMethod,
 ) -> Result<(), String> {
+    ensure_update_not_cancelled()?;
     let current_version = env!("CARGO_PKG_VERSION").to_string();
     let runtime = detect_update_runtime_paths()?;
     let update = check_updater_with_manifest_fallbacks(
@@ -1110,6 +1193,7 @@ async fn prepare_portable_update(
     )
     .await
     .map_err(|err| format!("下载便携版更新失败：{err}"))?;
+    ensure_update_not_cancelled()?;
     std_fs::write(&zip_path, &bytes).map_err(|err| {
         format!("写入便携版更新包失败（{}）：{err}", zip_path.display())
     })?;
@@ -1126,6 +1210,7 @@ async fn prepare_portable_update(
             None,
         ),
     );
+    ensure_update_not_cancelled()?;
     let extracted_files = extract_zip_to_dir(&zip_path, &staging_dir)?;
     let target_exe_name = runtime
         .exe_path
@@ -1134,6 +1219,7 @@ async fn prepare_portable_update(
         .ok_or_else(|| format!("无法解析主程序文件名：{}", runtime.exe_path.display()))?
         .to_string();
     verify_staging_files(&staging_dir, &extracted_files, &target_exe_name)?;
+    ensure_update_not_cancelled()?;
     copy_file_with_parent(&runtime.exe_path, &helper_copy_path)?;
     let helper_hash = compute_file_sha256(&helper_copy_path)?;
     let current_hash = compute_file_sha256(&runtime.exe_path)?;
@@ -1180,6 +1266,7 @@ async fn start_github_update(
     update_method: Option<String>,
 ) -> Result<(), String> {
     let _guard = UpdateInProgressGuard::acquire()?;
+    reset_update_cancel_requested();
     clear_prepared_github_update();
     let method = GithubUpdateMethod::from_raw(update_method);
     let runtime = detect_update_runtime_paths()?;
@@ -1188,21 +1275,39 @@ async fn start_github_update(
         UpdateRuntimeKind::Portable => prepare_portable_update(&app, force, method).await,
     };
     if let Err(err) = &result {
+        let cancelled = is_update_cancelled_error(err);
         emit_update_progress(
             &app,
             build_update_progress(
                 runtime.runtime_kind,
-                UPDATE_STAGE_FAILED,
-                format!("更新失败：{err}"),
+                if cancelled {
+                    UPDATE_STAGE_CANCELLED
+                } else {
+                    UPDATE_STAGE_FAILED
+                },
+                if cancelled {
+                    "已取消更新".to_string()
+                } else {
+                    format!("更新失败：{err}")
+                },
                 Some(env!("CARGO_PKG_VERSION").to_string()),
                 None,
                 None,
                 None,
-                Some(err.clone()),
+                if cancelled { None } else { Some(err.clone()) },
             ),
         );
     }
     result
+}
+
+#[tauri::command]
+async fn cancel_github_update() -> Result<(), String> {
+    if !UPDATE_IN_PROGRESS.load(Ordering::SeqCst) {
+        return Err("当前没有正在执行的更新任务".to_string());
+    }
+    request_update_cancel();
+    Ok(())
 }
 
 #[tauri::command]

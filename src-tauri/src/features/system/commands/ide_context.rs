@@ -4143,6 +4143,32 @@ fn ide_chat_set_github_update_method_for_web_settings(
     ide_chat_serialize(runtime_config)
 }
 
+fn ide_chat_set_skipped_github_update_version_for_web_settings(
+    state: &AppState,
+    app: &AppHandle,
+    params: Value,
+) -> Result<Value, String> {
+    let version = match params {
+        Value::Object(mut map) => map
+            .remove("version")
+            .and_then(|value| value.as_str().map(ToOwned::to_owned))
+            .unwrap_or_default(),
+        _ => String::new(),
+    };
+    let normalized = normalize_skipped_github_update_version(&version);
+    let mut config = state_read_config_cached(state)?;
+    normalize_app_config(&mut config);
+    if config.skipped_github_update_version != normalized {
+        config.skipped_github_update_version = normalized.clone();
+        state_write_config_cached(state, &config)?;
+        eprintln!("[自动更新] 已保存跳过版本：version={normalized}");
+    }
+    let data = state_read_agents_runtime_snapshot(state)?;
+    let runtime_config = runtime_config_with_private_organization(state, &config, &data)?;
+    let _ = app.emit("easy-call:config-updated", &runtime_config);
+    ide_chat_serialize(runtime_config)
+}
+
 async fn ide_chat_check_github_update_for_web_settings(params: Value) -> Result<Value, String> {
     let update_method = match params {
         Value::Object(mut map) => map
@@ -4173,6 +4199,11 @@ async fn ide_chat_start_github_update_for_web_settings(
         _ => (false, None),
     };
     start_github_update(app.clone(), force, update_method).await?;
+    Ok(serde_json::json!(null))
+}
+
+async fn ide_chat_cancel_github_update_for_web_settings() -> Result<Value, String> {
+    cancel_github_update().await?;
     Ok(serde_json::json!(null))
 }
 
@@ -5710,8 +5741,12 @@ async fn ide_chat_handle_jsonrpc_request(
         })(),
         "set_webview_zoom_percent" => ide_chat_set_webview_zoom_percent_for_web_settings(app, request.params),
         "set_github_update_method" => ide_chat_set_github_update_method_for_web_settings(state, app, request.params),
+        "set_skipped_github_update_version" => {
+            ide_chat_set_skipped_github_update_version_for_web_settings(state, app, request.params)
+        }
         "check_github_update" => ide_chat_check_github_update_for_web_settings(request.params).await,
         "start_github_update" => ide_chat_start_github_update_for_web_settings(app, request.params).await,
+        "cancel_github_update" => ide_chat_cancel_github_update_for_web_settings().await,
         "apply_prepared_github_update" => ide_chat_apply_prepared_github_update_for_web_settings(app).await,
         "codex_get_auth_status" => ide_chat_codex_get_auth_status_for_web_settings(request.params).await,
         "codex_start_oauth_login" => ide_chat_codex_start_oauth_login_for_web_settings(request.params).await,

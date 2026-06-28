@@ -191,6 +191,7 @@ const config = reactive<AppConfig>({
   uiFont: "auto",
   webviewZoomPercent: 100,
   githubUpdateMethod: "auto",
+  skippedGithubUpdateVersion: "",
   recordHotkey: "Alt",
   recordBackgroundWakeEnabled: true,
   minRecordSeconds: 1,

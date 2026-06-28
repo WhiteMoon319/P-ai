@@ -1180,6 +1180,8 @@ fn normalize_app_config(config: &mut AppConfig) {
     config.web_access_port = normalize_web_access_port(config.web_access_port);
     config.web_access_password = normalize_web_access_password(&config.web_access_password);
     config.github_update_method = normalize_github_update_method(&config.github_update_method);
+    config.skipped_github_update_version =
+        normalize_skipped_github_update_version(&config.skipped_github_update_version);
 
     normalize_api_tools(config);
 

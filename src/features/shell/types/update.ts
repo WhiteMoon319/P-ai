@@ -6,6 +6,7 @@ export type GithubUpdateInfo = {
   hasUpdate: boolean;
   releaseUrl: string;
   updateSource: string;
+  accessMode: "direct" | "proxy";
   releaseNotes: string;
   publishedAt?: string;
   runtimeKind: UpdateRuntimeKind;

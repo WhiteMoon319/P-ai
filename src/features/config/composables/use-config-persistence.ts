@@ -143,6 +143,10 @@ function normalizeGithubUpdateMethod(value: unknown): AppConfig["githubUpdateMet
   return text === "direct" || text === "proxy" ? text : "auto";
 }
 
+function normalizeSkippedGithubUpdateVersion(value: unknown): string {
+  return String(value || "").trim();
+}
+
 function mapRemoteImChannel(item: unknown): RemoteImChannelConfig {
   const platformRaw = String((item as { platform?: unknown })?.platform || "").trim().toLowerCase();
   const platform =
@@ -276,6 +280,9 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
     options.config.webAccessEnabled = (cfg as { webAccessEnabled?: unknown }).webAccessEnabled !== false;
     options.config.webAccessPassword = String((cfg as { webAccessPassword?: unknown }).webAccessPassword || "").trim();
     options.config.githubUpdateMethod = normalizeGithubUpdateMethod((cfg as { githubUpdateMethod?: unknown }).githubUpdateMethod);
+    options.config.skippedGithubUpdateVersion = normalizeSkippedGithubUpdateVersion(
+      (cfg as { skippedGithubUpdateVersion?: unknown }).skippedGithubUpdateVersion,
+    );
     options.locale.value = options.config.uiLanguage;
     options.config.recordHotkey = String(cfg.recordHotkey ?? "");
     options.config.recordBackgroundWakeEnabled = !!cfg.recordBackgroundWakeEnabled;

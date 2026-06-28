@@ -15,6 +15,10 @@ export function useChatWindowShellDataOrchestrator(bindings: Record<string, any>
     updateMethod: computed<GithubUpdateMethod | undefined>(
       () => (bindings.config.githubUpdateMethod || "auto") as GithubUpdateMethod,
     ),
+    skippedVersion: computed(() => bindings.config.skippedGithubUpdateVersion || ""),
+    onSkippedVersionSaved: (saved) => {
+      bindings.config.skippedGithubUpdateVersion = saved.skippedGithubUpdateVersion || "";
+    },
   });
 
   const archivesView = useArchivesView({

@@ -16,6 +16,10 @@ function normalizeGithubUpdateMethod(value: unknown): AppConfig["githubUpdateMet
   return text === "direct" || text === "proxy" ? text : "auto";
 }
 
+function normalizeSkippedGithubUpdateVersion(value: unknown): string {
+  return String(value || "").trim();
+}
+
 function normalizeWebAccessPort(value: unknown): number {
   const parsed = Math.round(Number(value));
   if (Number.isFinite(parsed) && parsed >= 1024 && parsed <= 65535) {
@@ -310,10 +314,11 @@ export function useConfigCore(options: UseConfigCoreOptions) {
       uiFont: options.config.uiFont,
       webviewZoomPercent: options.config.webviewZoomPercent,
       webAccessPort: normalizeWebAccessPort(options.config.webAccessPort),
-      webAccessEnabled: options.config.webAccessEnabled !== false,
-      webAccessPassword: String(options.config.webAccessPassword || "").trim(),
-      githubUpdateMethod: normalizeGithubUpdateMethod(options.config.githubUpdateMethod),
-      recordHotkey: options.config.recordHotkey,
+        webAccessEnabled: options.config.webAccessEnabled !== false,
+        webAccessPassword: String(options.config.webAccessPassword || "").trim(),
+        githubUpdateMethod: normalizeGithubUpdateMethod(options.config.githubUpdateMethod),
+        skippedGithubUpdateVersion: normalizeSkippedGithubUpdateVersion(options.config.skippedGithubUpdateVersion),
+        recordHotkey: options.config.recordHotkey,
       recordBackgroundWakeEnabled: !!options.config.recordBackgroundWakeEnabled,
       minRecordSeconds: options.config.minRecordSeconds,
       maxRecordSeconds: options.config.maxRecordSeconds,
@@ -442,9 +447,10 @@ export function useConfigCore(options: UseConfigCoreOptions) {
       webviewZoomPercent: options.config.webviewZoomPercent,
       webAccessPort: normalizeWebAccessPort(options.config.webAccessPort),
       webAccessEnabled: options.config.webAccessEnabled !== false,
-      webAccessPassword: String(options.config.webAccessPassword || "").trim(),
-      githubUpdateMethod: normalizeGithubUpdateMethod(options.config.githubUpdateMethod),
-      recordHotkey: options.config.recordHotkey,
+        webAccessPassword: String(options.config.webAccessPassword || "").trim(),
+        githubUpdateMethod: normalizeGithubUpdateMethod(options.config.githubUpdateMethod),
+        skippedGithubUpdateVersion: normalizeSkippedGithubUpdateVersion(options.config.skippedGithubUpdateVersion),
+        recordHotkey: options.config.recordHotkey,
       recordBackgroundWakeEnabled: !!options.config.recordBackgroundWakeEnabled,
       minRecordSeconds: options.config.minRecordSeconds,
       maxRecordSeconds: options.config.maxRecordSeconds,

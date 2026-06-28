@@ -46,6 +46,23 @@
       @close-window="closeWindow"
     />
 
+    <GithubUpdateReminderCard
+      :visible="shouldShowUpdateReminder"
+      :latest-version="reminderActionVersion"
+      :runtime-kind="latestCheckResult?.runtimeKind"
+      :access-mode-label="reminderAccessModeLabel"
+      :release-url="latestCheckResult?.releaseUrl"
+      :update-ready-to-restart="updateReadyToRestart"
+      :update-in-progress="updateInProgress"
+      :update-cancel-pending="updateCancelPending"
+      :progress-percent="updateProgressPercent"
+      :progress-text="reminderProgressText"
+      @update-now="triggerUpdateToLatest"
+      @skip-version="skipCurrentUpdateVersion"
+      @cancel-update="cancelGithubUpdate"
+      @open-release="openUpdateRelease"
+    />
+
     <div class="window-content p-0 min-h-0 overflow-hidden">
       <ConfigView
         :config="config"
@@ -261,6 +278,7 @@ import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import ConfigView from "./features/config/views/ConfigView.vue";
 import AppWindowHeader from "./features/shell/components/AppWindowHeader.vue";
+import GithubUpdateReminderCard from "./features/shell/components/GithubUpdateReminderCard.vue";
 import ShellDialogsHost from "./features/shell/components/ShellDialogsHost.vue";
 import Win10ResizeHandles from "./features/shell/components/Win10ResizeHandles.vue";
 import MemoryDialog from "./features/memory/components/dialogs/MemoryDialog.vue";
@@ -329,6 +347,7 @@ const config = reactive<AppConfig>({
   webAccessEnabled: true,
   webAccessPassword: "",
   githubUpdateMethod: "auto",
+  skippedGithubUpdateVersion: "",
   recordHotkey: isMacPlatform ? "Option+Space" : "Alt",
   recordBackgroundWakeEnabled: true,
   minRecordSeconds: 1,
@@ -661,6 +680,10 @@ const {
 const {
   checkingUpdate,
   hasAvailableUpdate,
+  latestCheckResult,
+  updateReadyToRestart,
+  updateInProgress,
+  updateCancelPending,
   updateDialogOpen,
   updateDialogTitle,
   updateDialogBody,
@@ -668,12 +691,18 @@ const {
   updateDialogReleaseUrl,
   updateDialogPrimaryAction,
   updateProgressPercent,
+  shouldShowUpdateReminder,
+  reminderAccessModeLabel,
+  reminderActionVersion,
+  reminderProgressText,
   closeUpdateDialog,
   openUpdateRelease,
   confirmUpdateDialogPrimary,
   autoCheckGithubUpdate,
   manualCheckGithubUpdate,
   triggerUpdateToLatest,
+  cancelGithubUpdate,
+  skipCurrentUpdateVersion,
   showUpdateToLatestButton,
   updateToLatestLabel,
   updateToLatestTitle,
@@ -682,6 +711,10 @@ const {
   viewMode,
   status,
   updateMethod: computed(() => config.githubUpdateMethod || "auto"),
+  skippedVersion: computed(() => config.skippedGithubUpdateVersion || ""),
+  onSkippedVersionSaved: (saved) => {
+    config.skippedGithubUpdateVersion = saved.skippedGithubUpdateVersion || "";
+  },
 });
 
 const { summonChatWindowFromConfig, openGithubRepository } = useWindowActions({

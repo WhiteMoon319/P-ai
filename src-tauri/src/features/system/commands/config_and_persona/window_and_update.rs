@@ -673,6 +673,26 @@ fn set_github_update_method(
     Ok(runtime_config)
 }
 
+#[tauri::command]
+fn set_skipped_github_update_version(
+    version: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<AppConfig, String> {
+    let normalized = normalize_skipped_github_update_version(&version);
+    let mut config = state_read_config_cached(&state)?;
+    normalize_app_config(&mut config);
+    if config.skipped_github_update_version != normalized {
+        config.skipped_github_update_version = normalized.clone();
+        state_write_config_cached(&state, &config)?;
+        eprintln!("[自动更新] 已保存跳过版本：version={normalized}");
+    }
+    let data = state_read_agents_runtime_snapshot(&state)?;
+    let runtime_config = runtime_config_with_private_organization(&state, &config, &data)?;
+    let _ = app.emit("easy-call:config-updated", &runtime_config);
+    Ok(runtime_config)
+}
+
 fn normalize_ui_language(value: &str) -> String {
     match value.trim() {
         "en-US" => "en-US".to_string(),

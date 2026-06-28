@@ -7,6 +7,8 @@ export type GithubUpdateViewBindings = {
   viewMode: Ref<"chat" | "archives" | "config">;
   status: Ref<string>;
   updateMethod: Ref<GithubUpdateMethod | undefined>;
+  skippedVersion: Ref<string | undefined>;
+  onSkippedVersionSaved: (config: { skippedGithubUpdateVersion?: string }) => void;
 };
 
 export function useGithubUpdateView(bindings: GithubUpdateViewBindings) {
@@ -14,13 +16,14 @@ export function useGithubUpdateView(bindings: GithubUpdateViewBindings) {
     viewMode: bindings.viewMode,
     status: bindings.status,
     updateMethod: bindings.updateMethod,
+    skippedVersion: bindings.skippedVersion,
+    onSkippedVersionSaved: bindings.onSkippedVersionSaved,
   });
 
-  const showUpdateToLatestButton = computed(() => githubUpdate.hasAvailableUpdate.value);
   const updateToLatestLabel = computed(() =>
     githubUpdate.updateReadyToRestart.value
       ? bindings.t("about.updateAndRestart")
-      : githubUpdate.checkingUpdate.value
+      : githubUpdate.updateInProgress.value
         ? bindings.t("about.updating")
         : bindings.t("about.updateNow"),
   );
@@ -37,7 +40,6 @@ export function useGithubUpdateView(bindings: GithubUpdateViewBindings) {
 
   return {
     ...githubUpdate,
-    showUpdateToLatestButton,
     updateToLatestLabel,
     updateToLatestTitle,
   };

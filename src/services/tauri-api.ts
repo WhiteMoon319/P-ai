@@ -77,6 +77,7 @@ const WEB_BRIDGE_VERY_LONG_TIMEOUT_MS = 30 * 60 * 1000;
 const WEB_BRIDGE_NO_TIMEOUT_COMMANDS = new Set([
   "apply_prepared_github_update",
   "apply_import_config_migration_package",
+  "cancel_github_update",
   "export_config_migration_package",
   "import_angel_memories",
   "import_memories",

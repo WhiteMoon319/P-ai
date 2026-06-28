@@ -2346,6 +2346,7 @@ fn departments_only_config(departments: &[DepartmentConfig]) -> AppConfig {
         web_access_enabled: default_web_access_enabled(),
         web_access_password: default_web_access_password(),
         github_update_method: default_github_update_method(),
+        skipped_github_update_version: default_skipped_github_update_version(),
         record_hotkey: String::new(),
         record_background_wake_enabled: false,
         min_record_seconds: 0,
