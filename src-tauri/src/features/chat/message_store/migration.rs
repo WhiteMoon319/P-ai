@@ -197,39 +197,23 @@ pub(super) fn recover_ready_jsonl_snapshot_manifest_from_directory(
         Err(_) => return Ok(None),
     };
     validate_conversation_shard_meta_id(paths, &meta)?;
-    let index = match read_message_store_index_file(&paths.index_file) {
-        Ok(index) => index,
+    let rebuilt = match rebuild_ready_message_store_snapshot_from_blocks(paths) {
+        Ok(rebuilt) => rebuilt,
         Err(_) => return Ok(None),
     };
-    if index.items.len() != manifest.source_message_count() {
+    if rebuilt.message_count != manifest.source_message_count() {
         return Ok(None);
     }
-    let last_message_id = index
-        .items
-        .last()
-        .map(|item| item.message_id.trim().to_string())
-        .unwrap_or_default();
-    if last_message_id != manifest.last_message_id().trim() {
+    if rebuilt.last_message_id != manifest.last_message_id().trim() {
         return Ok(None);
     }
-    let messages = read_jsonl_snapshot_messages_by_index_items(&paths.messages_file, &index.items)?;
-    if messages.len() != manifest.source_message_count() {
-        return Ok(None);
-    }
-    let actual_last_message_id = messages
-        .last()
-        .map(|message| message.id.trim().to_string())
-        .unwrap_or_default();
-    if actual_last_message_id != manifest.last_message_id().trim() {
-        return Ok(None);
-    }
-    let total_bytes = message_store_index_total_bytes(paths, &index)?;
     let ready_manifest = MessageStoreManifest::jsonl_snapshot_ready_for_messages(
-        manifest.source_message_count(),
-        manifest.last_message_id().trim().to_string(),
-        total_bytes,
+        rebuilt.message_count,
+        rebuilt.last_message_id.clone(),
+        rebuilt.total_bytes,
         manifest.messages_index_revision.max(1),
     );
+    write_message_store_index_atomic(&paths.index_file, &rebuilt.index)?;
     write_message_store_manifest_atomic(&paths.manifest_file, &ready_manifest)?;
     eprintln!(
         "[消息存储迁移] 完成 task=恢复目录型会话 ready manifest conversation_id={} message_count={} bytes={}",

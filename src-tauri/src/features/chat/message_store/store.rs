@@ -1397,55 +1397,128 @@ pub(super) fn validate_ready_message_store_snapshot_integrity(
     if !manifest.should_read_jsonl() {
         return Ok(());
     }
-    let actual_bytes = fs::metadata(&paths.messages_file)
-        .map(|metadata| metadata.len())
-        .or_else(|single_file_err| {
-            let index = read_message_store_index_file(&paths.index_file)?;
-            message_store_index_total_bytes(paths, &index).map_err(|err| {
-                format!(
-                    "ready JSONL 会话缺少可读 messages.jsonl 且会话块校验失败，path={}，single_file_error={}，block_error={}",
-                    paths.messages_file.display(),
-                    single_file_err,
-                    err
-                )
-            })
-        })?;
-    if actual_bytes != manifest.messages_jsonl_bytes() {
-        return Err(format!(
-            "ready JSONL 会话消息文件大小不一致，conversation_id={}，manifest_bytes={}，actual_bytes={}，path={}",
-            paths.conversation_id,
-            manifest.messages_jsonl_bytes(),
-            actual_bytes,
-            paths.messages_file.display()
-        ));
+    let rebuilt = rebuild_ready_message_store_snapshot_from_blocks(paths)?;
+    let meta = read_conversation_shard_meta(&paths.meta_file)
+        .map_err(|err| format!("ready JSONL 会话缺少可读 meta.json，无法校验消息存储状态: {err}"))?;
+    validate_conversation_shard_meta_id(paths, &meta)?;
+    let current_index = read_message_store_index_file(&paths.index_file).ok();
+    let index_matches = current_index
+        .as_ref()
+        .map(|index| index.items == rebuilt.index.items)
+        .unwrap_or(false);
+    let manifest_matches = manifest.source_message_count() == rebuilt.message_count
+        && manifest.last_message_id().trim() == rebuilt.last_message_id
+        && manifest.messages_jsonl_bytes() == rebuilt.total_bytes;
+    if index_matches && manifest_matches {
+        return Ok(());
     }
-    if paths.index_file.exists() {
-        let index = read_message_store_index_file(&paths.index_file)?;
-        if index.items.len() != manifest.source_message_count() {
-            return Err(format!(
-                "ready JSONL 会话索引数量不一致，conversation_id={}，manifest={}，actual={}，path={}",
-                paths.conversation_id,
-                manifest.source_message_count(),
-                index.items.len(),
-                paths.index_file.display()
-            ));
-        }
-        let actual_last_message_id = index
-            .items
-            .last()
-            .map(|item| item.message_id.trim())
-            .unwrap_or_default();
-        if actual_last_message_id != manifest.last_message_id().trim() {
-            return Err(format!(
-                "ready JSONL 会话索引最后消息不一致，conversation_id={}，manifest={}，actual={}，path={}",
-                paths.conversation_id,
-                manifest.last_message_id(),
-                actual_last_message_id,
-                paths.index_file.display()
-            ));
-        }
-    }
+    write_message_store_index_atomic(&paths.index_file, &rebuilt.index)?;
+    let repaired_manifest = MessageStoreManifest::jsonl_snapshot_ready_for_messages(
+        rebuilt.message_count,
+        rebuilt.last_message_id.clone(),
+        rebuilt.total_bytes,
+        manifest.messages_index_revision.max(1),
+    );
+    write_message_store_manifest_atomic(&paths.manifest_file, &repaired_manifest)?;
+    runtime_log_warn(format!(
+        "[消息存储] 完成，任务=ready快照基于blocks自修复，conversation_id={}，manifest_count={}，rebuilt_count={}，manifest_last={}，rebuilt_last={}，manifest_bytes={}，rebuilt_bytes={}，index_matched_before={}，manifest_matched_before={}",
+        paths.conversation_id,
+        manifest.source_message_count(),
+        rebuilt.message_count,
+        manifest.last_message_id(),
+        rebuilt.last_message_id,
+        manifest.messages_jsonl_bytes(),
+        rebuilt.total_bytes,
+        index_matches,
+        manifest_matches
+    ));
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct RebuiltReadyMessageStoreSnapshot {
+    index: MessageStoreIndexFile,
+    total_bytes: u64,
+    message_count: usize,
+    last_message_id: String,
+}
+
+fn rebuild_ready_message_store_snapshot_from_blocks(
+    paths: &MessageStorePaths,
+) -> Result<RebuiltReadyMessageStoreSnapshot, String> {
+    let mut block_entries = fs::read_dir(&paths.blocks_dir)
+        .map_err(|err| {
+            format!(
+                "读取会话块目录失败，conversation_id={}，path={}，error={err}",
+                paths.conversation_id,
+                paths.blocks_dir.display()
+            )
+        })?
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let path = entry.path();
+            if !path.is_file() {
+                return None;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            let block_id = name
+                .strip_suffix(".jsonl")
+                .and_then(|value| value.parse::<u32>().ok())?;
+            Some((block_id, path))
+        })
+        .collect::<Vec<_>>();
+    block_entries.sort_by_key(|(block_id, _)| *block_id);
+
+    let mut items = Vec::<MessageStoreIndexItem>::new();
+    let mut total_bytes = 0_u64;
+    let mut last_message_id = String::new();
+
+    for (block_id, block_path) in block_entries {
+        let report = verify_jsonl_snapshot_file(&block_path, usize::MAX, "").map_err(|err| {
+            format!(
+                "校验会话块失败，conversation_id={}，block_id={}，path={}，error={err}",
+                paths.conversation_id,
+                block_id,
+                block_path.display()
+            )
+        })?;
+        if report.message_count == 0 {
+            return Err(format!(
+                "校验会话块失败，conversation_id={}，block_id={}，path={}，error=空 block 文件不允许作为 ready 快照真相",
+                paths.conversation_id,
+                block_id,
+                block_path.display()
+            ));
+        }
+        let block_len = fs::metadata(&block_path)
+            .map_err(|err| {
+                format!(
+                    "读取会话块元数据失败，conversation_id={}，path={}，error={err}",
+                    paths.conversation_id,
+                    block_path.display()
+                )
+            })?
+            .len();
+        total_bytes = total_bytes.checked_add(block_len).ok_or_else(|| {
+            format!(
+                "统计会话块字节数失败：总字节数溢出，conversation_id={}，path={}",
+                paths.conversation_id,
+                block_path.display()
+            )
+        })?;
+        last_message_id = report.last_message_id;
+        items.extend(report.index.items.into_iter().map(|mut item| {
+            item.block_id = Some(block_id);
+            item
+        }));
+    }
+
+    Ok(RebuiltReadyMessageStoreSnapshot {
+        message_count: items.len(),
+        last_message_id,
+        total_bytes,
+        index: MessageStoreIndexFile::new(MESSAGE_STORE_MANIFEST_VERSION, items),
+    })
 }
 
 fn message_store_index_total_bytes(
@@ -1499,6 +1572,8 @@ fn read_message_store_directory_conversation_with_manifest(
         ));
     }
     validate_ready_message_store_snapshot_integrity(paths, &manifest)?;
+    let manifest = read_message_store_manifest(&paths.manifest_file)?
+        .ok_or_else(|| format!("目录型会话缺少 manifest，path={}", paths.manifest_file.display()))?;
     let meta = read_conversation_shard_meta(&paths.meta_file)?;
     validate_conversation_shard_meta_id(paths, &meta)?;
     let messages = JsonlSnapshotMessageStore::with_index(
@@ -1908,7 +1983,10 @@ fn build_message_store_block_summaries(
 
 fn jsonl_snapshot_index_item_path(base_messages_file: &PathBuf, block_id: Option<u32>) -> Result<PathBuf, String> {
     let Some(block_id) = block_id else {
-        return Ok(base_messages_file.clone());
+        return Err(format!(
+            "会话块路径解析失败：索引缺少 block_id，path={}",
+            base_messages_file.display()
+        ));
     };
     let Some(shard_dir) = base_messages_file.parent() else {
         return Err(format!(
@@ -2408,6 +2486,24 @@ mod message_store_reader_tests {
         (root, messages_file, index_file)
     }
 
+    fn write_test_blocks_with_index(messages: &[ChatMessage]) -> (PathBuf, PathBuf, PathBuf) {
+        let root = std::env::temp_dir().join(format!(
+            "easy-call-message-store-reader-blocks-{}",
+            Uuid::new_v4()
+        ));
+        let shard_dir = root.join("conversation-reader");
+        let messages_file = shard_dir.join("messages.jsonl");
+        let blocks = build_jsonl_snapshot_conversation_blocks(messages).expect("build blocks");
+        fs::create_dir_all(shard_dir.join(MESSAGE_STORE_BLOCKS_DIR_NAME)).expect("create blocks dir");
+        for block in &blocks.blocks {
+            let block_path = shard_dir.join(&block.block_file);
+            write_jsonl_snapshot_atomic(&block_path, &block.content).expect("write block");
+        }
+        let index_file = shard_dir.join("messages.idx.json");
+        write_message_store_index_atomic(&index_file, &blocks.index).expect("write index");
+        (root, messages_file, index_file)
+    }
+
     fn test_conversation(messages: Vec<ChatMessage>) -> Conversation {
         Conversation {
             id: "conversation-reader".to_string(),
@@ -2677,7 +2773,7 @@ mod message_store_reader_tests {
             test_message("m4", "assistant"),
             test_message("m5", "user"),
         ];
-        let (root, messages_file, index_file) = write_test_messages_with_index(&messages);
+        let (root, messages_file, index_file) = write_test_blocks_with_index(&messages);
         let store = JsonlSnapshotMessageStore::with_index(messages_file, index_file);
 
         let before = store.read_messages_before("m5", 2).expect("indexed before page");
@@ -2704,7 +2800,7 @@ mod message_store_reader_tests {
             test_message("m3", "user"),
             test_message("m4", "assistant"),
         ];
-        let (root, messages_file, index_file) = write_test_messages_with_index(&messages);
+        let (root, messages_file, index_file) = write_test_blocks_with_index(&messages);
         let store = JsonlSnapshotMessageStore::with_index(messages_file, index_file);
 
         let recent = store.read_recent_messages(2).expect("recent messages");
@@ -2731,7 +2827,7 @@ mod message_store_reader_tests {
             test_message("m3", "user"),
             test_message("m4", "assistant"),
         ];
-        let (root, messages_file, index_file) = write_test_messages_with_index(&messages);
+        let (root, messages_file, index_file) = write_test_blocks_with_index(&messages);
         let store = JsonlSnapshotMessageStore::with_index(messages_file, index_file);
 
         let page = store
@@ -2755,7 +2851,7 @@ mod message_store_reader_tests {
             test_compaction_message("c2", "summary_context_seed"),
             test_message("m3", "assistant"),
         ];
-        let (root, messages_file, index_file) = write_test_messages_with_index(&messages);
+        let (root, messages_file, index_file) = write_test_blocks_with_index(&messages);
         let store = JsonlSnapshotMessageStore::with_index(messages_file, index_file);
 
         let current = store.read_current_compaction_segment().expect("indexed current segment");
@@ -2778,7 +2874,7 @@ mod message_store_reader_tests {
     #[test]
     fn message_store_jsonl_indexed_reader_should_reject_unsupported_index_version() {
         let messages = vec![test_message("m1", "user"), test_message("m2", "assistant")];
-        let (root, messages_file, index_file) = write_test_messages_with_index(&messages);
+        let (root, messages_file, index_file) = write_test_blocks_with_index(&messages);
         let mut index = (*read_message_store_index_file(&index_file).expect("read index")).clone();
         index.version = MESSAGE_STORE_MANIFEST_VERSION + 1;
         write_message_store_index_atomic(&index_file, &index).expect("write future index");
@@ -2795,7 +2891,7 @@ mod message_store_reader_tests {
     #[test]
     fn message_store_jsonl_indexed_reader_should_reject_stale_message_id() {
         let messages = vec![test_message("m1", "user"), test_message("m2", "assistant")];
-        let (root, messages_file, index_file) = write_test_messages_with_index(&messages);
+        let (root, messages_file, index_file) = write_test_blocks_with_index(&messages);
         let mut index = (*read_message_store_index_file(&index_file).expect("read index")).clone();
         index.items[1].message_id = "wrong-m2".to_string();
         write_message_store_index_atomic(&index_file, &index).expect("write stale index");
@@ -2812,7 +2908,7 @@ mod message_store_reader_tests {
     #[test]
     fn message_store_jsonl_indexed_reader_should_reject_invalid_index_shape() {
         let messages = vec![test_message("m1", "user"), test_message("m2", "assistant")];
-        let (root, _messages_file, index_file) = write_test_messages_with_index(&messages);
+        let (root, _messages_file, index_file) = write_test_blocks_with_index(&messages);
         let mut index = (*read_message_store_index_file(&index_file).expect("read index")).clone();
         index.items[1].message_id = index.items[0].message_id.clone();
         write_message_store_index_atomic(&index_file, &index).expect("write duplicate index");
@@ -3066,7 +3162,7 @@ mod message_store_reader_tests {
     }
 
     #[test]
-    fn message_store_ready_status_should_not_decode_messages_jsonl() {
+    fn message_store_ready_status_should_fail_when_block_truth_is_corrupted() {
         let root = std::env::temp_dir().join(format!(
             "easy-call-message-store-status-ready-{}",
             Uuid::new_v4()
@@ -3083,18 +3179,15 @@ mod message_store_reader_tests {
         fs::write(&block_path, "x".repeat(original_content.len()))
             .expect("break messages jsonl without changing size");
 
-        let status = read_ready_message_store_status(&paths)
-            .expect("read ready status")
-            .expect("ready status should exist");
+        let err = read_ready_message_store_status(&paths)
+            .expect_err("corrupted block truth should fail status read");
 
-        assert!(status.ready_jsonl);
-        assert_eq!(status.source_message_count, 2);
-        assert_eq!(status.last_message_id, "jsonl2");
+        assert!(err.contains("校验会话块失败"));
         let _ = fs::remove_dir_all(root);
     }
 
     #[test]
-    fn message_store_ready_status_should_reject_mismatched_jsonl_size() {
+    fn message_store_ready_status_should_repair_stale_manifest_bytes() {
         let root = std::env::temp_dir().join(format!(
             "easy-call-message-store-status-size-mismatch-{}",
             Uuid::new_v4()
@@ -3103,12 +3196,22 @@ mod message_store_reader_tests {
         let paths = message_store_paths(&data_path, "conversation-reader").expect("paths");
         let conversation = test_conversation(vec![test_message("jsonl1", "assistant")]);
         run_jsonl_snapshot_migration(&paths, &conversation, false).expect("run migration");
-        fs::write(&paths.messages_file, "").expect("truncate messages");
+        let mut manifest = read_message_store_manifest(&paths.manifest_file)
+            .expect("read manifest")
+            .expect("manifest exists");
+        manifest.messages_jsonl_bytes += 1;
+        write_message_store_manifest_atomic(&paths.manifest_file, &manifest)
+            .expect("write stale manifest");
 
-        let err = read_ready_message_store_status(&paths)
-            .expect_err("mismatched message file size should fail status");
+        let status = read_ready_message_store_status(&paths)
+            .expect("repair stale manifest bytes should succeed")
+            .expect("ready status should exist");
+        let manifest = read_message_store_manifest(&paths.manifest_file)
+            .expect("read manifest")
+            .expect("manifest exists");
 
-        assert!(err.contains("消息文件大小不一致"));
+        assert!(status.ready_jsonl);
+        assert_eq!(manifest.messages_jsonl_bytes(), message_store_index_total_bytes(&paths, &read_message_store_index_file(&paths.index_file).expect("read index")).expect("total bytes"));
         let _ = fs::remove_dir_all(root);
     }
 
@@ -3169,7 +3272,7 @@ mod message_store_reader_tests {
     }
 
     #[test]
-    fn message_store_directory_conversation_should_reject_stale_manifest() {
+    fn message_store_directory_conversation_should_repair_stale_manifest() {
         let root = std::env::temp_dir().join(format!(
             "easy-call-message-store-directory-stale-{}",
             Uuid::new_v4()
@@ -3185,15 +3288,19 @@ mod message_store_reader_tests {
         write_message_store_manifest_atomic(&paths.manifest_file, &manifest)
             .expect("write stale manifest");
 
-        let err = read_message_store_directory_conversation(&paths)
-            .expect_err("stale manifest should fail");
+        let loaded = read_message_store_directory_conversation(&paths)
+            .expect("stale manifest should self-heal");
+        let repaired_manifest = read_message_store_manifest(&paths.manifest_file)
+            .expect("read repaired manifest")
+            .expect("repaired manifest exists");
 
-        assert!(err.contains("最后消息不一致"));
+        assert_eq!(loaded.messages.len(), 1);
+        assert_eq!(repaired_manifest.last_message_id(), "m1");
         let _ = fs::remove_dir_all(root);
     }
 
     #[test]
-    fn message_store_ready_reader_should_reject_mismatched_jsonl_size() {
+    fn message_store_ready_reader_should_repair_stale_manifest_bytes() {
         let root = std::env::temp_dir().join(format!(
             "easy-call-message-store-size-mismatch-{}",
             Uuid::new_v4()
@@ -3202,17 +3309,24 @@ mod message_store_reader_tests {
         let paths = message_store_paths(&data_path, "conversation-reader").expect("paths");
         let conversation = test_conversation(vec![test_message("m1", "user")]);
         run_jsonl_snapshot_migration(&paths, &conversation, false).expect("run migration");
-        fs::write(&paths.messages_file, "").expect("truncate messages");
+        let mut manifest = read_message_store_manifest(&paths.manifest_file)
+            .expect("read manifest")
+            .expect("manifest exists");
+        manifest.messages_jsonl_bytes += 1;
+        write_message_store_manifest_atomic(&paths.manifest_file, &manifest)
+            .expect("write stale manifest");
 
-        let err = read_ready_message_store_recent_messages(&paths, 1)
-            .expect_err("mismatched message file size should fail");
+        let messages = read_ready_message_store_recent_messages(&paths, 1)
+            .expect("repair stale manifest bytes should succeed")
+            .expect("ready messages should exist");
 
-        assert!(err.contains("消息文件大小不一致"));
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].id, "m1");
         let _ = fs::remove_dir_all(root);
     }
 
     #[test]
-    fn message_store_backend_should_reject_mismatched_jsonl_size() {
+    fn message_store_backend_should_repair_stale_manifest_bytes() {
         let root = std::env::temp_dir().join(format!(
             "easy-call-message-store-backend-size-mismatch-{}",
             Uuid::new_v4()
@@ -3221,19 +3335,24 @@ mod message_store_reader_tests {
         let paths = message_store_paths(&data_path, "conversation-reader").expect("paths");
         let conversation = test_conversation(vec![test_message("m1", "user")]);
         run_jsonl_snapshot_migration(&paths, &conversation, false).expect("run migration");
-        fs::write(&paths.messages_file, "").expect("truncate messages");
+        let mut manifest = read_message_store_manifest(&paths.manifest_file)
+            .expect("read manifest")
+            .expect("manifest exists");
+        manifest.messages_jsonl_bytes += 1;
+        write_message_store_manifest_atomic(&paths.manifest_file, &manifest)
+            .expect("write stale manifest");
 
-        let err = match message_store_backend_for_conversation(&paths, &conversation) {
-            Ok(_) => panic!("mismatched message file size should fail"),
-            Err(err) => err,
-        };
+        let backend = message_store_backend_for_conversation(&paths, &conversation)
+            .expect("stale manifest bytes should self-heal");
 
-        assert!(err.contains("消息文件大小不一致"));
+        let messages = backend.read_all_messages().expect("read messages");
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].id, "m1");
         let _ = fs::remove_dir_all(root);
     }
 
     #[test]
-    fn message_store_ready_reader_should_reject_index_manifest_count_mismatch() {
+    fn message_store_ready_reader_should_repair_index_manifest_count_mismatch() {
         let root = std::env::temp_dir().join(format!(
             "easy-call-message-store-index-count-mismatch-{}",
             Uuid::new_v4()
@@ -3249,15 +3368,20 @@ mod message_store_reader_tests {
         write_message_store_manifest_atomic(&paths.manifest_file, &manifest)
             .expect("write stale manifest");
 
-        let err = read_ready_message_store_recent_messages(&paths, 1)
-            .expect_err("mismatched index count should fail");
+        let messages = read_ready_message_store_recent_messages(&paths, 1)
+            .expect("stale manifest count should self-heal")
+            .expect("ready messages should exist");
+        let repaired_manifest = read_message_store_manifest(&paths.manifest_file)
+            .expect("read repaired manifest")
+            .expect("manifest exists");
 
-        assert!(err.contains("索引数量不一致"));
+        assert_eq!(messages.len(), 1);
+        assert_eq!(repaired_manifest.source_message_count(), 1);
         let _ = fs::remove_dir_all(root);
     }
 
     #[test]
-    fn message_store_ready_reader_should_reject_index_manifest_last_id_mismatch() {
+    fn message_store_ready_reader_should_repair_index_manifest_last_id_mismatch() {
         let root = std::env::temp_dir().join(format!(
             "easy-call-message-store-index-last-id-mismatch-{}",
             Uuid::new_v4()
@@ -3273,10 +3397,36 @@ mod message_store_reader_tests {
         write_message_store_manifest_atomic(&paths.manifest_file, &manifest)
             .expect("write stale manifest");
 
-        let err = read_ready_message_store_recent_messages(&paths, 1)
-            .expect_err("mismatched index last id should fail");
+        let messages = read_ready_message_store_recent_messages(&paths, 1)
+            .expect("stale manifest last id should self-heal")
+            .expect("ready messages should exist");
+        let repaired_manifest = read_message_store_manifest(&paths.manifest_file)
+            .expect("read repaired manifest")
+            .expect("manifest exists");
 
-        assert!(err.contains("索引最后消息不一致"));
+        assert_eq!(messages.len(), 1);
+        assert_eq!(repaired_manifest.last_message_id(), "m1");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn message_store_ready_reader_should_still_reject_broken_block_content() {
+        let root = std::env::temp_dir().join(format!(
+            "easy-call-message-store-broken-block-{}",
+            Uuid::new_v4()
+        ));
+        let data_path = root.join("app_data.json");
+        let paths = message_store_paths(&data_path, "conversation-reader").expect("paths");
+        let conversation = test_conversation(vec![test_message("m1", "user")]);
+        run_jsonl_snapshot_migration(&paths, &conversation, false).expect("run migration");
+        let block_path = paths.blocks_dir.join("000000.jsonl");
+        let original = fs::read_to_string(&block_path).expect("read block");
+        fs::write(&block_path, "x".repeat(original.len())).expect("corrupt block");
+
+        let err = read_ready_message_store_recent_messages(&paths, 1)
+            .expect_err("broken block content should still fail");
+
+        assert!(err.contains("校验会话块失败"));
         let _ = fs::remove_dir_all(root);
     }
 

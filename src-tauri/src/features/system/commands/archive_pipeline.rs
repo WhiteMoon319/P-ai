@@ -401,12 +401,42 @@ fn resolve_archive_request_conversation_by_id(
 }
 
 fn log_manual_archive_failure(conversation_id: &str, reason: String) -> String {
+    let reason = decorate_manual_archive_failure_reason(reason);
     runtime_log_warn(format!(
         "[归档] 失败，任务=手动归档，conversation_id={}，error={}",
         conversation_id.trim(),
         reason
     ));
     reason
+}
+
+fn decorate_manual_archive_failure_reason(reason: String) -> String {
+    if !should_suggest_deleting_unrepairable_conversation(&reason) {
+        return reason;
+    }
+    if reason.contains("可直接删除该会话") {
+        return reason;
+    }
+    format!(
+        "{} 如确认该会话已无保留价值，可直接删除该会话。",
+        reason.trim()
+    )
+}
+
+fn should_suggest_deleting_unrepairable_conversation(reason: &str) -> bool {
+    let trimmed = reason.trim();
+    (trimmed.contains("消息存储")
+        || trimmed.contains("会话块")
+        || trimmed.contains("JSONL 索引与消息不一致")
+        || trimmed.contains("解析 JSONL 消息失败")
+        || trimmed.contains("读取 JSONL 消息失败")
+        || trimmed.contains("目录型会话消息数量不一致")
+        || trimmed.contains("目录型会话最后消息不一致"))
+        && (trimmed.contains("无法")
+            || trimmed.contains("失败")
+            || trimmed.contains("不一致")
+            || trimmed.contains("损坏")
+            || trimmed.contains("缺少"))
 }
 
 fn instant_archive_conversation(
@@ -2108,5 +2138,23 @@ mod archive_pipeline_tests {
         let resolved = resolve_memory_action_drafts(&drafts, &id_alias_map);
 
         assert_eq!(resolved.len(), 8);
+    }
+
+    #[test]
+    fn decorate_manual_archive_failure_reason_should_suggest_delete_for_unrepairable_store_error() {
+        let decorated = decorate_manual_archive_failure_reason(
+            "校验会话块失败，conversation_id=test".to_string(),
+        );
+
+        assert!(decorated.contains("可直接删除该会话"));
+    }
+
+    #[test]
+    fn decorate_manual_archive_failure_reason_should_not_suggest_delete_for_normal_error() {
+        let decorated = decorate_manual_archive_failure_reason(
+            "强制归档正在进行中，请稍候。".to_string(),
+        );
+
+        assert!(!decorated.contains("可直接删除该会话"));
     }
 }

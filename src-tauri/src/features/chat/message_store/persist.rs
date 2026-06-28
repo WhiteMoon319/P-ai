@@ -1568,54 +1568,6 @@ mod message_store_persist_tests {
     }
 
     #[test]
-    fn message_store_persist_should_recover_from_ready_single_file_snapshot() {
-        let root = std::env::temp_dir().join(format!(
-            "easy-call-message-store-recover-single-file-{}",
-            Uuid::new_v4()
-        ));
-        let data_path = root.join("app_data.json");
-        let paths = message_store_paths(&data_path, "conversation-persist").expect("paths");
-        let conversation = test_conversation(vec![test_message("m1"), test_message("m2")]);
-        let content =
-            encode_jsonl_snapshot_messages(&conversation.messages).expect("encode single-file");
-        let report = verify_jsonl_snapshot_content(&content, 2, "m2")
-            .expect("verify single-file index");
-        let manifest = MessageStoreManifest::jsonl_snapshot_building(&conversation)
-            .jsonl_snapshot_ready(content.len() as u64, 1);
-
-        write_conversation_shard_meta_atomic(
-            &paths.meta_file,
-            &ConversationShardMeta::from_conversation(&conversation),
-        )
-        .expect("write meta");
-        write_jsonl_snapshot_atomic(&paths.messages_file, &content).expect("write messages file");
-        write_message_store_index_atomic(&paths.index_file, &report.index).expect("write index");
-        write_message_store_manifest_atomic(&paths.manifest_file, &manifest)
-            .expect("write manifest");
-
-        let mut updated = conversation.clone();
-        updated.messages.push(test_message("m3"));
-        let write = write_jsonl_snapshot_directory_shard(&paths, &updated)
-            .expect("recover from single-file ready snapshot");
-        let loaded = read_message_store_directory_conversation(&paths)
-            .expect("read recovered conversation");
-
-        assert_eq!(write.message_count, 3);
-        assert_eq!(write.last_message_id, "m3");
-        assert!(!paths.messages_file.exists());
-        assert!(paths.blocks_dir.join("000000.jsonl").exists());
-        assert_eq!(
-            loaded
-                .messages
-                .iter()
-                .map(|message| message.id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["m1", "m2", "m3"]
-        );
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
     fn message_store_persist_should_recover_from_ready_snapshot_missing_block_files() {
         let root = std::env::temp_dir().join(format!(
             "easy-call-message-store-recover-missing-blocks-{}",

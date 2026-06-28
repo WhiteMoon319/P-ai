@@ -777,7 +777,6 @@ fn app_data_cache_signature(path: &PathBuf) -> AppDataCacheSignature {
             for shard_file_name in [
                 message_store::MESSAGE_STORE_MANIFEST_FILE_NAME,
                 message_store::MESSAGE_STORE_META_FILE_NAME,
-                message_store::MESSAGE_STORE_MESSAGES_FILE_NAME,
                 message_store::MESSAGE_STORE_INDEX_FILE_NAME,
             ] {
                 update_conversation_cache_signature_for_file(

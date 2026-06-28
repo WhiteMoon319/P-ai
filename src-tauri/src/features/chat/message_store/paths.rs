@@ -145,7 +145,6 @@ pub(super) fn message_store_shard_modified_time(
         &paths.legacy_conversation_file,
         &paths.manifest_file,
         &paths.meta_file,
-        &paths.messages_file,
         &paths.index_file,
         &paths.blocks_dir,
     ]
