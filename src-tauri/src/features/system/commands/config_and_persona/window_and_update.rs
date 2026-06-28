@@ -715,6 +715,7 @@ fn load_config_inner(state: &AppState) -> Result<AppConfig, String> {
     if workspace_changed || remote_im_private_state_migrated {
         state_write_config_cached(&state, &result)?;
     }
+    let _ = run_app_data_migrations_with_state(&state, &result)?;
     let runtime_agents = state_read_agents_cached(&state)?;
     let snapshot =
         build_runtime_organization_snapshot_from_parts(&state.data_path, &result, &runtime_agents)?;
@@ -722,8 +723,6 @@ fn load_config_inner(state: &AppState) -> Result<AppConfig, String> {
 }
 
 fn read_app_bootstrap_snapshot(state: &AppState) -> Result<AppBootstrapSnapshot, String> {
-    // 启动快照阶段优先修复会话总索引，避免旧版本误删归档入口后仍需人工恢复。
-    let _ = state_read_chat_index_cached(state)?;
     let mut config = state_read_config_cached(state)?;
     normalize_app_config(&mut config);
     let workspace_changed = ensure_default_shell_workspace_in_config(&mut config, state);
@@ -732,6 +731,9 @@ fn read_app_bootstrap_snapshot(state: &AppState) -> Result<AppBootstrapSnapshot,
     if workspace_changed || remote_im_private_state_migrated {
         state_write_config_cached(state, &config)?;
     }
+    let _ = run_app_data_migrations_with_state(state, &config)?;
+    // 启动快照阶段修复会话总索引，避免旧版本误删归档入口后仍需人工恢复。
+    let _ = state_read_chat_index_cached(state)?;
     let mut data = state_read_agents_runtime_snapshot(state)?;
     let assistant_agent_id =
         assistant_department_agent_id(&config).unwrap_or_else(default_assistant_department_agent_id);
@@ -929,6 +931,15 @@ fn save_config_inner(
     if shell_workspaces_changed {
         mark_prompt_cache_rebuild_for_all_system_environments(&state);
     }
+    let assistant_workspace_label_synced = if shell_workspaces_changed {
+        sync_assistant_workspace_label_for_unarchived_conversations(
+            &state,
+            &base_config,
+            &config,
+        )?
+    } else {
+        0
+    };
     if let Some(agent_id) = assistant_department_agent_id(&config) {
         if data.assistant_department_agent_id != agent_id {
             data.assistant_department_agent_id = agent_id;
@@ -985,6 +996,9 @@ fn save_config_inner(
     let runtime_config = runtime_config_with_private_organization(&state, &main_config, &data)
         .map_err(|err| format!("配置已保存，但运行时配置刷新失败：{err}"))?;
     let _ = app.emit("easy-call:config-updated", &runtime_config);
+    if assistant_workspace_label_synced > 0 {
+        emit_unarchived_conversation_overview_updated_from_state(&state)?;
+    }
     if department_content_changed {
         broadcast_sidebar_department_changed();
     }

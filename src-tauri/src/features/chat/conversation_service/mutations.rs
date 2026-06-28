@@ -281,11 +281,12 @@ fn create_unarchived_conversation_shared(
                 .iter()
                 .any(|api| api.id == *value && is_text_chat_api(api))
         });
-    if let Some(shell_workspaces) = input.shell_workspaces.as_ref() {
-        conversation.shell_workspaces =
-            normalize_conversation_shell_workspaces(state, shell_workspaces);
-        conversation.shell_workspace_path = None;
-    }
+    conversation.shell_workspaces = normalize_conversation_shell_workspaces_or_assistant_default(
+        state,
+        &app_config,
+        input.shell_workspaces.as_deref().unwrap_or(&conversation.shell_workspaces),
+    );
+    conversation.shell_workspace_path = None;
     if let Some(shell_autonomous_mode) = input.shell_autonomous_mode {
         conversation.shell_autonomous_mode = shell_autonomous_mode;
     }

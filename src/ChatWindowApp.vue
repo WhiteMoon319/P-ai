@@ -20,6 +20,7 @@
       :current-department-id="currentForegroundDepartmentId"
       :conversation-items="chatConversationItems"
       :current-chat-workspaces="chatWorkspaceChoices"
+      :config-shell-workspaces="config.shellWorkspaces || []"
       :user-alias="userAlias"
       :user-avatar-url="userAvatarUrl"
       :persona-name-map="chatPersonaNameMap"

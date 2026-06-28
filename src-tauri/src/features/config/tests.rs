@@ -1343,8 +1343,14 @@ model = "gpt-4.1"
         let after = message_store::message_store_shard_write_signature(&paths);
         let runtime = read_runtime_state_shard(&data_path).expect("read runtime shard");
 
-        assert_eq!(restored.data_migration_version, DATA_MIGRATION_CURRENT_VERSION);
-        assert_eq!(runtime.data_migration_version, DATA_MIGRATION_CURRENT_VERSION);
+        assert_eq!(
+            restored.data_migration_version,
+            DATA_MIGRATION_VERSION_V1_BASELINE
+        );
+        assert_eq!(
+            runtime.data_migration_version,
+            DATA_MIGRATION_VERSION_V1_BASELINE
+        );
         assert_eq!(restored.message_store_migration_version, 0);
         assert_eq!(runtime.message_store_migration_version, 0);
         assert_eq!(after, before);

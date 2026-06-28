@@ -347,7 +347,6 @@
               class="select select-bordered join-item min-w-0 flex-1"
               @change="handleCreateConversationWorkspaceChange"
             >
-              <option value="">{{ t("chat.createConversationNoWorkspace") }}</option>
               <option
                 v-for="workspace in selectableCreateConversationWorkspaces"
                 :key="workspace.id"
@@ -389,7 +388,11 @@
         </label>
         <div class="flex shrink-0 items-center justify-end gap-2">
           <button class="btn btn-sm" @click="closeCreateConversationDialog">{{ t("common.cancel") }}</button>
-          <button class="btn btn-sm btn-primary" @click="confirmCreateConversation">{{ t("common.confirm") }}</button>
+          <button
+            class="btn btn-sm btn-primary"
+            :disabled="!createConversationWorkspacePath"
+            @click="confirmCreateConversation"
+          >{{ t("common.confirm") }}</button>
         </div>
       </div>
     </div>
@@ -531,6 +534,7 @@ const props = withDefaults(defineProps<{
   currentDepartmentId?: string;
   conversationItems: ChatConversationOverviewItem[];
   currentChatWorkspaces?: ShellWorkspace[];
+  configShellWorkspaces?: ShellWorkspace[];
   userAlias: string;
   userAvatarUrl: string;
   personaNameMap: Record<string, string>;
@@ -751,6 +755,19 @@ const selectableCreateConversationWorkspaces = computed<ShellWorkspace[]>(() => 
       builtIn: false,
     });
   }
+  for (const workspace of Array.isArray(props.configShellWorkspaces) ? props.configShellWorkspaces : []) {
+    const path = String(workspace?.path || "").trim();
+    const key = normalizeWorkspacePathKey(path);
+    if (!path || deduped.has(key)) continue;
+    deduped.set(key, {
+      id: String(workspace?.id || "").trim() || `config-workspace-${path}`,
+      name: String(workspace?.name || "").trim() || defaultWorkspaceNameFromPath(path) || path,
+      path,
+      level: "main",
+      access: normalizeWorkspaceAccess(workspace?.access),
+      builtIn: false,
+    });
+  }
   const localConversationItems = props.conversationItems.filter((item) =>
     item.kind !== "remote_im_contact" && !item.isPinned && !item.isSystemNotificationConversation,
   );
@@ -810,6 +827,15 @@ function resetCreateConversationWorkspace() {
   closeCreateConversationWorkspacePicker();
 }
 
+function ensureCreateConversationWorkspaceSelected() {
+  const currentPath = String(createConversationWorkspacePath.value || "").trim();
+  if (currentPath) return;
+  const preferredWorkspace = selectableCreateConversationWorkspaces.value[0];
+  if (!preferredWorkspace?.path) return;
+  createConversationWorkspacePath.value = preferredWorkspace.path;
+  createConversationWorkspaceAccess.value = normalizeWorkspaceAccess(preferredWorkspace.access);
+}
+
 function workspaceAccessLabel(access: ShellWorkspaceAccess): string {
   if (access === "full_access") return t("config.tools.workspaceAccessFullAccess");
   if (access === "read_only") return t("config.tools.workspaceAccessReadOnly");
@@ -833,6 +859,7 @@ function selectedCreateConversationWorkspace(): ShellWorkspace | undefined {
 }
 
 function createConversationWorkspacePayload(): ShellWorkspace[] | undefined {
+  ensureCreateConversationWorkspaceSelected();
   const workspace = selectedCreateConversationWorkspace();
   return workspace ? [workspace] : undefined;
 }
@@ -840,7 +867,7 @@ function createConversationWorkspacePayload(): ShellWorkspace[] | undefined {
 function handleCreateConversationWorkspaceChange() {
   const path = String(createConversationWorkspacePath.value || "").trim();
   if (!path) {
-    createConversationWorkspaceAccess.value = "approval";
+    ensureCreateConversationWorkspaceSelected();
     return;
   }
   const source = selectableCreateConversationWorkspaces.value.find((item) => item.path === path)

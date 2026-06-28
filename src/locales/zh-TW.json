@@ -1343,7 +1343,6 @@
     "workspacePermissionFull": "完全無限制",
     "workspacePickerEmpty": "目前還沒有會話工作目錄，先新增一個即可。",
     "allowedWorkspaceButton": "允許 AI 存取的目錄",
-    "createConversationNoWorkspace": "不設定工作目錄",
     "createConversationMaxPermission": "給予會話最大權限",
     "conversationMenu": {
       "title": "會話選單",

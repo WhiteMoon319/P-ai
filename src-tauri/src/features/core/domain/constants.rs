@@ -12,9 +12,10 @@ const APP_DATA_SCHEMA_VERSION: u32 = 1;
 //   1. 在 app_data_layout.rs 的 data_migration_steps() 注册一个 DataMigrationStep；
 //   2. 在此处新增 DATA_MIGRATION_VERSION_V2 常量，并把 CURRENT_VERSION 提到它；
 //   3. 不要继续往 v1 baseline 门禁块里堆叠。
-// 当前尚无 v2+ 迁移，data_migration_steps() 为空，registry 未接入执行路径。
 const DATA_MIGRATION_VERSION_V1_BASELINE: u32 = 1;
-const DATA_MIGRATION_CURRENT_VERSION: u32 = DATA_MIGRATION_VERSION_V1_BASELINE;
+const DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES: u32 = 2;
+const DATA_MIGRATION_CURRENT_VERSION: u32 =
+    DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES;
 const MAX_MULTIMODAL_BYTES: usize = 10 * 1024 * 1024;
 const DEFAULT_AGENT_ID: &str = "default-agent";
 const DEPUTY_AGENT_ID: &str = "deputy-agent";

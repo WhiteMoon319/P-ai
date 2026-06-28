@@ -1230,7 +1230,6 @@
     "workspacePermissionFull": "Full access",
     "workspacePickerEmpty": "No conversation workspace has been added yet. Add one to continue.",
     "allowedWorkspaceButton": "Directories AI Can Access",
-    "createConversationNoWorkspace": "No working directory",
     "createConversationMaxPermission": "Grant maximum permissions",
     "conversationMenu": {
       "title": "Conversation Menu",

@@ -381,6 +381,44 @@ fn ensure_default_shell_workspace_in_config(config: &mut AppConfig, state: &AppS
     original_snapshot != current_snapshot
 }
 
+fn assistant_workspace_as_conversation_main_workspace(
+    state: &AppState,
+    config: &AppConfig,
+) -> ShellWorkspaceConfig {
+    let system_workspace = config.shell_workspaces.iter().find(|workspace| {
+        normalize_shell_workspace_level_text(&workspace.level) == SHELL_WORKSPACE_LEVEL_SYSTEM
+    });
+    let candidate = system_workspace
+        .and_then(|workspace| shell_workspace_resolve_path_candidate(state, workspace))
+        .unwrap_or_else(|| state.llm_workspace_path.clone());
+    let name = system_workspace
+        .map(|workspace| workspace.name.trim())
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| shell_workspace_display_name_fallback(&candidate));
+    ShellWorkspaceConfig {
+        id: "assistant-main-workspace".to_string(),
+        name,
+        path: terminal_path_for_user(&candidate),
+        level: SHELL_WORKSPACE_LEVEL_MAIN.to_string(),
+        access: SHELL_WORKSPACE_ACCESS_FULL_ACCESS.to_string(),
+        built_in: false,
+    }
+}
+
+fn normalize_conversation_shell_workspaces_or_assistant_default(
+    state: &AppState,
+    config: &AppConfig,
+    raw_entries: &[ShellWorkspaceConfig],
+) -> Vec<ShellWorkspaceConfig> {
+    let normalized = normalize_conversation_shell_workspaces(state, raw_entries);
+    if normalized.is_empty() {
+        vec![assistant_workspace_as_conversation_main_workspace(state, config)]
+    } else {
+        normalized
+    }
+}
+
 fn normalize_conversation_shell_workspaces(
     state: &AppState,
     raw_entries: &[ShellWorkspaceConfig],
@@ -1058,6 +1096,20 @@ mod terminal_workspace_tests {
         }
     }
 
+    fn build_workspace_test_conversation(conversation_id: &str) -> Conversation {
+        let mut conversation = build_conversation_record(
+            "api-1",
+            DEFAULT_AGENT_ID,
+            ASSISTANT_DEPARTMENT_ID,
+            conversation_id,
+            CONVERSATION_KIND_CHAT,
+            None,
+            None,
+        );
+        conversation.id = conversation_id.to_string();
+        conversation
+    }
+
     #[cfg(target_os = "windows")]
     #[test]
     fn path_is_within_should_allow_descendants_of_drive_root() {
@@ -1110,7 +1162,7 @@ mod terminal_workspace_tests {
     }
 
     #[test]
-    fn normalize_conversation_shell_workspaces_should_ignore_input_name() {
+    fn normalize_conversation_shell_workspaces_should_keep_input_label() {
         let temp_root = std::env::temp_dir().join(format!(
             "easy-call-ai-terminal-workspace-test-{}",
             uuid::Uuid::new_v4()
@@ -1134,7 +1186,157 @@ mod terminal_workspace_tests {
         );
 
         assert_eq!(normalized.len(), 1);
-        assert_eq!(normalized[0].name, "project-alpha".to_string());
+        assert_eq!(normalized[0].name, "前端乱传的标题".to_string());
+
+        let _ = std::fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn data_migration_should_fill_empty_unarchived_conversation_shell_workspaces() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "easy-call-ai-terminal-workspace-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let llm_workspace_path = temp_root.join("p-ai").join("llm-workspace");
+        let custom_workspace_path = temp_root.join("custom-root");
+        std::fs::create_dir_all(&llm_workspace_path).expect("create llm workspace");
+        std::fs::create_dir_all(&custom_workspace_path).expect("create custom workspace");
+        let state = build_test_state(llm_workspace_path.clone());
+        let mut config = AppConfig::default();
+        config.shell_workspaces = vec![ShellWorkspaceConfig {
+            id: "system-workspace".to_string(),
+            name: "天空岛".to_string(),
+            path: terminal_path_for_user(&llm_workspace_path),
+            level: SHELL_WORKSPACE_LEVEL_SYSTEM.to_string(),
+            access: SHELL_WORKSPACE_ACCESS_FULL_ACCESS.to_string(),
+            built_in: true,
+        }];
+        state_write_config_cached(&state, &config).expect("write config");
+
+        let empty_conversation = build_workspace_test_conversation("conv-empty-workspace");
+        write_conversation_shard(&state.data_path, &empty_conversation)
+            .expect("write empty conversation");
+        let mut custom_conversation = build_workspace_test_conversation("conv-custom-workspace");
+        custom_conversation.shell_workspaces = vec![ShellWorkspaceConfig {
+            id: "custom-main".to_string(),
+            name: "Custom".to_string(),
+            path: terminal_path_for_user(&custom_workspace_path),
+            level: SHELL_WORKSPACE_LEVEL_MAIN.to_string(),
+            access: SHELL_WORKSPACE_ACCESS_APPROVAL.to_string(),
+            built_in: false,
+        }];
+        write_conversation_shard(&state.data_path, &custom_conversation)
+            .expect("write custom conversation");
+        let mut archived_conversation = build_workspace_test_conversation("conv-archived-workspace");
+        archived_conversation.summary = "已归档".to_string();
+        write_conversation_shard(&state.data_path, &archived_conversation)
+            .expect("write archived conversation");
+
+        let changed =
+            run_app_data_migrations_with_state(&state, &config).expect("run migrations");
+
+        assert!(changed);
+        let migrated = read_conversation_shard(&state.data_path, "conv-empty-workspace")
+            .expect("read migrated conversation");
+        assert_eq!(migrated.shell_workspace_path, None);
+        assert_eq!(migrated.shell_workspaces.len(), 1);
+        assert_eq!(migrated.shell_workspaces[0].name, "天空岛");
+        assert_eq!(
+            migrated.shell_workspaces[0].path,
+            terminal_path_for_user(&llm_workspace_path)
+        );
+        assert_eq!(
+            migrated.shell_workspaces[0].level,
+            SHELL_WORKSPACE_LEVEL_MAIN
+        );
+        assert_eq!(
+            migrated.shell_workspaces[0].access,
+            SHELL_WORKSPACE_ACCESS_FULL_ACCESS
+        );
+        let custom = read_conversation_shard(&state.data_path, "conv-custom-workspace")
+            .expect("read custom conversation");
+        assert_eq!(
+            custom.shell_workspaces[0].path,
+            terminal_path_for_user(&custom_workspace_path)
+        );
+        let archived = read_conversation_shard(&state.data_path, "conv-archived-workspace")
+            .expect("read archived conversation");
+        assert!(archived.shell_workspaces.is_empty());
+        let runtime = read_runtime_state_shard(&state.data_path).expect("read runtime");
+        assert_eq!(runtime.data_migration_version, DATA_MIGRATION_CURRENT_VERSION);
+
+        let _ = std::fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn assistant_workspace_label_sync_should_update_unarchived_matching_conversations() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "easy-call-ai-terminal-workspace-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let llm_workspace_path = temp_root.join("p-ai").join("llm-workspace");
+        let custom_workspace_path = temp_root.join("custom-root");
+        std::fs::create_dir_all(&llm_workspace_path).expect("create llm workspace");
+        std::fs::create_dir_all(&custom_workspace_path).expect("create custom workspace");
+        let state = build_test_state(llm_workspace_path.clone());
+        let mut previous_config = AppConfig::default();
+        previous_config.shell_workspaces = vec![ShellWorkspaceConfig {
+            id: "system-workspace".to_string(),
+            name: "旧助理空间".to_string(),
+            path: terminal_path_for_user(&llm_workspace_path),
+            level: SHELL_WORKSPACE_LEVEL_SYSTEM.to_string(),
+            access: SHELL_WORKSPACE_ACCESS_FULL_ACCESS.to_string(),
+            built_in: true,
+        }];
+        let mut next_config = previous_config.clone();
+        next_config.shell_workspaces[0].name = "新助理空间".to_string();
+
+        let mut assistant_conversation =
+            build_workspace_test_conversation("conv-assistant-workspace");
+        assistant_conversation.shell_workspaces = vec![ShellWorkspaceConfig {
+            id: "assistant-main".to_string(),
+            name: "旧助理空间".to_string(),
+            path: terminal_path_for_user(&llm_workspace_path),
+            level: SHELL_WORKSPACE_LEVEL_MAIN.to_string(),
+            access: SHELL_WORKSPACE_ACCESS_APPROVAL.to_string(),
+            built_in: false,
+        }];
+        write_conversation_shard(&state.data_path, &assistant_conversation)
+            .expect("write assistant conversation");
+        let mut custom_conversation = build_workspace_test_conversation("conv-custom-workspace");
+        custom_conversation.shell_workspaces = vec![ShellWorkspaceConfig {
+            id: "custom-main".to_string(),
+            name: "Custom".to_string(),
+            path: terminal_path_for_user(&custom_workspace_path),
+            level: SHELL_WORKSPACE_LEVEL_MAIN.to_string(),
+            access: SHELL_WORKSPACE_ACCESS_APPROVAL.to_string(),
+            built_in: false,
+        }];
+        write_conversation_shard(&state.data_path, &custom_conversation)
+            .expect("write custom conversation");
+
+        let changed = sync_assistant_workspace_label_for_unarchived_conversations(
+            &state,
+            &previous_config,
+            &next_config,
+        )
+        .expect("sync assistant labels");
+
+        assert_eq!(changed, 1);
+        let assistant = read_conversation_shard(&state.data_path, "conv-assistant-workspace")
+            .expect("read assistant conversation");
+        assert_eq!(assistant.shell_workspaces[0].name, "新助理空间");
+        assert_eq!(
+            assistant.shell_workspaces[0].path,
+            terminal_path_for_user(&llm_workspace_path)
+        );
+        assert_eq!(
+            assistant.shell_workspaces[0].access,
+            SHELL_WORKSPACE_ACCESS_APPROVAL
+        );
+        let custom = read_conversation_shard(&state.data_path, "conv-custom-workspace")
+            .expect("read custom conversation");
+        assert_eq!(custom.shell_workspaces[0].name, "Custom");
 
         let _ = std::fs::remove_dir_all(temp_root);
     }

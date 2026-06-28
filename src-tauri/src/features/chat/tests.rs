@@ -4506,6 +4506,20 @@
             .expect("created conversation should exist");
         assert_eq!(created_conversation.title, "V2创建会话");
         assert_eq!(created_conversation.agent_id, DEFAULT_AGENT_ID);
+        assert_eq!(created_conversation.shell_workspace_path, None);
+        assert_eq!(created_conversation.shell_workspaces.len(), 1);
+        assert_eq!(
+            created_conversation.shell_workspaces[0].level,
+            SHELL_WORKSPACE_LEVEL_MAIN
+        );
+        assert_eq!(
+            created_conversation.shell_workspaces[0].path,
+            terminal_path_for_user(&state.llm_workspace_path)
+        );
+        assert_eq!(
+            created_conversation.shell_workspaces[0].access,
+            SHELL_WORKSPACE_ACCESS_FULL_ACCESS
+        );
 
         let deleted = conversation_service_v2()
             .delete_conversation(&state, &created.conversation_id)

@@ -1041,37 +1041,310 @@ fn read_layout_app_data(path: &PathBuf) -> Result<AppData, String> {
     })
 }
 
-// ========== 数据迁移 registry 骨架 ==========
+// ========== 数据迁移 registry ==========
 //
-// 给 v2+ 显式版本迁移一个注册点，避免后续再往 read_app_data() 的 v1 baseline
-// 门禁块里堆叠。当前未接入执行路径：steps() 返回空 Vec，CURRENT_VERSION 仍停在 v1。
-//
-// 接入执行路径时（首个 v2 迁移落地），在 read_app_data() 里：
-//   for step in data_migration_steps() {
-//       if migration_version_before < step.version {
-//           if (step.run)(path, &mut parsed)? {
-//               touched = true;
-//           }
-//       }
-//   }
-// 并把 parsed.data_migration_version 推进到 CURRENT_VERSION。
-//
-// 单步签名说明：
-//   - 返回 bool 表示本次是否真的改了数据（用于决定是否触发兼容写回）；
-//   - 需要 Err 时（如读旧文件失败、必须中止）返回 Err。
-//   - path 用于触碰磁盘上的遗留资源（旧归档、内联媒体等），
-//     纯结构补齐的 step 可以忽略 path。
-#[allow(dead_code)]
+// v1 是历史兼容合集，继续由 read_app_data() 的 baseline 门禁处理。
+// v2+ 需要显式上下文，避免在只有 app_data 路径时猜测助理空间位置或名称。
+struct DataMigrationContext<'a> {
+    state: &'a AppState,
+    config: &'a AppConfig,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+struct DataMigrationStepStats {
+    data_changed: bool,
+    conversation_writes: usize,
+}
+
 struct DataMigrationStep {
     version: u32,
     name: &'static str,
-    run: fn(&PathBuf, &mut AppData) -> Result<bool, String>,
+    run: for<'a> fn(&DataMigrationContext<'a>) -> Result<DataMigrationStepStats, String>,
 }
 
-// 新增 v2+ 迁移时在此 push。当前为空。
-#[allow(dead_code)]
 fn data_migration_steps() -> Vec<DataMigrationStep> {
-    Vec::new()
+    vec![DataMigrationStep {
+        version: DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES,
+        name: "v2_assistant_workspace_for_empty_shell_workspaces",
+        run: migrate_empty_shell_workspaces_to_assistant_workspace,
+    }]
+}
+
+fn conversation_shell_workspace_path_key(path: &str) -> String {
+    let path = path.trim();
+    if path.is_empty() {
+        String::new()
+    } else {
+        normalize_terminal_path_for_compare(&PathBuf::from(path))
+    }
+}
+
+fn legacy_shell_workspace_path_as_main_workspace(
+    state: &AppState,
+    path: &str,
+) -> Option<ShellWorkspaceConfig> {
+    let raw = ShellWorkspaceConfig {
+        id: "legacy-main-workspace".to_string(),
+        name: String::new(),
+        path: path.trim().to_string(),
+        level: SHELL_WORKSPACE_LEVEL_MAIN.to_string(),
+        access: SHELL_WORKSPACE_ACCESS_APPROVAL.to_string(),
+        built_in: false,
+    };
+    let candidate = shell_workspace_resolve_path_candidate(state, &raw)?;
+    let canonical = candidate.canonicalize().ok()?;
+    if !canonical.is_dir() {
+        return None;
+    }
+    normalize_conversation_shell_workspaces(
+        state,
+        &[ShellWorkspaceConfig {
+            path: terminal_path_for_user(&canonical),
+            ..raw
+        }],
+    )
+    .into_iter()
+    .next()
+}
+
+fn state_write_conversation_shell_workspace_metadata_direct(
+    state: &AppState,
+    conversation_id: &str,
+    shell_workspaces: Vec<ShellWorkspaceConfig>,
+) -> Result<bool, String> {
+    let conversation_id = conversation_id.trim();
+    if conversation_id.is_empty() {
+        return Ok(false);
+    }
+    let conversation_meta = state_read_conversation_metadata_cached(state, conversation_id)?;
+    let mut conversation =
+        conversation_service_v2().build_conversation_snapshot_from_meta(&conversation_meta, Vec::new());
+    let original_path = conversation.shell_workspace_path.clone();
+    let original_workspaces = conversation.shell_workspaces.clone();
+    conversation.shell_workspace_path = None;
+    conversation.shell_workspaces = shell_workspaces;
+    if conversation.shell_workspace_path == original_path
+        && conversation.shell_workspaces == original_workspaces
+    {
+        return Ok(false);
+    }
+    let mut updated_meta = message_store::ConversationShardMeta::from_conversation(&conversation);
+    updated_meta.preserve_message_derived_fields_from(&conversation_meta);
+    write_conversation_meta_shard_from_meta(&state.data_path, &updated_meta)?;
+    let _ = state_mark_conversation_metadata_direct_persisted(state, conversation_id)?;
+    Ok(true)
+}
+
+fn shell_workspaces_for_empty_conversation_workspace_migration(
+    state: &AppState,
+    config: &AppConfig,
+    conversation: &Conversation,
+) -> Option<Vec<ShellWorkspaceConfig>> {
+    let normalized = normalize_conversation_shell_workspaces(state, &conversation.shell_workspaces);
+    if !normalized.is_empty() {
+        return None;
+    }
+    if let Some(legacy_workspace) = conversation
+        .shell_workspace_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .and_then(|path| legacy_shell_workspace_path_as_main_workspace(state, path))
+    {
+        return Some(vec![legacy_workspace]);
+    }
+    Some(vec![assistant_workspace_as_conversation_main_workspace(
+        state, config,
+    )])
+}
+
+fn migrate_empty_shell_workspaces_to_assistant_workspace(
+    context: &DataMigrationContext<'_>,
+) -> Result<DataMigrationStepStats, String> {
+    let chat_index = collect_chat_index_items_from_storage(&context.state.data_path)?;
+    let mut stats = DataMigrationStepStats::default();
+    for item in chat_index {
+        let conversation_id = item.id.trim();
+        if conversation_id.is_empty() {
+            continue;
+        }
+        let _guard = lock_conversation_with_metrics(
+            context.state,
+            "data_migration_v2_empty_shell_workspaces_item",
+        )?;
+        let conversation_meta =
+            match state_read_conversation_metadata_cached(context.state, conversation_id) {
+                Ok(meta) => meta,
+                Err(err) => {
+                    runtime_log_warn(format!(
+                        "[应用数据迁移] 跳过，任务=v2补齐会话工作区，conversation_id={}，error={}",
+                        conversation_id, err
+                    ));
+                    continue;
+                }
+            };
+        let conversation = conversation_service_v2()
+            .build_conversation_snapshot_from_meta(&conversation_meta, Vec::new());
+        if !conversation_visible_in_foreground_lists(&conversation)
+            || !conversation_is_local_normal_chat(&conversation)
+            || !conversation_is_unarchived(&conversation)
+        {
+            continue;
+        }
+        let Some(shell_workspaces) = shell_workspaces_for_empty_conversation_workspace_migration(
+            context.state,
+            context.config,
+            &conversation,
+        ) else {
+            continue;
+        };
+        if state_write_conversation_shell_workspace_metadata_direct(
+            context.state,
+            conversation_id,
+            shell_workspaces,
+        )? {
+            stats.data_changed = true;
+            stats.conversation_writes += 1;
+        }
+    }
+    Ok(stats)
+}
+
+fn run_app_data_migrations_with_state(
+    state: &AppState,
+    config: &AppConfig,
+) -> Result<bool, String> {
+    let mut runtime = state_read_runtime_state_cached(state)?;
+    if runtime.data_migration_version >= DATA_MIGRATION_CURRENT_VERSION {
+        return Ok(false);
+    }
+    let migration_version_before = runtime.data_migration_version;
+    let mut any_data_changed = false;
+    for step in data_migration_steps() {
+        if runtime.data_migration_version >= step.version {
+            continue;
+        }
+        let started = std::time::Instant::now();
+        let stats = (step.run)(&DataMigrationContext { state, config })?;
+        runtime.data_migration_version = step.version;
+        any_data_changed |= stats.data_changed;
+        runtime_log_info(format!(
+            "[应用数据迁移] 完成，任务={}，migration_version_before={}，migration_version_after={}，data_changed={}，conversation_writes={}，duration_ms={}",
+            step.name,
+            migration_version_before,
+            runtime.data_migration_version,
+            stats.data_changed,
+            stats.conversation_writes,
+            started.elapsed().as_millis()
+        ));
+    }
+    if runtime.data_migration_version < DATA_MIGRATION_CURRENT_VERSION {
+        runtime.data_migration_version = DATA_MIGRATION_CURRENT_VERSION;
+    }
+    state_write_runtime_state_cached(state, &runtime)?;
+    Ok(any_data_changed || migration_version_before != runtime.data_migration_version)
+}
+
+fn assistant_workspace_label_sync_target_keys(
+    state: &AppState,
+    previous_config: &AppConfig,
+    next_config: &AppConfig,
+) -> std::collections::HashSet<String> {
+    let mut previous = previous_config.clone();
+    let mut next = next_config.clone();
+    let _ = ensure_default_shell_workspace_in_config(&mut previous, state);
+    let _ = ensure_default_shell_workspace_in_config(&mut next, state);
+    [
+        assistant_workspace_as_conversation_main_workspace(state, &previous),
+        assistant_workspace_as_conversation_main_workspace(state, &next),
+    ]
+    .into_iter()
+    .map(|workspace| conversation_shell_workspace_path_key(&workspace.path))
+    .filter(|key| !key.is_empty())
+    .collect()
+}
+
+fn sync_assistant_workspace_label_for_unarchived_conversations(
+    state: &AppState,
+    previous_config: &AppConfig,
+    next_config: &AppConfig,
+) -> Result<usize, String> {
+    let target_keys =
+        assistant_workspace_label_sync_target_keys(state, previous_config, next_config);
+    if target_keys.is_empty() {
+        return Ok(0);
+    }
+    let assistant_workspace =
+        assistant_workspace_as_conversation_main_workspace(state, next_config);
+    let chat_index = collect_chat_index_items_from_storage(&state.data_path)?;
+    let mut changed = 0usize;
+    for item in chat_index {
+        let conversation_id = item.id.trim();
+        if conversation_id.is_empty() {
+            continue;
+        }
+        let _guard =
+            lock_conversation_with_metrics(state, "sync_assistant_workspace_label_item")?;
+        let conversation_meta = match state_read_conversation_metadata_cached(state, conversation_id)
+        {
+            Ok(meta) => meta,
+            Err(err) => {
+                runtime_log_warn(format!(
+                    "[终端工作空间] 跳过，任务=同步助理空间会话标签，conversation_id={}，error={}",
+                    conversation_id, err
+                ));
+                continue;
+            }
+        };
+        let conversation = conversation_service_v2()
+            .build_conversation_snapshot_from_meta(&conversation_meta, Vec::new());
+        if !conversation_visible_in_foreground_lists(&conversation)
+            || !conversation_is_local_normal_chat(&conversation)
+            || !conversation_is_unarchived(&conversation)
+        {
+            continue;
+        }
+        let mut workspaces =
+            normalize_conversation_shell_workspaces(state, &conversation.shell_workspaces);
+        if workspaces.is_empty() {
+            workspaces = vec![assistant_workspace.clone()];
+        } else {
+            let main_index = workspaces
+                .iter()
+                .position(|workspace| {
+                    normalize_shell_workspace_level_text(&workspace.level)
+                        == SHELL_WORKSPACE_LEVEL_MAIN
+                })
+                .unwrap_or(0);
+            let key = conversation_shell_workspace_path_key(&workspaces[main_index].path);
+            if !target_keys.contains(&key) {
+                continue;
+            }
+            let mut synced = workspaces[main_index].clone();
+            synced.name = assistant_workspace.name.clone();
+            synced.path = assistant_workspace.path.clone();
+            synced.level = SHELL_WORKSPACE_LEVEL_MAIN.to_string();
+            synced.built_in = false;
+            if normalize_shell_workspace_access_text(&synced.access).is_empty() {
+                synced.access = assistant_workspace.access.clone();
+            }
+            workspaces[main_index] = synced;
+        }
+        if state_write_conversation_shell_workspace_metadata_direct(
+            state,
+            conversation_id,
+            workspaces,
+        )? {
+            changed += 1;
+        }
+    }
+    if changed > 0 {
+        runtime_log_info(format!(
+            "[终端工作空间] 完成，任务=同步助理空间会话标签，conversation_count={}",
+            changed
+        ));
+    }
+    Ok(changed)
 }
 
 fn read_app_data(path: &PathBuf) -> Result<AppData, String> {
@@ -1124,8 +1397,9 @@ fn read_app_data(path: &PathBuf) -> Result<AppData, String> {
             }
         }
     }
-    let data_migration_version_recorded = if parsed.data_migration_version < DATA_MIGRATION_CURRENT_VERSION {
-        parsed.data_migration_version = DATA_MIGRATION_CURRENT_VERSION;
+    let data_migration_version_recorded =
+        if parsed.data_migration_version < DATA_MIGRATION_VERSION_V1_BASELINE {
+        parsed.data_migration_version = DATA_MIGRATION_VERSION_V1_BASELINE;
         true
     } else {
         false

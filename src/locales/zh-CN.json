@@ -1352,7 +1352,6 @@
     "workspacePermissionFull": "完全无限制",
     "workspacePickerEmpty": "当前还没有会话工作目录，先添加一个即可。",
     "allowedWorkspaceButton": "允许 AI 访问的目录",
-    "createConversationNoWorkspace": "不设置工作目录",
     "createConversationMaxPermission": "给予会话最大权限",
     "conversationMenu": {
       "autoPush": "自动推送",
