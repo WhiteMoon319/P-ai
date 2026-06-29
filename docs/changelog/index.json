@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-06-29T02:33:37.195Z",
-  "latestVersion": "v0.15.4",
+  "generatedAt": "2026-06-29T12:36:57.271Z",
+  "latestVersion": "v0.15.5",
   "releases": [
+    {
+      "version": "v0.15.5",
+      "path": "docs/changelog/releases/v0.15.5.md",
+      "summary": "**goal 续跑完成态收口**：移除 `round_completed` 对前端 activation 门禁的错误依赖，goal 自动续跑在消息正式完成后会正确结束忙碌态，不再出现已经出正式消息却仍显示“正在输入”的情况。"
+    },
     {
       "version": "v0.15.4",
       "path": "docs/changelog/releases/v0.15.4.md",
