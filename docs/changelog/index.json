@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-06-29T12:36:57.271Z",
-  "latestVersion": "v0.15.5",
+  "generatedAt": "2026-06-29T14:26:56.581Z",
+  "latestVersion": "v0.15.6",
   "releases": [
+    {
+      "version": "v0.15.6",
+      "path": "docs/changelog/releases/v0.15.6.md",
+      "summary": "**恢复消息去重**：恢复会话时去重已落库的 assistant 消息和前端草稿，避免重新打开窗口后出现两条相同回复。"
+    },
     {
       "version": "v0.15.5",
       "path": "docs/changelog/releases/v0.15.5.md",
