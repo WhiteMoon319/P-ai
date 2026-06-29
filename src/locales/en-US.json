@@ -1230,7 +1230,10 @@
     "workspacePermissionFull": "Full access",
     "workspacePickerEmpty": "No conversation workspace has been added yet. Add one to continue.",
     "allowedWorkspaceButton": "Directories AI Can Access",
+    "createConversationAction": "Create",
+    "createConversationCreating": "Creating",
     "createConversationMaxPermission": "Grant maximum permissions",
+    "createConversationDepartmentPersonaLockedHint": "Department/persona cannot be switched after the conversation starts",
     "conversationMenu": {
       "title": "Conversation Menu",
       "startDelegate": "Start Delegate",

@@ -1352,7 +1352,10 @@
     "workspacePermissionFull": "完全无限制",
     "workspacePickerEmpty": "当前还没有会话工作目录，先添加一个即可。",
     "allowedWorkspaceButton": "允许 AI 访问的目录",
+    "createConversationAction": "创建",
+    "createConversationCreating": "正在创建",
     "createConversationMaxPermission": "给予会话最大权限",
+    "createConversationDepartmentPersonaLockedHint": "会话中途不可切换部门/人格",
     "conversationMenu": {
       "autoPush": "自动推送",
       "title": "会话菜单",

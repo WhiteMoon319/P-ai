@@ -340,6 +340,7 @@
           :show-model="false"
           auto-select-first
         />
+        <div class="text-xs text-base-content/60">{{ t("chat.createConversationDepartmentPersonaLockedHint") }}</div>
         <div class="grid grid-cols-[minmax(0,1fr)_5rem] gap-2">
           <div class="join min-w-0">
             <select

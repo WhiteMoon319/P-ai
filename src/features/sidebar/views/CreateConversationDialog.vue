@@ -1,13 +1,13 @@
 <template>
   <dialog class="modal !items-start pt-[8vh]" :class="{ 'modal-open': open }">
     <div class="modal-box mx-auto max-w-md overflow-visible">
-      <h3 class="text-base font-semibold">新建会话</h3>
+      <h3 class="text-base font-semibold">{{ t("chat.newConversation") }}</h3>
       <div class="mt-3 flex flex-col gap-3">
         <input
           v-model="localTitle"
           type="text"
           class="input input-bordered w-full"
-          placeholder="会话主题"
+          :placeholder="t('chat.newConversationTopicPlaceholder')"
           @keydown.enter.prevent="confirm"
         />
         <DepartmentPersonaSelect
@@ -17,15 +17,16 @@
           :persona-avatar-url-map="personaAvatarUrlMap"
           auto-select-first
         />
+        <div class="text-xs text-base-content/60">{{ t("chat.createConversationDepartmentPersonaLockedHint") }}</div>
       </div>
       <div v-if="errorText" class="mt-3 rounded border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
         {{ errorText }}
       </div>
       <div class="modal-action">
-        <button class="btn btn-sm" :disabled="creating" @click="emit('close')">取消</button>
+        <button class="btn btn-sm" :disabled="creating" @click="emit('close')">{{ t("common.cancel") }}</button>
         <button class="btn btn-sm btn-primary" :disabled="creating || !localDepartmentId || !localAgentId" @click="confirm">
           <span v-if="creating" class="loading loading-spinner loading-xs"></span>
-          <span>{{ creating ? "正在创建" : "创建" }}</span>
+          <span>{{ creating ? t("chat.createConversationCreating") : t("chat.createConversationAction") }}</span>
         </button>
       </div>
     </div>
@@ -37,10 +38,13 @@
 
 <script setup lang="ts">
 import { ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import DepartmentPersonaSelect from "../../shared/components/DepartmentPersonaSelect.vue";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
 
 export type SidebarCreateDepartmentOption = DepartmentPersonaOption;
+
+const { t } = useI18n();
 
 const props = defineProps<{
   open: boolean;
