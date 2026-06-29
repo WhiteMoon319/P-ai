@@ -1712,6 +1712,18 @@ pub(crate) fn trigger_chat_event_after_ingress(state: &AppState, ingress: ChatEv
     });
 }
 
+pub(crate) fn trigger_chat_event_after_ingress_with_delay(
+    state: &AppState,
+    ingress: ChatEventIngress,
+    delay: std::time::Duration,
+) {
+    let state_clone = state.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(delay).await;
+        process_chat_event_after_ingress(&state_clone, ingress).await;
+    });
+}
+
 fn goal_continue_turn_for_conversation(
     conversation: &Conversation,
     goal_id: &str,
@@ -1828,7 +1840,7 @@ fn maybe_enqueue_goal_continue_after_idle(
         "[目标续跑] 开始，任务=goal_continue，conversation_id={}，goal_id={}，goal_turn={}",
         conversation_id, goal.goal_id, goal_turn
     ));
-    trigger_chat_event_after_ingress(state, ingress);
+    trigger_chat_event_after_ingress_with_delay(state, ingress, std::time::Duration::from_secs(1));
     Ok(true)
 }
 
