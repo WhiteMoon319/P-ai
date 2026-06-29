@@ -153,15 +153,6 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       options.clearConversationStreamCache(payloadConversationId);
       return;
     }
-    if (!options.payloadMatchesActiveActivation(parsed)) {
-      if (parsed.assistantMessage) {
-        await options.onAssistantMessageCompleted?.({
-          conversationId: payloadConversationId || currentConversationId,
-          assistantMessage: parsed.assistantMessage,
-        });
-      }
-      return;
-    }
     const round = options.getRound();
     if (round.phase !== "streaming" && round.phase !== "queued") {
       options.chatting.value = false;
