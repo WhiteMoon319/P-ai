@@ -12,8 +12,11 @@ import { stringifyExternalEventPayload } from "./use-chat-flow-utils";
 type UseChatFlowExternalEventsOptions = {
   debug?: boolean;
   getCurrentConversationId: () => string;
-  getActiveActivationId: () => string;
   setActiveActivationId: (value: string) => void;
+  clearRecentlyCompletedRoundIds: () => void;
+  hasRecentlyCompletedRoundIds: () => boolean;
+  markRecentlyCompletedRoundIds: (payload: { activationId?: string; requestId?: string } | null | undefined) => void;
+  matchesRecentlyCompletedRoundIds: (payload: { activationId?: string; requestId?: string } | null | undefined) => boolean;
   getRound: () => { phase: "idle" } | { phase: "queued"; gen: number } | { phase: "streaming"; gen: number; draftId: string };
   getSendChatActiveGen: () => number;
   nextGeneration: () => number;
@@ -25,7 +28,6 @@ type UseChatFlowExternalEventsOptions = {
   handleHistoryFlushed: (gen: number, parsed: any, source: "sendChat" | "bound") => Promise<void>;
   beginAssistantActivationFromEvent: (payload: any) => number;
   markRoundStarted: (gen: number) => Promise<void>;
-  payloadMatchesActiveActivation: (payload: { activationId?: string; requestId?: string } | null | undefined) => boolean;
   handleRoundCompleted: (gen: number, result: any) => void;
   handleRoundFailed: (gen: number, error: unknown) => Promise<void>;
   clearConversationStreamCache: (conversationId?: string | null) => void;
@@ -58,6 +60,7 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     if (!payloadConversationId || !currentConversationId || payloadConversationId !== currentConversationId) {
       return;
     }
+    options.clearRecentlyCompletedRoundIds();
     const requestId = String(raw?.requestId || "").trim();
     const phaseId = String(raw?.phaseId || "").trim();
     const reason = String(raw?.reason || "").trim();
@@ -113,6 +116,9 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     if (currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId) {
       return;
     }
+    if (parsed.activateAssistant) {
+      options.clearRecentlyCompletedRoundIds();
+    }
     const treatAsSendChat = options.getSendChatActiveGen() > 0 && !!parsed.activateAssistant;
     const source: "sendChat" | "bound" = treatAsSendChat ? "sendChat" : "bound";
     const gen = treatAsSendChat ? options.getSendChatActiveGen() : options.nextGeneration();
@@ -138,6 +144,7 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     if (currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId) {
       return;
     }
+    options.clearRecentlyCompletedRoundIds();
     const gen = options.beginAssistantActivationFromEvent(parsed);
     if (!gen) return;
     await options.markRoundStarted(gen);
@@ -153,6 +160,7 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       options.clearConversationStreamCache(payloadConversationId);
       return;
     }
+    options.markRecentlyCompletedRoundIds(parsed);
     const round = options.getRound();
     if (round.phase !== "streaming" && round.phase !== "queued") {
       options.chatting.value = false;
@@ -178,9 +186,6 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       const errorDetail = parsed?.error || raw || String(raw);
       options.setChatErrorText(options.formatRequestFailed(errorDetail), payloadConversationId);
       options.clearConversationStreamCache(payloadConversationId);
-      return;
-    }
-    if (!options.payloadMatchesActiveActivation(parsed)) {
       return;
     }
     const round = options.getRound();
@@ -220,14 +225,12 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     const payloadConversationId = String(rawObj?.conversationId || "").trim();
     const parsed = readAssistantEvent(rawObj?.event ?? payload);
     const cacheConversationId = payloadConversationId || currentConversationId;
-    const eventActivationId = String(parsed.activationId || parsed.requestId || "").trim();
-    const activeActivationId = options.getActiveActivationId();
-    if (activeActivationId && eventActivationId && eventActivationId !== activeActivationId) {
-      console.warn("[聊天流式块][前端外部丢弃] activationId 不一致", {
+    if (options.matchesRecentlyCompletedRoundIds(parsed)) {
+      console.warn("[聊天流式块][前端外部丢弃] 已完成轮次的旧增量", {
         currentConversationId,
         payloadConversationId,
-        activeActivationId,
-        eventActivationId,
+        activationId: String(parsed.activationId || "").trim(),
+        requestId: String(parsed.requestId || "").trim(),
         kind: parsed.kind || "delta",
       });
       return;
@@ -270,6 +273,19 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       }
     }
     const round = options.getRound();
+    if (
+      round.phase === "idle"
+      && parsed.kind === "tool_status"
+      && !String(parsed.activationId || parsed.requestId || "").trim()
+      && options.hasRecentlyCompletedRoundIds()
+    ) {
+      console.warn("[聊天流式块][前端外部丢弃] 已完成轮次后的无 ID tool_status", {
+        currentConversationId,
+        payloadConversationId,
+        kind: parsed.kind,
+      });
+      return;
+    }
     if (parsed.kind === "context_usage_update") {
       const currentGen = round.phase === "streaming" || round.phase === "queued" ? round.gen : 0;
       if (currentGen) {

@@ -64,6 +64,8 @@ export function useChatFlow(options: UseChatFlowOptions) {
   let deferredRoundCompletion: DeferredRoundCompletion | null = null;
   let foregroundRounds: ReturnType<typeof useChatFlowForegroundRounds> | null = null;
   let activeActivationId = "";
+  let recentlyCompletedActivationId = "";
+  let recentlyCompletedRequestId = "";
   let activeRoundAgentId = "";
   let queuedStreamingState: {
     assistantText: string;
@@ -302,10 +304,13 @@ export function useChatFlow(options: UseChatFlowOptions) {
   const externalEvents = useChatFlowExternalEvents({
     debug: CHAT_STREAM_DEBUG,
     getCurrentConversationId: () => String(options.getConversationId ? options.getConversationId() : "").trim(),
-    getActiveActivationId: () => activeActivationId,
     setActiveActivationId: (value) => {
       activeActivationId = value;
     },
+    clearRecentlyCompletedRoundIds,
+    hasRecentlyCompletedRoundIds,
+    markRecentlyCompletedRoundIds,
+    matchesRecentlyCompletedRoundIds,
     getRound: () => round,
     getSendChatActiveGen: () => sendChatActiveGen,
     nextGeneration: () => ++generation,
@@ -313,7 +318,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
     handleHistoryFlushed,
     beginAssistantActivationFromEvent,
     markRoundStarted,
-    payloadMatchesActiveActivation,
     handleRoundCompleted,
     handleRoundFailed,
     clearConversationStreamCache,
@@ -579,10 +583,29 @@ export function useChatFlow(options: UseChatFlowOptions) {
     frontendDispatch.restoreFromCache(cache, gen);
   }
 
-  function payloadMatchesActiveActivation(payload: { activationId?: string; requestId?: string } | null | undefined): boolean {
-    if (!activeActivationId) return true;
-    const payloadActivationId = String(payload?.activationId || payload?.requestId || "").trim();
-    return !payloadActivationId || payloadActivationId === activeActivationId;
+  function clearRecentlyCompletedRoundIds() {
+    recentlyCompletedActivationId = "";
+    recentlyCompletedRequestId = "";
+  }
+
+  function hasRecentlyCompletedRoundIds() {
+    return !!(recentlyCompletedActivationId || recentlyCompletedRequestId);
+  }
+
+  function markRecentlyCompletedRoundIds(payload: { activationId?: string; requestId?: string } | null | undefined) {
+    recentlyCompletedActivationId = String(payload?.activationId || payload?.requestId || "").trim();
+    recentlyCompletedRequestId = String(payload?.requestId || payload?.activationId || "").trim();
+  }
+
+  function matchesRecentlyCompletedRoundIds(payload: { activationId?: string; requestId?: string } | null | undefined): boolean {
+    const payloadActivationId = String(payload?.activationId || "").trim();
+    const payloadRequestId = String(payload?.requestId || "").trim();
+    return !!(
+      (recentlyCompletedActivationId && payloadActivationId && payloadActivationId === recentlyCompletedActivationId)
+      || (recentlyCompletedActivationId && payloadRequestId && payloadRequestId === recentlyCompletedActivationId)
+      || (recentlyCompletedRequestId && payloadRequestId && payloadRequestId === recentlyCompletedRequestId)
+      || (recentlyCompletedRequestId && payloadActivationId && payloadActivationId === recentlyCompletedRequestId)
+    );
   }
 
   // =========================================================================

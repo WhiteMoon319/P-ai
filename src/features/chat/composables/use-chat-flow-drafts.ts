@@ -11,7 +11,7 @@ import {
 } from "../../../utils/chat-message-semantics";
 import { consumeClosedMarkdownBlocks } from "./use-chat-flow-text";
 import { readMessagePlainText } from "./use-chat-flow-utils";
-import { messageWithStableRenderId, stableRenderIdFromMessage } from "../utils/stable-render-id";
+import { messageWithStableRenderId, messageWithoutStableRenderId, stableRenderIdFromMessage } from "../utils/stable-render-id";
 
 export const DRAFT_ASSISTANT_ID_PREFIX = "__draft_assistant__:";
 export const DRAFT_USER_ID_PREFIX = "__draft_user__:";
@@ -176,16 +176,6 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
       options.allMessages.value = cur.map((m, i) => (i === idx ? msg : m));
       return draftId;
     }
-    const relatedUserDraftId = `${DRAFT_USER_ID_PREFIX}${gen}`;
-    const userDraftIdx = cur.findIndex((m) => m.id === relatedUserDraftId);
-    if (userDraftIdx >= 0) {
-      options.allMessages.value = [
-        ...cur.slice(0, userDraftIdx + 1),
-        msg,
-        ...cur.slice(userDraftIdx + 1),
-      ];
-      return draftId;
-    }
     options.allMessages.value = [...cur, msg];
     return draftId;
   }
@@ -220,16 +210,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     if (idx >= 0) {
       options.allMessages.value = cur.map((m, i) => (i === idx ? msg : m));
     } else {
-      const gen = Number(String(draftId).split(":").pop() || 0);
-      const relatedUserDraftId = `${DRAFT_USER_ID_PREFIX}${gen}`;
-      const userDraftIdx = cur.findIndex((m) => m.id === relatedUserDraftId);
-      options.allMessages.value = userDraftIdx >= 0
-        ? [
-            ...cur.slice(0, userDraftIdx + 1),
-            msg,
-            ...cur.slice(userDraftIdx + 1),
-          ]
-        : [...cur, msg];
+      options.allMessages.value = [...cur, msg];
     }
   }
 
@@ -363,15 +344,14 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     const draftIdx = current.findIndex((m) => m.id === draftId);
     if (draftIdx < 0) return;
     const draft = current[draftIdx];
-    const stableRenderId = stableRenderIdFromMessage(draft) || draftId;
 
     if (finalMessage) {
       const draftSpeakerAgentId = resolveAssistantDraftSpeakerAgentId(draft);
       const finalSpeakerAgentId = String(finalMessage.speakerAgentId || "").trim();
-      const messageToApply = messageWithStableRenderId({
+      const messageToApply = messageWithoutStableRenderId({
         ...finalMessage,
         speakerAgentId: finalSpeakerAgentId || draftSpeakerAgentId,
-      }, stableRenderId);
+      });
       const deduped = current.filter((m, idx) => idx === draftIdx || m.id !== finalMessage.id);
       const nextDraftIdx = deduped.findIndex((m) => m.id === draftId);
       if (nextDraftIdx < 0) {
