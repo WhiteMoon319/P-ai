@@ -96,85 +96,103 @@
       />
     </div>
     <div class="flex min-w-0 items-center justify-end gap-1.5">
-      <div
+      <button
         v-if="uniqueMentionEntries.length > 0"
-        class="dropdown dropdown-top dropdown-end"
+        ref="mentionListButtonRef"
+        type="button"
+        class="btn btn-ghost btn-sm btn-circle shrink-0 border-0 bg-transparent shadow-none hover:bg-base-200"
+        :title="t('chat.toolbar.personaList')"
+        @click="toggleMentionListPopup"
       >
-        <button
-          type="button"
-          tabindex="0"
-          class="btn btn-ghost btn-sm btn-circle shrink-0 border border-base-300/70 bg-base-100/70 hover:border-base-300 hover:bg-base-200"
-          :title="t('chat.toolbar.personaList')"
+        <span class="text-base font-semibold leading-none">@</span>
+      </button>
+    </div>
+  </div>
+  <Teleport to="body">
+    <div
+      v-if="mentionListPopupOpen"
+      ref="mentionListPopupRef"
+      class="fixed z-1200"
+      :style="mentionListPopupStyle"
+    >
+      <div class="relative overflow-hidden rounded-box border border-base-300 bg-base-100 shadow-xl">
+        <div
+          ref="mentionListScrollRef"
+          class="ecall-toolbar-mention-scroll max-h-[min(56vh,24rem)] min-w-56 max-w-[min(80vw,20rem)] overflow-y-auto overscroll-contain p-1"
         >
-          <Users class="h-4 w-4" />
-        </button>
-        <ul
-          tabindex="0"
-          class="dropdown-content menu z-50 mb-2 w-max min-w-56 max-w-[min(80vw,20rem)] rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
-        >
-          <li
-            v-for="entry in uniqueMentionEntries"
-            :key="entry.agentId"
-          >
-            <button
-              type="button"
-              class="flex min-h-0 w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left text-base-content transition-colors hover:bg-base-200/80"
-              :disabled="chatting || frozen || !entry.mentionable"
-              @click="handleCompactPersonaEntryClick($event, entry)"
+          <ul class="flex flex-col gap-1">
+            <li
+              v-for="entry in uniqueMentionEntries"
+              :key="entry.agentId"
             >
-              <div class="indicator shrink-0">
-                <span
-                  v-if="entry.selected"
-                  class="indicator-item indicator-top indicator-end inline-flex h-4 w-4 translate-x-1/4 -translate-y-1/4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-content"
-                >
-                  @
-                </span>
-                <span
-                  v-else-if="entry.hasBackgroundTask"
-                  class="indicator-item indicator-bottom indicator-end inline-flex min-w-5 translate-x-1/4 translate-y-1/4 items-center justify-center rounded-full border border-base-300 bg-base-100 px-1 py-0.5 text-[9px] text-base-content shadow-sm"
-                >
-                  <span class="loading loading-dots loading-xs"></span>
-                </span>
-                <div class="avatar">
-                  <div class="w-7 rounded-full">
-                    <img
-                      v-if="entry.avatarUrl"
-                      :src="entry.avatarUrl"
-                      :alt="entry.agentName"
-                      class="w-7 h-7 rounded-full object-cover"
-                      :class="frontSpeakingMuted(entry) ? 'grayscale opacity-75' : ''"
-                    />
-                    <div
-                      v-else
-                      class="w-7 h-7 rounded-full flex items-center justify-center text-[10px]"
-                      :class="frontSpeakingMuted(entry)
-                        ? 'bg-base-300 text-base-content/70'
-                        : 'bg-neutral text-neutral-content'"
-                    >
-                      {{ avatarInitial(entry.agentName) }}
+              <button
+                type="button"
+                class="flex min-h-0 w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left text-base-content transition-colors"
+                :class="[
+                  entry.mentionable ? 'hover:bg-base-200/80' : 'opacity-65',
+                ]"
+                :disabled="chatting || frozen || !entry.mentionable"
+                @click="handleCompactPersonaEntryClick($event, entry)"
+              >
+                <div class="indicator shrink-0">
+                  <span
+                    v-if="entry.selected"
+                    class="indicator-item indicator-top indicator-end inline-flex h-4 w-4 translate-x-1/4 -translate-y-1/4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-content"
+                  >
+                    @
+                  </span>
+                  <span
+                    v-else-if="entry.hasBackgroundTask"
+                    class="indicator-item indicator-bottom indicator-end inline-flex min-w-5 translate-x-1/4 translate-y-1/4 items-center justify-center rounded-full border border-base-300 bg-base-100 px-1 py-0.5 text-[9px] text-base-content shadow-sm"
+                  >
+                    <span class="loading loading-dots loading-xs"></span>
+                  </span>
+                  <div class="avatar">
+                    <div class="w-7 rounded-full">
+                      <img
+                        v-if="entry.avatarUrl"
+                        :src="entry.avatarUrl"
+                        :alt="entry.agentName"
+                        class="w-7 h-7 rounded-full object-cover"
+                        :class="frontSpeakingMuted(entry) ? 'grayscale opacity-75' : ''"
+                      />
+                      <div
+                        v-else
+                        class="w-7 h-7 rounded-full flex items-center justify-center text-[10px]"
+                        :class="frontSpeakingMuted(entry)
+                          ? 'bg-base-300 text-base-content/70'
+                          : 'bg-neutral text-neutral-content'"
+                      >
+                        {{ avatarInitial(entry.agentName) }}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-              <div class="min-w-0 flex-1 pr-0.5">
-                <div class="truncate text-sm leading-5">@{{ entry.agentName }}</div>
-                <div class="truncate text-[11px] leading-4 text-base-content/60">
-                  {{ entry.departmentName || t("chat.defaultDepartment") }}
+                <div class="min-w-0 flex-1 pr-0.5">
+                  <div class="truncate text-sm leading-5">@{{ entry.agentName }}</div>
+                  <div class="truncate text-[11px] leading-4 text-base-content/60">
+                    {{ entry.departmentName || t("chat.defaultDepartment") }}
+                  </div>
                 </div>
-              </div>
-            </button>
-          </li>
-        </ul>
+              </button>
+            </li>
+          </ul>
+        </div>
+        <FloatingScrollbar ref="mentionListScrollbarRef" :target="mentionListScrollRef" />
       </div>
     </div>
-  </div>
+  </Teleport>
   <Teleport to="body">
     <div
       v-if="avatarPopupTarget"
       class="fixed z-1200"
       :style="avatarPopupStyle"
     >
-      <div ref="avatarPopupPanelRef" class="w-max max-w-[min(80vw,20rem)] overflow-hidden rounded-box border border-base-300 bg-base-100 p-1 shadow-xl">
+      <div class="relative overflow-hidden rounded-box border border-base-300 bg-base-100 shadow-xl">
+        <div
+          ref="avatarPopupPanelRef"
+          class="ecall-toolbar-mention-scroll max-h-[min(56vh,24rem)] w-max max-w-[min(80vw,20rem)] overflow-y-auto overscroll-contain p-1"
+        >
         <ul class="flex flex-col gap-1">
           <li
             v-for="entry in filteredAvatarPopupOptions"
@@ -207,6 +225,8 @@
             </button>
           </li>
         </ul>
+        </div>
+        <FloatingScrollbar ref="avatarPopupScrollbarRef" :target="avatarPopupPanelRef" />
       </div>
     </div>
   </Teleport>
@@ -215,8 +235,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { ClipboardCheck, ClipboardList, ExternalLink, Folder, Grip, ListTodo, Package, Send, Split, Users } from "@lucide/vue";
+import { ClipboardCheck, ClipboardList, ExternalLink, Folder, Grip, ListTodo, Package, Send, Split } from "@lucide/vue";
 import type { ChatMentionEntry, ConversationDelegateStatusSummary } from "../../../types/app";
+import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import SessionControlPanel from "./SessionControlPanel.vue";
 
 const props = withDefaults(defineProps<{
@@ -284,6 +305,16 @@ const POPUP_VIEWPORT_PADDING = 8;
 
 // ========== 头像栏去重 + 部门弹出 ==========
 
+const mentionListButtonRef = ref<HTMLButtonElement | null>(null);
+const mentionListPopupOpen = ref(false);
+const mentionListPopupRef = ref<HTMLElement | null>(null);
+const mentionListScrollRef = ref<HTMLElement | null>(null);
+const mentionListScrollbarRef = ref<InstanceType<typeof FloatingScrollbar> | null>(null);
+const mentionListPopupStyle = ref<Record<string, string>>({
+  left: "0px",
+  top: "0px",
+});
+
 const uniqueMentionEntries = computed(() => {
   const seen = new Map<string, ChatMentionEntry>();
   for (const entry of props.mentionEntries || []) {
@@ -311,7 +342,9 @@ const avatarPopupTarget = ref<{
   agentName: string;
   avatarUrl?: string;
 } | null>(null);
+const avatarPopupAnchorEl = ref<HTMLElement | null>(null);
 const avatarPopupPanelRef = ref<HTMLElement | null>(null);
+const avatarPopupScrollbarRef = ref<InstanceType<typeof FloatingScrollbar> | null>(null);
 
 const avatarPopupStyle = ref<Record<string, string>>({
   left: "0px",
@@ -337,42 +370,73 @@ function handleMentionEntryClick(event: MouseEvent, entry: ChatMentionEntry & { 
   const agentId = String(entry.agentId || "").trim();
   const deptEntries = (props.mentionEntries || []).filter((e) => String(e.agentId || "").trim() === agentId);
   if (deptEntries.length <= 1) {
+    mentionListPopupOpen.value = false;
     emit('mentionEntry', deptEntries[0] || entry);
     return;
   }
+  mentionListPopupOpen.value = false;
   avatarPopupTarget.value = { agentId: entry.agentId, agentName: entry.agentName, avatarUrl: entry.avatarUrl };
   const el = event.currentTarget as HTMLElement | null;
   if (el) {
+    avatarPopupAnchorEl.value = el;
     void updateAvatarPopupPlacement(el.getBoundingClientRect());
   }
 }
 
-function clampPopupPosition(anchorRect: DOMRect, panelEl: HTMLElement | null) {
-  const measuredWidth = Math.round(panelEl?.offsetWidth || 0);
+function clampPopupPosition(anchorRect: DOMRect, panelEl: HTMLElement | null, options?: {
+  preferredWidth?: number;
+  alignRight?: boolean;
+}) {
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const measuredWidth = Math.round(panelEl?.offsetWidth || options?.preferredWidth || 0);
   const measuredHeight = Math.round(panelEl?.offsetHeight || 0);
+  const spaceAbove = Math.max(0, anchorRect.top - POPUP_VIEWPORT_PADDING - POPUP_OFFSET);
+  const spaceBelow = Math.max(0, viewportHeight - anchorRect.bottom - POPUP_VIEWPORT_PADDING - POPUP_OFFSET);
+  const openUpward = spaceAbove >= measuredHeight || spaceAbove > spaceBelow;
   const maxLeft = Math.max(
     POPUP_VIEWPORT_PADDING,
-    window.innerWidth - measuredWidth - POPUP_VIEWPORT_PADDING,
+    viewportWidth - measuredWidth - POPUP_VIEWPORT_PADDING,
   );
+  const preferredLeft = options?.alignRight
+    ? Math.round(anchorRect.right - measuredWidth)
+    : Math.round(anchorRect.left);
   const left = Math.min(
-    Math.max(POPUP_VIEWPORT_PADDING, Math.round(anchorRect.left)),
+    Math.max(POPUP_VIEWPORT_PADDING, preferredLeft),
     maxLeft,
   );
-  const top = Math.max(
-    POPUP_VIEWPORT_PADDING,
-    Math.round(anchorRect.top) - measuredHeight - POPUP_OFFSET,
-  );
+  const top = openUpward
+    ? Math.max(POPUP_VIEWPORT_PADDING, Math.round(anchorRect.top) - measuredHeight - POPUP_OFFSET)
+    : Math.min(
+      Math.round(anchorRect.bottom) + POPUP_OFFSET,
+      Math.max(POPUP_VIEWPORT_PADDING, viewportHeight - measuredHeight - POPUP_VIEWPORT_PADDING),
+    );
   return {
     left: `${left}px`,
     top: `${top}px`,
   };
 }
 
-async function updateAvatarPopupPlacement(anchorRect?: DOMRect) {
-  const rect = anchorRect;
+async function updateMentionListPopupPlacement(anchorRect?: DOMRect) {
+  const rect = anchorRect || mentionListButtonRef.value?.getBoundingClientRect();
   if (!rect) return;
   await nextTick();
-  avatarPopupStyle.value = clampPopupPosition(rect, avatarPopupPanelRef.value);
+  mentionListPopupStyle.value = clampPopupPosition(rect, mentionListPopupRef.value, {
+    preferredWidth: 320,
+    alignRight: true,
+  });
+  mentionListScrollbarRef.value?.updateThumb();
+}
+
+async function updateAvatarPopupPlacement(anchorRect?: DOMRect) {
+  const rect = anchorRect || avatarPopupAnchorEl.value?.getBoundingClientRect();
+  if (!rect) return;
+  await nextTick();
+  avatarPopupStyle.value = clampPopupPosition(rect, avatarPopupPanelRef.value, {
+    preferredWidth: 320,
+    alignRight: true,
+  });
+  avatarPopupScrollbarRef.value?.updateThumb();
 }
 
 function handleCompactPersonaEntryClick(event: MouseEvent, entry: ChatMentionEntry & { selected?: boolean }) {
@@ -397,13 +461,35 @@ function applyAvatarPopupSelection(entry: {
 
 function closeAvatarPopup() {
   avatarPopupTarget.value = null;
+  avatarPopupAnchorEl.value = null;
+}
+
+function closeMentionListPopup() {
+  mentionListPopupOpen.value = false;
+}
+
+function toggleMentionListPopup() {
+  if (busy.value) return;
+  mentionListPopupOpen.value = !mentionListPopupOpen.value;
+  if (mentionListPopupOpen.value) {
+    closeAvatarPopup();
+    void updateMentionListPopupPlacement();
+  }
 }
 
 function handleAvatarClickOutside(event: MouseEvent) {
   const target = event.target as HTMLElement | null;
   if (!target) {
     closeAvatarPopup();
+    closeMentionListPopup();
     return;
+  }
+  if (
+    mentionListPopupOpen.value
+    && !mentionListButtonRef.value?.contains(target)
+    && !mentionListPopupRef.value?.contains(target)
+  ) {
+    closeMentionListPopup();
   }
   if (
     avatarPopupTarget.value
@@ -411,6 +497,16 @@ function handleAvatarClickOutside(event: MouseEvent) {
   ) {
     closeAvatarPopup();
   }
+}
+
+function handleMentionPopupViewportChange() {
+  if (!mentionListPopupOpen.value) return;
+  void updateMentionListPopupPlacement();
+}
+
+function handleAvatarPopupViewportChange() {
+  if (!avatarPopupTarget.value) return;
+  void updateAvatarPopupPlacement();
 }
 
 const menuButtonRef = ref<HTMLButtonElement | null>(null);
@@ -454,12 +550,33 @@ onMounted(() => {
   updateMenuPlacement();
   window.addEventListener("resize", updateMenuPlacement);
   window.addEventListener("scroll", updateMenuPlacement, true);
+  window.addEventListener("resize", handleMentionPopupViewportChange);
+  window.addEventListener("scroll", handleMentionPopupViewportChange, true);
+  window.addEventListener("resize", handleAvatarPopupViewportChange);
+  window.addEventListener("scroll", handleAvatarPopupViewportChange, true);
   window.addEventListener("click", handleAvatarClickOutside, true);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("resize", updateMenuPlacement);
   window.removeEventListener("scroll", updateMenuPlacement, true);
+  window.removeEventListener("resize", handleMentionPopupViewportChange);
+  window.removeEventListener("scroll", handleMentionPopupViewportChange, true);
+  window.removeEventListener("resize", handleAvatarPopupViewportChange);
+  window.removeEventListener("scroll", handleAvatarPopupViewportChange, true);
   window.removeEventListener("click", handleAvatarClickOutside, true);
 });
 </script>
+
+<style scoped>
+.ecall-toolbar-mention-scroll {
+  scrollbar-gutter: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.ecall-toolbar-mention-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+</style>
