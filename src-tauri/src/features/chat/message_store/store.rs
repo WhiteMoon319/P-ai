@@ -1404,7 +1404,7 @@ pub(super) fn validate_ready_message_store_snapshot_integrity(
     let current_index = read_message_store_index_file(&paths.index_file).ok();
     let index_matches = current_index
         .as_ref()
-        .map(|index| index.items == rebuilt.index.items)
+        .map(|index| index.persistent_view().items == rebuilt.index.persistent_view().items)
         .unwrap_or(false);
     let manifest_matches = manifest.source_message_count() == rebuilt.message_count
         && manifest.last_message_id().trim() == rebuilt.last_message_id
@@ -3427,6 +3427,37 @@ mod message_store_reader_tests {
             .expect_err("broken block content should still fail");
 
         assert!(err.contains("校验会话块失败"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn message_store_ready_reader_should_not_repair_index_for_compaction_kind_only_difference() {
+        let root = std::env::temp_dir().join(format!(
+            "easy-call-message-store-compaction-kind-only-{}",
+            Uuid::new_v4()
+        ));
+        let data_path = root.join("app_data.json");
+        let paths = message_store_paths(&data_path, "conversation-reader").expect("paths");
+        let conversation = test_conversation(vec![
+            test_compaction_message("c1", "context_compaction"),
+            test_message("m1", "assistant"),
+        ]);
+        run_jsonl_snapshot_migration(&paths, &conversation, false).expect("run migration");
+
+        let mut index = (*read_message_store_index_file(&paths.index_file).expect("read index")).clone();
+        for item in &mut index.items {
+            item.compaction_kind = None;
+        }
+        write_message_store_index_atomic(&paths.index_file, &index).expect("write normalized index");
+        let before = fs::read_to_string(&paths.index_file).expect("read index before");
+
+        let messages = read_ready_message_store_recent_messages(&paths, 2)
+            .expect("compaction kind difference should not trigger repair")
+            .expect("ready messages should exist");
+        let after = fs::read_to_string(&paths.index_file).expect("read index after");
+
+        assert_eq!(messages.len(), 2);
+        assert_eq!(before, after);
         let _ = fs::remove_dir_all(root);
     }
 

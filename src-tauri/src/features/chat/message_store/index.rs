@@ -38,6 +38,16 @@ impl MessageStoreIndexFile {
         self
     }
 
+    fn persistent_view(&self) -> Self {
+        let mut next = self.clone();
+        for item in &mut next.items {
+            item.compaction_kind = None;
+        }
+        next.positions_by_message_id.clear();
+        next.compaction_boundary_positions.clear();
+        next.with_position_lookup()
+    }
+
     fn rebuild_position_lookup(&mut self) {
         self.positions_by_message_id.clear();
         self.compaction_boundary_positions.clear();
