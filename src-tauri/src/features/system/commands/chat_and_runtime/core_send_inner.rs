@@ -930,16 +930,14 @@ fn conversation_has_visible_title(conversation: &Conversation) -> bool {
     !conversation.title.trim().is_empty() || conversation_latest_summary_title(conversation).is_some()
 }
 
-fn conversation_meta_has_visible_title(
-    conversation_meta: &ConversationMetaView,
-) -> bool {
-    !conversation_meta.title.trim().is_empty()
-        || conversation_meta
-            .latest_summary_title
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .is_some()
+fn conversation_has_visible_title_from_store(
+    state: &AppState,
+    conversation_id: &str,
+) -> Result<bool, String> {
+    Ok(conversation_service_v2()
+        .try_get_conversation_snapshot(state, conversation_id)?
+        .map(|conversation| conversation_has_visible_title(&conversation))
+        .unwrap_or(false))
 }
 
 fn auto_title_generation_inflight(
@@ -1092,23 +1090,13 @@ fn spawn_conversation_auto_title_generation(
             return;
         }
         let result = async {
-            match conversation_service_v2().get_conversation_meta(&state, &conversation_id) {
-                Ok(conversation_meta) => {
-                    if conversation_meta_has_visible_title(&conversation_meta) {
-                        return Ok::<(), String>(());
-                    }
-                }
-                Err(err) => return Err(err),
+            if conversation_has_visible_title_from_store(&state, &conversation_id)? {
+                return Ok::<(), String>(());
             }
             match run_auto_conversation_title_generation(&state, &conversation_id, &user_message).await {
                 Ok(title) => {
-                    match conversation_service_v2().get_conversation_meta(&state, &conversation_id) {
-                        Ok(conversation_meta) => {
-                            if conversation_meta_has_visible_title(&conversation_meta) {
-                                return Ok(());
-                            }
-                        }
-                        Err(err) => return Err(err),
+                    if conversation_has_visible_title_from_store(&state, &conversation_id)? {
+                        return Ok(());
                     }
                     match conversation_service_v2().update_latest_summary_title(
                         &state,

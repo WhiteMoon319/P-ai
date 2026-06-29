@@ -50,10 +50,6 @@ async fn archive_conversation(
             "强制归档正在进行中，请稍候。".to_string(),
         ));
     }
-    if !already_archived {
-        verify_archive_source_message_integrity(state.inner(), &source)
-            .map_err(|err| log_manual_archive_failure(&source.id, err))?;
-    }
     let archive_result = instant_archive_conversation(state.inner(), &selected_api, &source)
         .map_err(|err| log_manual_archive_failure(&source.id, err))?;
     flush_pending_persists_blocking(state.inner()).map_err(|err| {

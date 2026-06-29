@@ -2454,7 +2454,19 @@ async fn process_conversation_batch(
         }
     };
     let scheduler_agents = state_read_agents_cached(state)?;
-    let is_empty_conversation = conversation_meta.message_count == 0;
+    let last_block = conversation_service_v2().get_conversation_last_block(state, conversation_id)?;
+    let actual_message_count = last_block.messages.len();
+    let actual_body_message_count = last_block
+        .messages
+        .iter()
+        .filter(|message| {
+            matches!(
+                message.role.trim().to_ascii_lowercase().as_str(),
+                "user" | "assistant"
+            )
+        })
+        .count();
+    let is_empty_conversation = actual_message_count == 0;
     let should_seed_summary_context = is_empty_conversation
         && !conversation_meta.has_context_compaction_message
         && conversation_meta.conversation_kind.trim() != CONVERSATION_KIND_DELEGATE
@@ -2467,9 +2479,13 @@ async fn process_conversation_batch(
         runtime_log_warn(format!(
             "[上下文整理] 跳过补种初始摘要，任务=scheduler_history_flush，conversation_id={}，原因=non_empty_conversation_missing_compaction_marker，message_count={}，body_message_count={}，last_message_at={}",
             conversation_id,
-            conversation_meta.message_count,
-            conversation_meta.body_message_count,
-            conversation_meta.last_message_at.as_deref().unwrap_or("")
+            actual_message_count,
+            actual_body_message_count,
+            last_block
+                .messages
+                .last()
+                .map(|message| message.created_at.as_str())
+                .unwrap_or("")
         ));
     }
     let mut prepared_batches = Vec::<Vec<(ChatMessage, Vec<String>)>>::with_capacity(events.len());
@@ -2511,6 +2527,7 @@ async fn process_conversation_batch(
         prepared_batches,
         &history_flush_time,
         should_seed_summary_context,
+        actual_message_count > 0,
     )?;
     let persisted_batch_messages = commit_result.persisted_batch_messages;
     let event_activate_flags = commit_result.event_activate_flags;

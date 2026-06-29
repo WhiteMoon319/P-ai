@@ -5923,6 +5923,105 @@
         );
     }
 
+    #[test]
+    fn rewind_conversation_should_rebuild_message_derived_meta_from_store() {
+        let state = test_chat_runtime_state();
+        write_config(&state.config_path, &AppConfig::default()).expect("write config");
+        let now = now_iso();
+        let mut first_user = test_text_message("user", "第一句", &now);
+        first_user.id = "user-1".to_string();
+        let mut first_assistant = test_text_message("assistant", "第一句回复", &now);
+        first_assistant.id = "assistant-1".to_string();
+        let mut recalled_user = test_text_message("user", "需要撤回", &now);
+        recalled_user.id = "user-2".to_string();
+        let mut trailing_assistant = test_text_message("assistant", "后续回复", &now);
+        trailing_assistant.id = "assistant-2".to_string();
+        let mut conversation = build_conversation_record(
+            "",
+            DEFAULT_AGENT_ID,
+            ASSISTANT_DEPARTMENT_ID,
+            "撤回重建 metadata",
+            CONVERSATION_KIND_CHAT,
+            None,
+            None,
+        );
+        conversation.id = "conversation-rewind-rebuild-meta".to_string();
+        conversation.status = "active".to_string();
+        conversation.messages = vec![
+            first_user,
+            first_assistant,
+            recalled_user.clone(),
+            trailing_assistant,
+        ];
+        state_schedule_conversation_persist(&state, &conversation)
+            .expect("persist conversation");
+        let store_paths =
+            message_store::message_store_paths(&state.data_path, &conversation.id)
+                .expect("message store paths");
+        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
+            .expect("write message store");
+        state_mark_conversation_direct_persisted(&state, &conversation)
+            .expect("mark direct persisted");
+
+        state_update_conversation_metadata_cached(&state, &conversation.id, |cached| {
+            cached.updated_at = now.clone();
+            Ok(())
+        })
+        .expect("prime metadata pending");
+        {
+            let mut cached = state
+                .cached_conversation_metadata
+                .lock()
+                .expect("lock cached conversation metadata");
+            let current = cached
+                .get(&conversation.id)
+                .cloned()
+                .expect("cached meta exists");
+            let mut broken_conversation =
+                conversation_service_v2().build_conversation_snapshot_from_meta(&current, Vec::new());
+            broken_conversation.messages = vec![
+                test_text_message("user", "伪造一", &now),
+                test_text_message("assistant", "伪造二", &now),
+                test_text_message("user", "伪造三", &now),
+                test_text_message("assistant", "伪造四", &now),
+                test_text_message("user", "伪造五", &now),
+            ];
+            let broken = message_store::ConversationShardMeta::from_conversation(
+                &broken_conversation,
+            );
+            cached.insert(conversation.id.clone(), broken);
+        }
+
+        let input = RewindConversationInput {
+            session: SessionSelector {
+                api_config_id: None,
+                department_id: Some(ASSISTANT_DEPARTMENT_ID.to_string()),
+                agent_id: DEFAULT_AGENT_ID.to_string(),
+                conversation_id: Some(conversation.id.clone()),
+            },
+            message_id: recalled_user.id.clone(),
+            undo_apply_patch: false,
+        };
+        let result = conversation_service_v2()
+            .rewind_conversation_from_message(
+                &state,
+                &input,
+                &recalled_user.id,
+                &std::time::Instant::now(),
+            )
+            .expect("rewind conversation with stale cached meta");
+
+        assert_eq!(result.removed_count, 2);
+        assert_eq!(result.remaining_count, 2);
+        let ready_meta = message_store::read_ready_message_store_meta(&store_paths)
+            .expect("read ready meta after rewind")
+            .expect("ready meta exists after rewind");
+        assert_eq!(ready_meta.message_count(), 2);
+        assert_eq!(ready_meta.body_message_count(), 2);
+        assert_eq!(ready_meta.body_text_length(), 8);
+        assert_eq!(ready_meta.preview_messages().len(), 2);
+    }
+
     fn setup_rewind_busy_test_conversation(
         conversation_id: &str,
     ) -> (AppState, RewindConversationInput, String) {

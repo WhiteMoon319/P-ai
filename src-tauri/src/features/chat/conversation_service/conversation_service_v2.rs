@@ -5969,6 +5969,7 @@ impl ConversationServiceV2 {
         prepared_batches: Vec<Vec<(ChatMessage, Vec<String>)>>,
         history_flush_time: &str,
         should_seed_summary_context: bool,
+        has_existing_messages: bool,
     ) -> Result<SchedulerHistoryFlushCommitResult, String> {
         let _guard = lock_conversation_with_metrics(state, "scheduler_commit")?;
         let conversation_meta = match self.get_conversation_meta(state, conversation_id) {
@@ -6002,7 +6003,7 @@ impl ConversationServiceV2 {
             prepared_batches,
             history_flush_time,
             should_seed_summary_context,
-            conversation_meta.message_count > 0,
+            has_existing_messages,
             conversation_meta.has_context_compaction_message,
             state,
             &mut conversation,

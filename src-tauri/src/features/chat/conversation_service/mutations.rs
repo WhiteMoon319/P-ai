@@ -514,48 +514,14 @@ fn read_ready_store_rewind_state_meta_view(
 ) -> Result<ReadyStoreRewindState, String> {
     let rewind_slice = message_store::read_ready_message_store_rewind_slice(store_paths, message_id)?
         .ok_or_else(|| "Target message not found in active conversation.".to_string())?;
-    let removed_body_message_count = rewind_slice
-        .removed_messages
-        .iter()
-        .filter(|message| {
-            matches!(
-                message.role.trim().to_ascii_lowercase().as_str(),
-                "user" | "assistant"
-            )
-        })
-        .count();
-    let removed_body_text_length = rewind_slice
-        .removed_messages
-        .iter()
-        .flat_map(|message| message.parts.iter())
-        .filter_map(|part| match part {
-            MessagePart::Text { text, .. } => Some(text.trim().chars().count()),
-            _ => None,
-        })
-        .sum::<usize>();
-    let removed_has_context_compaction = rewind_slice
-        .removed_messages
-        .iter()
-        .any(|message| is_context_compaction_message(message, message.role.trim()));
-    let removed_latest_summary_title = rewind_slice
-        .removed_messages
-        .iter()
-        .rev()
-        .find_map(summary_context_message_title);
-    let removed_may_clear_latest_summary = removed_latest_summary_title.as_deref()
-        == conversation_meta.latest_summary_title.as_deref();
-
     let mut remaining_last_message_at = None::<String>;
     let mut remaining_last_user_at = None::<String>;
     let mut remaining_last_assistant_at = None::<String>;
     let mut remaining_todos = None::<Vec<ConversationTodoItem>>;
-    let mut remaining_has_context_compaction_message =
-        conversation_meta.has_context_compaction_message && !removed_has_context_compaction;
-    let mut remaining_latest_summary_title = if removed_may_clear_latest_summary {
-        None
-    } else {
-        conversation_meta.latest_summary_title.clone()
-    };
+    let mut remaining_body_message_count = 0usize;
+    let mut remaining_body_text_length = 0usize;
+    let mut remaining_has_context_compaction_message = false;
+    let mut remaining_latest_summary_title = None::<String>;
     let mut preview_messages_latest_first =
         Vec::<message_store::ConversationShardPreviewMessage>::new();
     let mut before_anchor = message_id.trim().to_string();
@@ -575,6 +541,17 @@ fn read_ready_store_rewind_state_meta_view(
             remaining_last_message_at = page.messages.last().map(|message| message.created_at.clone());
         }
         for message in page.messages.iter().rev() {
+            if matches!(
+                message.role.trim().to_ascii_lowercase().as_str(),
+                "user" | "assistant"
+            ) {
+                remaining_body_message_count += 1;
+            }
+            for part in &message.parts {
+                if let MessagePart::Text { text, .. } = part {
+                    remaining_body_text_length += text.trim().chars().count();
+                }
+            }
             if remaining_last_user_at.is_none() && message.role.trim().eq_ignore_ascii_case("user") {
                 remaining_last_user_at = Some(message.created_at.clone());
             }
@@ -623,13 +600,7 @@ fn read_ready_store_rewind_state_meta_view(
                 });
             }
         }
-        let done = remaining_last_user_at.is_some()
-            && remaining_last_assistant_at.is_some()
-            && remaining_todos.is_some()
-            && remaining_latest_summary_title.is_some()
-            && remaining_has_context_compaction_message
-            && preview_messages_latest_first.len() >= 2;
-        if done || !page.has_more {
+        if !page.has_more {
             break;
         }
         before_anchor = page
@@ -651,12 +622,8 @@ fn read_ready_store_rewind_state_meta_view(
         remaining_last_user_at,
         remaining_last_assistant_at,
         remaining_todos,
-        remaining_body_message_count: conversation_meta
-            .body_message_count
-            .saturating_sub(removed_body_message_count),
-        remaining_body_text_length: conversation_meta
-            .body_text_length
-            .saturating_sub(removed_body_text_length),
+        remaining_body_message_count,
+        remaining_body_text_length,
         remaining_has_context_compaction_message,
         remaining_latest_summary_title,
         remaining_preview_messages: preview_messages_latest_first,

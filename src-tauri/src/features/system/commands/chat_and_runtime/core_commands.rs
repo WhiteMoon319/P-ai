@@ -620,27 +620,9 @@ fn read_user_mention_context_snapshot(
             latest_user_text,
         ));
     }
-    let preview_messages = conversation_meta
-        .preview_messages
-        .iter()
-        .map(|message| ChatMessage {
-            id: message.message_id.clone(),
-            role: message.role.clone(),
-            created_at: message.created_at.clone().unwrap_or_default(),
-            speaker_agent_id: message.speaker_agent_id.clone(),
-            parts: vec![MessagePart::Text {
-                text: message.text_preview.clone(),
-                reasoning_content: None,
-            }],
-            extra_text_blocks: Vec::new(),
-            provider_meta: None,
-            tool_call: None,
-            mcp_call: None,
-            meme_annotations: None,
-        })
-        .collect::<Vec<_>>();
+    let last_block = conversation_service_v2().get_conversation_last_block(state, &conversation_meta.id)?;
     Ok(build_user_mention_context_snapshot_from_messages(
-        &preview_messages,
+        &last_block.messages,
         agents,
         latest_user_text,
     ))
