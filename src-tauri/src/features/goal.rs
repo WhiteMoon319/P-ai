@@ -374,7 +374,7 @@ mod goal_tests {
     }
 
     #[test]
-    fn build_goal_continue_message_should_use_system_persona_and_hidden_prompt() {
+    fn build_goal_continue_message_should_use_system_persona_assistant_role_and_hidden_prompt() {
         let goal = ConversationGoalState {
             goal_id: "goal-message-shape".to_string(),
             status: GOAL_STATUS_ACTIVE.to_string(),
@@ -391,7 +391,7 @@ mod goal_tests {
             "2026-06-11T00:00:00Z".to_string(),
         );
 
-        assert_eq!(message.role, "system");
+        assert_eq!(message.role, "assistant");
         assert_eq!(message.speaker_agent_id.as_deref(), Some(SYSTEM_PERSONA_ID));
         let first_text = match message.parts.first() {
             Some(MessagePart::Text { text, .. }) => text.as_str(),
@@ -407,7 +407,7 @@ mod goal_tests {
     }
 
     #[test]
-    fn prompt_role_for_goal_continue_system_message_should_feed_model_as_user() {
+    fn prompt_role_for_goal_continue_system_persona_message_should_feed_model_as_user() {
         let goal = ConversationGoalState {
             goal_id: "goal-prompt-role".to_string(),
             status: GOAL_STATUS_ACTIVE.to_string(),

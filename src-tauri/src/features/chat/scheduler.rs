@@ -1747,7 +1747,7 @@ fn build_goal_continue_message(
 ) -> ChatMessage {
     ChatMessage {
         id: Uuid::new_v4().to_string(),
-        role: "system".to_string(),
+        role: "assistant".to_string(),
         created_at: now,
         speaker_agent_id: Some(SYSTEM_PERSONA_ID.to_string()),
         parts: vec![MessagePart::Text {
