@@ -541,15 +541,16 @@ fn read_ready_store_rewind_state_meta_view(
             remaining_last_message_at = page.messages.last().map(|message| message.created_at.clone());
         }
         for message in page.messages.iter().rev() {
-            if matches!(
+            let is_body_message = matches!(
                 message.role.trim().to_ascii_lowercase().as_str(),
                 "user" | "assistant"
-            ) {
+            );
+            if is_body_message {
                 remaining_body_message_count += 1;
-            }
-            for part in &message.parts {
-                if let MessagePart::Text { text, .. } = part {
-                    remaining_body_text_length += text.trim().chars().count();
+                for part in &message.parts {
+                    if let MessagePart::Text { text, .. } = part {
+                        remaining_body_text_length += text.trim().chars().count();
+                    }
                 }
             }
             if remaining_last_user_at.is_none() && message.role.trim().eq_ignore_ascii_case("user") {
