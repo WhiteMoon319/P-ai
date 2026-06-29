@@ -1,6 +1,6 @@
 import { computed, type Ref } from "vue";
 import type { ChatMessageBlock } from "../../../types/app";
-import { type ChatRenderItem, isRightAlignedMessage } from "../utils/chat-render";
+import { type ChatRenderItem, isCompactionBlock, isRightAlignedMessage } from "../utils/chat-render";
 
 export function useChatBlockTracking(
   messageBlocks: Ref<ChatMessageBlock[]>,
@@ -24,23 +24,39 @@ export function useChatBlockTracking(
     return sourceMessageId === normalizedMessageId || blockId === normalizedMessageId;
   }
 
-  const latestOwnMessageId = computed(() => {
+  function findLatestMessageIdByPredicate(predicate: (block: ChatMessageBlock) => boolean): string {
     for (let idx = messageBlocks.value.length - 1; idx >= 0; idx -= 1) {
       const block = messageBlocks.value[idx];
       if (block.isExtraTextBlock) continue;
-      if (!isOwnUserMessage(block)) continue;
+      if (!predicate(block)) continue;
       const messageId = String(block.sourceMessageId || block.id || "").trim();
       if (messageId) return messageId;
     }
     return "";
+  }
+
+  const latestOwnMessageId = computed(() => {
+    return findLatestMessageIdByPredicate((block) => isOwnUserMessage(block));
+  });
+
+  const latestSummaryMessageId = computed(() => {
+    return findLatestMessageIdByPredicate((block) => isCompactionBlock(block));
+  });
+
+  const latestVisibleMessageId = computed(() => {
+    return findLatestMessageIdByPredicate(() => true);
   });
 
   const latestOwnElasticItemId = computed(() => {
-    const targetMessageId = latestOwnMessageId.value;
+    const targetMessageId = latestOwnMessageId.value
+      || latestSummaryMessageId.value
+      || latestVisibleMessageId.value;
     if (!targetMessageId) return "";
     for (let idx = chatRenderItems.value.length - 1; idx >= 0; idx -= 1) {
       const item = chatRenderItems.value[idx];
-      if (item.kind === "message" && blockBelongsToMessageId(item.block, targetMessageId)) return item.id;
+      if ((item.kind === "message" || item.kind === "compaction") && blockBelongsToMessageId(item.block, targetMessageId)) {
+        return item.id;
+      }
     }
     return "";
   });
