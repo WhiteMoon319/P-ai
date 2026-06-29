@@ -530,6 +530,7 @@ export function useChatConversationSync(bindings: Record<string, any>) {
       runtimeState === "assistant_streaming"
       && overlay.removed
     ) {
+      const replacedMessageId = String(overlay.replacedMessageId || "").trim();
       const preservedDrafts = freezeConversationMessages(bindings.allMessages.value)
         .filter((message: any) => isAssistantDraftMessage(message));
       if (preservedDrafts.length > 0) {
@@ -538,7 +539,13 @@ export function useChatConversationSync(bindings: Record<string, any>) {
           ...rawNextMessages,
           ...preservedDrafts.filter((message: any) => {
             const messageId = String(message?.id || "").trim();
-            return !!messageId && !existingIds.has(messageId);
+            if (!messageId || existingIds.has(messageId)) {
+              return false;
+            }
+            if (replacedMessageId && existingIds.has(replacedMessageId)) {
+              return false;
+            }
+            return true;
           }),
         ];
       }
