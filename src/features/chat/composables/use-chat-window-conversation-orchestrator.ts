@@ -208,11 +208,7 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
   async function restoreForegroundConversationProjection(conversationId: string, reason: string) {
     const cid = String(conversationId || "").trim();
     if (!cid) return;
-    // 如果前端流式仍在进行中，跳过恢复——流式通道会自动推送最新内容
     const chatFlow = bindings.getChatFlow();
-    if (chatFlow.frontendRoundPhase?.value !== "idle") {
-      return;
-    }
     const now = Date.now();
     const lastAt = restoreForegroundProjectionLastAtByConversation.get(cid) || 0;
     if (restoreForegroundProjectionInflight.has(cid) || now - lastAt < RESTORE_FOREGROUND_PROJECTION_COOLDOWN_MS) {
