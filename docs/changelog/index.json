@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-06-27T23:34:52.380Z",
-  "latestVersion": "v0.15.3",
+  "generatedAt": "2026-06-29T02:33:37.195Z",
+  "latestVersion": "v0.15.4",
   "releases": [
+    {
+      "version": "v0.15.4",
+      "path": "docs/changelog/releases/v0.15.4.md",
+      "summary": "**助理空间工作区统一**：主助理会话统一落到助理空间工作区，减少会话切换时的工作区割裂，后续工具与记忆链路也更容易复用同一上下文。"
+    },
     {
       "version": "v0.15.3",
       "path": "docs/changelog/releases/v0.15.3.md",
