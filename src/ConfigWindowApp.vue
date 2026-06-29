@@ -55,6 +55,7 @@
       :update-ready-to-restart="updateReadyToRestart"
       :update-in-progress="updateInProgress"
       :update-cancel-pending="updateCancelPending"
+      :update-can-cancel="updateCanCancel"
       :progress-percent="updateProgressPercent"
       :progress-text="reminderProgressText"
       @update-now="triggerUpdateToLatest"
@@ -684,6 +685,7 @@ const {
   updateReadyToRestart,
   updateInProgress,
   updateCancelPending,
+  updateCanCancel,
   updateDialogOpen,
   updateDialogTitle,
   updateDialogBody,

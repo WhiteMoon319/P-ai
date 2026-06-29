@@ -10,6 +10,7 @@ const props = defineProps<{
   updateReadyToRestart: boolean;
   updateInProgress: boolean;
   updateCancelPending: boolean;
+  updateCanCancel: boolean;
   progressPercent?: number | null;
   progressText?: string;
 }>();
@@ -60,7 +61,7 @@ const { t } = useI18n();
           {{ t("about.skipVersion") }}
         </button>
         <button
-          v-if="props.updateInProgress"
+          v-if="props.updateInProgress && props.updateCanCancel"
           class="btn btn-sm btn-ghost"
           :disabled="props.updateCancelPending"
           @click="emit('cancelUpdate')"

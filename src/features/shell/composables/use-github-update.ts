@@ -38,6 +38,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   const checkingUpdateRequest = ref(false);
   const updateInProgress = ref(false);
   const updateCancelPending = ref(false);
+  const updateCanCancel = ref(false);
   const updateReadyToRestart = ref(false);
   const updateDialogOpen = ref(false);
   const updateDialogTitle = ref(t("about.dialogTitleCheck"));
@@ -99,9 +100,34 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   }
 
   function openUpdateRelease() {
-    const url = updateDialogReleaseUrl.value.trim();
+    const url = String(updateDialogReleaseUrl.value || latestCheckResult.value?.releaseUrl || "").trim();
     if (!url) return;
     void invokeTauri("open_external_url", { url });
+  }
+
+  function buildCheckDialogBody(result: GithubUpdateInfo) {
+    const lines = [
+      t("about.currentVersion", { version: result.currentVersion }),
+      t("about.latestVersion", { version: result.latestVersion }),
+      t("about.currentRuntime", { kind: runtimeLabel(result.runtimeKind) }),
+    ];
+    const notes = String(result.releaseNotes || "").trim();
+    if (notes) {
+      lines.push("");
+      lines.push(t("about.releaseNotes"));
+      lines.push(notes);
+    }
+    return lines.join("\n");
+  }
+
+  function openCheckResultDialog(result: GithubUpdateInfo) {
+    updateDialogReleaseUrl.value = result.releaseUrl || "";
+    updateDialogBody.value = buildCheckDialogBody(result);
+    updateDialogKind.value = "info";
+    updateDialogPrimaryAction.value = result.hasUpdate ? "download" : "force";
+    updateProgressPercent.value = null;
+    updateDialogTitle.value = result.hasUpdate ? t("about.foundUpdate") : t("about.alreadyLatest");
+    updateDialogOpen.value = true;
   }
 
   function clearDailyCheckTimer() {
@@ -154,6 +180,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     if (payload.stage === "failed") {
       updateInProgress.value = false;
       updateCancelPending.value = false;
+      updateCanCancel.value = false;
       updateReadyToRestart.value = false;
       updateUiMode.value = null;
       updateDialogPrimaryAction.value = null;
@@ -168,6 +195,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     if (payload.stage === "cancelled") {
       updateInProgress.value = false;
       updateCancelPending.value = false;
+      updateCanCancel.value = false;
       updateReadyToRestart.value = false;
       updateUiMode.value = null;
       updateDialogPrimaryAction.value = null;
@@ -178,6 +206,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     if (payload.stage === "ready") {
       updateInProgress.value = false;
       updateCancelPending.value = false;
+      updateCanCancel.value = false;
       updateReadyToRestart.value = true;
       updateUiMode.value = null;
       if (latestCheckResult.value) {
@@ -208,6 +237,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     if (payload.stage === "completed") {
       updateInProgress.value = false;
       updateCancelPending.value = false;
+      updateCanCancel.value = false;
       updateReadyToRestart.value = false;
       updateUiMode.value = null;
       updateDialogOpen.value = true;
@@ -242,23 +272,19 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       const result = await invokeTauri<GithubUpdateInfo>("check_github_update", { updateMethod: currentUpdateMethod() });
       latestCheckResult.value = result;
       updateRuntimeKind.value = result.runtimeKind;
+      updateDialogReleaseUrl.value = result.releaseUrl || "";
       if (!result?.hasUpdate) {
         updateReadyToRestart.value = false;
         if (!silent) {
           options.status.value = t("about.alreadyLatestWithVersion", { version: result.currentVersion });
-          openUpdateDialog(
-            [
-              t("about.currentVersion", { version: result.currentVersion }),
-              t("about.latestVersion", { version: result.latestVersion }),
-              t("about.currentRuntime", { kind: runtimeLabel(result.runtimeKind) }),
-            ].join("\n"),
-            "info",
-            result.releaseUrl,
-          );
+          openCheckResultDialog(result);
         }
         return result;
       }
       options.status.value = t("about.foundNewVersion", { latest: result.latestVersion, current: result.currentVersion });
+      if (!silent) {
+        openCheckResultDialog(result);
+      }
       return result;
     } catch (error) {
       if (!silent) {
@@ -276,6 +302,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     if (checkingUpdate.value) return;
     updateInProgress.value = true;
     updateCancelPending.value = false;
+    updateCanCancel.value = true;
     updateReadyToRestart.value = false;
     updateUiMode.value = silent ? "background" : "foreground";
     updateDialogPrimaryAction.value = null;
@@ -293,6 +320,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       if (String(error || "").includes("用户已取消更新")) {
         updateInProgress.value = false;
         updateCancelPending.value = false;
+        updateCanCancel.value = false;
         updateUiMode.value = null;
         updateDialogOpen.value = false;
         updateProgressPercent.value = null;
@@ -301,6 +329,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       }
       updateInProgress.value = false;
       updateCancelPending.value = false;
+      updateCanCancel.value = false;
       updateUiMode.value = null;
       updateDialogKind.value = "error";
       updateDialogTitle.value = t("about.updateFailed");
@@ -314,7 +343,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   }
 
   async function cancelGithubUpdate() {
-    if (!updateInProgress.value || updateCancelPending.value) return;
+    if (!updateInProgress.value || updateCancelPending.value || !updateCanCancel.value) return;
     updateCancelPending.value = true;
     options.status.value = t("about.cancellingUpdate");
     try {
@@ -330,6 +359,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     if (checkingUpdate.value) return;
     updateInProgress.value = true;
     updateCancelPending.value = false;
+    updateCanCancel.value = false;
     updateUiMode.value = "foreground";
     updateDialogOpen.value = true;
     updateDialogKind.value = "info";
@@ -343,6 +373,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     } catch (error) {
       updateInProgress.value = false;
       updateCancelPending.value = false;
+      updateCanCancel.value = false;
       updateUiMode.value = null;
       updateDialogKind.value = "error";
       updateDialogTitle.value = t("about.updateFailed");
@@ -443,6 +474,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     updateReadyToRestart,
     updateInProgress,
     updateCancelPending,
+    updateCanCancel,
     latestCheckResult,
     updateDialogOpen,
     updateDialogTitle,
