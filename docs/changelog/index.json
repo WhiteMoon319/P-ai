@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-06-30T09:25:03.516Z",
-  "latestVersion": "v0.15.8",
+  "generatedAt": "2026-06-30T14:27:06.365Z",
+  "latestVersion": "v0.15.9",
   "releases": [
+    {
+      "version": "v0.15.9",
+      "path": "docs/changelog/releases/v0.15.9.md",
+      "summary": "聊天使用后端预分配的真实消息 ID，替换前端乐观占位 ID，避免恢复流式时 ID 不一致导致消息覆盖"
+    },
     {
       "version": "v0.15.8",
       "path": "docs/changelog/releases/v0.15.8.md",

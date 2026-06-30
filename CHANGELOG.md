@@ -5,6 +5,7 @@
 
 ## 最近版本
 
+- [v0.15.9](docs/changelog/releases/v0.15.9.md) - 聊天使用后端预分配的真实消息 ID，替换前端乐观占位 ID，避免恢复流式时 ID 不一致导致消息覆盖
 - [v0.15.8](docs/changelog/releases/v0.15.8.md) - 支持会话分组排序与拖拽调整
 - [v0.15.7](docs/changelog/releases/v0.15.7.md) - **代码审查人格选择**：审查对话框现在支持精确选择部门下的特定人格作为审查者，而非自动选中部门首个人格；跨会话、归档和侧边栏全链路透传 agentId。
 - [v0.15.6](docs/changelog/releases/v0.15.6.md) - **恢复消息去重**：恢复会话时去重已落库的 assistant 消息和前端草稿，避免重新打开窗口后出现两条相同回复。
