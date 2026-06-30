@@ -745,6 +745,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     resumeForegroundRuntimeRound,
     resumeForegroundStreamCacheProjection,
     bindActiveConversationStream: channelBinding.bindActiveConversationStream,
+    hasActiveBoundDeltaChannel: channelBinding.hasActiveBoundDeltaChannel,
     handleExternalStreamRebindRequired: externalEvents.handleExternalStreamRebindRequired,
     handleExternalHistoryFlushed: externalEvents.handleExternalHistoryFlushed,
     handleExternalRoundStarted: externalEvents.handleExternalRoundStarted,

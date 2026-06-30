@@ -97,24 +97,23 @@ export function useChatFlowForegroundReset(options: UseChatFlowForegroundResetOp
     options.tickGeneration();
     options.setSendChatActiveGen(0);
     options.setActiveRoundAgentId("");
-    const conversationId = options.getConversationId ? options.getConversationId() : "";
     const round = options.getRound();
-    if (round.phase === "streaming") {
-      options.clearFrontendDispatchTimer();
-      // 前台冻结日志已移除
-    } else if (round.phase === "queued") {
+    if (round.phase === "streaming" || round.phase === "queued") {
       options.clearFrontendDispatchTimer();
     }
     const pendingUserDraftId = options.getPendingUserDraftId();
     if (pendingUserDraftId) {
       options.removeDraft(pendingUserDraftId);
     }
-    // 最小化/失焦只是冻结前台调度，不应该把仍在运行的流式草稿伪装成完成态。
-    options.setRound({ phase: "idle" });
-    options.setActiveHistoryMessageCount(0);
-    options.chatting.value = false;
-    options.reasoningStartedAtMs.value = 0;
-    resetDisplayState();
+    // 最小化/失焦不是流式结束证据；在未确认后端终态前，保留当前前台流式真相。
+    if (round.phase === "idle") {
+      options.setActiveHistoryMessageCount(0);
+      options.chatting.value = false;
+      options.reasoningStartedAtMs.value = 0;
+      resetDisplayState();
+      return;
+    }
+    options.chatting.value = true;
   }
 
   return {

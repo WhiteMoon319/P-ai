@@ -227,7 +227,14 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
       if (cid !== String(bindings.currentChatConversationId.value || "").trim()) return;
       const shouldBindStream = !!snapshot?.shouldBindStream;
       if (shouldBindStream) {
-        await chatFlow.bindActiveConversationStream(cid, true);
+        if (!chatFlow.hasActiveBoundDeltaChannel?.(cid)) {
+          await chatFlow.bindActiveConversationStream(cid, true);
+        }
+        chatFlow.resumeForegroundRuntimeRound?.({
+          conversationId: cid,
+          streamCache: snapshot?.streamCache || null,
+          reason,
+        });
         return;
       }
       const snapshotRuntimeState = String(snapshot?.runtimeState || "").trim();
