@@ -5030,6 +5030,7 @@ fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, Strin
         queue_mode: ChatQueueMode::Normal,
         messages: vec![user_message],
         activate_assistant: true,
+        assistant_message_id: None,
         session_info: ChatSessionInfo {
             department_id,
             agent_id,

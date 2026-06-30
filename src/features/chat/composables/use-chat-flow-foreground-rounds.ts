@@ -1,6 +1,6 @@
 import type { ChatMessage } from "../../../types/app";
 import { normalizeAssistantStreamBlocks, streamBlocksToToolCalls } from "../../../utils/chat-message-semantics";
-import { buildAssistantDraftId, DRAFT_ASSISTANT_ID_PREFIX } from "./use-chat-flow-drafts";
+import { DRAFT_ASSISTANT_ID_PREFIX } from "./use-chat-flow-drafts";
 import { streamCacheHasVisibleProgress } from "./use-chat-flow-stream-cache";
 import { applyStreamingHistoryOverlay } from "./use-chat-flow-stream-overlay";
 import { formalizeMessages, normalizeConversationId, positiveRoundedNumber, readMessagePlainText } from "./use-chat-flow-utils";
@@ -13,20 +13,26 @@ type ResumeForegroundStreamCacheProjectionInput = {
 };
 
 export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
+  function isStreamingAssistantMessage(message?: ChatMessage | null): boolean {
+    const messageId = String(message?.id || "").trim();
+    const meta = (message?.providerMeta || {}) as Record<string, unknown>;
+    return messageId.startsWith(DRAFT_ASSISTANT_ID_PREFIX)
+      || (String(message?.role || "").trim() === "assistant" && meta._streaming === true);
+  }
+
   function resolveAssistantDraftId(input?: {
     draftId?: string | null;
+    assistantMessageId?: string | null;
+    persistedAssistantMessageId?: string | null;
     activationId?: string | null;
     requestId?: string | null;
     gen?: number;
   }): string {
     const explicitDraftId = String(input?.draftId || "").trim();
     if (explicitDraftId) return explicitDraftId;
-    const activationId = String(input?.activationId || "").trim();
-    if (activationId) return buildAssistantDraftId(activationId);
-    const requestId = String(input?.requestId || "").trim();
-    if (requestId) return buildAssistantDraftId(requestId);
-    const gen = Number.isFinite(input?.gen) ? Number(input?.gen) : 0;
-    return gen > 0 ? buildAssistantDraftId(gen) : buildAssistantDraftId("resume");
+    const assistantMessageId = String(input?.assistantMessageId || input?.persistedAssistantMessageId || "").trim();
+    if (assistantMessageId) return assistantMessageId;
+    return "";
   }
 
   function applyStreamingOverlayForConversation(conversationId?: string | null) {
@@ -84,6 +90,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
         agentId: String(payload.agentId || "").trim(),
         startedAt: String(payload.startedAt || "").trim(),
         startedAtMs: positiveRoundedNumber(payload.startedAtMs),
+        persistedAssistantMessageId: String(payload.assistantMessageId || "").trim(),
       });
     }
     const payloadAgentId = String(payload.agentId || "").trim();
@@ -103,6 +110,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
         gen,
         draftId: resolveAssistantDraftId({
           draftId: round.phase === "queued" ? round.draftId : "",
+          assistantMessageId: payload.assistantMessageId,
           activationId: nextActivationId,
           requestId: payload.requestId,
           gen,
@@ -117,6 +125,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     bindings.updateQueuedAssistantDraftStatus(
       resolveAssistantDraftId({
         draftId: bindings.getRound().phase === "queued" ? bindings.getRound().draftId : "",
+        assistantMessageId: payload.assistantMessageId,
         activationId: nextActivationId,
         requestId: payload.requestId,
         gen,
@@ -172,6 +181,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     bindings.setQueuedStreamingState(null);
     bindings.setActiveHistoryMessageCount(formalizeMessages(bindings.allMessages.value).length);
     const draftId = resolveAssistantDraftId({
+      persistedAssistantMessageId: conversationId ? bindings.readConversationStreamCache(conversationId)?.persistedAssistantMessageId : "",
       activationId: cachedTimer.startedAtMs > 0 ? bindings.getActiveActivationId?.() : "",
       requestId: conversationId ? bindings.readConversationStreamCache(conversationId)?.requestId : "",
       gen,
@@ -200,7 +210,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     if (bindings.streamBlocks) bindings.streamBlocks.value = [];
     const existingDraft = [...bindings.allMessages.value]
       .reverse()
-      .find((message: ChatMessage) => String(message?.id || "").trim().startsWith(DRAFT_ASSISTANT_ID_PREFIX));
+      .find((message: ChatMessage) => isStreamingAssistantMessage(message));
     const existingDraftId = String(existingDraft?.id || "").trim();
     const existingDraftMeta = ((existingDraft?.providerMeta || {}) as Record<string, unknown>);
     const restoredFromCache = !existingDraftId && bindings.applyConversationStreamCacheToDisplay(conversationId);
@@ -214,6 +224,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     const draftId = existingDraftId || bindings.insertDraft(
       resolveAssistantDraftId({
         draftId: round.phase === "queued" ? round.draftId : "",
+        persistedAssistantMessageId: bindings.readConversationStreamCache(conversationId)?.persistedAssistantMessageId,
         activationId: bindings.getActiveActivationId?.(),
         requestId: bindings.readConversationStreamCache(conversationId)?.requestId,
         gen,
@@ -287,7 +298,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     if (bindings.streamBlocks) bindings.streamBlocks.value = [];
     const existingDraft = [...bindings.allMessages.value]
       .reverse()
-      .find((message: ChatMessage) => String(message?.id || "").trim().startsWith(DRAFT_ASSISTANT_ID_PREFIX));
+      .find((message: ChatMessage) => isStreamingAssistantMessage(message));
     const existingDraftId = String(existingDraft?.id || "").trim();
     const existingDraftMeta = ((existingDraft?.providerMeta || {}) as Record<string, unknown>);
     const restoredFromCache = !existingDraftId && bindings.applyConversationStreamCacheToDisplay(conversationId);

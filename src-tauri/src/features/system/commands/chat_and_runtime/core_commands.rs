@@ -432,6 +432,7 @@ async fn confirm_plan_and_continue_inner(
         queue_mode: ChatQueueMode::Normal,
         messages: vec![plan_continue_confirmation_message()],
         activate_assistant: true,
+        assistant_message_id: None,
         session_info: ChatSessionInfo {
             department_id,
             agent_id,
@@ -1083,6 +1084,7 @@ fn append_delegate_result_message_and_emit(
                     &conversation_id,
                     None,
                     None,
+                    None,
                     Some(runtime_context),
                     Vec::new(),
                     &oldest_queue_created_at,
@@ -1496,10 +1498,13 @@ async fn submit_chat_message_inner(
             conversation_id,
             trace_id: request_id,
             ingress: "duplicate".to_string(),
+            user_message_id: None,
+            assistant_message_id: None,
         });
     }
+    let user_message_id = Uuid::new_v4().to_string();
     let user_message = ChatMessage {
-        id: Uuid::new_v4().to_string(),
+        id: user_message_id.clone(),
         role: "user".to_string(),
         created_at: now_iso(),
         speaker_agent_id: None,
@@ -1613,6 +1618,7 @@ async fn submit_chat_message_inner(
     };
 
     let event_id = Uuid::new_v4().to_string();
+    let assistant_message_id = (!has_user_mentions).then(|| Uuid::new_v4().to_string());
     let mut runtime_context = runtime_context_new(
         "user_message",
         if has_user_mentions { "user_mention_send" } else { "user_send" },
@@ -1633,6 +1639,7 @@ async fn submit_chat_message_inner(
         queue_mode: ChatQueueMode::Normal,
         messages: vec![user_message],
         activate_assistant: !has_user_mentions,
+        assistant_message_id: assistant_message_id.clone(),
         session_info: ChatSessionInfo {
             department_id: department_id.clone(),
             agent_id: agent_id.clone(),
@@ -1693,6 +1700,8 @@ async fn submit_chat_message_inner(
         conversation_id,
         trace_id: request_id,
         ingress: ingress_label.to_string(),
+        user_message_id: Some(user_message_id),
+        assistant_message_id,
     })
 }
 
@@ -1904,6 +1913,7 @@ async fn send_chat_message(
         queue_mode: ChatQueueMode::Normal,
         messages: vec![user_message],
         activate_assistant: !has_user_mentions,
+        assistant_message_id: None,
         session_info: ChatSessionInfo {
             department_id: department_id.clone(),
             agent_id: agent_id.clone(),
@@ -2134,6 +2144,7 @@ async fn send_user_mention_message_inner(
         queue_mode: ChatQueueMode::Normal,
         messages: vec![user_message],
         activate_assistant: false,
+        assistant_message_id: None,
         session_info: ChatSessionInfo {
             department_id: department_id.clone(),
             agent_id: agent_id.clone(),

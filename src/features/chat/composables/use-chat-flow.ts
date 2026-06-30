@@ -4,7 +4,6 @@ import type { AssistantStreamBlock, ChatMessage } from "../../../types/app";
 import { normalizeAssistantStreamBlocks } from "../../../utils/chat-message-semantics";
 import { useChatFlowChannelBinding } from "./use-chat-flow-channel-binding";
 import {
-  buildAssistantDraftId,
   useChatFlowDrafts,
 } from "./use-chat-flow-drafts";
 import { useChatFlowExternalEvents } from "./use-chat-flow-external-events";
@@ -101,7 +100,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
       if ((round.phase === "queued" || round.phase === "streaming") && round.gen === gen) {
         return round.draftId;
       }
-      return buildAssistantDraftId(gen);
+      return "";
     },
     isRoundActiveForGen: (gen) => (
       (round.phase === "queued" || round.phase === "streaming")
@@ -116,6 +115,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     finalizeDraft,
     getDraftStreamBlocks,
     getPendingUserDraftId,
+    getPendingUserDraftIdForGen,
     hasAssistantDraftInMessages,
     insertDraft,
     insertUserDraft,
@@ -401,6 +401,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     setChatErrorText,
     formatRequestFailed: options.formatRequestFailed,
     getPendingUserDraftId,
+    getPendingUserDraftIdForGen,
     removeDraft,
     deleteSendStartedAtMs: (gen) => {
       sendStartedAtMsByGen.delete(gen);

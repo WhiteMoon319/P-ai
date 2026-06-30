@@ -228,33 +228,24 @@ fn apply_foreground_stream_projection(
             .collect::<Vec<_>>()
     };
     next_messages.retain(|message| !message.id.trim().starts_with("__draft_assistant__:"));
-    next_messages.push(build_foreground_stream_projection_message(stream_cache));
+    if let Some(message) = build_foreground_stream_projection_message(stream_cache) {
+        next_messages.push(message);
+    }
     next_messages
 }
 
 fn foreground_stream_projection_message_id(
     stream_cache: &ConversationStreamRuntimeCacheSnapshot,
-) -> String {
-    if !stream_cache.activation_id.trim().is_empty() {
-        let activation_id = stream_cache.activation_id.trim();
-        let normalized_activation_id = activation_id
-            .strip_prefix("round-")
-            .filter(|suffix| !suffix.is_empty() && suffix.chars().all(|ch| ch.is_ascii_digit()))
-            .unwrap_or(activation_id);
-        return format!("__draft_assistant__:{}", normalized_activation_id);
-    }
-    if !stream_cache.request_id.trim().is_empty() {
-        return format!("__draft_assistant__:{}", stream_cache.request_id.trim());
-    }
+) -> Option<String> {
     if !stream_cache.persisted_assistant_message_id.trim().is_empty() {
-        return stream_cache.persisted_assistant_message_id.trim().to_string();
+        return Some(stream_cache.persisted_assistant_message_id.trim().to_string());
     }
-    "__draft_assistant__:resume".to_string()
+    None
 }
 
 fn build_foreground_stream_projection_message(
     stream_cache: &ConversationStreamRuntimeCacheSnapshot,
-) -> ChatMessage {
+) -> Option<ChatMessage> {
     let assistant_text = assistant_text_from_stream_blocks(&stream_cache.stream_blocks);
     let reasoning_text = reasoning_text_from_stream_blocks(&stream_cache.stream_blocks);
     let fallback_text = stream_cache.assistant_text.trim();
@@ -263,8 +254,8 @@ fn build_foreground_stream_projection_message(
     } else {
         assistant_text
     };
-    let message_id = foreground_stream_projection_message_id(stream_cache);
-    ChatMessage {
+    let message_id = foreground_stream_projection_message_id(stream_cache)?;
+    Some(ChatMessage {
         id: message_id.clone(),
         role: "assistant".to_string(),
         created_at: if stream_cache.started_at.trim().is_empty() {
@@ -299,7 +290,7 @@ fn build_foreground_stream_projection_message(
         tool_call: None,
         mcp_call: None,
         meme_annotations: None,
-    }
+    })
 }
 
 #[cfg(test)]
@@ -356,13 +347,12 @@ mod foreground_resume_projection_tests {
 
         assert_eq!(projected.len(), 2);
         assert_eq!(projected[0].id, "user-1");
-        assert_eq!(projected[1].id, "__draft_assistant__:42");
-        assert!(projected.iter().all(|message| message.id != "assistant-half"));
+        assert_eq!(projected[1].id, "assistant-half");
         assert!(projected
             .iter()
             .filter(|message| message.id.starts_with("__draft_assistant__:"))
             .count()
-            == 1);
+            == 0);
     }
 
     #[test]
@@ -380,10 +370,10 @@ mod foreground_resume_projection_tests {
             started_at_ms: 1000,
             updated_at: "2026-06-12T00:00:02Z".to_string(),
             has_visible_progress: true,
-            persisted_assistant_message_id: String::new(),
+            persisted_assistant_message_id: "assistant-tool-status".to_string(),
         };
 
-        let projected = build_foreground_stream_projection_message(&stream_cache);
+        let projected = build_foreground_stream_projection_message(&stream_cache).unwrap();
         let meta = projected.provider_meta.unwrap_or_default();
 
         assert_eq!(

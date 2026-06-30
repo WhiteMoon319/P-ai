@@ -2522,6 +2522,7 @@
                 queue_mode: ChatQueueMode::Normal,
                 messages: vec![test_text_message("user", "来自张三的第一条消息", &created_at)],
                 activate_assistant: true,
+                assistant_message_id: None,
                 session_info: ChatSessionInfo {
                     department_id: ASSISTANT_DEPARTMENT_ID.to_string(),
                     agent_id: DEFAULT_AGENT_ID.to_string(),
@@ -2537,6 +2538,7 @@
                 queue_mode: ChatQueueMode::Normal,
                 messages: vec![test_text_message("user", "来自张三的第二条消息", &created_at)],
                 activate_assistant: true,
+                assistant_message_id: None,
                 session_info: ChatSessionInfo {
                     department_id: ASSISTANT_DEPARTMENT_ID.to_string(),
                     agent_id: DEFAULT_AGENT_ID.to_string(),
@@ -2552,6 +2554,7 @@
                 queue_mode: ChatQueueMode::Normal,
                 messages: vec![test_text_message("user", "来自李四的消息", &created_at)],
                 activate_assistant: true,
+                assistant_message_id: None,
                 session_info: ChatSessionInfo {
                     department_id: ASSISTANT_DEPARTMENT_ID.to_string(),
                     agent_id: DEFAULT_AGENT_ID.to_string(),
@@ -2567,6 +2570,7 @@
                 queue_mode: ChatQueueMode::Normal,
                 messages: vec![test_text_message("user", "普通用户消息", &now_iso())],
                 activate_assistant: true,
+                assistant_message_id: None,
                 session_info: ChatSessionInfo {
                     department_id: ASSISTANT_DEPARTMENT_ID.to_string(),
                     agent_id: DEFAULT_AGENT_ID.to_string(),
@@ -2615,6 +2619,7 @@
             queue_mode: ChatQueueMode::Normal,
             messages: vec![test_text_message("user", "忙碌期间来的新消息", &created_at)],
             activate_assistant: true,
+            assistant_message_id: None,
             session_info: ChatSessionInfo {
                 department_id: ASSISTANT_DEPARTMENT_ID.to_string(),
                 agent_id: DEFAULT_AGENT_ID.to_string(),
@@ -3443,6 +3448,7 @@
             queue_mode: ChatQueueMode::Normal,
             messages: vec![test_text_message("user", "hello", &created_at)],
             activate_assistant: true,
+            assistant_message_id: None,
             session_info: ChatSessionInfo {
                 department_id: ASSISTANT_DEPARTMENT_ID.to_string(),
                 agent_id: DEFAULT_AGENT_ID.to_string(),

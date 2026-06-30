@@ -49,6 +49,8 @@ export type UseChatFlowOptions = {
     conversationId: string;
     traceId: string;
     ingress: string;
+    userMessageId?: string;
+    assistantMessageId?: string;
   }>;
   invokeStopChatMessage?: (input: {
     session: { apiConfigId: string; agentId: string; departmentId?: string; conversationId?: string };

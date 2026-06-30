@@ -1,6 +1,5 @@
 import type { Ref } from "vue";
 import type { AssistantStreamBlock, ChatMessage } from "../../../types/app";
-import { buildAssistantDraftId } from "./use-chat-flow-drafts";
 import {
   readHistoryFlushedPayload,
   type AssistantDeltaEvent,
@@ -67,12 +66,11 @@ export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
     }
     if (wasQueuedForActivation) {
       const existingRound = options.getRound();
-      const draftId = existingRound.phase === "queued" && existingRound.gen === gen
-        ? existingRound.draftId
-        : buildAssistantDraftId(gen);
-      options.setRound({ phase: "queued", gen, draftId }, "waiting");
+      if (existingRound.phase === "queued" && existingRound.gen === gen) {
+        options.setRound({ phase: "queued", gen, draftId: existingRound.draftId }, "waiting");
+        options.updateQueuedAssistantDraftStatus(existingRound.draftId, options.optionsT("chat.statusWaitingReply"));
+      }
       options.chatting.value = true;
-      options.updateQueuedAssistantDraftStatus(draftId, options.optionsT("chat.statusWaitingReply"));
       return;
     }
     if (gen !== options.getGeneration()) return;

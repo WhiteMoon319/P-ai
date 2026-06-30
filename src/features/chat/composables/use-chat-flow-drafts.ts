@@ -55,6 +55,7 @@ type UseChatFlowDraftsOptions = {
 
 export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
   let pendingUserDraftId = "";
+  const pendingUserDraftIdByGen = new Map<number, string>();
 
   function resolveAssistantDraftSpeakerAgentId(existingDraft?: ChatMessage | null): string {
     const existing = String(existingDraft?.speakerAgentId || "").trim();
@@ -66,6 +67,10 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
 
   function getPendingUserDraftId(): string {
     return pendingUserDraftId;
+  }
+
+  function getPendingUserDraftIdForGen(gen: number): string {
+    return pendingUserDraftIdByGen.get(gen) || "";
   }
 
   function getDraftStreamBlocks(draftId: string): AssistantStreamBlock[] {
@@ -90,19 +95,24 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
   }
 
   function hasAssistantDraftInMessages(): boolean {
-    return options.allMessages.value.some((message) =>
-      String(message?.id || "").trim().startsWith(DRAFT_ASSISTANT_ID_PREFIX)
-    );
+    return options.allMessages.value.some((message) => {
+      const messageId = String(message?.id || "").trim();
+      const meta = (message?.providerMeta || {}) as Record<string, unknown>;
+      return messageId.startsWith(DRAFT_ASSISTANT_ID_PREFIX)
+        || (String(message?.role || "").trim() === "assistant" && meta._streaming === true);
+    });
   }
 
   function insertUserDraft(
+    messageId: string,
     gen: number,
     text: string,
     images: Array<{ mime: string; bytesBase64: string; savedPath?: string }>,
     attachments: Array<{ fileName: string; relativePath: string; mime: string }>,
     mentions: ChatMentionTarget[],
   ): string {
-    const draftId = `${DRAFT_USER_ID_PREFIX}${gen}`;
+    const draftId = String(messageId || "").trim();
+    if (!draftId) return "";
     const parts: ChatMessage["parts"] = [];
     const normalizedText = String(text || "");
     if (normalizedText) {
@@ -142,6 +152,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     const idx = cur.findIndex((m) => m.id === draftId);
     options.allMessages.value = idx < 0 ? [...cur, stableMsg] : cur.map((m, i) => (i === idx ? stableMsg : m));
     pendingUserDraftId = draftId;
+    pendingUserDraftIdByGen.set(gen, draftId);
     return draftId;
   }
 
@@ -326,6 +337,11 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     if (draftId === pendingUserDraftId) {
       pendingUserDraftId = "";
     }
+    for (const [gen, userDraftId] of pendingUserDraftIdByGen.entries()) {
+      if (userDraftId === draftId) {
+        pendingUserDraftIdByGen.delete(gen);
+      }
+    }
     options.allMessages.value = options.allMessages.value.filter((m) => m.id !== draftId);
   }
 
@@ -392,6 +408,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     finalizeDraft,
     getDraftStreamBlocks,
     getPendingUserDraftId,
+    getPendingUserDraftIdForGen,
     hasAssistantDraftInMessages,
     insertDraft,
     insertUserDraft,

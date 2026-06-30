@@ -106,6 +106,9 @@ pub(crate) struct ChatPendingEvent {
     pub messages: Vec<ChatMessage>,
     /// 是否在本批消息写入历史后激活主助理
     pub activate_assistant: bool,
+    /// 若本批消息会激活主助理，则预先分配真实 assistant message id
+    #[serde(default)]
+    pub assistant_message_id: Option<String>,
     /// 会话信息
     pub session_info: ChatSessionInfo,
     /// 运行上下文（渐进接入）
@@ -1828,6 +1831,7 @@ fn maybe_enqueue_goal_continue_after_idle(
         queue_mode: ChatQueueMode::Normal,
         messages: vec![message],
         activate_assistant: true,
+        assistant_message_id: None,
         session_info: ChatSessionInfo {
             department_id: conversation.department_id,
             agent_id: conversation.agent_id,
@@ -2727,6 +2731,17 @@ async fn process_conversation_batch(
                 None
             }
         });
+    let activating_assistant_message_id = events
+        .iter()
+        .zip(event_activate_flags.iter().copied())
+        .rev()
+        .find_map(|(event, should_activate)| {
+            if should_activate {
+                event.assistant_message_id.clone()
+            } else {
+                None
+            }
+        });
 
     let batch_message_count = events.iter().map(|e| e.messages.len()).sum::<usize>();
     let mut activations = take_queued_chat_activations(state, &event_ids)?;
@@ -2767,6 +2782,7 @@ async fn process_conversation_batch(
                 activating_session_info,
                 conversation_id,
                 activation.clone(),
+                activating_assistant_message_id.clone(),
                 (!guided_event_ids.is_empty()).then_some(guided_event_ids.as_slice()),
                 activating_runtime_context.clone(),
                 activated_remote_im_sources.clone(),
@@ -2828,6 +2844,7 @@ async fn process_conversation_batch(
                             state,
                             activating_session_info,
                             conversation_id,
+                            None,
                             None,
                             None,
                             Some(follow_up_context),
@@ -2984,6 +3001,7 @@ async fn activate_main_assistant(
     session_info: &ChatSessionInfo,
     conversation_id: &str,
     activation: Option<QueuedChatActivation>,
+    assistant_message_id: Option<String>,
     guided_event_ids: Option<&[String]>,
     runtime_context: Option<RuntimeContext>,
     remote_im_activation_sources: Vec<RemoteImActivationSource>,
@@ -3032,6 +3050,12 @@ async fn activate_main_assistant(
     let activation_reason = resolve_activation_reason(&runtime_context);
     let stream_started_at = now_iso();
     let stream_started_at_ms = now_unix_ms();
+    let assistant_message_id = assistant_message_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
     reset_conversation_stream_runtime_cache(
         state,
         conversation_id,
@@ -3039,7 +3063,7 @@ async fn activate_main_assistant(
         trace_id.as_str(),
         executor_department_id.as_str(),
         executor_agent_id.as_str(),
-        Uuid::new_v4().to_string().as_str(),
+        assistant_message_id.as_str(),
         stream_started_at.as_str(),
         stream_started_at_ms,
     )?;
@@ -3048,6 +3072,7 @@ async fn activate_main_assistant(
         conversation_id,
         activation_id.as_str(),
         trace_id.as_str(),
+        assistant_message_id.as_str(),
         activation_reason.as_str(),
         executor_department_id.as_str(),
         executor_agent_id.as_str(),
@@ -3388,6 +3413,7 @@ fn emit_round_started_event(
     conversation_id: &str,
     activation_id: &str,
     request_id: &str,
+    assistant_message_id: &str,
     reason: &str,
     department_id: &str,
     agent_id: &str,
@@ -3409,6 +3435,7 @@ fn emit_round_started_event(
         "conversationId": conversation_id,
         "activationId": activation_id,
         "requestId": request_id,
+        "assistantMessageId": assistant_message_id,
         "reason": reason,
         "departmentId": department_id,
         "agentId": agent_id,

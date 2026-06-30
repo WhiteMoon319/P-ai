@@ -92,6 +92,10 @@ struct SubmitChatResult {
     conversation_id: String,
     trace_id: String,
     ingress: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    user_message_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    assistant_message_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

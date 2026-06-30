@@ -1692,6 +1692,7 @@ fn restart_dispatch_round_after_context_compaction(
         conversation_id,
         request_id.as_str(),
         request_id.as_str(),
+        assistant_message_id.as_str(),
         activation_reason.as_str(),
         department_id,
         agent_id,

@@ -90,6 +90,9 @@
               </span>
             </template>
           </div>
+          <div v-if="showMessageIdDebug" class="mb-1 font-mono text-[10px] leading-tight text-base-content/45 break-all">
+            id={{ String(block.id || "") }}<span v-if="String(block.sourceMessageId || '') && String(block.sourceMessageId || '') !== String(block.id || '')"> src={{ String(block.sourceMessageId || "") }}</span>
+          </div>
           <div
             v-if="!showAssistantPreStreamingDots(block)"
             :class="[
@@ -400,6 +403,9 @@
           <time v-if="formattedCreatedAt && !block.isStreaming" class="text-base-content/40 leading-none">{{ formattedCreatedAt }}</time>
         </span>
       </div>
+      <div v-if="showMessageIdDebug && !compactWithPrevious" class="mb-1 font-mono text-[10px] leading-tight text-base-content/45 break-all">
+        id={{ String(block.id || "") }}<span v-if="String(block.sourceMessageId || '') && String(block.sourceMessageId || '') !== String(block.id || '')"> src={{ String(block.sourceMessageId || "") }}</span>
+      </div>
       <div :class="[
         'chat-bubble',
         bubbleBackgroundHidden ? 'ecall-message-bubble-bg-hidden text-base-content' : '',
@@ -589,6 +595,10 @@ const imageDataUrlCache = new Map<string, string>();
 const imageDataUrlPromiseCache = new Map<string, Promise<string>>();
 const debugPlainMarkdownRender = typeof window !== "undefined"
   && window.localStorage.getItem("easy-call.debug.chat-plain-markdown") === "1";
+const showMessageIdDebug = import.meta.env.DEV || (
+  typeof window !== "undefined"
+  && window.localStorage.getItem("easy-call.debug.chat-message-id") === "1"
+);
 
 const props = defineProps<{
   activeConversationId: string;

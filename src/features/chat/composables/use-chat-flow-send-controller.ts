@@ -1,10 +1,6 @@
 import { Channel } from "@tauri-apps/api/core";
 import type { Ref } from "vue";
 import type { AssistantStreamBlock, ChatMentionTarget, ChatMessage } from "../../../types/app";
-import {
-  buildAssistantDraftId,
-  DRAFT_USER_ID_PREFIX,
-} from "./use-chat-flow-drafts";
 import type { AssistantDeltaEvent } from "./use-chat-flow-events";
 import type { PreparedChatSendInput } from "./use-chat-flow-send-input";
 import type { RoundState, SendChatOverrides } from "./use-chat-flow-types";
@@ -38,6 +34,8 @@ type UseChatFlowSendControllerOptions = {
     conversationId: string;
     traceId: string;
     ingress: string;
+    userMessageId?: string;
+    assistantMessageId?: string;
   }>;
   onOwnUserDraftInserted?: () => void;
   onAssistantDraftInserted?: () => void;
@@ -57,6 +55,7 @@ type UseChatFlowSendControllerOptions = {
   applyPreparedSendInput: (input: PreparedChatSendInput) => void;
   prepareSendInput: (overrides?: SendChatOverrides) => PreparedChatSendInput | null;
   insertUserDraft: (
+    messageId: string,
     gen: number,
     text: string,
     images: StreamUserImageAttachment[],
@@ -128,25 +127,16 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
       options.startFrontendDispatchTimer(gen, options.sendStartedAtMsByGen.get(gen));
     }
     options.setPendingTerminalEventNull();
-    if (!hasForegroundRoundInFlight) {
-      options.insertUserDraft(gen, plainText, sentImages, attachments, selectedMentions);
-      options.onOwnUserDraftInserted?.();
-    }
 
     const traceId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const assistantDraftId = buildAssistantDraftId(traceId);
+    let assistantDraftId = "";
 
     if (!hasForegroundRoundInFlight) {
       options.resetDisplayState();
       const round = options.getRound();
       if (round.phase === "streaming") options.removeDraft(round.draftId);
-      if (selectedMentions.length === 0) {
-        options.setRound({ phase: "queued", gen, draftId: assistantDraftId });
-        options.updateQueuedAssistantDraftStatus(assistantDraftId, options.t("chat.statusPreparingMessage"));
-        options.onAssistantDraftInserted?.();
-      }
     }
 
     const deltaChannel = new Channel<AssistantDeltaEvent>();
@@ -177,8 +167,21 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
       const accepted = typeof (submitResult as { accepted?: unknown } | null)?.accepted === "boolean"
         ? !!(submitResult as { accepted?: boolean }).accepted
         : true;
+      const userMessageId = String((submitResult as { userMessageId?: string } | null)?.userMessageId || "").trim();
+      const assistantMessageId = String((submitResult as { assistantMessageId?: string } | null)?.assistantMessageId || "").trim();
+      if (!hasForegroundRoundInFlight && accepted && ingress !== "queued") {
+        if (userMessageId) {
+          options.insertUserDraft(userMessageId, gen, plainText, sentImages, attachments, selectedMentions);
+          options.onOwnUserDraftInserted?.();
+        }
+        if (selectedMentions.length === 0 && assistantMessageId) {
+          assistantDraftId = assistantMessageId;
+          options.setRound({ phase: "queued", gen, draftId: assistantDraftId });
+          options.updateQueuedAssistantDraftStatus(assistantDraftId, options.t("chat.statusPreparingMessage"));
+          options.onAssistantDraftInserted?.();
+        }
+      }
       if (!hasForegroundRoundInFlight && (ingress === "queued" || !accepted)) {
-        options.removeDraft(`${DRAFT_USER_ID_PREFIX}${gen}`);
         options.removeDraft(assistantDraftId);
         if (options.getRound().phase !== "idle") {
           options.setRound({ phase: "idle" });

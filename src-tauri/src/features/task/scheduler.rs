@@ -262,6 +262,7 @@ fn task_enqueue_conversation_trigger(
         queue_mode: ChatQueueMode::Normal,
         messages: vec![build_task_trigger_message(task)],
         activate_assistant: true,
+        assistant_message_id: None,
         session_info: ChatSessionInfo {
             department_id: session.department_id.clone(),
             agent_id: session.agent_id.clone(),

@@ -2523,6 +2523,7 @@ fn create_pending_event(
         queue_mode: ChatQueueMode::Normal,
         messages,
         activate_assistant,
+        assistant_message_id: None,
         session_info,
         runtime_context: None,
         sender_info: Some(sender_info),

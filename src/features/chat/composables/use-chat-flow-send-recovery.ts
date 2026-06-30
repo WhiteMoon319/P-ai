@@ -1,7 +1,6 @@
 import type { Ref } from "vue";
 import type { AssistantStreamBlock } from "../../../types/app";
 import {
-  DRAFT_USER_ID_PREFIX,
   summarizeToolCallsText,
 } from "./use-chat-flow-drafts";
 import type { RoundState } from "./use-chat-flow-types";
@@ -27,6 +26,7 @@ type UseChatFlowSendRecoveryOptions = {
   setChatErrorText: (text: string, conversationId?: string | null) => void;
   formatRequestFailed: (error: unknown) => string;
   getPendingUserDraftId: () => string;
+  getPendingUserDraftIdForGen: (gen: number) => string;
   removeDraft: (draftId: string) => void;
   deleteSendStartedAtMs: (gen: number) => void;
   failQueuedRoundWithoutDraft: (gen: number, error: unknown) => Promise<void>;
@@ -36,10 +36,8 @@ type UseChatFlowSendRecoveryOptions = {
 
 export function useChatFlowSendRecovery(options: UseChatFlowSendRecoveryOptions) {
   function removePendingDraftsForGen(gen: number, assistantDraftId?: string) {
-    const pendingUserDraftId = options.getPendingUserDraftId();
-    if (pendingUserDraftId === `${DRAFT_USER_ID_PREFIX}${gen}`) {
-      options.removeDraft(pendingUserDraftId);
-    }
+    const pendingUserDraftId = options.getPendingUserDraftIdForGen(gen);
+    if (pendingUserDraftId) options.removeDraft(pendingUserDraftId);
     if (assistantDraftId) {
       options.removeDraft(assistantDraftId);
     }
@@ -100,10 +98,8 @@ export function useChatFlowSendRecovery(options: UseChatFlowSendRecoveryOptions)
     const latestRound = options.getRound();
     if (latestRound.phase === "streaming" && latestRound.gen === gen) {
       options.removeDraft(latestRound.draftId);
-      const pendingUserDraftId = options.getPendingUserDraftId();
-      if (pendingUserDraftId === `${DRAFT_USER_ID_PREFIX}${gen}`) {
-        options.removeDraft(pendingUserDraftId);
-      }
+      const pendingUserDraftId = options.getPendingUserDraftIdForGen(gen);
+      if (pendingUserDraftId) options.removeDraft(pendingUserDraftId);
       options.deleteSendStartedAtMs(gen);
       options.setRound({ phase: "idle" });
       options.setActiveRoundAgentId("");

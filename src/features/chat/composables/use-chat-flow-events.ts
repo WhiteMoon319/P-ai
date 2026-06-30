@@ -28,6 +28,7 @@ export type RoundStartedPayload = {
   conversationId: string;
   activationId?: string;
   requestId?: string;
+  assistantMessageId?: string;
   reason?: string;
   departmentId?: string;
   agentId?: string;
@@ -138,6 +139,7 @@ export function readRoundStartedPayload(raw: string | undefined): RoundStartedPa
       conversationId: String(parsed.conversationId || "").trim(),
       activationId: typeof parsed.activationId === "string" ? parsed.activationId : undefined,
       requestId: typeof parsed.requestId === "string" ? parsed.requestId : undefined,
+      assistantMessageId: typeof parsed.assistantMessageId === "string" ? parsed.assistantMessageId : undefined,
       reason: typeof parsed.reason === "string" ? parsed.reason : undefined,
       departmentId: typeof parsed.departmentId === "string" ? parsed.departmentId : undefined,
       agentId: typeof parsed.agentId === "string" ? parsed.agentId : undefined,
