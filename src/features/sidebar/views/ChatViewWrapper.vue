@@ -52,6 +52,7 @@
     :current-workspace-root-path="currentWorkspaceRootPath"
     :workspaces="currentWorkspaces"
     :current-department-id="currentDepartmentId"
+    :active-agent-id="activeAgentId"
     :active-conversation-id="activeConversationId"
     :current-todos="props.currentTodos"
     :supervision-active="!!props.supervisionActive"

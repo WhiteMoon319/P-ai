@@ -29,6 +29,7 @@ export type ToolReviewReportRecord = {
   scope: string;
   target: string;
   departmentId?: string;
+  agentId?: string;
   delegateId?: string;
   workspacePath: string;
   createdAt: string;
@@ -93,6 +94,7 @@ type SubmitToolReviewCodeInput = {
   scope: ToolReviewCodeReviewScope;
   target?: string;
   departmentId?: string;
+  agentId?: string;
 };
 
 type DeleteToolReviewReportInput = {
@@ -261,6 +263,7 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
         scope,
         target: String(input.target || "").trim(),
         departmentId: String(input.departmentId || "").trim(),
+        agentId: String(input.agentId || "").trim(),
       });
       const result = await requestToolReview<SubmitToolReviewTaskOutput>("submit_tool_review_code", {
         input: {
@@ -268,6 +271,7 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
           scope,
           target: String(input.target || "").trim() || undefined,
           departmentId: String(input.departmentId || "").trim() || undefined,
+          agentId: String(input.agentId || "").trim() || undefined,
         },
       });
       toolReviewCurrentReportId.value = String(result?.report?.id || "").trim();

@@ -124,6 +124,7 @@
       :current-chat-workspace-root-path="chatWorkspaceRootPath"
       :current-chat-workspaces="chatWorkspaceChoices"
       :current-chat-department-id="currentForegroundDepartmentId"
+      :current-chat-agent-id="currentForegroundAgentId"
       :user-avatar-url="userAvatarUrl"
       :selected-persona-avatar-url="currentForegroundPersonaAvatarUrl"
       :chat-persona-name-map="chatPersonaNameMap"

@@ -164,6 +164,7 @@
       :submitting="codeReviewSubmitting"
       :error-text="codeReviewErrorText"
       :current-department-id="activeDepartmentId"
+      :current-agent-id="activeAgentId"
       :department-options="createConversationDepartmentOptions"
       :persona-avatar-url-map="sidebarPersonaAvatarUrlMap"
       :commit-options="commitOptions"
@@ -1595,7 +1596,7 @@ async function loadCodeReviewCommitOptions(page = 1) {
   }
 }
 
-async function submitCodeReview(input: { scope: ToolReviewCodeReviewScope; target?: string; departmentId: string }) {
+async function submitCodeReview(input: { scope: ToolReviewCodeReviewScope; target?: string; departmentId: string; agentId: string }) {
   if (!activeConversationId.value || codeReviewSubmitting.value) return;
   codeReviewSubmitting.value = true;
   codeReviewErrorText.value = "";
@@ -1605,6 +1606,7 @@ async function submitCodeReview(input: { scope: ToolReviewCodeReviewScope; targe
       scope: input.scope,
       target: String(input.target || "").trim() || undefined,
       departmentId: input.departmentId,
+      agentId: String(input.agentId || "").trim() || undefined,
     });
     codeReviewDialogOpen.value = false;
     if (reviewPanelOpen.value) loadReviewReports();
@@ -1685,6 +1687,7 @@ async function retryReviewReport(report: ToolReviewReportRecord) {
       scope: report.scope || "uncommitted",
       target: String(report.target || "").trim() || undefined,
       departmentId: String(report.departmentId || "").trim() || undefined,
+      agentId: String(report.agentId || "").trim() || undefined,
     });
     await loadReviewReports();
   } catch (error) {

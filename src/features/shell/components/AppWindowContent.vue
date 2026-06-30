@@ -166,6 +166,7 @@
         :current-workspace-root-path="currentChatWorkspaceRootPath"
         :workspaces="currentChatWorkspaces"
         :current-department-id="currentChatDepartmentId"
+        :active-agent-id="currentChatAgentId"
         :active-conversation-id="currentChatConversationId"
         :current-todos="currentChatTodos"
         :supervision-active="chatSupervisionActive"
@@ -544,6 +545,7 @@ const props = defineProps<{
   currentChatWorkspaceRootPath: string;
   currentChatWorkspaces: ShellWorkspace[];
   currentChatDepartmentId: string;
+  currentChatAgentId: string;
   currentChatConversationId: string;
   currentChatTodos: ChatTodoItem[];
   chatSupervisionActive: boolean;

@@ -85,6 +85,7 @@ const props = defineProps<{
   submitting: boolean;
   errorText: string;
   currentDepartmentId: string;
+  currentAgentId: string;
   departmentOptions: DepartmentOption[];
   personaAvatarUrlMap?: Record<string, string>;
   commitOptions: ToolReviewCommitOption[];
@@ -97,7 +98,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: [];
   pickCommitReview: [page: number];
-  reviewCode: [input: { scope: ToolReviewCodeReviewScope; target?: string; departmentId: string }];
+  reviewCode: [input: { scope: ToolReviewCodeReviewScope; target?: string; departmentId: string; agentId: string }];
 }>();
 
 const { t } = useI18n();
@@ -112,43 +113,54 @@ const departmentSelectOptions = computed<DepartmentPersonaOption[]>(() => {
   return (Array.isArray(props.departmentOptions) ? props.departmentOptions : [])
     .map((item) => {
       const departmentId = String(item.departmentId || item.id || "").trim();
+      const agentId = String(item.agentId || "").trim();
       return {
         ...item,
         departmentId,
-        id: String(item.id || `${departmentId}::${String(item.agentId || "").trim()}`).trim(),
+        agentId,
+        id: String(item.id || `${departmentId}::${agentId}`).trim(),
       };
     })
     .filter((item) => {
-      if (!item.departmentId || seen.has(item.departmentId)) return false;
-      seen.add(item.departmentId);
+      if (!item.departmentId || !item.agentId || !item.id || seen.has(item.id)) return false;
+      seen.add(item.id);
       return true;
     });
 });
 
-const validDepartmentId = computed(() => {
-  const selected = String(selectedDepartmentId.value || "").trim();
-  if (selected && departmentSelectOptions.value.some((item) => item.departmentId === selected)) return selected;
+const validSelectionOption = computed<DepartmentPersonaOption | null>(() => {
+  const selectedDepartmentIdValue = String(selectedDepartmentId.value || "").trim();
+  const selectedAgentIdValue = String(selectedAgentId.value || "").trim();
+  const selected = departmentSelectOptions.value.find((item) =>
+    item.departmentId === selectedDepartmentIdValue && item.agentId === selectedAgentIdValue
+  );
+  if (selected) return selected;
   const current = String(props.currentDepartmentId || "").trim();
-  if (current && departmentSelectOptions.value.some((item) => item.departmentId === current)) return current;
-  return String(departmentSelectOptions.value[0]?.departmentId || "").trim();
+  const currentAgentId = String(props.currentAgentId || "").trim();
+  const currentOption = departmentSelectOptions.value.find((item) =>
+    item.departmentId === current && item.agentId === currentAgentId
+  );
+  if (currentOption) return currentOption;
+  if (current) {
+    const currentDepartmentOption = departmentSelectOptions.value.find((item) => item.departmentId === current);
+    if (currentDepartmentOption) return currentDepartmentOption;
+  }
+  return departmentSelectOptions.value[0] || null;
 });
 
 const commitTotalPages = computed(() => Math.max(1, Math.ceil(props.commitTotal / Math.max(1, props.commitPageSize))));
 
 const canConfirm = computed(() => {
-  if (props.submitting || !validDepartmentId.value) return false;
+  if (props.submitting || !validSelectionOption.value) return false;
   if (scope.value === "commit") return selectedCommitHashes.value.length > 0;
   if (scope.value === "custom") return !!customTargetText.value.trim();
   return true;
 });
 
 watch(
-  () => [props.currentDepartmentId, departmentSelectOptions.value.map((item) => item.departmentId).join("|")] as const,
+  () => [props.currentDepartmentId, props.currentAgentId, departmentSelectOptions.value.map((item) => item.id).join("|")] as const,
   () => {
-    const current = String(props.currentDepartmentId || "").trim();
-    const selectedOption = departmentSelectOptions.value.find((item) => item.departmentId === current)
-      || departmentSelectOptions.value[0]
-      || null;
+    const selectedOption = validSelectionOption.value;
     selectedDepartmentId.value = String(selectedOption?.departmentId || "").trim();
     selectedAgentId.value = String(selectedOption?.agentId || "").trim();
   },
@@ -159,10 +171,7 @@ watch(
   () => props.open,
   (open) => {
     if (!open) return;
-    const current = String(props.currentDepartmentId || "").trim();
-    const selectedOption = departmentSelectOptions.value.find((item) => item.departmentId === current)
-      || departmentSelectOptions.value[0]
-      || null;
+    const selectedOption = validSelectionOption.value;
     selectedDepartmentId.value = String(selectedOption?.departmentId || "").trim();
     selectedAgentId.value = String(selectedOption?.agentId || "").trim();
   },
@@ -195,22 +204,24 @@ function close() {
 }
 
 function confirm() {
-  const departmentId = validDepartmentId.value;
-  if (!departmentId) return;
+  const selection = validSelectionOption.value;
+  const departmentId = String(selection?.departmentId || "").trim();
+  const agentId = String(selection?.agentId || "").trim();
+  if (!departmentId || !agentId) return;
   if (scope.value === "commit") {
     if (selectedCommitHashes.value.length === 0) return;
-    emit("reviewCode", { scope: "commit", target: selectedCommitHashes.value.join("\n"), departmentId });
+    emit("reviewCode", { scope: "commit", target: selectedCommitHashes.value.join("\n"), departmentId, agentId });
     close();
     return;
   }
   if (scope.value === "custom") {
     const target = customTargetText.value.trim();
     if (!target) return;
-    emit("reviewCode", { scope: "custom", target, departmentId });
+    emit("reviewCode", { scope: "custom", target, departmentId, agentId });
     close();
     return;
   }
-  emit("reviewCode", { scope: scope.value, target: "", departmentId });
+  emit("reviewCode", { scope: scope.value, target: "", departmentId, agentId });
   close();
 }
 </script>

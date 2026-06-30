@@ -339,6 +339,8 @@ struct ToolReviewCodeReviewInput {
     target: Option<String>,
     #[serde(default)]
     department_id: Option<String>,
+    #[serde(default)]
+    agent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -390,6 +392,8 @@ struct ToolReviewReportRecord {
     target: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     department_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    agent_id: Option<String>,
     workspace_path: String,
     created_at: String,
     updated_at: String,
@@ -1360,6 +1364,7 @@ fn tool_review_create_pending_report(
     scope: &str,
     target: &str,
     department_id: Option<&str>,
+    agent_id: Option<&str>,
     workspace_path: &str,
 ) -> Result<ToolReviewReportRecord, String> {
     let mut records = tool_review_read_report_records(data_path, conversation_id)?;
@@ -1372,6 +1377,10 @@ fn tool_review_create_pending_report(
         scope: scope.trim().to_string(),
         target: target.trim().to_string(),
         department_id: department_id
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned),
+        agent_id: agent_id
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned),
@@ -1909,6 +1918,11 @@ async fn submit_tool_review_code_internal(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
+    let requested_agent_id = input
+        .agent_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
     let target_department_id = if let Some(department_id) = requested_department_id {
         department_id.to_string()
     } else if conversation.department_id.trim().is_empty() {
@@ -1919,25 +1933,45 @@ async fn submit_tool_review_code_internal(
     let runtime_snapshot = load_runtime_organization_snapshot(&app_state)?;
     let target_department = runtime_department_by_id(&runtime_snapshot, &target_department_id)
         .ok_or_else(|| format!("代码审查目标部门不存在，departmentId={target_department_id}"))?;
-    let target_agent_id = target_department
-        .agent_ids
-        .iter()
-        .map(|item| item.trim())
-        .find(|agent_id| {
-            !agent_id.is_empty()
-                && runtime_snapshot
-                    .agents
-                    .iter()
-                    .any(|agent| agent.id == *agent_id && !agent.is_built_in_user)
-        })
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| format!("代码审查目标部门没有可用人格，departmentId={target_department_id}"))?;
+    let target_agent_id = if let Some(agent_id) = requested_agent_id {
+        if !target_department
+            .agent_ids
+            .iter()
+            .any(|item| item.trim() == agent_id)
+        {
+            return Err(format!(
+                "代码审查目标人格不属于目标部门，departmentId={}，agentId={}",
+                target_department_id, agent_id
+            ));
+        }
+        runtime_snapshot
+            .agents
+            .iter()
+            .find(|agent| agent.id == agent_id && !agent.is_built_in_user)
+            .map(|agent| agent.id.clone())
+            .ok_or_else(|| format!("代码审查目标人格不存在或不可用，agentId={agent_id}"))?
+    } else {
+        target_department
+            .agent_ids
+            .iter()
+            .map(|item| item.trim())
+            .find(|agent_id| {
+                !agent_id.is_empty()
+                    && runtime_snapshot
+                        .agents
+                        .iter()
+                        .any(|agent| agent.id == *agent_id && !agent.is_built_in_user)
+            })
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| format!("代码审查目标部门没有可用人格，departmentId={target_department_id}"))?
+    };
     let pending_report = tool_review_create_pending_report(
         &app_state.data_path,
         conversation_id,
         scope,
         &target_text,
         Some(&target_department_id),
+        Some(&target_agent_id),
         &workspace_text,
     )
     .map_err(|err| {

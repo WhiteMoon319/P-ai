@@ -345,6 +345,7 @@
           :submitting="!!toolReviewSubmittingBatchKey"
           :error-text="codeReviewErrorText"
           :current-department-id="props.currentDepartmentId"
+          :current-agent-id="props.activeAgentId"
           :department-options="props.createConversationDepartmentOptions"
           :persona-avatar-url-map="props.personaAvatarUrlMap"
           :commit-options="commitOptions"
@@ -540,7 +541,7 @@ const props = defineProps<{
   hasMoreHistory: boolean; loadingOlderHistory: boolean;
   latestOwnMessageAlignRequest: number; conversationScrollToBottomRequest: number; scrollToBottomBehavior: "auto" | "smooth" | "smooth_light";
   currentWorkspaceName: string; currentWorkspaceDisplayName?: string; currentWorkspaceRootPath: string; workspaces: ShellWorkspace[];
-  currentDepartmentId: string; activeConversationId: string; currentTodos: ChatTodoItem[];
+  currentDepartmentId: string; activeAgentId: string; activeConversationId: string; currentTodos: ChatTodoItem[];
   supervisionActive: boolean; supervisionTitle: string; supervisionDialogOpen: boolean;
   supervisionTaskSaving: boolean; supervisionTaskError: string;
   activeSupervisionTask: { taskId: string; goal: string; why: string; todo: string; endAtLocal: string; remainingHours: number } | null;
@@ -1200,7 +1201,7 @@ async function loadCodeReviewCommitOptions(page = 1) {
     commitOptionsLoading.value = false;
   }
 }
-async function handleSubmitCodeReview(input: { scope: ToolReviewCodeReviewScope; target?: string; departmentId: string }) {
+async function handleSubmitCodeReview(input: { scope: ToolReviewCodeReviewScope; target?: string; departmentId: string; agentId: string }) {
   const conversationId = String(props.activeConversationId || "").trim();
   if (!conversationId || toolReviewSubmittingBatchKey.value) return;
   codeReviewErrorText.value = "";
@@ -1209,6 +1210,7 @@ async function handleSubmitCodeReview(input: { scope: ToolReviewCodeReviewScope;
     scope: input.scope,
     target: String(input.target || "").trim() || undefined,
     departmentId: String(input.departmentId || "").trim() || undefined,
+    agentId: String(input.agentId || "").trim() || undefined,
   });
   if (!report) {
     codeReviewErrorText.value = t("chat.startCodeReviewFailed");
