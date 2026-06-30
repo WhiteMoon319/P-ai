@@ -3,14 +3,29 @@
     <div
       role="button"
       tabindex="0"
-      class="group/section sticky top-0 z-20 mx-1 flex h-9 items-center gap-2 rounded-lg bg-base-200/95 px-2 text-left text-xs font-semibold text-base-content backdrop-blur transition-colors hover:bg-base-300/70"
+      :draggable="draggable"
+      class="group/section relative sticky top-0 z-20 mx-1 flex h-9 select-none items-center gap-2 rounded-lg bg-base-200/95 px-2 text-left text-xs font-semibold text-base-content backdrop-blur transition-colors hover:bg-base-300/70"
       :title="title"
       @click="toggle"
       @contextmenu.stop.prevent="collapseAll"
       @dblclick.stop.prevent="collapseAll"
       @keydown.enter.prevent="toggle"
       @keydown.space.prevent="toggle"
+      @dragstart="onDragStart"
+      @dragover="onDragOver"
+      @drop="onDrop"
+      @dragend="onDragEnd"
     >
+      <div
+        v-if="dropIndicator === 'before'"
+        class="pointer-events-none absolute left-2 right-2 top-0 h-[3px] -translate-y-1/2 rounded-full bg-neutral shadow-[0_0_0_1px_color-mix(in_srgb,hsl(var(--n))_28%,transparent)]"
+        aria-hidden="true"
+      ></div>
+      <div
+        v-if="dropIndicator === 'after'"
+        class="pointer-events-none absolute left-2 right-2 bottom-0 translate-y-1/2 rounded-full bg-neutral h-[3px] shadow-[0_0_0_1px_color-mix(in_srgb,hsl(var(--n))_28%,transparent)]"
+        aria-hidden="true"
+      ></div>
       <ChevronRight
         class="h-4 w-4 shrink-0 transition-transform duration-200 ease-out"
         :class="modelValue ? '' : 'rotate-90'"
@@ -40,6 +55,8 @@ const props = defineProps<{
   title: string;
   count: number;
   modelValue: boolean;
+  draggable?: boolean;
+  dropIndicator?: "before" | "after" | null;
 }>();
 
 const emit = defineEmits<{
@@ -47,6 +64,10 @@ const emit = defineEmits<{
   "collapse-all": [];
   "after-enter": [];
   "after-leave": [];
+  "dragstart": [event: DragEvent];
+  "dragover": [event: DragEvent];
+  "drop": [event: DragEvent];
+  "dragend": [event: DragEvent];
 }>();
 
 function toggle() {
@@ -57,6 +78,30 @@ function collapseAll(event: MouseEvent) {
   const target = event.target;
   if (target instanceof HTMLElement && target.closest("button,a,input,textarea,select")) return;
   emit("collapse-all");
+}
+
+function onDragStart(event: DragEvent) {
+  if (!props.draggable) {
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+  emit("dragstart", event);
+}
+
+function onDragOver(event: DragEvent) {
+  if (!props.draggable) return;
+  emit("dragover", event);
+}
+
+function onDrop(event: DragEvent) {
+  if (!props.draggable) return;
+  emit("drop", event);
+}
+
+function onDragEnd(event: DragEvent) {
+  if (!props.draggable) return;
+  emit("dragend", event);
 }
 
 function cleanupAnimation(element: Element) {
