@@ -59,7 +59,7 @@ export function useChatFlowForegroundReset(options: UseChatFlowForegroundResetOp
     if (round.phase === "streaming") {
       options.removeDraft(round.draftId);
     } else if (round.phase === "queued") {
-      options.removeDraft(`__draft_assistant__:${round.gen}`);
+      options.removeDraft(round.draftId);
     }
     options.setRound({ phase: "idle" });
     options.setActiveHistoryMessageCount(0);
@@ -109,11 +109,7 @@ export function useChatFlowForegroundReset(options: UseChatFlowForegroundResetOp
     if (pendingUserDraftId) {
       options.removeDraft(pendingUserDraftId);
     }
-    if (round.phase === "streaming") {
-      options.finalizeDraft(round.draftId);
-    } else if (round.phase === "queued") {
-      options.removeDraft(`__draft_assistant__:${round.gen}`);
-    }
+    // 最小化/失焦只是冻结前台调度，不应该把仍在运行的流式草稿伪装成完成态。
     options.setRound({ phase: "idle" });
     options.setActiveHistoryMessageCount(0);
     options.chatting.value = false;

@@ -1,5 +1,6 @@
 import type { Ref } from "vue";
 import type { AssistantStreamBlock, ChatMessage } from "../../../types/app";
+import { buildAssistantDraftId } from "./use-chat-flow-drafts";
 import {
   readHistoryFlushedPayload,
   type AssistantDeltaEvent,
@@ -28,7 +29,7 @@ type UseChatFlowRoundEventsOptions = {
   applyConversationStreamCacheToDisplay: (conversationId?: string | null) => boolean;
   loadStreamBlocksFromDraft: (draftId: string) => void;
   updateQueuedAssistantDraftStatus: (draftId: string, statusText: string) => void;
-  insertDraft: (gen: number, initialText?: string) => string;
+  insertDraft: (draftId: string, gen?: number, initialText?: string) => string;
   updateDraftText: (draftId: string) => void;
   syncStreamBlocksToDraft: (draftId: string) => void;
   applyPendingTerminalEvent: (gen: number) => boolean;
@@ -65,9 +66,13 @@ export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
       options.setDeferredRoundCompletion(null);
     }
     if (wasQueuedForActivation) {
-      options.setRound({ phase: "queued", gen }, "waiting");
+      const existingRound = options.getRound();
+      const draftId = existingRound.phase === "queued" && existingRound.gen === gen
+        ? existingRound.draftId
+        : buildAssistantDraftId(gen);
+      options.setRound({ phase: "queued", gen, draftId }, "waiting");
       options.chatting.value = true;
-      options.updateQueuedAssistantDraftStatus(`__draft_assistant__:${gen}`, options.optionsT("chat.statusWaitingReply"));
+      options.updateQueuedAssistantDraftStatus(draftId, options.optionsT("chat.statusWaitingReply"));
       return;
     }
     if (gen !== options.getGeneration()) return;
@@ -90,7 +95,7 @@ export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
       await options.failQueuedRoundWithoutDraft(gen, pending?.error);
       return;
     }
-    options.updateQueuedAssistantDraftStatus(`__draft_assistant__:${gen}`, options.optionsT("chat.statusWaitingReply"));
+    options.updateQueuedAssistantDraftStatus(round.draftId, options.optionsT("chat.statusWaitingReply"));
     options.chatting.value = true;
   }
 

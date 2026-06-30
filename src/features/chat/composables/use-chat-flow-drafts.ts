@@ -16,6 +16,10 @@ import { messageWithStableRenderId, messageWithoutStableRenderId, stableRenderId
 export const DRAFT_ASSISTANT_ID_PREFIX = "__draft_assistant__:";
 export const DRAFT_USER_ID_PREFIX = "__draft_user__:";
 
+export function buildAssistantDraftId(key: string | number): string {
+  return `${DRAFT_ASSISTANT_ID_PREFIX}${String(key ?? "").trim()}`;
+}
+
 type UpdateDraftTextOptions = {
   preserveActivityProjection?: boolean;
 };
@@ -141,20 +145,14 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     return draftId;
   }
 
-  function insertDraft(gen: number, initialText = ""): string {
-    const draftId = `${DRAFT_ASSISTANT_ID_PREFIX}${gen}`;
-    const startedAtMs = options.getSendStartedAtMs(gen) || 0;
+  function insertDraft(draftId: string, gen?: number, initialText = ""): string {
+    const normalizedDraftId = String(draftId || "").trim();
+    if (!normalizedDraftId) return "";
+    const startedAtMs = typeof gen === "number" ? options.getSendStartedAtMs(gen) || 0 : 0;
     const elapsedMs = startedAtMs > 0 ? Math.max(0, Date.now() - startedAtMs) : -1;
-    console.warn("[聊天前端耗时] 助理草稿出现", {
-      gen,
-      elapsedMs,
-      conversationId: String(options.getConversationId ? options.getConversationId() : "").trim(),
-      activeHistoryMessageCount: options.getActiveHistoryMessageCount(),
-      latestUserTextLength: String(options.latestUserText.value || "").length,
-    });
     const agentId = resolveAssistantDraftSpeakerAgentId();
     const msg = messageWithStableRenderId({
-      id: draftId,
+      id: normalizedDraftId,
       role: "assistant",
       createdAt: new Date().toISOString(),
       speakerAgentId: agentId,
@@ -169,15 +167,15 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
         _frontendDispatchStartedAtMs: options.getFrontendDispatchStartedAtMs(),
         _frontendDispatchElapsedMs: options.currentFrontendDispatchElapsedMs(),
       },
-    } satisfies ChatMessage, draftId);
+    } satisfies ChatMessage, normalizedDraftId);
     const cur = options.allMessages.value;
-    const idx = cur.findIndex((m) => m.id === draftId);
+    const idx = cur.findIndex((m) => m.id === normalizedDraftId);
     if (idx >= 0) {
       options.allMessages.value = cur.map((m, i) => (i === idx ? msg : m));
-      return draftId;
+      return normalizedDraftId;
     }
     options.allMessages.value = [...cur, msg];
-    return draftId;
+    return normalizedDraftId;
   }
 
   function updateQueuedAssistantDraftStatus(draftId: string, statusText: string) {

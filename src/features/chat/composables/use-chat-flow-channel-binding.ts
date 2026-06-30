@@ -32,6 +32,7 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
   let boundConversationInitialized = false;
   let boundDisplayGeneration = 0;
   let boundDeltaChannel: Channel<AssistantDeltaEvent> | null = null;
+  let boundChannelSeq = 0;
 
   function getBoundDisplayGeneration(): number {
     return boundDisplayGeneration;
@@ -46,8 +47,17 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
     source: ChatFlowDeltaSource,
     getGen: () => number,
     nextGenOnHistoryFlushed: () => number,
+    guard?: () => boolean,
   ) {
     channel.onmessage = (event) => {
+      if (guard && !guard()) {
+        if (options.debug && source === "bound") {
+          console.debug("[聊天] 丢弃过期 bound channel 事件", {
+            conversationId: boundConversationId,
+          });
+        }
+        return;
+      }
       const parsed = readAssistantEvent(event);
 
       if (parsed.kind === "history_flushed") {
@@ -85,20 +95,34 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
     const id = String(conversationId || "").trim();
     if (!force && boundConversationInitialized && id === boundConversationId) return;
     // 流式绑定日志已移除
+    const previousChannel = boundDeltaChannel;
+    const previousConversationId = boundConversationId;
+    const previousInitialized = boundConversationInitialized;
+    const channelSeq = ++boundChannelSeq;
     const channel = new Channel<AssistantDeltaEvent>();
     attachDeltaHandler(
       channel,
       "bound",
       () => options.getRoundActiveGen() || boundDisplayGeneration,
       () => options.getRoundActiveGen() || boundDisplayGeneration,
+      () => channelSeq === boundChannelSeq && boundDeltaChannel === channel,
     );
-    await options.invokeBindActiveChatViewStream({
-      conversationId: id || undefined,
-      onDelta: channel,
-    });
     boundDeltaChannel = channel;
     boundConversationId = id;
     boundConversationInitialized = true;
+    try {
+      await options.invokeBindActiveChatViewStream({
+        conversationId: id || undefined,
+        onDelta: channel,
+      });
+    } catch (error) {
+      if (channelSeq === boundChannelSeq && boundDeltaChannel === channel) {
+        boundDeltaChannel = previousChannel;
+        boundConversationId = previousConversationId;
+        boundConversationInitialized = previousInitialized;
+      }
+      throw error;
+    }
     if (!id) boundDisplayGeneration = 0;
     // 流式绑定日志已移除
     if (options.debug) {

@@ -1,6 +1,6 @@
 import type { ChatMessage } from "../../../types/app";
 import { normalizeAssistantStreamBlocks, streamBlocksToToolCalls } from "../../../utils/chat-message-semantics";
-import { DRAFT_ASSISTANT_ID_PREFIX } from "./use-chat-flow-drafts";
+import { buildAssistantDraftId, DRAFT_ASSISTANT_ID_PREFIX } from "./use-chat-flow-drafts";
 import { streamCacheHasVisibleProgress } from "./use-chat-flow-stream-cache";
 import { applyStreamingHistoryOverlay } from "./use-chat-flow-stream-overlay";
 import { formalizeMessages, normalizeConversationId, positiveRoundedNumber, readMessagePlainText } from "./use-chat-flow-utils";
@@ -13,6 +13,22 @@ type ResumeForegroundStreamCacheProjectionInput = {
 };
 
 export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
+  function resolveAssistantDraftId(input?: {
+    draftId?: string | null;
+    activationId?: string | null;
+    requestId?: string | null;
+    gen?: number;
+  }): string {
+    const explicitDraftId = String(input?.draftId || "").trim();
+    if (explicitDraftId) return explicitDraftId;
+    const activationId = String(input?.activationId || "").trim();
+    if (activationId) return buildAssistantDraftId(activationId);
+    const requestId = String(input?.requestId || "").trim();
+    if (requestId) return buildAssistantDraftId(requestId);
+    const gen = Number.isFinite(input?.gen) ? Number(input?.gen) : 0;
+    return gen > 0 ? buildAssistantDraftId(gen) : buildAssistantDraftId("resume");
+  }
+
   function applyStreamingOverlayForConversation(conversationId?: string | null) {
     const cid = normalizeConversationId(conversationId);
     if (!cid) return;
@@ -82,14 +98,31 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
       bindings.removeAssistantDrafts();
       bindings.resetDisplayState();
       bindings.setActiveHistoryMessageCount(formalizeMessages(bindings.allMessages.value).length);
-      bindings.setRound({ phase: "queued", gen }, "waiting");
+      bindings.setRound({
+        phase: "queued",
+        gen,
+        draftId: resolveAssistantDraftId({
+          draftId: round.phase === "queued" ? round.draftId : "",
+          activationId: nextActivationId,
+          requestId: payload.requestId,
+          gen,
+        }),
+      }, "waiting");
     }
     bindings.startFrontendDispatchTimer(
       gen,
       positiveRoundedNumber(payload.startedAtMs) || bindings.sendStartedAtMsByGen.get(gen),
     );
     bindings.chatting.value = true;
-    bindings.updateQueuedAssistantDraftStatus(`${DRAFT_ASSISTANT_ID_PREFIX}${gen}`, bindings.t("chat.statusWaitingReply"));
+    bindings.updateQueuedAssistantDraftStatus(
+      resolveAssistantDraftId({
+        draftId: bindings.getRound().phase === "queued" ? bindings.getRound().draftId : "",
+        activationId: nextActivationId,
+        requestId: payload.requestId,
+        gen,
+      }),
+      bindings.t("chat.statusWaitingReply"),
+    );
     bindings.setFrontendRoundPhase("waiting");
     return gen;
   }
@@ -106,13 +139,14 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
   function ensureForegroundWaitingRound(statusText = bindings.t("chat.statusWaitingReply")) {
     const round = bindings.getRound();
     const cachedTimer = cachedDispatchTimerForConversation();
+    const conversationId = normalizeConversationId(bindings.getConversationId ? bindings.getConversationId() : "");
     if (round.phase === "queued") {
       bindings.startFrontendDispatchTimer(
         round.gen,
         bindings.frontendDispatch.getStartedAtMs() || cachedTimer.startedAtMs || undefined,
         bindings.frontendDispatch.getElapsedMs() || cachedTimer.elapsedMs,
       );
-      bindings.updateQueuedAssistantDraftStatus(`${DRAFT_ASSISTANT_ID_PREFIX}${round.gen}`, statusText);
+      bindings.updateQueuedAssistantDraftStatus(round.draftId, statusText);
       bindings.chatting.value = true;
       bindings.setFrontendRoundPhase("waiting");
       return round.gen;
@@ -124,7 +158,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
         bindings.frontendDispatch.getElapsedMs() || cachedTimer.elapsedMs,
       );
       if (!bindings.hasAssistantDraftInMessages()) {
-        const draftId = bindings.insertDraft(round.gen, statusText);
+        const draftId = bindings.insertDraft(round.draftId, round.gen, statusText);
         bindings.updateDraftText(draftId);
         bindings.setRound({ phase: "streaming", gen: round.gen, draftId });
       }
@@ -137,10 +171,15 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     bindings.setDeferredRoundCompletion(null);
     bindings.setQueuedStreamingState(null);
     bindings.setActiveHistoryMessageCount(formalizeMessages(bindings.allMessages.value).length);
-    bindings.setRound({ phase: "queued", gen }, "waiting");
+    const draftId = resolveAssistantDraftId({
+      activationId: cachedTimer.startedAtMs > 0 ? bindings.getActiveActivationId?.() : "",
+      requestId: conversationId ? bindings.readConversationStreamCache(conversationId)?.requestId : "",
+      gen,
+    });
+    bindings.setRound({ phase: "queued", gen, draftId }, "waiting");
     bindings.startFrontendDispatchTimer(gen, cachedTimer.startedAtMs || undefined, cachedTimer.elapsedMs);
     bindings.chatting.value = true;
-    bindings.updateQueuedAssistantDraftStatus(`${DRAFT_ASSISTANT_ID_PREFIX}${gen}`, statusText);
+    bindings.updateQueuedAssistantDraftStatus(draftId, statusText);
     return gen;
   }
 
@@ -151,7 +190,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
       if (!bindings.hasAssistantDraftInMessages()) {
         if (bindings.streamBlocks) bindings.streamBlocks.value = [];
         bindings.applyConversationStreamCacheToDisplay(conversationId);
-        const draftId = bindings.insertDraft(round.gen);
+        const draftId = bindings.insertDraft(round.draftId, round.gen);
         bindings.updateDraftText(draftId);
         bindings.setRound({ phase: "streaming", gen: round.gen, draftId });
       }
@@ -172,7 +211,15 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
       bindings.latestAssistantText.value = readMessagePlainText(existingDraft);
     }
     bindings.setActiveHistoryMessageCount(formalizeMessages(bindings.allMessages.value).length);
-    const draftId = existingDraftId || bindings.insertDraft(gen);
+    const draftId = existingDraftId || bindings.insertDraft(
+      resolveAssistantDraftId({
+        draftId: round.phase === "queued" ? round.draftId : "",
+        activationId: bindings.getActiveActivationId?.(),
+        requestId: bindings.readConversationStreamCache(conversationId)?.requestId,
+        gen,
+      }),
+      gen,
+    );
     if (existingDraftId) {
       bindings.loadStreamBlocksFromDraft(draftId);
     }
@@ -251,7 +298,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
       bindings.latestAssistantText.value = readMessagePlainText(existingDraft);
     }
     bindings.setActiveHistoryMessageCount(formalizeMessages(bindings.allMessages.value).length);
-    const draftId = existingDraftId || bindings.insertDraft(gen);
+    const draftId = existingDraftId || bindings.insertDraft(round.draftId, gen);
     if (existingDraftId) {
       bindings.loadStreamBlocksFromDraft(draftId);
     }

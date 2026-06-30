@@ -4,7 +4,7 @@ import type { AssistantStreamBlock, ChatMessage } from "../../../types/app";
 import { normalizeAssistantStreamBlocks } from "../../../utils/chat-message-semantics";
 import { useChatFlowChannelBinding } from "./use-chat-flow-channel-binding";
 import {
-  DRAFT_ASSISTANT_ID_PREFIX,
+  buildAssistantDraftId,
   useChatFlowDrafts,
 } from "./use-chat-flow-drafts";
 import { useChatFlowExternalEvents } from "./use-chat-flow-external-events";
@@ -98,8 +98,10 @@ export function useChatFlow(options: UseChatFlowOptions) {
   const frontendDispatch = useChatFlowFrontendDispatch({
     allMessages: options.allMessages,
     getDraftIdForGen: (gen) => {
-      if (round.phase === "streaming" && round.gen === gen) return round.draftId;
-      return `${DRAFT_ASSISTANT_ID_PREFIX}${gen}`;
+      if ((round.phase === "queued" || round.phase === "streaming") && round.gen === gen) {
+        return round.draftId;
+      }
+      return buildAssistantDraftId(gen);
     },
     isRoundActiveForGen: (gen) => (
       (round.phase === "queued" || round.phase === "streaming")

@@ -526,30 +526,6 @@ export function useChatConversationSync(bindings: Record<string, any>) {
       ? applyStreamingHistoryOverlay(rawNextMessages, streamCache)
       : { messages: rawNextMessages, replacedMessageId: "", removed: false };
     rawNextMessages = overlay.messages;
-    if (
-      runtimeState === "assistant_streaming"
-      && overlay.removed
-    ) {
-      const replacedMessageId = String(overlay.replacedMessageId || "").trim();
-      const preservedDrafts = freezeConversationMessages(bindings.allMessages.value)
-        .filter((message: any) => isAssistantDraftMessage(message));
-      if (preservedDrafts.length > 0) {
-        const existingIds = new Set(rawNextMessages.map((message: any) => String(message?.id || "").trim()).filter(Boolean));
-        rawNextMessages = [
-          ...rawNextMessages,
-          ...preservedDrafts.filter((message: any) => {
-            const messageId = String(message?.id || "").trim();
-            if (!messageId || existingIds.has(messageId)) {
-              return false;
-            }
-            if (replacedMessageId && existingIds.has(replacedMessageId)) {
-              return false;
-            }
-            return true;
-          }),
-        ];
-      }
-    }
     const mergedMessages = preserveExistingHistory
       ? mergeMessagesIntoTimeline(bindings.allMessages.value, rawNextMessages)
       : rawNextMessages;

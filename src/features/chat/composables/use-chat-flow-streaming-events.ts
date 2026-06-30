@@ -55,16 +55,6 @@ type UseChatFlowStreamingEventsOptions = {
 };
 
 export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOptions) {
-  function streamBlockStats(rawBlocks: unknown = options.streamBlocks?.value || []) {
-    const blocks = normalizeAssistantStreamBlocks(rawBlocks);
-    return {
-      blockCount: blocks.length,
-      reasoningLen: blocks.reduce((total, block) => total + String(block.reasoning || "").length, 0),
-      textLen: blocks.reduce((total, block) => total + String(block.text || "").length, 0),
-      toolCount: blocks.reduce((total, block) => total + (block.tools || []).length, 0),
-    };
-  }
-
   function shouldCorrectDraftProjectionFromSnapshot(
     draftId: string,
     snapshotBlocks: AssistantStreamBlock[],
@@ -75,14 +65,7 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
   }
 
   function handleStreamingEvent(currentGen: number, parsed: AssistantDeltaEvent) {
-    const snapshotStats = streamBlockStats(parsed.streamCache?.streamBlocks);
     if (!currentGen) {
-      console.warn("[聊天流式块][前端关键] 丢弃：currentGen 为空", {
-        kind: parsed.kind || "delta",
-        hasStreamCache: !!parsed.streamCache,
-        snapshot: snapshotStats,
-        round: options.getRound(),
-      });
       return;
     }
     const round = options.getRound();
@@ -91,21 +74,9 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
     }
     const currentRound = options.getRound();
     if (currentRound.phase !== "streaming" && currentRound.phase !== "queued") {
-      console.warn("[聊天流式块][前端关键] 丢弃：当前轮次不可接收", {
-        currentGen,
-        kind: parsed.kind || "delta",
-        snapshot: snapshotStats,
-        currentRound,
-      });
       return;
     }
     if (currentRound.gen !== currentGen) {
-      console.warn("[聊天流式块][前端关键] 丢弃：generation 不一致", {
-        currentGen,
-        kind: parsed.kind || "delta",
-        snapshot: snapshotStats,
-        currentRound,
-      });
       return;
     }
     if (parsed.kind === "context_usage_update") {

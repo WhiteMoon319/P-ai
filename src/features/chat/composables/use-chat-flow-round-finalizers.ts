@@ -1,5 +1,5 @@
 import type { ChatMessage } from "../../../types/app";
-import { DRAFT_ASSISTANT_ID_PREFIX, DRAFT_USER_ID_PREFIX, summarizeToolCallsText as formatToolCallsText } from "./use-chat-flow-drafts";
+import { DRAFT_USER_ID_PREFIX, summarizeToolCallsText as formatToolCallsText } from "./use-chat-flow-drafts";
 import { mergeAssistantText } from "./use-chat-flow-text";
 
 export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
@@ -52,7 +52,7 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
     bindings.sendStartedAtMsByGen.delete(gen);
     const round = bindings.getRound();
     if (round.phase !== "queued" || round.gen !== gen) return;
-    bindings.removeDraft(`${DRAFT_ASSISTANT_ID_PREFIX}${gen}`);
+    bindings.removeDraft(round.draftId);
     bindings.setPendingTerminalEvent(null);
     bindings.setDeferredRoundCompletion(null);
     bindings.setQueuedStreamingState(null);
@@ -72,7 +72,7 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
     bindings.sendStartedAtMsByGen.delete(gen);
     const round = bindings.getRound();
     if (round.phase !== "queued" || round.gen !== gen) return;
-    bindings.removeDraft(`${DRAFT_ASSISTANT_ID_PREFIX}${gen}`);
+    bindings.removeDraft(round.draftId);
     bindings.setPendingTerminalEvent(null);
     bindings.setDeferredRoundCompletion(null);
     bindings.setQueuedStreamingState(null);

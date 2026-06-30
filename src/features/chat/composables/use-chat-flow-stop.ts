@@ -2,7 +2,6 @@ import type { Ref } from "vue";
 import type { AssistantStreamBlock, ChatMessage } from "../../../types/app";
 import { normalizeAssistantStreamBlocks } from "../../../utils/chat-message-semantics";
 import {
-  DRAFT_ASSISTANT_ID_PREFIX,
   DRAFT_USER_ID_PREFIX,
   summarizeToolCallsText,
 } from "./use-chat-flow-drafts";
@@ -59,15 +58,6 @@ function stringifyStopError(error: unknown): string {
       })();
 }
 
-function streamBlockStopStats(blocks: AssistantStreamBlock[]) {
-  return {
-    blockCount: blocks.length,
-    reasoningLen: blocks.reduce((total, block) => total + String(block.reasoning || "").length, 0),
-    textLen: blocks.reduce((total, block) => total + String(block.text || "").length, 0),
-    toolCount: blocks.reduce((total, block) => total + (block.tools || []).length, 0),
-  };
-}
-
 export function useChatFlowStop(options: UseChatFlowStopOptions) {
   async function finishLocalStoppedRound(statusState: "failed" | "" = "") {
     options.advanceGeneration();
@@ -88,7 +78,7 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
       options.removeDraft(round.draftId);
       options.deleteSendStartedAtMs(round.gen);
     } else if (round.phase === "queued") {
-      options.removeDraft(`${DRAFT_ASSISTANT_ID_PREFIX}${round.gen}`);
+      options.removeDraft(round.draftId);
       options.deleteSendStartedAtMs(round.gen);
     }
 
@@ -115,16 +105,6 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
       : undefined;
     const partialAssistantText = options.latestAssistantText.value || readMessagePlainText(activeDraft);
     const partialStreamBlocks = normalizeAssistantStreamBlocks(options.streamBlocks?.value || []);
-    if (typeof window !== "undefined" && window.localStorage.getItem("easy-call.debug.chat-stream") === "1") {
-      console.info("[聊天流式块][前端停止] 准备停止", {
-        conversationId: cid,
-        roundPhase: round.phase,
-        draftId: activeDraftId,
-        partialAssistantTextLen: partialAssistantText.length,
-        ...streamBlockStopStats(partialStreamBlocks),
-      });
-    }
-
     if (round.phase === "queued") {
       await finishLocalStoppedRound();
       if (stopSession && options.invokeStopChatMessage) {

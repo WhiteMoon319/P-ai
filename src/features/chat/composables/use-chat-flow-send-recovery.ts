@@ -1,7 +1,6 @@
 import type { Ref } from "vue";
 import type { AssistantStreamBlock } from "../../../types/app";
 import {
-  DRAFT_ASSISTANT_ID_PREFIX,
   DRAFT_USER_ID_PREFIX,
   summarizeToolCallsText,
 } from "./use-chat-flow-drafts";
@@ -36,12 +35,14 @@ type UseChatFlowSendRecoveryOptions = {
 };
 
 export function useChatFlowSendRecovery(options: UseChatFlowSendRecoveryOptions) {
-  function removePendingDraftsForGen(gen: number) {
+  function removePendingDraftsForGen(gen: number, assistantDraftId?: string) {
     const pendingUserDraftId = options.getPendingUserDraftId();
     if (pendingUserDraftId === `${DRAFT_USER_ID_PREFIX}${gen}`) {
       options.removeDraft(pendingUserDraftId);
     }
-    options.removeDraft(`${DRAFT_ASSISTANT_ID_PREFIX}${gen}`);
+    if (assistantDraftId) {
+      options.removeDraft(assistantDraftId);
+    }
   }
 
   function handleAbortedSend(gen: number, sendConversationId: string) {
@@ -119,7 +120,7 @@ export function useChatFlowSendRecovery(options: UseChatFlowSendRecoveryOptions)
     const round = options.getRound();
     if (round.phase === "queued" && round.gen === gen && options.getHistoryFlushedReceivedGen() !== gen) {
       if (options.submitPending) options.submitPending.value = false;
-      removePendingDraftsForGen(gen);
+      removePendingDraftsForGen(gen, round.draftId);
       options.deleteSendStartedAtMs(gen);
       options.setRound({ phase: "idle" });
       options.setActiveRoundAgentId("");

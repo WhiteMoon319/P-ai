@@ -2,7 +2,7 @@ import { Channel } from "@tauri-apps/api/core";
 import type { Ref } from "vue";
 import type { AssistantStreamBlock, ChatMentionTarget, ChatMessage } from "../../../types/app";
 import {
-  DRAFT_ASSISTANT_ID_PREFIX,
+  buildAssistantDraftId,
   DRAFT_USER_ID_PREFIX,
 } from "./use-chat-flow-drafts";
 import type { AssistantDeltaEvent } from "./use-chat-flow-events";
@@ -127,36 +127,30 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
     if (!hasForegroundRoundInFlight) {
       options.startFrontendDispatchTimer(gen, options.sendStartedAtMsByGen.get(gen));
     }
-    console.warn("[聊天前端耗时] 发送开始", {
-      gen,
-      conversationId: String(options.getConversationId ? options.getConversationId() : "").trim(),
-      textLength: plainText.length,
-      imageCount: sentImages.length,
-      attachmentCount: attachments.length,
-      extraBlockCount: extraTextBlocks.length,
-    });
     options.setPendingTerminalEventNull();
     if (!hasForegroundRoundInFlight) {
       options.insertUserDraft(gen, plainText, sentImages, attachments, selectedMentions);
       options.onOwnUserDraftInserted?.();
     }
 
+    const traceId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const assistantDraftId = buildAssistantDraftId(traceId);
+
     if (!hasForegroundRoundInFlight) {
       options.resetDisplayState();
       const round = options.getRound();
       if (round.phase === "streaming") options.removeDraft(round.draftId);
       if (selectedMentions.length === 0) {
-        options.setRound({ phase: "queued", gen });
-        options.updateQueuedAssistantDraftStatus(`${DRAFT_ASSISTANT_ID_PREFIX}${gen}`, options.t("chat.statusPreparingMessage"));
+        options.setRound({ phase: "queued", gen, draftId: assistantDraftId });
+        options.updateQueuedAssistantDraftStatus(assistantDraftId, options.t("chat.statusPreparingMessage"));
         options.onAssistantDraftInserted?.();
       }
     }
 
     const deltaChannel = new Channel<AssistantDeltaEvent>();
     options.channelBinding.attachDeltaHandler(deltaChannel, "sendChat", () => gen, () => gen);
-    const traceId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const shouldBlockStopUntilHistoryFlushed = !hasForegroundRoundInFlight;
     let submitSucceeded = false;
 
@@ -185,7 +179,7 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
         : true;
       if (!hasForegroundRoundInFlight && (ingress === "queued" || !accepted)) {
         options.removeDraft(`${DRAFT_USER_ID_PREFIX}${gen}`);
-        options.removeDraft(`${DRAFT_ASSISTANT_ID_PREFIX}${gen}`);
+        options.removeDraft(assistantDraftId);
         if (options.getRound().phase !== "idle") {
           options.setRound({ phase: "idle" });
         }

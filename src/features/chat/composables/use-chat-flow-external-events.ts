@@ -7,6 +7,7 @@ import {
   readRoundFailedPayload,
   readRoundStartedPayload,
 } from "./use-chat-flow-events";
+import type { RoundState } from "./use-chat-flow-types";
 import { stringifyExternalEventPayload } from "./use-chat-flow-utils";
 
 type UseChatFlowExternalEventsOptions = {
@@ -17,7 +18,7 @@ type UseChatFlowExternalEventsOptions = {
   hasRecentlyCompletedRoundIds: () => boolean;
   markRecentlyCompletedRoundIds: (payload: { activationId?: string; requestId?: string } | null | undefined) => void;
   matchesRecentlyCompletedRoundIds: (payload: { activationId?: string; requestId?: string } | null | undefined) => boolean;
-  getRound: () => { phase: "idle" } | { phase: "queued"; gen: number } | { phase: "streaming"; gen: number; draftId: string };
+  getRound: () => RoundState;
   getSendChatActiveGen: () => number;
   nextGeneration: () => number;
   channelBinding: {
@@ -226,21 +227,9 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     const parsed = readAssistantEvent(rawObj?.event ?? payload);
     const cacheConversationId = payloadConversationId || currentConversationId;
     if (options.matchesRecentlyCompletedRoundIds(parsed)) {
-      console.warn("[聊天流式块][前端外部丢弃] 已完成轮次的旧增量", {
-        currentConversationId,
-        payloadConversationId,
-        activationId: String(parsed.activationId || "").trim(),
-        requestId: String(parsed.requestId || "").trim(),
-        kind: parsed.kind || "delta",
-      });
       return;
     }
     if (currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId) {
-      console.warn("[聊天流式块][前端外部缓存] 非当前会话，仅写缓存", {
-        currentConversationId,
-        payloadConversationId,
-        kind: parsed.kind || "delta",
-      });
       if (cacheConversationId) {
         if (parsed.streamCache) {
           options.writeConversationStreamCacheSnapshot(cacheConversationId, parsed.streamCache);
@@ -279,11 +268,6 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       && !String(parsed.activationId || parsed.requestId || "").trim()
       && options.hasRecentlyCompletedRoundIds()
     ) {
-      console.warn("[聊天流式块][前端外部丢弃] 已完成轮次后的无 ID tool_status", {
-        currentConversationId,
-        payloadConversationId,
-        kind: parsed.kind,
-      });
       return;
     }
     if (parsed.kind === "context_usage_update") {
@@ -326,15 +310,6 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       ? options.ensureForegroundStreamingRound()
       : (round.phase === "streaming" ? round.gen : 0);
     if (!currentGen) {
-      console.warn("[聊天流式块][前端外部丢弃] currentGen 为空", {
-        currentConversationId,
-        payloadConversationId,
-        cacheConversationId,
-        kind: parsed.kind || "delta",
-        round: options.getRound(),
-        shouldProjectFromAppEvent,
-        shouldResumeForegroundRound,
-      });
       return;
     }
     if (parsed.kind === "activity_reasoning_delta") {
