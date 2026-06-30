@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { IncrementalMarkdownBlockParser } from "./incremental-markdown";
-import { parseMarkdownBlocks, type MarkdownBlock } from "./parse-markdown";
+import { parseInlineSegments, parseMarkdownBlocks, type InlineSegment, type MarkdownBlock } from "./parse-markdown";
 
 function stripKeys(blocks: MarkdownBlock[]): unknown[] {
   return blocks.map((block) => {
@@ -56,5 +56,30 @@ describe("IncrementalMarkdownBlockParser", () => {
 
     expect(actual[actual.length - 1]?.type).toBe("footnotes");
     expect(stripKeys(actual)).toEqual(stripKeys(parseMarkdownBlocks(text, true)));
+  });
+});
+
+describe("parseInlineSegments", () => {
+  it("renders strong text across inline code spans", () => {
+    const segments = parseInlineSegments("**Issue 1: `heading_h1` 一直为空**");
+
+    expect(segments).toEqual<InlineSegment[]>([
+      {
+        type: "strong",
+        children: [
+          { type: "text", text: "Issue 1: " },
+          { type: "code", text: "heading_h1" },
+          { type: "text", text: " 一直为空" },
+        ],
+      },
+    ]);
+  });
+
+  it("keeps emphasis markers inside inline code literal", () => {
+    const segments = parseInlineSegments("`**not strong**`");
+
+    expect(segments).toEqual<InlineSegment[]>([
+      { type: "code", text: "**not strong**" },
+    ]);
   });
 });

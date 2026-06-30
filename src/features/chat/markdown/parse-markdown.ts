@@ -420,23 +420,80 @@ function normalizeMarkdownHref(rawHref: string): string {
   return href;
 }
 
+type EmphasisMarkerType = "strong" | "em" | "strongEm" | "delete";
+type InlineSyntaxMatch =
+  | { kind: "code"; start: number; end: number; raw: string; text: string }
+  | { kind: "math"; start: number; end: number; raw: string; text: string }
+  | { kind: "emphasis"; start: number; end: number; inner: string; emphasisType: EmphasisMarkerType }
+  | LinkMatch;
+
+type ProtectedInlineRange = { start: number; end: number };
+
+function pickEarlierInline(left: InlineSyntaxMatch | null, right: InlineSyntaxMatch | null): InlineSyntaxMatch | null {
+  if (!left) return right;
+  if (!right) return left;
+  return left.start <= right.start ? left : right;
+}
+
+function isIndexInProtectedRange(index: number, ranges: ProtectedInlineRange[]): boolean {
+  return ranges.some((range) => index >= range.start && index < range.end);
+}
+
+function collectProtectedInlineRanges(text: string): ProtectedInlineRange[] {
+  const ranges: ProtectedInlineRange[] = [];
+  const inlinePattern = /`([^`]+)`|\$([^$\n]+)\$/g;
+  let match: RegExpExecArray | null;
+  while ((match = inlinePattern.exec(text))) {
+    if (match[1] !== undefined) {
+      ranges.push({ start: match.index, end: match.index + match[0].length });
+      continue;
+    }
+
+    if (match[2] !== undefined) {
+      const before = match.index > 0 ? text[match.index - 1] : "";
+      const after = match.index + match[0].length < text.length ? text[match.index + match[0].length] : "";
+      if (before !== "$" && after !== "$") {
+        ranges.push({ start: match.index, end: match.index + match[0].length });
+      }
+    }
+  }
+  return ranges;
+}
+
+function findMarkerOutsideProtectedRanges(
+  text: string,
+  marker: string,
+  from: number,
+  protectedRanges: ProtectedInlineRange[],
+): number {
+  let cursor = from;
+  while (cursor < text.length) {
+    const index = text.indexOf(marker, cursor);
+    if (index < 0) return -1;
+    if (!isIndexInProtectedRange(index, protectedRanges)) return index;
+    cursor = index + marker.length;
+  }
+  return -1;
+}
+
 function findNextInlineMarker(
   text: string,
   from: number,
-): { type: "strong" | "em" | "strongEm" | "delete"; start: number; end: number; inner: string } | null {
-  const patterns: Array<{ type: "strong" | "em" | "strongEm" | "delete"; marker: string }> = [
+): { type: EmphasisMarkerType; start: number; end: number; inner: string } | null {
+  const protectedRanges = collectProtectedInlineRanges(text);
+  const patterns: Array<{ type: EmphasisMarkerType; marker: string }> = [
     { type: "strongEm", marker: "***" },
     { type: "delete", marker: "~~" },
     { type: "strong", marker: "**" },
     { type: "em", marker: "*" },
   ];
-  let best: { type: "strong" | "em" | "strongEm" | "delete"; start: number; end: number; inner: string } | null = null;
+  let best: { type: EmphasisMarkerType; start: number; end: number; inner: string } | null = null;
   for (const pattern of patterns) {
-    const start = text.indexOf(pattern.marker, from);
+    const start = findMarkerOutsideProtectedRanges(text, pattern.marker, from, protectedRanges);
     if (start < 0) continue;
     if (pattern.marker === "*" && text[start + 1] === "*") continue;
     const contentStart = start + pattern.marker.length;
-    const endMarker = text.indexOf(pattern.marker, contentStart);
+    const endMarker = findMarkerOutsideProtectedRanges(text, pattern.marker, contentStart, protectedRanges);
     if (endMarker < 0 || endMarker === contentStart) continue;
     const candidate = {
       type: pattern.type,
@@ -451,77 +508,122 @@ function findNextInlineMarker(
   return best;
 }
 
-function pushEmphasisIntoSegments(input: string, segments: InlineSegment[]) {
-  const text = String(input || "");
-  let cursor = 0;
-  while (cursor < text.length) {
-    const matched = findNextInlineMarker(text, cursor);
-    if (!matched) {
-      pushTextSegment(segments, text.slice(cursor));
-      break;
+function nextCodeOrMath(input: string, from: number): InlineSyntaxMatch | null {
+  const inlinePattern = /`([^`]+)`|\$([^$\n]+)\$/g;
+  inlinePattern.lastIndex = from;
+  let match: RegExpExecArray | null;
+  while ((match = inlinePattern.exec(input))) {
+    if (match[1] !== undefined) {
+      return {
+        kind: "code",
+        start: match.index,
+        end: match.index + match[0].length,
+        raw: match[0],
+        text: match[1],
+      };
     }
-    if (matched.start > cursor) {
-      pushTextSegment(segments, text.slice(cursor, matched.start));
+
+    if (match[2] !== undefined) {
+      const before = match.index > 0 ? input[match.index - 1] : "";
+      const after = match.index + match[0].length < input.length ? input[match.index + match[0].length] : "";
+      if (before === "$" || after === "$") {
+        inlinePattern.lastIndex = match.index + 1;
+        continue;
+      }
+      return {
+        kind: "math",
+        start: match.index,
+        end: match.index + match[0].length,
+        raw: match[0],
+        text: match[2],
+      };
     }
-    segments.push({
-      type: matched.type,
-      children: parseInlineSegments(matched.inner),
-    } as InlineSegment);
-    cursor = matched.end;
   }
+  return null;
 }
 
-function parseLinksIntoSegments(input: string, segments: InlineSegment[]) {
-  let cursor = 0;
-  while (cursor < input.length) {
-    const imageLink = nextMarkdownImageLink(input, cursor);
-    const markdownLink = nextMarkdownLink(input, cursor);
-    const autoLink = nextAutoLink(input, cursor);
-    const toolcallRef = nextToolcallRef(input, cursor);
-    const footnoteRef = nextFootnoteRef(input, cursor);
-    const next = pickEarlierLink(
-      pickEarlierLink(pickEarlierLink(pickEarlierLink(imageLink, markdownLink), autoLink), toolcallRef),
-      footnoteRef,
-    );
-    if (!next) break;
-    pushEmphasisIntoSegments(input.slice(cursor, next.start), segments);
-    if (next.kind === "image_link") {
-      const src = normalizeMarkdownHref(next.src);
-      const href = normalizeMarkdownHref(next.href);
-      if (src && href) {
-        segments.push({ type: "imageLink", src, href, alt: next.alt });
-      } else {
-        pushEmphasisIntoSegments(next.raw, segments);
-      }
-    } else if (next.kind === "markdown") {
-      const href = normalizeMarkdownHref(next.href);
-      if (href) {
-        if (next.image) {
-          segments.push({ type: "image", src: href, alt: next.text });
-        } else {
-          segments.push({ type: "link", href, text: next.text });
-        }
-      } else {
-        pushEmphasisIntoSegments(next.raw, segments);
-      }
-    } else if (next.kind === "auto") {
-      const { href, trailing } = trimTrailingUrlPunctuation(next.href);
-      if (href) segments.push({ type: "link", href, text: href });
-      pushEmphasisIntoSegments(trailing, segments);
-    } else if (next.kind === "toolcall_ref") {
-      segments.push({
-        type: "toolcall_ref",
-        id: next.id,
-        label: toolcallRefLabel(next.id),
-      });
-    } else if (next.id) {
-      segments.push({ type: "footnote_ref", id: next.id });
-    } else {
-      pushEmphasisIntoSegments(next.raw, segments);
-    }
-    cursor = next.end;
+function nextLinkLike(input: string, from: number): LinkMatch | null {
+  const imageLink = nextMarkdownImageLink(input, from);
+  const markdownLink = nextMarkdownLink(input, from);
+  const autoLink = nextAutoLink(input, from);
+  const toolcallRef = nextToolcallRef(input, from);
+  const footnoteRef = nextFootnoteRef(input, from);
+  return pickEarlierLink(
+    pickEarlierLink(pickEarlierLink(pickEarlierLink(imageLink, markdownLink), autoLink), toolcallRef),
+    footnoteRef,
+  );
+}
+
+function nextEmphasis(input: string, from: number): InlineSyntaxMatch | null {
+  const matched = findNextInlineMarker(input, from);
+  if (!matched) return null;
+  return {
+    kind: "emphasis",
+    start: matched.start,
+    end: matched.end,
+    inner: matched.inner,
+    emphasisType: matched.type,
+  };
+}
+
+function emitInlineSyntaxMatch(match: InlineSyntaxMatch, segments: InlineSegment[]) {
+  if (match.kind === "code") {
+    segments.push({ type: "code", text: match.text });
+    return;
   }
-  pushEmphasisIntoSegments(input.slice(cursor), segments);
+  if (match.kind === "math") {
+    segments.push({ type: "math", text: match.text });
+    return;
+  }
+  if (match.kind === "emphasis") {
+    segments.push({
+      type: match.emphasisType,
+      children: parseInlineSegments(match.inner),
+    } as InlineSegment);
+    return;
+  }
+  if (match.kind === "image_link") {
+    const src = normalizeMarkdownHref(match.src);
+    const href = normalizeMarkdownHref(match.href);
+    if (src && href) {
+      segments.push({ type: "imageLink", src, href, alt: match.alt });
+    } else {
+      pushTextSegment(segments, match.raw);
+    }
+    return;
+  }
+  if (match.kind === "markdown") {
+    const href = normalizeMarkdownHref(match.href);
+    if (href) {
+      if (match.image) {
+        segments.push({ type: "image", src: href, alt: match.text });
+      } else {
+        segments.push({ type: "link", href, text: match.text });
+      }
+    } else {
+      pushTextSegment(segments, match.raw);
+    }
+    return;
+  }
+  if (match.kind === "auto") {
+    const { href, trailing } = trimTrailingUrlPunctuation(match.href);
+    if (href) segments.push({ type: "link", href, text: href });
+    pushTextSegment(segments, trailing);
+    return;
+  }
+  if (match.kind === "toolcall_ref") {
+    segments.push({
+      type: "toolcall_ref",
+      id: match.id,
+      label: toolcallRefLabel(match.id),
+    });
+    return;
+  }
+  if (match.id) {
+    segments.push({ type: "footnote_ref", id: match.id });
+  } else {
+    pushTextSegment(segments, match.raw);
+  }
 }
 
 /**
@@ -533,33 +635,17 @@ export function parseInlineSegments(input: string): InlineSegment[] {
   const text = String(input || "");
   let cursor = 0;
 
-  // Combined pattern for inline code and inline math
-  // Inline code: `...`  Inline math: $...$  (not $$)
-  const inlinePattern = /`([^`]+)`|\$([^$\n]+)\$/g;
-  let match: RegExpExecArray | null;
-  while ((match = inlinePattern.exec(text))) {
-    if (match.index > cursor) {
-      parseLinksIntoSegments(text.slice(cursor, match.index), segments);
-    }
-    if (match[1] !== undefined) {
-      // Inline code
-      segments.push({ type: "code", text: match[1] });
-    } else if (match[2] !== undefined) {
-      // Inline math — verify it's not preceded/followed by $ (which would be $$)
-      const before = match.index > 0 ? text[match.index - 1] : "";
-      const after = match.index + match[0].length < text.length ? text[match.index + match[0].length] : "";
-      if (before === "$" || after === "$") {
-        // Part of $$, treat as text
-        parseLinksIntoSegments(match[0], segments);
-      } else {
-        segments.push({ type: "math", text: match[2] });
-      }
-    }
-    cursor = match.index + match[0].length;
+  while (cursor < text.length) {
+    const next = pickEarlierInline(
+      pickEarlierInline(nextCodeOrMath(text, cursor), nextLinkLike(text, cursor)),
+      nextEmphasis(text, cursor),
+    );
+    if (!next) break;
+    pushTextSegment(segments, text.slice(cursor, next.start));
+    emitInlineSyntaxMatch(next, segments);
+    cursor = next.end;
   }
-  if (cursor < text.length) {
-    parseLinksIntoSegments(text.slice(cursor), segments);
-  }
+  pushTextSegment(segments, text.slice(cursor));
   return segments;
 }
 
