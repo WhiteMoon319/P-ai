@@ -81,7 +81,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
       options.setChatError(text);
       return;
     }
-    if (targetIsForeground && options.chatting.value) {
+    if (targetIsForeground && options.chatting.value && action.command !== "archive_conversation") {
       const text = options.t("status.conversationActionBusy");
       options.setStatus(text);
       options.setChatError(text);

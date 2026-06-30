@@ -44,11 +44,15 @@ async fn archive_conversation(
     }
     let conversation_runtime_state = get_conversation_runtime_state(state.inner(), &source.id)
         .map_err(|err| log_manual_archive_failure(&source.id, err))?;
-    if !already_archived && conversation_runtime_state == MainSessionState::OrganizingContext {
-        return Err(log_manual_archive_failure(
-            &source.id,
-            "强制归档正在进行中，请稍候。".to_string(),
-        ));
+    if !already_archived {
+        let disabled_reason = match conversation_runtime_state {
+            MainSessionState::AssistantStreaming => Some("当前会话正在流式输出，请稍后再归档。"),
+            MainSessionState::OrganizingContext => Some("强制归档正在进行中，请稍候。"),
+            MainSessionState::Idle => None,
+        };
+        if let Some(reason) = disabled_reason {
+            return Err(log_manual_archive_failure(&source.id, reason.to_string()));
+        }
     }
     let archive_result = instant_archive_conversation(state.inner(), &selected_api, &source)
         .map_err(|err| log_manual_archive_failure(&source.id, err))?;
