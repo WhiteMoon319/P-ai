@@ -96,6 +96,7 @@
       "playRecord": "Play Record",
       "builtinShortcuts": "Built-in Shortcuts",
       "builtinTabInstruction": "Shortcut Command",
+      "builtinEscStopReplying": "Interrupt current reply",
       "builtinShiftTabPlanMode": "Toggle Plan Mode",
       "builtinShiftWheelConversationSwitch": "Switch Conversation"
     },

@@ -1179,6 +1179,11 @@ function handleChatInputKeydown(event: KeyboardEvent) {
       return;
     }
   }
+  if (event.key === "Escape" && props.chatting && showStopAction.value && !props.stopChatDisabled) {
+    event.preventDefault();
+    emit("stopChat");
+    return;
+  }
   if (event.key === "Enter" && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
     if (props.frozen || props.busy) return;
     event.preventDefault();

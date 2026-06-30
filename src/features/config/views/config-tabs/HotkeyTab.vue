@@ -162,6 +162,10 @@
             <span class="list-col-grow opacity-60 text-right">{{ t("config.hotkey.builtinTabInstruction") }}</span>
           </li>
           <li class="list-row">
+            <span class="font-mono">Esc</span>
+            <span class="list-col-grow opacity-60 text-right">{{ t("config.hotkey.builtinEscStopReplying") }}</span>
+          </li>
+          <li class="list-row">
             <span class="font-mono">Shift + Wheel</span>
             <span class="list-col-grow opacity-60 text-right">{{ t("config.hotkey.builtinShiftWheelConversationSwitch") }}</span>
           </li>

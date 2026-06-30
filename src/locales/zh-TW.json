@@ -96,6 +96,7 @@
       "playRecord": "播放录音",
       "builtinShortcuts": "內建快捷鍵",
       "builtinTabInstruction": "快捷指令",
+      "builtinEscStopReplying": "打斷目前回覆",
       "builtinShiftTabPlanMode": "切換計劃模式",
       "builtinShiftWheelConversationSwitch": "切換會話"
     },
