@@ -297,10 +297,10 @@
             </button>
           </div>
         </div>
-        <div class="flex items-center">
+        <div class="flex items-center gap-2">
           <span
             v-if="planModeEnabled"
-            class="badge badge-sm badge-info shrink-0 select-none"
+            class="inline-flex h-8 min-h-8 shrink-0 select-none items-center rounded-full bg-info px-3 text-xs font-medium leading-none text-info-content"
             :title="`Shift+Tab ${t('chat.plan.mode')}`"
           >
             {{ t("chat.plan.mode") }}
@@ -313,7 +313,7 @@
             @click="showStopAction ? emit('stopChat') : handleSendChat()"
           >
             <Square v-if="showStopAction" class="h-3.5 w-3.5 fill-current" />
-            <Send v-else class="h-3.5 w-3.5" />
+            <CornerRightUp v-else class="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
@@ -352,7 +352,7 @@
 <script setup lang="ts">
 import { Teleport, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Bot, CalendarPlus, ChevronDown, ClipboardList, FileText, History, Image as ImageIcon, Layers2, Menu, Mic, Minus, Paperclip, Plus, Send, Settings, Square, Target, X } from "@lucide/vue";
+import { Bot, CalendarPlus, ChevronDown, ClipboardList, CornerRightUp, FileText, History, Image as ImageIcon, Layers2, Menu, Mic, Minus, Paperclip, Plus, Settings, Square, Target, X } from "@lucide/vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption } from "../../../types/app";
 import { invokeTauri } from "../../../services/tauri-api";
 import ChatQueuePreview from "./ChatQueuePreview.vue";
