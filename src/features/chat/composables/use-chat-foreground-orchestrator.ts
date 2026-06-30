@@ -153,6 +153,18 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
       const trace = bindings.beginForegroundPaintTrace(cid);
       const snapshot = await requestConversationLightSnapshot(cid, { resumeProjection: true });
       bindings.applyConversationSnapshot(snapshot);
+      const shouldBindStream = !!snapshot?.shouldBindStream;
+      if (shouldBindStream) {
+        const chatFlow = bindings.getChatFlow();
+        if (!chatFlow.hasActiveBoundDeltaChannel?.(cid)) {
+          await chatFlow.bindActiveConversationStream(cid, true);
+        }
+        chatFlow.resumeForegroundRuntimeRound?.({
+          conversationId: cid,
+          streamCache: snapshot?.streamCache || null,
+          reason: "switch_unarchived_conversation",
+        });
+      }
       bindings.clearConversationBadge(cid);
       bindings.markConversationReadPersisted(cid);
       await nextTick();

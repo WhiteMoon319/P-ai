@@ -6,13 +6,24 @@
       </div>
     </div>
 
-    <div class="scrollbar-gutter-stable min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-24">
-      <div class="w-full p-4">
-        <slot />
+    <div class="relative min-h-0 flex-1 overflow-hidden" @mouseenter="scrollbarRef?.reveal()" @mouseleave="scrollbarRef?.hide()">
+      <div ref="scrollerRef" class="ecall-floating-scroll-target scrollbar-gutter-stable min-h-0 h-full overflow-y-auto overflow-x-hidden pb-24">
+        <div class="w-full p-4">
+          <slot />
+        </div>
       </div>
+      <FloatingScrollbar ref="scrollbarRef" :target="scrollerRef" />
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { ref } from "vue";
+import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
+
+const scrollerRef = ref<HTMLElement | null>(null);
+const scrollbarRef = ref<InstanceType<typeof FloatingScrollbar> | null>(null);
+</script>
 
 <style scoped>
 .scrollbar-gutter-stable {

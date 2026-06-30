@@ -334,6 +334,16 @@ body {
   display: none;
 }
 
+.ecall-floating-scroll-target {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.ecall-floating-scroll-target::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
 .chat-input-no-focus,
 .chat-input-no-focus:focus,
 .chat-input-no-focus:focus-visible {

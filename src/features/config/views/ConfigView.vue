@@ -241,22 +241,29 @@
     </div>
     </div>
 
-    <div class="drawer-side z-40">
+    <div class="drawer-side z-40 min-h-0 overflow-hidden">
       <label for="config-drawer-toggle" aria-label="关闭设置导航" class="drawer-overlay"></label>
-      <aside class="min-h-full w-44 border-r border-base-300 bg-base-200 p-2">
-        <ul class="menu w-full gap-1 p-0 [&>li>a]:w-full">
-          <li v-for="item in visibleConfigNavItems" :key="item.tab">
-            <a :class="configNavLinkClass(item.tab)" @click="selectConfigNavTab(item.tab)">
-              <component :is="item.icon" class="h-4 w-4 shrink-0" />
-              <span class="min-w-0 truncate">{{ item.labelKey ? t(item.labelKey) : item.label }}</span>
-              <span
-                v-if="item.tab === 'about' && props.hasAvailableUpdate"
-                class="ml-auto inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-error"
-                :title="t('about.updateAvailableBadge')"
-              ></span>
-            </a>
-          </li>
-        </ul>
+      <aside
+        class="relative flex h-full min-h-0 w-44 flex-col border-r border-base-300 bg-base-200 p-2"
+        @mouseenter="navScrollbarRef?.reveal()"
+        @mouseleave="navScrollbarRef?.hide()"
+      >
+        <div ref="navScrollerRef" class="ecall-floating-scroll-target min-h-0 flex-1 overflow-y-auto pr-1">
+          <ul class="menu w-full gap-1 p-0 [&>li>a]:w-full">
+            <li v-for="item in visibleConfigNavItems" :key="item.tab">
+              <a :class="configNavLinkClass(item.tab)" @click="selectConfigNavTab(item.tab)">
+                <component :is="item.icon" class="h-4 w-4 shrink-0" />
+                <span class="min-w-0 truncate">{{ item.labelKey ? t(item.labelKey) : item.label }}</span>
+                <span
+                  v-if="item.tab === 'about' && props.hasAvailableUpdate"
+                  class="ml-auto inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-error"
+                  :title="t('about.updateAvailableBadge')"
+                ></span>
+              </a>
+            </li>
+          </ul>
+        </div>
+        <FloatingScrollbar ref="navScrollbarRef" :target="navScrollerRef" />
       </aside>
     </div>
   </div>
@@ -400,6 +407,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
 import { toErrorMessage } from "../../../utils/error";
 import { ArrowLeftRight, Beaker, Bell, Building2, ClipboardList, Code, Cpu, Database, Home, Info, Keyboard, Menu, MessageSquare, Network, Palette, Puzzle, Radio, ScrollText, User, Wifi, Wrench } from "@lucide/vue";
+import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 
 type ConfigTab = "welcome" | "hotkey" | "api" | "tools" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "networkAccess" | "remoteIm" | "usage" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
 type AvatarTarget = { agentId: string };
@@ -567,6 +575,8 @@ const cropperReady = ref(false);
 const localCropError = ref("");
 const avatarEditorTargetId = ref("");
 const configDrawerOpen = ref(false);
+const navScrollerRef = ref<HTMLElement | null>(null);
+const navScrollbarRef = ref<InstanceType<typeof FloatingScrollbar> | null>(null);
 const memorySyncLocked = ref(false);
 const savingToolsConfig = ref(false);
 let cropper: Cropper | null = null;
