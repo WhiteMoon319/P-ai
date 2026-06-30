@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-06-29T14:26:56.581Z",
-  "latestVersion": "v0.15.6",
+  "generatedAt": "2026-06-30T06:13:10.753Z",
+  "latestVersion": "v0.15.7",
   "releases": [
+    {
+      "version": "v0.15.7",
+      "path": "docs/changelog/releases/v0.15.7.md",
+      "summary": "**代码审查人格选择**：审查对话框现在支持精确选择部门下的特定人格作为审查者，而非自动选中部门首个人格；跨会话、归档和侧边栏全链路透传 agentId。"
+    },
     {
       "version": "v0.15.6",
       "path": "docs/changelog/releases/v0.15.6.md",
