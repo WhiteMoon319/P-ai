@@ -677,17 +677,8 @@ fn apply_window_layout_before_show(app: &AppHandle, label: &str) -> Result<(), S
 
     if let Some(saved) = saved {
         if let Some(monitor) = fallback_monitor.as_ref() {
-            let use_default_size_on_startup = matches!(label, "chat" | "archives");
-            let preferred_width = if use_default_size_on_startup {
-                None
-            } else {
-                saved.width
-            };
-            let preferred_height = if use_default_size_on_startup {
-                None
-            } else {
-                saved.height
-            };
+            let preferred_width = saved.width;
+            let preferred_height = saved.height;
             let (resolved_width, resolved_height) =
                 resolved_window_size_for_monitor(label, monitor, preferred_width, preferred_height);
             let resolved_width_physical =
@@ -744,14 +735,12 @@ fn apply_window_layout_before_show(app: &AppHandle, label: &str) -> Result<(), S
                 );
             }
         } else {
-            if !matches!(label, "chat" | "archives") {
-                if let (Some(width), Some(height)) = (saved.width, saved.height) {
-                    let (restore_min_width, restore_min_height) = restore_window_minimum_size(label);
-                    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(
-                        width.max(restore_min_width) as f64,
-                        height.max(restore_min_height) as f64,
-                    )));
-                }
+            if let (Some(width), Some(height)) = (saved.width, saved.height) {
+                let (restore_min_width, restore_min_height) = restore_window_minimum_size(label);
+                let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(
+                    width.max(restore_min_width) as f64,
+                    height.max(restore_min_height) as f64,
+                )));
             } else {
                 let (width, height) = default_window_size(label);
                 let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(
@@ -772,17 +761,21 @@ fn apply_window_layout_before_show(app: &AppHandle, label: &str) -> Result<(), S
     Ok(())
 }
 
-fn persist_window_layout_snapshot(app: &AppHandle, label: &str) -> Result<(), String> {
+fn persist_window_layout_snapshot_with_reason(
+    app: &AppHandle,
+    label: &str,
+    _reason: &str,
+) -> Result<(), String> {
     let window = app
         .get_webview_window(label)
         .ok_or_else(|| format!("Window '{label}' not found"))?;
-    let outer_size = window
-        .outer_size()
-        .map_err(|err| format!("Read window outer size failed: {err}"))?;
+    let inner_size = window
+        .inner_size()
+        .map_err(|err| format!("Read window inner size failed: {err}"))?;
     let scale_factor = window
         .scale_factor()
         .map_err(|err| format!("Read window scale factor failed: {err}"))?;
-    let outer_size_logical = outer_size.to_logical::<f64>(scale_factor.max(0.1));
+    let inner_size_logical = inner_size.to_logical::<f64>(scale_factor.max(0.1));
     let outer_pos = window
         .outer_position()
         .map_err(|err| format!("Read window outer position failed: {err}"))?;
@@ -791,8 +784,8 @@ fn persist_window_layout_snapshot(app: &AppHandle, label: &str) -> Result<(), St
         .map_err(|err| format!("Read window maximized state failed: {err}"))?;
 
     upsert_window_layout(app, label, |entry| {
-        entry.width = Some(outer_size_logical.width.round().max(1.0) as u32);
-        entry.height = Some(outer_size_logical.height.round().max(1.0) as u32);
+        entry.width = Some(inner_size_logical.width.round().max(1.0) as u32);
+        entry.height = Some(inner_size_logical.height.round().max(1.0) as u32);
         entry.x = Some(outer_pos.x);
         entry.y = Some(outer_pos.y);
         entry.maximized = maximized;
@@ -807,11 +800,45 @@ fn attach_window_layout_persistence(app: &AppHandle) {
         let app_handle = app.clone();
         let label = label.to_string();
         let _ = window.on_window_event(move |event| match event {
-            tauri::WindowEvent::Resized(_)
-            | tauri::WindowEvent::Moved(_)
-            | tauri::WindowEvent::CloseRequested { .. }
-            | tauri::WindowEvent::Destroyed => {
-                if let Err(err) = persist_window_layout_snapshot(&app_handle, &label) {
+            tauri::WindowEvent::Resized(_) => {
+                if let Err(err) =
+                    persist_window_layout_snapshot_with_reason(&app_handle, &label, "resized")
+                {
+                    eprintln!(
+                        "[窗口] 持久化窗口布局失败: label={}, error={}",
+                        label.trim(),
+                        err
+                    );
+                }
+            }
+            tauri::WindowEvent::Moved(_) => {
+                if let Err(err) =
+                    persist_window_layout_snapshot_with_reason(&app_handle, &label, "moved")
+                {
+                    eprintln!(
+                        "[窗口] 持久化窗口布局失败: label={}, error={}",
+                        label.trim(),
+                        err
+                    );
+                }
+            }
+            tauri::WindowEvent::CloseRequested { .. } => {
+                if let Err(err) = persist_window_layout_snapshot_with_reason(
+                    &app_handle,
+                    &label,
+                    "close_requested",
+                ) {
+                    eprintln!(
+                        "[窗口] 持久化窗口布局失败: label={}, error={}",
+                        label.trim(),
+                        err
+                    );
+                }
+            }
+            tauri::WindowEvent::Destroyed => {
+                if let Err(err) =
+                    persist_window_layout_snapshot_with_reason(&app_handle, &label, "destroyed")
+                {
                     eprintln!(
                         "[窗口] 持久化窗口布局失败: label={}, error={}",
                         label.trim(),
