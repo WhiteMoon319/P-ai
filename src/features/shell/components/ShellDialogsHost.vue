@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
+import { Star } from "@lucide/vue";
 import type { RuntimeLogEntry } from "../../../types/app";
 import RuntimeLogsDialog from "./RuntimeLogsDialog.vue";
 
@@ -37,6 +38,9 @@ const props = defineProps<{
   updateDialogReleaseUrl?: string;
   updateDialogPrimaryAction?: UpdateDialogPrimaryAction;
   updateProgressPercent?: number | null;
+  updateDialogSkipVersionVisible?: boolean;
+  updateDialogCancelUpdateVisible?: boolean;
+  updateDialogCancelPending?: boolean;
   runtimeLogsDialogOpen: boolean;
   runtimeLogs: RuntimeLogEntry[];
   runtimeLogsLoading: boolean;
@@ -63,6 +67,9 @@ const emit = defineEmits<{
   closeUpdateDialog: [];
   confirmUpdateDialogPrimary: [];
   openUpdateRelease: [];
+  openUpdateRepository: [];
+  skipUpdateVersion: [];
+  cancelUpdate: [];
   closeRuntimeLogsDialog: [];
   refreshRuntimeLogs: [];
   clearRuntimeLogs: [];
@@ -98,6 +105,16 @@ function handleCloseTrimActionDialog() {
 function handleConfirmTrimCompactionAction() {
   emit("confirmTrimCompactionAction");
 }
+
+function updateDialogCloseLabel() {
+  if (props.updateDialogPrimaryAction) return t("common.cancel");
+  if (props.updateDialogCancelUpdateVisible) return t("common.close");
+  return t("common.confirm");
+}
+
+function canShowUpdateSecondaryActions() {
+  return !props.updateDialogPrimaryAction;
+}
 </script>
 
 <template>
@@ -116,30 +133,54 @@ function handleConfirmTrimCompactionAction() {
         :value="Math.max(0, Math.min(100, updateProgressPercent))"
         max="100"
       />
-      <div class="modal-action">
+      <div class="modal-action flex items-center justify-between gap-3">
         <button
-          v-if="updateDialogPrimaryAction"
-          class="btn btn-sm btn-primary"
-          @click="emit('confirmUpdateDialogPrimary')"
+          class="btn btn-sm btn-warning"
+          @click="emit('openUpdateRepository')"
         >
-          {{
-            updateDialogPrimaryAction === 'force'
-              ? t("dialogs.update.forceDownload")
-              : updateDialogPrimaryAction === 'restart'
-                ? t("dialogs.update.restart")
-                : t("dialogs.update.download")
-          }}
+          <Star class="h-4 w-4" />
+          {{ t("about.starAuthor") }}
         </button>
-        <button
-          v-if="updateDialogReleaseUrl"
-          class="btn btn-sm"
-          @click="emit('openUpdateRelease')"
-        >
-          {{ t("dialogs.update.openReleases") }}
-        </button>
-        <button class="btn btn-sm" @click="emit('closeUpdateDialog')">
-          {{ updateDialogPrimaryAction ? t("common.cancel") : t("common.confirm") }}
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            v-if="updateDialogPrimaryAction"
+            class="btn btn-sm btn-primary"
+            @click="emit('confirmUpdateDialogPrimary')"
+          >
+            {{
+              updateDialogPrimaryAction === 'force'
+                ? t("dialogs.update.forceDownload")
+                : updateDialogPrimaryAction === 'restart'
+                  ? t("dialogs.update.restart")
+                  : t("dialogs.update.download")
+              }}
+          </button>
+          <button
+            v-if="canShowUpdateSecondaryActions() && updateDialogCancelUpdateVisible"
+            class="btn btn-sm btn-warning btn-outline"
+            :disabled="updateDialogCancelPending"
+            @click="emit('cancelUpdate')"
+          >
+            {{ updateDialogCancelPending ? t("about.cancellingUpdate") : t("about.cancelUpdate") }}
+          </button>
+          <button
+            v-if="canShowUpdateSecondaryActions() && updateDialogReleaseUrl"
+            class="btn btn-sm"
+            @click="emit('openUpdateRelease')"
+          >
+            {{ t("dialogs.update.openReleases") }}
+          </button>
+          <button
+            v-if="canShowUpdateSecondaryActions() && updateDialogSkipVersionVisible"
+            class="btn btn-sm btn-ghost"
+            @click="emit('skipUpdateVersion')"
+          >
+            {{ t("about.skipVersion") }}
+          </button>
+          <button class="btn btn-sm" @click="emit('closeUpdateDialog')">
+            {{ updateDialogCloseLabel() }}
+          </button>
+        </div>
       </div>
     </div>
     <form method="dialog" class="modal-backdrop">

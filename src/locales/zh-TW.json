@@ -2160,6 +2160,7 @@
     "updateMethodDirect": "直連",
     "updateMethodProxy": "中轉",
     "repository": "Git 倉庫",
+    "starAuthor": "為作者打星",
     "changelog": "更新日誌",
     "changelogLoading": "正在讀取遠端更新日誌...",
     "changelogEmpty": "暫無更新日誌內容",

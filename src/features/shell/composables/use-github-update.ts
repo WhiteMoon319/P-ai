@@ -53,28 +53,25 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   const updateUiMode = ref<"foreground" | "background" | null>(null);
   const skippedVersion = computed(() => normalizeSkippedVersion(options.skippedVersion.value));
 
-  const reminderSuppressedBySkip = computed(() => {
+  const updateSuppressedBySkip = computed(() => {
     const latestVersion = String(latestCheckResult.value?.latestVersion || "").trim();
     return !!latestVersion && !!skippedVersion.value && latestVersion === skippedVersion.value;
   });
-  const shouldShowUpdateReminder = computed(() => {
+  const shouldShowUpdateAction = computed(() => {
     if (updateReadyToRestart.value || updateInProgress.value) return true;
-    return !!latestCheckResult.value?.hasUpdate && !reminderSuppressedBySkip.value;
+    return !!latestCheckResult.value?.hasUpdate && !updateSuppressedBySkip.value;
   });
-  const hasAvailableUpdate = computed(() => shouldShowUpdateReminder.value);
-  const showUpdateToLatestButton = computed(() => shouldShowUpdateReminder.value);
-  const reminderAccessModeLabel = computed(() =>
-    latestCheckResult.value?.accessMode === "direct" ? t("about.updateMethodDirect") : t("about.updateMethodProxy"),
+  const hasAvailableUpdate = computed(() => shouldShowUpdateAction.value);
+  const showUpdateToLatestButton = computed(() => shouldShowUpdateAction.value);
+  const latestUpdateVersion = computed(() => String(latestCheckResult.value?.latestVersion || "").trim());
+  const updateDialogSkipVersionVisible = computed(() =>
+    updateDialogOpen.value
+    && updateDialogPrimaryAction.value === "download"
+    && !!latestUpdateVersion.value
+    && !updateInProgress.value
+    && !updateReadyToRestart.value,
   );
-  const reminderActionVersion = computed(() => String(latestCheckResult.value?.latestVersion || "").trim());
-  const reminderProgressText = computed(() => {
-    if (!updateInProgress.value) return "";
-    if (updateCancelPending.value) return t("about.cancellingUpdate");
-    if (!Number.isFinite(updateProgressPercent.value ?? NaN)) return t("about.updating");
-    return t("about.downloadProgressPercent", {
-      percent: Math.max(0, Math.min(100, updateProgressPercent.value || 0)).toFixed(1),
-    });
-  });
+  const updateDialogCancelUpdateVisible = computed(() => updateInProgress.value && updateCanCancel.value);
 
   let updateProgressUnlisten: UnlistenFn | null = null;
   let webUpdateProgressUnlisten: (() => void) | null = null;
@@ -282,7 +279,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
         return result;
       }
       options.status.value = t("about.foundNewVersion", { latest: result.latestVersion, current: result.currentVersion });
-      if (!silent) {
+      if (!silent || !updateSuppressedBySkip.value) {
         openCheckResultDialog(result);
       }
       return result;
@@ -398,9 +395,10 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   }
 
   async function skipCurrentUpdateVersion() {
-    const version = reminderActionVersion.value;
+    const version = latestUpdateVersion.value;
     if (!version) return;
     await saveSkippedVersion(version);
+    updateDialogOpen.value = false;
     options.status.value = t("about.skipVersionSaved", { version });
   }
 
@@ -427,15 +425,15 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       return;
     }
     if (latestCheckResult.value?.hasUpdate) {
-      if (reminderSuppressedBySkip.value) {
+      if (updateSuppressedBySkip.value) {
         await saveSkippedVersion("");
       }
-      await startGithubUpdate(false, true);
+      await startGithubUpdate(false, false);
       return;
     }
     const result = await checkGithubUpdate(false);
     if (result?.hasUpdate) {
-      if (reminderSuppressedBySkip.value) {
+      if (updateSuppressedBySkip.value) {
         await saveSkippedVersion("");
       }
     }
@@ -483,10 +481,8 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     updateDialogReleaseUrl,
     updateDialogPrimaryAction,
     updateProgressPercent,
-    shouldShowUpdateReminder,
-    reminderAccessModeLabel,
-    reminderActionVersion,
-    reminderProgressText,
+    updateDialogSkipVersionVisible,
+    updateDialogCancelUpdateVisible,
     closeUpdateDialog,
     openUpdateRelease,
     confirmUpdateDialogPrimary,

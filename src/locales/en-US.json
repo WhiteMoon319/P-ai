@@ -2161,6 +2161,7 @@
     "updateMethodDirect": "Direct",
     "updateMethodProxy": "Proxy",
     "repository": "Git Repository",
+    "starAuthor": "Star Author",
     "changelog": "Changelog",
     "changelogLoading": "Loading remote changelog...",
     "changelogEmpty": "No changelog content available.",

@@ -46,24 +46,6 @@
       @close-window="closeWindow"
     />
 
-    <GithubUpdateReminderCard
-      :visible="shouldShowUpdateReminder"
-      :latest-version="reminderActionVersion"
-      :runtime-kind="latestCheckResult?.runtimeKind"
-      :access-mode-label="reminderAccessModeLabel"
-      :release-url="latestCheckResult?.releaseUrl"
-      :update-ready-to-restart="updateReadyToRestart"
-      :update-in-progress="updateInProgress"
-      :update-cancel-pending="updateCancelPending"
-      :update-can-cancel="updateCanCancel"
-      :progress-percent="updateProgressPercent"
-      :progress-text="reminderProgressText"
-      @update-now="triggerUpdateToLatest"
-      @skip-version="skipCurrentUpdateVersion"
-      @cancel-update="cancelGithubUpdate"
-      @open-release="openUpdateRelease"
-    />
-
     <div class="window-content p-0 min-h-0 overflow-hidden">
       <ConfigView
         :config="config"
@@ -231,6 +213,9 @@
       :update-dialog-release-url="updateDialogReleaseUrl"
       :update-dialog-primary-action="updateDialogPrimaryAction"
       :update-progress-percent="updateProgressPercent"
+      :update-dialog-skip-version-visible="updateDialogSkipVersionVisible"
+      :update-dialog-cancel-update-visible="updateDialogCancelUpdateVisible"
+      :update-dialog-cancel-pending="updateCancelPending"
       :runtime-logs-dialog-open="false"
       :runtime-logs="[]"
       :runtime-logs-loading="false"
@@ -254,6 +239,9 @@
       @close-update-dialog="closeUpdateDialog"
       @confirm-update-dialog-primary="confirmUpdateDialogPrimary"
       @open-update-release="openUpdateRelease"
+      @open-update-repository="openGithubRepository"
+      @skip-update-version="skipCurrentUpdateVersion"
+      @cancel-update="cancelGithubUpdate"
       @close-settings-save-error-dialog="closeSettingsSaveErrorDialog"
     />
 
@@ -279,7 +267,6 @@ import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import ConfigView from "./features/config/views/ConfigView.vue";
 import AppWindowHeader from "./features/shell/components/AppWindowHeader.vue";
-import GithubUpdateReminderCard from "./features/shell/components/GithubUpdateReminderCard.vue";
 import ShellDialogsHost from "./features/shell/components/ShellDialogsHost.vue";
 import Win10ResizeHandles from "./features/shell/components/Win10ResizeHandles.vue";
 import MemoryDialog from "./features/memory/components/dialogs/MemoryDialog.vue";
@@ -683,9 +670,7 @@ const {
   hasAvailableUpdate,
   latestCheckResult,
   updateReadyToRestart,
-  updateInProgress,
   updateCancelPending,
-  updateCanCancel,
   updateDialogOpen,
   updateDialogTitle,
   updateDialogBody,
@@ -693,10 +678,8 @@ const {
   updateDialogReleaseUrl,
   updateDialogPrimaryAction,
   updateProgressPercent,
-  shouldShowUpdateReminder,
-  reminderAccessModeLabel,
-  reminderActionVersion,
-  reminderProgressText,
+  updateDialogSkipVersionVisible,
+  updateDialogCancelUpdateVisible,
   closeUpdateDialog,
   openUpdateRelease,
   confirmUpdateDialogPrimary,

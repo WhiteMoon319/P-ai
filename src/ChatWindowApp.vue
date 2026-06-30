@@ -64,24 +64,6 @@
       @close-window="handleCloseWindow"
     />
 
-    <GithubUpdateReminderCard
-      :visible="shouldShowUpdateReminder"
-      :latest-version="reminderActionVersion"
-      :runtime-kind="latestCheckResult?.runtimeKind"
-      :access-mode-label="reminderAccessModeLabel"
-      :release-url="latestCheckResult?.releaseUrl"
-      :update-ready-to-restart="updateReadyToRestart"
-      :update-in-progress="updateInProgress"
-      :update-cancel-pending="updateCancelPending"
-      :update-can-cancel="updateCanCancel"
-      :progress-percent="updateProgressPercent"
-      :progress-text="reminderProgressText"
-      @update-now="triggerUpdateToLatest"
-      @skip-version="skipCurrentUpdateVersion"
-      @cancel-update="cancelGithubUpdate"
-      @open-release="openUpdateRelease"
-    />
-
     <AppWindowContent
       :t="tr"
       :view-mode="viewMode"
@@ -382,6 +364,9 @@
       :update-dialog-release-url="updateDialogReleaseUrl"
       :update-dialog-primary-action="updateDialogPrimaryAction"
       :update-progress-percent="updateProgressPercent"
+      :update-dialog-skip-version-visible="updateDialogSkipVersionVisible"
+      :update-dialog-cancel-update-visible="updateDialogCancelUpdateVisible"
+      :update-dialog-cancel-pending="updateCancelPending"
       :runtime-logs-dialog-open="runtimeLogsDialogOpen"
       :runtime-logs="runtimeLogs"
       :runtime-logs-loading="runtimeLogsLoading"
@@ -405,6 +390,9 @@
       @close-update-dialog="closeUpdateDialog"
       @confirm-update-dialog-primary="confirmUpdateDialogPrimary"
       @open-update-release="openUpdateRelease"
+      @open-update-repository="openGithubRepository"
+      @skip-update-version="skipCurrentUpdateVersion"
+      @cancel-update="cancelGithubUpdate"
       @close-runtime-logs-dialog="closeRuntimeLogsDialog"
       @refresh-runtime-logs="refreshRuntimeLogs"
       @clear-runtime-logs="clearRuntimeLogs"
@@ -496,7 +484,6 @@ import Win10ResizeHandles from "./features/shell/components/Win10ResizeHandles.v
 import ChatWorkspacePickerDialog from "./features/chat/components/dialogs/ChatWorkspacePickerDialog.vue";
 import AppWindowContent from "./features/shell/components/AppWindowContent.vue";
 import AppWindowHeader from "./features/shell/components/AppWindowHeader.vue";
-import GithubUpdateReminderCard from "./features/shell/components/GithubUpdateReminderCard.vue";
 import ShellDialogsHost from "./features/shell/components/ShellDialogsHost.vue";
 import { useChatWindowApp } from "./features/chat/composables/use-chat-window-app";
 
@@ -507,7 +494,6 @@ export default defineComponent({
     ChatWorkspacePickerDialog,
     AppWindowContent,
     AppWindowHeader,
-    GithubUpdateReminderCard,
     ShellDialogsHost,
   },
   setup() {
