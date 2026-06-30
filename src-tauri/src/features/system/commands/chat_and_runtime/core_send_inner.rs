@@ -1754,6 +1754,26 @@ async fn send_chat_message_inner(
             if !early_department_id.is_empty() && !early_agent_id.is_empty() {
                 let stream_started_at = now_iso();
                 let stream_started_at_ms = now_unix_ms();
+                let early_assistant_message_id = input
+                    .assistant_message_id
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(ToOwned::to_owned)
+                    .or_else(|| {
+                        read_conversation_runtime_snapshot(state, cid)
+                            .ok()
+                            .and_then(|snapshot| {
+                                let value =
+                                    snapshot.stream_cache.persisted_assistant_message_id.trim();
+                                if value.is_empty() {
+                                    None
+                                } else {
+                                    Some(value.to_string())
+                                }
+                            })
+                    })
+                    .unwrap_or_else(|| Uuid::new_v4().to_string());
                 let _ = reset_conversation_stream_runtime_cache(
                     state,
                     cid,
@@ -1761,7 +1781,7 @@ async fn send_chat_message_inner(
                     trace_id.as_str(),
                     &early_department_id,
                     early_agent_id,
-                    &Uuid::new_v4().to_string(),
+                    &early_assistant_message_id,
                     &stream_started_at,
                     stream_started_at_ms,
                 );

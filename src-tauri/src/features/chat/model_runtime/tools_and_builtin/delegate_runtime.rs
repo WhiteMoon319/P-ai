@@ -236,6 +236,7 @@ async fn delegate_execute_agent_prompt(
         }),
         speaker_agent_id: Some(speaker_agent_id),
         trace_id: Some(request_id.clone()),
+        assistant_message_id: None,
         oldest_queue_created_at: None,
         remote_im_activation_sources: Vec::new(),
         runtime_context: Some(RuntimeContext {

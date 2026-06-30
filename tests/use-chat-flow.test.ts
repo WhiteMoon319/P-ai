@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { computed, ref, shallowRef } from "vue";
 import type { AssistantStreamBlock, ChatMessage } from "../src/types/app";
 import { useChatFlow, type AssistantDeltaEvent } from "../src/features/chat/composables/use-chat-flow";
+import { useChatFlowDrafts } from "../src/features/chat/composables/use-chat-flow-drafts";
 import { useChatRuntime } from "../src/features/chat/composables/use-chat-runtime";
 import { useChatMessageBlocks } from "../src/features/chat/composables/use-chat-turns";
 import { projectMessageForDisplay } from "../src/utils/chat-message-semantics";
@@ -54,6 +55,64 @@ describe("useChatFlow stream isolation", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  function createDraftHarness(initialMessages: ChatMessage[]) {
+    const allMessages = shallowRef<ChatMessage[]>(initialMessages);
+    const drafts = useChatFlowDrafts({
+      allMessages,
+      latestUserText: ref(""),
+      latestAssistantText: ref(""),
+      toolStatusText: ref(""),
+      toolStatusState: ref(""),
+      buildImageAttachmentPayload: () => [],
+      getSendStartedAtMs: () => 0,
+      getActiveHistoryMessageCount: () => allMessages.value.length,
+      getFrontendDispatchStartedAtMs: () => 0,
+      currentFrontendDispatchElapsedMs: () => 0,
+    });
+    return { allMessages, drafts };
+  }
+
+  it("does not replace a flushed user message with an optimistic draft for the same id", () => {
+    const { allMessages, drafts } = createDraftHarness([
+      {
+        id: "user-1",
+        role: "user",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        speakerAgentId: "user-persona",
+        parts: [{ type: "text", text: "flushed user" }],
+        providerMeta: {},
+      },
+    ]);
+
+    drafts.insertUserDraft("user-1", 1, "optimistic user", [], [], []);
+
+    expect(allMessages.value).toHaveLength(1);
+    expect(allMessages.value[0].parts).toEqual([{ type: "text", text: "flushed user" }]);
+    expect(allMessages.value[0].providerMeta?._optimistic).toBeUndefined();
+  });
+
+  it("does not downgrade an active assistant stream to a queued waiting bubble for the same id", () => {
+    const { allMessages, drafts } = createDraftHarness([
+      {
+        id: "assistant-1",
+        role: "assistant",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        speakerAgentId: "agent-1",
+        parts: [{ type: "text", text: "streaming text" }],
+        providerMeta: {
+          _streaming: true,
+          _streamSegments: ["streaming text"],
+        },
+      },
+    ]);
+
+    drafts.updateQueuedAssistantDraftStatus("assistant-1", "chat.statusPreparingMessage");
+
+    expect(allMessages.value).toHaveLength(1);
+    expect(allMessages.value[0].parts).toEqual([{ type: "text", text: "streaming text" }]);
+    expect(allMessages.value[0].providerMeta?._preStreamingStatusText).toBeUndefined();
   });
 
   it("closes queued round immediately when compaction boundary completes it", async () => {

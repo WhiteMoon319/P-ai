@@ -3082,6 +3082,13 @@ async fn activate_main_assistant(
 
     // 设置状态为 AssistantStreaming
     set_conversation_runtime_state(state, conversation_id, MainSessionState::AssistantStreaming)?;
+    emit_conversation_runtime_state_updated_payload(
+        state,
+        &ConversationRuntimeStateUpdatedPayload {
+            conversation_id: conversation_id.to_string(),
+            runtime_state: MainSessionState::AssistantStreaming,
+        },
+    );
     set_conversation_remote_im_activation_sources(
         state,
         conversation_id,
@@ -3162,6 +3169,7 @@ async fn activate_main_assistant(
         },
         speaker_agent_id: None,
         trace_id: Some(trace_id.clone()),
+        assistant_message_id: Some(assistant_message_id.clone()),
         oldest_queue_created_at: Some(oldest_queue_created_at.to_string()),
         remote_im_activation_sources,
         runtime_context: Some(runtime_context),
@@ -3293,7 +3301,14 @@ async fn activate_main_assistant(
     } else {
         MainSessionState::Idle
     };
-    set_conversation_runtime_state(state, conversation_id, next_state)?;
+    set_conversation_runtime_state(state, conversation_id, next_state.clone())?;
+    emit_conversation_runtime_state_updated_payload(
+        state,
+        &ConversationRuntimeStateUpdatedPayload {
+            conversation_id: conversation_id.to_string(),
+            runtime_state: next_state,
+        },
+    );
     if let Err(err) = clear_conversation_stream_runtime_cache(state, conversation_id) {
         runtime_log_warn(format!(
             "[聊天流式缓存] 清理失败，conversation_id={}，error={}",

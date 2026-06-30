@@ -57,6 +57,8 @@ struct SendChatRequest {
     #[serde(default)]
     trace_id: Option<String>,
     #[serde(default)]
+    assistant_message_id: Option<String>,
+    #[serde(default)]
     oldest_queue_created_at: Option<String>,
     #[serde(default)]
     remote_im_activation_sources: Vec<RemoteImActivationSource>,

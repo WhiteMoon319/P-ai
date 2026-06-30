@@ -35,6 +35,24 @@ function messageHasActivityEvents(message: ChatMessage): boolean {
   });
 }
 
+function isOptimisticMessage(message?: ChatMessage | null): boolean {
+  const meta = (message?.providerMeta || {}) as Record<string, unknown>;
+  return meta._optimistic === true;
+}
+
+function assistantMessageHasVisibleProgress(message?: ChatMessage | null): boolean {
+  if (!message) return false;
+  if (readMessagePlainText(message).trim()) return true;
+  if (messageHasActivityEvents(message)) return true;
+  const meta = (message.providerMeta || {}) as Record<string, unknown>;
+  if (String(meta._streamTail || "").trim()) return true;
+  if (Array.isArray(meta._streamSegments) && meta._streamSegments.some((item) => String(item || "").trim())) {
+    return true;
+  }
+  const streamBlocks = normalizeAssistantStreamBlocks(meta._streamBlocks);
+  return streamBlocks.length > 0 || !!assistantTextFromStreamBlocks(streamBlocks).trim();
+}
+
 type UseChatFlowDraftsOptions = {
   allMessages: Ref<ChatMessage[]>;
   latestUserText: Ref<string>;
@@ -150,6 +168,11 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     const stableMsg = messageWithStableRenderId(msg, draftId);
     const cur = options.allMessages.value;
     const idx = cur.findIndex((m) => m.id === draftId);
+    if (idx >= 0 && !isOptimisticMessage(cur[idx])) {
+      pendingUserDraftId = draftId;
+      pendingUserDraftIdByGen.set(gen, draftId);
+      return draftId;
+    }
     options.allMessages.value = idx < 0 ? [...cur, stableMsg] : cur.map((m, i) => (i === idx ? stableMsg : m));
     pendingUserDraftId = draftId;
     pendingUserDraftIdByGen.set(gen, draftId);
@@ -182,6 +205,11 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     const cur = options.allMessages.value;
     const idx = cur.findIndex((m) => m.id === normalizedDraftId);
     if (idx >= 0) {
+      const existing = cur[idx];
+      const existingMeta = (existing?.providerMeta || {}) as Record<string, unknown>;
+      if (String(existing?.role || "") === "assistant" && (existingMeta._streaming !== true || assistantMessageHasVisibleProgress(existing))) {
+        return normalizedDraftId;
+      }
       options.allMessages.value = cur.map((m, i) => (i === idx ? msg : m));
       return normalizedDraftId;
     }
@@ -192,6 +220,12 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
   function updateQueuedAssistantDraftStatus(draftId: string, statusText: string) {
     if (!draftId) return;
     const existingDraft = options.allMessages.value.find((item) => item.id === draftId);
+    if (String(existingDraft?.role || "") === "assistant") {
+      const existingMeta = (existingDraft?.providerMeta || {}) as Record<string, unknown>;
+      if (existingMeta._streaming !== true || assistantMessageHasVisibleProgress(existingDraft)) {
+        return;
+      }
+    }
     const agentId = resolveAssistantDraftSpeakerAgentId(existingDraft);
     const existingMeta = ((existingDraft?.providerMeta || {}) as Record<string, unknown>);
     const stableRenderId = stableRenderIdFromMessage(existingDraft) || draftId;
