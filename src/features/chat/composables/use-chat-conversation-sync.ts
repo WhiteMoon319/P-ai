@@ -527,7 +527,7 @@ export function useChatConversationSync(bindings: Record<string, any>) {
       : { messages: rawNextMessages, replacedMessageId: "", removed: false };
     rawNextMessages = overlay.messages;
     const mergedMessages = preserveExistingHistory
-      ? mergeMessagesIntoTimeline(bindings.allMessages.value, rawNextMessages)
+      ? mergeMessagesIntoTimeline(formalizeConversationMessages(bindings.allMessages.value), rawNextMessages)
       : rawNextMessages;
     const nextMessages = reuseStableMessageReferences(mergedMessages, bindings.allMessages.value);
     bindings.currentChatConversationId.value = nextConversationId;

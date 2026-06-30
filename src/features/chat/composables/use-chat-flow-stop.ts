@@ -1,10 +1,7 @@
 import type { Ref } from "vue";
 import type { AssistantStreamBlock, ChatMessage } from "../../../types/app";
 import { normalizeAssistantStreamBlocks } from "../../../utils/chat-message-semantics";
-import {
-  DRAFT_USER_ID_PREFIX,
-  summarizeToolCallsText,
-} from "./use-chat-flow-drafts";
+import { summarizeToolCallsText } from "./use-chat-flow-drafts";
 import type { RoundState } from "./use-chat-flow-types";
 import { readMessagePlainText } from "./use-chat-flow-utils";
 

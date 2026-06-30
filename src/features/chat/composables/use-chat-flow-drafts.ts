@@ -35,11 +35,6 @@ function messageHasActivityEvents(message: ChatMessage): boolean {
   });
 }
 
-function isOptimisticMessage(message?: ChatMessage | null): boolean {
-  const meta = (message?.providerMeta || {}) as Record<string, unknown>;
-  return meta._optimistic === true;
-}
-
 function assistantMessageHasVisibleProgress(message?: ChatMessage | null): boolean {
   if (!message) return false;
   if (readMessagePlainText(message).trim()) return true;
@@ -162,20 +157,15 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
               })),
             }
           : undefined,
-        _optimistic: true,
       },
     };
     const stableMsg = messageWithStableRenderId(msg, draftId);
     const cur = options.allMessages.value;
     const idx = cur.findIndex((m) => m.id === draftId);
-    if (idx >= 0 && !isOptimisticMessage(cur[idx])) {
-      pendingUserDraftId = draftId;
-      pendingUserDraftIdByGen.set(gen, draftId);
+    if (idx >= 0) {
       return draftId;
     }
-    options.allMessages.value = idx < 0 ? [...cur, stableMsg] : cur.map((m, i) => (i === idx ? stableMsg : m));
-    pendingUserDraftId = draftId;
-    pendingUserDraftIdByGen.set(gen, draftId);
+    options.allMessages.value = [...cur, stableMsg];
     return draftId;
   }
 

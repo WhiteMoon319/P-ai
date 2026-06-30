@@ -220,9 +220,8 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
       // 和 switchUnarchivedConversation 一致的快照恢复路径，不走缓存直灌
       const snapshot = await chatForeground.requestConversationLightSnapshot(cid, { resumeProjection: true });
       if (cid !== String(bindings.currentChatConversationId.value || "").trim()) return;
-      const resumeProjectionAuthoritative = !!snapshot?.resumeProjectionAuthoritative;
       applyConversationSnapshot(snapshot, {
-        preserveExistingHistory: !resumeProjectionAuthoritative,
+        preserveExistingHistory: true,
       });
       if (cid !== String(bindings.currentChatConversationId.value || "").trim()) return;
       const shouldBindStream = !!snapshot?.shouldBindStream;

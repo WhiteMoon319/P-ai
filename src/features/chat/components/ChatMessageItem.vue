@@ -903,9 +903,8 @@ function hasStreamingSpeechContent(block: ChatMessageBlock): boolean {
 }
 
 function shouldAnimateEnter(block: ChatMessageBlock): boolean {
-  if (!isOwnMessage(block)) return false;
-  const providerMeta = (block.providerMeta || {}) as Record<string, unknown>;
-  return !!providerMeta._optimistic;
+  void block;
+  return false;
 }
 
 function toolCallsForBlock(block: ChatMessageBlock): Array<{ name: string; argsText: string; status?: "doing" | "done" }> {

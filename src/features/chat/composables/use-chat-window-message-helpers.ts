@@ -46,9 +46,7 @@ export function useChatWindowMessageHelpers(bindings: Record<string, any>) {
   function isOptimisticOwnUserDraft(message?: ChatMessage | null): boolean {
     if (!message || message.role !== "user") return false;
     const messageId = String(message.id || "").trim();
-    if (messageId.startsWith("__draft_user__:")) return true;
-    const meta = (message.providerMeta || {}) as Record<string, unknown>;
-    return meta._optimistic === true && isLocalOwnUserMessage(message);
+    return messageId.startsWith("__draft_user__:");
   }
 
   function historyFlushedMessageKind(message?: ChatMessage | null): string {

@@ -74,7 +74,7 @@ describe("useChatFlow stream isolation", () => {
     return { allMessages, drafts };
   }
 
-  it("does not replace a flushed user message with an optimistic draft for the same id", () => {
+  it("does not replace a flushed user message with a local real user message for the same id", () => {
     const { allMessages, drafts } = createDraftHarness([
       {
         id: "user-1",
@@ -86,11 +86,23 @@ describe("useChatFlow stream isolation", () => {
       },
     ]);
 
-    drafts.insertUserDraft("user-1", 1, "optimistic user", [], [], []);
+    drafts.insertUserDraft("user-1", 1, "local user", [], [], []);
 
     expect(allMessages.value).toHaveLength(1);
     expect(allMessages.value[0].parts).toEqual([{ type: "text", text: "flushed user" }]);
     expect(allMessages.value[0].providerMeta?._optimistic).toBeUndefined();
+    expect(drafts.getPendingUserDraftId()).toBe("");
+  });
+
+  it("keeps a local real user message out of pending draft cleanup", () => {
+    const { allMessages, drafts } = createDraftHarness([]);
+
+    drafts.insertUserDraft("user-real-1", 1, "real user", [], [], []);
+
+    expect(allMessages.value).toHaveLength(1);
+    expect(allMessages.value[0].id).toBe("user-real-1");
+    expect(allMessages.value[0].providerMeta?._optimistic).toBeUndefined();
+    expect(drafts.getPendingUserDraftId()).toBe("");
   });
 
   it("does not downgrade an active assistant stream to a queued waiting bubble for the same id", () => {
