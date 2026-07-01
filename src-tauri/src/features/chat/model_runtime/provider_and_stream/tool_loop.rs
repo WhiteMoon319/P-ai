@@ -288,47 +288,6 @@ fn append_tool_loop_transient_history_to_prepared(
     normalize_prepared_history_messages_in_place(prepared);
 }
 
-fn estimate_latest_tool_result_content_tokens(events: &[Value]) -> u64 {
-    let start = events
-        .iter()
-        .rposition(|event| {
-            event
-                .get("role")
-                .and_then(Value::as_str)
-                .is_some_and(|role| role.trim().eq_ignore_ascii_case("assistant"))
-                && event
-                    .get("tool_calls")
-                    .and_then(Value::as_array)
-                    .is_some_and(|items| !items.is_empty())
-        })
-        .map(|index| index + 1)
-        .unwrap_or(0);
-    let mut total = 0.0f64;
-    let mut count = 0usize;
-    for event in events.iter().skip(start) {
-        if !event
-            .get("role")
-            .and_then(Value::as_str)
-            .is_some_and(|role| role.trim().eq_ignore_ascii_case("tool"))
-        {
-            continue;
-        }
-        let Some(content) = event.get("content").and_then(Value::as_str) else {
-            continue;
-        };
-        count += 1;
-        total += estimated_tokens_for_text(content);
-    }
-    let tokens = total.ceil().max(0.0).min(u64::MAX as f64) as u64;
-    if tokens > 0 {
-        runtime_log_debug(format!(
-            "[估算Token] 工具结果增量 tool_result_count={} estimated_tokens={}",
-            count, tokens
-        ));
-    }
-    tokens
-}
-
 fn tool_loop_guided_close_reply(
     activity_reasoning_text: String,
     tool_history_events: Vec<Value>,
@@ -1582,20 +1541,14 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
         selected_api,
         &context.agent,
     );
-    let latest_tool_result_tokens = estimate_latest_tool_result_content_tokens(transient_tool_history);
-    let usage = conversation_prompt_service().add_estimated_prompt_tokens_to_usage(
-        base_usage,
-        latest_tool_result_tokens,
-        selected_api,
-        "prompt_usage_plus_estimated_tool_results",
-    );
+    let usage = base_usage;
     let (decision, decision_source) = decide_archive_before_send_from_usage(
         &usage,
         source.last_user_at.as_deref(),
         archive_pipeline_has_assistant_reply(&source),
     );
     runtime_log_info(format!(
-        "[聊天] 工具续调前上下文整理检查 conversation_id={} should_archive={} forced={} usage_ratio={:.4} source={} reason={} effective_prompt_tokens={} context_window_tokens={} estimated={} latest_tool_result_estimated_tokens={}",
+        "[聊天] 工具续调前上下文整理检查 conversation_id={} should_archive={} forced={} usage_ratio={:.4} source={} reason={} effective_prompt_tokens={} context_window_tokens={} estimated={}",
         context.conversation_id,
         decision.should_archive,
         decision.forced,
@@ -1605,7 +1558,6 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
         usage.effective_prompt_tokens,
         selected_api.context_window_tokens,
         usage.estimated_prompt_tokens.is_some(),
-        latest_tool_result_tokens,
     ));
     if !decision.should_archive {
         conversation_prompt_service().store_shared_prompt_usage_resolution(
