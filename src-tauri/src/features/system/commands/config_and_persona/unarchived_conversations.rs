@@ -162,7 +162,7 @@ fn get_foreground_conversation_light_snapshot_blocking(
         should_bind_stream = foreground_runtime_snapshot_should_bind(&runtime_snapshot);
         resume_projection_authoritative = true;
         snapshot.runtime_state = Some(runtime_snapshot.runtime_state.clone());
-        if runtime_snapshot.stream_cache.has_visible_progress {
+        if should_bind_stream && runtime_snapshot.stream_cache.has_visible_progress {
             let before_count = snapshot.messages.len();
             snapshot.messages = apply_foreground_stream_projection(
                 snapshot.messages,
@@ -211,7 +211,6 @@ fn foreground_runtime_snapshot_should_bind(snapshot: &ConversationRuntimeSnapsho
         || snapshot.is_processing
         || snapshot.has_pending_queue
         || snapshot.pending_queue_count > 0
-        || snapshot.stream_cache.has_visible_progress
 }
 
 fn apply_foreground_stream_projection(
@@ -313,6 +312,45 @@ mod foreground_resume_projection_tests {
             mcp_call: None,
             meme_annotations: None,
         }
+    }
+
+    fn runtime_snapshot_with_state(
+        runtime_state: MainSessionState,
+        stream_cache: ConversationStreamRuntimeCacheSnapshot,
+    ) -> ConversationRuntimeSnapshot {
+        ConversationRuntimeSnapshot {
+            conversation_id: "conversation-1".to_string(),
+            runtime_state,
+            is_processing: false,
+            has_pending_queue: false,
+            pending_queue_count: 0,
+            stream_cache,
+        }
+    }
+
+    #[test]
+    fn idle_runtime_snapshot_with_stale_stream_cache_should_not_bind_stream() {
+        let snapshot = runtime_snapshot_with_state(
+            MainSessionState::Idle,
+            ConversationStreamRuntimeCacheSnapshot {
+                assistant_text: "stale partial reply".to_string(),
+                has_visible_progress: true,
+                persisted_assistant_message_id: "assistant-1".to_string(),
+                ..Default::default()
+            },
+        );
+
+        assert!(!foreground_runtime_snapshot_should_bind(&snapshot));
+    }
+
+    #[test]
+    fn streaming_runtime_snapshot_should_bind_stream() {
+        let snapshot = runtime_snapshot_with_state(
+            MainSessionState::AssistantStreaming,
+            ConversationStreamRuntimeCacheSnapshot::default(),
+        );
+
+        assert!(foreground_runtime_snapshot_should_bind(&snapshot));
     }
 
     #[test]

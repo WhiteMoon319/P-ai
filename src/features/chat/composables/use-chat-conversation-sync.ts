@@ -7,7 +7,6 @@ import {
 } from "./use-chat-conversation-message-utils";
 import { useChatConversationOverviewUtils } from "./use-chat-conversation-overview-utils";
 import { applyStreamingHistoryOverlay } from "./use-chat-flow-stream-overlay";
-import { streamCacheHasVisibleProgress } from "./use-chat-flow-stream-cache";
 
 type ForegroundPaintTrace = {
   id: number;
@@ -96,13 +95,13 @@ export function useChatConversationSync(bindings: Record<string, any>) {
 
   function conversationRuntimeSnapshotIsBusy(snapshot?: any): boolean {
     if (!snapshot) return false;
-    // 切换/重绑时后端 streamCache 是最新显示真源；即使 runtimeState 已短暂回到 idle，
-    // 只要缓存里还有可见流式块，也必须恢复 draft 投影。
+    // runtimeState/isProcessing/pendingQueue 才表示仍有运行中轮次。
+    // streamCache 只是运行中恢复显示用的投影缓存；完成收尾期间它可能短暂残留，
+    // 不能单独把前台状态重新拉回 chatting=true。
     return snapshot.runtimeState === "assistant_streaming"
       || !!snapshot.isProcessing
       || !!snapshot.hasPendingQueue
-      || Math.max(0, Number(snapshot.pendingQueueCount || 0)) > 0
-      || streamCacheHasVisibleProgress(snapshot.streamCache);
+      || Math.max(0, Number(snapshot.pendingQueueCount || 0)) > 0;
   }
 
   async function requestConversationRuntimeSnapshot(conversationId: string) {
@@ -120,7 +119,10 @@ export function useChatConversationSync(bindings: Record<string, any>) {
       if (resumeSeq !== foregroundRuntimeResumeSeq) return "unknown";
       if (cid !== String(bindings.currentChatConversationId.value || "").trim()) return "unknown";
       const busy = conversationRuntimeSnapshotIsBusy(snapshot);
-      if (!busy) return "idle";
+      if (!busy) {
+        bindings.getChatFlow()?.clearForegroundRuntimeState?.();
+        return "idle";
+      }
       await bindings.getChatFlow().bindActiveConversationStream(cid, true);
       if (resumeSeq !== foregroundRuntimeResumeSeq) return "unknown";
       if (cid !== String(bindings.currentChatConversationId.value || "").trim()) return "unknown";
@@ -518,9 +520,8 @@ export function useChatConversationSync(bindings: Record<string, any>) {
       && nextConversationId === currentConversationId;
     const runtimeState = String(snapshot.runtimeState || "").trim();
     const streamCache = bindings.readConversationStreamCache(nextConversationId);
-    const streamCacheVisibleProgress = !!streamCache?.hasVisibleProgress;
     const shouldApplyStreamingOverlay =
-      runtimeState === "assistant_streaming" || streamCacheVisibleProgress;
+      runtimeState === "assistant_streaming";
     let rawNextMessages = freezeConversationMessages(Array.isArray(snapshot.messages) ? snapshot.messages : []);
     const overlay = shouldApplyStreamingOverlay
       ? applyStreamingHistoryOverlay(rawNextMessages, streamCache)
