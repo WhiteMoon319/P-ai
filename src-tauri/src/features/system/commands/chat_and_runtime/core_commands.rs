@@ -1438,7 +1438,6 @@ fn release_submit_trace_id(state: &AppState, trace_id: &str) {
 async fn submit_chat_message_inner(
     input: SendChatRequest,
     state: &AppState,
-    on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
 ) -> Result<SubmitChatResult, String> {
     if input.trigger_only {
         return Err("submit_chat_message 不支持 trigger_only".to_string());
@@ -1650,20 +1649,19 @@ async fn submit_chat_message_inner(
 
     let mention_result_rx = if has_user_mentions {
         let (result_tx, result_rx) = tokio::sync::oneshot::channel();
-        register_chat_event_runtime(state, &event_id, on_delta, result_tx)?;
+        state
+            .pending_chat_result_senders
+            .lock()
+            .map_err(|_| "Failed to lock pending chat result senders".to_string())?
+            .insert(event_id.clone(), result_tx);
         Some(result_rx)
     } else {
-        register_chat_event_delta_channel(state, &event_id, on_delta)?;
         None
     };
 
     let ingress = match ingress_chat_event(state, event) {
         Ok(value) => value,
         Err(err) => {
-            let _ = state
-                .pending_chat_delta_channels
-                .lock()
-                .map(|mut map| map.remove(&event_id));
             let _ = state
                 .pending_chat_result_senders
                 .lock()
@@ -1709,9 +1707,8 @@ async fn submit_chat_message_inner(
 async fn submit_chat_message(
     input: SendChatRequest,
     state: State<'_, AppState>,
-    on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
 ) -> Result<SubmitChatResult, String> {
-    submit_chat_message_inner(input, state.inner(), on_delta).await
+    submit_chat_message_inner(input, state.inner()).await
 }
 
 #[tauri::command]
@@ -2238,6 +2235,14 @@ struct BindActiveChatViewStreamInput {
     conversation_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProbeActiveChatViewStreamInput {
+    #[serde(default)]
+    conversation_id: Option<String>,
+    probe_id: String,
+}
+
 #[tauri::command]
 async fn bind_active_chat_view_stream(
     input: BindActiveChatViewStreamInput,
@@ -2272,6 +2277,61 @@ async fn bind_active_chat_view_stream(
         )?;
     }
     Ok(())
+}
+
+#[tauri::command]
+async fn probe_active_chat_view_stream(
+    input: ProbeActiveChatViewStreamInput,
+    state: State<'_, AppState>,
+    window: tauri::Window,
+) -> Result<bool, String> {
+    let window_label = window.label().to_string();
+    let conversation_id = input
+        .conversation_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("");
+    let probe_id = input.probe_id.trim();
+    if conversation_id.is_empty() || probe_id.is_empty() {
+        return Ok(false);
+    }
+    let binding = state
+        .active_chat_view_bindings
+        .lock()
+        .map_err(|_| "Failed to lock active chat view bindings".to_string())?
+        .get(&window_label)
+        .cloned();
+    let Some(binding) = binding else {
+        return Ok(false);
+    };
+    if binding.conversation_id.trim() != conversation_id {
+        return Ok(false);
+    }
+    let event = AssistantDeltaEvent {
+        delta: String::new(),
+        kind: Some("stream_probe".to_string()),
+        request_id: None,
+        activation_id: None,
+        phase_id: None,
+        reason: None,
+        tool_name: None,
+        tool_call_id: None,
+        tool_status: None,
+        tool_args: None,
+        message: Some(probe_id.to_string()),
+        stream_cache: None,
+    };
+    match binding.delta_channel.send(event) {
+        Ok(_) => Ok(true),
+        Err(_) => {
+            let _ = state
+                .active_chat_view_bindings
+                .lock()
+                .map(|mut bindings| bindings.remove(&window_label));
+            Ok(false)
+        }
+    }
 }
 
 #[tauri::command]

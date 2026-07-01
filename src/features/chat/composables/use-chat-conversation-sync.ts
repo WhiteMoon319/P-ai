@@ -86,11 +86,8 @@ export function useChatConversationSync(bindings: Record<string, any>) {
   }
 
   function maybeResumeForegroundStreamingDraft(conversationId?: string | null, reason = "unknown") {
-    const cid = String(conversationId || "").trim();
-    if (!cid) return;
-    if (cid !== String(bindings.currentChatConversationId.value || "").trim()) return;
-    if (currentConversationRuntimeState(cid) !== "assistant_streaming") return;
-    bindings.getChatFlow().resumeForegroundStreamingRound();
+    void conversationId;
+    void reason;
   }
 
   function conversationRuntimeSnapshotIsBusy(snapshot?: any): boolean {
@@ -111,36 +108,9 @@ export function useChatConversationSync(bindings: Record<string, any>) {
   }
 
   async function resumeForegroundRuntimeFromBackend(conversationId?: string | null, reason = "unknown") {
-    const cid = String(conversationId || "").trim();
-    if (!cid || cid !== String(bindings.currentChatConversationId.value || "").trim()) return "unknown";
-    const resumeSeq = ++foregroundRuntimeResumeSeq;
-    try {
-      const snapshot = await requestConversationRuntimeSnapshot(cid);
-      if (resumeSeq !== foregroundRuntimeResumeSeq) return "unknown";
-      if (cid !== String(bindings.currentChatConversationId.value || "").trim()) return "unknown";
-      const busy = conversationRuntimeSnapshotIsBusy(snapshot);
-      if (!busy) {
-        bindings.getChatFlow()?.clearForegroundRuntimeState?.();
-        return "idle";
-      }
-      await bindings.getChatFlow().bindActiveConversationStream(cid, true);
-      if (resumeSeq !== foregroundRuntimeResumeSeq) return "unknown";
-      if (cid !== String(bindings.currentChatConversationId.value || "").trim()) return "unknown";
-      bindings.getChatFlow().resumeForegroundRuntimeRound({
-        conversationId: cid,
-        streamCache: snapshot.streamCache || null,
-        statusText: bindings.tr("chat.statusWaitingReply"),
-        reason,
-      });
-      return "busy";
-    } catch (error) {
-      console.warn("[聊天运行态恢复] 后端快照读取失败", {
-        conversationId: cid,
-        reason,
-        error,
-      });
-      return "unknown";
-    }
+    void conversationId;
+    void reason;
+    return "disabled";
   }
 
   function beginForegroundPaintTrace(conversationId: string): ForegroundPaintTrace {

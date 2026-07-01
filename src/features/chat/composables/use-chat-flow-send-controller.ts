@@ -1,9 +1,9 @@
-import { Channel } from "@tauri-apps/api/core";
 import type { Ref } from "vue";
+import type { Channel } from "@tauri-apps/api/core";
 import type { AssistantStreamBlock, ChatMentionTarget, ChatMessage } from "../../../types/app";
-import type { AssistantDeltaEvent } from "./use-chat-flow-events";
 import type { PreparedChatSendInput } from "./use-chat-flow-send-input";
 import type { RoundState, SendChatOverrides } from "./use-chat-flow-types";
+import type { AssistantDeltaEvent } from "./use-chat-flow-events";
 import { isChatAbortedByUser } from "./use-chat-flow-utils";
 
 type StreamUserImageAttachment = { mime: string; bytesBase64: string; savedPath?: string };
@@ -17,6 +17,7 @@ type UseChatFlowSendControllerOptions = {
   streamBlocks?: Ref<AssistantStreamBlock[]>;
   getConversationId?: () => string;
   getSession: () => { apiConfigId: string; agentId: string; departmentId?: string } | null;
+  createSendChatDeltaChannel: (gen: number) => Channel<AssistantDeltaEvent>;
   invokeSendChatMessage: (input: {
     text: string;
     displayText?: string;
@@ -65,14 +66,6 @@ type UseChatFlowSendControllerOptions = {
   resetDisplayState: () => void;
   removeDraft: (draftId: string) => void;
   updateQueuedAssistantDraftStatus: (draftId: string, statusText: string) => void;
-  channelBinding: {
-    attachDeltaHandler: (
-      channel: Channel<AssistantDeltaEvent>,
-      source: "sendChat" | "bound",
-      getGen: () => number,
-      nextGenOnHistoryFlushed: () => number,
-    ) => void;
-  };
   handleRoundCompleted: (gen: number, result: {
     assistantText: string;
     assistantMessage?: ChatMessage;
@@ -139,12 +132,11 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
       if (round.phase === "streaming") options.removeDraft(round.draftId);
     }
 
-    const deltaChannel = new Channel<AssistantDeltaEvent>();
-    options.channelBinding.attachDeltaHandler(deltaChannel, "sendChat", () => gen, () => gen);
     const shouldBlockStopUntilHistoryFlushed = !hasForegroundRoundInFlight;
     let submitSucceeded = false;
 
     try {
+      const onDelta = options.createSendChatDeltaChannel(gen);
       if (shouldBlockStopUntilHistoryFlushed && options.submitPending) {
         options.submitPending.value = true;
       }
@@ -160,7 +152,7 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
           conversationId: sendConversationId,
         },
         traceId,
-        onDelta: deltaChannel,
+        onDelta,
       });
       submitSucceeded = true;
       const ingress = String((submitResult as { ingress?: string } | null)?.ingress || "").trim();

@@ -15,30 +15,18 @@ export function useChatConversationDialogGlue(bindings: Record<string, any>) {
       return;
     }
     if (deletingCurrentConversation) {
-      const optimisticNextConversationId = bindings.pickForegroundConversationId(
-        bindings.unarchivedConversations.value.filter((item: any) => String(item.conversationId || "").trim() !== normalizedConversationId),
-      );
-      if (optimisticNextConversationId) {
-        try {
-          bindings.conversationForegroundSyncing.value = true;
-          const snapshot = await bindings.requestConversationLightSnapshot(optimisticNextConversationId);
-          bindings.applyConversationSnapshot({
-            ...snapshot,
-            unarchivedConversations: bindings.unarchivedConversations.value,
-          });
-        } finally {
-          bindings.conversationForegroundSyncing.value = false;
-        }
-      } else {
-        bindings.clearForegroundConversation("delete_unarchived_conversation_optimistic_empty");
-      }
+      bindings.clearForegroundConversation("delete_unarchived_conversation_current");
     }
     const result = await bindings.deleteUnarchivedConversationFromArchivesRaw(normalizedConversationId);
     if (!deletingCurrentConversation) return;
     if (String(bindings.currentChatConversationId.value || "").trim()) return;
+    const nextConversationId = String(result?.activeConversationId || "").trim();
+    if (nextConversationId) {
+      await bindings.switchUnarchivedConversation(nextConversationId);
+      return;
+    }
     await bindings.recoverForegroundConversationFromOverview(
-      "delete_unarchived_conversation",
-      String(result?.activeConversationId || "").trim() || null,
+      "delete_unarchived_conversation_current_missing_replacement",
     );
   }
 

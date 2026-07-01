@@ -55,57 +55,7 @@ type UseChatFlowExternalEventsOptions = {
 
 export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOptions) {
   async function handleExternalStreamRebindRequired(payload: unknown) {
-    const raw = payload && typeof payload === "object" ? payload as Record<string, unknown> : null;
-    const payloadConversationId = String(raw?.conversationId || "").trim();
-    const currentConversationId = options.getCurrentConversationId();
-    if (!payloadConversationId || !currentConversationId || payloadConversationId !== currentConversationId) {
-      return;
-    }
-    options.clearRecentlyCompletedRoundIds();
-    const requestId = String(raw?.requestId || "").trim();
-    const phaseId = String(raw?.phaseId || "").trim();
-    const reason = String(raw?.reason || "").trim();
-    if (options.debug) {
-      console.debug("[聊天] 流式通道重绑 开始", {
-        conversationId: currentConversationId,
-        requestId,
-        phaseId,
-        reason,
-        roundPhase: options.getRound().phase,
-      });
-    }
-    try {
-      await options.channelBinding.bindActiveConversationStream(currentConversationId, true);
-      if (options.getRound().phase !== "streaming") {
-        if (options.debug) {
-          console.debug("[聊天流式重绑][前端] 重绑事件触发恢复草稿", {
-            conversationId: currentConversationId,
-            requestId,
-            phaseId,
-            reason,
-            roundPhase: options.getRound().phase,
-          });
-        }
-        options.ensureForegroundStreamingRound();
-      }
-      if (options.debug) {
-        console.debug("[聊天] 流式通道重绑 完成", {
-          conversationId: currentConversationId,
-          requestId,
-          phaseId,
-          reason,
-        });
-      }
-    } catch (error) {
-      console.error("[聊天] 流式通道重绑 失败", {
-        conversationId: currentConversationId,
-        requestId,
-        phaseId,
-        reason,
-        error,
-      });
-      throw error;
-    }
+    void payload;
   }
 
   async function handleExternalHistoryFlushed(payload: unknown) {
@@ -123,9 +73,6 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     const treatAsSendChat = options.getSendChatActiveGen() > 0 && !!parsed.activateAssistant;
     const source: "sendChat" | "bound" = treatAsSendChat ? "sendChat" : "bound";
     const gen = treatAsSendChat ? options.getSendChatActiveGen() : options.nextGeneration();
-    if (!treatAsSendChat) {
-      options.channelBinding.setBoundDisplayGeneration(gen);
-    }
     await options.handleHistoryFlushed(
       gen,
       {
@@ -244,13 +191,6 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     }
     // tool_status 是调度层信号，服务头像右侧/运行态提示；它不属于气泡流式结果。
     // 后端将它作为 app-event-only 发送，所以即使 bound channel 已连接也不能在这里去重丢弃。
-    if (
-      parsed.kind !== "tool_status"
-      && assistantEventHasVisibleProgress(parsed)
-      && options.channelBinding.hasActiveBoundDeltaChannel(cacheConversationId)
-    ) {
-      return;
-    }
     if (cacheConversationId) {
       if (parsed.streamCache) {
         options.writeConversationStreamCacheSnapshot(cacheConversationId, parsed.streamCache);
@@ -260,6 +200,13 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       } else {
         options.applyAssistantEventToConversationStreamCache(cacheConversationId, parsed);
       }
+    }
+    if (
+      parsed.kind !== "tool_status"
+      && assistantEventHasVisibleProgress(parsed)
+      && options.channelBinding.hasActiveBoundDeltaChannel(cacheConversationId)
+    ) {
+      return;
     }
     const round = options.getRound();
     if (
@@ -277,38 +224,10 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       }
       return;
     }
-    const shouldProjectFromAppEvent =
-      parsed.kind === "tool_status"
-      || round.phase !== "streaming"
-      || !options.hasAssistantDraftInMessages();
-    const shouldResumeForegroundRound =
-      shouldProjectFromAppEvent
-      && assistantEventHasVisibleProgress(parsed);
-    if (shouldResumeForegroundRound && options.debug) {
-      console.debug("[聊天流式重绑][前端] 普通事件触发恢复前景流式", {
-        currentConversationId,
-        payloadConversationId,
-        kind: parsed.kind || "delta",
-      });
-    }
-    if (!shouldProjectFromAppEvent) {
-      if (parsed.kind === "activity_reasoning_delta" || parsed.kind === "assistant_tool_event" || parsed.kind === "assistant_tool_result") {
-        const delta = readDeltaMessage(parsed);
-        if (delta && options.reasoningStartedAtMs.value === 0) {
-          options.reasoningStartedAtMs.value = Date.now();
-        }
-        options.applyConversationStreamCacheToDisplay(cacheConversationId);
-        const latestRound = options.getRound();
-        if (latestRound.phase === "streaming") {
-          options.syncStreamBlocksToDraft(latestRound.draftId);
-          options.updateDraftText(latestRound.draftId);
-        }
-      }
+    if (round.phase !== "streaming" && round.phase !== "queued") {
       return;
     }
-    const currentGen = shouldResumeForegroundRound
-      ? options.ensureForegroundStreamingRound()
-      : (round.phase === "streaming" ? round.gen : 0);
+    const currentGen = round.gen;
     if (!currentGen) {
       return;
     }
@@ -319,7 +238,7 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       }
     }
     if (parsed.kind === "tool_status") {
-      options.applyConversationStreamCacheToDisplay(cacheConversationId, { skipStreamBlocks: true });
+      options.handleStreamingEvent(currentGen, parsed);
       return;
     }
     options.handleStreamingEvent(currentGen, parsed);

@@ -20,9 +20,9 @@ export function useChatWindowLifecycleSetup(bindings: Record<string, any>) {
       refreshAllViewData: bindings.refreshAllViewData,
       afterRefreshData: () => {
         bindings.startupDataReady.value = true;
-        if (bindings.viewMode.value === "chat" && !String(bindings.currentChatConversationId.value || "").trim()) {
+        if (bindings.viewMode.value === "chat") {
           return bindings.refreshChatUnarchivedConversations().catch((error: unknown) => {
-            console.warn("[聊天追踪][前台会话] 启动数据就绪后恢复失败", error);
+            console.warn("[聊天追踪][会话概览] 启动数据就绪后加载失败", error);
           });
         }
       },

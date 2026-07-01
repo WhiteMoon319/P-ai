@@ -158,24 +158,6 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
         console.error("[聊天追踪][助手增量] 监听器注册失败", error);
       });
 
-      void listen<any>("easy-call:stream-rebind-required", (event) => {
-        const conversationId = bindings.readConversationIdFromPayload(event.payload);
-        if (bindings.CHAT_STREAM_DEBUG) {
-          console.debug("[聊天流式重绑][前端] 收到重绑普通事件", {
-            conversationId,
-            currentConversationId: String(bindings.currentChatConversationId.value || "").trim(),
-            payload: event.payload,
-          });
-        }
-        void bindings.getChatFlow().handleExternalStreamRebindRequired(event.payload).catch((error: unknown) => {
-          console.error("[聊天追踪][流重绑] 处理失败", { conversationId, error });
-        });
-      }).then((unlisten) => {
-        bindings.unlisteners.chatStreamRebindRequired = unlisten;
-      }).catch((error) => {
-        console.error("[聊天追踪][流重绑] 监听器注册失败", error);
-      });
-
       void listen<any>("easy-call:conversation-messages-after-synced", (event) => {
         void bindings.applyConversationMessagesAfterSynced(event.payload);
       }).then((unlisten) => {

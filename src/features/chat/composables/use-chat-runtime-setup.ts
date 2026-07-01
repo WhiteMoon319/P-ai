@@ -109,6 +109,13 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
           },
           onDelta,
         }),
+      invokeProbeActiveChatViewStream: ({ conversationId, probeId }) =>
+        invokeTauri<boolean>("probe_active_chat_view_stream", {
+          input: {
+            conversationId: conversationId || null,
+            probeId,
+          },
+        }),
       onReloadMessages: () => bindings.reloadForegroundConversationMessages("chat_flow_reload"),
       onAssistantMessageCompleted: async ({ conversationId, assistantMessage }) => {
         bindings.applyConversationMessageAppended({

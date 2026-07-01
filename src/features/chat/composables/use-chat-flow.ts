@@ -235,6 +235,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     debug: CHAT_STREAM_DEBUG,
     getConversationId: options.getConversationId,
     invokeBindActiveChatViewStream: options.invokeBindActiveChatViewStream,
+    invokeProbeActiveChatViewStream: options.invokeProbeActiveChatViewStream,
     getRoundActiveGen: () => (
       round.phase === "queued" || round.phase === "streaming" ? round.gen : 0
     ),
@@ -286,7 +287,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
     streamBlocks: options.streamBlocks,
     chatting: options.chatting,
     t: options.t,
-    channelBinding,
     sendStartedAtMsByGen,
     clearConversationStreamCache,
     removeAssistantDrafts,
@@ -466,6 +466,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     streamBlocks: options.streamBlocks,
     getConversationId: options.getConversationId,
     getSession: options.getSession,
+    createSendChatDeltaChannel: channelBinding.createSendChatDeltaChannel,
     invokeSendChatMessage: options.invokeSendChatMessage,
     onOwnUserDraftInserted: options.onOwnUserDraftInserted,
     onAssistantDraftInserted: options.onAssistantDraftInserted,
@@ -496,7 +497,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
     resetDisplayState,
     removeDraft,
     updateQueuedAssistantDraftStatus,
-    channelBinding,
     handleRoundCompleted,
     sendRecovery,
   });
@@ -747,6 +747,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     resumeForegroundStreamCacheProjection,
     bindActiveConversationStream: channelBinding.bindActiveConversationStream,
     hasActiveBoundDeltaChannel: channelBinding.hasActiveBoundDeltaChannel,
+    probeBoundChannel: channelBinding.probeBoundChannel,
     handleExternalStreamRebindRequired: externalEvents.handleExternalStreamRebindRequired,
     handleExternalHistoryFlushed: externalEvents.handleExternalHistoryFlushed,
     handleExternalRoundStarted: externalEvents.handleExternalRoundStarted,

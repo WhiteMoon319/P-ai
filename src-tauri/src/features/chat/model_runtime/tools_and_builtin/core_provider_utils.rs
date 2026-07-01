@@ -53,41 +53,7 @@ fn send_stream_rebind_required_event(
     request_id: Option<&str>,
     reason: &str,
 ) {
-    let phase_id = uuid::Uuid::new_v4().to_string();
-    let request_id_text = request_id
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned);
-    let reason_text = reason.trim().to_string();
-    let send_result = on_delta.send(AssistantDeltaEvent {
-        delta: String::new(),
-        kind: Some("stream_rebind_required".to_string()),
-        request_id: request_id_text.clone(),
-        activation_id: request_id_text.clone(),
-        phase_id: Some(phase_id.clone()),
-        reason: Some(reason_text.clone()),
-        tool_name: None,
-        tool_call_id: None,
-        tool_status: None,
-        tool_args: None,
-        message: None,
-        stream_cache: None,
-    });
-    match send_result {
-        Ok(_) => runtime_log_info(format!(
-            "[聊天] 流式通道重绑请求 完成 reason={} phase_id={} request_id={}",
-            reason_text,
-            phase_id,
-            request_id_text.unwrap_or_default()
-        )),
-        Err(err) => runtime_log_warn(format!(
-            "[聊天] 流式通道重绑请求 失败 reason={} phase_id={} request_id={} error={}",
-            reason_text,
-            phase_id,
-            request_id_text.unwrap_or_default(),
-            err
-        )),
-    }
+    let _ = (on_delta, request_id, reason);
 }
 
 fn tool_failure_result_json(tool_name: &str, err_text: &str) -> String {

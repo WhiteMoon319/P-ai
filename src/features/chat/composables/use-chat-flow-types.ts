@@ -67,6 +67,10 @@ export type UseChatFlowOptions = {
     conversationId?: string;
     onDelta: Channel<AssistantDeltaEvent>;
   }) => Promise<void>;
+  invokeProbeActiveChatViewStream?: (input: {
+    conversationId?: string;
+    probeId: string;
+  }) => Promise<boolean>;
   onReloadMessages: () => Promise<void>;
   onHistoryFlushed?: (input: {
     conversationId: string;

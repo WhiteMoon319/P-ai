@@ -916,10 +916,7 @@ fn emit_assistant_delta_app_event(
 }
 
 fn should_emit_assistant_delta_via_app_event_only(event: &AssistantDeltaEvent) -> bool {
-    matches!(
-        event.kind.as_deref(),
-        Some("tool_status") | Some("stream_rebind_required")
-    )
+    matches!(event.kind.as_deref(), Some("tool_status"))
 }
 
 fn is_visible_stream_progress_event(event: &AssistantDeltaEvent) -> bool {
@@ -1596,54 +1593,7 @@ fn emit_stream_rebind_required_event(
     phase_id: Option<&str>,
     reason: &str,
 ) {
-    let app_handle = match state.app_handle.lock() {
-        Ok(guard) => guard.as_ref().cloned(),
-        Err(_) => None,
-    };
-    let Some(app_handle) = app_handle else {
-        return;
-    };
-    let payload = serde_json::json!({
-        "conversationId": conversation_id,
-        "requestId": request_id.map(str::trim).filter(|value| !value.is_empty()),
-        "phaseId": phase_id.map(str::trim).filter(|value| !value.is_empty()),
-        "reason": reason.trim(),
-    });
-    ide_chat_broadcast_notification("chat.streamRebindRequired", payload.clone());
-    runtime_log_info(format!(
-        "[聊天流式重绑] 发送普通事件 conversation_id={} request_id={} phase_id={} reason={}",
-        conversation_id.trim(),
-        request_id
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or(""),
-        phase_id
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or(""),
-        reason.trim(),
-    ));
-    match app_handle.emit(CHAT_STREAM_REBIND_REQUIRED_EVENT, payload) {
-        Ok(_) => {
-            runtime_log_info(format!(
-                "[聊天流式重绑] 普通事件发送成功 conversation_id={} request_id={} phase_id={} reason={}",
-                conversation_id.trim(),
-                request_id.map(str::trim).filter(|value| !value.is_empty()).unwrap_or(""),
-                phase_id.map(str::trim).filter(|value| !value.is_empty()).unwrap_or(""),
-                reason.trim(),
-            ));
-        }
-        Err(err) => {
-            runtime_log_error(format!(
-                "[聊天流式重绑] 普通事件发送失败 conversation_id={} request_id={} phase_id={} reason={} error={}",
-                conversation_id.trim(),
-                request_id.map(str::trim).filter(|value| !value.is_empty()).unwrap_or(""),
-                phase_id.map(str::trim).filter(|value| !value.is_empty()).unwrap_or(""),
-                reason.trim(),
-                err
-            ));
-        }
-    }
+    let _ = (state, conversation_id, request_id, phase_id, reason);
 }
 
 #[allow(dead_code)]
@@ -3211,55 +3161,22 @@ async fn activate_main_assistant(
                 }
                 let mut stream_start_rebind_guard =
                     stream_start_rebind_emitted_for_channel.lock().ok();
-                if event.kind.as_deref() == Some("stream_rebind_required") {
-                    if let Some(flag) = stream_start_rebind_guard.as_mut() {
-                        **flag = false;
-                    }
-                } else if stream_start_rebind_guard
+                if stream_start_rebind_guard
                     .as_ref()
                     .map(|flag| !**flag)
                     .unwrap_or(true)
                     && is_visible_stream_progress_event(&event)
                 {
-                    runtime_log_info(format!(
-                        "[聊天流式重绑] 检测到首个可见流式包 conversation_id={} kind={} delta_len={}",
-                        conversation_id_for_emit.trim(),
-                        event.kind.as_deref().unwrap_or("delta"),
-                        event.delta.chars().count(),
-                    ));
-                    emit_stream_rebind_required_event(
-                        &state_for_delta,
-                        &conversation_id_for_emit,
-                        event.request_id.as_deref(),
-                        event.phase_id.as_deref(),
-                        "stream_start",
-                    );
-                    runtime_log_info(format!(
-                        "[聊天流式重绑] 首个可见流式包触发重绑事件 conversation_id={} kind={} delta_len={}",
-                        conversation_id_for_emit.trim(),
-                        event.kind.as_deref().unwrap_or("delta"),
-                        event.delta.chars().count(),
-                    ));
                     if let Some(flag) = stream_start_rebind_guard.as_mut() {
                         **flag = true;
                     }
                 }
                 if should_emit_assistant_delta_via_app_event_only(&event) {
-                    if event.kind.as_deref() == Some("stream_rebind_required") {
-                        emit_stream_rebind_required_event(
-                            &state_for_delta,
-                            &conversation_id_for_emit,
-                            event.request_id.as_deref(),
-                            event.phase_id.as_deref(),
-                            event.reason.as_deref().unwrap_or("tool_start"),
-                        );
-                    } else {
-                        emit_assistant_delta_app_event(
-                            &state_for_delta,
-                            &conversation_id_for_emit,
-                            &event,
-                        );
-                    }
+                    emit_assistant_delta_app_event(
+                        &state_for_delta,
+                        &conversation_id_for_emit,
+                        &event,
+                    );
                 } else {
                     dispatch_assistant_delta_to_active_view(
                         &state_for_delta,

@@ -1066,6 +1066,7 @@ fn main() {
             send_user_mention_message,
             submit_user_async_delegate,
             bind_active_chat_view_stream,
+            probe_active_chat_view_stream,
              stop_chat_message,
              get_chat_queue_snapshot,
              get_conversation_fast_request_turns,

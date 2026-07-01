@@ -7,10 +7,6 @@ import { useChatForegroundOrchestrator } from "./use-chat-foreground-orchestrato
 import { useChatRemoteConversationOrchestrator } from "./use-chat-remote-conversation-orchestrator";
 
 export function useChatWindowConversationOrchestrator(bindings: Record<string, any>) {
-  const RESTORE_FOREGROUND_PROJECTION_COOLDOWN_MS = 1000;
-  const restoreForegroundProjectionLastAtByConversation = new Map<string, number>();
-  const restoreForegroundProjectionInflight = new Set<string>();
-
   const {
     matchesForegroundConversation,
     formalizeConversationMessages,
@@ -208,40 +204,14 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
   async function restoreForegroundConversationProjection(conversationId: string, reason: string) {
     const cid = String(conversationId || "").trim();
     if (!cid) return;
-    const chatFlow = bindings.getChatFlow();
-    const now = Date.now();
-    const lastAt = restoreForegroundProjectionLastAtByConversation.get(cid) || 0;
-    if (restoreForegroundProjectionInflight.has(cid) || now - lastAt < RESTORE_FOREGROUND_PROJECTION_COOLDOWN_MS) {
-      return;
-    }
-    restoreForegroundProjectionLastAtByConversation.set(cid, now);
-    restoreForegroundProjectionInflight.add(cid);
     try {
-      // 和 switchUnarchivedConversation 一致的快照恢复路径，不走缓存直灌
-      const snapshot = await chatForeground.requestConversationLightSnapshot(cid, { resumeProjection: true });
+      const snapshot = await chatForeground.requestConversationLightSnapshot(cid);
       if (cid !== String(bindings.currentChatConversationId.value || "").trim()) return;
       applyConversationSnapshot(snapshot, {
         preserveExistingHistory: true,
       });
-      if (cid !== String(bindings.currentChatConversationId.value || "").trim()) return;
-      const shouldBindStream = !!snapshot?.shouldBindStream;
-      if (shouldBindStream) {
-        if (!chatFlow.hasActiveBoundDeltaChannel?.(cid)) {
-          await chatFlow.bindActiveConversationStream(cid, true);
-        }
-        chatFlow.resumeForegroundRuntimeRound?.({
-          conversationId: cid,
-          streamCache: snapshot?.streamCache || null,
-          reason,
-        });
-        return;
-      }
-      const snapshotRuntimeState = String(snapshot?.runtimeState || "").trim();
-      if (snapshotRuntimeState !== "assistant_streaming") {
-        chatFlow.clearForegroundRoundState();
-      }
+      void reason;
     } finally {
-      restoreForegroundProjectionInflight.delete(cid);
     }
   }
 

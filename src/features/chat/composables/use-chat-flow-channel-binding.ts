@@ -14,6 +14,10 @@ type UseChatFlowChannelBindingOptions = {
     conversationId?: string;
     onDelta: Channel<AssistantDeltaEvent>;
   }) => Promise<void>;
+  invokeProbeActiveChatViewStream?: (input: {
+    conversationId?: string;
+    probeId: string;
+  }) => Promise<boolean>;
   getRoundActiveGen: () => number;
   getCurrentGeneration: () => number;
   markHistoryFlushedReceived: (gen: number) => void;
@@ -33,6 +37,7 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
   let boundDisplayGeneration = 0;
   let boundDeltaChannel: Channel<AssistantDeltaEvent> | null = null;
   let boundChannelSeq = 0;
+  const pendingProbeResolvers = new Map<string, (received: boolean) => void>();
 
   function getBoundDisplayGeneration(): number {
     return boundDisplayGeneration;
@@ -59,6 +64,14 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
         return;
       }
       const parsed = readAssistantEvent(event);
+      if (parsed.kind === "stream_probe") {
+        const probeId = String(parsed.message || "").trim();
+        if (probeId) {
+          pendingProbeResolvers.get(probeId)?.(true);
+          pendingProbeResolvers.delete(probeId);
+        }
+        return;
+      }
 
       if (parsed.kind === "history_flushed") {
         const hfGen = nextGenOnHistoryFlushed();
@@ -130,11 +143,56 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
     }
   }
 
+  function createSendChatDeltaChannel(gen: number): Channel<AssistantDeltaEvent> {
+    const channel = new Channel<AssistantDeltaEvent>();
+    attachDeltaHandler(
+      channel,
+      "sendChat",
+      () => gen,
+      () => gen,
+    );
+    return channel;
+  }
+
+  async function probeBoundChannel(conversationId?: string | null, timeoutMs = 800): Promise<boolean> {
+    if (!options.invokeProbeActiveChatViewStream) return false;
+    const id = String(conversationId || (options.getConversationId ? options.getConversationId() : "")).trim();
+    if (!id || !hasActiveBoundDeltaChannel(id)) return false;
+    const probeId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+    const receivedPromise = new Promise<boolean>((resolve) => {
+      pendingProbeResolvers.set(probeId, resolve);
+      timeoutHandle = setTimeout(() => {
+        pendingProbeResolvers.delete(probeId);
+        resolve(false);
+      }, Math.max(100, timeoutMs));
+    });
+    try {
+      const dispatched = await options.invokeProbeActiveChatViewStream({
+        conversationId: id,
+        probeId,
+      });
+      if (!dispatched) {
+        pendingProbeResolvers.delete(probeId);
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+        return false;
+      }
+      return await receivedPromise;
+    } finally {
+      pendingProbeResolvers.delete(probeId);
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+    }
+  }
+
   return {
     attachDeltaHandler,
     bindActiveConversationStream,
+    createSendChatDeltaChannel,
     getBoundDisplayGeneration,
     hasActiveBoundDeltaChannel,
+    probeBoundChannel,
     setBoundDisplayGeneration,
   };
 }

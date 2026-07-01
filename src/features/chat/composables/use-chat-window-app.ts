@@ -384,10 +384,16 @@ export function useChatWindowApp() {
     isChatTauriWindow,
     detachedChatWindow,
     currentChatConversationId,
+    currentForegroundAgentId: contentOrchestrator.personaConversation.currentForegroundAgentId,
     startupDataReady,
     recordHotkeyProbeLastSeq,
     recordHotkeyProbeDown,
     chatWindowActiveSynced,
+    allMessages,
+    FOREGROUND_SNAPSHOT_RECENT_LIMIT,
+    BACKGROUND_CONVERSATION_CACHE_LIMIT,
+    getChatFlow: () => chatFlow,
+    applyConversationRuntimeStateUpdated,
     refreshChatUnarchivedConversations,
     freezeForegroundConversation,
     restoreForegroundConversationProjection,
@@ -757,9 +763,6 @@ export function useChatWindowApp() {
         currentChatPreferredApiConfigId.value = String(result.preferredApiConfigId || "").trim();
       }
       await refreshChatUnarchivedConversations();
-      if (String(currentChatConversationId.value || "").trim() === conversationId) {
-        await restoreForegroundConversationProjection(conversationId, "rebind_conversation_recipient");
-      }
       setStatus(t("status.conversationRecipientRebound"));
     } catch (error) {
       setStatusError("status.rebindConversationRecipientFailed", error);

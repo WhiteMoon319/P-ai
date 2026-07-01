@@ -26,8 +26,6 @@ export function useChatRuntimeWatchers(bindings: Record<string, any>) {
       void (async () => {
         try {
           await bindings.getChatFlow().bindActiveConversationStream(conversationId);
-          bindings.maybeResumeForegroundStreamingDraft(conversationId, "bind_active_stream");
-          await bindings.resumeForegroundRuntimeFromBackend(conversationId, "bind_active_stream");
         } catch (error) {
           console.warn("[聊天推送] 绑定前台流失败", {
             conversationId,

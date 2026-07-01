@@ -195,6 +195,7 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     refreshChatUnarchivedConversations: conversationOrchestrator.refreshChatUnarchivedConversations,
     freezeForegroundConversation: conversationOrchestrator.freezeForegroundConversation,
     restoreForegroundConversationProjection: conversationOrchestrator.restoreForegroundConversationProjection,
+    switchUnarchivedConversation: conversationOrchestrator.switchUnarchivedConversation,
     sendChatFromCurrentWindow: conversationOrchestrator.sendChatFromCurrentWindow,
     detachCurrentConversationToWindow: conversationOrchestrator.detachCurrentConversationToWindow,
     deleteUnarchivedConversationFromArchives: conversationOrchestrator.deleteUnarchivedConversationFromArchives,

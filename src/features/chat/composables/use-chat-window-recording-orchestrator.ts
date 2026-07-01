@@ -1,6 +1,7 @@
 import { ref, watch, type Ref } from "vue";
 import { invokeTauri } from "../../../services/tauri-api";
-import type { AppConfig } from "../../../types/app";
+import type { AppConfig, ChatMessage } from "../../../types/app";
+import { formalizeMessages } from "./use-chat-flow-utils";
 import { useRecordHotkey } from "./use-record-hotkey";
 
 type RecordingActivationSource = "foreground" | "background";
@@ -13,16 +14,45 @@ type UseChatWindowRecordingOrchestratorOptions = {
   isChatTauriWindow: Ref<boolean>;
   detachedChatWindow: Ref<boolean>;
   currentChatConversationId: Ref<string>;
+  currentForegroundAgentId: Ref<string>;
   startupDataReady: Ref<boolean>;
   recordHotkeyProbeLastSeq: Ref<number>;
   recordHotkeyProbeDown: Ref<boolean>;
   chatWindowActiveSynced: Ref<boolean | null>;
+  allMessages: Ref<ChatMessage[]>;
+  foregroundSnapshotRecentLimit: number;
+  backgroundConversationCacheLimit: number;
+  getChatFlow: () => {
+    probeBoundChannel?: (conversationId?: string | null, timeoutMs?: number) => Promise<boolean>;
+    bindActiveConversationStream?: (conversationId: string, force?: boolean) => Promise<void>;
+    resumeForegroundRuntimeRound?: (input?: {
+      conversationId?: string | null;
+      streamCache?: unknown;
+      statusText?: string;
+      reason?: string;
+    }) => number;
+  } | null | undefined;
+  applyConversationRuntimeStateUpdated: (payload: {
+    conversationId: string;
+    runtimeState: "idle" | "assistant_streaming" | "organizing_context";
+  }) => void;
   startSpeechRecording: () => Promise<unknown>;
   stopSpeechRecording: (discard: boolean) => Promise<unknown>;
   prewarmMicrophone: () => Promise<unknown>;
   refreshChatUnarchivedConversations: () => Promise<void>;
   freezeForegroundConversation: (reason: string) => void;
   restoreForegroundConversationProjection: (conversationId: string, reason: string) => Promise<void>;
+};
+
+type ConversationRuntimeSnapshot = {
+  runtimeState?: string;
+  isProcessing?: boolean;
+  hasPendingQueue?: boolean;
+  pendingQueueCount?: number;
+  streamCache?: {
+    hasVisibleProgress?: boolean;
+    toolStatusState?: string;
+  } | null;
 };
 
 export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordingOrchestratorOptions) {
@@ -105,12 +135,12 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     if (!isPrimaryChatWindow()) return;
     clearChatWindowActiveSyncTimer();
     if (delayMs <= 0) {
-      syncChatWindowActiveState(reason);
+      void syncChatWindowActiveState(reason);
       return;
     }
     chatWindowActiveSyncTimer = setTimeout(() => {
       chatWindowActiveSyncTimer = null;
-      syncChatWindowActiveState(reason);
+      void syncChatWindowActiveState(reason);
     }, delayMs);
   }
 
@@ -126,7 +156,133 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     }, delayMs);
   }
 
-  function syncChatWindowActiveState(reason = "unknown") {
+  function currentFormalTailMessageId(): string {
+    const formalMessages = formalizeMessages(Array.isArray(options.allMessages.value) ? options.allMessages.value : []);
+    return String(formalMessages[formalMessages.length - 1]?.id || "").trim();
+  }
+
+  async function requestLatestFormalTailMessageId(conversationId: string): Promise<string> {
+    const snapshot = await invokeTauri<any>("get_foreground_conversation_light_snapshot", {
+      input: {
+        conversationId,
+        agentId: String(options.currentForegroundAgentId.value || "").trim() || null,
+        limit: options.foregroundSnapshotRecentLimit,
+      },
+    });
+    const messages = formalizeMessages(Array.isArray(snapshot?.messages) ? snapshot.messages : []);
+    return String(messages[messages.length - 1]?.id || "").trim();
+  }
+
+  async function requestConversationRuntimeSnapshot(conversationId: string): Promise<ConversationRuntimeSnapshot> {
+    return invokeTauri<ConversationRuntimeSnapshot>("get_conversation_runtime_snapshot", {
+      conversationId,
+    });
+  }
+
+  async function requestMissingFormalMessages(conversationId: string, afterMessageId: string | null) {
+    await invokeTauri("request_conversation_messages_after_async", {
+      input: {
+        conversationId,
+        afterMessageId,
+        fallbackLimit: options.backgroundConversationCacheLimit,
+      },
+    });
+  }
+
+  async function reconcileForegroundConversationAfterFreeze(conversationId: string, reason: string) {
+    const chatFlow = options.getChatFlow();
+    if (!chatFlow?.probeBoundChannel) {
+      console.warn("[聊天前台恢复][诊断] focus 对账跳过：probe 不可用", {
+        conversationId,
+        reason,
+        restoreMode: "probe_unavailable_skip",
+      });
+      return;
+    }
+
+    // 别在 focus 上写任何“先恢复一下”的狗屁降级。
+    // 聊天窗口恢复焦点的真正原因是 WebView 可能冻结过；channel 还活着时前台就是健康的，乱刷只会把正确画面刷坏。
+    const probeHealthy = await chatFlow.probeBoundChannel(conversationId);
+    if (probeHealthy) {
+      console.info("[聊天前台恢复][诊断] focus 对账完成：channel 仍然健康，禁止恢复", {
+        conversationId,
+        reason,
+        restoreMode: "probe_success_skip",
+      });
+      return;
+    }
+
+    const runtimeSnapshot = await requestConversationRuntimeSnapshot(conversationId);
+    const runtimeState = String(runtimeSnapshot?.runtimeState || "").trim();
+    const isProcessing = !!runtimeSnapshot?.isProcessing;
+    const hasPendingQueue = !!runtimeSnapshot?.hasPendingQueue
+      || Math.max(0, Number(runtimeSnapshot?.pendingQueueCount || 0)) > 0;
+    const hasVisibleProgress = !!runtimeSnapshot?.streamCache?.hasVisibleProgress;
+
+    if (runtimeState === "assistant_streaming" || isProcessing || hasPendingQueue) {
+      await chatFlow.bindActiveConversationStream?.(conversationId, true);
+      if (runtimeState === "assistant_streaming") {
+        options.applyConversationRuntimeStateUpdated({
+          conversationId,
+          runtimeState: "assistant_streaming",
+        });
+      }
+      chatFlow.resumeForegroundRuntimeRound?.({
+        conversationId,
+        streamCache: runtimeSnapshot?.streamCache || null,
+        reason,
+      });
+      console.warn("[聊天前台恢复][诊断] focus 对账命中运行中恢复路径", {
+        conversationId,
+        reason,
+        runtimeState,
+        isProcessing,
+        hasPendingQueue,
+        hasVisibleProgress,
+        restoreMode: hasVisibleProgress
+          ? "probe_failed_resume_streaming"
+          : "probe_failed_resume_waiting",
+      });
+      return;
+    }
+
+    if (runtimeState === "organizing_context") {
+      options.applyConversationRuntimeStateUpdated({
+        conversationId,
+        runtimeState: "organizing_context",
+      });
+      console.warn("[聊天前台恢复][诊断] focus 对账命中整理上下文恢复路径", {
+        conversationId,
+        reason,
+        restoreMode: "probe_failed_resume_compacting",
+      });
+      return;
+    }
+
+    // 最新正式消息 ID 只能在彻底空闲时比较。流式、等待工具、整理上下文时拿消息 ID 硬判落后，等于主动把没坏的画面刷坏。
+    const currentTailId = currentFormalTailMessageId();
+    const latestTailId = await requestLatestFormalTailMessageId(conversationId);
+    if (latestTailId === currentTailId) {
+      console.info("[聊天前台恢复][诊断] focus 对账完成：当前前台已经是最新", {
+        conversationId,
+        reason,
+        restoreMode: "probe_failed_but_already_latest",
+        currentTailId,
+      });
+      return;
+    }
+
+    await requestMissingFormalMessages(conversationId, currentTailId || null);
+    console.warn("[聊天前台恢复][诊断] focus 对账命中正式消息补缺路径", {
+      conversationId,
+      reason,
+      restoreMode: "probe_failed_append_missing_messages",
+      currentTailId,
+      latestTailId,
+    });
+  }
+
+  async function syncChatWindowActiveState(reason = "unknown") {
     if (!isPrimaryChatWindow()) return;
     const active = isChatWindowActiveNow();
     if (options.chatWindowActiveSynced.value === active) return;
@@ -135,19 +291,7 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
       void stopRecording(false);
       const activeConversationId = String(options.currentChatConversationId.value || "").trim();
       if (activeConversationId) {
-        void options.restoreForegroundConversationProjection(activeConversationId, reason)
-          .catch((error) => {
-            console.warn("[聊天流式恢复] 前台激活同步失败", {
-              conversationId: activeConversationId,
-              reason,
-              error,
-            });
-          });
-      } else if (options.startupDataReady.value) {
-        void options.refreshChatUnarchivedConversations()
-          .catch((error) => {
-            console.warn("[聊天追踪][前台会话] 激活恢复失败", error);
-          });
+        await reconcileForegroundConversationAfterFreeze(activeConversationId, reason);
       }
     }
     clearRecordHotkeyProbeState();
@@ -171,7 +315,7 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     if (options.isChatTauriWindow.value && document.visibilityState !== "visible") {
       cancelForegroundRecordingOnBackground("visibility_hidden");
     }
-    syncChatWindowActiveState("visibilitychange");
+    void syncChatWindowActiveState("visibilitychange");
   }
 
   function handleWindowFocusForMicPrewarm() {

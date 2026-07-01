@@ -83,22 +83,16 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
 
   async function recoverForegroundConversationFromOverview(reason: string, preferredConversationId?: string | null) {
     if (bindings.conversationForegroundSyncing.value) return;
-    try {
-      bindings.conversationForegroundSyncing.value = true;
-      const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
-      if (currentConversationId && bindings.unarchivedConversations.value.some((item: any) => String(item.conversationId || "").trim() === currentConversationId)) {
-        return;
-      }
-      const nextConversationId = String(preferredConversationId || "").trim() || pickForegroundConversationId(bindings.unarchivedConversations.value);
-      if (!nextConversationId) {
-        clearForegroundConversation(reason);
-        return;
-      }
-      const snapshot = await requestConversationLightSnapshot(nextConversationId);
-      bindings.applyConversationSnapshot(snapshot);
-    } finally {
-      bindings.conversationForegroundSyncing.value = false;
+    const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
+    if (currentConversationId) return;
+    const nextConversationId =
+      String(preferredConversationId || "").trim()
+      || pickForegroundConversationId(bindings.unarchivedConversations.value);
+    if (!nextConversationId) {
+      clearForegroundConversation(reason);
+      return;
     }
+    await switchUnarchivedConversation(nextConversationId);
   }
 
   function syncCurrentConversationWorkspaceLabel() {
@@ -151,20 +145,8 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
       bindings.clearPendingManualScrollToBottom();
       bindings.foregroundTailLatestReady.value = false;
       const trace = bindings.beginForegroundPaintTrace(cid);
-      const snapshot = await requestConversationLightSnapshot(cid, { resumeProjection: true });
+      const snapshot = await requestConversationLightSnapshot(cid);
       bindings.applyConversationSnapshot(snapshot);
-      const shouldBindStream = !!snapshot?.shouldBindStream;
-      if (shouldBindStream) {
-        const chatFlow = bindings.getChatFlow();
-        if (!chatFlow.hasActiveBoundDeltaChannel?.(cid)) {
-          await chatFlow.bindActiveConversationStream(cid, true);
-        }
-        chatFlow.resumeForegroundRuntimeRound?.({
-          conversationId: cid,
-          streamCache: snapshot?.streamCache || null,
-          reason: "switch_unarchived_conversation",
-        });
-      }
       bindings.clearConversationBadge(cid);
       bindings.markConversationReadPersisted(cid);
       await nextTick();
@@ -225,20 +207,11 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
       bindings.conversationForegroundSyncing.value = true;
       await refreshUnarchivedConversationOverview();
       await refreshRemoteImConversationOverview();
-      const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
-      const nextConversationId = currentConversationId && bindings.unarchivedConversations.value.some((item: any) =>
-        String(item.conversationId || "").trim() === currentConversationId
-      )
-        ? currentConversationId
-        : pickForegroundConversationId(bindings.unarchivedConversations.value);
-      if (!nextConversationId) {
-        clearForegroundConversation("refresh_unarchived_conversations_empty");
-        return;
-      }
-      const snapshot = await requestConversationLightSnapshot(nextConversationId);
-      bindings.applyConversationSnapshot(snapshot);
     } finally {
       bindings.conversationForegroundSyncing.value = false;
+    }
+    if (!String(bindings.currentChatConversationId.value || "").trim()) {
+      await recoverForegroundConversationFromOverview("refresh_unarchived_conversations");
     }
   }
 
@@ -261,8 +234,6 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
       bindings.currentChatConversationId.value = conversationId;
       bindings.sideConversationListVisible.value = false;
       await refreshRemoteImConversationOverview();
-      const snapshot = await requestConversationLightSnapshot(conversationId, { resumeProjection: true });
-      bindings.applyConversationSnapshot(snapshot);
       await nextTick();
     } catch (error) {
       bindings.setStatusError("status.loadMessagesFailed", error);
@@ -327,7 +298,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
       if (systemNotificationConversationId) {
         await switchUnarchivedConversation(systemNotificationConversationId);
       } else {
-        await refreshChatUnarchivedConversations();
+        await refreshUnarchivedConversationOverview();
       }
       bindings.setStatus(t('chat.foregroundOrchestrator.detachedRequestSent'));
     } catch (error) {
