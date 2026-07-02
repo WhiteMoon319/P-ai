@@ -14,6 +14,7 @@ import {
   projectMessageForDisplay,
   projectStreamingChatActivityForDisplay,
   streamBlocksActivitySignature,
+  streamBlocksToActivityItems,
   streamBlocksToToolCalls,
 } from "../../../utils/chat-message-semantics";
 
@@ -269,6 +270,24 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
     const streamBlocks = normalizeAssistantStreamBlocks(meta._streamBlocks);
     const streamingDisplayText = assistantTextFromStreamBlocks(streamBlocks);
     const streamBlockToolCalls = streamBlocksToToolCalls(streamBlocks);
+    const streamBlockActivityItems = streamBlocksToActivityItems(streamBlocks, false);
+    if (
+      !meta._streaming
+      && streamBlocks.length > 0
+      && (streamBlockToolCalls.length > 0 || streamBlockActivityItems.length > 0 || !!streamingDisplayText.trim())
+      && projection.toolCalls.length === 0
+      && projection.activityItems.length === 0
+    ) {
+      console.warn("[聊天] 检测到停止后消息投影缺失，streamBlocks 有内容但投影为空", {
+        conversationId: String(options.currentConversationId?.value || "").trim(),
+        messageId: String(message.id || "").trim(),
+        streamBlockCount: streamBlocks.length,
+        streamToolCallCount: streamBlockToolCalls.length,
+        streamActivityCount: streamBlockActivityItems.length,
+        streamTextLength: streamingDisplayText.length,
+        projectionTextLength: String(projection.text || "").length,
+      });
+    }
     const displayToolCalls = !!meta._streaming && streamBlockToolCalls.length > 0
       ? streamBlockToolCalls
       : (projection.toolCalls.length > 0 ? projection.toolCalls : streamBlockToolCalls);

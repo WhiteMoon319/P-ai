@@ -63,6 +63,10 @@ export type UseChatFlowOptions = {
     assistantText?: string;
     assistantMessage?: ChatMessage;
   }>;
+  refreshMessageById?: (input: {
+    conversationId: string;
+    messageId: string;
+  }) => Promise<boolean | void>;
   invokeBindActiveChatViewStream?: (input: {
     conversationId?: string;
     onDelta: Channel<AssistantDeltaEvent>;

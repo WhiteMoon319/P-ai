@@ -277,6 +277,7 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     formatRequestFailed: (error: unknown) => formatI18nError(bindings.tr, "status.requestFailed", error),
     removeBinaryPlaceholders,
     reloadForegroundConversationMessages: conversationOrchestrator.reloadForegroundConversationMessages,
+    refreshForegroundConversationMessageById: conversationOrchestrator.refreshForegroundConversationMessageById,
     tauriWindowLabel: bindings.tauriWindowLabel,
     isChatWindowActiveNow: bindings.isChatWindowActiveNow,
     applyStableRenderIdFromDraft: bindings.applyStableRenderIdFromDraft,

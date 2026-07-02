@@ -25,6 +25,10 @@ type UseChatFlowStopOptions = {
     assistantText?: string;
     assistantMessage?: ChatMessage;
   }>;
+  refreshMessageById?: (input: {
+    conversationId: string;
+    messageId: string;
+  }) => Promise<boolean | void>;
   onReloadMessages: () => Promise<void>;
   t: (key: string, params?: Record<string, unknown>) => string;
   getRound: () => RoundState;
@@ -64,12 +68,39 @@ function stringifyStopError(error: unknown): string {
 }
 
 export function useChatFlowStop(options: UseChatFlowStopOptions) {
+  async function tryRefreshStreamingMessage(round: RoundState): Promise<boolean> {
+    if (round.phase !== "streaming") return false;
+    const conversationId = String(options.getConversationId ? options.getConversationId() : "").trim();
+    const messageId = String(round.draftId || "").trim();
+    if (!conversationId || !messageId || !options.refreshMessageById) return false;
+    try {
+      console.info("[聊天] 停止后开始刷新流式消息", {
+        conversationId,
+        messageId,
+      });
+      const refreshed = await options.refreshMessageById({
+        conversationId,
+        messageId,
+      });
+      console.info("[聊天] 停止后刷新流式消息完成", {
+        conversationId,
+        messageId,
+        refreshed: refreshed !== false,
+      });
+      return refreshed !== false;
+    } catch (error) {
+      const et = stringifyStopError(error);
+      console.warn(`[聊天] 停止后刷新流式消息失败，conversationId=${conversationId}，messageId=${messageId}，错误=${et}`);
+      return false;
+    }
+  }
+
   async function finishLocalStoppedRound(input?: {
     statusState?: "failed" | "";
-    preserveAssistantDraft?: boolean;
+    assistantHandling?: "remove" | "preserve" | "keep_refreshed";
   }) {
     const statusState = input?.statusState || "";
-    const preserveAssistantDraft = !!input?.preserveAssistantDraft;
+    const assistantHandling = input?.assistantHandling || "remove";
     options.advanceGeneration();
     options.setSendChatActiveGen(0);
     options.clearDeferredRoundCompletion();
@@ -85,16 +116,14 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
 
     const round = options.getRound();
     if (round.phase === "streaming") {
-      if (preserveAssistantDraft) {
-        // stop = 保留现状：直接冻结当前前端可见内容，不额外向后端重取。
+      if (assistantHandling === "preserve") {
         options.updateDraftText(round.draftId, undefined, undefined, "", normalizeAssistantStreamBlocks(options.streamBlocks?.value || []));
         options.finalizeDraft(round.draftId);
-      } else {
+      } else if (assistantHandling === "remove") {
         options.removeDraft(round.draftId);
       }
       options.deleteSendStartedAtMs(round.gen);
     } else if (round.phase === "queued") {
-      // stop 同样保留现状；即便还是空气泡，也保留当前消息本身，只结束流式态。
       options.finalizeDraft(round.draftId);
       options.deleteSendStartedAtMs(round.gen);
     }
@@ -121,9 +150,14 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
       : undefined;
     const partialAssistantText = options.latestAssistantText.value || readMessagePlainText(activeDraft);
     const partialStreamBlocks = normalizeAssistantStreamBlocks(options.streamBlocks?.value || []);
-    const localStopSucceeded = async () => finishLocalStoppedRound({
-      preserveAssistantDraft: round.phase === "streaming",
-    });
+    const localStopSucceeded = async () => {
+      const refreshed = await tryRefreshStreamingMessage(round);
+      await finishLocalStoppedRound({
+        assistantHandling: round.phase !== "streaming"
+          ? "remove"
+          : (refreshed ? "keep_refreshed" : "preserve"),
+      });
+    };
     if (round.phase === "queued") {
       if (stopSession && options.invokeStopChatMessage) {
         try {

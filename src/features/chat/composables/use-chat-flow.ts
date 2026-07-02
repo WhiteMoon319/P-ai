@@ -350,6 +350,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     getSession: options.getSession,
     getConversationId: options.getConversationId,
     invokeStopChatMessage: options.invokeStopChatMessage,
+    refreshMessageById: options.refreshMessageById,
     onReloadMessages: options.onReloadMessages,
     t: options.t,
     getRound: () => round,

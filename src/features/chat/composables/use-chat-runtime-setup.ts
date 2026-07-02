@@ -114,6 +114,16 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
             partialStreamBlocks,
           },
         }),
+      refreshMessageById: async ({ conversationId, messageId }) => {
+        const normalizedMessageId = String(messageId || "").trim();
+        const beforeMessage = bindings.allMessages.value.find((message: any) => String(message?.id || "").trim() === normalizedMessageId);
+        await bindings.refreshForegroundConversationMessageById({
+          conversationId,
+          messageId,
+        });
+        const afterMessage = bindings.allMessages.value.find((message: any) => String(message?.id || "").trim() === normalizedMessageId);
+        return !!afterMessage && afterMessage !== beforeMessage;
+      },
       invokeBindActiveChatViewStream: ({ conversationId, onDelta }) =>
         invokeTauri("bind_active_chat_view_stream", {
           input: {
