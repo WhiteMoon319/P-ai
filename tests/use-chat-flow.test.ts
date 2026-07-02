@@ -3,6 +3,7 @@ import { computed, ref, shallowRef } from "vue";
 import type { AssistantStreamBlock, ChatMessage } from "../src/types/app";
 import { useChatFlow, type AssistantDeltaEvent } from "../src/features/chat/composables/use-chat-flow";
 import { useChatFlowDrafts } from "../src/features/chat/composables/use-chat-flow-drafts";
+import { useChatFlowStop } from "../src/features/chat/composables/use-chat-flow-stop";
 import { useChatRuntime } from "../src/features/chat/composables/use-chat-runtime";
 import { useChatMessageBlocks } from "../src/features/chat/composables/use-chat-turns";
 import { projectMessageForDisplay } from "../src/utils/chat-message-semantics";
@@ -469,7 +470,77 @@ describe("useChatFlow stream isolation", () => {
     expect(toolStatusText.value).toBe("");
     expect(toolStatusState.value).toBe("");
     expect(allMessages.value.some((message) => String(message.id || "").startsWith("__draft_assistant__:"))).toBe(false);
-    expect(onReloadMessages).toHaveBeenCalledTimes(1);
+    expect(onReloadMessages).toHaveBeenCalledTimes(0);
+  });
+
+  it("keeps the local real user message after stopping a queued first-turn dispatch", async () => {
+    const chatting = ref(false);
+    const trimming = ref(false);
+    const chatInput = ref("first question");
+    const clipboardImages = ref<Array<{ mime: string; bytesBase64: string }>>([]);
+    const latestUserText = ref("");
+    const latestUserImages = ref<Array<{ mime: string; bytesBase64: string }>>([]);
+    const latestAssistantText = ref("");
+    const toolStatusText = ref("");
+    const toolStatusState = ref<"running" | "done" | "failed" | "">("");
+    const chatErrorText = ref("");
+    const allMessages = shallowRef<ChatMessage[]>([]);
+    const visibleTurnCount = ref(1);
+    const currentConversationId = ref("");
+    const cachedMessagesByConversation: Record<string, ChatMessage[]> = {};
+    const invokeStopChatMessage = vi.fn(async () => ({ aborted: true, persisted: false }));
+
+    const flow = useChatFlow({
+      chatting,
+      trimming,
+      getConversationId: () => currentConversationId.value,
+      getSession: () => ({ apiConfigId: "api-1", agentId: "agent-1" }),
+      chatInput,
+      clipboardImages,
+      latestUserText,
+      latestUserImages,
+      latestAssistantText,
+      toolStatusText,
+      toolStatusState,
+      chatErrorText,
+      allMessages,
+      visibleMessageBlockCount: visibleTurnCount,
+      t: (key) => key,
+      formatRequestFailed: (error) => String(error),
+      removeBinaryPlaceholders: (text) => text,
+      invokeSendChatMessage: vi.fn(async () => ({
+        accepted: true,
+        duplicate: false,
+        eventId: "event-1",
+        conversationId: "conversation-1",
+        traceId: "trace-1",
+        ingress: "accepted",
+        userMessageId: "user-1",
+        assistantMessageId: "assistant-1",
+      })),
+      invokeStopChatMessage,
+      onOwnUserDraftInserted: ({ conversationId }) => {
+        currentConversationId.value = conversationId;
+        cachedMessagesByConversation[conversationId] = [...allMessages.value];
+      },
+      onReloadMessages: async () => {
+        allMessages.value = [...(cachedMessagesByConversation[currentConversationId.value] || [])];
+      },
+    });
+
+    await flow.sendChat();
+
+    expect(currentConversationId.value).toBe("conversation-1");
+    expect(allMessages.value.map((message) => String(message.id || ""))).toEqual(["user-1", "assistant-1"]);
+    expect(flow.frontendRoundPhase.value).toBe("queued");
+
+    await flow.stopChat();
+
+    expect(invokeStopChatMessage).toHaveBeenCalledTimes(1);
+    expect(allMessages.value).toHaveLength(1);
+    expect(allMessages.value[0].id).toBe("user-1");
+    expect(allMessages.value[0].parts).toEqual([{ type: "text", text: "first question" }]);
+    expect(flow.frontendRoundPhase.value).toBe("idle");
   });
 
   it("stops stream by preserving partial text and syncing stop payload", async () => {
@@ -557,7 +628,12 @@ describe("useChatFlow stream isolation", () => {
       partialAssistantText: "ABC",
       partialStreamBlocks: [{ reasoning: "R1", text: "ABC", tools: [] }],
     });
-    expect(onReloadMessages).toHaveBeenCalledTimes(1);
+    expect(onReloadMessages).toHaveBeenCalledTimes(0);
+    expect(allMessages.value).toHaveLength(2);
+    const stoppedAssistant = allMessages.value[1];
+    expect(stoppedAssistant.role).toBe("assistant");
+    expect(stoppedAssistant.parts).toEqual([{ type: "text", text: "ABC" }]);
+    expect(stoppedAssistant.providerMeta?._streaming).toBeUndefined();
   });
 
   it("keeps streamed reasoning on final assistant messages without tools", async () => {
@@ -1701,5 +1777,99 @@ describe("useChatRuntime force archive conversation sync", () => {
     });
     expect(errorList).toEqual([]);
     expect(statusList.length).toBeGreaterThan(0);
+  });
+});
+
+describe("useChatFlowStop", () => {
+  it("finalizes the visible frontend stream after stop succeeds without reloading", async () => {
+    const chatting = ref(true);
+    const latestAssistantText = ref("ABC");
+    const toolStatusText = ref("");
+    const toolStatusState = ref<"running" | "done" | "failed" | "">("");
+    const streamBlocks = ref<AssistantStreamBlock[]>([{ reasoning: "R1", text: "ABC" }]);
+    const reasoningStartedAtMs = ref(123);
+    const allMessages = shallowRef<ChatMessage[]>([{
+      id: "assistant-1",
+      role: "assistant",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      speakerAgentId: "agent-1",
+      parts: [{ type: "text", text: "" }],
+      providerMeta: {
+        _streaming: true,
+      },
+    }]);
+    let round: { phase: "streaming"; gen: number; draftId: string } | { phase: "idle" } = {
+      phase: "streaming",
+      gen: 1,
+      draftId: "assistant-1",
+    };
+    const onReloadMessages = vi.fn(async () => {});
+    const invokeStopChatMessage = vi.fn(async () => ({ aborted: true, persisted: false }));
+
+    const stop = useChatFlowStop({
+      chatting,
+      latestAssistantText,
+      toolStatusText,
+      toolStatusState,
+      streamBlocks,
+      allMessages,
+      getSession: () => ({ apiConfigId: "api-1", agentId: "agent-1" }),
+      getConversationId: () => "conversation-1",
+      invokeStopChatMessage,
+      onReloadMessages,
+      t: (key) => key,
+      getRound: () => round,
+      setRound: (next) => {
+        round = next;
+      },
+      advanceGeneration: () => {},
+      setSendChatActiveGen: () => {},
+      clearDeferredRoundCompletion: () => {},
+      clearPendingTerminalEvent: () => {},
+      setActiveActivationId: () => {},
+      setActiveRoundAgentId: () => {},
+      clearFrontendDispatchTimer: () => {},
+      getPendingUserDraftId: () => "",
+      removeDraft: (draftId) => {
+        allMessages.value = allMessages.value.filter((message) => String(message.id || "") !== draftId);
+      },
+      finalizeDraft: (draftId) => {
+        allMessages.value = allMessages.value.map((message) => {
+          if (String(message.id || "") !== draftId) return message;
+          const nextMeta = { ...(message.providerMeta || {}) } as Record<string, unknown>;
+          delete nextMeta._streaming;
+          return {
+            ...message,
+            providerMeta: nextMeta,
+          };
+        });
+      },
+      updateDraftText: (draftId, _streamSegments, _streamTail, _streamAnimatedDelta, rawBlocks) => {
+        allMessages.value = allMessages.value.map((message) => {
+          if (String(message.id || "") !== draftId) return message;
+          return {
+            ...message,
+            parts: [{ type: "text", text: latestAssistantText.value }],
+            providerMeta: {
+              ...(message.providerMeta || {}),
+              _streamBlocks: rawBlocks,
+            },
+          };
+        });
+      },
+      deleteSendStartedAtMs: () => {},
+      clearConversationStreamCache: () => {},
+      reasoningStartedAtMs,
+    });
+
+    await stop.stopChat();
+
+    expect(invokeStopChatMessage).toHaveBeenCalledTimes(1);
+    expect(onReloadMessages).toHaveBeenCalledTimes(0);
+    expect(chatting.value).toBe(false);
+    expect(round.phase).toBe("idle");
+    expect(allMessages.value).toHaveLength(1);
+    expect(allMessages.value[0].parts).toEqual([{ type: "text", text: "ABC" }]);
+    expect(allMessages.value[0].providerMeta?._streaming).toBeUndefined();
   });
 });

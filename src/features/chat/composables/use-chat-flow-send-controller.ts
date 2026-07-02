@@ -38,7 +38,7 @@ type UseChatFlowSendControllerOptions = {
     userMessageId?: string;
     assistantMessageId?: string;
   }>;
-  onOwnUserDraftInserted?: () => void;
+  onOwnUserDraftInserted?: (payload: { conversationId: string; messageId: string }) => void;
   onAssistantDraftInserted?: () => void;
   t: (key: string, params?: Record<string, unknown>) => string;
   getRound: () => RoundState;
@@ -164,7 +164,10 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
       if (!hasForegroundRoundInFlight && accepted && ingress !== "queued") {
         if (userMessageId) {
           options.insertUserDraft(userMessageId, gen, plainText, sentImages, attachments, selectedMentions);
-          options.onOwnUserDraftInserted?.();
+          options.onOwnUserDraftInserted?.({
+            conversationId: String(submitResult.conversationId || sendConversationId || "").trim(),
+            messageId: userMessageId,
+          });
         }
         if (selectedMentions.length === 0 && assistantMessageId) {
           assistantDraftId = assistantMessageId;

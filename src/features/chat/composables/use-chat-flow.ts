@@ -375,6 +375,8 @@ export function useChatFlow(options: UseChatFlowOptions) {
     clearFrontendDispatchTimer,
     getPendingUserDraftId,
     removeDraft,
+    finalizeDraft,
+    updateDraftText,
     deleteSendStartedAtMs: (gen) => {
       sendStartedAtMsByGen.delete(gen);
     },

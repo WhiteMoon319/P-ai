@@ -49,8 +49,20 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
       chatErrorText: bindings.chatErrorText,
       setConversationChatError: bindings.setConversationChatErrorText,
       allMessages: bindings.allMessages,
-      onOwnUserDraftInserted: () => {
+      onOwnUserDraftInserted: ({ conversationId }) => {
+        const insertedConversationId = String(conversationId || "").trim();
+        if (
+          insertedConversationId
+          && bindings.isChatWindowActiveNow()
+          && !String(bindings.currentChatConversationId.value || "").trim()
+        ) {
+          bindings.currentChatConversationId.value = insertedConversationId;
+        }
         bindings.bumpOwnUserDraftAlign();
+        bindings.cacheConversationMessages(
+          insertedConversationId || String(bindings.currentChatConversationId.value || "").trim(),
+          bindings.allMessages.value,
+        );
       },
       onAssistantDraftInserted: () => {
         bindings.bumpOwnUserDraftAlign();

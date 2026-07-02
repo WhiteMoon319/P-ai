@@ -27,7 +27,7 @@ export type UseChatFlowOptions = {
   chatErrorText: Ref<string>;
   setConversationChatError?: (conversationId: string, text: string) => void;
   allMessages: Ref<ChatMessage[]>;
-  onOwnUserDraftInserted?: () => void;
+  onOwnUserDraftInserted?: (payload: { conversationId: string; messageId: string }) => void;
   onAssistantDraftInserted?: () => void;
   t: (key: string, params?: Record<string, unknown>) => string;
   formatRequestFailed: (error: unknown) => string;

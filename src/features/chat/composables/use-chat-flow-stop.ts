@@ -38,6 +38,14 @@ type UseChatFlowStopOptions = {
   clearFrontendDispatchTimer: () => void;
   getPendingUserDraftId: () => string;
   removeDraft: (draftId: string) => void;
+  finalizeDraft: (draftId: string, finalMessage?: ChatMessage) => void;
+  updateDraftText: (
+    draftId: string,
+    streamSegments?: string[],
+    streamTail?: string,
+    streamAnimatedDelta?: string,
+    rawBlocks?: AssistantStreamBlock[],
+  ) => void;
   deleteSendStartedAtMs: (gen: number) => void;
   clearConversationStreamCache: (conversationId?: string | null) => void;
   reasoningStartedAtMs: Ref<number>;
@@ -56,7 +64,12 @@ function stringifyStopError(error: unknown): string {
 }
 
 export function useChatFlowStop(options: UseChatFlowStopOptions) {
-  async function finishLocalStoppedRound(statusState: "failed" | "" = "") {
+  async function finishLocalStoppedRound(input?: {
+    statusState?: "failed" | "";
+    preserveAssistantDraft?: boolean;
+  }) {
+    const statusState = input?.statusState || "";
+    const preserveAssistantDraft = !!input?.preserveAssistantDraft;
     options.advanceGeneration();
     options.setSendChatActiveGen(0);
     options.clearDeferredRoundCompletion();
@@ -72,7 +85,12 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
 
     const round = options.getRound();
     if (round.phase === "streaming") {
-      options.removeDraft(round.draftId);
+      if (preserveAssistantDraft) {
+        options.updateDraftText(round.draftId, undefined, undefined, "", normalizeAssistantStreamBlocks(options.streamBlocks?.value || []));
+        options.finalizeDraft(round.draftId);
+      } else {
+        options.removeDraft(round.draftId);
+      }
       options.deleteSendStartedAtMs(round.gen);
     } else if (round.phase === "queued") {
       options.removeDraft(round.draftId);
@@ -87,7 +105,6 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
       ? (summarizeToolCallsText(options.streamBlocks?.value || []) || options.t("status.interrupted"))
       : "";
     options.clearConversationStreamCache(options.getConversationId ? options.getConversationId() : "");
-    await options.onReloadMessages();
   }
 
   async function stopChat() {
@@ -102,21 +119,28 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
       : undefined;
     const partialAssistantText = options.latestAssistantText.value || readMessagePlainText(activeDraft);
     const partialStreamBlocks = normalizeAssistantStreamBlocks(options.streamBlocks?.value || []);
+    const localStopSucceeded = async () => finishLocalStoppedRound({
+      preserveAssistantDraft: round.phase === "streaming",
+    });
     if (round.phase === "queued") {
-      await finishLocalStoppedRound();
       if (stopSession && options.invokeStopChatMessage) {
-        void options
+        try {
+          await options
           .invokeStopChatMessage({
             session: cid ? { ...stopSession, conversationId: cid } : stopSession,
             partialAssistantText,
             partialStreamBlocks,
-          })
-          .catch((error) => {
-            const et = stringifyStopError(error);
-            console.warn(`[聊天] queued 停止后端中断失败，apiConfigId=${stopSession.apiConfigId}，agentId=${stopSession.agentId}，错误=${et}`);
           });
+          await localStopSucceeded();
+          return;
+        } catch (error) {
+          const et = stringifyStopError(error);
+          console.warn(`[聊天] queued 停止后端中断失败，apiConfigId=${stopSession.apiConfigId}，agentId=${stopSession.agentId}，错误=${et}`);
+        }
+      } else {
+        await localStopSucceeded();
+        return;
       }
-      return;
     }
 
     if (stopSession && options.invokeStopChatMessage) {
@@ -126,7 +150,7 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
           partialAssistantText,
           partialStreamBlocks,
         });
-        await finishLocalStoppedRound();
+        await localStopSucceeded();
         return;
       } catch (error) {
         const et = stringifyStopError(error);
@@ -134,7 +158,7 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
       }
     }
 
-    await finishLocalStoppedRound("failed");
+    await finishLocalStoppedRound({ statusState: "failed" });
   }
 
   return {
