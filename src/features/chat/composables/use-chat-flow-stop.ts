@@ -86,6 +86,7 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
     const round = options.getRound();
     if (round.phase === "streaming") {
       if (preserveAssistantDraft) {
+        // stop = 保留现状：直接冻结当前前端可见内容，不额外向后端重取。
         options.updateDraftText(round.draftId, undefined, undefined, "", normalizeAssistantStreamBlocks(options.streamBlocks?.value || []));
         options.finalizeDraft(round.draftId);
       } else {
@@ -93,7 +94,8 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
       }
       options.deleteSendStartedAtMs(round.gen);
     } else if (round.phase === "queued") {
-      options.removeDraft(round.draftId);
+      // stop 同样保留现状；即便还是空气泡，也保留当前消息本身，只结束流式态。
+      options.finalizeDraft(round.draftId);
       options.deleteSendStartedAtMs(round.gen);
     }
 

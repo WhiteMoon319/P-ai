@@ -30,6 +30,7 @@ type UseChatFlowRoundEventsOptions = {
   updateQueuedAssistantDraftStatus: (draftId: string, statusText: string) => void;
   insertDraft: (draftId: string, gen?: number, initialText?: string) => string;
   updateDraftText: (draftId: string) => void;
+  finalizeDraft: (draftId: string, finalMessage?: ChatMessage) => void;
   syncStreamBlocksToDraft: (draftId: string) => void;
   applyPendingTerminalEvent: (gen: number) => boolean;
   promoteQueuedRoundToStreaming: (gen: number) => number;
@@ -126,17 +127,17 @@ export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
     options.clearConversationStreamCache();
     options.clearFrontendDispatchTimer();
     options.setActiveActivationId("");
-    options.latestAssistantText.value = "";
-    if (options.streamBlocks) options.streamBlocks.value = [];
     options.setChatErrorText(options.formatRequestFailed(error));
     if (!options.toolStatusText.value) {
       options.toolStatusState.value = "failed";
       options.toolStatusText.value = options.optionsT("status.toolCallFailed");
     }
+    // streaming failed: 保留已经显示出来的内容，只结束流式态，不再重载。
+    options.updateDraftText(round.draftId);
+    options.finalizeDraft(round.draftId);
     options.setRound({ phase: "idle" });
     options.chatting.value = false;
     options.reasoningStartedAtMs.value = 0;
-    await options.onReloadMessages();
   }
 
   function applyPendingTerminalEvent(gen: number) {

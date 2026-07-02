@@ -145,8 +145,23 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
       bindings.clearPendingManualScrollToBottom();
       bindings.foregroundTailLatestReady.value = false;
       const trace = bindings.beginForegroundPaintTrace(cid);
-      const snapshot = await requestConversationLightSnapshot(cid);
+      // 切会话恢复时，先让后端把“持久消息 + 当前运行中投影”合成为一份权威快照，
+      // 前端一次性接管正文，再只负责接后续流式增量，避免先显示持久消息再二次补流式。
+      const snapshot = await requestConversationLightSnapshot(cid, {
+        resumeProjection: true,
+      });
       bindings.applyConversationSnapshot(snapshot);
+      if (String(bindings.currentChatConversationId.value || "").trim() === cid && snapshot?.shouldBindStream) {
+        await bindings.getChatFlow()?.bindActiveConversationStream?.(cid, true);
+        if (String(bindings.currentChatConversationId.value || "").trim() === cid) {
+          bindings.getChatFlow()?.resumeForegroundRuntimeRound?.({
+            conversationId: cid,
+            streamCache: snapshot?.streamCache || null,
+            statusText: t('chat.statusWaitingReply'),
+            reason: "switch_conversation_snapshot_ready",
+          });
+        }
+      }
       bindings.clearConversationBadge(cid);
       bindings.markConversationReadPersisted(cid);
       await nextTick();
@@ -155,6 +170,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
         conversationId: cid,
         snapshotCount: Array.isArray(snapshot?.messages) ? snapshot.messages.length : 0,
         hasMoreHistory: !!snapshot?.hasMoreHistory,
+        shouldBindStream: !!snapshot?.shouldBindStream,
         fromConversationId: previousConversationId,
         syncCostMs: Math.round((bindings.perfNow() - startedAt) * 10) / 10,
       });

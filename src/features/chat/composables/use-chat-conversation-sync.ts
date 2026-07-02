@@ -489,9 +489,10 @@ export function useChatConversationSync(bindings: Record<string, any>) {
       && !!nextConversationId
       && nextConversationId === currentConversationId;
     const runtimeState = String(snapshot.runtimeState || "").trim();
+    const resumeProjectionAuthoritative = !!snapshot.resumeProjectionAuthoritative;
     const streamCache = bindings.readConversationStreamCache(nextConversationId);
     const shouldApplyStreamingOverlay =
-      runtimeState === "assistant_streaming";
+      runtimeState === "assistant_streaming" && !resumeProjectionAuthoritative;
     let rawNextMessages = freezeConversationMessages(Array.isArray(snapshot.messages) ? snapshot.messages : []);
     const overlay = shouldApplyStreamingOverlay
       ? applyStreamingHistoryOverlay(rawNextMessages, streamCache)

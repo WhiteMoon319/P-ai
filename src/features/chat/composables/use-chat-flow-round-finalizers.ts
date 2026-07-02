@@ -3,6 +3,17 @@ import { DRAFT_USER_ID_PREFIX, summarizeToolCallsText as formatToolCallsText } f
 import { mergeAssistantText } from "./use-chat-flow-text";
 
 export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
+  function messageHasVisibleContent(message?: ChatMessage | null): boolean {
+    const parts = Array.isArray(message?.parts) ? message.parts : [];
+    return parts.some((part) => {
+      if (!part || typeof part !== "object") return false;
+      if (String(part.type || "").trim() === "text") {
+        return !!String((part as { text?: string }).text || "").trim();
+      }
+      return true;
+    });
+  }
+
   function finalizeDeferredRoundCompletion() {
     const deferredRoundCompletion = bindings.getDeferredRoundCompletion();
     const round = bindings.getRound();
@@ -48,11 +59,15 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
       assistantMessage?: ChatMessage;
     },
   ) {
-    void result;
     bindings.sendStartedAtMsByGen.delete(gen);
     const round = bindings.getRound();
     if (round.phase !== "queued" || round.gen !== gen) return;
-    bindings.removeDraft(round.draftId);
+    bindings.latestAssistantText.value = mergeAssistantText(
+      bindings.latestAssistantText.value,
+      String(result.assistantText || ""),
+    );
+    bindings.updateDraftText(round.draftId);
+    bindings.finalizeDraft(round.draftId, result.assistantMessage);
     bindings.setPendingTerminalEvent(null);
     bindings.setDeferredRoundCompletion(null);
     bindings.setQueuedStreamingState(null);
@@ -65,14 +80,13 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
     bindings.setRound({ phase: "idle" });
     bindings.chatting.value = false;
     bindings.reasoningStartedAtMs.value = 0;
-    await bindings.onReloadMessages();
   }
 
   async function failQueuedRoundWithoutDraft(gen: number, error: unknown) {
     bindings.sendStartedAtMsByGen.delete(gen);
     const round = bindings.getRound();
     if (round.phase !== "queued" || round.gen !== gen) return;
-    bindings.removeDraft(round.draftId);
+    const queuedMessage = bindings.allMessages.value.find((message: ChatMessage) => String(message?.id || "").trim() === round.draftId);
     bindings.setPendingTerminalEvent(null);
     bindings.setDeferredRoundCompletion(null);
     bindings.setQueuedStreamingState(null);
@@ -90,6 +104,13 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
         bindings.streamBlocks?.value || [],
       ) || bindings.t("status.toolCallFailed");
     }
+    // failed 只清理空气泡；一旦已经有可见内容，就保留当前消息并结束流式态。
+    if (messageHasVisibleContent(queuedMessage)) {
+      bindings.updateDraftText(round.draftId);
+      bindings.finalizeDraft(round.draftId);
+    } else {
+      bindings.removeDraft(round.draftId);
+    }
     const pendingUserDraftId = bindings.getPendingUserDraftId();
     if (pendingUserDraftId === `${DRAFT_USER_ID_PREFIX}${gen}`) {
       bindings.removeDraft(pendingUserDraftId);
@@ -97,7 +118,6 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
     bindings.setRound({ phase: "idle" });
     bindings.chatting.value = false;
     bindings.reasoningStartedAtMs.value = 0;
-    await bindings.onReloadMessages();
   }
 
   function enqueueStreamDelta(gen: number, delta: string) {

@@ -447,6 +447,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     updateQueuedAssistantDraftStatus,
     insertDraft,
     updateDraftText,
+    finalizeDraft,
     syncStreamBlocksToDraft,
     applyPendingTerminalEvent,
     promoteQueuedRoundToStreaming,

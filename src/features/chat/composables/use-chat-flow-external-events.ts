@@ -116,6 +116,7 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       options.clearConversationStreamCache(payloadConversationId || currentConversationId);
       options.clearFrontendDispatchTimer();
       options.setActiveActivationId("");
+      // 这里是外部终态兜底：当前前台已经不持有该轮次时，仍需走既有对账链路，避免切会话后失去正式历史刷新。
       await options.onReloadMessages();
       return;
     }
@@ -161,6 +162,7 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
         rawPayload: raw,
       });
       options.setChatErrorText(options.formatRequestFailed(errorDetail), payloadConversationId || currentConversationId);
+      // 同上：当前前台已不承接该轮次时，保留原有外部失败后的兜底刷新。
       await options.onReloadMessages();
       return;
     }
