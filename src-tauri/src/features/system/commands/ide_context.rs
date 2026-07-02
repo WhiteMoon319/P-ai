@@ -245,6 +245,8 @@ struct IdeChatJsonRpcError {
 struct IdeChatAuthLoginInput {
     #[serde(default)]
     password: String,
+    #[serde(default)]
+    password_hash: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -875,6 +877,17 @@ fn ide_context_generate_remote_password() -> String {
     generate_web_access_password()
 }
 
+fn ide_context_hash_remote_password(value: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let normalized = ide_context_normalize_remote_password(value);
+    if normalized.is_empty() {
+        return String::new();
+    }
+    let mut hasher = Sha256::new();
+    hasher.update(normalized.as_bytes());
+    format!("sha256:{:x}", hasher.finalize())
+}
+
 fn ide_context_normalize_remote_password(raw: &str) -> String {
     raw.chars()
         .filter(|ch| ch.is_ascii_alphanumeric())
@@ -926,6 +939,22 @@ fn ide_context_verify_remote_password(
         return Ok(false);
     }
     Ok(provided == ide_context_normalize_remote_password(&expected))
+}
+
+fn ide_context_verify_remote_password_hash(
+    runtime: &IdeContextRuntime,
+    state: Option<&AppState>,
+    provided_hash: &str,
+) -> Result<bool, String> {
+    let normalized_hash = provided_hash.trim().to_ascii_lowercase();
+    if normalized_hash.is_empty() {
+        return Ok(false);
+    }
+    let expected = match state {
+        Some(state) => ide_context_effective_remote_password(state, runtime)?,
+        None => ide_context_remote_password(runtime)?,
+    };
+    Ok(normalized_hash == ide_context_hash_remote_password(&expected))
 }
 
 fn ide_context_peer_is_local(peer_addr: &std::net::SocketAddr) -> bool {
@@ -6297,11 +6326,22 @@ async fn ide_context_chat_ws_handle_connection(
                                 ide_chat_jsonrpc_error(request.id, -32600, "jsonrpc must be 2.0")
                             } else if request.method.as_str() == "auth.login" {
                                 match ide_chat_parse_params::<IdeChatAuthLoginInput>(request.params) {
-                                    Ok(input) => match ide_context_verify_remote_password(
-                                        &ide_context_runtime,
-                                        Some(&state),
-                                        &input.password,
-                                    ) {
+                                    Ok(input) => {
+                                        let matched_hash = ide_context_verify_remote_password_hash(
+                                            &ide_context_runtime,
+                                            Some(&state),
+                                            &input.password_hash,
+                                        );
+                                        let verified = match matched_hash {
+                                            Ok(true) => Ok(true),
+                                            Ok(false) => ide_context_verify_remote_password(
+                                                &ide_context_runtime,
+                                                Some(&state),
+                                                &input.password,
+                                            ),
+                                            Err(err) => Err(err),
+                                        };
+                                        match verified {
                                         Ok(true) => match ide_context_issue_bridge_token_with_state(
                                             &ide_context_runtime,
                                             Some(&state),
@@ -6328,7 +6368,8 @@ async fn ide_context_chat_ws_handle_connection(
                                         },
                                         Ok(false) => ide_chat_jsonrpc_error(request.id, -32001, "远程访问密码错误"),
                                         Err(err) => ide_chat_jsonrpc_error(request.id, -32000, err),
-                                    },
+                                        }
+                                    }
                                     Err(err) => ide_chat_jsonrpc_error(request.id, -32602, err),
                                 }
                             } else {
@@ -6457,6 +6498,19 @@ mod ide_context_tests {
         );
         assert!(!ide_context_verify_remote_password(&runtime, None, "").expect("reject empty"));
         assert!(!ide_context_verify_remote_password(&runtime, None, "wrong-password").expect("reject wrong"));
+    }
+
+    #[test]
+    fn ide_context_remote_password_hash_matches_normalized_password() {
+        let runtime = IdeContextRuntime::new();
+        let password = ide_context_remote_password(&runtime).expect("remote password");
+        let password_hash = ide_context_hash_remote_password(&password);
+
+        assert!(ide_context_verify_remote_password_hash(&runtime, None, &password_hash).expect("verify hash"));
+        assert!(
+            !ide_context_verify_remote_password_hash(&runtime, None, "sha256:deadbeef")
+                .expect("reject wrong hash")
+        );
     }
 
     #[test]

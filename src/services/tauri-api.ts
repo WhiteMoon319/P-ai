@@ -179,8 +179,13 @@ export async function connectWebBridge(): Promise<WebBridgeState> {
   return getWebBridgeState();
 }
 
-export async function loginWebBridge(password: string): Promise<WebBridgeState> {
-  await invokeWebBridge("auth.login", { password }, 10000);
+export async function loginWebBridge(password: string, passwordHash?: string): Promise<WebBridgeState> {
+  const normalizedPassword = String(password || "").trim();
+  const normalizedPasswordHash = String(passwordHash || "").trim();
+  await invokeWebBridge("auth.login", {
+    ...(normalizedPassword ? { password: normalizedPassword } : {}),
+    ...(normalizedPasswordHash ? { passwordHash: normalizedPasswordHash } : {}),
+  }, 10000);
   return getWebBridgeState();
 }
 
