@@ -675,18 +675,68 @@ export function streamBlocksToActivityItems(rawBlocks: unknown, running = false)
   return items;
 }
 
+function streamBlocksReasoningCharCount(blocks: AssistantStreamBlock[]): number {
+  return blocks.reduce((total, block) => total + String(block.reasoning || "").length, 0);
+}
+
+function streamBlocksToolCountsByName(blocks: AssistantStreamBlock[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const block of blocks) {
+    for (const tool of (block.tools || [])) {
+      const name = String(tool.name || "").trim() || "unknown";
+      counts[name] = (counts[name] || 0) + 1;
+    }
+  }
+  return counts;
+}
+
+export function streamBlocksToActivitySummaryItems(rawBlocks: unknown, running = false): ChatActivityItem[] {
+  const blocks = normalizeAssistantStreamBlocks(rawBlocks);
+  const items: ChatActivityItem[] = [];
+  for (const [blockIndex, block] of blocks.entries()) {
+    if (String(block.reasoning || "").trim()) {
+      items.push({
+        kind: "reasoning",
+        id: `stream-summary-${blockIndex}-reasoning`,
+        text: "",
+        running,
+      });
+    }
+    if (String(block.text || "").trim()) {
+      items.push({
+        kind: "content",
+        id: `stream-summary-${blockIndex}-content`,
+        text: "",
+        running,
+      });
+    }
+    for (const [toolIndex, tool] of (block.tools || []).entries()) {
+      items.push({
+        kind: "tool",
+        id: tool.toolCallId || `stream-summary-${blockIndex}-tool-${toolIndex}`,
+        toolCallId: tool.toolCallId || undefined,
+        name: tool.name,
+        argsText: "",
+        status: tool.status === "doing" ? "doing" : "done",
+      });
+    }
+  }
+  return items;
+}
+
 export function streamBlocksActivitySignature(rawBlocks: unknown): string {
   return normalizeAssistantStreamBlocks(rawBlocks)
     .map((block, blockIndex) => [
       `b:${blockIndex}`,
-      `r:${String(block.reasoning || "")}`,
+      `rlen:${String(block.reasoning || "").length}`,
+      `tlen:${String(block.text || "").length}`,
       ...((block.tools || []).map((tool, toolIndex) => [
         `t:${toolIndex}`,
         String(tool.toolCallId || "").trim(),
         String(tool.name || "").trim(),
         String(tool.status || "").trim(),
-        String(tool.argsText || ""),
-        String(tool.resultText || ""),
+        `alen:${String(tool.argsText || "").length}`,
+        `rlen:${String(tool.resultText || "").length}`,
       ].join(":"))),
     ].join("|"))
     .join("||");
@@ -703,6 +753,14 @@ export function streamBlocksToToolCalls(
       argsText: tool.argsText || "",
       status: tool.status === "doing" ? "doing" as const : "done" as const,
     }));
+}
+
+function copyAssistantStreamBlocksForAppend(rawBlocks: unknown): AssistantStreamBlock[] {
+  const blocks = normalizeAssistantStreamBlocks(rawBlocks);
+  return blocks.map((block) => ({
+    ...block,
+    tools: Array.isArray(block.tools) ? block.tools : [],
+  }));
 }
 
 function cloneAssistantStreamBlocks(rawBlocks: unknown): AssistantStreamBlock[] {
@@ -726,7 +784,7 @@ function ensureAssistantStreamBlock(blocks: AssistantStreamBlock[]): AssistantSt
 
 export function appendReasoningDeltaToStreamBlocks(rawBlocks: unknown, delta: string): AssistantStreamBlock[] {
   const text = String(delta || "");
-  const blocks = cloneAssistantStreamBlocks(rawBlocks);
+  const blocks = copyAssistantStreamBlocksForAppend(rawBlocks);
   if (!text) return blocks;
   const lastBlock = blocks[blocks.length - 1];
   if (lastBlock?.text?.trim() || (lastBlock?.tools || []).length > 0) {
@@ -734,12 +792,12 @@ export function appendReasoningDeltaToStreamBlocks(rawBlocks: unknown, delta: st
   }
   const block = ensureAssistantStreamBlock(blocks);
   block.reasoning = `${String(block.reasoning || "")}${text}`;
-  return normalizeAssistantStreamBlocks(blocks);
+  return blocks;
 }
 
 export function appendTextDeltaToStreamBlocks(rawBlocks: unknown, delta: string): AssistantStreamBlock[] {
   const text = String(delta || "");
-  const blocks = cloneAssistantStreamBlocks(rawBlocks);
+  const blocks = copyAssistantStreamBlocksForAppend(rawBlocks);
   if (!text) return blocks;
   const block = ensureAssistantStreamBlock(blocks);
   if (block.pendingTextBreak && String(block.text || "").trim()) {
@@ -748,7 +806,7 @@ export function appendTextDeltaToStreamBlocks(rawBlocks: unknown, delta: string)
     block.text = `${String(block.text || "")}${text}`;
   }
   block.pendingTextBreak = false;
-  return normalizeAssistantStreamBlocks(blocks);
+  return blocks;
 }
 
 export function applyAssistantToolEventToStreamBlocks(
@@ -934,7 +992,8 @@ export function projectStreamingChatActivityForDisplay(input: {
   activityStatus: ChatActivityStatus;
 } {
   const activityItems = normalizeChatActivityItems(input.activityItems);
-  const blockItems = streamBlocksToActivityItems(input.streamBlocks, !!input.running);
+  const normalizedBlocks = normalizeAssistantStreamBlocks(input.streamBlocks);
+  const blockItems = streamBlocksToActivitySummaryItems(normalizedBlocks, !!input.running);
   const eventItems = blockItems.length > 0 ? blockItems : activityItems;
   const usingEventItems = eventItems.length > 0;
   const items: ChatActivityItem[] = usingEventItems ? eventItems : [];
@@ -955,8 +1014,11 @@ export function projectStreamingChatActivityForDisplay(input: {
   }
   const activityRunning = !!input.running;
   const hasDoingTool = items.some((item) => item.kind === "tool" && item.status === "doing");
-  const hasReasoningItem = items.some((item) => item.kind === "reasoning" && !!String(item.text || "").trim());
-  const hasContentItem = items.some((item) => item.kind === "content" && !!String(item.text || "").trim());
+  const blockReasoningCharCount = streamBlocksReasoningCharCount(normalizedBlocks);
+  const hasReasoningItem = blockReasoningCharCount > 0
+    || items.some((item) => item.kind === "reasoning" && !!String(item.text || "").trim());
+  const hasContentItem = normalizedBlocks.some((block) => !!String(block.text || "").trim())
+    || items.some((item) => item.kind === "content" && !!String(item.text || "").trim());
   const status: ChatActivityStatus = hasDoingTool
     ? "running_tool"
     : hasReasoningItem
@@ -968,9 +1030,19 @@ export function projectStreamingChatActivityForDisplay(input: {
         : items.length > 0
           ? "complete"
           : "idle";
+  const fallbackStats = normalizedBlocks.length > 0
+    ? null
+    : chatActivityStats(items, activityRunning, status);
   return {
     items,
-    ...chatActivityStats(items, activityRunning, status),
+    activityReasoningCharCount: normalizedBlocks.length > 0
+      ? blockReasoningCharCount
+      : (fallbackStats?.activityReasoningCharCount || 0),
+    activityToolCountsByName: normalizedBlocks.length > 0
+      ? streamBlocksToolCountsByName(normalizedBlocks)
+      : (fallbackStats?.activityToolCountsByName || {}),
+    activityRunning,
+    activityStatus: status,
   };
 }
 

@@ -137,13 +137,13 @@
                   </span>
                 </summary>
                 <div
-                  v-show="activityPanelOpen(block)"
+                  v-if="activityPanelOpen(block)"
                   class="collapse-content px-0 pb-1 pt-2 text-xs text-base-content/70"
                   @click="collapseDetailsFromContentClick"
                 >
                   <div class="flex flex-col">
                     <details
-                      v-for="item in block.activityItems"
+                      v-for="item in resolvedActivityItems(block)"
                       :key="`${block.id}-activity-${activityItemKey(item)}`"
                       class="collapse rounded-none border-l border-base-content/15 pl-2"
                       :open="activityItemOpen(block, item)"
@@ -180,7 +180,7 @@
                         </span>
                       </summary>
                       <div
-                        v-show="activityItemOpen(block, item)"
+                        v-if="activityItemOpen(block, item)"
                         class="collapse-content px-1 pb-2 pt-1"
                       >
                         <div
@@ -582,6 +582,10 @@ import { useI18n } from "vue-i18n";
 import { CircleCheckBig, Copy, Eye, EyeOff, FileText, ListCheck, Pause, Play, RotateCcw, Split, Undo2 } from "@lucide/vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ChatActivityItem, ChatMessageBlock } from "../../../types/app";
+import {
+  normalizeAssistantStreamBlocks,
+  streamBlocksToActivityItems,
+} from "../../../utils/chat-message-semantics";
 import { formatIsoToLocalHourMinute } from "../../../utils/time";
 import { AppMarkdownRenderer, initKatex } from "../markdown";
 import { normalizeLocalLinkHref } from "../utils/local-link";
@@ -651,7 +655,7 @@ const resolvedImageSrcMap = ref<Record<string, string>>({});
 const markdownContainerRef = ref<HTMLElement | null>(null);
 const activityDetailsRef = ref<HTMLDetailsElement | null>(null);
 const activityExpanded = ref(false);
-const expandedActivityItemIds = ref<Record<string, boolean>>({});
+const expandedActivityItemKey = ref("");
 const planMarkdownText = ref("");
 const planMarkdownError = ref("");
 const planMarkdownLoading = ref(false);
@@ -725,6 +729,9 @@ function detailsOpenFromEvent(event: Event): boolean {
 
 function onActivityToggle(event: Event): void {
   activityExpanded.value = detailsOpenFromEvent(event);
+  if (!activityExpanded.value) {
+    expandedActivityItemKey.value = "";
+  }
 }
 
 function closeActivityDetails(): void {
@@ -733,6 +740,7 @@ function closeActivityDetails(): void {
     details.open = false;
   }
   activityExpanded.value = false;
+  expandedActivityItemKey.value = "";
 }
 
 function handleActivityOutsidePointerDown(event: PointerEvent): void {
@@ -745,10 +753,7 @@ function handleActivityOutsidePointerDown(event: PointerEvent): void {
 }
 
 function onActivityItemToggle(item: ChatActivityItem, event: Event): void {
-  expandedActivityItemIds.value = {
-    ...expandedActivityItemIds.value,
-    [activityItemKey(item)]: detailsOpenFromEvent(event),
-  };
+  expandedActivityItemKey.value = detailsOpenFromEvent(event) ? activityItemKey(item) : "";
 }
 
 function collapseDetailsFromContentClick(event: MouseEvent): void {
@@ -916,6 +921,14 @@ function showActivityPanel(block: ChatMessageBlock): boolean {
   return block.activityItems.length > 0 || !!block.activityRunning;
 }
 
+function resolvedActivityItems(block: ChatMessageBlock): ChatActivityItem[] {
+  if (!activityPanelOpen(block)) return block.activityItems;
+  const meta = (block.providerMeta || {}) as Record<string, unknown>;
+  const streamBlocks = normalizeAssistantStreamBlocks(meta._streamBlocks);
+  if (streamBlocks.length <= 0) return block.activityItems;
+  return streamBlocksToActivityItems(streamBlocks, !!block.activityRunning);
+}
+
 function activityShouldAutoExpand(block: ChatMessageBlock): boolean {
   void block;
   return false;
@@ -965,7 +978,7 @@ function activityToolCountsLabel(block: ChatMessageBlock): string {
 }
 
 function activityItemsSignature(block: ChatMessageBlock): string {
-  return block.activityItems
+  return resolvedActivityItems(block)
     .map((item) => {
       if (item.kind === "reasoning") {
         return [
@@ -997,7 +1010,7 @@ function activityItemsSignature(block: ChatMessageBlock): string {
 }
 
 function activityExpandedItemsSignature(block: ChatMessageBlock): string {
-  return block.activityItems
+  return resolvedActivityItems(block)
     .map((item) => `${activityItemKey(item)}:${activityItemOpen(block, item) ? "1" : "0"}`)
     .join("|");
 }
@@ -1022,7 +1035,7 @@ function activityItemKey(item: ChatActivityItem): string {
 }
 
 function isActivityItemExpanded(item: ChatActivityItem): boolean {
-  return !!expandedActivityItemIds.value[activityItemKey(item)];
+  return expandedActivityItemKey.value === activityItemKey(item);
 }
 
 function activityItemOpen(block: ChatMessageBlock, item: ChatActivityItem): boolean {

@@ -10,8 +10,10 @@ import {
 import {
   assistantTextFromStreamBlocks,
   normalizeAssistantStreamBlocks,
+  normalizeChatActivityItems,
   projectMessageForDisplay,
   projectStreamingChatActivityForDisplay,
+  streamBlocksActivitySignature,
   streamBlocksToToolCalls,
 } from "../../../utils/chat-message-semantics";
 
@@ -72,6 +74,97 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
   const messageSignatureCache = new WeakMap<ChatMessage, string>();
   const messageBlockCache = new WeakMap<ChatMessage, { signature: string; blocks: ChatMessageBlock[] }>();
 
+  function messagePartsSignature(message: ChatMessage): string {
+    return (Array.isArray(message.parts) ? message.parts : [])
+      .map((part, index) => {
+        if (!part || typeof part !== "object") return `unknown:${index}`;
+        if (part.type === "text") {
+          return [
+            "text",
+            String(part.text || "").length,
+            String(part.reasoningContent || part.reasoning_content || "").length,
+          ].join(":");
+        }
+        if (part.type === "image") {
+          return ["image", String(part.mime || ""), String(part.bytesBase64 || "").length].join(":");
+        }
+        if (part.type === "audio") {
+          return ["audio", String(part.mime || ""), String(part.bytesBase64 || "").length].join(":");
+        }
+        return `${String((part as { type?: string }).type || "unknown")}:${index}`;
+      })
+      .join("|");
+  }
+
+  function providerMetaSignature(message: ChatMessage): string {
+    const meta = (message.providerMeta || {}) as Record<string, unknown>;
+    const streamBlocksSignature = streamBlocksActivitySignature(meta._streamBlocks);
+    const attachments = Array.isArray(meta.attachments) ? meta.attachments.length : 0;
+    return [
+      String(meta.messageKind || ""),
+      String(meta.hiddenPromptText || "").length,
+      String(meta._streaming ? "1" : "0"),
+      String(meta._streamTail || "").length,
+      String(meta._streamAnimatedDelta || "").length,
+      Array.isArray(meta._streamSegments) ? (meta._streamSegments as unknown[]).length : 0,
+      String(meta._toolStatusText || "").length,
+      String(meta._toolStatusState || ""),
+      String(meta.dispatchElapsedMs || ""),
+      String(meta._frontendDispatchElapsedMs || ""),
+      attachments,
+      String(meta.planCard ? "1" : "0"),
+      String(meta.taskTrigger ? "1" : "0"),
+      streamBlocksSignature,
+    ].join("|");
+  }
+
+  function toolCallSignature(message: ChatMessage): string {
+    return (Array.isArray(message.toolCall) ? message.toolCall : [])
+      .map((event, index) => {
+        const calls = Array.isArray(event?.tool_calls) ? event.tool_calls : [];
+        return [
+          String(event?.role || ""),
+          String(event?.content || "").length,
+          String(event?.reasoning_content || "").length,
+          String(event?.tool_call_id || ""),
+          calls.length,
+          ...calls.map((call) => [
+            String(call?.id || call?.call_id || ""),
+            String(call?.function?.name || ""),
+            typeof call?.function?.arguments === "string"
+              ? call.function.arguments.length
+              : JSON.stringify(call?.function?.arguments || {}).length,
+          ].join(":")),
+          index,
+        ].join("|");
+      })
+      .join("||");
+  }
+
+  function activityItemsSignature(message: ChatMessage): string {
+    return normalizeChatActivityItems(message.activityItems)
+      .map((item) => {
+        if (item.kind === "tool") {
+          return [
+            "tool",
+            String(item.id || ""),
+            String(item.toolCallId || ""),
+            String(item.name || ""),
+            String(item.status || ""),
+            String(item.argsText || "").length,
+            String(item.resultText || "").length,
+          ].join(":");
+        }
+        return [
+          item.kind,
+          String(item.id || ""),
+          String(item.text || "").length,
+          item.running ? "1" : "0",
+        ].join(":");
+      })
+      .join("|");
+  }
+
   function messageSignature(message: ChatMessage): string {
     const cached = messageSignatureCache.get(message);
     if (cached) return cached;
@@ -79,11 +172,13 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
       String(message.id || "").trim(),
       String(message.createdAt || "").trim(),
       String(message.speakerAgentId || "").trim(),
-      JSON.stringify(message.parts || []),
-      JSON.stringify(message.extraTextBlocks || []),
-      JSON.stringify(message.providerMeta || {}),
-      JSON.stringify(message.toolCall || []),
-      JSON.stringify(message.activityItems || []),
+      messagePartsSignature(message),
+      (Array.isArray(message.extraTextBlocks) ? message.extraTextBlocks : [])
+        .map((text) => String(text || "").length)
+        .join(","),
+      providerMetaSignature(message),
+      toolCallSignature(message),
+      activityItemsSignature(message),
     ].join("|");
     messageSignatureCache.set(message, signature);
     return signature;

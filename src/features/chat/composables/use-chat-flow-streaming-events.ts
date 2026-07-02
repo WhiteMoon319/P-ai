@@ -55,6 +55,10 @@ type UseChatFlowStreamingEventsOptions = {
 };
 
 export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOptions) {
+  function shouldPreserveDraftProjection(parsed: AssistantDeltaEvent): boolean {
+    return parsed.kind === "activity_reasoning_delta";
+  }
+
   function shouldCorrectDraftProjectionFromSnapshot(
     draftId: string,
     snapshotBlocks: AssistantStreamBlock[],
@@ -190,10 +194,24 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
         );
       } else if (isActivityProjectionEvent) {
         options.syncStreamBlocksToDraft(currentRound.draftId, authoritativeBlocks);
-        options.updateDraftText(currentRound.draftId, undefined, undefined, "", authoritativeBlocks);
+        options.updateDraftText(
+          currentRound.draftId,
+          undefined,
+          undefined,
+          "",
+          authoritativeBlocks,
+          { preserveActivityProjection: shouldPreserveDraftProjection(parsed) },
+        );
       } else if (parsed.streamCache && shouldCorrectProjectionFromSnapshot) {
         options.syncStreamBlocksToDraft(currentRound.draftId, authoritativeBlocks);
-        options.updateDraftText(currentRound.draftId, undefined, undefined, "", authoritativeBlocks);
+        options.updateDraftText(
+          currentRound.draftId,
+          undefined,
+          undefined,
+          "",
+          authoritativeBlocks,
+          { preserveActivityProjection: shouldPreserveDraftProjection(parsed) },
+        );
       } else if (parsed.streamCache && parsed.kind !== "tool_status") {
         options.updateDraftText(
           currentRound.draftId,

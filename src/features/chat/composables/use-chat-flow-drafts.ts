@@ -5,7 +5,6 @@ import {
   appendTextDeltaToStreamBlocks,
   normalizeAssistantStreamBlocks,
   normalizeChatActivityItems,
-  streamBlocksToActivityItems,
   streamBlocksToToolCalls,
   streamBlocksToToolHistoryEvents,
 } from "../../../utils/chat-message-semantics";
@@ -267,7 +266,6 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
   function syncStreamBlocksToDraft(draftId: string, rawBlocks?: AssistantStreamBlock[]) {
     if (!draftId) return;
     const blocks = normalizeAssistantStreamBlocks(rawBlocks || options.streamBlocks?.value || []);
-    const nextActivityItems = streamBlocksToActivityItems(blocks, true);
     options.allMessages.value = options.allMessages.value.map((message) => {
       if (message.id !== draftId) return message;
       const meta = ((message.providerMeta || {}) as Record<string, unknown>);
@@ -275,7 +273,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
         ...message,
         parts: [{ type: "text", text: assistantTextFromStreamBlocks(blocks) }],
         toolCall: streamBlocksToToolHistoryEvents(blocks),
-        activityItems: nextActivityItems.length > 0 ? nextActivityItems : undefined,
+        activityItems: undefined,
         providerMeta: {
           ...meta,
           _streamBlocks: blocks,
@@ -321,10 +319,6 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     const streamBlocks = normalizeAssistantStreamBlocks(rawBlocks || options.streamBlocks?.value || []);
     const blockText = assistantTextFromStreamBlocks(streamBlocks);
     const preserveActivityProjection = !!updateOptions?.preserveActivityProjection;
-    const existingActivityItems = normalizeChatActivityItems(existingDraft?.activityItems);
-    const nextActivityItems = preserveActivityProjection
-      ? existingActivityItems
-      : streamBlocksToActivityItems(streamBlocks, true);
     const stableRenderId = stableRenderIdFromMessage(existingDraft) || draftId;
     const existingMeta = ((existingDraft?.providerMeta || {}) as Record<string, unknown>);
     const msg = messageWithStableRenderId({
@@ -336,7 +330,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
       toolCall: preserveActivityProjection
         ? existingDraft?.toolCall
         : streamBlocksToToolHistoryEvents(streamBlocks),
-      activityItems: nextActivityItems.length > 0 ? nextActivityItems : undefined,
+      activityItems: undefined,
       providerMeta: {
         ...existingMeta,
         _streaming: true,
