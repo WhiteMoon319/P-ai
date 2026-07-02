@@ -947,19 +947,6 @@ function markCreateConversationOptionsStale() {
   });
 }
 
-function clearCompletedRuntimeStateForConversation(conversationId: string) {
-  const targetId = String(conversationId || "").trim();
-  if (!targetId) return;
-  conversations.value = conversations.value.map((item) => {
-    if (String(item.conversationId || "").trim() !== targetId) return item;
-    const state = String(item.runtimeState || "").trim();
-    if (state === "done" || state === "failed" || state === "completed") {
-      return { ...item, runtimeState: "" };
-    }
-    return item;
-  });
-}
-
 function patchConversationRuntimeState(conversationId: string, runtimeState: string) {
   const targetId = String(conversationId || "").trim();
   if (!targetId) return;
@@ -1176,7 +1163,6 @@ async function openConversation(conversationId: string) {
   if (String(activeConversationId.value || "").trim() === String(conversationId || "").trim()) {
     resetActiveConversationTransientState("reload_current_conversation");
   }
-  clearCompletedRuntimeStateForConversation(activeConversationId.value);
   const vscodeRoot = vscodeWorkspaceRoots.value[0];
   let result: OpenConversationResult;
   try {
@@ -1192,7 +1178,6 @@ async function openConversation(conversationId: string) {
 
 async function applyOpenConversationResult(result: OpenConversationResult) {
   activeConversationId.value = result.conversationId;
-  clearCompletedRuntimeStateForConversation(result.conversationId);
   activeAgentId.value = String(result.agentId || "").trim();
   persona.value = result.persona || {};
   applyModelPayload(result.model || {});
@@ -1441,7 +1426,6 @@ async function createConversation(input: {
     });
     if (Array.isArray(result.unarchivedConversations)) {
       conversations.value = result.unarchivedConversations;
-      clearCompletedRuntimeStateForConversation(activeConversationId.value);
       syncConversationTabForRemoteContacts();
     }
     if (result.conversation && String(result.conversation.conversationId || "").trim()) {
@@ -1470,7 +1454,6 @@ async function deleteConversation(conversationId: string) {
     });
     if (Array.isArray(result.unarchivedConversations)) {
       conversations.value = result.unarchivedConversations;
-      clearCompletedRuntimeStateForConversation(normalizedConversationId);
       syncConversationTabForRemoteContacts();
     } else {
       await refreshList();
@@ -1522,7 +1505,6 @@ async function rebindConversationRecipient(payload: { conversationId: string; de
     });
     if (Array.isArray(result.unarchivedConversations)) {
       conversations.value = result.unarchivedConversations;
-      clearCompletedRuntimeStateForConversation(conversationId);
       syncConversationTabForRemoteContacts();
     } else {
       await refreshList();
@@ -2650,7 +2632,6 @@ function registerNotifications() {
     const value = payload as { unarchivedConversations?: ConversationSummary[] };
     if (Array.isArray(value.unarchivedConversations)) {
       conversations.value = value.unarchivedConversations;
-      clearCompletedRuntimeStateForConversation(activeConversationId.value);
       syncConversationTabForRemoteContacts();
     }
   });
@@ -2679,9 +2660,6 @@ function registerNotifications() {
     if (!conversationId) return;
     const runtimeState = String(value.runtimeState || "").trim();
     patchConversationRuntimeState(conversationId, runtimeState);
-    if (conversationId === activeConversationId.value && (runtimeState === "done" || runtimeState === "failed" || runtimeState === "completed" || !runtimeState)) {
-      clearCompletedRuntimeStateForConversation(conversationId);
-    }
   });
   transport.onNotification("conversation.todosUpdated", (payload) => {
     const value = payload as { conversationId?: string; currentTodos?: ChatTodoItem[] };
@@ -2751,7 +2729,6 @@ function registerNotifications() {
   });
   transport.onNotification("chat.roundFinished", (payload) => {
     const value = payload as { conversationId?: string; assistantMessage?: ChatMessage };
-    clearCompletedRuntimeStateForConversation(value.conversationId || "");
     if (value.conversationId !== activeConversationId.value) return;
     busy.value = false;
     // 先追加正式消息再清流式状态，避免 Vue 先删草稿再插正式消息导致一帧闪烁。

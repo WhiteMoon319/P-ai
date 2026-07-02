@@ -5117,7 +5117,7 @@ fn ide_chat_stop_conversation(state: &AppState, params: Value) -> Result<Value, 
         "消息已因 VS Code 侧边栏中断被清出队列",
     )?;
     let _ = release_conversation_processing_claim(state, conversation_id);
-    let _ = set_conversation_runtime_state(state, conversation_id, MainSessionState::Idle);
+    let _ = set_conversation_runtime_state_and_emit(state, conversation_id, MainSessionState::Idle);
     let _ = set_conversation_remote_im_activation_sources(state, conversation_id, Vec::new());
     runtime_log_info(format!(
         "[聊天流式块][侧边栏停止] 停止请求完成 session={} conversation_id={} aborted={} persisted=false cleared_queue_count={}",

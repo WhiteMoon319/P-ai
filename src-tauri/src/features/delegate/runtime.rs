@@ -474,7 +474,13 @@ fn abort_delegate_runtime_thread(
             normalized_delegate_id, err
         ));
     }
-    if let Err(err) = set_conversation_runtime_state(app_state, &thread.conversation.id, MainSessionState::Idle) {
+    if let Err(err) =
+        set_conversation_runtime_state_and_emit(
+            app_state,
+            &thread.conversation.id,
+            MainSessionState::Idle,
+        )
+    {
         runtime_log_info(format!(
             "[委托会话] 重置运行态失败: delegate_id={}, error={}",
             normalized_delegate_id, err

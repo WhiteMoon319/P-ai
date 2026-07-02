@@ -1899,7 +1899,9 @@ async fn process_guided_queue_when_idle(
     } else {
         MainSessionState::Idle
     };
-    if let Err(state_err) = set_conversation_runtime_state(state, conversation_id, next_state) {
+    if let Err(state_err) =
+        set_conversation_runtime_state_and_emit(state, conversation_id, next_state)
+    {
         runtime_log_warn(format!(
             "[引导投送] 失败，任务=restore_guided_runtime_state，conversation_id={}，error={}",
             conversation_id, state_err
@@ -1999,7 +2001,7 @@ pub(crate) fn read_conversation_runtime_snapshot(
 }
 
 /// 设置会话状态并记录日志
-pub(crate) fn set_conversation_runtime_state(
+fn set_conversation_runtime_state(
     state: &AppState,
     conversation_id: &str,
     new_state: MainSessionState,
@@ -2030,6 +2032,22 @@ pub(crate) fn set_conversation_runtime_state(
     );
 
     emit_chat_queue_snapshot(state);
+    Ok(())
+}
+
+pub(crate) fn set_conversation_runtime_state_and_emit(
+    state: &AppState,
+    conversation_id: &str,
+    new_state: MainSessionState,
+) -> Result<(), String> {
+    set_conversation_runtime_state(state, conversation_id, new_state.clone())?;
+    emit_conversation_runtime_state_updated_payload(
+        state,
+        &ConversationRuntimeStateUpdatedPayload {
+            conversation_id: conversation_id.trim().to_string(),
+            runtime_state: new_state,
+        },
+    );
     Ok(())
 }
 
@@ -3031,14 +3049,11 @@ async fn activate_main_assistant(
     );
 
     // 设置状态为 AssistantStreaming
-    set_conversation_runtime_state(state, conversation_id, MainSessionState::AssistantStreaming)?;
-    emit_conversation_runtime_state_updated_payload(
+    set_conversation_runtime_state_and_emit(
         state,
-        &ConversationRuntimeStateUpdatedPayload {
-            conversation_id: conversation_id.to_string(),
-            runtime_state: MainSessionState::AssistantStreaming,
-        },
-    );
+        conversation_id,
+        MainSessionState::AssistantStreaming,
+    )?;
     set_conversation_remote_im_activation_sources(
         state,
         conversation_id,
@@ -3218,14 +3233,7 @@ async fn activate_main_assistant(
     } else {
         MainSessionState::Idle
     };
-    set_conversation_runtime_state(state, conversation_id, next_state.clone())?;
-    emit_conversation_runtime_state_updated_payload(
-        state,
-        &ConversationRuntimeStateUpdatedPayload {
-            conversation_id: conversation_id.to_string(),
-            runtime_state: next_state,
-        },
-    );
+    set_conversation_runtime_state_and_emit(state, conversation_id, next_state)?;
     if let Err(err) = clear_conversation_stream_runtime_cache(state, conversation_id) {
         runtime_log_warn(format!(
             "[聊天流式缓存] 清理失败，conversation_id={}，error={}",

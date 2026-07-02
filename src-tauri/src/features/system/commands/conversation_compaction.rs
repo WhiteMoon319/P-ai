@@ -86,14 +86,11 @@ pub(crate) async fn run_context_compaction_pipeline(
         &trace_id,
     )?;
 
-    set_conversation_runtime_state(state, &source.id, MainSessionState::OrganizingContext)?;
-    emit_conversation_runtime_state_updated_payload(
+    set_conversation_runtime_state_and_emit(
         state,
-        &ConversationRuntimeStateUpdatedPayload {
-            conversation_id: source.id.clone(),
-            runtime_state: MainSessionState::OrganizingContext,
-        },
-    );
+        &source.id,
+        MainSessionState::OrganizingContext,
+    )?;
     eprintln!(
         "[ARCHIVE-PIPELINE] 开始: task=context_compaction, trace_id={}, agent_id={}, api_id={}, started_at={}",
         trace_id, effective_agent_id, selected_api.id, started_at.elapsed().as_millis()
@@ -116,20 +113,13 @@ pub(crate) async fn run_context_compaction_pipeline(
 
     let elapsed_ms = started_at.elapsed().as_millis();
     if let Err(state_err) =
-        set_conversation_runtime_state(state, &source.id, MainSessionState::Idle)
+        set_conversation_runtime_state_and_emit(state, &source.id, MainSessionState::Idle)
     {
         eprintln!(
             "[ARCHIVE-PIPELINE] 警告: 状态恢复失败, trace_id={}, elapsed_ms={}, error={}",
             trace_id, elapsed_ms, state_err
         );
     } else {
-        emit_conversation_runtime_state_updated_payload(
-            state,
-            &ConversationRuntimeStateUpdatedPayload {
-                conversation_id: source.id.clone(),
-                runtime_state: MainSessionState::Idle,
-            },
-        );
         eprintln!(
             "[ARCHIVE-PIPELINE] 完成: task=context_compaction, trace_id={}, agent_id={}, api_id={}, elapsed_ms={}",
             trace_id, effective_agent_id, selected_api.id, elapsed_ms

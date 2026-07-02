@@ -2924,6 +2924,38 @@ mod tool_loop_tests {
         Box::new(TestRuntimeTool { name, mcp })
     }
 
+    fn estimate_latest_tool_result_content_tokens(events: &[Value]) -> u64 {
+        let latest_tool_call_ids = events
+            .iter()
+            .rposition(|event| event.get("role").and_then(Value::as_str) == Some("assistant"))
+            .and_then(|index| events.get(index))
+            .and_then(|event| event.get("tool_calls"))
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| item.get("id").and_then(Value::as_str))
+                    .map(str::to_string)
+                    .collect::<std::collections::HashSet<_>>()
+            })
+            .unwrap_or_default();
+        if latest_tool_call_ids.is_empty() {
+            return 0;
+        }
+        let text = events
+            .iter()
+            .filter(|event| {
+                event.get("role").and_then(Value::as_str) == Some("tool")
+                    && event
+                        .get("tool_call_id")
+                        .and_then(Value::as_str)
+                        .is_some_and(|id| latest_tool_call_ids.contains(id))
+            })
+            .filter_map(|event| event.get("content").and_then(Value::as_str))
+            .collect::<String>();
+        estimated_tokens_for_text(&text).ceil() as u64
+    }
+
     #[test]
     fn stateful_builtin_tools_should_be_serial_tools() {
         let tools = vec![

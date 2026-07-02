@@ -1699,14 +1699,11 @@ fn restart_dispatch_round_after_context_compaction(
         stream_started_at.as_str(),
         stream_started_at_ms,
     );
-    set_conversation_runtime_state(state, conversation_id, MainSessionState::AssistantStreaming)?;
-    emit_conversation_runtime_state_updated_payload(
+    set_conversation_runtime_state_and_emit(
         state,
-        &ConversationRuntimeStateUpdatedPayload {
-            conversation_id: conversation_id.to_string(),
-            runtime_state: MainSessionState::AssistantStreaming,
-        },
-    );
+        conversation_id,
+        MainSessionState::AssistantStreaming,
+    )?;
     runtime_log_info(format!(
         "[聊天调度] 压缩后新一轮开始事件已发送 conversation_id={} request_id={} department_id={} agent_id={} reason={}",
         conversation_id, request_id, department_id, agent_id, activation_reason

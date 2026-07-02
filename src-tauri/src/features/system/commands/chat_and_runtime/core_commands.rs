@@ -2525,7 +2525,11 @@ async fn interrupt_conversation_runtime(
         "消息已因会话撤回被清出队列",
     )?;
     let _ = release_conversation_processing_claim(state.inner(), &conversation_id);
-    let _ = set_conversation_runtime_state(state.inner(), &conversation_id, MainSessionState::Idle);
+    let _ = set_conversation_runtime_state_and_emit(
+        state.inner(),
+        &conversation_id,
+        MainSessionState::Idle,
+    );
     let _ = set_conversation_remote_im_activation_sources(state.inner(), &conversation_id, Vec::new());
 
     let aborted = aborted_chat || aborted_tool || aborted_delegate_children > 0;
