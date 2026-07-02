@@ -34,6 +34,7 @@ type ConversationActionsBridge = {
   refreshChatUnarchivedConversations: () => Promise<void>;
   freezeForegroundConversation: (reason: string) => void;
   restoreForegroundConversationProjection: (conversationId: string, reason: string) => Promise<void>;
+  switchUnarchivedConversation: (conversationId: string) => Promise<void>;
   sendChatFromCurrentWindow: (overrides?: { extraTextBlocks?: string[] }) => Promise<void>;
   detachCurrentConversationToWindow: (conversationId?: string) => Promise<void>;
   deleteUnarchivedConversationFromArchives: (conversationId: string) => Promise<void>;
@@ -152,6 +153,7 @@ export function useChatWindowApp() {
     refreshChatUnarchivedConversations: async () => {},
     freezeForegroundConversation: () => {},
     restoreForegroundConversationProjection: async () => {},
+    switchUnarchivedConversation: async () => {},
     sendChatFromCurrentWindow: async () => {},
     detachCurrentConversationToWindow: async () => {},
     deleteUnarchivedConversationFromArchives: async () => {},
@@ -161,6 +163,8 @@ export function useChatWindowApp() {
   const freezeForegroundConversation = (reason: string) => conversationActions.freezeForegroundConversation(reason);
   const restoreForegroundConversationProjection = (conversationId: string, reason: string) =>
     conversationActions.restoreForegroundConversationProjection(conversationId, reason);
+  const switchUnarchivedConversation = (conversationId: string) =>
+    conversationActions.switchUnarchivedConversation(conversationId);
   const sendChatFromCurrentWindow = (overrides?: { extraTextBlocks?: string[] }) => conversationActions.sendChatFromCurrentWindow(overrides);
   const detachCurrentConversationToWindow = (conversationId?: string) => conversationActions.detachCurrentConversationToWindow(conversationId);
   const deleteUnarchivedConversationFromArchives = (conversationId: string) => conversationActions.deleteUnarchivedConversationFromArchives(conversationId);
@@ -397,6 +401,7 @@ export function useChatWindowApp() {
     refreshChatUnarchivedConversations,
     freezeForegroundConversation,
     restoreForegroundConversationProjection,
+    switchUnarchivedConversation,
     parseBackgroundVoiceScreenshotKeywords: (text: string) => parseBackgroundVoiceScreenshotKeywords(text),
     matchBackgroundVoiceScreenshotKeyword: (text: string, keywords: string[]) => matchBackgroundVoiceScreenshotKeyword(text, keywords),
     queueAutoScreenshotFromVoice: (input: {

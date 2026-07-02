@@ -118,6 +118,7 @@ export function useChatWindowMediaOrchestrator(bindings: Record<string, any>) {
     refreshChatUnarchivedConversations: bindings.refreshChatUnarchivedConversations,
     freezeForegroundConversation: bindings.freezeForegroundConversation,
     restoreForegroundConversationProjection: bindings.restoreForegroundConversationProjection,
+    switchUnarchivedConversation: bindings.switchUnarchivedConversation,
   });
 
   const chatMedia = useChatMedia({

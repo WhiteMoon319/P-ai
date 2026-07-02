@@ -4,6 +4,14 @@ import type { AppConfig, ChatMessage } from "../../../types/app";
 import { formalizeMessages } from "./use-chat-flow-utils";
 import { useRecordHotkey } from "./use-record-hotkey";
 
+const CHAT_FOCUS_RECOVERY_DEBUG = (() => {
+  if (typeof window === "undefined") return false;
+  const stored = window.localStorage.getItem("easy-call.debug.chat-focus-recovery");
+  if (stored === "1") return true;
+  if (stored === "0") return false;
+  return !!import.meta.env.DEV;
+})();
+
 type RecordingActivationSource = "foreground" | "background";
 
 type UseChatWindowRecordingOrchestratorOptions = {
@@ -42,6 +50,7 @@ type UseChatWindowRecordingOrchestratorOptions = {
   refreshChatUnarchivedConversations: () => Promise<void>;
   freezeForegroundConversation: (reason: string) => void;
   restoreForegroundConversationProjection: (conversationId: string, reason: string) => Promise<void>;
+  switchUnarchivedConversation: (conversationId: string) => Promise<void>;
 };
 
 type ConversationRuntimeSnapshot = {
@@ -60,6 +69,31 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
   const foregroundRecordingActive = ref(false);
   let chatWindowActiveSyncTimer: ReturnType<typeof setTimeout> | null = null;
   let chatMicPrewarmTimer: ReturnType<typeof setTimeout> | null = null;
+  let focusReconcileSeq = 0;
+
+  function nextFocusReconcileSeq(): number {
+    focusReconcileSeq += 1;
+    return focusReconcileSeq;
+  }
+
+  function logFocusReconcile(
+    seq: number,
+    stage: string,
+    detail?: Record<string, unknown>,
+    level: "info" | "warn" = "info",
+  ) {
+    if (!CHAT_FOCUS_RECOVERY_DEBUG) return;
+    const payload = {
+      seq,
+      stage,
+      ...detail,
+    };
+    if (level === "warn") {
+      console.warn("[聊天前台恢复][状态机]", payload);
+      return;
+    }
+    console.info("[聊天前台恢复][状态机]", payload);
+  }
 
   function clearChatWindowActiveSyncTimer() {
     if (!chatWindowActiveSyncTimer) return;
@@ -161,6 +195,28 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     return String(formalMessages[formalMessages.length - 1]?.id || "").trim();
   }
 
+  function hasForegroundStreamingBubble(): boolean {
+    const messages = Array.isArray(options.allMessages.value) ? options.allMessages.value : [];
+    return messages.some((message) => {
+      if (String(message?.role || "").trim() !== "assistant") return false;
+      const meta = (message?.providerMeta || {}) as Record<string, unknown>;
+      return meta._streaming === true;
+    });
+  }
+
+  function isBusyRuntimeState(runtimeState: string, snapshot: ConversationRuntimeSnapshot): boolean {
+    const normalizedState = String(runtimeState || "").trim();
+    if (
+      normalizedState === "assistant_streaming"
+      || normalizedState === "organizing_context"
+      || normalizedState === "compacting"
+    ) {
+      return true;
+    }
+    if (snapshot?.isProcessing) return true;
+    return !!snapshot?.hasPendingQueue || Math.max(0, Number(snapshot?.pendingQueueCount || 0)) > 0;
+  }
+
   async function requestLatestFormalTailMessageId(conversationId: string): Promise<string> {
     const snapshot = await invokeTauri<any>("get_foreground_conversation_light_snapshot", {
       input: {
@@ -179,112 +235,167 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     });
   }
 
-  async function requestMissingFormalMessages(conversationId: string, afterMessageId: string | null) {
-    await invokeTauri("request_conversation_messages_after_async", {
-      input: {
-        conversationId,
-        afterMessageId,
-        fallbackLimit: options.backgroundConversationCacheLimit,
-      },
-    });
+  async function recoverForegroundConversationBySwitch(conversationId: string, reason: string, seq: number, staleReason: string) {
+    // focus 只负责判断前台是否过时；一旦确认过时，统一走“切到当前会话”的唯一恢复路径，
+    // 禁止在 focus 分支里各自补正文/补运行态，否则一定会出现恢复分叉。
+    logFocusReconcile(seq, "判定过时，准备统一切会话", {
+      conversationId,
+      reason,
+      staleReason,
+    }, "warn");
+    await options.switchUnarchivedConversation(conversationId);
+    logFocusReconcile(seq, "统一切会话完成", {
+      conversationId,
+      reason,
+      staleReason,
+      restoreMode: "focus_stale_switch_current_conversation",
+    }, "warn");
   }
 
   async function reconcileForegroundConversationAfterFreeze(conversationId: string, reason: string) {
+    const seq = nextFocusReconcileSeq();
     const chatFlow = options.getChatFlow();
+    const streamingBubblePresentAtStart = hasForegroundStreamingBubble();
+    logFocusReconcile(seq, "开始 focus 对账", {
+      conversationId,
+      reason,
+      hasProbeBoundChannel: !!chatFlow?.probeBoundChannel,
+      hasBindActiveConversationStream: !!chatFlow?.bindActiveConversationStream,
+      currentConversationId: String(options.currentChatConversationId.value || "").trim(),
+      currentTailId: currentFormalTailMessageId(),
+      streamingBubblePresentAtStart,
+    });
+
+    // 第一步只判断“流式绑定通道是否还活着”。
+    // 这里绝不能把 probe=true 误当成正文健康，只能用来判断是否需要先重绑当前会话的流式通道。
     if (!chatFlow?.probeBoundChannel) {
-      console.warn("[聊天前台恢复][诊断] focus 对账跳过：probe 不可用", {
+      logFocusReconcile(seq, "probe 不可用，先重绑后恢复", {
         conversationId,
         reason,
-        restoreMode: "probe_unavailable_skip",
-      });
+        restoreMode: "probe_unavailable_rebind_and_switch",
+      }, "warn");
+      if (chatFlow?.bindActiveConversationStream) {
+        await chatFlow.bindActiveConversationStream(conversationId, true);
+        logFocusReconcile(seq, "probe 不可用时重绑完成", {
+          conversationId,
+          reason,
+        }, "warn");
+      }
+      await recoverForegroundConversationBySwitch(
+        conversationId,
+        reason,
+        seq,
+        "probe_unavailable",
+      );
       return;
     }
 
-    // 别在 focus 上写任何“先恢复一下”的狗屁降级。
-    // 聊天窗口恢复焦点的真正原因是 WebView 可能冻结过；channel 还活着时前台就是健康的，乱刷只会把正确画面刷坏。
     const probeHealthy = await chatFlow.probeBoundChannel(conversationId);
-    if (probeHealthy) {
-      console.info("[聊天前台恢复][诊断] focus 对账完成：channel 仍然健康，禁止恢复", {
+    logFocusReconcile(seq, "probe 完成", {
+      conversationId,
+      reason,
+      probeHealthy,
+    });
+    if (!probeHealthy) {
+      logFocusReconcile(seq, "probe 失败，先重绑后恢复", {
         conversationId,
         reason,
-        restoreMode: "probe_success_skip",
-      });
+      }, "warn");
+      if (chatFlow?.bindActiveConversationStream) {
+        await chatFlow.bindActiveConversationStream(conversationId, true);
+        logFocusReconcile(seq, "probe 失败后重绑完成", {
+          conversationId,
+          reason,
+        }, "warn");
+      }
+      await recoverForegroundConversationBySwitch(
+        conversationId,
+        reason,
+        seq,
+        "stream_channel_broken",
+      );
       return;
     }
 
     const runtimeSnapshot = await requestConversationRuntimeSnapshot(conversationId);
     const runtimeState = String(runtimeSnapshot?.runtimeState || "").trim();
-    const isProcessing = !!runtimeSnapshot?.isProcessing;
-    const hasPendingQueue = !!runtimeSnapshot?.hasPendingQueue
-      || Math.max(0, Number(runtimeSnapshot?.pendingQueueCount || 0)) > 0;
-    const hasVisibleProgress = !!runtimeSnapshot?.streamCache?.hasVisibleProgress;
+    const isBusyRuntime = isBusyRuntimeState(runtimeState, runtimeSnapshot);
+    const streamingBubblePresent = hasForegroundStreamingBubble();
+    logFocusReconcile(seq, "读取运行态快照完成", {
+      conversationId,
+      reason,
+      runtimeState,
+      isProcessing: !!runtimeSnapshot?.isProcessing,
+      hasPendingQueue: !!runtimeSnapshot?.hasPendingQueue,
+      pendingQueueCount: Math.max(0, Number(runtimeSnapshot?.pendingQueueCount || 0)),
+      hasVisibleProgress: !!runtimeSnapshot?.streamCache?.hasVisibleProgress,
+      toolStatusState: String(runtimeSnapshot?.streamCache?.toolStatusState || "").trim(),
+      isBusyRuntime,
+      streamingBubblePresent,
+    });
 
-    if (runtimeState === "assistant_streaming" || isProcessing || hasPendingQueue) {
-      await chatFlow.bindActiveConversationStream?.(conversationId, true);
-      if (runtimeState === "assistant_streaming") {
-        options.applyConversationRuntimeStateUpdated({
-          conversationId,
-          runtimeState: "assistant_streaming",
-        });
-      }
-      chatFlow.resumeForegroundRuntimeRound?.({
-        conversationId,
-        streamCache: runtimeSnapshot?.streamCache || null,
-        reason,
-      });
-      console.warn("[聊天前台恢复][诊断] focus 对账命中运行中恢复路径", {
+    // 第二步判断“后端是否仍在运行这一会话”。
+    // 只要后端还在跑，而前端已经没有运行中气泡，就说明前台正文丢了，必须统一恢复。
+    if (isBusyRuntime && !streamingBubblePresent) {
+      await recoverForegroundConversationBySwitch(
         conversationId,
         reason,
-        runtimeState,
-        isProcessing,
-        hasPendingQueue,
-        hasVisibleProgress,
-        restoreMode: hasVisibleProgress
-          ? "probe_failed_resume_streaming"
-          : "probe_failed_resume_waiting",
+        seq,
+        "runtime_busy_but_foreground_stream_missing",
+      );
+      return;
+    }
+
+    if (isBusyRuntime) {
+      logFocusReconcile(seq, "运行态判定前台未过时", {
+        conversationId,
+        reason,
+        restoreMode: "runtime_busy_with_foreground_stream",
       });
       return;
     }
 
-    if (runtimeState === "organizing_context") {
-      options.applyConversationRuntimeStateUpdated({
-        conversationId,
-        runtimeState: "organizing_context",
-      });
-      console.warn("[聊天前台恢复][诊断] focus 对账命中整理上下文恢复路径", {
-        conversationId,
-        reason,
-        restoreMode: "probe_failed_resume_compacting",
-      });
-      return;
-    }
-
-    // 最新正式消息 ID 只能在彻底空闲时比较。流式、等待工具、整理上下文时拿消息 ID 硬判落后，等于主动把没坏的画面刷坏。
+    // 第三步只在后端彻底空闲时检查正式消息是否已是最新。
+    // 这样可以避免在流式/压缩/整理上下文过程中，用正式消息尾部去误判一个本来正常的运行中前台。
     const currentTailId = currentFormalTailMessageId();
     const latestTailId = await requestLatestFormalTailMessageId(conversationId);
+    logFocusReconcile(seq, "正式消息尾部比较完成", {
+      conversationId,
+      reason,
+      currentTailId,
+      latestTailId,
+      tailMatched: latestTailId === currentTailId,
+    });
     if (latestTailId === currentTailId) {
-      console.info("[聊天前台恢复][诊断] focus 对账完成：当前前台已经是最新", {
+      logFocusReconcile(seq, "tail 判定前台未过时", {
         conversationId,
         reason,
-        restoreMode: "probe_failed_but_already_latest",
+        restoreMode: "formal_tail_already_latest",
         currentTailId,
       });
       return;
     }
 
-    await requestMissingFormalMessages(conversationId, currentTailId || null);
-    console.warn("[聊天前台恢复][诊断] focus 对账命中正式消息补缺路径", {
+    await recoverForegroundConversationBySwitch(
       conversationId,
       reason,
-      restoreMode: "probe_failed_append_missing_messages",
-      currentTailId,
-      latestTailId,
-    });
+      seq,
+      "formal_tail_mismatch",
+    );
   }
 
   async function syncChatWindowActiveState(reason = "unknown") {
     if (!isPrimaryChatWindow()) return;
     const active = isChatWindowActiveNow();
+    if (CHAT_FOCUS_RECOVERY_DEBUG) {
+      console.info("[聊天前台恢复][状态机]", {
+        stage: "窗口激活状态同步",
+        reason,
+        active,
+        previousActive: options.chatWindowActiveSynced.value,
+        currentConversationId: String(options.currentChatConversationId.value || "").trim(),
+      });
+    }
     if (options.chatWindowActiveSynced.value === active) return;
     options.chatWindowActiveSynced.value = active;
     if (active) {
