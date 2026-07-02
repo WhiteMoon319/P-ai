@@ -1168,6 +1168,8 @@ fn main() {
             goal_create_goal,
             goal_cancel_goal,
             resolve_terminal_approval,
+            approve_terminal_approval_for_session,
+            approve_terminal_approval_for_workspace,
             open_file_reader_window_command,
             read_file_reader_file,
             read_file_reader_file_block,

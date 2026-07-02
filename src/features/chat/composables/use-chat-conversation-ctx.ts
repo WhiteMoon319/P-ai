@@ -88,9 +88,12 @@ export function useChatConversationCtx(
 
   const activeConversationTerminalApprovals = computed(() => {
     const conversationId = String(props.activeConversationId || "").trim();
-    if (!conversationId) return [];
-    return (Array.isArray(props.terminalApprovals) ? props.terminalApprovals : [])
+    const allApprovals = Array.isArray(props.terminalApprovals) ? props.terminalApprovals : [];
+    if (!conversationId) return allApprovals;
+    const conversationApprovals = allApprovals
       .filter((item) => String(item.conversationId || item.sessionId || "").trim() === conversationId);
+    // 审批卡绝不能因为会话映射暂时没挂上就直接消失；命中当前会话就显示当前会话，否则回退显示全局待审批队列。
+    return conversationApprovals.length > 0 ? conversationApprovals : allApprovals;
   });
 
   const supervisionButtonTitle = computed(() => {

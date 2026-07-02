@@ -2084,7 +2084,9 @@
   "terminalApproval": {
     "title": "終端審批",
     "approve": "批准",
-    "deny": "拒絕"
+    "deny": "拒絕",
+    "rememberWorkspace": "目錄全權",
+    "rememberSession": "會話全權"
   },
   "terminalApprovalImpact": {
     "riskTitle": "危險等級評估",

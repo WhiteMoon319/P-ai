@@ -156,6 +156,8 @@
       :terminal-approval-resolving="terminalApprovalResolving"
       :approve-terminal-approval="approveTerminalApproval"
       :deny-terminal-approval="denyTerminalApproval"
+      :approve-terminal-approval-for-session="approveTerminalApprovalForSession"
+      :approve-terminal-approval-for-workspace="approveTerminalApprovalForWorkspace"
       :plan-mode-enabled="currentConversationPlanModeEnabled"
       :chat-usage-percent="chatUsagePercent"
       :trim-tip="t('chat.trimTip')"

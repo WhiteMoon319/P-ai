@@ -323,6 +323,12 @@ struct IdeChatResolveTerminalApprovalInput {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct IdeChatTerminalApprovalRequestIdInput {
+    request_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct IdeChatWorkspacePermissionInput {
     conversation_id: String,
     access: String,
@@ -5344,6 +5350,25 @@ fn ide_chat_resolve_terminal_approval(state: &AppState, params: Value) -> Result
     Ok(serde_json::json!({ "resolved": resolved }))
 }
 
+fn ide_chat_approve_terminal_approval_for_session(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatTerminalApprovalRequestIdInput>(params)?;
+    let approved = approve_terminal_approval_for_session_request(state, input.request_id.trim())?;
+    Ok(serde_json::json!({ "approved": approved }))
+}
+
+fn ide_chat_approve_terminal_approval_for_workspace(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatTerminalApprovalRequestIdInput>(params)?;
+    let approved =
+        approve_terminal_approval_for_workspace_request(state, input.request_id.trim())?;
+    Ok(serde_json::json!({ "approved": approved }))
+}
+
 fn ide_chat_set_conversation_plan_mode(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<SetConversationPlanModeInput>(params)?;
     let conversation_id = input.conversation_id.trim();
@@ -5686,6 +5711,12 @@ async fn ide_chat_handle_jsonrpc_request(
                 .map_err(|err| format!("serialize IDE context query result failed: {err}"))),
         "workspace.layout.save" => ide_chat_workspace_layout_save(state, request.params),
         "terminalApproval.resolve" => ide_chat_resolve_terminal_approval(state, request.params),
+        "terminalApproval.approveForSession" => {
+            ide_chat_approve_terminal_approval_for_session(state, request.params)
+        }
+        "terminalApproval.approveForWorkspace" => {
+            ide_chat_approve_terminal_approval_for_workspace(state, request.params)
+        }
         "conversation.planMode.set" => ide_chat_set_conversation_plan_mode(state, request.params),
         "conversation.plan.confirm" => ide_chat_confirm_plan(state, request.params).await,
         "conversation.plan.readFile" => ide_chat_read_plan_file(state, request.params),

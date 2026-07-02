@@ -608,6 +608,12 @@ struct ResolveTerminalApprovalInput {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct TerminalApprovalRequestIdInput {
+    request_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ChatShellWorkspaceInput {
     api_config_id: String,
     agent_id: String,
@@ -1352,6 +1358,24 @@ fn resolve_terminal_approval(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let _ = resolve_terminal_approval_request(&state, &input.request_id, input.approved)?;
+    Ok(())
+}
+
+#[tauri::command]
+fn approve_terminal_approval_for_session(
+    input: TerminalApprovalRequestIdInput,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let _ = approve_terminal_approval_for_session_request(&state, &input.request_id)?;
+    Ok(())
+}
+
+#[tauri::command]
+fn approve_terminal_approval_for_workspace(
+    input: TerminalApprovalRequestIdInput,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let _ = approve_terminal_approval_for_workspace_request(&state, &input.request_id)?;
     Ok(())
 }
 

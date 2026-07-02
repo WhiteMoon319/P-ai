@@ -218,7 +218,10 @@
           <ChatApprovalPanel
             v-if="activeConversationTerminalApprovals.length > 0"
             :approvals="activeConversationTerminalApprovals" :resolving="terminalApprovalResolving"
-            @approve="$emit('approveTerminalApproval', $event)" @deny="$emit('denyTerminalApproval', $event)"
+            @approve="$emit('approveTerminalApproval', $event)"
+            @deny="$emit('denyTerminalApproval', $event)"
+            @approve-for-session="$emit('approveTerminalApprovalForSession', $event)"
+            @approve-for-workspace="$emit('approveTerminalApprovalForWorkspace', $event)"
           />
           <div
             v-else-if="activeConversationRecipientMissing"
@@ -617,6 +620,8 @@ const emit = defineEmits<{
   (e: "selectionActionShare", payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; exportFormat?: "html" | "png" }): void;
   (e: "approveTerminalApproval", requestId: string): void;
   (e: "denyTerminalApproval", requestId: string): void;
+  (e: "approveTerminalApprovalForSession", requestId: string): void;
+  (e: "approveTerminalApprovalForWorkspace", requestId: string): void;
   (e: "openSidebarFileReference", href: string): void;
   (e: "openSidebarExternalUrl", url: string): void;
 }>();

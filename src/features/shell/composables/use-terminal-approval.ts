@@ -18,6 +18,9 @@ export type TerminalApprovalRequestPayload = {
   targetPaths?: string[];
   reviewOpinion?: string;
   reviewModelName?: string;
+  canRememberWorkspace?: boolean;
+  workspaceName?: string;
+  workspacePath?: string;
 };
 
 export type TerminalApprovalConversationItem = TerminalApprovalRequestPayload & {
@@ -71,6 +74,7 @@ export function useTerminalApproval(options: UseTerminalApprovalOptions) {
   function enqueueTerminalApprovalRequest(payload: TerminalApprovalRequestPayload) {
     const requestId = String(payload.requestId || "").trim();
     if (!requestId) return;
+    if (options.queue.value.some((item) => item.requestId === requestId)) return;
     options.queue.value.push({
       ...payload,
       requestId,
@@ -87,6 +91,9 @@ export function useTerminalApproval(options: UseTerminalApprovalOptions) {
       reason: String(payload.reason || ""),
       reviewOpinion: String(payload.reviewOpinion || ""),
       reviewModelName: String(payload.reviewModelName || ""),
+      canRememberWorkspace: !!payload.canRememberWorkspace,
+      workspaceName: String(payload.workspaceName || ""),
+      workspacePath: String(payload.workspacePath || ""),
       existingPaths: Array.isArray(payload.existingPaths)
         ? payload.existingPaths.map((item) => String(item || "").trim()).filter(Boolean)
         : [],
@@ -129,6 +136,38 @@ export function useTerminalApproval(options: UseTerminalApprovalOptions) {
     void resolveTerminalApproval(true, requestId);
   }
 
+  async function invokeTerminalApprovalAction(command: string, requestId?: string) {
+    if (options.resolving.value) return;
+    const normalizedRequestId = String(requestId || "").trim();
+    const targetIndex = normalizedRequestId
+      ? options.queue.value.findIndex((item) => item.requestId === normalizedRequestId)
+      : 0;
+    if (targetIndex < 0) return;
+    const current = options.queue.value[targetIndex] ?? null;
+    if (!current) return;
+    options.resolving.value = true;
+    try {
+      await invokeTauri(command, {
+        input: {
+          requestId: current.requestId,
+        },
+      });
+    } catch (error) {
+      console.warn(`[TERMINAL] ${command} failed:`, error);
+    } finally {
+      options.queue.value.splice(targetIndex, 1);
+      options.resolving.value = false;
+    }
+  }
+
+  function approveTerminalApprovalForSession(requestId?: string) {
+    void invokeTerminalApprovalAction("approve_terminal_approval_for_session", requestId);
+  }
+
+  function approveTerminalApprovalForWorkspace(requestId?: string) {
+    void invokeTerminalApprovalAction("approve_terminal_approval_for_workspace", requestId);
+  }
+
   return {
     terminalApprovalCurrent,
     terminalApprovalDialogOpen,
@@ -140,5 +179,7 @@ export function useTerminalApproval(options: UseTerminalApprovalOptions) {
     enqueueTerminalApprovalRequest,
     denyTerminalApproval,
     approveTerminalApproval,
+    approveTerminalApprovalForSession,
+    approveTerminalApprovalForWorkspace,
   };
 }

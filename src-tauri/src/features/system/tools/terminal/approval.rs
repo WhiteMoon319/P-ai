@@ -1,3 +1,10 @@
+#[derive(Debug)]
+struct PendingTerminalApprovalRequest {
+    sender: tokio::sync::oneshot::Sender<bool>,
+    session_id: String,
+    workspace_path: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct TerminalApprovalRequestPayload {
@@ -28,6 +35,123 @@ struct TerminalApprovalRequestPayload {
     review_opinion: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     review_model_name: Option<String>,
+    #[serde(default)]
+    can_remember_workspace: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    workspace_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    workspace_path: Option<String>,
+}
+
+fn approval_workspace_memory_target(
+    state: &AppState,
+    session_id: &str,
+    requested_path: Option<&Path>,
+    existing_paths: &[PathBuf],
+    target_paths: &[PathBuf],
+    cwd: Option<&Path>,
+) -> Option<(String, String)> {
+    let conversation = terminal_session_conversation(state, session_id).ok().flatten()?;
+    let configured = normalize_conversation_shell_workspaces(state, &conversation.shell_workspaces);
+    if configured.is_empty() {
+        return None;
+    }
+
+    let candidates = requested_path
+        .into_iter()
+        .map(PathBuf::from)
+        .chain(target_paths.iter().cloned())
+        .chain(existing_paths.iter().cloned())
+        .chain(cwd.into_iter().map(PathBuf::from))
+        .collect::<Vec<_>>();
+    if candidates.is_empty() {
+        return None;
+    }
+
+    for workspace in configured {
+        if normalize_shell_workspace_access_text(&workspace.access)
+            != SHELL_WORKSPACE_ACCESS_APPROVAL
+        {
+            continue;
+        }
+        let canonical = match PathBuf::from(workspace.path.trim()).canonicalize() {
+            Ok(value) if value.is_dir() => value,
+            _ => continue,
+        };
+        if candidates.iter().any(|candidate| path_is_within(&canonical, candidate)) {
+            let display_path = terminal_path_for_user(&canonical);
+            let display_name = workspace.name.trim().to_string();
+            return Some((display_name, display_path));
+        }
+    }
+    None
+}
+
+fn remember_terminal_workspace_without_approval(
+    state: &AppState,
+    session_id: &str,
+    workspace_path: &str,
+) -> Result<(), String> {
+    let normalized_workspace_path =
+        normalize_terminal_path_input_for_current_platform(workspace_path.trim());
+    if normalized_workspace_path.is_empty() {
+        return Err("workspacePath is empty.".to_string());
+    }
+    let Some(conversation_id) = terminal_session_conversation_id(session_id) else {
+        return Err("当前审批不属于可持久化会话。".to_string());
+    };
+    let conversation = terminal_session_conversation(state, session_id)?
+        .ok_or_else(|| "当前审批不属于可持久化会话。".to_string())?;
+    let mut workspaces =
+        normalize_conversation_shell_workspaces(state, &conversation.shell_workspaces);
+    let target_key = normalize_terminal_path_for_compare(&PathBuf::from(&normalized_workspace_path));
+    let mut changed = false;
+    for workspace in &mut workspaces {
+        let workspace_key =
+            normalize_terminal_path_for_compare(&PathBuf::from(workspace.path.trim()));
+        if workspace_key != target_key {
+            continue;
+        }
+        if normalize_shell_workspace_access_text(&workspace.access)
+            != SHELL_WORKSPACE_ACCESS_FULL_ACCESS
+        {
+            workspace.access = SHELL_WORKSPACE_ACCESS_FULL_ACCESS.to_string();
+            changed = true;
+        }
+    }
+    if !changed {
+        return Err("当前审批不属于可记忆的会话工作区。".to_string());
+    }
+    let _ = apply_conversation_chat_workspace_changes(
+        state,
+        &conversation_id,
+        None,
+        Some(workspaces),
+        None,
+    )?;
+    Ok(())
+}
+
+fn remember_terminal_conversation_autonomous_mode(
+    state: &AppState,
+    session_id: &str,
+) -> Result<(), String> {
+    let Some(conversation_id) = terminal_session_conversation_id(session_id) else {
+        return Err("当前审批不属于可持久化会话。".to_string());
+    };
+    let conversation = terminal_session_conversation(state, session_id)?
+        .ok_or_else(|| "当前审批不属于可持久化会话。".to_string())?;
+    if conversation.shell_autonomous_mode {
+        return Ok(());
+    }
+    let _ = apply_conversation_chat_workspace_changes(
+        state,
+        &conversation_id,
+        None,
+        None,
+        Some(true),
+    )?;
+    Ok(())
 }
 
 async fn terminal_request_user_approval(
@@ -60,13 +184,28 @@ async fn terminal_request_user_approval(
             .ok_or_else(|| "App handle is not ready".to_string())?
     };
 
+    let workspace_memory_target = approval_workspace_memory_target(
+        state,
+        session_id,
+        requested_path,
+        existing_paths,
+        target_paths,
+        cwd,
+    );
     let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
     {
         let mut pending = state
             .terminal_pending_approvals
             .lock()
             .map_err(|_| "Failed to lock terminal pending approvals".to_string())?;
-        pending.insert(request_id.clone(), tx);
+        pending.insert(
+            request_id.clone(),
+            PendingTerminalApprovalRequest {
+                sender: tx,
+                session_id: normalize_terminal_tool_session_id(session_id),
+                workspace_path: workspace_memory_target.as_ref().map(|(_, path)| path.clone()),
+            },
+        );
     }
 
     let payload = TerminalApprovalRequestPayload {
@@ -115,6 +254,9 @@ async fn terminal_request_user_approval(
             .map(str::trim)
             .filter(|v| !v.is_empty())
             .map(ToString::to_string),
+        can_remember_workspace: workspace_memory_target.is_some(),
+        workspace_name: workspace_memory_target.as_ref().map(|(name, _)| name.clone()),
+        workspace_path: workspace_memory_target.map(|(_, path)| path),
     };
 
     if let Err(err) = app_handle.emit("easy-call:terminal-approval-request", &payload) {
@@ -157,7 +299,7 @@ fn resolve_terminal_approval_request(
         pending.remove(trimmed)
     };
 
-    let Some(sender) = sender else {
+    let Some(pending_request) = sender else {
         runtime_log_debug(format!(
             "[TOOL-DEBUG] terminal approval request not found: {}",
             trimmed
@@ -165,7 +307,7 @@ fn resolve_terminal_approval_request(
         return Ok(false);
     };
 
-    if sender.send(approved).is_err() {
+    if pending_request.sender.send(approved).is_err() {
         runtime_log_debug(format!(
             "[TOOL-DEBUG] terminal approval receiver dropped: {}",
             trimmed
@@ -173,4 +315,53 @@ fn resolve_terminal_approval_request(
         return Ok(false);
     }
     Ok(true)
+}
+
+fn approve_terminal_approval_for_session_request(
+    state: &AppState,
+    request_id: &str,
+) -> Result<bool, String> {
+    let trimmed = request_id.trim();
+    if trimmed.is_empty() {
+        return Err("requestId is empty.".to_string());
+    }
+    let session_id = {
+        let pending = state
+            .terminal_pending_approvals
+            .lock()
+            .map_err(|_| "Failed to lock terminal pending approvals".to_string())?;
+        pending
+            .get(trimmed)
+            .map(|item| item.session_id.clone())
+            .ok_or_else(|| "terminal approval request not found".to_string())?
+    };
+    remember_terminal_conversation_autonomous_mode(state, &session_id)?;
+    resolve_terminal_approval_request(state, trimmed, true)
+}
+
+fn approve_terminal_approval_for_workspace_request(
+    state: &AppState,
+    request_id: &str,
+) -> Result<bool, String> {
+    let trimmed = request_id.trim();
+    if trimmed.is_empty() {
+        return Err("requestId is empty.".to_string());
+    }
+    let (session_id, workspace_path) = {
+        let pending = state
+            .terminal_pending_approvals
+            .lock()
+            .map_err(|_| "Failed to lock terminal pending approvals".to_string())?;
+        let item = pending
+            .get(trimmed)
+            .ok_or_else(|| "terminal approval request not found".to_string())?;
+        (
+            item.session_id.clone(),
+            item.workspace_path
+                .clone()
+                .ok_or_else(|| "当前审批不属于可记忆的会话工作区。".to_string())?,
+        )
+    };
+    remember_terminal_workspace_without_approval(state, &session_id, &workspace_path)?;
+    resolve_terminal_approval_request(state, trimmed, true)
 }

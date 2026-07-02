@@ -135,6 +135,8 @@
     @selection-action-share="noop"
     @approve-terminal-approval="$emit('approveTerminalApproval', $event)"
     @deny-terminal-approval="$emit('denyTerminalApproval', $event)"
+    @approve-terminal-approval-for-session="$emit('approveTerminalApprovalForSession', $event)"
+    @approve-terminal-approval-for-workspace="$emit('approveTerminalApprovalForWorkspace', $event)"
     @open-sidebar-file-reference="openSidebarFileReference"
     @open-sidebar-external-url="openSidebarExternalUrl"
   />
@@ -240,6 +242,8 @@ defineEmits<{
   saveSupervisionTask: [payload: { durationHours: number; goal: string; why: string; todo: string }];
   approveTerminalApproval: [requestId: string];
   denyTerminalApproval: [requestId: string];
+  approveTerminalApprovalForSession: [requestId: string];
+  approveTerminalApprovalForWorkspace: [requestId: string];
   switchConversation: [payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }];
   deleteConversation: [conversationId: string];
   rebindConversationRecipient: [payload: { conversationId: string; departmentId: string; agentId: string }];

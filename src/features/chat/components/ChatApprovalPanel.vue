@@ -17,6 +17,8 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   approve: [requestId: string];
   deny: [requestId: string];
+  approveForSession: [requestId: string];
+  approveForWorkspace: [requestId: string];
 }>();
 
 const { t } = useI18n();
@@ -63,6 +65,29 @@ function callPreviewFirstLine(item: TerminalApprovalConversationItem): string {
   }
   return "";
 }
+
+function workspaceRememberLabel(item: TerminalApprovalConversationItem): string {
+  const workspaceName = String(item.workspaceName || "").trim();
+  if (workspaceName) return workspaceName;
+  const workspacePath = String(item.workspacePath || "").trim();
+  return workspacePath || "";
+}
+
+function currentSessionApprovalRequestId(): string {
+  return String(props.approvals[0]?.requestId || "").trim();
+}
+
+function handleSessionAutonomousModeChange() {
+  const requestId = currentSessionApprovalRequestId();
+  if (!requestId || props.resolving) return;
+  emit("approveForSession", requestId);
+}
+
+function handleWorkspaceAutonomousModeChange(requestId: string) {
+  const normalizedRequestId = String(requestId || "").trim();
+  if (!normalizedRequestId || props.resolving) return;
+  emit("approveForWorkspace", normalizedRequestId);
+}
 </script>
 
 <template>
@@ -79,17 +104,49 @@ function callPreviewFirstLine(item: TerminalApprovalConversationItem): string {
           </div>
         </div>
       </div>
+      <label
+        v-if="currentSessionApprovalRequestId()"
+        class="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg bg-base-200 px-3 py-2 text-sm text-base-content transition hover:bg-base-300"
+        :class="resolving ? 'pointer-events-none opacity-60' : ''"
+      >
+        <input
+          type="checkbox"
+          class="checkbox checkbox-sm"
+          :disabled="resolving"
+          @change="handleSessionAutonomousModeChange"
+        >
+        <span>{{ t("terminalApproval.rememberSession") }}</span>
+      </label>
     </div>
-
     <ul class="mt-3 flex flex-col gap-2">
       <li
         v-for="(item, index) in approvals"
         :key="item.requestId"
         class="rounded-box border border-base-300 bg-base-100/85 px-3 py-2"
       >
-        <div class="flex items-center gap-2 text-sm font-medium text-base-content">
-          <span class="badge badge-ghost badge-sm shrink-0">{{ index + 1 }}</span>
-          <span class="truncate">{{ toolNameText(item) }}</span>
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex min-w-0 items-center gap-2 text-sm font-medium text-base-content">
+            <span class="badge badge-ghost badge-sm shrink-0">{{ index + 1 }}</span>
+            <span class="truncate">{{ toolNameText(item) }}</span>
+          </div>
+
+          <div
+            v-if="item.canRememberWorkspace"
+            class="flex shrink-0 flex-wrap justify-end gap-1.5"
+          >
+            <label
+              class="flex cursor-pointer items-center gap-2 rounded-lg bg-base-200 px-3 py-2 text-sm text-base-content transition hover:bg-base-300"
+              :class="resolving ? 'pointer-events-none opacity-60' : ''"
+            >
+              <input
+                type="checkbox"
+                class="checkbox checkbox-sm"
+                :disabled="resolving"
+                @change="handleWorkspaceAutonomousModeChange(item.requestId)"
+              >
+              <span>{{ t("terminalApproval.rememberWorkspace") }}</span>
+            </label>
+          </div>
         </div>
 
         <div v-if="callPreviewText(item)" class="mt-2 flex items-center gap-2">
@@ -118,10 +175,17 @@ function callPreviewFirstLine(item: TerminalApprovalConversationItem): string {
           {{ reviewOpinionText(item) }}
         </div>
 
+        <div
+          v-if="item.canRememberWorkspace && workspaceRememberLabel(item)"
+          class="mt-2 text-[11px] text-base-content/45"
+        >
+          {{ workspaceRememberLabel(item) }}
+        </div>
+
         <div class="mt-2 flex gap-2">
           <button
             type="button"
-            class="btn btn-xs flex-1 border-base-300 bg-base-200 text-base-content hover:bg-base-300"
+            class="btn btn-sm flex-1 border-base-300 bg-base-200 text-base-content hover:bg-base-300"
             :disabled="resolving"
             @click="emit('deny', item.requestId)"
           >
@@ -129,7 +193,7 @@ function callPreviewFirstLine(item: TerminalApprovalConversationItem): string {
           </button>
           <button
             type="button"
-            class="btn btn-xs flex-1 border-base-300 bg-base-200 text-base-content hover:bg-base-300"
+            class="btn btn-sm flex-1 border-base-300 bg-base-200 text-base-content hover:bg-base-300"
             :disabled="resolving"
             @click="emit('approve', item.requestId)"
           >

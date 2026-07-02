@@ -2092,7 +2092,9 @@
   "terminalApproval": {
     "title": "终端审批",
     "approve": "批准",
-    "deny": "拒绝"
+    "deny": "拒绝",
+    "rememberWorkspace": "目录全权",
+    "rememberSession": "会话全权"
   },
   "terminalApprovalImpact": {
     "riskTitle": "危险等级评估",

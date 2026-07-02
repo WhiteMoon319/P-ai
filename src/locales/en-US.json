@@ -2085,7 +2085,9 @@
   "terminalApproval": {
     "title": "Terminal Approval",
     "approve": "Approve",
-    "deny": "Deny"
+    "deny": "Deny",
+    "rememberWorkspace": "Workspace full access",
+    "rememberSession": "Session full access"
   },
   "terminalApprovalImpact": {
     "riskTitle": "Risk Assessment",

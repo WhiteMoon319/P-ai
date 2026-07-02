@@ -70,7 +70,7 @@ struct AppState {
         tokio::sync::Mutex<std::collections::HashMap<String, TerminalLiveShellSessionHandle>>,
     >,
     terminal_pending_approvals:
-        Arc<Mutex<std::collections::HashMap<String, tokio::sync::oneshot::Sender<bool>>>>,
+        Arc<Mutex<std::collections::HashMap<String, PendingTerminalApprovalRequest>>>,
     llm_round_logs: Arc<Mutex<std::collections::VecDeque<LlmRoundLogEntry>>>,
     conversation_runtime_slots:
         Arc<Mutex<std::collections::HashMap<String, ConversationRuntimeSlot>>>,

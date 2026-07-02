@@ -99,8 +99,10 @@
       @lock-workspace="openWorkspacePicker"
       @open-code-review="openCodeReview"
       @open-supervision-task="openSupervisionTask"
-      @approve-terminal-approval="approveTerminalApproval"
-      @deny-terminal-approval="denyTerminalApproval"
+    @approve-terminal-approval="approveTerminalApproval"
+    @deny-terminal-approval="denyTerminalApproval"
+    @approve-terminal-approval-for-session="approveTerminalApprovalForSession"
+    @approve-terminal-approval-for-workspace="approveTerminalApprovalForWorkspace"
       @switch-conversation="openConversation($event.conversationId)"
       @delete-conversation="deleteConversation"
       @rebind-conversation-recipient="rebindConversationRecipient"
@@ -1293,6 +1295,9 @@ function enqueueTerminalApprovalRequest(payload: TerminalApprovalRequestPayload)
     reason: String(payload.reason || ""),
     reviewOpinion: String(payload.reviewOpinion || ""),
     reviewModelName: String(payload.reviewModelName || ""),
+    canRememberWorkspace: !!payload.canRememberWorkspace,
+    workspaceName: String(payload.workspaceName || ""),
+    workspacePath: String(payload.workspacePath || ""),
     existingPaths: Array.isArray(payload.existingPaths)
       ? payload.existingPaths.map((item) => String(item || "").trim()).filter(Boolean)
       : [],
@@ -1327,6 +1332,32 @@ function approveTerminalApproval(requestId: string) {
 
 function denyTerminalApproval(requestId: string) {
   void resolveTerminalApproval(false, requestId);
+}
+
+async function invokeTerminalApprovalAction(method: string, requestId?: string) {
+  if (terminalApprovalResolving.value) return;
+  const normalizedRequestId = String(requestId || "").trim();
+  const targetIndex = terminalApprovalQueue.value.findIndex((item) => item.requestId === normalizedRequestId);
+  if (targetIndex < 0) return;
+  terminalApprovalResolving.value = true;
+  try {
+    await transport.request(method, {
+      requestId: terminalApprovalQueue.value[targetIndex].requestId,
+    });
+    terminalApprovalQueue.value.splice(targetIndex, 1);
+  } catch (error) {
+    transport.errorText.value = String(error || t('sidebar.approvalFailed'));
+  } finally {
+    terminalApprovalResolving.value = false;
+  }
+}
+
+function approveTerminalApprovalForSession(requestId: string) {
+  void invokeTerminalApprovalAction("terminalApproval.approveForSession", requestId);
+}
+
+function approveTerminalApprovalForWorkspace(requestId: string) {
+  void invokeTerminalApprovalAction("terminalApproval.approveForWorkspace", requestId);
 }
 
 async function loadPrevBlock() {

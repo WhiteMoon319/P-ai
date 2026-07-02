@@ -247,6 +247,8 @@
         @create-conversation="onCreateConversation"
         @approve-terminal-approval="approveTerminalApproval"
         @deny-terminal-approval="denyTerminalApproval"
+        @approve-terminal-approval-for-session="approveTerminalApprovalForSession"
+        @approve-terminal-approval-for-workspace="approveTerminalApprovalForWorkspace"
       />
       <div
         v-if="chatBusyOverlay"
@@ -523,6 +525,8 @@ const props = defineProps<{
   terminalApprovalResolving?: boolean;
   approveTerminalApproval: (requestId?: string) => void;
   denyTerminalApproval: (requestId?: string) => void;
+  approveTerminalApprovalForSession: (requestId?: string) => void;
+  approveTerminalApprovalForWorkspace: (requestId?: string) => void;
   planModeEnabled: boolean;
   chatUsagePercent: number;
   trimTip: string;
