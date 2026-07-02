@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-02T06:25:53.339Z",
-  "latestVersion": "v0.16.0",
+  "generatedAt": "2026-07-02T13:18:57.907Z",
+  "latestVersion": "v0.16.1",
   "releases": [
+    {
+      "version": "v0.16.1",
+      "path": "docs/changelog/releases/v0.16.1.md",
+      "summary": "网页登录支持记住密码，下次打开无需重复输入"
+    },
     {
       "version": "v0.16.0",
       "path": "docs/changelog/releases/v0.16.0.md",
