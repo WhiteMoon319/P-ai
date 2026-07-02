@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-06-30T14:27:06.365Z",
-  "latestVersion": "v0.15.9",
+  "generatedAt": "2026-07-02T06:25:53.339Z",
+  "latestVersion": "v0.16.0",
   "releases": [
+    {
+      "version": "v0.16.0",
+      "path": "docs/changelog/releases/v0.16.0.md",
+      "summary": "残留流缓存导致对话在收尾后仍被前端视为忙碌；移除 stream cache 在前后端的热绑/忙碌判断，仅以运行时状态、处理中和待处理队列为准"
+    },
     {
       "version": "v0.15.9",
       "path": "docs/changelog/releases/v0.15.9.md",

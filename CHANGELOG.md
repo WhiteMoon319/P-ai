@@ -5,6 +5,7 @@
 
 ## 最近版本
 
+- [v0.16.0](docs/changelog/releases/v0.16.0.md) - 残留流缓存导致对话在收尾后仍被前端视为忙碌；移除 stream cache 在前后端的热绑/忙碌判断，仅以运行时状态、处理中和待处理队列为准
 - [v0.15.9](docs/changelog/releases/v0.15.9.md) - 聊天使用后端预分配的真实消息 ID，替换前端乐观占位 ID，避免恢复流式时 ID 不一致导致消息覆盖
 - [v0.15.8](docs/changelog/releases/v0.15.8.md) - 支持会话分组排序与拖拽调整
 - [v0.15.7](docs/changelog/releases/v0.15.7.md) - **代码审查人格选择**：审查对话框现在支持精确选择部门下的特定人格作为审查者，而非自动选中部门首个人格；跨会话、归档和侧边栏全链路透传 agentId。
