@@ -6,117 +6,13 @@
     :class="[isDark ? 'ecall-md-dark' : 'ecall-md-light', variant === 'document' ? 'ecall-md-document' : 'ecall-md-chat']"
     @click="emit('click', $event)"
   >
-    <template v-for="(block, index) in visibleBlocks" :key="`${block.type}-${index}-${block.key}`">
-      <component
-        :is="headingTag(block.level)"
-        v-if="block.type === 'heading'"
-        class="ecall-md-heading"
-      >
-        <InlineRenderer
-          :segments="parseInlineSegments(block.text)"
-          :local-image-base-path="localImageBasePath"
-          :footnote-index-map="footnoteIndexMap"
-        />
-      </component>
-
-      <blockquote v-else-if="block.type === 'quote'" class="ecall-md-quote">
-        <InlineRenderer
-          :segments="parseInlineSegments(block.text)"
-          :local-image-base-path="localImageBasePath"
-          :footnote-index-map="footnoteIndexMap"
-        />
-      </blockquote>
-
-      <ul v-else-if="block.type === 'list' && !block.ordered" class="ecall-md-list">
-        <li v-for="(item, itemIndex) in block.items" :key="`${index}-${itemIndex}`">
-          <InlineRenderer
-            :segments="parseInlineSegments(item)"
-            :local-image-base-path="localImageBasePath"
-            :footnote-index-map="footnoteIndexMap"
-          />
-        </li>
-      </ul>
-      <ol v-else-if="block.type === 'list'" class="ecall-md-list ecall-md-list-ordered">
-        <li v-for="(item, itemIndex) in block.items" :key="`${index}-${itemIndex}`">
-          <InlineRenderer
-            :segments="parseInlineSegments(item)"
-            :local-image-base-path="localImageBasePath"
-            :footnote-index-map="footnoteIndexMap"
-          />
-        </li>
-      </ol>
-
-      <div v-else-if="block.type === 'table'" class="ecall-md-table-wrap">
-        <table class="ecall-md-table">
-          <thead>
-            <tr>
-              <th v-for="(cell, ci) in block.headers" :key="`${index}-h-${ci}`">
-                <InlineRenderer
-                  :segments="parseInlineSegments(cell)"
-                  :local-image-base-path="localImageBasePath"
-                  :footnote-index-map="footnoteIndexMap"
-                />
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(row, ri) in block.rows" :key="`${index}-r-${ri}`">
-              <td v-for="(cell, ci) in normalizedTableRow(row, block.headers.length)" :key="`${index}-r-${ri}-c-${ci}`">
-                <InlineRenderer
-                  :segments="parseInlineSegments(cell)"
-                  :local-image-base-path="localImageBasePath"
-                  :footnote-index-map="footnoteIndexMap"
-                />
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <CodeBlock
-        v-else-if="block.type === 'code'"
-        :lang="block.lang"
-        :code="block.text"
-        :block-key="block.key"
-        :is-dark="isDark"
-        :streaming="streaming"
-      />
-
-      <MathBlock
-        v-else-if="block.type === 'math'"
-        :text="block.text"
-        :block-key="block.key"
-        :streaming="streaming"
-      />
-
-      <section v-else-if="block.type === 'footnotes'" class="ecall-md-footnotes">
-        <ol class="ecall-md-footnote-list">
-          <li
-            v-for="item in block.items"
-            :id="footnoteDomId(item.id)"
-            :key="`${index}-${item.id}`"
-            class="ecall-md-footnote-item"
-            :class="activeFootnoteId === item.id ? 'ecall-md-footnote-active' : ''"
-          >
-            <InlineRenderer
-              :segments="parseInlineSegments(item.text)"
-              :local-image-base-path="localImageBasePath"
-              :footnote-index-map="footnoteIndexMap"
-            />
-          </li>
-        </ol>
-      </section>
-
-      <hr v-else-if="block.type === 'hr'" class="ecall-md-hr" />
-
-      <p v-else class="ecall-md-paragraph">
-        <InlineRenderer
-          :segments="parseInlineSegments(block.text)"
-          :local-image-base-path="localImageBasePath"
-          :footnote-index-map="footnoteIndexMap"
-        />
-      </p>
-    </template>
+    <BlockRenderer
+      :blocks="visibleBlocks"
+      :is-dark="isDark"
+      :streaming="streaming"
+      :local-image-base-path="localImageBasePath"
+      :footnote-index-map="footnoteIndexMap"
+    />
   </div>
   <Teleport to="body">
     <div
@@ -484,6 +380,10 @@ function headingTag(level: unknown): "h1" | "h2" | "h3" | "h4" {
   return `h${normalized}` as "h1" | "h2" | "h3" | "h4";
 }
 
+function nestedMarkdownBlocks(text: string, streaming: boolean): MarkdownBlock[] {
+  return parseMarkdownBlocks(text, streaming);
+}
+
 // ==================== Inline Renderer ====================
 
 const InlineRenderer = defineComponent({
@@ -509,6 +409,152 @@ const InlineRenderer = defineComponent({
         footnoteIndexMap: inlineProps.footnoteIndexMap,
       },
     );
+  },
+});
+
+const BlockRenderer = defineComponent({
+  name: "BlockRenderer",
+  props: {
+    blocks: {
+      type: Array as PropType<MarkdownBlock[]>,
+      required: true,
+    },
+    isDark: { type: Boolean, default: false },
+    streaming: { type: Boolean, default: false },
+    localImageBasePath: { type: String, default: "" },
+    footnoteIndexMap: {
+      type: Object as PropType<Record<string, number>>,
+      default: () => ({}),
+    },
+  },
+  setup(blockProps) {
+    const renderBlock = (block: MarkdownBlock, index: number): VNodeChild => {
+      if (block.type === "heading") {
+        return h(headingTag(block.level), { key: `${block.type}-${index}-${block.key}`, class: "ecall-md-heading" }, [
+          h(InlineRenderer, {
+            segments: parseInlineSegments(block.text),
+            localImageBasePath: blockProps.localImageBasePath,
+            footnoteIndexMap: blockProps.footnoteIndexMap,
+          }),
+        ]);
+      }
+      if (block.type === "quote") {
+        return h("blockquote", { key: `${block.type}-${index}-${block.key}`, class: "ecall-md-quote" }, [
+          h(InlineRenderer, {
+            segments: parseInlineSegments(block.text),
+            localImageBasePath: blockProps.localImageBasePath,
+            footnoteIndexMap: blockProps.footnoteIndexMap,
+          }),
+        ]);
+      }
+      if (block.type === "list") {
+        const tag = block.ordered ? "ol" : "ul";
+        return h(tag, {
+          key: `${block.type}-${index}-${block.key}`,
+          class: block.ordered ? "ecall-md-list ecall-md-list-ordered" : "ecall-md-list",
+        }, block.items.map((item, itemIndex) => h("li", { key: `${index}-${itemIndex}` }, [
+          h(InlineRenderer, {
+            segments: parseInlineSegments(item),
+            localImageBasePath: blockProps.localImageBasePath,
+            footnoteIndexMap: blockProps.footnoteIndexMap,
+          }),
+        ])));
+      }
+      if (block.type === "table") {
+        return h("div", { key: `${block.type}-${index}-${block.key}`, class: "ecall-md-table-wrap" }, [
+          h("table", { class: "ecall-md-table" }, [
+            h("thead", [
+              h("tr", block.headers.map((cell, ci) => h("th", { key: `${index}-h-${ci}` }, [
+                h(InlineRenderer, {
+                  segments: parseInlineSegments(cell),
+                  localImageBasePath: blockProps.localImageBasePath,
+                  footnoteIndexMap: blockProps.footnoteIndexMap,
+                }),
+              ]))),
+            ]),
+            h("tbody", block.rows.map((row, ri) => h("tr", { key: `${index}-r-${ri}` }, normalizedTableRow(row, block.headers.length).map((cell, ci) => h("td", { key: `${index}-r-${ri}-c-${ci}` }, [
+              h(InlineRenderer, {
+                segments: parseInlineSegments(cell),
+                localImageBasePath: blockProps.localImageBasePath,
+                footnoteIndexMap: blockProps.footnoteIndexMap,
+              }),
+            ]))))),
+          ]),
+        ]);
+      }
+      if (block.type === "code") {
+        return h(CodeBlock, {
+          key: `${block.type}-${index}-${block.key}`,
+          lang: block.lang,
+          code: block.text,
+          blockKey: block.key,
+          isDark: blockProps.isDark,
+          streaming: blockProps.streaming,
+        });
+      }
+      if (block.type === "math") {
+        return h(MathBlock, {
+          key: `${block.type}-${index}-${block.key}`,
+          text: block.text,
+          blockKey: block.key,
+          streaming: blockProps.streaming,
+        });
+      }
+      if (block.type === "details") {
+        const nestedBlocks = nestedMarkdownBlocks(block.body, blockProps.streaming);
+        return h("details", {
+          key: `${block.type}-${index}-${block.key}`,
+          class: "ecall-md-details",
+          open: block.open || undefined,
+        }, [
+          h("summary", { class: "ecall-md-details-summary" }, [
+            h(InlineRenderer, {
+              segments: parseInlineSegments(block.summary),
+              localImageBasePath: blockProps.localImageBasePath,
+              footnoteIndexMap: blockProps.footnoteIndexMap,
+            }),
+          ]),
+          block.body
+            ? h("div", { class: "ecall-md-details-body" }, [
+              h(BlockRenderer, {
+                blocks: nestedBlocks,
+                isDark: blockProps.isDark,
+                streaming: blockProps.streaming,
+                localImageBasePath: blockProps.localImageBasePath,
+                footnoteIndexMap: blockProps.footnoteIndexMap,
+              }),
+            ])
+            : null,
+        ]);
+      }
+      if (block.type === "footnotes") {
+        return h("section", { key: `${block.type}-${index}-${block.key}`, class: "ecall-md-footnotes" }, [
+          h("ol", { class: "ecall-md-footnote-list" }, block.items.map((item) => h("li", {
+            id: footnoteDomId(item.id),
+            key: `${index}-${item.id}`,
+            class: ["ecall-md-footnote-item", activeFootnoteId.value === item.id ? "ecall-md-footnote-active" : ""],
+          }, [
+            h(InlineRenderer, {
+              segments: parseInlineSegments(item.text),
+              localImageBasePath: blockProps.localImageBasePath,
+              footnoteIndexMap: blockProps.footnoteIndexMap,
+            }),
+          ]))),
+        ]);
+      }
+      if (block.type === "hr") {
+        return h("hr", { key: `${block.type}-${index}-${block.key}`, class: "ecall-md-hr" });
+      }
+      return h("p", { key: `${block.type}-${index}-${block.key}`, class: "ecall-md-paragraph" }, [
+        h(InlineRenderer, {
+          segments: parseInlineSegments(block.text),
+          localImageBasePath: blockProps.localImageBasePath,
+          footnoteIndexMap: blockProps.footnoteIndexMap,
+        }),
+      ]);
+    };
+
+    return () => blockProps.blocks.map((block, index) => renderBlock(block, index));
   },
 });
 
@@ -705,6 +751,10 @@ function renderSegments(
       nodes.push(h("code", { key: `${keyPrefix}-c-${index}`, class: "ecall-md-inline-code" }, segment.text));
       continue;
     }
+    if (segment.type === "html_br") {
+      nodes.push(h("br", { key: `${keyPrefix}-br-${index}` }));
+      continue;
+    }
     if (segment.type === "toolcall_ref") {
       const grouped = consumeGroupedToolcallRefs(index);
       const ids = grouped?.ids || [segment.id];
@@ -755,6 +805,22 @@ function renderSegments(
     }
     if (segment.type === "math") {
       nodes.push(h(InlineMath, { key: `${keyPrefix}-m-${index}`, text: segment.text }));
+      continue;
+    }
+    if (segment.type === "html_sub") {
+      nodes.push(h("sub", { key: `${keyPrefix}-sub-${index}`, class: "ecall-md-sub" }, renderSegments(segment.children, `${keyPrefix}-sub-${index}`, localImageBasePath, options)));
+      continue;
+    }
+    if (segment.type === "html_sup") {
+      nodes.push(h("sup", { key: `${keyPrefix}-sup-${index}`, class: "ecall-md-sup" }, renderSegments(segment.children, `${keyPrefix}-sup-${index}`, localImageBasePath, options)));
+      continue;
+    }
+    if (segment.type === "html_kbd") {
+      nodes.push(h("kbd", { key: `${keyPrefix}-kbd-${index}`, class: "ecall-md-kbd" }, renderSegments(segment.children, `${keyPrefix}-kbd-${index}`, localImageBasePath, options)));
+      continue;
+    }
+    if (segment.type === "html_mark") {
+      nodes.push(h("mark", { key: `${keyPrefix}-mark-${index}`, class: "ecall-md-mark" }, renderSegments(segment.children, `${keyPrefix}-mark-${index}`, localImageBasePath, options)));
       continue;
     }
     if (segment.type === "link") {

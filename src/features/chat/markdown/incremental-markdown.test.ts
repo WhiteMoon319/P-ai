@@ -82,4 +82,45 @@ describe("parseInlineSegments", () => {
       { type: "code", text: "**not strong**" },
     ]);
   });
+
+  it("supports whitelisted inline html tags", () => {
+    const segments = parseInlineSegments("按 <kbd>Ctrl</kbd>+<kbd>K</kbd><br>H<sub>2</sub>O 与 x<sup>2</sup>，<mark>重点</mark>");
+
+    expect(segments).toEqual<InlineSegment[]>([
+      { type: "text", text: "按 " },
+      { type: "html_kbd", children: [{ type: "text", text: "Ctrl" }] },
+      { type: "text", text: "+" },
+      { type: "html_kbd", children: [{ type: "text", text: "K" }] },
+      { type: "html_br" },
+      { type: "text", text: "H" },
+      { type: "html_sub", children: [{ type: "text", text: "2" }] },
+      { type: "text", text: "O 与 x" },
+      { type: "html_sup", children: [{ type: "text", text: "2" }] },
+      { type: "text", text: "，" },
+      { type: "html_mark", children: [{ type: "text", text: "重点" }] },
+    ]);
+  });
+});
+
+describe("parseMarkdownBlocks", () => {
+  it("supports whitelisted details blocks", () => {
+    const blocks = stripKeys(parseMarkdownBlocks([
+      "<details open>",
+      "<summary>展开看 <mark>说明</mark></summary>",
+      "",
+      "正文第一行",
+      "",
+      "- 项目 A",
+      "</details>",
+    ].join("\n")));
+
+    expect(blocks).toEqual([
+      {
+        type: "details",
+        summary: "展开看 <mark>说明</mark>",
+        body: "正文第一行\n\n- 项目 A",
+        open: true,
+      },
+    ]);
+  });
 });

@@ -49,6 +49,9 @@
 .ecall-markdown-content .inline-code,
 .ecall-markdown-content .ecall-md-footnotes,
 .ecall-markdown-content .ecall-md-footnote-item,
+.ecall-markdown-content .ecall-md-details,
+.ecall-markdown-content .ecall-md-details-summary,
+.ecall-markdown-content .ecall-md-details-body,
 .ecall-markdown-content .table-node-wrapper,
 .ecall-markdown-content .hr-node {
   color: inherit;
@@ -103,6 +106,79 @@
   color: inherit;
   font-weight: var(--ecall-md-strong-weight);
   font-variation-settings: "wght" var(--ecall-md-strong-weight);
+}
+
+.ecall-markdown-content .ecall-md-details {
+  border: 1px solid color-mix(in srgb, var(--color-base-300) 72%, transparent);
+  border-radius: var(--ecall-md-block-radius);
+  background: color-mix(in srgb, var(--color-base-300) 34%, transparent);
+  padding: 0.16rem 0.2rem;
+}
+
+.ecall-markdown-content .ecall-md-details-summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.34rem 0.46rem;
+  font-weight: var(--ecall-md-strong-weight);
+  font-variation-settings: "wght" var(--ecall-md-strong-weight);
+}
+
+.ecall-markdown-content .ecall-md-details-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ecall-markdown-content .ecall-md-details-summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 0.45rem;
+  color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+  transition: transform 160ms ease;
+}
+
+.ecall-markdown-content .ecall-md-details[open] > .ecall-md-details-summary::before {
+  transform: rotate(90deg);
+}
+
+.ecall-markdown-content .ecall-md-details-body {
+  padding: 0.1rem 0.46rem 0.4rem 1.65rem;
+}
+
+.ecall-markdown-content .ecall-md-kbd {
+  display: inline-block;
+  min-width: 1.5em;
+  border: 1px solid color-mix(in srgb, var(--color-base-content) 18%, transparent);
+  border-bottom-width: 2px;
+  border-radius: 0.42rem;
+  background: color-mix(in srgb, var(--color-base-100) 78%, var(--color-base-300));
+  padding: 0.06rem 0.38rem;
+  font-family: var(
+    --ms-font-mono,
+    ui-monospace,
+    "SFMono-Regular",
+    "SF Mono",
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    "Courier New",
+    monospace
+  );
+  font-size: 0.92em;
+  line-height: 1.4;
+  vertical-align: baseline;
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--color-base-content) 10%, transparent);
+}
+
+.ecall-markdown-content .ecall-md-mark {
+  border-radius: 0.26rem;
+  background: color-mix(in srgb, var(--color-warning) 22%, transparent);
+  color: inherit;
+  padding: 0.02rem 0.2rem;
+}
+
+.ecall-markdown-content .ecall-md-sub,
+.ecall-markdown-content .ecall-md-sup {
+  font-size: 0.8em;
 }
 
 .ecall-markdown-content a,

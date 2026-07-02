@@ -10,11 +10,13 @@ export type MarkdownBlock =
   | { type: "table"; headers: string[]; rows: string[][]; key: string }
   | { type: "code"; lang: string; text: string; key: string }
   | { type: "math"; text: string; key: string }
+  | { type: "details"; summary: string; body: string; open: boolean; key: string }
   | { type: "footnotes"; items: { id: string; text: string }[]; key: string }
   | { type: "hr"; key: string };
 
 export type InlineSegment =
   | { type: "text"; text: string }
+  | { type: "html_br" }
   | { type: "toolcall_ref"; id: string; label: string }
   | { type: "footnote_ref"; id: string }
   | { type: "code"; text: string }
@@ -22,6 +24,10 @@ export type InlineSegment =
   | { type: "link"; text: string; href: string }
   | { type: "image"; alt: string; src: string }
   | { type: "imageLink"; alt: string; src: string; href: string }
+  | { type: "html_sub"; children: InlineSegment[] }
+  | { type: "html_sup"; children: InlineSegment[] }
+  | { type: "html_kbd"; children: InlineSegment[] }
+  | { type: "html_mark"; children: InlineSegment[] }
   | { type: "strong"; children: InlineSegment[] }
   | { type: "em"; children: InlineSegment[] }
   | { type: "strongEm"; children: InlineSegment[] }
@@ -51,6 +57,73 @@ function isTableSeparator(line: string | undefined, expectedCells: number): bool
   const cells = parseTableRow(line);
   if (!cells || cells.length < expectedCells) return false;
   return cells.every((cell) => /^:?-{3,}:?$/.test(cell.trim()));
+}
+
+type DetailsMatch = {
+  summary: string;
+  body: string;
+  open: boolean;
+  endIndex: number;
+};
+
+function tryParseDetailsBlock(lines: string[], startIndex: number, streaming: boolean): DetailsMatch | null {
+  const startLine = String(lines[startIndex] || "");
+  const openMatch = startLine.match(/^\s*<details(\s+open)?\s*>\s*$/i);
+  if (!openMatch) return null;
+  let summary = "";
+  const bodyLines: string[] = [];
+  let endIndex = startIndex;
+  let pendingSummary = false;
+  let summaryCaptured = false;
+
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    const line = String(lines[index] || "");
+    const trimmed = line.trim();
+    endIndex = index;
+
+    if (!summaryCaptured) {
+      const sameLineSummary = trimmed.match(/^<summary>(.*?)<\/summary>\s*$/i);
+      if (sameLineSummary) {
+        summary = String(sameLineSummary[1] || "").trim();
+        summaryCaptured = true;
+        continue;
+      }
+      if (/^<summary>\s*$/i.test(trimmed)) {
+        pendingSummary = true;
+        summaryCaptured = true;
+        continue;
+      }
+    }
+
+    if (pendingSummary) {
+      const closingOnly = trimmed.match(/^(.*?)<\/summary>\s*$/i);
+      if (closingOnly) {
+        summary = String(closingOnly[1] || "").trim();
+        pendingSummary = false;
+        continue;
+      }
+      summary = summary ? `${summary}\n${line}` : line;
+      continue;
+    }
+
+    if (/^\s*<\/details>\s*$/i.test(trimmed)) {
+      return {
+        summary: summary.trim(),
+        body: bodyLines.join("\n").trim(),
+        open: !!openMatch[1],
+        endIndex: index,
+      };
+    }
+    bodyLines.push(line);
+  }
+
+  if (!streaming) return null;
+  return {
+    summary: summary.trim(),
+    body: bodyLines.join("\n").trim(),
+    open: !!openMatch[1],
+    endIndex,
+  };
 }
 
 export function parseMarkdownBlocks(input: string, streaming = false): MarkdownBlock[] {
@@ -176,6 +249,22 @@ export function parseMarkdownBlocks(input: string, streaming = false): MarkdownB
     if (hrMatch) {
       flushParagraph();
       result.push({ type: "hr", key: `hr-${result.length}` });
+      continue;
+    }
+
+    const detailsMatch = tryParseDetailsBlock(lines, lineIndex, streaming);
+    if (detailsMatch) {
+      flushParagraph();
+      recordFootnoteRefs(detailsMatch.summary);
+      recordFootnoteRefs(detailsMatch.body);
+      result.push({
+        type: "details",
+        summary: detailsMatch.summary,
+        body: detailsMatch.body,
+        open: detailsMatch.open,
+        key: `details-${result.length}`,
+      });
+      lineIndex = detailsMatch.endIndex;
       continue;
     }
 
@@ -422,6 +511,8 @@ function normalizeMarkdownHref(rawHref: string): string {
 
 type EmphasisMarkerType = "strong" | "em" | "strongEm" | "delete";
 type InlineSyntaxMatch =
+  | { kind: "html_br"; start: number; end: number; raw: string }
+  | { kind: "html_tag"; start: number; end: number; raw: string; tag: "sub" | "sup" | "kbd" | "mark"; inner: string }
   | { kind: "code"; start: number; end: number; raw: string; text: string }
   | { kind: "math"; start: number; end: number; raw: string; text: string }
   | { kind: "emphasis"; start: number; end: number; inner: string; emphasisType: EmphasisMarkerType }
@@ -542,6 +633,37 @@ function nextCodeOrMath(input: string, from: number): InlineSyntaxMatch | null {
   return null;
 }
 
+function nextAllowedHtml(input: string, from: number): InlineSyntaxMatch | null {
+  const brPattern = /<br\s*\/?>/ig;
+  brPattern.lastIndex = from;
+  const brMatch = brPattern.exec(input);
+
+  const tagPattern = /<(sub|sup|kbd|mark)>([\s\S]*?)<\/\1>/ig;
+  tagPattern.lastIndex = from;
+  const tagMatch = tagPattern.exec(input);
+
+  const brCandidate = brMatch
+    ? {
+      kind: "html_br" as const,
+      start: brMatch.index,
+      end: brMatch.index + brMatch[0].length,
+      raw: brMatch[0],
+    }
+    : null;
+  const tagCandidate = tagMatch
+    ? {
+      kind: "html_tag" as const,
+      start: tagMatch.index,
+      end: tagMatch.index + tagMatch[0].length,
+      raw: tagMatch[0],
+      tag: tagMatch[1].toLowerCase() as "sub" | "sup" | "kbd" | "mark",
+      inner: tagMatch[2],
+    }
+    : null;
+
+  return pickEarlierInline(brCandidate, tagCandidate);
+}
+
 function nextLinkLike(input: string, from: number): LinkMatch | null {
   const imageLink = nextMarkdownImageLink(input, from);
   const markdownLink = nextMarkdownLink(input, from);
@@ -567,6 +689,27 @@ function nextEmphasis(input: string, from: number): InlineSyntaxMatch | null {
 }
 
 function emitInlineSyntaxMatch(match: InlineSyntaxMatch, segments: InlineSegment[]) {
+  if (match.kind === "html_br") {
+    segments.push({ type: "html_br" });
+    return;
+  }
+  if (match.kind === "html_tag") {
+    const children = parseInlineSegments(match.inner);
+    if (match.tag === "sub") {
+      segments.push({ type: "html_sub", children });
+      return;
+    }
+    if (match.tag === "sup") {
+      segments.push({ type: "html_sup", children });
+      return;
+    }
+    if (match.tag === "kbd") {
+      segments.push({ type: "html_kbd", children });
+      return;
+    }
+    segments.push({ type: "html_mark", children });
+    return;
+  }
   if (match.kind === "code") {
     segments.push({ type: "code", text: match.text });
     return;
@@ -637,7 +780,10 @@ export function parseInlineSegments(input: string): InlineSegment[] {
 
   while (cursor < text.length) {
     const next = pickEarlierInline(
-      pickEarlierInline(nextCodeOrMath(text, cursor), nextLinkLike(text, cursor)),
+      pickEarlierInline(
+        pickEarlierInline(nextCodeOrMath(text, cursor), nextAllowedHtml(text, cursor)),
+        nextLinkLike(text, cursor),
+      ),
       nextEmphasis(text, cursor),
     );
     if (!next) break;
