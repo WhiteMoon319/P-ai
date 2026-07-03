@@ -26,6 +26,7 @@
 - 升级 @lucide/vue 到 1.23.0。
 - 升级 Tauri global shortcut 插件到 2.3.2。
 - 升级 serde_json 到 1.0.150。
+- 升级 chrono 到 0.4.45。
 
 ## 修复
 
