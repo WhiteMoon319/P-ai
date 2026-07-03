@@ -1273,7 +1273,7 @@ async fn builtin_read_media(
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(&raw);
-    let hash = format!("{:x}", hasher.finalize());
+    let hash = bytes_to_lower_hex(hasher.finalize());
     if let Some(cached) = {
         let runtime = state_read_runtime_state_cached(state)?;
         read_file_media_cache_lookup(&runtime, &hash, &selected_api.id, detected, &description)

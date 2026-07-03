@@ -141,7 +141,7 @@ fn media_hash_from_raw(raw: &[u8]) -> String {
     let mut hasher = sha2::Sha256::new();
     use sha2::Digest as _;
     hasher.update(&raw);
-    format!("sha256:{:x}", hasher.finalize())
+    format!("sha256:{}", crate::bytes_to_lower_hex(hasher.finalize()))
 }
 
 fn media_hash_from_base64(base64_value: &str) -> Result<String, String> {

@@ -1408,7 +1408,7 @@ fn persist_media_bytes(data_path: &PathBuf, mime: &str, raw: &[u8]) -> Result<St
     }
     let mut hasher = Sha256::new();
     hasher.update(raw);
-    let hash = format!("{:x}", hasher.finalize());
+    let hash = bytes_to_lower_hex(hasher.finalize());
     let ext = media_extension_from_mime(mime);
     let media_id = format!("{hash}.{ext}");
     let dir = media_storage_dir_from_data_path(data_path)?;
@@ -1486,7 +1486,7 @@ fn externalize_stored_binary_base64_in_downloads_subdir(
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(&raw);
-    let hash = format!("{:x}", hasher.finalize());
+    let hash = bytes_to_lower_hex(hasher.finalize());
     let download_id = format!("{subdir}/{hash}.{}", media_extension_from_mime(mime));
     let dir = downloads_storage_dir_from_data_path(data_path)?.join(&subdir);
     fs::create_dir_all(&dir).map_err(|err| {
@@ -1855,7 +1855,7 @@ fn compute_image_hash_hex(image: &BinaryPart) -> Result<String, String> {
     let raw = decode_image_bytes(image)?;
     let mut hasher = Sha256::new();
     hasher.update(raw);
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(bytes_to_lower_hex(hasher.finalize()))
 }
 
 #[cfg(test)]

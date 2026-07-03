@@ -308,7 +308,7 @@ fn memory_match_signature(memories: &[MemoryEntry]) -> String {
         }
         hasher.update(b"\x1c");
     }
-    format!("{:x}", hasher.finalize())
+    bytes_to_lower_hex(hasher.finalize())
 }
 
 #[cfg(test)]

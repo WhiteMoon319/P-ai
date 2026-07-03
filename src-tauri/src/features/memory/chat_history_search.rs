@@ -142,7 +142,7 @@ fn chat_history_index_signature(
         hasher.update(item.summary.as_bytes());
         hasher.update(b"\x1e");
     }
-    format!("{:x}", hasher.finalize())
+    bytes_to_lower_hex(hasher.finalize())
 }
 
 fn chat_history_source_kind(conversation: &Conversation) -> Option<&'static str> {

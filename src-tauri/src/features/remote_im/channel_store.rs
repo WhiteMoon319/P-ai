@@ -49,7 +49,7 @@ fn remote_im_channel_state_file_stem(platform: &RemoteImPlatform, channel_id: &s
     hasher.update(remote_im_platform_store_key(platform).as_bytes());
     hasher.update(b"\n");
     hasher.update(channel_id.trim().as_bytes());
-    format!("{:x}", hasher.finalize())
+    bytes_to_lower_hex(hasher.finalize())
 }
 
 fn remote_im_channel_state_path(

@@ -885,7 +885,7 @@ fn ide_context_hash_remote_password(value: &str) -> String {
     }
     let mut hasher = Sha256::new();
     hasher.update(normalized.as_bytes());
-    format!("sha256:{:x}", hasher.finalize())
+    format!("sha256:{}", crate::bytes_to_lower_hex(hasher.finalize()))
 }
 
 fn ide_context_normalize_remote_password(raw: &str) -> String {

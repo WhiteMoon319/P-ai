@@ -616,7 +616,7 @@ fn compute_file_sha256(path: &StdPath) -> Result<String, String> {
         }
         hasher.update(&buffer[..read]);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(bytes_to_lower_hex(hasher.finalize()))
 }
 
 fn extract_zip_to_dir(

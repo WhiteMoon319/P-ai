@@ -15,6 +15,7 @@
 - 升级 scraper 到 0.27.0，跟进 HTML/CSS 解析依赖更新。
 - 升级 undoc 到 0.5.2，跟进 Office 文档抽取能力更新。
 - 升级 aes 到 0.9.1，适配新版 cipher block API。
+- 升级 sha2 到 0.11.0，跟进 RustCrypto digest 0.11。
 
 ## 修复
 
