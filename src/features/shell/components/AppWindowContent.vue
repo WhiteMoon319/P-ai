@@ -238,6 +238,7 @@
         @task-updated="setStatus(props.t('config.task.updated'))"
         @refresh-tool-review-message="onRefreshToolReviewMessage"
         @switch-conversation="onSwitchConversation"
+        @force-takeover-conversation="onForceTakeoverConversation"
         @rename-conversation="onRenameConversation"
         @toggle-pin-conversation="onToggleConversationPin"
         @archive-conversation="onArchiveConversation"
@@ -706,6 +707,7 @@ const props = defineProps<{
   stopSupervisionTask: () => void;
   onRefreshToolReviewMessage: (payload: { conversationId: string; messageId: string }) => void;
   onSwitchConversation: (payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }) => void;
+  onForceTakeoverConversation: (payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }) => void;
   onRenameConversation: (payload: { conversationId: string; title: string }) => void;
   onToggleConversationPin: (conversationId: string) => void;
   onArchiveConversation: (conversationId: string) => void;
