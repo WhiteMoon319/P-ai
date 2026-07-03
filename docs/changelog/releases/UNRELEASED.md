@@ -18,6 +18,7 @@
 - 升级 sha2 到 0.11.0，跟进 RustCrypto digest 0.11。
 - 升级 httpmock 到 0.8.3，跟进测试 HTTP mock 运行时更新。
 - 刷新 Tauri 核心运行时到 2.11.5，跟进窗口与运行时死锁修复。
+- 刷新 Rust 传递依赖锁定，跟进网络、TLS、WebView 与解析栈补丁。
 
 ## 修复
 
