@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-02T13:18:57.907Z",
-  "latestVersion": "v0.16.1",
+  "generatedAt": "2026-07-03T03:57:02.607Z",
+  "latestVersion": "v0.16.2",
   "releases": [
+    {
+      "version": "v0.16.2",
+      "path": "docs/changelog/releases/v0.16.2.md",
+      "summary": "**强制切入被占用的会话**：当某个会话在其他窗口或客户端中打开时，尝试切换到该会话会弹出确认提示，确认后可强制接管。支持在独立窗口、VS Code 侧边栏和主窗口中互抢会话。"
+    },
     {
       "version": "v0.16.1",
       "path": "docs/changelog/releases/v0.16.1.md",
