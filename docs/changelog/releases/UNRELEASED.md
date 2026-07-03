@@ -13,6 +13,7 @@
 - 升级 tailwindcss 到 4.3.2。
 - 升级 @tailwindcss/postcss 到 4.3.2。
 - 升级 postcss 到 8.5.16。
+- 升级 Vite 到 8.1.3。
 
 ## 修复
 
