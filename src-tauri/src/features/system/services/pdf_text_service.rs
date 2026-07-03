@@ -185,7 +185,7 @@ fn truncate_pdf_pages_to_token_limit(
             continue;
         }
         let truncated = bpe
-            .decode(tokens[..remaining].to_vec())
+            .decode(&tokens[..remaining])
             .map_err(|err| format!("tiktoken decode failed: {err}"))?;
         page.text = truncated;
         kept.push(page);
