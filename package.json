@@ -35,7 +35,7 @@
     "mermaid": "^11.16.0",
     "shiki": "^4.3.0",
     "vue": "^3.5.39",
-    "vue-i18n": "^11.4.4"
+    "vue-i18n": "^11.4.6"
   },
   "devDependencies": {
     "@intlify/devtools-types": "^11.4.4",
