@@ -659,7 +659,7 @@
 
     #[test]
     fn weixin_oc_decrypt_media_ecb_should_remove_pkcs7_padding() {
-        use aes::cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit};
+        use aes::cipher::{BlockCipherEncrypt, KeyInit};
 
         let key = vec![
             0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc,
@@ -673,7 +673,7 @@
         let cipher = aes::Aes128::new_from_slice(&key).expect("create cipher");
         let mut encrypted = padded.clone();
         for chunk in encrypted.chunks_exact_mut(16) {
-            let block = GenericArray::from_mut_slice(chunk);
+            let block = <&mut aes::Block>::try_from(chunk).expect("16-byte AES block");
             cipher.encrypt_block(block);
         }
 

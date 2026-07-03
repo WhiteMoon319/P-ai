@@ -32,7 +32,7 @@ fn weixin_oc_pkcs7_pad(data: &[u8]) -> Vec<u8> {
 }
 
 fn weixin_oc_encrypt_media_ecb(raw: &[u8], key: &[u8]) -> Result<Vec<u8>, String> {
-    use aes::cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit};
+    use aes::cipher::{BlockCipherEncrypt, KeyInit};
 
     if key.len() != 16 {
         return Err(format!("媒体 AES 密钥长度不正确: {}", key.len()));
@@ -41,7 +41,8 @@ fn weixin_oc_encrypt_media_ecb(raw: &[u8], key: &[u8]) -> Result<Vec<u8>, String
         .map_err(|err| format!("初始化媒体 AES 加密器失败: {err}"))?;
     let mut encrypted = weixin_oc_pkcs7_pad(raw);
     for chunk in encrypted.chunks_exact_mut(16) {
-        let block = GenericArray::from_mut_slice(chunk);
+        let block =
+            <&mut aes::Block>::try_from(chunk).map_err(|_| "媒体 AES 分组长度不正确".to_string())?;
         cipher.encrypt_block(block);
     }
     Ok(encrypted)
@@ -137,7 +138,7 @@ fn weixin_oc_parse_media_aes_key(aes_key_value: &str) -> Result<Vec<u8>, String>
 }
 
 fn weixin_oc_decrypt_media_ecb(encrypted: &[u8], key: &[u8]) -> Result<Vec<u8>, String> {
-    use aes::cipher::{generic_array::GenericArray, BlockDecrypt, KeyInit};
+    use aes::cipher::{BlockCipherDecrypt, KeyInit};
 
     if key.len() != 16 {
         return Err(format!("媒体 AES 密钥长度不正确: {}", key.len()));
@@ -152,7 +153,8 @@ fn weixin_oc_decrypt_media_ecb(encrypted: &[u8], key: &[u8]) -> Result<Vec<u8>, 
         .map_err(|err| format!("初始化媒体 AES 解密器失败: {err}"))?;
     let mut decrypted = encrypted.to_vec();
     for chunk in decrypted.chunks_exact_mut(16) {
-        let block = GenericArray::from_mut_slice(chunk);
+        let block =
+            <&mut aes::Block>::try_from(chunk).map_err(|_| "媒体 AES 分组长度不正确".to_string())?;
         cipher.decrypt_block(block);
     }
     Ok(weixin_oc_pkcs7_unpad(&decrypted))

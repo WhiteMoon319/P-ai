@@ -14,6 +14,7 @@
 - 升级 toml 到 1.1.2，跟进 TOML 1.1 解析与序列化实现。
 - 升级 scraper 到 0.27.0，跟进 HTML/CSS 解析依赖更新。
 - 升级 undoc 到 0.5.2，跟进 Office 文档抽取能力更新。
+- 升级 aes 到 0.9.1，适配新版 cipher block API。
 
 ## 修复
 

@@ -35,7 +35,7 @@ dingtalk-stream = "0.1.5"
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "stream", "multipart", "query", "form", "rustls"] }
 genai = "0.7.0-beta.9"
 base64 = "0.22"
-aes = "0.8"
+aes = "0.9.1"
 md5 = "0.8"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
 infer = "0.19.0"
