@@ -20,6 +20,7 @@
 - 升级 vue-i18n 到 11.4.6。
 - 升级 @intlify/devtools-types 到 11.4.6。
 - 升级 @tanstack/vue-virtual 到 3.13.31。
+- 升级 @tauri-apps/cli 到 2.11.4。
 
 ## 修复
 
