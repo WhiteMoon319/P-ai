@@ -27,6 +27,7 @@
 - 升级 Tauri global shortcut 插件到 2.3.2。
 - 升级 serde_json 到 1.0.150。
 - 升级 chrono 到 0.4.45。
+- 升级 uuid 到 1.23.4。
 
 ## 修复
 
