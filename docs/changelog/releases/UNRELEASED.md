@@ -2,7 +2,7 @@
 
 ## 功能
 
-- 升级 genai 到 0.7.0-beta.9，并接入 ProviderConfig 模型列表刷新、adapter 绑定、请求级 prompt cache control 与 Responses response_id 元数据保存。
+- 升级 genai 到 0.7.0-beta.9，并接入 ProviderConfig 模型列表刷新、adapter 绑定与 Responses response_id 元数据保存。
 
 ## 修复
 

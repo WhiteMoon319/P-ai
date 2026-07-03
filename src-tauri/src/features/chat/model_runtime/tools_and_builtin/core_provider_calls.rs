@@ -689,9 +689,7 @@ fn build_provider_genai_chat_options(
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        options = options
-            .with_prompt_cache_key(prompt_cache_key)
-            .with_cache_control(genai::chat::CacheControl::Memory);
+        options = options.with_prompt_cache_key(prompt_cache_key);
     }
     options
 }
@@ -1240,10 +1238,7 @@ mod openai_responses_genai_request_tests {
         let options = build_provider_genai_chat_options(&api_config, false, false);
 
         assert_eq!(options.prompt_cache_key.as_deref(), Some("conversation-1"));
-        assert!(matches!(
-            options.cache_control,
-            Some(genai::chat::CacheControl::Memory)
-        ));
+        assert_eq!(options.cache_control, None);
     }
 
     #[test]
@@ -1273,10 +1268,7 @@ mod openai_responses_genai_request_tests {
         let options = build_provider_genai_chat_options(&api_config, true, true);
 
         assert_eq!(options.prompt_cache_key.as_deref(), Some("conversation-codex"));
-        assert!(matches!(
-            options.cache_control,
-            Some(genai::chat::CacheControl::Memory)
-        ));
+        assert_eq!(options.cache_control, None);
     }
 
     #[test]
