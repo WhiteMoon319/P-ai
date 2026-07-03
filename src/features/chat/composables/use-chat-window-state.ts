@@ -77,7 +77,6 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
     chatConversationPinUpdated: null,
     chatConversationRuntimeStateUpdated: null,
     chatConversationOverviewUpdated: null,
-    chatConversationForceReleased: null,
   };
   const currentChatConversationId = ref("");
   const currentChatPreferredApiConfigId = ref("");

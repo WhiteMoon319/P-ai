@@ -4743,11 +4743,6 @@ fn ide_chat_register_sidebar_conversation(
         *opened_conversation_id = Some(conversation_id.to_string());
         return Ok(());
     }
-    if let Some(existing_label) = detached_chat_window_for_conversation(conversation_id) {
-        if existing_label != sidebar_label {
-            return Err("会话已在其他窗口打开。".to_string());
-        }
-    }
     if opened_conversation_id.as_deref() != Some(conversation_id) {
         ide_chat_release_sidebar_conversation(state, sidebar_label)?;
     }

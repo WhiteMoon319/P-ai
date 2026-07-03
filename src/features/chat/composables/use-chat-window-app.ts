@@ -774,24 +774,6 @@ export function useChatWindowApp() {
     }
   }
 
-  async function forceTakeoverConversation(payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }) {
-    const conversationId = String(payload?.conversationId || "").trim();
-    if (!conversationId) return;
-    try {
-      await invokeTauri("force_take_over_unarchived_conversation", {
-        input: { conversationId },
-      });
-      await refreshChatUnarchivedConversations();
-      await conversationOrchestrator.switchChatConversation({
-        conversationId,
-        kind: payload?.kind,
-        remoteContactId: String(payload?.remoteContactId || "").trim() || undefined,
-      });
-    } catch (error) {
-      setStatusError("status.forceTakeoverConversationFailed", error);
-    }
-  }
-
   return {
     messageText,
     extractMessageImages,
@@ -898,7 +880,6 @@ export function useChatWindowApp() {
     handleConfirmPlan,
     deleteUnarchivedConversation,
     rebindConversationRecipient,
-    forceTakeoverConversation,
     handleCreateConversationBranchFromTurn,
     handleRecallTurn,
     handleRegenerateTurn,

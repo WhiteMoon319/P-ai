@@ -34,30 +34,15 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
     bindings.unarchivedConversations.value = Array.isArray(items) ? items : [];
   }
 
-  function conversationOpenedByAnotherViewer(item: any): boolean {
-    if (item?.isSystemNotificationConversation) return false;
-    const openState = String(item?.state?.openState || "").trim();
-    const openViewerId = String(item?.state?.openViewerId || "").trim();
-    const currentViewerId = String(item?.state?.currentViewerId || "").trim();
-    return openState === "open" && !!openViewerId && !!currentViewerId && openViewerId !== currentViewerId;
-  }
-
-  function isForegroundConversationOpenable(item: any): boolean {
-    return !item?.detachedWindowOpen && !conversationOpenedByAnotherViewer(item);
-  }
-
   function pickForegroundConversationId(candidates: any[]): string {
-    const openableCandidates = candidates.filter(isForegroundConversationOpenable);
     const storedConversationId = readLastActiveConversationId();
     if (storedConversationId) {
-      const stored = openableCandidates.find((item) => String(item?.conversationId || "").trim() === storedConversationId);
+      const stored = candidates.find((item) => String(item?.conversationId || "").trim() === storedConversationId);
       if (stored) return storedConversationId;
     }
     const target =
-      openableCandidates.find((item) => !!item.isSystemNotificationConversation)
-      || openableCandidates.find((item) => !!item.isActive)
-      || openableCandidates[0]
-      || candidates.find((item) => !!item.isSystemNotificationConversation)
+      candidates.find((item) => !!item.isSystemNotificationConversation)
+      || candidates.find((item) => !!item.isActive)
       || candidates[0];
     return String(target?.conversationId || "").trim();
   }
@@ -125,17 +110,6 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
   async function switchUnarchivedConversation(conversationId: string) {
     const cid = String(conversationId || "").trim();
     if (!cid) return;
-    const targetOverview = bindings.unarchivedConversations.value.find((item: any) => String(item.conversationId || "").trim() === cid);
-    if (targetOverview?.detachedWindowOpen) {
-      try {
-        await invokeTauri<boolean>("focus_detached_chat_window_by_conversation", {
-          input: { conversationId: cid },
-        });
-      } catch (error) {
-        console.warn("[独立聊天窗口] 聚焦已占用会话失败", error);
-      }
-      return;
-    }
     const previousConversationId = String(bindings.currentChatConversationId.value || "").trim();
     const startedAt = bindings.perfNow();
     try {

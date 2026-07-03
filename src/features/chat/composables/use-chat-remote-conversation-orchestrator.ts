@@ -16,17 +16,6 @@ export function useChatRemoteConversationOrchestrator(bindings: Record<string, a
     const cid = String(conversationId || "").trim();
     if (!cid) return;
     try {
-      const focused = await invokeTauri<boolean>("focus_detached_chat_window_by_conversation", {
-        input: { conversationId: cid },
-      });
-      if (focused) return;
-    } catch (error) {
-      console.warn("[独立聊天窗口] 聚焦已占用会话失败", {
-        conversationId: cid,
-        error,
-      });
-    }
-    try {
       await invokeTauri<{ conversationId: string; windowLabel: string; systemNotificationConversationId?: string | null }>("detach_current_conversation_to_window", {
         input: { conversationId: cid },
       });

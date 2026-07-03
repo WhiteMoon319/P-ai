@@ -641,7 +641,7 @@ const chatUnarchivedConversationItems = computed<ChatConversationOverviewItem[]>
         activeGoal: item.activeGoal || null,
         currentTodos: item.currentTodos,
         planModeEnabled: !!item.planModeEnabled,
-        detachedWindowOpen: sidebarConversationUnavailableForCurrentViewer(item),
+        detachedWindowOpen: false,
         detachedWindowLabel: item.detachedWindowLabel,
         previewMessages: Array.isArray(item.previewMessages) ? item.previewMessages : [],
         state: item.state
@@ -1020,22 +1020,6 @@ function resolveRemoteConversationDepartmentName(boundDepartmentId?: string): st
   )?.name || normalizedDepartmentId;
 }
 
-function sidebarConversationOpenedOutside(item: ConversationSummary): boolean {
-  if (isSidebarSystemConversation(item)) return false;
-  const openState = String(item.state?.openState || "").trim();
-  const openViewerId = String(item.state?.openViewerId || "").trim();
-  const currentViewerId = String(sidebarViewerId.value || item.state?.currentViewerId || "").trim();
-  return openState === "open" && !!openViewerId && !!currentViewerId && openViewerId !== currentViewerId;
-}
-
-function sidebarConversationUnavailableForCurrentViewer(item: ConversationSummary): boolean {
-  if (sidebarConversationOpenedOutside(item)) return true;
-  const openViewerId = String(item.state?.openViewerId || "").trim();
-  const currentViewerId = String(sidebarViewerId.value || item.state?.currentViewerId || "").trim();
-  if (openViewerId && currentViewerId) return false;
-  return !!item.detachedWindowOpen;
-}
-
 function normalizeSidebarWorkspacePath(path: string): string {
   return String(path || "").trim().replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }
@@ -1070,8 +1054,7 @@ function isSidebarConversationOpenable(item: ConversationSummary): boolean {
   const state = String(item.runtimeState || "").trim();
   return state !== "organizing_context"
     && state !== "archiving"
-    && state !== "compacting"
-    && !sidebarConversationUnavailableForCurrentViewer(item);
+    && state !== "compacting";
 }
 
 function conversationActivityTime(item: ConversationSummary): number {
@@ -2638,15 +2621,6 @@ function registerNotifications() {
   transport.onNotification("conversation.overviewItemUpdated", (payload) => {
     const value = payload as { conversation?: ConversationSummary };
     patchConversationOverviewItem(value.conversation);
-  });
-  transport.onNotification("conversation.forceReleased", (payload) => {
-    const value = payload as { conversationId?: string; systemConversationId?: string };
-    const releasedConversationId = String(value.conversationId || "").trim();
-    const systemConversationId = String(value.systemConversationId || SYSTEM_NOTIFICATION_CONVERSATION_ID).trim();
-    if (!releasedConversationId || releasedConversationId !== String(activeConversationId.value || "").trim()) return;
-    void openConversation(systemConversationId || SYSTEM_NOTIFICATION_CONVERSATION_ID).catch((error) => {
-      console.warn("[会话接管] 切回系统会话失败", error);
-    });
   });
   transport.onNotification("ideContext.updated", () => {
     void refreshIdeContextGroups();

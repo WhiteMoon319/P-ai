@@ -480,7 +480,7 @@ fn build_conversation_list_item_state(
     state: &AppState,
     conversation_id: &str,
     unread_count: usize,
-    is_system_notification_conversation: bool,
+    _is_system_notification_conversation: bool,
     current_viewer_id: Option<&str>,
 ) -> ConversationListItemState {
     let runtime_state = get_conversation_runtime_state(state, conversation_id)
@@ -498,12 +498,6 @@ fn build_conversation_list_item_state(
     };
     let disabled_reason = if runtime_state == MainSessionState::OrganizingContext {
         Some("organizing_context".to_string())
-    } else if !is_system_notification_conversation
-        && open_state == "open"
-        && open_viewer_id.as_deref().is_some()
-        && open_viewer_id.as_deref() != current_viewer_id
-    {
-        Some("opened_elsewhere".to_string())
     } else {
         None
     };
@@ -933,18 +927,6 @@ struct SetConversationAutoPushRemoteContactOutput {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ForceTakeOverUnarchivedConversationInput {
-    conversation_id: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ForceTakeOverUnarchivedConversationOutput {
-    conversation_id: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct UnarchivedConversationOverviewUpdatedPayload {
     unarchived_conversations: Vec<UnarchivedConversationSummary>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1236,94 +1218,6 @@ fn emit_unarchived_conversation_overview_updated_from_state(state: &AppState) ->
         emit_elapsed_ms
     );
     Ok(())
-}
-
-#[tauri::command]
-fn force_take_over_unarchived_conversation(
-    input: ForceTakeOverUnarchivedConversationInput,
-    app: AppHandle,
-    state: State<'_, AppState>,
-    window: tauri::Window,
-) -> Result<ForceTakeOverUnarchivedConversationOutput, String> {
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId 不能为空".to_string());
-    }
-
-    let window_label = window.label().trim().to_string();
-    if window_label.is_empty() {
-        return Err("当前窗口标签为空，无法强制切入会话".to_string());
-    }
-    if window_label.starts_with(VSCODE_SIDEBAR_WINDOW_LABEL_PREFIX)
-        || window_label.starts_with(LEGACY_IDE_CHAT_SIDEBAR_WINDOW_LABEL_PREFIX)
-    {
-        return Err("侧边栏不支持强制切入会话".to_string());
-    }
-
-    let state_ref = state.inner();
-    let system_conversation_id = state_read_runtime_state_cached(state_ref)
-        .ok()
-        .and_then(|runtime| {
-            runtime
-                .main_conversation_id
-                .map(|value| value.trim().to_string())
-                .filter(|value| !value.is_empty())
-        })
-        .unwrap_or_else(|| SYSTEM_NOTIFICATION_CONVERSATION_ID.to_string());
-    let release_payload = serde_json::json!({
-        "conversationId": conversation_id,
-        "systemConversationId": system_conversation_id,
-        "reason": "force_takeover",
-    });
-    let mut released_window_labels = Vec::<String>::new();
-    if let Ok(mut bindings) = state_ref.active_chat_view_bindings.lock() {
-        let current_delta_channel = bindings
-            .get(&window_label)
-            .map(|binding| binding.delta_channel.clone());
-        released_window_labels = bindings
-            .iter()
-            .filter_map(|(label, binding)| {
-                if label == &window_label {
-                    return None;
-                }
-                (binding.conversation_id.trim() == conversation_id).then(|| label.clone())
-            })
-            .collect();
-        bindings.retain(|label, binding| {
-            if label == &window_label {
-                return true;
-            }
-            binding.conversation_id.trim() != conversation_id
-        });
-        if let Some(delta_channel) = current_delta_channel {
-            bindings.insert(
-                window_label.clone(),
-                ActiveChatViewBinding {
-                    conversation_id: conversation_id.to_string(),
-                    delta_channel,
-                },
-            );
-        }
-    }
-
-    if let Some(detached_label) = detached_chat_window_for_conversation(conversation_id) {
-        if detached_label != window_label {
-            let _ = unregister_detached_chat_window_by_label(&detached_label);
-            if !released_window_labels.iter().any(|label| label == &detached_label) {
-                released_window_labels.push(detached_label);
-            }
-        }
-    }
-
-    for label in released_window_labels {
-        let _ = app.emit_to(&label, "easy-call:conversation-force-released", release_payload.clone());
-    }
-    ide_chat_broadcast_notification("conversation.forceReleased", release_payload);
-    clear_conversation_list_activity_mark(state_ref, conversation_id);
-    emit_unarchived_conversation_overview_updated_from_state(state_ref)?;
-    Ok(ForceTakeOverUnarchivedConversationOutput {
-        conversation_id: conversation_id.to_string(),
-    })
 }
 
 #[tauri::command]

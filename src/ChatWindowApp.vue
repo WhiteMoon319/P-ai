@@ -319,7 +319,6 @@
       :confirm-plan="handleConfirmPlan"
       :on-lock-chat-workspace="openChatWorkspacePicker"
       :on-switch-conversation="switchChatConversation"
-      :on-force-takeover-conversation="forceTakeoverConversation"
       :on-rename-conversation="renameCurrentConversation"
       :on-toggle-conversation-pin="toggleConversationPin"
       :on-archive-conversation="archiveConversationFromList"

@@ -303,7 +303,6 @@ const props = defineProps<{
   personaNameMap: Record<string, string>;
   personaAvatarUrlMap: Record<string, string>;
   activeTab: ConversationSidebarTab;
-  allowOpenedElsewhereSelection?: boolean;
   bridgeRequest?: <T = unknown>(method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<T>;
 }>();
 
@@ -698,21 +697,13 @@ function conversationIndicatorClass(tone: "error" | "info" | "success" | ""): st
 }
 
 function isConversationDisabled(item: ChatConversationOverviewItem): boolean {
-  const occupied = !!item.detachedWindowOpen || conversationOpenedByAnotherViewer(item);
-  if (occupied && props.allowOpenedElsewhereSelection) return false;
-  return occupied;
+  void item;
+  return false;
 }
 
 function isConversationVisuallyOccupied(item: ChatConversationOverviewItem): boolean {
-  return !!item.detachedWindowOpen || conversationOpenedByAnotherViewer(item);
-}
-
-function conversationOpenedByAnotherViewer(item: ChatConversationOverviewItem): boolean {
-  if (item.isSystemNotificationConversation) return false;
-  const openState = String(item.state?.openState || "").trim();
-  const openViewerId = String(item.state?.openViewerId || "").trim();
-  const currentViewerId = String(item.state?.currentViewerId || "").trim();
-  return openState === "open" && !!openViewerId && !!currentViewerId && openViewerId !== currentViewerId;
+  void item;
+  return false;
 }
 
 function isLocalConversation(item: ChatConversationOverviewItem): boolean {
@@ -720,13 +711,12 @@ function isLocalConversation(item: ChatConversationOverviewItem): boolean {
 }
 
 function shouldShowConversationMenu(item: ChatConversationOverviewItem): boolean {
-  return isLocalConversation(item) && !isConversationVisuallyOccupied(item);
+  return isLocalConversation(item);
 }
 
 function canRenameConversation(item: ChatConversationOverviewItem): boolean {
   return isLocalConversation(item)
     && !item.isSystemNotificationConversation
-    && !isConversationVisuallyOccupied(item)
     && isCurrentConversation(item);
 }
 
@@ -742,7 +732,6 @@ function conversationDisplayTitle(item: ChatConversationOverviewItem): string {
 }
 
 function conversationItemTitle(item: ChatConversationOverviewItem): string {
-  if (item.detachedWindowOpen || conversationOpenedByAnotherViewer(item)) return t("chat.detachedWindowOpen");
   return item.workspaceLabel || t("chat.defaultWorkspace");
 }
 
@@ -793,7 +782,7 @@ function handleCardPointerLeave() {
 }
 
 function canToggleConversationPin(item: ChatConversationOverviewItem): boolean {
-  return isLocalConversation(item) && !item.isSystemNotificationConversation && !isConversationVisuallyOccupied(item);
+  return isLocalConversation(item) && !item.isSystemNotificationConversation;
 }
 
 function canArchiveConversation(item: ChatConversationOverviewItem): boolean {
@@ -805,7 +794,7 @@ function canDeleteConversation(item: ChatConversationOverviewItem): boolean {
 }
 
 function canExportConversation(item: ChatConversationOverviewItem): boolean {
-  return isLocalConversation(item) && !isConversationVisuallyOccupied(item);
+  return isLocalConversation(item);
 }
 
 function pinConversationTitle(item: ChatConversationOverviewItem): string {

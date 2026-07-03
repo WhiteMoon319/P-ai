@@ -190,17 +190,6 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
         console.error("[聊天追踪][追加消息] 监听器注册失败", error);
       });
 
-      void listen<any>("easy-call:conversation-force-released", (event) => {
-        const releasedConversationId = String(event.payload?.conversationId || "").trim();
-        const systemConversationId = String(event.payload?.systemConversationId || "").trim();
-        const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
-        if (!releasedConversationId || releasedConversationId !== currentConversationId || !systemConversationId) return;
-        void bindings.switchUnarchivedConversation(systemConversationId);
-      }).then((unlisten) => {
-        bindings.unlisteners.chatConversationForceReleased = unlisten;
-      }).catch((error) => {
-        console.error("[会话接管] 监听器注册失败", error);
-      });
     }
 
     bindings.scheduleChatWindowActiveStateSync("mounted");
@@ -245,10 +234,6 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
     if (bindings.unlisteners.chatConversationMessageAppended) {
       bindings.unlisteners.chatConversationMessageAppended();
       bindings.unlisteners.chatConversationMessageAppended = null;
-    }
-    if (bindings.unlisteners.chatConversationForceReleased) {
-      bindings.unlisteners.chatConversationForceReleased();
-      bindings.unlisteners.chatConversationForceReleased = null;
     }
     if (bindings.unlisteners.chatConversationTodosUpdated) {
       bindings.unlisteners.chatConversationTodosUpdated();

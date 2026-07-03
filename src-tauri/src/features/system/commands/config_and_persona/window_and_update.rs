@@ -224,26 +224,6 @@ fn get_detached_chat_window_info(window: tauri::Window) -> Result<DetachedChatWi
 }
 
 #[tauri::command]
-fn focus_detached_chat_window_by_conversation(
-    input: DetachedChatWindowInput,
-    app: AppHandle,
-) -> Result<bool, String> {
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Ok(false);
-    }
-    let Some(label) = detached_chat_window_for_conversation(conversation_id) else {
-        return Ok(false);
-    };
-    if app.get_webview_window(&label).is_none() {
-        let _ = unregister_detached_chat_window_by_label(&label);
-        return Ok(false);
-    }
-    focus_detached_chat_window(&app, &label)?;
-    Ok(true)
-}
-
-#[tauri::command]
 fn set_chat_window_active(active: bool) {
     static CHAT_WINDOW_INACTIVE_LOGGED_ONCE: std::sync::atomic::AtomicBool =
         std::sync::atomic::AtomicBool::new(false);

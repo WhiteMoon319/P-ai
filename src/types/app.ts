@@ -828,7 +828,7 @@ export type ConversationListItemState = {
   openViewerId?: string;
   currentViewerId?: string;
   openedBy?: "main" | "detached" | "vscode";
-  disabledReason?: "organizing_context" | "opened_elsewhere";
+  disabledReason?: "organizing_context";
   failedMessage?: string;
   completedAt?: string;
 };

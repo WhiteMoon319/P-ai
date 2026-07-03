@@ -16,7 +16,6 @@
         :persona-name-map="personaNameMap"
         :persona-avatar-url-map="personaAvatarUrlMap"
         :active-tab="chatLeftPanelMode"
-        :allow-opened-elsewhere-selection="!bridgeMode"
         :bridge-request="bridgeRequest"
         @update:active-tab="$emit('update:conversation-list-tab', $event)"
         @edit-task="openTaskEditDialog"
@@ -197,29 +196,6 @@
           <button class="btn btn-sm btn-circle btn-primary pointer-events-auto shadow-lg" :title="t('chat.jumpToBottom')" @click="handleJumpToBottom">
             <ChevronsDown class="h-4 w-4" />
           </button>
-        </div>
-
-        <div
-          v-if="takeoverPrompt.visible"
-          class="absolute inset-0 z-35 flex items-center justify-center bg-base-100/60 px-4 backdrop-blur-[1px]"
-        >
-          <div class="w-full max-w-md rounded-box border border-warning/30 bg-base-100 p-5 shadow-xl">
-            <div class="text-base font-semibold">{{ t("chat.takeoverPromptTitle") }}</div>
-            <div class="mt-2 text-sm text-base-content/80">
-              {{ t("chat.takeoverPromptMessage", { viewer: takeoverPrompt.viewerLabel || t("chat.takeoverPromptUnknownViewer") }) }}
-            </div>
-            <div class="mt-1 text-xs text-base-content/55">
-              {{ t("chat.takeoverPromptHint") }}
-            </div>
-            <div class="mt-4 flex justify-end gap-2">
-              <button type="button" class="btn btn-sm" @click="closeTakeoverPrompt">
-                {{ t("common.cancel") }}
-              </button>
-              <button type="button" class="btn btn-sm btn-warning" @click="confirmTakeoverPrompt">
-                {{ t("chat.takeoverPromptConfirm") }}
-              </button>
-            </div>
-          </div>
         </div>
 
         <div ref="composerContainer" class="relative shrink-0 border-t border-base-300 bg-base-100 px-2 pt-2 pb-1.5">
@@ -626,7 +602,6 @@ const emit = defineEmits<{
   (e: "taskCreated", task: TaskEntry): void;
   (e: "taskUpdated", task: TaskEntry): void;
   (e: "switchConversation", payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }): void;
-  (e: "forceTakeoverConversation", payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }): void;
   (e: "renameConversation", payload: { conversationId: string; title: string }): void;
   (e: "togglePinConversation", conversationId: string): void;
   (e: "archiveConversation", conversationId: string): void;
@@ -679,20 +654,6 @@ const commitOptionsLoading = ref(false);
 const commitTotal = ref(0);
 const commitPage = ref(1);
 const commitPageSize = ref(30);
-const takeoverPrompt = ref<{
-  visible: boolean;
-  conversationId: string;
-  kind?: "local_unarchived" | "remote_im_contact";
-  remoteContactId?: string;
-  viewerLabel: string;
-}>({
-  visible: false,
-  conversationId: "",
-  kind: undefined,
-  remoteContactId: undefined,
-  viewerLabel: "",
-});
-
 // ==================== context computed ====================
 
 const {
@@ -1272,65 +1233,10 @@ function handleSendChat() {
   emit("sendChat", extraTextBlocks.length > 0 ? { extraTextBlocks } : undefined);
   clearAttachedIdeContextReferences();
 }
-function conversationOpenedByAnotherViewer(item: ChatConversationOverviewItem | undefined): boolean {
-  if (!item || item.isSystemNotificationConversation) return false;
-  const openState = String(item.state?.openState || "").trim();
-  const openViewerId = String(item.state?.openViewerId || "").trim();
-  const currentViewerId = String(item.state?.currentViewerId || "").trim();
-  return openState === "open" && !!openViewerId && !!currentViewerId && openViewerId !== currentViewerId;
-}
-
-function conversationNeedsTakeover(item: ChatConversationOverviewItem | undefined): boolean {
-  if (!item || bridgeMode.value) return false;
-  return !!item.detachedWindowOpen || conversationOpenedByAnotherViewer(item);
-}
-
-function conversationTakeoverViewerLabel(item: ChatConversationOverviewItem | undefined): string {
-  const openedBy = String(item?.state?.openedBy || "").trim();
-  if (openedBy === "detached" || item?.detachedWindowOpen) return t("chat.takeoverPromptViewerDetached");
-  if (openedBy === "vscode") return t("chat.takeoverPromptViewerVscode");
-  if (openedBy === "main") return t("chat.takeoverPromptViewerMain");
-  return t("chat.takeoverPromptUnknownViewer");
-}
-
-function closeTakeoverPrompt() {
-  takeoverPrompt.value = {
-    visible: false,
-    conversationId: "",
-    kind: undefined,
-    remoteContactId: undefined,
-    viewerLabel: "",
-  };
-}
-
-function confirmTakeoverPrompt() {
-  const conversationId = String(takeoverPrompt.value.conversationId || "").trim();
-  if (!conversationId) {
-    closeTakeoverPrompt();
-    return;
-  }
-  emit("forceTakeoverConversation", {
-    conversationId,
-    kind: takeoverPrompt.value.kind,
-    remoteContactId: takeoverPrompt.value.remoteContactId,
-  });
-  closeTakeoverPrompt();
-}
-
 function handleConversationListSelect(payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }) {
   const id = String(payload?.conversationId || "").trim();
   if (!id || id === String(props.activeConversationId || "").trim()) return;
   const target = (props.conversationItems || props.unarchivedConversationItems).find((item) => String(item.conversationId || "").trim() === id);
-  if (conversationNeedsTakeover(target)) {
-    takeoverPrompt.value = {
-      visible: true,
-      conversationId: id,
-      kind: payload?.kind || target?.kind,
-      remoteContactId: String(payload?.remoteContactId || target?.remoteContactId || "").trim() || undefined,
-      viewerLabel: conversationTakeoverViewerLabel(target),
-    };
-    return;
-  }
   emit("switchConversation", { conversationId: id, kind: payload?.kind || target?.kind, remoteContactId: String(payload?.remoteContactId || target?.remoteContactId || "").trim() || undefined });
 }
 function handleConversationRename(payload: { conversationId: string; title: string }) {
@@ -1359,24 +1265,13 @@ function handleShiftWheel(event: WheelEvent) {
   const currentIndex = items.findIndex((item) => String(item.conversationId || "").trim() === currentId);
   if (currentIndex < 0) return;
   const direction = event.deltaY > 0 ? 1 : -1;
-  let step = direction;
-  // 沿方向搜索第一个可切换的会话（跳过当前和不可用）
-  const maxSteps = items.length;
-  while (Math.abs(step) <= maxSteps) {
-    const targetIndex = currentIndex + step;
-    if (targetIndex < 0 || targetIndex >= items.length) break;
-    const target = items[targetIndex];
-    const isDisabled = conversationNeedsTakeover(target);
-    if (!isDisabled) {
-      emit("switchConversation", {
-        conversationId: String(target.conversationId || "").trim(),
-        kind: target.kind,
-        remoteContactId: String(target.remoteContactId || "").trim() || undefined,
-      });
-      break;
-    }
-    step += direction;
-  }
+  const target = items[currentIndex + direction];
+  if (!target) return;
+  emit("switchConversation", {
+    conversationId: String(target.conversationId || "").trim(),
+    kind: target.kind,
+    remoteContactId: String(target.remoteContactId || "").trim() || undefined,
+  });
 }
 
 function handleConversationWheel(event: WheelEvent) {
