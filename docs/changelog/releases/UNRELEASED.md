@@ -10,6 +10,7 @@
 - 升级 Vue 到 3.5.39。
 - 升级 shiki 到 4.3.0。
 - 升级 @tauri-apps/api 到 2.11.1。
+- 升级 tailwindcss 到 4.3.2。
 
 ## 修复
 
