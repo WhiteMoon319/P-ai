@@ -24,6 +24,7 @@ type UseChatFlowExternalEventsOptions = {
   channelBinding: {
     bindActiveConversationStream: (conversationId: string, force?: boolean) => Promise<void>;
     hasActiveBoundDeltaChannel: (conversationId?: string | null) => boolean;
+    probeBoundChannel: (conversationId?: string | null, timeoutMs?: number) => Promise<boolean>;
     setBoundDisplayGeneration: (gen: number) => void;
   };
   handleHistoryFlushed: (gen: number, parsed: any, source: "sendChat" | "bound") => Promise<void>;
@@ -54,8 +55,62 @@ type UseChatFlowExternalEventsOptions = {
 };
 
 export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOptions) {
+  const STREAM_REBIND_COOLDOWN_MS = 800;
+  const rebindCooldownByConversation = new Map<string, number>();
+  const rebindInFlightByConversation = new Map<string, Promise<void>>();
+
+  function sameForegroundConversation(payloadConversationId: string): boolean {
+    const currentConversationId = options.getCurrentConversationId();
+    return !!payloadConversationId
+      && !!currentConversationId
+      && payloadConversationId === currentConversationId;
+  }
+
+  function foregroundAlreadyHandlingCurrentConversation(): boolean {
+    const round = options.getRound();
+    if (round.phase === "queued" || round.phase === "streaming") {
+      return true;
+    }
+    if (options.hasStreamingAssistantMessageInMessages()) {
+      options.ensureForegroundStreamingRound();
+      return true;
+    }
+    return false;
+  }
+
   async function handleExternalStreamRebindRequired(payload: unknown) {
-    void payload;
+    const raw = payload && typeof payload === "object" ? payload as Record<string, unknown> : null;
+    const payloadConversationId = String(raw?.conversationId || "").trim();
+    if (!sameForegroundConversation(payloadConversationId)) {
+      return;
+    }
+    if (foregroundAlreadyHandlingCurrentConversation()) {
+      return;
+    }
+    const now = Date.now();
+    const lastAt = rebindCooldownByConversation.get(payloadConversationId) || 0;
+    if (now - lastAt < STREAM_REBIND_COOLDOWN_MS) {
+      return;
+    }
+    const currentTask = rebindInFlightByConversation.get(payloadConversationId);
+    if (currentTask) {
+      await currentTask;
+      return;
+    }
+    const rebindTask = (async () => {
+      rebindCooldownByConversation.set(payloadConversationId, now);
+      if (options.channelBinding.hasActiveBoundDeltaChannel(payloadConversationId)) {
+        const probeHealthy = await options.channelBinding.probeBoundChannel(payloadConversationId);
+        if (probeHealthy || foregroundAlreadyHandlingCurrentConversation()) {
+          return;
+        }
+      }
+      await options.channelBinding.bindActiveConversationStream(payloadConversationId, true);
+    })().finally(() => {
+      rebindInFlightByConversation.delete(payloadConversationId);
+    });
+    rebindInFlightByConversation.set(payloadConversationId, rebindTask);
+    await rebindTask;
   }
 
   async function handleExternalHistoryFlushed(payload: unknown) {
@@ -175,6 +230,7 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     const payloadConversationId = String(rawObj?.conversationId || "").trim();
     const parsed = readAssistantEvent(rawObj?.event ?? payload);
     const cacheConversationId = payloadConversationId || currentConversationId;
+    const round = options.getRound();
     if (options.matchesRecentlyCompletedRoundIds(parsed)) {
       return;
     }
@@ -206,11 +262,11 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     if (
       parsed.kind !== "tool_status"
       && assistantEventHasVisibleProgress(parsed)
+      && round.phase !== "idle"
       && options.channelBinding.hasActiveBoundDeltaChannel(cacheConversationId)
     ) {
       return;
     }
-    const round = options.getRound();
     if (
       round.phase === "idle"
       && parsed.kind === "tool_status"
@@ -227,6 +283,20 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       return;
     }
     if (round.phase !== "streaming" && round.phase !== "queued") {
+      if (!assistantEventHasVisibleProgress(parsed)) {
+        return;
+      }
+      const resumedGen = options.ensureForegroundStreamingRound();
+      if (!resumedGen) {
+        return;
+      }
+      if (parsed.kind === "activity_reasoning_delta") {
+        const delta = readDeltaMessage(parsed);
+        if (delta && options.reasoningStartedAtMs.value === 0) {
+          options.reasoningStartedAtMs.value = Date.now();
+        }
+      }
+      options.handleStreamingEvent(resumedGen, parsed);
       return;
     }
     const currentGen = round.gen;

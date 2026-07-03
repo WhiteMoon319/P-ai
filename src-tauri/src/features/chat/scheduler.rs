@@ -1545,7 +1545,6 @@ fn dispatch_assistant_delta_to_active_view(
         return;
     }
     let target_count = targets.len();
-
     let mut delivered = false;
     let mut failed_labels = Vec::<String>::new();
     for (window_label, channel) in targets {
@@ -1593,7 +1592,20 @@ fn emit_stream_rebind_required_event(
     phase_id: Option<&str>,
     reason: &str,
 ) {
-    let _ = (state, conversation_id, request_id, phase_id, reason);
+    let app_handle = match state.app_handle.lock() {
+        Ok(guard) => guard.as_ref().cloned(),
+        Err(_) => None,
+    };
+    let Some(app_handle) = app_handle else {
+        return;
+    };
+    let payload = serde_json::json!({
+        "conversationId": conversation_id.trim(),
+        "requestId": request_id.map(str::trim).filter(|value| !value.is_empty()),
+        "phaseId": phase_id.map(str::trim).filter(|value| !value.is_empty()),
+        "reason": reason.trim(),
+    });
+    let _ = app_handle.emit(CHAT_STREAM_REBIND_REQUIRED_EVENT, payload);
 }
 
 #[allow(dead_code)]
@@ -3186,7 +3198,15 @@ async fn activate_main_assistant(
                         **flag = true;
                     }
                 }
-                if should_emit_assistant_delta_via_app_event_only(&event) {
+                if event.kind.as_deref() == Some("stream_rebind_required") {
+                    emit_stream_rebind_required_event(
+                        &state_for_delta,
+                        &conversation_id_for_emit,
+                        event.request_id.as_deref(),
+                        event.phase_id.as_deref(),
+                        event.reason.as_deref().unwrap_or("tool_start"),
+                    );
+                } else if should_emit_assistant_delta_via_app_event_only(&event) {
                     emit_assistant_delta_app_event(
                         &state_for_delta,
                         &conversation_id_for_emit,

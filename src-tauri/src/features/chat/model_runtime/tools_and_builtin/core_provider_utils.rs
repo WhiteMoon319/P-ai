@@ -53,7 +53,23 @@ fn send_stream_rebind_required_event(
     request_id: Option<&str>,
     reason: &str,
 ) {
-    let _ = (on_delta, request_id, reason);
+    let _ = on_delta.send(AssistantDeltaEvent {
+        delta: String::new(),
+        kind: Some("stream_rebind_required".to_string()),
+        request_id: request_id
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned),
+        activation_id: None,
+        phase_id: None,
+        reason: Some(reason.trim().to_string()),
+        tool_name: None,
+        tool_call_id: None,
+        tool_status: None,
+        tool_args: None,
+        message: None,
+        stream_cache: None,
+    });
 }
 
 fn tool_failure_result_json(tool_name: &str, err_text: &str) -> String {
