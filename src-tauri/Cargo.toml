@@ -64,7 +64,7 @@ rusqlite = { version = "0.39.0", features = ["bundled"] }
 tantivy = "0.26.0"
 font-kit = "0.14"
 chrono = { version = "0.4", features = ["serde"] }
-undoc = "0.1.8"
+undoc = "0.5.2"
 litchi = { git = "https://github.com/DevExzh/litchi.git", rev = "5a931961d58bf71c6bb5b7e82f450bda34349e3d" }
 walkdir = "2.5.0"
 zip = { version = "8.5.1", default-features = false, features = ["deflate", "aes-crypto"] }
