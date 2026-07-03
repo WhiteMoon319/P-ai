@@ -34,12 +34,16 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
     bindings.unarchivedConversations.value = Array.isArray(items) ? items : [];
   }
 
+  function conversationOpenedByAnotherViewer(item: any): boolean {
+    if (item?.isSystemNotificationConversation) return false;
+    const openState = String(item?.state?.openState || "").trim();
+    const openViewerId = String(item?.state?.openViewerId || "").trim();
+    const currentViewerId = String(item?.state?.currentViewerId || "").trim();
+    return openState === "open" && !!openViewerId && !!currentViewerId && openViewerId !== currentViewerId;
+  }
+
   function isForegroundConversationOpenable(item: any): boolean {
-    const state = String(item?.runtimeState || "").trim();
-    return state !== "organizing_context"
-      && state !== "archiving"
-      && state !== "compacting"
-      && !item?.detachedWindowOpen;
+    return !item?.detachedWindowOpen && !conversationOpenedByAnotherViewer(item);
   }
 
   function pickForegroundConversationId(candidates: any[]): string {

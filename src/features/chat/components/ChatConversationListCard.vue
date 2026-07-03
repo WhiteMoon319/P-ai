@@ -412,10 +412,7 @@ function setRenameInputRef(element: Element | { $el?: Element | null } | null) {
 }
 
 function isConversationItemDisabled(item: ChatConversationOverviewItem): boolean {
-  return item.runtimeState === "organizing_context"
-    || item.runtimeState === "archiving"
-    || item.runtimeState === "compacting"
-    || !!item.detachedWindowOpen
+  return !!item.detachedWindowOpen
     || conversationOpenedByAnotherViewer(item);
 }
 
@@ -456,15 +453,6 @@ function conversationItemTitle(item: ChatConversationOverviewItem): string {
   }
   if (item.detachedWindowOpen || conversationOpenedByAnotherViewer(item)) {
     return t("chat.detachedWindowOpen");
-  }
-  if (item.runtimeState === "archiving") {
-    return runtimeStateText("archiving");
-  }
-  if (item.runtimeState === "compacting") {
-    return runtimeStateText("compacting");
-  }
-  if (item.runtimeState === "organizing_context") {
-    return t("chat.organizingContextDisabled");
   }
   return item.workspaceLabel || t("chat.defaultWorkspace");
 }

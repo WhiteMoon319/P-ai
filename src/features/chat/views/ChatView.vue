@@ -1281,10 +1281,7 @@ function handleShiftWheel(event: WheelEvent) {
       && !!openViewerId
       && !!currentViewerId
       && openViewerId !== currentViewerId;
-    const isDisabled = target.runtimeState === "organizing_context"
-      || target.runtimeState === "archiving"
-      || target.runtimeState === "compacting"
-      || !!target.detachedWindowOpen
+    const isDisabled = !!target.detachedWindowOpen
       || openedByAnotherViewer;
     if (!isDisabled) {
       emit("switchConversation", {

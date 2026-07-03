@@ -204,19 +204,6 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     });
   }
 
-  function isBusyRuntimeState(runtimeState: string, snapshot: ConversationRuntimeSnapshot): boolean {
-    const normalizedState = String(runtimeState || "").trim();
-    if (
-      normalizedState === "assistant_streaming"
-      || normalizedState === "organizing_context"
-      || normalizedState === "compacting"
-    ) {
-      return true;
-    }
-    if (snapshot?.isProcessing) return true;
-    return !!snapshot?.hasPendingQueue || Math.max(0, Number(snapshot?.pendingQueueCount || 0)) > 0;
-  }
-
   async function requestLatestFormalTailMessageId(conversationId: string): Promise<string> {
     const snapshot = await invokeTauri<any>("get_foreground_conversation_light_snapshot", {
       input: {
@@ -319,7 +306,6 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
 
     const runtimeSnapshot = await requestConversationRuntimeSnapshot(conversationId);
     const runtimeState = String(runtimeSnapshot?.runtimeState || "").trim();
-    const isBusyRuntime = isBusyRuntimeState(runtimeState, runtimeSnapshot);
     const streamingBubblePresent = hasForegroundStreamingBubble();
     logFocusReconcile(seq, "读取运行态快照完成", {
       conversationId,
@@ -330,33 +316,20 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
       pendingQueueCount: Math.max(0, Number(runtimeSnapshot?.pendingQueueCount || 0)),
       hasVisibleProgress: !!runtimeSnapshot?.streamCache?.hasVisibleProgress,
       toolStatusState: String(runtimeSnapshot?.streamCache?.toolStatusState || "").trim(),
-      isBusyRuntime,
       streamingBubblePresent,
     });
 
-    // 第二步判断“后端是否仍在运行这一会话”。
-    // 只要后端还在跑，而前端已经没有运行中气泡，就说明前台正文丢了，必须统一恢复。
-    if (isBusyRuntime && !streamingBubblePresent) {
-      await recoverForegroundConversationBySwitch(
+    if (runtimeState === "assistant_streaming" || runtimeState === "organizing_context" || runtimeState === "compacting") {
+      logFocusReconcile(seq, "运行态仅记录，不触发强制切回", {
         conversationId,
         reason,
-        seq,
-        "runtime_busy_but_foreground_stream_missing",
-      );
-      return;
-    }
-
-    if (isBusyRuntime) {
-      logFocusReconcile(seq, "运行态判定前台未过时", {
-        conversationId,
-        reason,
-        restoreMode: "runtime_busy_with_foreground_stream",
+        runtimeState,
+        streamingBubblePresent,
       });
       return;
     }
 
-    // 第三步只在后端彻底空闲时检查正式消息是否已是最新。
-    // 这样可以避免在流式/压缩/整理上下文过程中，用正式消息尾部去误判一个本来正常的运行中前台。
+    // 后端没有明确流式态时，再检查正式消息是否已是最新。
     const currentTailId = currentFormalTailMessageId();
     const latestTailId = await requestLatestFormalTailMessageId(conversationId);
     logFocusReconcile(seq, "正式消息尾部比较完成", {
