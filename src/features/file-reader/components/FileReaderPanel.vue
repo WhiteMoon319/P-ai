@@ -63,6 +63,7 @@
             class="btn btn-ghost btn-xs min-w-0 flex-1 truncate justify-start font-medium"
             :title="directoryTreeRoot.path"
             @click="openDirectoryInFileManager(directoryTreeRoot.path)"
+            @contextmenu.prevent.stop="openPathOnlyContextMenu(directoryTreeRoot.path, $event)"
           >{{ directoryTreeRoot.name }}</button>
           <button
             class="btn btn-ghost btn-xs h-7 min-h-7 w-7 shrink-0 px-0"
@@ -110,6 +111,7 @@
               class="flex h-7 items-center gap-1 px-2"
               :class="row.kind === 'entry' && !row.entry.isDirectory && normalizePath(row.entry.path) === activePath ? 'bg-primary/10 text-primary' : 'hover:bg-base-300/55'"
               :style="{ paddingLeft: `${8 + row.depth * 14}px` }"
+              @contextmenu.prevent.stop="row.kind === 'entry' && openPathOnlyContextMenu(row.entry.path, $event)"
             >
               <template v-if="row.kind === 'entry'">
                 <button
@@ -156,6 +158,7 @@
               class="file-reader-address-scroll flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden"
               @scroll="updateAddressScrollState"
               @wheel="handleAddressWheel"
+              @contextmenu.prevent.stop="openAddressContextMenu"
             >
               <template v-for="segment in activePathSegments" :key="segment.key">
                 <span v-if="segment.index > 0" class="shrink-0 text-base-content/35">›</span>
@@ -236,6 +239,7 @@
               @scroll="captureVisibleRangeContext"
               @mouseup="captureCurrentTextSelection"
               @keyup="captureCurrentTextSelection"
+              @contextmenu.prevent="openActiveFileContextMenu"
             >
               <AppMarkdownRenderer
                 class="ecall-markdown-content max-w-none"
@@ -258,6 +262,7 @@
                 @scroll="captureVisibleRangeContext"
                 @mouseup="captureCurrentTextSelection"
                 @keyup="captureCurrentTextSelection"
+                @contextmenu.prevent="openActiveFileContextMenu"
               >
                 <div class="file-reader-code-virtual-canvas" :style="{ height: `${activeVirtualCodeTotalSize}px` }">
                   <div
@@ -355,7 +360,10 @@
           @mouseleave="hideHoverDirectoryTree"
         >
           <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-base-300 bg-base-200 px-3 text-sm">
-            <span class="flex-1 truncate font-medium">{{ hoverDirectoryTreeRoot?.name || "" }}</span>
+            <span
+              class="flex-1 truncate font-medium"
+              @contextmenu.prevent.stop="hoverDirectoryTreeRoot && openPathOnlyContextMenu(hoverDirectoryTreeRoot.path, $event)"
+            >{{ hoverDirectoryTreeRoot?.name || "" }}</span>
           </div>
           <div ref="hoverDirectoryScroller" class="flex-1 overflow-auto py-1 text-sm">
             <div v-if="hoverDirectoryTreeRoot?.loading" class="flex items-center gap-2 px-3 py-2 text-xs opacity-65">
@@ -375,6 +383,7 @@
                 class="flex h-7 items-center gap-1 px-2"
                 :class="row.kind === 'entry' && !row.entry.isDirectory ? 'hover:bg-base-300/55' : ''"
                 :style="{ paddingLeft: `${8 + row.depth * 14}px` }"
+                @contextmenu.prevent.stop="row.kind === 'entry' && openPathOnlyContextMenu(row.entry.path, $event)"
               >
                 <template v-if="row.kind === 'entry'">
                   <button
@@ -408,6 +417,56 @@
           </div>
         </div>
       </template>
+      <div
+        v-if="contextMenuOpen && contextMenuTarget"
+        class="fixed z-1300 w-52 rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
+        :style="{ left: `${contextMenuPosition.x}px`, top: `${contextMenuPosition.y}px` }"
+        @pointerdown.stop
+        @contextmenu.prevent.stop
+      >
+        <button
+          v-if="contextMenuTarget.kind !== 'address'"
+          type="button"
+          class="btn btn-ghost btn-sm h-8 w-full justify-start px-2 text-sm font-normal"
+          @click.stop="copyContextMenuFilePath"
+        >
+          {{ t('fileReader.copyFilePath') }}
+        </button>
+        <template v-if="contextMenuTarget.kind === 'file'">
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm h-8 w-full justify-start px-2 text-sm font-normal"
+            :disabled="!contextMenuTarget.selectedText"
+            @click.stop="copyContextMenuSelectedText"
+          >
+            {{ t('fileReader.copySelectedText') }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm h-8 w-full justify-start px-2 text-sm font-normal"
+            :disabled="!contextMenuTarget.lineReference"
+            @click.stop="copyContextMenuLineReference"
+          >
+            {{ t('fileReader.copySelectedLineReference') }}
+          </button>
+        </template>
+        <template v-else-if="contextMenuTarget.kind === 'address'">
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm h-8 w-full justify-start px-2 text-sm font-normal"
+            @click.stop="openContextMenuShell"
+          >
+            {{ t('fileReader.openShellHere') }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm h-8 w-full justify-start px-2 text-sm font-normal"
+            @click.stop="openContextMenuDirectory"
+          >
+            {{ t('fileReader.openContainingFolder') }}
+          </button>
+        </template>
+      </div>
     </Teleport>
   </div>
 </template>
@@ -493,6 +552,13 @@ const emit = defineEmits<{
   (e: "clearSelectionContextReference"): void;
 }>();
 
+type FileReaderContextMenuTarget = {
+  kind: "file" | "path" | "address";
+  path: string;
+  selectedText: string;
+  lineReference: string;
+};
+
 // ==================== Constants ====================
 
 // ==================== State ====================
@@ -500,6 +566,9 @@ const emit = defineEmits<{
 const tabs = ref<FileTab[]>([]);
 const activePath = ref("");
 const actionErrorMessage = ref("");
+const contextMenuOpen = ref(false);
+const contextMenuPosition = ref({ x: 0, y: 0 });
+const contextMenuTarget = ref<FileReaderContextMenuTarget | null>(null);
 const directoryRootPath = ref("");
 const directoryTreeFilter = ref("");
 const directoryTreeSearchVisible = ref(false);
@@ -821,6 +890,127 @@ function isPathRelevantToVisibleDirectory(path: string) {
   return visibleTreeRows.value.some((row) => row.kind === "entry" && sameNormalizedPath(normalizedPath, row.entry.path));
 }
 
+// ==================== Context Menu ====================
+
+function contextMenuPositionFromEvent(event: MouseEvent, options: { width?: number; height?: number } = {}) {
+  const width = options.width || 208;
+  const height = options.height || 128;
+  return {
+    x: Math.max(8, Math.min(event.clientX, window.innerWidth - width - 8)),
+    y: Math.max(8, Math.min(event.clientY, window.innerHeight - height - 8)),
+  };
+}
+
+function openPathOnlyContextMenu(path: string, event: MouseEvent) {
+  const normalizedPath = normalizePath(path);
+  if (!normalizedPath) return;
+  contextMenuPosition.value = contextMenuPositionFromEvent(event, { height: 42 });
+  contextMenuTarget.value = {
+    kind: "path",
+    path: normalizedPath,
+    selectedText: "",
+    lineReference: "",
+  };
+  contextMenuOpen.value = true;
+}
+
+function openAddressContextMenu(event: MouseEvent) {
+  if (!isTauriRuntimeAvailable()) {
+    closeContextMenu();
+    return;
+  }
+  const tab = activeTab.value;
+  const currentDirectory = normalizePath(tab ? directoryFromPath(tab.path) : "");
+  if (!currentDirectory) return;
+  contextMenuPosition.value = contextMenuPositionFromEvent(event, { height: 76 });
+  contextMenuTarget.value = {
+    kind: "address",
+    path: currentDirectory,
+    selectedText: "",
+    lineReference: "",
+  };
+  contextMenuOpen.value = true;
+}
+
+function openActiveFileContextMenu(event: MouseEvent) {
+  const tab = activeTab.value;
+  if (!tab || tab.loading || tab.error) return;
+  const selectionContext = readCurrentFileSelection();
+  contextMenuPosition.value = contextMenuPositionFromEvent(event);
+  contextMenuTarget.value = {
+    kind: "file",
+    path: normalizePath(tab.path),
+    selectedText: selectionContext?.selectedText || "",
+    lineReference: selectionContext ? fileLineReference(tab.path, selectionContext.lineRange) : "",
+  };
+  contextMenuOpen.value = true;
+}
+
+function closeContextMenu() {
+  contextMenuOpen.value = false;
+  contextMenuTarget.value = null;
+}
+
+function readCurrentFileSelection(): { selectedText: string; lineRange: { startLine: number; endLine: number } } | null {
+  const tab = activeTab.value;
+  const scroller = activeContentScroller();
+  if (!tab || !scroller || tab.loading || tab.error) return null;
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
+  if (!scroller.contains(range.commonAncestorContainer)) return null;
+  const selectedText = normalizeSelectedText(selection.toString());
+  if (!selectedText) return null;
+  return {
+    selectedText,
+    lineRange: resolveSelectedLineRange(tab, scroller, selectedText, range),
+  };
+}
+
+function fileLineReference(path: string, lineRange: { startLine?: number; endLine?: number }) {
+  return `${normalizePath(path)}${formatLineSuffix(lineRange.startLine, lineRange.endLine)}`;
+}
+
+async function copyTextToClipboard(text: string) {
+  const value = String(text || "");
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+  } catch (error) {
+    reportFileReaderActionFailure(t('fileReader.actionCopy'), value, error);
+  }
+}
+
+function copyContextMenuFilePath() {
+  const target = contextMenuTarget.value;
+  closeContextMenu();
+  void copyTextToClipboard(target?.path || "");
+}
+
+function copyContextMenuSelectedText() {
+  const target = contextMenuTarget.value;
+  closeContextMenu();
+  void copyTextToClipboard(target?.selectedText || "");
+}
+
+function copyContextMenuLineReference() {
+  const target = contextMenuTarget.value;
+  closeContextMenu();
+  void copyTextToClipboard(target?.lineReference || "");
+}
+
+function openContextMenuShell() {
+  const target = contextMenuTarget.value;
+  closeContextMenu();
+  void openShellAtDirectory(target?.path || "");
+}
+
+function openContextMenuDirectory() {
+  const target = contextMenuTarget.value;
+  closeContextMenu();
+  void openDirectoryInFileManager(target?.path || "");
+}
+
 // ==================== Context Capture ====================
 
 function captureCurrentTextSelection() {
@@ -843,7 +1033,7 @@ function captureCurrentTextSelection() {
   const selectedText = normalizeSelectedText(selection.toString());
   if (!selectedText) return;
 
-  const lineRange = resolveSelectedLineRange(tab, scroller, selectedText);
+  const lineRange = resolveSelectedLineRange(tab, scroller, selectedText, range);
   const meta = buildContextMeta(tab);
   const capturedAt = new Date().toISOString();
   const selectionKey = [
@@ -984,8 +1174,10 @@ function buildContextMeta(tab: FileTab) {
   };
 }
 
-function resolveSelectedLineRange(tab: FileTab, scroller: HTMLElement, selectedText: string): { startLine: number; endLine: number } {
+function resolveSelectedLineRange(tab: FileTab, scroller: HTMLElement, selectedText: string, range?: Range): { startLine: number; endLine: number } {
   if (tab.virtualized) {
+    const virtualizedLineRange = range ? resolveVirtualizedSelectedLineRange(range) : null;
+    if (virtualizedLineRange) return virtualizedLineRange;
     return resolveVisibleLineRange(scroller, Math.max(1, tab.totalLines));
   }
   if (tab.kind === "markdown" && !isTabRawMode(tab)) {
@@ -993,6 +1185,61 @@ function resolveSelectedLineRange(tab: FileTab, scroller: HTMLElement, selectedT
   }
   return resolveRawSelectedLineRange(tab.content, selectedText)
     || resolveVisibleLineRange(scroller, Math.max(1, splitContentLines(tab.content).length));
+}
+
+function resolveVirtualizedSelectedLineRange(range: Range): { startLine: number; endLine: number } | null {
+  const startLine = resolveVirtualizedBoundaryLine(range.startContainer, range.startOffset);
+  const endLine = resolveVirtualizedBoundaryLine(range.endContainer, range.endOffset);
+  if (!startLine || !endLine) return null;
+  return {
+    startLine: Math.min(startLine, endLine),
+    endLine: Math.max(startLine, endLine),
+  };
+}
+
+function resolveVirtualizedBoundaryLine(container: Node, offset: number): number | null {
+  const element = container.nodeType === Node.ELEMENT_NODE
+    ? container as Element
+    : container.parentElement;
+  const row = element?.closest<HTMLElement>(".file-reader-code-virtual-row");
+  if (!row) return null;
+  const blockStartLine = Number(row.dataset.startLine || 0);
+  const blockEndLine = Number(row.dataset.endLine || 0);
+  if (!Number.isFinite(blockStartLine) || !Number.isFinite(blockEndLine) || blockStartLine <= 0 || blockEndLine < blockStartLine) {
+    return null;
+  }
+
+  const shikiLine = element?.closest<HTMLElement>(".file-reader-code-virtual-shiki .line");
+  if (shikiLine && row.contains(shikiLine)) {
+    const lineElements = Array.from(row.querySelectorAll<HTMLElement>(".file-reader-code-virtual-shiki code .line"));
+    const index = lineElements.indexOf(shikiLine);
+    if (index >= 0) {
+      return Math.max(blockStartLine, Math.min(blockEndLine, blockStartLine + index));
+    }
+  }
+
+  const rawPre = row.querySelector<HTMLElement>(".file-reader-code-virtual-raw");
+  if (rawPre && (container === rawPre || rawPre.contains(container))) {
+    const lineIndex = lineIndexWithinElement(rawPre, container, offset);
+    if (lineIndex != null) {
+      return Math.max(blockStartLine, Math.min(blockEndLine, blockStartLine + lineIndex));
+    }
+  }
+
+  return blockStartLine;
+}
+
+function lineIndexWithinElement(root: HTMLElement, container: Node, offset: number): number | null {
+  const range = document.createRange();
+  try {
+    range.selectNodeContents(root);
+    range.setEnd(container, offset);
+    return Math.max(0, range.toString().split("\n").length - 1);
+  } catch {
+    return null;
+  } finally {
+    range.detach();
+  }
 }
 
 function buildContextTextBlock(input: {
@@ -1616,10 +1863,16 @@ function toggleDirectoryTreeSearch() {
 async function openShellAtDirectoryTreeRoot() {
   const root = directoryTreeRoot.value;
   if (!root) return;
+  await openShellAtDirectory(root.path);
+}
+
+async function openShellAtDirectory(path: string) {
+  const normalizedPath = normalizePath(path);
+  if (!normalizedPath) return;
   try {
-    await invokeTauri("open_file_reader_directory_shell", { path: root.path });
+    await invokeTauri("open_file_reader_directory_shell", { path: normalizedPath });
   } catch (error) {
-    reportFileReaderActionFailure(t('fileReader.actionOpenShell'), root.path, error);
+    reportFileReaderActionFailure(t('fileReader.actionOpenShell'), normalizedPath, error);
   }
 }
 
@@ -1727,10 +1980,22 @@ function flattenDirectoryEntriesFromNodes(entries: FileReaderDirectoryEntry[], r
   return rows;
 }
 
+function handleGlobalPointerDown() {
+  closeContextMenu();
+}
+
+function handleGlobalEscape(event: KeyboardEvent) {
+  if (event.key === "Escape") {
+    closeContextMenu();
+  }
+}
+
 // ==================== Lifecycle ====================
 
 onMounted(async () => {
   window.addEventListener("resize", updateAddressScrollState);
+  window.addEventListener("pointerdown", handleGlobalPointerDown);
+  window.addEventListener("keydown", handleGlobalEscape);
   void startFileReaderWatchListener();
   scheduleFileReaderWatchTargetUpdate();
   if (props.enableGlobalDrop === false || !isTauriRuntimeAvailable()) return;
@@ -1753,6 +2018,8 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener("resize", updateAddressScrollState);
+  window.removeEventListener("pointerdown", handleGlobalPointerDown);
+  window.removeEventListener("keydown", handleGlobalEscape);
   if (watchTargetUpdateTimer) window.clearTimeout(watchTargetUpdateTimer);
   if (autoRefreshFileTimer) window.clearTimeout(autoRefreshFileTimer);
   if (autoRefreshDirectoryTimer) window.clearTimeout(autoRefreshDirectoryTimer);
