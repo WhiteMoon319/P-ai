@@ -18,6 +18,7 @@
 - 升级 vue-tsc 到 3.3.6。
 - 升级 mermaid 到 11.16.0。
 - 升级 vue-i18n 到 11.4.6。
+- 升级 @intlify/devtools-types 到 11.4.6。
 
 ## 修复
 
