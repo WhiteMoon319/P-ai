@@ -414,109 +414,52 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useVirtualizer } from "@tanstack/vue-virtual";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { ChevronDown, ChevronRight, Code2, Eye, ExternalLink, FilePlus, FileText, Folder, ListIndentDecrease, ListIndentIncrease, RefreshCw, Search, SquareTerminal, X } from "@lucide/vue";
-import { bundledLanguagesInfo, codeToHtml } from "shiki";
 import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
 import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import { useI18n } from "vue-i18n";
 import type { IdeContextReferenceItem } from "../../../types/app";
+import { CONTEXT_TEXT_BLOCK_CONTENT_LIMIT } from "../constants";
+import { useFileReaderVirtualCode } from "../composables/use-file-reader-virtual-code";
+import type {
+  DirectoryNode,
+  FileReaderDirectoryEntry,
+  FileReaderDirectoryPayload,
+  FileReaderFileBlockPayload,
+  FileReaderFilePayload,
+  FileReaderSessionState,
+  FileReaderWatchEventPayload,
+  FileReaderWatchTarget,
+  FileTab,
+  TreeRow,
+} from "../types";
+import {
+  blockLineNumbers,
+  directoryFromPath,
+  extensionFromPath,
+  fileKindFromPath,
+  formatLineSuffix,
+  hashText,
+  languageIdFromTab,
+  normalizeDirectoryEntries,
+  normalizePath,
+  normalizeSelectedText,
+  relativePathFromWorkspace,
+  resolveRawSelectedLineRange,
+  resolveVisibleLineRange,
+  sameNormalizedPath,
+  splitContentLines,
+  stripMarkdownHtmlComments,
+  titleFromPath,
+} from "../utils";
 
 const { t } = useI18n();
 
 initKatex();
-
-// ==================== Types ====================
-
-type FileReaderFilePayload = {
-  path: string;
-  name: string;
-  extension: string;
-  kind: "markdown" | "code" | string;
-  content: string;
-  forcePlain?: boolean;
-  virtualized?: boolean;
-  totalLines?: number;
-  blockLineCount?: number;
-};
-
-type FileReaderFileBlockPayload = {
-  path: string;
-  startLine: number;
-  endLine: number;
-  content: string;
-};
-
-type FileReaderDirectoryEntry = {
-  path: string;
-  name: string;
-  isDirectory: boolean;
-};
-
-type FileReaderDirectoryPayload = {
-  path: string;
-  name: string;
-  entries: FileReaderDirectoryEntry[];
-};
-
-type FileTab = {
-  path: string;
-  title: string;
-  extension: string;
-  kind: string;
-  content: string;
-  rawMode: boolean;
-  forcePlain: boolean;
-  virtualized: boolean;
-  totalLines: number;
-  blockLineCount: number;
-  loaded: boolean;
-  loading: boolean;
-  error: string;
-};
-
-type VirtualCodeBlock = {
-  key: string;
-  path: string;
-  startLine: number;
-  endLine: number;
-  lineCount: number;
-};
-
-type DirectoryNode = {
-  path: string;
-  name: string;
-  entries: FileReaderDirectoryEntry[];
-  loaded: boolean;
-  loading: boolean;
-  error: string;
-  expanded: boolean;
-};
-
-type TreeRow =
-  | { kind: "entry"; key: string; depth: number; entry: FileReaderDirectoryEntry }
-  | { kind: "status"; key: string; depth: number; text: string };
-
-type FileReaderSessionState = {
-  tabs?: string[];
-  activePath?: string;
-  directoryRootPath?: string;
-};
-
-type FileReaderWatchTarget = {
-  path: string;
-  kind: "file" | "directory";
-};
-
-type FileReaderWatchEventPayload = {
-  sessionId: string;
-  path: string;
-  kind: "file" | "directory";
-};
 
 // ==================== Props ====================
 
@@ -552,39 +495,11 @@ const emit = defineEmits<{
 
 // ==================== Constants ====================
 
-const SHIKI_LANGUAGE_KEYS = new Set(
-  bundledLanguagesInfo.flatMap((item) => [item.id, ...(item.aliases || [])]).map((item) => item.toLowerCase()),
-);
-
-const CODE_LANGUAGE_BY_EXTENSION: Record<string, string> = {
-  ts: "typescript", tsx: "tsx", c: "c", cc: "cpp", cpp: "cpp", cxx: "cpp",
-  h: "c", hpp: "cpp", cs: "csharp", java: "java", kt: "kotlin", kts: "kotlin",
-  go: "go", js: "javascript", jsx: "jsx", vue: "vue", rs: "rust", py: "python",
-  rb: "ruby", php: "php", swift: "swift", scala: "scala", dart: "dart", lua: "lua",
-  r: "r", m: "objective-c", mm: "objective-cpp", pl: "perl", pm: "perl",
-  json: "json", jsonc: "jsonc", json5: "json5", toml: "toml", yaml: "yaml", yml: "yaml",
-  css: "css", scss: "scss", sass: "sass", less: "less", html: "html", htm: "html",
-  xml: "xml", svg: "xml", sql: "sql", sh: "bash", bash: "bash", zsh: "bash",
-  fish: "fish", ps1: "powershell", bat: "bat", cmd: "bat", dockerfile: "dockerfile",
-  ini: "ini", env: "dotenv", gitignore: "gitignore", gitattributes: "gitignore",
-  editorconfig: "ini", lock: "text", csv: "csv", tsv: "tsv", txt: "text", log: "log",
-  md: "markdown", markdown: "markdown", mdx: "mdx",
-};
-
-const CONTEXT_TEXT_BLOCK_CONTENT_LIMIT = 2000;
-const FILE_READER_VIRTUAL_BLOCK_OVERSCAN = 6;
-const FILE_READER_VIRTUAL_BLOCK_LINE_HEIGHT_PX = 24;
-const FILE_READER_VIRTUAL_BLOCK_PADDING_Y_PX = 8;
-
 // ==================== State ====================
 
 const tabs = ref<FileTab[]>([]);
 const activePath = ref("");
 const actionErrorMessage = ref("");
-const highlightedCodeHtmlByBlockKey = ref<Record<string, string>>({});
-const fileBlockContentByKey = ref<Record<string, string>>({});
-const fileBlockLoadingByKey = ref<Record<string, boolean>>({});
-const fileBlockErrorByKey = ref<Record<string, string>>({});
 const directoryRootPath = ref("");
 const directoryTreeFilter = ref("");
 const directoryTreeSearchVisible = ref(false);
@@ -623,11 +538,31 @@ let watchTargetUpdateTimer = 0;
 let autoRefreshFileTimer = 0;
 let autoRefreshDirectoryTimer = 0;
 const pendingAutoRefreshDirectoryPaths = new Set<string>();
-let activeHighlightRefreshId = 0;
 
 // ==================== Computed ====================
 
 const activeTab = computed(() => tabs.value.find((tab) => tab.path === activePath.value) || tabs.value[0] || null);
+
+const {
+  highlightedCodeHtmlByBlockKey,
+  fileBlockContentByKey,
+  fileBlockLoadingByKey,
+  fileBlockErrorByKey,
+  activeVirtualCodeEntries,
+  activeVirtualCodeTotalSize,
+  virtualCodeLineNumberDigits,
+  blockContentText,
+  blockContentHtml,
+  clearFileBlockCaches,
+  collectVirtualizedVisibleContent,
+  measureVirtualCodeRow,
+} = useFileReaderVirtualCode({
+  activeTab,
+  markdownIsDark: computed(() => props.markdownIsDark),
+  virtualCodeScroller,
+  isRawMode: isTabRawMode,
+  requestFileBlock: requestFileReaderFileBlock,
+});
 
 const directoryTreeRoot = computed(() => {
   const rootPath = normalizePath(directoryRootPath.value);
@@ -667,25 +602,6 @@ const activeMarkdownSource = computed(() => {
   return tab.kind === "markdown" ? stripMarkdownHtmlComments(tab.content) : "";
 });
 
-const activeVirtualCodeBlocks = computed<VirtualCodeBlock[]>(() => {
-  const tab = activeTab.value;
-  if (!tab || !tab.virtualized) return [];
-  const totalLines = Math.max(0, tab.totalLines);
-  const blockLineCount = Math.max(1, tab.blockLineCount || 120);
-  const blocks: VirtualCodeBlock[] = [];
-  for (let startLine = 1; startLine <= totalLines; startLine += blockLineCount) {
-    const endLine = Math.min(totalLines, startLine + blockLineCount - 1);
-    blocks.push({
-      key: buildFileBlockKey(tab.path, startLine, endLine),
-      path: tab.path,
-      startLine,
-      endLine,
-      lineCount: endLine - startLine + 1,
-    });
-  }
-  return blocks;
-});
-
 const addressScrollbarThumbStyle = computed(() => {
   const state = addressScrollState.value;
   if (!state.scrollable || state.clientWidth <= 0 || state.scrollWidth <= 0) {
@@ -697,37 +613,6 @@ const addressScrollbarThumbStyle = computed(() => {
   const left = Math.round((state.left / maxLeft) * maxThumbLeft);
   return { width: `${width}px`, transform: `translateX(${left}px)` };
 });
-
-const virtualCodeBlockVirtualizer = useVirtualizer(
-  computed(() => ({
-    count: activeVirtualCodeBlocks.value.length,
-    getScrollElement: () => virtualCodeScroller.value,
-    getItemKey: (index: number) => activeVirtualCodeBlocks.value[index]?.key ?? `file-block-${index}`,
-    estimateSize: (index: number) => {
-      const block = activeVirtualCodeBlocks.value[index];
-      if (!block) return FILE_READER_VIRTUAL_BLOCK_LINE_HEIGHT_PX;
-      return block.lineCount * FILE_READER_VIRTUAL_BLOCK_LINE_HEIGHT_PX + FILE_READER_VIRTUAL_BLOCK_PADDING_Y_PX * 2;
-    },
-    overscan: FILE_READER_VIRTUAL_BLOCK_OVERSCAN,
-    measureElement: (element: Element) => (element as HTMLElement).getBoundingClientRect().height,
-  })),
-);
-
-const activeVirtualCodeEntries = computed(() =>
-  virtualCodeBlockVirtualizer.value.getVirtualItems().map((row) => ({
-    row,
-    block: activeVirtualCodeBlocks.value[row.index],
-  })).filter((entry): entry is { row: ReturnType<typeof virtualCodeBlockVirtualizer.value.getVirtualItems>[number]; block: VirtualCodeBlock } => Boolean(entry.block)),
-);
-
-const activeVirtualCodeTotalSize = computed(() => virtualCodeBlockVirtualizer.value.getTotalSize());
-
-const virtualCodeLineNumberDigits = computed(() => {
-  const totalLines = Math.max(1, activeTab.value?.totalLines || 1);
-  return Math.max(2, String(totalLines).length);
-});
-
-const activeShikiTheme = computed(() => (props.markdownIsDark ? "github-dark" : "github-light"));
 
 const visibleTreeRows = computed<TreeRow[]>(() => {
   const root = directoryTreeRoot.value;
@@ -789,22 +674,6 @@ watch(
 );
 
 watch(visibleTreeRows, () => scheduleFileReaderWatchTargetUpdate());
-watch(
-  activeVirtualCodeEntries,
-  (entries) => {
-    for (const entry of entries) {
-      void ensureVirtualCodeBlockLoaded(entry.block);
-    }
-  },
-  { immediate: true },
-);
-
-watch(
-  () => props.markdownIsDark,
-  () => {
-    void refreshActiveCodeHighlights();
-  },
-);
 
 // ==================== Address Scroll ====================
 
@@ -952,10 +821,6 @@ function isPathRelevantToVisibleDirectory(path: string) {
   const root = directoryTreeRoot.value;
   if (root && sameNormalizedPath(normalizedPath, root.path)) return true;
   return visibleTreeRows.value.some((row) => row.kind === "entry" && sameNormalizedPath(normalizedPath, row.entry.path));
-}
-
-function sameNormalizedPath(left: string, right: string) {
-  return normalizePath(left).toLowerCase() === normalizePath(right).toLowerCase();
 }
 
 // ==================== Context Capture ====================
@@ -1106,96 +971,6 @@ function buildContextMeta(tab: FileTab) {
   };
 }
 
-function normalizeSelectedText(value: string) {
-  return String(value || "")
-    .replace(/\r\n/g, "\n")
-    .replace(/\u00a0/g, " ")
-    .trim()
-    .slice(0, 20_000);
-}
-
-function splitContentLines(value: string) {
-  const normalized = String(value || "").replace(/\r\n/g, "\n");
-  return normalized.length > 0 ? normalized.split("\n") : [];
-}
-
-function buildFileBlockKey(path: string, startLine: number, endLine: number) {
-  return `${normalizePath(path)}::${startLine}-${endLine}`;
-}
-
-function blockLineNumbers(block: VirtualCodeBlock) {
-  return Array.from({ length: block.lineCount }, (_, index) => block.startLine + index);
-}
-
-function blockContentText(blockKey: string) {
-  return fileBlockContentByKey.value[blockKey] || "";
-}
-
-function blockContentHtml(blockKey: string) {
-  return highlightedCodeHtmlByBlockKey.value[blockKey] || escapeHtml(blockContentText(blockKey));
-}
-
-function normalizeShikiLineHtml(html: string) {
-  return html
-    .replace(/<\/span>\s+<span class="line"/g, '</span><span class="line"')
-    .replace(/<span class="line"><\/span>/g, '<span class="line"><span class="file-reader-code-empty-line">&#8203;</span></span>');
-}
-
-async function renderHighlightedCodeHtml(tab: FileTab, content: string) {
-  const language = resolveShikiLanguage(tab.extension);
-  const html = await codeToHtml(content, { lang: language, theme: activeShikiTheme.value });
-  return normalizeShikiLineHtml(html);
-}
-
-async function updateHighlightedCodeBlock(tab: FileTab, blockKey: string, content: string) {
-  if (isTabRawMode(tab)) return;
-  if (tab.kind === "markdown") return;
-  try {
-    const html = await renderHighlightedCodeHtml(tab, content);
-    highlightedCodeHtmlByBlockKey.value = {
-      ...highlightedCodeHtmlByBlockKey.value,
-      [blockKey]: html,
-    };
-  } catch {
-    highlightedCodeHtmlByBlockKey.value = { ...highlightedCodeHtmlByBlockKey.value, [blockKey]: escapeHtml(content) };
-  }
-}
-
-async function refreshActiveCodeHighlights() {
-  const active = activeTab.value;
-  if (!active || isTabRawMode(active) || active.kind === "markdown") return;
-  const activePathKey = `${normalizePath(active.path)}::`;
-  const blockEntries = Object.entries(fileBlockContentByKey.value).filter(([key]) => key.startsWith(activePathKey));
-  if (blockEntries.length <= 0) return;
-
-  const refreshId = ++activeHighlightRefreshId;
-  const nextHtml = { ...highlightedCodeHtmlByBlockKey.value };
-  for (const [key] of blockEntries) {
-    delete nextHtml[key];
-  }
-
-  await Promise.all(blockEntries.map(async ([key, content]) => {
-    try {
-      nextHtml[key] = await renderHighlightedCodeHtml(active, content);
-    } catch {
-      nextHtml[key] = escapeHtml(content);
-    }
-  }));
-
-  if (refreshId !== activeHighlightRefreshId) return;
-  highlightedCodeHtmlByBlockKey.value = nextHtml;
-}
-
-function resolveVisibleLineRange(scroller: HTMLElement, totalLines: number): { startLine: number; endLine: number } {
-  const scrollableHeight = Math.max(1, scroller.scrollHeight - scroller.clientHeight);
-  const startRatio = Math.max(0, Math.min(1, scroller.scrollTop / scrollableHeight));
-  const visibleRatio = Math.max(0.05, Math.min(1, scroller.clientHeight / Math.max(1, scroller.scrollHeight)));
-  const startLine = Math.max(1, Math.min(totalLines, Math.floor(startRatio * totalLines) + 1));
-  const visibleLineCount = Math.max(12, Math.ceil(totalLines * visibleRatio));
-  const endLine = Math.max(startLine, Math.min(totalLines, startLine + visibleLineCount - 1));
-  return { startLine, endLine };
-}
-
 function resolveSelectedLineRange(tab: FileTab, scroller: HTMLElement, selectedText: string): { startLine: number; endLine: number } {
   if (tab.virtualized) {
     return resolveVisibleLineRange(scroller, Math.max(1, tab.totalLines));
@@ -1205,58 +980,6 @@ function resolveSelectedLineRange(tab: FileTab, scroller: HTMLElement, selectedT
   }
   return resolveRawSelectedLineRange(tab.content, selectedText)
     || resolveVisibleLineRange(scroller, Math.max(1, splitContentLines(tab.content).length));
-}
-
-function resolveRawSelectedLineRange(source: string, selectedText: string): { startLine: number; endLine: number } | null {
-  const normalizedSource = String(source || "").replace(/\r\n/g, "\n");
-  const normalizedSelection = selectedText.replace(/\r\n/g, "\n");
-  const index = normalizedSource.indexOf(normalizedSelection);
-  if (index < 0) return null;
-  if (normalizedSource.indexOf(normalizedSelection, index + Math.max(1, normalizedSelection.length)) >= 0) return null;
-  const before = normalizedSource.slice(0, index);
-  const startLine = before.split("\n").length;
-  const selectedLineCount = Math.max(1, normalizedSelection.split("\n").length);
-  return { startLine, endLine: startLine + selectedLineCount - 1 };
-}
-
-function relativePathFromWorkspace(filePath: string, workspacePath: string) {
-  const normalizedFilePath = normalizePath(filePath);
-  const normalizedWorkspacePath = normalizePath(workspacePath).replace(/\/+$/, "");
-  if (!normalizedWorkspacePath) return normalizedFilePath;
-  const lowerFilePath = normalizedFilePath.toLowerCase();
-  const lowerWorkspacePath = normalizedWorkspacePath.toLowerCase();
-  if (lowerFilePath === lowerWorkspacePath) return titleFromPath(normalizedFilePath);
-  const prefix = `${lowerWorkspacePath}/`;
-  if (lowerFilePath.startsWith(prefix)) {
-    return normalizedFilePath.slice(normalizedWorkspacePath.length + 1);
-  }
-  return normalizedFilePath;
-}
-
-function languageIdFromTab(tab: FileTab) {
-  return CODE_LANGUAGE_BY_EXTENSION[tab.extension] || tab.extension || tab.kind || "text";
-}
-
-function formatLineSuffix(startLine?: number, endLine?: number) {
-  if (!startLine) return "";
-  if (endLine && endLine > startLine) return `:${startLine}-${endLine}`;
-  return `:${startLine}`;
-}
-
-function hashText(value: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(16);
-}
-
-function measureVirtualCodeRow(element: Element | { $el?: Element } | null) {
-  if (!element) return;
-  const target = element instanceof Element ? element : element.$el;
-  if (!(target instanceof Element)) return;
-  virtualCodeBlockVirtualizer.value.measureElement(target);
 }
 
 function buildContextTextBlock(input: {
@@ -1280,35 +1003,7 @@ function buildContextTextBlock(input: {
   ].join("\n");
 }
 
-function collectVirtualizedVisibleContent(tab: FileTab, lineRange: { startLine: number; endLine: number }) {
-  const chunks: string[] = [];
-  for (const block of activeVirtualCodeBlocks.value) {
-    if (block.path !== tab.path) continue;
-    if (block.endLine < lineRange.startLine || block.startLine > lineRange.endLine) continue;
-    const blockContent = blockContentText(block.key);
-    if (!blockContent) continue;
-    const blockLines = splitContentLines(blockContent);
-    const sliceStart = Math.max(0, lineRange.startLine - block.startLine);
-    const sliceEndExclusive = Math.min(blockLines.length, lineRange.endLine - block.startLine + 1);
-    if (sliceEndExclusive <= sliceStart) continue;
-    chunks.push(blockLines.slice(sliceStart, sliceEndExclusive).join("\n"));
-  }
-  return chunks.join("\n").trim();
-}
-
 // ==================== Helpers ====================
-
-function normalizePath(path: string) {
-  return String(path || "")
-    .trim()
-    .replace(/^\\\\\?\\/, "")
-    .replace(/^\/\/\?\//, "")
-    .replace(/^\/\?\//, "")
-    .replace(/^\?\//, "")
-    .replace(/^\?\\/, "")
-    .replace(/\\/g, "/")
-    .replace(/^\/([A-Za-z]:)/, "$1");
-}
 
 function readFileReaderSessionState(key = props.sessionKey): FileReaderSessionState {
   const storageKey = String(key || "").trim();
@@ -1409,55 +1104,6 @@ function createRestoredTab(path: string): FileTab {
     loading: false,
     error: "",
   };
-}
-
-function fileKindFromPath(path: string) {
-  const extension = extensionFromPath(path);
-  return ["md", "markdown", "mdx"].includes(extension) ? "markdown" : "code";
-}
-
-function extensionFromPath(path: string) {
-  const fileName = titleFromPath(path);
-  const lowerFileName = fileName.toLowerCase();
-  if (CODE_LANGUAGE_BY_EXTENSION[lowerFileName]) return lowerFileName;
-  if (SHIKI_LANGUAGE_KEYS.has(lowerFileName)) return lowerFileName;
-  const dotIndex = fileName.lastIndexOf(".");
-  if (dotIndex <= 0 || dotIndex === fileName.length - 1) return "";
-  const extension = fileName.slice(dotIndex + 1).toLowerCase();
-  return CODE_LANGUAGE_BY_EXTENSION[extension] || SHIKI_LANGUAGE_KEYS.has(extension) ? extension : "";
-}
-
-function escapeHtml(value: string) {
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function stripMarkdownHtmlComments(value: string) {
-  return String(value || "").replace(/<!--[\s\S]*?-->/g, "");
-}
-
-function resolveShikiLanguage(extension: string) {
-  const key = String(extension || "").trim().toLowerCase();
-  const mapped = CODE_LANGUAGE_BY_EXTENSION[key] || key;
-  return SHIKI_LANGUAGE_KEYS.has(mapped) ? mapped : "text";
-}
-
-function titleFromPath(path: string) {
-  const normalized = normalizePath(path);
-  return normalized.split("/").filter(Boolean).pop() || normalized || "未命名文件";
-}
-
-function directoryFromPath(path: string) {
-  const normalized = normalizePath(path).replace(/\/+$/, "");
-  const slashIndex = normalized.lastIndexOf("/");
-  if (slashIndex < 0) return "";
-  if (slashIndex === 0) return "/";
-  if (slashIndex === 2 && normalized[1] === ":") return normalized.slice(0, 3);
-  return normalized.slice(0, slashIndex);
 }
 
 function replaceTabState(tab: FileTab, matchPath = tab.path) {
@@ -1755,51 +1401,6 @@ async function requestFileReaderFileBlock(path: string, startLine: number, lineC
   });
 }
 
-function clearFileBlockCaches(path: string) {
-  const normalizedPath = normalizePath(path);
-  if (!normalizedPath) return;
-  const contentNext = { ...fileBlockContentByKey.value };
-  const loadingNext = { ...fileBlockLoadingByKey.value };
-  const errorNext = { ...fileBlockErrorByKey.value };
-  const htmlNext = { ...highlightedCodeHtmlByBlockKey.value };
-  for (const key of Object.keys(contentNext)) {
-    if (!key.startsWith(`${normalizedPath}::`)) continue;
-    delete contentNext[key];
-    delete loadingNext[key];
-    delete errorNext[key];
-    delete htmlNext[key];
-  }
-  fileBlockContentByKey.value = contentNext;
-  fileBlockLoadingByKey.value = loadingNext;
-  fileBlockErrorByKey.value = errorNext;
-  highlightedCodeHtmlByBlockKey.value = htmlNext;
-}
-
-async function ensureVirtualCodeBlockLoaded(block: VirtualCodeBlock) {
-  if (!block.path) return;
-  if (fileBlockContentByKey.value[block.key] !== undefined) return;
-  if (fileBlockLoadingByKey.value[block.key]) return;
-  fileBlockLoadingByKey.value = { ...fileBlockLoadingByKey.value, [block.key]: true };
-  try {
-    const payload = await requestFileReaderFileBlock(block.path, block.startLine, block.lineCount);
-    const normalizedKey = buildFileBlockKey(payload.path || block.path, payload.startLine, payload.endLine);
-    fileBlockContentByKey.value = { ...fileBlockContentByKey.value, [normalizedKey]: String(payload.content || "") };
-    const active = activeTab.value;
-    if (active && sameNormalizedPath(active.path, block.path) && !isTabRawMode(active)) {
-      await updateHighlightedCodeBlock(active, normalizedKey, String(payload.content || ""));
-    }
-    const errorNext = { ...fileBlockErrorByKey.value };
-    delete errorNext[block.key];
-    fileBlockErrorByKey.value = errorNext;
-  } catch (error) {
-    fileBlockErrorByKey.value = { ...fileBlockErrorByKey.value, [block.key]: error instanceof Error ? error.message : String(error) };
-  } finally {
-    const loadingNext = { ...fileBlockLoadingByKey.value };
-    delete loadingNext[block.key];
-    fileBlockLoadingByKey.value = loadingNext;
-  }
-}
-
 async function loadDirectory(path: string, expanded: boolean) {
   const normalizedPath = normalizePath(path);
   if (!normalizedPath) return;
@@ -2047,15 +1648,6 @@ async function toggleTreeDirectory(entry: FileReaderDirectoryEntry) {
     return;
   }
   await loadDirectory(normalizedPath, true);
-}
-
-function normalizeDirectoryEntries(entries: FileReaderDirectoryEntry[]) {
-  return entries.map((entry) => ({
-    ...entry,
-    path: normalizePath(entry.path),
-    name: String(entry.name || titleFromPath(entry.path)),
-    isDirectory: !!entry.isDirectory,
-  }));
 }
 
 function updateDirectoryNode(path: string, patch: Partial<DirectoryNode>) {

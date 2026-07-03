@@ -1,0 +1,85 @@
+export type FileReaderFilePayload = {
+  path: string;
+  name: string;
+  extension: string;
+  kind: "markdown" | "code" | string;
+  content: string;
+  forcePlain?: boolean;
+  virtualized?: boolean;
+  totalLines?: number;
+  blockLineCount?: number;
+};
+
+export type FileReaderFileBlockPayload = {
+  path: string;
+  startLine: number;
+  endLine: number;
+  content: string;
+};
+
+export type FileReaderDirectoryEntry = {
+  path: string;
+  name: string;
+  isDirectory: boolean;
+};
+
+export type FileReaderDirectoryPayload = {
+  path: string;
+  name: string;
+  entries: FileReaderDirectoryEntry[];
+};
+
+export type FileTab = {
+  path: string;
+  title: string;
+  extension: string;
+  kind: string;
+  content: string;
+  rawMode: boolean;
+  forcePlain: boolean;
+  virtualized: boolean;
+  totalLines: number;
+  blockLineCount: number;
+  loaded: boolean;
+  loading: boolean;
+  error: string;
+};
+
+export type VirtualCodeBlock = {
+  key: string;
+  path: string;
+  startLine: number;
+  endLine: number;
+  lineCount: number;
+};
+
+export type DirectoryNode = {
+  path: string;
+  name: string;
+  entries: FileReaderDirectoryEntry[];
+  loaded: boolean;
+  loading: boolean;
+  error: string;
+  expanded: boolean;
+};
+
+export type TreeRow =
+  | { kind: "entry"; key: string; depth: number; entry: FileReaderDirectoryEntry }
+  | { kind: "status"; key: string; depth: number; text: string };
+
+export type FileReaderSessionState = {
+  tabs?: string[];
+  activePath?: string;
+  directoryRootPath?: string;
+};
+
+export type FileReaderWatchTarget = {
+  path: string;
+  kind: "file" | "directory";
+};
+
+export type FileReaderWatchEventPayload = {
+  sessionId: string;
+  path: string;
+  kind: "file" | "directory";
+};
