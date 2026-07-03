@@ -44,6 +44,16 @@ function textPartReasoning(part: ChatMessage["parts"][number]): string {
   return String(textPart.reasoningContent || textPart.reasoning_content || "").trim();
 }
 
+function optionalNonNegativeInteger(value: unknown): number | undefined {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return undefined;
+  return Math.floor(parsed);
+}
+
+function assistantStreamBlockReasoningCharCount(block: AssistantStreamBlock): number {
+  return optionalNonNegativeInteger(block.reasoningCharCount) ?? String(block.reasoning || "").length;
+}
+
 export type ChatMessageDisplayProjection = {
   speakerAgentId?: string;
   mentions: ChatMentionTarget[];
@@ -513,11 +523,15 @@ export function normalizeAssistantStreamBlocks(rawBlocks: unknown): AssistantStr
     const item = raw && typeof raw === "object" ? raw as Record<string, unknown> : null;
     if (!item) continue;
     const reasoning = String(item.reasoning || item.reasoningText || item.reasoning_text || "");
+    const reasoningCharCount = optionalNonNegativeInteger(
+      item.reasoningCharCount ?? item.reasoning_char_count,
+    ) ?? reasoning.length;
     const text = String(item.text || "");
     const tools = normalizeAssistantStreamToolBlocks(item.tools);
     if (!reasoning.trim() && !text.trim() && tools.length === 0) continue;
     blocks.push({
       reasoning,
+      reasoningCharCount,
       text,
       tools,
       pendingTextBreak: item.pendingTextBreak === true || item.pending_text_break === true,
@@ -676,7 +690,7 @@ export function streamBlocksToActivityItems(rawBlocks: unknown, running = false)
 }
 
 function streamBlocksReasoningCharCount(blocks: AssistantStreamBlock[]): number {
-  return blocks.reduce((total, block) => total + String(block.reasoning || "").length, 0);
+  return blocks.reduce((total, block) => total + assistantStreamBlockReasoningCharCount(block), 0);
 }
 
 function streamBlocksToolCountsByName(blocks: AssistantStreamBlock[]): Record<string, number> {
@@ -728,7 +742,7 @@ export function streamBlocksActivitySignature(rawBlocks: unknown): string {
   return normalizeAssistantStreamBlocks(rawBlocks)
     .map((block, blockIndex) => [
       `b:${blockIndex}`,
-      `rlen:${String(block.reasoning || "").length}`,
+      `rlen:${assistantStreamBlockReasoningCharCount(block)}`,
       `tlen:${String(block.text || "").length}`,
       ...((block.tools || []).map((tool, toolIndex) => [
         `t:${toolIndex}`,
@@ -766,6 +780,7 @@ function copyAssistantStreamBlocksForAppend(rawBlocks: unknown): AssistantStream
 function cloneAssistantStreamBlocks(rawBlocks: unknown): AssistantStreamBlock[] {
   return normalizeAssistantStreamBlocks(rawBlocks).map((block) => ({
     reasoning: String(block.reasoning || ""),
+    reasoningCharCount: assistantStreamBlockReasoningCharCount(block),
     text: String(block.text || ""),
     tools: (block.tools || []).map((tool) => ({ ...tool })),
     pendingTextBreak: block.pendingTextBreak === true,
@@ -791,7 +806,9 @@ export function appendReasoningDeltaToStreamBlocks(rawBlocks: unknown, delta: st
     blocks.push({ reasoning: "", text: "", tools: [], pendingTextBreak: false });
   }
   const block = ensureAssistantStreamBlock(blocks);
+  const previousReasoningCharCount = assistantStreamBlockReasoningCharCount(block);
   block.reasoning = `${String(block.reasoning || "")}${text}`;
+  block.reasoningCharCount = previousReasoningCharCount + text.length;
   return blocks;
 }
 

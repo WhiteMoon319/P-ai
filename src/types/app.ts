@@ -645,6 +645,7 @@ export type AssistantStreamToolBlock = {
 
 export type AssistantStreamBlock = {
   reasoning?: string;
+  reasoningCharCount?: number;
   text?: string;
   tools?: AssistantStreamToolBlock[];
   pendingTextBreak?: boolean;
