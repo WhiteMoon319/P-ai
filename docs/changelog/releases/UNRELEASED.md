@@ -23,6 +23,7 @@
 - 升级 @tauri-apps/cli 到 2.11.4。
 - 升级 @tailwindcss/typography 到 0.5.20。
 - 升级 type-fest 到 5.7.0。
+- 升级 @lucide/vue 到 1.23.0。
 
 ## 修复
 
