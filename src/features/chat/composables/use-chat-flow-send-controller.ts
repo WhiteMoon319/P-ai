@@ -64,8 +64,8 @@ type UseChatFlowSendControllerOptions = {
     mentions: ChatMentionTarget[],
   ) => string;
   resetDisplayState: () => void;
-  removeDraft: (draftId: string) => void;
-  updateQueuedAssistantDraftStatus: (draftId: string, statusText: string) => void;
+  removeMessage: (messageId: string) => void;
+  updateQueuedAssistantMessageStatus: (messageId: string, statusText: string) => void;
   handleRoundCompleted: (gen: number, result: {
     assistantText: string;
     assistantMessage?: ChatMessage;
@@ -124,12 +124,12 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
     const traceId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    let assistantDraftId = "";
+    let queuedAssistantMessageId = "";
 
     if (!hasForegroundRoundInFlight) {
       options.resetDisplayState();
       const round = options.getRound();
-      if (round.phase === "streaming") options.removeDraft(round.draftId);
+      if (round.phase === "streaming") options.removeMessage(round.messageId);
     }
 
     const shouldBlockStopUntilHistoryFlushed = !hasForegroundRoundInFlight;
@@ -170,14 +170,14 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
           });
         }
         if (selectedMentions.length === 0 && assistantMessageId) {
-          assistantDraftId = assistantMessageId;
-          options.setRound({ phase: "queued", gen, draftId: assistantDraftId });
-          options.updateQueuedAssistantDraftStatus(assistantDraftId, options.t("chat.statusPreparingMessage"));
+          queuedAssistantMessageId = assistantMessageId;
+          options.setRound({ phase: "queued", gen, messageId: queuedAssistantMessageId });
+          options.updateQueuedAssistantMessageStatus(queuedAssistantMessageId, options.t("chat.statusPreparingMessage"));
           options.onAssistantDraftInserted?.();
         }
       }
       if (!hasForegroundRoundInFlight && (ingress === "queued" || !accepted)) {
-        options.removeDraft(assistantDraftId);
+        options.removeMessage(queuedAssistantMessageId);
         if (options.getRound().phase !== "idle") {
           options.setRound({ phase: "idle" });
         }

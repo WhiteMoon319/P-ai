@@ -15,11 +15,7 @@ import { messageWithStableRenderId, messageWithoutStableRenderId, stableRenderId
 export const DRAFT_ASSISTANT_ID_PREFIX = "__draft_assistant__:";
 export const DRAFT_USER_ID_PREFIX = "__draft_user__:";
 
-export function buildAssistantDraftId(key: string | number): string {
-  return `${DRAFT_ASSISTANT_ID_PREFIX}${String(key ?? "").trim()}`;
-}
-
-type UpdateDraftTextOptions = {
+type UpdateMessageTextOptions = {
   preserveActivityProjection?: boolean;
 };
 
@@ -69,8 +65,8 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
   let pendingUserDraftId = "";
   const pendingUserDraftIdByGen = new Map<number, string>();
 
-  function resolveAssistantDraftSpeakerAgentId(existingDraft?: ChatMessage | null): string {
-    const existing = String(existingDraft?.speakerAgentId || "").trim();
+  function resolveAssistantMessageSpeakerAgentId(existingMessage?: ChatMessage | null): string {
+    const existing = String(existingMessage?.speakerAgentId || "").trim();
     if (existing && existing !== "assistant-draft") return existing;
     const activeRoundAgentId = String(options.getActiveRoundAgentId ? options.getActiveRoundAgentId() : "").trim();
     if (activeRoundAgentId) return activeRoundAgentId;
@@ -85,20 +81,20 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     return pendingUserDraftIdByGen.get(gen) || "";
   }
 
-  function getDraftStreamBlocks(draftId: string): AssistantStreamBlock[] {
-    if (!draftId) return [];
-    const draft = options.allMessages.value.find((item) => item.id === draftId);
+  function getMessageStreamBlocks(messageId: string): AssistantStreamBlock[] {
+    if (!messageId) return [];
+    const draft = options.allMessages.value.find((item) => item.id === messageId);
     const meta = (draft?.providerMeta || {}) as Record<string, unknown>;
     return normalizeAssistantStreamBlocks(meta._streamBlocks);
   }
 
-  function loadStreamBlocksFromDraft(draftId: string) {
+  function loadStreamBlocksFromMessage(messageId: string) {
     if (!options.streamBlocks) return;
-    if (!draftId) {
+    if (!messageId) {
       options.streamBlocks.value = [];
       return;
     }
-    const draft = options.allMessages.value.find((item) => item.id === draftId);
+    const draft = options.allMessages.value.find((item) => item.id === messageId);
     const meta = (draft?.providerMeta || {}) as Record<string, unknown>;
     const blocks = normalizeAssistantStreamBlocks(meta._streamBlocks);
     if (blocks.length > 0 || options.streamBlocks.value.length === 0) {
@@ -106,7 +102,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     }
   }
 
-  function hasAssistantDraftInMessages(): boolean {
+  function hasStreamingAssistantMessageInMessages(): boolean {
     return options.allMessages.value.some((message) => {
       const messageId = String(message?.id || "").trim();
       const meta = (message?.providerMeta || {}) as Record<string, unknown>;
@@ -116,15 +112,15 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
   }
 
   function insertUserDraft(
-    messageId: string,
+    rawMessageId: string,
     gen: number,
     text: string,
     images: Array<{ mime: string; bytesBase64: string; savedPath?: string }>,
     attachments: Array<{ fileName: string; relativePath: string; mime: string }>,
     mentions: ChatMentionTarget[],
   ): string {
-    const draftId = String(messageId || "").trim();
-    if (!draftId) return "";
+    const messageId = String(rawMessageId || "").trim();
+    if (!messageId) return "";
     const parts: ChatMessage["parts"] = [];
     const normalizedText = String(text || "");
     if (normalizedText) {
@@ -138,7 +134,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     }
     const attachmentPayload = [...attachments, ...options.buildImageAttachmentPayload(images)];
     const msg: ChatMessage = {
-      id: draftId,
+      id: messageId,
       role: "user",
       createdAt: new Date().toISOString(),
       speakerAgentId: "user-persona",
@@ -158,24 +154,24 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
           : undefined,
       },
     };
-    const stableMsg = messageWithStableRenderId(msg, draftId);
+    const stableMsg = messageWithStableRenderId(msg, messageId);
     const cur = options.allMessages.value;
-    const idx = cur.findIndex((m) => m.id === draftId);
+    const idx = cur.findIndex((m) => m.id === messageId);
     if (idx >= 0) {
-      return draftId;
+      return messageId;
     }
     options.allMessages.value = [...cur, stableMsg];
-    return draftId;
+    return messageId;
   }
 
-  function insertDraft(draftId: string, gen?: number, initialText = ""): string {
-    const normalizedDraftId = String(draftId || "").trim();
-    if (!normalizedDraftId) return "";
+  function insertStreamingAssistantMessage(messageId: string, gen?: number, initialText = ""): string {
+    const normalizedMessageId = String(messageId || "").trim();
+    if (!normalizedMessageId) return "";
     const startedAtMs = typeof gen === "number" ? options.getSendStartedAtMs(gen) || 0 : 0;
     const elapsedMs = startedAtMs > 0 ? Math.max(0, Date.now() - startedAtMs) : -1;
-    const agentId = resolveAssistantDraftSpeakerAgentId();
+    const agentId = resolveAssistantMessageSpeakerAgentId();
     const msg = messageWithStableRenderId({
-      id: normalizedDraftId,
+      id: normalizedMessageId,
       role: "assistant",
       createdAt: new Date().toISOString(),
       speakerAgentId: agentId,
@@ -190,38 +186,38 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
         _frontendDispatchStartedAtMs: options.getFrontendDispatchStartedAtMs(),
         _frontendDispatchElapsedMs: options.currentFrontendDispatchElapsedMs(),
       },
-    } satisfies ChatMessage, normalizedDraftId);
+    } satisfies ChatMessage, normalizedMessageId);
     const cur = options.allMessages.value;
-    const idx = cur.findIndex((m) => m.id === normalizedDraftId);
+    const idx = cur.findIndex((m) => m.id === normalizedMessageId);
     if (idx >= 0) {
       const existing = cur[idx];
       const existingMeta = (existing?.providerMeta || {}) as Record<string, unknown>;
       if (String(existing?.role || "") === "assistant" && (existingMeta._streaming !== true || assistantMessageHasVisibleProgress(existing))) {
-        return normalizedDraftId;
+        return normalizedMessageId;
       }
       options.allMessages.value = cur.map((m, i) => (i === idx ? msg : m));
-      return normalizedDraftId;
+      return normalizedMessageId;
     }
     options.allMessages.value = [...cur, msg];
-    return normalizedDraftId;
+    return normalizedMessageId;
   }
 
-  function updateQueuedAssistantDraftStatus(draftId: string, statusText: string) {
-    if (!draftId) return;
-    const existingDraft = options.allMessages.value.find((item) => item.id === draftId);
-    if (String(existingDraft?.role || "") === "assistant") {
-      const existingMeta = (existingDraft?.providerMeta || {}) as Record<string, unknown>;
-      if (existingMeta._streaming !== true || assistantMessageHasVisibleProgress(existingDraft)) {
+  function updateQueuedAssistantMessageStatus(messageId: string, statusText: string) {
+    if (!messageId) return;
+    const existingMessage = options.allMessages.value.find((item) => item.id === messageId);
+    if (String(existingMessage?.role || "") === "assistant") {
+      const existingMeta = (existingMessage?.providerMeta || {}) as Record<string, unknown>;
+      if (existingMeta._streaming !== true || assistantMessageHasVisibleProgress(existingMessage)) {
         return;
       }
     }
-    const agentId = resolveAssistantDraftSpeakerAgentId(existingDraft);
-    const existingMeta = ((existingDraft?.providerMeta || {}) as Record<string, unknown>);
-    const stableRenderId = stableRenderIdFromMessage(existingDraft) || draftId;
+    const agentId = resolveAssistantMessageSpeakerAgentId(existingMessage);
+    const existingMeta = ((existingMessage?.providerMeta || {}) as Record<string, unknown>);
+    const stableRenderId = stableRenderIdFromMessage(existingMessage) || messageId;
     const msg = messageWithStableRenderId({
-      id: draftId,
+      id: messageId,
       role: "assistant",
-      createdAt: String(existingDraft?.createdAt || new Date().toISOString()),
+      createdAt: String(existingMessage?.createdAt || new Date().toISOString()),
       speakerAgentId: agentId,
       parts: [{ type: "text", text: "" }],
       providerMeta: {
@@ -238,7 +234,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
       },
     } satisfies ChatMessage, stableRenderId);
     const cur = options.allMessages.value;
-    const idx = cur.findIndex((m) => m.id === draftId);
+    const idx = cur.findIndex((m) => m.id === messageId);
     if (idx >= 0) {
       options.allMessages.value = cur.map((m, i) => (i === idx ? msg : m));
     } else {
@@ -246,28 +242,28 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     }
   }
 
-  function readDraftStreamSegments(draftId: string): string[] {
-    if (!draftId) return [];
-    const draft = options.allMessages.value.find((item) => item.id === draftId);
-    const meta = (draft?.providerMeta || {}) as Record<string, unknown>;
+  function readMessageStreamSegments(messageId: string): string[] {
+    if (!messageId) return [];
+    const message = options.allMessages.value.find((item) => item.id === messageId);
+    const meta = (message?.providerMeta || {}) as Record<string, unknown>;
     if (!Array.isArray(meta._streamSegments)) return [];
     return (meta._streamSegments as unknown[])
       .map((item) => String(item ?? ""))
       .filter((item) => item.length > 0);
   }
 
-  function readDraftStreamTail(draftId: string): string {
-    if (!draftId) return "";
-    const draft = options.allMessages.value.find((item) => item.id === draftId);
-    const meta = (draft?.providerMeta || {}) as Record<string, unknown>;
+  function readMessageStreamTail(messageId: string): string {
+    if (!messageId) return "";
+    const message = options.allMessages.value.find((item) => item.id === messageId);
+    const meta = (message?.providerMeta || {}) as Record<string, unknown>;
     return String(meta._streamTail ?? "");
   }
 
-  function syncStreamBlocksToDraft(draftId: string, rawBlocks?: AssistantStreamBlock[]) {
-    if (!draftId) return;
+  function syncStreamBlocksToMessage(messageId: string, rawBlocks?: AssistantStreamBlock[]) {
+    if (!messageId) return;
     const blocks = normalizeAssistantStreamBlocks(rawBlocks || options.streamBlocks?.value || []);
     options.allMessages.value = options.allMessages.value.map((message) => {
-      if (message.id !== draftId) return message;
+      if (message.id !== messageId) return message;
       const meta = ((message.providerMeta || {}) as Record<string, unknown>);
       return {
         ...message,
@@ -282,32 +278,32 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     });
   }
 
-  function updateDraftText(
-    draftId: string,
+  function updateMessageText(
+    messageId: string,
     streamSegments?: string[],
     streamTail?: string,
     streamAnimatedDelta = "",
     rawBlocks?: AssistantStreamBlock[],
-    updateOptions?: UpdateDraftTextOptions,
+    updateOptions?: UpdateMessageTextOptions,
   ) {
-    if (!draftId) return;
-    const existingDraft = options.allMessages.value.find((item) => item.id === draftId);
-    const agentId = resolveAssistantDraftSpeakerAgentId(existingDraft);
-    const existingDraftText = readMessagePlainText(existingDraft);
+    if (!messageId) return;
+    const existingMessage = options.allMessages.value.find((item) => item.id === messageId);
+    const agentId = resolveAssistantMessageSpeakerAgentId(existingMessage);
+    const existingMessageText = readMessagePlainText(existingMessage);
     const nextAssistantText = String(options.latestAssistantText.value || "");
-    const shouldPreserveExistingDraftText =
-      !!existingDraft
+    const shouldPreserveExistingMessageText =
+      !!existingMessage
       && !nextAssistantText
-      && !!existingDraftText
+      && !!existingMessageText
       && (
         !!String(options.toolStatusText.value || "").trim()
         || (options.streamBlocks?.value.length || 0) > 0
       );
-    if (shouldPreserveExistingDraftText) {
-      options.latestAssistantText.value = existingDraftText;
+    if (shouldPreserveExistingMessageText) {
+      options.latestAssistantText.value = existingMessageText;
     }
-    const nextStreamSegments = streamSegments || readDraftStreamSegments(draftId);
-    const nextStreamTail = streamTail ?? readDraftStreamTail(draftId);
+    const nextStreamSegments = streamSegments || readMessageStreamSegments(messageId);
+    const nextStreamTail = streamTail ?? readMessageStreamTail(messageId);
     const hasVisibleStreamContent =
       !!String(options.latestAssistantText.value || "").trim()
       || nextStreamSegments.some((item) => !!String(item || "").trim())
@@ -319,16 +315,16 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     const streamBlocks = normalizeAssistantStreamBlocks(rawBlocks || options.streamBlocks?.value || []);
     const blockText = assistantTextFromStreamBlocks(streamBlocks);
     const preserveActivityProjection = !!updateOptions?.preserveActivityProjection;
-    const stableRenderId = stableRenderIdFromMessage(existingDraft) || draftId;
-    const existingMeta = ((existingDraft?.providerMeta || {}) as Record<string, unknown>);
+    const stableRenderId = stableRenderIdFromMessage(existingMessage) || messageId;
+    const existingMeta = ((existingMessage?.providerMeta || {}) as Record<string, unknown>);
     const msg = messageWithStableRenderId({
-      id: draftId,
+      id: messageId,
       role: "assistant",
-      createdAt: String(existingDraft?.createdAt || new Date().toISOString()),
+      createdAt: String(existingMessage?.createdAt || new Date().toISOString()),
       speakerAgentId: agentId,
       parts: [{ type: "text", text: blockText || String(options.latestAssistantText.value || "") }],
       toolCall: preserveActivityProjection
-        ? existingDraft?.toolCall
+        ? existingMessage?.toolCall
         : streamBlocksToToolHistoryEvents(streamBlocks),
       activityItems: undefined,
       providerMeta: {
@@ -346,51 +342,51 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
       },
     } satisfies ChatMessage, stableRenderId);
     const cur = options.allMessages.value;
-    const idx = cur.findIndex((m) => m.id === draftId);
+    const idx = cur.findIndex((m) => m.id === messageId);
     options.allMessages.value = idx < 0 ? [...cur, msg] : cur.map((m, i) => (i === idx ? msg : m));
   }
 
-  function removeDraft(draftId: string) {
-    if (!draftId) return;
-    if (draftId === pendingUserDraftId) {
+  function removeMessage(messageId: string) {
+    if (!messageId) return;
+    if (messageId === pendingUserDraftId) {
       pendingUserDraftId = "";
     }
     for (const [gen, userDraftId] of pendingUserDraftIdByGen.entries()) {
-      if (userDraftId === draftId) {
+      if (userDraftId === messageId) {
         pendingUserDraftIdByGen.delete(gen);
       }
     }
-    options.allMessages.value = options.allMessages.value.filter((m) => m.id !== draftId);
+    options.allMessages.value = options.allMessages.value.filter((m) => m.id !== messageId);
   }
 
-  function removeAssistantDrafts() {
+  function removeLegacyAssistantDrafts() {
     options.allMessages.value = options.allMessages.value.filter((message) => {
       const messageId = String(message?.id || "").trim();
       return !messageId.startsWith(DRAFT_ASSISTANT_ID_PREFIX);
     });
   }
 
-  function finalizeDraft(draftId: string, finalMessage?: ChatMessage) {
-    if (!draftId) return;
+  function finalizeMessage(messageId: string, finalMessage?: ChatMessage) {
+    if (!messageId) return;
     const current = options.allMessages.value;
-    const draftIdx = current.findIndex((m) => m.id === draftId);
-    if (draftIdx < 0) return;
-    const draft = current[draftIdx];
+    const messageIdx = current.findIndex((m) => m.id === messageId);
+    if (messageIdx < 0) return;
+    const draft = current[messageIdx];
 
     if (finalMessage) {
-      const draftSpeakerAgentId = resolveAssistantDraftSpeakerAgentId(draft);
+      const messageSpeakerAgentId = resolveAssistantMessageSpeakerAgentId(draft);
       const finalSpeakerAgentId = String(finalMessage.speakerAgentId || "").trim();
       const messageToApply = messageWithoutStableRenderId({
         ...finalMessage,
-        speakerAgentId: finalSpeakerAgentId || draftSpeakerAgentId,
+        speakerAgentId: finalSpeakerAgentId || messageSpeakerAgentId,
       });
-      const deduped = current.filter((m, idx) => idx === draftIdx || m.id !== finalMessage.id);
-      const nextDraftIdx = deduped.findIndex((m) => m.id === draftId);
-      if (nextDraftIdx < 0) {
+      const deduped = current.filter((m, idx) => idx === messageIdx || m.id !== finalMessage.id);
+      const nextMessageIdx = deduped.findIndex((m) => m.id === messageId);
+      if (nextMessageIdx < 0) {
         options.allMessages.value = deduped;
         return;
       }
-      options.allMessages.value = deduped.map((m, idx) => (idx === nextDraftIdx ? messageToApply : m));
+      options.allMessages.value = deduped.map((m, idx) => (idx === nextMessageIdx ? messageToApply : m));
       return;
     }
 
@@ -401,41 +397,41 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     delete (nextMeta as Record<string, unknown>)._toolStatusText;
     delete (nextMeta as Record<string, unknown>)._toolStatusState;
     const normalized: ChatMessage = { ...draft, providerMeta: nextMeta };
-    options.allMessages.value = current.map((m, idx) => (idx === draftIdx ? normalized : m));
+    options.allMessages.value = current.map((m, idx) => (idx === messageIdx ? normalized : m));
   }
 
-  function applyAssistantDeltaToDraft(draftId: string, delta: string) {
-    if (!draftId || !delta) return;
+  function applyAssistantDeltaToMessage(messageId: string, delta: string) {
+    if (!messageId || !delta) return;
     options.latestAssistantText.value += delta;
     if (options.streamBlocks) {
       options.streamBlocks.value = appendTextDeltaToStreamBlocks(options.streamBlocks.value, delta);
     }
-    const currentSegments = readDraftStreamSegments(draftId);
-    const currentTail = readDraftStreamTail(draftId);
+    const currentSegments = readMessageStreamSegments(messageId);
+    const currentTail = readMessageStreamTail(messageId);
     const parsed = consumeClosedMarkdownBlocks(`${currentTail}${delta}`);
     const nextStreamSegments = parsed.chunks.length > 0
       ? [...currentSegments, ...parsed.chunks]
       : currentSegments;
-    updateDraftText(draftId, nextStreamSegments, parsed.tail, delta, undefined, {
+    updateMessageText(messageId, nextStreamSegments, parsed.tail, delta, undefined, {
       preserveActivityProjection: true,
     });
   }
 
   return {
-    applyAssistantDeltaToDraft,
-    finalizeDraft,
-    getDraftStreamBlocks,
+    applyAssistantDeltaToMessage,
+    finalizeMessage,
+    getMessageStreamBlocks,
     getPendingUserDraftId,
     getPendingUserDraftIdForGen,
-    hasAssistantDraftInMessages,
-    insertDraft,
+    hasStreamingAssistantMessageInMessages,
+    insertStreamingAssistantMessage,
     insertUserDraft,
-    loadStreamBlocksFromDraft,
-    removeAssistantDrafts,
-    removeDraft,
-    syncStreamBlocksToDraft,
-    updateDraftText,
-    updateQueuedAssistantDraftStatus,
+    loadStreamBlocksFromMessage,
+    removeLegacyAssistantDrafts,
+    removeMessage,
+    syncStreamBlocksToMessage,
+    updateMessageText,
+    updateQueuedAssistantMessageStatus,
   };
 }
 

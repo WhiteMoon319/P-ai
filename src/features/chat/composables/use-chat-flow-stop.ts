@@ -41,10 +41,10 @@ type UseChatFlowStopOptions = {
   setActiveRoundAgentId: (value: string) => void;
   clearFrontendDispatchTimer: () => void;
   getPendingUserDraftId: () => string;
-  removeDraft: (draftId: string) => void;
-  finalizeDraft: (draftId: string, finalMessage?: ChatMessage) => void;
-  updateDraftText: (
-    draftId: string,
+  removeMessage: (messageId: string) => void;
+  finalizeMessage: (messageId: string, finalMessage?: ChatMessage) => void;
+  updateMessageText: (
+    messageId: string,
     streamSegments?: string[],
     streamTail?: string,
     streamAnimatedDelta?: string,
@@ -71,7 +71,7 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
   async function tryRefreshStreamingMessage(round: RoundState): Promise<boolean> {
     if (round.phase !== "streaming") return false;
     const conversationId = String(options.getConversationId ? options.getConversationId() : "").trim();
-    const messageId = String(round.draftId || "").trim();
+    const messageId = String(round.messageId || "").trim();
     if (!conversationId || !messageId || !options.refreshMessageById) return false;
     try {
       console.info("[聊天] 停止后开始刷新流式消息", {
@@ -111,20 +111,20 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
 
     const pendingUserDraftId = options.getPendingUserDraftId();
     if (pendingUserDraftId) {
-      options.removeDraft(pendingUserDraftId);
+      options.removeMessage(pendingUserDraftId);
     }
 
     const round = options.getRound();
     if (round.phase === "streaming") {
       if (assistantHandling === "preserve") {
-        options.updateDraftText(round.draftId, undefined, undefined, "", normalizeAssistantStreamBlocks(options.streamBlocks?.value || []));
-        options.finalizeDraft(round.draftId);
+        options.updateMessageText(round.messageId, undefined, undefined, "", normalizeAssistantStreamBlocks(options.streamBlocks?.value || []));
+        options.finalizeMessage(round.messageId);
       } else if (assistantHandling === "remove") {
-        options.removeDraft(round.draftId);
+        options.removeMessage(round.messageId);
       }
       options.deleteSendStartedAtMs(round.gen);
     } else if (round.phase === "queued") {
-      options.finalizeDraft(round.draftId);
+      options.finalizeMessage(round.messageId);
       options.deleteSendStartedAtMs(round.gen);
     }
 
@@ -144,11 +144,11 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
 
     const stopSession = options.getSession();
     const cid = options.getConversationId ? options.getConversationId() : "";
-    const activeDraftId = round.phase === "streaming" ? round.draftId : "";
-    const activeDraft = activeDraftId
-      ? options.allMessages.value.find((message) => String(message?.id || "") === activeDraftId)
+    const activeMessageId = round.phase === "streaming" ? round.messageId : "";
+    const activeMessage = activeMessageId
+      ? options.allMessages.value.find((message) => String(message?.id || "") === activeMessageId)
       : undefined;
-    const partialAssistantText = options.latestAssistantText.value || readMessagePlainText(activeDraft);
+    const partialAssistantText = options.latestAssistantText.value || readMessagePlainText(activeMessage);
     const partialStreamBlocks = normalizeAssistantStreamBlocks(options.streamBlocks?.value || []);
     const localStopSucceeded = async () => {
       const refreshed = await tryRefreshStreamingMessage(round);

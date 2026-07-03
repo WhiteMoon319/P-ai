@@ -90,8 +90,8 @@ export type UseChatFlowOptions = {
 
 export type RoundState =
   | { phase: "idle" }
-  | { phase: "queued"; gen: number; draftId: string }
-  | { phase: "streaming"; gen: number; draftId: string };
+  | { phase: "queued"; gen: number; messageId: string }
+  | { phase: "streaming"; gen: number; messageId: string };
 
 export type PendingTerminalEvent =
   | {

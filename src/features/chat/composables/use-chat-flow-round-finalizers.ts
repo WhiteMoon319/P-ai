@@ -22,7 +22,7 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
       bindings.setDeferredRoundCompletion(null);
       return;
     }
-    const { draftId } = round;
+    const { messageId } = round;
     const { result } = deferredRoundCompletion;
     bindings.setDeferredRoundCompletion(null);
 
@@ -39,8 +39,8 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
       ) || bindings.t("status.toolCallDone");
     }
 
-    bindings.updateDraftText(draftId);
-    bindings.finalizeDraft(draftId, result.assistantMessage);
+    bindings.updateMessageText(messageId);
+    bindings.finalizeMessage(messageId, result.assistantMessage);
     bindings.clearConversationStreamCache(bindings.getConversationId ? bindings.getConversationId() : "");
     bindings.submitPending && (bindings.submitPending.value = false);
     bindings.clearFrontendDispatchTimer();
@@ -52,7 +52,7 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
     bindings.reasoningStartedAtMs.value = 0;
   }
 
-  async function finalizeQueuedRoundWithoutDraft(
+  async function finalizeQueuedRoundWithoutMessage(
     gen: number,
     result: {
       assistantText: string;
@@ -66,8 +66,8 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
       bindings.latestAssistantText.value,
       String(result.assistantText || ""),
     );
-    bindings.updateDraftText(round.draftId);
-    bindings.finalizeDraft(round.draftId, result.assistantMessage);
+    bindings.updateMessageText(round.messageId);
+    bindings.finalizeMessage(round.messageId, result.assistantMessage);
     bindings.setPendingTerminalEvent(null);
     bindings.setDeferredRoundCompletion(null);
     bindings.setQueuedStreamingState(null);
@@ -82,11 +82,11 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
     bindings.reasoningStartedAtMs.value = 0;
   }
 
-  async function failQueuedRoundWithoutDraft(gen: number, error: unknown) {
+  async function failQueuedRoundWithoutMessage(gen: number, error: unknown) {
     bindings.sendStartedAtMsByGen.delete(gen);
     const round = bindings.getRound();
     if (round.phase !== "queued" || round.gen !== gen) return;
-    const queuedMessage = bindings.allMessages.value.find((message: ChatMessage) => String(message?.id || "").trim() === round.draftId);
+    const queuedMessage = bindings.allMessages.value.find((message: ChatMessage) => String(message?.id || "").trim() === round.messageId);
     bindings.setPendingTerminalEvent(null);
     bindings.setDeferredRoundCompletion(null);
     bindings.setQueuedStreamingState(null);
@@ -106,14 +106,14 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
     }
     // failed 只清理空气泡；一旦已经有可见内容，就保留当前消息并结束流式态。
     if (messageHasVisibleContent(queuedMessage)) {
-      bindings.updateDraftText(round.draftId);
-      bindings.finalizeDraft(round.draftId);
+      bindings.updateMessageText(round.messageId);
+      bindings.finalizeMessage(round.messageId);
     } else {
-      bindings.removeDraft(round.draftId);
+      bindings.removeMessage(round.messageId);
     }
     const pendingUserDraftId = bindings.getPendingUserDraftId();
     if (pendingUserDraftId === `${DRAFT_USER_ID_PREFIX}${gen}`) {
-      bindings.removeDraft(pendingUserDraftId);
+      bindings.removeMessage(pendingUserDraftId);
     }
     bindings.setRound({ phase: "idle" });
     bindings.chatting.value = false;
@@ -123,14 +123,14 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
   function enqueueStreamDelta(gen: number, delta: string) {
     const round = bindings.getRound();
     if (round.phase !== "streaming" || round.gen !== gen || !delta) return;
-    bindings.applyAssistantDeltaToDraft(round.draftId, delta);
+    bindings.applyAssistantDeltaToMessage(round.messageId, delta);
     finalizeDeferredRoundCompletion();
   }
 
   return {
     finalizeDeferredRoundCompletion,
-    finalizeQueuedRoundWithoutDraft,
-    failQueuedRoundWithoutDraft,
+    finalizeQueuedRoundWithoutMessage,
+    failQueuedRoundWithoutMessage,
     enqueueStreamDelta,
   };
 }

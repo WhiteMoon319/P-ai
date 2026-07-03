@@ -20,16 +20,16 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
       || (String(message?.role || "").trim() === "assistant" && meta._streaming === true);
   }
 
-  function resolveAssistantDraftId(input?: {
-    draftId?: string | null;
+  function resolveAssistantMessageId(input?: {
+    messageId?: string | null;
     assistantMessageId?: string | null;
     persistedAssistantMessageId?: string | null;
     activationId?: string | null;
     requestId?: string | null;
     gen?: number;
   }): string {
-    const explicitDraftId = String(input?.draftId || "").trim();
-    if (explicitDraftId) return explicitDraftId;
+    const explicitMessageId = String(input?.messageId || "").trim();
+    if (explicitMessageId) return explicitMessageId;
     const assistantMessageId = String(input?.assistantMessageId || input?.persistedAssistantMessageId || "").trim();
     if (assistantMessageId) return assistantMessageId;
     return "";
@@ -47,7 +47,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     // 流式恢复日志已移除
   }
 
-  function applyQueuedStreamingStateIfNeeded(draftId: string) {
+  function applyQueuedStreamingStateIfNeeded(messageId: string) {
     const queuedStreamingState = bindings.getQueuedStreamingState();
     if (!queuedStreamingState) return;
     bindings.latestAssistantText.value = queuedStreamingState.assistantText;
@@ -65,7 +65,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
       );
     }
     bindings.setQueuedStreamingState(null);
-    bindings.updateDraftText(draftId);
+    bindings.updateMessageText(messageId);
   }
 
   function beginAssistantActivationFromEvent(payload: RoundStartedPayload): number {
@@ -102,14 +102,14 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
       bindings.setPendingTerminalEvent(null);
       bindings.setDeferredRoundCompletion(null);
       bindings.setQueuedStreamingState(null);
-      bindings.removeAssistantDrafts();
+      bindings.removeLegacyAssistantDrafts();
       bindings.resetDisplayState();
       bindings.setActiveHistoryMessageCount(formalizeMessages(bindings.allMessages.value).length);
       bindings.setRound({
         phase: "queued",
         gen,
-        draftId: resolveAssistantDraftId({
-          draftId: round.phase === "queued" ? round.draftId : "",
+        messageId: resolveAssistantMessageId({
+          messageId: round.phase === "queued" ? round.messageId : "",
           assistantMessageId: payload.assistantMessageId,
           activationId: nextActivationId,
           requestId: payload.requestId,
@@ -122,9 +122,9 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
       positiveRoundedNumber(payload.startedAtMs) || bindings.sendStartedAtMsByGen.get(gen),
     );
     bindings.chatting.value = true;
-    bindings.updateQueuedAssistantDraftStatus(
-      resolveAssistantDraftId({
-        draftId: bindings.getRound().phase === "queued" ? bindings.getRound().draftId : "",
+    bindings.updateQueuedAssistantMessageStatus(
+      resolveAssistantMessageId({
+        messageId: bindings.getRound().phase === "queued" ? bindings.getRound().messageId : "",
         assistantMessageId: payload.assistantMessageId,
         activationId: nextActivationId,
         requestId: payload.requestId,
@@ -155,7 +155,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
         bindings.frontendDispatch.getStartedAtMs() || cachedTimer.startedAtMs || undefined,
         bindings.frontendDispatch.getElapsedMs() || cachedTimer.elapsedMs,
       );
-      bindings.updateQueuedAssistantDraftStatus(round.draftId, statusText);
+      bindings.updateQueuedAssistantMessageStatus(round.messageId, statusText);
       bindings.chatting.value = true;
       bindings.setFrontendRoundPhase("waiting");
       return round.gen;
@@ -166,10 +166,10 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
         bindings.frontendDispatch.getStartedAtMs() || cachedTimer.startedAtMs || undefined,
         bindings.frontendDispatch.getElapsedMs() || cachedTimer.elapsedMs,
       );
-      if (!bindings.hasAssistantDraftInMessages()) {
-        const draftId = bindings.insertDraft(round.draftId, round.gen, statusText);
-        bindings.updateDraftText(draftId);
-        bindings.setRound({ phase: "streaming", gen: round.gen, draftId });
+      if (!bindings.hasStreamingAssistantMessageInMessages()) {
+        const messageId = bindings.insertStreamingAssistantMessage(round.messageId, round.gen, statusText);
+        bindings.updateMessageText(messageId);
+        bindings.setRound({ phase: "streaming", gen: round.gen, messageId });
       }
       bindings.chatting.value = true;
       return round.gen;
@@ -180,16 +180,16 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     bindings.setDeferredRoundCompletion(null);
     bindings.setQueuedStreamingState(null);
     bindings.setActiveHistoryMessageCount(formalizeMessages(bindings.allMessages.value).length);
-    const draftId = resolveAssistantDraftId({
+    const messageId = resolveAssistantMessageId({
       persistedAssistantMessageId: conversationId ? bindings.readConversationStreamCache(conversationId)?.persistedAssistantMessageId : "",
       activationId: cachedTimer.startedAtMs > 0 ? bindings.getActiveActivationId?.() : "",
       requestId: conversationId ? bindings.readConversationStreamCache(conversationId)?.requestId : "",
       gen,
     });
-    bindings.setRound({ phase: "queued", gen, draftId }, "waiting");
+    bindings.setRound({ phase: "queued", gen, messageId }, "waiting");
     bindings.startFrontendDispatchTimer(gen, cachedTimer.startedAtMs || undefined, cachedTimer.elapsedMs);
     bindings.chatting.value = true;
-    bindings.updateQueuedAssistantDraftStatus(draftId, statusText);
+    bindings.updateQueuedAssistantMessageStatus(messageId, statusText);
     return gen;
   }
 
@@ -197,33 +197,33 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     const conversationId = bindings.getConversationId ? bindings.getConversationId() : "";
     const round = bindings.getRound();
     if (round.phase === "streaming") {
-      if (!bindings.hasAssistantDraftInMessages()) {
+      if (!bindings.hasStreamingAssistantMessageInMessages()) {
         if (bindings.streamBlocks) bindings.streamBlocks.value = [];
         bindings.applyConversationStreamCacheToDisplay(conversationId);
-        const draftId = bindings.insertDraft(round.draftId, round.gen);
-        bindings.updateDraftText(draftId);
-        bindings.setRound({ phase: "streaming", gen: round.gen, draftId });
+        const messageId = bindings.insertStreamingAssistantMessage(round.messageId, round.gen);
+        bindings.updateMessageText(messageId);
+        bindings.setRound({ phase: "streaming", gen: round.gen, messageId });
       }
       return round.gen;
     }
     const gen = bindings.nextGeneration();
     if (bindings.streamBlocks) bindings.streamBlocks.value = [];
-    const existingDraft = [...bindings.allMessages.value]
+    const existingMessage = [...bindings.allMessages.value]
       .reverse()
       .find((message: ChatMessage) => isStreamingAssistantMessage(message));
-    const existingDraftId = String(existingDraft?.id || "").trim();
-    const existingDraftMeta = ((existingDraft?.providerMeta || {}) as Record<string, unknown>);
-    const restoredFromCache = !existingDraftId && bindings.applyConversationStreamCacheToDisplay(conversationId);
+    const existingMessageId = String(existingMessage?.id || "").trim();
+    const existingMessageMeta = ((existingMessage?.providerMeta || {}) as Record<string, unknown>);
+    const restoredFromCache = !existingMessageId && bindings.applyConversationStreamCacheToDisplay(conversationId);
     applyStreamingOverlayForConversation(conversationId);
-    const existingDraftStartedAtMs = existingDraftId ? positiveRoundedNumber(existingDraftMeta._frontendDispatchStartedAtMs) : 0;
-    const existingDraftElapsedMs = existingDraftId ? positiveRoundedNumber(existingDraftMeta._frontendDispatchElapsedMs) : 0;
+    const existingMessageStartedAtMs = existingMessageId ? positiveRoundedNumber(existingMessageMeta._frontendDispatchStartedAtMs) : 0;
+    const existingMessageElapsedMs = existingMessageId ? positiveRoundedNumber(existingMessageMeta._frontendDispatchElapsedMs) : 0;
     if (!restoredFromCache) {
-      bindings.latestAssistantText.value = readMessagePlainText(existingDraft);
+      bindings.latestAssistantText.value = readMessagePlainText(existingMessage);
     }
     bindings.setActiveHistoryMessageCount(formalizeMessages(bindings.allMessages.value).length);
-    const draftId = existingDraftId || bindings.insertDraft(
-      resolveAssistantDraftId({
-        draftId: round.phase === "queued" ? round.draftId : "",
+    const messageId = existingMessageId || bindings.insertStreamingAssistantMessage(
+      resolveAssistantMessageId({
+        messageId: round.phase === "queued" ? round.messageId : "",
         persistedAssistantMessageId: bindings.readConversationStreamCache(conversationId)?.persistedAssistantMessageId,
         activationId: bindings.getActiveActivationId?.(),
         requestId: bindings.readConversationStreamCache(conversationId)?.requestId,
@@ -231,20 +231,20 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
       }),
       gen,
     );
-    if (existingDraftId) {
-      bindings.loadStreamBlocksFromDraft(draftId);
+    if (existingMessageId) {
+      bindings.loadStreamBlocksFromMessage(messageId);
     }
-    if (existingDraftId || restoredFromCache) {
-      bindings.updateDraftText(draftId);
+    if (existingMessageId || restoredFromCache) {
+      bindings.updateMessageText(messageId);
     }
-    bindings.setRound({ phase: "streaming", gen, draftId });
+    bindings.setRound({ phase: "streaming", gen, messageId });
     bindings.startFrontendDispatchTimer(
       gen,
-      existingDraftStartedAtMs || bindings.frontendDispatch.getStartedAtMs() || undefined,
-      existingDraftElapsedMs || bindings.frontendDispatch.getElapsedMs(),
+      existingMessageStartedAtMs || bindings.frontendDispatch.getStartedAtMs() || undefined,
+      existingMessageElapsedMs || bindings.frontendDispatch.getElapsedMs(),
     );
     bindings.chatting.value = true;
-    applyQueuedStreamingStateIfNeeded(draftId);
+    applyQueuedStreamingStateIfNeeded(messageId);
     return gen;
   }
 
@@ -270,8 +270,8 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     if (round.phase === "streaming") {
       const blocks = snapshotBlocks.length > 0 ? snapshotBlocks : normalizeAssistantStreamBlocks(cache?.streamBlocks || []);
       if (bindings.streamBlocks) bindings.streamBlocks.value = blocks;
-      bindings.syncStreamBlocksToDraft(round.draftId, blocks);
-      bindings.updateDraftText(round.draftId, undefined, undefined, "", blocks);
+      bindings.syncStreamBlocksToMessage(round.messageId, blocks);
+      bindings.updateMessageText(round.messageId, undefined, undefined, "", blocks);
     }
     return gen;
   }
@@ -296,34 +296,34 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     }
     const conversationId = bindings.getConversationId ? bindings.getConversationId() : "";
     if (bindings.streamBlocks) bindings.streamBlocks.value = [];
-    const existingDraft = [...bindings.allMessages.value]
+    const existingMessage = [...bindings.allMessages.value]
       .reverse()
       .find((message: ChatMessage) => isStreamingAssistantMessage(message));
-    const existingDraftId = String(existingDraft?.id || "").trim();
-    const existingDraftMeta = ((existingDraft?.providerMeta || {}) as Record<string, unknown>);
-    const restoredFromCache = !existingDraftId && bindings.applyConversationStreamCacheToDisplay(conversationId);
+    const existingMessageId = String(existingMessage?.id || "").trim();
+    const existingMessageMeta = ((existingMessage?.providerMeta || {}) as Record<string, unknown>);
+    const restoredFromCache = !existingMessageId && bindings.applyConversationStreamCacheToDisplay(conversationId);
     applyStreamingOverlayForConversation(conversationId);
-    const existingDraftStartedAtMs = existingDraftId ? positiveRoundedNumber(existingDraftMeta._frontendDispatchStartedAtMs) : 0;
-    const existingDraftElapsedMs = existingDraftId ? positiveRoundedNumber(existingDraftMeta._frontendDispatchElapsedMs) : 0;
+    const existingMessageStartedAtMs = existingMessageId ? positiveRoundedNumber(existingMessageMeta._frontendDispatchStartedAtMs) : 0;
+    const existingMessageElapsedMs = existingMessageId ? positiveRoundedNumber(existingMessageMeta._frontendDispatchElapsedMs) : 0;
     if (!restoredFromCache) {
-      bindings.latestAssistantText.value = readMessagePlainText(existingDraft);
+      bindings.latestAssistantText.value = readMessagePlainText(existingMessage);
     }
     bindings.setActiveHistoryMessageCount(formalizeMessages(bindings.allMessages.value).length);
-    const draftId = existingDraftId || bindings.insertDraft(round.draftId, gen);
-    if (existingDraftId) {
-      bindings.loadStreamBlocksFromDraft(draftId);
+    const messageId = existingMessageId || bindings.insertStreamingAssistantMessage(round.messageId, gen);
+    if (existingMessageId) {
+      bindings.loadStreamBlocksFromMessage(messageId);
     }
-    if (existingDraftId || restoredFromCache) {
-      bindings.updateDraftText(draftId);
+    if (existingMessageId || restoredFromCache) {
+      bindings.updateMessageText(messageId);
     }
-    bindings.setRound({ phase: "streaming", gen, draftId });
+    bindings.setRound({ phase: "streaming", gen, messageId });
     bindings.startFrontendDispatchTimer(
       gen,
-      existingDraftStartedAtMs || bindings.frontendDispatch.getStartedAtMs() || undefined,
-      existingDraftElapsedMs || bindings.frontendDispatch.getElapsedMs(),
+      existingMessageStartedAtMs || bindings.frontendDispatch.getStartedAtMs() || undefined,
+      existingMessageElapsedMs || bindings.frontendDispatch.getElapsedMs(),
     );
     bindings.chatting.value = true;
-    applyQueuedStreamingStateIfNeeded(draftId);
+    applyQueuedStreamingStateIfNeeded(messageId);
     bindings.applyPendingTerminalEvent(gen);
     return gen;
   }

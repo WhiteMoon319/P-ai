@@ -23,9 +23,9 @@ type UseChatFlowForegroundResetOptions = {
   resetQueuedStreamingState: () => void;
   clearFrontendDispatchTimer: () => void;
   getPendingUserDraftId: () => string;
-  removeDraft: (draftId: string) => void;
-  removeAssistantDrafts: () => void;
-  finalizeDraft: (draftId: string, finalMessage?: ChatMessage) => void;
+  removeMessage: (messageId: string) => void;
+  removeLegacyAssistantDrafts: () => void;
+  finalizeMessage: (messageId: string, finalMessage?: ChatMessage) => void;
   clearConversationStreamCache: (conversationId?: string | null) => void;
   setActiveHistoryMessageCount: (value: number) => void;
   reasoningStartedAtMs: Ref<number>;
@@ -53,13 +53,13 @@ export function useChatFlowForegroundReset(options: UseChatFlowForegroundResetOp
     options.clearFrontendDispatchTimer();
     const pendingUserDraftId = options.getPendingUserDraftId();
     if (pendingUserDraftId) {
-      options.removeDraft(pendingUserDraftId);
+      options.removeMessage(pendingUserDraftId);
     }
     const round = options.getRound();
     if (round.phase === "streaming") {
-      options.removeDraft(round.draftId);
+      options.removeMessage(round.messageId);
     } else if (round.phase === "queued") {
-      options.removeDraft(round.draftId);
+      options.removeMessage(round.messageId);
     }
     options.setRound({ phase: "idle" });
     options.setActiveHistoryMessageCount(0);
@@ -81,9 +81,9 @@ export function useChatFlowForegroundReset(options: UseChatFlowForegroundResetOp
     options.clearFrontendDispatchTimer();
     const pendingUserDraftId = options.getPendingUserDraftId();
     if (pendingUserDraftId) {
-      options.removeDraft(pendingUserDraftId);
+      options.removeMessage(pendingUserDraftId);
     }
-    options.removeAssistantDrafts();
+    options.removeLegacyAssistantDrafts();
     options.setRound({ phase: "idle" });
     options.setActiveHistoryMessageCount(0);
     options.chatting.value = false;
@@ -103,7 +103,7 @@ export function useChatFlowForegroundReset(options: UseChatFlowForegroundResetOp
     }
     const pendingUserDraftId = options.getPendingUserDraftId();
     if (pendingUserDraftId) {
-      options.removeDraft(pendingUserDraftId);
+      options.removeMessage(pendingUserDraftId);
     }
     // 最小化/失焦不是流式结束证据；在未确认后端终态前，保留当前前台流式真相。
     if (round.phase === "idle") {

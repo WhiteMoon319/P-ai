@@ -24,22 +24,22 @@ type UseChatFlowRoundEventsOptions = {
   setActiveActivationId: (value: string) => void;
   setSendChatActiveGen: (value: number) => void;
   sendStartedAtMsByGen: Map<number, number>;
-  hasAssistantDraftInMessages: () => boolean;
+  hasStreamingAssistantMessageInMessages: () => boolean;
   applyConversationStreamCacheToDisplay: (conversationId?: string | null) => boolean;
-  loadStreamBlocksFromDraft: (draftId: string) => void;
-  updateQueuedAssistantDraftStatus: (draftId: string, statusText: string) => void;
-  insertDraft: (draftId: string, gen?: number, initialText?: string) => string;
-  updateDraftText: (draftId: string) => void;
-  finalizeDraft: (draftId: string, finalMessage?: ChatMessage) => void;
-  syncStreamBlocksToDraft: (draftId: string) => void;
+  loadStreamBlocksFromMessage: (messageId: string) => void;
+  updateQueuedAssistantMessageStatus: (messageId: string, statusText: string) => void;
+  insertStreamingAssistantMessage: (messageId: string, gen?: number, initialText?: string) => string;
+  updateMessageText: (messageId: string) => void;
+  finalizeMessage: (messageId: string, finalMessage?: ChatMessage) => void;
+  syncStreamBlocksToMessage: (messageId: string) => void;
   applyPendingTerminalEvent: (gen: number) => boolean;
   promoteQueuedRoundToStreaming: (gen: number) => number;
   finalizeDeferredRoundCompletion: () => void;
-  finalizeQueuedRoundWithoutDraft: (
+  finalizeQueuedRoundWithoutMessage: (
     gen: number,
     result: { assistantText: string; assistantMessage?: ChatMessage },
   ) => Promise<void>;
-  failQueuedRoundWithoutDraft: (gen: number, error: unknown) => Promise<void>;
+  failQueuedRoundWithoutMessage: (gen: number, error: unknown) => Promise<void>;
   enqueueStreamDelta: (gen: number, delta: string) => void;
   setChatErrorText: (text: string, conversationId?: string | null) => void;
   formatRequestFailed: (error: unknown) => string;
@@ -68,8 +68,8 @@ export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
     if (wasQueuedForActivation) {
       const existingRound = options.getRound();
       if (existingRound.phase === "queued" && existingRound.gen === gen) {
-        options.setRound({ phase: "queued", gen, draftId: existingRound.draftId }, "waiting");
-        options.updateQueuedAssistantDraftStatus(existingRound.draftId, options.optionsT("chat.statusWaitingReply"));
+        options.setRound({ phase: "queued", gen, messageId: existingRound.messageId }, "waiting");
+        options.updateQueuedAssistantMessageStatus(existingRound.messageId, options.optionsT("chat.statusWaitingReply"));
       }
       options.chatting.value = true;
       return;
@@ -88,13 +88,13 @@ export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
       options.setPendingTerminalEvent(null);
       options.setDeferredRoundCompletion(null);
       if (pending?.kind === "completed") {
-        await options.finalizeQueuedRoundWithoutDraft(gen, pending.result);
+        await options.finalizeQueuedRoundWithoutMessage(gen, pending.result);
         return;
       }
-      await options.failQueuedRoundWithoutDraft(gen, pending?.error);
+      await options.failQueuedRoundWithoutMessage(gen, pending?.error);
       return;
     }
-    options.updateQueuedAssistantDraftStatus(round.draftId, options.optionsT("chat.statusWaitingReply"));
+    options.updateQueuedAssistantMessageStatus(round.messageId, options.optionsT("chat.statusWaitingReply"));
     options.chatting.value = true;
   }
 
@@ -108,7 +108,7 @@ export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
     options.sendStartedAtMsByGen.delete(gen);
     const round = options.getRound();
     if (round.phase === "queued" && round.gen === gen) {
-      await options.finalizeQueuedRoundWithoutDraft(gen, result);
+      await options.finalizeQueuedRoundWithoutMessage(gen, result);
       return;
     }
     if (round.phase !== "streaming" || round.gen !== gen) return;
@@ -120,7 +120,7 @@ export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
     options.sendStartedAtMsByGen.delete(gen);
     const round = options.getRound();
     if (round.phase === "queued" && round.gen === gen) {
-      await options.failQueuedRoundWithoutDraft(gen, error);
+      await options.failQueuedRoundWithoutMessage(gen, error);
       return;
     }
     if (round.phase !== "streaming" || round.gen !== gen) return;
@@ -133,8 +133,8 @@ export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
       options.toolStatusText.value = options.optionsT("status.toolCallFailed");
     }
     // streaming failed: 保留已经显示出来的内容，只结束流式态，不再重载。
-    options.updateDraftText(round.draftId);
-    options.finalizeDraft(round.draftId);
+    options.updateMessageText(round.messageId);
+    options.finalizeMessage(round.messageId);
     options.setRound({ phase: "idle" });
     options.chatting.value = false;
     options.reasoningStartedAtMs.value = 0;

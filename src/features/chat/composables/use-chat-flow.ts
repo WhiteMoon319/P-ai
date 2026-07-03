@@ -96,9 +96,9 @@ export function useChatFlow(options: UseChatFlowOptions) {
   });
   const frontendDispatch = useChatFlowFrontendDispatch({
     allMessages: options.allMessages,
-    getDraftIdForGen: (gen) => {
+    getMessageIdForGen: (gen) => {
       if ((round.phase === "queued" || round.phase === "streaming") && round.gen === gen) {
-        return round.draftId;
+        return round.messageId;
       }
       return "";
     },
@@ -111,20 +111,20 @@ export function useChatFlow(options: UseChatFlowOptions) {
     },
   });
   const {
-    applyAssistantDeltaToDraft,
-    finalizeDraft,
-    getDraftStreamBlocks,
+    applyAssistantDeltaToMessage,
+    finalizeMessage,
+    getMessageStreamBlocks,
     getPendingUserDraftId,
     getPendingUserDraftIdForGen,
-    hasAssistantDraftInMessages,
-    insertDraft,
+    hasStreamingAssistantMessageInMessages,
+    insertStreamingAssistantMessage,
     insertUserDraft,
-    loadStreamBlocksFromDraft,
-    removeAssistantDrafts,
-    removeDraft,
-    syncStreamBlocksToDraft,
-    updateDraftText,
-    updateQueuedAssistantDraftStatus,
+    loadStreamBlocksFromMessage,
+    removeLegacyAssistantDrafts,
+    removeMessage,
+    syncStreamBlocksToMessage,
+    updateMessageText,
+    updateQueuedAssistantMessageStatus,
   } = useChatFlowDrafts({
     allMessages: options.allMessages,
     latestUserText: options.latestUserText,
@@ -179,8 +179,8 @@ export function useChatFlow(options: UseChatFlowOptions) {
     reasoningStartedAtMs,
     t: options.t,
     clearChatErrorText,
-    updateDraftText,
-    finalizeDraft,
+    updateMessageText,
+    finalizeMessage,
     clearConversationStreamCache,
     clearFrontendDispatchTimer,
     setActiveActivationId: (value: string) => {
@@ -190,7 +190,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
       activeRoundAgentId = String(value || "").trim();
     },
     onReloadMessages: options.onReloadMessages,
-    removeDraft,
+    removeMessage,
     setPendingTerminalEvent: (event: PendingTerminalEvent | null) => {
       pendingTerminalEvent = event;
     },
@@ -203,7 +203,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     getPendingUserDraftId,
     formatRequestFailed: options.formatRequestFailed,
     setChatErrorText,
-    applyAssistantDeltaToDraft,
+    applyAssistantDeltaToMessage,
     submitPending,
   });
   const streamingEvents = useChatFlowStreamingEvents({
@@ -224,11 +224,11 @@ export function useChatFlow(options: UseChatFlowOptions) {
     },
     handleRoundCompleted,
     handleRoundFailed,
-    getDraftStreamBlocks,
-    syncStreamBlocksToDraft,
+    getMessageStreamBlocks,
+    syncStreamBlocksToMessage,
     syncCurrentDisplayStateToConversationStreamCache,
     applyConversationStreamCacheSnapshotToDisplay,
-    updateDraftText,
+    updateMessageText,
     enqueueStreamDelta: roundFinalizers.enqueueStreamDelta,
   });
   const channelBinding = useChatFlowChannelBinding({
@@ -289,16 +289,16 @@ export function useChatFlow(options: UseChatFlowOptions) {
     t: options.t,
     sendStartedAtMsByGen,
     clearConversationStreamCache,
-    removeAssistantDrafts,
+    removeLegacyAssistantDrafts,
     resetDisplayState,
     startFrontendDispatchTimer,
-    updateQueuedAssistantDraftStatus,
-    hasAssistantDraftInMessages,
-    insertDraft,
-    syncStreamBlocksToDraft,
-    updateDraftText,
+    updateQueuedAssistantMessageStatus,
+    hasStreamingAssistantMessageInMessages,
+    insertStreamingAssistantMessage,
+    syncStreamBlocksToMessage,
+    updateMessageText,
     applyConversationStreamCacheToDisplay,
-    loadStreamBlocksFromDraft,
+    loadStreamBlocksFromMessage,
     readConversationStreamCache,
     writeConversationStreamCacheSnapshot,
     applyPendingTerminalEvent,
@@ -334,11 +334,11 @@ export function useChatFlow(options: UseChatFlowOptions) {
     applyAssistantEventToConversationStreamCache,
     writeConversationStreamCacheSnapshot,
     applyConversationStreamCacheToDisplay,
-    hasAssistantDraftInMessages,
+    hasStreamingAssistantMessageInMessages,
     ensureForegroundStreamingRound,
     handleStreamingEvent,
-    syncStreamBlocksToDraft,
-    updateDraftText,
+    syncStreamBlocksToMessage,
+    updateMessageText,
   });
   const stopController = useChatFlowStop({
     chatting: options.chatting,
@@ -375,9 +375,9 @@ export function useChatFlow(options: UseChatFlowOptions) {
     },
     clearFrontendDispatchTimer,
     getPendingUserDraftId,
-    removeDraft,
-    finalizeDraft,
-    updateDraftText,
+    removeMessage,
+    finalizeMessage,
+    updateMessageText,
     deleteSendStartedAtMs: (gen) => {
       sendStartedAtMsByGen.delete(gen);
     },
@@ -405,11 +405,11 @@ export function useChatFlow(options: UseChatFlowOptions) {
     formatRequestFailed: options.formatRequestFailed,
     getPendingUserDraftId,
     getPendingUserDraftIdForGen,
-    removeDraft,
+    removeMessage,
     deleteSendStartedAtMs: (gen) => {
       sendStartedAtMsByGen.delete(gen);
     },
-    failQueuedRoundWithoutDraft: roundFinalizers.failQueuedRoundWithoutDraft,
+    failQueuedRoundWithoutMessage: roundFinalizers.failQueuedRoundWithoutMessage,
     setActiveRoundAgentId: (value: string) => {
       activeRoundAgentId = String(value || "").trim();
     },
@@ -442,19 +442,19 @@ export function useChatFlow(options: UseChatFlowOptions) {
       sendChatActiveGen = value;
     },
     sendStartedAtMsByGen,
-    hasAssistantDraftInMessages,
+    hasStreamingAssistantMessageInMessages,
     applyConversationStreamCacheToDisplay,
-    loadStreamBlocksFromDraft,
-    updateQueuedAssistantDraftStatus,
-    insertDraft,
-    updateDraftText,
-    finalizeDraft,
-    syncStreamBlocksToDraft,
+    loadStreamBlocksFromMessage,
+    updateQueuedAssistantMessageStatus,
+    insertStreamingAssistantMessage,
+    updateMessageText,
+    finalizeMessage,
+    syncStreamBlocksToMessage,
     applyPendingTerminalEvent,
     promoteQueuedRoundToStreaming,
     finalizeDeferredRoundCompletion: roundFinalizers.finalizeDeferredRoundCompletion,
-    finalizeQueuedRoundWithoutDraft: roundFinalizers.finalizeQueuedRoundWithoutDraft,
-    failQueuedRoundWithoutDraft: roundFinalizers.failQueuedRoundWithoutDraft,
+    finalizeQueuedRoundWithoutMessage: roundFinalizers.finalizeQueuedRoundWithoutMessage,
+    failQueuedRoundWithoutMessage: roundFinalizers.failQueuedRoundWithoutMessage,
     enqueueStreamDelta: roundFinalizers.enqueueStreamDelta,
     setChatErrorText,
     formatRequestFailed: options.formatRequestFailed,
@@ -499,8 +499,8 @@ export function useChatFlow(options: UseChatFlowOptions) {
     prepareSendInput: sendInput.prepareSendInput,
     insertUserDraft,
     resetDisplayState,
-    removeDraft,
-    updateQueuedAssistantDraftStatus,
+    removeMessage,
+    updateQueuedAssistantMessageStatus,
     handleRoundCompleted,
     sendRecovery,
   });
@@ -539,9 +539,9 @@ export function useChatFlow(options: UseChatFlowOptions) {
     },
     clearFrontendDispatchTimer,
     getPendingUserDraftId,
-    removeDraft,
-    removeAssistantDrafts,
-    finalizeDraft,
+    removeMessage,
+    removeLegacyAssistantDrafts,
+    finalizeMessage,
     clearConversationStreamCache,
     setActiveHistoryMessageCount: (value) => {
       activeHistoryMessageCount = value;
@@ -698,7 +698,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
 
   /**
    * round_completed：终结当前轮次。
-   * 只做文字收尾 + 状态转换，不碰 allMessages（除了 updateDraftText）。
+   * 只做文字收尾 + 状态转换，不碰 allMessages（除了 updateMessageText）。
    */
   async function handleRoundCompleted(
     gen: number,

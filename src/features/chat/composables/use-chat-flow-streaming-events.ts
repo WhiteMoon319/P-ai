@@ -35,16 +35,16 @@ type UseChatFlowStreamingEventsOptions = {
     },
   ) => Promise<void>;
   handleRoundFailed: (gen: number, error: unknown) => Promise<void>;
-  getDraftStreamBlocks: (draftId: string) => AssistantStreamBlock[];
-  syncStreamBlocksToDraft: (draftId: string, rawBlocks?: AssistantStreamBlock[]) => void;
+  getMessageStreamBlocks: (messageId: string) => AssistantStreamBlock[];
+  syncStreamBlocksToMessage: (messageId: string, rawBlocks?: AssistantStreamBlock[]) => void;
   syncCurrentDisplayStateToConversationStreamCache: () => void;
   applyConversationStreamCacheSnapshotToDisplay: (
     conversationId: string,
     snapshot?: any,
     input?: { ignoreActivationId?: boolean },
   ) => boolean;
-  updateDraftText: (
-    draftId: string,
+  updateMessageText: (
+    messageId: string,
     streamSegments?: string[],
     streamTail?: string,
     streamAnimatedDelta?: string,
@@ -55,17 +55,17 @@ type UseChatFlowStreamingEventsOptions = {
 };
 
 export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOptions) {
-  function shouldPreserveDraftProjection(parsed: AssistantDeltaEvent): boolean {
+  function shouldPreserveMessageProjection(parsed: AssistantDeltaEvent): boolean {
     return parsed.kind === "activity_reasoning_delta";
   }
 
-  function shouldCorrectDraftProjectionFromSnapshot(
-    draftId: string,
+  function shouldCorrectMessageProjectionFromSnapshot(
+    messageId: string,
     snapshotBlocks: AssistantStreamBlock[],
   ): boolean {
-    if (!draftId || snapshotBlocks.length <= 0) return false;
-    const currentDraftBlocks = options.getDraftStreamBlocks(draftId);
-    return streamBlocksActivitySignature(currentDraftBlocks) !== streamBlocksActivitySignature(snapshotBlocks);
+    if (!messageId || snapshotBlocks.length <= 0) return false;
+    const currentMessageBlocks = options.getMessageStreamBlocks(messageId);
+    return streamBlocksActivitySignature(currentMessageBlocks) !== streamBlocksActivitySignature(snapshotBlocks);
   }
 
   function handleStreamingEvent(currentGen: number, parsed: AssistantDeltaEvent) {
@@ -148,13 +148,13 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
       || parsed.kind === "assistant_tool_result";
     let shouldCorrectProjectionFromSnapshot = false;
     let authoritativeBlocks: AssistantStreamBlock[] = currentRound.phase === "streaming"
-      ? options.getDraftStreamBlocks(currentRound.draftId)
+      ? options.getMessageStreamBlocks(currentRound.messageId)
       : [];
     if (conversationId && parsed.streamCache) {
       const snapshotBlocks = normalizeAssistantStreamBlocks(parsed.streamCache.streamBlocks);
       if (currentRound.phase === "streaming") {
-        shouldCorrectProjectionFromSnapshot = shouldCorrectDraftProjectionFromSnapshot(
-          currentRound.draftId,
+        shouldCorrectProjectionFromSnapshot = shouldCorrectMessageProjectionFromSnapshot(
+          currentRound.messageId,
           snapshotBlocks,
         );
       }
@@ -184,8 +184,8 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
 
     if (currentRound.phase === "streaming") {
       if (parsed.kind === "tool_status") {
-        options.updateDraftText(
-          currentRound.draftId,
+        options.updateMessageText(
+          currentRound.messageId,
           undefined,
           undefined,
           "",
@@ -193,28 +193,28 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
           { preserveActivityProjection: true },
         );
       } else if (isActivityProjectionEvent) {
-        options.syncStreamBlocksToDraft(currentRound.draftId, authoritativeBlocks);
-        options.updateDraftText(
-          currentRound.draftId,
+        options.syncStreamBlocksToMessage(currentRound.messageId, authoritativeBlocks);
+        options.updateMessageText(
+          currentRound.messageId,
           undefined,
           undefined,
           "",
           authoritativeBlocks,
-          { preserveActivityProjection: shouldPreserveDraftProjection(parsed) },
+          { preserveActivityProjection: shouldPreserveMessageProjection(parsed) },
         );
       } else if (parsed.streamCache && shouldCorrectProjectionFromSnapshot) {
-        options.syncStreamBlocksToDraft(currentRound.draftId, authoritativeBlocks);
-        options.updateDraftText(
-          currentRound.draftId,
+        options.syncStreamBlocksToMessage(currentRound.messageId, authoritativeBlocks);
+        options.updateMessageText(
+          currentRound.messageId,
           undefined,
           undefined,
           "",
           authoritativeBlocks,
-          { preserveActivityProjection: shouldPreserveDraftProjection(parsed) },
+          { preserveActivityProjection: shouldPreserveMessageProjection(parsed) },
         );
       } else if (parsed.streamCache && parsed.kind !== "tool_status") {
-        options.updateDraftText(
-          currentRound.draftId,
+        options.updateMessageText(
+          currentRound.messageId,
           undefined,
           undefined,
           "",

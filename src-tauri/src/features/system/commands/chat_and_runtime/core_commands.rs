@@ -424,6 +424,7 @@ async fn confirm_plan_and_continue_inner(
     runtime_context.executor_agent_id = Some(agent_id.clone());
     runtime_context.executor_department_id = Some(department_id.clone());
     runtime_context.model_config_id = Some(selected_api.id.clone());
+    let assistant_message_id = Uuid::new_v4().to_string();
     let event = ChatPendingEvent {
         id: continue_event_id,
         conversation_id: conversation_id.to_string(),
@@ -432,7 +433,7 @@ async fn confirm_plan_and_continue_inner(
         queue_mode: ChatQueueMode::Normal,
         messages: vec![plan_continue_confirmation_message()],
         activate_assistant: true,
-        assistant_message_id: None,
+        assistant_message_id: Some(assistant_message_id),
         session_info: ChatSessionInfo {
             department_id,
             agent_id,

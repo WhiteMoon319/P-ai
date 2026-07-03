@@ -5,7 +5,7 @@ import { positiveRoundedNumber } from "./use-chat-flow-utils";
 
 type UseChatFlowFrontendDispatchOptions = {
   allMessages: Ref<ChatMessage[]>;
-  getDraftIdForGen: (gen: number) => string;
+  getMessageIdForGen: (gen: number) => string;
   isRoundActiveForGen: (gen: number) => boolean;
   syncCurrentDisplayStateToConversationStreamCache: () => void;
 };
@@ -41,13 +41,13 @@ export function useChatFlowFrontendDispatch(options: UseChatFlowFrontendDispatch
     elapsedMs = 0;
   }
 
-  function updateDraftMeta(gen: number) {
+  function updateMessageMeta(gen: number) {
     if (!gen || startedAtMs <= 0) return;
     const nextElapsedMs = currentElapsedMs();
-    const draftId = options.getDraftIdForGen(gen);
+    const messageId = options.getMessageIdForGen(gen);
     let touched = false;
     options.allMessages.value = options.allMessages.value.map((message) => {
-      if (message.id !== draftId) return message;
+      if (message.id !== messageId) return message;
       touched = true;
       const meta = ((message.providerMeta || {}) as Record<string, unknown>);
       return {
@@ -73,7 +73,7 @@ export function useChatFlowFrontendDispatch(options: UseChatFlowFrontendDispatch
       && timerGen === normalizedGen
       && startedAtMs === normalizedStartedAtMs
     ) {
-      updateDraftMeta(normalizedGen);
+      updateMessageMeta(normalizedGen);
       return;
     }
     if (timer) {
@@ -83,13 +83,13 @@ export function useChatFlowFrontendDispatch(options: UseChatFlowFrontendDispatch
     timerGen = normalizedGen;
     startedAtMs = normalizedStartedAtMs;
     elapsedMs = positiveRoundedNumber(nextElapsedMs);
-    updateDraftMeta(normalizedGen);
+    updateMessageMeta(normalizedGen);
     timer = setInterval(() => {
       if (timerGen !== normalizedGen || !options.isRoundActiveForGen(normalizedGen)) {
         clear();
         return;
       }
-      updateDraftMeta(normalizedGen);
+      updateMessageMeta(normalizedGen);
     }, 1000);
   }
 

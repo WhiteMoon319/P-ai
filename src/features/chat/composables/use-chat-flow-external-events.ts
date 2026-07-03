@@ -46,11 +46,11 @@ type UseChatFlowExternalEventsOptions = {
     conversationId?: string | null,
     input?: { ignoreActivationId?: boolean; skipStreamBlocks?: boolean },
   ) => boolean;
-  hasAssistantDraftInMessages: () => boolean;
+  hasStreamingAssistantMessageInMessages: () => boolean;
   ensureForegroundStreamingRound: () => number;
   handleStreamingEvent: (gen: number, parsed: any) => void;
-  syncStreamBlocksToDraft: (draftId: string) => void;
-  updateDraftText: (draftId: string) => void;
+  syncStreamBlocksToMessage: (messageId: string) => void;
+  updateMessageText: (messageId: string) => void;
 };
 
 export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOptions) {

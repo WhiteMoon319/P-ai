@@ -27,19 +27,19 @@ type UseChatFlowSendRecoveryOptions = {
   formatRequestFailed: (error: unknown) => string;
   getPendingUserDraftId: () => string;
   getPendingUserDraftIdForGen: (gen: number) => string;
-  removeDraft: (draftId: string) => void;
+  removeMessage: (messageId: string) => void;
   deleteSendStartedAtMs: (gen: number) => void;
-  failQueuedRoundWithoutDraft: (gen: number, error: unknown) => Promise<void>;
+  failQueuedRoundWithoutMessage: (gen: number, error: unknown) => Promise<void>;
   onReloadMessages: () => Promise<void>;
   t: (key: string, params?: Record<string, unknown>) => string;
 };
 
 export function useChatFlowSendRecovery(options: UseChatFlowSendRecoveryOptions) {
-  function removePendingDraftsForGen(gen: number, assistantDraftId?: string) {
+  function removePendingDraftsForGen(gen: number, assistantMessageId?: string) {
     const pendingUserDraftId = options.getPendingUserDraftIdForGen(gen);
-    if (pendingUserDraftId) options.removeDraft(pendingUserDraftId);
-    if (assistantDraftId) {
-      options.removeDraft(assistantDraftId);
+    if (pendingUserDraftId) options.removeMessage(pendingUserDraftId);
+    if (assistantMessageId) {
+      options.removeMessage(assistantMessageId);
     }
   }
 
@@ -97,9 +97,9 @@ export function useChatFlowSendRecovery(options: UseChatFlowSendRecoveryOptions)
 
     const latestRound = options.getRound();
     if (latestRound.phase === "streaming" && latestRound.gen === gen) {
-      options.removeDraft(latestRound.draftId);
+      options.removeMessage(latestRound.messageId);
       const pendingUserDraftId = options.getPendingUserDraftIdForGen(gen);
-      if (pendingUserDraftId) options.removeDraft(pendingUserDraftId);
+      if (pendingUserDraftId) options.removeMessage(pendingUserDraftId);
       options.deleteSendStartedAtMs(gen);
       options.setRound({ phase: "idle" });
       options.setActiveRoundAgentId("");
@@ -107,7 +107,7 @@ export function useChatFlowSendRecovery(options: UseChatFlowSendRecoveryOptions)
       options.chatting.value = false;
       options.reasoningStartedAtMs.value = 0;
     } else if (latestRound.phase === "queued" && latestRound.gen === gen) {
-      await options.failQueuedRoundWithoutDraft(gen, error);
+      await options.failQueuedRoundWithoutMessage(gen, error);
     }
   }
 
@@ -116,7 +116,7 @@ export function useChatFlowSendRecovery(options: UseChatFlowSendRecoveryOptions)
     const round = options.getRound();
     if (round.phase === "queued" && round.gen === gen && options.getHistoryFlushedReceivedGen() !== gen) {
       if (options.submitPending) options.submitPending.value = false;
-      removePendingDraftsForGen(gen, round.draftId);
+      removePendingDraftsForGen(gen, round.messageId);
       options.deleteSendStartedAtMs(gen);
       options.setRound({ phase: "idle" });
       options.setActiveRoundAgentId("");
