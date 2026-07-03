@@ -513,7 +513,7 @@ fn claim_guided_queue_events_for_conversation(
         .pending_queue
         .iter()
         .any(|event| event.queue_mode == ChatQueueMode::Guided);
-    if (slot.state != MainSessionState::Idle && slot.state != MainSessionState::OrganizingContext)
+    if slot.state != MainSessionState::Idle
         || !has_guided
         || claims.contains(trimmed_conversation_id)
         || claims.len() >= CHAT_CONCURRENCY_LIMIT
@@ -522,7 +522,6 @@ fn claim_guided_queue_events_for_conversation(
     }
 
     claims.insert(trimmed_conversation_id.to_string());
-    slot.state = MainSessionState::OrganizingContext;
     slot.last_activity_at = now_iso();
 
     let mut guided_events = Vec::<ChatPendingEvent>::new();
@@ -1905,14 +1904,8 @@ async fn process_guided_queue_when_idle(
             conversation_id, release_err
         ));
     }
-    let next_state = if conversation_has_guided_queue_events(state, conversation_id).unwrap_or(false)
-    {
-        MainSessionState::OrganizingContext
-    } else {
-        MainSessionState::Idle
-    };
     if let Err(state_err) =
-        set_conversation_runtime_state_and_emit(state, conversation_id, next_state)
+        set_conversation_runtime_state_and_emit(state, conversation_id, MainSessionState::Idle)
     {
         runtime_log_warn(format!(
             "[引导投送] 失败，任务=restore_guided_runtime_state，conversation_id={}，error={}",
@@ -3247,13 +3240,7 @@ async fn activate_main_assistant(
         );
     }
 
-    let next_state = if conversation_has_guided_queue_events(state, conversation_id).unwrap_or(false)
-    {
-        MainSessionState::OrganizingContext
-    } else {
-        MainSessionState::Idle
-    };
-    set_conversation_runtime_state_and_emit(state, conversation_id, next_state)?;
+    set_conversation_runtime_state_and_emit(state, conversation_id, MainSessionState::Idle)?;
     if let Err(err) = clear_conversation_stream_runtime_cache(state, conversation_id) {
         runtime_log_warn(format!(
             "[聊天流式缓存] 清理失败，conversation_id={}，error={}",

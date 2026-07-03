@@ -6352,7 +6352,7 @@
             .lock()
             .expect("lock slots");
         let slot = slots.get("conversation-a").expect("conversation slot");
-        assert_eq!(slot.state, MainSessionState::OrganizingContext);
+        assert_eq!(slot.state, MainSessionState::Idle);
         assert_eq!(slot.pending_queue.len(), 1);
         assert_eq!(slot.pending_queue[0].id, normal_event_id);
         drop(slots);
