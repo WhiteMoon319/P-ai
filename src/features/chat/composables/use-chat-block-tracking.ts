@@ -13,7 +13,7 @@ export function useChatBlockTracking(
   function isOwnUserMessage(block: ChatMessageBlock): boolean {
     if (block.remoteImOrigin) return false;
     const speakerAgentId = String(block.speakerAgentId || "").trim();
-    return !speakerAgentId || speakerAgentId === "user-persona";
+    return block.role === "user" || speakerAgentId === "user-persona";
   }
 
   function blockBelongsToMessageId(block: ChatMessageBlock, messageId: string): boolean {
@@ -43,18 +43,20 @@ export function useChatBlockTracking(
     return findLatestMessageIdByPredicate((block) => isCompactionBlock(block));
   });
 
-  const latestVisibleMessageId = computed(() => {
-    return findLatestMessageIdByPredicate(() => true);
-  });
-
   const latestOwnElasticItemId = computed(() => {
     const targetMessageId = latestOwnMessageId.value
-      || latestSummaryMessageId.value
-      || latestVisibleMessageId.value;
-    if (!targetMessageId) return "";
+      || latestSummaryMessageId.value;
+    if (targetMessageId) {
+      for (let idx = chatRenderItems.value.length - 1; idx >= 0; idx -= 1) {
+        const item = chatRenderItems.value[idx];
+        if ((item.kind === "message" || item.kind === "compaction") && blockBelongsToMessageId(item.block, targetMessageId)) {
+          return item.id;
+        }
+      }
+    }
     for (let idx = chatRenderItems.value.length - 1; idx >= 0; idx -= 1) {
       const item = chatRenderItems.value[idx];
-      if ((item.kind === "message" || item.kind === "compaction") && blockBelongsToMessageId(item.block, targetMessageId)) {
+      if (item.kind === "plan_started") {
         return item.id;
       }
     }
