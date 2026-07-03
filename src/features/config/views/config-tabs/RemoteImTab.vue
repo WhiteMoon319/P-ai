@@ -498,7 +498,8 @@
             <button
               class="btn btn-ghost"
               :title="t('common.delete')"
-              @click="removeChannelById(selectedChannel.id); closeChannelConfigModal()"
+              :disabled="saving || isChannelOperationBusy(selectedChannel.id)"
+              @click="deleteSelectedChannel"
             >
               <Trash2 class="h-3.5 w-3.5" />
               {{ t("common.delete") }}
@@ -1293,6 +1294,69 @@ function removeChannelById(channelId: string) {
       const nextIdx = Math.min(idx, channels.value.length - 1);
       selectedChannelId.value = nextIdx >= 0 ? channels.value[nextIdx].id : "";
     }
+  }
+}
+
+function cloneRemoteImChannel(channel: RemoteImChannelConfig): RemoteImChannelConfig {
+  return {
+    ...channel,
+    credentials: channel.credentials && typeof channel.credentials === "object"
+      ? { ...channel.credentials }
+      : {},
+  };
+}
+
+function restoreRemovedChannel(index: number, channel: RemoteImChannelConfig) {
+  if (props.config.remoteImChannels.some((item) => item.id === channel.id)) return;
+  const insertIndex = Math.max(0, Math.min(index, props.config.remoteImChannels.length));
+  props.config.remoteImChannels.splice(insertIndex, 0, cloneRemoteImChannel(channel));
+  selectedChannelId.value = channel.id;
+  channelConfigModalOpen.value = true;
+  lastSavedChannelSnapshot.value = channelSnapshot.value;
+}
+
+async function deleteSelectedChannel() {
+  const channel = selectedChannel.value;
+  if (!channel || saving.value || isChannelOperationBusy(channel.id)) return;
+  const channelName = String(channel.name || channel.id).trim() || channel.id;
+  const confirmed = window.confirm(t("config.remoteIm.deleteChannelConfirm", { name: channelName }));
+  if (!confirmed) return;
+
+  const removedIndex = props.config.remoteImChannels.findIndex((item) => item.id === channel.id);
+  if (removedIndex < 0) return;
+  const removedChannel = cloneRemoteImChannel(channel);
+  const removedChannelId = removedChannel.id;
+
+  saving.value = true;
+  setChannelOperationBusy(removedChannelId, true);
+  removeChannelById(removedChannelId);
+  closeChannelConfigModal();
+  try {
+    const saved = await Promise.resolve(props.saveConfigAction());
+    if (!saved) {
+      restoreRemovedChannel(removedIndex, removedChannel);
+      props.setStatusAction(t("config.remoteIm.deleteChannelFailed", { error: t("config.remoteIm.channelSaveFailed") }));
+      return;
+    }
+    const nextDrafts = { ...credentialDrafts.value };
+    delete nextDrafts[removedChannelId];
+    credentialDrafts.value = nextDrafts;
+    const nextRuntimeStates = { ...channelRuntimeStates.value };
+    delete nextRuntimeStates[removedChannelId];
+    channelRuntimeStates.value = nextRuntimeStates;
+    if (channelLogsModalOpen.value) {
+      channelLogs.value = [];
+      closeChannelLogsModal();
+    }
+    await nextTick();
+    lastSavedChannelSnapshot.value = channelSnapshot.value;
+    props.setStatusAction(t("config.remoteIm.deleteChannelSuccess", { name: channelName }));
+  } catch (error) {
+    restoreRemovedChannel(removedIndex, removedChannel);
+    props.setStatusAction(t("config.remoteIm.deleteChannelFailed", { error: String(error) }));
+  } finally {
+    setChannelOperationBusy(removedChannelId, false);
+    saving.value = false;
   }
 }
 

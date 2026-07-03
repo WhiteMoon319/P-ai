@@ -729,6 +729,65 @@ fn save_config(
     save_config_inner(config, &app, &state, &ide_context_runtime)
 }
 
+fn removed_remote_im_channels(
+    previous: &AppConfig,
+    next: &AppConfig,
+) -> Vec<RemoteImChannelConfig> {
+    let next_ids = next
+        .remote_im_channels
+        .iter()
+        .map(|channel| channel.id.trim().to_ascii_lowercase())
+        .collect::<std::collections::HashSet<_>>();
+    previous
+        .remote_im_channels
+        .iter()
+        .filter(|channel| !next_ids.contains(&channel.id.trim().to_ascii_lowercase()))
+        .cloned()
+        .collect()
+}
+
+fn stop_removed_remote_im_channel_runtimes(
+    state: AppState,
+    channels: Vec<RemoteImChannelConfig>,
+) {
+    if channels.is_empty() {
+        return;
+    }
+    tauri::async_runtime::spawn(async move {
+        for channel in channels {
+            let channel_id = channel.id.trim().to_string();
+            if channel_id.is_empty() {
+                continue;
+            }
+            match channel.platform {
+                RemoteImPlatform::OnebotV11 => {
+                    if let Err(err) = onebot_v11_ws_manager().stop_channel(&channel_id).await {
+                        eprintln!(
+                            "[远程IM] 删除渠道后停止 OneBot v11 运行态失败: channel_id={}, error={}",
+                            channel_id, err
+                        );
+                    }
+                }
+                RemoteImPlatform::Dingtalk => {
+                    dingtalk_stream_manager().stop_channel(&channel_id).await;
+                }
+                RemoteImPlatform::WeixinOc => {
+                    weixin_oc_manager().stop_channel(&channel_id).await;
+                }
+                RemoteImPlatform::Feishu => {}
+            }
+            if let Err(err) =
+                remote_im_delete_channel_private_state(&state, &channel.platform, &channel_id)
+            {
+                eprintln!(
+                    "[远程IM] 删除渠道后清理私有状态失败: channel_id={}, platform={:?}, error={}",
+                    channel_id, channel.platform, err
+                );
+            }
+        }
+    });
+}
+
 fn save_config_inner(
     config: AppConfig,
     app: &AppHandle,
@@ -746,6 +805,7 @@ fn save_config_inner(
 
     let mut data = state_read_agents_runtime_snapshot(&state)?;
     let base_config = state_read_config_cached(&state)?;
+    let removed_remote_im_channels = removed_remote_im_channels(&base_config, &config);
     let previous_runtime_config = runtime_config_with_private_organization(&state, &base_config, &data)?;
     let departments_changed = changed_department_ids(&previous_runtime_config, &config);
     let department_content_changed = !changed_department_content_ids(&previous_runtime_config, &config).is_empty();
@@ -840,5 +900,6 @@ fn save_config_inner(
     if provider_changed {
         broadcast_sidebar_provider_changed();
     }
+    stop_removed_remote_im_channel_runtimes(state.clone(), removed_remote_im_channels);
     Ok(runtime_config)
 }
