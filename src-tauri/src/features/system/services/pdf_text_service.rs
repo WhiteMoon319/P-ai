@@ -215,7 +215,8 @@ fn encode_rgba_page_to_webp(
 fn render_pdf_pages_as_webp_with_hayro(file_path: &str) -> Result<(usize, Vec<PdfRenderedImage>), String> {
     let file_bytes: hayro::hayro_syntax::PdfData = std::sync::Arc::new(
         std::fs::read(file_path).map_err(|err| format!("read pdf failed: {err}"))?,
-    );
+    )
+    .into();
     let pdf = hayro::hayro_syntax::Pdf::new(file_bytes)
         .map_err(|err| format!("hayro open failed: {err:?}"))?;
     let pages = pdf.pages();
@@ -236,7 +237,8 @@ fn render_pdf_pages_as_webp_with_hayro(file_path: &str) -> Result<(usize, Vec<Pd
         .par_iter()
         .enumerate()
         .map(|(page_index, page)| {
-            let pixmap = hayro::render(page, &interpreter_settings, &render_settings);
+            let render_cache = hayro::RenderCache::new();
+            let pixmap = hayro::render(page, &render_cache, &interpreter_settings, &render_settings);
             let width = pixmap.width() as u32;
             let height = pixmap.height() as u32;
             let rgba = pixmap.data_as_u8_slice().to_vec();
