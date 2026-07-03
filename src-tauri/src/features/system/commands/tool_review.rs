@@ -549,45 +549,6 @@ fn tool_review_normalize_review_value(raw: Option<Value>) -> Option<Value> {
     }
 }
 
-fn tool_review_log_review_kind(review_value: Option<&Value>) -> String {
-    review_value
-        .and_then(|value| value.get("kind").and_then(Value::as_str))
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("none")
-        .to_string()
-}
-
-fn tool_review_log_review_opinion(review_value: Option<&Value>) -> String {
-    review_value
-        .and_then(|value| {
-            value
-                .get("reviewOpinion")
-                .or_else(|| value.get("review_opinion"))
-                .and_then(Value::as_str)
-        })
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("")
-        .to_string()
-}
-
-fn tool_review_log_item_state(label: &str, conversation_id: &str, item: &ToolReviewCollectedItem) {
-    runtime_log_info(format!(
-        "[工具审查][{}] conversation_id={} batch_key={} call_id={} tool={} order_index={} message_id={} has_review={} review_kind={} review_opinion={}",
-        label,
-        conversation_id,
-        item.batch_key,
-        item.call_id,
-        item.tool_name,
-        item.order_index,
-        item.message_id.trim(),
-        item.review_value.is_some(),
-        tool_review_log_review_kind(item.review_value.as_ref()),
-        tool_review_log_review_opinion(item.review_value.as_ref()),
-    ));
-}
-
 #[tauri::command]
 fn delete_tool_review_report(
     input: DeleteToolReviewReportInput,
@@ -1656,7 +1617,6 @@ fn list_tool_review_batches(
     input: ToolReviewConversationInput,
     state: State<'_, AppState>,
 ) -> Result<ListToolReviewBatchesOutput, String> {
-    let total_started_at = std::time::Instant::now();
     let conversation_id = input.conversation_id.trim();
     if conversation_id.is_empty() {
         return Ok(ListToolReviewBatchesOutput {
@@ -1664,52 +1624,17 @@ fn list_tool_review_batches(
             current_batch_key: None,
         });
     }
-    let read_started_at = std::time::Instant::now();
-    let (batches, current_batch_key, message_count, collect_elapsed_ms, current_key_elapsed_ms) =
+    let (batches, current_batch_key) =
         with_tool_review_conversation(state.inner(), conversation_id, |conversation| {
-            let collect_started_at = std::time::Instant::now();
             let batches = collect_tool_review_batches_internal(conversation);
-            let collect_elapsed_ms = collect_started_at.elapsed().as_millis();
-            let current_key_started_at = std::time::Instant::now();
             let current_batch_key = conversation
                 .messages
                 .iter()
                 .rev()
                 .find(|message| message.role.trim().eq_ignore_ascii_case("user"))
                 .map(|message| message.id.clone());
-            let current_key_elapsed_ms = current_key_started_at.elapsed().as_millis();
-            Ok((
-                batches,
-                current_batch_key,
-                conversation.messages.len(),
-                collect_elapsed_ms,
-                current_key_elapsed_ms,
-            ))
+            Ok((batches, current_batch_key))
         })?;
-    let read_elapsed_ms = read_started_at.elapsed().as_millis();
-    runtime_log_debug(format!(
-        "[工具审查] 批次读取 完成 total_ms={} lock_wait_ms={} read_ms={} collect_ms={} current_batch_ms={} conversation_id={} batch_count={} message_count={}",
-        total_started_at.elapsed().as_millis(),
-        0,
-        read_elapsed_ms,
-        collect_elapsed_ms,
-        current_key_elapsed_ms,
-        conversation_id,
-        batches.len(),
-        message_count
-    ));
-    for batch in &batches {
-        runtime_log_info(format!(
-            "[工具审查][列表] conversation_id={} batch_key={} item_count={} unreviewed_count={}",
-            conversation_id,
-            batch.batch_key,
-            batch.items.len(),
-            batch.items.iter().filter(|item| item.review_value.is_none()).count(),
-        ));
-        for item in &batch.items {
-            tool_review_log_item_state("列表项", conversation_id, item);
-        }
-    }
     Ok(ListToolReviewBatchesOutput {
         current_batch_key,
         batches: batches
@@ -1731,7 +1656,6 @@ fn get_tool_review_item_detail(
     }
     with_tool_review_conversation(state.inner(), conversation_id, |conversation| {
         let item = tool_review_find_item(conversation, call_id)?;
-        tool_review_log_item_state("详情", conversation_id, &item);
         Ok(tool_review_item_detail_from_collected(&item))
     })
 }
