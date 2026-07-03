@@ -544,16 +544,14 @@ const pendingAutoRefreshDirectoryPaths = new Set<string>();
 const activeTab = computed(() => tabs.value.find((tab) => tab.path === activePath.value) || tabs.value[0] || null);
 
 const {
-  highlightedCodeHtmlByBlockKey,
-  fileBlockContentByKey,
-  fileBlockLoadingByKey,
-  fileBlockErrorByKey,
   activeVirtualCodeEntries,
   activeVirtualCodeTotalSize,
   virtualCodeLineNumberDigits,
   blockContentText,
   blockContentHtml,
   clearFileBlockCaches,
+  resetVirtualCodeCaches,
+  migrateVirtualCodeCaches,
   collectVirtualizedVisibleContent,
   measureVirtualCodeRow,
 } = useFileReaderVirtualCode({
@@ -1036,10 +1034,7 @@ async function restoreFileReaderSession(key = props.sessionKey, fallbackRootPath
   try {
     tabs.value = [];
     activePath.value = "";
-    highlightedCodeHtmlByBlockKey.value = {};
-    fileBlockContentByKey.value = {};
-    fileBlockLoadingByKey.value = {};
-    fileBlockErrorByKey.value = {};
+    resetVirtualCodeCaches();
     directoryRootPath.value = "";
     directoryTreeFilter.value = "";
     directoryTreeSearchVisible.value = false;
@@ -1212,33 +1207,7 @@ function migrateTabPath(tab: FileTab, fromPath: string, toPath: string) {
     scheduleAddressScrollStateUpdate();
     return duplicated;
   }
-  const contentNext = { ...fileBlockContentByKey.value };
-  const loadingNext = { ...fileBlockLoadingByKey.value };
-  const errorNext = { ...fileBlockErrorByKey.value };
-  const htmlNext = { ...highlightedCodeHtmlByBlockKey.value };
-  for (const key of Object.keys(contentNext)) {
-    if (!key.startsWith(`${normalizedFromPath}::`)) continue;
-    const suffix = key.slice(normalizedFromPath.length);
-    const nextKey = `${toPath}${suffix}`;
-    contentNext[nextKey] = contentNext[key];
-    delete contentNext[key];
-    if (loadingNext[key] !== undefined) {
-      loadingNext[nextKey] = loadingNext[key];
-      delete loadingNext[key];
-    }
-    if (errorNext[key] !== undefined) {
-      errorNext[nextKey] = errorNext[key];
-      delete errorNext[key];
-    }
-    if (htmlNext[key] !== undefined) {
-      htmlNext[nextKey] = htmlNext[key];
-      delete htmlNext[key];
-    }
-  }
-  fileBlockContentByKey.value = contentNext;
-  fileBlockLoadingByKey.value = loadingNext;
-  fileBlockErrorByKey.value = errorNext;
-  highlightedCodeHtmlByBlockKey.value = htmlNext;
+  migrateVirtualCodeCaches(fromPath, toPath);
   tab.path = toPath;
   activePath.value = toPath;
   replaceTabState(tab, fromPath);

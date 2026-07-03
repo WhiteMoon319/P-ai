@@ -29,14 +29,18 @@ type HighlightStateEntry = {
   state?: GrammarState;
 };
 
+type ShikiHighlighter = Awaited<ReturnType<typeof getSingletonHighlighter>>;
+
 export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOptions) {
   const highlightedCodeHtmlByBlockKey = ref<Record<string, string>>({});
   const fileBlockContentByKey = ref<Record<string, string>>({});
   const fileBlockLoadingByKey = ref<Record<string, boolean>>({});
   const fileBlockErrorByKey = ref<Record<string, string>>({});
   const blockLoadPromises = new Map<string, Promise<string>>();
+  const highlighterPromises = new Map<string, Promise<ShikiHighlighter>>();
   const grammarStateByBlockKey = new Map<string, HighlightStateEntry>();
   const highlightedVersionByBlockKey = new Map<string, string>();
+  let highlightQueue = Promise.resolve();
   let activeHighlightRefreshId = 0;
 
   const activeShikiTheme = computed(() => (options.markdownIsDark.value ? "github-dark" : "github-light"));
@@ -107,7 +111,7 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
   async function renderHighlightedCodeHtml(tab: FileTab, content: string, grammarState?: GrammarState) {
     const language = resolveShikiLanguage(tab.extension);
     const theme = activeShikiTheme.value;
-    const highlighter = await getSingletonHighlighter({ langs: [language], themes: [theme] });
+    const highlighter = await getReadyHighlighter(language, theme);
     const root = highlighter.codeToHast(content, {
       lang: language,
       theme,
@@ -117,6 +121,15 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
       html: normalizeShikiLineHtml(hastToHtml(root)),
       grammarState: highlighter.getLastGrammarState(root),
     };
+  }
+
+  function getReadyHighlighter(language: string, theme: string) {
+    const key = `${language}::${theme}`;
+    const existing = highlighterPromises.get(key);
+    if (existing) return existing;
+    const promise = getSingletonHighlighter({ langs: [language], themes: [theme] });
+    highlighterPromises.set(key, promise);
+    return promise;
   }
 
   function highlightVersion(tab: FileTab) {
@@ -161,7 +174,17 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
     return promise;
   }
 
-  async function ensureHighlightedThroughBlock(tab: FileTab, targetBlock: VirtualCodeBlock) {
+  async function queueHighlightedThroughBlock(tab: FileTab, targetBlock: VirtualCodeBlock) {
+    const refreshId = activeHighlightRefreshId;
+    const queued = highlightQueue.catch(() => {}).then(async () => {
+      if (refreshId !== activeHighlightRefreshId) return;
+      await ensureHighlightedThroughBlock(tab, targetBlock, refreshId);
+    });
+    highlightQueue = queued.catch(() => {});
+    await queued;
+  }
+
+  async function ensureHighlightedThroughBlock(tab: FileTab, targetBlock: VirtualCodeBlock, refreshId: number) {
     if (options.isRawMode(tab) || tab.kind === "markdown") return;
     const version = highlightVersion(tab);
     if (highlightedVersionByBlockKey.get(targetBlock.key) === version) return;
@@ -181,7 +204,6 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
       }
     }
 
-    const refreshId = activeHighlightRefreshId;
     for (let index = startIndex; index <= targetIndex; index += 1) {
       const block = blocks[index];
       if (!block) continue;
@@ -219,13 +241,14 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
     if (!tab || !sameNormalizedPath(tab.path, block.path)) return;
     try {
       await loadVirtualCodeBlockContent(block);
-      await ensureHighlightedThroughBlock(tab, block);
+      await queueHighlightedThroughBlock(tab, block);
     } catch {
       // loadVirtualCodeBlockContent records the visible block error state.
     }
   }
 
   function clearFileBlockCaches(path: string) {
+    activeHighlightRefreshId += 1;
     const normalizedPath = normalizePath(path);
     if (!normalizedPath) return;
     const contentNext = { ...fileBlockContentByKey.value };
@@ -253,6 +276,62 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
     fileBlockLoadingByKey.value = loadingNext;
     fileBlockErrorByKey.value = errorNext;
     highlightedCodeHtmlByBlockKey.value = htmlNext;
+  }
+
+  function resetVirtualCodeCaches() {
+    activeHighlightRefreshId += 1;
+    highlightedCodeHtmlByBlockKey.value = {};
+    fileBlockContentByKey.value = {};
+    fileBlockLoadingByKey.value = {};
+    fileBlockErrorByKey.value = {};
+    blockLoadPromises.clear();
+    grammarStateByBlockKey.clear();
+    highlightedVersionByBlockKey.clear();
+  }
+
+  function migrateVirtualCodeCaches(fromPath: string, toPath: string) {
+    const normalizedFromPath = normalizePath(fromPath);
+    const normalizedToPath = normalizePath(toPath);
+    if (!normalizedFromPath || !normalizedToPath || normalizedFromPath === normalizedToPath) return;
+    const fromPrefix = `${normalizedFromPath}::`;
+
+    const contentNext = migrateRecordKeys(fileBlockContentByKey.value, fromPrefix, normalizedToPath);
+    const loadingNext = migrateRecordKeys(fileBlockLoadingByKey.value, fromPrefix, normalizedToPath);
+    const errorNext = migrateRecordKeys(fileBlockErrorByKey.value, fromPrefix, normalizedToPath);
+    const htmlNext = migrateRecordKeys(highlightedCodeHtmlByBlockKey.value, fromPrefix, normalizedToPath);
+
+    migrateMapKeys(grammarStateByBlockKey, fromPrefix, normalizedToPath);
+    migrateMapKeys(highlightedVersionByBlockKey, fromPrefix, normalizedToPath);
+    for (const key of Array.from(blockLoadPromises.keys())) {
+      if (key.startsWith(fromPrefix)) blockLoadPromises.delete(key);
+    }
+
+    fileBlockContentByKey.value = contentNext;
+    fileBlockLoadingByKey.value = loadingNext;
+    fileBlockErrorByKey.value = errorNext;
+    highlightedCodeHtmlByBlockKey.value = htmlNext;
+  }
+
+  function migrateRecordKeys<T>(record: Record<string, T>, fromPrefix: string, toPath: string) {
+    const next = { ...record };
+    for (const key of Object.keys(next)) {
+      if (!key.startsWith(fromPrefix)) continue;
+      const suffix = key.slice(fromPrefix.length);
+      next[`${toPath}::${suffix}`] = next[key];
+      delete next[key];
+    }
+    return next;
+  }
+
+  function migrateMapKeys<T>(map: Map<string, T>, fromPrefix: string, toPath: string) {
+    for (const key of Array.from(map.keys())) {
+      if (!key.startsWith(fromPrefix)) continue;
+      const value = map.get(key);
+      if (value === undefined) continue;
+      const suffix = key.slice(fromPrefix.length);
+      map.set(`${toPath}::${suffix}`, value);
+      map.delete(key);
+    }
   }
 
   async function refreshActiveCodeHighlights() {
@@ -322,21 +401,14 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
   });
 
   return {
-    highlightedCodeHtmlByBlockKey,
-    fileBlockContentByKey,
-    fileBlockLoadingByKey,
-    fileBlockErrorByKey,
-    activeVirtualCodeBlocks,
-    virtualCodeBlockVirtualizer,
     activeVirtualCodeEntries,
     activeVirtualCodeTotalSize,
     virtualCodeLineNumberDigits,
-    activeShikiTheme,
     blockContentText,
     blockContentHtml,
     clearFileBlockCaches,
-    ensureVirtualCodeBlockLoaded,
-    refreshActiveCodeHighlights,
+    resetVirtualCodeCaches,
+    migrateVirtualCodeCaches,
     collectVirtualizedVisibleContent,
     measureVirtualCodeRow,
   };
