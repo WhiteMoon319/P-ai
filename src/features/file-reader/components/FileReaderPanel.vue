@@ -948,6 +948,21 @@ function activeContentScroller() {
   return contentScroller.value;
 }
 
+async function resetActiveContentScrollToTop() {
+  lastCapturedSelectionKey = "";
+  lastCapturedVisibleRangeKey = "";
+  await nextTick();
+  const scroller = activeContentScroller();
+  if (!scroller) return;
+  scroller.scrollTop = 0;
+  scroller.scrollLeft = 0;
+}
+
+async function resetScrollAndCaptureFirstPage() {
+  await resetActiveContentScrollToTop();
+  captureVisibleRangeContextNow({ force: true });
+}
+
 function canToggleRawMode(tab: FileTab | null | undefined) {
   return !!tab && tab.kind === "markdown";
 }
@@ -1152,11 +1167,14 @@ function upsertLoadingTab(path: string, reuseActiveTab = false) {
 
 function setActiveTab(path: string) {
   const normalizedPath = normalizePath(path);
+  const changed = !sameNormalizedPath(activePath.value, normalizedPath);
   activePath.value = normalizedPath;
   scheduleAddressScrollStateUpdate();
   const tab = tabs.value.find((item) => item.path === normalizedPath);
   if (tab && !tab.loaded && !tab.loading) {
     void openPath(normalizedPath);
+  } else if (changed) {
+    void resetScrollAndCaptureFirstPage();
   } else {
     void nextTick(() => captureVisibleRangeContextNow());
   }
@@ -1205,6 +1223,7 @@ function migrateTabPath(tab: FileTab, fromPath: string, toPath: string) {
     clearFileBlockCaches(fromPath);
     activePath.value = toPath;
     scheduleAddressScrollStateUpdate();
+    void resetScrollAndCaptureFirstPage();
     return duplicated;
   }
   migrateVirtualCodeCaches(fromPath, toPath);
@@ -1231,10 +1250,14 @@ function reportFileReaderActionFailure(action: string, path: string, error: unkn
 async function openPath(path: string, options: { reuseActiveTab?: boolean } = {}) {
   const normalizedPath = normalizePath(path);
   if (!normalizedPath) return;
+  const shouldResetScrollAfterOpen = !sameNormalizedPath(activePath.value, normalizedPath);
   const current = tabs.value.find((tab) => tab.path === normalizedPath);
   if (current?.loading) {
     activePath.value = normalizedPath;
     scheduleAddressScrollStateUpdate();
+    if (shouldResetScrollAfterOpen) {
+      void resetScrollAndCaptureFirstPage();
+    }
     return;
   }
   let tab = upsertLoadingTab(normalizedPath, !!options.reuseActiveTab);
@@ -1258,7 +1281,11 @@ async function openPath(path: string, options: { reuseActiveTab?: boolean } = {}
     replaceTabState(tab);
     clearFileBlockCaches(resolvedPath);
     scheduleAddressScrollStateUpdate();
-    void nextTick(() => captureVisibleRangeContextNow());
+    if (shouldResetScrollAfterOpen) {
+      void resetScrollAndCaptureFirstPage();
+    } else {
+      void nextTick(() => captureVisibleRangeContextNow({ force: true }));
+    }
     emit("openPath", resolvedPath);
   } catch (error) {
     tab.loaded = true;
@@ -1287,6 +1314,8 @@ function closeTab(path: string) {
     const nextTab = tabs.value.find((tab) => tab.path === activePath.value);
     if (nextTab && !nextTab.loaded && !nextTab.loading) {
       void openPath(nextTab.path);
+    } else {
+      void resetScrollAndCaptureFirstPage();
     }
   }
 }
