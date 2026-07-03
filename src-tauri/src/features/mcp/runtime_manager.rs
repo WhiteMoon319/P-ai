@@ -104,28 +104,28 @@ fn provider_tool_result_from_mcp_call(
     }
 
     for content in result.content {
-        match content.raw {
-            rmcp::model::RawContent::Text(raw) => {
+        match content {
+            rmcp::model::ContentBlock::Text(raw) => {
                 if !raw.text.trim().is_empty() {
                     display_lines.push(raw.text.clone());
                 }
                 parts.push(ProviderToolResultPart::Text { text: raw.text });
             }
-            rmcp::model::RawContent::Image(raw) => {
+            rmcp::model::ContentBlock::Image(raw) => {
                 display_lines.push(format!("[image:{}]", raw.mime_type));
                 parts.push(ProviderToolResultPart::Image {
                     mime: raw.mime_type,
                     data_base64: raw.data,
                 });
             }
-            rmcp::model::RawContent::Audio(raw) => {
+            rmcp::model::ContentBlock::Audio(raw) => {
                 display_lines.push(format!("[audio:{}]", raw.mime_type));
                 parts.push(ProviderToolResultPart::Audio {
                     mime: raw.mime_type,
                     data_base64: raw.data,
                 });
             }
-            rmcp::model::RawContent::Resource(raw) => match raw.resource {
+            rmcp::model::ContentBlock::Resource(raw) => match raw.resource {
                 rmcp::model::ResourceContents::TextResourceContents {
                     uri,
                     mime_type,
@@ -156,8 +156,11 @@ fn provider_tool_result_from_mcp_call(
                         text: blob,
                     });
                 }
+                _ => {
+                    display_lines.push("[resource]".to_string());
+                }
             },
-            rmcp::model::RawContent::ResourceLink(raw) => {
+            rmcp::model::ContentBlock::ResourceLink(raw) => {
                 let text = raw
                     .description
                     .clone()
@@ -174,6 +177,7 @@ fn provider_tool_result_from_mcp_call(
                     text,
                 });
             }
+            _ => {}
         }
     }
 

@@ -67,9 +67,9 @@ impl DesktopScreenshotMcpServer {
                 Some(serde_json::json!({ "error": err.to_string() })),
             )
         })?;
-        Ok(rmcp::model::CallToolResult::success(vec![rmcp::model::Content::text(
-            text,
-        )]))
+        Ok(rmcp::model::CallToolResult::success(vec![
+            rmcp::model::ContentBlock::text(text),
+        ]))
     }
 }
 
@@ -102,4 +102,3 @@ fn run_desktop_screenshot_mcp_server() -> Result<(), String> {
         Ok::<(), String>(())
     })
 }
-

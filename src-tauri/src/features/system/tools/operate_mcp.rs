@@ -51,9 +51,9 @@ impl OperateMcpServer {
                 })),
             )
         })?;
-        Ok(rmcp::model::CallToolResult::success(vec![rmcp::model::Content::text(
-            text,
-        )]))
+        Ok(rmcp::model::CallToolResult::success(vec![
+            rmcp::model::ContentBlock::text(text),
+        ]))
     }
 }
 
