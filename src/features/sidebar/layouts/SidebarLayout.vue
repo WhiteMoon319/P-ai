@@ -34,6 +34,7 @@
       :pipeline-status-enabled="false"
       @toggle-side-conversation-list="$emit('toggleSideConversationList')"
       @toggle-tool-review-panel="$emit('toggleToolReviewPanel')"
+      @open-reader-directory-if-empty="$emit('openReaderDirectoryIfEmpty')"
       @update:conversation-list-tab="$emit('updateConversationListTab', $event)"
       @update:chat-left-panel-mode="$emit('updateChatLeftPanelMode', $event)"
       @update:chat-right-panel-mode="$emit('updateChatRightPanelMode', $event)"
@@ -158,6 +159,7 @@ defineEmits<{
   toggleReviewPanel: [];
   toggleSideConversationList: [];
   toggleToolReviewPanel: [];
+  openReaderDirectoryIfEmpty: [];
   updateConversationListTab: [value: "local" | "contact" | "task"];
   updateChatLeftPanelMode: [value: "local" | "contact" | "task"];
   updateChatRightPanelMode: [value: "reader" | "review" | "delegate"];

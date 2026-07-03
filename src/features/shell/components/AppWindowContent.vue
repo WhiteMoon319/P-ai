@@ -190,6 +190,7 @@
         :conversation-list-tab="conversationListTab"
         :chat-left-panel-mode="chatLeftPanelMode"
         :chat-right-panel-mode="chatRightPanelMode"
+        :reader-directory-open-request="chatReaderDirectoryOpenRequest"
         @update:chat-input="updateChatInput"
         @add-mention="addChatMention"
         @remove-mention="removeChatMention"
@@ -445,6 +446,7 @@ const props = defineProps<{
   conversationListTab: "local" | "contact" | "task";
   chatLeftPanelMode: "local" | "contact" | "task";
   chatRightPanelMode: "reader" | "review" | "delegate";
+  chatReaderDirectoryOpenRequest: number;
   config: AppConfig;
   configTab: "welcome" | "hotkey" | "api" | "tools" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "networkAccess" | "remoteIm" | "usage" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
   localeOptions: Array<{ value: "zh-CN" | "en-US" | "zh-TW"; label: string }>;

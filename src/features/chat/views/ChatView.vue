@@ -556,6 +556,7 @@ const props = defineProps<{
   conversationListTab: "local" | "contact" | "task";
   chatLeftPanelMode: "local" | "contact" | "task";
   chatRightPanelMode: "reader" | "review" | "delegate";
+  readerDirectoryOpenRequest?: number;
   createConversationDepartmentOptions: DepartmentPersonaOption[];
   defaultCreateConversationDepartmentId: string;
   ideContextGroups: IdeContextWorkspaceGroup[]; attachedIdeContextReferences: IdeContextReferenceItem[];
@@ -1073,6 +1074,28 @@ const {
   onToolReviewPanelOpenChange: (open) => emit("toolReviewPanelOpenChange", open),
 });
 const effectiveToolReviewPanelOpen = computed(() => !sidebarMode.value && toolReviewPanelOpen.value);
+
+async function openReaderDirectoryFromTitleBarIfEmpty(request: number) {
+  const requestId = Number(request || 0);
+  if (!requestId) return;
+  await nextTick();
+  await nextTick();
+  if (requestId !== Number(props.readerDirectoryOpenRequest || 0)) return;
+  if (!effectiveToolReviewPanelOpen.value || props.chatRightPanelMode !== "reader") return;
+  const panel = chatReaderPanelRef.value;
+  const workspaceRootPath = String(props.currentWorkspaceRootPath || "").trim();
+  if (!panel || !workspaceRootPath) return;
+  if (String(panel.activePath || "").trim()) return;
+  if (String(panel.directoryRootPath || "").trim()) return;
+  await panel.openDirectoryTree(workspaceRootPath);
+}
+
+watch(
+  () => props.readerDirectoryOpenRequest,
+  (request) => {
+    void openReaderDirectoryFromTitleBarIfEmpty(Number(request || 0));
+  },
+);
 
 // ==================== delegate status ====================
 

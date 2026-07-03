@@ -94,6 +94,7 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
   const conversationListTab = ref<ChatLeftPanelMode>(loadStoredConversationListTab());
   const chatLeftPanelMode = ref<ChatLeftPanelMode>(loadStoredChatLeftPanelMode());
   const chatRightPanelMode = ref<"reader" | "review" | "delegate">(loadStoredChatRightPanelMode());
+  const chatReaderDirectoryOpenRequest = ref(0);
   const sideConversationListVisible = ref(loadStoredChatSidePanelVisibility("left"));
   const toolReviewPanelOpenVisible = ref(loadStoredChatSidePanelVisibility("right"));
   const chatSidePanelWidths = ref(loadStoredChatSidePanelWidths());
@@ -238,11 +239,8 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     }
   }
 
-  let _panelOpenedByFile = false;
-
   function updateChatRightPanelMode(value: "reader" | "review" | "delegate") {
     const nextMode = value === "reader" || value === "delegate" ? value : "review";
-    _panelOpenedByFile = value === "reader";
     chatRightPanelMode.value = nextMode;
     if (typeof window !== "undefined") {
       window.localStorage.setItem(CHAT_RIGHT_PANEL_MODE_STORAGE_KEY, nextMode);
@@ -251,6 +249,10 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
       toolReviewPanelOpenVisible.value = true;
       storeChatSidePanelVisibility("right", true);
     }
+  }
+
+  function requestChatReaderDirectoryOpenIfEmpty() {
+    chatReaderDirectoryOpenRequest.value += 1;
   }
 
   function handleChatSidePanelWidthsChange(value: { leftWidth: number; rightWidth: number }) {
@@ -272,9 +274,6 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     const nextVisible = !toolReviewPanelOpenVisible.value;
     toolReviewPanelOpenVisible.value = nextVisible;
     storeChatSidePanelVisibility("right", nextVisible);
-    if (!nextVisible) {
-      _panelOpenedByFile = false;
-    }
   }
 
   const configSearchResults = computed<ConfigSearchResult[]>(() => {
@@ -298,6 +297,7 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     conversationListTab,
     chatLeftPanelMode,
     chatRightPanelMode,
+    chatReaderDirectoryOpenRequest,
     sideConversationListVisible,
     toolReviewPanelOpenVisible,
     chatSidePanelWidths,
@@ -312,6 +312,7 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     updateConversationListTab,
     updateChatLeftPanelMode,
     updateChatRightPanelMode,
+    requestChatReaderDirectoryOpenIfEmpty,
     handleChatSidePanelWidthsChange,
     toggleSideConversationList,
     toggleToolReviewPanel,

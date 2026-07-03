@@ -575,6 +575,7 @@ const emit = defineEmits<{
   (e: "open-archives"): void;
   (e: "toggle-side-conversation-list"): void;
   (e: "toggle-tool-review-panel"): void;
+  (e: "open-reader-directory-if-empty"): void;
   (e: "update:conversation-list-tab", value: "local" | "contact" | "task"): void;
   (e: "update:chat-left-panel-mode", value: "local" | "contact" | "task"): void;
   (e: "update:chat-right-panel-mode", value: "reader" | "review" | "delegate"): void;
@@ -1081,6 +1082,9 @@ function toggleChatRightPanelMode(mode: "reader" | "delegate") {
     return;
   }
   emit("update:chat-right-panel-mode", mode);
+  if (mode === "reader") {
+    emit("open-reader-directory-if-empty");
+  }
 }
 
 function handleCreateConversation() {

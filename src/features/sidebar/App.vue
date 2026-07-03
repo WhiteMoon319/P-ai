@@ -30,6 +30,7 @@
     @toggle-review-panel="toggleReviewPanel"
     @toggle-side-conversation-list="toggleSideConversationList"
     @toggle-tool-review-panel="toggleToolReviewPanel"
+    @open-reader-directory-if-empty="requestChatReaderDirectoryOpenIfEmpty"
     @update-conversation-list-tab="updateConversationListTab"
     @update-chat-left-panel-mode="updateChatLeftPanelMode"
     @update-chat-right-panel-mode="updateChatRightPanelMode"
@@ -77,6 +78,7 @@
       :conversation-list-tab="conversationListTab"
       :chat-left-panel-mode="chatLeftPanelMode"
       :chat-right-panel-mode="chatRightPanelMode"
+      :reader-directory-open-request="chatReaderDirectoryOpenRequest"
       :supervision-active="sidebarSupervisionActive"
       :supervision-title="sidebarSupervisionTitle"
       @send="send"
@@ -574,6 +576,7 @@ const toolReviewPanelOpenVisible = ref(false);
 const conversationListTab = ref<SidebarConversationTab>(loadStoredConversationListTab());
 const chatLeftPanelMode = ref<SidebarConversationTab>(loadStoredChatLeftPanelMode());
 const chatRightPanelMode = ref<"reader" | "review" | "delegate">("review");
+const chatReaderDirectoryOpenRequest = ref(0);
 const chatSidePanelWidths = ref({ leftWidth: 320, rightWidth: 320 });
 let discoveryRefreshTimer: number | null = null;
 
@@ -789,6 +792,10 @@ function updateChatRightPanelMode(value: "reader" | "review" | "delegate") {
   chatRightPanelMode.value = value;
   view.value = "chat";
   toolReviewPanelOpenVisible.value = true;
+}
+
+function requestChatReaderDirectoryOpenIfEmpty() {
+  chatReaderDirectoryOpenRequest.value += 1;
 }
 
 function normalizeDiscovery(payload: DiscoveryPayload): SidebarBridgeConfig | null {

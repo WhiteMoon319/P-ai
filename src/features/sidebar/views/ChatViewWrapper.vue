@@ -83,6 +83,7 @@
     :conversation-list-tab="conversationListTab"
     :chat-left-panel-mode="chatLeftPanelMode"
     :chat-right-panel-mode="chatRightPanelMode"
+    :reader-directory-open-request="readerDirectoryOpenRequest"
     @update:chat-input="$emit('update:input', $event)"
     @send-chat="$emit('send', $event)"
     @stop-chat="$emit('stop')"
@@ -220,6 +221,7 @@ const props = defineProps<{
   conversationListTab: "local" | "contact" | "task";
   chatLeftPanelMode: "local" | "contact" | "task";
   chatRightPanelMode: "reader" | "review" | "delegate";
+  readerDirectoryOpenRequest?: number;
   supervisionActive?: boolean;
   supervisionTitle?: string;
 }>();
