@@ -5,6 +5,7 @@
 
 ## 最近版本
 
+- [v0.17.0](docs/changelog/releases/v0.17.0.md) - 升级 genai 到 0.7.0-beta.9，并接入 ProviderConfig 模型列表刷新、adapter 绑定与 Responses response_id 元数据保存。
 - [v0.16.2](docs/changelog/releases/v0.16.2.md) - **强制切入被占用的会话**：当某个会话在其他窗口或客户端中打开时，尝试切换到该会话会弹出确认提示，确认后可强制接管。支持在独立窗口、VS Code 侧边栏和主窗口中互抢会话。
 - [v0.16.1](docs/changelog/releases/v0.16.1.md) - 网页登录支持记住密码，下次打开无需重复输入
 - [v0.16.0](docs/changelog/releases/v0.16.0.md) - 残留流缓存导致对话在收尾后仍被前端视为忙碌；移除 stream cache 在前后端的热绑/忙碌判断，仅以运行时状态、处理中和待处理队列为准
