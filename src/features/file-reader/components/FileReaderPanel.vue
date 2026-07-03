@@ -1915,16 +1915,16 @@ defineExpose({
   height: 100%;
 }
 .file-reader-code-virtual-gutter-raw {
-  background: var(--color-base-100);
+  background: color-mix(in srgb, var(--color-base-200) 60%, transparent);
 }
 .file-reader-code-virtual-gutter-raw::after {
-  background: var(--color-base-100);
+  background: color-mix(in srgb, var(--color-base-200) 60%, transparent);
 }
 .file-reader-code-virtual-gutter-shiki {
-  background: var(--color-base-100);
+  background: color-mix(in srgb, var(--color-base-200) 60%, transparent);
 }
 .file-reader-code-virtual-gutter-shiki::after {
-  background: var(--color-base-100);
+  background: color-mix(in srgb, var(--color-base-200) 60%, transparent);
 }
 .file-reader-code-virtual-gutter-line {
   min-height: 21px;
