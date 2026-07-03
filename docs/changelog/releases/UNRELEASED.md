@@ -2,6 +2,8 @@
 
 ## 功能
 
+- 升级 genai 到 0.7.0-beta.9，并接入 ProviderConfig 模型列表刷新、adapter 绑定、请求级 prompt cache control 与 Responses response_id 元数据保存。
+
 ## 修复
 
 - 修复 APP 强制切入被占用会话后，被接管窗口仍停留在原会话的问题；被接管方会自动退回系统会话，且系统会话不再参与占用锁定。

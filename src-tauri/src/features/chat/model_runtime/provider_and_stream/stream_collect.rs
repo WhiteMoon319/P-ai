@@ -55,6 +55,7 @@ where
     let mut activity_reasoning_text = String::new();
     let mut trusted_input_tokens: Option<u64> = None;
     let mut usage = None;
+    let mut assistant_provider_meta = None::<Value>;
     while let Some(chunk) = stream.next().await {
         match chunk {
             Ok(genai::chat::ChatStreamEvent::Start) => {}
@@ -135,6 +136,8 @@ where
                     .and_then(|value| u64::try_from(value).ok())
                     .filter(|value| *value > 0);
                 usage = end.captured_usage.as_ref().and_then(genai_usage_to_log_value);
+                assistant_provider_meta =
+                    genai_response_id_provider_meta(end.captured_response_id.as_deref());
                 if let Some(usage) = usage.as_ref() {
                     add_provider_usage_delta_to_conversation(
                         app_state,
@@ -158,7 +161,7 @@ where
         assistant_text: assistant_text.clone(),
         final_response_text: assistant_text,
         activity_reasoning_text,
-        assistant_provider_meta: None,
+        assistant_provider_meta,
         tool_history_events: Vec::new(),
         suppress_assistant_message: false,
         trusted_input_tokens,

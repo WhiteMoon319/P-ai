@@ -46,6 +46,46 @@ fn genai_usage_to_log_value(usage: &genai::chat::Usage) -> Option<Value> {
     }))
 }
 
+fn genai_response_id_provider_meta(response_id: Option<&str>) -> Option<Value> {
+    response_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            serde_json::json!({
+                "genai": {
+                    "responseId": value,
+                }
+            })
+        })
+}
+
+fn merge_assistant_provider_meta_patch(target: &mut Option<Value>, patch: Option<Value>) {
+    let Some(patch) = patch else {
+        return;
+    };
+    if target.is_none() {
+        *target = Some(patch);
+        return;
+    }
+    let Some(current) = target.as_mut() else {
+        return;
+    };
+    if !current.is_object() {
+        let raw_provider_meta = std::mem::replace(current, serde_json::json!({}));
+        *current = serde_json::json!({
+            "_raw_provider_meta": raw_provider_meta,
+        });
+    }
+    let Some(current_obj) = current.as_object_mut() else {
+        return;
+    };
+    if let Some(patch_obj) = patch.as_object() {
+        for (key, value) in patch_obj {
+            current_obj.insert(key.clone(), value.clone());
+        }
+    }
+}
+
 fn add_provider_usage_delta_to_conversation(
     app_state: Option<&AppState>,
     conversation_id: Option<&str>,
@@ -606,7 +646,9 @@ fn build_provider_genai_client_and_model_spec_from_target(
             model: genai::ModelIden::new(adapter_kind, model_name.to_string()),
         };
         (
-            genai::Client::builder().build(),
+            genai::Client::builder()
+                .with_adapter_kind(adapter_kind)
+                .build(),
             genai::ModelSpec::from_target(target),
         )
     } else {
@@ -647,7 +689,9 @@ fn build_provider_genai_chat_options(
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        options = options.with_prompt_cache_key(prompt_cache_key);
+        options = options
+            .with_prompt_cache_key(prompt_cache_key)
+            .with_cache_control(genai::chat::CacheControl::Memory);
     }
     options
 }
@@ -805,6 +849,7 @@ async fn call_model_openai_non_stream(
     let response_texts = response.content.into_texts();
     let assistant_text = join_model_text_blocks(response_texts.iter().map(String::as_str));
     let activity_reasoning_text = response.reasoning_content.unwrap_or_default();
+    let assistant_provider_meta = genai_response_id_provider_meta(response.response_id.as_deref());
     let trusted_input_tokens = response
         .usage
         .prompt_tokens
@@ -814,7 +859,7 @@ async fn call_model_openai_non_stream(
         assistant_text: assistant_text.clone(),
         final_response_text: assistant_text,
         activity_reasoning_text,
-        assistant_provider_meta: None,
+        assistant_provider_meta,
         tool_history_events: Vec::new(),
         suppress_assistant_message: false,
         trusted_input_tokens,
@@ -916,11 +961,12 @@ async fn call_model_gemini(
     }
     let response_texts = response.content.into_texts();
     let assistant_text = join_model_text_blocks(response_texts.iter().map(String::as_str));
+    let assistant_provider_meta = genai_response_id_provider_meta(response.response_id.as_deref());
     Ok(ModelReply {
         assistant_text: assistant_text.clone(),
         final_response_text: assistant_text,
         activity_reasoning_text: response.reasoning_content.unwrap_or_default(),
-        assistant_provider_meta: None,
+        assistant_provider_meta,
         tool_history_events: Vec::new(),
         suppress_assistant_message: false,
         trusted_input_tokens: response
@@ -1194,6 +1240,10 @@ mod openai_responses_genai_request_tests {
         let options = build_provider_genai_chat_options(&api_config, false, false);
 
         assert_eq!(options.prompt_cache_key.as_deref(), Some("conversation-1"));
+        assert!(matches!(
+            options.cache_control,
+            Some(genai::chat::CacheControl::Memory)
+        ));
     }
 
     #[test]
@@ -1223,6 +1273,23 @@ mod openai_responses_genai_request_tests {
         let options = build_provider_genai_chat_options(&api_config, true, true);
 
         assert_eq!(options.prompt_cache_key.as_deref(), Some("conversation-codex"));
+        assert!(matches!(
+            options.cache_control,
+            Some(genai::chat::CacheControl::Memory)
+        ));
+    }
+
+    #[test]
+    fn genai_response_id_provider_meta_should_use_nested_genai_key() {
+        let meta = genai_response_id_provider_meta(Some(" resp_123 "))
+            .expect("response id provider meta should be created");
+
+        assert_eq!(
+            meta.get("genai")
+                .and_then(|value| value.get("responseId"))
+                .and_then(Value::as_str),
+            Some("resp_123")
+        );
     }
 
     #[test]

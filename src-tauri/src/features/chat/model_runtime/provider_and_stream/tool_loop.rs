@@ -8,6 +8,7 @@ struct GenaiToolLoopRoundOutput {
     turn_tool_calls: Vec<genai::chat::ToolCall>,
     trusted_input_tokens: Option<u64>,
     usage: Option<Value>,
+    assistant_provider_meta: Option<Value>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -1863,6 +1864,7 @@ async fn run_genai_tool_loop(
             let mut turn_tool_calls = Vec::<genai::chat::ToolCall>::new();
             let mut round_trusted_input_tokens = None;
             let mut round_usage = None;
+            let mut round_assistant_provider_meta = None::<Value>;
 
             let mut stream = {
                 let mut request = genai::chat::ChatRequest::from_messages(
@@ -1914,6 +1916,8 @@ async fn run_genai_tool_loop(
                             .and_then(|value| u64::try_from(value).ok())
                             .filter(|value| *value > 0);
                         round_usage = end.captured_usage.as_ref().and_then(genai_usage_to_log_value);
+                        round_assistant_provider_meta =
+                            genai_response_id_provider_meta(end.captured_response_id.as_deref());
                         if let Some(usage) = round_usage.as_ref() {
                             let usage_provider_key = usage_provider_key_from_api_config(&api_config);
                             add_provider_usage_delta_to_conversation(
@@ -1975,6 +1979,7 @@ async fn run_genai_tool_loop(
                 turn_tool_calls,
                 trusted_input_tokens: round_trusted_input_tokens,
                 usage: round_usage,
+                assistant_provider_meta: round_assistant_provider_meta,
             })
         }
         .await?;
@@ -1985,6 +1990,7 @@ async fn run_genai_tool_loop(
             turn_tool_calls,
             trusted_input_tokens: round_trusted_input_tokens,
             usage: round_usage,
+            assistant_provider_meta: round_assistant_provider_meta,
         } = round_output;
         let round_elapsed_ms = round_started_at
             .elapsed()
@@ -1994,6 +2000,10 @@ async fn run_genai_tool_loop(
         if let Some(usage) = round_usage.as_ref() {
             latest_usage = Some(usage.clone());
         }
+        merge_assistant_provider_meta_patch(
+            &mut final_assistant_provider_meta_override,
+            round_assistant_provider_meta,
+        );
         push_tool_loop_round_log(
             tool_abort_state,
             chat_session_key,
@@ -2412,6 +2422,7 @@ async fn execute_genai_non_stream_round(
         turn_tool_calls,
         trusted_input_tokens,
         usage,
+        assistant_provider_meta: genai_response_id_provider_meta(response.response_id.as_deref()),
     })
 }
 
@@ -2522,6 +2533,7 @@ async fn run_genai_tool_loop_non_stream(
         let raw_turn_tool_calls = round.turn_tool_calls;
         let round_trusted_input_tokens = round.trusted_input_tokens;
         let round_usage = round.usage;
+        let round_assistant_provider_meta = round.assistant_provider_meta;
         let round_elapsed_ms = round_started_at
             .elapsed()
             .as_millis()
@@ -2532,6 +2544,10 @@ async fn run_genai_tool_loop_non_stream(
         if let Some(usage) = round_usage.as_ref() {
             latest_usage = Some(usage.clone());
         }
+        merge_assistant_provider_meta_patch(
+            &mut final_assistant_provider_meta_override,
+            round_assistant_provider_meta,
+        );
         push_tool_loop_round_log(
             tool_abort_state,
             chat_session_key,

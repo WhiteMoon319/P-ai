@@ -348,14 +348,19 @@ async fn fetch_models_genai(
     if matches!(api_key.as_str(), "..." | "***" | "•••" | "···") {
         return Err("API key is still a placeholder ('...' / '***'). Please paste the real token.".to_string());
     }
+    let mut provider_config = genai::resolver::ProviderConfig::from_auth(
+        genai::resolver::AuthData::from_single(api_key),
+    );
+    let endpoint = normalize_provider_genai_base_url(adapter_kind, &input.base_url);
+    if !endpoint.trim().is_empty() {
+        provider_config = provider_config.with_endpoint(genai::resolver::Endpoint::from_owned(endpoint));
+    }
     let client = genai::Client::builder()
-        .with_auth_resolver_fn(move |_model: genai::ModelIden| {
-            Ok(Some(genai::resolver::AuthData::from_single(api_key.clone())))
-        })
+        .with_adapter_kind(adapter_kind)
         .build();
     let mut models = tokio::time::timeout(
         std::time::Duration::from_secs(20),
-        client.all_model_names(adapter_kind, None),
+        client.all_model_names(adapter_kind, provider_config),
     )
     .await
     .map_err(|_| format!("Fetch genai model list timed out: {adapter_kind}"))?
