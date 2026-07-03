@@ -46,9 +46,9 @@ fn decode_text_file_bytes(bytes: &[u8]) -> Result<DecodedTextFile, String> {
         });
     }
 
-    let mut detector = chardetng::EncodingDetector::new();
+    let mut detector = chardetng::EncodingDetector::new(chardetng::Iso2022JpDetection::Allow);
     detector.feed(bytes, true);
-    let (guessed, _) = detector.guess_assess(None, true);
+    let guessed = detector.guess(None, chardetng::Utf8Detection::Allow);
     if let Ok(decoded) = decode_with_encoding(bytes, guessed, TextFileBom::None) {
         return Ok(decoded);
     }

@@ -128,9 +128,9 @@ fn terminal_windows_system_encoding() -> Option<&'static encoding_rs::Encoding> 
 }
 
 fn terminal_detect_output_encoding(bytes: &[u8]) -> Option<&'static encoding_rs::Encoding> {
-    let mut detector = chardetng::EncodingDetector::new();
+    let mut detector = chardetng::EncodingDetector::new(chardetng::Iso2022JpDetection::Allow);
     detector.feed(bytes, true);
-    let (encoding, _) = detector.guess_assess(None, true);
+    let encoding = detector.guess(None, chardetng::Utf8Detection::Allow);
     Some(encoding)
 }
 
