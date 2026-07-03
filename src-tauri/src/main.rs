@@ -413,10 +413,20 @@ async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {
         .collect();
     let mut started_napcat_channels = Vec::new();
     for channel in &napcat_channels {
+        onebot_v11_ws_manager()
+            .add_log(&channel.id, "info", "[启动] 前端就绪，准备启动 OneBot v11 WS 服务")
+            .await;
         let effective_channel =
             match remote_im_channel_with_effective_credentials(&event_state, channel) {
                 Ok(value) => value,
                 Err(err) => {
+                    onebot_v11_ws_manager()
+                        .add_log(
+                            &channel.id,
+                            "error",
+                            "[启动] OneBot v11 渠道私有状态读取失败，详情请查看后端诊断日志",
+                        )
+                        .await;
                     eprintln!(
                         "[启动] OneBot v11 渠道私有状态读取失败: channel_id={}, error={}",
                         channel.id, err
@@ -429,6 +439,13 @@ async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {
                 started_napcat_channels.push(channel.clone());
             }
             Err(err) => {
+                onebot_v11_ws_manager()
+                    .add_log(
+                        &channel.id,
+                        "error",
+                        &format!("[启动] OneBot v11 WS 服务启动失败: {}", err),
+                    )
+                    .await;
                 eprintln!(
                     "[启动] 前端就绪后启动 OneBot v11 WS 服务失败: channel_id={}, error={}",
                     channel.id, err
@@ -443,6 +460,13 @@ async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {
             .start_event_consumer(channel_id.clone(), state_clone)
             .await
         {
+            onebot_v11_ws_manager()
+                .add_log(
+                    &channel_id,
+                    "error",
+                    &format!("[启动] OneBot v11 事件消费器启动失败: {}", err),
+                )
+                .await;
             eprintln!(
                 "[启动] 前端就绪后启动 OneBot v11 事件消费器失败: channel_id={}, error={}",
                 channel_id, err
@@ -461,10 +485,20 @@ async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {
         let manager = dingtalk_stream_manager();
         tauri::async_runtime::spawn(async move {
             let channel_id = channel.id.clone();
+            manager
+                .add_log(&channel_id, "info", "[启动] 前端就绪，准备启动钉钉 Stream 渠道")
+                .await;
             let effective_channel =
                 match remote_im_channel_with_effective_credentials(&state_clone, &channel) {
                     Ok(value) => value,
                     Err(err) => {
+                        manager
+                            .add_log(
+                                &channel_id,
+                                "error",
+                                "[启动] 钉钉渠道私有状态读取失败，详情请查看后端诊断日志",
+                            )
+                            .await;
                         eprintln!(
                             "[启动] 钉钉渠道私有状态读取失败: channel_id={}, error={}",
                             channel_id, err
@@ -473,6 +507,13 @@ async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {
                     }
                 };
             if let Err(err) = manager.start_channel(effective_channel, state_clone).await {
+                manager
+                    .add_log(
+                        &channel_id,
+                        "error",
+                        &format!("[启动] 钉钉 Stream 渠道启动失败: {}", err),
+                    )
+                    .await;
                 eprintln!(
                     "[启动] 前端就绪后启动钉钉 Stream 渠道失败: channel_id={}, error={}",
                     channel_id, err
@@ -490,10 +531,20 @@ async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {
     for channel in weixin_channels {
         let state_clone = event_state.clone();
         tauri::async_runtime::spawn(async move {
+            weixin_oc_manager()
+                .add_log(&channel.id, "info", "[启动] 前端就绪，准备启动个人微信渠道")
+                .await;
             if let Err(err) = weixin_oc_manager()
                 .reconcile_channel_runtime(&channel, state_clone)
                 .await
             {
+                weixin_oc_manager()
+                    .add_log(
+                        &channel.id,
+                        "error",
+                        "[启动] 个人微信渠道启动失败，详情请查看后端诊断日志",
+                    )
+                    .await;
                 eprintln!(
                     "[启动] 前端就绪后启动个人微信渠道失败: channel_id={}, error={}",
                     channel.id, err

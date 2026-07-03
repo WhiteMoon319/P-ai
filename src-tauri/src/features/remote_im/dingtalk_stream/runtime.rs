@@ -92,11 +92,12 @@ impl DingtalkStreamManager {
             .await;
     }
 
-    async fn add_log(&self, channel_id: &str, level: &str, message: &str) {
+    pub(crate) async fn add_log(&self, channel_id: &str, level: &str, message: &str) {
         self.port_service.add_log(channel_id, level, message).await;
     }
 
     async fn stop_channel_inner(&self, channel_id: &str) {
+        self.add_log(channel_id, "info", "[钉钉生命周期] 开始停止渠道").await;
         if let Some(tx) = self.stop_senders.write().await.remove(channel_id) {
             let _ = tx.send(true);
         }
@@ -111,6 +112,7 @@ impl DingtalkStreamManager {
             }
         }
         self.set_state(channel_id, false, None, None).await;
+        self.add_log(channel_id, "info", "[钉钉生命周期] 渠道已停止").await;
     }
 
     #[allow(dead_code)]
@@ -129,12 +131,16 @@ impl DingtalkStreamManager {
             .reconcile_serialized(&channel.id, || async move {
                 self.stop_channel_inner(&channel.id).await;
                 if channel.enabled && channel.platform == RemoteImPlatform::Dingtalk {
+                    self.add_log(&channel.id, "info", "[钉钉生命周期] 渠道已启用，开始启动 Stream")
+                        .await;
                     self.start_channel_inner(channel.clone(), state).await?;
                 } else {
                     self.port_service
                         .set_status_text(&channel.id, Some("disabled".to_string()))
                         .await;
                     self.port_service.set_last_error(&channel.id, None).await;
+                    self.add_log(&channel.id, "info", "[钉钉生命周期] 渠道已停用，跳过启动")
+                        .await;
                 }
                 Ok(())
             })
@@ -144,6 +150,8 @@ impl DingtalkStreamManager {
     async fn start_channel_inner(&self, channel: RemoteImChannelConfig, state: AppState) -> Result<(), String> {
         let channel_id = channel.id.clone();
         self.stop_channel_inner(&channel_id).await;
+        self.add_log(&channel_id, "info", "[钉钉生命周期] 正在创建 Stream 任务")
+            .await;
         let (stop_tx, stop_rx) = tokio::sync::watch::channel(false);
         self.stop_senders
             .write()

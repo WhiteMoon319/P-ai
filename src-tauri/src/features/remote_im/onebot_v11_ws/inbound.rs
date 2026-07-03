@@ -285,6 +285,7 @@ async fn napcat_run_event_consumer_loop(
 
 impl OnebotV11WsManager {
     async fn stop_event_consumer_inner(&self, channel_id: &str) -> Result<(), String> {
+        self.add_log(channel_id, "info", "开始停止事件消费器").await;
         let stop_sender = {
             self.event_consumer_stop_senders
                 .write()
@@ -300,6 +301,12 @@ impl OnebotV11WsManager {
             match tokio::time::timeout(Duration::from_secs(5), &mut handle).await {
                 Ok(join_result) => {
                     if let Err(err) = join_result {
+                        self.add_log(
+                            channel_id,
+                            "warn",
+                            &format!("停止消费器失败，已移除任务句柄: {}", err),
+                        )
+                        .await;
                         eprintln!(
                             "[远程IM][OneBot v11 事件] 停止消费器失败，已移除任务句柄: channel_id={}, error={}",
                             channel_id, err
@@ -309,6 +316,8 @@ impl OnebotV11WsManager {
                 Err(_) => {
                     handle.abort();
                     let _ = handle.await;
+                    self.add_log(channel_id, "warn", "停止消费器超时，已强制中止")
+                        .await;
                     eprintln!(
                         "[远程IM][OneBot v11 事件] 停止消费器超时，已强制中止: {}",
                         channel_id
@@ -327,6 +336,7 @@ impl OnebotV11WsManager {
         let service_id = channel_id.clone();
         self.port_service
             .restart_serialized(&service_id, || async move {
+                self.add_log(&channel_id, "info", "准备启动事件消费器").await;
                 self.stop_event_consumer_inner(&channel_id).await?;
                 let (stop_tx, stop_rx) = tokio::sync::watch::channel(false);
                 self.event_consumer_stop_senders
