@@ -422,6 +422,9 @@ fn conversation_list_open_state(
     if cid.is_empty() {
         return ("closed".to_string(), None, None, None);
     }
+    if cid == SYSTEM_NOTIFICATION_CONVERSATION_ID {
+        return ("closed".to_string(), None, None, None);
+    }
     if let Some(label) = detached_chat_window_for_conversation(cid) {
         let opened_by = opened_by_for_window_label(&label);
         let open_viewer_id = chat_viewer_id_for_window_label(&label);
@@ -1258,10 +1261,34 @@ fn force_take_over_unarchived_conversation(
     }
 
     let state_ref = state.inner();
+    let system_conversation_id = state_read_runtime_state_cached(state_ref)
+        .ok()
+        .and_then(|runtime| {
+            runtime
+                .main_conversation_id
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        })
+        .unwrap_or_else(|| SYSTEM_NOTIFICATION_CONVERSATION_ID.to_string());
+    let release_payload = serde_json::json!({
+        "conversationId": conversation_id,
+        "systemConversationId": system_conversation_id,
+        "reason": "force_takeover",
+    });
+    let mut released_window_labels = Vec::<String>::new();
     if let Ok(mut bindings) = state_ref.active_chat_view_bindings.lock() {
         let current_delta_channel = bindings
             .get(&window_label)
             .map(|binding| binding.delta_channel.clone());
+        released_window_labels = bindings
+            .iter()
+            .filter_map(|(label, binding)| {
+                if label == &window_label {
+                    return None;
+                }
+                (binding.conversation_id.trim() == conversation_id).then(|| label.clone())
+            })
+            .collect();
         bindings.retain(|label, binding| {
             if label == &window_label {
                 return true;
@@ -1282,12 +1309,16 @@ fn force_take_over_unarchived_conversation(
     if let Some(detached_label) = detached_chat_window_for_conversation(conversation_id) {
         if detached_label != window_label {
             let _ = unregister_detached_chat_window_by_label(&detached_label);
-            if let Some(detached_window) = app.get_webview_window(&detached_label) {
-                let _ = detached_window.close();
+            if !released_window_labels.iter().any(|label| label == &detached_label) {
+                released_window_labels.push(detached_label);
             }
         }
     }
 
+    for label in released_window_labels {
+        let _ = app.emit_to(&label, "easy-call:conversation-force-released", release_payload.clone());
+    }
+    ide_chat_broadcast_notification("conversation.forceReleased", release_payload);
     clear_conversation_list_activity_mark(state_ref, conversation_id);
     emit_unarchived_conversation_overview_updated_from_state(state_ref)?;
     Ok(ForceTakeOverUnarchivedConversationOutput {

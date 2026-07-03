@@ -2639,6 +2639,15 @@ function registerNotifications() {
     const value = payload as { conversation?: ConversationSummary };
     patchConversationOverviewItem(value.conversation);
   });
+  transport.onNotification("conversation.forceReleased", (payload) => {
+    const value = payload as { conversationId?: string; systemConversationId?: string };
+    const releasedConversationId = String(value.conversationId || "").trim();
+    const systemConversationId = String(value.systemConversationId || SYSTEM_NOTIFICATION_CONVERSATION_ID).trim();
+    if (!releasedConversationId || releasedConversationId !== String(activeConversationId.value || "").trim()) return;
+    void openConversation(systemConversationId || SYSTEM_NOTIFICATION_CONVERSATION_ID).catch((error) => {
+      console.warn("[会话接管] 切回系统会话失败", error);
+    });
+  });
   transport.onNotification("ideContext.updated", () => {
     void refreshIdeContextGroups();
   });

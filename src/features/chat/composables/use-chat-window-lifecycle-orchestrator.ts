@@ -90,6 +90,7 @@ export function useChatWindowLifecycleOrchestrator(bindings: Record<string, any>
     CHAT_STREAM_DEBUG: bindings.CHAT_STREAM_DEBUG,
     applyConversationMessagesAfterSynced: bindings.applyConversationMessagesAfterSynced,
     applyConversationMessageAppended: bindings.applyConversationMessageAppended,
+    switchUnarchivedConversation: bindings.switchUnarchivedConversation,
     scheduleChatWindowActiveStateSync: bindings.scheduleChatWindowActiveStateSync,
     startSupervisionTaskPolling: bindings.startSupervisionTaskPolling,
     refreshActiveSupervisionTask: bindings.refreshActiveSupervisionTask,
