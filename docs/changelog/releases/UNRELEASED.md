@@ -22,6 +22,7 @@
 - 升级 @tanstack/vue-virtual 到 3.13.31。
 - 升级 @tauri-apps/cli 到 2.11.4。
 - 升级 @tailwindcss/typography 到 0.5.20。
+- 升级 type-fest 到 5.7.0。
 
 ## 修复
 
