@@ -536,7 +536,8 @@
       v-if="contextMenuOpen"
       ref="contextMenuRef"
       tabindex="0"
-      class="menu fixed z-[1200] w-44 rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
+      class="menu fixed z-[1200] w-44 rounded-box border border-base-300 bg-base-100 p-1 text-base-content shadow-xl"
+      :data-theme="teleportTheme"
       :style="{ left: contextMenuX + 'px', top: contextMenuY + 'px' }"
       @click.stop
       @mousedown.stop
@@ -633,6 +634,7 @@ const props = defineProps<{
   canConfirmPlan: boolean;
   readPlanFileContent?: (input: { conversationId: string; path: string }) => Promise<string>;
   currentWorkspaceRootPath?: string;
+  currentTheme?: string;
   bubbleBackgroundHidden: boolean;
   hideToggleEnabled: boolean;
   disableMarkdownRender?: boolean;
@@ -668,6 +670,13 @@ const planMarkdownError = ref("");
 const planMarkdownLoading = ref(false);
 const forcePlainMarkdownRender = computed(() => !!props.disableMarkdownRender || debugPlainMarkdownRender);
 const assistantRenderedText = computed(() => formatAssistantStreamingText(props.block));
+const teleportTheme = computed(() => {
+  if (typeof document !== "undefined" && document.documentElement.getAttribute("data-host") === "vscode") {
+    return undefined;
+  }
+  if (typeof document === "undefined") return "light";
+  return String(props.currentTheme || document.documentElement.getAttribute("data-theme") || "light").trim() || "light";
+});
 let disposed = false;
 
 const contextMenuOpen = ref(false);

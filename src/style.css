@@ -43,6 +43,19 @@
     background-position: -50% center;
   }
 }
+
+.menu.bg-base-100 {
+  color: var(--color-base-content);
+}
+
+.menu.bg-base-100 :where(button, a):not(.text-error):not(.text-warning):not(.text-success):not(.text-info):not(.text-primary):not(.text-secondary):not(.text-accent) {
+  color: inherit;
+}
+
+.menu.bg-base-100 :where(svg) {
+  color: currentColor;
+}
+
 @plugin "@tailwindcss/typography";
 @plugin "daisyui" {
   themes:

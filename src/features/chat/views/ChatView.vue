@@ -110,6 +110,7 @@
                       :can-confirm-plan="canConfirmPlan(entry.item.block)"
                       :read-plan-file-content="readPlanFileContent"
                       :current-workspace-root-path="currentWorkspaceRootPath"
+                      :current-theme="currentTheme"
                       :bubble-background-hidden="isBubbleBackgroundHidden(entry.item.block)"
                       :hide-toggle-enabled="canToggleBubbleBackground(entry.item.block)"
                       :disable-recall-and-branch-actions="activeConversationIsSystemNotification"
