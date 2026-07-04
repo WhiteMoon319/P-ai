@@ -88,6 +88,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   (e: "click", event: MouseEvent): void;
+  (e: "mathContextMenu", payload: { clientX: number; clientY: number; copyText: string }): void;
 }>();
 const attrs = useAttrs();
 
@@ -122,6 +123,12 @@ const activeToolcallPreviews = computed(() => {
     })
     .filter((preview): preview is { id: string; label: string; title: string; body: string } => !!preview);
 });
+
+function resolveMathCopyText(text: string, raw: string, display: boolean): string {
+  const normalizedRaw = String(raw || "").trim();
+  if (normalizedRaw) return normalizedRaw;
+  return display ? `$$\n${text}\n$$` : `$${text}$`;
+}
 
 const activeToolcallPopupTitle = computed(() => {
   const count = activeToolcallPreviews.value.length;
@@ -933,8 +940,6 @@ const InlineMath = defineComponent({
     display: { type: Boolean, default: false },
   },
   setup(mathProps) {
-    const copied = ref(false);
-    let copyTimer = 0;
     const html = computed(() => {
       try {
         const katex = (window as any).__ecall_katex;
@@ -945,46 +950,24 @@ const InlineMath = defineComponent({
       }
     });
 
-    async function copyMath(event: MouseEvent) {
+    function openContextMenu(event: MouseEvent) {
       event.preventDefault();
       event.stopPropagation();
-      try {
-        const fallback = mathProps.display ? `$$${mathProps.text}$$` : `$${mathProps.text}$`;
-        await navigator.clipboard.writeText(mathProps.raw || fallback);
-        copied.value = true;
-        if (copyTimer) clearTimeout(copyTimer);
-        copyTimer = window.setTimeout(() => {
-          copied.value = false;
-          copyTimer = 0;
-        }, 1500);
-      } catch {
-        copied.value = false;
-      }
+      emit("mathContextMenu", {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        copyText: resolveMathCopyText(mathProps.text, mathProps.raw, mathProps.display),
+      });
     }
-
-    onBeforeUnmount(() => {
-      if (copyTimer) {
-        clearTimeout(copyTimer);
-        copyTimer = 0;
-      }
-    });
 
     return () => {
       const mathNode = html.value
         ? h("span", { class: "ecall-md-inline-math", innerHTML: html.value })
         : h("code", { class: "ecall-md-inline-code" }, `$${mathProps.text}$`);
-      const copyTitle = copied.value ? t("chat.copyMathDone") : t("chat.copyMath");
-      const copyButton = h("button", {
-        type: "button",
-        class: "ecall-md-math-copy ecall-md-inline-math-copy",
-        title: copyTitle,
-        "aria-label": copyTitle,
-        onClick: copyMath,
-      }, [h(copied.value ? Check : Copy, { class: "ecall-md-math-copy-icon" })]);
       if (html.value) {
-        return h("span", { class: "ecall-md-inline-math-wrap" }, [mathNode, copyButton]);
+        return h("span", { class: "ecall-md-inline-math-wrap", onContextmenu: openContextMenu }, [mathNode]);
       }
-      return h("span", { class: "ecall-md-inline-math-wrap ecall-md-inline-math-fallback" }, [mathNode, copyButton]);
+      return h("span", { class: "ecall-md-inline-math-wrap ecall-md-inline-math-fallback", onContextmenu: openContextMenu }, [mathNode]);
     };
   },
 });
@@ -1132,8 +1115,6 @@ const MathBlock = defineComponent({
     streaming: { type: Boolean, default: false },
   },
   setup(mathProps) {
-    const copied = ref(false);
-    let copyTimer = 0;
     const html = computed(() => {
       try {
         const katex = (window as any).__ecall_katex;
@@ -1144,45 +1125,21 @@ const MathBlock = defineComponent({
       }
     });
 
-    async function copyMath(event: MouseEvent) {
+    function openContextMenu(event: MouseEvent) {
       event.preventDefault();
       event.stopPropagation();
-      try {
-        await navigator.clipboard.writeText(mathProps.raw || `$$\n${mathProps.text}\n$$`);
-        copied.value = true;
-        if (copyTimer) clearTimeout(copyTimer);
-        copyTimer = window.setTimeout(() => {
-          copied.value = false;
-          copyTimer = 0;
-        }, 1500);
-      } catch {
-        copied.value = false;
-      }
+      emit("mathContextMenu", {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        copyText: resolveMathCopyText(mathProps.text, mathProps.raw, true),
+      });
     }
 
-    onBeforeUnmount(() => {
-      if (copyTimer) {
-        clearTimeout(copyTimer);
-        copyTimer = 0;
-      }
-    });
-
     return () => {
-      const copyTitle = copied.value ? t("chat.copyMathDone") : t("chat.copyMath");
-      const copyButton = h("button", {
-        type: "button",
-        class: "ecall-md-math-copy ecall-md-block-math-copy",
-        title: copyTitle,
-        "aria-label": copyTitle,
-        onClick: copyMath,
-      }, [h(copied.value ? Check : Copy, { class: "ecall-md-math-copy-icon" })]);
       const mathNode = html.value
         ? h("div", { class: "ecall-md-math-block", innerHTML: html.value })
         : h("pre", { class: "ecall-md-math-fallback" }, [h("code", null, mathProps.text)]);
-      if (html.value) {
-        return h("div", { class: "ecall-md-math-block-shell" }, [copyButton, mathNode]);
-      }
-      return h("div", { class: "ecall-md-math-block-shell" }, [copyButton, mathNode]);
+      return h("div", { class: "ecall-md-math-block-shell", onContextmenu: openContextMenu }, [mathNode]);
     };
   },
 });
@@ -1701,8 +1658,11 @@ ul.ecall-md-list {
 }
 
 .ecall-md-math-block-shell {
+  display: inline-block;
   position: relative;
+  max-width: 100%;
   margin: 0.35rem 0;
+  vertical-align: top;
 }
 
 .ecall-md-math-block {
@@ -1720,61 +1680,6 @@ ul.ecall-md-list {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.82rem;
   overflow-x: auto;
-}
-
-.ecall-md-math-copy {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.35rem;
-  height: 1.35rem;
-  border: 0;
-  border-radius: 0.28rem;
-  background: color-mix(in srgb, var(--color-base-100) 82%, transparent);
-  color: color-mix(in srgb, currentColor 62%, transparent);
-  cursor: pointer;
-  transition: opacity 0.14s ease, background-color 0.14s ease, color 0.14s ease;
-}
-
-.ecall-md-math-copy:hover,
-.ecall-md-math-copy:focus-visible {
-  background: color-mix(in srgb, currentColor 10%, transparent);
-  color: currentColor;
-}
-
-.ecall-md-math-copy-icon {
-  width: 0.78rem;
-  height: 0.78rem;
-}
-
-.ecall-md-inline-math-copy {
-  flex: 0 0 auto;
-  width: 1rem;
-  height: 1rem;
-  opacity: 0;
-}
-
-.ecall-md-inline-math-wrap:hover .ecall-md-inline-math-copy,
-.ecall-md-inline-math-copy:focus-visible {
-  opacity: 1;
-}
-
-.ecall-md-inline-math-copy .ecall-md-math-copy-icon {
-  width: 0.68rem;
-  height: 0.68rem;
-}
-
-.ecall-md-block-math-copy {
-  position: absolute;
-  top: 0.25rem;
-  right: 0.25rem;
-  z-index: 1;
-  opacity: 0.72;
-}
-
-.ecall-md-math-block-shell:hover .ecall-md-block-math-copy,
-.ecall-md-block-math-copy:focus-visible {
-  opacity: 1;
 }
 
 /* ==================== Mermaid ==================== */

@@ -218,6 +218,7 @@
             :streaming="!!block.isStreaming"
             :local-image-base-path="currentWorkspaceRootPath"
             :toolcall-preview-map="toolcallPreviewMap"
+            @math-context-menu="openMathContextMenu"
             @click="emit('assistantLinkClick', $event)"
           />
         </div>
@@ -553,6 +554,12 @@
           <span>{{ t('common.copy') }}</span>
         </button>
       </li>
+      <li v-if="mathContextCopyText">
+        <button type="button" @click="handleContextMenuAction('copyMath')">
+          <Copy class="h-4 w-4" />
+          <span>{{ t('chat.copyMath') }}</span>
+        </button>
+      </li>
       <li>
         <button type="button" @click="handleContextMenuAction('toggleBubble')">
           <EyeOff v-if="bubbleBackgroundHidden" class="h-4 w-4" />
@@ -667,6 +674,7 @@ const contextMenuOpen = ref(false);
 const contextMenuRef = ref<HTMLElement | null>(null);
 const contextMenuX = ref(0);
 const contextMenuY = ref(0);
+const mathContextCopyText = ref("");
 
 watch(
   () => ({
@@ -1850,6 +1858,7 @@ function openContextMenu(event: MouseEvent) {
     closeContextMenu();
     return;
   }
+  mathContextCopyText.value = "";
   event.preventDefault();
   const menuWidth = 176; // w-44
   const menuHeight = 200; // estimate
@@ -1862,17 +1871,42 @@ function openContextMenu(event: MouseEvent) {
   window.addEventListener("pointerdown", handleGlobalPointerDownForContextMenu, true);
 }
 
+function openMathContextMenu(payload: { clientX: number; clientY: number; copyText: string }) {
+  if (!String(payload.copyText || "").trim()) return;
+  const menuWidth = 176; // w-44
+  const menuHeight = 236; // estimate with extra entry
+  const margin = 8;
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  mathContextCopyText.value = payload.copyText;
+  contextMenuX.value = Math.min(Math.max(margin, payload.clientX), viewportWidth - menuWidth - margin);
+  contextMenuY.value = Math.min(Math.max(margin, payload.clientY), viewportHeight - menuHeight - margin);
+  contextMenuOpen.value = true;
+  window.addEventListener("pointerdown", handleGlobalPointerDownForContextMenu, true);
+}
+
 function closeContextMenu() {
   contextMenuOpen.value = false;
+  mathContextCopyText.value = "";
   window.removeEventListener("pointerdown", handleGlobalPointerDownForContextMenu, true);
 }
 
+async function copyTextToClipboard(text: string) {
+  if (!String(text || "").trim()) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {}
+}
+
 function handleContextMenuAction(action: string) {
+  const mathCopyText = mathContextCopyText.value;
   closeContextMenu();
   if (action === "select") {
     emit("enterSelectionMode", props.selectionKey);
   } else if (action === "copy") {
     emit("copyMessage", props.block);
+  } else if (action === "copyMath") {
+    void copyTextToClipboard(mathCopyText);
   } else if (action === "toggleBubble") {
     emit("toggleBubbleBackground", props.selectionKey);
   } else if (action === "branchFromMessage") {
