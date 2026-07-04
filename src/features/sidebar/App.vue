@@ -1887,26 +1887,29 @@ async function openCompactionDialog() {
 }
 
 function closeCompactionDialog() {
-  if (compacting.value) return;
   compactionDialogOpen.value = false;
   compactionPreview.value = null;
   compactionErrorText.value = "";
 }
 
 async function confirmCompaction() {
-  if (!activeConversationId.value || compacting.value || !compactionPreview.value?.canCompact) return;
+  const sourceConversationId = String(compactionPreview.value?.conversationId || activeConversationId.value || "").trim();
+  if (!sourceConversationId || compacting.value || !compactionPreview.value?.canCompact) return;
   compacting.value = true;
   compactionErrorText.value = "";
+  compactionDialogOpen.value = false;
+  compactionPreview.value = null;
   try {
-    const result = await transport.request<{ compactionMessage?: ChatMessage }>("conversation.compact", {
-      conversationId: activeConversationId.value,
+    await transport.request<{ compactionMessage?: ChatMessage }>("conversation.compact", {
+      conversationId: sourceConversationId,
     });
-    if (result.compactionMessage) appendMessages({ conversationId: activeConversationId.value, message: result.compactionMessage });
     await refreshList();
-    await openConversation(activeConversationId.value);
-    compactionDialogOpen.value = false;
+    if (activeConversationId.value === sourceConversationId) {
+      await openConversation(sourceConversationId);
+    }
   } catch (error) {
     compactionErrorText.value = String(error || t('sidebar.compactionFailed'));
+    transport.errorText.value = compactionErrorText.value;
   } finally {
     compacting.value = false;
   }

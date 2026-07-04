@@ -126,6 +126,9 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
       if (action.lockForeground && !targetIsForeground) {
         return;
       }
+      if (!action.lockForeground && currentConversationIdOrNull() !== sourceConversationId) {
+        return;
+      }
       await loadAllMessages(action.lockForeground ? undefined : sourceConversationId);
     } catch (e) {
       const rawErrorText = String(e ?? "");
