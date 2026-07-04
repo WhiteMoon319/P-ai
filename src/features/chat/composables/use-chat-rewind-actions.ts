@@ -96,15 +96,18 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
     return mentions;
   }
 
-  function resolveRewindTargetUserMessage(currentMessages: ChatMessage[], turnId: string): { targetUserMessageId: string; keepCountFromLocal: number } | null {
+  function findMessageIndexByTurnId(currentMessages: ChatMessage[], turnId: string): number {
     const turnMessageId = String(turnId || "").trim();
-    if (!turnMessageId) return null;
-    const directIndex = currentMessages.findIndex((item) => item.id === turnMessageId);
+    if (!turnMessageId) return -1;
+    return currentMessages.findIndex((item) => item.id === turnMessageId);
+  }
+
+  function resolveRegenerateSourceUserMessage(currentMessages: ChatMessage[], turnId: string): { targetUserMessageId: string; keepCountFromLocal: number } | null {
+    const directIndex = findMessageIndexByTurnId(currentMessages, turnId);
     if (directIndex < 0) return null;
-    const directRole = String(currentMessages[directIndex]?.role || "").trim();
-    if (directRole === "user") {
+    if (String(currentMessages[directIndex]?.role || "").trim() === "user") {
       return {
-        targetUserMessageId: turnMessageId,
+        targetUserMessageId: String(currentMessages[directIndex]?.id || "").trim(),
         keepCountFromLocal: directIndex,
       };
     }
@@ -220,7 +223,7 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
     try {
       const currentMessages = [...options.allMessages.value];
       const turnMessageId = String(payload.turnId || "").trim();
-      const directIndex = currentMessages.findIndex((item) => item.id === turnMessageId);
+      const directIndex = findMessageIndexByTurnId(currentMessages, turnMessageId);
       if (directIndex < 0) {
         console.warn("[会话撤回] 失败：未找到目标消息", {
           turnId: payload.turnId,
@@ -302,7 +305,7 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
     try {
       // 重新生成必须先映射到上一条用户消息，再撤回到该用户消息并重发
       const currentMessages = [...options.allMessages.value];
-      const target = resolveRewindTargetUserMessage(currentMessages, payload.turnId);
+      const target = resolveRegenerateSourceUserMessage(currentMessages, payload.turnId);
       if (!target || !target.targetUserMessageId) {
         console.warn("[重新生成] 失败：未找到可撤回的用户消息", {
           turnId: payload.turnId,
@@ -335,8 +338,9 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
       return;
     }
     const currentMessages = [...options.allMessages.value];
-    const target = resolveRewindTargetUserMessage(currentMessages, payload.turnId);
-    if (!target || !target.targetUserMessageId) {
+    const directIndex = findMessageIndexByTurnId(currentMessages, payload.turnId);
+    const targetMessageId = String(payload.turnId || "").trim();
+    if (directIndex < 0 || !targetMessageId) {
       options.setChatErrorText(t('dialogs.rewind.failedNoTarget'));
       options.setStatusError("status.createBranchFailed", t('dialogs.rewind.failedNoTarget'));
       return;
@@ -351,13 +355,13 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
     }
     const confirmed = await options.requestCreateConversationBranchFromMessageConfirm({
       turnId: payload.turnId,
-      targetUserMessageId: target.targetUserMessageId,
+      targetUserMessageId: targetMessageId,
     });
     if (!confirmed) return;
     try {
       await options.createConversationBranchFromMessage({
         turnId: payload.turnId,
-        targetUserMessageId: target.targetUserMessageId,
+        targetUserMessageId: targetMessageId,
       });
     } catch (error) {
       const detail = errorText(error);

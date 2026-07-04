@@ -2122,7 +2122,7 @@
   "dialogs": {
     "branchFromMessage": {
       "title": "Create a Conversation Branch from This Message",
-      "hint": "This will duplicate the current conversation, keep all messages before this point, and preserve the working directory and permissions in the new branch.",
+      "hint": "This will duplicate the current conversation, keep all messages through this message, and preserve the working directory and permissions in the new branch.",
       "confirm": "Create Branch"
     },
     "update": {

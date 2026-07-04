@@ -2034,20 +2034,10 @@ async function stop() {
   busy.value = false;
 }
 
-function resolveRewindTargetUserMessage(turnId: string): { targetUserMessageId: string; keepCount: number } | null {
+function findMessageIndexByTurnId(turnId: string): number {
   const targetId = String(turnId || "").trim();
-  if (!targetId) return null;
-  const index = messages.value.findIndex((item) => item.id === targetId);
-  if (index < 0) return null;
-  if (String(messages.value[index]?.role || "").trim() === "user") {
-    return { targetUserMessageId: targetId, keepCount: index };
-  }
-  for (let i = index - 1; i >= 0; i -= 1) {
-    if (String(messages.value[i]?.role || "").trim() === "user") {
-      return { targetUserMessageId: String(messages.value[i]?.id || "").trim(), keepCount: i };
-    }
-  }
-  return null;
+  if (!targetId) return -1;
+  return messages.value.findIndex((item) => item.id === targetId);
 }
 
 async function recallTurn(payload: { turnId: string }) {
@@ -2060,30 +2050,34 @@ async function recallTurn(payload: { turnId: string }) {
     transport.errorText.value = t('sidebar.rewindRunning');
     return;
   }
-  const target = resolveRewindTargetUserMessage(payload.turnId);
-  if (!target?.targetUserMessageId) {
+  const targetMessageId = String(payload.turnId || "").trim();
+  const directIndex = findMessageIndexByTurnId(targetMessageId);
+  if (!targetMessageId || directIndex < 0) {
     transport.errorText.value = t('sidebar.rewindNotFound');
     return;
   }
+  const targetRole = String(messages.value[directIndex]?.role || "").trim();
   rewindInFlight = true;
   try {
-    const mode = await requestRecallMode(target.targetUserMessageId);
+    const mode = await requestRecallMode(targetMessageId);
     if (mode === "cancel") return;
     const result = await transport.request<RewindConversationResult>("conversation.rewind", {
       conversationId: activeConversationId.value,
-      messageId: target.targetUserMessageId,
+      messageId: targetMessageId,
       undoApplyPatch: mode === "with_patch",
     });
     clearStreamingState();
-    const recalled = result.recalledUserMessage || messages.value[target.keepCount];
-    inputText.value = recalled ? removeBinaryPlaceholders(messageText(recalled)) : inputText.value;
+    const recalled = result.recalledUserMessage || messages.value[directIndex];
+    if (targetRole === "user" && recalled) {
+      inputText.value = removeBinaryPlaceholders(messageText(recalled));
+    }
     if (result.conversation) {
       activeConversationId.value = result.conversation.conversationId;
-      messages.value = Array.isArray(result.conversation.messages) ? result.conversation.messages : messages.value.slice(0, target.keepCount);
+      messages.value = Array.isArray(result.conversation.messages) ? result.conversation.messages : messages.value.slice(0, directIndex);
       persona.value = result.conversation.persona || persona.value;
       applyModelPayload(result.conversation.model || {});
     } else {
-      messages.value = messages.value.slice(0, target.keepCount);
+      messages.value = messages.value.slice(0, directIndex);
     }
     selectedBlockId.value = null;
     hasPrevBlock.value = true;
@@ -2101,8 +2095,9 @@ async function createConversationBranchFromTurn(payload: { turnId: string }) {
     transport.errorText.value = t('sidebar.createBranchFailed');
     return;
   }
-  const target = resolveRewindTargetUserMessage(payload.turnId);
-  if (!target?.targetUserMessageId) {
+  const targetMessageId = String(payload.turnId || "").trim();
+  const directIndex = findMessageIndexByTurnId(targetMessageId);
+  if (!targetMessageId || directIndex < 0) {
     transport.errorText.value = t('sidebar.rewindNotFound');
     return;
   }
@@ -2112,7 +2107,7 @@ async function createConversationBranchFromTurn(payload: { turnId: string }) {
   try {
     const result = await transport.request<{ conversationId: string }>("conversation.branchFromMessage", {
       sourceConversationId: activeConversationId.value,
-      turnMessageId: target.targetUserMessageId,
+      turnMessageId: targetMessageId,
     });
     const conversationId = String(result?.conversationId || "").trim();
     if (!conversationId) return;

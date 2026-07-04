@@ -963,7 +963,7 @@ fn build_branch_conversation_title(
     format!("{prefix}[会话分支自第{first_selected_ordinal}条对话]")
 }
 
-fn resolve_rewind_target_user_message_index(
+fn resolve_branch_from_message_target_index(
     messages: &[ChatMessage],
     turn_message_id: &str,
 ) -> Option<usize> {
@@ -971,15 +971,9 @@ fn resolve_rewind_target_user_message_index(
     if normalized_turn_message_id.is_empty() {
         return None;
     }
-    let direct_index = messages
+    messages
         .iter()
-        .position(|message| message.id.trim() == normalized_turn_message_id)?;
-    if messages[direct_index].role.trim().eq_ignore_ascii_case("user") {
-        return Some(direct_index);
-    }
-    (0..direct_index)
-        .rev()
-        .find(|index| messages[*index].role.trim().eq_ignore_ascii_case("user"))
+        .position(|message| message.id.trim() == normalized_turn_message_id)
 }
 
 fn visible_message_ordinal_for_index(messages: &[ChatMessage], target_index: usize) -> usize {
@@ -1372,16 +1366,17 @@ async fn create_conversation_branch_from_message_internal(
                 && conversation_is_local_normal_chat(conversation)
         })
         .ok_or_else(|| "源会话不存在或已归档，无法创建会话分支".to_string())?;
-    let target_user_index = resolve_rewind_target_user_message_index(
+    let target_message_index = resolve_branch_from_message_target_index(
         &source_conversation.messages,
         turn_message_id,
     )
     .ok_or_else(|| "未找到可用于创建会话分支的起始消息".to_string())?;
     let first_selected_ordinal =
-        visible_message_ordinal_for_index(&source_conversation.messages, target_user_index);
+        visible_message_ordinal_for_index(&source_conversation.messages, target_message_index);
     if first_selected_ordinal == 0 {
         return Err("无法确定会话分支的消息位置".to_string());
     }
+    let rewind_anchor_index = target_message_index.saturating_add(1);
     let branch_title = build_branch_conversation_title(
         &source_conversation.title,
         first_selected_ordinal,
@@ -1401,45 +1396,47 @@ async fn create_conversation_branch_from_message_internal(
     let branched_conversation = conversation_service_v2()
         .get_conversation_snapshot(state, &conversation_id)
         .map_err(|_| "新建会话分支后读取失败".to_string())?;
-    let target_user_message_id = branched_conversation
+    if let Some(rewind_anchor_message_id) = branched_conversation
         .messages
-        .get(target_user_index)
+        .get(rewind_anchor_index)
         .map(|message| message.id.clone())
-        .ok_or_else(|| "新会话分支缺少目标消息，无法定位分支起点".to_string())?;
-    let rewind_input = RewindConversationInput {
-        session: SessionSelector {
-            api_config_id: None,
-            department_id: None,
-            agent_id: String::new(),
-            conversation_id: Some(conversation_id.clone()),
-        },
-        message_id: target_user_message_id.clone(),
-        undo_apply_patch: false,
-    };
-    let rewind_started_at = std::time::Instant::now();
-    let rewind_result = conversation_service_v2().rewind_conversation(
-        state,
-        &rewind_input,
-        &target_user_message_id,
-        &rewind_started_at,
-    )?;
-    if rewind_result.removed_count > 0 {
-        emit_conversation_todos_updated_payload(
-            state,
-            &ConversationTodosUpdatedPayload {
-                conversation_id: conversation_id.clone(),
-                current_todo: rewind_result.current_todo,
-                current_todos: rewind_result.current_todos,
+    {
+        let rewind_input = RewindConversationInput {
+            session: SessionSelector {
+                api_config_id: None,
+                department_id: None,
+                agent_id: String::new(),
+                conversation_id: Some(conversation_id.clone()),
             },
-        );
+            message_id: rewind_anchor_message_id.clone(),
+            undo_apply_patch: false,
+        };
+        let rewind_started_at = std::time::Instant::now();
+        let rewind_result = conversation_service_v2().rewind_conversation(
+            state,
+            &rewind_input,
+            &rewind_anchor_message_id,
+            &rewind_started_at,
+        )?;
+        if rewind_result.removed_count > 0 {
+            emit_conversation_todos_updated_payload(
+                state,
+                &ConversationTodosUpdatedPayload {
+                    conversation_id: conversation_id.clone(),
+                    current_todo: rewind_result.current_todo,
+                    current_todos: rewind_result.current_todos,
+                },
+            );
+        }
     }
     emit_unarchived_conversation_overview_updated_payload(state, &create_result.overview_payload);
     runtime_log_info(format!(
-        "[会话分支] 完成，任务=从此消息开始创建会话分支，source_conversation_id={}，conversation_id={}，turn_message_id={}，target_user_index={}，duration_ms={}",
+        "[会话分支] 完成，任务=从此消息开始创建会话分支，source_conversation_id={}，conversation_id={}，turn_message_id={}，target_message_index={}，has_rewind_anchor={}，duration_ms={}",
         source_conversation_id,
         conversation_id,
         turn_message_id,
-        target_user_index,
+        target_message_index,
+        rewind_anchor_index < branched_conversation.messages.len(),
         started_at.elapsed().as_millis()
     ));
     Ok(BranchUnarchivedConversationFromSelectionOutput {
@@ -3506,6 +3503,40 @@ mod unarchived_conversations_tests {
         assert_eq!(selected.len(), 2);
         assert_eq!(selected[0].id, "m1");
         assert_eq!(selected[1].id, "m2");
+    }
+
+    #[test]
+    fn resolve_branch_from_message_target_index_should_use_exact_message() {
+        let mut source = build_test_conversation();
+        source.messages = vec![
+            {
+                let mut message = build_test_message("u1", "user");
+                message.role = "user".to_string();
+                message
+            },
+            build_test_message("a1", "assistant"),
+            {
+                let mut message = build_test_message("u2", "user");
+                message.role = "user".to_string();
+                message
+            },
+        ];
+
+        let target_index =
+            resolve_branch_from_message_target_index(&source.messages, "a1").expect("target index");
+
+        assert_eq!(target_index, 1);
+        assert_eq!(target_index.saturating_add(1), 2);
+    }
+
+    #[test]
+    fn branch_from_message_next_index_should_point_past_tail_for_last_message() {
+        let source = build_test_conversation();
+        let target_index =
+            resolve_branch_from_message_target_index(&source.messages, "m2").expect("target index");
+
+        assert_eq!(target_index, 1);
+        assert_eq!(target_index.saturating_add(1), source.messages.len());
     }
 
     #[test]
