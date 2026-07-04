@@ -438,6 +438,18 @@ watch(
 );
 
 watch(
+  () => [
+    props.activeConversationId,
+    activeConversationTab.value,
+    orderedConversationSections.value.map((section) => `${section.key}:${section.items.length}`).join("|"),
+  ] as const,
+  () => {
+    expandSectionForActiveConversation();
+  },
+  { immediate: true },
+);
+
+watch(
   () => activeConversationTab.value,
   (nextValue, previousValue) => {
     if (!previousValue || nextValue === previousValue) return;
@@ -600,6 +612,27 @@ function toggleConversationSection(key: string) {
     [key]: !isConversationSectionCollapsed(key),
   };
   scheduleConversationListScrollbarUpdate();
+}
+
+function expandConversationSection(key: string) {
+  if (!key || !isConversationSectionCollapsed(key)) return;
+  collapsedConversationSectionKeys.value = {
+    ...collapsedConversationSectionKeys.value,
+    [key]: false,
+  };
+  scheduleConversationListScrollbarUpdate();
+}
+
+function expandSectionForActiveConversation() {
+  if (normalizedConversationSearchQuery.value) return;
+  const activeConversationId = String(props.activeConversationId || "").trim();
+  if (!activeConversationId) return;
+  const section = orderedConversationSections.value.find((entry) =>
+    entry.key !== RECENT_CONVERSATION_SECTION_KEY
+    && entry.items.some((item) => String(item.conversationId || "").trim() === activeConversationId),
+  );
+  if (!section) return;
+  expandConversationSection(section.key);
 }
 
 function collapseAllConversationSections() {

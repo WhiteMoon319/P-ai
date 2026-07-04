@@ -1277,6 +1277,10 @@ function handleConversationScroll() {
 }
 
 function handleConversationWheelInput(event: WheelEvent) {
+  if (event.shiftKey) {
+    handleShiftWheel(event);
+    return;
+  }
   noteWheelScrollIntent();
   onConversationWheel(event);
 }
@@ -1490,12 +1494,6 @@ function handleShiftWheel(event: WheelEvent) {
     kind: target.kind,
     remoteContactId: String(target.remoteContactId || "").trim() || undefined,
   });
-}
-
-function handleConversationWheel(event: WheelEvent) {
-  onConversationWheel(event);
-  if (event.defaultPrevented) return;
-  handleShiftWheel(event);
 }
 
 // ==================== link / copy ====================
