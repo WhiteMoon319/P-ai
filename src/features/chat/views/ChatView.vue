@@ -193,21 +193,27 @@
           @update:enabled="autoPushEnabled = $event"
           @update:selected-contact-id="autoPushSelectedContactId = $event"
         />
-        <div v-show="showJumpToBottom" class="pointer-events-none absolute bottom-3 right-5 z-30 flex justify-end" :style="jumpToBottomStyle">
-          <button class="btn btn-sm btn-circle btn-neutral pointer-events-auto shadow-lg" @click="handleJumpToBottom">
-            <ArrowDownToLine class="h-4 w-4" />
-          </button>
-        </div>
-        <div v-show="showJumpToNextUserMessage" class="pointer-events-none absolute bottom-3 right-5 z-30 flex justify-end" :style="jumpAboveBottomStyle">
-          <button class="btn btn-sm btn-circle btn-neutral pointer-events-auto shadow-lg" @click="handleJumpToNextUserMessage">
-            <ChevronsDown class="h-4 w-4" />
-          </button>
-        </div>
-        <div v-show="showJumpToPreviousUserMessage" class="pointer-events-none absolute right-5 top-3 z-30 flex justify-end">
-          <button class="btn btn-sm btn-circle btn-neutral pointer-events-auto shadow-lg" @click="handleJumpToPreviousUserMessage">
-            <ChevronsUp class="h-4 w-4" />
-          </button>
-        </div>
+        <Transition name="chat-jump-action">
+          <div v-show="showJumpToBottom" class="pointer-events-none absolute bottom-3 right-5 z-30 flex justify-end" :style="jumpToBottomStyle">
+            <button class="btn btn-sm btn-circle btn-neutral pointer-events-auto shadow-lg" @click="handleJumpToBottom">
+              <ArrowDownToLine class="h-4 w-4" />
+            </button>
+          </div>
+        </Transition>
+        <Transition name="chat-jump-action">
+          <div v-show="showJumpToNextUserMessage" class="pointer-events-none absolute bottom-3 right-5 z-30 flex justify-end" :style="jumpToBottomStyle">
+            <button class="btn btn-sm btn-circle border border-base-300 bg-base-100 text-base-content pointer-events-auto shadow-lg hover:border-base-300 hover:bg-base-100" @click="handleJumpToNextUserMessage">
+              <ChevronsDown class="h-4 w-4" />
+            </button>
+          </div>
+        </Transition>
+        <Transition name="chat-jump-action">
+          <div v-show="showJumpToPreviousUserMessage" class="pointer-events-none absolute bottom-3 right-5 z-30 flex justify-end" :style="jumpAboveBottomStyle">
+            <button class="btn btn-sm btn-circle border border-base-300 bg-base-100 text-base-content pointer-events-auto shadow-lg hover:border-base-300 hover:bg-base-100" @click="handleJumpToPreviousUserMessage">
+              <ChevronsUp class="h-4 w-4" />
+            </button>
+          </div>
+        </Transition>
 
         <div ref="composerContainer" class="relative shrink-0 border-t border-base-300 bg-base-100 px-2 pt-2 pb-1.5">
           <div v-if="chatStatusBanner" class="absolute inset-x-0 top-0 z-10 -translate-y-full">
@@ -1152,7 +1158,7 @@ const showJumpToPreviousUserMessage = computed(() =>
 );
 
 const showJumpToNextUserMessage = computed(() =>
-  userScrollingDown.value && !!nextUserMessageJumpTarget.value,
+  userScrollingUp.value && !!nextUserMessageJumpTarget.value,
 );
 
 // ==================== tool review ====================
@@ -1611,3 +1617,16 @@ onBeforeUnmount(() => {
   stopAudioPlayback();
 });
 </script>
+
+<style scoped>
+.chat-jump-action-enter-active,
+.chat-jump-action-leave-active {
+  transition: opacity 120ms ease-out, transform 120ms ease-out;
+}
+
+.chat-jump-action-enter-from,
+.chat-jump-action-leave-to {
+  opacity: 0;
+  transform: translateY(4px) scale(0.98);
+}
+</style>
