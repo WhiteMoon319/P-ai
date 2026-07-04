@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-03T17:09:52.115Z",
-  "latestVersion": "v0.17.0",
+  "generatedAt": "2026-07-04T06:57:49.219Z",
+  "latestVersion": "v0.18.0",
   "releases": [
+    {
+      "version": "v0.18.0",
+      "path": "docs/changelog/releases/v0.18.0.md",
+      "summary": "聊天消息区新增“跳到上一条用户消息”入口，便于长对话中快速回到上一轮用户输入。"
+    },
     {
       "version": "v0.17.0",
       "path": "docs/changelog/releases/v0.17.0.md",
