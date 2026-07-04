@@ -1063,6 +1063,7 @@ const latestOwnTailSpacerMinHeight = computed(() => {
 // ==================== previous user message jump ====================
 
 const scrollNavigationTick = ref(0);
+const pendingPreviousUserMessageJumpId = ref("");
 
 function isPreviousUserMessageJumpItem(item: ChatRenderItem | undefined): boolean {
   if (!item || item.kind !== "message") return false;
@@ -1072,10 +1073,9 @@ function isPreviousUserMessageJumpItem(item: ChatRenderItem | undefined): boolea
   return block.role === "user" || speakerAgentId === "user-persona";
 }
 
-const previousUserMessageJumpTarget = computed(() => {
-  scrollNavigationTick.value;
+function collectPreviousUserMessageJumpTargets() {
   const scrollEl = scrollContainer.value;
-  if (!scrollEl || virtualRenderItems.value.length <= 0) return null;
+  if (!scrollEl || virtualRenderItems.value.length <= 0) return [];
   const rows = virtualizer.value.getVirtualItems();
   const viewportTop = scrollEl.scrollTop;
   let firstVisibleIndex = virtualRenderItems.value.length;
@@ -1085,11 +1085,30 @@ const previousUserMessageJumpTarget = computed(() => {
       break;
     }
   }
+  const targets: Array<{ index: number; item: ChatRenderItem }> = [];
   for (let index = Math.min(firstVisibleIndex - 1, virtualRenderItems.value.length - 1); index >= 0; index -= 1) {
     const item = virtualRenderItems.value[index];
-    if (isPreviousUserMessageJumpItem(item)) return { index, item };
+    if (isPreviousUserMessageJumpItem(item)) targets.push({ index, item });
   }
-  return null;
+  return targets;
+}
+
+function countPreviousUserMessageJumpItemsBeforeIndex(index: number): number {
+  const targetIndex = Math.max(0, Math.min(index, virtualRenderItems.value.length));
+  let count = 0;
+  for (let currentIndex = targetIndex - 1; currentIndex >= 0; currentIndex -= 1) {
+    if (isPreviousUserMessageJumpItem(virtualRenderItems.value[currentIndex])) count += 1;
+  }
+  return count;
+}
+
+const previousUserMessageJumpTargets = computed(() => {
+  scrollNavigationTick.value;
+  return collectPreviousUserMessageJumpTargets();
+});
+
+const previousUserMessageJumpTarget = computed(() => {
+  return previousUserMessageJumpTargets.value[0] ?? null;
 });
 
 const showJumpToPreviousUserMessage = computed(() =>
@@ -1211,8 +1230,7 @@ function handleConversationScroll() {
   scrollNavigationTick.value += 1;
 }
 
-function handleJumpToPreviousUserMessage() {
-  const target = previousUserMessageJumpTarget.value;
+function scrollToPreviousUserMessageTarget(target: { index: number; item: ChatRenderItem }) {
   if (!target) return;
   armProgrammaticScrollPaginationSuppression();
   scheduleVirtualMeasure();
@@ -1222,6 +1240,63 @@ function handleJumpToPreviousUserMessage() {
     scrollNavigationTick.value += 1;
   });
 }
+
+function requestOlderHistoryBeforePreviousUserJump(target: { index: number; item: ChatRenderItem }): boolean {
+  if (!props.hasMoreHistory) return false;
+  pendingPreviousUserMessageJumpId.value = String(target.item.id || "").trim();
+  if (!props.loadingOlderHistory) {
+    emit("loadOlderHistory");
+  }
+  return true;
+}
+
+async function continuePendingPreviousUserMessageJump() {
+  const pendingId = String(pendingPreviousUserMessageJumpId.value || "").trim();
+  if (!pendingId || props.loadingOlderHistory) return;
+  await nextTick();
+  const index = virtualRenderItems.value.findIndex((item) => String(item.id || "").trim() === pendingId);
+  if (index < 0) {
+    pendingPreviousUserMessageJumpId.value = "";
+    return;
+  }
+  const item = virtualRenderItems.value[index];
+  if (!isPreviousUserMessageJumpItem(item)) {
+    pendingPreviousUserMessageJumpId.value = "";
+    return;
+  }
+  const target = { index, item };
+  if (props.hasMoreHistory && countPreviousUserMessageJumpItemsBeforeIndex(index) < 1) {
+    requestOlderHistoryBeforePreviousUserJump(target);
+    return;
+  }
+  pendingPreviousUserMessageJumpId.value = "";
+  scrollToPreviousUserMessageTarget(target);
+}
+
+function handleJumpToPreviousUserMessage() {
+  const target = previousUserMessageJumpTarget.value;
+  if (!target) return;
+  if (props.hasMoreHistory && previousUserMessageJumpTargets.value.length < 2) {
+    requestOlderHistoryBeforePreviousUserJump(target);
+    return;
+  }
+  scrollToPreviousUserMessageTarget(target);
+}
+
+watch(
+  () => props.loadingOlderHistory,
+  (loading, wasLoading) => {
+    if (loading || !wasLoading) return;
+    void continuePendingPreviousUserMessageJump();
+  },
+);
+
+watch(
+  () => props.activeConversationId,
+  () => {
+    pendingPreviousUserMessageJumpId.value = "";
+  },
+);
 
 // ==================== image preview ====================
 
