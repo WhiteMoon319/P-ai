@@ -65,10 +65,10 @@
           />
           <template v-else>
             <CollapsibleGroup
-              v-for="section in filteredConversationSections"
+              v-for="section in displayedConversationSections"
               :key="section.key"
               :title="section.title"
-              :count="section.items.length"
+              :count="section.totalItemCount"
               :model-value="isConversationSectionCollapsed(section.key)"
               :draggable="isConversationSectionDraggable(section)"
               :drop-indicator="conversationSectionDragIndicator(section)"
@@ -94,7 +94,7 @@
               </button>
             </template>
             <div
-              v-for="item in section.items"
+              v-for="item in section.visibleItems"
               :key="item.conversationId"
               class="group relative mx-1"
               @contextmenu.prevent="handleCardContextMenu(item, $event)"
@@ -254,9 +254,18 @@
                   </div>
 
                 </div>
+            <div v-if="section.hiddenItemCount > 0" class="px-3 pb-2 pt-1">
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs h-7 min-h-7 w-full justify-center text-base-content/65 hover:text-base-content"
+                @click.stop="loadMoreConversationsInSection(section.key)"
+              >
+                {{ t("chat.loadMore") }}
+              </button>
+            </div>
             </CollapsibleGroup>
             <div
-              v-if="filteredConversationSections.length === 0"
+              v-if="displayedConversationSections.length === 0"
               class="px-3 py-4 text-center text-sm text-base-content/60"
             >
               {{ t("chat.conversationSearchEmpty") }}
@@ -269,7 +278,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch, watchEffect } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
 import { Archive, PencilLine, Pin, PinOff, Search, SquarePen, Trash2, Upload } from "@lucide/vue";
 import CollapsibleGroup from "./CollapsibleGroup.vue";
@@ -293,7 +302,16 @@ import ChatConversationFloatingScroll from "./ChatConversationFloatingScroll.vue
 import ChatTaskSidebarPanel from "./ChatTaskSidebarPanel.vue";
 
 type ConversationSidebarTab = "local" | "contact" | "task";
+type DisplayConversationSection = ConversationSection & {
+  visibleItems: ChatConversationOverviewItem[];
+  hiddenItemCount: number;
+  totalItemCount: number;
+};
 
+const CONVERSATION_SECTION_UNUSED_DAYS = 7;
+const CONVERSATION_SECTION_MIN_VISIBLE = 5;
+const CONVERSATION_SECTION_LOAD_MORE_STEP = 10;
+const CONVERSATION_SECTION_RESET_DELAY_MS = 30_000;
 
 const props = defineProps<{
   items: ChatConversationOverviewItem[];
@@ -329,6 +347,8 @@ const searchInputRef = ref<HTMLInputElement | null>(null);
 const conversationFloatingScrollRef = ref<InstanceType<typeof ChatConversationFloatingScroll> | null>(null);
 const collapsedConversationSectionKeys = ref<Record<string, boolean>>({});
 const conversationSectionOrders = ref<ConversationSectionOrderState>({ local: [], contact: [] });
+const conversationSectionLoadMoreCounts = ref<Record<string, number>>({});
+const conversationSectionResetTimers = new Map<ConversationSidebarTab, ReturnType<typeof setTimeout>>();
 const draggingConversationSectionKey = ref("");
 const dragOverConversationSectionKey = ref("");
 const dragOverConversationSectionPlacement = ref<"before" | "after">("before");
@@ -422,6 +442,10 @@ const filteredConversationSections = computed(() => {
     .filter((section) => section.items.length > 0);
 });
 
+const displayedConversationSections = computed<DisplayConversationSection[]>(() =>
+  filteredConversationSections.value.map((section) => buildDisplayedConversationSection(section)),
+);
+
 watchEffect(() => {
   const editingId = String(editingConversationId.value || "").trim();
   if (!editingId) return;
@@ -452,6 +476,10 @@ watch(
 watch(
   () => activeConversationTab.value,
   (nextValue, previousValue) => {
+    if (previousValue && previousValue !== nextValue) {
+      scheduleConversationSectionReset(previousValue);
+    }
+    clearConversationSectionResetTimer(nextValue);
     if (!previousValue || nextValue === previousValue) return;
     conversationTabTransitionName.value = conversationTabOrder(nextValue) > conversationTabOrder(previousValue)
       ? "conversation-tab-slide-left"
@@ -464,6 +492,12 @@ watch(
 
 onMounted(() => {
   void loadConversationSectionOrders();
+});
+
+onBeforeUnmount(() => {
+  clearConversationSectionResetTimer("local");
+  clearConversationSectionResetTimer("contact");
+  clearConversationSectionResetTimer("task");
 });
 
 async function loadConversationSectionOrders() {
@@ -585,6 +619,85 @@ function conversationSectionDragIndicator(section: ConversationSection): "before
   if (dragOverConversationSectionKey.value !== section.key) return null;
   if (!draggingConversationSectionKey.value) return null;
   return dragOverConversationSectionPlacement.value;
+}
+
+function conversationLastUsedMs(item: ChatConversationOverviewItem): number {
+  const raw = String(item.lastMessageAt || item.updatedAt || "").trim();
+  if (!raw) return 0;
+  const timestamp = Date.parse(raw);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function defaultVisibleConversationCount(section: ConversationSection): number {
+  const items = Array.isArray(section.items) ? section.items : [];
+  if (items.length <= CONVERSATION_SECTION_MIN_VISIBLE) return items.length;
+  if (normalizedConversationSearchQuery.value) return items.length;
+  if (section.key === "pinned" || section.key === RECENT_CONVERSATION_SECTION_KEY) return items.length;
+  const thresholdMs = Date.now() - CONVERSATION_SECTION_UNUSED_DAYS * 24 * 60 * 60 * 1000;
+  const recentCount = items.reduce((count, item) => (
+    conversationLastUsedMs(item) >= thresholdMs ? count + 1 : count
+  ), 0);
+  const activeConversationId = String(props.activeConversationId || "").trim();
+  const activeIndex = activeConversationId
+    ? items.findIndex((item) => String(item.conversationId || "").trim() === activeConversationId)
+    : -1;
+  return Math.min(
+    items.length,
+    Math.max(CONVERSATION_SECTION_MIN_VISIBLE, recentCount, activeIndex >= 0 ? activeIndex + 1 : 0),
+  );
+}
+
+function buildDisplayedConversationSection(section: ConversationSection): DisplayConversationSection {
+  const items = Array.isArray(section.items) ? section.items : [];
+  const baseVisibleCount = defaultVisibleConversationCount(section);
+  const extraVisibleCount = Math.max(0, Number(conversationSectionLoadMoreCounts.value[section.key] || 0));
+  const visibleCount = Math.min(items.length, baseVisibleCount + extraVisibleCount);
+  return {
+    ...section,
+    visibleItems: items.slice(0, visibleCount),
+    hiddenItemCount: Math.max(0, items.length - visibleCount),
+    totalItemCount: items.length,
+  };
+}
+
+function loadMoreConversationsInSection(sectionKey: string) {
+  const key = String(sectionKey || "").trim();
+  if (!key) return;
+  conversationSectionLoadMoreCounts.value = {
+    ...conversationSectionLoadMoreCounts.value,
+    [key]: Math.max(0, Number(conversationSectionLoadMoreCounts.value[key] || 0)) + CONVERSATION_SECTION_LOAD_MORE_STEP,
+  };
+  scheduleConversationListScrollbarUpdate();
+}
+
+function sectionTabFromKey(sectionKey: string): ConversationSidebarTab {
+  return sectionKey.startsWith("channel:") ? "contact" : "local";
+}
+
+function clearConversationSectionResetTimer(tab: ConversationSidebarTab) {
+  const timer = conversationSectionResetTimers.get(tab);
+  if (!timer) return;
+  clearTimeout(timer);
+  conversationSectionResetTimers.delete(tab);
+}
+
+function resetConversationSectionLoadMore(tab: ConversationSidebarTab) {
+  if (tab === "task") return;
+  conversationSectionLoadMoreCounts.value = Object.fromEntries(
+    Object.entries(conversationSectionLoadMoreCounts.value)
+      .filter(([key, value]) => sectionTabFromKey(key) !== tab || !(Number(value) > 0)),
+  );
+  scheduleConversationListScrollbarUpdate();
+}
+
+function scheduleConversationSectionReset(tab: ConversationSidebarTab) {
+  if (tab === "task") return;
+  clearConversationSectionResetTimer(tab);
+  conversationSectionResetTimers.set(tab, setTimeout(() => {
+    conversationSectionResetTimers.delete(tab);
+    if (activeConversationTab.value === tab) return;
+    resetConversationSectionLoadMore(tab);
+  }, CONVERSATION_SECTION_RESET_DELAY_MS));
 }
 
 watch(showSearch, async (visible) => {
