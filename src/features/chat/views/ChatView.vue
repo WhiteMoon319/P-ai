@@ -1460,6 +1460,9 @@ function handleConversationListSelect(payload: { conversationId: string; kind?: 
   if (!id || id === String(props.activeConversationId || "").trim()) return;
   const target = (props.conversationItems || props.unarchivedConversationItems).find((item) => String(item.conversationId || "").trim() === id);
   emit("switchConversation", { conversationId: id, kind: payload?.kind || target?.kind, remoteContactId: String(payload?.remoteContactId || target?.remoteContactId || "").trim() || undefined });
+  if (leftPaneOverlay.value) {
+    emit("sideConversationListVisibleChange", false);
+  }
 }
 function handleConversationRename(payload: { conversationId: string; title: string }) {
   const id = String(payload?.conversationId || "").trim();
