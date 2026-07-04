@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-04T10:46:24.078Z",
-  "latestVersion": "v0.18.1",
+  "generatedAt": "2026-07-04T11:41:37.000Z",
+  "latestVersion": "v0.18.2",
   "releases": [
+    {
+      "version": "v0.18.2",
+      "path": "docs/changelog/releases/v0.18.2.md",
+      "summary": "聊天消息区新增“上一条/下一条用户消息”跳转按钮，并将回到底部入口调整为独立底部图标，长对话内移动更直接。"
+    },
     {
       "version": "v0.18.1",
       "path": "docs/changelog/releases/v0.18.1.md",
