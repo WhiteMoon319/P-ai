@@ -31,6 +31,10 @@ const UPDATER_GITHUB_PORTABLE_MANIFEST_ORIGIN: &str =
     "https://github.com/kawayiYokami/P-ai/releases/latest/download/latest-portable.json";
 const PORTABLE_UPDATE_EVENT_NAME: &str = "easy-call:update-status";
 const PORTABLE_HELPER_FLAG: &str = "--portable-update-helper";
+const PORTABLE_HELPER_FILE_PREFIX: &str = "portable-helper-";
+const PORTABLE_PLAN_FILE_PREFIX: &str = "portable-plan-";
+const PORTABLE_ZIP_FILE_PREFIX: &str = "p-ai-portable-";
+const PORTABLE_STAGING_DIR_PREFIX: &str = "staging-";
 const PORTABLE_UPDATE_TARGET_SUFFIX: &str = "-portable";
 const UPDATE_STAGE_CHECKING: &str = "checking";
 const UPDATE_STAGE_DOWNLOADING: &str = "downloading";
@@ -704,6 +708,46 @@ fn ensure_update_temp_dirs(runtime: &UpdateRuntimePaths) -> Result<StdPathBuf, S
     Ok(root)
 }
 
+fn should_cleanup_portable_temp_entry(path: &StdPath) -> bool {
+    let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+        return false;
+    };
+    if path.is_dir() {
+        return name.starts_with(PORTABLE_STAGING_DIR_PREFIX);
+    }
+    (name.starts_with(PORTABLE_HELPER_FILE_PREFIX) && name.ends_with(".exe"))
+        || (name.starts_with(PORTABLE_PLAN_FILE_PREFIX) && name.ends_with(".json"))
+        || (name.starts_with(PORTABLE_ZIP_FILE_PREFIX) && name.ends_with(".zip"))
+}
+
+fn cleanup_portable_update_temp_artifacts(temp_root: &StdPath) {
+    let Ok(entries) = std_fs::read_dir(temp_root) else {
+        return;
+    };
+    for entry in entries.filter_map(|entry| entry.ok()) {
+        let path = entry.path();
+        if !should_cleanup_portable_temp_entry(&path) {
+            continue;
+        }
+        if let Err(err) = remove_if_exists(&path) {
+            eprintln!(
+                "[自动更新] 清理便携版更新临时文件失败: path={}，error={}",
+                path.display(),
+                err
+            );
+        }
+    }
+}
+
+fn cleanup_portable_update_temp_artifacts_for_current_runtime() -> Result<(), String> {
+    let runtime = detect_update_runtime_paths()?;
+    if runtime.runtime_kind != UpdateRuntimeKind::Portable {
+        return Ok(());
+    }
+    cleanup_portable_update_temp_artifacts(&updater_temp_root(&runtime));
+    Ok(())
+}
+
 fn write_portable_plan(plan_path: &StdPath, plan: &PortableUpdatePlan) -> Result<(), String> {
     let json = serde_json::to_vec_pretty(plan)
         .map_err(|err| format!("序列化便携版更新计划失败：{err}"))?;
@@ -1127,6 +1171,7 @@ async fn prepare_portable_update(
     let verify_progress_current_version = current_version.clone();
     let verify_progress_target_version = target_version.clone();
     let temp_root = ensure_update_temp_dirs(&runtime)?;
+    cleanup_portable_update_temp_artifacts(&temp_root);
     let zip_path = temp_root.join(format!("p-ai-portable-{}.zip", target_version));
     let staging_dir = temp_root.join(format!("staging-{}", target_version));
     let helper_copy_path = temp_root.join(format!("portable-helper-{}.exe", Uuid::new_v4()));
@@ -1616,7 +1661,10 @@ fn run_portable_update_helper(plan_path: &str) -> Result<(), String> {
     thread::sleep(StdDuration::from_millis(1800));
     let result = replace_from_staging(&plan);
     match &result {
-        Ok(_) => append_helper_log(&log_path, "[自动更新] helper 执行完成"),
+        Ok(_) => {
+            let _ = remove_if_exists(&plan_path);
+            append_helper_log(&log_path, "[自动更新] helper 执行完成");
+        }
         Err(err) => append_helper_log(&log_path, &format!("[自动更新] helper 执行失败：{err}")),
     }
     result

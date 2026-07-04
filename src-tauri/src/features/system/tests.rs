@@ -249,6 +249,32 @@
     }
 
     #[test]
+    fn cleanup_portable_update_temp_artifacts_should_keep_backups_and_log() {
+        let temp_root = std::env::temp_dir().join(format!("easy-call-ai-updater-{}", Uuid::new_v4()));
+        let backups_dir = temp_root.join("backups");
+        let staging_dir = temp_root.join("staging-0.9.9");
+        std::fs::create_dir_all(&backups_dir).expect("create backups dir");
+        std::fs::create_dir_all(&staging_dir).expect("create staging dir");
+        std::fs::write(temp_root.join("p-ai-portable-0.9.9.zip"), b"zip").expect("write zip");
+        std::fs::write(temp_root.join("portable-helper-test.exe"), b"helper").expect("write helper");
+        std::fs::write(temp_root.join("portable-plan-test.json"), b"{}").expect("write plan");
+        std::fs::write(temp_root.join("portable-update.log"), b"log").expect("write log");
+        std::fs::write(temp_root.join("other-file.tmp"), b"tmp").expect("write other file");
+
+        cleanup_portable_update_temp_artifacts(&temp_root);
+
+        assert!(backups_dir.exists());
+        assert!(temp_root.join("portable-update.log").exists());
+        assert!(temp_root.join("other-file.tmp").exists());
+        assert!(!staging_dir.exists());
+        assert!(!temp_root.join("p-ai-portable-0.9.9.zip").exists());
+        assert!(!temp_root.join("portable-helper-test.exe").exists());
+        assert!(!temp_root.join("portable-plan-test.json").exists());
+
+        let _ = std::fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
     fn conversation_todo_replace_should_store_next_step_and_clear_when_done() {
         let state = test_chat_runtime_state();
         let conversation_id = "conversation-todo-a".to_string();

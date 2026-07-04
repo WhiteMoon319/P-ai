@@ -842,6 +842,9 @@ fn main() {
             return;
         }
     };
+    if let Err(err) = cleanup_portable_update_temp_artifacts_for_current_runtime() {
+        eprintln!("[自动更新] 清理便携版更新临时文件失败: {err}");
+    }
     init_last_panic_snapshot_slot(state.last_panic_snapshot.clone());
     {
         let panic_slot = state.last_panic_snapshot.clone();
