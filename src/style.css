@@ -388,6 +388,26 @@ body {
   min-height: 0;
 }
 
+@media (min-width: 768px) {
+  .config-drawer-shell.drawer {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .config-drawer-shell.drawer > .drawer-side {
+    position: relative;
+    inset: auto;
+    width: 11rem;
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+  }
+
+  .config-drawer-shell.drawer > .drawer-side > .drawer-overlay {
+    display: none;
+  }
+}
+
 :where(
   .input,
   .textarea,

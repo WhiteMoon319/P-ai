@@ -1,6 +1,6 @@
 <template>
-  <div class="h-full min-h-0">
-  <div class="drawer md:drawer-open h-full min-h-0">
+  <div class="h-full min-h-0 overflow-hidden">
+  <div class="config-drawer-shell drawer md:drawer-open h-full min-h-0 overflow-hidden">
     <input
       id="config-drawer-toggle"
       v-model="configDrawerOpen"
@@ -244,7 +244,7 @@
     <div class="drawer-side z-40 min-h-0 overflow-hidden">
       <label for="config-drawer-toggle" aria-label="关闭设置导航" class="drawer-overlay"></label>
       <aside
-        class="relative flex h-full min-h-0 w-44 flex-col border-r border-base-300 bg-base-200 p-2"
+        class="relative flex h-full min-h-0 w-44 flex-col border-r border-base-300 bg-base-200 px-2"
         @mouseenter="navScrollbarRef?.reveal()"
         @mouseleave="navScrollbarRef?.hide()"
       >
