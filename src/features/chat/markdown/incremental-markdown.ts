@@ -8,8 +8,19 @@ function isCodeFenceLine(line: string): boolean {
   return /^(`{3,})([\w+-]*)\s*$/.test(line);
 }
 
-function isMathFenceLine(line: string): boolean {
-  return line.trim() === "$$";
+function isStandaloneMathLine(line: string): boolean {
+  const trimmed = line.trim();
+  return trimmed.startsWith("$$") && trimmed.length > 4 && trimmed.endsWith("$$");
+}
+
+function isMathFenceStartLine(line: string): boolean {
+  const trimmed = line.trim();
+  return trimmed === "$$" || trimmed.startsWith("$$");
+}
+
+function isMathFenceEndLine(line: string): boolean {
+  const trimmed = line.trim();
+  return trimmed === "$$" || (trimmed.endsWith("$$") && !trimmed.startsWith("$$"));
 }
 
 function isHeadingLine(line: string): boolean {
@@ -39,7 +50,7 @@ function isNewBlockStart(line: string): boolean {
   return isHeadingLine(line)
     || isHorizontalRuleLine(line)
     || isCodeFenceLine(line)
-    || isMathFenceLine(line)
+    || isMathFenceStartLine(line)
     || isBlockquoteLine(line)
     || isListItemLine(line);
 }
@@ -246,7 +257,7 @@ export class IncrementalMarkdownBlockParser {
       }
 
       if (inMathFence) {
-        if (isMathFenceLine(line)) {
+        if (isMathFenceEndLine(line)) {
           inMathFence = false;
           if (index < lastLine) stableLine = index;
         }
@@ -259,7 +270,12 @@ export class IncrementalMarkdownBlockParser {
         continue;
       }
 
-      if (isMathFenceLine(line)) {
+      if (isStandaloneMathLine(line)) {
+        if (index < lastLine) stableLine = index;
+        continue;
+      }
+
+      if (isMathFenceStartLine(line)) {
         if (index > this.pendingStartLine && index < lastLine) stableLine = index - 1;
         inMathFence = true;
         continue;

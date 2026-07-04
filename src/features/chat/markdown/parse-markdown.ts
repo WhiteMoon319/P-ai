@@ -9,7 +9,7 @@ export type MarkdownBlock =
   | { type: "list"; ordered: boolean; items: string[]; key: string }
   | { type: "table"; headers: string[]; rows: string[][]; key: string }
   | { type: "code"; lang: string; text: string; key: string }
-  | { type: "math"; text: string; key: string }
+  | { type: "math"; text: string; raw: string; key: string }
   | { type: "details"; summary: string; body: string; open: boolean; key: string }
   | { type: "footnotes"; items: { id: string; text: string }[]; key: string }
   | { type: "hr"; key: string };
@@ -20,7 +20,7 @@ export type InlineSegment =
   | { type: "toolcall_ref"; id: string; label: string }
   | { type: "footnote_ref"; id: string }
   | { type: "code"; text: string }
-  | { type: "math"; text: string }
+  | { type: "math"; text: string; raw: string; display: boolean }
   | { type: "link"; text: string; href: string }
   | { type: "image"; alt: string; src: string }
   | { type: "imageLink"; alt: string; src: string; href: string }
@@ -126,6 +126,54 @@ function tryParseDetailsBlock(lines: string[], startIndex: number, streaming: bo
   };
 }
 
+function isEscapedAt(text: string, index: number): boolean {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && text[cursor] === "\\"; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
+}
+
+function findUnescapedDelimiter(text: string, delimiter: "$" | "$$", from: number): number {
+  let cursor = Math.max(0, from);
+  while (cursor < text.length) {
+    const index = text.indexOf(delimiter, cursor);
+    if (index < 0) return -1;
+    if (!isEscapedAt(text, index)) return index;
+    cursor = index + delimiter.length;
+  }
+  return -1;
+}
+
+function normalizeMathText(value: string): string {
+  return String(value || "").trim();
+}
+
+function mathBlock(raw: string, text: string, key: string): MarkdownBlock {
+  return {
+    type: "math",
+    text: normalizeMathText(text),
+    raw: String(raw || "").trim(),
+    key,
+  };
+}
+
+function parseDisplayMathBlockStart(line: string): { closed: boolean; text: string; raw: string } | null {
+  const trimmed = String(line || "").trim();
+  if (!trimmed.startsWith("$$")) return null;
+  const closeIndex = findUnescapedDelimiter(trimmed, "$$", 2);
+  if (closeIndex >= 0 && !trimmed.slice(closeIndex + 2).trim()) {
+    const text = trimmed.slice(2, closeIndex);
+    if (!normalizeMathText(text)) return null;
+    return { closed: true, text, raw: trimmed };
+  }
+  return {
+    closed: false,
+    text: String(line || "").slice(String(line || "").indexOf("$$") + 2),
+    raw: String(line || ""),
+  };
+}
+
 export function parseMarkdownBlocks(input: string, streaming = false): MarkdownBlock[] {
   const normalized = String(input || "").replace(/\r\n?/g, "\n");
   const lines = normalized.split("\n");
@@ -139,6 +187,7 @@ export function parseMarkdownBlocks(input: string, streaming = false): MarkdownB
   let codeLines: string[] = [];
   let inMathBlock = false;
   let mathLines: string[] = [];
+  let mathRawLines: string[] = [];
   let activeList: { ordered: boolean; items: string[] } | null = null;
 
   const recordFootnoteRefs = (text: string) => {
@@ -173,26 +222,32 @@ export function parseMarkdownBlocks(input: string, streaming = false): MarkdownB
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex];
 
-    // Math block: $$ on its own line
-    if (!inCode && line.trim() === "$$") {
-      if (inMathBlock) {
-        result.push({
-          type: "math",
-          text: mathLines.join("\n"),
-          key: `math-${result.length}`,
-        });
+    if (inMathBlock) {
+      mathRawLines.push(line);
+      const closeIndex = findUnescapedDelimiter(line, "$$", 0);
+      if (closeIndex >= 0 && !line.slice(closeIndex + 2).trim()) {
+        const beforeClose = line.slice(0, closeIndex);
+        if (beforeClose || mathLines.length > 0) mathLines.push(beforeClose);
+        result.push(mathBlock(mathRawLines.join("\n"), mathLines.join("\n"), `math-${result.length}`));
         inMathBlock = false;
         mathLines = [];
-      } else {
-        flushParagraph();
-        inMathBlock = true;
-        mathLines = [];
+        mathRawLines = [];
+        continue;
       }
+      mathLines.push(line);
       continue;
     }
 
-    if (inMathBlock) {
-      mathLines.push(line);
+    const mathStart = !inCode ? parseDisplayMathBlockStart(line) : null;
+    if (mathStart) {
+      flushParagraph();
+      if (mathStart.closed) {
+        result.push(mathBlock(mathStart.raw, mathStart.text, `math-${result.length}`));
+      } else {
+        inMathBlock = true;
+        mathLines = mathStart.text ? [mathStart.text] : [];
+        mathRawLines = [mathStart.raw];
+      }
       continue;
     }
 
@@ -357,11 +412,7 @@ export function parseMarkdownBlocks(input: string, streaming = false): MarkdownB
   }
   if (inMathBlock) {
     if (!streaming) {
-      result.push({
-        type: "math",
-        text: mathLines.join("\n"),
-        key: `math-${result.length}`,
-      });
+      result.push(mathBlock(mathRawLines.join("\n"), mathLines.join("\n"), `math-${result.length}`));
     }
   }
   flushParagraph();
@@ -514,7 +565,7 @@ type InlineSyntaxMatch =
   | { kind: "html_br"; start: number; end: number; raw: string }
   | { kind: "html_tag"; start: number; end: number; raw: string; tag: "sub" | "sup" | "kbd" | "mark"; inner: string }
   | { kind: "code"; start: number; end: number; raw: string; text: string }
-  | { kind: "math"; start: number; end: number; raw: string; text: string }
+  | { kind: "math"; start: number; end: number; raw: string; text: string; display: boolean }
   | { kind: "emphasis"; start: number; end: number; inner: string; emphasisType: EmphasisMarkerType }
   | LinkMatch;
 
@@ -532,21 +583,12 @@ function isIndexInProtectedRange(index: number, ranges: ProtectedInlineRange[]):
 
 function collectProtectedInlineRanges(text: string): ProtectedInlineRange[] {
   const ranges: ProtectedInlineRange[] = [];
-  const inlinePattern = /`([^`]+)`|\$([^$\n]+)\$/g;
-  let match: RegExpExecArray | null;
-  while ((match = inlinePattern.exec(text))) {
-    if (match[1] !== undefined) {
-      ranges.push({ start: match.index, end: match.index + match[0].length });
-      continue;
-    }
-
-    if (match[2] !== undefined) {
-      const before = match.index > 0 ? text[match.index - 1] : "";
-      const after = match.index + match[0].length < text.length ? text[match.index + match[0].length] : "";
-      if (before !== "$" && after !== "$") {
-        ranges.push({ start: match.index, end: match.index + match[0].length });
-      }
-    }
+  let cursor = 0;
+  while (cursor < text.length) {
+    const match = nextCodeOrMath(text, cursor);
+    if (!match) break;
+    ranges.push({ start: match.start, end: match.end });
+    cursor = Math.max(match.end, match.start + 1);
   }
   return ranges;
 }
@@ -599,38 +641,65 @@ function findNextInlineMarker(
   return best;
 }
 
-function nextCodeOrMath(input: string, from: number): InlineSyntaxMatch | null {
-  const inlinePattern = /`([^`]+)`|\$([^$\n]+)\$/g;
-  inlinePattern.lastIndex = from;
-  let match: RegExpExecArray | null;
-  while ((match = inlinePattern.exec(input))) {
-    if (match[1] !== undefined) {
-      return {
-        kind: "code",
-        start: match.index,
-        end: match.index + match[0].length,
-        raw: match[0],
-        text: match[1],
-      };
-    }
+function nextInlineCode(input: string, from: number): InlineSyntaxMatch | null {
+  const codePattern = /`([^`]+)`/g;
+  codePattern.lastIndex = from;
+  const match = codePattern.exec(input);
+  if (!match) return null;
+  return {
+    kind: "code",
+    start: match.index,
+    end: match.index + match[0].length,
+    raw: match[0],
+    text: match[1],
+  };
+}
 
-    if (match[2] !== undefined) {
-      const before = match.index > 0 ? input[match.index - 1] : "";
-      const after = match.index + match[0].length < input.length ? input[match.index + match[0].length] : "";
-      if (before === "$" || after === "$") {
-        inlinePattern.lastIndex = match.index + 1;
-        continue;
-      }
-      return {
-        kind: "math",
-        start: match.index,
-        end: match.index + match[0].length,
-        raw: match[0],
-        text: match[2],
-      };
+function inlineMathLooksIntentional(text: string): boolean {
+  const content = normalizeMathText(text);
+  if (!content) return false;
+  if (/\\[A-Za-z]+/.test(content)) return true;
+  if (/[=^_{}<>+\-*/]|\\/.test(content)) return true;
+  if (/^[A-Za-z0-9\s.,]+$/.test(content) && !/[A-Za-z]/.test(content)) return true;
+  return content.length <= 80 && /[A-Za-z]\d|\d[A-Za-z]|[A-Za-z]\s*[=^_]/.test(content);
+}
+
+function nextInlineMath(input: string, from: number): InlineSyntaxMatch | null {
+  let cursor = Math.max(0, from);
+  while (cursor < input.length) {
+    const start = findUnescapedDelimiter(input, "$", cursor);
+    if (start < 0) return null;
+    if (input[start + 1] === "$" || input[start - 1] === "$") {
+      cursor = start + 1;
+      continue;
     }
+    const contentStart = start + 1;
+    const end = findUnescapedDelimiter(input, "$", contentStart);
+    if (end < 0) return null;
+    if (input[end + 1] === "$") {
+      cursor = start + 1;
+      continue;
+    }
+    const raw = input.slice(start, end + 1);
+    const text = input.slice(contentStart, end);
+    if (!inlineMathLooksIntentional(text)) {
+      cursor = start + 1;
+      continue;
+    }
+    return {
+      kind: "math",
+      start,
+      end: end + 1,
+      raw,
+      text,
+      display: false,
+    };
   }
   return null;
+}
+
+function nextCodeOrMath(input: string, from: number): InlineSyntaxMatch | null {
+  return pickEarlierInline(nextInlineCode(input, from), nextInlineMath(input, from));
 }
 
 function nextAllowedHtml(input: string, from: number): InlineSyntaxMatch | null {
@@ -715,7 +784,7 @@ function emitInlineSyntaxMatch(match: InlineSyntaxMatch, segments: InlineSegment
     return;
   }
   if (match.kind === "math") {
-    segments.push({ type: "math", text: match.text });
+    segments.push({ type: "math", text: normalizeMathText(match.text), raw: match.raw, display: match.display });
     return;
   }
   if (match.kind === "emphasis") {

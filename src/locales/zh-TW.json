@@ -1266,6 +1266,8 @@
     "voice": "語音{index}",
     "jumpToBottom": "回到底部",
     "jumpToPreviousUserMessage": "跳到上一則使用者訊息",
+    "copyMath": "複製公式",
+    "copyMathDone": "公式已複製",
     "image": "圖片{index}",
     "contextUsageTitle": "目前上下文已使用 {percent}%",
     "recording": "錄音中 {seconds}s",
