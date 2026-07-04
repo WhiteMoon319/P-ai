@@ -1112,6 +1112,7 @@ fn onebot_format_mention_quote(qq: &str, display_name: Option<&str>) -> String {
     onebot_format_segment_quote("提及", vec![("对象".to_string(), target)])
 }
 
+#[cfg(test)]
 fn onebot_resolve_reply_sender_display_name(payload: &Value) -> Option<String> {
     if let Some(name) = onebot_read_reply_sender_name(payload) {
         return Some(name);

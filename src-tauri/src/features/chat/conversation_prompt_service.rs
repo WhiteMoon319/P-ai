@@ -406,28 +406,6 @@ impl ConversationPromptService {
         *guard = Some(next);
     }
 
-    fn add_estimated_prompt_tokens_to_usage(
-        &self,
-        usage: PromptUsageResolution,
-        additional_tokens: u64,
-        selected_api: &ApiConfig,
-        source: &'static str,
-    ) -> PromptUsageResolution {
-        if additional_tokens == 0 {
-            return usage;
-        }
-        let effective_prompt_tokens = usage
-            .effective_prompt_tokens
-            .saturating_add(additional_tokens);
-        PromptUsageResolution {
-            effective_prompt_tokens,
-            usage_ratio: effective_prompt_tokens as f64
-                / f64::from(selected_api.context_window_tokens.max(1)),
-            estimated_prompt_tokens: Some(effective_prompt_tokens),
-            source,
-        }
-    }
-
     fn latest_real_prompt_usage(
         &self,
         conversation: &Conversation,

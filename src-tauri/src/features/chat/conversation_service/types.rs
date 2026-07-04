@@ -172,7 +172,6 @@ struct ListUnarchivedConversationsMutationResult {
 }
 
 struct InstantArchiveConversationMutationResult {
-    archived_conversation: Conversation,
     active_conversation_id: String,
     overview_payload: UnarchivedConversationOverviewUpdatedPayload,
     already_archived: bool,

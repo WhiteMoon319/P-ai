@@ -3318,9 +3318,7 @@ impl ConversationServiceV2 {
             conversation_id
         };
 
-        let archived_conversation = if already_archived {
-            source_conversation
-        } else {
+        if !already_archived {
             let previous_status = source_conversation.status.clone();
             let now = now_iso();
             let (conversation, (), _) = state_update_conversation_metadata_cached(
@@ -3342,8 +3340,7 @@ impl ConversationServiceV2 {
                 archive_reason,
                 conversation.archived_at.as_deref().unwrap_or("")
             ));
-            conversation
-        };
+        }
         let app_config = runtime_snapshot.config;
         let unarchived_conversations =
             self.collect_unarchived_conversation_summaries_cached(state, &app_config)?;
@@ -3353,7 +3350,6 @@ impl ConversationServiceV2 {
         };
         drop(guard);
         Ok(InstantArchiveConversationMutationResult {
-            archived_conversation,
             active_conversation_id,
             overview_payload,
             already_archived,
