@@ -89,10 +89,10 @@
       @load-prev-block="loadPrevBlock"
       @update:conversation-preferred-api-config-id="selectConversationPreferredModel"
       @update-workspace-access="selectWorkspaceAccess"
-      @side-conversation-list-visible-change="sideConversationListVisible = $event"
-      @tool-review-panel-open-change="toolReviewPanelOpenVisible = $event"
-      @side-panel-widths-change="chatSidePanelWidths = $event"
-      @side-panel-widths-commit="chatSidePanelWidths = $event"
+      @side-conversation-list-visible-change="handleSideConversationListVisibleChange"
+      @tool-review-panel-open-change="handleToolReviewPanelOpenChange"
+      @side-panel-widths-change="handleChatSidePanelWidthsChange"
+      @side-panel-widths-commit="handleChatSidePanelWidthsCommit"
       @update-conversation-list-tab="updateConversationListTab"
       @update-chat-left-panel-mode="updateChatLeftPanelMode"
       @update-chat-right-panel-mode="updateChatRightPanelMode"
@@ -282,6 +282,23 @@ import type { ChatWorkspaceChoice } from "../chat/composables/use-chat-workspace
 import type { ToolReviewCodeReviewScope, ToolReviewCommitOption, ToolReviewReportRecord } from "../chat/composables/use-chat-tool-review";
 import type { TerminalApprovalConversationItem, TerminalApprovalRequestPayload } from "../shell/composables/use-terminal-approval";
 import { readLastActiveConversationId, writeLastActiveConversationId } from "../chat/utils/last-active-conversation";
+import {
+  loadStoredChatLeftPanelMode,
+  loadStoredChatRightPanelMode,
+  loadStoredChatSidePanelVisibility,
+  loadStoredChatSidePanelWidths,
+  loadStoredConversationListTab,
+  normalizeChatLeftPanelMode,
+  normalizeChatRightPanelMode,
+  normalizeChatSidePanelWidths,
+  storeChatLeftPanelMode,
+  storeChatRightPanelMode,
+  storeChatSidePanelVisibility,
+  storeChatSidePanelWidths,
+  storeConversationListTab,
+  type ChatLeftPanelMode,
+  type ChatRightPanelMode,
+} from "../chat/composables/chat-ui-layout-storage";
 
 type ConversationSummary = {
   conversationId: string;
@@ -462,12 +479,9 @@ type IdeContextQueryResult = {
 
 const SYSTEM_NOTIFICATION_CONVERSATION_ID = "system-notification-conversation";
 const SYSTEM_NOTIFICATION_DISPLAY_TITLE = "P-ai系统";
-const CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY = "easy_call.chat_conversation_list_tab.v1";
-const CHAT_LEFT_PANEL_MODE_STORAGE_KEY = "easy_call.chat_left_panel_mode.v1";
-const LEGACY_CHAT_LEFT_PANEL_MODE_STORAGE_KEY = "easy-call.chat.left-panel-mode";
 const SIDEBAR_DRAFT_USER_ID_PREFIX = "__draft_user__:";
 
-type SidebarConversationTab = "local" | "contact" | "task";
+type SidebarConversationTab = ChatLeftPanelMode;
 
 const transport = useWsTransport();
 const { t } = useI18n();
@@ -571,13 +585,13 @@ const workspaceDirectoryError = ref("");
 const terminalApprovalQueue = ref<TerminalApprovalRequestPayload[]>([]);
 const terminalApprovalResolving = ref(false);
 const hideWorkspaceButton = computed(() => false);
-const sideConversationListVisible = ref(false);
-const toolReviewPanelOpenVisible = ref(false);
+const sideConversationListVisible = ref(loadStoredChatSidePanelVisibility("left"));
+const toolReviewPanelOpenVisible = ref(loadStoredChatSidePanelVisibility("right"));
 const conversationListTab = ref<SidebarConversationTab>(loadStoredConversationListTab());
 const chatLeftPanelMode = ref<SidebarConversationTab>(loadStoredChatLeftPanelMode());
-const chatRightPanelMode = ref<"reader" | "review" | "delegate">("review");
+const chatRightPanelMode = ref<ChatRightPanelMode>(loadStoredChatRightPanelMode("review"));
 const chatReaderDirectoryOpenRequest = ref(0);
-const chatSidePanelWidths = ref({ leftWidth: 320, rightWidth: 320 });
+const chatSidePanelWidths = ref(loadStoredChatSidePanelWidths());
 let discoveryRefreshTimer: number | null = null;
 
 const activeSummary = computed(() => conversations.value.find((item) => item.conversationId === activeConversationId.value));
@@ -753,45 +767,43 @@ watch(
   { immediate: true },
 );
 
-function normalizeSidebarConversationTab(value: string): SidebarConversationTab {
-  if (value === "contact" || value === "task") return value;
-  return "local";
-}
-
-function loadStoredConversationListTab(): SidebarConversationTab {
-  if (typeof window === "undefined") return "local";
-  const stored = String(window.localStorage.getItem(CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY) || "").trim();
-  return normalizeSidebarConversationTab(stored);
-}
-
-function loadStoredChatLeftPanelMode(): SidebarConversationTab {
-  if (typeof window === "undefined") return loadStoredConversationListTab();
-  const stored = String(
-    window.localStorage.getItem(CHAT_LEFT_PANEL_MODE_STORAGE_KEY)
-    || window.localStorage.getItem(LEGACY_CHAT_LEFT_PANEL_MODE_STORAGE_KEY)
-    || "",
-  ).trim();
-  return stored ? normalizeSidebarConversationTab(stored) : loadStoredConversationListTab();
-}
-
 function updateConversationListTab(value: SidebarConversationTab) {
-  const next = normalizeSidebarConversationTab(value);
+  const next = normalizeChatLeftPanelMode(value);
   conversationListTab.value = next;
   chatLeftPanelMode.value = next;
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY, next);
-    window.localStorage.setItem(CHAT_LEFT_PANEL_MODE_STORAGE_KEY, next);
-  }
+  storeConversationListTab(next);
+  storeChatLeftPanelMode(next);
 }
 
 function updateChatLeftPanelMode(value: SidebarConversationTab) {
   updateConversationListTab(value);
 }
 
-function updateChatRightPanelMode(value: "reader" | "review" | "delegate") {
-  chatRightPanelMode.value = value;
+function updateChatRightPanelMode(value: ChatRightPanelMode) {
+  const next = normalizeChatRightPanelMode(value, "review");
+  chatRightPanelMode.value = next;
+  storeChatRightPanelMode(next);
   view.value = "chat";
-  toolReviewPanelOpenVisible.value = true;
+  handleToolReviewPanelOpenChange(true);
+}
+
+function handleSideConversationListVisibleChange(value: boolean) {
+  sideConversationListVisible.value = value;
+  storeChatSidePanelVisibility("left", value);
+}
+
+function handleToolReviewPanelOpenChange(value: boolean) {
+  toolReviewPanelOpenVisible.value = value;
+  storeChatSidePanelVisibility("right", value);
+}
+
+function handleChatSidePanelWidthsChange(value: { leftWidth: number; rightWidth: number }) {
+  chatSidePanelWidths.value = normalizeChatSidePanelWidths(value);
+}
+
+function handleChatSidePanelWidthsCommit(value: { leftWidth: number; rightWidth: number }) {
+  handleChatSidePanelWidthsChange(value);
+  storeChatSidePanelWidths(chatSidePanelWidths.value);
 }
 
 function requestChatReaderDirectoryOpenIfEmpty() {
@@ -1632,12 +1644,12 @@ function toggleReviewPanel() {
 
 function toggleSideConversationList() {
   view.value = "chat";
-  sideConversationListVisible.value = !sideConversationListVisible.value;
+  handleSideConversationListVisibleChange(!sideConversationListVisible.value);
 }
 
 function toggleToolReviewPanel() {
   view.value = "chat";
-  toolReviewPanelOpenVisible.value = !toolReviewPanelOpenVisible.value;
+  handleToolReviewPanelOpenChange(!toolReviewPanelOpenVisible.value);
 }
 
 function handleDirectoryPickRestricted() {

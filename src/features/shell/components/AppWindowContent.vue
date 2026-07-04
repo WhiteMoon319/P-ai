@@ -681,7 +681,7 @@ const props = defineProps<{
   updatePlanModeEnabled: (value: boolean) => void;
   setSideConversationListVisible: (value: boolean) => void;
   setToolReviewPanelOpen: (value: boolean) => void;
-  setChatSidePanelWidths: (value: { leftWidth: number; rightWidth: number }, options?: { syncWindow?: boolean }) => void;
+  setChatSidePanelWidths: (value: { leftWidth: number; rightWidth: number }, options?: { syncWindow?: boolean; commit?: boolean }) => void;
   updateConversationListTab: (value: "local" | "contact" | "task") => void;
   updateChatLeftPanelMode: (value: "local" | "contact" | "task") => void;
   updateChatRightPanelMode: (value: "reader" | "review" | "delegate") => void;
@@ -754,7 +754,7 @@ const promptPreviewDialogVNodeRef: VNodeRef = (el) => {
 const chatViewRef = ref<{ exitMessageSelectionMode: () => void } | null>(null);
 
 function commitChatSidePanelWidths(value: { leftWidth: number; rightWidth: number }) {
-  props.setChatSidePanelWidths(value);
+  props.setChatSidePanelWidths(value, { commit: true });
 }
 
 function handleDetachConversation() {

@@ -3,77 +3,23 @@ import type { ConfigSearchTab, ConfigSearchResult } from "../../config/search/co
 import type { ChatMentionTarget } from "../../../types/app";
 import type { ConversationPipelineStatus } from "../../shell/composables/use-pipeline-status";
 import type { searchConfigTabs } from "../../config/search/config-search";
-
-const CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY = "easy_call.chat_conversation_list_tab.v1";
-const CHAT_LEFT_PANEL_MODE_STORAGE_KEY = "easy_call.chat_left_panel_mode.v1";
-const CHAT_RIGHT_PANEL_MODE_STORAGE_KEY = "easy_call.chat_right_panel_mode.v1";
-const LEGACY_CHAT_LEFT_PANEL_MODE_STORAGE_KEY = "easy-call.chat.left-panel-mode";
-const LEGACY_CHAT_RIGHT_PANEL_MODE_STORAGE_KEY = "easy-call.chat.right-panel-mode";
-const CHAT_SIDE_PANEL_VISIBILITY_STORAGE_KEYS = {
-  left: "easy_call.chat_left_sidebar_visible.v1",
-  right: "easy_call.chat_right_sidebar_visible.v1",
-} as const;
-const LEGACY_CHAT_SIDE_PANEL_VISIBILITY_STORAGE_KEYS = {
-  left: "easy-call.chat.left-sidebar-visible",
-  right: "easy-call.chat.right-sidebar-visible",
-} as const;
-const CHAT_SIDE_PANEL_WIDTH_STORAGE_KEYS = {
-  left: "easy_call.chat_left_sidebar_width.v1",
-  right: "easy_call.chat_right_sidebar_width.v1",
-} as const;
-const LEGACY_CHAT_SIDE_PANEL_WIDTH_STORAGE_KEYS = {
-  left: "easy-call.chat.left-sidebar-width",
-  right: "easy-call.chat.right-sidebar-width",
-} as const;
-
-type ChatLeftPanelMode = "local" | "contact" | "task";
-
-function normalizeChatLeftPanelMode(value: string): ChatLeftPanelMode {
-  if (value === "contact" || value === "task") return value;
-  return "local";
-}
-
-function loadStoredConversationListTab(): ChatLeftPanelMode {
-  if (typeof window === "undefined") return "local";
-  const stored = String(window.localStorage.getItem(CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY) || "").trim();
-  return normalizeChatLeftPanelMode(stored);
-}
-
-function loadStoredChatLeftPanelMode(): ChatLeftPanelMode {
-  if (typeof window === "undefined") return loadStoredConversationListTab();
-  const stored = String(window.localStorage.getItem(CHAT_LEFT_PANEL_MODE_STORAGE_KEY) || window.localStorage.getItem(LEGACY_CHAT_LEFT_PANEL_MODE_STORAGE_KEY) || "").trim();
-  return stored ? normalizeChatLeftPanelMode(stored) : loadStoredConversationListTab();
-}
-
-function loadStoredChatRightPanelMode(): "reader" | "review" | "delegate" {
-  if (typeof window === "undefined") return "delegate";
-  const stored = String(window.localStorage.getItem(CHAT_RIGHT_PANEL_MODE_STORAGE_KEY) || window.localStorage.getItem(LEGACY_CHAT_RIGHT_PANEL_MODE_STORAGE_KEY) || "").trim();
-  return stored === "reader" || stored === "delegate" ? stored : "delegate";
-}
-
-function loadStoredChatSidePanelVisibility(side: "left" | "right"): boolean {
-  if (typeof window === "undefined") return false;
-  const stored = window.localStorage.getItem(CHAT_SIDE_PANEL_VISIBILITY_STORAGE_KEYS[side])
-    ?? window.localStorage.getItem(LEGACY_CHAT_SIDE_PANEL_VISIBILITY_STORAGE_KEYS[side]);
-  return stored === "true";
-}
-
-function storeChatSidePanelVisibility(side: "left" | "right", visible: boolean) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(CHAT_SIDE_PANEL_VISIBILITY_STORAGE_KEYS[side], visible ? "true" : "false");
-}
-
-function loadStoredChatSidePanelWidths(): { leftWidth: number; rightWidth: number } {
-  if (typeof window === "undefined") {
-    return { leftWidth: 320, rightWidth: 320 };
-  }
-  const leftWidth = Number(window.localStorage.getItem(CHAT_SIDE_PANEL_WIDTH_STORAGE_KEYS.left) ?? window.localStorage.getItem(LEGACY_CHAT_SIDE_PANEL_WIDTH_STORAGE_KEYS.left));
-  const rightWidth = Number(window.localStorage.getItem(CHAT_SIDE_PANEL_WIDTH_STORAGE_KEYS.right) ?? window.localStorage.getItem(LEGACY_CHAT_SIDE_PANEL_WIDTH_STORAGE_KEYS.right));
-  return {
-    leftWidth: Number.isFinite(leftWidth) ? leftWidth : 320,
-    rightWidth: Number.isFinite(rightWidth) ? rightWidth : 320,
-  };
-}
+import {
+  loadStoredChatLeftPanelMode,
+  loadStoredChatRightPanelMode,
+  loadStoredChatSidePanelVisibility,
+  loadStoredChatSidePanelWidths,
+  loadStoredConversationListTab,
+  normalizeChatLeftPanelMode,
+  normalizeChatRightPanelMode,
+  normalizeChatSidePanelWidths,
+  storeChatLeftPanelMode,
+  storeChatRightPanelMode,
+  storeChatSidePanelVisibility,
+  storeChatSidePanelWidths,
+  storeConversationListTab,
+  type ChatLeftPanelMode,
+  type ChatRightPanelMode,
+} from "./chat-ui-layout-storage";
 
 export type ChatUiStateBindings = {
   viewMode: Ref<"chat" | "archives" | "config">;
@@ -93,7 +39,7 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
 
   const conversationListTab = ref<ChatLeftPanelMode>(loadStoredConversationListTab());
   const chatLeftPanelMode = ref<ChatLeftPanelMode>(loadStoredChatLeftPanelMode());
-  const chatRightPanelMode = ref<"reader" | "review" | "delegate">(loadStoredChatRightPanelMode());
+  const chatRightPanelMode = ref<ChatRightPanelMode>(loadStoredChatRightPanelMode("delegate"));
   const chatReaderDirectoryOpenRequest = ref(0);
   const sideConversationListVisible = ref(loadStoredChatSidePanelVisibility("left"));
   const toolReviewPanelOpenVisible = ref(loadStoredChatSidePanelVisibility("right"));
@@ -220,31 +166,26 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
   function updateConversationListTab(value: ChatLeftPanelMode) {
     conversationListTab.value = normalizeChatLeftPanelMode(value);
     chatLeftPanelMode.value = conversationListTab.value;
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY, conversationListTab.value);
-    window.localStorage.setItem(CHAT_LEFT_PANEL_MODE_STORAGE_KEY, chatLeftPanelMode.value);
+    storeConversationListTab(conversationListTab.value);
+    storeChatLeftPanelMode(chatLeftPanelMode.value);
   }
 
   function updateChatLeftPanelMode(value: ChatLeftPanelMode) {
     const nextMode = normalizeChatLeftPanelMode(value);
     chatLeftPanelMode.value = nextMode;
     conversationListTab.value = nextMode;
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(CHAT_LEFT_PANEL_MODE_STORAGE_KEY, nextMode);
-      window.localStorage.setItem(CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY, nextMode);
-    }
+    storeChatLeftPanelMode(nextMode);
+    storeConversationListTab(nextMode);
     if (!sideConversationListVisible.value && bindings.viewMode.value === "chat" && !bindings.detachedChatWindow.value) {
       sideConversationListVisible.value = true;
       storeChatSidePanelVisibility("left", true);
     }
   }
 
-  function updateChatRightPanelMode(value: "reader" | "review" | "delegate") {
-    const nextMode = value === "reader" || value === "delegate" ? value : "review";
+  function updateChatRightPanelMode(value: ChatRightPanelMode) {
+    const nextMode = normalizeChatRightPanelMode(value, "delegate");
     chatRightPanelMode.value = nextMode;
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(CHAT_RIGHT_PANEL_MODE_STORAGE_KEY, nextMode);
-    }
+    storeChatRightPanelMode(nextMode);
     if (!toolReviewPanelOpenVisible.value && bindings.viewMode.value === "chat") {
       toolReviewPanelOpenVisible.value = true;
       storeChatSidePanelVisibility("right", true);
@@ -255,13 +196,11 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     chatReaderDirectoryOpenRequest.value += 1;
   }
 
-  function handleChatSidePanelWidthsChange(value: { leftWidth: number; rightWidth: number }) {
-    const leftWidth = Number(value.leftWidth);
-    const rightWidth = Number(value.rightWidth);
-    chatSidePanelWidths.value = {
-      leftWidth: Number.isFinite(leftWidth) ? leftWidth : 320,
-      rightWidth: Number.isFinite(rightWidth) ? rightWidth : 320,
-    };
+  function handleChatSidePanelWidthsChange(value: { leftWidth: number; rightWidth: number }, options?: { commit?: boolean; syncWindow?: boolean }) {
+    chatSidePanelWidths.value = normalizeChatSidePanelWidths(value);
+    if (options?.commit) {
+      storeChatSidePanelWidths(chatSidePanelWidths.value);
+    }
   }
 
   async function toggleSideConversationList() {
