@@ -45,7 +45,7 @@
             class="ecall-chat-scroll-container relative flex flex-1 min-h-0 flex-col overflow-x-hidden overflow-y-auto px-0 py-3"
             :class="chatting || frozen || conversationInteractionBusy ? 'pointer-events-auto' : ''"
             :data-chat-interaction-locked="chatting || frozen || conversationInteractionBusy ? 'true' : undefined"
-            @scroll="onConversationScroll"
+            @scroll="handleConversationScroll"
             @wheel="handleConversationWheel"
           >
           <ConversationTodoDropdown :todos="normalizedConversationTodos" :persona-name="personaName" />
@@ -195,6 +195,11 @@
         <div v-show="showJumpToBottom" class="pointer-events-none absolute bottom-3 right-5 z-30 flex justify-end" :style="jumpToBottomStyle">
           <button class="btn btn-sm btn-circle btn-primary pointer-events-auto shadow-lg" :title="t('chat.jumpToBottom')" @click="handleJumpToBottom">
             <ChevronsDown class="h-4 w-4" />
+          </button>
+        </div>
+        <div v-show="showJumpToPreviousUserMessage" class="pointer-events-none absolute bottom-3 right-5 z-30 flex justify-end" :style="jumpToBottomStyle">
+          <button class="btn btn-sm btn-circle btn-primary pointer-events-auto shadow-lg" :title="t('chat.jumpToPreviousUserMessage')" @click="handleJumpToPreviousUserMessage">
+            <ChevronsUp class="h-4 w-4" />
           </button>
         </div>
 
@@ -480,7 +485,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch, type ComponentPublicInstance, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { isDarkAppTheme } from "../../shell/composables/use-app-theme";
-import { Check, ChevronsDown, History, Trash2, X } from "@lucide/vue";
+import { Check, ChevronsDown, ChevronsUp, History, Trash2, X } from "@lucide/vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ChatMessageBlock, ChatPersonaPresenceChip, ChatTodoItem, ConversationDelegateStatusSummary, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption, ShellWorkspace } from "../../../types/app";
 import ChatMessageItem from "../components/ChatMessageItem.vue";
@@ -1020,7 +1025,7 @@ defineExpose({ exitMessageSelectionMode: handleExitMessageSelectionMode });
 
 const {
   scrollContainer, composerContainer, toolbarContainer, chatLayoutRoot,
-  latestOwnElasticMinHeight, showJumpToBottom, jumpToBottomStyle, onScroll,
+  latestOwnElasticMinHeight, showJumpToBottom, userScrollingUp, jumpToBottomStyle, onScroll,
   prepareBottomAlignmentLayout,
 } = useChatScrollLayout({
   activeConversationId: toRef(props, "activeConversationId"),
@@ -1052,6 +1057,42 @@ const latestOwnTailSpacerMinHeight = computed(() => {
   if (!latestOwnElasticItemId.value || latestOwnTailContentHeight.value <= 0) return 0;
   return Math.max(0, latestOwnElasticMinHeight.value - latestOwnTailContentHeight.value);
 });
+
+// ==================== previous user message jump ====================
+
+const scrollNavigationTick = ref(0);
+
+function isPreviousUserMessageJumpItem(item: ChatRenderItem | undefined): boolean {
+  if (!item || item.kind !== "message") return false;
+  const block = item.block;
+  if (!block || block.isExtraTextBlock || block.remoteImOrigin) return false;
+  const speakerAgentId = String(block.speakerAgentId || "").trim();
+  return block.role === "user" || speakerAgentId === "user-persona";
+}
+
+const previousUserMessageJumpTarget = computed(() => {
+  scrollNavigationTick.value;
+  const scrollEl = scrollContainer.value;
+  if (!scrollEl || virtualRenderItems.value.length <= 0) return null;
+  const rows = virtualizer.value.getVirtualItems();
+  const viewportTop = scrollEl.scrollTop;
+  let firstVisibleIndex = virtualRenderItems.value.length;
+  for (const row of rows) {
+    if (row.end > viewportTop + 2) {
+      firstVisibleIndex = row.index;
+      break;
+    }
+  }
+  for (let index = Math.min(firstVisibleIndex - 1, virtualRenderItems.value.length - 1); index >= 0; index -= 1) {
+    const item = virtualRenderItems.value[index];
+    if (isPreviousUserMessageJumpItem(item)) return { index, item };
+  }
+  return null;
+});
+
+const showJumpToPreviousUserMessage = computed(() =>
+  userScrollingUp.value && !!previousUserMessageJumpTarget.value,
+);
 
 // ==================== tool review ====================
 
@@ -1141,7 +1182,10 @@ function closeOverlayPanes() {
 // ==================== scroll orchestration ====================
 
 const {
-  onConversationScroll, onConversationWheel, handleJumpToBottom,
+  onConversationScroll: handleConversationScrollBase,
+  onConversationWheel,
+  handleJumpToBottom,
+  armProgrammaticScrollPaginationSuppression,
 } = useChatScrollOrchestration({
   scrollContainer, chatScrollbarRef: chatScrollbarRef as Ref<{ updateThumb: () => void; hide?: () => void } | null>,
   prepareBottomAlignmentLayout,
@@ -1159,6 +1203,23 @@ const {
   },
   emit: { loadOlderHistory: () => emit("loadOlderHistory"), jumpToConversationBottom: () => emit("jumpToConversationBottom") },
 });
+
+function handleConversationScroll() {
+  handleConversationScrollBase();
+  scrollNavigationTick.value += 1;
+}
+
+function handleJumpToPreviousUserMessage() {
+  const target = previousUserMessageJumpTarget.value;
+  if (!target) return;
+  armProgrammaticScrollPaginationSuppression();
+  scheduleVirtualMeasure();
+  virtualizer.value.scrollToIndex(target.index, { align: "start", behavior: "smooth" });
+  void nextTick(() => {
+    chatScrollbarRef.value?.updateThumb();
+    scrollNavigationTick.value += 1;
+  });
+}
 
 // ==================== image preview ====================
 

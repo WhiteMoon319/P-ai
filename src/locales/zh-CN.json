@@ -1273,6 +1273,7 @@
     },
     "voice": "语音{index}",
     "jumpToBottom": "回到底部",
+    "jumpToPreviousUserMessage": "跳到上一条用户消息",
     "image": "图片{index}",
     "contextUsageTitle": "当前上下文已使用 {percent}%",
     "recording": "录音中 {seconds}s",

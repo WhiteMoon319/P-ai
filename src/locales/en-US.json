@@ -1350,6 +1350,7 @@
     },
     "voice": "Voice {index}",
     "jumpToBottom": "Jump to bottom",
+    "jumpToPreviousUserMessage": "Jump to previous user message",
     "image": "Image {index}",
     "contextUsageTitle": "Current context used: {percent}%",
     "recording": "Recording {seconds}s",
