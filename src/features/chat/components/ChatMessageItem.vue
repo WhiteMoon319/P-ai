@@ -208,12 +208,12 @@
           v-else-if="forcePlainMarkdownRender"
           @click="emit('assistantLinkClick', $event)"
         >
-          <SidebarLightMarkdown :text="formatThinkAsMarkdown(block.text)" />
+          <SidebarLightMarkdown :text="assistantRenderedText" />
         </div>
         <div v-else ref="markdownContainerRef">
           <AppMarkdownRenderer
             class="ecall-markdown-content max-w-none"
-            :text="formatThinkAsMarkdown(block.text)"
+            :text="assistantRenderedText"
             :is-dark="markdownIsDark"
             :streaming="!!block.isStreaming"
             :local-image-base-path="currentWorkspaceRootPath"
@@ -660,6 +660,7 @@ const planMarkdownText = ref("");
 const planMarkdownError = ref("");
 const planMarkdownLoading = ref(false);
 const forcePlainMarkdownRender = computed(() => !!props.disableMarkdownRender || debugPlainMarkdownRender);
+const assistantRenderedText = computed(() => formatAssistantStreamingText(props.block));
 let disposed = false;
 
 const contextMenuOpen = ref(false);
@@ -1915,6 +1916,130 @@ function formatThinkAsMarkdown(raw: string): string {
   }
 
   return output.trim();
+}
+
+function formatAssistantStreamingText(block: ChatMessageBlock): string {
+  const rendered = formatThinkAsMarkdown(String(block.text || ""));
+  if (!block.isStreaming || isOwnMessage(block)) return rendered;
+  return hideIncompleteInlineMath(hideIncompleteDisplayMath(rendered));
+}
+
+function hideIncompleteDisplayMath(text: string): string {
+  if (!text.includes("$$")) return text;
+
+  const lines = text.split("\n");
+  let inCodeFence = false;
+  let offset = 0;
+  let openMathStart = -1;
+
+  for (const line of lines) {
+    if (/^\s*```/.test(line)) {
+      inCodeFence = !inCodeFence;
+      offset += line.length + 1;
+      continue;
+    }
+    if (!inCodeFence) {
+      let searchFrom = 0;
+      while (searchFrom < line.length) {
+        const delimiterIndex = findUnescapedDoubleDollar(line, searchFrom);
+        if (delimiterIndex < 0) break;
+        const absoluteIndex = offset + delimiterIndex;
+        openMathStart = openMathStart >= 0 ? -1 : absoluteIndex;
+        searchFrom = delimiterIndex + 2;
+      }
+    }
+    offset += line.length + 1;
+  }
+
+  if (openMathStart < 0) return text;
+  return text.slice(0, openMathStart);
+}
+
+function hideIncompleteInlineMath(text: string): string {
+  if (!text.includes("$")) return text;
+
+  const lines = text.split("\n");
+  let offset = 0;
+
+  for (const line of lines) {
+    if (/^\s*```/.test(line)) {
+      offset += line.length + 1;
+      continue;
+    }
+    let openMathStartInLine = -1;
+    let searchFrom = 0;
+    while (searchFrom < line.length) {
+      const delimiterIndex = findUnescapedSingleDollar(line, searchFrom);
+      if (delimiterIndex < 0) break;
+      if (openMathStartInLine < 0) {
+        openMathStartInLine = delimiterIndex;
+      } else {
+        const content = line.slice(openMathStartInLine + 1, delimiterIndex);
+        if (inlineMathLooksIntentional(content)) {
+          openMathStartInLine = -1;
+        } else {
+          openMathStartInLine = delimiterIndex;
+        }
+      }
+      searchFrom = delimiterIndex + 1;
+    }
+    if (openMathStartInLine >= 0) {
+      const pendingContent = line.slice(openMathStartInLine + 1);
+      if (inlineMathLooksIntentional(pendingContent)) {
+        return text.slice(0, offset + openMathStartInLine);
+      }
+    }
+    offset += line.length + 1;
+  }
+  
+  return text;
+}
+
+function findUnescapedDoubleDollar(text: string, from: number): number {
+  let cursor = Math.max(0, from);
+  while (cursor < text.length) {
+    const index = text.indexOf("$$", cursor);
+    if (index < 0) return -1;
+    let backslashCount = 0;
+    for (let i = index - 1; i >= 0 && text[i] === "\\"; i -= 1) {
+      backslashCount += 1;
+    }
+    if (backslashCount % 2 === 0) return index;
+    cursor = index + 2;
+  }
+  return -1;
+}
+
+function findUnescapedSingleDollar(text: string, from: number): number {
+  let cursor = Math.max(0, from);
+  while (cursor < text.length) {
+    const index = text.indexOf("$", cursor);
+    if (index < 0) return -1;
+    if (text[index - 1] === "$" || text[index + 1] === "$") {
+      cursor = index + 1;
+      continue;
+    }
+    let backslashCount = 0;
+    for (let i = index - 1; i >= 0 && text[i] === "\\"; i -= 1) {
+      backslashCount += 1;
+    }
+    if (backslashCount % 2 === 0) return index;
+    cursor = index + 1;
+  }
+  return -1;
+}
+
+function normalizeMathText(text: string): string {
+  return String(text || "").replace(/\s+/g, " ").trim();
+}
+
+function inlineMathLooksIntentional(text: string): boolean {
+  const content = normalizeMathText(text);
+  if (!content) return false;
+  if (/\\[A-Za-z]+/.test(content)) return true;
+  if (/[=^_{}<>+\-*/]|\\/.test(content)) return true;
+  if (/^[A-Za-z0-9\s.,]+$/.test(content) && !/[A-Za-z]/.test(content)) return true;
+  return content.length <= 80 && /[A-Za-z]\d|\d[A-Za-z]|[A-Za-z]\s*[=^_]/.test(content);
 }
 
 function normalizeRenderedLocalLinks() {
