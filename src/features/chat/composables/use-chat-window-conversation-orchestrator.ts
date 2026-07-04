@@ -218,15 +218,8 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
   async function restoreForegroundConversationProjection(conversationId: string, reason: string) {
     const cid = String(conversationId || "").trim();
     if (!cid) return;
-    try {
-      const snapshot = await chatForeground.requestConversationLightSnapshot(cid);
-      if (cid !== String(bindings.currentChatConversationId.value || "").trim()) return;
-      applyConversationSnapshot(snapshot, {
-        preserveExistingHistory: true,
-      });
-      void reason;
-    } finally {
-    }
+    void reason;
+    await chatForeground.switchUnarchivedConversation(cid);
   }
 
   async function deleteUnarchivedConversationFromArchives(conversationId: string) {
