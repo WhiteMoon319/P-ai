@@ -655,13 +655,10 @@ function nextInlineCode(input: string, from: number): InlineSyntaxMatch | null {
   };
 }
 
-function inlineMathLooksIntentional(text: string): boolean {
+function inlineMathCanRender(text: string): boolean {
   const content = normalizeMathText(text);
   if (!content) return false;
-  if (/\\[A-Za-z]+/.test(content)) return true;
-  if (/[=^_{}<>+\-*/]|\\/.test(content)) return true;
-  if (/^[A-Za-z0-9\s.,]+$/.test(content) && !/[A-Za-z]/.test(content)) return true;
-  return content.length <= 80 && /[A-Za-z]\d|\d[A-Za-z]|[A-Za-z]\s*[=^_]/.test(content);
+  return !/[\r\n]/.test(content);
 }
 
 function nextInlineMath(input: string, from: number): InlineSyntaxMatch | null {
@@ -682,7 +679,7 @@ function nextInlineMath(input: string, from: number): InlineSyntaxMatch | null {
     }
     const raw = input.slice(start, end + 1);
     const text = input.slice(contentStart, end);
-    if (!inlineMathLooksIntentional(text)) {
+    if (!inlineMathCanRender(text)) {
       cursor = start + 1;
       continue;
     }

@@ -2009,7 +2009,7 @@ function hideIncompleteInlineMath(text: string): string {
         openMathStartInLine = delimiterIndex;
       } else {
         const content = line.slice(openMathStartInLine + 1, delimiterIndex);
-        if (inlineMathLooksIntentional(content)) {
+        if (inlineMathCanRender(content)) {
           openMathStartInLine = -1;
         } else {
           openMathStartInLine = delimiterIndex;
@@ -2019,7 +2019,7 @@ function hideIncompleteInlineMath(text: string): string {
     }
     if (openMathStartInLine >= 0) {
       const pendingContent = line.slice(openMathStartInLine + 1);
-      if (inlineMathLooksIntentional(pendingContent)) {
+      if (inlineMathCanRender(pendingContent)) {
         return text.slice(0, offset + openMathStartInLine);
       }
     }
@@ -2067,13 +2067,10 @@ function normalizeMathText(text: string): string {
   return String(text || "").replace(/\s+/g, " ").trim();
 }
 
-function inlineMathLooksIntentional(text: string): boolean {
+function inlineMathCanRender(text: string): boolean {
   const content = normalizeMathText(text);
   if (!content) return false;
-  if (/\\[A-Za-z]+/.test(content)) return true;
-  if (/[=^_{}<>+\-*/]|\\/.test(content)) return true;
-  if (/^[A-Za-z0-9\s.,]+$/.test(content) && !/[A-Za-z]/.test(content)) return true;
-  return content.length <= 80 && /[A-Za-z]\d|\d[A-Za-z]|[A-Za-z]\s*[=^_]/.test(content);
+  return !/[\r\n]/.test(content);
 }
 
 function normalizeRenderedLocalLinks() {

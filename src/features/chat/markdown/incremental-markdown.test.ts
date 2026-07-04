@@ -70,6 +70,29 @@ describe("parseInlineSegments", () => {
     ]);
   });
 
+  it("parses simple same-line dollar math without heuristic filtering", () => {
+    const segments = parseInlineSegments("求 $x$ 固定，$z$ 跟着 $y$ 变，直接输出$dx,dy$");
+
+    expect(segments).toEqual<InlineSegment[]>([
+      { type: "text", text: "求 " },
+      { type: "math", text: "x", raw: "$x$", display: false },
+      { type: "text", text: " 固定，" },
+      { type: "math", text: "z", raw: "$z$", display: false },
+      { type: "text", text: " 跟着 " },
+      { type: "math", text: "y", raw: "$y$", display: false },
+      { type: "text", text: " 变，直接输出" },
+      { type: "math", text: "dx,dy", raw: "$dx,dy$", display: false },
+    ]);
+  });
+
+  it("does not parse inline dollar math across line breaks", () => {
+    const segments = parseInlineSegments("跨行 $x\n+y$ 不按行内公式");
+
+    expect(segments).toEqual<InlineSegment[]>([
+      { type: "text", text: "跨行 $x\n+y$ 不按行内公式" },
+    ]);
+  });
+
   it("does not treat double dollar math as inline math inside paragraphs", () => {
     const segments = parseInlineSegments("不要把 $$E=mc^2$$ 当成行内公式");
 
