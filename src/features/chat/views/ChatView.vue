@@ -315,6 +315,8 @@
             :ide-context-groups="mergedVisibleIdeContextGroups" :attached-ide-context-references="attachedIdeContextReferences"
             :current-theme="currentTheme"
             :sidebar-mode="sidebarMode"
+            :bridge-request="bridgeRequest"
+            :bridge-subscribe="bridgeSubscribe"
             @update:chat-input="$emit('update:chatInput', $event)" @add-mention="$emit('addMention', $event)"
             @remove-mention="$emit('removeMention', $event)" @remove-clipboard-image="$emit('removeClipboardImage', $event)"
             @remove-queued-attachment-notice="$emit('removeQueuedAttachmentNotice', $event)"
@@ -584,6 +586,7 @@ const props = defineProps<{
   bridgeMode?: boolean;
   openLocalFilesInHost?: boolean;
   bridgeRequest?: <T = unknown>(method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<T>;
+  bridgeSubscribe?: (method: string, handler: (payload: unknown) => void) => () => void;
   systemNotificationMode?: boolean;
   hideWorkspaceButton?: boolean;
   workspaceAccess?: "read_only" | "approval" | "full_access" | "";

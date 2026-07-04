@@ -5211,6 +5211,62 @@ fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, Strin
     }))
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IdeChatQueueEventInput {
+    event_id: String,
+}
+
+fn ide_chat_queue_snapshot(state: &AppState) -> Result<Value, String> {
+    let snapshot = get_queue_snapshot(state)?;
+    serde_json::to_value(snapshot).map_err(|err| format!("serialize queue snapshot failed: {err}"))
+}
+
+fn ide_chat_session_state_snapshot(state: &AppState) -> Result<Value, String> {
+    let snapshot = get_main_session_state(state)?;
+    serde_json::to_value(snapshot).map_err(|err| format!("serialize session state failed: {err}"))
+}
+
+fn ide_chat_recall_queue_event(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatQueueEventInput>(params)?;
+    let event_id = input.event_id.trim();
+    if event_id.is_empty() {
+        return Err("eventId is required".to_string());
+    }
+    let removed = recall_queue_event(state, event_id)?;
+    let message_text = removed
+        .as_ref()
+        .and_then(|event| {
+            event.messages.first().and_then(|msg| {
+                msg.parts.iter().find_map(|part| match part {
+                    MessagePart::Text { text, .. } => Some(text.clone()),
+                    _ => None,
+                })
+            })
+        })
+        .unwrap_or_default();
+    serde_json::to_value(ChatQueueRecallResult {
+        removed: removed.is_some(),
+        message_text,
+    })
+    .map_err(|err| format!("serialize queue recall failed: {err}"))
+}
+
+fn ide_chat_mark_queue_event_guided(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatQueueEventInput>(params)?;
+    let event_id = input.event_id.trim();
+    if event_id.is_empty() {
+        return Err("eventId is required".to_string());
+    }
+    let conversation_id = mark_queue_event_guided(state, event_id)?;
+    if let Some(conversation_id) = conversation_id {
+        trigger_guided_queue_processing(state, &conversation_id);
+        return serde_json::to_value(true)
+            .map_err(|err| format!("serialize queue guided result failed: {err}"));
+    }
+    serde_json::to_value(false).map_err(|err| format!("serialize queue guided result failed: {err}"))
+}
+
 fn ide_chat_stop_conversation(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatStopInput>(params)?;
     let conversation_id = input.conversation_id.trim();
@@ -6015,6 +6071,10 @@ async fn ide_chat_handle_jsonrpc_request(
         "remote_im_weixin_oc_logout" => ide_chat_remote_im_weixin_oc_logout_for_web_settings(state, request.params).await,
         "chat.send" => ide_chat_send_message(state, request.params),
         "chat.stop" => ide_chat_stop_conversation(state, request.params),
+        "chat.queueSnapshot" => ide_chat_queue_snapshot(state),
+        "chat.sessionStateSnapshot" => ide_chat_session_state_snapshot(state),
+        "chat.queueRecall" => ide_chat_recall_queue_event(state, request.params),
+        "chat.queueMarkGuided" => ide_chat_mark_queue_event_guided(state, request.params),
         "toolReview.reports.list" => ide_chat_tool_review_reports(state, request.params),
         "toolReview.report.delete" => ide_chat_tool_review_delete_report(state, request.params),
         "toolReview.commitOptions.list" => ide_chat_tool_review_commit_options(state, request.params).await,

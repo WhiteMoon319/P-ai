@@ -73,6 +73,7 @@
       :ide-context-groups="vscodeIdeContextGroups"
       :read-plan-file-content="readPlanFileContent"
       :bridge-request="transport.request"
+      :bridge-subscribe="transport.onNotification"
       :side-conversation-list-visible="sideConversationListVisible"
       :tool-review-panel-open-visible="toolReviewPanelOpenVisible"
       :conversation-list-tab="conversationListTab"
@@ -509,6 +510,7 @@ const toolStatusText = ref("");
 const toolStatusState = ref<"running" | "done" | "failed" | "">("");
 const streamBlocks = ref<ReturnType<typeof normalizeAssistantStreamBlocks>>([]);
 const busy = ref(false);
+const sendSubmitting = ref(false);
 const compacting = ref(false);
 const chatViewWrapperRef = ref<{ exitMessageSelectionMode: () => void; chatUsagePercent?: number } | null>(null);
 const chatUsagePercent = computed(() => chatViewWrapperRef.value?.chatUsagePercent ?? 0);
@@ -2004,25 +2006,35 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
   const extraTextBlocks = (Array.isArray(payload?.extraTextBlocks) ? payload.extraTextBlocks : [])
     .map((item) => String(item || "").trim())
     .filter(Boolean);
-  if ((!text && images.length === 0 && extraTextBlocks.length === 0) || !activeConversationId.value || busy.value) return;
-  const optimisticDraftId = insertOptimisticOwnUserDraft({ text, images, extraTextBlocks });
+  if ((!text && images.length === 0 && extraTextBlocks.length === 0) || !activeConversationId.value || sendSubmitting.value) return;
+  const hadForegroundRound = busy.value;
+  const optimisticDraftId = hadForegroundRound ? "" : insertOptimisticOwnUserDraft({ text, images, extraTextBlocks });
   inputText.value = "";
   clipboardImages.value = [];
-  busy.value = true;
+  sendSubmitting.value = true;
+  if (!hadForegroundRound) busy.value = true;
   try {
-    await transport.request("chat.send", {
+    const result = await transport.request<{ queued?: boolean }>("chat.send", {
       conversationId: activeConversationId.value,
       text,
       images,
       extraTextBlocks,
     });
+    if (result?.queued) {
+      if (optimisticDraftId) removeOptimisticOwnUserDraftById(optimisticDraftId);
+      if (!hadForegroundRound) busy.value = false;
+    }
   } catch (error) {
-    busy.value = false;
-    clearStreamingState();
-    removeOptimisticOwnUserDraftById(optimisticDraftId);
+    if (!hadForegroundRound) {
+      busy.value = false;
+      clearStreamingState();
+    }
+    if (optimisticDraftId) removeOptimisticOwnUserDraftById(optimisticDraftId);
     if (!inputText.value.trim()) inputText.value = text;
     clipboardImages.value = [...images, ...clipboardImages.value];
     transport.errorText.value = String(error || t('sidebar.sendFailed'));
+  } finally {
+    sendSubmitting.value = false;
   }
 }
 

@@ -1,7 +1,7 @@
 <template>
   <div>
     <ChatQueuePreview
-      v-if="!sidebarMode && !systemNotificationMode && !remoteContactMode"
+      v-if="queueEnabled && !systemNotificationMode && !remoteContactMode"
       :queue-events="visibleQueueEvents"
       :session-state="sessionState"
       @recall-to-input="handleRecallToInput"
@@ -423,6 +423,8 @@ const props = defineProps<{
   attachedIdeContextReferences: IdeContextReferenceItem[];
   currentTheme?: string;
   sidebarMode?: boolean;
+  bridgeRequest?: <T = unknown>(method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<T>;
+  bridgeSubscribe?: (method: string, handler: (payload: unknown) => void) => () => void;
   trimTip?: string;
   chatUsagePercent?: number;
 }>();
@@ -460,6 +462,9 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const sidebarMode = computed(() => !!props.sidebarMode);
+const bridgeRequest = computed(() => props.bridgeRequest);
+const bridgeSubscribe = computed(() => props.bridgeSubscribe);
+const queueEnabled = computed(() => !sidebarMode.value || typeof bridgeRequest.value === "function");
 const systemNotificationMode = computed(() => !!props.systemNotificationMode);
 const remoteContactMode = computed(() => !!props.remoteContactMode);
 const teleportTheme = computed(() => {
@@ -512,7 +517,9 @@ onMounted(() => { document.addEventListener('pointerdown', onMenuOutsideClick); 
 onBeforeUnmount(() => { document.removeEventListener('pointerdown', onMenuOutsideClick); });
 
 const { queueEvents, sessionState, recallQueueEvent, markGuided } = useChatQueue({
-  enabled: computed(() => !sidebarMode.value),
+  enabled: queueEnabled,
+  request: bridgeRequest,
+  subscribe: bridgeSubscribe,
 });
 
 const visibleQueueEvents = computed(() => {

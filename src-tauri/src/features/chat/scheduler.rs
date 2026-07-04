@@ -363,7 +363,10 @@ pub(crate) fn emit_chat_queue_snapshot(state: &AppState) {
         Err(_) => None,
     };
     if let Some(app_handle) = app_handle {
-        let _ = app_handle.emit(CHAT_QUEUE_SNAPSHOT_EVENT, payload);
+        let _ = app_handle.emit(CHAT_QUEUE_SNAPSHOT_EVENT, &payload);
+    }
+    if let Ok(value) = serde_json::to_value(&payload) {
+        ide_chat_broadcast_notification("chat.queueSnapshotUpdated", value);
     }
 }
 

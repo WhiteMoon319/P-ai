@@ -75,6 +75,7 @@
     :bridge-mode="true"
     :open-local-files-in-host="isVsCodeHost"
     :bridge-request="bridgeRequest"
+    :bridge-subscribe="bridgeSubscribe"
     :system-notification-mode="systemNotificationMode"
     :hide-workspace-button="hideWorkspaceButton"
     :read-plan-file-content="readPlanFileContent"
@@ -216,6 +217,7 @@ const props = defineProps<{
   ideContextGroups: IdeContextWorkspaceGroup[];
   readPlanFileContent: (input: { conversationId: string; path: string }) => Promise<string>;
   bridgeRequest?: <T = unknown>(method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<T>;
+  bridgeSubscribe?: (method: string, handler: (payload: unknown) => void) => () => void;
   sideConversationListVisible: boolean;
   toolReviewPanelOpenVisible: boolean;
   conversationListTab: "local" | "contact" | "task";
