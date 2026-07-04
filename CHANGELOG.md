@@ -5,6 +5,7 @@
 
 ## 最近版本
 
+- [v0.18.1](docs/changelog/releases/v0.18.1.md) - 聊天消息区新增“上一条/下一条用户消息”跳转按钮，并将回到底部入口调整为独立底部图标，长对话内移动更直接。
 - [v0.18.0](docs/changelog/releases/v0.18.0.md) - 聊天消息区新增“跳到上一条用户消息”入口，便于长对话中快速回到上一轮用户输入。
 - [v0.17.0](docs/changelog/releases/v0.17.0.md) - 升级 genai 到 0.7.0-beta.9，并接入 ProviderConfig 模型列表刷新、adapter 绑定与 Responses response_id 元数据保存。
 - [v0.16.2](docs/changelog/releases/v0.16.2.md) - **强制切入被占用的会话**：当某个会话在其他窗口或客户端中打开时，尝试切换到该会话会弹出确认提示，确认后可强制接管。支持在独立窗口、VS Code 侧边栏和主窗口中互抢会话。
