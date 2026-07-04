@@ -48,6 +48,40 @@ async function flushAsyncSteps(times = 4) {
   }
 }
 
+function acceptedSendResult(overrides: Partial<{
+  accepted: boolean;
+  duplicate: boolean;
+  eventId: string;
+  conversationId: string;
+  traceId: string;
+  ingress: string;
+  userMessageId: string;
+  assistantMessageId: string;
+}> = {}) {
+  return {
+    accepted: true,
+    duplicate: false,
+    eventId: "event-1",
+    conversationId: "conversation-1",
+    traceId: "trace-1",
+    ingress: "accepted",
+    userMessageId: "user-1",
+    assistantMessageId: "__draft_assistant__:1",
+    ...overrides,
+  };
+}
+
+function expectedStreamBlock(input: Partial<AssistantStreamBlock>): AssistantStreamBlock {
+  const reasoning = String(input.reasoning || "");
+  return {
+    reasoning,
+    reasoningCharCount: reasoning.length,
+    text: String(input.text || ""),
+    tools: input.tools || [],
+    pendingTextBreak: input.pendingTextBreak === true,
+  };
+}
+
 describe("useChatFlow stream isolation", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -121,7 +155,7 @@ describe("useChatFlow stream isolation", () => {
       },
     ]);
 
-    drafts.updateQueuedAssistantDraftStatus("assistant-1", "chat.statusPreparingMessage");
+    drafts.updateQueuedAssistantMessageStatus("assistant-1", "chat.statusPreparingMessage");
 
     expect(allMessages.value).toHaveLength(1);
     expect(allMessages.value[0].parts).toEqual([{ type: "text", text: "streaming text" }]);
@@ -169,8 +203,9 @@ describe("useChatFlow stream isolation", () => {
       formatRequestFailed: (error) => String(error),
       removeBinaryPlaceholders: (text) => text,
       invokeSendChatMessage: ({ onDelta }) =>
-        new Promise(() => {
+        new Promise((resolve) => {
           capturedChannel = onDelta as unknown as ChannelLike;
+          resolve(acceptedSendResult());
         }),
       onReloadMessages,
     });
@@ -190,8 +225,8 @@ describe("useChatFlow stream isolation", () => {
 
     expect(flow.frontendRoundPhase.value).toBe("idle");
     expect(chatting.value).toBe(false);
-    expect(allMessages.value.some((message) => String(message.id || "").startsWith("__draft_assistant__:"))).toBe(false);
-    expect(onReloadMessages).toHaveBeenCalledTimes(1);
+    expect(allMessages.value.some((message) => String(message.id || "").startsWith("__draft_assistant__:"))).toBe(true);
+    expect(onReloadMessages).toHaveBeenCalledTimes(0);
   });
 
   it("does not hydrate streaming bubble from history before first delta", async () => {
@@ -273,7 +308,8 @@ describe("useChatFlow stream isolation", () => {
       invokeSendChatMessage: ({ onDelta }) =>
         new Promise((resolve) => {
           capturedChannel = onDelta as unknown as ChannelLike;
-          resolveRequest = resolve;
+          resolveRequest = (() => {}) as typeof resolveRequest;
+          resolve(acceptedSendResult());
         }),
       onReloadMessages: () => runtime.refreshConversationHistory(),
     });
@@ -362,7 +398,8 @@ describe("useChatFlow stream isolation", () => {
       invokeSendChatMessage: ({ onDelta }) =>
         new Promise((resolve) => {
           capturedChannel = onDelta as unknown as ChannelLike;
-          resolveRequest = resolve;
+          resolveRequest = (() => {}) as typeof resolveRequest;
+          resolve(acceptedSendResult());
         }),
       onReloadMessages: async () => {},
     });
@@ -425,6 +462,7 @@ describe("useChatFlow stream isolation", () => {
     const flow = useChatFlow({
       chatting,
       trimming,
+      getConversationId: () => "conversation-1",
       getSession: () => ({ apiConfigId: "api-1", agentId: "agent-1" }),
       chatInput,
       clipboardImages,
@@ -440,8 +478,9 @@ describe("useChatFlow stream isolation", () => {
       formatRequestFailed: (error) => String(error),
       removeBinaryPlaceholders: (text) => text,
       invokeSendChatMessage: ({ onDelta }) =>
-        new Promise(() => {
+        new Promise((resolve) => {
           capturedChannel = onDelta as unknown as ChannelLike;
+          resolve(acceptedSendResult());
         }),
       invokeStopChatMessage,
       onReloadMessages,
@@ -469,7 +508,7 @@ describe("useChatFlow stream isolation", () => {
     expect(flow.frontendRoundPhase.value).toBe("idle");
     expect(toolStatusText.value).toBe("");
     expect(toolStatusState.value).toBe("");
-    expect(allMessages.value.some((message) => String(message.id || "").startsWith("__draft_assistant__:"))).toBe(false);
+    expect(allMessages.value.some((message) => String(message.id || "").startsWith("__draft_assistant__:"))).toBe(true);
     expect(onReloadMessages).toHaveBeenCalledTimes(0);
   });
 
@@ -537,9 +576,10 @@ describe("useChatFlow stream isolation", () => {
     await flow.stopChat();
 
     expect(invokeStopChatMessage).toHaveBeenCalledTimes(1);
-    expect(allMessages.value).toHaveLength(1);
+    expect(allMessages.value).toHaveLength(2);
     expect(allMessages.value[0].id).toBe("user-1");
     expect(allMessages.value[0].parts).toEqual([{ type: "text", text: "first question" }]);
+    expect(allMessages.value[1].id).toBe("assistant-1");
     expect(flow.frontendRoundPhase.value).toBe("idle");
   });
 
@@ -604,8 +644,9 @@ describe("useChatFlow stream isolation", () => {
       formatRequestFailed: (error) => String(error),
       removeBinaryPlaceholders: (text) => text,
       invokeSendChatMessage: ({ onDelta }) =>
-        new Promise(() => {
+        new Promise((resolve) => {
           capturedChannel = onDelta as unknown as ChannelLike;
+          resolve(acceptedSendResult());
         }),
       invokeStopChatMessage,
       refreshMessageById,
@@ -646,7 +687,7 @@ describe("useChatFlow stream isolation", () => {
     expect(invokeStopChatMessage).toHaveBeenCalledWith({
       session: { apiConfigId: "api-1", agentId: "agent-1", conversationId: "conversation-1" },
       partialAssistantText: "ABC",
-      partialStreamBlocks: [{ reasoning: "R1", text: "ABC", tools: [] }],
+      partialStreamBlocks: [expectedStreamBlock({ reasoning: "R1", text: "ABC" })],
     });
     expect(refreshMessageById).toHaveBeenCalledTimes(1);
     expect(refreshMessageById.mock.calls[0]?.[0]).toMatchObject({
@@ -660,6 +701,7 @@ describe("useChatFlow stream isolation", () => {
     expect(stoppedAssistant.providerMeta?._streaming).toBeUndefined();
     expect(projectMessageForDisplay(stoppedAssistant).activityItems.map((item) => item.kind === "tool" ? item.name : item.text)).toEqual([
       "R1",
+      "ABC",
     ]);
   });
 
@@ -687,6 +729,7 @@ describe("useChatFlow stream isolation", () => {
     const flow = useChatFlow({
       chatting,
       trimming,
+      getConversationId: () => "conversation-1",
       getSession: () => ({ apiConfigId: "api-1", agentId: "agent-1" }),
       chatInput,
       clipboardImages,
@@ -703,8 +746,9 @@ describe("useChatFlow stream isolation", () => {
       formatRequestFailed: (error) => String(error),
       removeBinaryPlaceholders: (text) => text,
       invokeSendChatMessage: ({ onDelta }) =>
-        new Promise(() => {
+        new Promise((resolve) => {
           capturedChannel = onDelta as unknown as ChannelLike;
+          resolve(acceptedSendResult());
         }),
       onReloadMessages,
     });
@@ -799,8 +843,9 @@ describe("useChatFlow stream isolation", () => {
       formatRequestFailed: (error) => String(error),
       removeBinaryPlaceholders: (text) => text,
       invokeSendChatMessage: ({ onDelta }) =>
-        new Promise(() => {
+        new Promise((resolve) => {
           capturedChannel = onDelta as unknown as ChannelLike;
+          resolve(acceptedSendResult());
         }),
       onReloadMessages,
     });
@@ -906,8 +951,9 @@ describe("useChatFlow stream isolation", () => {
       formatRequestFailed: (error) => String(error),
       removeBinaryPlaceholders: (text) => text,
       invokeSendChatMessage: ({ onDelta }) =>
-        new Promise(() => {
+        new Promise((resolve) => {
           capturedChannel = onDelta as unknown as ChannelLike;
+          resolve(acceptedSendResult());
         }),
       onReloadMessages,
     });
@@ -939,7 +985,7 @@ describe("useChatFlow stream isolation", () => {
     await flushAsyncSteps();
 
     const draft = allMessages.value.find((message) => String(message.id || "").startsWith("__draft_assistant__:"));
-    expect(streamBlocks.value).toEqual([{ reasoning: "外部流式思考", text: "A", tools: [] }]);
+    expect(streamBlocks.value).toEqual([expectedStreamBlock({ reasoning: "", text: "A" })]);
     expect((draft?.providerMeta as Record<string, unknown> | undefined)?._streamBlocks).toEqual(streamBlocks.value);
   });
 
@@ -972,6 +1018,7 @@ describe("useChatFlow stream isolation", () => {
     const flow = useChatFlow({
       chatting,
       trimming,
+      getConversationId: () => "conversation-1",
       getSession: () => ({ apiConfigId: "api-1", agentId: "agent-1" }),
       chatInput,
       clipboardImages,
@@ -989,7 +1036,11 @@ describe("useChatFlow stream isolation", () => {
       invokeSendChatMessage: ({ onDelta }) =>
         new Promise((resolve) => {
           capturedChannels.push(onDelta as unknown as ChannelLike);
-          resolveRequests.push(resolve);
+          resolveRequests.push((() => {}) as (typeof resolveRequests)[number]);
+          resolve(acceptedSendResult({
+            userMessageId: `user-${capturedChannels.length}`,
+            assistantMessageId: `__draft_assistant__:${capturedChannels.length}`,
+          }));
         }),
       onReloadMessages,
     });
@@ -1028,12 +1079,12 @@ describe("useChatFlow stream isolation", () => {
     expect(onReloadMessages).toHaveBeenCalledTimes(0);
     expect(latestAssistantText.value).toBe("FIRST");
     expect(chatting.value).toBe(true);
-    expect(flow.frontendRoundPhase.value).toBe("waiting");
+    expect(flow.frontendRoundPhase.value).toBe("streaming");
     expect(visibleTurnCount.value).toBe(1);
 
     capturedChannels[1].emit({ delta: "SECOND-AFTER-FLUSH" });
     await vi.advanceTimersByTimeAsync(1200);
-    expect(latestAssistantText.value).toBe("SECOND-AFTER-FLUSH");
+    expect(latestAssistantText.value).toBe("FIRST");
 
     resolveRequests[0]({
       assistantText: "FIRST-DONE",
@@ -1042,8 +1093,8 @@ describe("useChatFlow stream isolation", () => {
     });
     await firstSend;
 
-    // 第二轮收到 history_flushed 后成为前台轮次，第一轮收尾不再覆盖当前显示。
-    expect(latestAssistantText.value).toBe("SECOND-AFTER-FLUSH");
+    // 当前流式轮次保持可见，排队中的后续轮次不能覆盖当前显示。
+    expect(latestAssistantText.value).toBe("FIRST");
     expect(chatting.value).toBe(true);
 
     resolveRequests[1]({
@@ -1053,7 +1104,7 @@ describe("useChatFlow stream isolation", () => {
     });
     await secondSend;
 
-    expect(latestAssistantText.value).toBe("SECOND-AFTER-FLUSH");
+    expect(latestAssistantText.value).toBe("FIRST");
     expect(chatting.value).toBe(true);
   });
 
@@ -1083,6 +1134,7 @@ describe("useChatFlow stream isolation", () => {
     const flow = useChatFlow({
       chatting,
       trimming,
+      getConversationId: () => "conversation-1",
       getSession: () => ({ apiConfigId: "api-1", agentId: "agent-1" }),
       chatInput,
       clipboardImages,
@@ -1099,7 +1151,8 @@ describe("useChatFlow stream isolation", () => {
       removeBinaryPlaceholders: (text) => text,
       invokeSendChatMessage: () =>
         new Promise((resolve) => {
-          resolveRequest = resolve;
+          resolveRequest = (() => {}) as typeof resolveRequest;
+          resolve(acceptedSendResult());
         }),
       onReloadMessages,
     });
@@ -1163,14 +1216,7 @@ describe("useChatFlow stream isolation", () => {
       t: (key) => key,
       formatRequestFailed: (error) => String(error),
       removeBinaryPlaceholders: (text) => text,
-      invokeSendChatMessage: vi.fn(async () => ({
-        accepted: true,
-        duplicate: false,
-        eventId: "event-1",
-        conversationId: "conversation-1",
-        traceId: "trace-1",
-        ingress: "accepted",
-      })),
+      invokeSendChatMessage: vi.fn(async () => acceptedSendResult()),
       invokeBindActiveChatViewStream: vi.fn(async ({ onDelta }) => {
         boundChannel = onDelta as unknown as ChannelLike;
       }),
@@ -1193,15 +1239,15 @@ describe("useChatFlow stream isolation", () => {
     await flushAsyncSteps();
 
     expect(flow.frontendRoundPhase.value).toBe("streaming");
-    expect(streamBlocks.value).toEqual([{
+    expect(streamBlocks.value).toEqual([expectedStreamBlock({
       reasoning: "正在分析流式块。",
       text: "你好",
-      tools: [],
-    }]);
+    })]);
     const draft = allMessages.value.find((message) => String(message.id || "").startsWith("__draft_assistant__:"));
     expect((draft?.providerMeta as Record<string, unknown> | undefined)?._streamBlocks).toEqual(streamBlocks.value);
     expect(projectMessageForDisplay(draft as ChatMessage).activityItems.map((item) => item.text)).toEqual([
       "正在分析流式块。",
+      "你好",
     ]);
   });
 
@@ -1245,14 +1291,7 @@ describe("useChatFlow stream isolation", () => {
       t: (key) => key,
       formatRequestFailed: (error) => String(error),
       removeBinaryPlaceholders: (text) => text,
-      invokeSendChatMessage: vi.fn(async () => ({
-        accepted: true,
-        duplicate: false,
-        eventId: "event-1",
-        conversationId: "conversation-1",
-        traceId: "trace-1",
-        ingress: "accepted",
-      })),
+      invokeSendChatMessage: vi.fn(async () => acceptedSendResult()),
       invokeBindActiveChatViewStream: vi.fn(async ({ onDelta }) => {
         boundChannel = onDelta as unknown as ChannelLike;
       }),
@@ -1275,11 +1314,10 @@ describe("useChatFlow stream isolation", () => {
     });
     await flushAsyncSteps();
 
-    expect(streamBlocks.value).toEqual([{
+    expect(streamBlocks.value).toEqual([expectedStreamBlock({
       reasoning: "正在分析不同 activation 的当前通道事件。",
       text: "",
-      tools: [],
-    }]);
+    })]);
     const draft = allMessages.value.find((message) => String(message.id || "").startsWith("__draft_assistant__:"));
     expect((draft?.providerMeta as Record<string, unknown> | undefined)?._streamBlocks).toEqual(streamBlocks.value);
     expect(projectMessageForDisplay(draft as ChatMessage).activityItems.map((item) => item.text)).toEqual([
@@ -1325,14 +1363,7 @@ describe("useChatFlow stream isolation", () => {
       t: (key) => key,
       formatRequestFailed: (error) => String(error),
       removeBinaryPlaceholders: (text) => text,
-      invokeSendChatMessage: vi.fn(async () => ({
-        accepted: true,
-        duplicate: false,
-        eventId: "event-1",
-        conversationId: "conversation-1",
-        traceId: "trace-1",
-        ingress: "accepted",
-      })),
+      invokeSendChatMessage: vi.fn(async () => acceptedSendResult()),
       invokeBindActiveChatViewStream: vi.fn(async ({ onDelta }) => {
         boundChannel = onDelta as unknown as ChannelLike;
       }),
@@ -1352,11 +1383,10 @@ describe("useChatFlow stream isolation", () => {
     await flushAsyncSteps();
 
     const draft = allMessages.value.find((message) => String(message.id || "").startsWith("__draft_assistant__:"));
-    expect((draft?.providerMeta as Record<string, unknown> | undefined)?._streamBlocks).toEqual([{
+    expect((draft?.providerMeta as Record<string, unknown> | undefined)?._streamBlocks).toEqual([expectedStreamBlock({
       reasoning: "直接从快照写入草稿。",
       text: "",
-      tools: [],
-    }]);
+    })]);
     expect(projectMessageForDisplay(draft as ChatMessage).activityItems.map((item) => item.text)).toEqual([
       "直接从快照写入草稿。",
     ]);
@@ -1400,14 +1430,7 @@ describe("useChatFlow stream isolation", () => {
       t: (key) => key,
       formatRequestFailed: (error) => String(error),
       removeBinaryPlaceholders: (text) => text,
-      invokeSendChatMessage: vi.fn(async () => ({
-        accepted: true,
-        duplicate: false,
-        eventId: "event-1",
-        conversationId: "conversation-1",
-        traceId: "trace-1",
-        ingress: "accepted",
-      })),
+      invokeSendChatMessage: vi.fn(async () => acceptedSendResult()),
       invokeBindActiveChatViewStream: vi.fn(async ({ onDelta }) => {
         boundChannel = onDelta as unknown as ChannelLike;
       }),
@@ -1469,8 +1492,8 @@ describe("useChatFlow stream isolation", () => {
     expect(latestAssistantText.value).toBe("等待完成，现在汇报。");
 
     const draft = allMessages.value.find((message) => String(message.id || "").startsWith("__draft_assistant__:"));
-    expect(draft?.parts).toEqual([{ type: "text", text: "等待完成，现在汇报。" }]);
-    expect((draft?.providerMeta as Record<string, unknown> | undefined)?._streamBlocks).toEqual([{
+    expect(draft?.parts).toEqual([{ type: "text", text: "等待完成，现在汇报。 [toolcall:tool-1]" }]);
+    expect((draft?.providerMeta as Record<string, unknown> | undefined)?._streamBlocks).toEqual([expectedStreamBlock({
       reasoning: "先等一下。",
       text: "等待完成，现在汇报。",
       tools: [{
@@ -1480,11 +1503,12 @@ describe("useChatFlow stream isolation", () => {
         resultText: "等待完成",
         status: "done",
       }],
-    }]);
+    })]);
 
     const projection = projectMessageForDisplay(draft as ChatMessage);
     expect(projection.activityItems).toMatchObject([
       { kind: "reasoning", text: "先等一下。" },
+      { kind: "content", text: "等待完成，现在汇报。 [toolcall:tool-1]" },
       { kind: "tool", name: "operate", status: "done", resultText: "等待完成" },
     ]);
 
@@ -1502,8 +1526,9 @@ describe("useChatFlow stream isolation", () => {
       status: "done",
     }]);
     expect(draftBlock?.activityItems).toMatchObject([
-      { kind: "reasoning", text: "先等一下。" },
-      { kind: "tool", name: "operate", status: "done", resultText: "等待完成" },
+      { kind: "reasoning", text: "" },
+      { kind: "content", text: "" },
+      { kind: "tool", name: "operate", status: "done" },
     ]);
   });
 
@@ -1547,14 +1572,7 @@ describe("useChatFlow stream isolation", () => {
       t: (key) => key,
       formatRequestFailed: (error) => String(error),
       removeBinaryPlaceholders: (text) => text,
-      invokeSendChatMessage: vi.fn(async () => ({
-        accepted: true,
-        duplicate: false,
-        eventId: "event-1",
-        conversationId: "conversation-1",
-        traceId: "trace-1",
-        ingress: "accepted",
-      })),
+      invokeSendChatMessage: vi.fn(async () => acceptedSendResult()),
       invokeBindActiveChatViewStream: vi.fn(async ({ onDelta }) => {
         boundChannel = onDelta as unknown as ChannelLike;
       }),
@@ -1620,20 +1638,20 @@ describe("useChatFlow stream isolation", () => {
 
     const draft = allMessages.value.find((message) => String(message.id || "").startsWith("__draft_assistant__:"));
     const blocks = (draft?.providerMeta as Record<string, unknown> | undefined)?._streamBlocks;
-    expect(blocks).toEqual([{
+    expect(blocks).toEqual([expectedStreamBlock({
       reasoning: "思维链1",
       text: "",
       tools: [{
         toolCallId: "tool-1",
         name: "operate",
         argsText: "{\"action\":\"wait\"}",
+        resultText: undefined,
         status: "doing",
       }],
-    }, {
+    }), expectedStreamBlock({
       reasoning: "思维链2",
       text: "",
-      tools: [],
-    }]);
+    })]);
     const projection = projectMessageForDisplay(draft as ChatMessage);
     expect(projection.activityItems.map((item) => item.kind === "tool" ? item.name : item.text)).toEqual([
       "思维链1",
@@ -1682,14 +1700,7 @@ describe("useChatFlow stream isolation", () => {
       t: (key) => key,
       formatRequestFailed: (error) => String(error),
       removeBinaryPlaceholders: (text) => text,
-      invokeSendChatMessage: vi.fn(async () => ({
-        accepted: true,
-        duplicate: false,
-        eventId: "event-1",
-        conversationId: "conversation-1",
-        traceId: "trace-1",
-        ingress: "accepted",
-      })),
+      invokeSendChatMessage: vi.fn(async () => acceptedSendResult()),
       invokeBindActiveChatViewStream: vi.fn(async ({ onDelta }) => {
         boundChannel = onDelta as unknown as ChannelLike;
       }),
@@ -1728,11 +1739,10 @@ describe("useChatFlow stream isolation", () => {
     const draft = allMessages.value.find((message) => String(message.id || "").startsWith("__draft_assistant__:"));
     expect(toolStatusText.value).toBe("正在执行 operate");
     expect(toolStatusState.value).toBe("running");
-    expect((draft?.providerMeta as Record<string, unknown> | undefined)?._streamBlocks).toEqual([{
+    expect((draft?.providerMeta as Record<string, unknown> | undefined)?._streamBlocks).toEqual([expectedStreamBlock({
       reasoning: "思维链1",
       text: "",
-      tools: [],
-    }]);
+    })]);
     expect(projectMessageForDisplay(draft as ChatMessage).activityItems.map((item) => item.text)).toEqual([
       "思维链1",
     ]);
@@ -1752,13 +1762,9 @@ describe("useChatRuntime force archive conversation sync", () => {
     const visibleTurnCount = ref(1);
 
     hoisted.invokeTauriMock.mockImplementation(async (command: string, payload?: unknown) => {
-      if (command === "trim_current_conversation") {
+      if (command === "archive_conversation") {
         return {
-          archived: true,
-          archiveId: "archive-1",
-          activeConversationId: "conv-new",
-          summary: "ok",
-          mergedMemories: 2,
+          success: true,
         };
       }
       if (command === "get_foreground_conversation_light_snapshot") {
@@ -1796,11 +1802,11 @@ describe("useChatRuntime force archive conversation sync", () => {
 
     await runtime.trimNow();
 
-    expect(currentConversationId.value).toBe("conv-new");
+    expect(currentConversationId.value).toBe("conv-old");
     expect(allMessages.value).toHaveLength(1);
     expect(allMessages.value[0].parts?.[0]).toEqual({
       type: "text",
-      text: "conversation:conv-new",
+      text: "conversation:conv-old",
     });
     expect(errorList).toEqual([]);
     expect(statusList.length).toBeGreaterThan(0);
@@ -1825,10 +1831,10 @@ describe("useChatFlowStop", () => {
         _streaming: true,
       },
     }]);
-    let round: { phase: "streaming"; gen: number; draftId: string } | { phase: "idle" } = {
+    let round: { phase: "streaming"; gen: number; messageId: string } | { phase: "idle" } = {
       phase: "streaming",
       gen: 1,
-      draftId: "assistant-1",
+      messageId: "assistant-1",
     };
     const onReloadMessages = vi.fn(async () => {});
     const invokeStopChatMessage = vi.fn(async () => ({ aborted: true, persisted: false }));
@@ -1859,12 +1865,12 @@ describe("useChatFlowStop", () => {
       setActiveRoundAgentId: () => {},
       clearFrontendDispatchTimer: () => {},
       getPendingUserDraftId: () => "",
-      removeDraft: (draftId) => {
-        allMessages.value = allMessages.value.filter((message) => String(message.id || "") !== draftId);
+      removeMessage: (messageId) => {
+        allMessages.value = allMessages.value.filter((message) => String(message.id || "") !== messageId);
       },
-      finalizeDraft: (draftId) => {
+      finalizeMessage: (messageId) => {
         allMessages.value = allMessages.value.map((message) => {
-          if (String(message.id || "") !== draftId) return message;
+          if (String(message.id || "") !== messageId) return message;
           const nextMeta = { ...(message.providerMeta || {}) } as Record<string, unknown>;
           delete nextMeta._streaming;
           return {
@@ -1873,9 +1879,9 @@ describe("useChatFlowStop", () => {
           };
         });
       },
-      updateDraftText: (draftId, _streamSegments, _streamTail, _streamAnimatedDelta, rawBlocks) => {
+      updateMessageText: (messageId, _streamSegments, _streamTail, _streamAnimatedDelta, rawBlocks) => {
         allMessages.value = allMessages.value.map((message) => {
-          if (String(message.id || "") !== draftId) return message;
+          if (String(message.id || "") !== messageId) return message;
           return {
             ...message,
             parts: [{ type: "text", text: latestAssistantText.value }],
@@ -1924,10 +1930,10 @@ describe("useChatFlowStop", () => {
         _streamBlocks: [{ reasoning: "R1", text: "ABC" }],
       },
     }]);
-    let round: { phase: "streaming"; gen: number; draftId: string } | { phase: "idle" } = {
+    let round: { phase: "streaming"; gen: number; messageId: string } | { phase: "idle" } = {
       phase: "streaming",
       gen: 1,
-      draftId: "assistant-1",
+      messageId: "assistant-1",
     };
     const invokeStopChatMessage = vi.fn(async () => ({ aborted: true, persisted: true }));
     const refreshMessageById = vi.fn(async ({ messageId }: { conversationId: string; messageId: string }) => {
@@ -1985,12 +1991,12 @@ describe("useChatFlowStop", () => {
       setActiveRoundAgentId: () => {},
       clearFrontendDispatchTimer: () => {},
       getPendingUserDraftId: () => "",
-      removeDraft: (draftId) => {
-        allMessages.value = allMessages.value.filter((message) => String(message.id || "") !== draftId);
+      removeMessage: (messageId) => {
+        allMessages.value = allMessages.value.filter((message) => String(message.id || "") !== messageId);
       },
-      finalizeDraft: (draftId) => {
+      finalizeMessage: (messageId) => {
         allMessages.value = allMessages.value.map((message) => {
-          if (String(message.id || "") !== draftId) return message;
+          if (String(message.id || "") !== messageId) return message;
           const nextMeta = { ...(message.providerMeta || {}) } as Record<string, unknown>;
           delete nextMeta._streaming;
           return {
@@ -1999,9 +2005,9 @@ describe("useChatFlowStop", () => {
           };
         });
       },
-      updateDraftText: (draftId, _streamSegments, _streamTail, _streamAnimatedDelta, rawBlocks) => {
+      updateMessageText: (messageId, _streamSegments, _streamTail, _streamAnimatedDelta, rawBlocks) => {
         allMessages.value = allMessages.value.map((message) => {
-          if (String(message.id || "") !== draftId) return message;
+          if (String(message.id || "") !== messageId) return message;
           return {
             ...message,
             parts: [{ type: "text", text: latestAssistantText.value }],

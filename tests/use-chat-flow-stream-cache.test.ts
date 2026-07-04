@@ -39,7 +39,13 @@ describe("useChatFlowStreamCache stream block snapshots", () => {
 
     expect(streamCacheHasVisibleProgress(cache.readConversationStreamCache("conversation-1"))).toBe(true);
     expect(cache.applyConversationStreamCacheToDisplay("conversation-1")).toBe(true);
-    expect(streamBlocks.value).toEqual([{ reasoning: "R1", text: "", tools: [] }]);
+    expect(streamBlocks.value).toEqual([{
+      reasoning: "R1",
+      reasoningCharCount: 2,
+      text: "",
+      tools: [],
+      pendingTextBreak: false,
+    }]);
     expect(latestAssistantText.value).toBe("");
   });
 
@@ -74,7 +80,13 @@ describe("useChatFlowStreamCache stream block snapshots", () => {
       requestId: "backend-activation",
       streamBlocks: [{ reasoning: "R2" }],
     }, { ignoreActivationId: true })).toBe(true);
-    expect(streamBlocks.value).toEqual([{ reasoning: "R2", text: "", tools: [] }]);
+    expect(streamBlocks.value).toEqual([{
+      reasoning: "R2",
+      reasoningCharCount: 2,
+      text: "",
+      tools: [],
+      pendingTextBreak: false,
+    }]);
   });
 
   it("preserves persisted assistant ids across cache reads and later display sync writes", () => {

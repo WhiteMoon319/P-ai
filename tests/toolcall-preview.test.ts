@@ -3,7 +3,7 @@ import type { ChatActivityItem } from "../src/types/app";
 import { buildToolcallPreviewMap } from "../src/features/chat/utils/toolcall-preview";
 
 describe("toolcall preview", () => {
-  it("prefers args text over tool result text", () => {
+  it("keeps tool preview body empty when args text exists", () => {
     const activityItems: ChatActivityItem[] = [{
       kind: "tool",
       id: "tool-1",
@@ -17,12 +17,12 @@ describe("toolcall preview", () => {
     expect(buildToolcallPreviewMap(activityItems, "暂无工具结果")).toEqual({
       "tool-1": {
         title: "operate",
-        body: "{\"action\":\"wait\"}",
+        body: "",
       },
     });
   });
 
-  it("shows no-args text when args text is absent", () => {
+  it("keeps tool preview body empty when args text is absent", () => {
     const activityItems: ChatActivityItem[] = [{
       kind: "tool",
       id: "tool-1",
@@ -35,7 +35,7 @@ describe("toolcall preview", () => {
     expect(buildToolcallPreviewMap(activityItems, "暂无工具结果")).toEqual({
       "tool-1": {
         title: "operate",
-        body: "暂无工具结果",
+        body: "",
       },
     });
   });

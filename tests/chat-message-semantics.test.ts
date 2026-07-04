@@ -607,8 +607,8 @@ describe("chat-message semantics", () => {
     });
 
     expect(streaming.items.map((item) => item.kind === "tool" ? item.name : item.text)).toEqual([
-      "先看文件。",
-      "结论 [toolcall:tool-1]",
+      "",
+      "",
       "read_file",
     ]);
     expect(persisted.activityItems.map((item) => item.kind === "tool" ? item.name : item.text)).toEqual([
@@ -638,13 +638,12 @@ describe("chat-message semantics", () => {
     });
 
     expect(activity.items.map((item) => item.kind === "tool" ? item.name : item.text)).toEqual([
-      "新思考。",
+      "",
       "operate",
     ]);
     expect(activity.items[1]).toMatchObject({
       kind: "tool",
       status: "done",
-      resultText: "等待完成",
     });
   });
 
@@ -709,6 +708,7 @@ describe("chat-message semantics", () => {
 
     expect(assistantStreamBlocksFromMessageForDisplay(message, "先说明我要等待。等待完成，现在汇报。")).toEqual([{
       reasoning: "准备调用等待工具。",
+      reasoningCharCount: "准备调用等待工具。".length,
       text: "等待完成，现在汇报。 [toolcall:tool-1]",
       tools: [{
         toolCallId: "tool-1",
@@ -739,14 +739,16 @@ describe("chat-message semantics", () => {
     }));
 
     expect(blocks).toEqual([
-      { reasoning: "先想。", text: "正文", tools: [], pendingTextBreak: false },
+      { reasoning: "先想。", reasoningCharCount: "先想。".length, text: "正文", tools: [], pendingTextBreak: false },
       {
         reasoning: "后续思考。",
+        reasoningCharCount: "后续思考。".length,
         text: "",
         tools: [{
           toolCallId: "tool-1",
           name: "operate",
           argsText: "{\"action\":\"wait\"}",
+          resultText: undefined,
           status: "doing",
         }],
         pendingTextBreak: false,
@@ -792,6 +794,7 @@ describe("chat-message semantics", () => {
     );
     expect(blocks).toEqual([{
       reasoning: "",
+      reasoningCharCount: 0,
       text: "先说明要并发读取。 [toolcall:tool-a] [toolcall:tool-b]\n\n下面继续正文。",
       tools: [{
         toolCallId: "tool-a",
@@ -835,6 +838,7 @@ describe("chat-message semantics", () => {
     );
     expect(blocks).toEqual([{
       reasoning: "",
+      reasoningCharCount: 0,
       text: "[toolcall:tool-first]\n\n后面才开始正文。",
       tools: [{
         toolCallId: "tool-first",

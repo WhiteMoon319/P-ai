@@ -739,6 +739,16 @@ export function streamBlocksToActivitySummaryItems(rawBlocks: unknown, running =
 }
 
 export function streamBlocksActivitySignature(rawBlocks: unknown): string {
+  function textSignature(text?: string): string {
+    const input = String(text || "");
+    let hash = 0x811c9dc5;
+    for (let index = 0; index < input.length; index += 1) {
+      hash ^= input.charCodeAt(index);
+      hash = Math.imul(hash, 0x01000193);
+    }
+    return `${input.length}:${(hash >>> 0).toString(36)}`;
+  }
+
   return normalizeAssistantStreamBlocks(rawBlocks)
     .map((block, blockIndex) => [
       `b:${blockIndex}`,
@@ -749,8 +759,8 @@ export function streamBlocksActivitySignature(rawBlocks: unknown): string {
         String(tool.toolCallId || "").trim(),
         String(tool.name || "").trim(),
         String(tool.status || "").trim(),
-        `alen:${String(tool.argsText || "").length}`,
-        `rlen:${String(tool.resultText || "").length}`,
+        `a:${textSignature(tool.argsText)}`,
+        `r:${textSignature(tool.resultText)}`,
       ].join(":"))),
     ].join("|"))
     .join("||");

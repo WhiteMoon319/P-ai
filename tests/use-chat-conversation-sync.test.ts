@@ -20,6 +20,7 @@ function textMessage(id: string, role: ChatMessage["role"], text: string): ChatM
 }
 
 function buildConversationSync(overrides: {
+  currentConversationId?: string;
   previousMessages?: ChatMessage[];
   readConversationStreamCache?: (conversationId?: string | null) => any;
 } = {}) {
@@ -29,7 +30,7 @@ function buildConversationSync(overrides: {
     DRAFT_ASSISTANT_ID_PREFIX: "__draft_assistant__:",
     BACKGROUND_CONVERSATION_CACHE_LIMIT: 20,
     OLDER_HISTORY_PAGE_SIZE: 20,
-    currentChatConversationId: ref(""),
+    currentChatConversationId: ref(overrides.currentConversationId ?? ""),
     currentChatPreferredApiConfigId: ref(""),
     currentChatTodos: ref([]),
     currentForegroundAgentId: ref(""),
@@ -76,10 +77,14 @@ describe("useChatConversationSync", () => {
     });
   });
 
-  it("removes the persisted history message when preserving a local streaming draft", () => {
-    const preservedDraft = textMessage("__draft_assistant__:7", "assistant", "partial reply");
+  it("removes the persisted history message when preserving local streaming state", () => {
+    const preservedDraft: ChatMessage = {
+      ...textMessage("__draft_assistant__:7", "assistant", "partial reply"),
+      providerMeta: { _streaming: true },
+    };
     const persistedAssistant = textMessage("assistant-1", "assistant", "partial reply");
     const { allMessages, sync } = buildConversationSync({
+      currentConversationId: "conversation-1",
       previousMessages: [preservedDraft],
       readConversationStreamCache: () => ({
         activationId: "request-1",
@@ -97,8 +102,8 @@ describe("useChatConversationSync", () => {
       preferredApiConfigId: "api-1",
       runtimeState: "assistant_streaming",
       messages: [persistedAssistant],
-    });
+    }, { preserveExistingHistory: true });
 
-    expect(allMessages.value.map((message) => message.id)).toEqual(["__draft_assistant__:7"]);
+    expect(allMessages.value.map((message) => message.id)).toEqual([]);
   });
 });
