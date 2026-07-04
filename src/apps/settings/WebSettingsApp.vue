@@ -30,8 +30,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import ConfigWindowApp from "../../ConfigWindowApp.vue";
-import { connectWebBridge, getWebBridgeConfig, getWebBridgeState, isTauriRuntimeAvailable, loginWebBridge } from "../../services/tauri-api";
-import { clearRememberedWebAccessPasswordHash, hashWebAccessPassword, readRememberedWebAccessPasswordHash, rememberWebAccessPasswordHash } from "../../utils/web-access-auth";
+import { connectWebBridge, getWebBridgeState, isTauriRuntimeAvailable, loginWebBridge } from "../../services/tauri-api";
 
 const ready = ref(isTauriRuntimeAvailable());
 const connecting = ref(false);
@@ -64,10 +63,6 @@ async function initialize() {
   try {
     const state = await connectWebBridge();
     applyBridgeState();
-    if (state.authRequired && !state.authenticated && await tryAutoLogin()) {
-      ready.value = true;
-      return;
-    }
     ready.value = !state.authRequired || state.authenticated;
   } catch (error) {
     applyBridgeState();
@@ -77,31 +72,14 @@ async function initialize() {
   }
 }
 
-async function tryAutoLogin(): Promise<boolean> {
-  const chatUrl = String(getWebBridgeConfig()?.chatUrl || "").trim();
-  const rememberedHash = readRememberedWebAccessPasswordHash(chatUrl);
-  if (!rememberedHash) return false;
-  try {
-    const state = await loginWebBridge("", rememberedHash);
-    applyBridgeState();
-    return !state.authRequired || state.authenticated;
-  } catch {
-    clearRememberedWebAccessPasswordHash(chatUrl);
-    return false;
-  }
-}
-
 async function submitPassword() {
   if (!password.value || submitting.value) return;
   submitting.value = true;
   errorText.value = "";
   try {
-    const passwordHash = await hashWebAccessPassword(password.value);
-    const state = await loginWebBridge(password.value, passwordHash);
+    const state = await loginWebBridge(password.value);
     applyBridgeState();
     ready.value = !state.authRequired || state.authenticated;
-    const chatUrl = String(getWebBridgeConfig()?.chatUrl || "").trim();
-    rememberWebAccessPasswordHash(chatUrl, passwordHash);
     password.value = "";
   } catch (error) {
     errorText.value = String(error || "认证失败");

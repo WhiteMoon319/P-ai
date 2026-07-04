@@ -234,12 +234,10 @@ export function useWsTransport() {
     authRefreshHandler = handler;
   }
 
-  async function login(password: string, passwordHash?: string): Promise<void> {
+  async function login(password: string): Promise<void> {
     const normalizedPassword = String(password || "").trim();
-    const normalizedPasswordHash = String(passwordHash || "").trim();
     await request("auth.login", {
       ...(normalizedPassword ? { password: normalizedPassword } : {}),
-      ...(normalizedPasswordHash ? { passwordHash: normalizedPasswordHash } : {}),
     }, 10000);
   }
 

@@ -275,7 +275,6 @@ import CreateConversationDialog, { type SidebarCreateDepartmentOption } from "./
 import WorkspaceDirectoryPickerDialog from "../shared/components/WorkspaceDirectoryPickerDialog.vue";
 import { useWsTransport, type SidebarBridgeConfig } from "./composables/use-ws-transport";
 import { isTauriRuntimeAvailable } from "../../services/tauri-api";
-import { clearRememberedWebAccessPasswordHash, hashWebAccessPassword, readRememberedWebAccessPasswordHash, rememberWebAccessPasswordHash } from "../../utils/web-access-auth";
 import ToolReviewTargetDialog from "../chat/components/ToolReviewTargetDialog.vue";
 import ChatSupervisionTaskDialog from "../chat/components/dialogs/ChatSupervisionTaskDialog.vue";
 import type { ChatWorkspaceChoice } from "../chat/composables/use-chat-workspace";
@@ -528,7 +527,6 @@ const remoteAuthDialogOpen = ref(false);
 const remoteAuthPassword = ref("");
 const remoteAuthSubmitting = ref(false);
 const remoteAuthError = ref("");
-const remoteAuthAutoSubmitting = ref(false);
 const codeReviewDialogOpen = ref(false);
 const codeReviewSubmitting = ref(false);
 const codeReviewErrorText = ref("");
@@ -2567,36 +2565,13 @@ function openRemoteAuthDialog() {
   remoteAuthError.value = "";
 }
 
-async function tryAutoRemoteAuth(): Promise<boolean> {
-  if (remoteAuthAutoSubmitting.value) return false;
-  const chatUrl = String(transport.bridgeConfig.value?.chatUrl || "").trim();
-  const rememberedHash = readRememberedWebAccessPasswordHash(chatUrl);
-  if (!rememberedHash) return false;
-  remoteAuthAutoSubmitting.value = true;
-  try {
-    await transport.login("", rememberedHash);
-    await initializeAfterBridgeAuthenticated();
-    remoteAuthDialogOpen.value = false;
-    remoteAuthError.value = "";
-    return true;
-  } catch {
-    clearRememberedWebAccessPasswordHash(chatUrl);
-    return false;
-  } finally {
-    remoteAuthAutoSubmitting.value = false;
-  }
-}
-
 async function submitRemoteAuth() {
   const password = remoteAuthPassword.value.trim();
   if (!password || remoteAuthSubmitting.value) return;
   remoteAuthSubmitting.value = true;
   remoteAuthError.value = "";
   try {
-    const passwordHash = await hashWebAccessPassword(password);
-    await transport.login(password, passwordHash);
-    const chatUrl = String(transport.bridgeConfig.value?.chatUrl || "").trim();
-    rememberWebAccessPasswordHash(chatUrl, passwordHash);
+    await transport.login(password);
     remoteAuthDialogOpen.value = false;
     remoteAuthPassword.value = "";
     await initializeAfterBridgeAuthenticated();
@@ -2611,9 +2586,7 @@ function registerNotifications() {
   transport.onNotification("bridge.ready", (payload) => {
     const value = payload as { authRequired?: boolean };
     if (value.authRequired && !transport.authenticated.value) {
-      void tryAutoRemoteAuth().then((authenticated) => {
-        if (!authenticated) openRemoteAuthDialog();
-      });
+      openRemoteAuthDialog();
       return;
     }
     void initializeAfterBridgeAuthenticated();

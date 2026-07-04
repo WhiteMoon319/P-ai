@@ -91,7 +91,8 @@ const IDE_CONTEXT_BRIDGE_PATH: &str = "/ide-context";
 const IDE_CONTEXT_CHAT_BRIDGE_PATH: &str = "/chat";
 const IDE_CONTEXT_BRIDGE_DISCOVERY_FILE: &str = "p-ai-ide-context-bridge.json";
 const IDE_CONTEXT_SNAPSHOT_TTL_SECS: i64 = 30;
-const IDE_CONTEXT_AUTH_TOKEN_TTL_SECS: i64 = 7 * 24 * 60 * 60;
+const IDE_CONTEXT_AUTH_TOKEN_TTL_SECS: i64 = 90 * 24 * 60 * 60;
+const IDE_CONTEXT_MAX_AUTH_TOKENS: usize = 128;
 const WEB_ACCESS_SERVICE_ID: &str = "web_access";
 static IDE_CONTEXT_BRIDGE_STARTED: AtomicBool = AtomicBool::new(false);
 static IDE_CONTEXT_BRIDGE_SHUTDOWN: OnceLock<
@@ -160,11 +161,39 @@ struct GetWebAccessInfoInput {
     force_refresh: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct IdeContextPersistedBridgeToken {
+    #[serde(default)]
+    #[serde(skip_serializing_if = "String::is_empty")]
+    token: String,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "String::is_empty")]
+    expires_at: String,
+    #[serde(default)]
+    tokens: Vec<IdeContextPersistedBridgeTokenEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IdeContextPersistedBridgeTokenEntry {
     token: String,
     expires_at: String,
+}
+
+impl IdeContextPersistedBridgeToken {
+    fn normalized_entries(self) -> Vec<IdeContextPersistedBridgeTokenEntry> {
+        if !self.tokens.is_empty() {
+            return self.tokens;
+        }
+        if self.token.trim().is_empty() || self.expires_at.trim().is_empty() {
+            return Vec::new();
+        }
+        vec![IdeContextPersistedBridgeTokenEntry {
+            token: self.token,
+            expires_at: self.expires_at,
+        }]
+    }
 }
 
 impl IdeContextRuntime {
@@ -248,8 +277,6 @@ struct IdeChatJsonRpcError {
 struct IdeChatAuthLoginInput {
     #[serde(default)]
     password: String,
-    #[serde(default)]
-    password_hash: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -880,17 +907,6 @@ fn ide_context_generate_remote_password() -> String {
     generate_web_access_password()
 }
 
-fn ide_context_hash_remote_password(value: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let normalized = ide_context_normalize_remote_password(value);
-    if normalized.is_empty() {
-        return String::new();
-    }
-    let mut hasher = Sha256::new();
-    hasher.update(normalized.as_bytes());
-    format!("sha256:{}", crate::bytes_to_lower_hex(hasher.finalize()))
-}
-
 fn ide_context_normalize_remote_password(raw: &str) -> String {
     raw.chars()
         .filter(|ch| ch.is_ascii_alphanumeric())
@@ -942,22 +958,6 @@ fn ide_context_verify_remote_password(
         return Ok(false);
     }
     Ok(provided == ide_context_normalize_remote_password(&expected))
-}
-
-fn ide_context_verify_remote_password_hash(
-    runtime: &IdeContextRuntime,
-    state: Option<&AppState>,
-    provided_hash: &str,
-) -> Result<bool, String> {
-    let normalized_hash = provided_hash.trim().to_ascii_lowercase();
-    if normalized_hash.is_empty() {
-        return Ok(false);
-    }
-    let expected = match state {
-        Some(state) => ide_context_effective_remote_password(state, runtime)?,
-        None => ide_context_remote_password(runtime)?,
-    };
-    Ok(normalized_hash == ide_context_hash_remote_password(&expected))
 }
 
 fn ide_context_peer_is_local(peer_addr: &std::net::SocketAddr) -> bool {
@@ -1436,6 +1436,19 @@ fn ide_chat_emit_notification_to_sidebar_conversation(
 
 fn ide_context_prune_expired_bridge_tokens(auth: &mut IdeContextBridgeAuthRuntime, now: OffsetDateTime) {
     auth.valid_tokens.retain(|_, expires_at| *expires_at > now);
+    if auth.valid_tokens.len() <= IDE_CONTEXT_MAX_AUTH_TOKENS {
+        return;
+    }
+    let mut tokens = auth
+        .valid_tokens
+        .iter()
+        .map(|(token, expires_at)| (token.clone(), *expires_at))
+        .collect::<Vec<_>>();
+    tokens.sort_by(|left, right| right.1.cmp(&left.1));
+    auth.valid_tokens = tokens
+        .into_iter()
+        .take(IDE_CONTEXT_MAX_AUTH_TOKENS)
+        .collect();
 }
 
 fn ide_context_bridge_token_store_path(state: &AppState) -> PathBuf {
@@ -1453,21 +1466,32 @@ fn ide_context_clear_persisted_bridge_token(state: &AppState) -> Result<(), Stri
         .map_err(|err| format!("删除 Web 访问令牌失败，path={}，error={err}", path.display()))
 }
 
-fn ide_context_persist_bridge_token(
+fn ide_context_persist_bridge_tokens(
     state: &AppState,
-    token: &str,
-    expires_at: OffsetDateTime,
+    tokens: &std::collections::HashMap<String, OffsetDateTime>,
 ) -> Result<(), String> {
     let path = ide_context_bridge_token_store_path(state);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .map_err(|err| format!("创建 Web 访问令牌目录失败，path={}，error={err}", parent.display()))?;
     }
+    let mut entries = tokens
+        .iter()
+        .filter_map(|(token, expires_at)| {
+            let normalized_token = token.trim();
+            if normalized_token.is_empty() {
+                return None;
+            }
+            Some(IdeContextPersistedBridgeTokenEntry {
+                token: normalized_token.to_string(),
+                expires_at: expires_at.format(&Rfc3339).ok()?,
+            })
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| right.expires_at.cmp(&left.expires_at));
     let payload = IdeContextPersistedBridgeToken {
-        token: token.trim().to_string(),
-        expires_at: expires_at
-            .format(&Rfc3339)
-            .map_err(|err| format!("格式化 Web 访问令牌过期时间失败: {err}"))?,
+        tokens: entries,
+        ..Default::default()
     };
     let text = serde_json::to_string_pretty(&payload)
         .map_err(|err| format!("序列化 Web 访问令牌失败: {err}"))?;
@@ -1487,17 +1511,21 @@ fn ide_context_try_restore_persisted_bridge_token(
         .map_err(|err| format!("读取 Web 访问令牌失败，path={}，error={err}", path.display()))?;
     let payload: IdeContextPersistedBridgeToken = serde_json::from_str(&text)
         .map_err(|err| format!("解析 Web 访问令牌失败，path={}，error={err}", path.display()))?;
-    let token = payload.token.trim().to_string();
-    if token.is_empty() {
-        let _ = ide_context_clear_persisted_bridge_token(state);
-        return Ok(());
-    }
-    let Some(expires_at) = parse_iso(&payload.expires_at) else {
-        let _ = ide_context_clear_persisted_bridge_token(state);
-        return Ok(());
-    };
     let now = now_utc();
-    if expires_at <= now {
+    let mut restored = std::collections::HashMap::new();
+    for entry in payload.normalized_entries() {
+        let token = entry.token.trim().to_string();
+        if token.is_empty() {
+            continue;
+        }
+        let Some(expires_at) = parse_iso(&entry.expires_at) else {
+            continue;
+        };
+        if expires_at > now {
+            restored.insert(token, expires_at);
+        }
+    }
+    if restored.is_empty() {
         let _ = ide_context_clear_persisted_bridge_token(state);
         return Ok(());
     }
@@ -1506,7 +1534,8 @@ fn ide_context_try_restore_persisted_bridge_token(
         .lock()
         .map_err(|_| "Failed to lock ide context bridge auth".to_string())?;
     auth.valid_tokens.clear();
-    auth.valid_tokens.insert(token, expires_at);
+    auth.valid_tokens.extend(restored);
+    ide_context_prune_expired_bridge_tokens(&mut auth, now);
     Ok(())
 }
 
@@ -1525,11 +1554,11 @@ fn ide_context_store_bridge_token(
             .bridge_auth
             .lock()
             .map_err(|_| "Failed to lock ide context bridge auth".to_string())?;
-        auth.valid_tokens.clear();
         auth.valid_tokens.insert(normalized_token.clone(), expires_at);
-    }
-    if let Some(state) = state {
-        ide_context_persist_bridge_token(state, &normalized_token, expires_at)?;
+        ide_context_prune_expired_bridge_tokens(&mut auth, now_utc());
+        if let Some(state) = state {
+            ide_context_persist_bridge_tokens(state, &auth.valid_tokens)?;
+        }
     }
     Ok(())
 }
@@ -6428,21 +6457,11 @@ async fn ide_context_chat_ws_handle_connection(
                             } else if request.method.as_str() == "auth.login" {
                                 match ide_chat_parse_params::<IdeChatAuthLoginInput>(request.params) {
                                     Ok(input) => {
-                                        let matched_hash = ide_context_verify_remote_password_hash(
+                                        match ide_context_verify_remote_password(
                                             &ide_context_runtime,
                                             Some(&state),
-                                            &input.password_hash,
-                                        );
-                                        let verified = match matched_hash {
-                                            Ok(true) => Ok(true),
-                                            Ok(false) => ide_context_verify_remote_password(
-                                                &ide_context_runtime,
-                                                Some(&state),
-                                                &input.password,
-                                            ),
-                                            Err(err) => Err(err),
-                                        };
-                                        match verified {
+                                            &input.password,
+                                        ) {
                                         Ok(true) => match ide_context_issue_bridge_token_with_state(
                                             &ide_context_runtime,
                                             Some(&state),
@@ -6602,19 +6621,6 @@ mod ide_context_tests {
         );
         assert!(!ide_context_verify_remote_password(&runtime, None, "").expect("reject empty"));
         assert!(!ide_context_verify_remote_password(&runtime, None, "wrong-password").expect("reject wrong"));
-    }
-
-    #[test]
-    fn ide_context_remote_password_hash_matches_normalized_password() {
-        let runtime = IdeContextRuntime::new();
-        let password = ide_context_remote_password(&runtime).expect("remote password");
-        let password_hash = ide_context_hash_remote_password(&password);
-
-        assert!(ide_context_verify_remote_password_hash(&runtime, None, &password_hash).expect("verify hash"));
-        assert!(
-            !ide_context_verify_remote_password_hash(&runtime, None, "sha256:deadbeef")
-                .expect("reject wrong hash")
-        );
     }
 
     #[test]
@@ -6848,6 +6854,25 @@ mod ide_context_tests {
         let second_next = ide_context_consume_bridge_token_with_state(&runtime, None, &token)
             .expect("second consume with same token");
         assert_eq!(second_next, token);
+    }
+
+    #[test]
+    fn ide_context_bridge_tokens_keep_multiple_login_tokens() {
+        let runtime = IdeContextRuntime::new();
+        let first = ide_context_issue_bridge_token_with_state(&runtime, None).expect("issue first token");
+        let second = ide_context_issue_bridge_token_with_state(&runtime, None).expect("issue second token");
+
+        assert_ne!(first, second);
+        assert_eq!(
+            ide_context_consume_bridge_token_with_state(&runtime, None, &first)
+                .expect("first token remains valid"),
+            first
+        );
+        assert_eq!(
+            ide_context_consume_bridge_token_with_state(&runtime, None, &second)
+                .expect("second token remains valid"),
+            second
+        );
     }
 
     #[test]
