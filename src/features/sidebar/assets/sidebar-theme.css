@@ -76,24 +76,24 @@ textarea {
   font-family: inherit;
 }
 
-button,
-textarea,
-input,
-select,
-.btn,
-.badge,
-.dropdown-content,
-.menu,
-.chat-bubble,
-.mockup-code {
+html[data-host="vscode"] button,
+html[data-host="vscode"] textarea,
+html[data-host="vscode"] input,
+html[data-host="vscode"] select,
+html[data-host="vscode"] .btn,
+html[data-host="vscode"] .badge,
+html[data-host="vscode"] .dropdown-content,
+html[data-host="vscode"] .menu,
+html[data-host="vscode"] .chat-bubble,
+html[data-host="vscode"] .mockup-code {
   color: inherit;
 }
 
-button svg,
-.btn svg,
-.badge svg,
-.dropdown-content svg,
-.menu svg {
+html[data-host="vscode"] button svg,
+html[data-host="vscode"] .btn svg,
+html[data-host="vscode"] .badge svg,
+html[data-host="vscode"] .dropdown-content svg,
+html[data-host="vscode"] .menu svg {
   color: currentColor;
   stroke: currentColor;
 }
