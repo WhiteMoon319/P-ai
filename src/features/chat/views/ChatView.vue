@@ -197,7 +197,7 @@
             <ChevronsDown class="h-4 w-4" />
           </button>
         </div>
-        <div v-show="showJumpToPreviousUserMessage" class="pointer-events-none absolute bottom-3 right-5 z-30 flex justify-end" :style="jumpToBottomStyle">
+        <div v-show="showJumpToPreviousUserMessage" class="pointer-events-none absolute right-5 top-3 z-30 flex justify-end">
           <button class="btn btn-sm btn-circle btn-primary pointer-events-auto shadow-lg" :title="t('chat.jumpToPreviousUserMessage')" @click="handleJumpToPreviousUserMessage">
             <ChevronsUp class="h-4 w-4" />
           </button>
