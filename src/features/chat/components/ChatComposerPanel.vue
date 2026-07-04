@@ -172,11 +172,12 @@
         <div
           v-if="mentionPanelOpen"
           class="fixed z-1200"
+          :data-theme="teleportTheme"
           :style="mentionPanelStyle"
         >
           <div
             ref="mentionPanelScrollRef"
-            class="dropdown-content max-h-[min(56vh,24rem)] w-max max-w-[min(80vw,20rem)] overflow-y-auto overscroll-contain rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
+            class="dropdown-content max-h-[min(56vh,24rem)] w-max max-w-[min(80vw,20rem)] overflow-y-auto overscroll-contain rounded-box border border-base-300 bg-base-100 p-1 text-base-content shadow-xl"
           >
             <ul class="flex flex-col gap-1">
               <li
@@ -326,9 +327,10 @@
       v-if="modelDropdownOpen"
       ref="modelDropdownPanelRef"
       class="fixed z-1200"
+      :data-theme="teleportTheme"
       :style="modelDropdownStyle"
     >
-      <div class="relative overflow-hidden rounded-box border border-base-300 bg-base-100 shadow-xl">
+      <div class="relative overflow-hidden rounded-box border border-base-300 bg-base-100 text-base-content shadow-xl">
         <div ref="modelDropdownScrollRef" class="ecall-model-dropdown-scroll max-h-[80vh] overflow-y-auto p-2">
           <ul class="w-full">
             <li v-for="item in normalizedChatModelOptions" :key="item.id" class="list-none">
@@ -419,6 +421,7 @@ const props = defineProps<{
   defaultCreateConversationDepartmentId: string;
   ideContextGroups: IdeContextWorkspaceGroup[];
   attachedIdeContextReferences: IdeContextReferenceItem[];
+  currentTheme?: string;
   sidebarMode?: boolean;
   trimTip?: string;
   chatUsagePercent?: number;
@@ -459,6 +462,12 @@ const { t } = useI18n();
 const sidebarMode = computed(() => !!props.sidebarMode);
 const systemNotificationMode = computed(() => !!props.systemNotificationMode);
 const remoteContactMode = computed(() => !!props.remoteContactMode);
+const teleportTheme = computed(() => {
+  if (typeof document !== "undefined" && document.documentElement.getAttribute("data-host") === "vscode") {
+    return undefined;
+  }
+  return String(props.currentTheme || document.documentElement.getAttribute("data-theme") || "light").trim() || "light";
+});
 
 function openCreateConversationDialog() {
   if (typeof window === "undefined") {

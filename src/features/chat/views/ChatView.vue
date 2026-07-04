@@ -301,6 +301,7 @@
             :create-conversation-department-options="createConversationDepartmentOptions"
             :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
             :ide-context-groups="mergedVisibleIdeContextGroups" :attached-ide-context-references="attachedIdeContextReferences"
+            :current-theme="currentTheme"
             :sidebar-mode="sidebarMode"
             @update:chat-input="$emit('update:chatInput', $event)" @add-mention="$emit('addMention', $event)"
             @remove-mention="$emit('removeMention', $event)" @remove-clipboard-image="$emit('removeClipboardImage', $event)"
