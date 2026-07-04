@@ -208,7 +208,7 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     const snapshot = await invokeTauri<any>("get_foreground_conversation_light_snapshot", {
       input: {
         conversationId,
-        agentId: String(options.currentForegroundAgentId.value || "").trim() || null,
+        agentId: null,
         limit: options.foregroundSnapshotRecentLimit,
       },
     });

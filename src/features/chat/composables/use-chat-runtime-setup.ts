@@ -273,7 +273,7 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
         const snapshot = await invokeTauri<any>("get_foreground_conversation_light_snapshot", {
           input: {
             conversationId: normalizedConversationId,
-            agentId: String(bindings.currentForegroundAgentId.value || "").trim() || null,
+            agentId: null,
             limit: bindings.FOREGROUND_SNAPSHOT_RECENT_LIMIT,
           },
         });

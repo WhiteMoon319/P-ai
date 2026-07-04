@@ -11,10 +11,13 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
     conversationId?: string | null,
     options?: { resumeProjection?: boolean },
   ) {
+    const targetConversationId = String(conversationId || "").trim();
     return invokeTauri<any>("get_foreground_conversation_light_snapshot", {
       input: {
-        conversationId: String(conversationId || "").trim() || null,
-        agentId: String(bindings.currentForegroundAgentId.value || "").trim() || null,
+        conversationId: targetConversationId || null,
+        agentId: targetConversationId
+          ? null
+          : String(bindings.currentForegroundAgentId.value || "").trim() || null,
         limit: bindings.FOREGROUND_SNAPSHOT_RECENT_LIMIT,
         resumeProjection: !!options?.resumeProjection,
       },

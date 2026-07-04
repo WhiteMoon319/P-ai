@@ -185,7 +185,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
       const conversationId = String(targetConversationId || currentConversationIdOrNull() || "").trim() || null;
       const snapshot = await invokeTauri<{ messages: ChatMessage[] }>("get_foreground_conversation_light_snapshot", {
         input: {
-          agentId: options.assistantDepartmentAgentId.value,
+          agentId: conversationId ? null : options.assistantDepartmentAgentId.value,
           conversationId,
           limit: FOREGROUND_SNAPSHOT_RECENT_LIMIT,
         },

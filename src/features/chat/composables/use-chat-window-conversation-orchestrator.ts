@@ -106,13 +106,27 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
   });
 
   function applyConversationOverviewUpdated(payload?: Record<string, any> | null) {
-    applyConversationOverviewUpdatedRaw(payload);
     const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
+    const previousCurrentItem = currentConversationId
+      ? bindings.unarchivedConversations.value.find(
+        (item: any) => String(item.conversationId || "").trim() === currentConversationId,
+      )
+      : null;
+    applyConversationOverviewUpdatedRaw(payload);
     if (!currentConversationId) return;
     const stillVisible = bindings.unarchivedConversations.value.some(
       (item: any) => String(item.conversationId || "").trim() === currentConversationId,
     );
     if (stillVisible) return;
+    if (previousCurrentItem) {
+      bindings.unarchivedConversations.value = sortUnarchivedConversationOverviewItems([
+        previousCurrentItem,
+        ...bindings.unarchivedConversations.value.filter(
+          (item: any) => String(item.conversationId || "").trim() !== currentConversationId,
+        ),
+      ]);
+      return;
+    }
     const preferredConversationId = String(payload?.preferredConversationId || "").trim() || null;
     void chatForeground.recoverForegroundConversationFromOverview(
       "conversation_overview_updated_missing_current",
