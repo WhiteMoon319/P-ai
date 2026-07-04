@@ -131,6 +131,8 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
           },
           onDelta,
         }),
+      invokeUnbindActiveChatViewStream: () =>
+        invokeTauri("unbind_active_chat_view_stream"),
       invokeProbeActiveChatViewStream: ({ conversationId, probeId }) =>
         invokeTauri<boolean>("probe_active_chat_view_stream", {
           input: {

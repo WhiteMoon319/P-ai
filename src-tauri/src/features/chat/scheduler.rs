@@ -821,23 +821,10 @@ fn collect_active_chat_view_delta_channels(
         .map_err(|_| "Failed to lock active chat view bindings".to_string())?;
     let conversation_id = conversation_id.trim();
 
-    let exact = bindings
-        .iter()
-        .filter_map(|(window_label, binding)| {
-            if binding.conversation_id != conversation_id {
-                return None;
-            }
-            Some((window_label.clone(), binding.delta_channel.clone()))
-        })
-        .collect::<Vec<_>>();
-    if !exact.is_empty() {
-        return Ok(exact);
-    }
-
     Ok(bindings
         .iter()
         .filter_map(|(window_label, binding)| {
-            if binding.conversation_id != "*" {
+            if binding.conversation_id != conversation_id {
                 return None;
             }
             Some((window_label.clone(), binding.delta_channel.clone()))
@@ -915,7 +902,42 @@ fn emit_assistant_delta_app_event(
 }
 
 fn should_emit_assistant_delta_via_app_event_only(event: &AssistantDeltaEvent) -> bool {
-    matches!(event.kind.as_deref(), Some("tool_status"))
+    matches!(
+        event.kind.as_deref(),
+        Some("tool_status") | Some("context_usage_update")
+    )
+}
+
+fn assistant_delta_broadcast_event(event: &AssistantDeltaEvent) -> AssistantDeltaEvent {
+    let mut next = event.clone();
+    next.delta.clear();
+    next.stream_cache = None;
+    next
+}
+
+fn is_assistant_delta_stream_channel_event(event: &AssistantDeltaEvent) -> bool {
+    if is_visible_stream_progress_event(event) {
+        return true;
+    }
+    matches!(
+        event.kind.as_deref(),
+        Some("round_completed") | Some("round_failed")
+    )
+}
+
+fn emit_assistant_delta_to_open_sidebar(
+    conversation_id: &str,
+    event: &AssistantDeltaEvent,
+) -> bool {
+    let payload = serde_json::json!({
+        "conversationId": conversation_id.trim(),
+        "event": event,
+    });
+    ide_chat_emit_notification_to_sidebar_conversation(
+        conversation_id,
+        "chat.assistantDelta",
+        payload,
+    ) > 0
 }
 
 fn is_visible_stream_progress_event(event: &AssistantDeltaEvent) -> bool {
@@ -1162,6 +1184,81 @@ fn apply_assistant_tool_event_to_stream_blocks(
 #[cfg(test)]
 mod scheduler_stream_block_tests {
     use super::*;
+
+    fn assistant_delta_event_for_test(kind: Option<&str>, delta: &str) -> AssistantDeltaEvent {
+        AssistantDeltaEvent {
+            delta: delta.to_string(),
+            kind: kind.map(ToOwned::to_owned),
+            request_id: Some("request-1".to_string()),
+            activation_id: Some("request-1".to_string()),
+            phase_id: None,
+            reason: None,
+            tool_name: None,
+            tool_call_id: None,
+            tool_status: None,
+            tool_args: None,
+            message: Some("message".to_string()),
+            stream_cache: None,
+        }
+    }
+
+    fn stream_cache_snapshot_for_test() -> ConversationStreamRuntimeCacheSnapshot {
+        ConversationStreamRuntimeCacheSnapshot {
+            activation_id: "request-1".to_string(),
+            request_id: "request-1".to_string(),
+            department_id: "department-1".to_string(),
+            agent_id: "agent-1".to_string(),
+            assistant_text: "assistant text".to_string(),
+            tool_status_text: "running".to_string(),
+            tool_status_state: "running".to_string(),
+            stream_blocks: Vec::new(),
+            started_at: "2026-01-01T00:00:00Z".to_string(),
+            started_at_ms: 1,
+            updated_at: "2026-01-01T00:00:01Z".to_string(),
+            has_visible_progress: true,
+            persisted_assistant_message_id: "assistant-1".to_string(),
+        }
+    }
+
+    #[test]
+    fn assistant_delta_broadcast_event_should_strip_high_frequency_payload() {
+        let mut event = assistant_delta_event_for_test(Some("tool_status"), "token");
+        event.tool_status = Some("running".to_string());
+        event.stream_cache = Some(stream_cache_snapshot_for_test());
+
+        let broadcast = assistant_delta_broadcast_event(&event);
+
+        assert!(broadcast.delta.is_empty());
+        assert!(broadcast.stream_cache.is_none());
+        assert_eq!(broadcast.kind.as_deref(), Some("tool_status"));
+        assert_eq!(broadcast.tool_status.as_deref(), Some("running"));
+        assert_eq!(broadcast.message.as_deref(), Some("message"));
+    }
+
+    #[test]
+    fn assistant_delta_stream_channel_event_should_only_match_stream_owned_events() {
+        assert!(is_assistant_delta_stream_channel_event(
+            &assistant_delta_event_for_test(None, "token")
+        ));
+        assert!(is_assistant_delta_stream_channel_event(
+            &assistant_delta_event_for_test(Some("activity_reasoning_delta"), "")
+        ));
+        assert!(is_assistant_delta_stream_channel_event(
+            &assistant_delta_event_for_test(Some("assistant_tool_event"), "")
+        ));
+        assert!(is_assistant_delta_stream_channel_event(
+            &assistant_delta_event_for_test(Some("assistant_tool_result"), "")
+        ));
+        assert!(is_assistant_delta_stream_channel_event(
+            &assistant_delta_event_for_test(Some("round_completed"), "")
+        ));
+        assert!(!is_assistant_delta_stream_channel_event(
+            &assistant_delta_event_for_test(Some("tool_status"), "")
+        ));
+        assert!(!is_assistant_delta_stream_channel_event(
+            &assistant_delta_event_for_test(Some("context_usage_update"), "")
+        ));
+    }
 
     #[test]
     fn assistant_tool_event_should_project_reasoning_and_tool_into_stream_block() {
@@ -1532,15 +1629,33 @@ fn dispatch_assistant_delta_to_active_view(
     conversation_id: &str,
     event: &AssistantDeltaEvent,
 ) {
-    emit_assistant_delta_app_event(state, conversation_id, event);
-
     if should_emit_assistant_delta_via_app_event_only(event) {
+        let broadcast_event = assistant_delta_broadcast_event(event);
+        emit_assistant_delta_app_event(state, conversation_id, &broadcast_event);
+        return;
+    }
+
+    if !is_assistant_delta_stream_channel_event(event) {
         return;
     }
 
     let targets =
         collect_active_chat_view_delta_channels(state, conversation_id).unwrap_or_default();
-    if targets.is_empty() {
+    let ide_sidebar_delivered = emit_assistant_delta_to_open_sidebar(
+        conversation_id,
+        event,
+    );
+    if targets.is_empty() && !ide_sidebar_delivered {
+        if matches!(
+            event.kind.as_deref(),
+            Some("assistant_tool_event") | Some("assistant_tool_result") | Some("tool_status")
+        ) {
+            runtime_log_debug(format!(
+                "[聊天流式订阅] 跳过，conversation_id={} kind={} reason=无订阅者",
+                conversation_id.trim(),
+                event.kind.as_deref().unwrap_or("delta"),
+            ));
+        }
         return;
     }
     let target_count = targets.len();
@@ -1573,7 +1688,7 @@ fn dispatch_assistant_delta_to_active_view(
             conversation_id.trim(),
             event.kind.as_deref().unwrap_or("delta"),
             target_count,
-            delivered,
+            delivered || ide_sidebar_delivered,
             failed_labels.len(),
             event.stream_cache.is_some(),
             block_count,
@@ -3199,12 +3314,6 @@ async fn activate_main_assistant(
                         event.phase_id.as_deref(),
                         event.reason.as_deref().unwrap_or("tool_start"),
                     );
-                } else if should_emit_assistant_delta_via_app_event_only(&event) {
-                    emit_assistant_delta_app_event(
-                        &state_for_delta,
-                        &conversation_id_for_emit,
-                        &event,
-                    );
                 } else {
                     dispatch_assistant_delta_to_active_view(
                         &state_for_delta,
@@ -3759,26 +3868,6 @@ fn collect_active_chat_view_activations(
             exact.len()
         );
         return Ok(exact);
-    }
-
-    let wildcard = bindings
-        .iter()
-        .filter_map(|(window_label, binding)| {
-            if binding.conversation_id != "*" {
-                return None;
-            }
-            Some(QueuedChatActivation {
-                event_id: format!("active-view:{window_label}"),
-            })
-        })
-        .collect::<Vec<_>>();
-    if !wildcard.is_empty() {
-        eprintln!(
-            "[聊天调度] 使用通配前端绑定: conversation_id={}, binding_count={}",
-            conversation_id,
-            wildcard.len()
-        );
-        return Ok(wildcard);
     }
 
     eprintln!(

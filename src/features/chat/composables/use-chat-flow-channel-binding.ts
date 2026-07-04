@@ -14,6 +14,7 @@ type UseChatFlowChannelBindingOptions = {
     conversationId?: string;
     onDelta: Channel<AssistantDeltaEvent>;
   }) => Promise<void>;
+  invokeUnbindActiveChatViewStream?: () => Promise<void>;
   invokeProbeActiveChatViewStream?: (input: {
     conversationId?: string;
     probeId: string;
@@ -43,6 +44,16 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
     return boundDisplayGeneration;
   }
 
+  function isSameForegroundConversation(conversationId?: string | null): boolean {
+    const expectedConversationId = normalizeConversationId(conversationId);
+    const currentConversationId = normalizeConversationId(
+      options.getConversationId ? options.getConversationId() : "",
+    );
+    return !!expectedConversationId
+      && !!currentConversationId
+      && expectedConversationId === currentConversationId;
+  }
+
   function setBoundDisplayGeneration(gen: number) {
     boundDisplayGeneration = Math.max(0, Math.round(Number(gen || 0)));
   }
@@ -56,10 +67,14 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
   ) {
     channel.onmessage = (event) => {
       if (guard && !guard()) {
-        if (options.debug && source === "bound") {
-          console.debug("[聊天] 丢弃过期 bound channel 事件", {
-            conversationId: boundConversationId,
-          });
+        if (options.debug) {
+          if (source === "bound") {
+            console.debug("[聊天] 丢弃过期 bound channel 事件", {
+              conversationId: boundConversationId,
+            });
+          } else {
+            console.debug("[聊天] 丢弃已切出会话的 sendChat 事件");
+          }
         }
         return;
       }
@@ -104,8 +119,12 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
   }
 
   async function bindActiveConversationStream(conversationId: string, force = false) {
-    if (!options.invokeBindActiveChatViewStream) return;
     const id = String(conversationId || "").trim();
+    if (!id) {
+      await unbindActiveConversationStream();
+      return;
+    }
+    if (!options.invokeBindActiveChatViewStream) return;
     if (!force && boundConversationInitialized && id === boundConversationId) return;
     // 流式绑定日志已移除
     const previousChannel = boundDeltaChannel;
@@ -143,13 +162,34 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
     }
   }
 
-  function createSendChatDeltaChannel(gen: number): Channel<AssistantDeltaEvent> {
+  async function unbindActiveConversationStream() {
+    const hadBinding = !!boundDeltaChannel || boundConversationInitialized || !!boundConversationId;
+    boundChannelSeq += 1;
+    boundDeltaChannel = null;
+    boundConversationId = "";
+    boundConversationInitialized = false;
+    boundDisplayGeneration = 0;
+    for (const resolve of pendingProbeResolvers.values()) {
+      resolve(false);
+    }
+    pendingProbeResolvers.clear();
+    if (hadBinding && options.invokeUnbindActiveChatViewStream) {
+      await options.invokeUnbindActiveChatViewStream();
+    }
+    if (options.debug) {
+      console.debug("[聊天] 已取消前台流式通道绑定");
+    }
+  }
+
+  function createSendChatDeltaChannel(gen: number, conversationId: string): Channel<AssistantDeltaEvent> {
+    const expectedConversationId = normalizeConversationId(conversationId);
     const channel = new Channel<AssistantDeltaEvent>();
     attachDeltaHandler(
       channel,
       "sendChat",
       () => gen,
       () => gen,
+      () => isSameForegroundConversation(expectedConversationId),
     );
     return channel;
   }
@@ -194,5 +234,6 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
     hasActiveBoundDeltaChannel,
     probeBoundChannel,
     setBoundDisplayGeneration,
+    unbindActiveConversationStream,
   };
 }

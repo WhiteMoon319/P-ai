@@ -66,7 +66,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
     bindings.hasMoreBackendHistory.value = false;
     bindings.foregroundTailLatestReady.value = true;
     bindings.clearPendingManualScrollToBottom();
-    bindings.getChatFlow().freezeForegroundRoundState();
+    bindings.getChatFlow().clearForegroundRuntimeState();
     void reason;
   }
 
@@ -119,7 +119,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
         bindings.clearConversationBadge(previousConversationId);
         bindings.markConversationReadPersisted(previousConversationId);
       }
-      bindings.getChatFlow().freezeForegroundRoundState();
+      bindings.getChatFlow().clearForegroundRuntimeState();
       bindings.clearPendingManualScrollToBottom();
       bindings.foregroundTailLatestReady.value = false;
       const trace = bindings.beginForegroundPaintTrace(cid);

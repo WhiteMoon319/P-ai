@@ -264,6 +264,7 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
     bindings.clearRecordHotkeyProbeState();
     bindings.agentWorkPresence.cleanup();
     bindings.chatWindowActiveSynced.value = null;
+    void bindings.getChatFlow()?.unbindActiveConversationStream?.().catch(() => {});
     if (bindings.isPrimaryChatWindow()) {
       void invokeTauri("set_chat_window_active", { active: false }).catch(() => {});
     }

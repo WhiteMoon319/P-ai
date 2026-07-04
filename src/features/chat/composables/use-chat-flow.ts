@@ -235,6 +235,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     debug: CHAT_STREAM_DEBUG,
     getConversationId: options.getConversationId,
     invokeBindActiveChatViewStream: options.invokeBindActiveChatViewStream,
+    invokeUnbindActiveChatViewStream: options.invokeUnbindActiveChatViewStream,
     invokeProbeActiveChatViewStream: options.invokeProbeActiveChatViewStream,
     getRoundActiveGen: () => (
       round.phase === "queued" || round.phase === "streaming" ? round.gen : 0
@@ -750,6 +751,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     resumeForegroundRuntimeRound,
     resumeForegroundStreamCacheProjection,
     bindActiveConversationStream: channelBinding.bindActiveConversationStream,
+    unbindActiveConversationStream: channelBinding.unbindActiveConversationStream,
     hasActiveBoundDeltaChannel: channelBinding.hasActiveBoundDeltaChannel,
     probeBoundChannel: channelBinding.probeBoundChannel,
     handleExternalStreamRebindRequired: externalEvents.handleExternalStreamRebindRequired,

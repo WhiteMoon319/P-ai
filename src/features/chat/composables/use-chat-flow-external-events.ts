@@ -234,30 +234,28 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     if (options.matchesRecentlyCompletedRoundIds(parsed)) {
       return;
     }
-    if (currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId) {
-      if (cacheConversationId) {
-        if (parsed.streamCache) {
-          options.writeConversationStreamCacheSnapshot(cacheConversationId, parsed.streamCache);
-          if (parsed.kind === "tool_status") {
-            options.applyAssistantEventToConversationStreamCache(cacheConversationId, parsed);
-          }
-        } else {
-          options.applyAssistantEventToConversationStreamCache(cacheConversationId, parsed);
-        }
+
+    const isAllowedBroadcastDelta =
+      parsed.kind === "tool_status"
+      || parsed.kind === "context_usage_update";
+    if (!isAllowedBroadcastDelta) {
+      if (options.debug && assistantEventHasVisibleProgress(parsed)) {
+        console.debug("[聊天流程] 已忽略全局高频助手增量事件", {
+          currentConversationId,
+          payloadConversationId,
+          kind: parsed.kind || "delta",
+        });
       }
       return;
     }
+
+    if (currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId) {
+      return;
+    }
     // tool_status 是调度层信号，服务头像右侧/运行态提示；它不属于气泡流式结果。
-    // 后端将它作为 app-event-only 发送，所以即使 bound channel 已连接也不能在这里去重丢弃。
+    // 后端将它作为低频广播发送，所以即使 bound channel 已连接也不能在这里去重丢弃。
     if (cacheConversationId) {
-      if (parsed.streamCache) {
-        options.writeConversationStreamCacheSnapshot(cacheConversationId, parsed.streamCache);
-        if (parsed.kind === "tool_status") {
-          options.applyAssistantEventToConversationStreamCache(cacheConversationId, parsed);
-        }
-      } else {
-        options.applyAssistantEventToConversationStreamCache(cacheConversationId, parsed);
-      }
+      options.applyAssistantEventToConversationStreamCache(cacheConversationId, parsed);
     }
     if (
       parsed.kind !== "tool_status"

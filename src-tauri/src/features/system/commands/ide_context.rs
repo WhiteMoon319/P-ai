@@ -104,6 +104,9 @@ static IDE_CONTEXT_PORT_SERVICE_CORE: OnceLock<Arc<LocalPortServiceCore>> = Once
 static IDE_CONTEXT_CHAT_CLIENTS: OnceLock<
     Arc<Mutex<std::collections::HashMap<String, tokio::sync::mpsc::UnboundedSender<serde_json::Value>>>>,
 > = OnceLock::new();
+static IDE_CONTEXT_CHAT_CLIENT_CONVERSATIONS: OnceLock<
+    Arc<Mutex<std::collections::HashMap<String, String>>>,
+> = OnceLock::new();
 static WEB_ACCESS_CONNECTIONS: OnceLock<
     Arc<Mutex<std::collections::HashMap<String, WebAccessConnectionEntry>>>,
 > = OnceLock::new();
@@ -1225,6 +1228,12 @@ fn ide_context_chat_clients() -> Arc<Mutex<std::collections::HashMap<String, tok
         .clone()
 }
 
+fn ide_context_chat_client_conversations() -> Arc<Mutex<std::collections::HashMap<String, String>>> {
+    IDE_CONTEXT_CHAT_CLIENT_CONVERSATIONS
+        .get_or_init(|| Arc::new(Mutex::new(std::collections::HashMap::new())))
+        .clone()
+}
+
 fn web_access_connections() -> Arc<Mutex<std::collections::HashMap<String, WebAccessConnectionEntry>>> {
     WEB_ACCESS_CONNECTIONS
         .get_or_init(|| Arc::new(Mutex::new(std::collections::HashMap::new())))
@@ -1344,6 +1353,85 @@ fn ide_chat_broadcast_notification(method: &str, params: serde_json::Value) {
             }
         }
     }
+}
+
+fn ide_chat_sidebar_client_id_from_label(label: &str) -> Option<String> {
+    let label = label.trim();
+    if let Some(value) = label.strip_prefix("vscode-sidebar:") {
+        let client_id = value.trim();
+        if !client_id.is_empty() {
+            return Some(client_id.to_string());
+        }
+    }
+    if let Some(value) = label.strip_prefix("ide-chat-sidebar-") {
+        let client_id = value.trim();
+        if !client_id.is_empty() {
+            return Some(client_id.to_string());
+        }
+    }
+    None
+}
+
+fn ide_chat_emit_notification_to_sidebar_conversation(
+    conversation_id: &str,
+    method: &str,
+    params: serde_json::Value,
+) -> usize {
+    let cid = conversation_id.trim();
+    if cid.is_empty() {
+        return 0;
+    }
+    let client_ids = ide_context_chat_client_conversations()
+        .lock()
+        .ok()
+        .map(|conversations| {
+            conversations
+                .iter()
+                .filter_map(|(client_id, mapped_conversation_id)| {
+                    if mapped_conversation_id.trim() == cid {
+                        Some(client_id.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if client_ids.is_empty() {
+        return 0;
+    }
+    let clients = ide_context_chat_clients();
+    let message = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": method,
+        "params": params,
+    });
+    let mut delivered = 0usize;
+    let mut stale_ids = Vec::<String>::new();
+    if let Ok(clients_guard) = clients.lock() {
+        for client_id in &client_ids {
+            match clients_guard.get(client_id) {
+                Some(sender) if sender.send(message.clone()).is_ok() => {
+                    delivered += 1;
+                }
+                Some(_) => stale_ids.push(client_id.clone()),
+                None => stale_ids.push(client_id.clone()),
+            }
+        }
+    }
+    if !stale_ids.is_empty() {
+        if let Ok(mut clients_guard) = clients.lock() {
+            for client_id in &stale_ids {
+                clients_guard.remove(client_id);
+            }
+        }
+        if let Ok(mut conversations) = ide_context_chat_client_conversations().lock() {
+            for client_id in stale_ids {
+                conversations.remove(&client_id);
+            }
+        }
+    }
+    delivered
 }
 
 fn ide_context_prune_expired_bridge_tokens(auth: &mut IdeContextBridgeAuthRuntime, now: OffsetDateTime) {
@@ -4717,6 +4805,11 @@ fn ide_chat_release_sidebar_conversation(
     state: &AppState,
     sidebar_label: &str,
 ) -> Result<(), String> {
+    if let Some(client_id) = ide_chat_sidebar_client_id_from_label(sidebar_label) {
+        if let Ok(mut conversations) = ide_context_chat_client_conversations().lock() {
+            conversations.remove(&client_id);
+        }
+    }
     if unregister_detached_chat_window_by_label(sidebar_label).is_some() {
         ide_chat_emit_overview_updated(state)?;
     }
@@ -4740,6 +4833,11 @@ fn ide_chat_register_sidebar_conversation(
         if opened_conversation_id.as_deref() != Some(conversation_id) {
             ide_chat_release_sidebar_conversation(state, sidebar_label)?;
         }
+        if let Some(client_id) = ide_chat_sidebar_client_id_from_label(sidebar_label) {
+            if let Ok(mut conversations) = ide_context_chat_client_conversations().lock() {
+                conversations.remove(&client_id);
+            }
+        }
         *opened_conversation_id = Some(conversation_id.to_string());
         return Ok(());
     }
@@ -4747,6 +4845,11 @@ fn ide_chat_register_sidebar_conversation(
         ide_chat_release_sidebar_conversation(state, sidebar_label)?;
     }
     register_detached_chat_window(conversation_id, sidebar_label)?;
+    if let Some(client_id) = ide_chat_sidebar_client_id_from_label(sidebar_label) {
+        if let Ok(mut conversations) = ide_context_chat_client_conversations().lock() {
+            conversations.insert(client_id, conversation_id.to_string());
+        }
+    }
     *opened_conversation_id = Some(conversation_id.to_string());
     ide_chat_emit_overview_updated(state)?;
     Ok(())
@@ -6282,6 +6385,9 @@ async fn ide_context_chat_ws_handle_connection(
         if let Ok(mut clients) = ide_context_chat_clients().lock() {
             clients.remove(&writer_client_id);
         }
+        if let Ok(mut conversations) = ide_context_chat_client_conversations().lock() {
+            conversations.remove(&writer_client_id);
+        }
     });
     let _ = outbound_tx.send(serde_json::json!({
         "jsonrpc": "2.0",
@@ -6457,6 +6563,9 @@ async fn ide_context_chat_ws_handle_connection(
     web_access_remove_connection(&connection_id);
     if let Ok(mut clients) = ide_context_chat_clients().lock() {
         clients.remove(&client_id);
+    }
+    if let Ok(mut conversations) = ide_context_chat_client_conversations().lock() {
+        conversations.remove(&client_id);
     }
     if opened_conversation_id.is_some() {
         let sidebar_label = ide_chat_sidebar_window_label(&client_id);

@@ -17,7 +17,7 @@ type UseChatFlowSendControllerOptions = {
   streamBlocks?: Ref<AssistantStreamBlock[]>;
   getConversationId?: () => string;
   getSession: () => { apiConfigId: string; agentId: string; departmentId?: string } | null;
-  createSendChatDeltaChannel: (gen: number) => Channel<AssistantDeltaEvent>;
+  createSendChatDeltaChannel: (gen: number, conversationId: string) => Channel<AssistantDeltaEvent>;
   invokeSendChatMessage: (input: {
     text: string;
     displayText?: string;
@@ -136,7 +136,7 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
     let submitSucceeded = false;
 
     try {
-      const onDelta = options.createSendChatDeltaChannel(gen);
+      const onDelta = options.createSendChatDeltaChannel(gen, sendConversationId);
       if (shouldBlockStopUntilHistoryFlushed && options.submitPending) {
         options.submitPending.value = true;
       }

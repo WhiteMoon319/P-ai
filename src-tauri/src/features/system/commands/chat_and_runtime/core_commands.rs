@@ -2269,14 +2269,26 @@ async fn bind_active_chat_view_stream(
             window_label, conversation_id
         ));
     } else {
-        // 空会话视图仍保留绑定，作为单窗口通配接收端，避免远程消息落地后前端无推送。
-        set_active_chat_view_stream_binding(
-            state.inner(),
-            &window_label,
-            Some("*"),
-            on_delta,
-        )?;
+        set_active_chat_view_stream_binding(state.inner(), &window_label, None, on_delta)?;
+        runtime_log_debug(format!(
+            "[聊天] 已取消活动聊天流绑定: window={}",
+            window_label
+        ));
     }
+    Ok(())
+}
+
+#[tauri::command]
+async fn unbind_active_chat_view_stream(
+    state: State<'_, AppState>,
+    window: tauri::Window,
+) -> Result<(), String> {
+    let window_label = window.label().to_string();
+    clear_active_chat_view_stream_binding(state.inner(), &window_label)?;
+    runtime_log_debug(format!(
+        "[聊天] 已取消活动聊天流订阅: window={}",
+        window_label
+    ));
     Ok(())
 }
 

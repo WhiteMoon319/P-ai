@@ -71,6 +71,7 @@ export type UseChatFlowOptions = {
     conversationId?: string;
     onDelta: Channel<AssistantDeltaEvent>;
   }) => Promise<void>;
+  invokeUnbindActiveChatViewStream?: () => Promise<void>;
   invokeProbeActiveChatViewStream?: (input: {
     conversationId?: string;
     probeId: string;
