@@ -1049,6 +1049,7 @@ const {
   activeConversationId: toRef(props, "activeConversationId"),
   latestOwnElasticItemId,
   latestOwnElasticMinHeight,
+  chatting: toRef(props, "chatting"),
   debugEnabled: computed(() => !sidebarMode.value),
   onUserScroll: () => onScroll(),
 });

@@ -10,6 +10,7 @@ interface UseChatVirtualScrollOptions {
   activeConversationId: Ref<string>;
   latestOwnElasticItemId: Ref<string>;
   latestOwnElasticMinHeight: Ref<number>;
+  chatting?: Ref<boolean> | boolean;
   debugEnabled?: Ref<boolean> | boolean;
   onUserScroll: () => void;
 }
@@ -22,6 +23,7 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     activeConversationId,
     latestOwnElasticItemId,
     latestOwnElasticMinHeight,
+    chatting,
     debugEnabled,
     onUserScroll,
   } = options;
@@ -38,7 +40,6 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
 
   const initialBottomOffset = ref(0);
   let conversationVirtualizerResetRequest = 0;
-  let debugTraceRequest = 0;
   let pendingConversationBottomInitializationId = "";
 
   // ==================== virtualizer ====================
@@ -81,6 +82,35 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       || (window as any).__easyCallDebugChatVirtualScroll === true;
   }
 
+  function chatStreamingActive(): boolean {
+    const configured = typeof chatting === "object" && chatting && "value" in chatting
+      ? chatting.value
+      : chatting;
+    return !!configured;
+  }
+
+  function virtualizerScrollToFn(
+    offset: number,
+    options: { adjustments?: number; behavior?: ScrollBehavior },
+    instance: { scrollElement: Element | Window | null },
+  ) {
+    const scrollEl = instance.scrollElement instanceof HTMLElement ? instance.scrollElement : null;
+    if (!scrollEl) return;
+    const nextTop = Math.max(0, Math.round(Number(offset || 0)));
+    // 覆盖 virtualizer 的尺寸修正滚动：我们定位到流式消息高度持续增长时，
+    // @tanstack/virtual 会走 ResizeObserver -> resizeItem -> applyScrollAdjustment
+    // -> _scrollToOffset -> scrollToFn，把 scrollTop 连续往下补，维持距底部固定偏移。
+    // 这会让聊天窗口在流式期间“自己往下走”。这里仅屏蔽 adjustments 驱动的
+    // 底层修正滚动，不影响手动滚动或显式的 scrollToBottom 路径。
+    if (chatStreamingActive() && Math.round(Number(options.adjustments || 0)) !== 0) {
+      return;
+    }
+    scrollEl.scrollTo({
+      top: nextTop,
+      behavior: options.behavior || "auto",
+    });
+  }
+
   function debugVirtualScrollState(label: string) {
     const scrollEl = scrollContainer.value;
     const rows = virtualizer.value.getVirtualItems();
@@ -112,8 +142,10 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       getItemKey: (index: number) => renderItems.value[index]?.id ?? `row-${index}`,
       estimateSize: estimateRenderItemSize,
       initialOffset: () => initialBottomOffset.value,
+      scrollToFn: virtualizerScrollToFn,
       anchorTo: "end",
-      scrollEndThreshold: 100,
+      // 仅在精确贴底时才允许尾部锚定跟随，避免“接近底部”时被持续往下带。
+      scrollEndThreshold: 0,
       shouldAdjustScrollPositionOnItemSizeChange: (item: { end: number }, _delta: number, instance: {
         getScrollOffset: () => number;
         getSize: () => number;
@@ -396,7 +428,6 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
 
   onBeforeUnmount(() => {
     conversationVirtualizerResetRequest += 1;
-    debugTraceRequest += 1;
     pendingConversationBottomInitializationId = "";
     virtualItemResizeObserver?.disconnect();
     virtualItemResizeObserver = null;
