@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-04T11:41:37.000Z",
-  "latestVersion": "v0.18.2",
+  "generatedAt": "2026-07-04T14:26:55.213Z",
+  "latestVersion": "v0.18.3",
   "releases": [
+    {
+      "version": "v0.18.3",
+      "path": "docs/changelog/releases/v0.18.3.md",
+      "summary": "会话列表分组新增旧会话渐进加载策略：默认隐藏 7 天未使用的旧会话、每组至少保留 5 条，并支持“加载更多”逐步展开。"
+    },
     {
       "version": "v0.18.2",
       "path": "docs/changelog/releases/v0.18.2.md",
