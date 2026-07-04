@@ -3,6 +3,7 @@ import App from "./App.vue";
 import { i18n } from "../../i18n";
 import "../../style.css";
 import "../chat/markdown/markdown-content.css";
+import "katex/dist/katex.min.css";
 import "./assets/sidebar-theme.css";
 import { LUCIDE_CONTEXT } from "../../lucide-context";
 import { useAppTheme } from "../shell/composables/use-app-theme";
