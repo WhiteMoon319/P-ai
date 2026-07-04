@@ -25,10 +25,15 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
   let chatLayoutResizeObserver: ResizeObserver | null = null;
   let pendingComposerResizeFrame = 0;
   let pendingChatLayoutResizeFrame = 0;
+  let wheelScrollIntentUntil = 0;
+  let pointerScrollIntentActive = false;
 
   const showJumpToBottom = computed(() => !lastBottomState.value && userScrollingDown.value);
   const jumpToBottomStyle = computed(() => ({
     bottom: `${jumpToBottomOffset.value}px`,
+  }));
+  const jumpAboveBottomStyle = computed(() => ({
+    bottom: `${jumpToBottomOffset.value + 44}px`,
   }));
 
   function updateJumpToBottomOffset() {
@@ -79,8 +84,17 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
     const el = scrollContainer.value;
     if (!el) return;
     const nextScrollTop = el.scrollTop;
-    userScrollingDown.value = nextScrollTop > lastScrollTop.value;
-    userScrollingUp.value = nextScrollTop < lastScrollTop.value;
+    const previousScrollTop = lastScrollTop.value;
+    const userInitiatedScroll = pointerScrollIntentActive || Date.now() <= wheelScrollIntentUntil;
+    if (userInitiatedScroll) {
+      if (nextScrollTop > previousScrollTop) {
+        userScrollingDown.value = true;
+        userScrollingUp.value = false;
+      } else if (nextScrollTop < previousScrollTop) {
+        userScrollingDown.value = false;
+        userScrollingUp.value = true;
+      }
+    }
     lastScrollTop.value = nextScrollTop;
     const nearBottom = isNearBottom(el);
     if (nearBottom && !lastBottomState.value) {
@@ -91,6 +105,22 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
       userScrollingUp.value = false;
     }
     lastBottomState.value = nearBottom;
+  }
+
+  function noteWheelScrollIntent() {
+    wheelScrollIntentUntil = Date.now() + 500;
+  }
+
+  function endPointerScrollIntent() {
+    pointerScrollIntentActive = false;
+    window.removeEventListener("pointerup", endPointerScrollIntent);
+    window.removeEventListener("pointercancel", endPointerScrollIntent);
+  }
+
+  function beginPointerScrollIntent() {
+    pointerScrollIntentActive = true;
+    window.addEventListener("pointerup", endPointerScrollIntent);
+    window.addEventListener("pointercancel", endPointerScrollIntent);
   }
 
   onMounted(() => {
@@ -156,6 +186,10 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
       window.cancelAnimationFrame(pendingChatLayoutResizeFrame);
       pendingChatLayoutResizeFrame = 0;
     }
+    if (typeof window !== "undefined") {
+      window.removeEventListener("pointerup", endPointerScrollIntent);
+      window.removeEventListener("pointercancel", endPointerScrollIntent);
+    }
   });
 
   watch(
@@ -195,8 +229,6 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
         if (el) {
           lastBottomState.value = isNearBottom(el);
           lastScrollTop.value = el.scrollTop;
-          userScrollingDown.value = false;
-          userScrollingUp.value = false;
         }
       });
     },
@@ -209,9 +241,13 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
     chatLayoutRoot,
     latestOwnElasticMinHeight,
     showJumpToBottom,
+    userScrollingDown,
     userScrollingUp,
     jumpToBottomStyle,
+    jumpAboveBottomStyle,
     onScroll,
+    noteWheelScrollIntent,
+    beginPointerScrollIntent,
     prepareBottomAlignmentLayout,
   };
 }

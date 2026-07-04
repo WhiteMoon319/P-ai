@@ -46,7 +46,8 @@
             :class="chatting || frozen || conversationInteractionBusy ? 'pointer-events-auto' : ''"
             :data-chat-interaction-locked="chatting || frozen || conversationInteractionBusy ? 'true' : undefined"
             @scroll="handleConversationScroll"
-            @wheel="handleConversationWheel"
+            @wheel="handleConversationWheelInput"
+            @pointerdown="beginPointerScrollIntent"
           >
           <ConversationTodoDropdown :todos="normalizedConversationTodos" :persona-name="personaName" />
           <div class="ecall-chat-history-flow flex min-w-0 shrink-0 flex-col">
@@ -193,12 +194,17 @@
           @update:selected-contact-id="autoPushSelectedContactId = $event"
         />
         <div v-show="showJumpToBottom" class="pointer-events-none absolute bottom-3 right-5 z-30 flex justify-end" :style="jumpToBottomStyle">
-          <button class="btn btn-sm btn-circle btn-primary pointer-events-auto shadow-lg" :title="t('chat.jumpToBottom')" @click="handleJumpToBottom">
+          <button class="btn btn-sm btn-circle btn-neutral pointer-events-auto shadow-lg" @click="handleJumpToBottom">
+            <ArrowDownToLine class="h-4 w-4" />
+          </button>
+        </div>
+        <div v-show="showJumpToNextUserMessage" class="pointer-events-none absolute bottom-3 right-5 z-30 flex justify-end" :style="jumpAboveBottomStyle">
+          <button class="btn btn-sm btn-circle btn-neutral pointer-events-auto shadow-lg" @click="handleJumpToNextUserMessage">
             <ChevronsDown class="h-4 w-4" />
           </button>
         </div>
         <div v-show="showJumpToPreviousUserMessage" class="pointer-events-none absolute right-5 top-3 z-30 flex justify-end">
-          <button class="btn btn-sm btn-circle btn-primary pointer-events-auto shadow-lg" :title="t('chat.jumpToPreviousUserMessage')" @click="handleJumpToPreviousUserMessage">
+          <button class="btn btn-sm btn-circle btn-neutral pointer-events-auto shadow-lg" @click="handleJumpToPreviousUserMessage">
             <ChevronsUp class="h-4 w-4" />
           </button>
         </div>
@@ -486,7 +492,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch, type ComponentPublicInstance, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { isDarkAppTheme } from "../../shell/composables/use-app-theme";
-import { Check, ChevronsDown, ChevronsUp, History, Trash2, X } from "@lucide/vue";
+import { ArrowDownToLine, Check, ChevronsDown, ChevronsUp, History, Trash2, X } from "@lucide/vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ChatMessageBlock, ChatPersonaPresenceChip, ChatTodoItem, ConversationDelegateStatusSummary, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption, ShellWorkspace } from "../../../types/app";
 import ChatMessageItem from "../components/ChatMessageItem.vue";
@@ -1026,8 +1032,9 @@ defineExpose({ exitMessageSelectionMode: handleExitMessageSelectionMode });
 
 const {
   scrollContainer, composerContainer, toolbarContainer, chatLayoutRoot,
-  latestOwnElasticMinHeight, showJumpToBottom, userScrollingUp, jumpToBottomStyle, onScroll,
-  prepareBottomAlignmentLayout,
+  latestOwnElasticMinHeight, showJumpToBottom, userScrollingDown, userScrollingUp,
+  jumpToBottomStyle, jumpAboveBottomStyle, onScroll,
+  noteWheelScrollIntent, beginPointerScrollIntent, prepareBottomAlignmentLayout,
 } = useChatScrollLayout({
   activeConversationId: toRef(props, "activeConversationId"),
   chatting: toRef(props, "chatting"), busy: conversationInteractionBusy,
@@ -1111,8 +1118,41 @@ const previousUserMessageJumpTarget = computed(() => {
   return previousUserMessageJumpTargets.value[0] ?? null;
 });
 
+function collectNextUserMessageJumpTargets() {
+  const scrollEl = scrollContainer.value;
+  if (!scrollEl || virtualRenderItems.value.length <= 0) return [];
+  const rows = virtualizer.value.getVirtualItems();
+  const viewportBottom = scrollEl.scrollTop + scrollEl.clientHeight;
+  let lastVisibleIndex = -1;
+  for (const row of rows) {
+    if (row.start < viewportBottom - 2) {
+      lastVisibleIndex = row.index;
+    }
+  }
+  if (lastVisibleIndex < 0) return [];
+  const targets: Array<{ index: number; item: ChatRenderItem }> = [];
+  for (let index = Math.min(lastVisibleIndex + 1, virtualRenderItems.value.length - 1); index < virtualRenderItems.value.length; index += 1) {
+    const item = virtualRenderItems.value[index];
+    if (isPreviousUserMessageJumpItem(item)) targets.push({ index, item });
+  }
+  return targets;
+}
+
+const nextUserMessageJumpTargets = computed(() => {
+  scrollNavigationTick.value;
+  return collectNextUserMessageJumpTargets();
+});
+
+const nextUserMessageJumpTarget = computed(() => {
+  return nextUserMessageJumpTargets.value[0] ?? null;
+});
+
 const showJumpToPreviousUserMessage = computed(() =>
   userScrollingUp.value && !!previousUserMessageJumpTarget.value,
+);
+
+const showJumpToNextUserMessage = computed(() =>
+  userScrollingDown.value && !!nextUserMessageJumpTarget.value,
 );
 
 // ==================== tool review ====================
@@ -1230,7 +1270,12 @@ function handleConversationScroll() {
   scrollNavigationTick.value += 1;
 }
 
-function scrollToPreviousUserMessageTarget(target: { index: number; item: ChatRenderItem }) {
+function handleConversationWheelInput(event: WheelEvent) {
+  noteWheelScrollIntent();
+  onConversationWheel(event);
+}
+
+function scrollToUserMessageTarget(target: { index: number; item: ChatRenderItem }) {
   if (!target) return;
   armProgrammaticScrollPaginationSuppression();
   scheduleVirtualMeasure();
@@ -1270,7 +1315,7 @@ async function continuePendingPreviousUserMessageJump() {
     return;
   }
   pendingPreviousUserMessageJumpId.value = "";
-  scrollToPreviousUserMessageTarget(target);
+  scrollToUserMessageTarget(target);
 }
 
 function handleJumpToPreviousUserMessage() {
@@ -1280,7 +1325,13 @@ function handleJumpToPreviousUserMessage() {
     requestOlderHistoryBeforePreviousUserJump(target);
     return;
   }
-  scrollToPreviousUserMessageTarget(target);
+  scrollToUserMessageTarget(target);
+}
+
+function handleJumpToNextUserMessage() {
+  const target = nextUserMessageJumpTarget.value;
+  if (!target) return;
+  scrollToUserMessageTarget(target);
 }
 
 watch(
