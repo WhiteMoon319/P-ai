@@ -1629,7 +1629,11 @@
       "queued": "排队",
       "recallToInput": "退回输入框",
       "guide": "引导",
-      "guiding": "引导中"
+      "guiding": "引导中",
+      "sourceTask": "任务",
+      "sourceDelegate": "委托",
+      "sourceSystem": "系统",
+      "sourceRemoteIm": "远程"
     },
     "toolNames": {},
     "planStartedDivider": "计划开始执行",

@@ -1341,7 +1341,11 @@
       "queued": "Queued",
       "recallToInput": "Recall to input",
       "guide": "Guide",
-      "guiding": "Guiding"
+      "guiding": "Guiding",
+      "sourceTask": "Task",
+      "sourceDelegate": "Delegate",
+      "sourceSystem": "System",
+      "sourceRemoteIm": "Remote"
     },
     "voice": "Voice {index}",
     "jumpToBottom": "Jump to bottom",

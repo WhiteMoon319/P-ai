@@ -4,6 +4,7 @@
       v-if="queueEnabled && !systemNotificationMode && !remoteContactMode"
       :queue-events="visibleQueueEvents"
       :session-state="sessionState"
+      :user-persona-name="queueUserPersonaName"
       @recall-to-input="handleRecallToInput"
       @mark-guided="markGuided"
     />
@@ -529,6 +530,10 @@ const visibleQueueEvents = computed(() => {
     (event) => String(event.conversationId || "").trim() === activeConversationId,
   );
 });
+
+const queueUserPersonaName = computed(() =>
+  String(props.personaNameMap["user-persona"] || props.userAlias || "").trim(),
+);
 
 const localChatInput = computed({
   get: () => props.chatInput,

@@ -1621,7 +1621,11 @@
       "queued": "排隊",
       "recallToInput": "退回輸入框",
       "guide": "引導",
-      "guiding": "引導中"
+      "guiding": "引導中",
+      "sourceTask": "任務",
+      "sourceDelegate": "委託",
+      "sourceSystem": "系統",
+      "sourceRemoteIm": "遠端"
     },
     "toolNames": {},
     "planStartedDivider": "計劃開始執行",

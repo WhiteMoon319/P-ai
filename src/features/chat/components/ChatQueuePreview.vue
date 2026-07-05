@@ -1,10 +1,10 @@
 <template>
-  <div v-if="queueEvents.length > 0" class="w-full py-2">
-    <div class="space-y-1">
+  <div v-if="queueEvents.length > 0" class="mb-2 w-full overflow-hidden rounded-lg bg-base-200/45">
+    <div class="divide-y divide-base-content/10">
       <div
         v-for="event in queueEvents"
         :key="event.id"
-        class="flex items-center gap-2 rounded bg-base-200/60 px-2 py-1.5 text-xs"
+        class="flex items-center gap-2 px-2 py-1 text-xs"
       >
         <span
           class="badge badge-xs shrink-0"
@@ -56,6 +56,7 @@ import type { ChatQueueEvent, MainSessionState } from "../composables/use-chat-q
 const props = defineProps<{
   queueEvents: ChatQueueEvent[];
   sessionState: MainSessionState;
+  userPersonaName?: string;
 }>();
 
 defineEmits<{
@@ -68,15 +69,15 @@ const { t } = useI18n();
 function sourceText(source: string): string {
   switch (source) {
     case "user":
-      return "用户";
+      return String(props.userPersonaName || "").trim() || t("archives.roleUser");
     case "task":
-      return "任务";
+      return t("chat.queue.sourceTask");
     case "delegate":
-      return "委托";
+      return t("chat.queue.sourceDelegate");
     case "system":
-      return "系统";
+      return t("chat.queue.sourceSystem");
     case "remote_im":
-      return "远程";
+      return t("chat.queue.sourceRemoteIm");
     default:
       return source;
   }
