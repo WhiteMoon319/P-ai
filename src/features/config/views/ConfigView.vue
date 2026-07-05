@@ -68,6 +68,8 @@
         <DemoTab
           :config="config"
           :personas="personas"
+          :persona-avatar-url-map="props.personaAvatarUrlMap"
+          :assistant-department-agent-id="assistantDepartmentAgentId"
           @update:config-tab="$emit('update:configTab', $event)"
           @update:persona-editor-id="$emit('update:personaEditorId', $event)"
         />

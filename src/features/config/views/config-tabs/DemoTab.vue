@@ -126,17 +126,141 @@
         </div>
       </div>
     </div>
+
+    <div class="card border border-base-300 bg-base-100">
+      <div class="card-body gap-3 p-4">
+        <div class="space-y-1">
+          <h3 class="card-title text-base">自研气泡组件 Demo</h3>
+          <p class="text-sm text-base-content/70">
+            不使用 DaisyUI 原生 chat/chat-bubble。助理消息无气泡，用户消息使用半透明圆角矩形气泡，单独验证多助理、左右布局、头像避让和名称对齐。
+          </p>
+        </div>
+
+        <div class="overflow-hidden rounded-[1.75rem] border border-base-300/80 bg-base-200/70 p-4 shadow-inner">
+          <div class="flex flex-col gap-4 rounded-[1.35rem] border border-base-100/70 bg-base-100/30 px-3 py-4">
+            <ChatBubbleShell
+              v-for="message in bubbleDemoDisplayMessages"
+              :key="message.id"
+              :side="message.side"
+              :tone="message.tone"
+              :name="message.name"
+              :meta="message.meta"
+              :avatar-text="message.avatarText"
+              :avatar-url="message.avatarUrl"
+              :streaming="!!message.streaming"
+              :separated="message.separated"
+            >
+              <template v-if="message.reasoning?.length || message.tools?.length" #activity>
+                <div class="flex flex-col opacity-90">
+                  <details
+                    class="collapse rounded-none min-w-55"
+                    :open="bubbleDemoActivityOpen(message.id)"
+                    @toggle="onBubbleDemoActivityToggle(message.id, $event)"
+                  >
+                    <summary class="collapse-title px-0 py-0.5 min-h-0 text-[12px] font-normal flex items-center gap-1.5 text-base-content/42 hover:bg-base-200">
+                      <span class="flex min-w-0 flex-1 items-center gap-1.5">
+                        <span class="shrink-0">思考与工具</span>
+                        <span v-if="message.tools?.length" class="inline-flex h-3 items-center text-base-content/30">·</span>
+                        <span v-if="message.tools?.length" class="min-w-0 truncate text-base-content/42">
+                          {{ message.tools.length }} 个工具
+                        </span>
+                      </span>
+                    </summary>
+                    <div v-if="bubbleDemoActivityOpen(message.id)" class="collapse-content px-0 pb-1 pt-2 text-xs text-base-content/70">
+                      <div class="flex flex-col">
+                        <details
+                          v-if="message.reasoning?.length"
+                          class="collapse rounded-none border-l border-base-content/15 pl-2"
+                          :open="bubbleDemoActivityItemOpen(message.id, 'reasoning')"
+                          @toggle="onBubbleDemoActivityItemToggle(message.id, 'reasoning', $event)"
+                        >
+                          <summary class="collapse-title flex min-h-0 items-center gap-1.5 px-1 py-1 text-xs hover:bg-base-200">
+                            <span class="inline-flex w-3 shrink-0 items-center justify-center font-mono text-xs leading-none text-info">•</span>
+                            <span class="min-w-0 flex-1 truncate text-base-content/75">思考</span>
+                          </summary>
+                          <div v-if="bubbleDemoActivityItemOpen(message.id, 'reasoning')" class="collapse-content px-1 pb-2 pt-1">
+                            <div class="whitespace-pre-wrap wrap-break-word text-xs leading-relaxed text-base-content/70">
+                              {{ message.reasoning.join("\n") }}
+                            </div>
+                          </div>
+                        </details>
+                        <details
+                          v-for="(tool, toolIndex) in message.tools || []"
+                          :key="`${tool.name}-${toolIndex}`"
+                          class="collapse rounded-none border-l border-base-content/15 pl-2"
+                          :open="bubbleDemoActivityItemOpen(message.id, bubbleDemoToolItemKey(tool, toolIndex))"
+                          @toggle="onBubbleDemoActivityItemToggle(message.id, bubbleDemoToolItemKey(tool, toolIndex), $event)"
+                        >
+                          <summary class="collapse-title flex min-h-0 items-center gap-1.5 px-1 py-1 text-xs hover:bg-base-200">
+                            <span class="inline-flex w-3 shrink-0 items-center justify-center leading-none text-success">
+                              <FileText v-if="tool.icon === 'file'" class="size-3" aria-hidden="true" />
+                              <SquareTerminal v-else-if="tool.icon === 'terminal'" class="size-3" aria-hidden="true" />
+                              <Wrench v-else class="size-3" aria-hidden="true" />
+                            </span>
+                            <span class="min-w-0 flex-1 truncate text-base-content/75">
+                              {{ tool.name }}
+                              <span class="ml-1 text-success">✓</span>
+                            </span>
+                          </summary>
+                          <div v-if="bubbleDemoActivityItemOpen(message.id, bubbleDemoToolItemKey(tool, toolIndex))" class="collapse-content px-1 pb-2 pt-1">
+                            <div class="whitespace-pre-wrap wrap-break-word text-xs leading-relaxed text-base-content/70">
+                              {{ tool.detail }}
+                            </div>
+                          </div>
+                        </details>
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              </template>
+              <div class="space-y-2 text-sm leading-relaxed">
+                <p v-for="line in message.lines" :key="line" class="m-0 whitespace-pre-wrap break-words">
+                  {{ line }}
+                </p>
+                <div
+                  v-if="message.chips?.length"
+                  :class="[
+                    'flex flex-wrap gap-1.5 pt-1',
+                    message.tone === 'user' ? 'justify-end' : 'justify-start',
+                  ]"
+                >
+                  <span
+                    v-for="chip in message.chips"
+                    :key="chip"
+                    class="rounded-lg bg-base-100/35 px-2 py-1 text-xs text-base-content/60 backdrop-blur-sm"
+                  >
+                    {{ chip }}
+                  </span>
+                </div>
+              </div>
+              <template #footer>
+                <span v-if="message.footer">{{ message.footer }}</span>
+                <span v-if="!message.streaming" class="inline-flex items-center gap-1">
+                  <Copy class="size-3" aria-hidden="true" />
+                  复制
+                </span>
+                <span v-if="!message.streaming && message.canRecall" class="inline-flex items-center gap-1">
+                  <Undo2 class="size-3" aria-hidden="true" />
+                  撤回
+                </span>
+              </template>
+            </ChatBubbleShell>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { RotateCcw } from "@lucide/vue";
+import { Copy, FileText, RotateCcw, SquareTerminal, Undo2, Wrench } from "@lucide/vue";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../../services/tauri-api";
+import ChatBubbleShell from "../../../chat/components/ChatBubbleShell.vue";
 import DelegateCard from "../../../chat/components/DelegateCard.vue";
 import SessionControlPanel from "../../../chat/components/SessionControlPanel.vue";
-import type { ConversationDelegateStatusSummary } from "../../../../types/app";
+import type { AppConfig, ConversationDelegateStatusSummary, PersonaProfile } from "../../../../types/app";
 
 type NativeNotificationDemoResult = {
   permissionBefore: string;
@@ -146,13 +270,188 @@ type NativeNotificationDemoResult = {
   sentAt: string;
 };
 
+type BubbleDemoMessage = {
+  id: string;
+  side: "left" | "right";
+  tone: "assistant" | "user" | "system";
+  personaSlot: "assistant-primary" | "assistant-reviewer" | "assistant-memory" | "assistant-system" | "user";
+  name: string;
+  meta: string;
+  avatarText: string;
+  reasoning?: string[];
+  tools?: Array<{
+    name: string;
+    detail: string;
+    icon: "file" | "terminal" | "tool";
+  }>;
+  lines: string[];
+  chips?: string[];
+  footer?: string;
+  canRecall?: boolean;
+  streaming?: boolean;
+};
+
+type BubbleDemoTool = NonNullable<BubbleDemoMessage["tools"]>[number];
+
+type BubbleDemoDisplayMessage = BubbleDemoMessage & {
+  avatarUrl: string;
+  separated: boolean;
+};
+
+const props = withDefaults(defineProps<{
+  config: AppConfig;
+  personas: PersonaProfile[];
+  personaAvatarUrlMap?: Record<string, string>;
+  assistantDepartmentAgentId?: string;
+}>(), {
+  personaAvatarUrlMap: () => ({}),
+  assistantDepartmentAgentId: "",
+});
+
 const sending = ref(false);
 const restarting = ref(false);
 const loadingMemoryStats = ref(false);
 const errorText = ref("");
 const resultText = ref("");
 const memoryStatsText = ref("");
+const bubbleDemoActivityOpenMap = ref<Record<string, boolean>>({});
+const bubbleDemoActivityItemOpenKey = ref("");
 const { t } = useI18n();
+const bubbleDemoMessages: BubbleDemoMessage[] = [
+  {
+    id: "assistant-opening",
+    side: "left",
+    tone: "assistant",
+    personaSlot: "assistant-primary",
+    name: "Pai",
+    meta: "刚刚",
+    avatarText: "P",
+    reasoning: [
+      "**Considering layout migration** The user wants to replace DaisyUI chat with a lighter custom message shell.",
+      "Need preserve current activity presentation while separating assistant content from user bubbles.",
+      "Only the user side should keep a translucent rounded rectangle bubble.",
+    ],
+    tools: [
+      { name: "exec", detail: 'rg -n "chat-bubble|activityPanel|thinkingAndTools" src/features/chat', icon: "terminal" },
+      { name: "exec", detail: 'rg -n "ChatMessageItem|DemoTab|ChatBubbleShell" src/features', icon: "terminal" },
+    ],
+    lines: [
+      "我把名字、气泡和底部操作都放在同一列里，头像永远只占头像列。",
+      "这样左侧消息不会被头像压到下面，右侧消息也能自然贴齐内容列。",
+    ],
+    chips: ["半透明背景", "无气泡尾巴", "名称对齐"],
+    canRecall: true,
+  },
+  {
+    id: "reviewer-assistant",
+    side: "left",
+    tone: "assistant",
+    personaSlot: "assistant-reviewer",
+    name: "代码审查员",
+    meta: "刚刚",
+    avatarText: "审",
+    reasoning: [
+      "**Reviewing assistant identity** Multiple assistant speakers should stay visually distinct without adding bubbles.",
+      "The content column must align name, activity, final answer, and footer under the same speaker identity.",
+    ],
+    tools: [
+      { name: "exec", detail: 'rg -n "speakerAgentId|personaNameMap|activityItems" src/features/chat', icon: "terminal" },
+      { name: "exec", detail: 'Get-Content src/features/chat/components/ChatMessageItem.vue | Select-Object -First 220', icon: "terminal" },
+    ],
+    lines: [
+      "这里是另一个助理身份。左侧消息没有气泡底，只保留头像、名称、内容和工具状态。",
+      "如果多个助理连续发言，视觉上应该靠头像和名称区分，而不是靠不同气泡颜色。",
+    ],
+    chips: ["review", "layout"],
+    canRecall: true,
+  },
+  {
+    id: "user-reply",
+    side: "right",
+    tone: "user",
+    personaSlot: "user",
+    name: "我",
+    meta: "1 分钟前",
+    avatarText: "我",
+    lines: [
+      "右侧也保持同一套结构：头像在右，名称和气泡右对齐，不再依赖 DaisyUI chat 的网格。",
+    ],
+    chips: ["附件: screenshot.png", "附件: design-notes.md"],
+    canRecall: true,
+  },
+  {
+    id: "memory-assistant",
+    side: "left",
+    tone: "assistant",
+    personaSlot: "assistant-memory",
+    name: "记忆管家",
+    meta: "1 分钟前",
+    avatarText: "忆",
+    tools: [
+      { name: "exec", detail: 'rg -n "bubbleBackgroundHidden|hideToggleEnabled|message footer" src/features/chat', icon: "terminal" },
+    ],
+    lines: [
+      "我补一条更短的助理消息，观察无气泡状态下短文本是否过于飘。",
+      "如果太轻，可以后续给助理内容区加极淡的左侧引导线，而不是恢复气泡。",
+    ],
+    chips: ["memory: UI preference", "命中 3"],
+    canRecall: true,
+  },
+  {
+    id: "assistant-long",
+    side: "left",
+    tone: "system",
+    personaSlot: "assistant-system",
+    name: "系统人格",
+    meta: "2 分钟前",
+    avatarText: "系",
+    reasoning: [
+      "**Preparing demo patch** Keep the current activity visual language, but make sample tool content match real runtime traces.",
+      "The final answer below should remain independent from activity, so future rendering can lazy-load details.",
+    ],
+    tools: [
+      { name: "apply_patch", detail: "更新 DemoTab.vue 的自研气泡样张内容", icon: "tool" },
+      { name: "exec", detail: "pnpm typecheck", icon: "terminal" },
+    ],
+    lines: [
+      "长内容会限制在内容列最大宽度内，背景是圆角矩形半透明层，适合后续接 Markdown、工具卡片和附件。",
+      "这个 demo 先只验证外壳：左右、头像、名称、气泡、footer。确认方向后，再迁移到正式 ChatMessageItem。",
+    ],
+    chips: ["未来兼容: assistant-attachment.md"],
+    streaming: true,
+  },
+];
+const userPersona = computed(
+  () => props.personas.find((persona) => persona.isBuiltInUser || persona.id === "user-persona") ?? null,
+);
+const assistantPersonas = computed(() =>
+  props.personas.filter((persona) =>
+    !persona.isBuiltInUser
+    && !persona.isBuiltInSystem
+    && persona.id !== "user-persona"
+    && persona.id !== "system-persona",
+  ),
+);
+const primaryAssistantPersona = computed(
+  () =>
+    assistantPersonas.value.find((persona) => persona.id === props.assistantDepartmentAgentId)
+    ?? assistantPersonas.value[0]
+    ?? null,
+);
+const bubbleDemoDisplayMessages = computed<BubbleDemoDisplayMessage[]>(() =>
+  bubbleDemoMessages.map((message, index) => {
+    const persona = bubbleDemoPersona(message.personaSlot);
+    const name = String(persona?.name || message.name).trim() || message.name;
+    const previous = bubbleDemoMessages[index - 1];
+    return {
+      ...message,
+      name,
+      avatarText: personaAvatarText(name, message.avatarText),
+      avatarUrl: String((persona?.id ? props.personaAvatarUrlMap[persona.id] : "") || "").trim(),
+      separated: !!previous && message.tone !== "user" && previous.tone !== "user" && message.side === previous.side,
+    };
+  }),
+);
 const demoDelegateStatuses = ref<ConversationDelegateStatusSummary[]>([
   createDemoDelegateStatus("demo-code-review", "示例：代码审查（pending）", 45000, 12, 15600, "apply_patch"),
   createDemoDelegateStatus("demo-research", "示例：委托任务（运行中）", 120000, 34, 52800, "shell_exec"),
@@ -165,6 +464,60 @@ const demoDelegateStatuses = ref<ConversationDelegateStatusSummary[]>([
 ]);
 let delegateDemoTimer = 0;
 const demoHasRunningDelegates = computed(() => demoDelegateStatuses.value.some((delegate) => delegate.active));
+
+function bubbleDemoPersona(slot: BubbleDemoMessage["personaSlot"]): PersonaProfile | null {
+  if (slot === "user") return userPersona.value;
+  const assistants = assistantPersonas.value;
+  if (assistants.length === 0) return null;
+  const primary = primaryAssistantPersona.value ?? assistants[0] ?? null;
+  const alternates = assistants.filter((persona) => persona.id !== primary?.id);
+  if (slot === "assistant-primary") return primary;
+  if (slot === "assistant-reviewer") return alternates[0] ?? assistants[1] ?? primary;
+  if (slot === "assistant-memory") return alternates[1] ?? assistants[2] ?? primary;
+  return alternates[2] ?? assistants[3] ?? primary;
+}
+
+function personaAvatarText(name: string, fallback: string): string {
+  const trimmed = String(name || fallback || "").trim();
+  return trimmed ? trimmed.slice(0, 2) : fallback;
+}
+
+function detailsOpenFromEvent(event: Event): boolean {
+  const target = event.target;
+  return target instanceof HTMLDetailsElement ? target.open : false;
+}
+
+function bubbleDemoActivityOpen(messageId: string): boolean {
+  return !!bubbleDemoActivityOpenMap.value[messageId];
+}
+
+function bubbleDemoActivityItemKey(messageId: string, itemKey: string): string {
+  return `${messageId}:${itemKey}`;
+}
+
+function bubbleDemoActivityItemOpen(messageId: string, itemKey: string): boolean {
+  return bubbleDemoActivityItemOpenKey.value === bubbleDemoActivityItemKey(messageId, itemKey);
+}
+
+function bubbleDemoToolItemKey(tool: BubbleDemoTool, index: number): string {
+  return `tool:${index}:${String(tool.name || "").trim()}`;
+}
+
+function onBubbleDemoActivityToggle(messageId: string, event: Event): void {
+  const open = detailsOpenFromEvent(event);
+  bubbleDemoActivityOpenMap.value = {
+    ...bubbleDemoActivityOpenMap.value,
+    [messageId]: open,
+  };
+  if (!open && bubbleDemoActivityItemOpenKey.value.startsWith(`${messageId}:`)) {
+    bubbleDemoActivityItemOpenKey.value = "";
+  }
+}
+
+function onBubbleDemoActivityItemToggle(messageId: string, itemKey: string, event: Event): void {
+  const nextKey = bubbleDemoActivityItemKey(messageId, itemKey);
+  bubbleDemoActivityItemOpenKey.value = detailsOpenFromEvent(event) ? nextKey : "";
+}
 
 async function sendNativeNotification() {
   sending.value = true;
