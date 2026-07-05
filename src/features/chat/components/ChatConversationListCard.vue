@@ -71,7 +71,7 @@
                     :class="conversationIndicatorClass(conversationIndicatorTone(item))"
                     aria-hidden="true"
                   ></span>
-                  <div class="avatar">
+                  <div class="avatar relative overflow-visible">
                     <div class="w-10 h-10 rounded-full bg-error text-error-content">
                       <img
                         v-if="lastSpeakerAvatarUrl(item)"
@@ -83,6 +83,13 @@
                         {{ lastSpeakerInitial(item) }}
                       </span>
                     </div>
+                    <span
+                      v-if="isRecentConversationSection(section.key)"
+                      class="pointer-events-none absolute bottom-0 left-1/2 z-20 inline-block max-w-10 -translate-x-1/2 translate-y-1/3 truncate rounded-full bg-neutral px-1.5 py-[1px] text-[9px] font-normal leading-3 text-neutral-content shadow-sm"
+                      :title="conversationSourceBadgeLabel(item)"
+                    >
+                      {{ conversationSourceBadgeLabel(item) }}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -215,7 +222,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watchEffect } from "vue";
+import { computed, nextTick, ref, watch, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
 import { Archive, Folder, FolderOpen, PencilLine, Pin, PinOff, SquarePen, Trash2, Upload } from "@lucide/vue";
 import type { ChatConversationOverviewItem, ConversationPreviewMessage } from "../../../types/app";
@@ -343,6 +350,18 @@ watchEffect(() => {
   }
 });
 
+watch(
+  () => [
+    props.activeConversationId,
+    activeConversationTab.value,
+    conversationSections.value.map((section) => `${section.key}:${section.items.length}`).join("|"),
+  ] as const,
+  () => {
+    expandSectionForActiveConversation();
+  },
+  { immediate: true },
+);
+
 function resetConversationTitleEdit() {
   editingConversationId.value = "";
   editingTitleDraft.value = "";
@@ -383,6 +402,43 @@ function toggleConversationSection(key: string) {
     ...collapsedConversationSectionKeys.value,
     [key]: !isConversationSectionCollapsed(key),
   };
+}
+
+function shouldKeepSectionOpenDuringAutoExpand(sectionKey: string, targetKey: string): boolean {
+  return sectionKey === targetKey
+    || sectionKey === "pinned"
+    || sectionKey === RECENT_CONVERSATION_SECTION_KEY;
+}
+
+function expandConversationSectionExclusively(key: string) {
+  if (!key) return;
+  let changed = false;
+  const next = { ...collapsedConversationSectionKeys.value };
+  for (const section of conversationSections.value) {
+    if (shouldKeepSectionOpenDuringAutoExpand(section.key, key)) continue;
+    if (next[section.key] !== true) {
+      next[section.key] = true;
+      changed = true;
+    }
+  }
+  if (next[key] !== false) {
+    next[key] = false;
+    changed = true;
+  }
+  if (!changed) return;
+  collapsedConversationSectionKeys.value = next;
+}
+
+function expandSectionForActiveConversation() {
+  if (normalizedConversationSearchQuery.value) return;
+  const activeConversationId = String(props.activeConversationId || "").trim();
+  if (!activeConversationId) return;
+  const section = conversationSections.value.find((entry) =>
+    entry.key !== RECENT_CONVERSATION_SECTION_KEY
+    && entry.items.some((item) => String(item.conversationId || "").trim() === activeConversationId),
+  );
+  if (!section) return;
+  expandConversationSectionExclusively(section.key);
 }
 
 function collapseAllConversationSections() {
@@ -445,6 +501,27 @@ function conversationItemTitle(item: ChatConversationOverviewItem): string {
     return String(item.remoteContactDisplayName || item.title || "").trim();
   }
   return item.workspaceLabel || t("chat.defaultWorkspace");
+}
+
+function isRecentConversationSection(sectionKey: string): boolean {
+  return sectionKey === RECENT_CONVERSATION_SECTION_KEY;
+}
+
+function conversationSourceBadgeLabel(item: ChatConversationOverviewItem): string {
+  if (item.kind === "remote_im_contact") {
+    return String(
+      item.channelName
+      || item.remoteContactDisplayName
+      || item.departmentName
+      || t("chat.otherConversations"),
+    ).trim();
+  }
+  const workspacePath = String(item.workspaceRootPath || "").trim();
+  return String(
+    item.workspaceLabel
+    || workspaceNameFromPath(workspacePath)
+    || t("chat.defaultWorkspace"),
+  ).trim();
 }
 
 function handleConversationCardClick(item: ChatConversationOverviewItem) {
