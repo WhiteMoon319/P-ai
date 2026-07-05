@@ -22,6 +22,7 @@ import { useChatWindowLifecycleOrchestrator } from "./use-chat-window-lifecycle-
 import { useChatWindowMediaOrchestrator } from "./use-chat-window-media-orchestrator";
 import { useChatWindowState } from "./use-chat-window-state";
 import { useChatUiStateOrchestrator } from "./use-chat-ui-state-orchestrator";
+import { useChatComposerDrafts } from "./use-chat-composer-drafts";
 import { extractMessageImages, messageText } from "../../../utils/chat-message";
 import { formatI18nError } from "../../../utils/error";
 import type { AppConfig } from "../../../types/app";
@@ -273,6 +274,13 @@ export function useChatWindowApp() {
     clearMatchingConversationChatErrors,
     clearChatError,
   } = chatUiState;
+  useChatComposerDrafts({
+    activeConversationId: currentChatConversationId,
+    chatInput,
+    selectedMentions: selectedChatMentions,
+    clipboardImages,
+    queuedAttachmentNotices,
+  });
   const shellData = useChatWindowShellDataOrchestrator({
     tr,
     viewMode,
