@@ -44,6 +44,7 @@
       :streaming="!!streamingHeaderStatus"
       :streaming-text="streamingHeaderStatus"
       :wide="blockNeedsWideBubble(block)"
+      :bubble-background="assistantBubbleBackgroundEnabled"
     >
       <template v-if="showActivityPanel(block)" #activity>
         <div
@@ -365,6 +366,12 @@
           <span>{{ t('common.copy') }}</span>
         </button>
       </li>
+      <li>
+        <button type="button" @click="handleContextMenuAction('toggleBubbleBackground')">
+          <Paintbrush class="h-4 w-4" />
+          <span>{{ assistantBubbleBackgroundEnabled ? t('chat.messageItem.hideBubbleBackground') : t('chat.messageItem.showBubbleBackground') }}</span>
+        </button>
+      </li>
       <li v-if="mathContextCopyText">
         <button type="button" @click="handleContextMenuAction('copyMath')">
           <Copy class="h-4 w-4" />
@@ -387,10 +394,30 @@
   </Teleport>
 </template>
 
+<script lang="ts">
+import { ref as moduleRef } from "vue";
+
+const CHAT_BUBBLE_BACKGROUND_STORAGE_KEY = "easy-call.chat.bubble-background.v1";
+
+function readChatBubbleBackgroundPreference(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(CHAT_BUBBLE_BACKGROUND_STORAGE_KEY) === "1";
+}
+
+const chatBubbleBackgroundPreference = moduleRef(readChatBubbleBackgroundPreference());
+
+function writeChatBubbleBackgroundPreference(enabled: boolean) {
+  chatBubbleBackgroundPreference.value = enabled;
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(CHAT_BUBBLE_BACKGROUND_STORAGE_KEY, enabled ? "1" : "0");
+  }
+}
+</script>
+
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect, watchPostEffect } from "vue";
 import { useI18n } from "vue-i18n";
-import { Copy, FileText, ListCheck, Pause, Play, Split, Undo2 } from "@lucide/vue";
+import { Copy, FileText, ListCheck, Paintbrush, Pause, Play, Split, Undo2 } from "@lucide/vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ChatActivityItem, ChatMessageBlock } from "../../../types/app";
 import {
@@ -483,6 +510,7 @@ const contextMenuX = ref(0);
 const contextMenuY = ref(0);
 const mathContextCopyText = ref("");
 const relativeTimeNowTick = ref(Date.now());
+const assistantBubbleBackgroundEnabled = chatBubbleBackgroundPreference;
 let relativeTimeNowTimer = 0;
 
 watch(
@@ -1706,7 +1734,7 @@ function openContextMenu(event: MouseEvent) {
   mathContextCopyText.value = "";
   event.preventDefault();
   const menuWidth = 176; // w-44
-  const menuHeight = 200; // estimate
+  const menuHeight = 236; // estimate
   const margin = 8;
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
   const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
@@ -1719,7 +1747,7 @@ function openContextMenu(event: MouseEvent) {
 function openMathContextMenu(payload: { clientX: number; clientY: number; copyText: string }) {
   if (!String(payload.copyText || "").trim()) return;
   const menuWidth = 176; // w-44
-  const menuHeight = 236; // estimate with extra entry
+  const menuHeight = 272; // estimate with extra entries
   const margin = 8;
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
   const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
@@ -1752,6 +1780,9 @@ function handleContextMenuAction(action: string) {
     emit("copyMessage", props.block);
   } else if (action === "copyMath") {
     void copyTextToClipboard(mathCopyText);
+  } else if (action === "toggleBubbleBackground") {
+    assistantBubbleBackgroundEnabled.value = !assistantBubbleBackgroundEnabled.value;
+    writeChatBubbleBackgroundPreference(assistantBubbleBackgroundEnabled.value);
   } else if (action === "branchFromMessage") {
     const turnId = recallTurnId(props.block);
     if (!turnId) return;

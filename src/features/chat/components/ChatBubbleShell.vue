@@ -8,7 +8,7 @@
         </div>
 
         <div class="ecall-chat-bubble-body">
-          <div class="ecall-chat-bubble-surface">
+          <div class="ecall-chat-bubble-surface" :style="surfaceStyle">
             <slot />
           </div>
 
@@ -43,7 +43,7 @@
       </div>
 
       <div class="ecall-chat-bubble-body">
-        <div class="ecall-chat-bubble-surface">
+        <div class="ecall-chat-bubble-surface" :style="surfaceStyle">
           <slot />
         </div>
 
@@ -56,7 +56,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, type StyleValue } from "vue";
 
 const props = withDefaults(defineProps<{
   side?: "left" | "right";
@@ -69,6 +69,7 @@ const props = withDefaults(defineProps<{
   streamingText?: string;
   separated?: boolean;
   wide?: boolean;
+  bubbleBackground?: boolean;
 }>(), {
   side: "left",
   tone: "assistant",
@@ -79,6 +80,7 @@ const props = withDefaults(defineProps<{
   streamingText: "",
   separated: false,
   wide: false,
+  bubbleBackground: false,
 });
 
 const avatarLabel = computed(() => {
@@ -86,6 +88,22 @@ const avatarLabel = computed(() => {
   if (explicit) return explicit.slice(0, 2).toUpperCase();
   const name = String(props.name || "").trim();
   return (name ? name.slice(0, 1) : "?").toUpperCase();
+});
+
+const surfaceStyle = computed<StyleValue | undefined>(() => {
+  if (props.tone === "user") {
+    return {
+      borderRadius: "var(--radius-box, 1rem)",
+      backgroundColor: "var(--color-base-300)",
+      padding: "0.68rem 0.82rem",
+    };
+  }
+  if (!props.bubbleBackground) return undefined;
+  return {
+    borderRadius: "var(--radius-box, 1rem)",
+    backgroundColor: "var(--color-base-100)",
+    padding: "0.68rem 0.82rem",
+  };
 });
 </script>
 
@@ -302,13 +320,6 @@ const avatarLabel = computed(() => {
 .ecall-chat-bubble-tone-assistant .ecall-chat-bubble-surface,
 .ecall-chat-bubble-tone-system .ecall-chat-bubble-surface {
   padding: 0.15rem 0;
-}
-
-.ecall-chat-bubble-tone-user .ecall-chat-bubble-surface {
-  border-radius: 1rem;
-  background: color-mix(in srgb, var(--color-base-100) 82%, transparent);
-  padding: 0.68rem 0.82rem;
-  backdrop-filter: blur(14px);
 }
 
 .ecall-chat-bubble-footer {

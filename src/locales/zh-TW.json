@@ -1203,6 +1203,8 @@
       "noToolResult": "暫無工具結果",
       "imageLoading": "圖片載入中",
       "multiSelect": "多選",
+      "showBubbleBackground": "顯示氣泡背景",
+      "hideBubbleBackground": "隱藏氣泡背景",
       "branchFromMessage": "從此訊息開始建立會話分支",
       "dispatchElapsed": "本次調度用時 {elapsed}",
       "elapsed": "用時 {elapsed}",
