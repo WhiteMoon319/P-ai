@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-05T04:24:24.438Z",
-  "latestVersion": "v0.18.4",
+  "generatedAt": "2026-07-05T18:15:11.381Z",
+  "latestVersion": "v0.18.5",
   "releases": [
+    {
+      "version": "v0.18.5",
+      "path": "docs/changelog/releases/v0.18.5.md",
+      "summary": "聊天消息视图接入自研气泡组件，固定用户/助理消息样式并移除右键隐藏气泡入口。"
+    },
     {
       "version": "v0.18.4",
       "path": "docs/changelog/releases/v0.18.4.md",
