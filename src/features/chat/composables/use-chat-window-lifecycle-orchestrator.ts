@@ -57,6 +57,7 @@ export function useChatWindowLifecycleOrchestrator(bindings: Record<string, any>
     currentChatConversationId: bindings.currentChatConversationId,
     recordHotkeyProbeLastSeq: bindings.recordHotkeyProbeLastSeq,
     recordHotkeyProbeDown: bindings.recordHotkeyProbeDown,
+    recordHotkey: bindings.recordHotkey,
     isPrimaryChatWindow: bindings.isPrimaryChatWindow,
     startRecording: bindings.startRecording,
     stopRecording: bindings.stopRecording,

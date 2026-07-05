@@ -1,8 +1,11 @@
+export type RecordHotkeyEventSource = "foreground" | "background";
+export type RecordHotkeyEventState = "pressed" | "released";
+
 type UseRecordHotkeyOptions = {
   isActive: () => boolean;
   getRecordHotkey: () => string;
-  onStartRecording: () => void | Promise<void>;
-  onStopRecording: (discard: boolean) => void | Promise<void>;
+  onStartRecording: (source: RecordHotkeyEventSource) => void | Promise<void>;
+  onStopRecording: (discard: boolean, source: RecordHotkeyEventSource) => void | Promise<void>;
   startDelayMs?: number;
 };
 
@@ -13,7 +16,10 @@ export function useRecordHotkey(options: UseRecordHotkeyOptions) {
   let hotkeyPressed = false;
   let suppressUntil = 0;
   let blockUntilRelease = false;
-  let recordingStarted = false;
+  let recordingStartRequested = false;
+  let stopRequestedAfterStart = false;
+  let activePressId = 0;
+  let activeSource: RecordHotkeyEventSource = "foreground";
 
   const startDelayMs = options.startDelayMs ?? 0;
 
@@ -22,6 +28,14 @@ export function useRecordHotkey(options: UseRecordHotkeyOptions) {
       clearTimeout(startTimer);
       startTimer = null;
     }
+  }
+
+  function resetActivePressState() {
+    activePressId += 1;
+    hotkeyPressed = false;
+    clearStartTimer();
+    recordingStartRequested = false;
+    stopRequestedAfterStart = false;
   }
 
   function isModifierToken(token: string): boolean {
@@ -125,35 +139,15 @@ export function useRecordHotkey(options: UseRecordHotkeyOptions) {
       if (!options.isActive()) return;
       if (!matchesRecordHotkey(event)) return;
       if (event.repeat) return;
-      if (Date.now() < suppressUntil) return;
-      if (blockUntilRelease) return;
       event.preventDefault();
-      hotkeyPressed = true;
-      clearStartTimer();
-      startTimer = setTimeout(() => {
-        if (!hotkeyPressed) return;
-        if (Date.now() < suppressUntil) return;
-        recordingStarted = true;
-        void options.onStartRecording();
-      }, startDelayMs);
+      handlePressed("foreground");
     };
 
     keyupHandler = (event: KeyboardEvent) => {
       if (!options.isActive()) return;
       if (!isRelevantRecordHotkeyKey(event)) return;
-      if (blockUntilRelease) {
-        blockUntilRelease = false;
-        hotkeyPressed = false;
-        clearStartTimer();
-        recordingStarted = false;
-        return;
-      }
       event.preventDefault();
-      hotkeyPressed = false;
-      clearStartTimer();
-      if (!recordingStarted) return;
-      recordingStarted = false;
-      void options.onStopRecording(false);
+      handleReleased("foreground");
     };
 
     window.addEventListener("keydown", keydownHandler);
@@ -163,24 +157,66 @@ export function useRecordHotkey(options: UseRecordHotkeyOptions) {
   function suppressAfterPopup(durationMs: number) {
     suppressUntil = Date.now() + durationMs;
     blockUntilRelease = true;
-    hotkeyPressed = false;
-    clearStartTimer();
-    recordingStarted = false;
+    resetActivePressState();
   }
 
   function resetPressedState() {
-    hotkeyPressed = false;
     blockUntilRelease = false;
+    resetActivePressState();
+  }
+
+  function handlePressed(source: RecordHotkeyEventSource) {
+    if (Date.now() < suppressUntil) return;
+    if (blockUntilRelease) return;
+    if (hotkeyPressed) return;
+    activePressId += 1;
+    const pressId = activePressId;
+    activeSource = source;
+    hotkeyPressed = true;
+    recordingStartRequested = false;
+    stopRequestedAfterStart = false;
     clearStartTimer();
-    recordingStarted = false;
+    startTimer = setTimeout(() => {
+      startTimer = null;
+      if (!hotkeyPressed || activePressId !== pressId) return;
+      if (Date.now() < suppressUntil) return;
+      recordingStartRequested = true;
+      const startResult = options.onStartRecording(source);
+      void Promise.resolve(startResult).finally(() => {
+        if (activePressId !== pressId) return;
+        if (!stopRequestedAfterStart) return;
+        void options.onStopRecording(false, activeSource);
+      });
+    }, startDelayMs);
+  }
+
+  function handleReleased(source: RecordHotkeyEventSource) {
+    if (blockUntilRelease) {
+      blockUntilRelease = false;
+      resetActivePressState();
+      return;
+    }
+    if (!hotkeyPressed && stopRequestedAfterStart) return;
+    if (!hotkeyPressed && !recordingStartRequested) return;
+    hotkeyPressed = false;
+    clearStartTimer();
+    if (!recordingStartRequested) return;
+    stopRequestedAfterStart = true;
+    void options.onStopRecording(false, activeSource || source);
+  }
+
+  function handleExternalState(state: RecordHotkeyEventState) {
+    if (state === "pressed") {
+      handlePressed("background");
+      return;
+    }
+    handleReleased("background");
   }
 
   function unmount() {
-    clearStartTimer();
-    hotkeyPressed = false;
+    resetActivePressState();
     suppressUntil = 0;
     blockUntilRelease = false;
-    recordingStarted = false;
     if (keydownHandler) {
       window.removeEventListener("keydown", keydownHandler);
       keydownHandler = null;
@@ -196,5 +232,6 @@ export function useRecordHotkey(options: UseRecordHotkeyOptions) {
     unmount,
     suppressAfterPopup,
     resetPressedState,
+    handleExternalState,
   };
 }

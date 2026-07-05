@@ -76,18 +76,14 @@ export function useChatWindowBootstrap(bindings: Record<string, any>) {
         bindings.recordHotkeyProbeDown.value = false;
       }
       if (bindings.viewMode.value !== "chat" || !bindings.isPrimaryChatWindow()) return;
+      if (state === "released") {
+        bindings.recordHotkey?.handleExternalState?.("released");
+        return;
+      }
       if (!bindings.config.recordBackgroundWakeEnabled) return;
       if (state === "pressed") {
         bindings.recordHotkeyProbeDown.value = true;
-        void bindings.startRecording("background").then(() => {
-          if (!bindings.recordHotkeyProbeDown.value) {
-            void bindings.stopRecording(false);
-          }
-        });
-        return;
-      }
-      if (state === "released") {
-        void bindings.stopRecording(false);
+        bindings.recordHotkey?.handleExternalState?.("pressed");
       }
     },
   });

@@ -137,7 +137,7 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
   const recordHotkey = useRecordHotkey({
     isActive: () => isChatWindowActiveNow(),
     getRecordHotkey: () => options.config.recordHotkey,
-    onStartRecording: () => startRecording("foreground"),
+    onStartRecording: (source) => startRecording(source),
     onStopRecording: (discard) => stopRecording(discard),
     startDelayMs: 0,
   });
@@ -372,7 +372,6 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     if (options.chatWindowActiveSynced.value === active) return;
     options.chatWindowActiveSynced.value = active;
     if (active) {
-      void stopRecording(false);
       const activeConversationId = String(options.currentChatConversationId.value || "").trim();
       if (activeConversationId) {
         await reconcileForegroundConversationAfterFreeze(activeConversationId, reason);

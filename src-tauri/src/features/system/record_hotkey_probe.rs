@@ -328,6 +328,18 @@ fn reset_record_hotkey_probe_state() {
 }
 
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+fn reset_record_hotkey_probe_modifiers() {
+    if let Some(state_arc) = RECORD_HOTKEY_PROBE_STATE.get() {
+        if let Ok(mut state) = state_arc.lock() {
+            state.ctrl = false;
+            state.alt = false;
+            state.shift = false;
+            state.meta = false;
+        }
+    }
+}
+
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn set_record_hotkey_probe_hotkey(raw_hotkey: &str) -> Result<(), String> {
     let parsed = if raw_hotkey.trim().is_empty() {
         None
@@ -353,7 +365,7 @@ fn set_record_hotkey_probe_chat_window_active(active: bool) {
     let flag = CHAT_WINDOW_ACTIVE.get_or_init(|| std::sync::atomic::AtomicBool::new(false));
     let previous = flag.swap(active, std::sync::atomic::Ordering::AcqRel);
     if previous != active {
-        reset_record_hotkey_probe_state();
+        reset_record_hotkey_probe_modifiers();
     }
 }
 
