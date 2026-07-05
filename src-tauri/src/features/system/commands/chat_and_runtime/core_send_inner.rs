@@ -1015,7 +1015,9 @@ fn sync_codex_conversation_request_key(
     if stable_key.is_empty() {
         return;
     }
-    resolved_api.prompt_cache_key = Some(stable_key.to_string());
+    if resolved_api.request_format.is_openai_responses_family() {
+        resolved_api.prompt_cache_key = Some(stable_key.to_string());
+    }
     if resolved_api.request_format.is_codex() {
         upsert_api_extra_header(resolved_api, "Session-Id", stable_key);
     }
@@ -4841,6 +4843,36 @@ mod core_send_inner_tests {
                 .map(|(_, value)| value.as_str()),
             Some("conversation-123")
         );
+    }
+
+    #[test]
+    fn sync_codex_conversation_request_key_should_skip_prompt_cache_key_for_openai_compatible() {
+        let mut resolved_api = ResolvedApiConfig {
+            provider_id: Some("openai-compatible-provider".to_string()),
+            provider_api_keys: Vec::new(),
+            provider_key_cursor: 0,
+            request_format: RequestFormat::OpenAI,
+            allow_concurrent_requests: false,
+            max_concurrent_requests: None,
+            base_url: "https://example.com/v1".to_string(),
+            api_key: "test-key".to_string(),
+            model: "gpt-4o-mini".to_string(),
+            reasoning_effort: None,
+            temperature: None,
+            max_output_tokens: None,
+            prompt_cache_key: None,
+            extra_headers: Vec::new(),
+            codex_auth: None,
+            codex_auth_mode: None,
+            codex_originator: None,
+            codex_residency_requirement: None,
+            codex_custom_api_key: None,
+        };
+
+        sync_codex_conversation_request_key(&mut resolved_api, "conversation-123");
+
+        assert_eq!(resolved_api.prompt_cache_key, None);
+        assert!(resolved_api.extra_headers.is_empty());
     }
 
     #[test]

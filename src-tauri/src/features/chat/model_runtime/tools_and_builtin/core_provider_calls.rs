@@ -683,13 +683,15 @@ fn build_provider_genai_chat_options(
     if let Some(max_output_tokens) = api_config.max_output_tokens {
         options = options.with_max_tokens(max_output_tokens);
     }
-    if let Some(prompt_cache_key) = api_config
-        .prompt_cache_key
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        options = options.with_prompt_cache_key(prompt_cache_key);
+    if api_config.request_format.is_openai_responses_family() {
+        if let Some(prompt_cache_key) = api_config
+            .prompt_cache_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            options = options.with_prompt_cache_key(prompt_cache_key);
+        }
     }
     options
 }
@@ -1212,7 +1214,7 @@ mod openai_responses_genai_request_tests {
     }
 
     #[test]
-    fn build_provider_genai_chat_options_should_use_prompt_cache_key() {
+    fn build_provider_genai_chat_options_should_skip_prompt_cache_key_for_openai_compatible() {
         let api_config = ResolvedApiConfig {
             provider_id: None,
             provider_api_keys: Vec::new(),
@@ -1237,7 +1239,40 @@ mod openai_responses_genai_request_tests {
 
         let options = build_provider_genai_chat_options(&api_config, false, false);
 
-        assert_eq!(options.prompt_cache_key.as_deref(), Some("conversation-1"));
+        assert_eq!(options.prompt_cache_key, None);
+        assert_eq!(options.cache_control, None);
+    }
+
+    #[test]
+    fn build_provider_genai_chat_options_should_use_prompt_cache_key_for_openai_responses() {
+        let api_config = ResolvedApiConfig {
+            provider_id: Some("responses-provider".to_string()),
+            provider_api_keys: Vec::new(),
+            provider_key_cursor: 0,
+            request_format: RequestFormat::OpenAIResponses,
+            allow_concurrent_requests: false,
+            max_concurrent_requests: None,
+            base_url: "https://api.openai.com/v1".to_string(),
+            api_key: "test-key".to_string(),
+            model: "gpt-5".to_string(),
+            reasoning_effort: Some("high".to_string()),
+            temperature: None,
+            max_output_tokens: None,
+            prompt_cache_key: Some("conversation-responses".to_string()),
+            extra_headers: Vec::new(),
+            codex_auth: None,
+            codex_auth_mode: None,
+            codex_originator: None,
+            codex_residency_requirement: None,
+            codex_custom_api_key: None,
+        };
+
+        let options = build_provider_genai_chat_options(&api_config, true, true);
+
+        assert_eq!(
+            options.prompt_cache_key.as_deref(),
+            Some("conversation-responses")
+        );
         assert_eq!(options.cache_control, None);
     }
 
