@@ -5,6 +5,7 @@ const WINDOW_LAYOUTS_FILE_NAME: &str = "window_layouts.json";
 const WINDOW_DIAGNOSTIC_LOG_FILE_NAME: &str = "window_diagnostics.log";
 const DETACHED_CHAT_WINDOW_PREFIX: &str = "chat-detached-";
 const FILE_READER_WINDOW_LABEL: &str = "file-reader";
+const NEAR_FULLSCREEN_RESTORE_RATIO: f64 = 0.92;
 
 static DETACHED_CHAT_WINDOWS: OnceLock<Mutex<std::collections::HashMap<String, String>>> =
     OnceLock::new();
@@ -540,6 +541,60 @@ fn resolved_window_size_for_monitor(
     )
 }
 
+fn window_size_is_near_fullscreen(width: u32, height: u32, monitor: &tauri::Monitor) -> bool {
+    let monitor_logical = monitor_logical_size(monitor);
+    if !monitor_logical.width.is_finite() || !monitor_logical.height.is_finite() {
+        return false;
+    }
+    if monitor_logical.width <= 1.0 || monitor_logical.height <= 1.0 {
+        return false;
+    }
+    let width_ratio = width as f64 / monitor_logical.width;
+    let height_ratio = height as f64 / monitor_logical.height;
+    width_ratio >= NEAR_FULLSCREEN_RESTORE_RATIO && height_ratio >= NEAR_FULLSCREEN_RESTORE_RATIO
+}
+
+fn saved_window_layout_is_near_fullscreen(
+    app: &AppHandle,
+    label: &str,
+    monitor: &tauri::Monitor,
+) -> bool {
+    let state = app.state::<AppState>();
+    let layouts = load_window_layouts(&state.data_path);
+    let Some(saved) = layouts.windows.get(label) else {
+        return false;
+    };
+    let (Some(width), Some(height)) = (saved.width, saved.height) else {
+        return false;
+    };
+    window_size_is_near_fullscreen(width, height, monitor)
+}
+
+fn webview_window_inner_size_logical(
+    window: &tauri::WebviewWindow,
+) -> Result<(u32, u32), String> {
+    let inner_size = window
+        .inner_size()
+        .map_err(|err| format!("Read window inner size failed: {err}"))?;
+    let scale_factor = window
+        .scale_factor()
+        .map_err(|err| format!("Read window scale factor failed: {err}"))?;
+    let inner_size_logical = inner_size.to_logical::<f64>(scale_factor.max(0.1));
+    Ok((
+        inner_size_logical.width.round().max(1.0) as u32,
+        inner_size_logical.height.round().max(1.0) as u32,
+    ))
+}
+
+fn current_window_size_is_near_fullscreen(
+    window: &tauri::WebviewWindow,
+    monitor: &tauri::Monitor,
+) -> bool {
+    webview_window_inner_size_logical(window)
+        .map(|(width, height)| window_size_is_near_fullscreen(width, height, monitor))
+        .unwrap_or(false)
+}
+
 fn window_rect_is_visible_on_any_monitor(
     monitors: &[tauri::Monitor],
     x: i32,
@@ -769,25 +824,26 @@ fn persist_window_layout_snapshot_with_reason(
     let window = app
         .get_webview_window(label)
         .ok_or_else(|| format!("Window '{label}' not found"))?;
-    let inner_size = window
-        .inner_size()
-        .map_err(|err| format!("Read window inner size failed: {err}"))?;
-    let scale_factor = window
-        .scale_factor()
-        .map_err(|err| format!("Read window scale factor failed: {err}"))?;
-    let inner_size_logical = inner_size.to_logical::<f64>(scale_factor.max(0.1));
-    let outer_pos = window
-        .outer_position()
-        .map_err(|err| format!("Read window outer position failed: {err}"))?;
     let maximized = window
         .is_maximized()
         .map_err(|err| format!("Read window maximized state failed: {err}"))?;
+    let size_and_position = if maximized {
+        None
+    } else {
+        let (width, height) = webview_window_inner_size_logical(&window)?;
+        let outer_pos = window
+            .outer_position()
+            .map_err(|err| format!("Read window outer position failed: {err}"))?;
+        Some((width, height, outer_pos.x, outer_pos.y))
+    };
 
     upsert_window_layout(app, label, |entry| {
-        entry.width = Some(inner_size_logical.width.round().max(1.0) as u32);
-        entry.height = Some(inner_size_logical.height.round().max(1.0) as u32);
-        entry.x = Some(outer_pos.x);
-        entry.y = Some(outer_pos.y);
+        if let Some((width, height, x, y)) = size_and_position {
+            entry.width = Some(width);
+            entry.height = Some(height);
+            entry.x = Some(x);
+            entry.y = Some(y);
+        }
         entry.maximized = maximized;
     })
 }
@@ -872,6 +928,57 @@ fn show_window(app: &AppHandle, label: &str) -> Result<(), String> {
     ensure_window_visible_after_show(app, label, "show_window");
     let _ = window.set_focus();
     Ok(())
+}
+
+fn toggle_window_maximize_with_default_restore(
+    app: &AppHandle,
+    label: &str,
+) -> Result<bool, String> {
+    let window = app
+        .get_webview_window(label)
+        .ok_or_else(|| format!("Window '{label}' not found"))?;
+    if is_fixed_window_size(label) {
+        return Ok(false);
+    }
+    let was_maximized = window
+        .is_maximized()
+        .map_err(|err| format!("Read window maximized state failed: {err}"))?;
+    if !was_maximized {
+        window
+            .maximize()
+            .map_err(|err| format!("Maximize window failed: {err}"))?;
+        let maximized = window
+            .is_maximized()
+            .map_err(|err| format!("Read window maximized state failed: {err}"))?;
+        return Ok(maximized);
+    }
+
+    let restore_monitor = preferred_window_monitor(&window);
+    let saved_layout_near_fullscreen = restore_monitor
+        .as_ref()
+        .map(|monitor| saved_window_layout_is_near_fullscreen(app, label, monitor))
+        .unwrap_or(false);
+    window
+        .unmaximize()
+        .map_err(|err| format!("Restore window failed: {err}"))?;
+    let restored_near_fullscreen = restore_monitor
+        .as_ref()
+        .map(|monitor| current_window_size_is_near_fullscreen(&window, monitor))
+        .unwrap_or(false);
+    if saved_layout_near_fullscreen || restored_near_fullscreen {
+        if let Some(monitor) = restore_monitor.as_ref() {
+            position_window_on_monitor(&window, label, monitor, None, None);
+            let _ = persist_window_layout_snapshot_with_reason(
+                app,
+                label,
+                "restore_near_fullscreen_to_default",
+            );
+        }
+    }
+    let maximized = window
+        .is_maximized()
+        .map_err(|err| format!("Read window maximized state failed: {err}"))?;
+    Ok(maximized)
 }
 
 fn toggle_window(app: &AppHandle, label: &str) -> Result<(), String> {

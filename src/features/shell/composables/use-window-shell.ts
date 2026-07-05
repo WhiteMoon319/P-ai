@@ -76,10 +76,16 @@ export function useWindowShell() {
   async function toggleMaximizeWindow() {
     if (!appWindow.value) return;
     try {
+      maximized.value = await invokeTauri<boolean>("toggle_current_window_maximize");
+      return;
+    } catch (error) {
+      console.warn("[WINDOW] backend toggleMaximize failed, fallback to frontend toggle:", error);
+    }
+    try {
       await appWindow.value.toggleMaximize();
       maximized.value = await appWindow.value.isMaximized();
     } catch (error) {
-      console.error("[WINDOW] toggleMaximize failed:", error);
+      console.error("[WINDOW] fallback toggleMaximize failed:", error);
     }
   }
 

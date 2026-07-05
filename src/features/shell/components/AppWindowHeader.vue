@@ -3,22 +3,21 @@
     class="min-h-10 h-10 shrink-0 relative z-40 overflow-visible select-none"
     :class="viewMode === 'chat' ? 'grid items-center bg-base-200 border-b border-base-300' : 'grid grid-cols-[1fr_auto_1fr] items-center bg-base-200 border-b border-base-300 px-2'"
     :style="viewMode === 'chat' ? chatHeaderGridStyle : undefined"
+    @mousedown="handleTitlebarMouseDown"
+    @dblclick.capture="handleTitlebarDoubleClick"
   >
     <div
       v-if="viewMode !== 'chat'"
-      data-tauri-drag-region
       class="absolute inset-0"
       aria-hidden="true"
     ></div>
     <div
       v-else
-      data-tauri-drag-region
       class="absolute inset-0 z-10"
       aria-hidden="true"
     ></div>
     <div
       v-if="viewMode === 'chat'"
-      data-tauri-drag-region
       class="relative z-30 flex h-full min-w-0 items-center gap-1 px-2"
     >
       <div v-if="!detachedChatWindow && leftHeaderInLayout" class="indicator" @mousedown.stop>
@@ -40,7 +39,6 @@
 
     <div
       v-if="viewMode === 'chat'"
-      data-tauri-drag-region
       class="relative z-30 grid h-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 px-2"
     >
       <div class="relative z-40 flex min-w-0 items-center gap-1" @mousedown.stop>
@@ -102,7 +100,6 @@
       </div>
 
       <div
-        data-tauri-drag-region
         class="relative z-30 flex min-w-0 flex-1 self-stretch items-center justify-start gap-1 px-2"
         :title="combinedTitleTooltip"
       >
@@ -117,7 +114,6 @@
 
     <div
       v-if="viewMode === 'chat'"
-      data-tauri-drag-region
       class="relative z-30 flex h-full min-w-0 flex-nowrap items-center justify-end gap-1 px-2"
     >
       <button
@@ -616,6 +612,32 @@ const windowWidth = ref(typeof window === "undefined" ? 0 : window.innerWidth);
 
 function updateWindowWidth() {
   windowWidth.value = typeof window === "undefined" ? 0 : window.innerWidth;
+}
+
+function isInteractiveTitlebarTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return !!target.closest("button,input,textarea,select,a,label,summary,details,[role='button'],[contenteditable='true']");
+}
+
+function handleTitlebarDoubleClick(event: MouseEvent) {
+  if (!props.windowReady || !showWindowControls.value) return;
+  if (event.button !== 0) return;
+  if (isInteractiveTitlebarTarget(event.target)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  emit("toggle-maximize-window");
+}
+
+function handleTitlebarMouseDown(event: MouseEvent) {
+  if (!props.windowReady || !showWindowControls.value) return;
+  if (event.button !== 0) return;
+  if (isInteractiveTitlebarTarget(event.target)) return;
+  if (event.detail >= 2) {
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+  emit("startDrag");
 }
 
 function headerPaneWidth(side: "left" | "right"): number {

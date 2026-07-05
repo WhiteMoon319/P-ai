@@ -29,6 +29,11 @@ fn hide_current_window(window: tauri::Window) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn toggle_current_window_maximize(window: tauri::Window, app: AppHandle) -> Result<bool, String> {
+    toggle_window_maximize_with_default_restore(&app, window.label())
+}
+
+#[tauri::command]
 fn complete_quick_setup_and_open_chat(app: AppHandle) -> Result<(), String> {
     show_window(&app, "chat")?;
     if let Some(window) = app.get_webview_window("quick-setup") {
