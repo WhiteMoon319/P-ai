@@ -70,6 +70,7 @@ const props = withDefaults(defineProps<{
   separated?: boolean;
   wide?: boolean;
   bubbleBackground?: boolean;
+  contentEmpty?: boolean;
 }>(), {
   side: "left",
   tone: "assistant",
@@ -81,6 +82,7 @@ const props = withDefaults(defineProps<{
   separated: false,
   wide: false,
   bubbleBackground: false,
+  contentEmpty: false,
 });
 
 const avatarLabel = computed(() => {
@@ -91,6 +93,12 @@ const avatarLabel = computed(() => {
 });
 
 const surfaceStyle = computed<StyleValue | undefined>(() => {
+  if (props.contentEmpty) {
+    return {
+      backgroundColor: "transparent",
+      padding: 0,
+    };
+  }
   if (props.tone === "user") {
     return {
       borderRadius: "var(--radius-box, 1rem)",

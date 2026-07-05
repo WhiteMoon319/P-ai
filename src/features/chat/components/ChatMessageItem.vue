@@ -45,6 +45,7 @@
       :streaming-text="streamingHeaderStatus"
       :wide="blockNeedsWideBubble(block)"
       :bubble-background="assistantBubbleBackgroundEnabled"
+      :content-empty="bubbleContentEmpty(block)"
     >
       <template v-if="showActivityPanel(block)" #activity>
         <div
@@ -770,11 +771,33 @@ function showAssistantPreStreamingDots(block: ChatMessageBlock): boolean {
     && block.attachmentFiles.length === 0;
 }
 
+function bubbleContentEmpty(block: ChatMessageBlock): boolean {
+  if (isOwnMessage(block)) return !ownBubbleHasContent(block);
+  if (showAssistantPreStreamingDots(block)) return false;
+  return !assistantBubbleHasContent(block);
+}
+
+function ownBubbleHasContent(block: ChatMessageBlock): boolean {
+  return !!ownMessageDisplayText(block).trim()
+    || (block.extraTextReferences?.length || 0) > 0
+    || block.images.length > 0
+    || block.audios.length > 0
+    || block.attachmentFiles.length > 0;
+}
+
+function assistantBubbleHasContent(block: ChatMessageBlock): boolean {
+  return hasStreamingSpeechContent(block)
+    || !!block.planCard
+    || block.images.length > 0
+    || block.audios.length > 0
+    || block.attachmentFiles.length > 0;
+}
+
 function hasStreamingSpeechContent(block: ChatMessageBlock): boolean {
-  if (String(block.text || "").trim()) return true;
-  if (Array.isArray(block.streamSegments) && block.streamSegments.some((item) => String(item || "").trim())) return true;
-  if (String(block.streamTail || "").trim()) return true;
-  if (String(block.streamAnimatedDelta || "").trim()) return true;
+  if (stripToolcallMarkers(block.text || "")) return true;
+  if (Array.isArray(block.streamSegments) && block.streamSegments.some((item) => stripToolcallMarkers(String(item || "")))) return true;
+  if (stripToolcallMarkers(block.streamTail || "")) return true;
+  if (stripToolcallMarkers(block.streamAnimatedDelta || "")) return true;
   return false;
 }
 
@@ -2401,8 +2424,6 @@ function openResolvedImagePreview(
 }
 
 .ecall-assistant-bubble {
-  min-width: 3rem;
-  min-height: 2.25rem;
   font-size: 0.875rem;
   transition:
     box-shadow 220ms ease,
@@ -2419,8 +2440,6 @@ function openResolvedImagePreview(
 }
 
 .ecall-assistant-loading-bubble {
-  min-width: 3.25rem;
-  min-height: 2.25rem;
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
