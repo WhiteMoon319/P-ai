@@ -88,10 +88,10 @@
               <span class="text-xs leading-none">
                 <time v-if="formattedCreatedAt && !block.isStreaming" class="text-base-content/40 leading-none">{{ formattedCreatedAt }}</time>
               </span>
+              <span v-if="showMessageIdDebug" class="font-mono text-[10px] leading-none text-base-content/45">
+                id={{ String(block.id || "") }}<span v-if="String(block.sourceMessageId || '') && String(block.sourceMessageId || '') !== String(block.id || '')"> src={{ String(block.sourceMessageId || "") }}</span>
+              </span>
             </template>
-          </div>
-          <div v-if="showMessageIdDebug" class="mb-1 font-mono text-[10px] leading-tight text-base-content/45 break-all">
-            id={{ String(block.id || "") }}<span v-if="String(block.sourceMessageId || '') && String(block.sourceMessageId || '') !== String(block.id || '')"> src={{ String(block.sourceMessageId || "") }}</span>
           </div>
           <div
             v-if="!showAssistantPreStreamingDots(block)"
@@ -403,9 +403,6 @@
         <span v-if="!isOwnMessage(block)" class="text-xs leading-none">
           <time v-if="formattedCreatedAt && !block.isStreaming" class="text-base-content/40 leading-none">{{ formattedCreatedAt }}</time>
         </span>
-      </div>
-      <div v-if="showMessageIdDebug && !compactWithPrevious" class="mb-1 font-mono text-[10px] leading-tight text-base-content/45 break-all">
-        id={{ String(block.id || "") }}<span v-if="String(block.sourceMessageId || '') && String(block.sourceMessageId || '') !== String(block.id || '')"> src={{ String(block.sourceMessageId || "") }}</span>
       </div>
       <div :class="[
         'chat-bubble',
