@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-04T14:26:55.213Z",
-  "latestVersion": "v0.18.3",
+  "generatedAt": "2026-07-05T04:24:24.438Z",
+  "latestVersion": "v0.18.4",
   "releases": [
+    {
+      "version": "v0.18.4",
+      "path": "docs/changelog/releases/v0.18.4.md",
+      "summary": "修复便携版自动更新后旧 helper、staging、zip 和计划文件残留在更新临时目录的问题。"
+    },
     {
       "version": "v0.18.3",
       "path": "docs/changelog/releases/v0.18.3.md",
