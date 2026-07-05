@@ -947,18 +947,22 @@ fn clone_foreground_conversation_for_copy(
     conversation
 }
 
-fn build_branch_conversation_title(
+fn build_branch_conversation_summary_title(
     source_title: &str,
+    source_summary_title: Option<&str>,
     first_selected_ordinal: usize,
     source_is_main_conversation: bool,
 ) -> String {
     let base_title = source_title.trim();
+    let base_summary_title = source_summary_title.map(str::trim).unwrap_or_default();
     let prefix = if source_is_main_conversation {
         "P-ai系统"
-    } else if base_title.is_empty() {
-        "未命名会话"
-    } else {
+    } else if !base_title.is_empty() {
         base_title
+    } else if !base_summary_title.is_empty() {
+        base_summary_title
+    } else {
+        "未命名会话"
     };
     format!("{prefix}[会话分支自第{first_selected_ordinal}条对话]")
 }
@@ -1044,7 +1048,7 @@ fn build_branch_conversation_record_from_selection(
     data: &AppData,
     source: &Conversation,
     department: &DepartmentConfig,
-    title: &str,
+    branch_summary_title: &str,
     latest_compaction_message: Option<&ChatMessage>,
     selected_messages: &[ChatMessage],
 ) -> Result<Conversation, String> {
@@ -1053,7 +1057,7 @@ fn build_branch_conversation_record_from_selection(
         &department_primary_api_config_id(department),
         &agent_id,
         &department.id,
-        title,
+        "",
         CONVERSATION_KIND_CHAT,
         None,
         None,
@@ -1098,6 +1102,11 @@ fn build_branch_conversation_record_from_selection(
             .messages
             .push(build_initial_summary_context_message(Some(&conversation.current_todos), None));
     }
+    conversation_update_latest_summary_title_with_source(
+        &mut conversation,
+        Some(branch_summary_title),
+        Some(SUMMARY_CONTEXT_TITLE_SOURCE_BRANCH),
+    );
     conversation.messages.extend(
         selected_messages
             .iter()
@@ -1377,8 +1386,9 @@ async fn create_conversation_branch_from_message_internal(
         return Err("无法确定会话分支的消息位置".to_string());
     }
     let rewind_anchor_index = target_message_index.saturating_add(1);
-    let branch_title = build_branch_conversation_title(
+    let branch_summary_title = build_branch_conversation_summary_title(
         &source_conversation.title,
+        conversation_latest_summary_title(&source_conversation).as_deref(),
         first_selected_ordinal,
         source_conversation.id.trim() == SYSTEM_NOTIFICATION_CONVERSATION_ID,
     );
@@ -1386,7 +1396,7 @@ async fn create_conversation_branch_from_message_internal(
         api_config_id: source_conversation.preferred_api_config_id.clone(),
         agent_id: Some(source_conversation.agent_id.clone()),
         department_id: Some(source_conversation.department_id.clone()),
-        title: Some(branch_title.clone()),
+        title: None,
         copy_source_conversation_id: Some(source_conversation.id.clone()),
         shell_workspaces: None,
         shell_autonomous_mode: None,
@@ -1430,6 +1440,20 @@ async fn create_conversation_branch_from_message_internal(
         }
     }
     emit_unarchived_conversation_overview_updated_payload(state, &create_result.overview_payload);
+    if conversation_service_v2()
+        .update_latest_summary_title_with_source(
+            state,
+            &conversation_id,
+            &branch_summary_title,
+            SUMMARY_CONTEXT_TITLE_SOURCE_BRANCH,
+        )
+        .unwrap_or(false)
+    {
+        let _ = emit_unarchived_conversation_overview_item_updated_from_state(
+            state,
+            &conversation_id,
+        );
+    }
     runtime_log_info(format!(
         "[会话分支] 完成，任务=从此消息开始创建会话分支，source_conversation_id={}，conversation_id={}，turn_message_id={}，target_message_index={}，has_rewind_anchor={}，duration_ms={}",
         source_conversation_id,
@@ -1441,7 +1465,7 @@ async fn create_conversation_branch_from_message_internal(
     ));
     Ok(BranchUnarchivedConversationFromSelectionOutput {
         conversation_id,
-        title: branch_title,
+        title: branch_summary_title,
         warning: None,
     })
 }
@@ -3540,14 +3564,18 @@ mod unarchived_conversations_tests {
     }
 
     #[test]
-    fn build_branch_conversation_title_should_include_source_title_and_ordinal() {
+    fn build_branch_conversation_summary_title_should_include_source_title_and_ordinal() {
         assert_eq!(
-            build_branch_conversation_title("原会话", 7, false),
+            build_branch_conversation_summary_title("原会话", None, 7, false),
             "原会话[会话分支自第7条对话]"
         );
         assert_eq!(
-            build_branch_conversation_title("Chat 2026-04-18T10:00", 3, true),
+            build_branch_conversation_summary_title("Chat 2026-04-18T10:00", Some("摘要标题"), 3, true),
             "P-ai系统[会话分支自第3条对话]"
+        );
+        assert_eq!(
+            build_branch_conversation_summary_title("", Some("摘要标题"), 2, false),
+            "摘要标题[会话分支自第2条对话]"
         );
     }
 
@@ -3625,6 +3653,18 @@ mod unarchived_conversations_tests {
         assert_eq!(
             render_prompt_message_text(&branched.messages[2]),
             render_prompt_message_text(&source.messages[3])
+        );
+        assert!(branched.title.is_empty());
+        assert_eq!(
+            conversation_latest_summary_title(&branched).as_deref(),
+            Some("会话分支标题")
+        );
+        assert_eq!(
+            branched
+                .messages
+                .first()
+                .and_then(summary_context_message_title_source),
+            Some(SUMMARY_CONTEXT_TITLE_SOURCE_BRANCH)
         );
         assert_ne!(branched.messages[0].id, source.messages[2].id);
     }

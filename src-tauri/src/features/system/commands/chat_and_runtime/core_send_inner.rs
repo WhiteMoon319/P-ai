@@ -927,7 +927,8 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
 }
 
 fn conversation_has_visible_title(conversation: &Conversation) -> bool {
-    !conversation.title.trim().is_empty() || conversation_latest_summary_title(conversation).is_some()
+    !conversation.title.trim().is_empty()
+        || conversation_has_auto_title_blocking_summary_title(conversation)
 }
 
 fn conversation_has_visible_title_from_store(
@@ -4923,6 +4924,32 @@ mod core_send_inner_tests {
             .push(build_initial_summary_context_message(None, Some("已有摘要标题")));
 
         assert!(!should_schedule_conversation_auto_title_generation(
+            &conversation,
+            "请帮我检查标题自动生成逻辑"
+        ));
+    }
+
+    #[test]
+    fn auto_title_schedule_should_ignore_branch_source_summary_title() {
+        let mut conversation = build_conversation_record(
+            "api-a",
+            "agent-a",
+            ASSISTANT_DEPARTMENT_ID,
+            "",
+            CONVERSATION_KIND_CHAT,
+            None,
+            None,
+        );
+        conversation
+            .messages
+            .push(build_initial_summary_context_message(None, Some("来自原会话的分支")));
+        assert!(conversation_update_latest_summary_title_with_source(
+            &mut conversation,
+            Some("来自原会话的分支"),
+            Some(SUMMARY_CONTEXT_TITLE_SOURCE_BRANCH),
+        ));
+
+        assert!(should_schedule_conversation_auto_title_generation(
             &conversation,
             "请帮我检查标题自动生成逻辑"
         ));

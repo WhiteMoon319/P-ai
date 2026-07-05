@@ -392,7 +392,7 @@ fn build_branch_conversation_record_from_selection_runtime_meta_view(
     agents: &[AgentProfile],
     source_meta: &ConversationMetaView,
     department: &DepartmentConfig,
-    title: &str,
+    branch_summary_title: &str,
     latest_compaction_message: Option<&ChatMessage>,
     selected_messages: &[ChatMessage],
 ) -> Result<Conversation, String> {
@@ -402,7 +402,7 @@ fn build_branch_conversation_record_from_selection_runtime_meta_view(
         &department_primary_api_config_id(department),
         &agent_id,
         &department.id,
-        title,
+        "",
         CONVERSATION_KIND_CHAT,
         None,
         None,
@@ -446,6 +446,11 @@ fn build_branch_conversation_record_from_selection_runtime_meta_view(
             .messages
             .push(build_initial_summary_context_message(Some(&conversation.current_todos), None));
     }
+    conversation_update_latest_summary_title_with_source(
+        &mut conversation,
+        Some(branch_summary_title),
+        Some(SUMMARY_CONTEXT_TITLE_SOURCE_BRANCH),
+    );
     conversation.messages.extend(
         selected_messages
             .iter()

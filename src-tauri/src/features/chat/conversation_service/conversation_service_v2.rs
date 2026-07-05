@@ -2839,8 +2839,9 @@ impl ConversationServiceV2 {
         )
         .cloned()
         .ok_or_else(|| "源会话所属部门不存在".to_string())?;
-        let branched_title = build_branch_conversation_title(
+        let branch_summary_title = build_branch_conversation_summary_title(
             &source_conversation_meta.title,
+            source_conversation_meta.latest_summary_title.as_deref(),
             first_selected_ordinal.max(1),
             runtime.main_conversation_id.as_deref().map(str::trim)
                 == Some(source_conversation_meta.id.as_str()),
@@ -2851,7 +2852,7 @@ impl ConversationServiceV2 {
             &agents,
             &source_conversation_meta,
             &department,
-            &branched_title,
+            &branch_summary_title,
             latest_compaction_message.as_ref(),
             &selected_messages,
         )?;
@@ -2867,7 +2868,7 @@ impl ConversationServiceV2 {
         drop(guard);
         Ok(BranchUnarchivedConversationMutationResult {
             conversation_id,
-            title: branched_title,
+            title: branch_summary_title,
             selected_count: selected_messages.len(),
             has_compaction_seed: latest_compaction_message.is_some(),
             overview_payload,
@@ -3083,6 +3084,22 @@ impl ConversationServiceV2 {
             Ok(conversation_update_latest_summary_title(
                 conversation,
                 Some(next_title),
+            ))
+        })
+    }
+
+    fn update_latest_summary_title_with_source(
+        &self,
+        state: &AppState,
+        conversation_id: &str,
+        next_title: &str,
+        title_source: &str,
+    ) -> Result<bool, String> {
+        self.update_unarchived_conversation_by_id(state, conversation_id, |conversation| {
+            Ok(conversation_update_latest_summary_title_with_source(
+                conversation,
+                Some(next_title),
+                Some(title_source),
             ))
         })
     }

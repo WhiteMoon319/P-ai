@@ -276,6 +276,7 @@ fn conversation_is_archived(conversation: &Conversation) -> bool {
 
 const SUMMARY_CONTEXT_MESSAGE_SCHEMA_VERSION: u64 = 2;
 const SUMMARY_CONTEXT_TITLE_MAX_CHARS: usize = 20;
+const SUMMARY_CONTEXT_TITLE_SOURCE_BRANCH: &str = "branch_source";
 
 fn conversation_is_local_normal_chat(conversation: &Conversation) -> bool {
     conversation.conversation_kind.trim() == CONVERSATION_KIND_CHAT
@@ -366,6 +367,58 @@ fn summary_context_message_title(message: &ChatMessage) -> Option<String> {
         })
 }
 
+fn summary_context_message_title_source(message: &ChatMessage) -> Option<&str> {
+    let kind = summary_context_message_kind(message)?;
+    if !is_summary_context_message_kind(kind) {
+        return None;
+    }
+    let meta = message.provider_meta.as_ref()?;
+    meta.get("message_meta")
+        .and_then(|value| {
+            value
+                .get("titleSource")
+                .or_else(|| value.get("title_source"))
+                .or_else(|| value.get("titleProvenance"))
+        })
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            meta.get("messageMeta")
+                .and_then(|value| {
+                    value
+                        .get("titleSource")
+                        .or_else(|| value.get("title_source"))
+                        .or_else(|| value.get("titleProvenance"))
+                })
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+        })
+}
+
+fn summary_context_message_title_blocks_auto_title(message: &ChatMessage) -> bool {
+    if summary_context_message_title(message).is_none() {
+        return false;
+    }
+    !matches!(
+        summary_context_message_title_source(message),
+        Some(SUMMARY_CONTEXT_TITLE_SOURCE_BRANCH)
+    )
+}
+
+fn conversation_has_auto_title_blocking_summary_title(conversation: &Conversation) -> bool {
+    conversation
+        .messages
+        .iter()
+        .rev()
+        .find_map(|message| {
+            summary_context_message_title(message)
+                .map(|_| summary_context_message_title_blocks_auto_title(message))
+        })
+        .unwrap_or(false)
+}
+
 fn ensure_summary_context_message_meta_object_mut(
     message: &mut ChatMessage,
 ) -> Option<&mut serde_json::Map<String, Value>> {
@@ -391,7 +444,16 @@ fn conversation_update_latest_summary_title(
     conversation: &mut Conversation,
     next_title: Option<&str>,
 ) -> bool {
+    conversation_update_latest_summary_title_with_source(conversation, next_title, None)
+}
+
+fn conversation_update_latest_summary_title_with_source(
+    conversation: &mut Conversation,
+    next_title: Option<&str>,
+    title_source: Option<&str>,
+) -> bool {
     let normalized_title = next_title.and_then(normalize_summary_context_title);
+    let normalized_source = title_source.map(str::trim).filter(|value| !value.is_empty());
     let Some(message) = conversation
         .messages
         .iter_mut()
@@ -429,9 +491,52 @@ fn conversation_update_latest_summary_title(
                 message_meta.insert("title".to_string(), Value::String(title));
                 changed = true;
             }
+            match normalized_source {
+                Some(source) => {
+                    if message_meta.get("titleSource").and_then(Value::as_str) != Some(source) {
+                        message_meta.insert("titleSource".to_string(), Value::String(source.to_string()));
+                        changed = true;
+                    }
+                    if message_meta.remove("title_source").is_some() {
+                        changed = true;
+                    }
+                    if message_meta.remove("titleProvenance").is_some() {
+                        changed = true;
+                    }
+                    if message_meta.remove("titleProvisional").is_some() {
+                        changed = true;
+                    }
+                }
+                None => {
+                    if message_meta.remove("titleSource").is_some() {
+                        changed = true;
+                    }
+                    if message_meta.remove("title_source").is_some() {
+                        changed = true;
+                    }
+                    if message_meta.remove("titleProvenance").is_some() {
+                        changed = true;
+                    }
+                    if message_meta.remove("titleProvisional").is_some() {
+                        changed = true;
+                    }
+                }
+            }
         }
         None => {
             if message_meta.remove("title").is_some() {
+                changed = true;
+            }
+            if message_meta.remove("titleSource").is_some() {
+                changed = true;
+            }
+            if message_meta.remove("title_source").is_some() {
+                changed = true;
+            }
+            if message_meta.remove("titleProvenance").is_some() {
+                changed = true;
+            }
+            if message_meta.remove("titleProvisional").is_some() {
                 changed = true;
             }
         }
