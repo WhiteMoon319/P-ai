@@ -86,12 +86,6 @@
                   <span class="shrink-0 rounded-full border border-base-300/80 bg-base-100 px-3 py-1 text-base-content/55">{{ t("chat.planStartedDivider") }}</span>
                   <div class="h-px flex-1 bg-base-300/80"></div>
                 </div>
-                <div v-else-if="entry.item.kind === 'time_divider'" class="my-3 flex items-center gap-3 px-3 text-[11px] text-base-content/45">
-                  <div class="h-px flex-1 bg-base-300/70"></div>
-                  <time class="shrink-0 text-[11px] font-semibold text-base-content/50"
-                    :datetime="entry.item.createdAt">{{ formatTimeDividerLabel(entry.item.createdAt) }}</time>
-                  <div class="h-px flex-1 bg-base-300/70"></div>
-                </div>
                 <div v-else-if="entry.item.kind === 'message'"
                   v-memo="[...messageMemoKey(entry.item.block, entry.item.renderId, entry.item.blockIndex, entry.item.compactWithPrevious), departmentNameMapSignature]">
                   <div class="ecall-elastic-item-shell">
@@ -1582,42 +1576,13 @@ async function openLocalFileInChatReader(path: string) {
   await chatReaderPanelRef.value?.openPath(path);
 }
 
-// ==================== time divider ====================
-
-const timeDividerNowTick = ref(Date.now());
-let timeDividerNowTimer = 0;
-
-function padTimePart(value: number): string { return String(value).padStart(2, "0"); }
-function formatLocalClock(date: Date): string { return `${padTimePart(date.getHours())}:${padTimePart(date.getMinutes())}`; }
-function formatTimeDividerLabel(value?: string): string {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  const date = new Date(raw);
-  const timestamp = date.getTime();
-  if (!Number.isFinite(timestamp)) return raw;
-  const now = new Date(timeDividerNowTick.value);
-  const sameYear = date.getFullYear() === now.getFullYear();
-  const sameMonth = date.getMonth() === now.getMonth();
-  const sameDate = date.getDate() === now.getDate();
-  const sameHour = sameYear && sameMonth && sameDate && date.getHours() === now.getHours();
-  const elapsedMinutes = Math.floor((now.getTime() - timestamp) / 60000);
-  if (sameHour && elapsedMinutes > 0) return t("chat.timeDivider.minutesAgo", { count: elapsedMinutes });
-  const clock = formatLocalClock(date);
-  if (sameYear && sameMonth && sameDate) return clock;
-  const monthDay = `${padTimePart(date.getMonth() + 1)}-${padTimePart(date.getDate())}`;
-  if (sameYear) return `${monthDay} ${clock}`;
-  return `${date.getFullYear()}-${monthDay} ${clock}`;
-}
-
 // ==================== lifecycle ====================
 
 onMounted(() => {
-  timeDividerNowTimer = window.setInterval(() => { timeDividerNowTick.value = Date.now(); }, 60_000);
   void nextTick(() => chatScrollbarRef.value?.updateThumb());
 });
 
 onBeforeUnmount(() => {
-  if (timeDividerNowTimer) { window.clearInterval(timeDividerNowTimer); timeDividerNowTimer = 0; }
   panesCleanupFns.forEach((fn) => fn());
   stopAudioPlayback();
 });

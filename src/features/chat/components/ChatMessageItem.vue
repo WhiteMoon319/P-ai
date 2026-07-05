@@ -85,9 +85,6 @@
             </template>
             <template v-else>
               <span class="text-xs text-base-content opacity-80">{{ displayName }}</span>
-              <span class="text-xs leading-none">
-                <time v-if="formattedCreatedAt && !block.isStreaming" class="text-base-content/40 leading-none">{{ formattedCreatedAt }}</time>
-              </span>
               <span v-if="showMessageIdDebug" class="font-mono text-[10px] leading-none text-base-content/45">
                 id={{ String(block.id || "") }}<span v-if="String(block.sourceMessageId || '') && String(block.sourceMessageId || '') !== String(block.id || '')"> src={{ String(block.sourceMessageId || "") }}</span>
               </span>
@@ -305,104 +302,46 @@
             <span class="sr-only">{{ streamingHeaderStatus || t("chat.statusWaitingReply") }}</span>
           </div>
           <div
+            v-if="!block.isStreaming"
             :class="[
               'chat-footer ecall-message-footer flex h-6 items-center gap-1.5 transition-opacity',
-              selectionModeEnabled
-                ? 'opacity-100 pointer-events-auto'
-                : showRegenerateAction && canRegenerate
-                  ? 'opacity-100 pointer-events-auto'
-              : (isLastUserMessage || isLastAssistantMessage)
-                ? 'opacity-100 pointer-events-auto'
-                : !block.isStreaming
-                    ? 'opacity-0 pointer-events-none group-hover/user-turn:opacity-100 group-hover/user-turn:pointer-events-auto'
-                    : 'opacity-0 pointer-events-none',
+              'opacity-100 pointer-events-auto',
             ]"
           >
+            <time
+              v-if="assistantRelativeCreatedAt"
+              class="inline-flex h-6 shrink-0 items-center rounded px-1 text-xs font-normal text-base-content/55"
+              :datetime="String(block.createdAt || '')"
+            >
+              {{ assistantRelativeCreatedAt }}
+            </time>
             <button
               v-if="!selectionModeEnabled"
               type="button"
-              class="ecall-message-footer-action inline-flex h-6 min-w-6 items-center justify-center rounded px-1 text-[11px] text-base-content/55 hover:text-base-content"
-              :title="t('chat.messageItem.multiSelect')"
-              :class="!block.isStreaming ? '' : 'opacity-0 pointer-events-none'"
-              :disabled="block.isStreaming"
-              @click="emit('enterSelectionMode', selectionKey)"
-            >
-              <CircleCheckBig class="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
               class="ecall-message-footer-action inline-flex h-6 w-6 items-center justify-center rounded text-base-content/55 hover:text-base-content"
               :title="t('chat.copy')"
-              :class="!selectionModeEnabled && !block.isStreaming ? '' : 'opacity-0 pointer-events-none'"
-              :disabled="selectionModeEnabled || block.isStreaming"
+              :disabled="selectionModeEnabled"
               @click="emit('copyMessage', block)"
             >
               <Copy class="h-3.5 w-3.5" />
             </button>
             <button
-              v-if="hideToggleEnabled && !selectionModeEnabled"
-              type="button"
-              class="ecall-message-footer-action inline-flex h-6 w-6 items-center justify-center rounded text-base-content/55 hover:text-base-content"
-              :title="bubbleBackgroundHidden ? t('chat.messageItem.showBubble') : t('chat.messageItem.hideBubble')"
-              :disabled="block.isStreaming"
-              @click="emit('toggleBubbleBackground', selectionKey)"
-            >
-              <EyeOff v-if="bubbleBackgroundHidden" class="h-3.5 w-3.5" />
-              <Eye v-else class="h-3.5 w-3.5" />
-            </button>
-            <button
-              v-if="canRecallBlock(block)"
-              type="button"
-              class="ecall-message-footer-action inline-flex h-6 w-6 items-center justify-center rounded text-base-content/55 hover:text-base-content"
-              :title="t('chat.messageItem.branchFromMessage')"
-              :class="!selectionModeEnabled && !block.isStreaming ? '' : 'opacity-0 pointer-events-none'"
-              :disabled="selectionModeEnabled || block.isStreaming || busy"
-              @click="emit('createConversationBranchFromTurn', { turnId: recallTurnId(block) })"
-            >
-              <Split class="h-3.5 w-3.5" />
-            </button>
-            <button
-              v-if="canRecallBlock(block)"
+              v-if="canRecallBlock(block) && !selectionModeEnabled"
               type="button"
               class="ecall-message-footer-action inline-flex h-6 w-6 items-center justify-center rounded text-base-content/55 hover:text-base-content"
               :title="t('chat.recall')"
-              :class="!selectionModeEnabled && !block.isStreaming ? '' : 'opacity-0 pointer-events-none'"
-              :disabled="selectionModeEnabled || block.isStreaming || busy"
+              :disabled="selectionModeEnabled || busy"
               @click="emit('recallTurn', { turnId: recallTurnId(block) })"
             >
               <Undo2 class="h-3.5 w-3.5" />
             </button>
-            <button
-              v-if="showRegenerateAction"
-              type="button"
-              class="ecall-message-footer-action inline-flex h-6 w-6 items-center justify-center rounded text-base-content/55 hover:text-base-content"
-              :title="t('chat.regenerate')"
-              :class="!selectionModeEnabled && !block.isStreaming && showRegenerateAction && canRegenerate ? '' : 'opacity-0 pointer-events-none'"
-              :disabled="selectionModeEnabled || block.isStreaming || !showRegenerateAction || !canRegenerate || busy"
-              @click="emit('regenerateTurn', { turnId: block.sourceMessageId || block.id })"
-            >
-              <RotateCcw class="h-3.5 w-3.5" />
-            </button>
-            <span
-              v-if="finalDispatchElapsedLabel(block) && !selectionModeEnabled"
-              class="inline-flex h-6 shrink-0 items-center rounded px-1 text-[11px] font-medium text-base-content/60"
-              :title="t('chat.messageItem.dispatchElapsed', { elapsed: finalDispatchElapsedLabel(block) })"
-            >
-              {{ t('chat.messageItem.elapsed', { elapsed: finalDispatchElapsedLabel(block) }) }}
-            </span>
           </div>
         </div>
       </div>
     </template>
     <template v-else>
       <div v-if="!compactWithPrevious" class="chat-header mb-1 flex items-baseline gap-2">
-        <span v-if="isOwnMessage(block)" class="text-xs leading-none">
-          <time v-if="formattedCreatedAt && !block.isStreaming" class="text-base-content/40 leading-none">{{ formattedCreatedAt }}</time>
-        </span>
         <span class="text-xs text-base-content opacity-80">{{ displayName }}</span>
-        <span v-if="!isOwnMessage(block)" class="text-xs leading-none">
-          <time v-if="formattedCreatedAt && !block.isStreaming" class="text-base-content/40 leading-none">{{ formattedCreatedAt }}</time>
-        </span>
       </div>
       <div :class="[
         'chat-bubble',
@@ -485,41 +424,23 @@
         </div>
       </div>
       <div
-        v-if="isOwnMessage(block) && !compactWithPrevious"
-        :class="[
-          'ecall-own-message-actions flex justify-end transition-opacity',
-          selectionModeEnabled
-            ? 'opacity-0 pointer-events-none'
-            : 'opacity-0 pointer-events-none group-hover/user-turn:opacity-100 group-hover/user-turn:pointer-events-auto',
-        ]"
+        v-if="isOwnMessage(block) && !compactWithPrevious && !block.isStreaming && !selectionModeEnabled"
+        class="ecall-own-message-actions flex h-5 justify-end gap-1 opacity-100 pointer-events-auto"
       >
         <button
-          v-if="hideToggleEnabled"
           type="button"
           class="ecall-message-recall-action inline-flex h-5 w-5 items-center justify-center rounded text-base-content/40 hover:text-base-content"
-          :title="bubbleBackgroundHidden ? t('chat.messageItem.showBubble') : t('chat.messageItem.hideBubble')"
-          :disabled="selectionModeEnabled || block.isStreaming"
-          @click="emit('toggleBubbleBackground', selectionKey)"
+          :title="t('chat.copy')"
+          @click="emit('copyMessage', block)"
         >
-          <EyeOff v-if="bubbleBackgroundHidden" class="h-3 w-3" />
-          <Eye v-else class="h-3 w-3" />
-        </button>
-        <button
-          v-if="canRecallBlock(block)"
-          type="button"
-          class="ecall-message-recall-action inline-flex h-5 w-5 items-center justify-center rounded text-base-content/40 hover:text-base-content"
-          :title="t('chat.messageItem.branchFromMessage')"
-          :disabled="selectionModeEnabled || block.isStreaming || busy"
-          @click="emit('createConversationBranchFromTurn', { turnId: recallTurnId(block) })"
-        >
-          <Split class="h-3 w-3" />
+          <Copy class="h-3 w-3" />
         </button>
         <button
           v-if="canRecallBlock(block)"
           type="button"
           class="ecall-message-recall-action inline-flex h-5 w-5 items-center justify-center rounded text-base-content/40 hover:text-base-content"
           :title="t('chat.recall')"
-          :disabled="selectionModeEnabled || block.isStreaming || busy"
+          :disabled="busy"
           @click="emit('recallTurn', { turnId: recallTurnId(block) })"
         >
           <Undo2 class="h-3 w-3" />
@@ -558,7 +479,7 @@
           <span>{{ t('chat.copyMath') }}</span>
         </button>
       </li>
-      <li>
+      <li v-if="hideToggleEnabled">
         <button type="button" @click="handleContextMenuAction('toggleBubble')">
           <EyeOff v-if="bubbleBackgroundHidden" class="h-4 w-4" />
           <Eye v-else class="h-4 w-4" />
@@ -584,14 +505,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect, watchPostEffect } from "vue";
 import { useI18n } from "vue-i18n";
-import { CircleCheckBig, Copy, Eye, EyeOff, FileText, ListCheck, Pause, Play, RotateCcw, Split, Undo2 } from "@lucide/vue";
+import { Copy, Eye, EyeOff, FileText, ListCheck, Pause, Play, Split, Undo2 } from "@lucide/vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ChatActivityItem, ChatMessageBlock } from "../../../types/app";
 import {
   normalizeAssistantStreamBlocks,
   streamBlocksToActivityItems,
 } from "../../../utils/chat-message-semantics";
-import { formatIsoToLocalHourMinute } from "../../../utils/time";
 import { AppMarkdownRenderer, initKatex } from "../markdown";
 import { normalizeLocalLinkHref } from "../utils/local-link";
 import { textContentSignature } from "../utils/text-signature";
@@ -654,8 +574,6 @@ const emit = defineEmits<{
   (e: "toggleBubbleBackground", selectionKey: string): void;
 }>();
 
-const showRegenerateAction = false;
-
 const { t } = useI18n();
 const resolvedImageSrcMap = ref<Record<string, string>>({});
 const markdownContainerRef = ref<HTMLElement | null>(null);
@@ -681,6 +599,8 @@ const contextMenuRef = ref<HTMLElement | null>(null);
 const contextMenuX = ref(0);
 const contextMenuY = ref(0);
 const mathContextCopyText = ref("");
+const relativeTimeNowTick = ref(Date.now());
+let relativeTimeNowTimer = 0;
 
 watch(
   () => ({
@@ -724,7 +644,10 @@ watch(
 
 const displayName = computed(() => messageName(props.block));
 const avatarUrl = computed(() => messageAvatarUrl(props.block));
-const formattedCreatedAt = computed(() => formattedBlockTime(props.block.createdAt));
+const assistantRelativeCreatedAt = computed(() => {
+  if (isOwnMessage(props.block) || props.block.isStreaming) return "";
+  return formatRecentRelativeTime(props.block.createdAt, relativeTimeNowTick.value);
+});
 const streamingHeaderStatus = computed(() => assistantStreamingHeaderStatus(props.block));
 const toolcallPreviewMap = computed<Record<string, { title: string; body: string }>>(() => {
   const previews = buildToolcallPreviewMap(props.block.activityItems, toolTimelineText("noArgs"));
@@ -1819,15 +1742,34 @@ function frontendDispatchElapsedLabel(block: ChatMessageBlock): string {
   return formatDispatchElapsed(elapsedMs);
 }
 
-function finalDispatchElapsedLabel(block: ChatMessageBlock): string {
-  if (block.isStreaming) return "";
-  const elapsedMs = numericMetaValue(block, "dispatchElapsedMs");
-  if (elapsedMs <= 0) return "";
-  return formatDispatchElapsed(elapsedMs);
+function padTimePart(value: number): string {
+  return String(value).padStart(2, "0");
 }
 
-function formattedBlockTime(value?: string): string {
-  return formatIsoToLocalHourMinute(value, "");
+function formatRecentRelativeTime(value: string | undefined, nowMs: number): string {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const date = new Date(raw);
+  const timestamp = date.getTime();
+  if (!Number.isFinite(timestamp)) return raw;
+
+  const diffMs = Math.max(0, nowMs - timestamp);
+  const seconds = Math.floor(diffMs / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (seconds < 60) return t("config.memory.justNow");
+  if (minutes < 60) return t("config.memory.minutesAgo", { count: minutes });
+  if (hours < 24) return t("config.memory.hoursAgo", { count: hours });
+  if (days < 7) return t("config.memory.daysAgo", { count: days });
+
+  const now = new Date(nowMs);
+  const year = date.getFullYear();
+  const monthDay = `${padTimePart(date.getMonth() + 1)}-${padTimePart(date.getDate())}`;
+  const clock = `${padTimePart(date.getHours())}:${padTimePart(date.getMinutes())}`;
+  if (year === now.getFullYear()) return `${monthDay} ${clock}`;
+  return `${year}-${monthDay}`;
 }
 
 function handleSelectionRowClick(event: MouseEvent): void {
@@ -1914,6 +1856,7 @@ function handleContextMenuAction(action: string) {
   } else if (action === "copyMath") {
     void copyTextToClipboard(mathCopyText);
   } else if (action === "toggleBubble") {
+    if (!props.hideToggleEnabled) return;
     emit("toggleBubbleBackground", props.selectionKey);
   } else if (action === "branchFromMessage") {
     const turnId = recallTurnId(props.block);
@@ -2203,11 +2146,18 @@ watchPostEffect(() => {
 });
 
 onMounted(() => {
+  relativeTimeNowTimer = window.setInterval(() => {
+    relativeTimeNowTick.value = Date.now();
+  }, 60_000);
   document.addEventListener("pointerdown", handleActivityOutsidePointerDown, true);
 });
 
 onBeforeUnmount(() => {
   closeContextMenu();
+  if (relativeTimeNowTimer) {
+    window.clearInterval(relativeTimeNowTimer);
+    relativeTimeNowTimer = 0;
+  }
   disposed = true;
   document.removeEventListener("pointerdown", handleActivityOutsidePointerDown, true);
 });

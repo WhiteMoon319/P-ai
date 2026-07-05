@@ -1197,9 +1197,6 @@
     "mentionUnavailableNoModel": "目标部门未配置可用文本模型",
     "todoIntentionWithPersona": "{name} 打算{todo}",
     "todoIntention": "打算{todo}",
-    "timeDivider": {
-      "minutesAgo": "{count} 分钟前"
-    },
     "loadMore": "加载更多...",
     "noMoreHistory": "已经没有更多消息",
     "recipientMissingTitle": "当前会话接管人不可用",

@@ -59,12 +59,12 @@ export function blockRenderId(block: ChatMessageBlock, ephemeralMap?: WeakMap<Ch
 // ==================== 高度估算 ====================
 
 export function estimateChatRenderItemHeight(item: ChatRenderItem): number {
-  if (item.kind === "compaction" || item.kind === "plan_started" || item.kind === "time_divider") return 44;
+  if (item.kind === "compaction" || item.kind === "plan_started") return 44;
   return estimateMessageBlockHeight(item.block, isRightAlignedMessage(item.block)) + 8;
 }
 
 export function virtualItemSizeDependencies(item: ChatRenderItem): unknown[] {
-  if (item.kind === "compaction" || item.kind === "plan_started" || item.kind === "time_divider") return [item.id, item.kind];
+  if (item.kind === "compaction" || item.kind === "plan_started") return [item.id, item.kind];
   return [item.id, ...blockSizeDependencies(item.block)];
 }
 
