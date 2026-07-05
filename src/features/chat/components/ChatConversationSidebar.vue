@@ -107,10 +107,10 @@
                     :class="[
                       item.conversationId === activeConversationId ? 'bg-base-300 hover:bg-base-300' : 'bg-transparent',
                       isConversationVisuallyOccupied(item) ? 'opacity-60' : '',
-                      isConversationDisabled(item) ? 'cursor-not-allowed' : 'cursor-pointer',
+                      isCurrentConversation(item) ? 'cursor-default' : 'cursor-pointer',
                     ]"
-                    :role="isCurrentConversation(item) || isConversationDisabled(item) ? undefined : 'button'"
-                    :tabindex="isCurrentConversation(item) || isConversationDisabled(item) ? undefined : 0"
+                    :role="isCurrentConversation(item) ? undefined : 'button'"
+                    :tabindex="isCurrentConversation(item) ? undefined : 0"
                     :title="conversationItemTitle(item)"
                     @click="handleConversationCardClick(item)"
                     @keydown.enter.prevent="handleConversationCardClick(item)"
@@ -843,11 +843,6 @@ function conversationIndicatorClass(tone: "error" | "info" | "success" | ""): st
   return "";
 }
 
-function isConversationDisabled(item: ChatConversationOverviewItem): boolean {
-  void item;
-  return false;
-}
-
 function isConversationVisuallyOccupied(item: ChatConversationOverviewItem): boolean {
   void item;
   return false;
@@ -884,7 +879,7 @@ function conversationItemTitle(item: ChatConversationOverviewItem): string {
 
 function handleConversationCardClick(item: ChatConversationOverviewItem) {
   const conversationId = String(item.conversationId || "").trim();
-  if (isCurrentConversation(item) || isConversationDisabled(item)) return;
+  if (isCurrentConversation(item)) return;
   emit("select", {
     conversationId,
     kind: item.kind,

@@ -1157,10 +1157,6 @@ function applyAssistantToolStatusEvent(event: NonNullable<SidebarAssistantDeltaP
 }
 
 async function openConversation(conversationId: string) {
-  const beforeSummary = conversations.value.find((item) => String(item.conversationId || "").trim() === String(conversationId || "").trim());
-  if (beforeSummary && String(beforeSummary.conversationId || "").trim() !== String(activeConversationId.value || "").trim() && !isSidebarConversationOpenable(beforeSummary)) {
-    return;
-  }
   if (String(activeConversationId.value || "").trim() === String(conversationId || "").trim()) {
     resetActiveConversationTransientState("reload_current_conversation");
   }

@@ -153,7 +153,10 @@
         :trimming-conversation-id="trimmingConversationId"
         :compacting-conversation="compactingConversation"
         :compacting-conversation-id="compactingConversationId"
-        :conversation-busy="trimming || compactingConversation"
+        :conversation-busy="
+          (trimming && (!trimmingConversationId || trimmingConversationId === currentChatConversationId))
+          || (compactingConversation && (!compactingConversationId || compactingConversationId === currentChatConversationId))
+        "
         :frozen="branchingConversation || forwardingConversationSelection"
         :message-blocks="visibleMessageBlocks"
         :has-more-history="chatHasMoreHistory"

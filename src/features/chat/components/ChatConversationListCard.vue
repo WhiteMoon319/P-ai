@@ -53,10 +53,10 @@
               :class="[
                 item.conversationId === props.activeConversationId ? 'bg-base-300' : 'bg-base-100 hover:bg-base-200',
                 isConversationVisuallyOccupied(item) ? 'opacity-60' : '',
-                isConversationItemDisabled(item) ? 'cursor-not-allowed' : 'cursor-pointer',
+                isCurrentConversation(item) ? 'cursor-default' : 'cursor-pointer',
               ]"
-              :role="isCurrentConversation(item) || isConversationItemDisabled(item) ? undefined : 'button'"
-              :tabindex="isCurrentConversation(item) || isConversationItemDisabled(item) ? undefined : 0"
+              :role="isCurrentConversation(item) ? undefined : 'button'"
+              :tabindex="isCurrentConversation(item) ? undefined : 0"
               :title="conversationItemTitle(item)"
               @click="handleConversationCardClick(item)"
               @keydown.enter.prevent="handleConversationCardClick(item)"
@@ -413,11 +413,6 @@ function setRenameInputRef(element: Element | { $el?: Element | null } | null) {
   renameInputRef.value = element instanceof HTMLInputElement ? element : null;
 }
 
-function isConversationItemDisabled(item: ChatConversationOverviewItem): boolean {
-  void item;
-  return false;
-}
-
 function isConversationVisuallyOccupied(item: ChatConversationOverviewItem): boolean {
   void item;
   return false;
@@ -453,7 +448,7 @@ function conversationItemTitle(item: ChatConversationOverviewItem): string {
 }
 
 function handleConversationCardClick(item: ChatConversationOverviewItem) {
-  if (isCurrentConversation(item) || isConversationItemDisabled(item)) return;
+  if (isCurrentConversation(item)) return;
   emit("selectConversation", {
     conversationId: String(item.conversationId || "").trim(),
     kind: item.kind,

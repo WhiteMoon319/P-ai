@@ -6,7 +6,6 @@
       type="button"
       class="group flex w-full items-center gap-2 border-b border-base-300 p-2 text-left transition-colors"
       :class="itemClass(item)"
-      :disabled="isConversationDisabled(item)"
       @click="handleSelect(item)"
     >
       <div class="shrink-0">
@@ -164,18 +163,12 @@ function unreadCount(item: ConversationListItem): string {
 function indicatorTone(item: ConversationListItem): "busy" | "error" | "" {
   if (item.conversationId === props.activeConversationId) return "";
   const state = String(item.runtimeState || "").trim();
-  if (state === "assistant_streaming" || state === "organizing_context") return "busy";
+  if (state === "assistant_streaming" || state === "organizing_context" || state === "archiving" || state === "compacting") return "busy";
   return "";
-}
-
-function isConversationDisabled(item: ConversationListItem): boolean {
-  if (item.conversationId === props.activeConversationId) return false;
-  return String(item.runtimeState || "").trim() === "organizing_context";
 }
 
 function itemClass(item: ConversationListItem): string {
   if (item.conversationId === props.activeConversationId) return "bg-base-300 hover:bg-base-300";
-  if (isConversationDisabled(item)) return "cursor-not-allowed bg-base-100 opacity-60";
   return "bg-base-100 hover:bg-base-200";
 }
 
@@ -184,13 +177,13 @@ function runtimeStateText(item: ConversationListItem): string {
   const state = String(item.runtimeState || "").trim();
   if (state === "assistant_streaming") return "回复中";
   if (state === "organizing_context") return "整理中";
+  if (state === "archiving") return "归档中";
+  if (state === "compacting") return "压缩中";
   return "";
 }
 
 function handleSelect(item: ConversationListItem) {
-  const disabled = isConversationDisabled(item);
   // Sidebar 会话列表日志已移除
-  if (disabled) return;
   emit("select", item.conversationId);
 }
 </script>
