@@ -57,6 +57,26 @@ describe("IncrementalMarkdownBlockParser", () => {
     expect(actual[actual.length - 1]?.type).toBe("footnotes");
     expect(stripKeys(actual)).toEqual(stripKeys(parseMarkdownBlocks(text, true)));
   });
+
+  it("matches full streaming parse for code fences indented up to three spaces", () => {
+    const parser = new IncrementalMarkdownBlockParser();
+    const chunks = [
+      "说明\n\n",
+      "  ```ts\n",
+      "const value = 1;\n",
+      "   ```\n",
+      "结束",
+    ];
+    let text = "";
+    let actual: MarkdownBlock[] = [];
+    for (const chunk of chunks) {
+      text += chunk;
+      actual = parser.parse(text);
+    }
+
+    expect(stripKeys(actual)).toEqual(stripKeys(parseMarkdownBlocks(text, true)));
+    expect(actual.some((block) => block.type === "code" && block.lang === "ts")).toBe(true);
+  });
 });
 
 describe("parseInlineSegments", () => {
@@ -144,6 +164,37 @@ describe("parseInlineSegments", () => {
 });
 
 describe("parseMarkdownBlocks", () => {
+  it("parses code fences indented up to three spaces", () => {
+    const blocks = stripKeys(parseMarkdownBlocks([
+      "  ```ts",
+      "const value = 1;",
+      "   ```",
+    ].join("\n")));
+
+    expect(blocks).toEqual([
+      {
+        type: "code",
+        lang: "ts",
+        text: "const value = 1;",
+      },
+    ]);
+  });
+
+  it("does not parse four-space indented lines as code fences", () => {
+    const blocks = stripKeys(parseMarkdownBlocks([
+      "    ```ts",
+      "const value = 1;",
+      "    ```",
+    ].join("\n")));
+
+    expect(blocks).toEqual([
+      {
+        type: "paragraph",
+        text: "```ts\nconst value = 1;\n    ```",
+      },
+    ]);
+  });
+
   it("parses single-line display math blocks with raw delimiters", () => {
     const blocks = stripKeys(parseMarkdownBlocks("$$E=mc^2$$"));
 

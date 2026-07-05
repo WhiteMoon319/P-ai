@@ -1,11 +1,11 @@
-import { parseMarkdownBlocks, type MarkdownBlock } from "./parse-markdown";
+import { parseCodeFenceLine, parseMarkdownBlocks, type MarkdownBlock } from "./parse-markdown";
 
 function normalizeMarkdownText(input: string): string {
   return String(input || "").replace(/\r\n?/g, "\n");
 }
 
 function isCodeFenceLine(line: string): boolean {
-  return /^(`{3,})([\w+-]*)\s*$/.test(line);
+  return !!parseCodeFenceLine(line);
 }
 
 function isStandaloneMathLine(line: string): boolean {

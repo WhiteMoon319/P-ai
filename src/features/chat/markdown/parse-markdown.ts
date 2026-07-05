@@ -35,6 +35,16 @@ export type InlineSegment =
 
 // ==================== Block Parser ====================
 
+export function parseCodeFenceLine(line: string): { fence: string; lang: string } | null {
+  const match = String(line || "").match(/^\s{0,3}(`{3,})[ \t]*([^`]*)\s*$/);
+  if (!match) return null;
+  const info = String(match[2] || "").trim();
+  return {
+    fence: match[1] || "",
+    lang: info.split(/\s+/)[0] || "",
+  };
+}
+
 function pushParagraph(blocks: MarkdownBlock[], lines: string[], keyPrefix: string): MarkdownBlock | null {
   const text = lines.join("\n").trim();
   lines.length = 0;
@@ -252,7 +262,7 @@ export function parseMarkdownBlocks(input: string, streaming = false): MarkdownB
     }
 
     // Code fence
-    const fenceMatch = line.match(/^(`{3,})([\w+-]*)\s*$/);
+    const fenceMatch = parseCodeFenceLine(line);
     if (fenceMatch) {
       if (inCode) {
         result.push({
@@ -267,7 +277,7 @@ export function parseMarkdownBlocks(input: string, streaming = false): MarkdownB
       } else {
         flushParagraph();
         inCode = true;
-        codeLang = fenceMatch[2] || "";
+        codeLang = fenceMatch.lang;
         codeLines = [];
       }
       continue;
