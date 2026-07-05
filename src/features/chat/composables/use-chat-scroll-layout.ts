@@ -5,7 +5,7 @@ type UseChatScrollLayoutOptions = {
   chatting: Ref<boolean>;
   busy: Ref<boolean>;
   frozen: Ref<boolean>;
-  messageBlockCount: Ref<number>;
+  timelineItemCount: Ref<number>;
   onReachedBottom: () => void;
   focusComposerInput: (options?: FocusOptions) => void;
 };
@@ -220,7 +220,7 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
   );
 
   watch(
-    options.messageBlockCount,
+    options.timelineItemCount,
     () => {
       nextTick(() => {
         updateJumpToBottomOffset();

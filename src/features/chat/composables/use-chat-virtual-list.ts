@@ -2,15 +2,12 @@ import { computed, type Ref } from "vue";
 import type { ChatMessageBlock } from "../../../types/app";
 import {
   type ChatRenderItem,
-  isCompactionBlock,
+  buildChatRenderTimeline,
   isRightAlignedMessage,
-  isCompactUserContinuation,
   estimateMessageBlockHeight,
   blockSizeDependencies,
 } from "../utils/chat-render";
 import { stableRenderIdFromBlock } from "../utils/stable-render-id";
-
-const TIME_DIVIDER_GAP_MS = 15 * 60 * 1000;
 
 interface UseChatVirtualListOptions {
   messageBlocks: Ref<ChatMessageBlock[]>;
@@ -87,56 +84,7 @@ export function useChatVirtualList(options: UseChatVirtualListOptions) {
   const rid = (block: ChatMessageBlock) => blockRenderId(block, ephemeralMap, ephemeralSeq);
 
   const chatRenderItems = computed<ChatRenderItem[]>(() => {
-    const items: ChatRenderItem[] = [];
-    let previousMessageBlock: ChatMessageBlock | null = null;
-    let previousMessageTimeMs = 0;
-
-    const blockTimeMs = (block: ChatMessageBlock): number => {
-      const raw = String(block.createdAt || "").trim();
-      if (!raw) return 0;
-      const timestamp = new Date(raw).getTime();
-      return Number.isFinite(timestamp) ? timestamp : 0;
-    };
-
-    const maybePushTimeDivider = (block: ChatMessageBlock, renderId: string) => {
-      const currentTimeMs = blockTimeMs(block);
-      if (previousMessageTimeMs > 0 && currentTimeMs > 0 && currentTimeMs - previousMessageTimeMs >= TIME_DIVIDER_GAP_MS) {
-        const stableRenderId = stableRenderIdFromBlock(block);
-        const dividerId = stableRenderId
-          ? `time-divider-${renderId}`
-          : `time-divider-${renderId}-${String(block.createdAt || "").trim()}`;
-        previousMessageBlock = null;
-        items.push({
-          kind: "time_divider",
-          id: dividerId,
-          createdAt: String(block.createdAt || "").trim(),
-        });
-      }
-      if (currentTimeMs > 0) {
-        previousMessageTimeMs = currentTimeMs;
-      }
-    };
-
-    messageBlocks.value.forEach((block, blockIndex) => {
-      const renderId = rid(block);
-      if (block.dividerKind === "plan_started") {
-        previousMessageBlock = null;
-        previousMessageTimeMs = 0;
-        items.push({ kind: "plan_started", id: `plan-started-${renderId}`, renderId, block, blockIndex });
-        return;
-      }
-      if (isCompactionBlock(block)) {
-        previousMessageBlock = null;
-        previousMessageTimeMs = 0;
-        items.push({ kind: "compaction", id: `compaction-${renderId}`, renderId, block, blockIndex });
-        return;
-      }
-      maybePushTimeDivider(block, renderId);
-      const compactWithPrevious = isCompactUserContinuation(block, previousMessageBlock);
-      items.push({ kind: "message", id: `message-${renderId}`, renderId, block, blockIndex, compactWithPrevious });
-      previousMessageBlock = block;
-    });
-    return items;
+    return buildChatRenderTimeline(messageBlocks.value, rid);
   });
 
   function messageMemoKey(block: ChatMessageBlock, renderId: string, blockIndex: number, compactWithPrevious = false) {

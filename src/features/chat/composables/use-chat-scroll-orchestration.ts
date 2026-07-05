@@ -1,5 +1,5 @@
+import type { ChatRenderItem } from "../utils/chat-render";
 import { nextTick, onBeforeUnmount, ref, watch, type Ref } from "vue";
-import type { ChatMessageBlock } from "../../../types/app";
 
 export interface UseChatScrollOrchestrationOptions {
   scrollContainer: Ref<HTMLElement | null>;
@@ -19,7 +19,7 @@ export interface UseChatScrollOrchestrationOptions {
     activeConversationId: Ref<string>;
     conversationScrollToBottomRequest: Ref<number>;
     scrollToBottomBehavior: Ref<"auto" | "smooth" | "smooth_light">;
-    messageBlocks: Ref<ChatMessageBlock[]>;
+    renderItems: Ref<ChatRenderItem[]>;
   };
   emit: {
     loadOlderHistory: () => void;
@@ -208,7 +208,7 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
   );
 
   watch(
-    () => props.messageBlocks.value,
+    () => props.renderItems.value,
     () => {
       refreshObservedVirtualItemElements();
       void nextTick(() => {

@@ -1049,7 +1049,7 @@ const {
   activeConversationId: toRef(props, "activeConversationId"),
   chatting: toRef(props, "chatting"), busy: conversationInteractionBusy,
   frozen: toRef(props, "frozen"),
-  messageBlockCount: computed(() => props.messageBlocks.length),
+  timelineItemCount: computed(() => virtualRenderItems.value.length),
   onReachedBottom: () => emit("reachedBottom"),
   focusComposerInput: (options) => composerPanelRef.value?.focusInput(options),
 });
@@ -1270,7 +1270,7 @@ const {
     activeConversationId: toRef(props, "activeConversationId"),
     conversationScrollToBottomRequest: toRef(props, "conversationScrollToBottomRequest"),
     scrollToBottomBehavior: toRef(props, "scrollToBottomBehavior"),
-    messageBlocks: toRef(props, "messageBlocks"),
+    renderItems: virtualRenderItems,
   },
   emit: { loadOlderHistory: () => emit("loadOlderHistory"), jumpToConversationBottom: () => emit("jumpToConversationBottom") },
 });
