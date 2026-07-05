@@ -264,7 +264,12 @@ const avatarLabel = computed(() => {
   white-space: nowrap;
 }
 
-.ecall-chat-bubble-meta,
+.ecall-chat-bubble-meta {
+  color: color-mix(in srgb, var(--color-base-content) 55%, transparent);
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
 .ecall-chat-bubble-footer {
   color: color-mix(in srgb, var(--color-base-content) 42%, transparent);
   font-size: 0.78rem;

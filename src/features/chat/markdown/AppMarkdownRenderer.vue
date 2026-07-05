@@ -1452,7 +1452,7 @@ ul.ecall-md-list {
 
 .ecall-md-code-lang {
   font-size: 0.72rem;
-  color: color-mix(in srgb, currentColor 60%, transparent);
+  color: color-mix(in srgb, currentColor 80%, transparent);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
@@ -1468,7 +1468,7 @@ ul.ecall-md-list {
   background: none;
   padding: 0.1rem 0.35rem;
   font-size: 0.72rem;
-  color: color-mix(in srgb, currentColor 65%, transparent);
+  color: color-mix(in srgb, currentColor 80%, transparent);
   cursor: pointer;
   border-radius: 0.25rem;
 }
