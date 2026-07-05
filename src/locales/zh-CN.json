@@ -1211,8 +1211,6 @@
       "noToolResult": "暂无工具结果",
       "imageLoading": "图片加载中",
       "multiSelect": "多选",
-      "showBubble": "显示气泡背景",
-      "hideBubble": "隐藏气泡背景",
       "branchFromMessage": "从此消息开始创建会话分支",
       "dispatchElapsed": "本次调度用时 {elapsed}",
       "elapsed": "用时 {elapsed}",

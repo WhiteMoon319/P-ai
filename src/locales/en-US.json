@@ -1282,8 +1282,6 @@
       "noToolResult": "No tool result",
       "imageLoading": "Image loading",
       "multiSelect": "Multi-select",
-      "showBubble": "Show bubble background",
-      "hideBubble": "Hide bubble background",
       "branchFromMessage": "Create a Conversation Branch from This Message",
       "dispatchElapsed": "Dispatch elapsed {elapsed}",
       "elapsed": "Elapsed {elapsed}",

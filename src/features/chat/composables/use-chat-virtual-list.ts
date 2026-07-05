@@ -22,8 +22,6 @@ interface UseChatVirtualListOptions {
   frozen: Ref<boolean>;
   messageSelectionModeEnabled: Ref<boolean>;
   selectedMessageRenderIdSet: Ref<Set<string>>;
-  isBubbleBackgroundHidden: (block: ChatMessageBlock) => boolean;
-  canToggleBubbleBackground: (block: ChatMessageBlock) => boolean;
   canRegenerateBlock: (block: ChatMessageBlock, blockIndex: number) => boolean;
   canConfirmPlan: (block: ChatMessageBlock) => boolean;
 }
@@ -75,7 +73,7 @@ export function useChatVirtualList(options: UseChatVirtualListOptions) {
     messageBlocks, markdownIsDark, playingAudioId, userAlias, userAvatarUrl,
     personaNameMap, personaAvatarUrlMap, chatting, conversationBusy, frozen,
     messageSelectionModeEnabled, selectedMessageRenderIdSet,
-    isBubbleBackgroundHidden, canToggleBubbleBackground, canRegenerateBlock, canConfirmPlan,
+    canRegenerateBlock, canConfirmPlan,
   } = options;
 
   // 实例级 ephemeral map，避免多 ChatView 实例共享
@@ -98,7 +96,6 @@ export function useChatVirtualList(options: UseChatVirtualListOptions) {
       userAlias.value, userAvatarUrl.value, personaNameMap.value, personaAvatarUrlMap.value,
       conversationBusy.value, messageSelectionModeEnabled.value, selected,
       canRegenerate, canConfirm,
-      isBubbleBackgroundHidden(block), canToggleBubbleBackground(block),
       compactWithPrevious,
       requiresInteractionState ? chatting.value : false,
       requiresInteractionState ? conversationBusy.value : false,

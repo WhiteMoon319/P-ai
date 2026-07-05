@@ -4,22 +4,22 @@
     :data-message-role="isOwnMessage(block) ? 'user' : block.role"
     :data-active-turn-user="activeTurnUser ? 'true' : undefined"
     :class="[
-      'chat group/user-turn rounded-2xl px-3 transition-colors',
+      'ecall-chat-message-row group/user-turn relative rounded-2xl px-3 transition-colors',
       shouldAnimateEnter(block) ? 'ecall-message-enter' : '',
-      isOwnMessage(block) ? 'chat-end' : 'chat-start',
-      isOwnMessage(block) && !selectionModeEnabled && !bubbleBackgroundHidden ? 'ecall-user-bubble-shift' : '',
-      !isOwnMessage(block) && !selectionModeEnabled
-        ? (bubbleBackgroundHidden ? 'ecall-message-simple' : 'ecall-bubble-shift')
-        : '',
+      isOwnMessage(block) ? 'ecall-chat-message-row-own' : 'ecall-chat-message-row-other',
       isOwnMessage(block) && compactWithPrevious ? 'ecall-message-continued' : '',
+      selectionModeEnabled ? 'ecall-chat-message-row-selectable' : '',
       selectionModeEnabled && selected ? 'ecall-message-selected bg-neutral/10 ring-1 ring-neutral/20 shadow-sm' : '',
     ]"
     @click="handleSelectionRowClick"
     @contextmenu="openContextMenu($event)"
   >
     <div
-      v-if="selectionModeEnabled && isOwnMessage(block)"
-      class="flex w-5 min-w-5 items-start justify-center self-stretch pt-1"
+      v-if="selectionModeEnabled"
+      :class="[
+        'ecall-message-selection-control',
+        isOwnMessage(block) ? 'ecall-message-selection-control-right' : 'ecall-message-selection-control-left',
+      ]"
     >
       <button
         type="button"
@@ -34,419 +34,311 @@
         <span class="text-[10px] leading-none">✓</span>
       </button>
     </div>
-    <div class="chat-image self-start ecall-chat-avatar-col" data-message-avatar-anchor="true">
-      <div
-        class="flex w-7 flex-col items-center gap-2"
-        :class="compactWithPrevious ? 'invisible pointer-events-none' : ''"
-        :aria-hidden="compactWithPrevious ? 'true' : undefined"
-      >
-        <div class="avatar">
-          <div class="w-7 rounded-full">
-            <img
-              v-if="avatarUrl"
-              :src="avatarUrl"
-              :alt="displayName"
-              class="w-7 h-7 rounded-full object-cover"
-            />
-            <div v-else class="bg-neutral text-neutral-content w-7 h-7 rounded-full flex items-center justify-center text-xs">
-              {{ avatarInitial(displayName) }}
-            </div>
-          </div>
-        </div>
-        <button
-          v-if="selectionModeEnabled && !isOwnMessage(block)"
-          type="button"
-          data-selection-ignore="true"
-          class="inline-flex h-4 w-4 items-center justify-center rounded-sm border transition-colors"
-          :class="selected
-            ? 'border-primary bg-primary text-primary-content'
-            : 'border-base-300 bg-base-100 text-transparent hover:border-primary/60'"
-          :title="selected ? t('chat.messageItem.cancelSelect') : t('chat.messageItem.selectMessage')"
-          @click.stop="emit('toggleMessageSelected', selectionKey)"
-        >
-          <span class="text-[10px] leading-none">✓</span>
-        </button>
-      </div>
-    </div>
-    <template v-if="!isOwnMessage(block)">
-      <div class="ecall-message-stack min-w-0 flex flex-col self-stretch">
+    <ChatBubbleShell
+      :side="isOwnMessage(block) ? 'right' : 'left'"
+      :tone="messageShellTone(block)"
+      :name="displayName"
+      :meta="assistantMetaText"
+      :avatar-text="avatarInitial(displayName)"
+      :avatar-url="avatarUrl"
+      :streaming="!!streamingHeaderStatus"
+      :streaming-text="streamingHeaderStatus"
+      :wide="blockNeedsWideBubble(block)"
+    >
+      <template v-if="showActivityPanel(block)" #activity>
         <div
+          v-memo="activityPanelMemoKey(block)"
+          class="flex flex-col opacity-90"
+        >
+          <details
+            ref="activityDetailsRef"
+            class="collapse rounded-none min-w-55"
+            :open="activityPanelOpen(block)"
+            @toggle="onActivityToggle"
+          >
+            <summary class="collapse-title px-0 py-0.5 min-h-0 text-[12px] font-normal flex items-center gap-1.5 text-base-content/42 hover:bg-base-200">
+              <span class="flex min-w-0 flex-1 items-center gap-1.5">
+                <span class="shrink-0">
+                  {{ `${activityStatusText(block)}${activityReasoningCountLabel(block)}` }}
+                </span>
+                <span v-if="activityToolCountsLabel(block)" class="inline-flex h-3 items-center text-base-content/30">·</span>
+                <span
+                  v-if="activityToolCountsLabel(block)"
+                  v-memo="[activityToolCountsLabel(block)]"
+                  class="min-w-0 truncate text-base-content/42"
+                >
+                  {{ activityToolCountsLabel(block) }}
+                </span>
+              </span>
+            </summary>
+            <div
+              v-if="activityPanelOpen(block)"
+              class="collapse-content px-0 pb-1 pt-2 text-xs text-base-content/70"
+              @click="collapseDetailsFromContentClick"
+            >
+              <div class="flex flex-col">
+                <details
+                  v-for="item in resolvedActivityItems(block)"
+                  :key="`${block.id}-activity-${activityItemKey(item)}`"
+                  class="collapse rounded-none border-l border-base-content/15 pl-2"
+                  :open="activityItemOpen(block, item)"
+                  @toggle="onActivityItemToggle(item, $event)"
+                >
+                  <summary class="collapse-title flex min-h-0 items-center gap-1.5 px-1 py-1 text-xs hover:bg-base-200">
+                    <span
+                      v-if="item.kind === 'tool' && item.status === 'doing'"
+                      class="loading loading-spinner loading-xs shrink-0 text-primary"
+                    ></span>
+                    <span
+                      v-else
+                      class="inline-flex w-3 shrink-0 items-center justify-center font-mono text-xs leading-none"
+                      :class="activityItemMarkerClass(item)"
+                    >{{ activityItemMarker(item) }}</span>
+                    <span
+                      class="min-w-0 flex-1 truncate"
+                      :class="activityItemTitleClass(item)"
+                    >
+                      <template v-if="item.kind === 'tool'">
+                        <span class="truncate">{{ activityItemDisplay(item).text }}</span>
+                        <span
+                          v-if="activityItemDisplay(item).adds > 0"
+                          class="ml-1 shrink-0 text-success"
+                        >+{{ activityItemDisplay(item).adds }}</span>
+                        <span
+                          v-if="activityItemDisplay(item).removes > 0"
+                          class="ml-1 shrink-0 text-error"
+                        >-{{ activityItemDisplay(item).removes }}</span>
+                      </template>
+                      <template v-else>
+                        {{ activityItemTitle(item) }}
+                      </template>
+                    </span>
+                  </summary>
+                  <div
+                    v-if="activityItemOpen(block, item)"
+                    class="collapse-content px-1 pb-2 pt-1"
+                  >
+                    <div
+                      v-if="item.kind === 'reasoning' || item.kind === 'content'"
+                      class="whitespace-pre-wrap wrap-break-word text-xs leading-relaxed text-base-content/70"
+                    >{{ item.kind === 'content' ? stripToolcallMarkers(item.text) : item.text }}</div>
+                    <pre
+                      v-else-if="activityToolArgsText(item)"
+                      class="m-0 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded bg-base-200/60 p-2 text-xs leading-relaxed text-base-content/75"
+                    ><code>{{ activityToolArgsText(item) }}</code></pre>
+                    <div v-else class="text-xs text-base-content/45">{{ toolTimelineText('noArgs') }}</div>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </details>
+        </div>
+      </template>
+
+      <template v-if="!isOwnMessage(block)">
+        <div
+          v-if="!showAssistantPreStreamingDots(block)"
           :class="[
-            'ecall-message-content min-w-0',
-            blockNeedsWideBubble(block) ? 'ecall-message-content-wide' : '',
+            'assistant-markdown ecall-assistant-bubble max-w-full',
+            blockNeedsWideBubble(block) ? 'ecall-assistant-bubble-wide' : '',
           ]"
         >
-          <div class="chat-header mb-1 flex items-baseline gap-2">
-            <template v-if="streamingHeaderStatus">
-              <span
-                class="text-xs font-semibold text-base-content opacity-80 ecall-shimmer-text ecall-reasoning-shimmer"
-                :data-shimmer-text="streamingHeaderStatus"
-              >{{ streamingHeaderStatus }}</span>
-            </template>
-            <template v-else>
-              <span class="text-xs text-base-content opacity-80">{{ displayName }}</span>
-              <span v-if="showMessageIdDebug" class="font-mono text-[10px] leading-none text-base-content/45">
-                id={{ String(block.id || "") }}<span v-if="String(block.sourceMessageId || '') && String(block.sourceMessageId || '') !== String(block.id || '')"> src={{ String(block.sourceMessageId || "") }}</span>
-              </span>
-            </template>
-          </div>
-          <div
-            v-if="!showAssistantPreStreamingDots(block)"
-            :class="[
-              'chat-bubble',
-              'self-start text-base-content assistant-markdown ecall-assistant-bubble max-w-full',
-              bubbleBackgroundHidden ? 'ecall-message-bubble-bg-hidden' : 'bg-base-100 border border-base-300/70',
-              blockNeedsWideBubble(block) ? 'ecall-assistant-bubble-wide' : '',
-            ]"
-          >
+          <div v-if="block.text">
             <div
-              v-if="showActivityPanel(block)"
-              v-memo="activityPanelMemoKey(block)"
-              class="flex flex-col opacity-90"
+              v-if="forcePlainMarkdownRender"
+              @click="emit('assistantLinkClick', $event)"
             >
-              <details
-                ref="activityDetailsRef"
-                class="collapse rounded-none min-w-55"
-                :open="activityPanelOpen(block)"
-                @toggle="onActivityToggle"
+              <SidebarLightMarkdown :text="assistantRenderedText" />
+            </div>
+            <div v-else ref="markdownContainerRef">
+              <AppMarkdownRenderer
+                class="ecall-markdown-content max-w-none"
+                :text="assistantRenderedText"
+                :is-dark="markdownIsDark"
+                :streaming="!!block.isStreaming"
+                :local-image-base-path="currentWorkspaceRootPath"
+                :toolcall-preview-map="toolcallPreviewMap"
+                @math-context-menu="openMathContextMenu"
+                @click="emit('assistantLinkClick', $event)"
+              />
+            </div>
+          </div>
+          <div v-if="block.planCard" class="space-y-3" :class="block.text ? 'mt-3' : ''">
+            <div class="text-xs italic opacity-60 mb-1">{{ t("chat.plan.sidebarHint") }}</div>
+            <div @click="emit('assistantLinkClick', $event)">
+              <a :href="block.planCard.path" class="link link-primary text-sm" :title="block.planCard.path">{{ t("chat.plan.linkLabel") }}{{ block.planCard.path.split(/[/\\]/).filter(Boolean).pop() }}</a>
+            </div>
+            <div v-if="block.providerMeta?.planCard && block.planCard.action === 'present'" class="space-y-2">
+              <button
+                type="button"
+                class="ecall-plan-confirm-action btn btn-sm btn-primary"
+                :disabled="chatting || busy || frozen || !canConfirmPlan"
+                @click="emit('confirmPlan', { messageId: block.sourceMessageId || block.id })"
               >
-                <summary class="collapse-title py-1 px-1 min-h-0 text-xs font-semibold flex items-center gap-1.5 text-base-content/80 hover:bg-base-200">
-                  <span
-                    v-if="activityIsBusy(block)"
-                    class="inline-flex h-4 w-4 shrink-0 items-center justify-center text-success"
-                  >
-                    <span
-                      class="loading loading-spinner h-4 w-4 text-success"
-                    ></span>
-                  </span>
-                  <span v-else class="inline-block h-2 w-2 rounded-full bg-success"></span>
-                  <span class="flex min-w-0 flex-1 items-baseline gap-1 font-medium">
-                    <span class="shrink-0">
-                      {{ `${activityStatusText(block)}${activityReasoningCountLabel(block)}` }}
-                    </span>
-                    <span
-                      v-if="activityToolCountsLabel(block)"
-                      v-memo="[activityToolCountsLabel(block)]"
-                      class="min-w-0 truncate text-base-content/55"
-                    >
-                      {{ `· ${activityToolCountsLabel(block)}` }}
-                    </span>
-                  </span>
-                </summary>
-                <div
-                  v-if="activityPanelOpen(block)"
-                  class="collapse-content px-0 pb-1 pt-2 text-xs text-base-content/70"
-                  @click="collapseDetailsFromContentClick"
-                >
-                  <div class="flex flex-col">
-                    <details
-                      v-for="item in resolvedActivityItems(block)"
-                      :key="`${block.id}-activity-${activityItemKey(item)}`"
-                      class="collapse rounded-none border-l border-base-content/15 pl-2"
-                      :open="activityItemOpen(block, item)"
-                      @toggle="onActivityItemToggle(item, $event)"
-                    >
-                      <summary class="collapse-title flex min-h-0 items-center gap-1.5 px-1 py-1 text-xs hover:bg-base-200">
-                        <span
-                          v-if="item.kind === 'tool' && item.status === 'doing'"
-                          class="loading loading-spinner loading-xs shrink-0 text-primary"
-                        ></span>
-                        <span
-                          v-else
-                          class="inline-flex w-3 shrink-0 items-center justify-center font-mono text-xs leading-none"
-                          :class="activityItemMarkerClass(item)"
-                        >{{ activityItemMarker(item) }}</span>
-                        <span
-                          class="min-w-0 flex-1 truncate"
-                          :class="activityItemTitleClass(item)"
-                        >
-                          <template v-if="item.kind === 'tool'">
-                            <span class="truncate">{{ activityItemDisplay(item).text }}</span>
-                            <span
-                              v-if="activityItemDisplay(item).adds > 0"
-                              class="ml-1 shrink-0 text-success"
-                            >+{{ activityItemDisplay(item).adds }}</span>
-                            <span
-                              v-if="activityItemDisplay(item).removes > 0"
-                              class="ml-1 shrink-0 text-error"
-                            >-{{ activityItemDisplay(item).removes }}</span>
-                          </template>
-                          <template v-else>
-                            {{ activityItemTitle(item) }}
-                          </template>
-                        </span>
-                      </summary>
-                      <div
-                        v-if="activityItemOpen(block, item)"
-                        class="collapse-content px-1 pb-2 pt-1"
-                      >
-                        <div
-                          v-if="item.kind === 'reasoning' || item.kind === 'content'"
-                          class="whitespace-pre-wrap wrap-break-word text-xs leading-relaxed text-base-content/70"
-                        >{{ item.kind === 'content' ? stripToolcallMarkers(item.text) : item.text }}</div>
-                        <pre
-                          v-else-if="activityToolArgsText(item)"
-                          class="m-0 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded bg-base-200/60 p-2 text-xs leading-relaxed text-base-content/75"
-                        ><code>{{ activityToolArgsText(item) }}</code></pre>
-                        <div v-else class="text-xs text-base-content/45">{{ toolTimelineText('noArgs') }}</div>
-                      </div>
-                    </details>
-                  </div>
-                </div>
-              </details>
-            </div>
-      <div v-if="block.text">
-        <div
-          v-if="isOwnMessage(block)"
-          class="whitespace-pre-wrap break-all"
-          style="overflow-wrap: anywhere;"
-        >{{ block.text }}</div>
-        <div
-          v-else-if="forcePlainMarkdownRender"
-          @click="emit('assistantLinkClick', $event)"
-        >
-          <SidebarLightMarkdown :text="assistantRenderedText" />
-        </div>
-        <div v-else ref="markdownContainerRef">
-          <AppMarkdownRenderer
-            class="ecall-markdown-content max-w-none"
-            :text="assistantRenderedText"
-            :is-dark="markdownIsDark"
-            :streaming="!!block.isStreaming"
-            :local-image-base-path="currentWorkspaceRootPath"
-            :toolcall-preview-map="toolcallPreviewMap"
-            @math-context-menu="openMathContextMenu"
-            @click="emit('assistantLinkClick', $event)"
-          />
-        </div>
-      </div>
-      <div v-if="block.planCard" class="space-y-3" :class="block.text ? 'mt-3' : ''">
-        <div class="text-xs italic opacity-60 mb-1">{{ t("chat.plan.sidebarHint") }}</div>
-        <div @click="emit('assistantLinkClick', $event)">
-          <a :href="block.planCard.path" class="link link-primary text-sm" :title="block.planCard.path">{{ t("chat.plan.linkLabel") }}{{ block.planCard.path.split(/[/\\]/).filter(Boolean).pop() }}</a>
-        </div>
-        <div v-if="block.providerMeta?.planCard && block.planCard.action === 'present'" class="space-y-2">
-          <button
-            type="button"
-            class="ecall-plan-confirm-action btn btn-sm btn-primary"
-            :disabled="chatting || busy || frozen || !canConfirmPlan"
-            @click="emit('confirmPlan', { messageId: block.sourceMessageId || block.id })"
-          >
-            {{ t("chat.plan.confirmAction") }}
-          </button>
-          <div class="text-xs opacity-60">{{ t("chat.plan.confirmHint") }}</div>
-        </div>
-      </div>
-      <div v-if="block.images.length > 0" :class="block.taskTrigger || block.text ? 'mt-2 grid gap-1' : 'grid gap-1'">
-        <template v-for="(img, idx) in block.images" :key="`${block.id}-img-${idx}`">
-          <img
-            v-if="isImageMime(img.mime) && resolvedImageSrc(img, idx)"
-            :src="resolvedImageSrc(img, idx)"
-            loading="lazy"
-            decoding="async"
-            class="rounded max-h-28 object-contain bg-base-100/40 cursor-zoom-in"
-            @click.stop="openResolvedImagePreview(img, idx)"
-          />
-          <div
-            v-else-if="isImageMime(img.mime)"
-            class="flex h-28 w-28 items-center justify-center rounded bg-base-200/70 text-[11px] text-base-content/55"
-          >
-            <span class="loading loading-spinner loading-xs mr-2"></span>
-            <span>{{ t('chat.messageItem.imageLoading') }}</span>
-          </div>
-          <div v-else-if="isPdfMime(img.mime)" class="badge badge-ghost gap-1 py-3 w-fit">
-            <FileText class="h-3.5 w-3.5" />
-            <span class="text-[11px]">PDF</span>
-          </div>
-        </template>
-      </div>
-      <div v-if="block.audios.length > 0" :class="block.taskTrigger || block.text || block.images.length > 0 ? 'mt-2 flex flex-col gap-1' : 'flex flex-col gap-1'">
-        <button
-          v-for="(aud, idx) in block.audios"
-          :key="`${block.id}-aud-${idx}`"
-          class="btn btn-sm bg-base-100/70 w-fit"
-          @click="emit('toggleAudioPlayback', { id: `${block.id}-aud-${idx}`, audio: aud })"
-        >
-          <Pause v-if="playingAudioId === `${block.id}-aud-${idx}`" class="h-3 w-3" />
-          <Play v-else class="h-3 w-3" />
-          <span>{{ t("chat.voice", { index: idx + 1 }) }}</span>
-        </button>
-      </div>
-      <div
-        v-if="block.attachmentFiles.length > 0"
-        :class="block.taskTrigger || block.text || block.images.length > 0 || block.audios.length > 0 ? 'mt-2 flex flex-wrap gap-1' : 'flex flex-wrap gap-1'"
-      >
-        <div
-          v-for="(file, idx) in block.attachmentFiles"
-          :key="`${block.id}-file-${idx}`"
-          class="badge badge-ghost gap-1 py-3"
-          :title="file.relativePath"
-        >
-          <FileText class="h-3.5 w-3.5" />
-          <span class="text-[11px]">{{ file.fileName }}</span>
-        </div>
+                {{ t("chat.plan.confirmAction") }}
+              </button>
+              <div class="text-xs opacity-60">{{ t("chat.plan.confirmHint") }}</div>
             </div>
           </div>
-          <div
-            v-else
-            :class="[
-              'chat-bubble self-start text-base-content assistant-markdown ecall-assistant-bubble ecall-assistant-loading-bubble max-w-full',
-              bubbleBackgroundHidden ? 'ecall-message-bubble-bg-hidden' : 'bg-base-100 border border-base-300/70',
-            ]"
-          >
-            <span class="ecall-assistant-loading-dots" aria-hidden="true">
-              <span></span>
-              <span></span>
-              <span></span>
-            </span>
-            <span class="sr-only">{{ streamingHeaderStatus || t("chat.statusWaitingReply") }}</span>
+          <div v-if="block.images.length > 0" :class="block.taskTrigger || block.text ? 'mt-2 grid gap-1' : 'grid gap-1'">
+            <template v-for="(img, idx) in block.images" :key="`${block.id}-img-${idx}`">
+              <img
+                v-if="isImageMime(img.mime) && resolvedImageSrc(img, idx)"
+                :src="resolvedImageSrc(img, idx)"
+                loading="lazy"
+                decoding="async"
+                class="rounded max-h-28 object-contain bg-base-100/40 cursor-zoom-in"
+                @click.stop="openResolvedImagePreview(img, idx)"
+              />
+              <div
+                v-else-if="isImageMime(img.mime)"
+                class="flex h-28 w-28 items-center justify-center rounded bg-base-200/70 text-[11px] text-base-content/55"
+              >
+                <span class="loading loading-spinner loading-xs mr-2"></span>
+                <span>{{ t('chat.messageItem.imageLoading') }}</span>
+              </div>
+              <div v-else-if="isPdfMime(img.mime)" class="badge badge-ghost gap-1 py-3 w-fit">
+                <FileText class="h-3.5 w-3.5" />
+                <span class="text-[11px]">PDF</span>
+              </div>
+            </template>
           </div>
-          <div
-            v-if="!block.isStreaming"
-            :class="[
-              'chat-footer ecall-message-footer flex h-6 items-center gap-1.5 transition-opacity',
-              'opacity-100 pointer-events-auto',
-            ]"
-          >
-            <time
-              v-if="assistantRelativeCreatedAt"
-              class="inline-flex h-6 shrink-0 items-center rounded px-1 text-xs font-normal text-base-content/55"
-              :datetime="String(block.createdAt || '')"
-            >
-              {{ assistantRelativeCreatedAt }}
-            </time>
+          <div v-if="block.audios.length > 0" :class="block.taskTrigger || block.text || block.images.length > 0 ? 'mt-2 flex flex-col gap-1' : 'flex flex-col gap-1'">
             <button
-              v-if="!selectionModeEnabled"
-              type="button"
-              class="ecall-message-footer-action inline-flex h-6 w-6 items-center justify-center rounded text-base-content/55 hover:text-base-content"
-              :title="t('chat.copy')"
-              :disabled="selectionModeEnabled"
-              @click="emit('copyMessage', block)"
+              v-for="(aud, idx) in block.audios"
+              :key="`${block.id}-aud-${idx}`"
+              class="btn btn-sm bg-base-100/70 w-fit"
+              @click="emit('toggleAudioPlayback', { id: `${block.id}-aud-${idx}`, audio: aud })"
             >
-              <Copy class="h-3.5 w-3.5" />
-            </button>
-            <button
-              v-if="canRecallBlock(block) && !selectionModeEnabled"
-              type="button"
-              class="ecall-message-footer-action inline-flex h-6 w-6 items-center justify-center rounded text-base-content/55 hover:text-base-content"
-              :title="t('chat.recall')"
-              :disabled="selectionModeEnabled || busy"
-              @click="emit('recallTurn', { turnId: recallTurnId(block) })"
-            >
-              <Undo2 class="h-3.5 w-3.5" />
+              <Pause v-if="playingAudioId === `${block.id}-aud-${idx}`" class="h-3 w-3" />
+              <Play v-else class="h-3 w-3" />
+              <span>{{ t("chat.voice", { index: idx + 1 }) }}</span>
             </button>
           </div>
-        </div>
-      </div>
-    </template>
-    <template v-else>
-      <div v-if="!compactWithPrevious" class="chat-header mb-1 flex items-baseline gap-2">
-        <span class="text-xs text-base-content opacity-80">{{ displayName }}</span>
-      </div>
-      <div :class="[
-        'chat-bubble',
-        bubbleBackgroundHidden ? 'ecall-message-bubble-bg-hidden text-base-content' : '',
-        isOwnMessage(block)
-          ? 'ecall-user-bubble'
-          : [
-            'self-start text-base-content assistant-markdown ecall-assistant-bubble max-w-full',
-            bubbleBackgroundHidden ? '' : 'bg-base-100 border border-base-300/70',
-            blockNeedsWideBubble(block) ? 'ecall-assistant-bubble-wide' : '',
-          ],
-      ]">
-        <div
-          v-if="isOwnMessage(block) ? !!ownMessageDisplayText(block).trim() : !!block.text"
-          class="whitespace-pre-wrap break-all"
-          style="overflow-wrap: anywhere;"
-        >{{ isOwnMessage(block) ? ownMessageDisplayText(block) : block.text }}</div>
-        <div
-          v-if="block.extraTextReferences && block.extraTextReferences.length > 0"
-          :class="block.text ? 'mt-2 flex flex-wrap gap-1' : 'flex flex-wrap gap-1'"
-        >
           <div
-            v-for="(reference, idx) in block.extraTextReferences"
-            :key="`${block.id}-extra-ref-${idx}`"
-            class="badge badge-ghost gap-1 py-3"
-            :title="reference.label"
+            v-if="block.attachmentFiles.length > 0"
+            :class="block.taskTrigger || block.text || block.images.length > 0 || block.audios.length > 0 ? 'mt-2 flex flex-wrap gap-1' : 'flex flex-wrap gap-1'"
           >
-            <FileText class="h-3.5 w-3.5" />
-            <span class="max-w-64 truncate text-[11px]">{{ reference.label }}</span>
-          </div>
-        </div>
-        <div v-if="block.images.length > 0" :class="block.taskTrigger || block.text ? 'mt-2 grid gap-1' : 'grid gap-1'">
-          <template v-for="(img, idx) in block.images" :key="`${block.id}-img-${idx}`">
-            <img
-              v-if="isImageMime(img.mime) && resolvedImageSrc(img, idx)"
-              :src="resolvedImageSrc(img, idx)"
-              loading="lazy"
-              decoding="async"
-              class="rounded max-h-28 object-contain bg-base-100/40 cursor-zoom-in"
-              @click.stop="openResolvedImagePreview(img, idx)"
-            />
             <div
-              v-else-if="isImageMime(img.mime)"
-              class="flex h-28 w-28 items-center justify-center rounded bg-base-200/70 text-[11px] text-base-content/55"
+              v-for="(file, idx) in block.attachmentFiles"
+              :key="`${block.id}-file-${idx}`"
+              class="badge badge-ghost gap-1 py-3"
+              :title="file.relativePath"
             >
-              <span class="loading loading-spinner loading-xs mr-2"></span>
-              <span>{{ t('chat.messageItem.imageLoading') }}</span>
-            </div>
-            <div v-else-if="isPdfMime(img.mime)" class="badge badge-ghost gap-1 py-3 w-fit">
               <FileText class="h-3.5 w-3.5" />
-              <span class="text-[11px]">PDF</span>
+              <span class="text-[11px]">{{ file.fileName }}</span>
             </div>
-          </template>
-        </div>
-        <div v-if="block.audios.length > 0" :class="block.taskTrigger || block.text || block.images.length > 0 ? 'mt-2 flex flex-col gap-1' : 'flex flex-col gap-1'">
-          <button
-            v-for="(aud, idx) in block.audios"
-            :key="`${block.id}-aud-${idx}`"
-            class="btn btn-sm bg-base-100/70 w-fit"
-            @click="emit('toggleAudioPlayback', { id: `${block.id}-aud-${idx}`, audio: aud })"
-          >
-            <Pause v-if="playingAudioId === `${block.id}-aud-${idx}`" class="h-3 w-3" />
-            <Play v-else class="h-3 w-3" />
-            <span>{{ t("chat.voice", { index: idx + 1 }) }}</span>
-          </button>
-        </div>
-        <div
-          v-if="block.attachmentFiles.length > 0"
-          :class="block.taskTrigger || block.text || block.images.length > 0 || block.audios.length > 0 ? 'mt-2 flex flex-wrap gap-1' : 'flex flex-wrap gap-1'"
-        >
-          <div
-            v-for="(file, idx) in block.attachmentFiles"
-            :key="`${block.id}-file-${idx}`"
-            class="badge badge-ghost gap-1 py-3"
-            :title="file.relativePath"
-          >
-            <FileText class="h-3.5 w-3.5" />
-            <span class="text-[11px]">{{ file.fileName }}</span>
           </div>
         </div>
-      </div>
-      <div
-        v-if="isOwnMessage(block) && !compactWithPrevious && !block.isStreaming && !selectionModeEnabled"
-        class="ecall-own-message-actions flex h-5 justify-end gap-1 opacity-100 pointer-events-auto"
-      >
+        <div
+          v-else
+          class="assistant-markdown ecall-assistant-bubble ecall-assistant-loading-bubble max-w-full"
+        >
+          <span class="ecall-assistant-loading-dots" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </span>
+          <span class="sr-only">{{ streamingHeaderStatus || t("chat.statusWaitingReply") }}</span>
+        </div>
+      </template>
+
+      <template v-else>
+        <div class="ecall-user-message-content">
+          <div
+            v-if="!!ownMessageDisplayText(block).trim()"
+            class="whitespace-pre-wrap break-all"
+            style="overflow-wrap: anywhere;"
+          >{{ ownMessageDisplayText(block) }}</div>
+          <div
+            v-if="block.extraTextReferences && block.extraTextReferences.length > 0"
+            :class="block.text ? 'mt-2 flex flex-wrap justify-end gap-1' : 'flex flex-wrap justify-end gap-1'"
+          >
+            <div
+              v-for="(reference, idx) in block.extraTextReferences"
+              :key="`${block.id}-extra-ref-${idx}`"
+              class="badge badge-ghost gap-1 py-3"
+              :title="reference.label"
+            >
+              <FileText class="h-3.5 w-3.5" />
+              <span class="max-w-64 truncate text-[11px]">{{ reference.label }}</span>
+            </div>
+          </div>
+          <div v-if="block.images.length > 0" :class="block.taskTrigger || block.text ? 'mt-2 grid justify-items-end gap-1' : 'grid justify-items-end gap-1'">
+            <template v-for="(img, idx) in block.images" :key="`${block.id}-img-${idx}`">
+              <img
+                v-if="isImageMime(img.mime) && resolvedImageSrc(img, idx)"
+                :src="resolvedImageSrc(img, idx)"
+                loading="lazy"
+                decoding="async"
+                class="rounded max-h-28 object-contain bg-base-100/40 cursor-zoom-in"
+                @click.stop="openResolvedImagePreview(img, idx)"
+              />
+              <div
+                v-else-if="isImageMime(img.mime)"
+                class="flex h-28 w-28 items-center justify-center rounded bg-base-200/70 text-[11px] text-base-content/55"
+              >
+                <span class="loading loading-spinner loading-xs mr-2"></span>
+                <span>{{ t('chat.messageItem.imageLoading') }}</span>
+              </div>
+              <div v-else-if="isPdfMime(img.mime)" class="badge badge-ghost gap-1 py-3 w-fit">
+                <FileText class="h-3.5 w-3.5" />
+                <span class="text-[11px]">PDF</span>
+              </div>
+            </template>
+          </div>
+          <div v-if="block.audios.length > 0" :class="block.taskTrigger || block.text || block.images.length > 0 ? 'mt-2 flex flex-col items-end gap-1' : 'flex flex-col items-end gap-1'">
+            <button
+              v-for="(aud, idx) in block.audios"
+              :key="`${block.id}-aud-${idx}`"
+              class="btn btn-sm bg-base-100/70 w-fit"
+              @click="emit('toggleAudioPlayback', { id: `${block.id}-aud-${idx}`, audio: aud })"
+            >
+              <Pause v-if="playingAudioId === `${block.id}-aud-${idx}`" class="h-3 w-3" />
+              <Play v-else class="h-3 w-3" />
+              <span>{{ t("chat.voice", { index: idx + 1 }) }}</span>
+            </button>
+          </div>
+          <div
+            v-if="block.attachmentFiles.length > 0"
+            :class="block.taskTrigger || block.text || block.images.length > 0 || block.audios.length > 0 ? 'mt-2 flex flex-wrap justify-end gap-1' : 'flex flex-wrap justify-end gap-1'"
+          >
+            <div
+              v-for="(file, idx) in block.attachmentFiles"
+              :key="`${block.id}-file-${idx}`"
+              class="badge badge-ghost gap-1 py-3"
+              :title="file.relativePath"
+            >
+              <FileText class="h-3.5 w-3.5" />
+              <span class="text-[11px]">{{ file.fileName }}</span>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <template v-if="showMessageFooterActions(block)" #footer>
         <button
           type="button"
-          class="ecall-message-recall-action inline-flex h-5 w-5 items-center justify-center rounded text-base-content/40 hover:text-base-content"
+          class="ecall-message-footer-action inline-flex h-6 w-6 items-center justify-center rounded text-base-content/55 hover:text-base-content"
           :title="t('chat.copy')"
+          :disabled="selectionModeEnabled"
           @click="emit('copyMessage', block)"
         >
-          <Copy class="h-3 w-3" />
+          <Copy class="h-3.5 w-3.5" />
         </button>
         <button
           v-if="canRecallBlock(block)"
           type="button"
-          class="ecall-message-recall-action inline-flex h-5 w-5 items-center justify-center rounded text-base-content/40 hover:text-base-content"
+          class="ecall-message-footer-action inline-flex h-6 w-6 items-center justify-center rounded text-base-content/55 hover:text-base-content"
           :title="t('chat.recall')"
-          :disabled="busy"
+          :disabled="selectionModeEnabled || busy"
           @click="emit('recallTurn', { turnId: recallTurnId(block) })"
         >
-          <Undo2 class="h-3 w-3" />
+          <Undo2 class="h-3.5 w-3.5" />
         </button>
-      </div>
-    </template>
+      </template>
+    </ChatBubbleShell>
+
   </div>
 
   <Teleport to="body">
@@ -479,13 +371,6 @@
           <span>{{ t('chat.copyMath') }}</span>
         </button>
       </li>
-      <li v-if="hideToggleEnabled">
-        <button type="button" @click="handleContextMenuAction('toggleBubble')">
-          <EyeOff v-if="bubbleBackgroundHidden" class="h-4 w-4" />
-          <Eye v-else class="h-4 w-4" />
-          <span>{{ bubbleBackgroundHidden ? t('chat.messageItem.showBubble') : t('chat.messageItem.hideBubble') }}</span>
-        </button>
-      </li>
       <li v-if="canRecallBlock(block)">
         <button type="button" @click="handleContextMenuAction('branchFromMessage')">
           <Split class="h-4 w-4" />
@@ -505,7 +390,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect, watchPostEffect } from "vue";
 import { useI18n } from "vue-i18n";
-import { Copy, Eye, EyeOff, FileText, ListCheck, Pause, Play, Split, Undo2 } from "@lucide/vue";
+import { Copy, FileText, ListCheck, Pause, Play, Split, Undo2 } from "@lucide/vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ChatActivityItem, ChatMessageBlock } from "../../../types/app";
 import {
@@ -516,6 +401,7 @@ import { AppMarkdownRenderer, initKatex } from "../markdown";
 import { normalizeLocalLinkHref } from "../utils/local-link";
 import { textContentSignature } from "../utils/text-signature";
 import { buildToolcallPreviewMap } from "../utils/toolcall-preview";
+import ChatBubbleShell from "./ChatBubbleShell.vue";
 import SidebarLightMarkdown from "./SidebarLightMarkdown.vue";
 
 initKatex();
@@ -552,8 +438,6 @@ const props = defineProps<{
   readPlanFileContent?: (input: { conversationId: string; path: string }) => Promise<string>;
   currentWorkspaceRootPath?: string;
   currentTheme?: string;
-  bubbleBackgroundHidden: boolean;
-  hideToggleEnabled: boolean;
   disableMarkdownRender?: boolean;
   disableRecallAndBranchActions?: boolean;
   isLastUserMessage?: boolean;
@@ -571,7 +455,6 @@ const emit = defineEmits<{
   (e: "openImagePreview", image: { mime: string; bytesBase64?: string; dataUrl?: string; localPath?: string }): void;
   (e: "toggleAudioPlayback", payload: { id: string; audio: { mime: string; bytesBase64: string } }): void;
   (e: "assistantLinkClick", event: MouseEvent): void;
-  (e: "toggleBubbleBackground", selectionKey: string): void;
 }>();
 
 const { t } = useI18n();
@@ -648,6 +531,17 @@ const assistantRelativeCreatedAt = computed(() => {
   if (isOwnMessage(props.block) || props.block.isStreaming) return "";
   return formatRecentRelativeTime(props.block.createdAt, relativeTimeNowTick.value);
 });
+const assistantDebugMeta = computed(() => {
+  if (isOwnMessage(props.block) || !showMessageIdDebug) return "";
+  const id = String(props.block.id || "").trim();
+  if (!id) return "";
+  const sourceId = String(props.block.sourceMessageId || "").trim();
+  return sourceId && sourceId !== id ? `id=${id} src=${sourceId}` : `id=${id}`;
+});
+const assistantMetaText = computed(() => joinNonEmpty([
+  assistantRelativeCreatedAt.value,
+  assistantDebugMeta.value,
+]));
 const streamingHeaderStatus = computed(() => assistantStreamingHeaderStatus(props.block));
 const toolcallPreviewMap = computed<Record<string, { title: string; body: string }>>(() => {
   const previews = buildToolcallPreviewMap(props.block.activityItems, toolTimelineText("noArgs"));
@@ -739,6 +633,13 @@ function isOwnMessage(block: ChatMessageBlock): boolean {
   return !id || id === "user-persona";
 }
 
+function messageShellTone(block: ChatMessageBlock): "assistant" | "user" | "system" {
+  if (isOwnMessage(block)) return "user";
+  if (String(block.role || "").trim().toLowerCase() === "system") return "system";
+  if (String(block.speakerAgentId || "").trim() === "system-persona") return "system";
+  return "assistant";
+}
+
 function recallTurnId(block: ChatMessageBlock): string {
   return String(block.sourceMessageId || block.id || "").trim();
 }
@@ -750,6 +651,10 @@ function canRecallBlock(block: ChatMessageBlock): boolean {
   if (String(block.role || "").trim().toLowerCase() === "system") return false;
   if (String(block.speakerAgentId || "").trim() === "system-persona") return false;
   return !!recallTurnId(block);
+}
+
+function showMessageFooterActions(block: ChatMessageBlock): boolean {
+  return !block.isStreaming && !props.selectionModeEnabled;
 }
 
 function ownMessageDisplayText(block: ChatMessageBlock): string {
@@ -876,13 +781,6 @@ function activityPanelOpen(block: ChatMessageBlock): boolean {
   return activityExpanded.value || activityShouldAutoExpand(block);
 }
 
-function activityIsBusy(block: ChatMessageBlock): boolean {
-  if (!block.activityRunning) return false;
-  return block.activityStatus === "requesting"
-    || block.activityStatus === "thinking"
-    || block.activityStatus === "running_tool";
-}
-
 function activityReasoningCountLabel(block: ChatMessageBlock): string {
   const count = Number(block.activityReasoningCharCount || 0);
   return count > 0 ? `(${count.toLocaleString("zh-CN")})` : "";
@@ -959,7 +857,6 @@ function activityPanelMemoKey(block: ChatMessageBlock): unknown[] {
     showActivityPanel(block),
     activityExpanded.value,
     activityPanelOpen(block),
-    activityIsBusy(block),
     activityStatusText(block),
     activityReasoningCountLabel(block),
     activityToolCountsLabel(block),
@@ -1855,9 +1752,6 @@ function handleContextMenuAction(action: string) {
     emit("copyMessage", props.block);
   } else if (action === "copyMath") {
     void copyTextToClipboard(mathCopyText);
-  } else if (action === "toggleBubble") {
-    if (!props.hideToggleEnabled) return;
-    emit("toggleBubbleBackground", props.selectionKey);
   } else if (action === "branchFromMessage") {
     const turnId = recallTurnId(props.block);
     if (!turnId) return;
@@ -2185,67 +2079,29 @@ function openResolvedImagePreview(
 </script>
 
 <style scoped>
-.ecall-chat-avatar-col {
-  width: 1.75rem;
-  min-width: 1.75rem;
-}
-
-.ecall-message-stack {
-  min-height: 100%;
-  flex: 1 1 auto;
+.ecall-chat-message-row {
   width: 100%;
 }
 
-.ecall-message-content {
-  min-width: 0;
-  flex: 0 1 auto;
+.ecall-chat-message-row-selectable {
+  padding-inline: 2rem;
 }
 
-.ecall-message-content-wide {
-  width: 100%;
-  max-width: none;
+.ecall-message-selection-control {
+  position: absolute;
+  top: 0.45rem;
+  z-index: 2;
+  display: flex;
+  width: 1.25rem;
+  justify-content: center;
 }
 
-.ecall-message-simple {
-  --ecall-chat-avatar-offset: calc(1.75rem + 0.75rem);
-}
-.ecall-bubble-shift {
-  --ecall-chat-avatar-offset: calc(1.75rem + 0.75rem);
-}
-.ecall-user-bubble-shift {
-  --ecall-chat-avatar-offset: calc(1.75rem + 0.75rem);
+.ecall-message-selection-control-left {
+  left: 0.35rem;
 }
 
-.ecall-message-simple .ecall-message-content {
-  width: calc(100% + var(--ecall-chat-avatar-offset));
-  max-width: calc(100% + var(--ecall-chat-avatar-offset));
-  margin-left: calc(var(--ecall-chat-avatar-offset) * -1);
-}
-
-.ecall-message-simple .chat-header {
-  margin-left: var(--ecall-chat-avatar-offset);
-}
-.ecall-message-simple .chat-bubble {
-  width: 100%;
-  max-width: none;
-}
-.ecall-bubble-shift .chat-bubble {
-  width: fit-content;
-  max-width: 100%;
-  margin-left: calc(var(--ecall-chat-avatar-offset) * -0.3);
-}
-.ecall-user-bubble-shift > .ecall-user-bubble {
-  width: fit-content;
-  max-width: 100%;
-  margin-right: calc(var(--ecall-chat-avatar-offset) * -0.3);
-}
-
-.ecall-user-bubble-shift > .ecall-own-message-actions {
-  margin-right: calc(var(--ecall-chat-avatar-offset) * -0.3);
-}
-
-.ecall-message-simple .ecall-message-bubble-bg-hidden {
-  padding-inline: 1rem !important;
+.ecall-message-selection-control-right {
+  right: 0.35rem;
 }
 
 .ecall-message-continued {
@@ -2513,11 +2369,6 @@ function openResolvedImagePreview(
   width: 100%;
 }
 
-:deep(.chat-bubble) {
-  min-width: 0;
-  min-height: 0;
-}
-
 .ecall-assistant-bubble {
   min-width: 3rem;
   min-height: 2.25rem;
@@ -2576,13 +2427,5 @@ function openResolvedImagePreview(
     opacity: 1;
     transform: translateY(-0.16rem);
   }
-}
-.ecall-message-bubble-bg-hidden {
-  min-width: 0 !important;
-  min-height: 0 !important;
-  padding-inline: 0 !important;
-  background-color: transparent !important;
-  border-color: transparent !important;
-  box-shadow: none !important;
 }
 </style>

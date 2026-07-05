@@ -388,7 +388,7 @@ const bubbleDemoMessages: BubbleDemoMessage[] = [
     meta: "1 分钟前",
     avatarText: "忆",
     tools: [
-      { name: "exec", detail: 'rg -n "bubbleBackgroundHidden|hideToggleEnabled|message footer" src/features/chat', icon: "terminal" },
+      { name: "exec", detail: 'rg -n "ChatBubbleShell|message footer" src/features/chat', icon: "terminal" },
     ],
     lines: [
       "我补一条更短的助理消息，观察无气泡状态下短文本是否过于飘。",

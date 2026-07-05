@@ -105,8 +105,6 @@
                       :read-plan-file-content="readPlanFileContent"
                       :current-workspace-root-path="currentWorkspaceRootPath"
                       :current-theme="currentTheme"
-                      :bubble-background-hidden="isBubbleBackgroundHidden(entry.item.block)"
-                      :hide-toggle-enabled="canToggleBubbleBackground(entry.item.block)"
                       :disable-recall-and-branch-actions="activeConversationIsSystemNotification"
                       :disable-markdown-render="sidebarMode"
                       @create-conversation-branch-from-turn="$emit('createConversationBranchFromTurn', $event)"
@@ -116,7 +114,6 @@
                       @open-image-preview="openImagePreview"
                       @toggle-audio-playback="toggleAudioPlayback($event.id, $event.audio)"
                       @assistant-link-click="handleAssistantLinkClick"
-                      @toggle-bubble-background="toggleBubbleBackground(entry.item.block)"
                     />
                   </div>
                 </div>
@@ -522,7 +519,6 @@ import { isAbsoluteLocalPath, normalizeLocalLinkHref, parseLocalFileReference } 
 import { type ChatRenderItem, isRightAlignedMessage, canOpenInFileReader, fileExtensionFromPath } from "../utils/chat-render";
 import { useIdeContext } from "../composables/use-ide-context";
 import { useDelegateStatus } from "../composables/use-delegate-status";
-import { useBubbleBackground } from "../composables/use-bubble-background";
 import { useChatVirtualList } from "../composables/use-chat-virtual-list";
 import { useChatVirtualScroll } from "../composables/use-chat-virtual-scroll";
 import { useChatPanes, PANE_WIDTH_LIMITS, type UseChatPanesOptions } from "../composables/use-chat-panes";
@@ -795,10 +791,9 @@ const legacyChatFileReaderSessionKey = computed(() => {
   return conversationId ? `easy-call.chat.file-reader-session.${conversationId}` : "";
 });
 
-// ==================== messages / audio / bubble ====================
+// ==================== messages / audio ====================
 
 const { playingAudioId, copyMessage, stopAudioPlayback, toggleAudioPlayback } = useChatMessageActions();
-const { isHidden: isBubbleBackgroundHidden, canToggle: canToggleBubbleBackground, toggle: toggleBubbleBackground } = useBubbleBackground(toRef(props, "activeConversationId"));
 const showSideConversationList = computed(() => !!props.sideConversationListVisible);
 const sidebarMode = computed(() => !!props.sidebarMode);
 const bridgeMode = computed(() => !!props.bridgeMode);
@@ -981,7 +976,7 @@ const { chatRenderItems, messageMemoKey } = useChatVirtualList({
   chatting: toRef(props, "chatting"), conversationBusy: conversationInteractionBusy,
   frozen: toRef(props, "frozen"), messageSelectionModeEnabled,
   selectedMessageRenderIdSet,
-  isBubbleBackgroundHidden, canToggleBubbleBackground, canRegenerateBlock, canConfirmPlan,
+  canRegenerateBlock, canConfirmPlan,
 });
 
 const virtualRenderItems = computed<ChatRenderItem[]>(() => [...chatRenderItems.value]);

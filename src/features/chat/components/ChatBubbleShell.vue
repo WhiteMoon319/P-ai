@@ -1,5 +1,5 @@
 <template>
-  <div :class="['ecall-chat-bubble-shell', `ecall-chat-bubble-shell-${side}`, `ecall-chat-bubble-tone-${tone}`, { 'ecall-chat-bubble-separated': separated }]">
+  <div :class="['ecall-chat-bubble-shell', `ecall-chat-bubble-shell-${side}`, `ecall-chat-bubble-tone-${tone}`, { 'ecall-chat-bubble-separated': separated, 'ecall-chat-bubble-wide': wide }]">
     <template v-if="tone === 'user'">
       <div class="ecall-chat-bubble-user-row">
         <div class="ecall-chat-bubble-avatar" :title="name">
@@ -31,7 +31,7 @@
             <span class="ecall-chat-bubble-name">{{ name }}</span>
             <span v-if="streaming" class="ecall-chat-bubble-meta ecall-chat-bubble-streaming-meta">
               <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
-              正在生成
+              {{ streamingText || "正在生成" }}
             </span>
             <span v-else-if="meta" class="ecall-chat-bubble-meta">{{ meta }}</span>
           </div>
@@ -66,7 +66,9 @@ const props = withDefaults(defineProps<{
   avatarText?: string;
   avatarUrl?: string;
   streaming?: boolean;
+  streamingText?: string;
   separated?: boolean;
+  wide?: boolean;
 }>(), {
   side: "left",
   tone: "assistant",
@@ -74,7 +76,9 @@ const props = withDefaults(defineProps<{
   avatarText: "",
   avatarUrl: "",
   streaming: false,
+  streamingText: "",
   separated: false,
+  wide: false,
 });
 
 const avatarLabel = computed(() => {
@@ -89,17 +93,22 @@ const avatarLabel = computed(() => {
 .ecall-chat-bubble-shell {
   --ecall-bubble-avatar-size: 2rem;
   --ecall-bubble-gap: 0.55rem;
+  --ecall-bubble-max-width: 42rem;
   --ecall-bubble-avatar-track: calc(var(--ecall-bubble-avatar-size) + var(--ecall-bubble-gap));
   --ecall-bubble-body-offset: calc(var(--ecall-bubble-avatar-size) / 2);
   position: relative;
   width: 100%;
 }
 
+.ecall-chat-bubble-wide {
+  --ecall-bubble-max-width: 100%;
+}
+
 .ecall-chat-bubble-separated::before {
   position: absolute;
   top: -0.5rem;
   left: var(--ecall-bubble-body-offset);
-  width: min(42rem, calc(100% - var(--ecall-bubble-body-offset)));
+  width: min(var(--ecall-bubble-max-width), calc(100% - var(--ecall-bubble-body-offset)));
   height: 1px;
   background: color-mix(in srgb, var(--color-base-content) 14%, transparent);
   content: "";
@@ -116,14 +125,14 @@ const avatarLabel = computed(() => {
 .ecall-chat-bubble-head,
 .ecall-chat-bubble-user-row {
   display: flex;
-  max-width: min(100%, calc(42rem + var(--ecall-bubble-avatar-track)));
+  max-width: min(100%, calc(var(--ecall-bubble-max-width) + var(--ecall-bubble-avatar-track)));
   align-items: flex-start;
   gap: var(--ecall-bubble-gap);
 }
 
 .ecall-chat-bubble-body {
   display: flex;
-  width: min(42rem, calc(100% - var(--ecall-bubble-body-offset)));
+  width: min(var(--ecall-bubble-max-width), calc(100% - var(--ecall-bubble-body-offset)));
   max-width: calc(100% - var(--ecall-bubble-body-offset));
   min-width: 0;
   margin-left: var(--ecall-bubble-body-offset);
@@ -145,26 +154,26 @@ const avatarLabel = computed(() => {
 
 .ecall-chat-bubble-tone-user .ecall-chat-bubble-body {
   width: auto;
-  max-width: min(42rem, calc(100% - var(--ecall-bubble-avatar-track)));
+  max-width: min(var(--ecall-bubble-max-width), calc(100% - var(--ecall-bubble-avatar-track) - var(--ecall-bubble-body-offset)));
   margin: 0;
   flex: 0 1 auto;
 }
 
 .ecall-chat-bubble-shell:not(.ecall-chat-bubble-tone-user) {
   display: grid;
-  grid-template-columns: var(--ecall-bubble-avatar-size) minmax(0, min(42rem, calc(100% - var(--ecall-bubble-avatar-track))));
+  grid-template-columns: var(--ecall-bubble-avatar-size) minmax(0, min(var(--ecall-bubble-max-width), calc(100% - var(--ecall-bubble-avatar-track) - var(--ecall-bubble-body-offset))));
   grid-template-areas:
     "avatar main"
-    ". body";
+    "body body";
   column-gap: var(--ecall-bubble-gap);
   align-items: start;
 }
 
 .ecall-chat-bubble-shell-right:not(.ecall-chat-bubble-tone-user) {
-  grid-template-columns: minmax(0, min(42rem, calc(100% - var(--ecall-bubble-avatar-track)))) var(--ecall-bubble-avatar-size);
+  grid-template-columns: minmax(0, min(var(--ecall-bubble-max-width), calc(100% - var(--ecall-bubble-avatar-track) - var(--ecall-bubble-body-offset)))) var(--ecall-bubble-avatar-size);
   grid-template-areas:
     "main avatar"
-    "body .";
+    "body body";
 }
 
 .ecall-chat-bubble-shell:not(.ecall-chat-bubble-tone-user) .ecall-chat-bubble-head {
@@ -180,8 +189,10 @@ const avatarLabel = computed(() => {
 }
 
 .ecall-chat-bubble-shell:not(.ecall-chat-bubble-tone-user) .ecall-chat-bubble-body {
+  box-sizing: border-box;
   grid-area: body;
-  width: min(42rem, 100%);
+  padding-inline: var(--ecall-bubble-body-offset);
+  width: min(var(--ecall-bubble-max-width), 100%);
   max-width: 100%;
   margin: 0;
 }
