@@ -151,6 +151,10 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
       ? options.getMessageStreamBlocks(currentRound.messageId)
       : [];
     if (conversationId && parsed.streamCache) {
+      const streamCacheMessageId = String(parsed.streamCache.persistedAssistantMessageId || "").trim();
+      if (streamCacheMessageId && currentRound.messageId && streamCacheMessageId !== currentRound.messageId) {
+        return;
+      }
       const snapshotBlocks = normalizeAssistantStreamBlocks(parsed.streamCache.streamBlocks);
       if (currentRound.phase === "streaming") {
         shouldCorrectProjectionFromSnapshot = shouldCorrectMessageProjectionFromSnapshot(

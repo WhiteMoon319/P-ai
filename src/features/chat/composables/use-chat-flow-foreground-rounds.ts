@@ -20,6 +20,27 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
       || (String(message?.role || "").trim() === "assistant" && meta._streaming === true);
   }
 
+  function messageIdOf(message?: ChatMessage | null): string {
+    return String(message?.id || "").trim();
+  }
+
+  function findStreamingAssistantMessageById(messageId: string): ChatMessage | null {
+    const normalizedMessageId = String(messageId || "").trim();
+    if (!normalizedMessageId) return null;
+    return [...bindings.allMessages.value]
+      .reverse()
+      .find((message: ChatMessage) =>
+        messageIdOf(message) === normalizedMessageId && isStreamingAssistantMessage(message)
+      ) || null;
+  }
+
+  function streamCacheMatchesMessageId(cache: unknown, messageId: string): boolean {
+    const normalizedMessageId = String(messageId || "").trim();
+    if (!normalizedMessageId) return false;
+    const cacheMessageId = String((cache as { persistedAssistantMessageId?: unknown } | null | undefined)?.persistedAssistantMessageId || "").trim();
+    return !cacheMessageId || cacheMessageId === normalizedMessageId;
+  }
+
   function resolveAssistantMessageId(input?: {
     messageId?: string | null;
     assistantMessageId?: string | null;
@@ -35,12 +56,14 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     return "";
   }
 
-  function applyStreamingOverlayForConversation(conversationId?: string | null) {
+  function applyStreamingOverlayForConversation(conversationId?: string | null, expectedMessageId = "") {
     const cid = normalizeConversationId(conversationId);
     if (!cid) return;
+    const cache = bindings.readConversationStreamCache(cid);
+    if (expectedMessageId && !streamCacheMatchesMessageId(cache, expectedMessageId)) return;
     const overlay = applyStreamingHistoryOverlay(
       bindings.allMessages.value,
-      bindings.readConversationStreamCache(cid),
+      cache,
     );
     if (!overlay.removed) return;
     bindings.allMessages.value = overlay.messages;
@@ -196,41 +219,43 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
   function ensureForegroundStreamingRound() {
     const conversationId = bindings.getConversationId ? bindings.getConversationId() : "";
     const round = bindings.getRound();
+    const cache = conversationId ? bindings.readConversationStreamCache(conversationId) : null;
     if (round.phase === "streaming") {
-      if (!bindings.hasStreamingAssistantMessageInMessages()) {
+      const targetMessageId = round.messageId;
+      const existingMessage = findStreamingAssistantMessageById(targetMessageId);
+      if (!existingMessage) {
         if (bindings.streamBlocks) bindings.streamBlocks.value = [];
-        bindings.applyConversationStreamCacheToDisplay(conversationId);
-        const messageId = bindings.insertStreamingAssistantMessage(round.messageId, round.gen);
+        const restoredFromCache = !!(targetMessageId
+          && streamCacheMatchesMessageId(cache, targetMessageId)
+          && bindings.applyConversationStreamCacheToDisplay(conversationId));
+        const messageId = bindings.insertStreamingAssistantMessage(targetMessageId, round.gen);
+        if (!restoredFromCache) bindings.latestAssistantText.value = "";
         bindings.updateMessageText(messageId);
         bindings.setRound({ phase: "streaming", gen: round.gen, messageId });
       }
       return round.gen;
     }
+    const targetMessageId = round.phase === "queued"
+      ? round.messageId
+      : String(cache?.persistedAssistantMessageId || "").trim();
+    if (!targetMessageId) return 0;
     const gen = bindings.nextGeneration();
     if (bindings.streamBlocks) bindings.streamBlocks.value = [];
-    const existingMessage = [...bindings.allMessages.value]
-      .reverse()
-      .find((message: ChatMessage) => isStreamingAssistantMessage(message));
-    const existingMessageId = String(existingMessage?.id || "").trim();
+    const existingMessage = findStreamingAssistantMessageById(targetMessageId);
+    const existingMessageId = messageIdOf(existingMessage);
     const existingMessageMeta = ((existingMessage?.providerMeta || {}) as Record<string, unknown>);
-    const restoredFromCache = !existingMessageId && bindings.applyConversationStreamCacheToDisplay(conversationId);
-    applyStreamingOverlayForConversation(conversationId);
+    const restoredFromCache = !!(!existingMessageId
+      && targetMessageId
+      && streamCacheMatchesMessageId(cache, targetMessageId)
+      && bindings.applyConversationStreamCacheToDisplay(conversationId));
+    applyStreamingOverlayForConversation(conversationId, targetMessageId);
     const existingMessageStartedAtMs = existingMessageId ? positiveRoundedNumber(existingMessageMeta._frontendDispatchStartedAtMs) : 0;
     const existingMessageElapsedMs = existingMessageId ? positiveRoundedNumber(existingMessageMeta._frontendDispatchElapsedMs) : 0;
     if (!restoredFromCache) {
-      bindings.latestAssistantText.value = readMessagePlainText(existingMessage);
+      bindings.latestAssistantText.value = readMessagePlainText(existingMessage || undefined);
     }
     bindings.setActiveHistoryMessageCount(formalizeMessages(bindings.allMessages.value).length);
-    const messageId = existingMessageId || bindings.insertStreamingAssistantMessage(
-      resolveAssistantMessageId({
-        messageId: round.phase === "queued" ? round.messageId : "",
-        persistedAssistantMessageId: bindings.readConversationStreamCache(conversationId)?.persistedAssistantMessageId,
-        activationId: bindings.getActiveActivationId?.(),
-        requestId: bindings.readConversationStreamCache(conversationId)?.requestId,
-        gen,
-      }),
-      gen,
-    );
+    const messageId = existingMessageId || bindings.insertStreamingAssistantMessage(targetMessageId, gen);
     if (existingMessageId) {
       bindings.loadStreamBlocksFromMessage(messageId);
     }
@@ -256,7 +281,11 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
       bindings.writeConversationStreamCacheSnapshot(conversationId, input.streamCache);
     }
     const cache = bindings.readConversationStreamCache(conversationId);
-    applyStreamingOverlayForConversation(conversationId);
+    const round = bindings.getRound();
+    const expectedMessageId = round.phase === "queued" || round.phase === "streaming"
+      ? round.messageId
+      : String(cache?.persistedAssistantMessageId || "").trim();
+    applyStreamingOverlayForConversation(conversationId, expectedMessageId);
     const hasVisibleProgress =
       !!input?.streamCache?.hasVisibleProgress
       || streamCacheHasVisibleProgress(input?.streamCache)
@@ -266,12 +295,12 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
       return ensureForegroundWaitingRound(input?.statusText || bindings.t("chat.statusWaitingReply"));
     }
     const gen = ensureForegroundStreamingRound();
-    const round = bindings.getRound();
-    if (round.phase === "streaming") {
+    const nextRound = bindings.getRound();
+    if (nextRound.phase === "streaming") {
       const blocks = snapshotBlocks.length > 0 ? snapshotBlocks : normalizeAssistantStreamBlocks(cache?.streamBlocks || []);
       if (bindings.streamBlocks) bindings.streamBlocks.value = blocks;
-      bindings.syncStreamBlocksToMessage(round.messageId, blocks);
-      bindings.updateMessageText(round.messageId, undefined, undefined, "", blocks);
+      bindings.syncStreamBlocksToMessage(nextRound.messageId, blocks);
+      bindings.updateMessageText(nextRound.messageId, undefined, undefined, "", blocks);
     }
     return gen;
   }
@@ -296,20 +325,23 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     }
     const conversationId = bindings.getConversationId ? bindings.getConversationId() : "";
     if (bindings.streamBlocks) bindings.streamBlocks.value = [];
-    const existingMessage = [...bindings.allMessages.value]
-      .reverse()
-      .find((message: ChatMessage) => isStreamingAssistantMessage(message));
-    const existingMessageId = String(existingMessage?.id || "").trim();
+    const cache = conversationId ? bindings.readConversationStreamCache(conversationId) : null;
+    const targetMessageId = round.messageId;
+    const existingMessage = findStreamingAssistantMessageById(targetMessageId);
+    const existingMessageId = messageIdOf(existingMessage);
     const existingMessageMeta = ((existingMessage?.providerMeta || {}) as Record<string, unknown>);
-    const restoredFromCache = !existingMessageId && bindings.applyConversationStreamCacheToDisplay(conversationId);
-    applyStreamingOverlayForConversation(conversationId);
+    const restoredFromCache = !!(!existingMessageId
+      && targetMessageId
+      && streamCacheMatchesMessageId(cache, targetMessageId)
+      && bindings.applyConversationStreamCacheToDisplay(conversationId));
+    applyStreamingOverlayForConversation(conversationId, targetMessageId);
     const existingMessageStartedAtMs = existingMessageId ? positiveRoundedNumber(existingMessageMeta._frontendDispatchStartedAtMs) : 0;
     const existingMessageElapsedMs = existingMessageId ? positiveRoundedNumber(existingMessageMeta._frontendDispatchElapsedMs) : 0;
     if (!restoredFromCache) {
-      bindings.latestAssistantText.value = readMessagePlainText(existingMessage);
+      bindings.latestAssistantText.value = readMessagePlainText(existingMessage || undefined);
     }
     bindings.setActiveHistoryMessageCount(formalizeMessages(bindings.allMessages.value).length);
-    const messageId = existingMessageId || bindings.insertStreamingAssistantMessage(round.messageId, gen);
+    const messageId = existingMessageId || bindings.insertStreamingAssistantMessage(targetMessageId, gen);
     if (existingMessageId) {
       bindings.loadStreamBlocksFromMessage(messageId);
     }
