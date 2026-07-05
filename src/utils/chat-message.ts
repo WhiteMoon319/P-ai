@@ -2,9 +2,33 @@ import type { ChatMessage } from "../types/app";
 
 const MEDIA_REF_PREFIX = "@media:";
 const DOWNLOAD_REF_PREFIX = "@download:";
+const IMAGE_ATTACHMENT_EXTENSIONS = new Set([
+  "avif",
+  "bmp",
+  "gif",
+  "heic",
+  "heif",
+  "jpg",
+  "jpeg",
+  "png",
+  "svg",
+  "webp",
+]);
 
 function isStoredImageRef(value: string): boolean {
   return value.startsWith(MEDIA_REF_PREFIX) || value.startsWith(DOWNLOAD_REF_PREFIX);
+}
+
+function fileExtension(value: string): string {
+  const name = String(value || "").trim().split(/[\\/]/).filter(Boolean).pop() || "";
+  const index = name.lastIndexOf(".");
+  return index >= 0 ? name.slice(index + 1).trim().toLowerCase() : "";
+}
+
+function isImageAttachmentFile(fileName: string, relativePath: string, mime?: string): boolean {
+  const normalizedMime = String(mime || "").trim().toLowerCase();
+  if (normalizedMime.startsWith("image/")) return true;
+  return IMAGE_ATTACHMENT_EXTENSIONS.has(fileExtension(fileName || relativePath));
 }
 
 export function stripHiddenExtraBlocks(text: string): string {
@@ -81,21 +105,24 @@ export function extractMessageAudios(msg?: ChatMessage): Array<{ mime: string; b
 
 export function extractMessageAttachmentFiles(
   msg?: ChatMessage,
-): Array<{ fileName: string; relativePath: string }> {
+): Array<{ fileName: string; relativePath: string; mime?: string }> {
   if (!msg) return [];
-  const out: Array<{ fileName: string; relativePath: string }> = [];
+  const out: Array<{ fileName: string; relativePath: string; mime?: string }> = [];
   const seen = new Set<string>();
+  const hasVisibleImages = extractMessageImages(msg).length > 0;
   const metaAttachments = Array.isArray((msg.providerMeta as { attachments?: unknown } | undefined)?.attachments)
-    ? ((msg.providerMeta as { attachments?: Array<{ fileName?: unknown; relativePath?: unknown }> }).attachments || [])
+    ? ((msg.providerMeta as { attachments?: Array<{ fileName?: unknown; relativePath?: unknown; mime?: unknown }> }).attachments || [])
     : [];
   for (const item of metaAttachments) {
     const fileName = String(item?.fileName || "").trim();
     const relativePath = String(item?.relativePath || "").trim().replace(/\\/g, "/");
+    const mime = String(item?.mime || "").trim();
     if (!fileName || !relativePath) continue;
+    if (hasVisibleImages && isImageAttachmentFile(fileName, relativePath, mime)) continue;
     const key = `${fileName}::${relativePath}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ fileName, relativePath });
+    out.push({ fileName, relativePath, mime: mime || undefined });
   }
   if (!Array.isArray(msg.extraTextBlocks)) return out;
   for (const raw of msg.extraTextBlocks) {
@@ -106,6 +133,7 @@ export function extractMessageAttachmentFiles(
     const fileName = String(fileMatch?.[1] || "").trim();
     const relativePath = String(pathMatch?.[1] || "").trim().replace(/\\/g, "/");
     if (!fileName || !relativePath) continue;
+    if (hasVisibleImages && isImageAttachmentFile(fileName, relativePath)) continue;
     const key = `${fileName}::${relativePath}`;
     if (seen.has(key)) continue;
     seen.add(key);

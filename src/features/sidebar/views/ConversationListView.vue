@@ -55,6 +55,8 @@
 </template>
 
 <script setup lang="ts">
+import { stripToolcallMarkers } from "../../../utils/chat-message-semantics";
+
 type ConversationListItem = {
   conversationId: string;
   title: string;
@@ -114,7 +116,7 @@ function conversationInitial(item: ConversationListItem): string {
 function lastPreviewMessage(item: ConversationListItem): ConversationPreview | null {
   const messages = Array.isArray(item.previewMessages) ? item.previewMessages : [];
   return [...messages].reverse().find((message) =>
-    String(message.textPreview || "").trim()
+    stripToolcallMarkers(message.textPreview || "")
     || message.hasImage
     || message.hasPdf
     || message.hasAudio
@@ -143,7 +145,7 @@ function lastSpeakerAvatarUrl(item: ConversationListItem): string {
 function previewLine(item: ConversationListItem): string {
   const latest = lastPreviewMessage(item);
   if (latest) {
-    const text = String(latest.textPreview || "").trim();
+    const text = stripToolcallMarkers(latest.textPreview || "");
     if (text) return text;
     if (latest.hasPdf) return "[PDF]";
     if (latest.hasImage) return "[图片]";

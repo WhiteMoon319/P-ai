@@ -1,3 +1,5 @@
+import { stripToolcallMarkers } from "../../../utils/chat-message-semantics";
+
 type ConversationOverviewUtilsOptions = {
   draftAssistantIdPrefix: string;
 };
@@ -10,12 +12,12 @@ export function useChatConversationOverviewUtils(options: ConversationOverviewUt
 
   function previewMessageFromChatMessage(message: any) {
     const parts = Array.isArray(message.parts) ? message.parts : [];
-    const textPreview = parts
+    const textPreview = stripToolcallMarkers(parts
       .filter((part: any) => part && typeof part === "object" && (part as { type?: unknown }).type === "text")
       .map((part: any) => String((part as { text?: unknown }).text || "").trim())
       .filter(Boolean)
       .join(" | ")
-      .slice(0, 160);
+    ).slice(0, 160);
     const providerMeta = (message.providerMeta || {}) as Record<string, unknown>;
     const attachmentEntries = Array.isArray(providerMeta.attachments) ? providerMeta.attachments : [];
     const hasPdfAttachment = attachmentEntries.some((entry) => {

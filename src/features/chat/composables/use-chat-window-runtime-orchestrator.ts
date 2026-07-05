@@ -297,6 +297,7 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     setStatusError: bindings.setStatusError,
     messageText: bindings.messageText,
     extractMessageImages: bindings.extractMessageImages,
+    extractMessageAttachmentFiles: bindings.extractMessageAttachmentFiles,
     requestRecallMode: shellDialogFlows.requestRecallMode,
     requestCreateConversationBranchFromMessageConfirm: shellDialogFlows.requestCreateConversationBranchFromMessageConfirm,
     createConversationBranchFromMessage,

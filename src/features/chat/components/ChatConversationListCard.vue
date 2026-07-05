@@ -219,6 +219,7 @@ import { computed, nextTick, ref, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
 import { Archive, Folder, FolderOpen, PencilLine, Pin, PinOff, SquarePen, Trash2, Upload } from "@lucide/vue";
 import type { ChatConversationOverviewItem, ConversationPreviewMessage } from "../../../types/app";
+import { stripToolcallMarkers } from "../../../utils/chat-message-semantics";
 import { usePipelineStatus } from "../../shell/composables/use-pipeline-status";
 import { formatConversationListTime } from "../utils/conversation-time";
 import { buildRecentConversationSection, RECENT_CONVERSATION_SECTION_KEY } from "../utils/conversation-sections";
@@ -644,7 +645,7 @@ function speakerLabel(preview: ConversationPreviewMessage): string {
 }
 
 function previewText(preview: ConversationPreviewMessage): string {
-  const text = String(preview.textPreview || "").trim();
+  const text = stripToolcallMarkers(preview.textPreview || "");
   if (text) return text;
   if (preview.hasPdf) return t("chat.previewPdf");
   if (preview.hasImage) return t("chat.previewImage");
@@ -653,9 +654,17 @@ function previewText(preview: ConversationPreviewMessage): string {
   return t("chat.conversationNoPreview");
 }
 
+function hasVisiblePreview(preview: ConversationPreviewMessage): boolean {
+  return !!stripToolcallMarkers(preview.textPreview || "")
+    || !!preview.hasPdf
+    || !!preview.hasImage
+    || !!preview.hasAudio
+    || !!preview.hasAttachment;
+}
+
 function latestPreviewLine(item: ChatConversationOverviewItem): string {
   const previews = normalizedPreviewMessages(item);
-  const latestPreview = previews[previews.length - 1];
+  const latestPreview = [...previews].reverse().find(hasVisiblePreview);
   if (!latestPreview) return t("chat.conversationNoPreview");
   return previewText(latestPreview);
 }

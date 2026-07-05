@@ -74,16 +74,7 @@
       </button>
     </div>
     <template v-else>
-    <div v-if="clipboardImages.length > 0 || queuedAttachmentNotices.length > 0" class="mb-2 flex flex-wrap gap-1">
-      <div v-for="(img, idx) in clipboardImages" :key="`${img.mime}-${idx}`" class="badge badge-ghost gap-1 py-3">
-        <ImageIcon v-if="isImageMime(img.mime)" class="h-3.5 w-3.5" />
-        <FileText v-else-if="isPdfMime(img.mime)" class="h-3.5 w-3.5" />
-        <ImageIcon v-else class="h-3.5 w-3.5" />
-        <span class="text-[11px]">{{ isPdfMime(img.mime) ? `PDF ${idx + 1}` : t("chat.image", { index: idx + 1 }) }}</span>
-        <button class="btn btn-ghost btn-sm btn-square" :disabled="chatting || frozen" @click="emit('removeClipboardImage', idx)">
-          <X class="h-3 w-3" />
-        </button>
-      </div>
+    <div v-if="queuedAttachmentNotices.length > 0" class="mb-2 flex flex-wrap gap-1">
       <div
         v-for="(file, idx) in queuedAttachmentNotices"
         :key="file.id"
@@ -91,7 +82,7 @@
       >
         <FileText class="h-3.5 w-3.5" />
         <span class="text-[11px]">{{ file.fileName }}</span>
-        <button class="btn btn-ghost btn-sm btn-square" :disabled="chatting || frozen" @click="emit('removeQueuedAttachmentNotice', idx)">
+        <button class="btn btn-ghost btn-sm btn-square" @click="emit('removeQueuedAttachmentNotice', idx)">
           <X class="h-3 w-3" />
         </button>
       </div>
@@ -157,16 +148,49 @@
         </div>
       </div>
       <div class="relative">
-        <textarea
-          ref="chatInputRef"
-          v-model="localChatInput"
-          class="ecall-chat-composer-input w-full textarea resize-none overflow-y-auto chat-input-no-focus min-h-0"
-          rows="1"
-          :disabled="frozen"
-          :placeholder="chatInputPlaceholder"
-          @input="handleChatInputInput"
-          @keydown="handleChatInputKeydown"
-        ></textarea>
+        <div
+          class="ecall-chat-composer-input-shell w-full"
+          :class="{ 'ecall-chat-composer-input-shell-with-images': clipboardImages.length > 0 }"
+        >
+          <div v-if="clipboardImages.length > 0" class="ecall-chat-composer-image-previews">
+            <div
+              v-for="(img, idx) in clipboardImages"
+              :key="`${img.mime}-${idx}`"
+              class="ecall-chat-composer-image-preview"
+            >
+              <img
+                v-if="clipboardImagePreviewSrc(img)"
+                class="ecall-chat-composer-image-preview-media"
+                :src="clipboardImagePreviewSrc(img)"
+                :alt="t('chat.image', { index: idx + 1 })"
+                draggable="false"
+              />
+              <div v-else class="ecall-chat-composer-file-preview">
+                <FileText class="h-5 w-5" />
+                <span class="text-[11px]">{{ isPdfMime(img.mime) ? `PDF ${idx + 1}` : t("chat.image", { index: idx + 1 }) }}</span>
+              </div>
+              <button
+                type="button"
+                class="ecall-chat-composer-image-remove"
+                aria-label="删除图片"
+                @mousedown.prevent
+                @click.stop="removeClipboardImageAt(idx)"
+              >
+                <X class="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+          <textarea
+            ref="chatInputRef"
+            v-model="localChatInput"
+            class="ecall-chat-composer-input w-full resize-none overflow-y-auto chat-input-no-focus min-h-0"
+            rows="1"
+            :disabled="frozen"
+            :placeholder="chatInputPlaceholder"
+            @input="handleChatInputInput"
+            @keydown="handleChatInputKeydown"
+          ></textarea>
+        </div>
         <FloatingScrollbar v-if="chatInputRef" :target="chatInputRef" />
       </div>
       <Teleport to="body">
@@ -355,7 +379,7 @@
 <script setup lang="ts">
 import { Teleport, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Bot, CalendarPlus, ChevronDown, ClipboardList, CornerRightUp, FileText, History, Image as ImageIcon, Layers2, Menu, Mic, Minus, Paperclip, Plus, Settings, Square, Target, X } from "@lucide/vue";
+import { Bot, CalendarPlus, ChevronDown, ClipboardList, CornerRightUp, FileText, History, Layers2, Menu, Mic, Minus, Paperclip, Plus, Settings, Square, Target, X } from "@lucide/vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption } from "../../../types/app";
 import { invokeTauri } from "../../../services/tauri-api";
 import ChatQueuePreview from "./ChatQueuePreview.vue";
@@ -1222,12 +1246,20 @@ function handleChatInputKeydown(event: KeyboardEvent) {
   }
 }
 
-function isImageMime(mime: string): boolean {
-  return (mime || "").trim().toLowerCase().startsWith("image/");
-}
-
 function isPdfMime(mime: string): boolean {
   return (mime || "").trim().toLowerCase() === "application/pdf";
+}
+
+function clipboardImagePreviewSrc(image: BinaryAttachment): string {
+  const mime = String(image?.mime || "").trim().toLowerCase();
+  const bytesBase64 = String(image?.bytesBase64 || "").trim();
+  if (!mime.startsWith("image/") || !bytesBase64) return "";
+  return `data:${mime};base64,${bytesBase64}`;
+}
+
+function removeClipboardImageAt(index: number) {
+  emit("removeClipboardImage", index);
+  void nextTick(() => focusInput({ preventScroll: true }));
 }
 
 function avatarInitial(name: string): string {
@@ -1384,9 +1416,107 @@ watch(
   width: 0;
   height: 0;
 }
+.ecall-chat-composer-input-shell {
+  appearance: none;
+  border: 0;
+  box-sizing: border-box;
+  display: flex;
+  min-height: 48px;
+  flex-direction: column;
+  gap: 8px;
+  background: transparent;
+  box-shadow: none;
+  outline: 0;
+  padding: 0;
+}
+.ecall-chat-composer-input-shell:focus,
+.ecall-chat-composer-input-shell:focus-within,
+.ecall-chat-composer-input-shell:focus-visible {
+  border: 0;
+  box-shadow: none;
+  outline: 0;
+}
+.ecall-chat-composer-input-shell-with-images {
+  padding: 10px 12px 12px;
+}
+.ecall-chat-composer-image-previews {
+  display: flex;
+  max-height: 4.5rem;
+  flex-wrap: wrap;
+  gap: 8px;
+  overflow: hidden;
+}
+.ecall-chat-composer-image-preview {
+  position: relative;
+  display: inline-flex;
+  min-height: 3.5rem;
+  max-width: 9.5rem;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--color-base-200) 72%, transparent);
+}
+.ecall-chat-composer-image-preview-media {
+  display: block;
+  max-height: 3.75rem;
+  max-width: 9.5rem;
+  object-fit: contain;
+}
+.ecall-chat-composer-file-preview {
+  display: inline-flex;
+  height: 3.5rem;
+  min-width: 5.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0 0.75rem;
+  color: color-mix(in srgb, var(--color-base-content) 72%, transparent);
+}
+.ecall-chat-composer-image-remove {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  display: inline-flex;
+  height: 1.25rem;
+  width: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-base-100) 88%, transparent);
+  color: color-mix(in srgb, var(--color-base-content) 72%, transparent);
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+.ecall-chat-composer-image-preview:hover .ecall-chat-composer-image-remove,
+.ecall-chat-composer-image-remove:focus-visible {
+  opacity: 1;
+}
+.ecall-chat-composer-image-remove:hover {
+  background: color-mix(in srgb, var(--color-error) 90%, transparent);
+  color: var(--color-error-content);
+}
 .ecall-chat-composer-input {
+  appearance: none;
+  box-sizing: border-box;
+  border: 0;
+  background: transparent;
   line-height: 1.5;
+  outline: 0;
   padding-top: 12px;
   padding-bottom: 12px;
+}
+.ecall-chat-composer-input:focus,
+.ecall-chat-composer-input:focus-visible {
+  border: 0;
+  box-shadow: none;
+  outline: 0;
+}
+.ecall-chat-composer-input-shell .ecall-chat-composer-input {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+.ecall-chat-composer-input-shell-with-images .ecall-chat-composer-input {
+  padding: 0;
 }
 </style>

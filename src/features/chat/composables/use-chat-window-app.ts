@@ -23,7 +23,7 @@ import { useChatWindowMediaOrchestrator } from "./use-chat-window-media-orchestr
 import { useChatWindowState } from "./use-chat-window-state";
 import { useChatUiStateOrchestrator } from "./use-chat-ui-state-orchestrator";
 import { useChatComposerDrafts } from "./use-chat-composer-drafts";
-import { extractMessageImages, messageText } from "../../../utils/chat-message";
+import { extractMessageAttachmentFiles, extractMessageImages, messageText } from "../../../utils/chat-message";
 import { formatI18nError } from "../../../utils/error";
 import type { AppConfig } from "../../../types/app";
 import { normalizeLocale } from "../../../i18n";
@@ -650,6 +650,7 @@ export function useChatWindowApp() {
     setConversationPlanMode,
     messageText,
     extractMessageImages,
+    extractMessageAttachmentFiles,
   });
   const {
     configRuntime,
@@ -785,6 +786,7 @@ export function useChatWindowApp() {
   return {
     messageText,
     extractMessageImages,
+    extractMessageAttachmentFiles,
     viewMode,
     t,
     locale,

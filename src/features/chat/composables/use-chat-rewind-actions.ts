@@ -12,6 +12,7 @@ type RewindConversationResult = {
 };
 
 type RecallConfirmMode = "with_patch" | "message_only" | "cancel";
+type QueuedAttachmentNotice = { id: string; fileName: string; relativePath: string; mime: string };
 
 type UseChatRewindActionsOptions = {
   activeApiConfigId: Ref<string>;
@@ -30,6 +31,7 @@ type UseChatRewindActionsOptions = {
   chatInput: Ref<string>;
   selectedMentions: Ref<ChatMentionTarget[]>;
   clipboardImages: Ref<Array<{ mime: string; bytesBase64: string; savedPath?: string }>>;
+  queuedAttachmentNotices: Ref<QueuedAttachmentNotice[]>;
   deleteUnarchivedConversationFromArchives: (conversationId: string) => Promise<void>;
   sendChat: () => Promise<void>;
   setStatusError: (key: string, error: unknown) => void;
@@ -37,6 +39,7 @@ type UseChatRewindActionsOptions = {
   removeBinaryPlaceholders: (text: string) => string;
   messageText: (message: ChatMessage) => string;
   extractMessageImages: (message: ChatMessage) => Array<{ mime: string; bytesBase64?: string; mediaRef?: string }>;
+  extractMessageAttachmentFiles: (message: ChatMessage) => Array<{ fileName: string; relativePath: string; mime?: string }>;
   requestRecallMode: (payload: { turnId: string; targetUserMessageId: string }) => Promise<RecallConfirmMode>;
   requestCreateConversationBranchFromMessageConfirm: (payload: { turnId: string; targetUserMessageId: string }) => Promise<boolean>;
   createConversationBranchFromMessage: (payload: { turnId: string; targetUserMessageId: string }) => Promise<void>;
@@ -47,13 +50,65 @@ type UseChatRewindActionsOptions = {
 export function useChatRewindActions(options: UseChatRewindActionsOptions) {
   let rewindInFlight = false;
 
-  function extractRecallableImages(message: ChatMessage): Array<{ mime: string; bytesBase64: string; savedPath?: string }> {
-    return options.extractMessageImages(message)
-      .filter((image) => !!String(image.bytesBase64 || "").trim())
-      .map((image) => ({
-        mime: image.mime,
-        bytesBase64: String(image.bytesBase64 || "").trim(),
-      }));
+  function bytesBase64FromDataUrl(dataUrl: string): string {
+    const text = String(dataUrl || "").trim();
+    const commaIndex = text.indexOf(",");
+    return commaIndex >= 0 ? text.slice(commaIndex + 1).trim() : "";
+  }
+
+  async function recallableImageFromMessageImage(
+    image: { mime: string; bytesBase64?: string; mediaRef?: string },
+  ): Promise<{ mime: string; bytesBase64: string; savedPath?: string } | null> {
+    const mime = String(image.mime || "").trim() || "image/webp";
+    const direct = String(image.bytesBase64 || "").trim();
+    if (direct) {
+      return {
+        mime,
+        bytesBase64: direct,
+      };
+    }
+    const mediaRef = String(image.mediaRef || "").trim();
+    if (!mediaRef) return null;
+    try {
+      const result = await invokeTauri<{ dataUrl: string }>("read_chat_image_data_url", {
+        input: { mediaRef, mime },
+      });
+      const bytesBase64 = bytesBase64FromDataUrl(result?.dataUrl || "");
+      return bytesBase64 ? { mime, bytesBase64 } : null;
+    } catch (error) {
+      console.warn("[会话撤回] 图片回填失败：读取 mediaRef 失败", {
+        mediaRef,
+        mime,
+        error: errorText(error),
+      });
+      return null;
+    }
+  }
+
+  async function extractRecallableImages(message: ChatMessage): Promise<Array<{ mime: string; bytesBase64: string; savedPath?: string }>> {
+    const images = await Promise.all(options.extractMessageImages(message).map(recallableImageFromMessageImage));
+    return images.filter((image): image is { mime: string; bytesBase64: string; savedPath?: string } => !!image);
+  }
+
+  function extractRecallableAttachmentNotices(message: ChatMessage): QueuedAttachmentNotice[] {
+    const seen = new Set<string>();
+    return options.extractMessageAttachmentFiles(message)
+      .map((file) => {
+        const fileName = String(file.fileName || "").trim();
+        const relativePath = String(file.relativePath || "").trim().replace(/\\/g, "/");
+        const mime = String(file.mime || "").trim();
+        if (!fileName || !relativePath) return null;
+        const id = `${relativePath || fileName}::${mime}`;
+        if (seen.has(id)) return null;
+        seen.add(id);
+        return {
+          id,
+          fileName,
+          relativePath,
+          mime,
+        };
+      })
+      .filter((item): item is QueuedAttachmentNotice => !!item);
   }
 
   function errorText(error: unknown): string {
@@ -270,11 +325,13 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
       }
       options.chatInput.value = options.removeBinaryPlaceholders(options.messageText(recalledMessage));
       options.selectedMentions.value = extractRecallableMentions(recalledMessage);
-      options.clipboardImages.value = extractRecallableImages(recalledMessage);
+      options.clipboardImages.value = await extractRecallableImages(recalledMessage);
+      options.queuedAttachmentNotices.value = extractRecallableAttachmentNotices(recalledMessage);
       console.info("[会话撤回] 已回填输入框", {
         textLength: options.chatInput.value.length,
         mentionCount: options.selectedMentions.value.length,
         imageCount: options.clipboardImages.value.length,
+        attachmentCount: options.queuedAttachmentNotices.value.length,
         turnId: payload.turnId,
       });
     } catch (error) {
@@ -319,7 +376,8 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
       if (!recalledUserMessage) return;
       options.chatInput.value = options.removeBinaryPlaceholders(options.messageText(recalledUserMessage));
       options.selectedMentions.value = extractRecallableMentions(recalledUserMessage);
-      options.clipboardImages.value = extractRecallableImages(recalledUserMessage);
+      options.clipboardImages.value = await extractRecallableImages(recalledUserMessage);
+      options.queuedAttachmentNotices.value = extractRecallableAttachmentNotices(recalledUserMessage);
       await options.sendChat();
     } finally {
       rewindInFlight = false;

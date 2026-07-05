@@ -327,7 +327,7 @@ function injectToolInlineMarkersIntoMergedText(text: string, events: NormalizedT
   return output;
 }
 
-function stripToolcallMarkers(text: string): string {
+export function stripToolcallMarkers(text: string): string {
   return String(text || "").replace(/\s*\[toolcall:[^\]\n]+\]/g, "").trim();
 }
 

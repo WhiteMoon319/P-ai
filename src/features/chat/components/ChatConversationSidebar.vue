@@ -284,6 +284,7 @@ import { Archive, PencilLine, Pin, PinOff, Search, SquarePen, Trash2, Upload } f
 import CollapsibleGroup from "./CollapsibleGroup.vue";
 import FloatingConversationMenu from "./FloatingConversationMenu.vue";
 import type { ChatConversationOverviewItem, ConversationPreviewMessage } from "../../../types/app";
+import { stripToolcallMarkers } from "../../../utils/chat-message-semantics";
 import type { TaskEntry } from "../../config/views/config-tabs/task-editor";
 import { invokeTauri } from "../../../services/tauri-api";
 import { usePipelineStatus } from "../../shell/composables/use-pipeline-status";
@@ -1037,7 +1038,7 @@ function speakerLabel(preview: ConversationPreviewMessage): string {
 }
 
 function previewText(preview: ConversationPreviewMessage): string {
-  const text = String(preview.textPreview || "").trim();
+  const text = stripToolcallMarkers(preview.textPreview || "");
   if (text) return text;
   if (preview.hasPdf) return t("chat.previewPdf");
   if (preview.hasImage) return t("chat.previewImage");
@@ -1046,9 +1047,17 @@ function previewText(preview: ConversationPreviewMessage): string {
   return t("chat.conversationNoPreview");
 }
 
+function hasVisiblePreview(preview: ConversationPreviewMessage): boolean {
+  return !!stripToolcallMarkers(preview.textPreview || "")
+    || !!preview.hasPdf
+    || !!preview.hasImage
+    || !!preview.hasAudio
+    || !!preview.hasAttachment;
+}
+
 function latestPreviewLine(item: ChatConversationOverviewItem): string {
   const previews = normalizedPreviewMessages(item);
-  const latestPreview = previews[previews.length - 1];
+  const latestPreview = [...previews].reverse().find(hasVisiblePreview);
   if (!latestPreview) return t("chat.conversationNoPreview");
   return previewText(latestPreview);
 }
