@@ -739,7 +739,7 @@ describe("chat-message semantics", () => {
     }));
 
     expect(blocks).toEqual([
-      { reasoning: "先想。", reasoningCharCount: "先想。".length, text: "正文", tools: [], pendingTextBreak: false },
+      { reasoning: "先想。", reasoningCharCount: "先想。".length, text: "正文 [toolcall:tool-1]", tools: [], pendingTextBreak: true },
       {
         reasoning: "后续思考。",
         reasoningCharCount: "后续思考。".length,
@@ -754,6 +754,48 @@ describe("chat-message semantics", () => {
         pendingTextBreak: false,
       },
     ]);
+  });
+
+  it("pins a tool marker before later streaming text instead of pushing it to the tail", () => {
+    let blocks = appendTextDeltaToStreamBlocks([], "正文1。");
+    blocks = applyAssistantToolEventToStreamBlocks(blocks, JSON.stringify({
+      role: "assistant",
+      content: null,
+      tool_calls: [{
+        id: "tool-middle",
+        type: "function",
+        function: {
+          name: "read",
+          arguments: "{\"path\":\"a.ts\"}",
+        },
+      }],
+    }));
+    blocks = appendTextDeltaToStreamBlocks(blocks, "正文2。");
+
+    expect(assistantTextFromStreamBlocks(blocks)).toBe(
+      "正文1。 [toolcall:tool-middle]\n\n正文2。",
+    );
+  });
+
+  it("keeps a tool marker outside a later streamed code block", () => {
+    let blocks = appendTextDeltaToStreamBlocks([], "先说明。");
+    blocks = applyAssistantToolEventToStreamBlocks(blocks, JSON.stringify({
+      role: "assistant",
+      content: null,
+      tool_calls: [{
+        id: "tool-before-code",
+        type: "function",
+        function: {
+          name: "read",
+          arguments: "{\"path\":\"a.ts\"}",
+        },
+      }],
+    }));
+    blocks = appendTextDeltaToStreamBlocks(blocks, "```ts\nconsole.log(1);\n```");
+
+    expect(assistantTextFromStreamBlocks(blocks)).toBe(
+      "先说明。 [toolcall:tool-before-code]\n\n```ts\nconsole.log(1);\n```",
+    );
   });
 
   it("writes multiple completed tool markers into streaming text and breaks before later text", () => {

@@ -807,6 +807,33 @@ function ensureAssistantStreamBlock(blocks: AssistantStreamBlock[]): AssistantSt
   return last;
 }
 
+function attachInlineToolMarkerToStreamBlock(
+  blocks: AssistantStreamBlock[],
+  blockIndex: number,
+  toolCallId: string,
+): boolean {
+  const normalizedToolCallId = String(toolCallId || "").trim();
+  if (!normalizedToolCallId) return false;
+  if (blocks.some((block) => hasInlineToolMarker(String(block.text || ""), normalizedToolCallId))) {
+    return false;
+  }
+  let targetBlock = blocks[blockIndex];
+  if (!targetBlock) return false;
+  if (!String(targetBlock.text || "").trim()) {
+    for (let index = blockIndex - 1; index >= 0; index -= 1) {
+      if (!String(blocks[index].text || "").trim()) continue;
+      targetBlock = blocks[index];
+      break;
+    }
+  }
+  const currentText = String(targetBlock.text || "");
+  targetBlock.text = currentText.trim()
+    ? `${currentText} [toolcall:${normalizedToolCallId}]`
+    : `[toolcall:${normalizedToolCallId}]`;
+  targetBlock.pendingTextBreak = true;
+  return true;
+}
+
 export function appendReasoningDeltaToStreamBlocks(rawBlocks: unknown, delta: string): AssistantStreamBlock[] {
   const text = String(delta || "");
   const blocks = copyAssistantStreamBlocksForAppend(rawBlocks);
@@ -882,6 +909,7 @@ export function applyAssistantToolEventToStreamBlocks(
   if (reasoning && !String(block.reasoning || "").trim()) {
     block.reasoning = reasoning;
   }
+  const blockIndex = blocks.indexOf(block);
   for (const tool of tools) {
     const existing = blocks
       .flatMap((item) => item.tools || [])
@@ -893,6 +921,7 @@ export function applyAssistantToolEventToStreamBlocks(
       continue;
     }
     block.tools = [...(block.tools || []), tool];
+    attachInlineToolMarkerToStreamBlock(blocks, blockIndex, tool.toolCallId);
   }
   return normalizeAssistantStreamBlocks(blocks);
 }
@@ -924,21 +953,7 @@ export function applyAssistantToolResultToStreamBlocks(
     if (!tool) continue;
     tool.resultText = resultText;
     tool.status = "done";
-    let targetBlock = block;
-    if (!String(targetBlock.text || "").trim()) {
-      for (let index = blockIndex - 1; index >= 0; index -= 1) {
-        if (!String(blocks[index].text || "").trim()) continue;
-        targetBlock = blocks[index];
-        break;
-      }
-    }
-    const currentText = String(targetBlock.text || "");
-    if (!hasInlineToolMarker(currentText, toolCallId)) {
-      targetBlock.text = currentText.trim()
-        ? `${currentText} [toolcall:${toolCallId}]`
-        : `[toolcall:${toolCallId}]`;
-      targetBlock.pendingTextBreak = true;
-    }
+    attachInlineToolMarkerToStreamBlock(blocks, blockIndex, toolCallId);
     return normalizeAssistantStreamBlocks(blocks);
   }
   return normalizeAssistantStreamBlocks(blocks);
