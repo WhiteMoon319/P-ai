@@ -57,6 +57,7 @@
       :tool-status-text="toolStatusText"
       :tool-status-state="toolStatusState"
       :stream-blocks="streamBlocks"
+      :streaming-assistant-message-id="streamingAssistantMessageId"
       :busy="busy"
       :runtime-state="activeConversationRuntimeState"
       :has-prev-block="hasPrevBlock"
@@ -266,7 +267,7 @@ import {
   normalizeAssistantStreamBlocks,
 } from "../../utils/chat-message-semantics";
 import { formatConversationFallbackTitle } from "../chat/utils/conversation-title";
-import { messageWithStableRenderId, stableRenderIdFromMessage } from "../chat/utils/stable-render-id";
+import { messageWithStableRenderId, preserveStableRenderId, stableRenderIdFromMessage } from "../chat/utils/stable-render-id";
 import { useI18n } from "vue-i18n";
 import SidebarLayout from "./layouts/SidebarLayout.vue";
 import ChatViewWrapper from "./views/ChatViewWrapper.vue";
@@ -432,6 +433,7 @@ type SidebarStreamCachePayload = {
   toolStatusText?: string;
   toolStatusState?: string;
   streamBlocks?: unknown[];
+  persistedAssistantMessageId?: string;
 };
 
 type SidebarConversationRuntimePayload = {
@@ -523,6 +525,7 @@ const streamingText = ref("");
 const toolStatusText = ref("");
 const toolStatusState = ref<"running" | "done" | "failed" | "">("");
 const streamBlocks = ref<ReturnType<typeof normalizeAssistantStreamBlocks>>([]);
+const streamingAssistantMessageId = ref("");
 const busy = ref(false);
 const sendSubmitting = ref(false);
 const compacting = ref(false);
@@ -1131,6 +1134,7 @@ function clearStreamingState() {
   toolStatusText.value = "";
   toolStatusState.value = "";
   streamBlocks.value = [];
+  streamingAssistantMessageId.value = "";
 }
 
 function resetActiveConversationTransientState(_reason: string) {
@@ -1141,6 +1145,7 @@ function resetActiveConversationTransientState(_reason: string) {
 function applyRuntimeStreamCache(runtime: SidebarConversationRuntimePayload | null | undefined) {
   const cache = runtime?.streamCache;
   if (!cache) return;
+  streamingAssistantMessageId.value = String(cache.persistedAssistantMessageId || "").trim();
   const blocks = normalizeAssistantStreamBlocks(cache.streamBlocks);
   if (blocks.length > 0 || streamBlocks.value.length === 0) {
     streamBlocks.value = blocks;
@@ -1180,7 +1185,7 @@ async function applyOpenConversationResult(result: OpenConversationResult) {
   applyModelPayload(result.model || {});
   await refreshWorkspacePermission();
   await refreshWorkspaceList();
-  messages.value = Array.isArray(result.messages) ? result.messages : [];
+  messages.value = normalizeSidebarMessages(Array.isArray(result.messages) ? result.messages : [], messages.value);
   sidebarTodos.value = Array.isArray(result.currentTodos) ? result.currentTodos : [];
   const resultActiveGoal = result.activeGoal || null;
   activeConversationGoal.value = String(resultActiveGoal?.status || "").trim() === "active"
@@ -1354,7 +1359,7 @@ async function loadPrevBlock() {
   hasPrevBlock.value = result.hasPrevBlock;
   const existingIds = new Set(messages.value.map((item) => item.id));
   const previous = (result.messages || []).filter((item) => !existingIds.has(item.id));
-  messages.value = [...previous, ...messages.value];
+  messages.value = normalizeSidebarMessages([...previous, ...messages.value], messages.value);
 }
 
 async function openCreateConversationDialog() {
@@ -2022,12 +2027,16 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
   sendSubmitting.value = true;
   if (!hadForegroundRound) busy.value = true;
   try {
-    const result = await transport.request<{ queued?: boolean }>("chat.send", {
+    const result = await transport.request<{ queued?: boolean; assistantMessageId?: string }>("chat.send", {
       conversationId: activeConversationId.value,
       text,
       images,
       extraTextBlocks,
     });
+    const assistantMessageId = String(result?.assistantMessageId || "").trim();
+    if (assistantMessageId) {
+      streamingAssistantMessageId.value = assistantMessageId;
+    }
     if (result?.queued) {
       if (optimisticDraftId) removeOptimisticOwnUserDraftById(optimisticDraftId);
       if (!hadForegroundRound) busy.value = false;
@@ -2095,11 +2104,14 @@ async function recallTurn(payload: { turnId: string }) {
     }
     if (result.conversation) {
       activeConversationId.value = result.conversation.conversationId;
-      messages.value = Array.isArray(result.conversation.messages) ? result.conversation.messages : messages.value.slice(0, directIndex);
+      messages.value = normalizeSidebarMessages(
+        Array.isArray(result.conversation.messages) ? result.conversation.messages : messages.value.slice(0, directIndex),
+        messages.value,
+      );
       persona.value = result.conversation.persona || persona.value;
       applyModelPayload(result.conversation.model || {});
     } else {
-      messages.value = messages.value.slice(0, directIndex);
+      messages.value = normalizeSidebarMessages(messages.value.slice(0, directIndex), messages.value);
     }
     selectedBlockId.value = null;
     hasPrevBlock.value = true;
@@ -2454,6 +2466,29 @@ function removeOptimisticOwnUserDraftById(draftId: string) {
   messages.value = messages.value.filter((message) => String(message.id || "").trim() !== normalizedDraftId);
 }
 
+function normalizeSidebarMessages(nextMessages: ChatMessage[], previousMessages: ChatMessage[] = messages.value): ChatMessage[] {
+  const previousById = new Map<string, ChatMessage>();
+  for (const message of Array.isArray(previousMessages) ? previousMessages : []) {
+    const messageId = String(message.id || "").trim();
+    if (!messageId || previousById.has(messageId)) continue;
+    previousById.set(messageId, message);
+  }
+
+  const normalized: ChatMessage[] = [];
+  const seenIds = new Set<string>();
+  for (const message of Array.isArray(nextMessages) ? nextMessages : []) {
+    const messageId = String(message.id || "").trim();
+    if (!messageId) {
+      normalized.push(message);
+      continue;
+    }
+    if (seenIds.has(messageId)) continue;
+    seenIds.add(messageId);
+    normalized.push(preserveStableRenderId(message, previousById.get(messageId)));
+  }
+  return normalized;
+}
+
 function replaceOptimisticOwnUserDraftIfNeeded(message: ChatMessage): boolean {
   if (!isLocalOwnUserMessage(message)) return false;
   const draftIndex = messages.value.findIndex((item) => isOptimisticOwnUserDraft(item));
@@ -2489,7 +2524,7 @@ function appendMessages(next: unknown) {
     appended.push(item);
   }
   if (appended.length > 0) {
-    messages.value = [...messages.value, ...appended];
+    messages.value = normalizeSidebarMessages([...messages.value, ...appended]);
   }
 }
 
@@ -2711,6 +2746,7 @@ function registerNotifications() {
     const value = payload as { conversationId?: string; assistantMessage?: ChatMessage };
     if (value.conversationId !== activeConversationId.value) return;
     busy.value = false;
+    streamingAssistantMessageId.value = String(value.assistantMessage?.id || "").trim();
     // 先追加正式消息再清流式状态，避免 Vue 先删草稿再插正式消息导致一帧闪烁。
     if (value.assistantMessage) appendMessages({ conversationId: value.conversationId, message: value.assistantMessage });
     clearStreamingState();

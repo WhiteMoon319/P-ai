@@ -201,6 +201,7 @@ const props = defineProps<{
   toolStatusText: string;
   toolStatusState: "running" | "done" | "failed" | "";
   streamBlocks: AssistantStreamBlock[];
+  streamingAssistantMessageId?: string;
   busy: boolean;
   runtimeState?: string;
   hasPrevBlock: boolean;
@@ -407,11 +408,13 @@ watch(
     props.toolStatusText,
     props.toolStatusState,
     props.streamBlocks,
+    props.streamingAssistantMessageId,
   ] as const,
   () => {
     const next = [...props.messages];
     const text = String(props.streamingText || "");
     const toolStatusText = String(props.toolStatusText || "");
+    const streamingAssistantMessageId = String(props.streamingAssistantMessageId || "").trim();
     const streamBlocks = normalizeAssistantStreamBlocks(props.streamBlocks);
     const blockText = assistantTextFromStreamBlocks(streamBlocks);
     const blockToolCalls = streamBlocksToToolCalls(streamBlocks);
@@ -436,8 +439,12 @@ watch(
         || blockToolCalls.length > 0
         || streamBlocks.length > 0
       );
-      next.push({
-        id: `sidebar-stream-${props.activeConversationId || "conversation"}`,
+      if (!streamingAssistantMessageId) {
+        allMessages.value = next;
+        return;
+      }
+      const projectedMessage: ChatMessage = {
+        id: streamingAssistantMessageId,
         role: "assistant",
         createdAt: streamingDraftCreatedAt.value,
         speakerAgentId: props.activeAgentId || undefined,
@@ -453,7 +460,24 @@ watch(
           _frontendDispatchElapsedMs: Date.now() - streamingDraftStartedAtMs.value,
         },
         toolCall: streamBlocksToToolHistoryEvents(streamBlocks) || [],
-      });
+      };
+      const targetId = String(projectedMessage.id || "").trim();
+      const existingIdx = targetId
+        ? next.findIndex((message) => String(message.id || "").trim() === targetId)
+        : -1;
+      if (existingIdx >= 0) {
+        const previous = next[existingIdx];
+        next[existingIdx] = {
+          ...projectedMessage,
+          createdAt: String(previous?.createdAt || projectedMessage.createdAt || ""),
+          providerMeta: {
+            ...((previous?.providerMeta || {}) as Record<string, unknown>),
+            ...((projectedMessage.providerMeta || {}) as Record<string, unknown>),
+          },
+        };
+      } else {
+        next.push(projectedMessage);
+      }
     } else {
       streamingDraftCreatedAt.value = "";
       streamingDraftStartedAtMs.value = 0;
