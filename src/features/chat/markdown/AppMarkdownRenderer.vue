@@ -1158,15 +1158,21 @@ const MermaidBlock = defineComponent({
     const svgHtml = ref("");
     const error = ref("");
     const copied = ref(false);
+    const renderPending = ref(false);
     const containerRef = ref<HTMLElement | null>(null);
     let renderCount = 0;
+    let renderTimer = 0;
     let copyTimer = 0;
 
     async function renderMermaid() {
-      if (!mermaidProps.code.trim()) {
+      const code = mermaidProps.code.trim();
+      if (!code) {
         svgHtml.value = "";
+        error.value = "";
+        renderPending.value = false;
         return;
       }
+      renderPending.value = true;
       renderCount += 1;
       const currentRender = renderCount;
       try {
@@ -1177,15 +1183,43 @@ const MermaidBlock = defineComponent({
           securityLevel: "strict",
         });
         const id = `ecall-mermaid-${mermaidProps.blockKey}-${currentRender}`;
-        const { svg } = await mermaid.render(id, mermaidProps.code.trim());
+        const { svg } = await mermaid.render(id, code);
         if (currentRender !== renderCount) return;
         svgHtml.value = svg;
         error.value = "";
       } catch (e: any) {
         if (currentRender !== renderCount) return;
-        svgHtml.value = "";
-        error.value = String(e?.message || "Mermaid render error");
+        if (!svgHtml.value) {
+          error.value = String(e?.message || "Mermaid render error");
+        } else {
+          error.value = "";
+          console.warn("[Mermaid] 增量渲染失败，保留上一版图表", e);
+        }
+      } finally {
+        if (currentRender === renderCount) {
+          renderPending.value = false;
+        }
       }
+    }
+
+    function scheduleRenderMermaid() {
+      if (renderTimer) {
+        clearTimeout(renderTimer);
+        renderTimer = 0;
+      }
+      if (!mermaidProps.code.trim()) {
+        renderCount += 1;
+        svgHtml.value = "";
+        error.value = "";
+        renderPending.value = false;
+        return;
+      }
+      renderPending.value = true;
+      const delay = mermaidProps.streaming ? 280 : 40;
+      renderTimer = window.setTimeout(() => {
+        renderTimer = 0;
+        void renderMermaid();
+      }, delay);
     }
 
     async function copyMermaidCode() {
@@ -1204,11 +1238,15 @@ const MermaidBlock = defineComponent({
 
     watch(
       () => [mermaidProps.code, mermaidProps.isDark],
-      () => renderMermaid(),
+      () => scheduleRenderMermaid(),
       { immediate: true },
     );
 
     onBeforeUnmount(() => {
+      if (renderTimer) {
+        clearTimeout(renderTimer);
+        renderTimer = 0;
+      }
       if (copyTimer) {
         clearTimeout(copyTimer);
         copyTimer = 0;
@@ -1228,7 +1266,7 @@ const MermaidBlock = defineComponent({
       if (!svgHtml.value && !error.value) {
         return h("div", { class: "ecall-md-mermaid-shell" }, [
           copyButton,
-          h("pre", { class: "ecall-md-math-fallback" }, [h("code", null, mermaidProps.code)]),
+          h("div", { class: "ecall-md-mermaid-loading" }, t("chat.statusPreparingMessage")),
         ]);
       }
       if (error.value) {
@@ -1242,7 +1280,7 @@ const MermaidBlock = defineComponent({
         copyButton,
         h("div", {
           ref: containerRef,
-          class: "ecall-md-mermaid-block",
+          class: ["ecall-md-mermaid-block", renderPending.value ? "ecall-md-mermaid-block-buffering" : ""],
           innerHTML: svgHtml.value,
         }),
       ]);
@@ -1748,6 +1786,11 @@ ul.ecall-md-list {
   overflow-x: auto;
   padding-right: 2.2rem;
   text-align: center;
+  transition: opacity 120ms ease;
+}
+
+.ecall-md-mermaid-block-buffering {
+  opacity: 0.82;
 }
 
 .ecall-md-mermaid-block svg {
@@ -1757,7 +1800,11 @@ ul.ecall-md-list {
 
 .ecall-md-mermaid-loading {
   margin: 0.35rem 0;
-  padding: 0.5rem;
+  min-height: 3.5rem;
+  padding: 1.1rem 2.2rem 1.1rem 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   color: color-mix(in srgb, currentColor 55%, transparent);
   font-size: 0.82rem;
