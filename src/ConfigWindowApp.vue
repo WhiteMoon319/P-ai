@@ -507,6 +507,7 @@ const {
 } = useConfigCore({
   config,
   textCapableApiConfigs,
+  t,
 });
 
 const {

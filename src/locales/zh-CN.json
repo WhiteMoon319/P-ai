@@ -133,7 +133,7 @@
       "protocolAuto": "Auto（按模型名）",
       "reasoningEffort": "思维强度",
       "googleReasoningEffort": "Google 思维强度",
-      "reasoningOff": "无",
+      "reasoningOff": "不思考",
       "reasoningLow": "低",
       "reasoningMedium": "中",
       "reasoningHigh": "高",

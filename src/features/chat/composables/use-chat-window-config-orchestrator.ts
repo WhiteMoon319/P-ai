@@ -8,6 +8,7 @@ export function useChatWindowConfigOrchestrator(bindings: Record<string, any>) {
   const configCore = useConfigCore({
     config: bindings.config,
     textCapableApiConfigs: configDerived.textCapableApiConfigs,
+    t: bindings.t,
   });
   const configUi = useChatConfigUiDerivedState({
     config: bindings.config,

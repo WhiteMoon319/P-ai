@@ -31,6 +31,7 @@ function normalizeWebAccessPort(value: unknown): number {
 type UseConfigCoreOptions = {
   config: AppConfig;
   textCapableApiConfigs: ComputedRef<ApiConfigItem[]>;
+  t?: (key: string, params?: Record<string, unknown>) => string;
 };
 
 export function useConfigCore(options: UseConfigCoreOptions) {
@@ -39,6 +40,27 @@ export function useConfigCore(options: UseConfigCoreOptions) {
   const DEFAULT_CODEX_AUTH_MODE = "read_local";
   const DEFAULT_CODEX_LOCAL_AUTH_PATH = "~/.codex/auth.json";
   const DEFAULT_REASONING_EFFORT = "medium";
+
+  function reasoningEffortDisplayLabel(value: string): string {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (normalized === "none" || normalized === "minimal") {
+      return options.t ? options.t("config.api.reasoningOff") : "不思考";
+    }
+    if (normalized === "low") {
+      return options.t ? options.t("config.api.reasoningLow") : "低";
+    }
+    if (normalized === "high") {
+      return options.t ? options.t("config.api.reasoningHigh") : "高";
+    }
+    if (normalized === "xhigh") {
+      return options.t ? options.t("config.api.reasoningXHigh") : "极高";
+    }
+    return options.t ? options.t("config.api.reasoningMedium") : "中";
+  }
+
+  function apiConfigDisplayName(providerName: string, modelValue: string, reasoningEffort: string): string {
+    return `${providerName}/${modelValue} · ${reasoningEffortDisplayLabel(reasoningEffort)}`;
+  }
 
   function toFiniteMaxOutputTokens(value: unknown): number {
     const parsed = Number(value);
@@ -108,9 +130,10 @@ export function useConfigCore(options: UseConfigCoreOptions) {
   function createApiConfig(seed = Date.now().toString()): ApiConfigItem {
     const provider = createApiProvider(seed);
     const model = provider.models[0];
+    const reasoningEffort = String(model.reasoningEffort || DEFAULT_REASONING_EFFORT).trim() || DEFAULT_REASONING_EFFORT;
     return {
       id: `${provider.id}::${model.id}`,
-      name: `${provider.name}/${model.model}`,
+      name: apiConfigDisplayName(provider.name, model.model, reasoningEffort),
       requestFormat: normalizeApiRequestFormat(provider.requestFormat),
       allowConcurrentRequests: !!provider.allowConcurrentRequests,
       maxConcurrentRequests: provider.maxConcurrentRequests ?? null,
@@ -247,9 +270,10 @@ export function useConfigCore(options: UseConfigCoreOptions) {
         if (model.deprecated) continue;
         const modelValue = String(model.model || "").trim();
         if (!modelValue) continue;
+        const reasoningEffort = String(model.reasoningEffort || DEFAULT_REASONING_EFFORT).trim() || DEFAULT_REASONING_EFFORT;
         nextApiConfigs.push({
           id: `${provider.id}::${model.id}`,
-          name: `${providerName}/${modelValue}`,
+          name: apiConfigDisplayName(providerName, modelValue, reasoningEffort),
           requestFormat: normalizeApiRequestFormat(provider.requestFormat),
           allowConcurrentRequests: !!provider.allowConcurrentRequests,
           maxConcurrentRequests: provider.maxConcurrentRequests ?? null,
@@ -264,7 +288,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
           codexAuthMode: normalizeCodexAuthMode(provider.codexAuthMode),
           codexLocalAuthPath: String(provider.codexLocalAuthPath || DEFAULT_CODEX_LOCAL_AUTH_PATH).trim() || DEFAULT_CODEX_LOCAL_AUTH_PATH,
           model: modelValue,
-          reasoningEffort: String(model.reasoningEffort || DEFAULT_REASONING_EFFORT).trim() || DEFAULT_REASONING_EFFORT,
+          reasoningEffort,
           temperature: Number(model.temperature ?? 1),
           customTemperatureEnabled: !!model.customTemperatureEnabled,
           contextWindowTokens: Math.round(Number(model.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS)),
@@ -280,9 +304,12 @@ export function useConfigCore(options: UseConfigCoreOptions) {
         ? provider.tools.map((tool) => ({ ...tool, args: [...(tool.args || [])], values: { ...(tool.values || {}) } }))
         : [];
       const providerApiKey = Array.isArray(provider.apiKeys) ? (provider.apiKeys[0] || "") : "";
+      const providerName = String(provider.name || "").trim() || provider.id;
+      const modelValue = String(model.model || "").trim();
+      const reasoningEffort = String(model.reasoningEffort || DEFAULT_REASONING_EFFORT).trim() || DEFAULT_REASONING_EFFORT;
       nextApiConfigs.push({
         id: `${provider.id}::${model.id}`,
-        name: `${provider.name}/${model.model}`,
+        name: apiConfigDisplayName(providerName, modelValue, reasoningEffort),
         requestFormat: normalizeApiRequestFormat(provider.requestFormat),
         allowConcurrentRequests: !!provider.allowConcurrentRequests,
         maxConcurrentRequests: provider.maxConcurrentRequests ?? null,
@@ -300,8 +327,8 @@ export function useConfigCore(options: UseConfigCoreOptions) {
         codexCustomApiKey: String(provider.codexCustomApiKey || "").trim() || undefined,
         codexOriginator: String(provider.codexOriginator || "").trim() || undefined,
         codexResidencyRequirement: String(provider.codexResidencyRequirement || "").trim() || undefined,
-        model: model.model,
-        reasoningEffort: String(model.reasoningEffort || DEFAULT_REASONING_EFFORT).trim() || DEFAULT_REASONING_EFFORT,
+        model: modelValue,
+        reasoningEffort,
         temperature: Number(model.temperature ?? 1),
         customTemperatureEnabled: !!model.customTemperatureEnabled,
         contextWindowTokens: Math.round(Number(model.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS)),

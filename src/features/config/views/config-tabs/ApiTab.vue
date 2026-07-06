@@ -206,7 +206,7 @@
               <div class="flex items-center gap-2">
                 <select v-model="connectionTestModelId" class="select select-bordered select-sm flex-1">
                   <option v-for="m in (selectedProvider.models || []).filter((item) => !item.deprecated)" :key="m.id" :value="m.id">
-                    {{ m.model || t('config.api.unnamedModel') }}
+                    {{ modelDisplayLabel(selectedProvider, m) }}
                   </option>
                 </select>
                 <button class="btn btn-sm" type="button"
@@ -265,8 +265,7 @@
                   <div class="card-body gap-3 p-4">
                     <div class="flex items-start justify-between gap-2">
                       <button class="min-w-0 flex-1 text-left" type="button" @click="selectModelCard(modelCard.id)">
-                        <div class="card-title text-base mb-1">{{ `${selectedProvider.name ||
-                          selectedProvider.id}/${modelCard.model || t("config.api.unnamedModel")}` }}</div>
+                        <div class="card-title text-base mb-1">{{ modelDisplayLabel(selectedProvider, modelCard) }}</div>
                       </button>
                       <button class="btn btn-sm btn-square btn-ghost" type="button"
                         :class="activeModelCount(selectedProvider) <= 1 ? 'text-base-content/30' : 'text-error'"
@@ -719,6 +718,38 @@ function firstActiveModel(provider: ApiProviderConfigItem | null | undefined): A
 function activeModelCount(provider: ApiProviderConfigItem | null | undefined): number {
   if (!provider) return 0;
   return (provider.models || []).filter((model) => !isModelDeprecated(model)).length;
+}
+
+function reasoningEffortDisplayLabel(value: string): string {
+  switch (String(value || "").trim().toLowerCase()) {
+    case "none":
+    case "minimal":
+      return t("config.api.reasoningOff");
+    case "low":
+      return t("config.api.reasoningLow");
+    case "high":
+      return t("config.api.reasoningHigh");
+    case "xhigh":
+      return t("config.api.reasoningXHigh");
+    case "medium":
+    default:
+      return t("config.api.reasoningMedium");
+  }
+}
+
+function modelDisplayLabel(
+  provider: ApiProviderConfigItem | null | undefined,
+  model: ApiModelConfigItem | null | undefined,
+): string {
+  const providerLabel = String(provider?.name || provider?.id || "").trim();
+  const modelLabel = String(model?.model || "").trim() || t("config.api.unnamedModel");
+  const reasoningLabel = reasoningEffortDisplayLabel(
+    provider && model
+      ? normalizedModelReasoningEffort(provider, model)
+      : String(model?.reasoningEffort || DEFAULT_REASONING_EFFORT),
+  );
+  if (!providerLabel) return `${modelLabel} · ${reasoningLabel}`;
+  return `${providerLabel}/${modelLabel} · ${reasoningLabel}`;
 }
 
 const providerList = computed(() => props.config.apiProviders || []);
