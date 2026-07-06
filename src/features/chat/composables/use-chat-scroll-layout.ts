@@ -1,5 +1,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Ref, watch } from "vue";
 
+const TODO_DROPDOWN_SAFE_GAP = 30;
+
 type UseChatScrollLayoutOptions = {
   activeConversationId: Ref<string>;
   chatting: Ref<boolean>;
@@ -58,7 +60,7 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
       - parseFloat(scrollStyles.paddingTop || "0")
       - parseFloat(scrollStyles.paddingBottom || "0");
     const toolbarHeight = toolbarContainer.value?.offsetHeight ?? 0;
-    const nextMinHeight = Math.max(0, scrollViewportHeight - toolbarHeight);
+    const nextMinHeight = Math.max(0, scrollViewportHeight - toolbarHeight - TODO_DROPDOWN_SAFE_GAP);
     if (latestOwnElasticMinHeight.value !== nextMinHeight) {
       latestOwnElasticMinHeight.value = nextMinHeight;
     }
