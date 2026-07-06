@@ -5,6 +5,7 @@
 
 ## 最近版本
 
+- [v0.18.6](docs/changelog/releases/v0.18.6.md) - Mermaid 图表新增复制按钮，便于直接复用生成内容。
 - [v0.18.5](docs/changelog/releases/v0.18.5.md) - 聊天消息视图接入自研气泡组件，固定用户/助理消息样式并移除右键隐藏气泡入口。
 - [v0.18.4](docs/changelog/releases/v0.18.4.md) - 修复便携版自动更新后旧 helper、staging、zip 和计划文件残留在更新临时目录的问题。
 - [v0.18.3](docs/changelog/releases/v0.18.3.md) - 会话列表分组新增旧会话渐进加载策略：默认隐藏 7 天未使用的旧会话、每组至少保留 5 条，并支持“加载更多”逐步展开。
