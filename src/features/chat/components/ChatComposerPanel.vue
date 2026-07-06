@@ -37,7 +37,7 @@
       <button
         type="button"
         class="btn btn-sm gap-2"
-        :disabled="chatting || frozen || busy"
+        :disabled="frozen || busy"
         @click="emit('openDelegateSelection')"
       >
         <ClipboardList class="h-3.5 w-3.5" />
@@ -46,7 +46,7 @@
       <button
         type="button"
         class="btn btn-sm gap-2"
-        :disabled="chatting || frozen || busy"
+        :disabled="frozen || busy"
         @click="emit('openTaskCreate')"
       >
         <CalendarPlus class="h-3.5 w-3.5" />
@@ -55,7 +55,7 @@
       <button
         type="button"
         class="btn btn-sm gap-2"
-        :disabled="chatting || frozen || busy"
+        :disabled="frozen || busy"
         @click="openCreateConversationDialog"
       >
         <Plus class="h-3.5 w-3.5" />
@@ -66,7 +66,7 @@
       <button
         type="button"
         class="btn btn-sm gap-2"
-        :disabled="chatting || frozen || busy"
+        :disabled="frozen || busy"
         @click="emit('openTaskCreate')"
       >
         <CalendarPlus class="h-3.5 w-3.5" />
@@ -273,7 +273,7 @@
           <button
             v-if="!sidebarMode"
             class="btn btn-sm btn-circle btn-ghost shrink-0"
-            :disabled="chatting || frozen"
+            :disabled="frozen"
             :title="t('chat.command')"
             @click="toggleInstructionPanel"
           >
@@ -282,7 +282,7 @@
           <button
             v-if="!sidebarMode"
             class="btn btn-sm btn-circle btn-ghost shrink-0"
-            :disabled="chatting || frozen"
+            :disabled="frozen"
             :title="t('chat.attach')"
             @click="emit('pickAttachments')"
           >
@@ -292,7 +292,7 @@
             v-if="!sidebarMode"
             class="btn btn-sm btn-circle shrink-0"
             :class="recording ? 'btn-error' : 'btn-ghost'"
-            :disabled="!canRecord || chatting || frozen"
+            :disabled="!canRecord || frozen"
             :title="recording ? t('chat.recording', { seconds: Math.max(1, Math.round(recordingMs / 1000)) }) : t('chat.holdRecord', { hotkey: recordHotkey })"
             @mousedown.prevent="emit('startRecording')"
             @mouseup.prevent="emit('stopRecording')"
@@ -492,6 +492,11 @@ const bridgeSubscribe = computed(() => props.bridgeSubscribe);
 const queueEnabled = computed(() => !sidebarMode.value || typeof bridgeRequest.value === "function");
 const systemNotificationMode = computed(() => !!props.systemNotificationMode);
 const remoteContactMode = computed(() => !!props.remoteContactMode);
+
+// Product rule: an in-flight assistant reply must not lock the input toolbar.
+// Users can keep typing while streaming, so do not use `chatting` as the disabled
+// condition for attach/record/command/task/delegate actions. Only gate on real
+// hard blockers such as frozen state, explicit busy flows, permissions, or action-specific prerequisites.
 const teleportTheme = computed(() => {
   if (typeof document !== "undefined" && document.documentElement.getAttribute("data-host") === "vscode") {
     return undefined;
