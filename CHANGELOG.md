@@ -5,6 +5,7 @@
 
 ## 最近版本
 
+- [v0.18.7](docs/changelog/releases/v0.18.7.md) - 修复（read-media-multimodal-routing）：`read_media` 不再按模型名或协议白名单拒绝已选中的多模态模型；只要配置页已允许绑定并开启图片/音视频能力，就允许执行媒体解析，避免 `doubao-seed-2.0-mini` 等模型出现“能选不能用”的致命错判。
 - [v0.18.6](docs/changelog/releases/v0.18.6.md) - Mermaid 图表新增复制按钮，便于直接复用生成内容。
 - [v0.18.5](docs/changelog/releases/v0.18.5.md) - 聊天消息视图接入自研气泡组件，固定用户/助理消息样式并移除右键隐藏气泡入口。
 - [v0.18.4](docs/changelog/releases/v0.18.4.md) - 修复便携版自动更新后旧 helper、staging、zip 和计划文件残留在更新临时目录的问题。
