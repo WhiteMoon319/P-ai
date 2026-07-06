@@ -1292,6 +1292,7 @@
       "runningTool": "Tool",
       "thinking": "Thinking",
       "requesting": "Thinking",
+      "notThought": "No thinking",
       "thinkingAndTools": "Thinking & Tools",
       "toolDone": "Tool done",
       "toolRunning": "Tool running",

@@ -1221,6 +1221,7 @@
       "runningTool": "工具",
       "thinking": "思考中",
       "requesting": "思考中",
+      "notThought": "未思考",
       "thinkingAndTools": "思考与工具",
       "toolDone": "工具执行毕",
       "toolRunning": "工具执行中",

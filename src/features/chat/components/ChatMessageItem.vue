@@ -47,12 +47,13 @@
       :bubble-background="assistantBubbleBackgroundEnabled"
       :content-empty="bubbleContentEmpty(block)"
     >
-      <template v-if="showActivityPanel(block)" #activity>
+      <template v-if="showActivitySummary(block)" #activity>
         <div
           v-memo="activityPanelMemoKey(block)"
           class="flex flex-col opacity-90"
         >
           <details
+            v-if="showActivityPanel(block)"
             ref="activityDetailsRef"
             class="collapse rounded-none min-w-55"
             :open="activityPanelOpen(block)"
@@ -134,6 +135,12 @@
               </div>
             </div>
           </details>
+          <div
+            v-else
+            class="-ml-2 inline-flex w-fit items-center rounded-full bg-base-200/70 px-2 py-0.5 text-[12px] leading-5 text-base-content/45"
+          >
+            {{ t('chat.messageItem.notThought') }}
+          </div>
         </div>
       </template>
 
@@ -812,7 +819,19 @@ function toolCallsForBlock(block: ChatMessageBlock): Array<{ name: string; argsT
 
 function showActivityPanel(block: ChatMessageBlock): boolean {
   if (isOwnMessage(block)) return false;
-  return block.activityItems.length > 0 || !!block.activityRunning;
+  return !!block.activityRunning || block.activityItems.some((item) => hasExpandableActivityItem(item));
+}
+
+function showActivitySummary(block: ChatMessageBlock): boolean {
+  if (isOwnMessage(block)) return false;
+  if (showActivityPanel(block)) return true;
+  return !block.isStreaming;
+}
+
+function hasExpandableActivityItem(item: ChatActivityItem): boolean {
+  if (item.kind === "reasoning") return !!String(item.text || "").trim();
+  if (item.kind === "tool") return !!String(item.name || item.argsText || item.resultText || "").trim();
+  return false;
 }
 
 function resolvedActivityItems(block: ChatMessageBlock): ChatActivityItem[] {
