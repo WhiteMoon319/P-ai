@@ -425,7 +425,10 @@ async fn onebot_resolve_inbound_media(
                                     relative_path: relative_path.clone(),
                                     mime: mime.clone(),
                                 });
-                                notices.push(build_attachment_notice_text("", &relative_path));
+                                notices.push(build_attachment_notice_text(
+                                    attachments.len().saturating_sub(1),
+                                    &relative_path,
+                                ));
                             }
                             Err(save_err) => {
                                 eprintln!(

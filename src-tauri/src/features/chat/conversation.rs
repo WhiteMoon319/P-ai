@@ -1386,7 +1386,15 @@ fn build_llm_image_input_fallback_notice(
         .map(str::trim)
         .filter(|value| !value.is_empty());
     if let Some(path) = trimmed_path {
-        return build_attachment_notice_text(label, path);
+        let trimmed_label = label.trim();
+        if trimmed_label.is_empty() {
+            return build_attachment_notice_text(0, path);
+        }
+        return format!(
+            "[附件：{}]\npath: {}",
+            trimmed_label,
+            assistant_space_display_path(path)
+        );
     }
     format!(
         "[系统提示] {label} 未能作为图片输入提供给模型，原因：{trimmed_reason}。\n请按普通附件处理该文件，必要时改用 shell 或 read 读取。"
@@ -1703,18 +1711,11 @@ fn render_message_content_for_model(message: &ChatMessage) -> String {
                 chunks.push(lines.join("\n"));
             }
         }
-        if let Some(attachments) = meta.get("attachments").and_then(Value::as_array) {
-            for item in attachments {
-                let relative_path = item
-                    .get("relativePath")
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    .unwrap_or("");
-                if relative_path.is_empty() {
-                    continue;
-                }
-                chunks.push(build_attachment_notice_text("", relative_path));
-            }
+        for (index, relative_path) in provider_meta_attachment_relative_paths(meta)
+            .iter()
+            .enumerate()
+        {
+            chunks.push(build_attachment_notice_text(index, relative_path));
         }
     }
     chunks.join(" | ")
@@ -2163,21 +2164,73 @@ fn prompt_user_extra_blocks_for_message(
         blocks.push(extra);
     }
     if let Some(meta) = message.provider_meta.as_ref() {
-        if let Some(attachments) = meta.get("attachments").and_then(Value::as_array) {
-            for item in attachments {
-                let relative_path = item
-                    .get("relativePath")
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    .unwrap_or("");
-                if relative_path.is_empty() {
-                    continue;
-                }
-                blocks.push(build_attachment_notice_text("", relative_path));
-            }
+        for (index, relative_path) in provider_meta_attachment_relative_paths(meta)
+            .iter()
+            .enumerate()
+        {
+            blocks.push(build_attachment_notice_text(index, relative_path));
         }
     }
     blocks
+}
+
+#[cfg(test)]
+mod prompt_user_extra_attachment_tests {
+    use super::*;
+
+    #[test]
+    fn prompt_user_extra_blocks_should_include_all_attachment_notices() {
+        let message = ChatMessage {
+            id: "user-a".to_string(),
+            role: "user".to_string(),
+            created_at: now_iso(),
+            speaker_agent_id: None,
+            parts: vec![MessagePart::Text {
+                text: "这是什么".to_string(),
+                reasoning_content: None,
+            }],
+            extra_text_blocks: Vec::new(),
+            provider_meta: Some(serde_json::json!({
+                "attachments": [
+                    {
+                        "fileName": "image.png",
+                        "relativePath": "downloads/image.png",
+                        "mime": "image/png"
+                    },
+                    {
+                        "fileName": "notes.txt",
+                        "relativePath": "downloads/notes.txt",
+                        "mime": "text/plain"
+                    }
+                ]
+            })),
+            tool_call: None,
+            mcp_call: None,
+            meme_annotations: None,
+        };
+        let mut seen_memory_ids = HashSet::new();
+
+        let blocks = prompt_user_extra_blocks_for_message(
+            None,
+            None,
+            &message,
+            &[],
+            "",
+            "",
+            false,
+            None,
+            &mut seen_memory_ids,
+            false,
+        );
+
+        assert_eq!(
+            blocks,
+            vec![
+                "[附件#1]\npath: {Assistant Space}/downloads/image.png".to_string(),
+                "[附件#2]\npath: {Assistant Space}/downloads/notes.txt".to_string(),
+            ]
+        );
+    }
 }
 
 fn provider_meta_message_kind(message: &ChatMessage) -> Option<String> {

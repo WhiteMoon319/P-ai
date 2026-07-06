@@ -36,7 +36,7 @@ fn dingtalk_push_normalized_image_or_attachment(
                         relative_path: relative_path.clone(),
                         mime: mime.to_string(),
                     });
-                    Some(build_attachment_notice_text("", &relative_path))
+                    Some(build_attachment_notice_text(0, &relative_path))
                 }
                 Err(save_err) => {
                     eprintln!(

@@ -520,10 +520,6 @@ fn prepared_prompt_latest_user_text_blocks_for_json(prepared: &PreparedPrompt) -
         }
     }
     blocks.extend(prepared_prompt_latest_user_extra_blocks(prepared));
-    blocks.extend(prepared_binary_payload_source_blocks(
-        "image",
-        &prepared.latest_images,
-    ));
     blocks
 }
 
@@ -598,12 +594,6 @@ fn prepared_prompt_to_messages_json(prepared: &PreparedPrompt) -> Vec<Value> {
                 content.push(serde_json::json!({
                     "type": "text",
                     "text": block,
-                }));
-            }
-            for source_block in prepared_binary_payload_source_blocks("image", &hm.images) {
-                content.push(serde_json::json!({
-                    "type": "text",
-                    "text": source_block,
                 }));
             }
             for image in &hm.images {

@@ -568,8 +568,8 @@ fn recent_user_image_fallback_plan(prepared: &PreparedPrompt) -> (Vec<bool>, boo
         .saturating_sub(usize::from(latest_user_in_window));
     let mut history_in_window = vec![false; prepared.history_messages.len()];
 
-    // 远程联系人可能连续刷大量图片。多模态图片回退按“最近用户消息条数”限流：
-    // 最新消息优先占 1 条，历史消息再从后向前补齐，旧图片只保留路径引用。
+    // 远程联系人可能连续刷大量图片。图片转文按“最近用户消息条数”限流；
+    // 附件路径由统一附件提示负责，这里只决定哪些图片需要额外转文。
     for (idx, message) in prepared.history_messages.iter().enumerate().rev() {
         if message.role.trim() != "user" {
             continue;
@@ -584,21 +584,84 @@ fn recent_user_image_fallback_plan(prepared: &PreparedPrompt) -> (Vec<bool>, boo
     (history_in_window, latest_user_in_window)
 }
 
-fn image_reference_block_for_fallback(index: usize, image: &PreparedBinaryPayload) -> String {
-    let reference = image
+fn collect_payload_attachment_meta_entries(payload: &ChatInputPayload) -> Vec<Value> {
+    let entries = normalize_payload_attachments(payload.attachments.as_ref());
+    if !entries.is_empty() {
+        return entries;
+    }
+    let mut entries = normalize_payload_image_attachments(payload.images.as_ref());
+    entries.extend(
+        payload
+            .audios
+            .as_ref()
+            .into_iter()
+            .flatten()
+            .filter_map(|audio| {
+                let relative_path = audio
+                    .saved_path
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(|value| value.replace('\\', "/"))?;
+                let file_name = std::path::Path::new(&relative_path)
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or("attachment")
+                    .to_string();
+                Some(serde_json::json!({
+                    "fileName": file_name,
+                    "relativePath": relative_path,
+                    "mime": audio.mime.trim(),
+                }))
+            }),
+    );
+    entries
+}
+
+fn collect_payload_attachment_relative_paths(payload: &ChatInputPayload) -> Vec<String> {
+    collect_payload_attachment_meta_entries(payload)
+        .into_iter()
+        .filter_map(|item| {
+            item.get("relativePath")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+        })
+        .collect()
+}
+
+fn image_attachment_reference_label(
+    payload: &ChatInputPayload,
+    image: &BinaryPart,
+    image_index: usize,
+) -> String {
+    let saved_path = image
         .saved_path
         .as_deref()
         .map(str::trim)
-        .filter(|path| !path.is_empty())
-        .map(|path| format!("路径：{path}"))
-        .unwrap_or_else(|| {
-            format!(
-                "路径：未保存；mime={}；base64_chars={}",
-                image.mime,
-                image.content.len()
-            )
-        });
-    format!("[图片{}]\n{}", index + 1, reference)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.replace('\\', "/"));
+    if let Some(saved_path) = saved_path {
+        for (index, item) in collect_payload_attachment_meta_entries(payload).iter().enumerate() {
+            let relative_path = item
+                .get("relativePath")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(|value| value.replace('\\', "/"));
+            if relative_path.as_deref() == Some(saved_path.as_str()) {
+                return format!("附件#{}", index + 1);
+            }
+        }
+    }
+    format!("图片#{}", image_index + 1)
+}
+
+fn image_description_block(label: &str, text: &str) -> String {
+    format!("[{} 图片转文]\n{}", label.trim(), text.trim())
 }
 
 async fn apply_prompt_image_fallbacks_to_prepared(
@@ -639,13 +702,6 @@ async fn apply_prompt_image_fallbacks_to_prepared(
             .copied()
             .unwrap_or(false)
         {
-            converted_blocks.extend(
-                original_images
-                    .iter()
-                    .enumerate()
-                    .map(|(index, image)| image_reference_block_for_fallback(index, image)),
-            );
-            message.extra_text_blocks.extend(converted_blocks);
             changed = true;
             continue;
         }
@@ -664,13 +720,16 @@ async fn apply_prompt_image_fallbacks_to_prepared(
             )
             .await?
             {
-                converted_blocks.push(format!("[图片{}]\n{}", index + 1, text));
+                converted_blocks.push(image_description_block(
+                    &format!("图片#{}", index + 1),
+                    &text,
+                ));
             }
         }
         if !converted_blocks.is_empty() {
             message.extra_text_blocks.extend(converted_blocks);
-            changed = true;
         }
+        changed = true;
     }
 
     if !prepared.latest_images.is_empty() {
@@ -691,21 +750,17 @@ async fn apply_prompt_image_fallbacks_to_prepared(
                 )
                 .await?
                 {
-                    converted_blocks.push(format!("[图片{}]\n{}", index + 1, text));
+                    converted_blocks.push(image_description_block(
+                        &format!("图片#{}", index + 1),
+                        &text,
+                    ));
                 }
             }
-        } else {
-            converted_blocks.extend(
-                original_images
-                    .iter()
-                    .enumerate()
-                    .map(|(index, image)| image_reference_block_for_fallback(index, image)),
-            );
         }
         if !converted_blocks.is_empty() {
             prepared_prompt_append_latest_user_extra_blocks(prepared, &converted_blocks);
-            changed = true;
         }
+        changed = true;
     }
 
     Ok(changed)
@@ -2668,28 +2723,6 @@ async fn send_chat_message_inner(
     }
 
     let mut effective_payload = input.payload.clone();
-    let extra_block_count = effective_payload
-        .extra_text_blocks
-        .as_ref()
-        .map(|v| v.len())
-        .unwrap_or(0);
-    let attachment_count = effective_payload
-        .attachments
-        .as_ref()
-        .map(|v| v.len())
-        .unwrap_or(0);
-    if extra_block_count > 0 {
-        eprintln!(
-            "[CHAT][ATTACHMENT] payload carries extra_text_blocks: count={}",
-            extra_block_count
-        );
-    }
-    if attachment_count > 0 {
-        eprintln!(
-            "[CHAT][ATTACHMENT] payload carries attachments json: count={}",
-            attachment_count
-        );
-    }
     let audios = effective_payload.audios.clone().unwrap_or_default();
     if !audios.is_empty() {
         return Err("当前版本仅支持本地语音识别，发送消息不支持语音附件。".to_string());
@@ -2697,18 +2730,7 @@ async fn send_chat_message_inner(
     if !trigger_only {
         let images = effective_payload.images.clone().unwrap_or_default();
         if !images.is_empty() {
-            let notices = persist_payload_images_to_workspace_downloads(&state, &images);
-            if !notices.is_empty() {
-                let notice_text = notices.join("\n\n");
-                let merged_text = effective_payload
-                    .text
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|v| !v.is_empty())
-                    .map(|text| format!("{text}\n\n{notice_text}"))
-                    .unwrap_or(notice_text);
-                effective_payload.text = Some(merged_text);
-            }
+            let _ = persist_payload_images_to_workspace_downloads(&state, &images);
         }
     }
 
@@ -2729,13 +2751,15 @@ async fn send_chat_message_inner(
                 let mut converted_texts = Vec::<String>::new();
                 for (idx, image) in images.iter().enumerate() {
                     let hash = compute_image_hash_hex(image)?;
+                    let image_label =
+                        image_attachment_reference_label(&input.payload, image, idx);
                     let cached = {
                         let runtime = state_read_runtime_state_cached(&state)?;
                         find_runtime_image_text_cache(&runtime, &hash, &vision_api.id)
                     };
 
                     if let Some(text) = cached {
-                        let mapped = format!("[图片{}]\n{}", idx + 1, text);
+                        let mapped = image_description_block(&image_label, &text);
                         converted_texts.push(mapped);
                         continue;
                     }
@@ -2752,7 +2776,7 @@ async fn send_chat_message_inner(
                     let mapped = if let Some(existing) =
                         find_runtime_image_text_cache(&runtime, &hash, &vision_api.id)
                     {
-                        format!("[图片{}]\n{}", idx + 1, existing)
+                        image_description_block(&image_label, &existing)
                     } else {
                         upsert_runtime_image_text_cache(
                             &mut runtime,
@@ -2761,7 +2785,7 @@ async fn send_chat_message_inner(
                             &converted,
                         );
                         state_write_runtime_state_cached(&state, &runtime)?;
-                        format!("[图片{}]\n{}", idx + 1, converted)
+                        image_description_block(&image_label, &converted)
                     };
                     converted_texts.push(mapped);
                 }
@@ -2779,23 +2803,16 @@ async fn send_chat_message_inner(
                 }
                 effective_payload.images = None;
             } else {
-                eprintln!(
-                    "[CHAT] Image input filtered out because current chat API does not support image and no vision fallback is configured."
-                );
-                let filtered_notice = match app_config.ui_language.trim() {
-                    "en-US" => "[SYSTEM NOTICE] Image attachment was filtered out: current model has image input disabled and no vision fallback model is configured.",
-                    "zh-TW" => "[系統提示] 已過濾圖片附件：當前模型未啟用圖片輸入，且未配置視覺回退模型。",
-                    _ => "[系统提示] 已过滤图片附件：当前模型未启用图片输入，且未配置视觉回退模型。",
-                };
-                let merged_text = effective_payload
-                    .text
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|v| !v.is_empty())
-                    .map(|text| format!("{text}\n\n{filtered_notice}"))
-                    .unwrap_or_else(|| filtered_notice.to_string());
-                effective_payload.text = Some(merged_text);
                 effective_payload.images = None;
+            }
+            if effective_payload
+                .text
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .is_none()
+            {
+                effective_payload.text = Some(" ".to_string());
             }
         }
     }
@@ -2928,7 +2945,7 @@ async fn send_chat_message_inner(
                 ),
             );
             externalize_message_parts_to_media_refs(&mut user_parts, &state.data_path)?;
-            let attachment_meta = normalize_payload_attachments(input.payload.attachments.as_ref());
+            let attachment_meta = collect_payload_attachment_meta_entries(&input.payload);
             let mut user_provider_meta = merge_provider_meta_with_attachments(
                 input.payload.provider_meta.clone(),
                 &attachment_meta,
@@ -3108,16 +3125,11 @@ async fn send_chat_message_inner(
             .ok_or_else(|| format!("执行部门不存在：department_id={effective_department_id}"))?;
         let todo_enabled =
             tool_enabled(&selected_api, &current_agent, Some(current_department), "todo");
-        let attachment_relative_paths = normalize_payload_attachments(input.payload.attachments.as_ref())
-            .into_iter()
-            .filter_map(|item| {
-                item.get("relativePath")
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .map(ToOwned::to_owned)
-            })
-            .collect::<Vec<_>>();
+        let attachment_relative_paths = if persist_user_message {
+            Vec::new()
+        } else {
+            collect_payload_attachment_relative_paths(&input.payload)
+        };
         let chat_overrides = ChatPromptOverrides {
             executor_department_id: Some(effective_department_id.clone()),
             latest_user_intent: Some(LatestUserPayloadIntent::ChatRequest {
@@ -4542,20 +4554,6 @@ mod core_send_inner_tests {
     }
 
     #[test]
-    fn image_reference_block_for_fallback_should_preserve_saved_path() {
-        let image = PreparedBinaryPayload {
-            mime: "image/png".to_string(),
-            content: B64.encode(b"old-image"),
-            saved_path: Some("downloads/old.png".to_string()),
-        };
-
-        assert_eq!(
-            image_reference_block_for_fallback(0, &image),
-            "[图片1]\n路径：downloads/old.png"
-        );
-    }
-
-    #[test]
     fn prepend_required_chat_api_id_should_move_id_to_front() {
         let app_config = AppConfig {
             api_configs: vec![test_chat_api("text-a", false), test_chat_api("vision-b", true)],
@@ -5195,5 +5193,192 @@ mod core_send_inner_tests {
         assert_eq!(images[0].mime, "image/webp");
         assert_eq!(images[0].content, B64.encode(b"normalized-webp"));
         assert_eq!(images[0].saved_path.as_deref(), Some("downloads/source.png"));
+    }
+
+    #[test]
+    fn collect_payload_attachment_relative_paths_should_use_attachment_meta_as_authority() {
+        let payload = ChatInputPayload {
+            text: Some("test".to_string()),
+            display_text: None,
+            images: Some(vec![BinaryPart {
+                mime: "image/png".to_string(),
+                bytes_base64: B64.encode(b"img"),
+                saved_path: Some("downloads/source.png".to_string()),
+            }]),
+            audios: None,
+            attachments: Some(vec![
+                AttachmentMetaInput {
+                    file_name: "report.pdf".to_string(),
+                    relative_path: "downloads/report.pdf".to_string(),
+                    mime: "application/pdf".to_string(),
+                },
+                AttachmentMetaInput {
+                    file_name: "source.png".to_string(),
+                    relative_path: "downloads/source.png".to_string(),
+                    mime: "image/png".to_string(),
+                },
+            ]),
+            model: None,
+            extra_text_blocks: None,
+            mentions: None,
+            provider_meta: None,
+        };
+
+        assert_eq!(
+            collect_payload_attachment_relative_paths(&payload),
+            vec![
+                "downloads/report.pdf".to_string(),
+                "downloads/source.png".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn collect_payload_attachment_meta_entries_should_store_each_attachment_once() {
+        let payload = ChatInputPayload {
+            text: Some("test".to_string()),
+            display_text: None,
+            images: Some(vec![BinaryPart {
+                mime: "image/png".to_string(),
+                bytes_base64: B64.encode(b"img"),
+                saved_path: Some("downloads/source.png".to_string()),
+            }]),
+            audios: None,
+            attachments: Some(vec![
+                AttachmentMetaInput {
+                    file_name: "source.png".to_string(),
+                    relative_path: "downloads/source.png".to_string(),
+                    mime: "image/png".to_string(),
+                },
+                AttachmentMetaInput {
+                    file_name: "source-copy.png".to_string(),
+                    relative_path: "downloads/source.png".to_string(),
+                    mime: "image/png".to_string(),
+                },
+            ]),
+            model: None,
+            extra_text_blocks: None,
+            mentions: None,
+            provider_meta: None,
+        };
+
+        let entries = collect_payload_attachment_meta_entries(&payload);
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(
+            entries[0].get("relativePath").and_then(Value::as_str),
+            Some("downloads/source.png")
+        );
+    }
+
+    #[test]
+    fn provider_meta_attachment_relative_paths_should_ignore_legacy_duplicates() {
+        let meta = serde_json::json!({
+            "attachments": [
+                {
+                    "fileName": "source.png",
+                    "relativePath": "downloads/source.png",
+                    "mime": "image/png"
+                },
+                {
+                    "fileName": "source-copy.png",
+                    "relativePath": "downloads/source.png",
+                    "mime": "image/png"
+                }
+            ]
+        });
+
+        assert_eq!(
+            provider_meta_attachment_relative_paths(&meta),
+            vec!["downloads/source.png".to_string()]
+        );
+    }
+
+    #[test]
+    fn image_attachment_reference_label_should_match_attachment_index() {
+        let image = BinaryPart {
+            mime: "image/png".to_string(),
+            bytes_base64: B64.encode(b"img"),
+            saved_path: Some("downloads/source.png".to_string()),
+        };
+        let payload = ChatInputPayload {
+            text: Some("test".to_string()),
+            display_text: None,
+            images: Some(vec![image.clone()]),
+            audios: None,
+            attachments: Some(vec![
+                AttachmentMetaInput {
+                    file_name: "report.pdf".to_string(),
+                    relative_path: "downloads/report.pdf".to_string(),
+                    mime: "application/pdf".to_string(),
+                },
+                AttachmentMetaInput {
+                    file_name: "source.png".to_string(),
+                    relative_path: "downloads/source.png".to_string(),
+                    mime: "image/png".to_string(),
+                },
+            ]),
+            model: None,
+            extra_text_blocks: None,
+            mentions: None,
+            provider_meta: None,
+        };
+
+        assert_eq!(
+            image_attachment_reference_label(&payload, &image, 0),
+            "附件#2"
+        );
+        assert_eq!(
+            image_description_block("附件#2", "识别结果"),
+            "[附件#2 图片转文]\n识别结果"
+        );
+    }
+
+    #[test]
+    fn collect_payload_attachment_relative_paths_should_fallback_to_image_media_path() {
+        let payload = ChatInputPayload {
+            text: Some("test".to_string()),
+            display_text: None,
+            images: Some(vec![BinaryPart {
+                mime: "image/png".to_string(),
+                bytes_base64: B64.encode(b"img"),
+                saved_path: Some("downloads/source.png".to_string()),
+            }]),
+            audios: None,
+            attachments: None,
+            model: None,
+            extra_text_blocks: None,
+            mentions: None,
+            provider_meta: None,
+        };
+
+        assert_eq!(
+            collect_payload_attachment_relative_paths(&payload),
+            vec!["downloads/source.png".to_string()]
+        );
+    }
+
+    #[test]
+    fn collect_payload_attachment_relative_paths_should_include_audio_media_too() {
+        let payload = ChatInputPayload {
+            text: Some("test".to_string()),
+            display_text: None,
+            images: None,
+            audios: Some(vec![BinaryPart {
+                mime: "audio/mp3".to_string(),
+                bytes_base64: B64.encode(b"audio"),
+                saved_path: Some("downloads/voice.mp3".to_string()),
+            }]),
+            attachments: None,
+            model: None,
+            extra_text_blocks: None,
+            mentions: None,
+            provider_meta: None,
+        };
+
+        assert_eq!(
+            collect_payload_attachment_relative_paths(&payload),
+            vec!["downloads/voice.mp3".to_string()]
+        );
     }
 }

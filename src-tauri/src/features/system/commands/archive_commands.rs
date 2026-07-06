@@ -218,6 +218,18 @@ async fn get_prompt_preview(
         false,
     )
     .await?;
+    let _ = apply_prompt_image_fallbacks_to_prepared(
+        state.inner(),
+        &app_config,
+        &api_config,
+        &mut prepared,
+    )
+    .await?;
+    let _ = replace_disabled_multimodal_with_text(
+        &mut prepared,
+        api_config.enable_image,
+        api_config.enable_audio,
+    );
 
     let request_body_json =
         serde_json::to_string_pretty(&prepared_prompt_to_messages_json(&prepared))

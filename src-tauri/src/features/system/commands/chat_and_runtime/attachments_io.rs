@@ -275,9 +275,10 @@ fn assistant_space_display_path(relative_path: &str) -> String {
     }
 }
 
-fn build_attachment_notice_text(_file_name: &str, relative_path: &str) -> String {
+fn build_attachment_notice_text(index: usize, relative_path: &str) -> String {
     format!(
-        "用户发送了一个附件，位于 {}。",
+        "[附件#{}]\npath: {}",
+        index + 1,
         assistant_space_display_path(relative_path)
     )
 }
@@ -331,7 +332,7 @@ fn queue_attachment_from_raw(
     } else {
         None
     };
-    let text_notice = build_attachment_notice_text(&final_file_name, &final_saved_path);
+    let text_notice = build_attachment_notice_text(0, &final_saved_path);
     Ok(QueueLocalFileAttachmentOutput {
         mime,
         file_name: final_file_name,
@@ -349,11 +350,20 @@ fn normalize_payload_attachments(
     let Some(items) = raw else {
         return out;
     };
+    let mut seen = std::collections::HashSet::<String>::new();
     for item in items {
         let file_name = String::from(item.file_name.trim());
         let relative_path = String::from(item.relative_path.trim()).replace('\\', "/");
         let mime = String::from(item.mime.trim());
         if file_name.is_empty() || relative_path.is_empty() {
+            continue;
+        }
+        let dedup_key = format!(
+            "{}::{}",
+            relative_path.to_ascii_lowercase(),
+            mime.to_ascii_lowercase()
+        );
+        if !seen.insert(dedup_key) {
             continue;
         }
         out.push(serde_json::json!({
@@ -386,6 +396,40 @@ fn merge_provider_meta_with_attachments(
     Some(merged)
 }
 
+fn provider_meta_attachment_relative_paths(meta: &Value) -> Vec<String> {
+    let mut out = Vec::<String>::new();
+    let Some(attachments) = meta.get("attachments").and_then(Value::as_array) else {
+        return out;
+    };
+    let mut seen = std::collections::HashSet::<String>::new();
+    for item in attachments {
+        let relative_path = item
+            .get("relativePath")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.replace('\\', "/"));
+        let Some(relative_path) = relative_path else {
+            continue;
+        };
+        let mime = item
+            .get("mime")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .unwrap_or("");
+        let dedup_key = format!(
+            "{}::{}",
+            relative_path.to_ascii_lowercase(),
+            mime.to_ascii_lowercase()
+        );
+        if !seen.insert(dedup_key) {
+            continue;
+        }
+        out.push(relative_path);
+    }
+    out
+}
+
 fn persist_payload_images_to_workspace_downloads(
     state: &AppState,
     images: &[BinaryPart],
@@ -398,14 +442,7 @@ fn persist_payload_images_to_workspace_downloads(
             .map(str::trim)
             .filter(|value| !value.is_empty())
         {
-            let file_name = std::path::Path::new(saved_path)
-                .file_name()
-                .and_then(|v| v.to_str())
-                .map(str::trim)
-                .filter(|v| !v.is_empty())
-                .unwrap_or("attachment")
-                .to_string();
-            notices.push(build_attachment_notice_text(&file_name, saved_path));
+            notices.push(build_attachment_notice_text(idx, saved_path));
             continue;
         }
         let mime = image.mime.trim();
@@ -420,12 +457,7 @@ fn persist_payload_images_to_workspace_downloads(
         match persist_raw_attachment_to_downloads(state, &suggested, mime, &raw) {
             Ok(saved_path) => {
                 let relative = workspace_relative_path(state, &saved_path);
-                let file_name = saved_path
-                    .file_name()
-                    .and_then(|v| v.to_str())
-                    .unwrap_or(&suggested)
-                    .to_string();
-                notices.push(build_attachment_notice_text(&file_name, &relative));
+                notices.push(build_attachment_notice_text(idx, &relative));
             }
             Err(err) => {
                 eprintln!("[CHAT] persist queued image to downloads failed: index={}, err={}", idx, err);

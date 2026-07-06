@@ -36,6 +36,51 @@ fn replace_disabled_multimodal_with_text(
     (history_images, history_audios, latest_images, latest_audios)
 }
 
+#[cfg(test)]
+mod router_multimodal_filter_tests {
+    use super::*;
+
+    #[test]
+    fn replace_disabled_multimodal_with_text_should_only_drop_disabled_binaries() {
+        let mut prepared = PreparedPrompt {
+            preamble: String::new(),
+            history_messages: vec![PreparedHistoryMessage {
+                role: "user".to_string(),
+                text: "历史消息".to_string(),
+                extra_text_blocks: Vec::new(),
+                user_time_text: None,
+                images: vec![PreparedBinaryPayload {
+                    mime: "image/png".to_string(),
+                    content: "history-base64".to_string(),
+                    saved_path: Some("downloads/history.png".to_string()),
+                }],
+                audios: Vec::new(),
+                tool_calls: None,
+                tool_call_id: None,
+                reasoning_content: None,
+            }],
+            latest_user_text: "最新消息".to_string(),
+            latest_user_meta_text: String::new(),
+            latest_user_extra_text: String::new(),
+            latest_user_extra_blocks: Vec::new(),
+            latest_images: vec![PreparedBinaryPayload {
+                mime: "image/png".to_string(),
+                content: "latest-base64".to_string(),
+                saved_path: Some("downloads/latest.png".to_string()),
+            }],
+            latest_audios: Vec::new(),
+        };
+
+        let counts = replace_disabled_multimodal_with_text(&mut prepared, false, true);
+
+        assert_eq!(counts, (1, 0, 1, 0));
+        assert!(prepared.history_messages[0].images.is_empty());
+        assert!(prepared.latest_images.is_empty());
+        assert!(prepared.history_messages[0].extra_text_blocks.is_empty());
+        assert!(prepared_prompt_latest_user_extra_blocks(&prepared).is_empty());
+    }
+}
+
 fn prepared_has_any_history_image(prepared: &PreparedPrompt) -> bool {
     prepared
         .history_messages

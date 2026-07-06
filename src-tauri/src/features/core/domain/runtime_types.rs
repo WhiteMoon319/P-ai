@@ -85,30 +85,6 @@ struct PreparedPrompt {
     latest_audios: Vec<PreparedBinaryPayload>,
 }
 
-fn prepared_binary_payload_source_block(
-    label: &str,
-    index: usize,
-    payload: &PreparedBinaryPayload,
-) -> Option<String> {
-    let path = payload
-        .saved_path
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())?;
-    Some(format!("[{} {}] path: {}", label, index + 1, path))
-}
-
-fn prepared_binary_payload_source_blocks(
-    label: &str,
-    payloads: &[PreparedBinaryPayload],
-) -> Vec<String> {
-    payloads
-        .iter()
-        .enumerate()
-        .filter_map(|(index, payload)| prepared_binary_payload_source_block(label, index, payload))
-        .collect()
-}
-
 #[derive(Debug, Clone)]
 struct PendingAppDataPersist {
     seq: u64,
@@ -250,10 +226,6 @@ fn prepared_prompt_latest_user_text_blocks(prepared: &PreparedPrompt) -> Vec<Str
         }
     }
     blocks.extend(prepared_prompt_latest_user_extra_blocks(prepared));
-    blocks.extend(prepared_binary_payload_source_blocks(
-        "image",
-        &prepared.latest_images,
-    ));
     if blocks.is_empty() {
         blocks.push(" ".to_string());
     }

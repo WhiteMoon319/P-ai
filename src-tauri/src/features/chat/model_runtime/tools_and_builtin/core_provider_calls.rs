@@ -287,7 +287,6 @@ fn prepared_history_to_genai_messages(
                     text_blocks.push(block.clone());
                 }
             }
-            text_blocks.extend(prepared_binary_payload_source_blocks("image", &hm.images));
             let parts =
                 genai_content_parts_from_text_and_binary(&text_blocks, &hm.images, &hm.audios);
             chat_history.push(genai::chat::ChatMessage::user(
@@ -1229,6 +1228,23 @@ mod openai_responses_genai_request_tests {
             .collect()
     }
 
+    fn prepared_prompt_with_single_image_path_and_base64() -> PreparedPrompt {
+        PreparedPrompt {
+            preamble: String::new(),
+            history_messages: Vec::new(),
+            latest_user_text: "这是什么".to_string(),
+            latest_user_meta_text: String::new(),
+            latest_user_extra_text: "[附件#1]\npath: {Assistant Space}/downloads/image.png".to_string(),
+            latest_user_extra_blocks: vec!["[附件#1]\npath: {Assistant Space}/downloads/image.png".to_string()],
+            latest_images: vec![PreparedBinaryPayload {
+                mime: "image/png".to_string(),
+                content: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO9Wl1QAAAAASUVORK5CYII=".to_string(),
+                saved_path: Some("downloads/image.png".to_string()),
+            }],
+            latest_audios: Vec::new(),
+        }
+    }
+
     #[test]
     fn build_genai_chat_request_should_keep_system_at_top_level() {
         let prepared = PreparedPrompt {
@@ -1779,6 +1795,98 @@ mod openai_responses_genai_request_tests {
                 .and_then(Value::as_str),
             Some("先调用终端工具查看 PowerShell 版本。")
         );
+    }
+
+    #[test]
+    fn build_provider_genai_request_should_keep_openai_image_payload_as_standard_base64() {
+        let prepared = prepared_prompt_with_single_image_path_and_base64();
+
+        let provider_request = build_provider_genai_request(&prepared)
+            .expect("build_provider_genai_request should succeed");
+        let binaries = provider_request.messages[0].content.binaries();
+
+        assert_eq!(binaries.len(), 1);
+        assert_eq!(binaries[0].content_type, "image/png");
+        assert_eq!(binaries[0].name, None);
+        assert!(matches!(
+            &binaries[0].source,
+            genai::chat::BinarySource::Base64(value)
+                if value.as_ref() == "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO9Wl1QAAAAASUVORK5CYII="
+        ));
+    }
+
+    #[test]
+    fn build_provider_genai_request_should_keep_gemini_image_payload_as_standard_base64() {
+        let prepared = prepared_prompt_with_single_image_path_and_base64();
+        let adapter_kind = resolve_provider_genai_adapter_kind(
+            &ResolvedApiConfig {
+                provider_id: Some("gemini-provider".to_string()),
+                provider_api_keys: Vec::new(),
+                provider_key_cursor: 0,
+                request_format: RequestFormat::Gemini,
+                allow_concurrent_requests: false,
+                max_concurrent_requests: None,
+                base_url: "https://generativelanguage.googleapis.com/v1beta".to_string(),
+                api_key: "test-key".to_string(),
+                model: "gemini-2.5-flash".to_string(),
+                reasoning_effort: None,
+                temperature: None,
+                max_output_tokens: None,
+                prompt_cache_key: None,
+                extra_headers: Vec::new(),
+                codex_auth: None,
+                codex_auth_mode: None,
+                codex_originator: None,
+                codex_residency_requirement: None,
+                codex_custom_api_key: None,
+            },
+            "gemini-2.5-flash",
+            genai::adapter::AdapterKind::Gemini,
+        );
+        let provider_request = build_provider_genai_request(&prepared)
+            .expect("build_provider_genai_request should succeed");
+        let binaries = provider_request.messages[0].content.binaries();
+
+        assert_eq!(adapter_kind, genai::adapter::AdapterKind::Gemini);
+        assert_eq!(binaries.len(), 1);
+        assert!(matches!(&binaries[0].source, genai::chat::BinarySource::Base64(_)));
+    }
+
+    #[test]
+    fn build_provider_genai_request_should_keep_anthropic_image_payload_as_standard_base64() {
+        let prepared = prepared_prompt_with_single_image_path_and_base64();
+        let adapter_kind = resolve_provider_genai_adapter_kind(
+            &ResolvedApiConfig {
+                provider_id: Some("anthropic-provider".to_string()),
+                provider_api_keys: Vec::new(),
+                provider_key_cursor: 0,
+                request_format: RequestFormat::Anthropic,
+                allow_concurrent_requests: false,
+                max_concurrent_requests: None,
+                base_url: "https://api.anthropic.com/v1".to_string(),
+                api_key: "test-key".to_string(),
+                model: "claude-3-7-sonnet".to_string(),
+                reasoning_effort: None,
+                temperature: None,
+                max_output_tokens: None,
+                prompt_cache_key: None,
+                extra_headers: Vec::new(),
+                codex_auth: None,
+                codex_auth_mode: None,
+                codex_originator: None,
+                codex_residency_requirement: None,
+                codex_custom_api_key: None,
+            },
+            "claude-3-7-sonnet",
+            genai::adapter::AdapterKind::Anthropic,
+        );
+        let provider_request = build_provider_genai_request(&prepared)
+            .expect("build_provider_genai_request should succeed");
+        let binaries = provider_request.messages[0].content.binaries();
+
+        assert_eq!(adapter_kind, genai::adapter::AdapterKind::Anthropic);
+        assert_eq!(binaries.len(), 1);
+        assert!(matches!(&binaries[0].source, genai::chat::BinarySource::Base64(_)));
     }
 
     #[test]

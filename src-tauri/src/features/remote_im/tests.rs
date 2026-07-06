@@ -1230,7 +1230,7 @@
         assert!(images.is_empty());
         assert_eq!(attachments.len(), 1);
         assert_eq!(attachments[0].mime, "image/png");
-        assert!(notice.unwrap_or_default().contains("用户发送了一个附件，位于 {Assistant Space}/"));
+        assert!(notice.unwrap_or_default().contains("[附件#1]\npath: {Assistant Space}/"));
         assert!(
             state
                 .llm_workspace_path
@@ -1259,7 +1259,7 @@
         assert!(images.is_empty());
         assert_eq!(attachments.len(), 1);
         assert_eq!(attachments[0].mime, "image/png");
-        assert!(notice.unwrap_or_default().contains("用户发送了一个附件，位于 {Assistant Space}/"));
+        assert!(notice.unwrap_or_default().contains("[附件#1]\npath: {Assistant Space}/"));
         assert!(
             state
                 .llm_workspace_path

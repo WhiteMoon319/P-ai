@@ -240,7 +240,7 @@ fn weixin_oc_push_normalized_image_and_attachment(
             return match weixin_oc_build_attachment_meta(state, file_name, mime, raw) {
                 Ok((attachment, relative_path)) => {
                     attachments.push(attachment);
-                    Some(build_attachment_notice_text("", &relative_path))
+                    Some(build_attachment_notice_text(0, &relative_path))
                 }
                 Err(save_err) => {
                     eprintln!(

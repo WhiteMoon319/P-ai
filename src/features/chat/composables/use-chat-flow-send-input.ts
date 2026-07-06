@@ -20,6 +20,10 @@ type UseChatFlowSendInputOptions = {
   buildImageAttachmentPayload: (
     images: ImageAttachment[],
   ) => Array<{ fileName: string; relativePath: string; mime: string }>;
+  mergeAttachmentPayloads: (
+    primary: Array<{ fileName: string; relativePath: string; mime: string }>,
+    fallback?: Array<{ fileName: string; relativePath: string; mime: string }>,
+  ) => Array<{ fileName: string; relativePath: string; mime: string }>;
 };
 
 export type PreparedChatSendInput = {
@@ -89,7 +93,10 @@ export function useChatFlowSendInput(options: UseChatFlowSendInputOptions) {
     const sendSession = options.getSession();
     if (!sendSession || !sendSession.apiConfigId || !sendSession.agentId) return null;
     const sendConversationId = normalizeConversationId(options.getConversationId ? options.getConversationId() : "");
-    const attachments = [...queuedAttachments, ...options.buildImageAttachmentPayload(sentImages)];
+    const attachments = options.mergeAttachmentPayloads(
+      queuedAttachments,
+      options.buildImageAttachmentPayload(sentImages),
+    );
     const displayText = useOverrideMessage
       ? String(overrides?.displayText || "").trim() || plainText
       : buildDisplayText(plainText, sentImages, queuedAttachments);

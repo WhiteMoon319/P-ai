@@ -1511,11 +1511,7 @@ async fn submit_chat_message_inner(
         parts: message_parts,
         extra_text_blocks: input.payload.extra_text_blocks.clone().unwrap_or_default(),
         provider_meta: {
-            let mut attachment_entries =
-                normalize_payload_attachments(input.payload.attachments.as_ref());
-            attachment_entries.extend(normalize_payload_image_attachments(
-                input.payload.images.as_ref(),
-            ));
+            let attachment_entries = collect_payload_attachment_meta_entries(&input.payload);
             build_user_message_provider_meta(
                 input.payload.provider_meta.clone(),
                 &attachment_entries,
@@ -1779,11 +1775,7 @@ async fn send_chat_message(
         parts: message_parts,
         extra_text_blocks: input.payload.extra_text_blocks.clone().unwrap_or_default(),
         provider_meta: {
-            let mut attachment_entries =
-                normalize_payload_attachments(input.payload.attachments.as_ref());
-            attachment_entries.extend(normalize_payload_image_attachments(
-                input.payload.images.as_ref(),
-            ));
+            let attachment_entries = collect_payload_attachment_meta_entries(&input.payload);
             build_user_message_provider_meta(
                 input.payload.provider_meta.clone(),
                 &attachment_entries,
@@ -2017,11 +2009,7 @@ async fn send_user_mention_message_inner(
         parts: message_parts,
         extra_text_blocks: input.payload.extra_text_blocks.clone().unwrap_or_default(),
         provider_meta: {
-            let mut attachment_entries =
-                normalize_payload_attachments(input.payload.attachments.as_ref());
-            attachment_entries.extend(normalize_payload_image_attachments(
-                input.payload.images.as_ref(),
-            ));
+            let attachment_entries = collect_payload_attachment_meta_entries(&input.payload);
             build_user_message_provider_meta(
                 input.payload.provider_meta.clone(),
                 &attachment_entries,

@@ -79,6 +79,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
   const {
     buildQueuedAttachmentPayload,
     buildImageAttachmentPayload,
+    mergeAttachmentPayloads,
   } = useChatFlowSendPayloads({
     queuedAttachmentNotices: options.queuedAttachmentNotices,
   });
@@ -93,6 +94,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     getConversationId: options.getConversationId,
     buildQueuedAttachmentPayload,
     buildImageAttachmentPayload,
+    mergeAttachmentPayloads,
   });
   const frontendDispatch = useChatFlowFrontendDispatch({
     allMessages: options.allMessages,
@@ -134,7 +136,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
     streamBlocks: options.streamBlocks,
     getActiveRoundAgentId: () => activeRoundAgentId,
     getConversationId: options.getConversationId,
-    buildImageAttachmentPayload,
     getSendStartedAtMs: (gen) => sendStartedAtMsByGen.get(gen) || 0,
     getActiveHistoryMessageCount: () => activeHistoryMessageCount,
     getFrontendDispatchStartedAtMs: frontendDispatch.getStartedAtMs,

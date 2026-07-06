@@ -52,9 +52,6 @@ type UseChatFlowDraftsOptions = {
   streamBlocks?: Ref<AssistantStreamBlock[]>;
   getActiveRoundAgentId?: () => string;
   getConversationId?: () => string;
-  buildImageAttachmentPayload: (
-    images: Array<{ mime: string; bytesBase64: string; savedPath?: string }>,
-  ) => Array<{ fileName: string; relativePath: string; mime: string }>;
   getSendStartedAtMs: (gen: number) => number;
   getActiveHistoryMessageCount: () => number;
   getFrontendDispatchStartedAtMs: () => number;
@@ -132,7 +129,6 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
       if (!mime || !bytesBase64) continue;
       parts.push({ type: "image", mime, bytesBase64 });
     }
-    const attachmentPayload = [...attachments, ...options.buildImageAttachmentPayload(images)];
     const msg: ChatMessage = {
       id: messageId,
       role: "user",
@@ -140,7 +136,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
       speakerAgentId: "user-persona",
       parts,
       providerMeta: {
-        attachments: attachmentPayload.length > 0 ? attachmentPayload : undefined,
+        attachments: attachments.length > 0 ? attachments : undefined,
         message_meta: mentions.length > 0
           ? {
               kind: "user_message",

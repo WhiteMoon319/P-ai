@@ -233,18 +233,7 @@ fn build_abstract_message_projection(
         }
     }
     if let Some(meta) = message.provider_meta.as_ref() {
-        if let Some(attachments) = meta.get("attachments").and_then(Value::as_array) {
-            for item in attachments {
-                let relative_path = item
-                    .get("relativePath")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .trim();
-                if !relative_path.is_empty() {
-                    attachment_refs.push(relative_path.to_string());
-                }
-            }
-        }
+        attachment_refs.extend(provider_meta_attachment_relative_paths(meta));
     }
     AbstractConversationMessageProjection {
         stable_message_id: message.id.clone(),
@@ -450,9 +439,6 @@ impl ConversationPromptService {
             }
             if let Some(v) = hm.user_time_text.as_deref() {
                 history_text += estimated_tokens_for_text(v);
-            }
-            for block in prepared_binary_payload_source_blocks("image", &hm.images) {
-                history_text += estimated_tokens_for_text(&block);
             }
             // reasoning_content 是输出，不算输入 token
             if let Some(calls) = hm.tool_calls.as_ref() {
@@ -964,12 +950,12 @@ impl ConversationPromptService {
                 if let Some(log_stage) = stage_logger {
                     log_stage("prepare_context.todo_board_ready");
                 }
-                for relative_path in attachment_relative_paths {
+                for (index, relative_path) in attachment_relative_paths.iter().enumerate() {
                     let trimmed = relative_path.trim();
                     if trimmed.is_empty() {
                         continue;
                     }
-                    extra_blocks.push(build_attachment_notice_text("", trimmed));
+                    extra_blocks.push(build_attachment_notice_text(index, trimmed));
                 }
                 if let Some(log_stage) = stage_logger {
                     log_stage("prepare_context.attachment_hints_ready");

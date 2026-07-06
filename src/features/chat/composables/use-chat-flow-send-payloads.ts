@@ -13,7 +13,7 @@ type ImageAttachment = {
   savedPath?: string;
 };
 
-type AttachmentPayload = {
+export type AttachmentPayload = {
   fileName: string;
   relativePath: string;
   mime: string;
@@ -24,10 +24,32 @@ type UseChatFlowSendPayloadsOptions = {
 };
 
 export function useChatFlowSendPayloads(options: UseChatFlowSendPayloadsOptions) {
+  function attachmentPayloadKey(item: AttachmentPayload): string {
+    return `${item.relativePath.replace(/\\/g, "/").toLowerCase()}::${item.mime.toLowerCase()}`;
+  }
+
+  function mergeAttachmentPayloads(
+    primary: AttachmentPayload[],
+    fallback: AttachmentPayload[] = [],
+  ): AttachmentPayload[] {
+    const merged = new Map<string, AttachmentPayload>();
+    for (const item of [...primary, ...fallback]) {
+      const fileName = String(item.fileName || "").trim();
+      const relativePath = String(item.relativePath || "").trim().replace(/\\/g, "/");
+      const mime = String(item.mime || "").trim();
+      if (!fileName || !relativePath) continue;
+      const normalized = { fileName, relativePath, mime };
+      const key = attachmentPayloadKey(normalized);
+      if (merged.has(key)) continue;
+      merged.set(key, normalized);
+    }
+    return Array.from(merged.values());
+  }
+
   function buildQueuedAttachmentPayload(): AttachmentPayload[] {
     const list = options.queuedAttachmentNotices?.value || [];
     if (list.length === 0) return [];
-    return list
+    const payloads = list
       .map((item) => {
         const fileName = String(item.fileName || "").trim();
         const relativePath = String(item.relativePath || "").trim().replace(/\\/g, "/");
@@ -36,10 +58,11 @@ export function useChatFlowSendPayloads(options: UseChatFlowSendPayloadsOptions)
         return { fileName, relativePath, mime };
       })
       .filter((value): value is AttachmentPayload => !!value);
+    return mergeAttachmentPayloads(payloads);
   }
 
   function buildImageAttachmentPayload(images: ImageAttachment[]): AttachmentPayload[] {
-    const dedup = new Map<string, AttachmentPayload>();
+    const payloads: AttachmentPayload[] = [];
     for (const image of images) {
       const rawPath = String(image.savedPath || "").trim();
       if (!rawPath) continue;
@@ -47,15 +70,14 @@ export function useChatFlowSendPayloads(options: UseChatFlowSendPayloadsOptions)
       if (!relativePath) continue;
       const fileName = relativePath.split("/").pop() || "attachment";
       const mime = String(image.mime || "").trim();
-      const key = `${relativePath}::${mime}`;
-      if (dedup.has(key)) continue;
-      dedup.set(key, { fileName, relativePath, mime });
+      payloads.push({ fileName, relativePath, mime });
     }
-    return Array.from(dedup.values());
+    return mergeAttachmentPayloads(payloads);
   }
 
   return {
     buildQueuedAttachmentPayload,
     buildImageAttachmentPayload,
+    mergeAttachmentPayloads,
   };
 }

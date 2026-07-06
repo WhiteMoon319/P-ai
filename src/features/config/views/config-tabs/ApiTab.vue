@@ -314,16 +314,26 @@
 
                     <div v-if="activeCapability === 'text'" class="grid gap-2 md:grid-cols-5">
                       <label
-                        v-if="shouldShowModelImageToggle(modelCard)"
-                        class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
+                        class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2"
+                        :class="{ 'opacity-60': isModelImageToggleDisabled(modelCard) }">
                         <span class="text-sm">{{ t("config.api.capImage") }}</span>
-                        <input v-model="modelCard.enableImage" type="checkbox" class="checkbox checkbox-sm" />
+                        <input
+                          v-model="modelCard.enableImage"
+                          type="checkbox"
+                          class="checkbox checkbox-sm"
+                          :disabled="isModelImageToggleDisabled(modelCard)"
+                        />
                       </label>
                       <label
-                        v-if="shouldShowModelVideoToggle(modelCard)"
-                        class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
+                        class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2"
+                        :class="{ 'opacity-60': isModelVideoToggleDisabled(modelCard) }">
                         <span class="text-sm">{{ t("config.api.capVideo") }}</span>
-                        <input v-model="modelCard.enableVideo" type="checkbox" class="checkbox checkbox-sm" />
+                        <input
+                          v-model="modelCard.enableVideo"
+                          type="checkbox"
+                          class="checkbox checkbox-sm"
+                          :disabled="isModelVideoToggleDisabled(modelCard)"
+                        />
                       </label>
                       <label
                         class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
@@ -930,6 +940,14 @@ function shouldShowModelVideoToggle(modelCard: ApiModelConfigItem): boolean {
     return capability.enableVideo === true;
   }
   return true;
+}
+
+function isModelImageToggleDisabled(modelCard: ApiModelConfigItem): boolean {
+  return !shouldShowModelImageToggle(modelCard);
+}
+
+function isModelVideoToggleDisabled(modelCard: ApiModelConfigItem): boolean {
+  return !shouldShowModelVideoToggle(modelCard);
 }
 
 function openaiReasoningEffortValue(modelCard: ApiModelConfigItem): string {
@@ -1588,14 +1606,10 @@ async function syncModelMetadata(modelCard: ApiModelConfigItem) {
     if (Number.isFinite(Number(metadata.maxOutputTokens))) {
       nextLimits.maxOutputTokensMax = Number(metadata.maxOutputTokens);
     }
-    if (typeof metadata.enableImage === "boolean") {
-      nextLimits.enableImage = metadata.enableImage;
-      modelCard.enableImage = metadata.enableImage;
-    }
-    if (typeof metadata.enableVideo === "boolean") {
-      nextLimits.enableVideo = metadata.enableVideo;
-      modelCard.enableVideo = metadata.enableVideo;
-    }
+    nextLimits.enableImage = metadata.enableImage === true;
+    modelCard.enableImage = metadata.enableImage === true;
+    nextLimits.enableVideo = metadata.enableVideo === true;
+    modelCard.enableVideo = metadata.enableVideo === true;
     if (typeof metadata.enableAudio === "boolean") {
       nextLimits.enableAudio = metadata.enableAudio;
     }
