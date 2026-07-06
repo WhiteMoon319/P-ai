@@ -2,8 +2,7 @@
 // 它不是通用图片存储模块，也不负责 path、消息持久化或历史回放语义。
 
 const IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_PIXEL_BUDGET: u64 = 1080 * 1080;
-const IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_WEBP_QUALITY: f32 = 75.0;
-const IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_REUSE_MAX_BYTES: u64 = 1024 * 1024;
+const IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_WEBP_QUALITY: f32 = 80.0;
 const IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_MAX_SOURCE_BYTES: u64 = 50 * 1024 * 1024;
 const IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_MAX_DIMENSION: u32 = 10_000;
 
@@ -11,7 +10,6 @@ const IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_MAX_DIMENSION: u32 = 10_000;
 struct LlmRequestImageNormalizeOptions {
     target_pixel_budget: u64,
     webp_quality: f32,
-    reuse_max_bytes: u64,
     max_source_bytes: u64,
     max_dimension: u32,
 }
@@ -21,7 +19,6 @@ impl Default for LlmRequestImageNormalizeOptions {
         Self {
             target_pixel_budget: IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_PIXEL_BUDGET,
             webp_quality: IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_WEBP_QUALITY,
-            reuse_max_bytes: IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_REUSE_MAX_BYTES,
             max_source_bytes: IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_MAX_SOURCE_BYTES,
             max_dimension: IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_MAX_DIMENSION,
         }
@@ -44,18 +41,6 @@ enum LlmRequestImageInputFormat {
     Gif,
     Webp,
     Bmp,
-}
-
-impl LlmRequestImageInputFormat {
-    fn output_reuse_mime(self) -> &'static str {
-        match self {
-            Self::Jpeg => "image/jpeg",
-            Self::Webp => "image/webp",
-            Self::Png => "image/png",
-            Self::Gif => "image/gif",
-            Self::Bmp => "image/bmp",
-        }
-    }
 }
 
 fn llm_request_image_normalize_options_default() -> LlmRequestImageNormalizeOptions {
@@ -133,20 +118,6 @@ fn llm_request_image_validate_dimensions(
     Ok(())
 }
 
-fn llm_request_image_should_reuse_original(
-    format: LlmRequestImageInputFormat,
-    bytes_len: usize,
-    width: u32,
-    height: u32,
-    options: &LlmRequestImageNormalizeOptions,
-) -> bool {
-    matches!(
-        format,
-        LlmRequestImageInputFormat::Jpeg | LlmRequestImageInputFormat::Webp
-    ) && (bytes_len as u64) <= options.reuse_max_bytes
-        && (u64::from(width) * u64::from(height)) <= options.target_pixel_budget
-}
-
 fn normalize_image_bytes_for_llm_request_with_options(
     bytes: &[u8],
     declared_mime: Option<&str>,
@@ -159,29 +130,13 @@ fn normalize_image_bytes_for_llm_request_with_options(
             options.max_source_bytes
         ));
     }
-    let (input_format, image_format) = llm_request_image_detect_format(bytes, declared_mime)?;
+    let (_input_format, image_format) = llm_request_image_detect_format(bytes, declared_mime)?;
     let image = image::load_from_memory_with_format(bytes, image_format).map_err(|err| {
         format!("解码图片失败，文件可能已损坏或扩展名与内容不匹配: {err}")
     })?;
     let original_width = image.width();
     let original_height = image.height();
     llm_request_image_validate_dimensions(original_width, original_height, &options)?;
-
-    if llm_request_image_should_reuse_original(
-        input_format,
-        bytes.len(),
-        original_width,
-        original_height,
-        &options,
-    ) {
-        return Ok(LlmRequestNormalizedImage {
-            mime: input_format.output_reuse_mime().to_string(),
-            bytes: bytes.to_vec(),
-            output_width: original_width,
-            output_height: original_height,
-            reused_original: true,
-        });
-    }
 
     let (target_width, target_height) = llm_request_image_output_dimensions(
         original_width,
@@ -324,12 +279,12 @@ fn image_normalizer_test_png(width: u32, height: u32) -> Vec<u8> {
 
 #[cfg(test)]
 #[test]
-fn normalize_image_bytes_for_llm_request_should_passthrough_small_jpeg() {
+fn normalize_image_bytes_for_llm_request_should_encode_small_jpeg_as_webp() {
     let bytes = image_normalizer_test_jpeg(512, 512, 80);
     let normalized =
         normalize_image_bytes_for_llm_request(&bytes, Some("image/jpeg")).expect("normalize jpeg");
-    assert_eq!(normalized.mime, "image/jpeg");
-    assert!(normalized.reused_original);
+    assert_eq!(normalized.mime, "image/webp");
+    assert!(!normalized.reused_original);
     assert_eq!(normalized.output_width, 512);
     assert_eq!(normalized.output_height, 512);
 }
@@ -338,7 +293,6 @@ fn normalize_image_bytes_for_llm_request_should_passthrough_small_jpeg() {
 #[test]
 fn normalize_image_bytes_for_llm_request_should_compress_large_jpeg_within_budget() {
     let bytes = image_normalizer_test_noisy_jpeg(1166, 1000, 100);
-    assert!(bytes.len() as u64 > IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_REUSE_MAX_BYTES);
     let normalized =
         normalize_image_bytes_for_llm_request(&bytes, Some("image/jpeg")).expect("normalize jpeg");
     assert_eq!(normalized.mime, "image/webp");

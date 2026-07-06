@@ -1372,6 +1372,45 @@ fn normalize_image_for_chat_upload(bytes: &[u8]) -> Result<LlmRequestNormalizedI
     normalize_image_bytes_for_llm_request(bytes, None)
 }
 
+fn normalize_image_base64_for_llm_request(
+    mime: &str,
+    bytes_base64: &str,
+) -> Result<(String, String), String> {
+    let raw = B64
+        .decode(bytes_base64.trim())
+        .map_err(|err| format!("解析图片 base64 失败: {err}"))?;
+    let normalized = normalize_image_bytes_for_llm_request(&raw, Some(mime.trim()))?;
+    Ok((normalized.mime, B64.encode(normalized.bytes)))
+}
+
+fn prepared_image_payload_for_llm_request(
+    mime: String,
+    bytes_base64: String,
+    saved_path: Option<String>,
+) -> PreparedBinaryPayload {
+    match normalize_image_base64_for_llm_request(&mime, &bytes_base64) {
+        Ok((normalized_mime, normalized_base64)) => PreparedBinaryPayload {
+            mime: normalized_mime,
+            content: normalized_base64,
+            saved_path,
+        },
+        Err(err) => {
+            eprintln!(
+                "[图片规范化] 跳过请求压缩，原因={}，mime={}，base64_len={}，path={}",
+                err,
+                mime,
+                bytes_base64.len(),
+                saved_path.as_deref().unwrap_or("未保存")
+            );
+            PreparedBinaryPayload {
+                mime,
+                content: bytes_base64,
+                saved_path,
+            }
+        }
+    }
+}
+
 fn is_supported_image_upload_mime(mime: &str) -> bool {
     llm_request_image_supported_raster_mime(mime)
 }
@@ -1528,10 +1567,12 @@ fn build_prepared_binary_payloads_from_message_parts(
             _ => None,
         })
         .enumerate()
-        .map(|(index, (mime, bytes_base64))| PreparedBinaryPayload {
-            mime,
-            content: bytes_base64,
-            saved_path: image_saved_paths.get(index).cloned().flatten(),
+        .map(|(index, (mime, bytes_base64))| {
+            prepared_image_payload_for_llm_request(
+                mime,
+                bytes_base64,
+                image_saved_paths.get(index).cloned().flatten(),
+            )
         })
         .collect::<Vec<_>>();
     let audios = parts
@@ -2342,11 +2383,11 @@ fn resolve_media_from_message(
                         .get_mut(&mime.trim().to_ascii_lowercase())
                         .and_then(|paths| paths.pop_front())
                         .or(stored_path);
-                    images.push(PreparedBinaryPayload {
-                        mime: mime.clone(),
-                        content: resolved,
+                    images.push(prepared_image_payload_for_llm_request(
+                        mime.clone(),
+                        resolved,
                         saved_path,
-                    });
+                    ));
                 }
             }
             MessagePart::Audio {
@@ -2410,6 +2451,19 @@ fn prompt_path_from_stored_binary_marker(
 mod prompt_media_path_tests {
     use super::*;
 
+    fn test_png_base64() -> String {
+        let image = image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+            32,
+            24,
+            image::Rgb([12, 34, 56]),
+        ));
+        let mut cursor = std::io::Cursor::new(Vec::<u8>::new());
+        image
+            .write_to(&mut cursor, image::ImageFormat::Png)
+            .expect("encode png");
+        B64.encode(cursor.into_inner())
+    }
+
     #[test]
     fn prompt_path_from_stored_binary_marker_should_keep_download_refs_workspace_relative() {
         let data_path = PathBuf::from("C:/pai/config/app_data.json");
@@ -2432,6 +2486,30 @@ mod prompt_media_path_tests {
         );
 
         assert_eq!(path.as_deref(), Some("C:/pai/media/image.png"));
+    }
+
+    #[test]
+    fn build_prepared_binary_payloads_from_message_parts_should_encode_images_as_webp() {
+        let (images, audios) = build_prepared_binary_payloads_from_message_parts(
+            &[MessagePart::Image {
+                mime: "image/png".to_string(),
+                bytes_base64: test_png_base64(),
+                name: None,
+                compressed: false,
+            }],
+            &[Some("downloads/source.png".to_string())],
+            &[],
+        );
+
+        assert!(audios.is_empty());
+        assert_eq!(images.len(), 1);
+        assert_eq!(images[0].mime, "image/webp");
+        assert_eq!(images[0].saved_path.as_deref(), Some("downloads/source.png"));
+        let raw = B64.decode(&images[0].content).expect("decode normalized image");
+        assert_eq!(
+            image::guess_format(&raw).expect("guess normalized image"),
+            image::ImageFormat::WebP
+        );
     }
 }
 

@@ -266,7 +266,6 @@ fn encode_screenshot_response(
         LlmRequestImageNormalizeOptions {
             target_pixel_budget: u64::from(width) * u64::from(height),
             webp_quality: input.webp_quality,
-            reuse_max_bytes: 0,
             max_source_bytes: u64::MAX,
             max_dimension: IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_MAX_DIMENSION,
         },
