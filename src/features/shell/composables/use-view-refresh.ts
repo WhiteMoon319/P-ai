@@ -16,6 +16,7 @@ type UseViewRefreshOptions = {
   perfLog: (label: string, startedAt: number) => void;
   onRefreshStepSlow?: (label: string, error: unknown) => void;
   onRefreshStepFailed?: (label: string, error: unknown) => void;
+  onRefreshStepChange?: (label: string, current: number, total: number) => void;
 };
 
 const VIEW_REFRESH_STEP_TIMEOUT_MS = 10_000;
@@ -55,11 +56,16 @@ export function useViewRefresh(options: UseViewRefreshOptions) {
   const suppressChatReloadWatch = ref(false);
   const windowBootstrapped = ref(false);
 
+  function emitRefreshStepChange(label: string, current: number, total: number) {
+    options.onRefreshStepChange?.(label, current, total);
+  }
+
   async function refreshAllViewData() {
     suppressChatReloadWatch.value = true;
     const startedAt = options.perfNow();
     try {
       if (options.loadBootstrapSnapshot) {
+        emitRefreshStepChange("loadBootstrapSnapshot", 1, 3);
         const tLoadBootstrap = options.perfNow();
         const bootstrapped = await runRefreshStep(
           "loadBootstrapSnapshot",
@@ -72,28 +78,35 @@ export function useViewRefresh(options: UseViewRefreshOptions) {
           throw new Error("loadBootstrapSnapshot failed");
         }
       } else {
-      const tLoadConfig = options.perfNow();
-      await runRefreshStep("loadConfig", options.loadConfig, options.onRefreshStepSlow, options.onRefreshStepFailed);
-      options.perfLog("refreshAll/loadConfig", tLoadConfig);
-      const tLoadPersonas = options.perfNow();
-      await runRefreshStep("loadPersonas", options.loadPersonas, options.onRefreshStepSlow, options.onRefreshStepFailed);
-      options.perfLog("refreshAll/loadPersonas", tLoadPersonas);
-      const tLoadChatSettings = options.perfNow();
-      await runRefreshStep("loadChatSettings", options.loadChatSettings, options.onRefreshStepSlow, options.onRefreshStepFailed);
-      options.perfLog("refreshAll/loadChatSettings", tLoadChatSettings);
+        emitRefreshStepChange("loadConfig", 1, 3);
+        const tLoadConfig = options.perfNow();
+        await runRefreshStep("loadConfig", options.loadConfig, options.onRefreshStepSlow, options.onRefreshStepFailed);
+        options.perfLog("refreshAll/loadConfig", tLoadConfig);
+        emitRefreshStepChange("loadPersonas", 2, 3);
+        const tLoadPersonas = options.perfNow();
+        await runRefreshStep("loadPersonas", options.loadPersonas, options.onRefreshStepSlow, options.onRefreshStepFailed);
+        options.perfLog("refreshAll/loadPersonas", tLoadPersonas);
+        emitRefreshStepChange("loadChatSettings", 3, 3);
+        const tLoadChatSettings = options.perfNow();
+        await runRefreshStep("loadChatSettings", options.loadChatSettings, options.onRefreshStepSlow, options.onRefreshStepFailed);
+        options.perfLog("refreshAll/loadChatSettings", tLoadChatSettings);
       }
       if (options.viewMode.value === "chat") {
+        emitRefreshStepChange("refreshConversationHistory", 1, 2);
         const tMessages = options.perfNow();
         await runRefreshStep("refreshConversationHistory", options.refreshConversationHistory, options.onRefreshStepSlow, options.onRefreshStepFailed);
         options.perfLog("refreshAll/refreshConversationHistory", tMessages);
+        emitRefreshStepChange("loadDelegateConversations", 2, 2);
         const tDelegates = options.perfNow();
         await runRefreshStep("loadDelegateConversations", options.loadDelegateConversations, options.onRefreshStepSlow, options.onRefreshStepFailed);
         options.perfLog("refreshAll/loadDelegateConversations", tDelegates);
         options.resetVisibleTurnCount();
       } else if (options.viewMode.value === "archives") {
+        emitRefreshStepChange("refreshConversationHistory", 1, 2);
         const tMessages = options.perfNow();
         await runRefreshStep("refreshConversationHistory", options.refreshConversationHistory, options.onRefreshStepSlow, options.onRefreshStepFailed);
         options.perfLog("refreshAll/refreshConversationHistory", tMessages);
+        emitRefreshStepChange("loadArchives", 2, 2);
         const tArchives = options.perfNow();
         await runRefreshStep("loadArchives", options.loadArchives, options.onRefreshStepSlow, options.onRefreshStepFailed);
         options.perfLog("refreshAll/loadArchives", tArchives);

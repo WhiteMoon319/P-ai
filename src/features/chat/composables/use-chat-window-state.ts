@@ -111,6 +111,9 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
   const startupDataReady = ref(false);
   const startupOverlayVisible = ref(false);
   const startupOverlayMessage = ref("等待后端加载中...");
+  const startupOverlayDetail = ref("正在建立启动连接...");
+  const startupOverlayProgressCurrent = ref(0);
+  const startupOverlayProgressTotal = ref(1);
   const chatting = ref(false);
   const trimming = ref(false);
   const compactingConversation = ref(false);
@@ -189,6 +192,9 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
     startupDataReady,
     startupOverlayVisible,
     startupOverlayMessage,
+    startupOverlayDetail,
+    startupOverlayProgressCurrent,
+    startupOverlayProgressTotal,
     chatting,
     trimming,
     compactingConversation,

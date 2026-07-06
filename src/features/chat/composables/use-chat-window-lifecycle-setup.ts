@@ -35,6 +35,12 @@ export function useChatWindowLifecycleSetup(bindings: Record<string, any>) {
         bindings.startupOverlayVisible.value = visible;
         bindings.startupOverlayMessage.value = message || "等待后端加载中...";
       },
+      onStartupProgressChange: ({ title, detail, current, total }) => {
+        bindings.startupOverlayMessage.value = title || "等待后端加载中...";
+        bindings.startupOverlayDetail.value = detail || "请稍候...";
+        bindings.startupOverlayProgressCurrent.value = Math.max(0, Number(current || 0));
+        bindings.startupOverlayProgressTotal.value = Math.max(1, Number(total || 1));
+      },
       onStartupStepFailed: (label, error) => {
         bindings.setStatus(`启动步骤失败：${label}：${bindings.formatRequestFailed(error)}`);
       },
@@ -49,7 +55,8 @@ export function useChatWindowLifecycleSetup(bindings: Record<string, any>) {
       },
       afterMountedReady: async () => {
         await bindings.initializeDetachedChatWindow();
-        await bindings.autoCheckGithubUpdate();
+        // 自动更新检查不应阻塞聊天窗口可用性，后台触发即可。
+        void bindings.autoCheckGithubUpdate();
       },
   });
   useAppWatchers({

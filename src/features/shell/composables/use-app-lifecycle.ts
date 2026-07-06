@@ -25,6 +25,12 @@ type UseAppLifecycleOptions = {
   afterMountedReady?: () => Promise<void> | void;
   onStartupOverlayChange?: (visible: boolean, message: string) => void;
   onStartupStepFailed?: (label: string, error: unknown) => void;
+  onStartupProgressChange?: (payload: {
+    title: string;
+    detail: string;
+    current: number;
+    total: number;
+  }) => void;
 };
 
 const STARTUP_STEP_TIMEOUT_MS = 10_000;
@@ -129,8 +135,20 @@ async function waitForBackendReady(): Promise<void> {
 export function useAppLifecycle(options: UseAppLifecycleOptions) {
   onMounted(async () => {
     options.onStartupOverlayChange?.(true, "等待后端加载中...");
+    options.onStartupProgressChange?.({
+      title: "等待后端加载中...",
+      detail: "正在建立启动连接...",
+      current: 0,
+      total: 7,
+    });
     let unlistenProgress: (() => void) | null = null;
     try {
+      options.onStartupProgressChange?.({
+        title: "初始化窗口中...",
+        detail: "正在挂载前端启动器...",
+        current: 1,
+        total: 7,
+      });
       const bootstrapMounted = await runStartupStep(
         "appBootstrapMount",
         () => options.appBootstrapMount(),
@@ -142,6 +160,12 @@ export function useAppLifecycle(options: UseAppLifecycleOptions) {
       }
 
       try {
+        options.onStartupProgressChange?.({
+          title: "等待后端加载中...",
+          detail: "正在等待后端就绪信号...",
+          current: 2,
+          total: 7,
+        });
         await waitForBackendReady();
       } catch (error) {
         console.warn("[LIFECYCLE] wait backend ready failed, continue startup refresh", error);
@@ -154,8 +178,20 @@ export function useAppLifecycle(options: UseAppLifecycleOptions) {
             const step = event.payload;
             if (step === "done") {
               options.onStartupOverlayChange?.(true, "加载数据中...");
+              options.onStartupProgressChange?.({
+                title: "加载数据中...",
+                detail: "后端延迟初始化已完成，正在准备界面数据...",
+                current: 3,
+                total: 7,
+              });
             } else {
               options.onStartupOverlayChange?.(true, `初始化: ${step}`);
+              options.onStartupProgressChange?.({
+                title: "初始化组件中...",
+                detail: `当前步骤：${step}`,
+                current: 3,
+                total: 7,
+              });
             }
           });
         } catch {
@@ -164,12 +200,24 @@ export function useAppLifecycle(options: UseAppLifecycleOptions) {
       }
 
       options.onStartupOverlayChange?.(true, "加载数据中...");
+      options.onStartupProgressChange?.({
+        title: "加载数据中...",
+        detail: "正在恢复主题与窗口基础状态...",
+        current: 3,
+        total: 7,
+      });
       options.restoreThemeFromStorage();
       window.addEventListener("paste", options.onPaste);
       window.addEventListener("dragover", options.onDragOver);
       window.addEventListener("drop", options.onDrop);
       options.recordHotkeyMount();
       try {
+        options.onStartupProgressChange?.({
+          title: "加载数据中...",
+          detail: "正在执行启动前安全检查...",
+          current: 4,
+          total: 7,
+        });
         await options.beforeRefreshData?.();
       } catch (error) {
         console.error("[LIFECYCLE] startup safety gate failed: beforeRefreshData", error);
@@ -187,6 +235,12 @@ export function useAppLifecycle(options: UseAppLifecycleOptions) {
         return;
       }
       try {
+        options.onStartupProgressChange?.({
+          title: "加载数据中...",
+          detail: "正在读取配置与会话数据...",
+          current: 5,
+          total: 7,
+        });
         await options.refreshAllViewData();
       } catch (error) {
         console.error("[LIFECYCLE] startup refresh failed: refreshAllViewData", error);
@@ -204,6 +258,12 @@ export function useAppLifecycle(options: UseAppLifecycleOptions) {
         return;
       }
       if (options.viewMode.value === "chat") {
+        options.onStartupProgressChange?.({
+          title: "收尾处理中...",
+          detail: "正在同步聊天窗口状态...",
+          current: 6,
+          total: 7,
+        });
         const windowControlsSynced = await runStartupStep(
           "syncWindowControlsState",
           () => options.syncWindowControlsState(),
@@ -214,6 +274,12 @@ export function useAppLifecycle(options: UseAppLifecycleOptions) {
           return;
         }
       }
+      options.onStartupProgressChange?.({
+        title: "收尾处理中...",
+        detail: "正在完成启动后的最后准备...",
+        current: 7,
+        total: 7,
+      });
       await runStartupStep(
         "afterMountedReady",
         () => options.afterMountedReady?.(),
