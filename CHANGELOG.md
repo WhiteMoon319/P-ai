@@ -5,6 +5,7 @@
 
 ## 最近版本
 
+- [v0.18.8](docs/changelog/releases/v0.18.8.md) - 修复（reasoning-disable-special-vendors）：配置页新增“思维强度 -> 无”，并为 DeepSeek、Kimi（Moonshot）、豆包这类特殊供应商在关闭思维链时只发送 `thinking.type=disabled`，不再错误附带 `reasoning_effort=none`，避免请求被 400 拒绝。
 - [v0.18.7](docs/changelog/releases/v0.18.7.md) - 修复（read-media-multimodal-routing）：`read_media` 不再按模型名或协议白名单拒绝已选中的多模态模型；只要配置页已允许绑定并开启图片/音视频能力，就允许执行媒体解析，避免 `doubao-seed-2.0-mini` 等模型出现“能选不能用”的致命错判。
 - [v0.18.6](docs/changelog/releases/v0.18.6.md) - Mermaid 图表新增复制按钮，便于直接复用生成内容。
 - [v0.18.5](docs/changelog/releases/v0.18.5.md) - 聊天消息视图接入自研气泡组件，固定用户/助理消息样式并移除右键隐藏气泡入口。

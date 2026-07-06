@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-06T10:06:26.737Z",
-  "latestVersion": "v0.18.7",
+  "generatedAt": "2026-07-06T11:59:36.825Z",
+  "latestVersion": "v0.18.8",
   "releases": [
+    {
+      "version": "v0.18.8",
+      "path": "docs/changelog/releases/v0.18.8.md",
+      "summary": "修复（reasoning-disable-special-vendors）：配置页新增“思维强度 -> 无”，并为 DeepSeek、Kimi（Moonshot）、豆包这类特殊供应商在关闭思维链时只发送 `thinking.type=disabled`，不再错误附带 `reasoning_effort=none`，避免请求被 400 拒绝。"
+    },
     {
       "version": "v0.18.7",
       "path": "docs/changelog/releases/v0.18.7.md",
