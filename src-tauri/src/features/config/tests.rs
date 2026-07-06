@@ -732,6 +732,28 @@
     }
 
     #[test]
+    fn resolve_api_config_should_preserve_openai_reasoning_none_for_runtime() {
+        let mut cfg = AppConfig::default();
+        let api = cfg
+            .api_configs
+            .iter_mut()
+            .find(|item| item.id == cfg.selected_api_config_id)
+            .expect("default api exists");
+        api.request_format = RequestFormat::OpenAI;
+        api.base_url = "https://api.deepseek.com/v1".to_string();
+        api.api_key = "sk-test".to_string();
+        api.model = "deepseek-v4-pro".to_string();
+        api.reasoning_effort = "none".to_string();
+
+        normalize_app_config(&mut cfg);
+
+        let resolved = resolve_api_config(&cfg, Some(&cfg.selected_api_config_id))
+            .expect("resolved api config");
+
+        assert_eq!(resolved.reasoning_effort, Some("none".to_string()));
+    }
+
+    #[test]
     fn normalize_app_config_should_not_copy_builtin_department_model_to_expert_model() {
         let mut chat_a = ApiConfig::default();
         chat_a.id = "chat-a".to_string();

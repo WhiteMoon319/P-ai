@@ -516,7 +516,7 @@ const DEFAULT_CODEX_LOCAL_AUTH_PATH = "~/.codex/auth.json";
 const DEFAULT_REASONING_EFFORT = "medium";
 const DEFAULT_GEMINI_REASONING_EFFORT = "high";
 const DEFAULT_OPENAI_REASONING_EFFORT = "high";
-const DEFAULT_DEEPSEEK_REASONING_EFFORT = "high";
+const DEFAULT_DEEPSEEK_REASONING_EFFORT = "none";
 const props = defineProps<{
   config: AppConfig;
   baseUrlReference: string;
@@ -537,12 +537,14 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const openaiReasoningEffortOptions = computed(() => [
+  { value: "none", label: t("config.api.reasoningOff") },
   { value: "low", label: t("config.api.reasoningLow") },
   { value: "medium", label: t("config.api.reasoningMedium") },
   { value: "high", label: t("config.api.reasoningHigh") },
   { value: "xhigh", label: t("config.api.reasoningXHigh") },
 ]);
 const deepseekReasoningEffortOptions = computed(() => [
+  { value: "none", label: t("config.api.reasoningOff") },
   { value: "high", label: t("config.api.reasoningHigh") },
   { value: "xhigh", label: t("config.api.reasoningXHigh") },
 ]);

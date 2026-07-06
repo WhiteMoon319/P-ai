@@ -563,10 +563,42 @@ fn provider_genai_reasoning_effort(
     if provider_genai_model_disables_reasoning(&api_config.model) {
         return None;
     }
+    if provider_genai_reasoning_disabled_raw(api_config)
+        && provider_genai_requires_deepseek_thinking_disabled(api_config)
+    {
+        return None;
+    }
     api_config
         .reasoning_effort
         .as_deref()
         .and_then(|value| value.parse::<genai::chat::ReasoningEffort>().ok())
+}
+
+fn provider_genai_reasoning_disabled_raw(api_config: &ResolvedApiConfig) -> bool {
+    matches!(
+        api_config.reasoning_effort.as_deref().map(str::trim),
+        Some(value) if value.eq_ignore_ascii_case("none")
+    )
+}
+
+fn provider_genai_reasoning_explicitly_disabled(api_config: &ResolvedApiConfig) -> bool {
+    provider_genai_reasoning_disabled_raw(api_config)
+}
+
+fn provider_genai_requires_deepseek_thinking_disabled(api_config: &ResolvedApiConfig) -> bool {
+    if !provider_genai_reasoning_disabled_raw(api_config) {
+        return false;
+    }
+    let base_url = api_config.base_url.trim().to_ascii_lowercase();
+    let model_name = api_config.model.trim().to_ascii_lowercase();
+    base_url.contains("deepseek")
+        || base_url.contains("moonshot")
+        || base_url.contains("doubao")
+        || base_url.contains("ark")
+        || base_url.contains("volc")
+        || model_name.contains("deepseek")
+        || model_name.contains("kimi")
+        || model_name.contains("doubao")
 }
 
 fn provider_genai_model_disables_reasoning(model_name: &str) -> bool {
@@ -664,8 +696,9 @@ fn build_provider_genai_chat_options(
     capture_reasoning_content: bool,
     capture_tool_calls: bool,
 ) -> genai::chat::ChatOptions {
-    let capture_reasoning_content =
-        capture_reasoning_content && !provider_genai_model_disables_reasoning(&api_config.model);
+    let capture_reasoning_content = capture_reasoning_content
+        && !provider_genai_model_disables_reasoning(&api_config.model)
+        && !provider_genai_reasoning_explicitly_disabled(api_config);
     let mut options = genai::chat::ChatOptions::default()
         .with_capture_usage(true)
         .with_capture_content(true)
@@ -676,6 +709,13 @@ fn build_provider_genai_chat_options(
     }
     if let Some(reasoning_effort) = provider_genai_reasoning_effort(api_config) {
         options = options.with_reasoning_effort(reasoning_effort);
+    }
+    if provider_genai_requires_deepseek_thinking_disabled(api_config) {
+        options = options.with_extra_body(serde_json::json!({
+            "thinking": {
+                "type": "disabled",
+            }
+        }));
     }
     if let Some(temperature) = api_config.temperature {
         options = options.with_temperature(temperature);
@@ -1347,6 +1387,147 @@ mod openai_responses_genai_request_tests {
 
         assert_eq!(options.capture_reasoning_content, Some(false));
         assert!(options.reasoning_effort.is_none());
+    }
+
+    #[test]
+    fn build_provider_genai_chat_options_should_disable_reasoning_capture_for_deepseek_none() {
+        let api_config = ResolvedApiConfig {
+            provider_id: Some("deepseek-provider".to_string()),
+            provider_api_keys: Vec::new(),
+            provider_key_cursor: 0,
+            request_format: RequestFormat::DeepSeek,
+            allow_concurrent_requests: false,
+            max_concurrent_requests: None,
+            base_url: "https://api.deepseek.com/v1".to_string(),
+            api_key: "test-key".to_string(),
+            model: "deepseek-chat".to_string(),
+            reasoning_effort: Some("none".to_string()),
+            temperature: None,
+            max_output_tokens: None,
+            prompt_cache_key: None,
+            extra_headers: Vec::new(),
+            codex_auth: None,
+            codex_auth_mode: None,
+            codex_originator: None,
+            codex_residency_requirement: None,
+            codex_custom_api_key: None,
+        };
+
+        let options = build_provider_genai_chat_options(&api_config, true, true);
+
+        assert_eq!(options.capture_reasoning_content, Some(false));
+        assert!(options.reasoning_effort.is_none());
+        assert_eq!(
+            options.extra_body,
+            Some(serde_json::json!({
+                "thinking": {
+                    "type": "disabled",
+                }
+            }))
+        );
+    }
+
+    #[test]
+    fn build_provider_genai_chat_options_should_set_thinking_disabled_for_moonshot_none() {
+        let api_config = ResolvedApiConfig {
+            provider_id: Some("moonshot-provider".to_string()),
+            provider_api_keys: Vec::new(),
+            provider_key_cursor: 0,
+            request_format: RequestFormat::OpenAI,
+            allow_concurrent_requests: false,
+            max_concurrent_requests: None,
+            base_url: "https://api.moonshot.cn/v1".to_string(),
+            api_key: "test-key".to_string(),
+            model: "kimi-k2.5".to_string(),
+            reasoning_effort: Some("none".to_string()),
+            temperature: None,
+            max_output_tokens: None,
+            prompt_cache_key: None,
+            extra_headers: Vec::new(),
+            codex_auth: None,
+            codex_auth_mode: None,
+            codex_originator: None,
+            codex_residency_requirement: None,
+            codex_custom_api_key: None,
+        };
+
+        let options = build_provider_genai_chat_options(&api_config, true, true);
+
+        assert!(options.reasoning_effort.is_none());
+        assert_eq!(
+            options.extra_body,
+            Some(serde_json::json!({
+                "thinking": {
+                    "type": "disabled",
+                }
+            }))
+        );
+    }
+
+    #[test]
+    fn build_provider_genai_chat_options_should_set_thinking_disabled_for_doubao_none() {
+        let api_config = ResolvedApiConfig {
+            provider_id: Some("doubao-provider".to_string()),
+            provider_api_keys: Vec::new(),
+            provider_key_cursor: 0,
+            request_format: RequestFormat::OpenAI,
+            allow_concurrent_requests: false,
+            max_concurrent_requests: None,
+            base_url: "https://ark.cn-beijing.volces.com/api/v3".to_string(),
+            api_key: "test-key".to_string(),
+            model: "doubao-seed-1-6-thinking".to_string(),
+            reasoning_effort: Some("none".to_string()),
+            temperature: None,
+            max_output_tokens: None,
+            prompt_cache_key: None,
+            extra_headers: Vec::new(),
+            codex_auth: None,
+            codex_auth_mode: None,
+            codex_originator: None,
+            codex_residency_requirement: None,
+            codex_custom_api_key: None,
+        };
+
+        let options = build_provider_genai_chat_options(&api_config, true, true);
+
+        assert!(options.reasoning_effort.is_none());
+        assert_eq!(
+            options.extra_body,
+            Some(serde_json::json!({
+                "thinking": {
+                    "type": "disabled",
+                }
+            }))
+        );
+    }
+
+    #[test]
+    fn build_provider_genai_chat_options_should_not_set_thinking_disabled_for_generic_openai_none() {
+        let api_config = ResolvedApiConfig {
+            provider_id: Some("openai-provider".to_string()),
+            provider_api_keys: Vec::new(),
+            provider_key_cursor: 0,
+            request_format: RequestFormat::OpenAI,
+            allow_concurrent_requests: false,
+            max_concurrent_requests: None,
+            base_url: "https://api.openai.com/v1".to_string(),
+            api_key: "test-key".to_string(),
+            model: "gpt-5".to_string(),
+            reasoning_effort: Some("none".to_string()),
+            temperature: None,
+            max_output_tokens: None,
+            prompt_cache_key: None,
+            extra_headers: Vec::new(),
+            codex_auth: None,
+            codex_auth_mode: None,
+            codex_originator: None,
+            codex_residency_requirement: None,
+            codex_custom_api_key: None,
+        };
+
+        let options = build_provider_genai_chat_options(&api_config, true, true);
+
+        assert_eq!(options.extra_body, None);
     }
 
     #[test]

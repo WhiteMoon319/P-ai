@@ -450,8 +450,10 @@ fn selected_reasoning_effort_for_runtime(selected: &ApiConfig) -> Option<String>
     if selected.request_format.is_codex() {
         return Some(normalize_reasoning_effort(&selected.reasoning_effort));
     }
-    request_format_uses_gemini_reasoning_effort(selected.request_format, &selected.model)
-        .then(|| normalize_gemini_reasoning_effort(&selected.reasoning_effort))
+    if request_format_uses_gemini_reasoning_effort(selected.request_format, &selected.model) {
+        return Some(normalize_gemini_reasoning_effort(&selected.reasoning_effort));
+    }
+    Some(normalize_reasoning_effort(&selected.reasoning_effort))
 }
 
 fn normalize_api_tools(config: &mut AppConfig) {
