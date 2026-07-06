@@ -119,11 +119,15 @@ const surfaceStyle = computed<StyleValue | undefined>(() => {
 .ecall-chat-bubble-shell {
   --ecall-bubble-avatar-size: 2rem;
   --ecall-bubble-gap: 0.55rem;
-  --ecall-bubble-max-width: 42rem;
+  --ecall-bubble-max-width: 100%;
   --ecall-bubble-avatar-track: calc(var(--ecall-bubble-avatar-size) + var(--ecall-bubble-gap));
   --ecall-bubble-body-offset: calc(var(--ecall-bubble-avatar-size) / 2);
   position: relative;
   width: 100%;
+}
+
+.ecall-chat-bubble-tone-user {
+  --ecall-bubble-max-width: 42rem;
 }
 
 .ecall-chat-bubble-wide {
