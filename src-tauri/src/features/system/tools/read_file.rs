@@ -43,7 +43,11 @@ fn detect_read_media_model_family(model_name: &str) -> Option<ReadMediaRouteFami
     if normalized.contains("minimax") {
         return Some(ReadMediaRouteFamily::Anthropic);
     }
-    if normalized.contains("qwen") || normalized.contains("mimo") || normalized.contains("gpt") {
+    if normalized.contains("qwen")
+        || normalized.contains("mimo")
+        || normalized.contains("gpt")
+        || normalized.contains("doubao")
+    {
         return Some(ReadMediaRouteFamily::OpenAI);
     }
     None
@@ -53,54 +57,17 @@ fn is_mimo_multimodal_model(model_name: &str) -> bool {
     model_name.trim().to_ascii_lowercase().contains("mimo")
 }
 
-fn resolve_read_media_protocol_family(
+fn resolve_read_media_route_family(
     request_format: RequestFormat,
     model_name: &str,
-) -> Option<ReadMediaRouteFamily> {
-    let model_family = detect_read_media_model_family(model_name)?;
+) -> ReadMediaRouteFamily {
     match request_format {
-        RequestFormat::Auto => Some(model_family),
-        RequestFormat::Gemini => Some(ReadMediaRouteFamily::Gemini),
-        RequestFormat::Anthropic => Some(ReadMediaRouteFamily::Anthropic),
-        RequestFormat::OpenAI | RequestFormat::OpenAIResponses => Some(ReadMediaRouteFamily::OpenAI),
-        _ => None,
+        RequestFormat::Gemini => ReadMediaRouteFamily::Gemini,
+        RequestFormat::Anthropic => ReadMediaRouteFamily::Anthropic,
+        RequestFormat::Auto => detect_read_media_model_family(model_name)
+            .unwrap_or(ReadMediaRouteFamily::OpenAI),
+        _ => ReadMediaRouteFamily::OpenAI,
     }
-}
-
-fn validate_read_media_route(api: &ApiConfig) -> Result<ReadMediaRouteFamily, String> {
-    let model_family = detect_read_media_model_family(&api.model).ok_or_else(|| {
-        format!(
-            "当前多模态模型协议配置错误：模型 '{}' 暂不在受支持的多模态路由名单中。",
-            api.model.trim()
-        )
-    })?;
-    let protocol_family = resolve_read_media_protocol_family(api.request_format, &api.model).ok_or_else(|| {
-        match model_family {
-            ReadMediaRouteFamily::Gemini => {
-                "当前多模态模型协议配置错误：gemini/gemma 模型只能使用 Gemini 协议。".to_string()
-            }
-            ReadMediaRouteFamily::OpenAI => {
-                "当前多模态模型协议配置错误：qwen/mimo/gpt 模型只能使用 OpenAI 协议。".to_string()
-            }
-            ReadMediaRouteFamily::Anthropic => {
-                "当前多模态模型协议配置错误：MiniMax 模型只能使用 Anthropic 协议。".to_string()
-            }
-        }
-    })?;
-    if protocol_family != model_family {
-        return Err(match model_family {
-            ReadMediaRouteFamily::Gemini => {
-                "当前多模态模型协议配置错误：gemini/gemma 模型只能使用 Gemini 协议。".to_string()
-            }
-            ReadMediaRouteFamily::OpenAI => {
-                "当前多模态模型协议配置错误：qwen/mimo/gpt 模型只能使用 OpenAI 协议。".to_string()
-            }
-            ReadMediaRouteFamily::Anthropic => {
-                "当前多模态模型协议配置错误：MiniMax 模型只能使用 Anthropic 协议。".to_string()
-            }
-        });
-    }
-    Ok(model_family)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1244,7 +1211,6 @@ async fn builtin_read_media(
     let detected = detect_read_media_type(&path).ok_or_else(|| "read_media 仅支持图片、音频或视频文件".to_string())?;
     let app_config = state_read_config_cached(state)?;
     let selected_api = resolve_vision_api_config(&app_config)?;
-    let route_family = validate_read_media_route(&selected_api)?;
     match detected {
         ReadMediaDetectedType::Image if !selected_api.enable_image => {
             return Err("当前多模态模型未启用图片输入".to_string());
@@ -1258,6 +1224,7 @@ async fn builtin_read_media(
         _ => {}
     }
     let resolved_api = resolve_api_config(&app_config, Some(selected_api.id.as_str()))?;
+    let route_family = resolve_read_media_route_family(resolved_api.request_format, &selected_api.model);
     let raw = tokio::fs::read(&path)
         .await
         .map_err(|err| format!("读取媒体文件失败: {err}"))?;
@@ -1850,55 +1817,37 @@ fn detect_read_media_type_should_classify_common_formats() {
 
 #[cfg(test)]
 #[test]
-fn validate_read_media_route_should_accept_supported_protocol_and_model_pairs() {
-        let mut api = ApiConfig::default();
-        api.request_format = RequestFormat::Gemini;
-        api.model = "gemini-2.5-pro".to_string();
+fn resolve_read_media_route_family_should_follow_request_format_or_auto_fallback() {
         assert_eq!(
-            validate_read_media_route(&api),
-            Ok(ReadMediaRouteFamily::Gemini)
+            resolve_read_media_route_family(RequestFormat::Gemini, "gemini-2.5-pro"),
+            ReadMediaRouteFamily::Gemini
         );
 
-        api.request_format = RequestFormat::OpenAI;
-        api.model = "mimo-v2.5".to_string();
         assert_eq!(
-            validate_read_media_route(&api),
-            Ok(ReadMediaRouteFamily::OpenAI)
+            resolve_read_media_route_family(RequestFormat::OpenAI, "mimo-v2.5"),
+            ReadMediaRouteFamily::OpenAI
         );
 
-        api.request_format = RequestFormat::Anthropic;
-        api.model = "MiniMax-M3".to_string();
         assert_eq!(
-            validate_read_media_route(&api),
-            Ok(ReadMediaRouteFamily::Anthropic)
+            resolve_read_media_route_family(RequestFormat::Anthropic, "MiniMax-M3"),
+            ReadMediaRouteFamily::Anthropic
         );
 
-        api.request_format = RequestFormat::Auto;
-        api.model = "qwen3.7-plus".to_string();
         assert_eq!(
-            validate_read_media_route(&api),
-            Ok(ReadMediaRouteFamily::OpenAI)
+            resolve_read_media_route_family(RequestFormat::Auto, "qwen3.7-plus"),
+            ReadMediaRouteFamily::OpenAI
         );
-}
 
-#[cfg(test)]
-#[test]
-fn validate_read_media_route_should_reject_protocol_mismatches() {
-        let mut api = ApiConfig::default();
-        api.request_format = RequestFormat::Anthropic;
-        api.model = "mimo-v2.5".to_string();
+        assert_eq!(
+            resolve_read_media_route_family(RequestFormat::OpenAI, "doubao-seed-2.0-mini"),
+            ReadMediaRouteFamily::OpenAI
+        );
+
         assert!(
-            validate_read_media_route(&api)
-                .expect_err("mimo should require openai")
-                .contains("只能使用 OpenAI 协议")
-        );
-
-        api.request_format = RequestFormat::OpenAI;
-        api.model = "gemini-2.5-pro".to_string();
-        assert!(
-            validate_read_media_route(&api)
-                .expect_err("gemini should require gemini protocol")
-                .contains("只能使用 Gemini 协议")
+            matches!(
+                resolve_read_media_route_family(RequestFormat::Auto, "unknown-model"),
+                ReadMediaRouteFamily::OpenAI
+            )
         );
 }
 
