@@ -1157,8 +1157,10 @@ const MermaidBlock = defineComponent({
   setup(mermaidProps) {
     const svgHtml = ref("");
     const error = ref("");
+    const copied = ref(false);
     const containerRef = ref<HTMLElement | null>(null);
     let renderCount = 0;
+    let copyTimer = 0;
 
     async function renderMermaid() {
       if (!mermaidProps.code.trim()) {
@@ -1186,27 +1188,64 @@ const MermaidBlock = defineComponent({
       }
     }
 
+    async function copyMermaidCode() {
+      try {
+        await navigator.clipboard.writeText(mermaidProps.code || "");
+        copied.value = true;
+        if (copyTimer) clearTimeout(copyTimer);
+        copyTimer = window.setTimeout(() => {
+          copied.value = false;
+          copyTimer = 0;
+        }, 1500);
+      } catch {
+        copied.value = false;
+      }
+    }
+
     watch(
       () => [mermaidProps.code, mermaidProps.isDark],
       () => renderMermaid(),
       { immediate: true },
     );
 
+    onBeforeUnmount(() => {
+      if (copyTimer) {
+        clearTimeout(copyTimer);
+        copyTimer = 0;
+      }
+    });
+
     return () => {
+      const copyButton = mermaidProps.code.trim()
+        ? h("button", {
+          type: "button",
+          class: "ecall-md-mermaid-copy ecall-md-code-action",
+          title: copied.value ? "已复制" : t("common.copy"),
+          "aria-label": copied.value ? "已复制" : t("common.copy"),
+          onClick: copyMermaidCode,
+        }, [h(copied.value ? Check : Copy, { class: "ecall-md-code-action-icon" })])
+        : null;
       if (!svgHtml.value && !error.value) {
-        return h("pre", { class: "ecall-md-math-fallback" }, [h("code", null, mermaidProps.code)]);
+        return h("div", { class: "ecall-md-mermaid-shell" }, [
+          copyButton,
+          h("pre", { class: "ecall-md-math-fallback" }, [h("code", null, mermaidProps.code)]),
+        ]);
       }
       if (error.value) {
-        return h("div", { class: "ecall-md-mermaid-error" }, [
+        return h("div", { class: "ecall-md-mermaid-shell ecall-md-mermaid-error" }, [
+          copyButton,
           h("pre", null, [h("code", null, mermaidProps.code)]),
           h("div", { class: "ecall-md-mermaid-error-msg" }, error.value),
         ]);
       }
-      return h("div", {
-        ref: containerRef,
-        class: "ecall-md-mermaid-block",
-        innerHTML: svgHtml.value,
-      });
+      return h("div", { class: "ecall-md-mermaid-shell" }, [
+        copyButton,
+        h("div", {
+          ref: containerRef,
+          class: "ecall-md-mermaid-block",
+          innerHTML: svgHtml.value,
+        }),
+      ]);
     };
   },
 });
@@ -1683,9 +1722,31 @@ ul.ecall-md-list {
 }
 
 /* ==================== Mermaid ==================== */
-.ecall-md-mermaid-block {
+.ecall-md-mermaid-shell {
+  position: relative;
   margin: 0.35rem 0;
+}
+
+.ecall-md-mermaid-copy {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  z-index: 1;
+  color: color-mix(in srgb, var(--color-base-content) 54%, transparent);
+  background: color-mix(in srgb, var(--color-base-100) 68%, transparent);
+  opacity: 0.58;
+  backdrop-filter: blur(6px);
+}
+
+.ecall-md-mermaid-shell:hover .ecall-md-mermaid-copy,
+.ecall-md-mermaid-copy:focus-visible {
+  opacity: 1;
+}
+
+.ecall-md-mermaid-block {
+  margin: 0;
   overflow-x: auto;
+  padding-right: 2.2rem;
   text-align: center;
 }
 
@@ -1707,7 +1768,7 @@ ul.ecall-md-list {
 }
 
 .ecall-md-mermaid-error pre {
-  padding: 0.5rem 0.65rem;
+  padding: 0.5rem 2.2rem 0.5rem 0.65rem;
   background: color-mix(in srgb, currentColor 8%, transparent);
   border-radius: 0.4rem;
   font-size: 0.82rem;
