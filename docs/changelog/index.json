@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-06T11:59:36.825Z",
-  "latestVersion": "v0.18.8",
+  "generatedAt": "2026-07-06T17:24:12.830Z",
+  "latestVersion": "v0.19.0",
   "releases": [
+    {
+      "version": "v0.19.0",
+      "path": "docs/changelog/releases/v0.19.0.md",
+      "summary": "功能（config）：所有模型选择器统一展示模型思维等级，关闭思考时显示“不思考”，便于在快速设置、配置页和聊天相关入口中直接区分同模型的不同推理档位。"
+    },
     {
       "version": "v0.18.8",
       "path": "docs/changelog/releases/v0.18.8.md",
