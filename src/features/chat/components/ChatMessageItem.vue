@@ -2002,12 +2002,16 @@ function normalizeRenderedLocalLinks() {
   }
 }
 
+function blockWideContentText(block: ChatMessageBlock): string {
+  return formatAssistantStreamingText(block);
+}
+
 function blockHasMermaid(block: ChatMessageBlock): boolean {
-  return /```(?:\s*)mermaid\b/i.test(block.text);
+  return /```(?:\s*)mermaid\b/i.test(blockWideContentText(block));
 }
 
 function blockHasCodeFence(block: ChatMessageBlock): boolean {
-  return /```[\w-]*\s*[\r\n]/i.test(block.text);
+  return /```[\w-]*\s*[\r\n]/i.test(blockWideContentText(block));
 }
 
 function blockNeedsWideBubble(block: ChatMessageBlock): boolean {

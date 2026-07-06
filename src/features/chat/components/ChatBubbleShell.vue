@@ -325,6 +325,10 @@ const surfaceStyle = computed<StyleValue | undefined>(() => {
   color: var(--color-base-content);
 }
 
+.ecall-chat-bubble-wide .ecall-chat-bubble-surface {
+  width: 100%;
+}
+
 .ecall-chat-bubble-activity {
   width: min(100%, 36rem);
 }
