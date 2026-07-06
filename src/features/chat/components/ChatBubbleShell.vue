@@ -221,7 +221,7 @@ const surfaceStyle = computed<StyleValue | undefined>(() => {
 .ecall-chat-bubble-shell:not(.ecall-chat-bubble-tone-user) .ecall-chat-bubble-body {
   box-sizing: border-box;
   grid-area: body;
-  padding-inline: var(--ecall-bubble-body-offset);
+  padding-left: var(--ecall-bubble-body-offset);
   width: min(var(--ecall-bubble-max-width), 100%);
   max-width: 100%;
   margin: 0;
