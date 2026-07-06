@@ -46,6 +46,8 @@ const UPDATE_STAGE_READY: &str = "ready";
 const UPDATE_STAGE_COMPLETED: &str = "completed";
 const UPDATE_STAGE_CANCELLED: &str = "cancelled";
 const UPDATE_STAGE_FAILED: &str = "failed";
+const GITHUB_UPDATE_CHECK_CACHE_FILE: &str = "github_update_check_cache.json";
+const GITHUB_UPDATE_CHECK_THROTTLE_HOURS: i64 = 8;
 
 static UPDATE_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 static UPDATE_CANCEL_REQUESTED: AtomicBool = AtomicBool::new(false);
@@ -97,6 +99,13 @@ struct GithubUpdateInfo {
     published_at: Option<String>,
     runtime_kind: String,
     can_force_update: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GithubUpdateCheckCache {
+    checked_at: String,
+    result: GithubUpdateInfo,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -546,10 +555,79 @@ async fn fetch_project_changelog_markdown() -> Result<String, String> {
     .await
 }
 
+fn github_update_check_cache_path(runtime: &UpdateRuntimePaths) -> StdPathBuf {
+    runtime.data_dir.join(GITHUB_UPDATE_CHECK_CACHE_FILE)
+}
+
+fn read_github_update_check_cache(
+    runtime: &UpdateRuntimePaths,
+) -> Result<Option<GithubUpdateCheckCache>, String> {
+    let path = github_update_check_cache_path(runtime);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let raw = std_fs::read(&path)
+        .map_err(|err| format!("读取更新检查缓存失败（{}）：{err}", path.display()))?;
+    let cache = serde_json::from_slice::<GithubUpdateCheckCache>(&raw)
+        .map_err(|err| format!("解析更新检查缓存失败（{}）：{err}", path.display()))?;
+    Ok(Some(cache))
+}
+
+fn write_github_update_check_cache(
+    runtime: &UpdateRuntimePaths,
+    result: &GithubUpdateInfo,
+) -> Result<(), String> {
+    let path = github_update_check_cache_path(runtime);
+    if let Some(parent) = path.parent() {
+        std_fs::create_dir_all(parent).map_err(|err| {
+            format!("创建更新检查缓存目录失败（{}）：{err}", parent.display())
+        })?;
+    }
+    let checked_at = now_utc()
+        .format(&Rfc3339)
+        .map_err(|err| format!("格式化更新检查缓存时间失败：{err}"))?;
+    let cache = GithubUpdateCheckCache {
+        checked_at,
+        result: result.clone(),
+    };
+    let raw = serde_json::to_vec_pretty(&cache)
+        .map_err(|err| format!("序列化更新检查缓存失败：{err}"))?;
+    std_fs::write(&path, raw)
+        .map_err(|err| format!("写入更新检查缓存失败（{}）：{err}", path.display()))
+}
+
+fn github_update_check_cache_valid(cache: &GithubUpdateCheckCache) -> bool {
+    let Ok(checked_at) = OffsetDateTime::parse(&cache.checked_at, &Rfc3339) else {
+        return false;
+    };
+    let elapsed = now_utc() - checked_at;
+    elapsed.whole_hours() < GITHUB_UPDATE_CHECK_THROTTLE_HOURS
+}
+
 #[tauri::command]
-async fn check_github_update(update_method: Option<String>) -> Result<GithubUpdateInfo, String> {
+async fn check_github_update(
+    update_method: Option<String>,
+    use_cached_result: Option<bool>,
+) -> Result<GithubUpdateInfo, String> {
     let method = GithubUpdateMethod::from_raw(update_method);
     let runtime = detect_update_runtime_paths()?;
+    if use_cached_result.unwrap_or(false) {
+        match read_github_update_check_cache(&runtime) {
+            Ok(Some(cache)) if github_update_check_cache_valid(&cache) => {
+                eprintln!(
+                    "[自动更新] 命中 {} 小时内更新检查缓存，直接返回：has_update={} latest_version={}",
+                    GITHUB_UPDATE_CHECK_THROTTLE_HOURS,
+                    cache.result.has_update,
+                    cache.result.latest_version
+                );
+                return Ok(cache.result);
+            }
+            Ok(_) => {}
+            Err(err) => {
+                eprintln!("[自动更新] 读取更新检查缓存失败，继续实时检查：{err}");
+            }
+        }
+    }
     let (payload, access_mode) = fetch_latest_release_payload(method).await?;
     let latest_version = payload
         .tag_name
@@ -570,7 +648,7 @@ async fn check_github_update(update_method: Option<String>) -> Result<GithubUpda
             payload.body.clone().unwrap_or_default()
         }
     };
-    Ok(GithubUpdateInfo {
+    let result = GithubUpdateInfo {
         current_version: current_version.clone(),
         latest_version: latest_version.clone(),
         has_update: is_newer_version(&current_version, &latest_version),
@@ -587,7 +665,11 @@ async fn check_github_update(update_method: Option<String>) -> Result<GithubUpda
         published_at: payload.published_at,
         runtime_kind: runtime.runtime_kind.as_str().to_string(),
         can_force_update: true,
-    })
+    };
+    if let Err(err) = write_github_update_check_cache(&runtime, &result) {
+        eprintln!("[自动更新] 写入更新检查缓存失败：{err}");
+    }
+    Ok(result)
 }
 
 fn copy_file_with_parent(src: &StdPath, dest: &StdPath) -> Result<(), String> {

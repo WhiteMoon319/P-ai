@@ -75,8 +75,9 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
 
   let updateProgressUnlisten: UnlistenFn | null = null;
   let webUpdateProgressUnlisten: (() => void) | null = null;
-  let dailyCheckTimer: number | null = null;
-  let dailyCheckStarted = false;
+  let autoCheckTimer: number | null = null;
+  let autoCheckStarted = false;
+  const AUTO_CHECK_INTERVAL_MS = 8 * 60 * 60 * 1000;
 
   function runtimeLabel(kind: "installer" | "portable") {
     return kind === "portable" ? t("about.runtimePortable") : t("about.runtimeInstaller");
@@ -127,30 +128,20 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     updateDialogOpen.value = true;
   }
 
-  function clearDailyCheckTimer() {
-    if (dailyCheckTimer != null) {
-      window.clearTimeout(dailyCheckTimer);
-      dailyCheckTimer = null;
+  function clearAutoCheckTimer() {
+    if (autoCheckTimer != null) {
+      window.clearTimeout(autoCheckTimer);
+      autoCheckTimer = null;
     }
   }
 
-  function msUntilNextFourAm() {
-    const now = new Date();
-    const next = new Date(now);
-    next.setHours(4, 0, 0, 0);
-    if (next.getTime() <= now.getTime()) {
-      next.setDate(next.getDate() + 1);
-    }
-    return Math.max(1000, next.getTime() - now.getTime());
-  }
-
-  function scheduleNextDailyCheck() {
-    clearDailyCheckTimer();
-    dailyCheckTimer = window.setTimeout(() => {
-      void checkGithubUpdate(true).finally(() => {
-        scheduleNextDailyCheck();
+  function scheduleNextAutoCheck() {
+    clearAutoCheckTimer();
+    autoCheckTimer = window.setTimeout(() => {
+      void checkGithubUpdate(true, true).finally(() => {
+        scheduleNextAutoCheck();
       });
-    }, msUntilNextFourAm());
+    }, AUTO_CHECK_INTERVAL_MS);
   }
 
   function currentUpdateMethod(): GithubUpdateMethod {
@@ -258,7 +249,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     options.status.value = payload.error ? payload.error : payload.message;
   }
 
-  async function checkGithubUpdate(silent: boolean) {
+  async function checkGithubUpdate(silent: boolean, useCachedResult = false) {
     if (options.viewMode.value === "archives") return;
     if (checkingUpdate.value) return;
     checkingUpdateRequest.value = true;
@@ -266,7 +257,10 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       if (!silent) {
         options.status.value = t("about.checking");
       }
-      const result = await invokeTauri<GithubUpdateInfo>("check_github_update", { updateMethod: currentUpdateMethod() });
+      const result = await invokeTauri<GithubUpdateInfo>("check_github_update", {
+        updateMethod: currentUpdateMethod(),
+        useCachedResult,
+      });
       latestCheckResult.value = result;
       updateRuntimeKind.value = result.runtimeKind;
       updateDialogReleaseUrl.value = result.releaseUrl || "";
@@ -403,10 +397,10 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   }
 
   async function autoCheckGithubUpdate() {
-    if (dailyCheckStarted) return;
-    dailyCheckStarted = true;
-    await checkGithubUpdate(true);
-    scheduleNextDailyCheck();
+    if (autoCheckStarted) return;
+    autoCheckStarted = true;
+    await checkGithubUpdate(true, true);
+    scheduleNextAutoCheck();
   }
 
   async function manualCheckGithubUpdate() {
@@ -462,8 +456,8 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     updateProgressUnlisten = null;
     webUpdateProgressUnlisten?.();
     webUpdateProgressUnlisten = null;
-    clearDailyCheckTimer();
-    dailyCheckStarted = false;
+    clearAutoCheckTimer();
+    autoCheckStarted = false;
   });
 
   return {
