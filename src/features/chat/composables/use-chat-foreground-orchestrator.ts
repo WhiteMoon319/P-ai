@@ -2,11 +2,58 @@ import { nextTick } from "vue";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { i18n } from "../../../i18n";
 import { invokeTauri } from "../../../services/tauri-api";
+import { toErrorMessage } from "../../../utils/error";
 import { readLastActiveConversationId } from "../utils/last-active-conversation";
 
 const t = i18n.global.t;
 
 export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
+  function currentConversationId(): string {
+    return String(bindings.currentChatConversationId.value || "").trim();
+  }
+
+  function formatSwitchDiagnostic(
+    stage: string,
+    targetConversationId: string,
+    previousConversationId: string,
+    startedAt: number,
+    detail?: unknown,
+  ): string {
+    const currentId = currentConversationId();
+    const reason = detail === undefined || detail === null ? "" : toErrorMessage(detail);
+    const elapsedMs = Math.round((bindings.perfNow() - startedAt) * 10) / 10;
+    return [
+      `会话切换未完成：${stage}${reason ? `。原因：${reason}` : ""}`,
+      `目标会话：${targetConversationId || "空"}`,
+      `当前会话：${currentId || "空"}`,
+      `原会话：${previousConversationId || "空"}`,
+      `耗时：${elapsedMs}ms`,
+    ].join("\n");
+  }
+
+  function showSwitchDiagnostic(
+    stage: string,
+    targetConversationId: string,
+    previousConversationId: string,
+    startedAt: number,
+    detail?: unknown,
+  ) {
+    const text = formatSwitchDiagnostic(stage, targetConversationId, previousConversationId, startedAt, detail);
+    const visibleConversationId = currentConversationId() || previousConversationId || targetConversationId;
+    if (typeof bindings.setConversationChatErrorText === "function") {
+      bindings.setConversationChatErrorText(visibleConversationId, text);
+    } else if (typeof bindings.setStatus === "function") {
+      bindings.setStatus(text);
+    }
+    console.warn("[会话切换] 诊断提示", {
+      stage,
+      targetConversationId,
+      currentConversationId: currentConversationId(),
+      previousConversationId,
+      detail,
+    });
+  }
+
   async function requestConversationLightSnapshot(
     conversationId?: string | null,
     options?: { resumeProjection?: boolean },
@@ -113,36 +160,80 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
   async function switchUnarchivedConversation(conversationId: string) {
     const cid = String(conversationId || "").trim();
     if (!cid) return;
-    const previousConversationId = String(bindings.currentChatConversationId.value || "").trim();
+    const previousConversationId = currentConversationId();
     const startedAt = bindings.perfNow();
+    let stage = "准备切换";
     try {
+      stage = "标记前台会话同步中";
       bindings.conversationForegroundSyncing.value = true;
       if (previousConversationId) {
+        stage = "保存原会话前台缓存";
         bindings.cacheConversationMessages(previousConversationId, bindings.allMessages.value);
         bindings.clearConversationBadge(previousConversationId);
         bindings.markConversationReadPersisted(previousConversationId);
       }
+      stage = "清理前台运行态";
       bindings.getChatFlow().clearForegroundRuntimeState();
       bindings.clearPendingManualScrollToBottom();
       bindings.foregroundTailLatestReady.value = false;
       const trace = bindings.beginForegroundPaintTrace(cid);
       // 切会话恢复时，先让后端把“持久消息 + 当前运行中投影”合成为一份权威快照，
       // 前端一次性接管正文，再只负责接后续流式增量，避免先显示持久消息再二次补流式。
+      stage = "请求前台轻量快照";
       const snapshot = await requestConversationLightSnapshot(cid, {
         resumeProjection: true,
       });
+      const snapshotConversationId = String(snapshot?.conversationId || "").trim();
+      if (!snapshotConversationId) {
+        showSwitchDiagnostic("后端快照没有返回会话 id", cid, previousConversationId, startedAt, snapshot);
+      } else if (snapshotConversationId !== cid) {
+        showSwitchDiagnostic(
+          "后端快照返回了其他会话",
+          cid,
+          previousConversationId,
+          startedAt,
+          `snapshotConversationId=${snapshotConversationId}`,
+        );
+      }
+      stage = "应用前台轻量快照";
       bindings.applyConversationSnapshot(snapshot);
-      if (String(bindings.currentChatConversationId.value || "").trim() === cid && snapshot?.shouldBindStream) {
-        await bindings.getChatFlow()?.bindActiveConversationStream?.(cid, true);
-        if (String(bindings.currentChatConversationId.value || "").trim() === cid) {
+      const appliedConversationId = currentConversationId();
+      if (appliedConversationId !== cid) {
+        showSwitchDiagnostic(
+          "快照已应用但当前会话不是目标会话",
+          cid,
+          previousConversationId,
+          startedAt,
+          `appliedConversationId=${appliedConversationId || "空"}`,
+        );
+      }
+      if (currentConversationId() === cid && snapshot?.shouldBindStream) {
+        const bindActiveConversationStream = bindings.getChatFlow()?.bindActiveConversationStream;
+        if (typeof bindActiveConversationStream !== "function") {
+          showSwitchDiagnostic("需要绑定流式通道但绑定函数不存在", cid, previousConversationId, startedAt);
+        } else {
+          stage = "绑定前台流式通道";
+          await bindActiveConversationStream(cid, true);
+        }
+        if (currentConversationId() === cid) {
+          stage = "恢复前台运行态";
           bindings.getChatFlow()?.resumeForegroundRuntimeRound?.({
             conversationId: cid,
             streamCache: snapshot?.streamCache || null,
             statusText: t('chat.statusWaitingReply'),
             reason: "switch_conversation_snapshot_ready",
           });
+        } else {
+          showSwitchDiagnostic(
+            "流式通道绑定后当前会话被改走",
+            cid,
+            previousConversationId,
+            startedAt,
+            `currentConversationId=${currentConversationId() || "空"}`,
+          );
         }
       }
+      stage = "完成会话切换收尾";
       bindings.clearConversationBadge(cid);
       bindings.markConversationReadPersisted(cid);
       await nextTick();
@@ -156,7 +247,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
         syncCostMs: Math.round((bindings.perfNow() - startedAt) * 10) / 10,
       });
     } catch (error) {
-      bindings.setStatusError("status.loadMessagesFailed", error);
+      showSwitchDiagnostic(stage, cid, previousConversationId, startedAt, error);
     } finally {
       bindings.conversationForegroundSyncing.value = false;
     }

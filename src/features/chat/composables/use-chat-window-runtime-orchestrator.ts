@@ -167,6 +167,7 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     backgroundConversationBadgeMap: bindings.backgroundConversationBadgeMap,
     setStatus: bindings.setStatus,
     setStatusError: bindings.setStatusError,
+    setConversationChatErrorText: bindings.setConversationChatErrorText,
     perfNow: bindings.perfNow,
     loadAllMessages,
     isChatWindowActiveNow: bindings.isChatWindowActiveNow,

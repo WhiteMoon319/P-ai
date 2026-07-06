@@ -289,6 +289,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     chatting: options.chatting,
     t: options.t,
     sendStartedAtMsByGen,
+    channelBinding,
     clearConversationStreamCache,
     removeLegacyAssistantDrafts,
     resetDisplayState,
