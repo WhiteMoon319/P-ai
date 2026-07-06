@@ -131,6 +131,7 @@ fn consume_api_key_for_request(resolved_api: &ResolvedApiConfig) -> String {
     let provider = ApiProviderConfig {
         id: resolved_api.provider_id.clone().unwrap_or_default(),
         name: String::new(),
+        deprecated: false,
         request_format: resolved_api.request_format,
         allow_concurrent_requests: resolved_api.allow_concurrent_requests,
         max_concurrent_requests: resolved_api.max_concurrent_requests,
@@ -183,6 +184,7 @@ fn migrate_legacy_api_configs_into_providers(config: &mut AppConfig) {
             ApiProviderConfig {
                 id: legacy.id.clone(),
                 name: legacy.name.clone(),
+                deprecated: false,
                 request_format: legacy.request_format,
                 allow_concurrent_requests: legacy.allow_concurrent_requests,
                 max_concurrent_requests: legacy.max_concurrent_requests,
@@ -215,6 +217,7 @@ fn migrate_legacy_api_configs_into_providers(config: &mut AppConfig) {
                 models: vec![ApiModelConfig {
                     id: model_id,
                     model: legacy.model.clone(),
+                    deprecated: false,
                     enable_image: legacy.enable_image,
                     enable_video: legacy.enable_video,
                     enable_tools: legacy.enable_tools,
@@ -281,7 +284,8 @@ fn is_default_placeholder_provider(provider: &ApiProviderConfig) -> bool {
 
 fn provider_first_endpoint_id(provider: &ApiProviderConfig) -> Option<String> {
     provider.models.iter().find_map(|model| {
-        (!model.model.trim().is_empty()).then(|| api_endpoint_id(&provider.id, &model.id))
+        (!provider.deprecated && !model.deprecated && !model.model.trim().is_empty())
+            .then(|| api_endpoint_id(&provider.id, &model.id))
     })
 }
 
@@ -307,7 +311,13 @@ fn remap_legacy_api_config_id_to_endpoint(config: &AppConfig, raw_id: &str) -> S
 fn expand_api_configs_from_providers(config: &mut AppConfig) {
     let mut expanded = Vec::<ApiConfig>::new();
     for provider in &config.api_providers {
+        if provider.deprecated {
+            continue;
+        }
         for model in &provider.models {
+            if model.deprecated {
+                continue;
+            }
             if model.model.trim().is_empty() {
                 continue;
             }

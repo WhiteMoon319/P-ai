@@ -205,7 +205,7 @@
               </div>
               <div class="flex items-center gap-2">
                 <select v-model="connectionTestModelId" class="select select-bordered select-sm flex-1">
-                  <option v-for="m in selectedProvider.models" :key="m.id" :value="m.id">
+                  <option v-for="m in (selectedProvider.models || []).filter((item) => !item.deprecated)" :key="m.id" :value="m.id">
                     {{ m.model || t('config.api.unnamedModel') }}
                   </option>
                 </select>
@@ -259,7 +259,7 @@
               </div>
 
               <div class="grid gap-3">
-                <div v-for="modelCard in selectedProvider.models" :key="modelCard.id"
+                <div v-for="modelCard in (selectedProvider.models || []).filter((item) => !item.deprecated)" :key="modelCard.id"
                   class="card border border-base-300 bg-base-200/50 transition"
                   :class="selectedModel?.id === modelCard.id ? '' : ''">
                   <div class="card-body gap-3 p-4">
@@ -269,8 +269,8 @@
                           selectedProvider.id}/${modelCard.model || t("config.api.unnamedModel")}` }}</div>
                       </button>
                       <button class="btn btn-sm btn-square btn-ghost" type="button"
-                        :class="selectedProvider.models.length <= 1 ? 'text-base-content/30' : 'text-error'"
-                        :disabled="selectedProvider.models.length <= 1" @click="removeModelCard(modelCard.id)">
+                        :class="activeModelCount(selectedProvider) <= 1 ? 'text-base-content/30' : 'text-error'"
+                        :disabled="activeModelCount(selectedProvider) <= 1" @click="removeModelCard(modelCard.id)">
                         <Trash2 class="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -703,19 +703,38 @@ function isTextRequestFormat(format: string): format is ApiRequestFormat {
   return TEXT_REQUEST_FORMATS.has(canonicalRequestFormat(format));
 }
 
+function isProviderDeprecated(provider: ApiProviderConfigItem | null | undefined): boolean {
+  return !!provider?.deprecated;
+}
+
+function isModelDeprecated(model: ApiModelConfigItem | null | undefined): boolean {
+  return !!model?.deprecated;
+}
+
+function firstActiveModel(provider: ApiProviderConfigItem | null | undefined): ApiModelConfigItem | null {
+  if (!provider) return null;
+  return (provider.models || []).find((model) => !isModelDeprecated(model)) ?? null;
+}
+
+function activeModelCount(provider: ApiProviderConfigItem | null | undefined): number {
+  if (!provider) return 0;
+  return (provider.models || []).filter((model) => !isModelDeprecated(model)).length;
+}
+
 const providerList = computed(() => props.config.apiProviders || []);
+const activeProviderList = computed(() => providerList.value.filter((provider) => !isProviderDeprecated(provider)));
 const selectedProviderId = computed(() => {
   const [providerId] = String(props.config.selectedApiConfigId || "").split("::");
-  return providerId || providerList.value[0]?.id || "";
+  return providerId || activeProviderList.value[0]?.id || "";
 });
 
 const selectedProvider = computed(() => {
   const [providerId] = String(props.config.selectedApiConfigId || "").split("::");
-  return providerList.value.find((provider) => provider.id === providerId) ?? providerList.value[0] ?? null;
+  return activeProviderList.value.find((provider) => provider.id === providerId) ?? activeProviderList.value[0] ?? null;
 });
 const activeCapability = computed<ApiCapability>(() => capabilityFromRequestFormat(selectedProvider.value?.requestFormat || "openai"));
 const scopedProviderList = computed(() =>
-  providerList.value.filter((provider) => capabilityFromRequestFormat(provider.requestFormat) === activeCapability.value),
+  activeProviderList.value.filter((provider) => capabilityFromRequestFormat(provider.requestFormat) === activeCapability.value),
 );
 const protocolOptions = computed(() =>
   protocolOptionsByCapability[activeCapability.value].map((option) =>
@@ -729,7 +748,7 @@ const selectedModel = computed(() => {
   const [, modelId] = String(props.config.selectedApiConfigId || "").split("::");
   const provider = selectedProvider.value;
   if (!provider) return null;
-  return provider.models.find((model) => model.id === modelId) ?? provider.models[0] ?? null;
+  return (provider.models || []).find((model) => model.id === modelId && !isModelDeprecated(model)) ?? firstActiveModel(provider);
 });
 
 const selectedProtocol = computed<ApiRequestFormat>(() => canonicalRequestFormat(selectedProvider.value?.requestFormat || "openai"));
@@ -989,6 +1008,7 @@ function cloneProvider(provider: ApiProviderConfigItem): ApiProviderConfigItem {
       ? provider.models.map((model) => ({
         id: String(model.id || "").trim(),
         model: String(model.model || "").trim(),
+        deprecated: !!model.deprecated,
         enableImage: !!model.enableImage,
         enableVideo: !!model.enableVideo,
         enableTools: model.enableTools !== false,
@@ -1022,6 +1042,7 @@ function normalizeProviderForCompare(provider: ApiProviderConfigItem) {
   return {
     id: String(provider.id || "").trim(),
     name: String(provider.name || "").trim(),
+    deprecated: !!provider.deprecated,
     requestFormat: normalizeApiRequestFormat(provider.requestFormat),
     allowConcurrentRequests: !!provider.allowConcurrentRequests,
     maxConcurrentRequests: provider.maxConcurrentRequests ?? null,
@@ -1054,6 +1075,7 @@ function normalizeProviderForCompare(provider: ApiProviderConfigItem) {
       ? provider.models.map((model) => ({
         id: String(model.id || "").trim(),
         model: String(model.model || "").trim(),
+        deprecated: !!model.deprecated,
         enableImage: !!model.enableImage,
         enableVideo: !!model.enableVideo,
         enableTools: model.enableTools !== false,
@@ -1182,7 +1204,7 @@ function createProvider(seed: string, capability: ApiCapability = activeCapabili
 function selectProvider(providerId: string) {
   revertUnsavedConfigIfNeeded();
   const provider = providerList.value.find((item) => item.id === providerId);
-  const model = provider?.models[0];
+  const model = firstActiveModel(provider);
   if (!provider || !model) return;
   props.config.selectedApiConfigId = `${provider.id}::${model.id}`;
 }
@@ -1220,6 +1242,50 @@ async function addProvider() {
   await Promise.resolve(props.saveApiConfigAction());
 }
 
+function firstActiveApiConfigIdExcluding(excludedIds: Set<string>): string {
+  for (const provider of props.config.apiProviders || []) {
+    if (provider.deprecated) continue;
+    for (const model of provider.models || []) {
+      if (model.deprecated) continue;
+      const providerId = String(provider.id || "").trim();
+      const modelId = String(model.id || "").trim();
+      const endpointId = providerId && modelId ? `${providerId}::${modelId}` : "";
+      if (endpointId && !excludedIds.has(endpointId)) return endpointId;
+    }
+  }
+  return "";
+}
+
+function clearRemovedApiConfigReferences(removedIds: string[]) {
+  const removedSet = new Set(removedIds.map((id) => String(id || "").trim()).filter(Boolean));
+  if (removedSet.size === 0) return;
+  for (const department of props.config.departments || []) {
+    const nextIds = (Array.isArray(department.apiConfigIds) ? department.apiConfigIds : [])
+      .map((id) => String(id || "").trim())
+      .filter((id) => !!id && !removedSet.has(id));
+    department.apiConfigIds = nextIds;
+    if (removedSet.has(String(department.apiConfigId || "").trim())) {
+      department.apiConfigId = nextIds[0] || "";
+    }
+  }
+  if (removedSet.has(String(props.config.assistantDepartmentApiConfigId || "").trim())) {
+    props.config.assistantDepartmentApiConfigId = "";
+  }
+  if (removedSet.has(String(props.config.sttApiConfigId || "").trim())) {
+    props.config.sttApiConfigId = undefined;
+    props.config.sttAutoSend = false;
+  }
+  if (removedSet.has(String(props.config.visionApiConfigId || "").trim())) {
+    props.config.visionApiConfigId = undefined;
+  }
+  if (removedSet.has(String(props.config.toolReviewApiConfigId || "").trim())) {
+    props.config.toolReviewApiConfigId = undefined;
+  }
+  if (removedSet.has(String(props.config.selectedApiConfigId || "").trim())) {
+    props.config.selectedApiConfigId = firstActiveApiConfigIdExcluding(removedSet);
+  }
+}
+
 function removeProvider(providerId: string) {
   if (scopedProviderList.value.length <= 1) return;
   const provider = props.config.apiProviders.find((item) => item.id === providerId);
@@ -1245,11 +1311,23 @@ async function confirmDeleteProvider() {
     closeDeleteProviderDialog();
     return;
   }
-  props.config.apiProviders.splice(idx, 1);
-  const fallbackProvider = scopedProviderList.value[Math.max(0, idx - 1)] ?? scopedProviderList.value[0] ?? props.config.apiProviders[0];
-  const fallbackModel = fallbackProvider?.models[0];
+  const target = props.config.apiProviders[idx];
+  const removedIds = (target.models || [])
+    .map((model) => {
+      const modelKey = String(model.id || "").trim();
+      return providerId && modelKey ? `${providerId}::${modelKey}` : "";
+    })
+    .filter(Boolean);
+  target.deprecated = true;
+  target.models = (target.models || []).map((model) => ({ ...model, deprecated: true }));
+  clearRemovedApiConfigReferences(removedIds);
+  props.normalizeApiBindingsAction();
+  const fallbackProvider = scopedProviderList.value.find((provider) => provider.id !== providerId) ?? activeProviderList.value.find((provider) => provider.id !== providerId) ?? null;
+  const fallbackModel = firstActiveModel(fallbackProvider);
   if (fallbackProvider && fallbackModel) {
     props.config.selectedApiConfigId = `${fallbackProvider.id}::${fallbackModel.id}`;
+  } else {
+    props.config.selectedApiConfigId = "";
   }
   closeDeleteProviderDialog();
   await Promise.resolve(props.saveApiConfigAction());
@@ -1257,7 +1335,7 @@ async function confirmDeleteProvider() {
 
 async function switchCapabilityTab(capability: ApiCapability) {
   revertUnsavedConfigIfNeeded();
-  const nextProvider = providerList.value.find((provider) => capabilityFromRequestFormat(provider.requestFormat) === capability);
+  const nextProvider = activeProviderList.value.find((provider) => capabilityFromRequestFormat(provider.requestFormat) === capability);
   if (nextProvider) {
     selectProvider(nextProvider.id);
     return;
@@ -1337,13 +1415,20 @@ function addModelCard() {
 
 function removeModelCard(modelId: string) {
   const provider = selectedProvider.value;
-  if (!provider || provider.models.length <= 1) return;
+  if (!provider) return;
+  const activeModels = (provider.models || []).filter((item) => !isModelDeprecated(item));
+  if (activeModels.length <= 1) return;
   const idx = provider.models.findIndex((item) => item.id === modelId);
   if (idx < 0) return;
-  provider.models.splice(idx, 1);
-  const fallback = provider.models[Math.max(0, idx - 1)] ?? provider.models[0];
+  const removedId = `${provider.id}::${modelId}`;
+  provider.models[idx].deprecated = true;
+  clearRemovedApiConfigReferences([removedId]);
+  props.normalizeApiBindingsAction();
+  const fallback = firstActiveModel(provider);
   if (fallback) {
     props.config.selectedApiConfigId = `${provider.id}::${fallback.id}`;
+  } else {
+    props.config.selectedApiConfigId = firstActiveApiConfigIdExcluding(new Set([removedId]));
   }
 }
 
@@ -1868,13 +1953,14 @@ watch(
     const provider = selectedProvider.value;
     connectionTestKeyStatus.value = {};
     modelConnectionResult.value = {};
-    if (!provider || provider.models.length === 0) {
+    const activeModels = (provider?.models || []).filter((model) => !isModelDeprecated(model));
+    if (!provider || activeModels.length === 0) {
       connectionTestModelId.value = "";
       connectionTestResults.value = [];
       return;
     }
-    if (!provider.models.some((m) => m.id === connectionTestModelId.value)) {
-      connectionTestModelId.value = provider.models[0].id;
+    if (!activeModels.some((m) => m.id === connectionTestModelId.value)) {
+      connectionTestModelId.value = activeModels[0].id;
     }
   },
   { immediate: true },

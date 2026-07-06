@@ -117,6 +117,7 @@ export type ApiConfigItem = {
 export type ApiModelConfigItem = {
   id: string;
   model: string;
+  deprecated?: boolean;
   enableImage: boolean;
   enableVideo?: boolean;
   enableTools: boolean;
@@ -131,6 +132,7 @@ export type ApiModelConfigItem = {
 export type ApiProviderConfigItem = {
   id: string;
   name: string;
+  deprecated?: boolean;
   requestFormat: ApiRequestFormat;
   allowConcurrentRequests?: boolean;
   maxConcurrentRequests?: number | null;

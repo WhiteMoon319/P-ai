@@ -570,6 +570,8 @@ fn department_effective_chat_api_config_ids(
 struct ApiModelConfig {
     id: String,
     model: String,
+    #[serde(default)]
+    deprecated: bool,
     #[serde(default = "default_false")]
     enable_image: bool,
     #[serde(default = "default_false")]
@@ -595,6 +597,7 @@ impl Default for ApiModelConfig {
         Self {
             id: "default-model".to_string(),
             model: "gpt-4o-mini".to_string(),
+            deprecated: false,
             enable_image: false,
             enable_video: false,
             enable_tools: true,
@@ -613,6 +616,8 @@ impl Default for ApiModelConfig {
 struct ApiProviderConfig {
     id: String,
     name: String,
+    #[serde(default)]
+    deprecated: bool,
     #[serde(default = "default_request_format")]
     request_format: RequestFormat,
     #[serde(default = "default_false")]
@@ -661,6 +666,7 @@ impl Default for ApiProviderConfig {
         Self {
             id: "default-provider-openai".to_string(),
             name: "Default OpenAI".to_string(),
+            deprecated: false,
             request_format: RequestFormat::OpenAI,
             allow_concurrent_requests: false,
             max_concurrent_requests: None,

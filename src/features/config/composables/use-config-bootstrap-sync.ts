@@ -110,9 +110,10 @@ export function applyConfigBootstrapUpdate(bindings: {
     bindings.config.apiProviders = Array.isArray(payload.apiProviders)
       ? payload.apiProviders.map((provider: any) => ({
         ...provider,
+        deprecated: !!provider.deprecated,
         apiKeys: Array.isArray(provider.apiKeys) ? [...provider.apiKeys] : [],
         cachedModelOptions: Array.isArray(provider.cachedModelOptions) ? [...provider.cachedModelOptions] : [],
-        models: Array.isArray(provider.models) ? provider.models.map((model: any) => ({ ...model })) : [],
+        models: Array.isArray(provider.models) ? provider.models.map((model: any) => ({ ...model, deprecated: !!model.deprecated })) : [],
         tools: Array.isArray(provider.tools)
           ? provider.tools.map((tool: any) => ({
             ...tool,

@@ -347,6 +347,7 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
       ? (cfg.apiProviders || []).map((provider) => ({
           id: String((provider as { id?: unknown }).id || "").trim(),
           name: String((provider as { name?: unknown }).name || "").trim(),
+          deprecated: !!(provider as { deprecated?: unknown }).deprecated,
           requestFormat: normalizeApiRequestFormat((provider as { requestFormat?: unknown }).requestFormat),
           allowConcurrentRequests: !!(provider as { allowConcurrentRequests?: unknown }).allowConcurrentRequests,
           maxConcurrentRequests: (() => {
@@ -388,6 +389,7 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
             ? ((provider as { models?: unknown[] }).models || []).map((model) => ({
                 id: String((model as { id?: unknown }).id || "").trim(),
                 model: String((model as { model?: unknown }).model || "").trim(),
+                deprecated: !!(model as { deprecated?: unknown }).deprecated,
                 enableImage: !!(model as { enableImage?: unknown }).enableImage,
                 enableVideo: !!(model as { enableVideo?: unknown }).enableVideo,
                 enableTools: (model as { enableTools?: unknown }).enableTools !== false,
@@ -570,7 +572,22 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
         ? (saved.remoteImChannels || []).map(mapRemoteImChannel).filter((item) => !!item.id)
         : [];
       options.config.apiProviders = Array.isArray((saved as AppConfig).apiProviders)
-        ? (saved.apiProviders || []).map((provider) => ({ ...provider }))
+        ? (saved.apiProviders || []).map((provider) => ({
+            ...provider,
+            deprecated: !!provider.deprecated,
+            apiKeys: Array.isArray(provider.apiKeys) ? [...provider.apiKeys] : [],
+            cachedModelOptions: Array.isArray(provider.cachedModelOptions) ? [...provider.cachedModelOptions] : [],
+            models: Array.isArray(provider.models)
+              ? provider.models.map((model) => ({ ...model, deprecated: !!model.deprecated }))
+              : [],
+            tools: Array.isArray(provider.tools)
+              ? provider.tools.map((tool) => ({
+                  ...tool,
+                  args: Array.isArray(tool.args) ? [...tool.args] : [],
+                  values: { ...((tool.values || {}) as Record<string, unknown>) },
+                }))
+              : [],
+          }))
         : [];
       options.config.apiConfigs.splice(0, options.config.apiConfigs.length, ...saved.apiConfigs);
       options.normalizeApiBindingsLocal();

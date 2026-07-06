@@ -1185,12 +1185,133 @@ fn usage_cumulative_from_conversation(conversation: &Conversation) -> (Conversat
     (cumulative, weighted)
 }
 
+fn usage_resolve_model_name_from_api_config_id(
+    api_config_id: &str,
+    config: &AppConfig,
+) -> Option<String> {
+    let normalized_api_config_id = api_config_id.trim();
+    if normalized_api_config_id.is_empty() {
+        return None;
+    }
+    if let Some(model_name) = config
+        .api_configs
+        .iter()
+        .find(|item| item.id.trim() == normalized_api_config_id)
+        .map(|item| item.model.trim())
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+    {
+        return Some(model_name);
+    }
+    let (provider_id, model_id) = parse_api_endpoint_id(normalized_api_config_id)?;
+    config
+        .api_providers
+        .iter()
+        .find(|provider| provider.id.trim() == provider_id.trim())
+        .and_then(|provider| {
+            provider
+                .models
+                .iter()
+                .find(|model| model.id.trim() == model_id.trim())
+        })
+        .map(|model| model.model.trim())
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn usage_backfill_provider_model_breakdown(
+    cumulative: &mut ConversationCumulativeUsage,
+    provider_key: &str,
+    model_name: &str,
+) -> bool {
+    let normalized_provider_key = provider_key.trim();
+    let normalized_model_name = model_name.trim();
+    if normalized_provider_key.is_empty() || normalized_model_name.is_empty() {
+        return false;
+    }
+    let remainder = cumulative.legacy_remainder();
+    if remainder.is_empty() {
+        return false;
+    }
+    let provider_models = cumulative
+        .by_provider_model
+        .entry(normalized_provider_key.to_string())
+        .or_default();
+    provider_models
+        .entry(normalized_model_name.to_string())
+        .or_default()
+        .saturating_add_assign(&remainder);
+    true
+}
+
+fn usage_preferred_model_name_for_display(
+    cumulative: &ConversationCumulativeUsage,
+    fallback_model_name: Option<String>,
+) -> String {
+    let detailed_model_name = cumulative
+        .by_provider_model
+        .iter()
+        .flat_map(|(_provider_key, models)| models.iter())
+        .filter(|(model_name, bucket)| !model_name.trim().is_empty() && !bucket.is_empty())
+        .max_by(|(left_name, left_bucket), (right_name, right_bucket)| {
+            let left_total = left_bucket.total_tokens.max(
+                left_bucket
+                    .input_tokens
+                    .saturating_add(left_bucket.output_tokens),
+            );
+            let right_total = right_bucket.total_tokens.max(
+                right_bucket
+                    .input_tokens
+                    .saturating_add(right_bucket.output_tokens),
+            );
+            left_total
+                .cmp(&right_total)
+                .then_with(|| left_bucket.output_tokens.cmp(&right_bucket.output_tokens))
+                .then_with(|| left_name.cmp(right_name))
+        })
+        .map(|(model_name, _bucket)| model_name.trim().to_string());
+    detailed_model_name
+        .or(fallback_model_name.filter(|value| !value.trim().is_empty()))
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn usage_backfill_cumulative_model_name(
+    cumulative: &mut ConversationCumulativeUsage,
+    api_config_id: &str,
+    config: &AppConfig,
+) -> bool {
+    let model_name = usage_resolve_model_name_from_api_config_id(api_config_id, config)
+        .unwrap_or_else(|| "unknown".to_string());
+    let provider_key = usage_provider_key_from_api_config_id(api_config_id, config);
+    usage_backfill_provider_model_breakdown(cumulative, &provider_key, &model_name)
+}
+
+fn usage_ensure_conversation_meta_model_name_resolved(
+    state: &AppState,
+    conversation_id: &str,
+    api_config_id: &str,
+    config: &AppConfig,
+) -> Result<ConversationCumulativeUsage, String> {
+    let (updated_meta, _, _) = state_update_conversation_metadata_cached(
+        state,
+        conversation_id,
+        |cached| {
+            Ok(usage_backfill_cumulative_model_name(
+                &mut cached.cumulative_usage,
+                api_config_id,
+                config,
+            ))
+        },
+    )?;
+    Ok(updated_meta.cumulative_usage.clone())
+}
+
 fn usage_push_conversation(
-    conversation: &Conversation,
+    conversation: &mut Conversation,
     message_count: usize,
+    _state: &AppState,
     config: &AppConfig,
     api_config_name_map: &std::collections::HashMap<String, String>,
-    api_config_model_map: &std::collections::HashMap<String, String>,
     agent_name_map: &std::collections::HashMap<String, String>,
     agent_avatar_path_map: &std::collections::HashMap<String, String>,
     agent_avatar_updated_at_map: &std::collections::HashMap<String, String>,
@@ -1215,6 +1336,12 @@ fn usage_push_conversation(
         totals.delegate_conversation_count = totals.delegate_conversation_count.saturating_add(1);
     }
 
+    let api_config_id = usage_resolve_api_config_id(conversation, config);
+    let _ = usage_backfill_cumulative_model_name(
+        &mut conversation.cumulative_usage,
+        &api_config_id,
+        config,
+    );
     let (cumulative, weighted) = usage_cumulative_from_conversation(conversation);
     if !cumulative.is_empty() || weighted > 0 {
         totals.with_usage_conversation_count = totals.with_usage_conversation_count.saturating_add(1);
@@ -1227,15 +1354,14 @@ fn usage_push_conversation(
     totals.cache_write_tokens = totals.cache_write_tokens.saturating_add(cumulative.cache_write_tokens);
     totals.reasoning_tokens = totals.reasoning_tokens.saturating_add(cumulative.reasoning_tokens);
 
-    let api_config_id = usage_resolve_api_config_id(conversation, config);
     let api_config_name = api_config_name_map
         .get(&api_config_id)
         .cloned()
         .unwrap_or_else(|| if api_config_id.is_empty() { "未绑定配置".to_string() } else { api_config_id.clone() });
-    let model_name = api_config_model_map
-        .get(&api_config_id)
-        .cloned()
-        .unwrap_or_else(|| "未绑定模型".to_string());
+    let model_name = usage_preferred_model_name_for_display(
+        &cumulative,
+        usage_resolve_model_name_from_api_config_id(&api_config_id, config),
+    );
     let provider_key = usage_provider_key_from_api_config_id(&api_config_id, config);
     let provider_label = usage_provider_label_from_api_config_id(&api_config_id, config);
     let agent_name = agent_name_map
@@ -1284,7 +1410,7 @@ fn usage_push_conversation(
     );
     usage_aggregate_push(
         by_model,
-        if model_name == "未绑定模型" { "unbound_model".to_string() } else { model_name.clone() },
+        if model_name == "unknown" { "unknown_model".to_string() } else { model_name.clone() },
         model_name,
         &usage_item,
     );
@@ -1306,10 +1432,10 @@ fn usage_push_conversation(
 }
 
 fn usage_push_conversation_meta(
-    conversation_meta: &ConversationMetaView,
+    conversation_meta: &mut ConversationMetaView,
+    state: &AppState,
     config: &AppConfig,
     api_config_name_map: &std::collections::HashMap<String, String>,
-    api_config_model_map: &std::collections::HashMap<String, String>,
     agent_name_map: &std::collections::HashMap<String, String>,
     agent_avatar_path_map: &std::collections::HashMap<String, String>,
     agent_avatar_updated_at_map: &std::collections::HashMap<String, String>,
@@ -1340,6 +1466,21 @@ fn usage_push_conversation_meta(
         totals.delegate_conversation_count = totals.delegate_conversation_count.saturating_add(1);
     }
 
+    let api_config_id = usage_resolve_api_config_id_from_meta(conversation_meta, config);
+    if let Ok(updated_usage) = usage_ensure_conversation_meta_model_name_resolved(
+        state,
+        &conversation_meta.id,
+        &api_config_id,
+        config,
+    ) {
+        conversation_meta.cumulative_usage = updated_usage;
+    } else {
+        let _ = usage_backfill_cumulative_model_name(
+            &mut conversation_meta.cumulative_usage,
+            &api_config_id,
+            config,
+        );
+    }
     let cumulative = conversation_meta.cumulative_usage.clone().normalized_legacy_totals();
     let weighted = conversation_cumulative_usage_weighted_tokens(&cumulative);
     if !cumulative.is_empty() || weighted > 0 {
@@ -1353,15 +1494,14 @@ fn usage_push_conversation_meta(
     totals.cache_write_tokens = totals.cache_write_tokens.saturating_add(cumulative.cache_write_tokens);
     totals.reasoning_tokens = totals.reasoning_tokens.saturating_add(cumulative.reasoning_tokens);
 
-    let api_config_id = usage_resolve_api_config_id_from_meta(conversation_meta, config);
     let api_config_name = api_config_name_map
         .get(&api_config_id)
         .cloned()
         .unwrap_or_else(|| if api_config_id.is_empty() { "未绑定配置".to_string() } else { api_config_id.clone() });
-    let model_name = api_config_model_map
-        .get(&api_config_id)
-        .cloned()
-        .unwrap_or_else(|| "未绑定模型".to_string());
+    let model_name = usage_preferred_model_name_for_display(
+        &cumulative,
+        usage_resolve_model_name_from_api_config_id(&api_config_id, config),
+    );
     let provider_key = usage_provider_key_from_api_config_id(&api_config_id, config);
     let provider_label = usage_provider_label_from_api_config_id(&api_config_id, config);
     let agent_name = agent_name_map
@@ -1424,7 +1564,7 @@ fn usage_push_conversation_meta(
     );
     usage_aggregate_push(
         by_model,
-        if model_name == "未绑定模型" { "unbound_model".to_string() } else { model_name.clone() },
+        if model_name == "unknown" { "unknown_model".to_string() } else { model_name.clone() },
         model_name,
         &usage_item,
     );
@@ -1450,10 +1590,8 @@ fn build_usage_overview(state: &AppState) -> Result<UsageOverview, String> {
     let runtime = state_read_agents_runtime_snapshot(state)?;
     let chat_index = state_read_chat_index_cached(state)?;
     let mut api_config_name_map = std::collections::HashMap::<String, String>::new();
-    let mut api_config_model_map = std::collections::HashMap::<String, String>::new();
     for item in &config.api_configs {
         api_config_name_map.insert(item.id.clone(), item.name.clone());
-        api_config_model_map.insert(item.id.clone(), item.model.clone());
     }
     let mut agent_name_map = std::collections::HashMap::<String, String>::new();
     let mut agent_avatar_path_map = std::collections::HashMap::<String, String>::new();
@@ -1489,15 +1627,15 @@ fn build_usage_overview(state: &AppState) -> Result<UsageOverview, String> {
     let mut by_kind = std::collections::HashMap::<String, UsageAggregateItem>::new();
 
     for item in chat_index.conversations {
-        let conversation_meta = match conversation_service_v2().get_conversation_meta(state, &item.id) {
+        let mut conversation_meta = match conversation_service_v2().get_conversation_meta(state, &item.id) {
             Ok(value) => value,
             Err(_) => continue,
         };
         usage_push_conversation_meta(
-            &conversation_meta,
+            &mut conversation_meta,
+            state,
             &config,
             &api_config_name_map,
-            &api_config_model_map,
             &agent_name_map,
             &agent_avatar_path_map,
             &agent_avatar_updated_at_map,
@@ -1518,12 +1656,14 @@ fn build_usage_overview(state: &AppState) -> Result<UsageOverview, String> {
         if !seen_delegate_ids.insert(thread.delegate_id.clone()) {
             continue;
         }
+        let mut conversation = thread.conversation;
+        let message_count = conversation.messages.len();
         usage_push_conversation(
-            &thread.conversation,
-            thread.conversation.messages.len(),
+            &mut conversation,
+            message_count,
+            state,
             &config,
             &api_config_name_map,
-            &api_config_model_map,
             &agent_name_map,
             &agent_avatar_path_map,
             &agent_avatar_updated_at_map,
@@ -1542,12 +1682,14 @@ fn build_usage_overview(state: &AppState) -> Result<UsageOverview, String> {
         if !seen_delegate_ids.insert(thread.delegate_id.clone()) {
             continue;
         }
+        let mut conversation = thread.conversation;
+        let message_count = conversation.messages.len();
         usage_push_conversation(
-            &thread.conversation,
-            thread.conversation.messages.len(),
+            &mut conversation,
+            message_count,
+            state,
             &config,
             &api_config_name_map,
-            &api_config_model_map,
             &agent_name_map,
             &agent_avatar_path_map,
             &agent_avatar_updated_at_map,
@@ -1562,7 +1704,7 @@ fn build_usage_overview(state: &AppState) -> Result<UsageOverview, String> {
             &mut by_kind,
         );
     }
-    for conversation in delegate_persisted_conversation_list(state)? {
+    for mut conversation in delegate_persisted_conversation_list(state)? {
         let delegate_id = conversation
             .delegate_id
             .clone()
@@ -1570,12 +1712,13 @@ fn build_usage_overview(state: &AppState) -> Result<UsageOverview, String> {
         if !seen_delegate_ids.insert(delegate_id) {
             continue;
         }
+        let message_count = conversation.messages.len();
         usage_push_conversation(
-            &conversation,
-            conversation.messages.len(),
+            &mut conversation,
+            message_count,
+            state,
             &config,
             &api_config_name_map,
-            &api_config_model_map,
             &agent_name_map,
             &agent_avatar_path_map,
             &agent_avatar_updated_at_map,
@@ -1832,6 +1975,76 @@ fn cleanup_storage_legacy_items(
 mod storage_usage_tests {
     use super::*;
 
+    fn storage_usage_test_state() -> AppState {
+        let root = std::env::temp_dir().join(format!("eca-storage-usage-test-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create temp test root");
+        std::fs::create_dir_all(root.join("llm-workspace")).expect("create temp llm workspace");
+        AppState {
+            app_handle: Arc::new(Mutex::new(None)),
+            config_path: root.join("app_config.toml"),
+            data_path: root.join("app_data.json"),
+            llm_workspace_path: root.join("llm-workspace"),
+            shared_http_client: reqwest::Client::new(),
+            terminal_shell: detect_default_terminal_shell(),
+            terminal_shell_candidates: detect_terminal_shell_candidates(),
+            conversation_lock: Arc::new(ConversationDomainLock::new()),
+            memory_lock: Arc::new(Mutex::new(())),
+            cached_config: Arc::new(Mutex::new(None)),
+            cached_config_mtime: Arc::new(Mutex::new(None)),
+            cached_agents: Arc::new(Mutex::new(None)),
+            cached_agents_mtime: Arc::new(Mutex::new(None)),
+            cached_runtime_state: Arc::new(Mutex::new(None)),
+            cached_runtime_state_mtime: Arc::new(Mutex::new(None)),
+            cached_chat_index: Arc::new(Mutex::new(None)),
+            cached_conversation_metadata: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            cached_conversation_mtimes: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            cached_app_data: Arc::new(Mutex::new(None)),
+            cached_app_data_signature: Arc::new(Mutex::new(None)),
+            cached_app_data_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            app_data_persist_pending: Arc::new(Mutex::new(None)),
+            app_data_persist_notify: Arc::new(tokio::sync::Notify::new()),
+            app_data_persist_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            app_data_persist_latest_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            conversation_persist_pending: Arc::new(Mutex::new(None)),
+            conversation_persist_notify: Arc::new(tokio::sync::Notify::new()),
+            conversation_persist_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            conversation_persist_latest_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            cached_conversation_dirty_ids: Arc::new(Mutex::new(std::collections::HashSet::new())),
+            cached_deleted_conversation_ids: Arc::new(Mutex::new(std::collections::HashSet::new())),
+            app_data_persist_write_lock: Arc::new(Mutex::new(())),
+            last_panic_snapshot: Arc::new(Mutex::new(None)),
+            inflight_chat_abort_handles: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            inflight_tool_abort_handles: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            inflight_completed_tool_history: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            terminal_session_roots: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            terminal_live_sessions: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
+            terminal_pending_approvals: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            llm_round_logs: Arc::new(Mutex::new(std::collections::VecDeque::new())),
+            conversation_runtime_slots: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            conversation_processing_claims: Arc::new(Mutex::new(std::collections::HashSet::new())),
+            goal_continue_suppressed_conversation_ids: Arc::new(Mutex::new(std::collections::HashSet::new())),
+            pending_chat_result_senders: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            pending_chat_delta_channels: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            accepted_submit_trace_ids: Arc::new(Mutex::new(std::collections::VecDeque::new())),
+            active_chat_view_bindings: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            conversation_list_activity_marks: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            dequeue_lock: Arc::new(Mutex::new(())),
+            task_scheduler_notify: Arc::new(tokio::sync::Notify::new()),
+            delegate_runtime_threads: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            delegate_recent_threads: Arc::new(Mutex::new(std::collections::VecDeque::new())),
+            provider_streaming_disabled_keys: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            provider_system_message_user_fallback_keys: Arc::new(Mutex::new(std::collections::HashSet::new())),
+            provider_request_gates: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
+            remote_im_contact_runtime_states: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            remote_im_channel_state_write_locks: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            hidden_skill_snapshot_cache: Arc::new(Mutex::new(String::new())),
+            preferred_release_source: Arc::new(Mutex::new(String::new())),
+            migration_preview_dirs: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            delegate_active_ids: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
+            backend_ready: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }
+    }
+
     fn storage_usage_test_remote_contact(bound_conversation_id: Option<&str>) -> RemoteImContact {
         RemoteImContact {
             id: "contact-a".to_string(),
@@ -2062,5 +2275,172 @@ mod storage_usage_tests {
             .expect("stale manifest");
         assert!(stale_status.ready_jsonl);
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn usage_overview_should_backfill_legacy_model_name_into_persisted_usage() {
+        let state = storage_usage_test_state();
+        let config = AppConfig {
+            api_providers: vec![ApiProviderConfig {
+                id: "provider-a".to_string(),
+                name: "主供应商".to_string(),
+                deprecated: true,
+                models: vec![ApiModelConfig {
+                    id: "model-a".to_string(),
+                    model: "real-model-v1".to_string(),
+                    deprecated: true,
+                    ..ApiModelConfig::default()
+                }],
+                ..ApiProviderConfig::default()
+            }],
+            departments: vec![default_assistant_department("api-a")],
+            ..AppConfig::default()
+        };
+        state_write_config_cached(&state, &config).expect("write config");
+
+        let mut conversation = storage_usage_test_conversation("legacy-model-name", "");
+        conversation.preferred_api_config_id = Some("provider-a::model-a".to_string());
+        conversation.cumulative_usage = ConversationCumulativeUsage {
+            input_tokens: 11,
+            output_tokens: 7,
+            total_tokens: 18,
+            ..ConversationCumulativeUsage::default()
+        };
+        state_write_conversation_cached(&state, &conversation).expect("write conversation");
+
+        let overview = build_usage_overview(&state).expect("build usage overview");
+        let conversation_item = overview
+            .conversations
+            .iter()
+            .find(|item| item.conversation_id == conversation.id)
+            .expect("conversation item");
+        assert_eq!(conversation_item.model_name, "real-model-v1");
+        assert!(
+            overview.by_provider_model.iter().any(|item| {
+                item.model_name == "real-model-v1"
+                    && item.total_tokens == 18
+                    && item.input_tokens == 11
+                    && item.output_tokens == 7
+            }),
+            "usage overview should expose migrated provider/model breakdown"
+        );
+
+        let persisted = conversation_service_v2()
+            .get_conversation_meta(&state, &conversation.id)
+            .expect("read migrated conversation meta");
+        let (_provider_key, provider_models) = persisted
+            .cumulative_usage
+            .by_provider_model
+            .iter()
+            .find(|(_provider_key, models)| models.contains_key("real-model-v1"))
+            .expect("provider usage");
+        let bucket = provider_models
+            .get("real-model-v1")
+            .expect("real model usage");
+        assert_eq!(bucket.total_tokens, 18);
+        assert_eq!(bucket.input_tokens, 11);
+        assert_eq!(bucket.output_tokens, 7);
+    }
+
+    #[test]
+    fn usage_overview_should_persist_unknown_when_legacy_model_name_cannot_be_resolved() {
+        let state = storage_usage_test_state();
+        let config = AppConfig {
+            departments: vec![default_assistant_department("missing-provider::missing-model")],
+            ..AppConfig::default()
+        };
+        state_write_config_cached(&state, &config).expect("write config");
+
+        let mut conversation = storage_usage_test_conversation("legacy-model-unknown", "");
+        conversation.preferred_api_config_id = Some("missing-provider::missing-model".to_string());
+        conversation.cumulative_usage = ConversationCumulativeUsage {
+            input_tokens: 3,
+            output_tokens: 2,
+            total_tokens: 5,
+            ..ConversationCumulativeUsage::default()
+        };
+        state_write_conversation_cached(&state, &conversation).expect("write conversation");
+
+        let overview = build_usage_overview(&state).expect("build usage overview");
+        let conversation_item = overview
+            .conversations
+            .iter()
+            .find(|item| item.conversation_id == conversation.id)
+            .expect("conversation item");
+        assert_eq!(conversation_item.model_name, "unknown");
+        assert!(
+            overview.by_provider_model.iter().any(|item| {
+                item.model_name == "unknown"
+                    && item.total_tokens == 5
+                    && item.input_tokens == 3
+                    && item.output_tokens == 2
+            }),
+            "usage overview should persist unknown model breakdown"
+        );
+
+        let persisted = conversation_service_v2()
+            .get_conversation_meta(&state, &conversation.id)
+            .expect("read migrated conversation meta");
+        let (_provider_key, provider_models) = persisted
+            .cumulative_usage
+            .by_provider_model
+            .iter()
+            .find(|(_provider_key, models)| models.contains_key("unknown"))
+            .expect("unknown provider usage");
+        let bucket = provider_models.get("unknown").expect("unknown model usage");
+        assert_eq!(bucket.total_tokens, 5);
+    }
+
+    #[test]
+    fn usage_overview_should_prefer_highest_usage_model_name() {
+        let state = storage_usage_test_state();
+        let config = AppConfig {
+            departments: vec![default_assistant_department("provider-a::model-a")],
+            ..AppConfig::default()
+        };
+        state_write_config_cached(&state, &config).expect("write config");
+
+        let mut conversation = storage_usage_test_conversation("multi-model-usage", "");
+        conversation.preferred_api_config_id = Some("provider-a::model-a".to_string());
+        conversation.cumulative_usage = ConversationCumulativeUsage {
+            input_tokens: 15,
+            output_tokens: 12,
+            total_tokens: 27,
+            by_provider_model: std::collections::BTreeMap::from([
+                (
+                    "provider-a".to_string(),
+                    std::collections::BTreeMap::from([
+                        (
+                            "small-model".to_string(),
+                            ConversationUsageBucket {
+                                input_tokens: 2,
+                                output_tokens: 1,
+                                total_tokens: 3,
+                                ..ConversationUsageBucket::default()
+                            },
+                        ),
+                        (
+                            "big-model".to_string(),
+                            ConversationUsageBucket {
+                                input_tokens: 13,
+                                output_tokens: 11,
+                                total_tokens: 24,
+                                ..ConversationUsageBucket::default()
+                            },
+                        ),
+                    ]),
+                ),
+            ]),
+            ..ConversationCumulativeUsage::default()
+        };
+        state_write_conversation_cached(&state, &conversation).expect("write conversation");
+
+        let overview = build_usage_overview(&state).expect("build usage overview");
+        let conversation_item = overview
+            .conversations
+            .iter()
+            .find(|item| item.conversation_id == conversation.id)
+            .expect("conversation item");
+        assert_eq!(conversation_item.model_name, "big-model");
     }
 }

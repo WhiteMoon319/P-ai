@@ -68,6 +68,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
     return {
       id: `api-model-${seed}`,
       model,
+      deprecated: false,
       enableImage: true,
       enableTools: true,
       reasoningEffort: DEFAULT_REASONING_EFFORT,
@@ -83,6 +84,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
     return {
       id: `api-provider-${seed}`,
       name: `API Provider ${options.config.apiProviders.length + 1}`,
+      deprecated: false,
       requestFormat: "openai",
       allowConcurrentRequests: true,
       maxConcurrentRequests: null,
@@ -142,6 +144,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
         options.config.apiProviders = options.config.apiConfigs.map((api, index) => ({
           id: `api-provider-legacy-${index + 1}`,
           name: api.name,
+          deprecated: false,
           requestFormat: normalizeApiRequestFormat(api.requestFormat),
           allowConcurrentRequests: !!api.allowConcurrentRequests,
           maxConcurrentRequests: api.maxConcurrentRequests ?? null,
@@ -160,6 +163,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
           models: [{
             id: `api-model-legacy-${index + 1}`,
             model: api.model,
+            deprecated: false,
             enableImage: !!api.enableImage,
             enableVideo: !!api.enableVideo,
             enableTools: !!api.enableTools,
@@ -181,6 +185,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
       (options.config.apiConfigs || []).map((api) => [String(api.id || "").trim(), api] as const),
     );
     for (const provider of options.config.apiProviders) {
+      provider.deprecated = !!provider.deprecated;
       provider.requestFormat = normalizeApiRequestFormat(provider.requestFormat);
       const models = Array.isArray(provider.models) ? provider.models : [];
       provider.enableImage = models.some((model) => !!model.enableImage);
@@ -194,6 +199,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
         provider.enableTools = true;
       }
       for (const model of provider.models || []) {
+        model.deprecated = !!model.deprecated;
         const endpointId = `${provider.id}::${model.id}`;
         const draft = endpointDraftById.get(endpointId);
         if (!draft) continue;
@@ -231,12 +237,14 @@ export function useConfigCore(options: UseConfigCoreOptions) {
 
     const nextApiConfigs: ApiConfigItem[] = [];
     for (const provider of options.config.apiProviders) {
+      if (provider.deprecated) continue;
       const providerName = String(provider.name || "").trim() || provider.id;
       const apiKey = Array.isArray(provider.apiKeys)
         ? provider.apiKeys.map((value) => String(value || "").trim()).find(Boolean) || ""
         : "";
       const models = Array.isArray(provider.models) ? provider.models : [];
       for (const model of models) {
+        if (model.deprecated) continue;
         const modelValue = String(model.model || "").trim();
         if (!modelValue) continue;
         nextApiConfigs.push({
@@ -360,6 +368,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
       apiProviders: (options.config.apiProviders || []).map((provider) => ({
         id: provider.id,
         name: provider.name,
+        deprecated: !!provider.deprecated,
         requestFormat: normalizeApiRequestFormat(provider.requestFormat),
         allowConcurrentRequests: !!provider.allowConcurrentRequests,
         maxConcurrentRequests: provider.maxConcurrentRequests ?? null,
@@ -390,6 +399,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
         models: (provider.models || []).map((model) => ({
           id: model.id,
           model: model.model,
+          deprecated: !!model.deprecated,
           enableImage: !!model.enableImage,
           enableVideo: !!model.enableVideo,
           enableTools: model.enableTools !== false,

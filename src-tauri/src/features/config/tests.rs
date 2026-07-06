@@ -1039,6 +1039,7 @@ model = "gpt-4.1"
             api_providers: vec![ApiProviderConfig {
                 id: provider_id.clone(),
                 name: "OpenAI".to_string(),
+                deprecated: false,
                 request_format: RequestFormat::OpenAI,
                 allow_concurrent_requests: false,
                 max_concurrent_requests: None,
@@ -1062,6 +1063,7 @@ model = "gpt-4.1"
                     ApiModelConfig {
                         id: model_a.clone(),
                         model: "gpt-4.1".to_string(),
+                        deprecated: false,
                         enable_image: false,
                         enable_video: false,
                         enable_tools: true,
@@ -1075,6 +1077,7 @@ model = "gpt-4.1"
                     ApiModelConfig {
                         id: model_b.clone(),
                         model: "gpt-4.1-mini".to_string(),
+                        deprecated: false,
                         enable_image: false,
                         enable_video: false,
                         enable_tools: true,
@@ -1123,6 +1126,7 @@ model = "gpt-4.1"
             api_providers: vec![ApiProviderConfig {
                 id: provider_id.clone(),
                 name: "SharedChat".to_string(),
+                deprecated: false,
                 request_format: RequestFormat::Codex,
                 allow_concurrent_requests: false,
                 max_concurrent_requests: None,
@@ -1145,6 +1149,7 @@ model = "gpt-4.1"
                 models: vec![ApiModelConfig {
                     id: model_id.clone(),
                     model: "gpt-5.4".to_string(),
+                    deprecated: false,
                     enable_image: false,
                     enable_video: false,
                     enable_tools: true,

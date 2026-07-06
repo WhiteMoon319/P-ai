@@ -20,6 +20,19 @@ type UseConfigEditorsOptions = {
 };
 
 export function useConfigEditors(options: UseConfigEditorsOptions) {
+  function firstActiveApiConfigId(): string {
+    for (const provider of options.config.apiProviders || []) {
+      if (provider.deprecated) continue;
+      for (const model of provider.models || []) {
+        if (model.deprecated) continue;
+        const providerId = String(provider.id || "").trim();
+        const modelId = String(model.id || "").trim();
+        if (providerId && modelId) return `${providerId}::${modelId}`;
+      }
+    }
+    return "";
+  }
+
   function addApiConfig() {
     const provider = options.createApiProvider();
     options.config.apiProviders.push(provider);
@@ -28,17 +41,27 @@ export function useConfigEditors(options: UseConfigEditorsOptions) {
   }
 
   function removeSelectedApiConfig() {
-    if (options.config.apiProviders.length <= 1) return;
     const [providerId, modelId] = String(options.config.selectedApiConfigId || "").split("::");
     if (!providerId) return;
     const providerIdx = options.config.apiProviders.findIndex((item) => item.id === providerId);
     if (providerIdx < 0) return;
     const provider = options.config.apiProviders[providerIdx];
     const removedId = String(options.config.selectedApiConfigId || "").trim();
-    if (modelId && provider.models.length > 1) {
-      provider.models = provider.models.filter((item) => item.id !== modelId);
+    const activeProviders = (options.config.apiProviders || []).filter((item) => !item.deprecated);
+    const activeModels = (provider.models || []).filter((item) => !item.deprecated);
+    if (!provider.deprecated && activeProviders.length <= 1 && activeModels.length <= 1) return;
+    if (modelId) {
+      const model = (provider.models || []).find((item) => item.id === modelId);
+      if (!model) return;
+      if (!provider.deprecated && activeModels.length <= 1) {
+        provider.deprecated = true;
+        provider.models = (provider.models || []).map((item) => ({ ...item, deprecated: true }));
+      } else {
+        model.deprecated = true;
+      }
     } else {
-      options.config.apiProviders.splice(providerIdx, 1);
+      provider.deprecated = true;
+      provider.models = (provider.models || []).map((item) => ({ ...item, deprecated: true }));
     }
     for (const department of options.config.departments || []) {
       const nextIds = (Array.isArray(department.apiConfigIds) ? department.apiConfigIds : [])
@@ -63,12 +86,7 @@ export function useConfigEditors(options: UseConfigEditorsOptions) {
       options.config.toolReviewApiConfigId = undefined;
     }
     options.normalizeApiBindingsLocal();
-    if (options.config.apiProviders.length > 0) {
-      const provider = options.config.apiProviders[0];
-      const modelId = Array.isArray(provider.models) ? String(provider.models[0]?.id || "").trim() : "";
-      const providerId = String(provider.id || "").trim();
-      options.config.selectedApiConfigId = providerId && modelId ? `${providerId}::${modelId}` : "";
-    }
+    options.config.selectedApiConfigId = firstActiveApiConfigId();
   }
 
   async function addPersona() {
