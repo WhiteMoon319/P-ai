@@ -666,7 +666,7 @@ const commitOptions = ref<ToolReviewCommitOption[]>([]);
 const commitOptionsLoading = ref(false);
 const commitTotal = ref(0);
 const commitPage = ref(1);
-const commitPageSize = ref(30);
+const commitPageSize = ref(5);
 // ==================== context computed ====================
 
 const {

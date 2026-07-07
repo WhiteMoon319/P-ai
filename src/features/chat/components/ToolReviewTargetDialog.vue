@@ -1,6 +1,6 @@
 <template>
-  <dialog class="modal !items-start overflow-y-auto pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] sm:!items-center sm:py-6" :class="{ 'modal-open': open }">
-    <div class="modal-box mx-auto flex max-h-[calc(100dvh-max(2rem,env(safe-area-inset-top)+env(safe-area-inset-bottom)))] w-[88vw] max-w-4xl flex-col overflow-visible p-0">
+  <dialog class="modal !items-start overflow-y-auto overflow-x-hidden pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] sm:!items-center sm:py-6" :class="{ 'modal-open': open }">
+    <div class="modal-box mx-auto flex max-h-[calc(100dvh-max(2rem,env(safe-area-inset-top)+env(safe-area-inset-bottom)))] w-[88vw] max-w-4xl flex-col overflow-hidden p-0">
       <div class="shrink-0 border-b border-base-300 px-5 py-4">
         <div class="text-base font-semibold">{{ t("chat.toolReview.generateReviewReport") }}</div>
       </div>
@@ -22,14 +22,14 @@
           <button type="button" role="tab" class="tab" :class="{ 'tab-active': scope === 'custom' }" @click="setScope('custom')">{{ t("chat.toolReview.scopeCustom") }}</button>
         </div>
       </div>
-      <div class="relative z-0 min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        <div v-if="scope === 'commit'" class="rounded-box border border-base-300">
-          <div class="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-base-300 bg-base-100 px-4 py-3 text-sm">
+      <div class="relative z-0 min-h-0 flex-1 px-5 py-4" :class="scope === 'commit' ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'">
+        <div v-if="scope === 'commit'" class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-box border border-base-300 bg-base-100">
+          <div class="flex shrink-0 items-center justify-between gap-3 border-b border-base-300 bg-base-100 px-4 py-3 text-sm">
             <button type="button" class="btn btn-sm shrink-0" :disabled="commitOptionsLoading || commitPage <= 1" @click="requestCommitPage(commitPage - 1)">上一页</button>
-            <span class="min-w-0 flex-1 text-center text-base-content/70">第 {{ commitPage }} 页 / 共 {{ commitTotalPages }} 页 · {{ commitTotal }}</span>
+            <span class="min-w-0 flex-1 text-center text-base-content/70">第 {{ commitPage }} 页 / 共 {{ commitTotalPages }} 页</span>
             <button type="button" class="btn btn-sm shrink-0" :disabled="commitOptionsLoading || commitPage >= commitTotalPages" @click="requestCommitPage(commitPage + 1)">下一页</button>
           </div>
-          <div class="max-h-[min(55vh,28rem)] overflow-y-auto">
+          <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             <div v-if="commitOptionsLoading" class="px-4 py-3 text-sm text-base-content/70">{{ t("chat.toolReview.commitPickerLoading") }}</div>
             <div v-else-if="commitOptions.length === 0" class="px-4 py-3 text-sm text-base-content/70">{{ t("chat.toolReview.commitPickerEmpty") }}</div>
             <button
