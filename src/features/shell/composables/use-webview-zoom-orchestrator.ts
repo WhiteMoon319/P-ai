@@ -1,7 +1,7 @@
 import { onBeforeUnmount, onMounted, ref, watch, type Reactive } from "vue";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { AppConfig } from "../../../types/app";
-import { invokeTauri } from "../../../services/tauri-api";
+import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
 
 const WEBVIEW_ZOOM_PERCENT_OPTIONS = [80, 90, 100, 110, 120, 150] as const;
 const WEBVIEW_ZOOM_APPLY_DELAY_MS = 500;
@@ -13,6 +13,7 @@ export type WebviewZoomOrchestratorBindings = {
 
 export function useWebviewZoomOrchestrator(bindings: WebviewZoomOrchestratorBindings) {
   const webviewZoomFactor = ref(1);
+  const tauriRuntimeAvailable = isTauriRuntimeAvailable();
   let webviewZoomApplyTimer: ReturnType<typeof window.setTimeout> | null = null;
   let webviewZoomWatcherReady = false;
   let suppressNextWebviewZoomApply = false;
@@ -30,6 +31,10 @@ export function useWebviewZoomOrchestrator(bindings: WebviewZoomOrchestratorBind
     const normalizedPercent = normalizeWebviewZoomPercent(percent);
     const nextFactor = normalizedPercent / 100;
     if (Math.abs(nextFactor - webviewZoomFactor.value) < 0.001) return;
+    if (!tauriRuntimeAvailable) {
+      webviewZoomFactor.value = nextFactor;
+      return;
+    }
     const appliedPercent = await invokeTauri<number>("set_webview_zoom_percent", {
       percent: normalizedPercent,
     });
@@ -130,18 +135,19 @@ export function useWebviewZoomOrchestrator(bindings: WebviewZoomOrchestratorBind
   }
 
   onMounted(() => {
-    void listen<{ percent?: unknown }>("easy-call:webview-zoom-updated", (event) => {
-      syncWebviewZoomPercentFromBackend(event.payload?.percent);
-    })
-      .then((unlisten) => {
-        webviewZoomUpdatedUnlisten = unlisten;
+    if (tauriRuntimeAvailable) {
+      void listen<{ percent?: unknown }>("easy-call:webview-zoom-updated", (event) => {
+        syncWebviewZoomPercentFromBackend(event.payload?.percent);
       })
-      .catch((error) => {
-        console.error("[外观] WebView 缩放同步监听器注册失败", error);
-      });
-
-    window.addEventListener("wheel", handleGlobalZoomWheel, { passive: false });
-    window.addEventListener("keydown", handleGlobalZoomKeydown);
+        .then((unlisten) => {
+          webviewZoomUpdatedUnlisten = unlisten;
+        })
+        .catch((error) => {
+          console.error("[外观] WebView 缩放同步监听器注册失败", error);
+        });
+      window.addEventListener("wheel", handleGlobalZoomWheel, { passive: false });
+      window.addEventListener("keydown", handleGlobalZoomKeydown);
+    }
   });
 
   onBeforeUnmount(() => {
@@ -149,8 +155,10 @@ export function useWebviewZoomOrchestrator(bindings: WebviewZoomOrchestratorBind
       webviewZoomUpdatedUnlisten();
       webviewZoomUpdatedUnlisten = null;
     }
-    window.removeEventListener("wheel", handleGlobalZoomWheel);
-    window.removeEventListener("keydown", handleGlobalZoomKeydown);
+    if (tauriRuntimeAvailable) {
+      window.removeEventListener("wheel", handleGlobalZoomWheel);
+      window.removeEventListener("keydown", handleGlobalZoomKeydown);
+    }
     if (webviewZoomApplyTimer) {
       window.clearTimeout(webviewZoomApplyTimer);
       webviewZoomApplyTimer = null;
