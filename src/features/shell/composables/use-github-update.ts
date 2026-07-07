@@ -34,11 +34,15 @@ function normalizeSkippedVersion(value: string | undefined) {
   return String(value || "").trim();
 }
 
+function isCancellableUpdateStage(stage: string | null | undefined) {
+  return ["checking", "downloading", "verifying", "preparing", "replacing"].includes(String(stage || ""));
+}
+
 export function useGithubUpdate(options: UseGithubUpdateOptions) {
   const checkingUpdateRequest = ref(false);
   const updateInProgress = ref(false);
   const updateCancelPending = ref(false);
-  const updateCanCancel = ref(false);
+  const updateStage = ref<string | null>(null);
   const updateReadyToRestart = ref(false);
   const updateDialogOpen = ref(false);
   const updateDialogTitle = ref(t("about.dialogTitleCheck"));
@@ -71,7 +75,11 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     && !updateInProgress.value
     && !updateReadyToRestart.value,
   );
-  const updateDialogCancelUpdateVisible = computed(() => updateInProgress.value && updateCanCancel.value);
+  const updateDialogCancelUpdateVisible = computed(() =>
+    updateInProgress.value
+    && !updateCancelPending.value
+    && isCancellableUpdateStage(updateStage.value),
+  );
 
   let updateProgressUnlisten: UnlistenFn | null = null;
   let webUpdateProgressUnlisten: (() => void) | null = null;
@@ -94,6 +102,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     updateDialogReleaseUrl.value = releaseUrl || "";
     updateDialogPrimaryAction.value = null;
     updateProgressPercent.value = null;
+    updateStage.value = null;
     updateDialogOpen.value = true;
   }
 
@@ -124,6 +133,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     updateDialogKind.value = "info";
     updateDialogPrimaryAction.value = result.hasUpdate ? "download" : "force";
     updateProgressPercent.value = null;
+    updateStage.value = null;
     updateDialogTitle.value = result.hasUpdate ? t("about.foundUpdate") : t("about.alreadyLatest");
     updateDialogOpen.value = true;
   }
@@ -162,13 +172,13 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
 
   function syncDialogFromProgress(payload: UpdateProgressPayload) {
     const previousUiMode = updateUiMode.value;
+    updateStage.value = payload.stage;
     updateRuntimeKind.value = payload.runtimeKind;
     updateDialogReleaseUrl.value = latestCheckResult.value?.releaseUrl || "";
     updateProgressPercent.value = Number.isFinite(payload.percent) ? payload.percent ?? null : null;
     if (payload.stage === "failed") {
       updateInProgress.value = false;
       updateCancelPending.value = false;
-      updateCanCancel.value = false;
       updateReadyToRestart.value = false;
       updateUiMode.value = null;
       updateDialogPrimaryAction.value = null;
@@ -183,7 +193,6 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     if (payload.stage === "cancelled") {
       updateInProgress.value = false;
       updateCancelPending.value = false;
-      updateCanCancel.value = false;
       updateReadyToRestart.value = false;
       updateUiMode.value = null;
       updateDialogPrimaryAction.value = null;
@@ -194,7 +203,6 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     if (payload.stage === "ready") {
       updateInProgress.value = false;
       updateCancelPending.value = false;
-      updateCanCancel.value = false;
       updateReadyToRestart.value = true;
       updateUiMode.value = null;
       if (latestCheckResult.value) {
@@ -225,7 +233,6 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     if (payload.stage === "completed") {
       updateInProgress.value = false;
       updateCancelPending.value = false;
-      updateCanCancel.value = false;
       updateReadyToRestart.value = false;
       updateUiMode.value = null;
       updateDialogOpen.value = true;
@@ -293,7 +300,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     if (checkingUpdate.value) return;
     updateInProgress.value = true;
     updateCancelPending.value = false;
-    updateCanCancel.value = true;
+    updateStage.value = "checking";
     updateReadyToRestart.value = false;
     updateUiMode.value = silent ? "background" : "foreground";
     updateDialogPrimaryAction.value = null;
@@ -311,7 +318,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       if (String(error || "").includes("用户已取消更新")) {
         updateInProgress.value = false;
         updateCancelPending.value = false;
-        updateCanCancel.value = false;
+        updateStage.value = null;
         updateUiMode.value = null;
         updateDialogOpen.value = false;
         updateProgressPercent.value = null;
@@ -320,7 +327,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       }
       updateInProgress.value = false;
       updateCancelPending.value = false;
-      updateCanCancel.value = false;
+      updateStage.value = null;
       updateUiMode.value = null;
       updateDialogKind.value = "error";
       updateDialogTitle.value = t("about.updateFailed");
@@ -334,7 +341,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   }
 
   async function cancelGithubUpdate() {
-    if (!updateInProgress.value || updateCancelPending.value || !updateCanCancel.value) return;
+    if (!updateInProgress.value || updateCancelPending.value || !isCancellableUpdateStage(updateStage.value)) return;
     updateCancelPending.value = true;
     options.status.value = t("about.cancellingUpdate");
     try {
@@ -350,7 +357,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     if (checkingUpdate.value) return;
     updateInProgress.value = true;
     updateCancelPending.value = false;
-    updateCanCancel.value = false;
+    updateStage.value = "installing";
     updateUiMode.value = "foreground";
     updateDialogOpen.value = true;
     updateDialogKind.value = "info";
@@ -364,7 +371,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     } catch (error) {
       updateInProgress.value = false;
       updateCancelPending.value = false;
-      updateCanCancel.value = false;
+      updateStage.value = null;
       updateUiMode.value = null;
       updateDialogKind.value = "error";
       updateDialogTitle.value = t("about.updateFailed");
@@ -466,7 +473,6 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     updateReadyToRestart,
     updateInProgress,
     updateCancelPending,
-    updateCanCancel,
     latestCheckResult,
     updateDialogOpen,
     updateDialogTitle,
