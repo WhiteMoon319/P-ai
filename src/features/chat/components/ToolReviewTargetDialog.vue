@@ -1,10 +1,10 @@
 <template>
-  <dialog class="modal" :class="{ 'modal-open': open }">
-    <div class="modal-box w-[88vw] max-w-4xl overflow-visible p-0">
-      <div class="border-b border-base-300 px-5 py-4">
+  <dialog class="modal !items-start overflow-y-auto pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] sm:!items-center sm:py-6" :class="{ 'modal-open': open }">
+    <div class="modal-box mx-auto flex max-h-[calc(100dvh-max(2rem,env(safe-area-inset-top)+env(safe-area-inset-bottom)))] w-[88vw] max-w-4xl flex-col overflow-visible p-0">
+      <div class="shrink-0 border-b border-base-300 px-5 py-4">
         <div class="text-base font-semibold">{{ t("chat.toolReview.generateReviewReport") }}</div>
       </div>
-      <div class="relative z-20 overflow-visible px-5 pt-4">
+      <div class="relative z-20 shrink-0 overflow-visible px-5 pt-4">
         <div class="mb-4 grid gap-1.5">
           <div class="text-xs font-medium text-base-content/60">{{ t("chat.toolReview.departmentLabel") }}</div>
           <DepartmentPersonaSelect
@@ -15,21 +15,21 @@
             auto-select-first
           />
         </div>
-        <div role="tablist" class="tabs tabs-border">
+        <div role="tablist" class="tabs tabs-border flex-wrap">
           <button type="button" role="tab" class="tab" :class="{ 'tab-active': scope === 'commit' }" @click="setScope('commit')">{{ t("chat.toolReview.scopeCommit") }}</button>
           <button type="button" role="tab" class="tab" :class="{ 'tab-active': scope === 'main' }" @click="setScope('main')">{{ t("chat.toolReview.scopeMain") }}</button>
           <button type="button" role="tab" class="tab" :class="{ 'tab-active': scope === 'uncommitted' }" @click="setScope('uncommitted')">{{ t("chat.toolReview.scopeUncommitted") }}</button>
           <button type="button" role="tab" class="tab" :class="{ 'tab-active': scope === 'custom' }" @click="setScope('custom')">{{ t("chat.toolReview.scopeCustom") }}</button>
         </div>
       </div>
-      <div class="relative z-0 px-5 py-4">
+      <div class="relative z-0 min-h-0 flex-1 overflow-y-auto px-5 py-4">
         <div v-if="scope === 'commit'" class="rounded-box border border-base-300">
-          <div class="sticky top-0 z-10 flex items-center justify-between border-b border-base-300 bg-base-100 px-4 py-3 text-sm">
-            <button type="button" class="btn btn-sm" :disabled="commitOptionsLoading || commitPage <= 1" @click="requestCommitPage(commitPage - 1)">上一页</button>
-            <span class="text-base-content/70">第 {{ commitPage }} 页 / 共 {{ commitTotalPages }} 页 · {{ commitTotal }}</span>
-            <button type="button" class="btn btn-sm" :disabled="commitOptionsLoading || commitPage >= commitTotalPages" @click="requestCommitPage(commitPage + 1)">下一页</button>
+          <div class="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-base-300 bg-base-100 px-4 py-3 text-sm">
+            <button type="button" class="btn btn-sm shrink-0" :disabled="commitOptionsLoading || commitPage <= 1" @click="requestCommitPage(commitPage - 1)">上一页</button>
+            <span class="min-w-0 flex-1 text-center text-base-content/70">第 {{ commitPage }} 页 / 共 {{ commitTotalPages }} 页 · {{ commitTotal }}</span>
+            <button type="button" class="btn btn-sm shrink-0" :disabled="commitOptionsLoading || commitPage >= commitTotalPages" @click="requestCommitPage(commitPage + 1)">下一页</button>
           </div>
-          <div class="max-h-[55vh] overflow-y-auto">
+          <div class="max-h-[min(55vh,28rem)] overflow-y-auto">
             <div v-if="commitOptionsLoading" class="px-4 py-3 text-sm text-base-content/70">{{ t("chat.toolReview.commitPickerLoading") }}</div>
             <div v-else-if="commitOptions.length === 0" class="px-4 py-3 text-sm text-base-content/70">{{ t("chat.toolReview.commitPickerEmpty") }}</div>
             <button
@@ -60,7 +60,7 @@
           {{ errorText }}
         </div>
       </div>
-      <div class="flex items-center justify-end gap-3 border-t border-base-300 px-5 py-4">
+      <div class="flex shrink-0 items-center justify-end gap-3 border-t border-base-300 px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         <button type="button" class="btn" :disabled="submitting" @click="close">{{ t("common.cancel") }}</button>
         <button type="button" class="btn btn-primary" :disabled="!canConfirm" @click="confirm">{{ t("common.confirm") }}</button>
       </div>

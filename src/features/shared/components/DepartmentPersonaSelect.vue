@@ -37,7 +37,7 @@
       <div
         v-if="dropdownOpen && !disabled && (normalizedOptions.length > 0 || placeholder)"
         ref="dropdownPanelRef"
-        class="absolute z-50 w-full overflow-hidden rounded-box border border-base-300 bg-base-100 shadow-xl"
+        class="absolute z-50 w-full max-w-full overflow-hidden rounded-box border border-base-300 bg-base-100 shadow-xl"
         :class="dropdownDirection === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'"
       >
         <div>
@@ -53,21 +53,21 @@
 
           <div class="min-h-0" :style="{ height: `${dropdownBodyHeight}px` }">
             <ChatConversationFloatingScroll class="h-full">
-              <div ref="dropdownContentRef" class="flex flex-wrap gap-x-2 gap-y-4 p-4">
+              <div ref="dropdownContentRef" class="flex flex-col gap-4 p-4 sm:flex-row sm:flex-wrap sm:gap-x-2 sm:gap-y-4">
                 <div
                   v-for="group in departmentGroups"
                   :key="group.departmentId"
-                  class="relative shrink-0 min-w-max flex flex-col gap-1 rounded-xl border-x border-t border-base-300 bg-base-100 p-2 transition-colors"
+                  class="relative w-full min-w-0 flex flex-col gap-1 rounded-xl border-x border-t border-base-300 bg-base-100 p-2 transition-colors sm:w-auto sm:min-w-[16rem]"
                 >
                   <div class="absolute -top-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap bg-base-100 px-2 text-center text-xs font-semibold text-base-content/70">
                     {{ group.departmentName }}
                   </div>
-                  <div class="flex flex-wrap justify-center gap-1">
+                  <div class="grid grid-cols-3 gap-1 sm:flex sm:flex-wrap sm:justify-center">
                     <button
                       v-for="option in group.agents"
                       :key="option.id"
                       type="button"
-                      class="flex w-20 flex-col items-center gap-1 rounded-lg px-1 py-1 transition-colors hover:bg-base-200"
+                      class="flex min-w-0 w-full flex-col items-center gap-1 rounded-lg px-1 py-1 transition-colors hover:bg-base-200 sm:w-20"
                       :class="selectedValue === option.id ? 'bg-primary/10' : ''"
                       @click="selectOption(option)"
                     >
