@@ -274,7 +274,7 @@
       "decryptPassword": "解壓密碼",
       "decryptPasswordPlaceholder": "請輸入遷移包密碼",
       "previewWithPasswordAction": "輸入密碼後繼續預檢",
-      "packageVersion": "遷移包版本：{version}",
+      "packageVersion": "遷移版本：{version}",
       "memoryAdded": "將新增記憶：{count}",
       "memoryMerged": "將合併記憶：{count}",
       "providerAdded": "將新增供應商：{count}",

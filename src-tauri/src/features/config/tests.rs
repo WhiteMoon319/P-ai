@@ -1632,6 +1632,50 @@ model = "gpt-4.1"
         assert_eq!(restored.pdf_image_cache[0].images.len(), 1);
     }
 
+    #[test]
+    fn migration_package_version_should_allow_importing_older_data_versions() {
+        let manifest = MigrationManifest {
+            schema_version: MIGRATION_SCHEMA_VERSION,
+            migration_version: DATA_MIGRATION_VERSION_V1_BASELINE,
+            app_version: "0.18.8".to_string(),
+            exported_at: "2026-07-07T00:00:00Z".to_string(),
+        };
+        let mut payload = MigrationPayload {
+            config: AppConfig::default(),
+            runtime_data: AppData::default(),
+            memories: Vec::new(),
+            oauth_files: Vec::new(),
+            avatar_files: Vec::new(),
+        };
+        payload.runtime_data.data_migration_version = DATA_MIGRATION_VERSION_V1_BASELINE;
+
+        let version = assert_manifest_version(&manifest, &payload).expect("allow older import");
+        assert_eq!(version, DATA_MIGRATION_VERSION_V1_BASELINE);
+    }
+
+    #[test]
+    fn migration_package_version_should_reject_newer_data_versions() {
+        let newer_version = DATA_MIGRATION_CURRENT_VERSION + 1;
+        let manifest = MigrationManifest {
+            schema_version: MIGRATION_SCHEMA_VERSION,
+            migration_version: newer_version,
+            app_version: "0.99.0".to_string(),
+            exported_at: "2026-07-07T00:00:00Z".to_string(),
+        };
+        let mut payload = MigrationPayload {
+            config: AppConfig::default(),
+            runtime_data: AppData::default(),
+            memories: Vec::new(),
+            oauth_files: Vec::new(),
+            avatar_files: Vec::new(),
+        };
+        payload.runtime_data.data_migration_version = newer_version;
+
+        let err = assert_manifest_version(&manifest, &payload).expect_err("reject newer import");
+        assert!(err.contains("迁移版本不兼容"));
+        assert!(err.contains(&format!("V{newer_version}")));
+    }
+
     fn build_test_conversation(id: &str, title: &str) -> Conversation {
         Conversation {
             id: id.to_string(),

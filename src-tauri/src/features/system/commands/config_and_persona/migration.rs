@@ -44,6 +44,9 @@ impl From<&str> for MigrationCommandError {
 #[serde(rename_all = "camelCase")]
 struct MigrationManifest {
     schema_version: u32,
+    #[serde(default)]
+    migration_version: u32,
+    #[serde(default)]
     app_version: String,
     exported_at: String,
 }
@@ -547,21 +550,36 @@ fn read_preview_payload(preview_dir: &Path) -> Result<(MigrationManifest, Migrat
     Ok((manifest, payload))
 }
 
-fn assert_manifest_version(manifest: &MigrationManifest) -> Result<(), String> {
+fn format_migration_version_label(version: u32) -> String {
+    format!("V{version}")
+}
+
+fn migration_manifest_version(manifest: &MigrationManifest, payload: &MigrationPayload) -> u32 {
+    manifest
+        .migration_version
+        .max(payload.runtime_data.data_migration_version)
+        .max(DATA_MIGRATION_VERSION_V1_BASELINE)
+}
+
+fn assert_manifest_version(
+    manifest: &MigrationManifest,
+    payload: &MigrationPayload,
+) -> Result<u32, String> {
     if manifest.schema_version != MIGRATION_SCHEMA_VERSION {
         return Err(format!(
             "迁移包 schema 不匹配：expected={}, actual={}",
             MIGRATION_SCHEMA_VERSION, manifest.schema_version
         ));
     }
-    let current_version = env!("CARGO_PKG_VERSION");
-    if manifest.app_version.trim() != current_version {
+    let package_version = migration_manifest_version(manifest, payload);
+    if package_version > DATA_MIGRATION_CURRENT_VERSION {
         return Err(format!(
-            "迁移包版本不匹配：当前版本为 {}，迁移包版本为 {}。仅允许同版本导入。",
-            current_version, manifest.app_version
+            "迁移版本不兼容：当前支持到 {}，迁移包版本为 {}。仅允许导入不高于当前版本的迁移包。",
+            format_migration_version_label(DATA_MIGRATION_CURRENT_VERSION),
+            format_migration_version_label(package_version)
         ));
     }
-    Ok(())
+    Ok(package_version)
 }
 
 fn preview_memory_import(
@@ -800,6 +818,7 @@ async fn export_config_migration_package(
     ));
     let manifest = MigrationManifest {
         schema_version: MIGRATION_SCHEMA_VERSION,
+        migration_version: payload.runtime_data.data_migration_version.max(DATA_MIGRATION_VERSION_V1_BASELINE),
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         exported_at: now_iso(),
     };
@@ -835,7 +854,7 @@ async fn preview_import_config_migration_package(
 
     unzip_migration_package_to_dir(&package_path, input.password.trim(), &preview_dir)?;
     let (manifest, payload) = read_preview_payload(&preview_dir)?;
-    assert_manifest_version(&manifest)?;
+    let package_version = assert_manifest_version(&manifest, &payload)?;
 
     let current_config = state_read_config_cached(&state)?;
     let memory_preview = preview_memory_import(state.inner(), &preview_dir, &payload.memories)?;
@@ -852,7 +871,7 @@ async fn preview_import_config_migration_package(
 
     Ok(PreviewImportConfigMigrationPackageResult {
         preview_id,
-        package_version: manifest.app_version,
+        package_version: format_migration_version_label(package_version),
         memory_added_count: memory_preview.created_count,
         memory_merged_count: memory_preview.merged_count,
         provider_added_count,
@@ -879,7 +898,7 @@ fn apply_import_config_migration_package(
     let preview_dir = PathBuf::from(preview_dir);
 
     let (manifest, payload) = read_preview_payload(&preview_dir)?;
-    assert_manifest_version(&manifest)?;
+    assert_manifest_version(&manifest, &payload)?;
 
     let backup_dir = backup_current_migration_targets(state.inner())?;
     let current_config = state_read_config_cached(&state)?;

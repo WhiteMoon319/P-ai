@@ -274,7 +274,7 @@
       "decryptPassword": "Decrypt Password",
       "decryptPasswordPlaceholder": "Enter package password",
       "previewWithPasswordAction": "Continue Preview with Password",
-      "packageVersion": "Package version: {version}",
+      "packageVersion": "Migration version: {version}",
       "memoryAdded": "Memories to add: {count}",
       "memoryMerged": "Memories to merge: {count}",
       "providerAdded": "Providers to add: {count}",

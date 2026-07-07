@@ -3965,6 +3965,7 @@ fn ide_chat_export_config_migration_package_for_web_settings(
     ));
     let manifest = MigrationManifest {
         schema_version: MIGRATION_SCHEMA_VERSION,
+        migration_version: payload.runtime_data.data_migration_version.max(DATA_MIGRATION_VERSION_V1_BASELINE),
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         exported_at: now_iso(),
     };
@@ -4019,7 +4020,7 @@ fn ide_chat_preview_import_config_migration_package_for_web_settings(
     unzip_migration_package_to_dir(&package_path, input.password.trim(), &preview_dir)
         .map_err(ide_chat_migration_error_message)?;
     let (manifest, payload) = read_preview_payload(&preview_dir)?;
-    assert_manifest_version(&manifest)?;
+    let package_version = assert_manifest_version(&manifest, &payload)?;
 
     let current_config = state_read_config_cached(state)?;
     let memory_preview = preview_memory_import(state, &preview_dir, &payload.memories)?;
@@ -4035,7 +4036,7 @@ fn ide_chat_preview_import_config_migration_package_for_web_settings(
 
     ide_chat_serialize(PreviewImportConfigMigrationPackageResult {
         preview_id,
-        package_version: manifest.app_version,
+        package_version: format_migration_version_label(package_version),
         memory_added_count: memory_preview.created_count,
         memory_merged_count: memory_preview.merged_count,
         provider_added_count,
@@ -4061,7 +4062,7 @@ fn ide_chat_apply_import_config_migration_package_for_web_settings(
         .ok_or_else(|| "迁移预检已失效，请重新选择迁移包。".to_string())?;
     let preview_dir = PathBuf::from(preview_dir);
     let (manifest, payload) = read_preview_payload(&preview_dir)?;
-    assert_manifest_version(&manifest)?;
+    assert_manifest_version(&manifest, &payload)?;
     let backup_dir = backup_current_migration_targets(state)?;
     let current_config = state_read_config_cached(state)?;
     let current_data = state_read_agents_runtime_snapshot(state)?;

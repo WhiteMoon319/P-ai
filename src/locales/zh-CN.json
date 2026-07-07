@@ -274,7 +274,7 @@
       "decryptPassword": "解压密码",
       "decryptPasswordPlaceholder": "请输入迁移包密码",
       "previewWithPasswordAction": "输入密码后继续预检",
-      "packageVersion": "迁移包版本：{version}",
+      "packageVersion": "迁移版本：{version}",
       "memoryAdded": "将新增记忆：{count}",
       "memoryMerged": "将合并记忆：{count}",
       "providerAdded": "将新增供应商：{count}",
