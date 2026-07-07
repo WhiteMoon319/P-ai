@@ -380,6 +380,12 @@
           <span>{{ assistantBubbleBackgroundEnabled ? t('chat.messageItem.hideBubbleBackground') : t('chat.messageItem.showBubbleBackground') }}</span>
         </button>
       </li>
+      <li>
+        <button type="button" @click="handleContextMenuAction('toggleTimeDisplayMode')">
+          <FileText class="h-4 w-4" />
+          <span>{{ chatTimeDisplayMode === 'absolute' ? t('chat.messageItem.showRelativeTime') : t('chat.messageItem.showAbsoluteTime') }}</span>
+        </button>
+      </li>
       <li v-if="mathContextCopyText">
         <button type="button" @click="handleContextMenuAction('copyMath')">
           <Copy class="h-4 w-4" />
@@ -406,6 +412,9 @@
 import { ref as moduleRef } from "vue";
 
 const CHAT_BUBBLE_BACKGROUND_STORAGE_KEY = "easy-call.chat.bubble-background.v1";
+const CHAT_TIME_DISPLAY_MODE_STORAGE_KEY = "easy-call.chat.time-display-mode.v1";
+
+type ChatTimeDisplayMode = "relative" | "absolute";
 
 function readChatBubbleBackgroundPreference(): boolean {
   if (typeof window === "undefined") return false;
@@ -414,10 +423,24 @@ function readChatBubbleBackgroundPreference(): boolean {
 
 const chatBubbleBackgroundPreference = moduleRef(readChatBubbleBackgroundPreference());
 
+function readChatTimeDisplayModePreference(): ChatTimeDisplayMode {
+  if (typeof window === "undefined") return "relative";
+  return window.localStorage.getItem(CHAT_TIME_DISPLAY_MODE_STORAGE_KEY) === "absolute" ? "absolute" : "relative";
+}
+
+const chatTimeDisplayModePreference = moduleRef<ChatTimeDisplayMode>(readChatTimeDisplayModePreference());
+
 function writeChatBubbleBackgroundPreference(enabled: boolean) {
   chatBubbleBackgroundPreference.value = enabled;
   if (typeof window !== "undefined") {
     window.localStorage.setItem(CHAT_BUBBLE_BACKGROUND_STORAGE_KEY, enabled ? "1" : "0");
+  }
+}
+
+function writeChatTimeDisplayModePreference(mode: ChatTimeDisplayMode) {
+  chatTimeDisplayModePreference.value = mode;
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(CHAT_TIME_DISPLAY_MODE_STORAGE_KEY, mode);
   }
 }
 </script>
@@ -432,6 +455,7 @@ import {
   normalizeAssistantStreamBlocks,
   streamBlocksToActivityItems,
 } from "../../../utils/chat-message-semantics";
+import { formatIsoToLocalDateTime } from "../../../utils/time";
 import { AppMarkdownRenderer, initKatex } from "../markdown";
 import { normalizeLocalLinkHref } from "../utils/local-link";
 import { textContentSignature } from "../utils/text-signature";
@@ -519,6 +543,7 @@ const contextMenuY = ref(0);
 const mathContextCopyText = ref("");
 const relativeTimeNowTick = ref(Date.now());
 const assistantBubbleBackgroundEnabled = chatBubbleBackgroundPreference;
+const chatTimeDisplayMode = chatTimeDisplayModePreference;
 let relativeTimeNowTimer = 0;
 
 watch(
@@ -563,8 +588,11 @@ watch(
 
 const displayName = computed(() => messageName(props.block));
 const avatarUrl = computed(() => messageAvatarUrl(props.block));
-const assistantRelativeCreatedAt = computed(() => {
+const assistantCreatedAtText = computed(() => {
   if (isOwnMessage(props.block) || props.block.isStreaming) return "";
+  if (chatTimeDisplayMode.value === "absolute") {
+    return formatIsoToLocalDateTime(props.block.createdAt, "");
+  }
   return formatRecentRelativeTime(props.block.createdAt, relativeTimeNowTick.value);
 });
 const assistantDebugMeta = computed(() => {
@@ -575,7 +603,7 @@ const assistantDebugMeta = computed(() => {
   return sourceId && sourceId !== id ? `id=${id} src=${sourceId}` : `id=${id}`;
 });
 const assistantMetaText = computed(() => joinNonEmpty([
-  assistantRelativeCreatedAt.value,
+  assistantCreatedAtText.value,
   assistantDebugMeta.value,
 ]));
 const streamingHeaderStatus = computed(() => assistantStreamingHeaderStatus(props.block));
@@ -1825,6 +1853,8 @@ function handleContextMenuAction(action: string) {
   } else if (action === "toggleBubbleBackground") {
     assistantBubbleBackgroundEnabled.value = !assistantBubbleBackgroundEnabled.value;
     writeChatBubbleBackgroundPreference(assistantBubbleBackgroundEnabled.value);
+  } else if (action === "toggleTimeDisplayMode") {
+    writeChatTimeDisplayModePreference(chatTimeDisplayMode.value === "absolute" ? "relative" : "absolute");
   } else if (action === "branchFromMessage") {
     const turnId = recallTurnId(props.block);
     if (!turnId) return;

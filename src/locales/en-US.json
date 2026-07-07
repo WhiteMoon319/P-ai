@@ -1285,6 +1285,8 @@
       "multiSelect": "Multi-select",
       "showBubbleBackground": "Show bubble background",
       "hideBubbleBackground": "Hide bubble background",
+      "showAbsoluteTime": "Show exact time",
+      "showRelativeTime": "Show compact time",
       "branchFromMessage": "Create a Conversation Branch from This Message",
       "dispatchElapsed": "Dispatch elapsed {elapsed}",
       "elapsed": "Elapsed {elapsed}",
