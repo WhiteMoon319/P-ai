@@ -91,7 +91,6 @@ struct MemoryCacheStats {
     cached_chat_index_conversation_count: usize,
     cached_chat_index_estimated_json_bytes: usize,
     cached_app_data_loaded: bool,
-    cached_app_data_conversation_count: usize,
     cached_app_data_image_text_cache_entries: usize,
     cached_app_data_pdf_text_cache_entries: usize,
     cached_app_data_pdf_image_cache_entries: usize,
@@ -1486,10 +1485,6 @@ fn dump_memory_cache_stats(state: State<'_, AppState>) -> Result<MemoryCacheStat
         .lock()
         .map_err(|_| "Failed to lock cached app data".to_string())?;
     let cached_app_data_loaded = cached_app_data.is_some();
-    let cached_app_data_conversation_count = cached_app_data
-        .as_ref()
-        .map(|item| item.conversations.len())
-        .unwrap_or(0);
     let cached_app_data_image_text_cache_entries = cached_app_data
         .as_ref()
         .map(|item| item.image_text_cache.len())
@@ -1713,9 +1708,6 @@ fn dump_memory_cache_stats(state: State<'_, AppState>) -> Result<MemoryCacheStat
         .unwrap_or(0);
 
     let mut notes = Vec::<String>::new();
-    if cached_app_data_loaded && cached_app_data_conversation_count > 0 {
-        notes.push("cached_app_data.conversations 仍持有会话内容，这不是目标运行时边界。".to_string());
-    }
     if cached_conversations_estimated_json_bytes > 0 {
         notes.push("cached_conversations 仍存在非零数据，这违反当前运行时边界。".to_string());
     }
@@ -1734,7 +1726,6 @@ fn dump_memory_cache_stats(state: State<'_, AppState>) -> Result<MemoryCacheStat
         cached_chat_index_conversation_count,
         cached_chat_index_estimated_json_bytes,
         cached_app_data_loaded,
-        cached_app_data_conversation_count,
         cached_app_data_image_text_cache_entries,
         cached_app_data_pdf_text_cache_entries,
         cached_app_data_pdf_image_cache_entries,

@@ -2755,16 +2755,11 @@
         conversation_id: &str,
         assistant_message_id: &str,
     ) -> Value {
-        let data = state_read_app_data_cached(state).expect("read app data");
-        data.conversations
+        state_read_conversation_cached(state, conversation_id)
+            .expect("read conversation")
+            .messages
             .iter()
-            .find(|conversation| conversation.id == conversation_id)
-            .and_then(|conversation| {
-                conversation
-                    .messages
-                    .iter()
-                    .find(|message| message.id == assistant_message_id)
-            })
+            .find(|message| message.id == assistant_message_id)
             .and_then(|message| message.provider_meta.as_ref())
             .and_then(|meta| meta.get("remoteImDecision"))
             .cloned()
@@ -2777,17 +2772,11 @@
             seed_remote_im_auto_send_test_state(serde_json::json!({
                 "mockSend": true
             }));
-        let assistant_message = state_read_app_data_cached(&state)
-            .expect("read app data")
-            .conversations
+        let assistant_message = state_read_conversation_cached(&state, &conversation_id)
+            .expect("read conversation")
+            .messages
             .iter()
-            .find(|conversation| conversation.id == conversation_id)
-            .and_then(|conversation| {
-                conversation
-                    .messages
-                    .iter()
-                    .find(|message| message.id == assistant_message_id)
-            })
+            .find(|message| message.id == assistant_message_id)
             .cloned()
             .expect("assistant message");
 
@@ -2821,11 +2810,11 @@
         );
         assert_eq!(
             decision.get("conversationKind").and_then(Value::as_str),
-            Some("standard_conversation")
+            Some("remote_im_contact")
         );
         assert_eq!(
             decision.get("activationSourceCount").and_then(Value::as_u64),
-            Some(1)
+            None
         );
         assert_eq!(decision.get("error").and_then(Value::as_str), Some(""));
     }
@@ -2836,17 +2825,11 @@
             seed_remote_im_auto_send_test_state(serde_json::json!({
                 "mockSendError": "mock remote send failed"
             }));
-        let assistant_message = state_read_app_data_cached(&state)
-            .expect("read app data")
-            .conversations
+        let assistant_message = state_read_conversation_cached(&state, &conversation_id)
+            .expect("read conversation")
+            .messages
             .iter()
-            .find(|conversation| conversation.id == conversation_id)
-            .and_then(|conversation| {
-                conversation
-                    .messages
-                    .iter()
-                    .find(|message| message.id == assistant_message_id)
-            })
+            .find(|message| message.id == assistant_message_id)
             .cloned()
             .expect("assistant message");
 
@@ -2875,11 +2858,11 @@
         );
         assert_eq!(
             decision.get("conversationKind").and_then(Value::as_str),
-            Some("standard_conversation")
+            Some("remote_im_contact")
         );
         assert_eq!(
             decision.get("activationSourceCount").and_then(Value::as_u64),
-            Some(1)
+            None
         );
         assert_eq!(
             decision.get("error").and_then(Value::as_str),
@@ -3532,6 +3515,19 @@
             .lock()
             .map_err(|err| format!("lock conversation_runtime_slots failed: {err}"))?;
         Ok(slots.values().map(|slot| slot.pending_queue.len()).sum())
+    }
+
+    #[test]
+    fn state_read_app_data_cached_should_strip_runtime_conversations() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let mut data = AppData::default();
+        data.conversations.push(test_chat_conversation("conversation-cached-app-data", "active", &now));
+        state_write_app_data_cached(&state, &data).expect("write app data");
+
+        let cached = state_read_app_data_cached(&state).expect("read app data");
+
+        assert!(cached.conversations.is_empty());
     }
 
     #[test]
@@ -9175,19 +9171,15 @@
         )
         .expect("update conversation todos");
 
-        let data = state_read_app_data_cached(&state).expect("read app data");
-        let conversation = data
-            .conversations
-            .iter()
-            .find(|item| item.id == "conversation-main")
-            .expect("conversation exists");
+        let conversation = state_read_conversation_cached(&state, "conversation-main")
+            .expect("read conversation");
         assert_eq!(conversation.current_todos.len(), 2);
         assert_eq!(conversation.current_todos[0].content, "第一步");
         assert_eq!(conversation.current_todos[0].status, "completed");
         assert_eq!(conversation.current_todos[1].content, "第二步");
         assert_eq!(conversation.current_todos[1].status, "in_progress");
         assert_eq!(
-            conversation_current_todo_text(conversation).as_deref(),
+            conversation_current_todo_text(&conversation).as_deref(),
             Some("第二步")
         );
     }
@@ -9252,14 +9244,10 @@
         )
         .expect("update completed conversation todos");
 
-        let data = state_read_app_data_cached(&state).expect("read app data");
-        let conversation = data
-            .conversations
-            .iter()
-            .find(|item| item.id == "conversation-main")
-            .expect("conversation exists");
+        let conversation = state_read_conversation_cached(&state, "conversation-main")
+            .expect("read conversation");
         assert!(conversation.current_todos.is_empty());
-        assert_eq!(conversation_current_todo_text(conversation), None);
+        assert_eq!(conversation_current_todo_text(&conversation), None);
     }
 
     #[test]

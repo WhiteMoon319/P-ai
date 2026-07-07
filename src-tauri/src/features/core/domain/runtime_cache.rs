@@ -236,11 +236,8 @@ fn sync_cached_app_data_agents(state: &AppState, agents: &[AgentProfile]) -> Res
     sync_cached_app_data_signature(state)
 }
 
-fn sanitize_runtime_cached_app_data(_data: &mut AppData) {
-    #[cfg(not(test))]
-    {
-        _data.conversations.clear();
-    }
+fn sanitize_runtime_cached_app_data(data: &mut AppData) {
+    data.conversations.clear();
 }
 
 fn sync_cached_app_data_runtime(
@@ -1271,6 +1268,7 @@ fn ensure_app_data_cache_ready_inner(
     for conversation in data.conversations.iter_mut() {
         normalize_conversation_runtime_volatile_fields(conversation);
     }
+    sanitize_runtime_cached_app_data(&mut data);
     let disk_read_ms = disk_read_started
         .elapsed()
         .as_millis()
@@ -1356,10 +1354,12 @@ fn state_write_app_data_cached(state: &AppState, data: &AppData) -> Result<(), S
     #[allow(deprecated)]
     write_app_data(&state.data_path, data)?;
     let disk_signature = app_data_cache_signature(&state.data_path);
+    let mut cached_data = data.clone();
+    sanitize_runtime_cached_app_data(&mut cached_data);
     *state
         .cached_app_data
         .lock()
-        .map_err(|_| "Failed to lock cached app data".to_string())? = Some(data.clone());
+        .map_err(|_| "Failed to lock cached app data".to_string())? = Some(cached_data);
     *state
         .cached_app_data_signature
         .lock()
@@ -1391,10 +1391,12 @@ fn state_schedule_app_data_persist(state: &AppState, data: &AppData) -> Result<u
         .app_data_persist_latest_seq
         .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
         + 1;
+    let mut cached_data = data.clone();
+    sanitize_runtime_cached_app_data(&mut cached_data);
     *state
         .cached_app_data
         .lock()
-        .map_err(|_| "Failed to lock cached app data".to_string())? = Some(data.clone());
+        .map_err(|_| "Failed to lock cached app data".to_string())? = Some(cached_data);
     state
         .cached_app_data_dirty
         .store(true, std::sync::atomic::Ordering::Release);
