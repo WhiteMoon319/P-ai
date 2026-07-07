@@ -581,6 +581,9 @@ type MarkdownImageSource =
 
 const markdownImageThumbnailCache = new Map<string, string>();
 const markdownImageThumbnailPromiseCache = new Map<string, Promise<string>>();
+const MARKDOWN_IMAGE_THUMBNAIL_SESSION_PREFIX = "easy_call.markdown_thumbnail.v1:";
+const MARKDOWN_IMAGE_THUMBNAIL_SESSION_INDEX_KEY = "easy_call.markdown_thumbnail_index.v1";
+const MARKDOWN_IMAGE_THUMBNAIL_SESSION_LIMIT = 40;
 
 function stableHash(value: string): string {
   let hash = 0;
@@ -615,6 +618,69 @@ function scrollToFootnote(rawId: string) {
 
 function hasUrlScheme(value: string): boolean {
   return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value);
+}
+
+function normalizeMarkdownImageCacheKey(path: string): string {
+  const normalized = normalizeLocalLinkHref(path).trim().replace(/\\/g, "/");
+  if (/^[A-Za-z]:\//.test(normalized)) {
+    return `${normalized.slice(0, 1).toLowerCase()}${normalized.slice(1)}`;
+  }
+  return normalized.toLowerCase();
+}
+
+function readMarkdownThumbnailSessionIndex(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.sessionStorage.getItem(MARKDOWN_IMAGE_THUMBNAIL_SESSION_INDEX_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeMarkdownThumbnailSessionIndex(index: string[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(MARKDOWN_IMAGE_THUMBNAIL_SESSION_INDEX_KEY, JSON.stringify(index));
+  } catch {
+    // ignore sessionStorage quota / privacy mode failures
+  }
+}
+
+function markdownThumbnailSessionStorageKey(cacheKey: string): string {
+  return `${MARKDOWN_IMAGE_THUMBNAIL_SESSION_PREFIX}${stableHash(cacheKey)}`;
+}
+
+function readMarkdownThumbnailFromSession(cacheKey: string): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const raw = window.sessionStorage.getItem(markdownThumbnailSessionStorageKey(cacheKey));
+    if (!raw) return "";
+    const parsed = JSON.parse(raw) as { key?: string; dataUrl?: string } | null;
+    if (!parsed || parsed.key !== cacheKey) return "";
+    return String(parsed.dataUrl || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function writeMarkdownThumbnailToSession(cacheKey: string, dataUrl: string) {
+  if (typeof window === "undefined" || !dataUrl) return;
+  try {
+    const storageKey = markdownThumbnailSessionStorageKey(cacheKey);
+    window.sessionStorage.setItem(storageKey, JSON.stringify({ key: cacheKey, dataUrl }));
+    const nextIndex = readMarkdownThumbnailSessionIndex().filter((item) => item !== cacheKey);
+    nextIndex.unshift(cacheKey);
+    while (nextIndex.length > MARKDOWN_IMAGE_THUMBNAIL_SESSION_LIMIT) {
+      const removedKey = nextIndex.pop();
+      if (!removedKey) continue;
+      window.sessionStorage.removeItem(markdownThumbnailSessionStorageKey(removedKey));
+    }
+    writeMarkdownThumbnailSessionIndex(nextIndex);
+  } catch {
+    // ignore sessionStorage quota / privacy mode failures
+  }
 }
 
 function normalizeBaseLocalPath(value: string): string {
@@ -657,8 +723,10 @@ const MarkdownImage = defineComponent({
         loadError.value = false;
         if (next.kind !== "local" || !next.path.trim()) return;
         const path = next.path.trim();
-        const cached = markdownImageThumbnailCache.get(path);
+        const cacheKey = normalizeMarkdownImageCacheKey(path);
+        const cached = markdownImageThumbnailCache.get(cacheKey) || readMarkdownThumbnailFromSession(cacheKey);
         if (cached) {
+          markdownImageThumbnailCache.set(cacheKey, cached);
           thumbnailSrc.value = cached;
           return;
         }
@@ -666,22 +734,25 @@ const MarkdownImage = defineComponent({
         onCleanup(() => {
           cancelled = true;
         });
-        const existing = markdownImageThumbnailPromiseCache.get(path);
+        const existing = markdownImageThumbnailPromiseCache.get(cacheKey);
         const task = existing || invokeTauri<{ dataUrl: string }>("read_local_chat_image_thumbnail", {
           input: { path },
         })
           .then((result) => {
             const dataUrl = String(result?.dataUrl || "").trim();
-            if (dataUrl) markdownImageThumbnailCache.set(path, dataUrl);
-            markdownImageThumbnailPromiseCache.delete(path);
+            if (dataUrl) {
+              markdownImageThumbnailCache.set(cacheKey, dataUrl);
+              writeMarkdownThumbnailToSession(cacheKey, dataUrl);
+            }
+            markdownImageThumbnailPromiseCache.delete(cacheKey);
             return dataUrl;
           })
           .catch((error) => {
-            markdownImageThumbnailPromiseCache.delete(path);
+            markdownImageThumbnailPromiseCache.delete(cacheKey);
             console.warn("[Markdown图片] 本地缩略图加载失败", { path, error });
             return "";
           });
-        if (!existing) markdownImageThumbnailPromiseCache.set(path, task);
+        if (!existing) markdownImageThumbnailPromiseCache.set(cacheKey, task);
         void task.then((dataUrl) => {
           if (cancelled) return;
           if (dataUrl) {

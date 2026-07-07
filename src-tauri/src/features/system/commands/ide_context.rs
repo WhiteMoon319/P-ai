@@ -2902,6 +2902,20 @@ fn ide_chat_open_external_url_for_web_settings(params: Value) -> Result<Value, S
     Ok(serde_json::json!(null))
 }
 
+fn ide_chat_read_local_chat_image_thumbnail_for_web_settings(
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ReadLocalChatImageThumbnailInput>(params, "input")?;
+    ide_chat_serialize(read_local_chat_image_thumbnail(input)?)
+}
+
+fn ide_chat_read_local_chat_image_original_for_web_settings(
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ReadLocalChatImageThumbnailInput>(params, "input")?;
+    ide_chat_serialize(read_local_chat_image_original(input)?)
+}
+
 async fn ide_chat_web_access_info_for_web_settings(
     app: &AppHandle,
     state: &AppState,
@@ -6014,6 +6028,8 @@ async fn ide_chat_handle_jsonrpc_request(
         "fetch_project_changelog_markdown" => fetch_project_changelog_markdown().await.and_then(ide_chat_serialize),
         "get_web_access_info" => ide_chat_web_access_info_for_web_settings(app, state, ide_context_runtime).await,
         "open_external_url" => ide_chat_open_external_url_for_web_settings(request.params),
+        "read_local_chat_image_thumbnail" => ide_chat_read_local_chat_image_thumbnail_for_web_settings(request.params),
+        "read_local_chat_image_original" => ide_chat_read_local_chat_image_original_for_web_settings(request.params),
         "show_main_window" => ide_chat_show_window_for_web_settings(app, "main"),
         "show_chat_window" => ide_chat_show_window_for_web_settings(app, "chat"),
         "show_archives_window" => ide_chat_show_window_for_web_settings(app, "archives"),
