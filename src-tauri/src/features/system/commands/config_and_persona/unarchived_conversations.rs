@@ -1789,8 +1789,14 @@ fn save_conversation_section_order(
 fn list_delegate_conversations(
     state: State<'_, AppState>,
 ) -> Result<Vec<DelegateConversationSummary>, String> {
-    let mut threads = delegate_runtime_thread_list(state.inner())?;
-    threads.extend(delegate_recent_thread_list(state.inner())?);
+    list_delegate_conversations_inner(state.inner())
+}
+
+fn list_delegate_conversations_inner(
+    state: &AppState,
+) -> Result<Vec<DelegateConversationSummary>, String> {
+    let mut threads = delegate_runtime_thread_list(state)?;
+    threads.extend(delegate_recent_thread_list(state)?);
     let mut seen_ids = std::collections::HashSet::<String>::new();
     let mut summaries = threads
         .iter()
@@ -1798,7 +1804,7 @@ fn list_delegate_conversations(
             seen_ids.insert(thread.delegate_id.clone()).then(|| {
                 let mut summary = delegate_conversation_summary_from_runtime_thread(thread);
                 summary.title = delegate_display_title_from_id(
-                    state.inner(),
+                    state,
                     &thread.delegate_id,
                     Some(&thread.conversation),
                     Some(&thread.title),
@@ -1807,7 +1813,7 @@ fn list_delegate_conversations(
             })
         })
         .collect::<Vec<_>>();
-    for conversation in delegate_persisted_conversation_summary_list(state.inner())? {
+    for conversation in delegate_persisted_conversation_summary_list(state)? {
         let delegate_id = conversation
             .delegate_id
             .clone()
@@ -1818,7 +1824,7 @@ fn list_delegate_conversations(
         summaries.push(DelegateConversationSummary {
             conversation_id: conversation.conversation_id.clone(),
             title: delegate_display_title_from_id(
-                state.inner(),
+                state,
                 &delegate_id,
                 None,
                 Some(&conversation.title),

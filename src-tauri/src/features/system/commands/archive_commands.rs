@@ -44,8 +44,16 @@ async fn get_prompt_preview(
     preview_mode: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<PromptPreview, String> {
-    let mut data = state_read_agents_runtime_snapshot(&state)?;
-    let runtime_snapshot = load_runtime_organization_snapshot(state.inner())?;
+    get_prompt_preview_inner(input, preview_mode, state.inner()).await
+}
+
+async fn get_prompt_preview_inner(
+    input: SessionSelector,
+    preview_mode: Option<String>,
+    state: &AppState,
+) -> Result<PromptPreview, String> {
+    let mut data = state_read_agents_runtime_snapshot(state)?;
+    let runtime_snapshot = load_runtime_organization_snapshot(state)?;
     let app_config = runtime_snapshot.config;
     data.agents = runtime_snapshot.agents;
     let preview_mode = parse_prompt_preview_mode(preview_mode.as_deref());
@@ -56,11 +64,11 @@ async fn get_prompt_preview(
         .filter(|value| !value.is_empty())
         .ok_or_else(|| "conversationId is required.".to_string())?;
     let mut conversation = match conversation_service_v2()
-        .get_conversation_snapshot(state.inner(), requested_conversation_id)
+        .get_conversation_snapshot(state, requested_conversation_id)
     {
         Ok(conversation) => conversation,
         Err(_) => delegate_runtime_thread_conversation_get_any(
-            state.inner(),
+            state,
             requested_conversation_id,
         )?
         .ok_or_else(|| format!("指定会话不存在或不可用：{requested_conversation_id}"))?,
@@ -122,11 +130,11 @@ async fn get_prompt_preview(
 
     let user_name = user_persona_name(&data);
     let user_intro = user_persona_intro(&data);
-    let last_archive_summary = state_read_chat_index_cached(&state)?
+    let last_archive_summary = state_read_chat_index_cached(state)?
         .conversations
         .iter()
         .rev()
-        .filter_map(|item| conversation_service_v2().get_conversation_meta(&state, item.id.as_str()).ok())
+        .filter_map(|item| conversation_service_v2().get_conversation_meta(state, item.id.as_str()).ok())
         .find(|conversation_meta| {
             conversation_meta.conversation_kind.trim() != CONVERSATION_KIND_DELEGATE
                 && !conversation_meta.summary.trim().is_empty()
@@ -154,7 +162,7 @@ async fn get_prompt_preview(
                 executor_department_id: Some(conversation.department_id.trim().to_string()),
                 ..Default::default()
             }),
-            Some(&*state),
+            Some(state),
             Some(&api_config),
             Some(&resolved_api),
             Some(data.pdf_read_mode == "image" && api_config.enable_image),
@@ -195,7 +203,7 @@ async fn get_prompt_preview(
                     latest_audios: Some(Vec::new()),
                     ..Default::default()
                 }),
-                Some(&*state),
+                Some(state),
                 Some(&api_config),
                 Some(&resolved_api),
                 Some(data.pdf_read_mode == "image" && api_config.enable_image),
@@ -208,7 +216,7 @@ async fn get_prompt_preview(
         api_config.model.trim().to_string()
     };
     maybe_prepare_aliyun_multimodal_urls_for_candidate(
-        state.inner(),
+        state,
         &api_config,
         &mut resolved_api,
         &model_name,
@@ -219,7 +227,7 @@ async fn get_prompt_preview(
     )
     .await?;
     let _ = apply_prompt_image_fallbacks_to_prepared(
-        state.inner(),
+        state,
         &app_config,
         &api_config,
         &mut prepared,
@@ -258,7 +266,7 @@ async fn get_system_prompt_preview(
     input: SessionSelector,
     state: State<'_, AppState>,
 ) -> Result<SystemPromptPreview, String> {
-    let preview = get_prompt_preview(input, None, state).await?;
+    let preview = get_prompt_preview_inner(input, None, state.inner()).await?;
     Ok(SystemPromptPreview {
         system_prompt: preview.preamble,
     })

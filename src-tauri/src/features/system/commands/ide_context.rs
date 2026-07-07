@@ -2718,6 +2718,49 @@ fn ide_chat_load_agents_for_web_settings(state: &AppState) -> Result<Value, Stri
     ide_chat_serialize(load_agents_inner(state)?)
 }
 
+async fn ide_chat_list_unarchived_conversations_for_web_settings(
+    state: &AppState,
+) -> Result<Value, String> {
+    let app_state = state.clone();
+    let summaries = tokio::task::spawn_blocking(move || list_unarchived_conversations_blocking(&app_state))
+        .await
+        .map_err(|err| format!("读取未归档会话列表任务异常：{err}"))??;
+    ide_chat_serialize(summaries)
+}
+
+fn ide_chat_remote_im_list_contact_conversations_for_web_settings(
+    state: &AppState,
+) -> Result<Value, String> {
+    ide_chat_serialize(conversation_service_v2().list_remote_im_contact_conversations(state)?)
+}
+
+fn ide_chat_list_delegate_conversations_for_web_settings(
+    state: &AppState,
+) -> Result<Value, String> {
+    ide_chat_serialize(list_delegate_conversations_inner(state)?)
+}
+
+async fn ide_chat_get_prompt_preview_for_web_settings(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<SessionSelector>(params.clone(), "input")?;
+    let preview_mode = ide_chat_parse_optional_param_field::<String>(params, "previewMode")?;
+    ide_chat_serialize(get_prompt_preview_inner(input, preview_mode, state).await?)
+}
+
+async fn ide_chat_get_system_prompt_preview_for_web_settings(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<SessionSelector>(params, "input")?;
+    ide_chat_serialize(get_prompt_preview_inner(input, None, state).await.map(|preview| {
+        SystemPromptPreview {
+            system_prompt: preview.preamble,
+        }
+    })?)
+}
+
 fn ide_chat_save_agents_for_web_settings(
     state: &AppState,
     app: &AppHandle,
@@ -5960,6 +6003,13 @@ async fn ide_chat_handle_jsonrpc_request(
         "conversation.rewind" => ide_chat_rewind_conversation(state, request.params).await,
         "conversation.branchFromMessage" => ide_chat_branch_conversation_from_message(state, request.params).await,
         "conversation.branchFromSelection" => ide_chat_branch_conversation(state, request.params).await,
+        "list_unarchived_conversations" => ide_chat_list_unarchived_conversations_for_web_settings(state).await,
+        "remote_im_list_contact_conversations" => {
+            ide_chat_remote_im_list_contact_conversations_for_web_settings(state)
+        }
+        "list_delegate_conversations" => ide_chat_list_delegate_conversations_for_web_settings(state),
+        "get_prompt_preview" => ide_chat_get_prompt_preview_for_web_settings(state, request.params).await,
+        "get_system_prompt_preview" => ide_chat_get_system_prompt_preview_for_web_settings(state, request.params).await,
         "get_conversation_section_orders" => (|| -> Result<Value, String> {
             let runtime = state_read_runtime_state_cached(state)?;
             ide_chat_serialize(ConversationSectionOrdersOutput {
