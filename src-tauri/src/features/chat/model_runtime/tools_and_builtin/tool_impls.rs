@@ -697,11 +697,12 @@ impl RuntimeJsonTool for BuiltinTerminalExecTool {
     type Args = TerminalExecToolArgs;
     type Error = ToolInvokeError;
 
-    fn timeout_override(args_json: &str) -> Option<std::time::Duration> {
-        parse_runtime_tool_args::<TerminalExecToolArgs>(args_json)
-            .ok()
-            .and_then(|args| args.timeout_ms)
-            .map(std::time::Duration::from_millis)
+    fn timeout_override(_args_json: &str) -> Option<std::time::Duration> {
+        // `exec` may wait indefinitely for explicit user approval before the
+        // command is allowed to start. The real process timeout is enforced
+        // inside `builtin_shell_exec`; adding another runtime-level timeout
+        // here would let approval wait expire and cause repeated re-prompts.
+        None
     }
 
     fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
