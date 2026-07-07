@@ -90,6 +90,16 @@ describe("parseInlineSegments", () => {
     ]);
   });
 
+  it("supports LaTeX parenthesized inline math", () => {
+    const segments = parseInlineSegments("能量公式 \\(E=mc^2\\) 很常见");
+
+    expect(segments).toEqual<InlineSegment[]>([
+      { type: "text", text: "能量公式 " },
+      { type: "math", text: "E=mc^2", raw: "\\(E=mc^2\\)", display: false },
+      { type: "text", text: " 很常见" },
+    ]);
+  });
+
   it("parses simple same-line dollar math without heuristic filtering", () => {
     const segments = parseInlineSegments("求 $x$ 固定，$z$ 跟着 $y$ 变，直接输出$dx,dy$");
 
@@ -207,6 +217,18 @@ describe("parseMarkdownBlocks", () => {
     ]);
   });
 
+  it("parses single-line bracketed display math blocks with raw delimiters", () => {
+    const blocks = stripKeys(parseMarkdownBlocks("\\[E=mc^2\\]"));
+
+    expect(blocks).toEqual([
+      {
+        type: "math",
+        text: "E=mc^2",
+        raw: "\\[E=mc^2\\]",
+      },
+    ]);
+  });
+
   it("parses display math blocks with content beside double-dollar delimiters", () => {
     const blocks = stripKeys(parseMarkdownBlocks("$$ \\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6} $$"));
 
@@ -233,6 +255,24 @@ describe("parseMarkdownBlocks", () => {
         type: "math",
         text: "\\sum_{n=1}^{\\infty} \\frac{1}{n^2}\n=\n\\frac{\\pi^2}{6}",
         raw: "$$\n\\sum_{n=1}^{\\infty} \\frac{1}{n^2}\n=\n\\frac{\\pi^2}{6}\n$$",
+      },
+    ]);
+  });
+
+  it("parses multiline bracketed display math blocks with raw delimiters", () => {
+    const blocks = stripKeys(parseMarkdownBlocks([
+      "\\[",
+      "\\sum_{n=1}^{\\infty} \\frac{1}{n^2}",
+      "=",
+      "\\frac{\\pi^2}{6}",
+      "\\]",
+    ].join("\n")));
+
+    expect(blocks).toEqual([
+      {
+        type: "math",
+        text: "\\sum_{n=1}^{\\infty} \\frac{1}{n^2}\n=\n\\frac{\\pi^2}{6}",
+        raw: "\\[\n\\sum_{n=1}^{\\infty} \\frac{1}{n^2}\n=\n\\frac{\\pi^2}{6}\n\\]",
       },
     ]);
   });

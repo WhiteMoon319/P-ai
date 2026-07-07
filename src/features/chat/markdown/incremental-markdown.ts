@@ -10,17 +10,24 @@ function isCodeFenceLine(line: string): boolean {
 
 function isStandaloneMathLine(line: string): boolean {
   const trimmed = line.trim();
-  return trimmed.startsWith("$$") && trimmed.length > 4 && trimmed.endsWith("$$");
+  return (trimmed.startsWith("$$") && trimmed.length > 4 && trimmed.endsWith("$$"))
+    || (trimmed.startsWith("\\[") && trimmed.length > 4 && trimmed.endsWith("\\]"));
 }
 
 function isMathFenceStartLine(line: string): boolean {
   const trimmed = line.trim();
-  return trimmed === "$$" || trimmed.startsWith("$$");
+  return trimmed === "$$"
+    || trimmed.startsWith("$$")
+    || trimmed === "\\["
+    || trimmed.startsWith("\\[");
 }
 
 function isMathFenceEndLine(line: string): boolean {
   const trimmed = line.trim();
-  return trimmed === "$$" || (trimmed.endsWith("$$") && !trimmed.startsWith("$$"));
+  return trimmed === "$$"
+    || (trimmed.endsWith("$$") && !trimmed.startsWith("$$"))
+    || trimmed === "\\]"
+    || (trimmed.endsWith("\\]") && !trimmed.startsWith("\\["));
 }
 
 function isHeadingLine(line: string): boolean {

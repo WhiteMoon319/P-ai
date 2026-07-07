@@ -144,7 +144,7 @@ function isEscapedAt(text: string, index: number): boolean {
   return slashCount % 2 === 1;
 }
 
-function findUnescapedDelimiter(text: string, delimiter: "$" | "$$", from: number): number {
+function findUnescapedDelimiter(text: string, delimiter: string, from: number): number {
   let cursor = Math.max(0, from);
   while (cursor < text.length) {
     const index = text.indexOf(delimiter, cursor);
@@ -168,20 +168,37 @@ function mathBlock(raw: string, text: string, key: string): MarkdownBlock {
   };
 }
 
-function parseDisplayMathBlockStart(line: string): { closed: boolean; text: string; raw: string } | null {
-  const trimmed = String(line || "").trim();
-  if (!trimmed.startsWith("$$")) return null;
-  const closeIndex = findUnescapedDelimiter(trimmed, "$$", 2);
-  if (closeIndex >= 0 && !trimmed.slice(closeIndex + 2).trim()) {
-    const text = trimmed.slice(2, closeIndex);
-    if (!normalizeMathText(text)) return null;
-    return { closed: true, text, raw: trimmed };
+type DisplayMathDelimiter = {
+  open: string;
+  close: string;
+};
+
+const DISPLAY_MATH_DELIMITERS: DisplayMathDelimiter[] = [
+  { open: "$$", close: "$$" },
+  { open: "\\[", close: "\\]" },
+];
+
+function parseDisplayMathBlockStart(
+  line: string,
+): { closed: boolean; text: string; raw: string; delimiter: DisplayMathDelimiter } | null {
+  const rawLine = String(line || "");
+  const trimmed = rawLine.trim();
+  for (const delimiter of DISPLAY_MATH_DELIMITERS) {
+    if (!trimmed.startsWith(delimiter.open)) continue;
+    const closeIndex = findUnescapedDelimiter(trimmed, delimiter.close, delimiter.open.length);
+    if (closeIndex >= 0 && !trimmed.slice(closeIndex + delimiter.close.length).trim()) {
+      const text = trimmed.slice(delimiter.open.length, closeIndex);
+      if (!normalizeMathText(text)) return null;
+      return { closed: true, text, raw: trimmed, delimiter };
+    }
+    return {
+      closed: false,
+      text: rawLine.slice(rawLine.indexOf(delimiter.open) + delimiter.open.length),
+      raw: rawLine,
+      delimiter,
+    };
   }
-  return {
-    closed: false,
-    text: String(line || "").slice(String(line || "").indexOf("$$") + 2),
-    raw: String(line || ""),
-  };
+  return null;
 }
 
 export function parseMarkdownBlocks(input: string, streaming = false): MarkdownBlock[] {
@@ -198,6 +215,7 @@ export function parseMarkdownBlocks(input: string, streaming = false): MarkdownB
   let inMathBlock = false;
   let mathLines: string[] = [];
   let mathRawLines: string[] = [];
+  let activeMathDelimiter: DisplayMathDelimiter | null = null;
   let activeList: { ordered: boolean; items: string[] } | null = null;
 
   const recordFootnoteRefs = (text: string) => {
@@ -234,14 +252,17 @@ export function parseMarkdownBlocks(input: string, streaming = false): MarkdownB
 
     if (inMathBlock) {
       mathRawLines.push(line);
-      const closeIndex = findUnescapedDelimiter(line, "$$", 0);
-      if (closeIndex >= 0 && !line.slice(closeIndex + 2).trim()) {
+      const closeIndex = activeMathDelimiter
+        ? findUnescapedDelimiter(line, activeMathDelimiter.close, 0)
+        : -1;
+      if (closeIndex >= 0 && !line.slice(closeIndex + (activeMathDelimiter?.close.length || 0)).trim()) {
         const beforeClose = line.slice(0, closeIndex);
         if (beforeClose || mathLines.length > 0) mathLines.push(beforeClose);
         result.push(mathBlock(mathRawLines.join("\n"), mathLines.join("\n"), `math-${result.length}`));
         inMathBlock = false;
         mathLines = [];
         mathRawLines = [];
+        activeMathDelimiter = null;
         continue;
       }
       mathLines.push(line);
@@ -257,6 +278,7 @@ export function parseMarkdownBlocks(input: string, streaming = false): MarkdownB
         inMathBlock = true;
         mathLines = mathStart.text ? [mathStart.text] : [];
         mathRawLines = [mathStart.raw];
+        activeMathDelimiter = mathStart.delimiter;
       }
       continue;
     }
@@ -671,7 +693,39 @@ function inlineMathCanRender(text: string): boolean {
   return !/[\r\n]/.test(content);
 }
 
+function nextInlineParenMath(input: string, from: number): InlineSyntaxMatch | null {
+  let cursor = Math.max(0, from);
+  while (cursor < input.length) {
+    const start = findUnescapedDelimiter(input, "\\(", cursor);
+    if (start < 0) return null;
+    const contentStart = start + 2;
+    const end = findUnescapedDelimiter(input, "\\)", contentStart);
+    if (end < 0) return null;
+    const raw = input.slice(start, end + 2);
+    const text = input.slice(contentStart, end);
+    if (!inlineMathCanRender(text)) {
+      cursor = start + 2;
+      continue;
+    }
+    return {
+      kind: "math",
+      start,
+      end: end + 2,
+      raw,
+      text,
+      display: false,
+    };
+  }
+  return null;
+}
+
 function nextInlineMath(input: string, from: number): InlineSyntaxMatch | null {
+  const dollarMath = nextInlineDollarMath(input, from);
+  const parenMath = nextInlineParenMath(input, from);
+  return pickEarlierInline(dollarMath, parenMath);
+}
+
+function nextInlineDollarMath(input: string, from: number): InlineSyntaxMatch | null {
   let cursor = Math.max(0, from);
   while (cursor < input.length) {
     const start = findUnescapedDelimiter(input, "$", cursor);
