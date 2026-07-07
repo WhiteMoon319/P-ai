@@ -369,16 +369,11 @@ fn chat_index_item_is_archived(item: &ChatIndexConversationItem) -> bool {
     if item.status.trim() == "archived" {
         return true;
     }
-    if item
-        .archived_at
+    item.archived_at
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .is_some()
-    {
-        return true;
-    }
-    !item.summary.trim().is_empty()
 }
 
 #[cfg(test)]

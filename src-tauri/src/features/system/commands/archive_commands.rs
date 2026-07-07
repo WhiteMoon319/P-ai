@@ -65,7 +65,7 @@ async fn get_prompt_preview(
         )?
         .ok_or_else(|| format!("指定会话不存在或不可用：{requested_conversation_id}"))?,
     };
-    if !conversation.summary.trim().is_empty() {
+    if conversation_is_archived(&conversation) {
         return Err(format!("指定会话不存在或不可用：{requested_conversation_id}"));
     }
     let agent =

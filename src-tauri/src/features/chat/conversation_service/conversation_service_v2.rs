@@ -995,10 +995,10 @@ impl ConversationServiceV2 {
             .iter()
             .rev()
             .find_map(|item| {
-                if !item.summary.trim().is_empty() {
+                let conversation_meta = self.get_conversation_meta(state, &item.id).ok()?;
+                if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
                     return None;
                 }
-                let conversation_meta = self.get_conversation_meta(state, &item.id).ok()?;
                 if !conversation_meta.visible_in_foreground_lists
                     || !self.conversation_meta_is_local_normal_chat_meta_view(&conversation_meta)
                 {
@@ -1179,7 +1179,6 @@ impl ConversationServiceV2 {
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
                 .is_none()
-            && conversation_meta.summary.trim().is_empty()
     }
 
     fn conversation_meta_visible_in_foreground_lists(
@@ -3581,7 +3580,7 @@ impl ConversationServiceV2 {
                 return Ok(None);
             }
         };
-        if !conversation_meta.summary.trim().is_empty() {
+        if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
             drop(guard);
             return Ok(None);
         }
@@ -3918,7 +3917,7 @@ impl ConversationServiceV2 {
         let requested_conversation_idx = requested_conversation_id.and_then(|conversation_id| {
             data.conversations
                 .iter()
-                .position(|item| item.id == conversation_id && item.summary.trim().is_empty())
+                .position(|item| item.id == conversation_id && conversation_is_unarchived(item))
         });
         let is_runtime_conversation = requested_conversation_id.is_some()
             && requested_conversation_idx.is_none()
@@ -3934,7 +3933,7 @@ impl ConversationServiceV2 {
             Some(
                 data.conversations
                     .iter()
-                    .position(|item| item.id == conversation_id && item.summary.trim().is_empty())
+                    .position(|item| item.id == conversation_id && conversation_is_unarchived(item))
                     .ok_or_else(|| format!("指定会话不存在或不可用：{conversation_id}"))?,
             )
         } else if read_only {
@@ -3949,7 +3948,7 @@ impl ConversationServiceV2 {
         };
         if idx.is_some() && !read_only {
             for conversation in &mut data.conversations {
-                if conversation_is_delegate(conversation) || !conversation.summary.trim().is_empty()
+                if conversation_is_delegate(conversation) || conversation_is_archived(conversation)
                 {
                     continue;
                 }
@@ -4150,7 +4149,7 @@ impl ConversationServiceV2 {
                 self.get_conversation_meta(app_state, conversation_id)
                     .ok()
                     .filter(|conversation_meta| {
-                        conversation_meta.summary.trim().is_empty()
+                        self.conversation_meta_is_unarchived_meta_view(conversation_meta)
                             && conversation_meta.conversation_kind.trim()
                                 != CONVERSATION_KIND_DELEGATE
                     })
@@ -4285,7 +4284,7 @@ impl ConversationServiceV2 {
                 .get_conversation_meta(state, normalized_root_conversation_id)
                 .ok()
                 .filter(|conversation_meta| {
-                    conversation_meta.summary.trim().is_empty()
+                    self.conversation_meta_is_unarchived_meta_view(conversation_meta)
                         && conversation_meta.conversation_kind.trim()
                             != CONVERSATION_KIND_DELEGATE
                         && conversation_meta.conversation_kind.trim()
@@ -4492,7 +4491,7 @@ impl ConversationServiceV2 {
                     self.get_conversation_meta(state, conversation_id)
                         .ok()
                         .filter(|conversation_meta| {
-                            conversation_meta.summary.trim().is_empty()
+                            self.conversation_meta_is_unarchived_meta_view(conversation_meta)
                                 && conversation_meta.is_remote_im_contact
                         })
                         .map(|conversation_meta| conversation_meta.id.to_string())
@@ -4504,7 +4503,7 @@ impl ConversationServiceV2 {
                         .iter()
                         .filter_map(|item| self.get_conversation_meta(state, item.id.as_str()).ok())
                         .find(|conversation_meta| {
-                            conversation_meta.summary.trim().is_empty()
+                            self.conversation_meta_is_unarchived_meta_view(conversation_meta)
                                 && conversation_meta.is_remote_im_contact
                                 && conversation_meta.root_conversation_id.as_deref()
                                     == Some(target_key.as_str())
@@ -4648,7 +4647,7 @@ impl ConversationServiceV2 {
                 .iter()
                 .filter_map(|item| self.get_conversation_meta(state, item.id.as_str()).ok())
                 .find(|conversation_meta| {
-                    conversation_meta.summary.trim().is_empty()
+                    self.conversation_meta_is_unarchived_meta_view(conversation_meta)
                         && conversation_meta.is_remote_im_contact
                         && conversation_meta.root_conversation_id.as_deref()
                             == Some(target_key.as_str())
@@ -4713,7 +4712,7 @@ impl ConversationServiceV2 {
                 .iter()
                 .filter_map(|item| self.get_conversation_meta(state, item.id.as_str()).ok())
                 .find(|conversation_meta| {
-                    conversation_meta.summary.trim().is_empty()
+                    self.conversation_meta_is_unarchived_meta_view(conversation_meta)
                         && conversation_meta.is_remote_im_contact
                         && conversation_meta.root_conversation_id.as_deref()
                             == Some(target_key.as_str())
@@ -4722,7 +4721,7 @@ impl ConversationServiceV2 {
                 .ok_or_else(|| format!("联系人未绑定联系人会话：{normalized_contact_id}"))?
         };
         let conversation_meta = self.get_conversation_meta(state, &conversation_id)?;
-        if !conversation_meta.summary.trim().is_empty()
+        if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta)
             || !conversation_meta.is_remote_im_contact
         {
             drop(guard);
@@ -4832,7 +4831,7 @@ impl ConversationServiceV2 {
                             }
                         })
                         .find(|conversation_meta| {
-                            conversation_meta.summary.trim().is_empty()
+                            self.conversation_meta_is_unarchived_meta_view(conversation_meta)
                                 && conversation_meta.is_remote_im_contact
                                 && conversation_meta.root_conversation_id.as_deref()
                                     == Some(target_key.as_str())
@@ -4853,7 +4852,7 @@ impl ConversationServiceV2 {
         };
         let conversation_meta = match self.get_conversation_meta(state, &conversation_id) {
             Ok(conversation_meta)
-                if conversation_meta.summary.trim().is_empty()
+                if self.conversation_meta_is_unarchived_meta_view(&conversation_meta)
                     && conversation_meta.is_remote_im_contact =>
             {
                 conversation_meta
@@ -5116,7 +5115,7 @@ impl ConversationServiceV2 {
                             }
                         };
                         let root_key = conversation_meta.root_conversation_id.as_deref()?;
-                        if !conversation_meta.summary.trim().is_empty()
+                        if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta)
                             || !conversation_meta.is_remote_im_contact
                             || !conversation_key_map.contains_key(root_key)
                         {
@@ -5699,7 +5698,7 @@ impl ConversationServiceV2 {
         let agents = state_read_agents_cached(state)?;
         let source_conversation = read_conversation_for_backup_cleanup(state, &source.id)
             .map_err(|_| "活动对话已变化，请重试归档。".to_string())?;
-        if source_conversation.summary.trim().is_empty() || conversation_is_delegate(&source_conversation) {
+        if !conversation_is_archived(&source_conversation) || conversation_is_delegate(&source_conversation) {
             drop(guard);
             return Err("活动对话已变化，请重试归档。".to_string());
         }
@@ -5981,7 +5980,9 @@ impl ConversationServiceV2 {
     ) -> Result<SchedulerHistoryFlushCommitResult, String> {
         let _guard = lock_conversation_with_metrics(state, "scheduler_commit")?;
         let conversation_meta = match self.get_conversation_meta(state, conversation_id) {
-            Ok(conversation_meta) if conversation_meta.summary.trim().is_empty() => {
+            Ok(conversation_meta)
+                if self.conversation_meta_is_unarchived_meta_view(&conversation_meta) =>
+            {
                 conversation_meta
             }
             _ => {

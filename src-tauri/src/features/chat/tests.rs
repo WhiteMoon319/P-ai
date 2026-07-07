@@ -6515,6 +6515,37 @@
     }
 
     #[test]
+    fn normalize_single_active_main_conversation_should_keep_summary_only_foreground_chat_active() {
+        let now = now_iso();
+        let later = (now_utc() + time::Duration::minutes(1))
+            .format(&Rfc3339)
+            .expect("format later");
+        let mut data = AppData::default();
+        data.main_conversation_id = Some("conversation-main".to_string());
+        let mut main = test_chat_conversation("conversation-main", "inactive", &now);
+        main.summary = "只是内容摘要".to_string();
+        data.conversations = vec![main, test_chat_conversation("conversation-sub", "active", &later)];
+
+        let changed = normalize_single_active_main_conversation(&mut data);
+
+        assert!(changed);
+        assert_eq!(data.conversations[0].status, "active");
+        assert_eq!(data.conversations[1].status, "active");
+    }
+
+    #[test]
+    fn conversation_is_archived_should_ignore_summary_without_archive_fields() {
+        let now = now_iso();
+        let mut conversation = test_chat_conversation("conversation-summary-only", "active", &now);
+        conversation.summary = "只是内容摘要".to_string();
+
+        assert!(!conversation_is_archived(&conversation));
+
+        let item = build_chat_index_item(&conversation);
+        assert!(!chat_index_item_is_archived(&item));
+    }
+
+    #[test]
     fn normalize_single_active_main_conversation_should_keep_all_foreground_chats_active() {
         let now = now_iso();
         let later = (now_utc() + time::Duration::minutes(1))
@@ -9028,6 +9059,62 @@
         let resolved = delegate_target_chat_api_config_ids(&app_config, &department);
 
         assert!(resolved.is_empty());
+    }
+
+    #[test]
+    fn conversation_meta_is_unarchived_meta_view_should_ignore_summary_only_conversation() {
+        let state = test_chat_runtime_state();
+        let now = now_utc_rfc3339();
+        let mut data = AppData::default();
+        let mut conversation = Conversation {
+            id: "conversation-summary-only".to_string(),
+            title: "摘要会话".to_string(),
+            agent_id: DEFAULT_AGENT_ID.to_string(),
+            department_id: String::new(),
+            bound_conversation_id: None,
+            parent_conversation_id: None,
+            child_conversation_ids: Vec::new(),
+            fork_message_cursor: None,
+            unread_count: 0,
+            conversation_kind: CONVERSATION_KIND_CHAT.to_string(),
+            root_conversation_id: None,
+            delegate_id: None,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+            last_user_at: None,
+            last_assistant_at: None,
+            status: "active".to_string(),
+            summary: "只是内容摘要".to_string(),
+            user_profile_snapshot: String::new(),
+            shell_workspace_path: None,
+            shell_workspaces: Vec::new(),
+            shell_autonomous_mode: false,
+            archived_at: None,
+            messages: Vec::new(),
+            fast_request_turns: Vec::new(),
+            current_todos: Vec::new(),
+            memory_recall_table: Vec::new(),
+            plan_mode_enabled: false,
+            preferred_api_config_id: None,
+            auto_push_remote_contact_id: None,
+            active_goal: None,
+            cumulative_usage: ConversationCumulativeUsage::default(),
+        };
+        let conversation_id = conversation.id.clone();
+        data.conversations.push(conversation.clone());
+        state_write_app_data_cached(&state, &data).expect("write app data");
+        let meta = conversation_service_v2()
+            .get_conversation_meta(&state, &conversation_id)
+            .expect("get conversation meta");
+
+        assert!(conversation_service_v2().conversation_meta_is_unarchived_meta_view(&meta));
+
+        conversation.archived_at = Some(now_utc_rfc3339());
+        let archived_meta = ConversationMetaView {
+            archived_at: conversation.archived_at.clone(),
+            ..meta
+        };
+        assert!(!conversation_service_v2().conversation_meta_is_unarchived_meta_view(&archived_meta));
     }
 
     #[test]

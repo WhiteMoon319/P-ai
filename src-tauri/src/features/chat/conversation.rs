@@ -7,8 +7,7 @@ fn latest_active_conversation_index(
         .iter()
         .enumerate()
         .filter(|(_, c)| {
-            c.summary.trim().is_empty()
-                && conversation_visible_in_foreground_lists(c)
+            conversation_is_unarchived(c) && conversation_visible_in_foreground_lists(c)
         })
         .max_by(|(idx_a, a), (idx_b, b)| {
             let a_updated = a.updated_at.trim();
@@ -28,8 +27,7 @@ fn latest_main_conversation_index(data: &AppData, _agent_id: &str) -> Option<usi
         .iter()
         .enumerate()
         .filter(|(_, c)| {
-            c.summary.trim().is_empty()
-                && conversation_visible_in_foreground_lists(c)
+            conversation_is_unarchived(c) && conversation_visible_in_foreground_lists(c)
         })
         .max_by(|(idx_a, a), (idx_b, b)| {
             let a_updated = a.updated_at.trim();
@@ -158,7 +156,7 @@ fn main_conversation_index(data: &AppData, _agent_id: &str) -> Option<usize> {
         .filter(|value| !value.is_empty())?;
     data.conversations.iter().position(|conversation| {
         conversation.id == target_id
-            && conversation.summary.trim().is_empty()
+            && conversation_is_unarchived(conversation)
             && conversation_visible_in_foreground_lists(conversation)
     })
 }
@@ -167,7 +165,7 @@ fn normalize_main_conversation_marker(data: &mut AppData, _agent_id: &str) -> bo
     let fixed_id = SYSTEM_NOTIFICATION_CONVERSATION_ID;
     if let Some(idx) = data.conversations.iter().position(|conversation| {
         conversation.id.trim() == fixed_id
-            && conversation.summary.trim().is_empty()
+            && conversation_is_unarchived(conversation)
             && conversation_visible_in_foreground_lists(conversation)
     }) {
         let mut changed = normalize_system_notification_conversation(&mut data.conversations[idx]);
@@ -178,7 +176,7 @@ fn normalize_main_conversation_marker(data: &mut AppData, _agent_id: &str) -> bo
         return changed;
     }
     if let Some(idx) = data.conversations.iter().position(|conversation| {
-        conversation.summary.trim().is_empty()
+        conversation_is_unarchived(conversation)
             && conversation_visible_in_foreground_lists(conversation)
             && conversation_is_system_notification(conversation)
     }) {
@@ -203,7 +201,7 @@ fn normalize_single_active_main_conversation(data: &mut AppData) -> bool {
 
     let mut changed = false;
     for (_idx, conversation) in data.conversations.iter_mut().enumerate() {
-        if !conversation_visible_in_foreground_lists(conversation) || !conversation.summary.trim().is_empty() {
+        if !conversation_visible_in_foreground_lists(conversation) || conversation_is_archived(conversation) {
             continue;
         }
         let target_status = "active";
@@ -262,16 +260,12 @@ fn conversation_is_archived(conversation: &Conversation) -> bool {
     if conversation.status.trim() == "archived" {
         return true;
     }
-    if conversation
+    conversation
         .archived_at
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .is_some()
-    {
-        return true;
-    }
-    !conversation.summary.trim().is_empty()
 }
 
 const SUMMARY_CONTEXT_MESSAGE_SCHEMA_VERSION: u64 = 2;
@@ -1062,7 +1056,7 @@ fn ensure_active_conversation_index(
 
     if let Some(idx) = latest_main_conversation_index(data, agent_id) {
         for (_i, conversation) in data.conversations.iter_mut().enumerate() {
-            if !conversation_visible_in_foreground_lists(conversation) || !conversation.summary.trim().is_empty() {
+            if !conversation_visible_in_foreground_lists(conversation) || conversation_is_archived(conversation) {
                 continue;
             }
             conversation.status = "active".to_string();
@@ -1073,7 +1067,7 @@ fn ensure_active_conversation_index(
     let conversation = build_system_notification_conversation_record();
 
     for item in &mut data.conversations {
-        if !conversation_visible_in_foreground_lists(item) || !item.summary.trim().is_empty() {
+        if !conversation_visible_in_foreground_lists(item) || conversation_is_archived(item) {
             continue;
         }
         item.status = "active".to_string();
@@ -1103,7 +1097,7 @@ fn ensure_main_conversation_index(
     }
     let conversation = build_system_notification_conversation_record();
     for item in &mut data.conversations {
-        if !conversation_visible_in_foreground_lists(item) || !item.summary.trim().is_empty() {
+        if !conversation_visible_in_foreground_lists(item) || conversation_is_archived(item) {
             continue;
         }
         item.status = "active".to_string();
@@ -1124,7 +1118,7 @@ fn ensure_active_foreground_conversation_index_atomic(
     if let Some(idx) = main_conversation_index(data, agent_id) {
         for conversation in &mut data.conversations {
             if !conversation_visible_in_foreground_lists(conversation)
-                || !conversation.summary.trim().is_empty()
+                || conversation_is_archived(conversation)
             {
                 continue;
             }
@@ -1135,7 +1129,7 @@ fn ensure_active_foreground_conversation_index_atomic(
 
     let conversation = build_system_notification_conversation_record();
     for item in &mut data.conversations {
-        if !conversation_visible_in_foreground_lists(item) || !item.summary.trim().is_empty() {
+        if !conversation_visible_in_foreground_lists(item) || conversation_is_archived(item) {
             continue;
         }
         item.status = "active".to_string();
@@ -1348,7 +1342,7 @@ fn archive_conversation_now(
     let idx = data
         .conversations
         .iter()
-        .position(|c| c.id == conversation_id && c.summary.trim().is_empty())?;
+        .position(|c| c.id == conversation_id && conversation_is_unarchived(c))?;
     let conv = data.conversations.get_mut(idx)?;
     let previous_status = conv.status.clone();
     let now = now_iso();
