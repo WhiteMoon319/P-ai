@@ -5,6 +5,7 @@
 
 ## 最近版本
 
+- [v0.19.3](docs/changelog/releases/v0.19.3.md) - 修复（chat-sidebar-attachment-downloads-and-missing-media）：侧边栏通过文件选择器添加附件时先统一入队并写入 `downloads/`，图片附件的预览与附件路径提示收敛为单一状态源，同时在历史媒体恢复阶段遇到缺失文件时跳过对应媒体并保持后续附件路径不串位。
 - [v0.19.2](docs/changelog/releases/v0.19.2.md) - 快速设置左上角入口改为“跳过快速设置”文字按钮，点击后更明确地进入设置页并隐藏快速设置窗口。
 - [v0.19.1](docs/changelog/releases/v0.19.1.md) - 修复（chat）：请求图片统一压缩为 WebP。
 - [v0.19.0](docs/changelog/releases/v0.19.0.md) - 功能（config）：所有模型选择器统一展示模型思维等级，关闭思考时显示“不思考”，便于在快速设置、配置页和聊天相关入口中直接区分同模型的不同推理档位。
