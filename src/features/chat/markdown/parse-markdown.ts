@@ -2,11 +2,17 @@
 // Lightweight markdown parser based on SidebarLightMarkdown's approach,
 // extended with math block detection ($$...$$ and $...$) and mermaid awareness.
 
+export type MarkdownListItem = {
+  text: string;
+  marker: string;
+  value?: number;
+};
+
 export type MarkdownBlock =
   | { type: "paragraph"; text: string; key: string }
   | { type: "heading"; level: 1 | 2 | 3 | 4; text: string; key: string }
   | { type: "quote"; text: string; key: string }
-  | { type: "list"; ordered: boolean; items: string[]; key: string }
+  | { type: "list"; ordered: boolean; items: MarkdownListItem[]; key: string }
   | { type: "table"; headers: string[]; rows: string[][]; key: string }
   | { type: "code"; lang: string; text: string; key: string }
   | { type: "math"; text: string; raw: string; key: string }
@@ -216,7 +222,7 @@ export function parseMarkdownBlocks(input: string, streaming = false): MarkdownB
   let mathLines: string[] = [];
   let mathRawLines: string[] = [];
   let activeMathDelimiter: DisplayMathDelimiter | null = null;
-  let activeList: { ordered: boolean; items: string[] } | null = null;
+  let activeList: { ordered: boolean; items: MarkdownListItem[] } | null = null;
 
   const recordFootnoteRefs = (text: string) => {
     const pattern = /\[\^([^\]\n]+)\]/g;
@@ -231,7 +237,7 @@ export function parseMarkdownBlocks(input: string, streaming = false): MarkdownB
 
   const flushList = () => {
     if (!activeList) return;
-    activeList.items.forEach(recordFootnoteRefs);
+    activeList.items.forEach((item) => recordFootnoteRefs(item.text));
     result.push({
       type: "list",
       ordered: activeList.ordered,
@@ -424,7 +430,12 @@ export function parseMarkdownBlocks(input: string, streaming = false): MarkdownB
         flushList();
         activeList = { ordered, items: [] };
       }
-      activeList.items.push(listMatch[3].trim());
+      const numericValue = ordered ? Math.max(1, Number.parseInt(listMatch[2] || "1", 10) || 1) : undefined;
+      activeList.items.push({
+        text: listMatch[3].trim(),
+        marker: ordered ? `${listMatch[2]}.` : (listMatch[1] || "-"),
+        value: numericValue,
+      });
       continue;
     }
 

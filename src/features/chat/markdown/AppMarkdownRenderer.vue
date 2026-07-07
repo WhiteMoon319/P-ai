@@ -459,9 +459,12 @@ const BlockRenderer = defineComponent({
         return h(tag, {
           key: `${block.type}-${index}-${block.key}`,
           class: block.ordered ? "ecall-md-list ecall-md-list-ordered" : "ecall-md-list",
-        }, block.items.map((item, itemIndex) => h("li", { key: `${index}-${itemIndex}` }, [
+        }, block.items.map((item, itemIndex) => h("li", {
+          key: `${index}-${itemIndex}`,
+          value: block.ordered && item.value ? item.value : undefined,
+        }, [
           h(InlineRenderer, {
-            segments: parseInlineSegments(item),
+            segments: parseInlineSegments(item.text),
             localImageBasePath: blockProps.localImageBasePath,
             footnoteIndexMap: blockProps.footnoteIndexMap,
           }),

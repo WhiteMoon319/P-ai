@@ -94,7 +94,7 @@ function collectFootnoteReferences(blocks: MarkdownBlock[]): string[] {
       continue;
     }
     if (block.type === "list") {
-      block.items.forEach((item) => collectFootnoteReferencesFromText(item, seen, output));
+      block.items.forEach((item) => collectFootnoteReferencesFromText(item.text, seen, output));
       continue;
     }
     if (block.type === "table") {

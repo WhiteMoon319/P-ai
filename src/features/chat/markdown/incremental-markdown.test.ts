@@ -297,4 +297,58 @@ describe("parseMarkdownBlocks", () => {
       },
     ]);
   });
+
+  it("preserves ordered-list numbering after an intervening unordered list", () => {
+    const blocks = stripKeys(parseMarkdownBlocks([
+      "1. 找出全部读取点",
+      "2. 区分：",
+      "   - 真正在产品链路里用的",
+      "   - 只在测试/调试里用的",
+      "3. 逐类迁到 metadata / snapshot / overview 真相层",
+    ].join("\n")));
+
+    expect(blocks).toEqual([
+      {
+        type: "list",
+        ordered: true,
+        items: [
+          { text: "找出全部读取点", marker: "1.", value: 1 },
+          { text: "区分：", marker: "2.", value: 2 },
+        ],
+      },
+      {
+        type: "list",
+        ordered: false,
+        items: [
+          { text: "真正在产品链路里用的", marker: "-", value: undefined },
+          { text: "只在测试/调试里用的", marker: "-", value: undefined },
+        ],
+      },
+      {
+        type: "list",
+        ordered: true,
+        items: [
+          { text: "逐类迁到 metadata / snapshot / overview 真相层", marker: "3.", value: 3 },
+        ],
+      },
+    ]);
+  });
+
+  it("preserves per-item ordered values from markdown source", () => {
+    const blocks = stripKeys(parseMarkdownBlocks([
+      "1. 第一项",
+      "135. 第一百三十五项",
+    ].join("\n")));
+
+    expect(blocks).toEqual([
+      {
+        type: "list",
+        ordered: true,
+        items: [
+          { text: "第一项", marker: "1.", value: 1 },
+          { text: "第一百三十五项", marker: "135.", value: 135 },
+        ],
+      },
+    ]);
+  });
 });
