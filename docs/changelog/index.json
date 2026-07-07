@@ -1,7 +1,12 @@
 {
   "generatedAt": "2026-07-06T17:24:12.830Z",
-  "latestVersion": "v0.19.0",
+  "latestVersion": "v0.19.1",
   "releases": [
+    {
+      "version": "v0.19.1",
+      "path": "docs/changelog/releases/v0.19.1.md",
+      "summary": "修复（chat）：请求图片统一压缩为 WebP。"
+    },
     {
       "version": "v0.19.0",
       "path": "docs/changelog/releases/v0.19.0.md",

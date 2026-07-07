@@ -5,6 +5,7 @@
 
 ## 最近版本
 
+- [v0.19.1](docs/changelog/releases/v0.19.1.md) - 修复（chat）：请求图片统一压缩为 WebP。
 - [v0.19.0](docs/changelog/releases/v0.19.0.md) - 功能（config）：所有模型选择器统一展示模型思维等级，关闭思考时显示“不思考”，便于在快速设置、配置页和聊天相关入口中直接区分同模型的不同推理档位。
 - [v0.18.8](docs/changelog/releases/v0.18.8.md) - 修复（reasoning-disable-special-vendors）：配置页新增“思维强度 -> 无”，并为 DeepSeek、Kimi（Moonshot）、豆包这类特殊供应商在关闭思维链时只发送 `thinking.type=disabled`，不再错误附带 `reasoning_effort=none`，避免请求被 400 拒绝。
 - [v0.18.7](docs/changelog/releases/v0.18.7.md) - 修复（read-media-multimodal-routing）：`read_media` 不再按模型名或协议白名单拒绝已选中的多模态模型；只要配置页已允许绑定并开启图片/音视频能力，就允许执行媒体解析，避免 `doubao-seed-2.0-mini` 等模型出现“能选不能用”的致命错判。
