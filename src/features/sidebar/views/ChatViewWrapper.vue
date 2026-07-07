@@ -66,6 +66,7 @@
     :remote-im-contact-conversations="remoteImContactConversations"
     :conversation-items="effectiveConversationItems"
     :create-conversation-department-options="createConversationDepartmentOptions"
+    :recipient-options-ready="recipientOptionsReady"
     :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
     :ide-context-groups="ideContextGroups"
     :attached-ide-context-references="[]"
@@ -207,6 +208,7 @@ const props = defineProps<{
   runtimeState?: string;
   hasPrevBlock: boolean;
   createConversationDepartmentOptions: DepartmentPersonaOption[];
+  recipientOptionsReady?: boolean;
   defaultCreateConversationDepartmentId: string;
   currentDepartmentId: string;
   currentWorkspaceName: string;

@@ -569,6 +569,7 @@ const props = defineProps<{
   chatRightPanelMode: "reader" | "review" | "delegate";
   readerDirectoryOpenRequest?: number;
   createConversationDepartmentOptions: DepartmentPersonaOption[];
+  recipientOptionsReady?: boolean;
   defaultCreateConversationDepartmentId: string;
   ideContextGroups: IdeContextWorkspaceGroup[]; attachedIdeContextReferences: IdeContextReferenceItem[];
   detachedChatWindow?: boolean; terminalApprovals?: TerminalApprovalConversationItem[];
@@ -707,6 +708,7 @@ function findRecipientOption(departmentId: string, agentId: string): DepartmentP
 }
 
 const activeConversationRecipientMissing = computed(() => {
+  if (!props.recipientOptionsReady) return false;
   if (activeConversationIsSystemNotification.value || activeConversationIsRemoteContact.value) return false;
   const conversationId = String(props.activeConversationId || "").trim();
   if (!conversationId) return false;

@@ -183,6 +183,7 @@
         :remote-im-contact-conversations="remoteImContactConversations"
         :conversation-items="chatConversationItems || chatUnarchivedConversationItems"
         :create-conversation-department-options="createConversationDepartmentOptions"
+        :recipient-options-ready="recipientOptionsReady"
         :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
         :ide-context-groups="[]"
         :attached-ide-context-references="[]"
@@ -579,6 +580,7 @@ const props = defineProps<{
   chatUnarchivedConversationItems: ChatConversationOverviewItem[];
   chatConversationItems?: ChatConversationOverviewItem[];
   createConversationDepartmentOptions: DepartmentPersonaOption[];
+  recipientOptionsReady?: boolean;
   defaultCreateConversationDepartmentId: string;
   archives: ArchiveSummary[];
   selectedArchiveId: string;

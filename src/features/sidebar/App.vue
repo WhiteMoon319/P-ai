@@ -63,6 +63,7 @@
       :runtime-state="activeConversationRuntimeState"
       :has-prev-block="hasPrevBlock"
       :create-conversation-department-options="createConversationDepartmentOptions"
+      :recipient-options-ready="!createConversationOptionsStale"
       :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
       :current-department-id="activeDepartmentId"
       :current-workspace-name="currentWorkspaceName"
