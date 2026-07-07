@@ -3,8 +3,9 @@
     <div class="flex h-screen min-h-0 flex-col overflow-hidden">
       <header class="grid h-10 shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b border-base-300 bg-base-200 px-2 select-none" data-tauri-drag-region>
         <div class="flex justify-self-start">
-          <button class="btn btn-ghost btn-xs h-7 min-h-7 w-7 px-0" type="button" :disabled="saving" :aria-label="t('quickSetup.advancedSettings')" @click.stop="openSettingsWindow">
-            <SlidersHorizontal class="h-3.5 w-3.5" />
+          <button class="btn btn-ghost btn-xs h-8 min-h-8 gap-1.5 rounded-full px-2.5" type="button" :disabled="saving" :aria-label="t('quickSetup.openSettings')" @click.stop="openSettingsWindow">
+            <Settings2 class="h-3.5 w-3.5 shrink-0" />
+            <span class="text-xs">{{ t("quickSetup.openSettings") }}</span>
           </button>
         </div>
         <div class="min-w-0 justify-self-center px-8" data-tauri-drag-region>
@@ -343,7 +344,7 @@ import { useI18n } from "vue-i18n";
 import { emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Eye, EyeOff, Minus, SlidersHorizontal, X } from "@lucide/vue";
+import { Eye, EyeOff, Minus, Settings2, X } from "@lucide/vue";
 import { i18n, normalizeLocale } from "../../../i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ApiProviderConfigItem, ApiRequestFormat, AppBootstrapSnapshot, AppConfig, ChatSettings, PersonaProfile, ResponseStyleOption } from "../../../types/app";
@@ -1190,15 +1191,13 @@ async function openSettingsWindow() {
   errorText.value = "";
   try {
     await persistCurrentStepBeforeWindowSwitch();
+    await invokeTauri("show_main_window");
+    closeWindow();
   } catch (error) {
     errorText.value = String(error ?? "unknown");
   } finally {
     saving.value = false;
   }
-  if (errorText.value) {
-    return;
-  }
-  await invokeTauri("show_main_window");
 }
 
 function minimizeWindow() {

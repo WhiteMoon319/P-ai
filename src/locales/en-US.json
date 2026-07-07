@@ -1958,6 +1958,7 @@
   "quickSetup": {
     "title": "Quick Setup",
     "advancedSettings": "Advanced Settings",
+    "openSettings": "Skip Quick Setup",
     "minimize": "Minimize",
     "close": "Close",
     "stepCounter": "Step {current} / {total}",

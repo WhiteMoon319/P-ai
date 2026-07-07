@@ -1957,6 +1957,7 @@
   "quickSetup": {
     "title": "快速設定",
     "advancedSettings": "進階設定",
+    "openSettings": "跳過快速設定",
     "minimize": "最小化",
     "close": "關閉",
     "stepCounter": "步驟 {current} / {total}",
