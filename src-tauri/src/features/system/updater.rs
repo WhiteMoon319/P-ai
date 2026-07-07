@@ -46,12 +46,13 @@ const UPDATE_STAGE_READY: &str = "ready";
 const UPDATE_STAGE_COMPLETED: &str = "completed";
 const UPDATE_STAGE_CANCELLED: &str = "cancelled";
 const UPDATE_STAGE_FAILED: &str = "failed";
-const GITHUB_UPDATE_CHECK_CACHE_FILE: &str = "github_update_check_cache.json";
-const GITHUB_UPDATE_CHECK_THROTTLE_HOURS: i64 = 8;
+const GITHUB_AUTO_UPDATE_COOLDOWN_HOURS: i64 = 8;
 
 static UPDATE_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 static UPDATE_CANCEL_REQUESTED: AtomicBool = AtomicBool::new(false);
 static PREPARED_GITHUB_UPDATE: Mutex<Option<PreparedGithubUpdate>> = Mutex::new(None);
+static LAST_AUTO_UPDATE_CHECKED_AT: std::sync::Mutex<Option<OffsetDateTime>> =
+    std::sync::Mutex::new(None);
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -99,13 +100,6 @@ struct GithubUpdateInfo {
     published_at: Option<String>,
     runtime_kind: String,
     can_force_update: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct GithubUpdateCheckCache {
-    checked_at: String,
-    result: GithubUpdateInfo,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -555,78 +549,63 @@ async fn fetch_project_changelog_markdown() -> Result<String, String> {
     .await
 }
 
-fn github_update_check_cache_path(runtime: &UpdateRuntimePaths) -> StdPathBuf {
-    runtime.data_dir.join(GITHUB_UPDATE_CHECK_CACHE_FILE)
-}
-
-fn read_github_update_check_cache(
-    runtime: &UpdateRuntimePaths,
-) -> Result<Option<GithubUpdateCheckCache>, String> {
-    let path = github_update_check_cache_path(runtime);
-    if !path.exists() {
-        return Ok(None);
-    }
-    let raw = std_fs::read(&path)
-        .map_err(|err| format!("读取更新检查缓存失败（{}）：{err}", path.display()))?;
-    let cache = serde_json::from_slice::<GithubUpdateCheckCache>(&raw)
-        .map_err(|err| format!("解析更新检查缓存失败（{}）：{err}", path.display()))?;
-    Ok(Some(cache))
-}
-
-fn write_github_update_check_cache(
-    runtime: &UpdateRuntimePaths,
-    result: &GithubUpdateInfo,
-) -> Result<(), String> {
-    let path = github_update_check_cache_path(runtime);
-    if let Some(parent) = path.parent() {
-        std_fs::create_dir_all(parent).map_err(|err| {
-            format!("创建更新检查缓存目录失败（{}）：{err}", parent.display())
-        })?;
-    }
-    let checked_at = now_utc()
-        .format(&Rfc3339)
-        .map_err(|err| format!("格式化更新检查缓存时间失败：{err}"))?;
-    let cache = GithubUpdateCheckCache {
-        checked_at,
-        result: result.clone(),
-    };
-    let raw = serde_json::to_vec_pretty(&cache)
-        .map_err(|err| format!("序列化更新检查缓存失败：{err}"))?;
-    std_fs::write(&path, raw)
-        .map_err(|err| format!("写入更新检查缓存失败（{}）：{err}", path.display()))
-}
-
-fn github_update_check_cache_valid(cache: &GithubUpdateCheckCache) -> bool {
-    let Ok(checked_at) = OffsetDateTime::parse(&cache.checked_at, &Rfc3339) else {
+fn github_auto_update_cooldown_active(
+    last_checked_at: Option<OffsetDateTime>,
+    now: OffsetDateTime,
+) -> bool {
+    let Some(last_checked_at) = last_checked_at else {
         return false;
     };
-    let elapsed = now_utc() - checked_at;
-    elapsed.whole_hours() < GITHUB_UPDATE_CHECK_THROTTLE_HOURS
+    (now - last_checked_at).whole_hours() < GITHUB_AUTO_UPDATE_COOLDOWN_HOURS
+}
+
+fn should_skip_auto_update_check() -> Result<bool, String> {
+    let guard = LAST_AUTO_UPDATE_CHECKED_AT
+        .lock()
+        .map_err(|err| format!("读取自动更新检查状态失败：{err}"))?;
+    Ok(github_auto_update_cooldown_active(*guard, now_utc()))
+}
+
+fn mark_auto_update_check_now() -> Result<(), String> {
+    let mut guard = LAST_AUTO_UPDATE_CHECKED_AT
+        .lock()
+        .map_err(|err| format!("记录自动更新检查状态失败：{err}"))?;
+    *guard = Some(now_utc());
+    Ok(())
+}
+
+fn build_skipped_auto_update_result(runtime_kind: UpdateRuntimeKind) -> GithubUpdateInfo {
+    let current_version = env!("CARGO_PKG_VERSION").to_string();
+    GithubUpdateInfo {
+        current_version: current_version.clone(),
+        latest_version: current_version,
+        has_update: false,
+        release_url: String::new(),
+        update_source: "cooldown".to_string(),
+        access_mode: "direct".to_string(),
+        release_notes: String::new(),
+        published_at: None,
+        runtime_kind: runtime_kind.as_str().to_string(),
+        can_force_update: true,
+    }
 }
 
 #[tauri::command]
 async fn check_github_update(
     update_method: Option<String>,
-    use_cached_result: Option<bool>,
+    respect_cooldown: Option<bool>,
 ) -> Result<GithubUpdateInfo, String> {
     let method = GithubUpdateMethod::from_raw(update_method);
     let runtime = detect_update_runtime_paths()?;
-    if use_cached_result.unwrap_or(false) {
-        match read_github_update_check_cache(&runtime) {
-            Ok(Some(cache)) if github_update_check_cache_valid(&cache) => {
-                eprintln!(
-                    "[自动更新] 命中 {} 小时内更新检查缓存，直接返回：has_update={} latest_version={}",
-                    GITHUB_UPDATE_CHECK_THROTTLE_HOURS,
-                    cache.result.has_update,
-                    cache.result.latest_version
-                );
-                return Ok(cache.result);
-            }
-            Ok(_) => {}
-            Err(err) => {
-                eprintln!("[自动更新] 读取更新检查缓存失败，继续实时检查：{err}");
-            }
+    if respect_cooldown.unwrap_or(false) {
+        if should_skip_auto_update_check()? {
+            eprintln!(
+                "[自动更新] 自动检查仍处于 {} 小时冷却期，本次跳过远端检查",
+                GITHUB_AUTO_UPDATE_COOLDOWN_HOURS
+            );
+            return Ok(build_skipped_auto_update_result(runtime.runtime_kind));
         }
+        mark_auto_update_check_now()?;
     }
     let (payload, access_mode) = fetch_latest_release_payload(method).await?;
     let latest_version = payload
@@ -666,9 +645,6 @@ async fn check_github_update(
         runtime_kind: runtime.runtime_kind.as_str().to_string(),
         can_force_update: true,
     };
-    if let Err(err) = write_github_update_check_cache(&runtime, &result) {
-        eprintln!("[自动更新] 写入更新检查缓存失败：{err}");
-    }
     Ok(result)
 }
 

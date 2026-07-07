@@ -275,6 +275,31 @@
     }
 
     #[test]
+    fn github_auto_update_cooldown_active_should_only_block_within_window() {
+        let now = now_utc();
+        assert!(!github_auto_update_cooldown_active(None, now));
+        assert!(github_auto_update_cooldown_active(
+            Some(now - time::Duration::hours(GITHUB_AUTO_UPDATE_COOLDOWN_HOURS - 1)),
+            now,
+        ));
+        assert!(!github_auto_update_cooldown_active(
+            Some(now - time::Duration::hours(GITHUB_AUTO_UPDATE_COOLDOWN_HOURS)),
+            now,
+        ));
+    }
+
+    #[test]
+    fn skipped_auto_update_result_should_use_current_version_and_report_no_update() {
+        let result = build_skipped_auto_update_result(UpdateRuntimeKind::Portable);
+
+        assert_eq!(result.current_version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(result.latest_version, env!("CARGO_PKG_VERSION"));
+        assert!(!result.has_update);
+        assert_eq!(result.update_source, "cooldown");
+        assert_eq!(result.runtime_kind, "portable");
+    }
+
+    #[test]
     fn conversation_todo_replace_should_store_next_step_and_clear_when_done() {
         let state = test_chat_runtime_state();
         let conversation_id = "conversation-todo-a".to_string();

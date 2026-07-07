@@ -4334,21 +4334,23 @@ fn ide_chat_set_skipped_github_update_version_for_web_settings(
 }
 
 async fn ide_chat_check_github_update_for_web_settings(params: Value) -> Result<Value, String> {
-    let (update_method, use_cached_result) = match params {
+    let (update_method, respect_cooldown) = match params {
         Value::Object(mut map) => {
             let update_method = map
                 .remove("updateMethod")
                 .or_else(|| map.remove("update_method"))
                 .and_then(|value| value.as_str().map(ToOwned::to_owned));
-            let use_cached_result = map
-                .remove("useCachedResult")
+            let respect_cooldown = map
+                .remove("respectCooldown")
+                .or_else(|| map.remove("respect_cooldown"))
+                .or_else(|| map.remove("useCachedResult"))
                 .or_else(|| map.remove("use_cached_result"))
                 .and_then(|value| value.as_bool());
-            (update_method, use_cached_result)
+            (update_method, respect_cooldown)
         }
         _ => (None, None),
     };
-    ide_chat_serialize(check_github_update(update_method, use_cached_result).await?)
+    ide_chat_serialize(check_github_update(update_method, respect_cooldown).await?)
 }
 
 async fn ide_chat_start_github_update_for_web_settings(

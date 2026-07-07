@@ -83,9 +83,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
 
   let updateProgressUnlisten: UnlistenFn | null = null;
   let webUpdateProgressUnlisten: (() => void) | null = null;
-  let autoCheckTimer: number | null = null;
   let autoCheckStarted = false;
-  const AUTO_CHECK_INTERVAL_MS = 8 * 60 * 60 * 1000;
 
   function runtimeLabel(kind: "installer" | "portable") {
     return kind === "portable" ? t("about.runtimePortable") : t("about.runtimeInstaller");
@@ -136,22 +134,6 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     updateStage.value = null;
     updateDialogTitle.value = result.hasUpdate ? t("about.foundUpdate") : t("about.alreadyLatest");
     updateDialogOpen.value = true;
-  }
-
-  function clearAutoCheckTimer() {
-    if (autoCheckTimer != null) {
-      window.clearTimeout(autoCheckTimer);
-      autoCheckTimer = null;
-    }
-  }
-
-  function scheduleNextAutoCheck() {
-    clearAutoCheckTimer();
-    autoCheckTimer = window.setTimeout(() => {
-      void checkGithubUpdate(true, true).finally(() => {
-        scheduleNextAutoCheck();
-      });
-    }, AUTO_CHECK_INTERVAL_MS);
   }
 
   function currentUpdateMethod(): GithubUpdateMethod {
@@ -256,7 +238,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     options.status.value = payload.error ? payload.error : payload.message;
   }
 
-  async function checkGithubUpdate(silent: boolean, useCachedResult = false) {
+  async function checkGithubUpdate(silent: boolean, respectCooldown = false) {
     if (options.viewMode.value === "archives") return;
     if (checkingUpdate.value) return;
     checkingUpdateRequest.value = true;
@@ -266,7 +248,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       }
       const result = await invokeTauri<GithubUpdateInfo>("check_github_update", {
         updateMethod: currentUpdateMethod(),
-        useCachedResult,
+        respectCooldown,
       });
       latestCheckResult.value = result;
       updateRuntimeKind.value = result.runtimeKind;
@@ -407,7 +389,6 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     if (autoCheckStarted) return;
     autoCheckStarted = true;
     await checkGithubUpdate(true, true);
-    scheduleNextAutoCheck();
   }
 
   async function manualCheckGithubUpdate() {
@@ -463,7 +444,6 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     updateProgressUnlisten = null;
     webUpdateProgressUnlisten?.();
     webUpdateProgressUnlisten = null;
-    clearAutoCheckTimer();
     autoCheckStarted = false;
   });
 
