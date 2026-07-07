@@ -17,7 +17,7 @@
     :tool-status-state="toolStatusState"
     chat-error-text=""
     :clipboard-images="clipboardImages"
-    :queued-attachment-notices="[]"
+    :queued-attachment-notices="queuedAttachmentNotices"
     :chat-input="input"
     :instruction-presets="[]"
     chat-input-placeholder="输入消息"
@@ -102,7 +102,7 @@
     @update:chat-left-panel-mode="$emit('updateChatLeftPanelMode', $event)"
     @update:chat-right-panel-mode="$emit('updateChatRightPanelMode', $event)"
     @remove-clipboard-image="$emit('removeClipboardImage', $event)"
-    @remove-queued-attachment-notice="noop"
+    @remove-queued-attachment-notice="$emit('removeQueuedAttachmentNotice', $event)"
     @start-recording="noop"
     @stop-recording="noop"
     @pick-attachments="$emit('pickAttachments')"
@@ -197,6 +197,7 @@ const props = defineProps<{
   conversationItems: ChatConversationOverviewItem[];
   remoteImContactConversations: RemoteImContactConversationOption[];
   clipboardImages: Array<{ mime: string; bytesBase64: string }>;
+  queuedAttachmentNotices: Array<{ id: string; fileName: string; relativePath: string; mime: string }>;
   streamingText: string;
   toolStatusText: string;
   toolStatusState: "running" | "done" | "failed" | "";
@@ -234,6 +235,7 @@ defineEmits<{
   send: [payload?: { extraTextBlocks?: string[] }];
   stop: [];
   removeClipboardImage: [index: number];
+  removeQueuedAttachmentNotice: [index: number];
   pickAttachments: [];
   loadPrevBlock: [];
   "update:conversationPreferredApiConfigId": [value: string];

@@ -321,6 +321,8 @@ struct IdeChatSendInput {
     extra_text_blocks: Vec<String>,
     #[serde(default)]
     images: Vec<IdeChatImageInput>,
+    #[serde(default)]
+    attachments: Vec<AttachmentMetaInput>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -330,6 +332,15 @@ struct IdeChatImageInput {
     bytes_base64: String,
     #[serde(default)]
     name: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IdeChatQueueAttachmentInput {
+    file_name: String,
+    #[serde(default)]
+    mime: String,
+    bytes_base64: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -5111,10 +5122,28 @@ fn ide_chat_rebind_conversation_recipient(state: &AppState, params: Value) -> Re
     }))
 }
 
+fn ide_chat_queue_attachment(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatQueueAttachmentInput>(params)?;
+    if input.bytes_base64.trim().is_empty() {
+        return Err("Attachment payload is empty.".to_string());
+    }
+    let raw = B64
+        .decode(input.bytes_base64.trim())
+        .map_err(|err| format!("Decode attachment base64 failed: {err}"))?;
+    let queued = queue_attachment_from_raw(
+        state,
+        input.file_name.trim(),
+        input.mime.trim(),
+        &raw,
+    )?;
+    serde_json::to_value(queued).map_err(|err| format!("serialize queued attachment failed: {err}"))
+}
+
 fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatSendInput>(params)?;
     let conversation_id = input.conversation_id.trim().to_string();
     let text = input.text.trim().to_string();
+    let attachment_entries = normalize_payload_attachments(Some(&input.attachments));
     if conversation_id.is_empty() {
         return Err("conversationId is required".to_string());
     }
@@ -5124,6 +5153,7 @@ fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, Strin
             .images
             .iter()
             .all(|item| item.bytes_base64.trim().is_empty())
+        && attachment_entries.is_empty()
     {
         return Err("消息内容为空".to_string());
     }
@@ -5160,9 +5190,19 @@ fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, Strin
             compressed: false,
         });
     }
-    if parts.is_empty() && input.extra_text_blocks.iter().all(|item| item.trim().is_empty()) {
+    if parts.is_empty()
+        && input.extra_text_blocks.iter().all(|item| item.trim().is_empty())
+        && attachment_entries.is_empty()
+    {
         return Err("消息内容为空".to_string());
     }
+    let provider_meta = merge_provider_meta_with_attachments(
+        Some(serde_json::json!({
+            "requestId": request_id,
+            "source": "vscode_sidebar",
+        })),
+        &attachment_entries,
+    );
     let user_message = ChatMessage {
         id: Uuid::new_v4().to_string(),
         role: "user".to_string(),
@@ -5175,10 +5215,7 @@ fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, Strin
             .map(|item| item.trim().to_string())
             .filter(|item| !item.is_empty())
             .collect(),
-        provider_meta: Some(serde_json::json!({
-            "requestId": request_id,
-            "source": "vscode_sidebar",
-        })),
+        provider_meta,
         tool_call: None,
         mcp_call: None,
         meme_annotations: None,
@@ -6077,6 +6114,7 @@ async fn ide_chat_handle_jsonrpc_request(
         "remote_im_weixin_oc_get_login_status" => ide_chat_remote_im_weixin_oc_get_login_status_for_web_settings(state, request.params).await,
         "remote_im_weixin_oc_sync_contacts" => ide_chat_remote_im_weixin_oc_sync_contacts_for_web_settings(state, request.params).await,
         "remote_im_weixin_oc_logout" => ide_chat_remote_im_weixin_oc_logout_for_web_settings(state, request.params).await,
+        "chat.queueAttachment" => ide_chat_queue_attachment(state, request.params),
         "chat.send" => ide_chat_send_message(state, request.params),
         "chat.stop" => ide_chat_stop_conversation(state, request.params),
         "chat.queueSnapshot" => ide_chat_queue_snapshot(state),

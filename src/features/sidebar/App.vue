@@ -52,7 +52,8 @@
       :messages="messages"
       :conversation-items="chatConversationItems"
       :remote-im-contact-conversations="remoteImContactConversations"
-      :clipboard-images="clipboardImages"
+      :clipboard-images="composerClipboardImages"
+      :queued-attachment-notices="queuedAttachmentNotices"
       :streaming-text="streamingText"
       :tool-status-text="toolStatusText"
       :tool-status-state="toolStatusState"
@@ -86,6 +87,7 @@
       @send="send"
       @stop="stop"
       @remove-clipboard-image="removeClipboardImage"
+      @remove-queued-attachment-notice="removeQueuedAttachmentNotice"
       @pick-attachments="pickAttachments"
       @load-prev-block="loadPrevBlock"
       @update:conversation-preferred-api-config-id="selectConversationPreferredModel"
@@ -382,6 +384,27 @@ type SidebarClipboardImage = {
   bytesBase64: string;
 };
 
+type SidebarQueuedAttachmentEntry = {
+  id: string;
+  fileName: string;
+  relativePath: string;
+  mime: string;
+  imageBytesBase64?: string;
+};
+
+type SidebarQueuedAttachmentNotice = {
+  id: string;
+  fileName: string;
+  relativePath: string;
+  mime: string;
+};
+
+type SidebarAttachmentPayload = {
+  fileName: string;
+  relativePath: string;
+  mime: string;
+};
+
 type RewindConversationResult = {
   conversationId: string;
   removedCount: number;
@@ -521,6 +544,23 @@ const messages = ref<ChatMessage[]>([]);
 const sidebarTodos = ref<ChatTodoItem[]>([]);
 const inputText = ref("");
 const clipboardImages = ref<SidebarClipboardImage[]>([]);
+const queuedAttachmentEntries = ref<SidebarQueuedAttachmentEntry[]>([]);
+const attachmentBackedClipboardImages = computed<SidebarClipboardImage[]>(() => queuedAttachmentEntries.value
+  .filter((item) => item.mime.startsWith("image/") && !!String(item.imageBytesBase64 || "").trim())
+  .map((item) => ({
+    mime: item.mime,
+    bytesBase64: String(item.imageBytesBase64 || "").trim(),
+  })));
+const composerClipboardImages = computed<SidebarClipboardImage[]>(() => [
+  ...clipboardImages.value,
+  ...attachmentBackedClipboardImages.value,
+]);
+const queuedAttachmentNotices = computed<SidebarQueuedAttachmentNotice[]>(() => queuedAttachmentEntries.value.map((item) => ({
+  id: item.id,
+  fileName: item.fileName,
+  relativePath: item.relativePath,
+  mime: item.mime,
+})));
 const streamingText = ref("");
 const toolStatusText = ref("");
 const toolStatusState = ref<"running" | "done" | "failed" | "">("");
@@ -1975,8 +2015,43 @@ async function appendClipboardImagesFromPaste(event: ClipboardEvent) {
 }
 
 function removeClipboardImage(index: number) {
-  if (index < 0 || index >= clipboardImages.value.length) return;
-  clipboardImages.value.splice(index, 1);
+  if (index < 0) return;
+  if (index < clipboardImages.value.length) {
+    clipboardImages.value.splice(index, 1);
+    return;
+  }
+  const attachmentImageIndex = index - clipboardImages.value.length;
+  if (attachmentImageIndex < 0) return;
+  const attachmentImageIds = queuedAttachmentEntries.value
+    .filter((item) => item.mime.startsWith("image/") && !!String(item.imageBytesBase64 || "").trim())
+    .map((item) => item.id);
+  const targetId = attachmentImageIds[attachmentImageIndex];
+  if (!targetId) return;
+  queuedAttachmentEntries.value = queuedAttachmentEntries.value.filter((item) => item.id !== targetId);
+}
+
+function removeQueuedAttachmentNotice(index: number) {
+  if (index < 0 || index >= queuedAttachmentEntries.value.length) return;
+  queuedAttachmentEntries.value.splice(index, 1);
+}
+
+function attachmentPayloadKey(item: SidebarAttachmentPayload): string {
+  return `${item.relativePath.replace(/\\/g, "/").toLowerCase()}::${item.mime.toLowerCase()}`;
+}
+
+function buildQueuedAttachmentPayload(): SidebarAttachmentPayload[] {
+  const merged = new Map<string, SidebarAttachmentPayload>();
+  for (const item of queuedAttachmentEntries.value) {
+    const fileName = String(item.fileName || "").trim();
+    const relativePath = String(item.relativePath || "").trim().replace(/\\/g, "/");
+    const mime = String(item.mime || "").trim();
+    if (!fileName || !relativePath) continue;
+    const normalized = { fileName, relativePath, mime };
+    const key = attachmentPayloadKey(normalized);
+    if (merged.has(key)) continue;
+    merged.set(key, normalized);
+  }
+  return Array.from(merged.values());
 }
 
 function pickAttachments() {
@@ -1997,10 +2072,31 @@ async function appendAttachmentFiles(files: File[]) {
       const dataUrl = await readBlobAsDataUrl(file);
       const bytesBase64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : "";
       if (!bytesBase64) continue;
-      clipboardImages.value.push({
+      const queued = await transport.request<{
+        mime: string;
+        fileName: string;
+        savedPath: string;
+        attachAsMedia: boolean;
+        bytesBase64?: string | null;
+      }>("chat.queueAttachment", {
+        fileName: String(file.name || "").trim() || "attachment",
         mime: String(file.type || "").trim() || "application/octet-stream",
         bytesBase64,
       });
+      const mime = String(queued.mime || "").trim().toLowerCase();
+      const savedPath = String(queued.savedPath || "").trim();
+      const relativePath = savedPath.replace(/\\/g, "/").replace(/^.*\/downloads\//, "downloads/");
+      const fileName = String(queued.fileName || "").trim() || relativePath.split("/").pop() || "attachment";
+      const id = `${relativePath || fileName}::${mime}`;
+      if (!queuedAttachmentEntries.value.some((item) => item.id === id)) {
+        queuedAttachmentEntries.value.push({
+          id,
+          fileName,
+          relativePath: relativePath || savedPath || fileName,
+          mime,
+          imageBytesBase64: mime.startsWith("image/") ? String(queued.bytesBase64 || "").trim() || undefined : undefined,
+        });
+      }
     }
   } catch (error) {
     transport.errorText.value = String(error || t('sidebar.readClipboardImageFailed'));
@@ -2015,15 +2111,19 @@ function handleAttachmentInputChange(event: Event) {
 
 async function send(payload?: { extraTextBlocks?: string[] }) {
   const text = inputText.value.trim();
-  const images = clipboardImages.value.map((item) => ({ ...item }));
+  const images = composerClipboardImages.value.map((item) => ({ ...item }));
+  const attachments = buildQueuedAttachmentPayload();
   const extraTextBlocks = (Array.isArray(payload?.extraTextBlocks) ? payload.extraTextBlocks : [])
     .map((item) => String(item || "").trim())
     .filter(Boolean);
-  if ((!text && images.length === 0 && extraTextBlocks.length === 0) || !activeConversationId.value || sendSubmitting.value) return;
+  if ((!text && images.length === 0 && attachments.length === 0 && extraTextBlocks.length === 0) || !activeConversationId.value || sendSubmitting.value) return;
   const hadForegroundRound = busy.value;
-  const optimisticDraftId = hadForegroundRound ? "" : insertOptimisticOwnUserDraft({ text, images, extraTextBlocks });
+  const optimisticDraftId = hadForegroundRound ? "" : insertOptimisticOwnUserDraft({ text, images, attachments, extraTextBlocks });
+  const previousClipboardImages = clipboardImages.value.map((item) => ({ ...item }));
+  const previousQueuedAttachmentEntries = queuedAttachmentEntries.value.map((item) => ({ ...item }));
   inputText.value = "";
   clipboardImages.value = [];
+  queuedAttachmentEntries.value = [];
   sendSubmitting.value = true;
   if (!hadForegroundRound) busy.value = true;
   try {
@@ -2031,6 +2131,7 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
       conversationId: activeConversationId.value,
       text,
       images,
+      attachments,
       extraTextBlocks,
     });
     const assistantMessageId = String(result?.assistantMessageId || "").trim();
@@ -2048,7 +2149,8 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
     }
     if (optimisticDraftId) removeOptimisticOwnUserDraftById(optimisticDraftId);
     if (!inputText.value.trim()) inputText.value = text;
-    clipboardImages.value = [...images, ...clipboardImages.value];
+    clipboardImages.value = [...previousClipboardImages, ...clipboardImages.value];
+    queuedAttachmentEntries.value = [...previousQueuedAttachmentEntries, ...queuedAttachmentEntries.value];
     transport.errorText.value = String(error || t('sidebar.sendFailed'));
   } finally {
     sendSubmitting.value = false;
@@ -2431,6 +2533,7 @@ function isOptimisticOwnUserDraft(message?: ChatMessage | null): boolean {
 function insertOptimisticOwnUserDraft(input: {
   text: string;
   images: Array<{ mime: string; bytesBase64: string }>;
+  attachments: SidebarAttachmentPayload[];
   extraTextBlocks: string[];
 }): string {
   const draftId = `${SIDEBAR_DRAFT_USER_ID_PREFIX}${Date.now()}`;
@@ -2454,6 +2557,11 @@ function insertOptimisticOwnUserDraft(input: {
     extraTextBlocks: input.extraTextBlocks.length > 0 ? [...input.extraTextBlocks] : [],
     providerMeta: {
       _optimistic: true,
+      attachments: input.attachments.map((item) => ({
+        fileName: item.fileName,
+        relativePath: item.relativePath,
+        mime: item.mime,
+      })),
     },
   } satisfies ChatMessage, draftId);
   messages.value = [...messages.value, message];

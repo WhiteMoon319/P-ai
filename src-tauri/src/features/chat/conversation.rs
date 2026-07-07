@@ -2170,8 +2170,33 @@ fn prompt_recall_memory_block_for_message(
     build_memory_board_xml_from_recall_ids(memories, &inject_ids, false)
 }
 
+fn prompt_attachment_notice_text(
+    state: Option<&AppState>,
+    index: usize,
+    relative_path: &str,
+) -> String {
+    let normalized_relative_path = relative_path.trim().replace('\\', "/");
+    if normalized_relative_path.is_empty() {
+        return build_attachment_notice_text(index, relative_path);
+    }
+    let Some(state) = state else {
+        return build_attachment_notice_text(index, &normalized_relative_path);
+    };
+    let workspace_root = configured_workspace_root_path(state)
+        .unwrap_or_else(|_| state.llm_workspace_path.clone());
+    let absolute_path = workspace_root.join(&normalized_relative_path);
+    if absolute_path.exists() {
+        return build_attachment_notice_text(index, &normalized_relative_path);
+    }
+    format!(
+        "[附件#{} 已经丢失]\npath: {}",
+        index + 1,
+        assistant_space_display_path(&normalized_relative_path)
+    )
+}
+
 fn prompt_user_extra_blocks_for_message(
-    _state: Option<&AppState>,
+    state: Option<&AppState>,
     _conversation: Option<&Conversation>,
     message: &ChatMessage,
     _agents: &[AgentProfile],
@@ -2209,7 +2234,7 @@ fn prompt_user_extra_blocks_for_message(
             .iter()
             .enumerate()
         {
-            blocks.push(build_attachment_notice_text(index, relative_path));
+            blocks.push(prompt_attachment_notice_text(state, index, relative_path));
         }
     }
     blocks
@@ -2360,6 +2385,10 @@ fn resolve_media_from_message(
                 mime, bytes_base64, ..
             } => {
                 let stored_path = prompt_path_from_stored_binary_marker(bytes_base64, data_path);
+                let expected_saved_path = image_paths
+                    .get_mut(&mime.trim().to_ascii_lowercase())
+                    .and_then(|paths| paths.pop_front())
+                    .or(stored_path);
                 let resolved = if let Some(path) = data_path {
                     match resolve_stored_binary_base64(path, bytes_base64) {
                         Ok(value) => value,
@@ -2372,21 +2401,17 @@ fn resolve_media_from_message(
                                 bytes_base64.len(),
                                 err
                             );
-                            bytes_base64.clone()
+                            continue;
                         }
                     }
                 } else {
                     bytes_base64.clone()
                 };
                 if !resolved.trim().is_empty() {
-                    let saved_path = image_paths
-                        .get_mut(&mime.trim().to_ascii_lowercase())
-                        .and_then(|paths| paths.pop_front())
-                        .or(stored_path);
                     images.push(prepared_image_payload_for_llm_request(
                         mime.clone(),
                         resolved,
-                        saved_path,
+                        expected_saved_path,
                     ));
                 }
             }
@@ -2394,6 +2419,10 @@ fn resolve_media_from_message(
                 mime, bytes_base64, ..
             } => {
                 let stored_path = prompt_path_from_stored_binary_marker(bytes_base64, data_path);
+                let expected_saved_path = audio_paths
+                    .get_mut(&mime.trim().to_ascii_lowercase())
+                    .and_then(|paths| paths.pop_front())
+                    .or(stored_path);
                 let resolved = if let Some(path) = data_path {
                     match resolve_stored_binary_base64(path, bytes_base64) {
                         Ok(value) => value,
@@ -2406,21 +2435,17 @@ fn resolve_media_from_message(
                                 bytes_base64.len(),
                                 err
                             );
-                            bytes_base64.clone()
+                            continue;
                         }
                     }
                 } else {
                     bytes_base64.clone()
                 };
                 if !resolved.trim().is_empty() {
-                    let saved_path = audio_paths
-                        .get_mut(&mime.trim().to_ascii_lowercase())
-                        .and_then(|paths| paths.pop_front())
-                        .or(stored_path);
                     audios.push(PreparedBinaryPayload {
                         mime: mime.clone(),
                         content: resolved,
-                        saved_path,
+                        saved_path: expected_saved_path,
                     });
                 }
             }
@@ -2510,6 +2535,67 @@ mod prompt_media_path_tests {
             image::guess_format(&raw).expect("guess normalized image"),
             image::ImageFormat::WebP
         );
+    }
+    #[test]
+    fn resolve_media_from_message_should_consume_missing_image_path_without_shifting_following_saved_path() {
+        let root = std::env::temp_dir().join(format!("eca-resolve-media-{}", Uuid::new_v4()));
+        let data_dir = root.join("data");
+        std::fs::create_dir_all(&data_dir).expect("create data dir");
+        let data_path = data_dir.join("app_data.json");
+        let downloads_dir = downloads_storage_dir_from_data_path(&data_path).expect("downloads dir");
+        std::fs::create_dir_all(downloads_dir.join("conversation-a")).expect("create downloads subdir");
+        let good_raw = B64.decode(test_png_base64()).expect("decode png");
+        std::fs::write(downloads_dir.join("conversation-a/good.png"), good_raw).expect("write good png");
+
+        let message = ChatMessage {
+            id: "user-a".to_string(),
+            role: "user".to_string(),
+            created_at: now_iso(),
+            speaker_agent_id: None,
+            parts: vec![
+                MessagePart::Image {
+                    mime: "image/png".to_string(),
+                    bytes_base64: download_marker_from_id("conversation-a/missing.png"),
+                    name: None,
+                    compressed: false,
+                },
+                MessagePart::Image {
+                    mime: "image/png".to_string(),
+                    bytes_base64: download_marker_from_id("conversation-a/good.png"),
+                    name: None,
+                    compressed: false,
+                },
+            ],
+            extra_text_blocks: Vec::new(),
+            provider_meta: Some(serde_json::json!({
+                "attachments": [
+                    {
+                        "fileName": "missing.png",
+                        "relativePath": "downloads/conversation-a/missing.png",
+                        "mime": "image/png"
+                    },
+                    {
+                        "fileName": "good.png",
+                        "relativePath": "downloads/conversation-a/good.png",
+                        "mime": "image/png"
+                    }
+                ]
+            })),
+            tool_call: None,
+            mcp_call: None,
+            meme_annotations: None,
+        };
+
+        let (images, audios) = resolve_media_from_message(&message, Some(&data_path), "[test]");
+
+        assert!(audios.is_empty());
+        assert_eq!(images.len(), 1);
+        assert_eq!(
+            images[0].saved_path.as_deref(),
+            Some("downloads/conversation-a/good.png")
+        );
+
+        let _ = std::fs::remove_dir_all(root);
     }
 }
 
