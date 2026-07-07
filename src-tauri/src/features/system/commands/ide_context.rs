@@ -5915,6 +5915,10 @@ async fn ide_chat_handle_jsonrpc_request(
     let sidebar_viewer_id = chat_viewer_id_for_window_label(&sidebar_label)
         .unwrap_or_else(|| format!("web:{}", client_id.trim()));
     let result = match request.method.as_str() {
+        "bridge.ping" => Ok(serde_json::json!({
+            "ok": true,
+            "ts": chrono::Utc::now().to_rfc3339(),
+        })),
         "conversation.list" => ide_chat_conversation_list(state, &sidebar_viewer_id),
         "conversation.open" => ide_chat_parse_params::<IdeChatConversationInput>(request.params)
             .and_then(|input| {

@@ -247,6 +247,10 @@ export function useWsTransport() {
     await connect(config);
   }
 
+  async function ping(timeoutMs = 2500): Promise<void> {
+    await request("bridge.ping", {}, timeoutMs);
+  }
+
   onBeforeUnmount(() => close());
 
   return {
@@ -263,6 +267,7 @@ export function useWsTransport() {
     close,
     login,
     request,
+    ping,
     onNotification,
     onAuthRefreshNeeded,
   };

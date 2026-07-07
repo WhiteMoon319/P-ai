@@ -2932,17 +2932,20 @@ function handleWindowMessage(event: MessageEvent) {
 }
 
 function handleDocumentVisibilityChange() {
-  if (document.visibilityState !== "visible") {
-    resetActiveConversationTransientState("visibility_hidden");
-    // 手机浏览器 / WebView 切后台后，旧 websocket 很容易变成僵尸连接。
-    // 先主动关闭，回前台时再走“重连 + 重开当前会话”，避免旧流式态和新流式态并存。
-    transport.close();
+  if (document.visibilityState !== "visible") return;
+  if (!transport.connected.value || !transport.bridgeReady.value || !transport.authenticated.value) {
+    void reconnectSidebarBridge({
+      forceReloadActiveConversation: false,
+      reason: "visibility_visible_reconnect",
+    }).catch(() => {});
     return;
   }
-  void reconnectSidebarBridge({
-    forceReloadActiveConversation: true,
-    reason: "visibility_visible",
-  }).catch(() => {});
+  void transport.ping().catch(() => {
+    void reconnectSidebarBridge({
+      forceReloadActiveConversation: false,
+      reason: "visibility_visible_ping_failed",
+    }).catch(() => {});
+  });
 }
 
 onMounted(() => {
