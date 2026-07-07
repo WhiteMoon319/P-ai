@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-06T17:24:12.830Z",
-  "latestVersion": "v0.19.1",
+  "generatedAt": "2026-07-07T07:50:50.545Z",
+  "latestVersion": "v0.19.2",
   "releases": [
+    {
+      "version": "v0.19.2",
+      "path": "docs/changelog/releases/v0.19.2.md",
+      "summary": "快速设置左上角入口改为“跳过快速设置”文字按钮，点击后更明确地进入设置页并隐藏快速设置窗口。"
+    },
     {
       "version": "v0.19.1",
       "path": "docs/changelog/releases/v0.19.1.md",

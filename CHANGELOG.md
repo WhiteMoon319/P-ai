@@ -5,6 +5,7 @@
 
 ## 最近版本
 
+- [v0.19.2](docs/changelog/releases/v0.19.2.md) - 快速设置左上角入口改为“跳过快速设置”文字按钮，点击后更明确地进入设置页并隐藏快速设置窗口。
 - [v0.19.1](docs/changelog/releases/v0.19.1.md) - 修复（chat）：请求图片统一压缩为 WebP。
 - [v0.19.0](docs/changelog/releases/v0.19.0.md) - 功能（config）：所有模型选择器统一展示模型思维等级，关闭思考时显示“不思考”，便于在快速设置、配置页和聊天相关入口中直接区分同模型的不同推理档位。
 - [v0.18.8](docs/changelog/releases/v0.18.8.md) - 修复（reasoning-disable-special-vendors）：配置页新增“思维强度 -> 无”，并为 DeepSeek、Kimi（Moonshot）、豆包这类特殊供应商在关闭思维链时只发送 `thinking.type=disabled`，不再错误附带 `reasoning_effort=none`，避免请求被 400 拒绝。
