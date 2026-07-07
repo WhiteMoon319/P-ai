@@ -1709,6 +1709,7 @@
     "archiveExported": "归档已导出（{format}）：{path}",
     "importArchiveDone": "归档导入完成：新增 {imported}，覆盖 {replaced}，总计 {total}。",
     "openLinkFailed": "打开链接失败: {err}",
+    "openLinkUnsupportedInWeb": "網頁端不支援開啟本機目錄。",
     "recordUnsupported": "当前环境不支持录音。",
     "microphonePermissionGranted": "錄音權限已取得。",
     "microphonePermissionRequestFailed": "取得錄音權限失敗: {err}",

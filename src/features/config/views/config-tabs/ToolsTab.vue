@@ -6,7 +6,7 @@
           <span class="text-sm font-medium">{{ t('config.tools.shellWorkspace') }}</span>
         </div>
         <div class="flex flex-wrap items-center justify-end gap-2">
-          <button class="btn btn-sm" type="button" @click="openShellWorkspaceDir">{{ t('config.tools.openDir') }}</button>
+          <button v-if="tauriRuntimeAvailable" class="btn btn-sm" type="button" @click="openShellWorkspaceDir">{{ t('config.tools.openDir') }}</button>
           <button class="btn btn-sm" type="button" :disabled="shellWorkspacePathResetting" @click="resetShellWorkspacePath">{{ t('config.tools.resetWorkspacePath') }}</button>
           <button class="btn btn-sm" type="button" :disabled="shellWorkspaceInitializing" @click="initializeShellWorkspace">{{ t('config.tools.initializeWorkspace') }}</button>
           <button class="btn btn-sm btn-primary" :disabled="savingConfig" @click="$emit('saveApiConfig')">
@@ -122,7 +122,7 @@ import type {
   FrontendToolDefinition,
   ToolLoadStatus,
 } from "../../../../types/app";
-import { invokeTauri } from "../../../../services/tauri-api";
+import { invokeTauri, isTauriRuntimeAvailable } from "../../../../services/tauri-api";
 import { toErrorMessage } from "../../../../utils/error";
 import { open } from "@tauri-apps/plugin-dialog";
 
@@ -163,6 +163,7 @@ const terminalShellOptionsLoading = ref(false);
 const terminalShellOptions = ref<TerminalShellCandidate[]>([]);
 const GIT_DOWNLOAD_URL = "https://git-scm.com/downloads";
 const isWindowsHost = typeof navigator !== "undefined" && /windows/i.test(String(navigator.userAgent || ""));
+const tauriRuntimeAvailable = isTauriRuntimeAvailable();
 const terminalShellKindValue = computed(() => String(props.config.terminalShellKind || "auto"));
 function setShellWorkspaceStatus(text: string, isError = false) {
   shellWorkspaceStatus.value = text;
@@ -211,6 +212,7 @@ function onTerminalShellKindChange(event: Event) {
 }
 
 async function openShellWorkspaceDir() {
+  if (!tauriRuntimeAvailable) return;
   try {
     const opened = await invokeTauri<string>("open_chat_shell_workspace_dir", {
       input: { workspacePath: props.config.shellWorkspaces[0]?.path || "" },

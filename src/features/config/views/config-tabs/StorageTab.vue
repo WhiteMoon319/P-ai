@@ -95,6 +95,7 @@
                 <td class="text-right">
                   <div class="flex justify-end gap-1">
                     <button
+                      v-if="tauriRuntimeAvailable"
                       class="btn btn-primary btn-xs"
                       :disabled="storageLoading || openingItemId === item.id"
                       :title="item.targetPath"
@@ -501,6 +502,7 @@ async function handleCleanupStorageItem(item: StorageUsageItem) {
 }
 
 async function handleOpenStorageItem(item: StorageUsageItem) {
+  if (!tauriRuntimeAvailable) return;
   openingItemId.value = item.id;
   storageMessage.value = "";
   try {

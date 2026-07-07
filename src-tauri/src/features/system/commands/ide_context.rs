@@ -3904,6 +3904,10 @@ fn ide_chat_get_storage_usage_overview_for_web_settings(state: &AppState) -> Res
     ide_chat_serialize(build_storage_usage_overview(state)?)
 }
 
+fn ide_chat_get_usage_overview_for_web_settings(state: &AppState) -> Result<Value, String> {
+    ide_chat_serialize(build_usage_overview(state)?)
+}
+
 fn ide_chat_open_storage_usage_item_directory_for_web_settings(
     state: &AppState,
     params: Value,
@@ -6183,6 +6187,7 @@ async fn ide_chat_handle_jsonrpc_request(
         "mcp_refresh_mcp_and_skills" => ide_chat_mcp_refresh_mcp_and_skills_for_web_settings(state).await,
         "skill_open_workspace_dir" => ide_chat_skill_open_workspace_dir_for_web_settings(state),
         "get_storage_usage_overview" => ide_chat_get_storage_usage_overview_for_web_settings(state),
+        "get_usage_overview" => ide_chat_get_usage_overview_for_web_settings(state),
         "open_storage_usage_item_directory" => ide_chat_open_storage_usage_item_directory_for_web_settings(state, request.params),
         "cleanup_storage_legacy_items" => ide_chat_cleanup_storage_legacy_items_for_web_settings(state, request.params),
         "export_config_migration_package" => ide_chat_export_config_migration_package_for_web_settings(state, request.params),

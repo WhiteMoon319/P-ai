@@ -493,7 +493,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch, type
 import { useI18n } from "vue-i18n";
 import { isDarkAppTheme } from "../../shell/composables/use-app-theme";
 import { ArrowDownToLine, Check, ChevronsDown, ChevronsUp, History, Trash2, X } from "@lucide/vue";
-import { invokeTauri } from "../../../services/tauri-api";
+import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ChatMessageBlock, ChatPersonaPresenceChip, ChatTodoItem, ConversationDelegateStatusSummary, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption, ShellWorkspace } from "../../../types/app";
 import ChatMessageItem from "../components/ChatMessageItem.vue";
 import ChatApprovalPanel from "../components/ChatApprovalPanel.vue";
@@ -800,6 +800,7 @@ const showSideConversationList = computed(() => !!props.sideConversationListVisi
 const sidebarMode = computed(() => !!props.sidebarMode);
 const bridgeMode = computed(() => !!props.bridgeMode);
 const openLocalFilesInHost = computed(() => !!props.openLocalFilesInHost);
+const tauriRuntimeAvailable = isTauriRuntimeAvailable();
 
 function canRegenerateBlock(block: ChatMessageBlock, blockIndex: number): boolean {
   if (block.role !== "assistant" || block.isExtraTextBlock) return false;
@@ -1547,7 +1548,8 @@ async function handleAssistantLinkClick(event: MouseEvent) {
     }
     try {
       if (canOpenInFileReader(localPath) || !fileExtensionFromPath(localPath)) { await openLocalFileInChatReader(localPath); }
-      else { await invokeTauri("open_local_file_directory", { path: localPath }); }
+      else if (tauriRuntimeAvailable) { await invokeTauri("open_local_file_directory", { path: localPath }); }
+      else { throw new Error(t("status.openLinkUnsupportedInWeb")); }
       linkOpenErrorText.value = "";
     } catch (error) { linkOpenErrorText.value = t("status.openLinkFailed", { err: String(error) }); }
     return;

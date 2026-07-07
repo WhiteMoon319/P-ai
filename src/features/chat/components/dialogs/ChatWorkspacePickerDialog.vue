@@ -42,12 +42,18 @@
               <div class="min-w-0 flex-1 text-left">
                 <div class="flex flex-wrap items-center gap-2">
                   <button
+                    v-if="canOpenLocalDirectories"
                     type="button"
                     class="btn btn-sm btn-ghost bg-base-200/50 hover:bg-base-300 max-w-40 truncate"
                     :title="item.path"
                     :disabled="saving"
                     @click="emit('openDir', item.id)"
                   >{{ item.name }}</button>
+                  <span
+                    v-else
+                    class="max-w-40 truncate rounded-btn bg-base-200/50 px-3 py-1.5 text-sm"
+                    :title="item.path"
+                  >{{ item.name }}</span>
                   <span v-if="levelLabel(item.level)" class="badge" :class="levelClass(item.level)">{{ levelLabel(item.level) }}</span>
                   <span class="badge" :class="accessClass(item.access)">{{ accessLabel(item.access) }}</span>
                 </div>
@@ -121,6 +127,7 @@ import { computed } from "vue";
 import { SquareTerminal, Trash2 } from "@lucide/vue";
 import { useI18n } from "vue-i18n";
 import type { ChatWorkspaceChoice } from "../../composables/use-chat-workspace";
+import { isTauriRuntimeAvailable } from "../../../../services/tauri-api";
 
 const props = withDefaults(defineProps<{
   open: boolean;
@@ -144,6 +151,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const canOpenLocalDirectories = isTauriRuntimeAvailable();
 
 const hasExplicitTerminalDirectory = computed(() => props.workspaces.some((item) => item.level === "main"));
 

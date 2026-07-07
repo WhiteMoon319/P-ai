@@ -59,13 +59,21 @@
       >
         <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-base-300 px-3 text-sm">
           <button
+            v-if="tauriRuntimeAvailable"
             type="button"
             class="btn btn-ghost btn-xs min-w-0 flex-1 truncate justify-start font-medium"
             :title="directoryTreeRoot.path"
             @click="openDirectoryInFileManager(directoryTreeRoot.path)"
             @contextmenu.prevent.stop="openPathOnlyContextMenu(directoryTreeRoot.path, $event)"
           >{{ directoryTreeRoot.name }}</button>
+          <span
+            v-else
+            class="min-w-0 flex-1 truncate text-xs font-medium"
+            :title="directoryTreeRoot.path"
+            @contextmenu.prevent.stop="openPathOnlyContextMenu(directoryTreeRoot.path, $event)"
+          >{{ directoryTreeRoot.name }}</span>
           <button
+            v-if="tauriRuntimeAvailable"
             class="btn btn-ghost btn-xs h-7 min-h-7 w-7 shrink-0 px-0"
             type="button"
             :disabled="directoryTreeRoot.loading"
@@ -560,6 +568,8 @@ type FileReaderContextMenuTarget = {
 };
 
 // ==================== Constants ====================
+
+const tauriRuntimeAvailable = isTauriRuntimeAvailable();
 
 // ==================== State ====================
 
@@ -1861,12 +1871,14 @@ function toggleDirectoryTreeSearch() {
 }
 
 async function openShellAtDirectoryTreeRoot() {
+  if (!tauriRuntimeAvailable) return;
   const root = directoryTreeRoot.value;
   if (!root) return;
   await openShellAtDirectory(root.path);
 }
 
 async function openShellAtDirectory(path: string) {
+  if (!tauriRuntimeAvailable) return;
   const normalizedPath = normalizePath(path);
   if (!normalizedPath) return;
   try {
@@ -1877,6 +1889,7 @@ async function openShellAtDirectory(path: string) {
 }
 
 async function openDirectoryInFileManager(path: string) {
+  if (!tauriRuntimeAvailable) return;
   const normalizedPath = normalizePath(path);
   if (!normalizedPath) return;
   try {

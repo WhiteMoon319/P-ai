@@ -1710,6 +1710,7 @@
     "archiveExported": "Archive exported ({format}): {path}",
     "importArchiveDone": "Archive import finished: added {imported}, replaced {replaced}, total {total}.",
     "openLinkFailed": "Open link failed: {err}",
+    "openLinkUnsupportedInWeb": "Opening local folders is not supported on web.",
     "recordUnsupported": "Recording is not supported in this environment.",
     "microphonePermissionGranted": "Microphone permission granted.",
     "microphonePermissionRequestFailed": "Failed to request microphone permission: {err}",

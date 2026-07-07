@@ -1,6 +1,6 @@
 import { ref, type Ref } from "vue";
 import { open } from "@tauri-apps/plugin-dialog";
-import { invokeTauri } from "../../../services/tauri-api";
+import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
 import { toErrorMessage } from "../../../utils/error";
 import type { ChatWorkspaceChoice } from "./use-chat-workspace";
 
@@ -19,6 +19,7 @@ export function useChatWorkspacePickerFlow(options: UseChatWorkspacePickerFlowOp
   const chatWorkspaceDraftChoices = ref<ChatWorkspaceChoice[]>([]);
   const chatWorkspaceDraftAutonomousMode = ref(false);
   const chatWorkspacePickerSaving = ref(false);
+  const tauriRuntimeAvailable = isTauriRuntimeAvailable();
 
   function cloneChatWorkspaceChoices(items: ChatWorkspaceChoice[]): ChatWorkspaceChoice[] {
     return (items || []).map((item) => ({
@@ -123,6 +124,7 @@ export function useChatWorkspacePickerFlow(options: UseChatWorkspacePickerFlowOp
   }
 
   async function openChatWorkspaceDir(workspaceId: string) {
+    if (!tauriRuntimeAvailable) return;
     const draft = cloneChatWorkspaceChoices(chatWorkspaceDraftChoices.value);
     const target = draft.find((item) => item.id === workspaceId);
     if (!target?.path) return;
