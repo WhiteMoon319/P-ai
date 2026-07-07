@@ -2286,7 +2286,6 @@ impl ConversationServiceV2 {
             .map(|conversation_meta| conversation_meta.id.to_string())
             .or_else(|| target_conversation.as_ref().map(|conversation| conversation.id.clone()))
             .ok_or_else(|| "Requested conversation not found.".to_string())?;
-        ensure_unarchived_conversation_not_organizing(state, &target_conversation_id)?;
         let unread_changed = target_conversation_meta
             .as_ref()
             .map(|conversation_meta| conversation_meta.unread_count > 0)
@@ -2371,7 +2370,6 @@ impl ConversationServiceV2 {
                 && (conversation_meta.visible_in_foreground_lists
                     || conversation_meta.is_remote_im_contact)
             {
-                ensure_unarchived_conversation_not_organizing(state, &conversation_meta.id)?;
                 build_foreground_conversation_snapshot_from_meta_view(
                     state,
                     &conversation_meta,
@@ -2391,7 +2389,6 @@ impl ConversationServiceV2 {
             .map(ToOwned::to_owned)
         {
             let conversation_meta = self.get_conversation_meta(state, &main_conversation_id)?;
-            ensure_unarchived_conversation_not_organizing(state, &conversation_meta.id)?;
             if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
                 return Err(format!(
                     "Unarchived conversation not found: {}",
@@ -2417,7 +2414,6 @@ impl ConversationServiceV2 {
             if let Some(target_conversation_id) =
                 self.resolve_latest_foreground_conversation_id(state, &effective_agent_id)?
             {
-                ensure_unarchived_conversation_not_organizing(state, &target_conversation_id)?;
                 let conversation_meta = self.get_conversation_meta(state, &target_conversation_id)?;
                 build_foreground_conversation_snapshot_from_meta_view(
                     state,
@@ -3534,7 +3530,6 @@ impl ConversationServiceV2 {
             .map(|conversation_meta| conversation_meta.id.to_string())
             .or_else(|| target_conversation.as_ref().map(|conversation| conversation.id.clone()))
             .ok_or_else(|| "Requested conversation not found.".to_string())?;
-        ensure_unarchived_conversation_not_organizing(state, &conversation_id)?;
         clear_conversation_list_activity_mark(state, &conversation_id);
         if created_new_conversation {
             let conversation = target_conversation

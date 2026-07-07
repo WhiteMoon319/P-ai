@@ -69,8 +69,6 @@
               type="button"
               class="flex flex-col items-start text-left"
               :class="{ 'menu-active': c.conversationId === selectedUnarchivedConversationId }"
-              :title="c.runtimeState === 'organizing_context' ? t('archives.organizingContextDisabled') : ''"
-              :disabled="c.runtimeState === 'organizing_context'"
               @click="$emit('selectUnarchivedConversation', c.conversationId)"
             >
               <span class="font-medium truncate text-sm block">{{ conversationDisplayTitle(c) }}</span>

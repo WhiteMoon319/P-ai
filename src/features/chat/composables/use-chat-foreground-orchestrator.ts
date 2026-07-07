@@ -12,6 +12,81 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
     return String(bindings.currentChatConversationId.value || "").trim();
   }
 
+  function readOverviewRuntimeState(conversationId?: string | null): string {
+    const cid = String(conversationId || "").trim();
+    if (!cid) return "";
+    const item = bindings.unarchivedConversations.value.find(
+      (entry: any) => String(entry?.conversationId || "").trim() === cid,
+    );
+    return String(item?.runtimeState || "").trim();
+  }
+
+  function describeLocalBusyProjection(conversationId?: string | null): string {
+    const cid = String(conversationId || "").trim();
+    if (!cid) return "无";
+    const trimmingConversationId = String(bindings.trimmingConversationId.value || "").trim();
+    const compactingConversationId = String(bindings.compactingConversationId.value || "").trim();
+    const localFlags: string[] = [];
+    if (bindings.trimming.value && (!trimmingConversationId || trimmingConversationId === cid)) {
+      localFlags.push(`trimming=${trimmingConversationId || "*"}`);
+    }
+    if (bindings.compactingConversation.value && (!compactingConversationId || compactingConversationId === cid)) {
+      localFlags.push(`compacting=${compactingConversationId || "*"}`);
+    }
+    return localFlags.join(", ") || "无";
+  }
+
+  async function appendSwitchRuntimeReconciliation(
+    baseText: string,
+    targetConversationId: string,
+    previousConversationId: string,
+  ): Promise<string> {
+    const lines = [baseText];
+    const targetId = String(targetConversationId || "").trim();
+    const previousId = String(previousConversationId || "").trim();
+    const currentId = currentConversationId();
+    const targetOverviewRuntimeState = readOverviewRuntimeState(targetId);
+    const previousOverviewRuntimeState = readOverviewRuntimeState(previousId);
+    lines.push(`目标会话列表态：${targetOverviewRuntimeState || "空"}`);
+    if (previousId) {
+      lines.push(`原会话列表态：${previousOverviewRuntimeState || "空"}`);
+    }
+    lines.push(`目标会话本地忙态：${describeLocalBusyProjection(targetId)}`);
+    if (previousId) {
+      lines.push(`原会话本地忙态：${describeLocalBusyProjection(previousId)}`);
+    }
+    lines.push(`全局本地忙态：trimming=${!!bindings.trimming.value}, compacting=${!!bindings.compactingConversation.value}`);
+    if (!targetId) {
+      return lines.join("\n");
+    }
+    if (typeof bindings.requestConversationRuntimeSnapshot !== "function") {
+      lines.push("后端对账：未提供 runtime snapshot 接口");
+      return lines.join("\n");
+    }
+    try {
+      const snapshot = await bindings.requestConversationRuntimeSnapshot(targetId);
+      const backendConversationId = String(snapshot?.conversationId || "").trim();
+      lines.push(
+        `后端目标运行态：${String(snapshot?.runtimeState || "").trim() || "空"}`
+        + `，processing=${!!snapshot?.isProcessing}`
+        + `，pending=${Math.max(0, Number(snapshot?.pendingQueueCount || 0))}`
+        + `，hasPendingQueue=${!!snapshot?.hasPendingQueue}`
+        + `，visibleProgress=${!!snapshot?.streamCache?.hasVisibleProgress}`,
+      );
+      if (backendConversationId && backendConversationId !== targetId) {
+        lines.push(`后端对账会话不一致：requested=${targetId}，actual=${backendConversationId}`);
+      }
+    } catch (runtimeError) {
+      lines.push(`后端对账失败：${toErrorMessage(runtimeError)}`);
+    }
+    if (currentId && currentId !== targetId && currentId !== previousId) {
+      lines.push(`失败后当前会话：${currentId}`);
+      lines.push(`失败后当前列表态：${readOverviewRuntimeState(currentId) || "空"}`);
+      lines.push(`失败后当前本地忙态：${describeLocalBusyProjection(currentId)}`);
+    }
+    return lines.join("\n");
+  }
+
   function formatSwitchDiagnostic(
     stage: string,
     targetConversationId: string,
@@ -31,14 +106,19 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
     ].join("\n");
   }
 
-  function showSwitchDiagnostic(
+  async function showSwitchDiagnostic(
     stage: string,
     targetConversationId: string,
     previousConversationId: string,
     startedAt: number,
     detail?: unknown,
   ) {
-    const text = formatSwitchDiagnostic(stage, targetConversationId, previousConversationId, startedAt, detail);
+    const baseText = formatSwitchDiagnostic(stage, targetConversationId, previousConversationId, startedAt, detail);
+    const text = await appendSwitchRuntimeReconciliation(
+      baseText,
+      targetConversationId,
+      previousConversationId,
+    );
     const visibleConversationId = currentConversationId() || previousConversationId || targetConversationId;
     if (typeof bindings.setConversationChatErrorText === "function") {
       bindings.setConversationChatErrorText(visibleConversationId, text);
@@ -185,9 +265,9 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
       });
       const snapshotConversationId = String(snapshot?.conversationId || "").trim();
       if (!snapshotConversationId) {
-        showSwitchDiagnostic("后端快照没有返回会话 id", cid, previousConversationId, startedAt, snapshot);
+        void showSwitchDiagnostic("后端快照没有返回会话 id", cid, previousConversationId, startedAt, snapshot);
       } else if (snapshotConversationId !== cid) {
-        showSwitchDiagnostic(
+        void showSwitchDiagnostic(
           "后端快照返回了其他会话",
           cid,
           previousConversationId,
@@ -199,7 +279,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
       bindings.applyConversationSnapshot(snapshot);
       const appliedConversationId = currentConversationId();
       if (appliedConversationId !== cid) {
-        showSwitchDiagnostic(
+        void showSwitchDiagnostic(
           "快照已应用但当前会话不是目标会话",
           cid,
           previousConversationId,
@@ -210,7 +290,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
       if (currentConversationId() === cid && snapshot?.shouldBindStream) {
         const bindActiveConversationStream = bindings.getChatFlow()?.bindActiveConversationStream;
         if (typeof bindActiveConversationStream !== "function") {
-          showSwitchDiagnostic("需要绑定流式通道但绑定函数不存在", cid, previousConversationId, startedAt);
+          void showSwitchDiagnostic("需要绑定流式通道但绑定函数不存在", cid, previousConversationId, startedAt);
         } else {
           stage = "绑定前台流式通道";
           await bindActiveConversationStream(cid, true);
@@ -224,7 +304,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
             reason: "switch_conversation_snapshot_ready",
           });
         } else {
-          showSwitchDiagnostic(
+          void showSwitchDiagnostic(
             "流式通道绑定后当前会话被改走",
             cid,
             previousConversationId,
@@ -247,7 +327,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
         syncCostMs: Math.round((bindings.perfNow() - startedAt) * 10) / 10,
       });
     } catch (error) {
-      showSwitchDiagnostic(stage, cid, previousConversationId, startedAt, error);
+      await showSwitchDiagnostic(stage, cid, previousConversationId, startedAt, error);
     } finally {
       bindings.conversationForegroundSyncing.value = false;
     }

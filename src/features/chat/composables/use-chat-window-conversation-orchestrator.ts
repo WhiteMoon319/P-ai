@@ -88,6 +88,7 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
     markConversationReadPersisted,
     beginForegroundPaintTrace,
     logForegroundPaintTrace,
+    requestConversationRuntimeSnapshot,
     applyConversationSnapshot,
     resumeForegroundRuntimeFromBackend,
     maybeResumeForegroundStreamingDraft,
