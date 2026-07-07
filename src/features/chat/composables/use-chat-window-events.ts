@@ -61,7 +61,9 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
         bindings.clearConversationBadge(payloadConversationId);
         bindings.toolReviewRefreshTick.value += 1;
         bindings.updateForegroundConversationOverviewFromMessages(payloadConversationId || currentConversationId, assistantMessage);
-        void bindings.getChatFlow().handleExternalRoundCompleted(event.payload);
+        void bindings.getChatFlow().handleExternalRoundCompleted(event.payload).finally(() => {
+          void bindings.refreshActiveSupervisionTask({ silent: true });
+        });
       }).then((unlisten) => {
         bindings.unlisteners.chatRoundCompleted = unlisten;
       }).catch((error) => {
