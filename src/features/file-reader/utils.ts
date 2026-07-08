@@ -1,5 +1,33 @@
 import { CODE_LANGUAGE_BY_EXTENSION, SHIKI_LANGUAGE_KEYS } from "./constants";
-import type { FileReaderDirectoryEntry, FileTab, VirtualCodeBlock } from "./types";
+import type { FileReaderDirectoryEntry, FileReaderFileKind, FileTab, VirtualCodeBlock } from "./types";
+
+const IMAGE_FILE_EXTENSIONS = new Set([
+  "avif", "bmp", "gif", "ico", "jpeg", "jpg", "png", "svg", "webp",
+]);
+
+const AUDIO_FILE_EXTENSIONS = new Set([
+  "aac", "flac", "m4a", "mp3", "oga", "ogg", "opus", "wav", "weba",
+]);
+
+const VIDEO_FILE_EXTENSIONS = new Set([
+  "mp4", "webm",
+]);
+
+const UNSUPPORTED_MEDIA_EXTENSIONS = new Set([
+  "3g2", "3gp", "aif", "aiff", "amr", "ape", "asf", "avi", "caf", "flv",
+  "heic", "heif", "m2ts", "mid", "midi", "mkv", "mov", "mpeg", "mpg", "mts",
+  "psd", "raw", "rm", "rmvb", "tif", "tiff", "ts", "vob", "wma", "wmv",
+]);
+
+const UNSUPPORTED_BINARY_EXTENSIONS = new Set([
+  "7z", "a", "accdb", "apk", "app", "arrow", "bin", "br", "bz2", "class",
+  "com", "dat", "db", "db3", "dbf", "deb", "dll", "dmg", "doc", "docx",
+  "duckdb", "dylib", "eot", "exe", "feather", "gz", "img", "ipa", "iso",
+  "jar", "lib", "mdb", "msi", "o", "obj", "odp", "ods", "odt", "orc", "otf",
+  "pak", "parquet", "pdf", "pfx", "pkg", "ppt", "pptx", "pyo", "pyc", "rar",
+  "rpm", "rtf", "scr", "so", "sqlite", "sqlite3", "sys", "tar", "tgz", "ttf",
+  "war", "wasm", "woff", "woff2", "xls", "xlsx", "xz", "zip", "zst",
+]);
 
 export function normalizePath(path: string) {
   return String(path || "")
@@ -94,19 +122,54 @@ export function hashText(value: string) {
 }
 
 export function fileKindFromPath(path: string) {
-  const extension = extensionFromPath(path);
+  const mediaKind = mediaFileKindFromPath(path);
+  if (mediaKind) return mediaKind;
+  const extension = fileExtensionKeyFromPath(path);
+  if (isUnsupportedFileExtension(extension)) return "unsupported";
   return ["md", "markdown", "mdx"].includes(extension) ? "markdown" : "code";
 }
 
-export function extensionFromPath(path: string) {
+export function mediaFileKindFromPath(path: string): Exclude<FileReaderFileKind, "markdown" | "code" | "unsupported"> | "" {
+  const extension = rawExtensionFromPath(path);
+  if (IMAGE_FILE_EXTENSIONS.has(extension)) return "image";
+  if (AUDIO_FILE_EXTENSIONS.has(extension)) return "audio";
+  if (VIDEO_FILE_EXTENSIONS.has(extension)) return "video";
+  return "";
+}
+
+export function isPreviewMediaKind(kind: string) {
+  return kind === "image" || kind === "audio" || kind === "video";
+}
+
+export function isTextFileKind(kind: string) {
+  return kind === "markdown" || kind === "code";
+}
+
+export function isUnsupportedFileExtension(extension: string) {
+  return UNSUPPORTED_MEDIA_EXTENSIONS.has(extension) || UNSUPPORTED_BINARY_EXTENSIONS.has(extension);
+}
+
+export function isUnsupportedFilePath(path: string) {
+  return fileKindFromPath(path) === "unsupported";
+}
+
+export function rawExtensionFromPath(path: string) {
+  const fileName = titleFromPath(path);
+  const dotIndex = fileName.lastIndexOf(".");
+  if (dotIndex <= 0 || dotIndex === fileName.length - 1) return "";
+  return fileName.slice(dotIndex + 1).toLowerCase();
+}
+
+export function fileExtensionKeyFromPath(path: string) {
   const fileName = titleFromPath(path);
   const lowerFileName = fileName.toLowerCase();
   if (CODE_LANGUAGE_BY_EXTENSION[lowerFileName]) return lowerFileName;
   if (SHIKI_LANGUAGE_KEYS.has(lowerFileName)) return lowerFileName;
-  const dotIndex = fileName.lastIndexOf(".");
-  if (dotIndex <= 0 || dotIndex === fileName.length - 1) return "";
-  const extension = fileName.slice(dotIndex + 1).toLowerCase();
-  return CODE_LANGUAGE_BY_EXTENSION[extension] || SHIKI_LANGUAGE_KEYS.has(extension) ? extension : "";
+  return rawExtensionFromPath(path);
+}
+
+export function extensionFromPath(path: string) {
+  return fileExtensionKeyFromPath(path);
 }
 
 export function escapeHtml(value: string) {

@@ -580,6 +580,7 @@
       "permissionSkillsRequireExec": "需要先允许终端（exec）工具，技能才可选。",
       "permissionMcpTools": "MCP 工具",
       "assignee": "任命",
+      "assigneePrimaryHint": "所选人格将作为当前部门的主执行人格。",
       "assigneePlaceholder": "暂不指定",
       "selectHint": "请从左侧选择一个部门"
     },
@@ -1656,7 +1657,10 @@
     "codeReviewRetryNoDepartment": "当前没有可直属下级部门，无法重新生成代码审查任务。",
     "codeReviewRetryUnsupportedScope": "不支持重新生成该代码审查范围：{scope}",
     "codeReviewDeleteFailed": "删除代码审查报告失败",
-    "codeReviewSubmitFailed": "提交代码审查失败"
+    "codeReviewSubmitFailed": "提交代码审查失败",
+    "deleteConversationFailed": "删除会话失败",
+    "readCommitFailed": "读取 commit 失败",
+    "startCodeReviewFailed": "发起代码审查失败"
   },
   "memory": {
     "title": "记忆列表",
@@ -2261,6 +2265,10 @@
     "currentRenderedView": "当前为渲染视图",
     "noFileOpen": "还没有打开文件。",
     "loadingFile": "正在读取文件",
+    "localMediaUnavailable": "当前环境无法预览本地媒体文件。",
+    "mediaLoadFailed": "媒体加载失败，可能是格式、编码或本地访问权限不受支持。",
+    "unsupportedPreviewTitle": "无法预览此文件",
+    "unsupportedPreviewDescription": "此类型不适合在文件阅读器中直接打开。",
     "noWorkspace": "当前会话还没有可浏览的工作目录。",
     "dropToOpen": "松开打开文件",
     "copyFilePath": "复制文件路径",

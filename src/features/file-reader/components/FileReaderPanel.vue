@@ -246,6 +246,61 @@
               {{ activeTab.error }}
             </div>
             <div
+              v-else-if="isPreviewMediaTab(activeTab) && !activeMediaSourceUrl"
+              class="flex h-full items-center justify-center px-6 text-center text-sm text-base-content/60"
+            >
+              {{ t('fileReader.localMediaUnavailable') }}
+            </div>
+            <div
+              v-else-if="activeTab.kind === 'image'"
+              class="file-reader-media-stage h-full overflow-auto"
+              @contextmenu.prevent="openPathOnlyContextMenu(activeTab.path, $event)"
+            >
+              <img
+                class="file-reader-media-image"
+                :src="activeMediaSourceUrl"
+                :alt="activeTab.title"
+                @error="handleMediaLoadError(activeTab)"
+              />
+            </div>
+            <div
+              v-else-if="activeTab.kind === 'audio'"
+              class="flex h-full items-center justify-center px-6"
+              @contextmenu.prevent="openPathOnlyContextMenu(activeTab.path, $event)"
+            >
+              <audio
+                class="w-full max-w-3xl"
+                :src="activeMediaSourceUrl"
+                controls
+                preload="metadata"
+                @error="handleMediaLoadError(activeTab)"
+              ></audio>
+            </div>
+            <div
+              v-else-if="activeTab.kind === 'video'"
+              class="file-reader-media-stage h-full bg-base-200/35"
+              @contextmenu.prevent="openPathOnlyContextMenu(activeTab.path, $event)"
+            >
+              <video
+                class="file-reader-media-video"
+                :src="activeMediaSourceUrl"
+                controls
+                preload="metadata"
+                @error="handleMediaLoadError(activeTab)"
+              ></video>
+            </div>
+            <div
+              v-else-if="activeTab.kind === 'unsupported'"
+              class="flex h-full items-center justify-center px-6 text-center"
+              @contextmenu.prevent="openPathOnlyContextMenu(activeTab.path, $event)"
+            >
+              <div class="max-w-md text-sm text-base-content/65">
+                <img :src="resolvePathIcon(activeTab.path)" alt="" class="file-reader-tree-icon mx-auto mb-3 h-8 w-8 object-contain opacity-80" />
+                <div class="font-medium text-base-content">{{ t('fileReader.unsupportedPreviewTitle') }}</div>
+                <div class="mt-1">{{ t('fileReader.unsupportedPreviewDescription') }}</div>
+              </div>
+            </div>
+            <div
               v-else-if="activeTab.kind === 'markdown' && !isTabRawMode(activeTab)"
               ref="markdownScroller"
               class="file-reader-content file-reader-markdown-scroller mx-auto h-full w-full max-w-300 overflow-auto px-4 py-4"
@@ -504,6 +559,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -535,6 +591,8 @@ import {
   fileKindFromPath,
   formatLineSuffix,
   hashText,
+  isPreviewMediaKind,
+  isTextFileKind,
   languageIdFromTab,
   normalizeDirectoryEntries,
   normalizePath,
@@ -663,6 +721,16 @@ let directoryTreeResizeMoved = false;
 // ==================== Computed ====================
 
 const activeTab = computed(() => tabs.value.find((tab) => tab.path === activePath.value) || tabs.value[0] || null);
+
+const activeMediaSourceUrl = computed(() => {
+  const tab = activeTab.value;
+  if (!tab || !isPreviewMediaKind(tab.kind) || !tauriRuntimeAvailable) return "";
+  try {
+    return convertFileSrc(tab.path);
+  } catch {
+    return "";
+  }
+});
 
 const {
   activeVirtualCodeEntries,
@@ -1174,7 +1242,7 @@ function openContextMenuDirectory() {
 function captureCurrentTextSelection() {
   const tab = activeTab.value;
   const scroller = activeContentScroller();
-  if (!tab || !scroller || tab.loading || tab.error) return;
+  if (!tab || !isTextFileKind(tab.kind) || !scroller || tab.loading || tab.error) return;
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
     lastCapturedSelectionKey = "";
@@ -1225,7 +1293,7 @@ function captureVisibleRangeContext() {
 function captureVisibleRangeContextNow(options: { force?: boolean } = {}) {
   const tab = activeTab.value;
   const scroller = activeContentScroller();
-  if (!tab || !scroller || tab.loading || tab.error || !tab.loaded) return;
+  if (!tab || !isTextFileKind(tab.kind) || !scroller || tab.loading || tab.error || !tab.loaded) return;
   const totalLines = tab.virtualized ? Math.max(1, tab.totalLines) : splitContentLines(tab.content).length;
   if (totalLines === 0) return;
   const lineRange = resolveVisibleLineRange(scroller, totalLines);
@@ -1296,6 +1364,19 @@ function activeContentScroller() {
   return contentScroller.value;
 }
 
+function isPreviewMediaTab(tab: FileTab | null | undefined) {
+  return !!tab && isPreviewMediaKind(tab.kind);
+}
+
+function handleMediaLoadError(tab: FileTab) {
+  const current = activeTab.value;
+  if (!current || !sameNormalizedPath(current.path, tab.path)) return;
+  tab.loaded = true;
+  tab.loading = false;
+  tab.error = t('fileReader.mediaLoadFailed');
+  replaceTabState(tab);
+}
+
 async function resetActiveContentScrollToTop() {
   lastCapturedSelectionKey = "";
   lastCapturedVisibleRangeKey = "";
@@ -1318,7 +1399,7 @@ function canToggleRawMode(tab: FileTab | null | undefined) {
 function isTabRawMode(tab: FileTab | null | undefined) {
   if (!tab) return false;
   if (tab.kind === "markdown") return tab.rawMode;
-  return tab.kind !== "code";
+  return false;
 }
 
 function buildContextMeta(tab: FileTab) {
@@ -1669,6 +1750,30 @@ async function openPath(path: string, options: { reuseActiveTab?: boolean } = {}
     return;
   }
   let tab = upsertLoadingTab(normalizedPath, !!options.reuseActiveTab);
+  const localKind = fileKindFromPath(normalizedPath);
+  if (!isTextFileKind(localKind)) {
+    tab.title = titleFromPath(normalizedPath);
+    tab.extension = extensionFromPath(normalizedPath);
+    tab.kind = localKind;
+    tab.content = "";
+    tab.rawMode = false;
+    tab.forcePlain = false;
+    tab.virtualized = false;
+    tab.totalLines = 0;
+    tab.blockLineCount = 0;
+    tab.loaded = true;
+    tab.error = "";
+    tab.loading = false;
+    activePath.value = normalizedPath;
+    replaceTabState(tab);
+    clearFileBlockCaches(normalizedPath);
+    scheduleAddressScrollStateUpdate();
+    if (shouldResetScrollAfterOpen) {
+      void resetActiveContentScrollToTop();
+    }
+    emit("openPath", normalizedPath);
+    return;
+  }
   try {
     const payload = await requestFileReaderFile(normalizedPath);
     const resolvedPath = normalizePath(payload.path || normalizedPath);
@@ -2307,6 +2412,29 @@ defineExpose({
 .file-reader-content :deep(.ecall-markdown-content :where(table,.table-node)) {
   width: 100%;
   font-size: 0.92rem;
+}
+.file-reader-media-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 1rem;
+}
+.file-reader-media-image {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 6rem);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+.file-reader-media-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: calc(100vh - 4rem);
+  object-fit: contain;
+  background: #000;
 }
 .file-reader-raw-main {
   min-height: 0;

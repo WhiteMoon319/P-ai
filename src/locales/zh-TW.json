@@ -665,6 +665,13 @@
       "waiting": "等待服務啟動...",
       "disabled": "網路訪問已關閉",
       "noRemoteLink": "未檢測到局域網地址。",
+      "linkStatus": "連結狀態",
+      "statusListening": "服務已監聽，當前固定端口 {port} 可訪問。",
+      "statusBinding": "正在啟動網路訪問服務，目標固定端口 {port}。",
+      "statusBindFailed": "固定端口 {port} 無法監聽，連結目前不可用。",
+      "statusStopped": "服務已停止，連結目前不可用。",
+      "statusError": "服務啟動失敗，連結目前不可用。",
+      "statusUnavailable": "連結目前不可用。",
       "refreshFailed": "刷新網路訪問資訊失敗",
       "openFailed": "打開連結失敗",
       "copied": "已複製",
@@ -924,6 +931,7 @@
       },
       "scheduleIntervalHint": "從首次觸發時間開始，按週、天、小時累加後的總時長循環觸發。",
       "scheduleUnsupportedHint": "當前任務的舊調度無法完整映射到這個簡化編輯器。不改週/天/小時就會按原調度保留；要修改的話，直接重新設定即可。",
+      "ownerDefault": "預設助理",
       "filters": {
         "active": "進行中",
         "completed": "已完成"
@@ -937,6 +945,7 @@
         "goal": "目標",
         "why": "為什麼做",
         "todo": "當前待辦",
+        "owner": "負責人",
         "completionConclusion": "完成結論",
         "completionState": "完成狀態",
         "nextRunAt": "下次觸發",
@@ -1592,6 +1601,7 @@
       "kindTitleGeneration": "標題生成",
       "kindTaskOptimization": "任務優化",
       "kindToolReview": "工具評估",
+      "kindVisionImageDescription": "圖轉文",
       "durationMs": "{ms} ms"
     },
     "selection": {
@@ -1647,7 +1657,10 @@
     "codeReviewRetryNoDepartment": "目前沒有可直屬下級部門，無法重新產生程式碼審查任務。",
     "codeReviewRetryUnsupportedScope": "不支援重新產生該程式碼審查範圍：{scope}",
     "codeReviewDeleteFailed": "刪除程式碼審查報告失敗",
-    "codeReviewSubmitFailed": "提交程式碼審查失敗"
+    "codeReviewSubmitFailed": "提交程式碼審查失敗",
+    "deleteConversationFailed": "刪除會話失敗",
+    "readCommitFailed": "讀取 commit 失敗",
+    "startCodeReviewFailed": "發起程式碼審查失敗"
   },
   "memory": {
     "title": "记忆列表",
@@ -2252,6 +2265,10 @@
     "currentRenderedView": "目前為渲染視圖",
     "noFileOpen": "還沒有開啟檔案。",
     "loadingFile": "正在讀取檔案",
+    "localMediaUnavailable": "目前環境無法預覽本機媒體檔案。",
+    "mediaLoadFailed": "媒體載入失敗，可能是格式、編碼或本機存取權限不受支援。",
+    "unsupportedPreviewTitle": "無法預覽此檔案",
+    "unsupportedPreviewDescription": "此類型不適合在檔案閱讀器中直接開啟。",
     "noWorkspace": "目前會話還沒有可瀏覽的工作目錄。",
     "dropToOpen": "放開開啟檔案",
     "copyFilePath": "複製檔案路徑",

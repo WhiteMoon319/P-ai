@@ -1,8 +1,10 @@
+export type FileReaderFileKind = "markdown" | "code" | "image" | "audio" | "video" | "unsupported";
+
 export type FileReaderFilePayload = {
   path: string;
   name: string;
   extension: string;
-  kind: "markdown" | "code" | string;
+  kind: FileReaderFileKind | string;
   content: string;
   forcePlain?: boolean;
   virtualized?: boolean;
@@ -33,7 +35,7 @@ export type FileTab = {
   path: string;
   title: string;
   extension: string;
-  kind: string;
+  kind: FileReaderFileKind | string;
   content: string;
   rawMode: boolean;
   forcePlain: boolean;

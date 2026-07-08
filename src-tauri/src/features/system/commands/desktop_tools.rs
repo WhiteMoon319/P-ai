@@ -1490,6 +1490,26 @@ fn file_reader_file_kind(extension: &str) -> &'static str {
     }
 }
 
+fn file_reader_extension_is_unsupported(extension: &str) -> bool {
+    matches!(
+        extension,
+        "3g2" | "3gp" | "7z" | "a" | "aac" | "accdb" | "aif" | "aiff" | "amr" | "ape"
+            | "apk" | "app" | "arrow" | "asf" | "avi" | "avif" | "bin" | "bmp" | "br"
+            | "bz2" | "caf" | "class" | "com" | "dat" | "db" | "db3" | "dbf" | "deb"
+            | "dll" | "dmg" | "doc" | "docx" | "duckdb" | "dylib" | "eot" | "exe"
+            | "feather" | "flac" | "flv" | "gif" | "gz" | "heic" | "heif" | "ico" | "img"
+            | "ipa" | "iso" | "jar" | "jpg" | "jpeg" | "lib" | "m2ts" | "m4a" | "mdb"
+            | "mid" | "midi" | "mkv" | "mov" | "mp3" | "mp4" | "mpeg" | "mpg" | "msi"
+            | "mts" | "o" | "obj" | "odp" | "ods" | "odt" | "oga" | "ogg" | "opus"
+            | "orc" | "otf" | "pak" | "parquet" | "pdf" | "pfx" | "pkg" | "png" | "ppt"
+            | "pptx" | "psd" | "pyc" | "pyo" | "rar" | "raw" | "rm" | "rmvb" | "rpm"
+            | "rtf" | "scr" | "so" | "sqlite" | "sqlite3" | "svg" | "sys" | "tar" | "tgz"
+            | "tif" | "tiff" | "ts" | "ttf" | "vob" | "war" | "wasm" | "wav" | "weba"
+            | "webm" | "webp" | "wma" | "wmv" | "woff" | "woff2" | "xls" | "xlsx" | "xz"
+            | "zip" | "zst"
+    )
+}
+
 fn file_reader_watch_targets_store(
 ) -> &'static Mutex<std::collections::HashMap<String, Vec<FileReaderWatchTrackedTarget>>> {
     FILE_READER_WATCH_TARGETS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
@@ -1677,21 +1697,6 @@ fn log_file_reader_read_burst(window_label: &str, path: &str) {
     );
 }
 
-fn format_hex_dump(bytes: &[u8]) -> String {
-    let display_bytes = &bytes[..bytes.len().min(65536)];
-    let mut lines = Vec::with_capacity(display_bytes.len() / 16 + 1);
-    for (i, chunk) in display_bytes.chunks(16).enumerate() {
-        let offset = i * 16;
-        let hex: String = chunk.iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" ");
-        let ascii: String = chunk.iter().map(|&b| if (0x20..=0x7E).contains(&b) { b as char } else { '.' }).collect();
-        lines.push(format!("{offset:08X}  {hex:<48}  {ascii}"));
-    }
-    if bytes.len() > 65536 {
-        lines.push(format!("... (已截断，总大小 {} bytes)", bytes.len()));
-    }
-    lines.join("\n")
-}
-
 fn truncate_single_line(line: &str, max_chars: usize) -> String {
     if line.chars().count() > max_chars {
         format!("{}...", line.chars().take(max_chars).collect::<String>())
@@ -1708,13 +1713,9 @@ fn truncate_long_lines(text: &str, max_chars: usize) -> String {
 }
 
 fn file_reader_decode_text_content(path: &PathBuf) -> Result<String, String> {
-    match decode_text_file_from_path(path) {
-        Ok(decoded) => Ok(decoded.text),
-        Err(_) => {
-            let bytes = fs::read(path).map_err(|err| format!("读取文件失败：{err}"))?;
-            Ok(format_hex_dump(&bytes))
-        }
-    }
+    decode_text_file_from_path(path)
+        .map(|decoded| decoded.text)
+        .map_err(|_| "此文件不是可预览的文本文件".to_string())
 }
 
 fn file_reader_decode_text_rope(path: &PathBuf) -> Result<ropey::Rope, String> {
@@ -1773,10 +1774,6 @@ fn read_file_reader_file(window: tauri::Window, path: String) -> Result<FileRead
     if !file_path.is_file() {
         return Err(format!("目标不是文件：{raw_path}"));
     }
-    let metadata = fs::metadata(&file_path).map_err(|err| format!("读取文件信息失败：{err}"))?;
-    let file_size = metadata.len();
-    let force_plain = file_size > FILE_READER_PLAIN_TEXT_THRESHOLD;
-    let resolved_path = file_path.canonicalize().unwrap_or_else(|_| file_path.clone());
     let extension = file_path
         .extension()
         .and_then(|value| value.to_str())
@@ -1791,8 +1788,15 @@ fn read_file_reader_file(window: tauri::Window, path: String) -> Result<FileRead
     let file_key = if extension.is_empty() {
         name.trim().to_ascii_lowercase()
     } else {
-        extension.clone()
+        extension
     };
+    if file_reader_extension_is_unsupported(&file_key) {
+        return Err("此类文件不适合在文件阅读器中直接读取".to_string());
+    }
+    let metadata = fs::metadata(&file_path).map_err(|err| format!("读取文件信息失败：{err}"))?;
+    let file_size = metadata.len();
+    let force_plain = file_size > FILE_READER_PLAIN_TEXT_THRESHOLD;
+    let resolved_path = file_path.canonicalize().unwrap_or_else(|_| file_path.clone());
     let kind = file_reader_file_kind(&file_key).to_string();
     let rope = file_reader_decode_text_rope(&file_path)?;
     let total_lines = file_reader_rope_line_count(&rope);
@@ -1831,6 +1835,25 @@ fn read_file_reader_file_block(path: String, start_line: usize, line_count: usiz
     }
     if !file_path.is_file() {
         return Err(format!("目标不是文件：{raw_path}"));
+    }
+    let extension = file_path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    let name = file_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or(raw_path)
+        .to_string();
+    let file_key = if extension.is_empty() {
+        name.trim().to_ascii_lowercase()
+    } else {
+        extension
+    };
+    if file_reader_extension_is_unsupported(&file_key) {
+        return Err("此类文件不适合在文件阅读器中直接读取".to_string());
     }
     let metadata = fs::metadata(&file_path).map_err(|err| format!("读取文件信息失败：{err}"))?;
     let force_plain = metadata.len() > FILE_READER_PLAIN_TEXT_THRESHOLD;

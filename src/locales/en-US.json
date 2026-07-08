@@ -580,6 +580,7 @@
       "permissionSkillsRequireExec": "Skills require the terminal tool (exec) to be allowed first.",
       "permissionMcpTools": "MCP Tools",
       "assignee": "Assignee",
+      "assigneePrimaryHint": "The selected persona will act as the primary executor for this department.",
       "assigneePlaceholder": "Not assigned",
       "selectHint": "Please select a department from the left"
     },
@@ -664,6 +665,13 @@
       "waiting": "Waiting for service...",
       "disabled": "Network access is disabled",
       "noRemoteLink": "No LAN address detected.",
+      "linkStatus": "Link status",
+      "statusListening": "Service is listening on fixed port {port}.",
+      "statusBinding": "Starting the network access service on fixed port {port}.",
+      "statusBindFailed": "Fixed port {port} cannot be listened on; links are unavailable.",
+      "statusStopped": "Service has stopped; links are unavailable.",
+      "statusError": "Service startup failed; links are unavailable.",
+      "statusUnavailable": "Links are currently unavailable.",
       "refreshFailed": "Failed to refresh network access info",
       "openFailed": "Failed to open link",
       "copied": "Copied",
@@ -1603,6 +1611,7 @@
       "kindTitleGeneration": "Title generation",
       "kindTaskOptimization": "Task optimization",
       "kindToolReview": "Tool assessment",
+      "kindVisionImageDescription": "Image description",
       "durationMs": "{ms} ms"
     },
     "selection": {
@@ -1648,7 +1657,10 @@
     "codeReviewRetryNoDepartment": "No subordinate department available to retry the code review.",
     "codeReviewRetryUnsupportedScope": "Unsupported code review scope for retry: {scope}",
     "codeReviewDeleteFailed": "Failed to delete code review report",
-    "codeReviewSubmitFailed": "Failed to submit code review"
+    "codeReviewSubmitFailed": "Failed to submit code review",
+    "deleteConversationFailed": "Failed to delete conversation",
+    "readCommitFailed": "Failed to read commit",
+    "startCodeReviewFailed": "Failed to start code review"
   },
   "memory": {
     "title": "Memories",
@@ -2253,6 +2265,10 @@
     "currentRenderedView": "Currently rendered view",
     "noFileOpen": "No file opened yet.",
     "loadingFile": "Loading file",
+    "localMediaUnavailable": "Local media preview is unavailable in this environment.",
+    "mediaLoadFailed": "Media failed to load. The format, codec, or local file access may be unsupported.",
+    "unsupportedPreviewTitle": "This file cannot be previewed",
+    "unsupportedPreviewDescription": "This file type is not suitable to open directly in the file reader.",
     "noWorkspace": "This conversation has no browsable workspace yet.",
     "dropToOpen": "Drop to open file",
     "copyFilePath": "Copy file path",

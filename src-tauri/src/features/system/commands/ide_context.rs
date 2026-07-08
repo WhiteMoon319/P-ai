@@ -753,19 +753,6 @@ fn ide_chat_file_reader_read(params: Value) -> Result<Value, String> {
     let metadata = fs::metadata(&file_path).map_err(|err| format!("读取文件信息失败：{err}"))?;
     let file_size = metadata.len();
     let force_plain = file_size > FILE_READER_PLAIN_TEXT_THRESHOLD;
-    let content = match decode_text_file_from_path(&file_path) {
-        Ok(decoded) => {
-            if force_plain {
-                truncate_long_lines(&decoded.text, FILE_READER_LINE_TRUNCATE_CHARS)
-            } else {
-                decoded.text
-            }
-        }
-        Err(_) => {
-            let bytes = fs::read(&file_path).map_err(|err| format!("读取文件失败：{err}"))?;
-            format_hex_dump(&bytes)
-        }
-    };
     let resolved_path = file_path.canonicalize().unwrap_or_else(|_| file_path.clone());
     let extension = file_path
         .extension()
@@ -782,6 +769,19 @@ fn ide_chat_file_reader_read(params: Value) -> Result<Value, String> {
         name.trim().to_ascii_lowercase()
     } else {
         extension.clone()
+    };
+    if file_reader_extension_is_unsupported(&file_key) {
+        return Err("此类文件不适合在文件阅读器中直接读取".to_string());
+    }
+    let content = match decode_text_file_from_path(&file_path) {
+        Ok(decoded) => {
+            if force_plain {
+                truncate_long_lines(&decoded.text, FILE_READER_LINE_TRUNCATE_CHARS)
+            } else {
+                decoded.text
+            }
+        }
+        Err(_) => return Err("此文件不是可预览的文本文件".to_string()),
     };
     let total_lines = content.lines().count().max(1);
     serde_json::to_value(FileReaderFilePayload {
