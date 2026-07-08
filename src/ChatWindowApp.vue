@@ -124,6 +124,7 @@
       :current-chat-workspace-name="chatWorkspaceName"
       :current-chat-workspace-display-name="chatWorkspaceDisplayName"
       :current-chat-workspace-root-path="chatWorkspaceRootPath"
+      :current-chat-workspace-autonomous-mode="chatWorkspaceAutonomousMode"
       :current-chat-workspaces="chatWorkspaceChoices"
       :current-chat-department-id="currentForegroundDepartmentId"
       :current-chat-agent-id="currentForegroundAgentId"

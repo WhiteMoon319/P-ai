@@ -167,6 +167,7 @@
         :current-workspace-name="currentChatWorkspaceName"
         :current-workspace-display-name="currentChatWorkspaceDisplayName"
         :current-workspace-root-path="currentChatWorkspaceRootPath"
+        :current-workspace-autonomous-mode="currentChatWorkspaceAutonomousMode"
         :workspaces="currentChatWorkspaces"
         :current-department-id="currentChatDepartmentId"
         :active-agent-id="currentChatAgentId"
@@ -553,6 +554,7 @@ const props = defineProps<{
   currentChatWorkspaceName: string;
   currentChatWorkspaceDisplayName: string;
   currentChatWorkspaceRootPath: string;
+  currentChatWorkspaceAutonomousMode: boolean;
   currentChatWorkspaces: ShellWorkspace[];
   currentChatDepartmentId: string;
   currentChatAgentId: string;

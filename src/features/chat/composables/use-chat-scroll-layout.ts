@@ -1,6 +1,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Ref, watch } from "vue";
 
 const TODO_DROPDOWN_SAFE_GAP = 30;
+const FLOATING_TOOLBAR_MIN_RESERVE = 24;
 
 type UseChatScrollLayoutOptions = {
   activeConversationId: Ref<string>;
@@ -37,6 +38,14 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
   const jumpAboveBottomStyle = computed(() => ({
     bottom: `${jumpToBottomOffset.value + 44}px`,
   }));
+  const toolbarReservedHeight = computed(() => {
+    const measuredHeight = toolbarContainer.value?.offsetHeight ?? 0;
+    if (measuredHeight <= 0) return 0;
+    return Math.max(FLOATING_TOOLBAR_MIN_RESERVE, measuredHeight);
+  });
+  const floatingToolbarStyle = computed(() => ({
+    bottom: `${jumpToBottomOffset.value}px`,
+  }));
 
   function updateJumpToBottomOffset() {
     const composerHeight = composerContainer.value?.offsetHeight ?? 0;
@@ -59,8 +68,7 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
       scrollEl.clientHeight
       - parseFloat(scrollStyles.paddingTop || "0")
       - parseFloat(scrollStyles.paddingBottom || "0");
-    const toolbarHeight = toolbarContainer.value?.offsetHeight ?? 0;
-    const nextMinHeight = Math.max(0, scrollViewportHeight - toolbarHeight - TODO_DROPDOWN_SAFE_GAP);
+    const nextMinHeight = Math.max(0, scrollViewportHeight - toolbarReservedHeight.value - TODO_DROPDOWN_SAFE_GAP);
     if (latestOwnElasticMinHeight.value !== nextMinHeight) {
       latestOwnElasticMinHeight.value = nextMinHeight;
     }
@@ -243,10 +251,13 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
     chatLayoutRoot,
     latestOwnElasticMinHeight,
     showJumpToBottom,
+    atConversationBottom: lastBottomState,
     userScrollingDown,
     userScrollingUp,
     jumpToBottomStyle,
     jumpAboveBottomStyle,
+    toolbarReservedHeight,
+    floatingToolbarStyle,
     onScroll,
     noteWheelScrollIntent,
     beginPointerScrollIntent,

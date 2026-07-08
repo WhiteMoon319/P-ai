@@ -2,13 +2,13 @@
   <div class="flex min-w-0 items-center gap-0.5 overflow-hidden">
     <button
       type="button"
-      class="btn btn-ghost btn-sm h-8 min-h-8 flex-none gap-1.5 overflow-hidden px-2 transition-[max-width,background-color,color] duration-200 ease-out"
-      :class="expandedPanel === 'workspace' ? 'w-auto max-w-52 justify-start bg-base-200/80' : 'w-8 max-w-8 justify-center'"
+      class="btn btn-ghost btn-sm h-8 min-h-8 min-w-0 gap-1.5 overflow-hidden px-2 transition-[max-width,background-color,color] duration-200 ease-out"
+      :class="expandedPanel === 'workspace' ? 'w-auto max-w-[min(28rem,56vw)] flex-none justify-start bg-base-200/80' : 'w-8 max-w-8 flex-none justify-center'"
       :disabled="workspaceButtonDisabled"
       :title="workspaceTitle"
       @click="handleWorkspaceClick"
     >
-      <SquareTerminal class="size-3.5 shrink-0" aria-hidden="true" />
+      <component :is="workspacePermissionIcon" class="size-3.5 shrink-0" aria-hidden="true" />
       <Transition name="wdc-content">
         <span v-if="expandedPanel === 'workspace'" class="truncate text-xs">
           {{ workspaceButtonName || workspaceButtonLabel }}
@@ -79,13 +79,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Coins, Footprints, Network, PanelRightOpen, SquareTerminal, Timer } from "@lucide/vue";
+import { Coins, Eye, Footprints, Network, PanelRightOpen, ShieldCheck, ShieldOff, ShieldQuestion, Timer } from "@lucide/vue";
 import type { ConversationDelegateStatusSummary } from "../../../types/app";
 
 const props = defineProps<{
   workspaceButtonLabel: string;
   workspaceButtonName: string;
   workspaceButtonDisabled?: boolean;
+  workspacePermissionKind?: "read_only" | "approval" | "full_access" | "autonomous";
   autoPushActive?: boolean;
   delegates: ConversationDelegateStatusSummary[];
 }>();
@@ -108,6 +109,12 @@ const tokenCount = computed(() => sumBy(displayedDelegates.value, (delegate) => 
 const elapsedText = computed(() => formatElapsedMs(elapsedMs.value));
 const tokenText = computed(() => formatTokenK(tokenCount.value));
 const workspaceTitle = computed(() => props.workspaceButtonName || props.workspaceButtonLabel);
+const workspacePermissionIcon = computed(() => {
+  if (props.workspacePermissionKind === "autonomous") return ShieldOff;
+  if (props.workspacePermissionKind === "full_access") return ShieldCheck;
+  if (props.workspacePermissionKind === "approval") return ShieldQuestion;
+  return Eye;
+});
 const autoPushLabel = computed(() => t("chat.autoPush.activeChip"));
 const autoPushTitle = computed(() => t("chat.autoPush.activeHint"));
 const delegateTitle = computed(() => {

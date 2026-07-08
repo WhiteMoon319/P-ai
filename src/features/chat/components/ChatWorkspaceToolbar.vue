@@ -1,5 +1,5 @@
 <template>
-  <div class="rounded-box border border-base-300 bg-base-100/70 px-2 py-1.5 flex items-center justify-between gap-2 text-[11px]">
+  <div v-bind="attrs" class="rounded-box bg-base-100/70 px-2 py-1.5 shadow backdrop-blur-md flex items-center justify-between gap-2 text-[11px]">
     <div class="flex min-w-0 flex-1 items-center gap-1.5">
       <div
         v-if="!hideMenuButton"
@@ -89,6 +89,7 @@
         :workspace-button-label="workspaceButtonLabel"
         :workspace-button-name="workspaceButtonName"
         :workspace-button-disabled="busy || workspaceButtonDisabled"
+        :workspace-permission-kind="workspacePermissionKind"
         :auto-push-active="autoPushActive"
         :delegates="delegateStatuses || []"
         @lock-workspace="emit('lockWorkspace')"
@@ -233,12 +234,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useAttrs } from "vue";
 import { useI18n } from "vue-i18n";
 import { ClipboardCheck, ClipboardList, ExternalLink, Folder, Grip, ListTodo, Package, Send, Split } from "@lucide/vue";
 import type { ChatMentionEntry, ConversationDelegateStatusSummary } from "../../../types/app";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import SessionControlPanel from "./SessionControlPanel.vue";
+
+defineOptions({
+  inheritAttrs: false,
+});
 
 const props = withDefaults(defineProps<{
   chatting: boolean;
@@ -247,6 +252,7 @@ const props = withDefaults(defineProps<{
   workspaceButtonLabel: string;
   workspaceButtonName: string;
   workspaceButtonDisabled?: boolean;
+  workspacePermissionKind?: "read_only" | "approval" | "full_access" | "autonomous";
   autoPushActive?: boolean;
   mentionEntries: ChatMentionEntry[];
   selectedMentionKeys: string[];
@@ -288,6 +294,7 @@ const emit = defineEmits<{
   (e: "mentionEntry", entry: ChatMentionEntry): void;
 }>();
 
+const attrs = useAttrs();
 const { t } = useI18n();
 const busy = computed(() => props.chatting || props.frozen || !!props.conversationBusy);
 const showTaskCreateMenuItem = computed(() => props.showTaskCreateMenuItem);

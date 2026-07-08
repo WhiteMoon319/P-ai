@@ -89,7 +89,7 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
   });
   const chatWorkspaceDisplayName = computed(() => {
     const workspaceName = String(chatWorkspaceName.value || "").trim() || DEFAULT_CHAT_WORKSPACE_NAME;
-    return `[${chatWorkspacePermissionLabel.value}] ${workspaceName}`;
+    return `${chatWorkspacePermissionLabel.value} · ${workspaceName}`;
   });
 
   function applyChatWorkspaceState(state: ChatShellWorkspaceState) {
@@ -196,6 +196,7 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
     chatWorkspacePickerOpen,
     chatWorkspaceChoices,
     chatWorkspaceAutonomousMode,
+    chatWorkspacePermissionLabel,
     chatWorkspaceDisplayName,
     refreshChatWorkspaceState,
     openChatWorkspacePicker,

@@ -125,48 +125,63 @@
               :style="{ height: `${latestOwnTailSpacerMinHeight}px` }"
             ></div>
             <div
-              v-if="!activeConversationIsSystemNotification && !activeConversationIsRemoteContact"
-              ref="toolbarContainer"
-              class="ecall-chat-toolbar-shell mx-auto w-full max-w-225 px-4 pt-1 pb-2"
-            >
-                <ChatWorkspaceToolbar
-                  :chatting="chatting" :frozen="frozen" :conversation-busy="conversationInteractionBusy"
-                  :workspace-button-label="t('chat.allowedWorkspaceButton')" :workspace-button-name="currentWorkspaceDisplayName || currentWorkspaceName"
-                  :workspace-button-disabled="!activeConversationId || activeConversationSummary?.kind === 'remote_im_contact'"
-                  :auto-push-active="!!String(activeConversationSummary?.autoPushRemoteContactId || '').trim()"
-                  :hide-menu-button="activeConversationSummary?.kind === 'remote_im_contact'"
-                  :hide-workspace-button="hideWorkspaceButton || activeConversationSummary?.kind === 'remote_im_contact'"
-                  :show-task-create-menu-item="!sidebarMode && !activeConversationIsRemoteContact && !activeConversationIsSystemNotification"
-                  :show-forward-menu-item="!sidebarMode"
-                :show-auto-push-menu-item="!sidebarMode && !activeConversationIsRemoteContact && !activeConversationIsSystemNotification"
-                :show-share-menu-item="!sidebarMode"
-                :show-workspace-menu-item="true"
-                :show-code-review-menu-item="true"
-                :mention-entries="mentionEntries" :selected-mention-keys="selectedMentionKeys"
-                :delegate-statuses="delegateStatuses"
-                :show-detach-button="!bridgeMode && !detachedChatWindow && !activeConversationIsSystemNotification"
-                :detach-disabled="bridgeMode || !activeConversationId || activeConversationIsSystemNotification || chatting || frozen || conversationInteractionBusy"
-                @lock-workspace="$emit('lockWorkspace')" @open-branch-selection="openBranchSelectionMenu"
-                @open-task-create="openTaskCreateDialog"
-                @open-delegate-selection="openDelegateSelectionMenu" @open-forward-selection="openForwardSelectionMenu"
-                @open-auto-push="openAutoPushCard"
-                @open-share-selection="openShareSelectionMenu"
-                @open-delegate-summary="openDelegateSummaryPanel"
-                @open-code-review="openCodeReviewDialog"
-                @mention-entry="(entry) => {
-                  const agentId = String(entry?.agentId || '').trim();
-                  const departmentId = String(entry?.departmentId || '').trim();
-                  if (!agentId || !departmentId) return;
-                  const mentionKey = `${agentId}:${departmentId}`;
-                  if (selectedMentionKeys.includes(mentionKey)) { emit('removeMention', { agentId, departmentId }); return; }
-                  emit('addMention', { agentId, agentName: String(entry?.agentName || '').trim() || agentId, departmentId, departmentName: String(entry?.departmentName || '').trim() || departmentId, avatarUrl: String(entry?.avatarUrl || '').trim() || undefined });
-                }"
-                @detach-conversation="handleDetachConversationRequest"
-              />
-            </div>
+              v-if="supportsFloatingSessionToolbar"
+              class="pointer-events-none mx-auto w-full max-w-225 shrink-0 px-4"
+              :style="{ height: `${toolbarReservedHeight + 10}px` }"
+            ></div>
           </div>
           </div>
           <FloatingScrollbar ref="chatScrollbarRef" :target="scrollContainer" />
+        </div>
+        <div
+          v-if="supportsFloatingSessionToolbar"
+          ref="toolbarContainer"
+          class="absolute inset-x-0 z-20 transition-all duration-150 ease-out"
+          :class="showFloatingSessionToolbar
+            ? 'pointer-events-auto opacity-100 translate-y-0'
+            : 'pointer-events-none opacity-0 translate-y-2'"
+          :style="floatingToolbarStyle"
+          :aria-hidden="showFloatingSessionToolbar ? undefined : 'true'"
+        >
+          <div class="ecall-chat-toolbar-shell mx-auto w-full max-w-225 px-4">
+            <ChatWorkspaceToolbar
+              class="transition-opacity duration-150 ease-out"
+              :class="showFloatingSessionToolbar ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'"
+                  :chatting="chatting" :frozen="frozen" :conversation-busy="conversationInteractionBusy"
+                  :workspace-button-label="t('chat.allowedWorkspaceButton')" :workspace-button-name="currentWorkspaceDisplayName || currentWorkspaceName"
+                  :workspace-button-disabled="!activeConversationId || activeConversationSummary?.kind === 'remote_im_contact'"
+                  :workspace-permission-kind="currentWorkspacePermissionKind"
+                  :auto-push-active="!!String(activeConversationSummary?.autoPushRemoteContactId || '').trim()"
+                  :hide-menu-button="activeConversationSummary?.kind === 'remote_im_contact'"
+                  :hide-workspace-button="hideWorkspaceButton || activeConversationSummary?.kind === 'remote_im_contact'"
+              :show-task-create-menu-item="!sidebarMode && !activeConversationIsRemoteContact && !activeConversationIsSystemNotification"
+              :show-forward-menu-item="!sidebarMode"
+              :show-auto-push-menu-item="!sidebarMode && !activeConversationIsRemoteContact && !activeConversationIsSystemNotification"
+              :show-share-menu-item="!sidebarMode"
+              :show-workspace-menu-item="true"
+              :show-code-review-menu-item="true"
+              :mention-entries="mentionEntries" :selected-mention-keys="selectedMentionKeys"
+              :delegate-statuses="delegateStatuses"
+              :show-detach-button="!bridgeMode && !detachedChatWindow && !activeConversationIsSystemNotification"
+              :detach-disabled="bridgeMode || !activeConversationId || activeConversationIsSystemNotification || chatting || frozen || conversationInteractionBusy"
+              @lock-workspace="$emit('lockWorkspace')" @open-branch-selection="openBranchSelectionMenu"
+              @open-task-create="openTaskCreateDialog"
+              @open-delegate-selection="openDelegateSelectionMenu" @open-forward-selection="openForwardSelectionMenu"
+              @open-auto-push="openAutoPushCard"
+              @open-share-selection="openShareSelectionMenu"
+              @open-delegate-summary="openDelegateSummaryPanel"
+              @open-code-review="openCodeReviewDialog"
+              @mention-entry="(entry) => {
+                const agentId = String(entry?.agentId || '').trim();
+                const departmentId = String(entry?.departmentId || '').trim();
+                if (!agentId || !departmentId) return;
+                const mentionKey = `${agentId}:${departmentId}`;
+                if (selectedMentionKeys.includes(mentionKey)) { emit('removeMention', { agentId, departmentId }); return; }
+                emit('addMention', { agentId, agentName: String(entry?.agentName || '').trim() || agentId, departmentId, departmentName: String(entry?.departmentName || '').trim() || departmentId, avatarUrl: String(entry?.avatarUrl || '').trim() || undefined });
+              }"
+              @detach-conversation="handleDetachConversationRequest"
+            />
+          </div>
         </div>
         <CompactionSummaryCard
           :visible="conversationSummaryCard.visible"
@@ -555,6 +570,7 @@ const props = defineProps<{
   hasMoreHistory: boolean; loadingOlderHistory: boolean;
   latestOwnMessageAlignRequest: number; conversationScrollToBottomRequest: number; scrollToBottomBehavior: "auto" | "smooth" | "smooth_light";
   currentWorkspaceName: string; currentWorkspaceDisplayName?: string; currentWorkspaceRootPath: string; workspaces: ShellWorkspace[];
+  currentWorkspaceAutonomousMode?: boolean;
   currentDepartmentId: string; activeAgentId: string; activeConversationId: string; currentTodos: ChatTodoItem[];
   supervisionActive: boolean; supervisionTitle: string; supervisionDialogOpen: boolean;
   supervisionTaskSaving: boolean; supervisionTaskError: string;
@@ -1034,8 +1050,8 @@ defineExpose({ exitMessageSelectionMode: handleExitMessageSelectionMode });
 
 const {
   scrollContainer, composerContainer, toolbarContainer, chatLayoutRoot,
-  latestOwnElasticMinHeight, showJumpToBottom, userScrollingDown, userScrollingUp,
-  jumpToBottomStyle, jumpAboveBottomStyle, onScroll,
+  latestOwnElasticMinHeight, showJumpToBottom, atConversationBottom, userScrollingDown, userScrollingUp,
+  jumpToBottomStyle, jumpAboveBottomStyle, toolbarReservedHeight, floatingToolbarStyle, onScroll,
   noteWheelScrollIntent, beginPointerScrollIntent, prepareBottomAlignmentLayout,
 } = useChatScrollLayout({
   activeConversationId: toRef(props, "activeConversationId"),
@@ -1067,6 +1083,30 @@ const {
 const latestOwnTailSpacerMinHeight = computed(() => {
   if (!latestOwnElasticItemId.value || latestOwnTailContentHeight.value <= 0) return 0;
   return Math.max(0, latestOwnElasticMinHeight.value - latestOwnTailContentHeight.value);
+});
+
+const currentWorkspacePermissionKind = computed<"read_only" | "approval" | "full_access" | "autonomous">(() => {
+  if (props.currentWorkspaceAutonomousMode) return "autonomous";
+  const targetPath = String(props.currentWorkspaceRootPath || "").trim().toLowerCase();
+  const workspaceList = Array.isArray(props.workspaces) ? props.workspaces : [];
+  const matched = workspaceList.find((item) => String(item.path || "").trim().toLowerCase() === targetPath);
+  if (matched?.access === "approval" || matched?.access === "full_access" || matched?.access === "read_only") {
+    return matched.access;
+  }
+  const mainWorkspace = workspaceList.find((item) => String(item.level || "").trim() === "main");
+  if (mainWorkspace?.access === "approval" || mainWorkspace?.access === "full_access" || mainWorkspace?.access === "read_only") {
+    return mainWorkspace.access;
+  }
+  return "read_only";
+});
+
+const supportsFloatingSessionToolbar = computed(() =>
+  !activeConversationIsSystemNotification.value && !activeConversationIsRemoteContact.value,
+);
+
+const showFloatingSessionToolbar = computed(() => {
+  if (!supportsFloatingSessionToolbar.value) return false;
+  return atConversationBottom.value || userScrollingDown.value;
 });
 
 // ==================== previous user message jump ====================

@@ -611,6 +611,7 @@ export function useChatWindowApp() {
     loadingOlderConversationHistory,
     foregroundTailLatestReady,
     chatWorkspaceName,
+    chatWorkspaceDisplayName,
     conversationMessageCache,
     backgroundConversationBadgeMap,
     ensureConversationMessageIds,

@@ -26,36 +26,26 @@
       </div>
       <div class="max-h-[65vh] overflow-y-auto">
         <div
-          v-if="workspaces.length === 0"
+          v-if="displayedWorkspaces.length === 0"
           class="m-4 rounded-box border border-dashed border-base-300 bg-base-200/20 px-4 py-6 text-center text-sm opacity-70"
         >
           {{ t("chat.workspacePickerEmpty") }}
         </div>
         <div v-else class="divide-y divide-base-300">
           <div
-            v-for="item in workspaces"
+            v-for="item in displayedWorkspaces"
             :key="item.id"
             class="px-3 py-3 text-left"
             :title="item.path"
           >
-            <div class="flex items-center gap-3">
+            <div class="flex min-w-0 items-center gap-3">
               <div class="min-w-0 flex-1 text-left">
-                <div class="flex flex-wrap items-center gap-2">
-                  <button
-                    v-if="canOpenLocalDirectories"
-                    type="button"
-                    class="btn btn-sm btn-ghost bg-base-200/50 hover:bg-base-300 max-w-40 truncate"
-                    :title="item.path"
-                    :disabled="saving"
-                    @click="emit('openDir', item.id)"
-                  >{{ item.name }}</button>
+                <div class="flex min-w-0 items-center gap-2 overflow-hidden">
                   <span
-                    v-else
-                    class="max-w-40 truncate rounded-btn bg-base-200/50 px-3 py-1.5 text-sm"
+                    class="min-w-0 flex-1 truncate text-sm font-medium"
                     :title="item.path"
                   >{{ item.name }}</span>
-                  <span v-if="levelLabel(item.level)" class="badge" :class="levelClass(item.level)">{{ levelLabel(item.level) }}</span>
-                  <span class="badge" :class="accessClass(item.access)">{{ accessLabel(item.access) }}</span>
+                  <span v-if="levelLabel(item.level)" class="badge shrink-0" :class="levelClass(item.level)">{{ levelLabel(item.level) }}</span>
                 </div>
               </div>
               <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -127,7 +117,6 @@ import { computed } from "vue";
 import { SquareTerminal, Trash2 } from "@lucide/vue";
 import { useI18n } from "vue-i18n";
 import type { ChatWorkspaceChoice } from "../../composables/use-chat-workspace";
-import { isTauriRuntimeAvailable } from "../../../../services/tauri-api";
 
 const props = withDefaults(defineProps<{
   open: boolean;
@@ -151,7 +140,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-const canOpenLocalDirectories = isTauriRuntimeAvailable();
+const displayedWorkspaces = computed(() => props.workspaces.filter((item) => item.level !== "system"));
 
 const hasExplicitTerminalDirectory = computed(() => props.workspaces.some((item) => item.level === "main"));
 
@@ -178,12 +167,6 @@ function accessLabel(access: string): string {
   if (access === "approval") return t("config.tools.workspaceAccessApproval");
   if (access === "full_access") return t("config.tools.workspaceAccessFullAccess");
   return t("config.tools.workspaceAccessReadOnly");
-}
-
-function accessClass(access: string): string {
-  if (access === "approval") return "badge-warning";
-  if (access === "full_access") return "badge-success";
-  return "badge-ghost";
 }
 
 function onAccessChange(workspaceId: string, event: Event) {
