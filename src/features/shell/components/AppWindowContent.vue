@@ -195,7 +195,6 @@
         :conversation-list-tab="conversationListTab"
         :chat-left-panel-mode="chatLeftPanelMode"
         :chat-right-panel-mode="chatRightPanelMode"
-        :reader-directory-open-request="chatReaderDirectoryOpenRequest"
         @update:chat-input="updateChatInput"
         @add-mention="addChatMention"
         @remove-mention="removeChatMention"
@@ -418,6 +417,7 @@ import type {
 } from "../../../types/app";
 import type { GeneratedThemeControls, GeneratedThemeTokens } from "../../shell/theme/theme-types";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
+import type { ChatRightPanelMode } from "../../chat/composables/chat-ui-layout-storage";
 import {
   buildShareExportFileName,
   buildShareHtmlDocument,
@@ -450,8 +450,7 @@ const props = defineProps<{
   initialToolReviewPanelOpen: boolean;
   conversationListTab: "local" | "contact" | "task";
   chatLeftPanelMode: "local" | "contact" | "task";
-  chatRightPanelMode: "reader" | "review" | "delegate";
-  chatReaderDirectoryOpenRequest: number;
+  chatRightPanelMode: ChatRightPanelMode;
   config: AppConfig;
   configTab: "welcome" | "hotkey" | "api" | "tools" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "networkAccess" | "remoteIm" | "usage" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
   localeOptions: Array<{ value: "zh-CN" | "en-US" | "zh-TW"; label: string }>;
@@ -691,7 +690,7 @@ const props = defineProps<{
   setChatSidePanelWidths: (value: { leftWidth: number; rightWidth: number }, options?: { syncWindow?: boolean; commit?: boolean }) => void;
   updateConversationListTab: (value: "local" | "contact" | "task") => void;
   updateChatLeftPanelMode: (value: "local" | "contact" | "task") => void;
-  updateChatRightPanelMode: (value: "reader" | "review" | "delegate") => void;
+  updateChatRightPanelMode: (value: ChatRightPanelMode) => void;
   removeClipboardImage: (index: number) => void;
   removeQueuedAttachmentNotice: (index: number) => void;
   pickAttachments: () => void;

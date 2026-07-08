@@ -12,9 +12,6 @@
       :side-conversation-list-visible="sideConversationListVisible"
       :tool-review-panel-open-visible="toolReviewPanelOpenVisible"
       :chat-side-panel-widths="chatSidePanelWidths || { leftWidth: 320, rightWidth: 320 }"
-      :conversation-list-tab="conversationListTab || 'local'"
-      :chat-left-panel-mode="chatLeftPanelMode || 'local'"
-      :chat-right-panel-mode="chatRightPanelMode || 'review'"
       :active-conversation-id="activeConversationId"
       :current-department-id="currentDepartmentId"
       :conversation-items="conversationItems || []"
@@ -34,10 +31,6 @@
       :pipeline-status-enabled="false"
       @toggle-side-conversation-list="$emit('toggleSideConversationList')"
       @toggle-tool-review-panel="$emit('toggleToolReviewPanel')"
-      @open-reader-directory-if-empty="$emit('openReaderDirectoryIfEmpty')"
-      @update:conversation-list-tab="$emit('updateConversationListTab', $event)"
-      @update:chat-left-panel-mode="$emit('updateChatLeftPanelMode', $event)"
-      @update:chat-right-panel-mode="$emit('updateChatRightPanelMode', $event)"
       @open-settings="$emit('openSettings')"
       @create-conversation="$emit('createConversation', $event)"
       @trim-conversation="$emit('compactConversation')"
@@ -124,9 +117,6 @@ const props = defineProps<{
   sideConversationListVisible?: boolean;
   toolReviewPanelOpenVisible?: boolean;
   chatSidePanelWidths?: { leftWidth: number; rightWidth: number };
-  conversationListTab?: "local" | "contact" | "task";
-  chatLeftPanelMode?: "local" | "contact" | "task";
-  chatRightPanelMode?: "reader" | "review" | "delegate";
   currentDepartmentId?: string;
   conversationItems?: ChatConversationOverviewItem[];
   currentWorkspaces?: ShellWorkspace[];
@@ -159,10 +149,6 @@ defineEmits<{
   toggleReviewPanel: [];
   toggleSideConversationList: [];
   toggleToolReviewPanel: [];
-  openReaderDirectoryIfEmpty: [];
-  updateConversationListTab: [value: "local" | "contact" | "task"];
-  updateChatLeftPanelMode: [value: "local" | "contact" | "task"];
-  updateChatRightPanelMode: [value: "reader" | "review" | "delegate"];
   createConversation: [input?: { title?: string; departmentId?: string; agentId?: string; copyCurrent?: boolean; importPath?: string; shellWorkspaces?: ShellWorkspace[]; shellAutonomousMode?: boolean }];
   directoryPickRestricted: [];
 }>();

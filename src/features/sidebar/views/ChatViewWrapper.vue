@@ -85,7 +85,6 @@
     :conversation-list-tab="conversationListTab"
     :chat-left-panel-mode="chatLeftPanelMode"
     :chat-right-panel-mode="chatRightPanelMode"
-    :reader-directory-open-request="readerDirectoryOpenRequest"
     @update:chat-input="$emit('update:input', $event)"
     @send-chat="$emit('send', $event)"
     @stop-chat="$emit('stop')"
@@ -157,6 +156,7 @@ import {
 import { stableRenderIdFromMessage } from "../../chat/utils/stable-render-id";
 import ChatView from "../../chat/views/ChatView.vue";
 import { useChatMessageBlocks } from "../../chat/composables/use-chat-turns";
+import type { ChatRightPanelMode } from "../../chat/composables/chat-ui-layout-storage";
 import type { TerminalApprovalConversationItem } from "../../shell/composables/use-terminal-approval";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
 import { useAppTheme } from "../../shell/composables/use-app-theme";
@@ -226,8 +226,7 @@ const props = defineProps<{
   toolReviewPanelOpenVisible: boolean;
   conversationListTab: "local" | "contact" | "task";
   chatLeftPanelMode: "local" | "contact" | "task";
-  chatRightPanelMode: "reader" | "review" | "delegate";
-  readerDirectoryOpenRequest?: number;
+  chatRightPanelMode: ChatRightPanelMode;
   supervisionActive?: boolean;
   supervisionTitle?: string;
 }>();
@@ -265,7 +264,7 @@ defineEmits<{
   sidePanelWidthsCommit: [value: { leftWidth: number; rightWidth: number }];
   updateConversationListTab: [value: "local" | "contact" | "task"];
   updateChatLeftPanelMode: [value: "local" | "contact" | "task"];
-  updateChatRightPanelMode: [value: "reader" | "review" | "delegate"];
+  updateChatRightPanelMode: [value: ChatRightPanelMode];
 }>();
 
 const allMessages = shallowRef<ChatMessage[]>([]);

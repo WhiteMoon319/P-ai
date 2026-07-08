@@ -438,11 +438,19 @@
           :session-key="chatFileReaderSessionKey"
           :legacy-session-key="legacyChatFileReaderSessionKey"
           :enable-global-drop="false"
+          :show-pick-file-button="false"
           :markdown-is-dark="markdownIsDark"
           custom-markstream-id="chat-file-reader-markstream"
           @capture-context-reference="handleCaptureFileReaderContextReference"
           @clear-selection-context-reference="handleClearFileReaderSelectionContextReference"
         >
+          <template #tabLeadingActions>
+            <ChatRightPanelSwitcher
+              :model-value="chatRightPanelMode"
+              :monitor-value="monitorRightPanelMode"
+              @update:model-value="selectChatRightPanelMode"
+            />
+          </template>
           <template #empty>
             <div class="space-y-2 px-5 text-center">
               <div class="font-medium text-base-content/70">选择文件开始阅读</div>
@@ -450,25 +458,42 @@
             </div>
           </template>
         </FileReaderPanel>
-        <ToolReviewSidebar v-else ref="toolReviewSidebarRef" class="w-full"
-          :batches="toolReviewBatches" :current-batch-key="toolReviewCurrentBatchKey"
-          :detail-map="toolReviewDetailMap" :detail-loading-call-id="toolReviewDetailLoadingCallId"
-          :reviewing-call-id="toolReviewReviewingCallId" :batch-reviewing-key="toolReviewBatchReviewingKey"
-          :error-text="toolReviewErrorText"
-          :markdown-is-dark="markdownIsDark"
-          :active-conversation-id="activeConversationId"
-          :current-workspace-name="currentWorkspaceName" :current-workspace-root-path="currentWorkspaceRootPath"
-          :workspaces="workspaces" :current-department-id="currentDepartmentId"
-          :department-options="toolReviewDepartmentOptions"
-          :delegate-statuses="delegateStatuses"
-          :delegate-statuses-error-text="delegateStatusesErrorText"
-          :persona-avatar-url-map="personaAvatarUrlMap"
-          :bridge-request="bridgeRequest"
-          @select-batch="setToolReviewCurrentBatchKey" @load-item-detail="loadToolReviewItemDetail"
-          @review-item="runToolReviewForCall" @review-batch="runToolReviewForBatch"
-          @open-delegate-detail="openDelegateArchiveDetail"
-          @abort-delegate="abortDelegate"
-        />
+        <div v-else class="flex h-full min-h-0 w-full flex-col bg-base-200">
+          <PanelTabStrip
+            :tabs="monitorPanelTabs"
+            :active-key="chatRightPanelMode"
+            :aria-label="t('chat.monitorPanelTab')"
+            @select-tab="selectMonitorPanelTab"
+          >
+            <template #leading>
+              <ChatRightPanelSwitcher
+                :model-value="chatRightPanelMode"
+                :monitor-value="monitorRightPanelMode"
+                @update:model-value="selectChatRightPanelMode"
+              />
+            </template>
+          </PanelTabStrip>
+          <ToolReviewSidebar class="min-h-0 flex-1"
+            :active-tab="toolReviewSidebarActiveTab"
+            :batches="toolReviewBatches" :current-batch-key="toolReviewCurrentBatchKey"
+            :detail-map="toolReviewDetailMap" :detail-loading-call-id="toolReviewDetailLoadingCallId"
+            :reviewing-call-id="toolReviewReviewingCallId" :batch-reviewing-key="toolReviewBatchReviewingKey"
+            :error-text="toolReviewErrorText"
+            :markdown-is-dark="markdownIsDark"
+            :active-conversation-id="activeConversationId"
+            :current-workspace-name="currentWorkspaceName" :current-workspace-root-path="currentWorkspaceRootPath"
+            :workspaces="workspaces" :current-department-id="currentDepartmentId"
+            :department-options="toolReviewDepartmentOptions"
+            :delegate-statuses="delegateStatuses"
+            :delegate-statuses-error-text="delegateStatusesErrorText"
+            :persona-avatar-url-map="personaAvatarUrlMap"
+            :bridge-request="bridgeRequest"
+            @select-batch="setToolReviewCurrentBatchKey" @load-item-detail="loadToolReviewItemDetail"
+            @review-item="runToolReviewForCall" @review-batch="runToolReviewForBatch"
+            @open-delegate-detail="openDelegateArchiveDetail"
+            @abort-delegate="abortDelegate"
+          />
+        </div>
       </div>
     </div>
 
@@ -504,7 +529,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch, type ComponentPublicInstance, type Ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { isDarkAppTheme } from "../../shell/composables/use-app-theme";
 import { ArrowDownToLine, Check, ChevronsDown, ChevronsUp, History, Trash2, X } from "@lucide/vue";
@@ -518,8 +543,10 @@ import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import ChatConversationSidebar from "../components/ChatConversationSidebar.vue";
 import ChatWorkspaceToolbar from "../components/ChatWorkspaceToolbar.vue";
 import ToolReviewSidebar from "../components/ToolReviewSidebar.vue";
+import ChatRightPanelSwitcher from "../components/ChatRightPanelSwitcher.vue";
 import ToolReviewTargetDialog from "../components/ToolReviewTargetDialog.vue";
 import FileReaderPanel from "../../file-reader/components/FileReaderPanel.vue";
+import PanelTabStrip from "../../shared/components/PanelTabStrip.vue";
 import ChatImagePreviewDialog from "../components/dialogs/ChatImagePreviewDialog.vue";
 import ChatSupervisionTaskDialog from "../components/dialogs/ChatSupervisionTaskDialog.vue";
 import TaskCreateCard from "../components/dialogs/TaskCreateCard.vue";
@@ -542,6 +569,7 @@ import { useChatConversationCtx } from "../composables/use-chat-conversation-ctx
 import { useChatScrollOrchestration } from "../composables/use-chat-scroll-orchestration";
 import { useChatToolReviewHandlers } from "../composables/use-chat-tool-review-handlers";
 import type { ToolReviewCodeReviewScope, ToolReviewCommitOption } from "../composables/use-chat-tool-review";
+import type { ChatRightPanelMode } from "../composables/chat-ui-layout-storage";
 import { useChatBlockTracking } from "../composables/use-chat-block-tracking";
 import type { TaskEntry } from "../../config/views/config-tabs/task-editor";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
@@ -582,8 +610,7 @@ const props = defineProps<{
   initialToolReviewPanelOpen: boolean;
   conversationListTab: "local" | "contact" | "task";
   chatLeftPanelMode: "local" | "contact" | "task";
-  chatRightPanelMode: "reader" | "review" | "delegate";
-  readerDirectoryOpenRequest?: number;
+  chatRightPanelMode: ChatRightPanelMode;
   createConversationDepartmentOptions: DepartmentPersonaOption[];
   recipientOptionsReady?: boolean;
   defaultCreateConversationDepartmentId: string;
@@ -611,7 +638,7 @@ const emit = defineEmits<{
   (e: "sidePanelWidthsCommit", value: { leftWidth: number; rightWidth: number }): void;
   (e: "update:conversation-list-tab", value: "local" | "contact" | "task"): void;
   (e: "update:chatLeftPanelMode", value: "local" | "contact" | "task"): void;
-  (e: "update:chatRightPanelMode", value: "reader" | "review" | "delegate"): void;
+  (e: "update:chatRightPanelMode", value: ChatRightPanelMode): void;
   (e: "removeClipboardImage", index: number): void;
   (e: "removeQueuedAttachmentNotice", index: number): void;
   (e: "startRecording"): void; (e: "stopRecording"): void; (e: "pickAttachments"): void;
@@ -659,9 +686,6 @@ const emit = defineEmits<{
 // ==================== basic state ====================
 
 const { t } = useI18n();
-const toolReviewSidebarRef = ref<ComponentPublicInstance<{
-  openDelegatesTab: () => void;
-}> | null>(null);
 const chatReaderPanelRef = ref<InstanceType<typeof FileReaderPanel> | null>(null);
 const chatScrollbarRef = ref<InstanceType<typeof FloatingScrollbar> | null>(null);
 const linkOpenErrorText = ref("");
@@ -684,6 +708,35 @@ const commitOptionsLoading = ref(false);
 const commitTotal = ref(0);
 const commitPage = ref(1);
 const commitPageSize = ref(5);
+
+type ChatMonitorPanelMode = Exclude<ChatRightPanelMode, "reader">;
+type ToolReviewSidebarTab = "tools" | "delegates" | "tasks" | "fastRequests";
+
+const monitorRightPanelMode = ref<ChatMonitorPanelMode>("delegate");
+
+const monitorPanelTabs = computed<Array<{ key: ChatMonitorPanelMode; label: string; closeable: false }>>(() => [
+  { key: "delegate", label: t("chat.toolReview.delegatesTab"), closeable: false },
+  { key: "tasks", label: t("chat.toolReview.tasksTab"), closeable: false },
+  { key: "tools", label: t("chat.toolReview.toolsTab"), closeable: false },
+  { key: "fastRequests", label: t("chat.fastRequest.tab"), closeable: false },
+]);
+
+const toolReviewSidebarActiveTab = computed<ToolReviewSidebarTab>(() => {
+  if (props.chatRightPanelMode === "tools") return "tools";
+  if (props.chatRightPanelMode === "fastRequests") return "fastRequests";
+  if (props.chatRightPanelMode === "tasks") return "tasks";
+  return "delegates";
+});
+
+watch(
+  () => props.chatRightPanelMode,
+  (mode) => {
+    if (mode !== "reader") {
+      monitorRightPanelMode.value = mode;
+    }
+  },
+  { immediate: true },
+);
 // ==================== context computed ====================
 
 const {
@@ -1219,12 +1272,9 @@ const {
 });
 const effectiveToolReviewPanelOpen = computed(() => !sidebarMode.value && toolReviewPanelOpen.value);
 
-async function openReaderDirectoryFromTitleBarIfEmpty(request: number) {
-  const requestId = Number(request || 0);
-  if (!requestId) return;
+async function openChatReaderDirectoryIfEmpty() {
   await nextTick();
   await nextTick();
-  if (requestId !== Number(props.readerDirectoryOpenRequest || 0)) return;
   if (!effectiveToolReviewPanelOpen.value || props.chatRightPanelMode !== "reader") return;
   const panel = chatReaderPanelRef.value;
   const workspaceRootPath = String(props.currentWorkspaceRootPath || "").trim();
@@ -1234,12 +1284,18 @@ async function openReaderDirectoryFromTitleBarIfEmpty(request: number) {
   await panel.openDirectoryTree(workspaceRootPath);
 }
 
-watch(
-  () => props.readerDirectoryOpenRequest,
-  (request) => {
-    void openReaderDirectoryFromTitleBarIfEmpty(Number(request || 0));
-  },
-);
+function selectChatRightPanelMode(mode: ChatRightPanelMode) {
+  emit("update:chatRightPanelMode", mode);
+  emit("toolReviewPanelOpenChange", true);
+  if (mode === "reader") {
+    void openChatReaderDirectoryIfEmpty();
+  }
+}
+
+function selectMonitorPanelTab(key: string) {
+  if (key !== "delegate" && key !== "tasks" && key !== "tools" && key !== "fastRequests") return;
+  selectChatRightPanelMode(key);
+}
 
 // ==================== delegate status ====================
 
@@ -1483,7 +1539,6 @@ async function handleSubmitCodeReview(input: { scope: ToolReviewCodeReviewScope;
 function openDelegateSummaryPanel() {
   emit("update:chatRightPanelMode", "delegate");
   emit("toolReviewPanelOpenChange", true);
-  void nextTick(() => toolReviewSidebarRef.value?.openDelegatesTab());
 }
 
 function handleSendChat() {

@@ -1,11 +1,12 @@
 export type ChatLeftPanelMode = "local" | "contact" | "task";
-export type ChatRightPanelMode = "reader" | "review" | "delegate";
+export type ChatRightPanelMode = "reader" | "delegate" | "tools" | "fastRequests" | "tasks";
 export type ChatSidePanelSide = "left" | "right";
 export type ChatSidePanelWidths = { leftWidth: number; rightWidth: number };
 
 const CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY = "easy_call.chat_conversation_list_tab.v1";
 const CHAT_LEFT_PANEL_MODE_STORAGE_KEY = "easy_call.chat_left_panel_mode.v1";
 const CHAT_RIGHT_PANEL_MODE_STORAGE_KEY = "easy_call.chat_right_panel_mode.v1";
+const CHAT_RIGHT_PANEL_MODE_BY_CONVERSATION_STORAGE_PREFIX = "easy_call.chat_right_panel_mode.conversation.v1.";
 const LEGACY_CHAT_LEFT_PANEL_MODE_STORAGE_KEY = "easy-call.chat.left-panel-mode";
 const LEGACY_CHAT_RIGHT_PANEL_MODE_STORAGE_KEY = "easy-call.chat.right-panel-mode";
 const CHAT_SIDE_PANEL_VISIBILITY_STORAGE_KEYS = {
@@ -30,8 +31,9 @@ export function normalizeChatLeftPanelMode(value: string): ChatLeftPanelMode {
   return "local";
 }
 
-export function normalizeChatRightPanelMode(value: string, fallback: ChatRightPanelMode = "delegate"): ChatRightPanelMode {
-  if (value === "reader" || value === "review" || value === "delegate") return value;
+export function normalizeChatRightPanelMode(value: string, fallback: ChatRightPanelMode = "reader"): ChatRightPanelMode {
+  if (value === "reader" || value === "delegate" || value === "tools" || value === "fastRequests" || value === "tasks") return value;
+  if (value === "review") return "tools";
   return fallback;
 }
 
@@ -70,8 +72,18 @@ export function storeChatLeftPanelMode(value: ChatLeftPanelMode) {
   window.localStorage.setItem(CHAT_LEFT_PANEL_MODE_STORAGE_KEY, normalizeChatLeftPanelMode(value));
 }
 
-export function loadStoredChatRightPanelMode(fallback: ChatRightPanelMode = "delegate"): ChatRightPanelMode {
+function chatRightPanelModeConversationStorageKey(conversationId: string) {
+  const normalizedId = String(conversationId || "").trim();
+  return normalizedId ? `${CHAT_RIGHT_PANEL_MODE_BY_CONVERSATION_STORAGE_PREFIX}${normalizedId}` : "";
+}
+
+export function loadStoredChatRightPanelMode(fallback: ChatRightPanelMode = "reader", conversationId = ""): ChatRightPanelMode {
   if (typeof window === "undefined") return fallback;
+  const conversationKey = chatRightPanelModeConversationStorageKey(conversationId);
+  if (conversationKey) {
+    const storedForConversation = String(window.localStorage.getItem(conversationKey) || "").trim();
+    return storedForConversation ? normalizeChatRightPanelMode(storedForConversation, fallback) : fallback;
+  }
   const stored = String(
     window.localStorage.getItem(CHAT_RIGHT_PANEL_MODE_STORAGE_KEY)
     || window.localStorage.getItem(LEGACY_CHAT_RIGHT_PANEL_MODE_STORAGE_KEY)
@@ -80,9 +92,15 @@ export function loadStoredChatRightPanelMode(fallback: ChatRightPanelMode = "del
   return normalizeChatRightPanelMode(stored, fallback);
 }
 
-export function storeChatRightPanelMode(value: ChatRightPanelMode) {
+export function storeChatRightPanelMode(value: ChatRightPanelMode, conversationId = "") {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(CHAT_RIGHT_PANEL_MODE_STORAGE_KEY, normalizeChatRightPanelMode(value));
+  const normalized = normalizeChatRightPanelMode(value);
+  const conversationKey = chatRightPanelModeConversationStorageKey(conversationId);
+  if (conversationKey) {
+    window.localStorage.setItem(conversationKey, normalized);
+    return;
+  }
+  window.localStorage.setItem(CHAT_RIGHT_PANEL_MODE_STORAGE_KEY, normalized);
 }
 
 export function loadStoredChatSidePanelVisibility(side: ChatSidePanelSide): boolean {

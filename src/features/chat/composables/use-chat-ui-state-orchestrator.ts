@@ -39,8 +39,7 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
 
   const conversationListTab = ref<ChatLeftPanelMode>(loadStoredConversationListTab());
   const chatLeftPanelMode = ref<ChatLeftPanelMode>(loadStoredChatLeftPanelMode());
-  const chatRightPanelMode = ref<ChatRightPanelMode>(loadStoredChatRightPanelMode("delegate"));
-  const chatReaderDirectoryOpenRequest = ref(0);
+  const chatRightPanelMode = ref<ChatRightPanelMode>("reader");
   const sideConversationListVisible = ref(loadStoredChatSidePanelVisibility("left"));
   const toolReviewPanelOpenVisible = ref(loadStoredChatSidePanelVisibility("right"));
   const chatSidePanelWidths = ref(loadStoredChatSidePanelWidths());
@@ -183,17 +182,16 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
   }
 
   function updateChatRightPanelMode(value: ChatRightPanelMode) {
-    const nextMode = normalizeChatRightPanelMode(value, "delegate");
+    const nextMode = normalizeChatRightPanelMode(value, "reader");
     chatRightPanelMode.value = nextMode;
-    storeChatRightPanelMode(nextMode);
+    const conversationId = String(bindings.currentChatConversationId.value || "").trim();
+    if (conversationId) {
+      storeChatRightPanelMode(nextMode, conversationId);
+    }
     if (!toolReviewPanelOpenVisible.value && bindings.viewMode.value === "chat") {
       toolReviewPanelOpenVisible.value = true;
       storeChatSidePanelVisibility("right", true);
     }
-  }
-
-  function requestChatReaderDirectoryOpenIfEmpty() {
-    chatReaderDirectoryOpenRequest.value += 1;
   }
 
   function handleChatSidePanelWidthsChange(value: { leftWidth: number; rightWidth: number }, options?: { commit?: boolean; syncWindow?: boolean }) {
@@ -222,9 +220,13 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
 
   watch(
     () => String(bindings.currentChatConversationId.value || "").trim(),
-    () => {
+    (conversationId) => {
       selectedChatMentions.value = [];
+      chatRightPanelMode.value = conversationId
+        ? loadStoredChatRightPanelMode("reader", conversationId)
+        : "reader";
     },
+    { immediate: true },
   );
 
   return {
@@ -236,7 +238,6 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     conversationListTab,
     chatLeftPanelMode,
     chatRightPanelMode,
-    chatReaderDirectoryOpenRequest,
     sideConversationListVisible,
     toolReviewPanelOpenVisible,
     chatSidePanelWidths,
@@ -251,7 +252,6 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     updateConversationListTab,
     updateChatLeftPanelMode,
     updateChatRightPanelMode,
-    requestChatReaderDirectoryOpenIfEmpty,
     handleChatSidePanelWidthsChange,
     toggleSideConversationList,
     toggleToolReviewPanel,

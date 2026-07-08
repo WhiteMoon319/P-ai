@@ -1,54 +1,39 @@
 <template>
   <div class="relative flex h-full min-h-0 flex-col bg-base-100 text-base-content">
-    <div
+    <PanelTabStrip
       v-if="showTabs"
-      class="flex h-8 shrink-0 items-stretch overflow-hidden bg-base-200 px-2"
+      :tabs="fileReaderPanelTabs"
+      :active-key="activePath"
+      :aria-label="t('fileReader.tabs')"
+      :close-title="t('fileReader.close')"
+      @select-tab="setActiveTab"
+      @close-tab="closeTab"
     >
-      <button
-        v-if="showPickFileButton"
-        class="btn btn-ghost btn-sm shrink-0"
-        type="button"
-        :title="t('fileReader.openFile')"
-        @click.stop="pickFile"
-      >
-        <FilePlus class="h-4 w-4" />
-      </button>
-      <div class="flex min-w-0 flex-1 items-stretch overflow-hidden">
-        <div
-          v-for="tab in tabs"
-          :key="tab.path"
-          class="group flex min-w-24 max-w-56 flex-none items-center gap-2 overflow-hidden border border-b-0 px-2 text-sm"
-          :class="tab.path === activePath ? 'border-base-300 bg-base-100 text-base-content' : 'border-transparent bg-base-200 text-base-content/65 hover:bg-base-100/70 hover:text-base-content'"
-          :title="tab.path"
-          role="button"
-          tabindex="0"
-          :aria-selected="tab.path === activePath"
-          @click="setActiveTab(tab.path)"
-          @keydown.enter.prevent="setActiveTab(tab.path)"
-          @keydown.space.prevent="setActiveTab(tab.path)"
-        >
-          <img :src="resolvePathIcon(tab.path)" alt="" class="file-reader-tree-icon h-4 w-4 shrink-0 object-contain" />
-          <span class="min-w-0 flex-1 truncate font-medium">{{ tab.title }}</span>
+      <template #leading>
+        <slot name="tabLeadingActions">
           <button
+            v-if="showPickFileButton"
+            class="btn btn-ghost btn-sm shrink-0"
             type="button"
-            class="btn btn-ghost btn-xs h-5 min-h-5 w-5 p-0 opacity-60 hover:opacity-100"
-            :title="t('fileReader.close')"
-            @click.stop="closeTab(tab.path)"
+            :title="t('fileReader.openFile')"
+            @click.stop="pickFile"
           >
-            <X class="h-3.5 w-3.5" />
+            <FilePlus class="size-4" />
           </button>
-        </div>
-      </div>
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm h-8 min-h-8 w-8 shrink-0 px-0"
-        :disabled="!directoryToggleTargetPath"
-        :title="directoryTreeRoot ? t('fileReader.collapseTree') : t('fileReader.expandTree', { path: directoryToggleTargetPath })"
-        @click="toggleDirectoryTree"
-      >
-        <Folders class="h-4 w-4" />
-      </button>
-    </div>
+        </slot>
+      </template>
+      <template #actions>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm btn-square shrink-0"
+          :disabled="!directoryToggleTargetPath"
+          :title="directoryTreeRoot ? t('fileReader.collapseTree') : t('fileReader.expandTree', { path: directoryToggleTargetPath })"
+          @click="toggleDirectoryTree"
+        >
+          <Folders class="size-4" />
+        </button>
+      </template>
+    </PanelTabStrip>
 
     <div ref="fileReaderLayoutRoot" class="relative flex min-h-0 flex-1" :class="directoryOnly ? '' : 'flex-row-reverse'">
       <aside
@@ -563,10 +548,11 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { ChevronDown, ChevronRight, Code2, Eye, ExternalLink, FilePlus, Folders, RefreshCw, Search, SquareTerminal, X } from "@lucide/vue";
+import { ChevronDown, ChevronRight, Code2, Eye, ExternalLink, FilePlus, Folders, RefreshCw, Search, SquareTerminal } from "@lucide/vue";
 import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
 import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
+import PanelTabStrip from "../../shared/components/PanelTabStrip.vue";
 import { useI18n } from "vue-i18n";
 import type { IdeContextReferenceItem } from "../../../types/app";
 import { CONTEXT_TEXT_BLOCK_CONTENT_LIMIT } from "../constants";
@@ -785,6 +771,16 @@ function isHoverDirectoryCollapsed(path: string) {
 function resolvePathIcon(path: string) {
   return resolveFileTreeIcon(path, false, false);
 }
+
+const fileReaderPanelTabs = computed(() =>
+  tabs.value.map((tab) => ({
+    key: tab.path,
+    label: tab.title,
+    title: tab.path,
+    iconSrc: resolvePathIcon(tab.path),
+    closeable: true,
+  })),
+);
 
 function resolveTreeEntryIcon(entry: FileReaderDirectoryEntry) {
   return resolveFileTreeIcon(entry.path, entry.isDirectory, entry.isDirectory && isTreeDirectoryExpanded(entry.path));

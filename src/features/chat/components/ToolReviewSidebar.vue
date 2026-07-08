@@ -1,12 +1,5 @@
 <template>
   <aside v-bind="rootAttrs" class="w-full flex h-full min-h-0 flex-col bg-base-200">
-    <div role="tablist" class="tabs tabs-border overflow-x-auto whitespace-nowrap px-2 pb-2">
-      <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'delegates' }" @click="activeTab = 'delegates'">{{ t("chat.toolReview.delegatesTab") }}</button>
-      <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'tasks' }" @click="activeTab = 'tasks'">{{ t("chat.toolReview.tasksTab") }}</button>
-      <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'tools' }" @click="activeTab = 'tools'">{{ t("chat.toolReview.toolsTab") }}</button>
-      <button type="button" role="tab" class="tab" :class="{ 'tab-active': activeTab === 'fastRequests' }" @click="activeTab = 'fastRequests'">{{ t("chat.fastRequest.tab") }}</button>
-    </div>
-
     <div ref="contentScroller" class="ecall-chat-scroll-container flex min-h-0 flex-1 flex-col overflow-y-auto p-1">
       <div v-if="errorText" class="mx-4 my-4 rounded-box border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
         {{ errorText }}
@@ -212,7 +205,10 @@ import type { TaskEntry } from "../../config/views/config-tabs/task-editor";
 
 initKatex();
 
+type ToolReviewSidebarTab = "tools" | "delegates" | "tasks" | "fastRequests";
+
 const props = defineProps<{
+  activeTab: ToolReviewSidebarTab;
   batches: ToolReviewBatchSummary[];
   currentBatchKey: string;
   detailMap: Record<string, ToolReviewItemDetail>;
@@ -243,7 +239,6 @@ const emit = defineEmits<{
 }>();
 
 const { t, locale } = useI18n();
-const activeTab = ref<"tools" | "delegates" | "tasks" | "fastRequests">("delegates");
 const contentScroller = ref<HTMLElement | null>(null);
 const delegateResultDialogOpen = ref(false);
 const delegateResultLoading = ref(false);
@@ -710,14 +705,6 @@ function handleTaskMutated(task: TaskEntry) {
   taskEditorTask.value = task;
   void loadConversationTasks();
 }
-
-function openDelegatesTab() {
-  activeTab.value = "delegates";
-}
-
-defineExpose({
-  openDelegatesTab,
-});
 
 function isDelegateRunning(delegate: ConversationDelegateStatusSummary) {
   const status = String(delegate.status || "").trim();

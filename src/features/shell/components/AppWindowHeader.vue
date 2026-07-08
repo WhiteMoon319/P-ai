@@ -28,11 +28,12 @@
         ></span>
         <button
           class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
-          :class="sideConversationListVisible ? 'btn-active' : ''"
+          :class="sideConversationListVisible ? 'btn-active bg-base-100 hover:bg-base-100' : ''"
           :title="t('chat.conversationList')"
           @click.stop="emit('toggle-side-conversation-list')"
         >
-          <LayoutList class="h-3.5 w-3.5" />
+          <PanelLeftClose v-if="sideConversationListVisible" class="h-3.5 w-3.5" />
+          <PanelLeft v-else class="h-3.5 w-3.5" />
         </button>
       </div>
     </div>
@@ -50,11 +51,12 @@
           ></span>
           <button
             class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
-            :class="sideConversationListVisible ? 'btn-active' : ''"
+            :class="sideConversationListVisible ? 'btn-active bg-base-100 hover:bg-base-100' : ''"
             :title="t('chat.conversationList')"
             @click.stop="emit('toggle-side-conversation-list')"
           >
-            <LayoutList class="h-3.5 w-3.5" />
+            <PanelLeftClose v-if="sideConversationListVisible" class="h-3.5 w-3.5" />
+            <PanelLeft v-else class="h-3.5 w-3.5" />
           </button>
         </div>
         <button
@@ -117,24 +119,14 @@
       class="relative z-30 flex h-full min-w-0 flex-nowrap items-center justify-end gap-1 px-2"
     >
       <button
-        type="button"
-        class="btn btn-ghost btn-sm btn-square h-8 min-h-8 w-8 shrink-0"
-        :class="toolReviewPanelOpenVisible && chatRightPanelMode === 'reader' ? 'btn-active' : ''"
-        :title="t('chat.readerPanelTab')"
+        class="btn btn-ghost btn-sm"
+        :class="toolReviewPanelOpenVisible ? 'btn-active bg-base-100 hover:bg-base-100' : ''"
+        :title="t('chat.rightSidebarToggle')"
         @mousedown.stop
-        @click.stop="toggleChatRightPanelMode('reader')"
+        @click.stop="$emit('toggle-tool-review-panel')"
       >
-        <Files class="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm btn-square h-8 min-h-8 w-8 shrink-0"
-        :class="toolReviewPanelOpenVisible && chatRightPanelMode !== 'reader' ? 'btn-active' : ''"
-        :title="t('chat.delegatePanelTab')"
-        @mousedown.stop
-        @click.stop="toggleChatRightPanelMode('delegate')"
-      >
-        <View class="h-3.5 w-3.5" />
+        <PanelRightClose v-if="toolReviewPanelOpenVisible" class="h-3.5 w-3.5" />
+        <PanelRight v-else class="h-3.5 w-3.5" />
       </button>
 
       <button
@@ -469,7 +461,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
-import { Download, Files, FoldVertical, FolderOpen, History, LayoutList, Minus, ScrollText, Search, Settings, Square, SquarePen, View, X } from "@lucide/vue";
+import { Download, FoldVertical, FolderOpen, History, Minus, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose, ScrollText, Search, Settings, Square, SquarePen, X } from "@lucide/vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ShellWorkspace, ShellWorkspaceAccess } from "../../../types/app";
 import { defaultWorkspaceNameFromPath } from "../../../utils/shell-workspaces";
 import { buildWorkspaceConversationSections } from "../../chat/utils/conversation-sections";
@@ -523,9 +515,6 @@ const props = withDefaults(defineProps<{
   sideConversationListVisible: boolean;
   toolReviewPanelOpenVisible: boolean;
   chatSidePanelWidths: { leftWidth: number; rightWidth: number };
-  conversationListTab: "local" | "contact" | "task";
-  chatLeftPanelMode: "local" | "contact" | "task";
-  chatRightPanelMode: "reader" | "review" | "delegate";
   activeConversationId: string;
   currentDepartmentId?: string;
   conversationItems: ChatConversationOverviewItem[];
@@ -571,10 +560,6 @@ const emit = defineEmits<{
   (e: "open-archives"): void;
   (e: "toggle-side-conversation-list"): void;
   (e: "toggle-tool-review-panel"): void;
-  (e: "open-reader-directory-if-empty"): void;
-  (e: "update:conversation-list-tab", value: "local" | "contact" | "task"): void;
-  (e: "update:chat-left-panel-mode", value: "local" | "contact" | "task"): void;
-  (e: "update:chat-right-panel-mode", value: "reader" | "review" | "delegate"): void;
   (e: "minimize-window"): void;
   (e: "toggle-maximize-window"): void;
   (e: "switch-conversation", payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }): void;
@@ -1095,18 +1080,6 @@ function isInteractiveHeaderTarget(target: HTMLElement): boolean {
   return Boolean(
     target.closest("button, input, textarea, select, option, a, label, summary, [role='button'], [contenteditable='true'], [data-no-drag]"),
   );
-}
-
-function toggleChatRightPanelMode(mode: "reader" | "delegate") {
-  const currentMode = props.chatRightPanelMode === "reader" ? "reader" : "delegate";
-  if (props.toolReviewPanelOpenVisible && currentMode === mode) {
-    emit("toggle-tool-review-panel");
-    return;
-  }
-  emit("update:chat-right-panel-mode", mode);
-  if (mode === "reader") {
-    emit("open-reader-directory-if-empty");
-  }
 }
 
 function handleCreateConversation() {

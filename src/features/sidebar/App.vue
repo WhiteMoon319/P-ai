@@ -11,9 +11,6 @@
     :side-conversation-list-visible="sideConversationListVisible"
     :tool-review-panel-open-visible="toolReviewPanelOpenVisible"
     :chat-side-panel-widths="chatSidePanelWidths"
-    :conversation-list-tab="conversationListTab"
-    :chat-left-panel-mode="chatLeftPanelMode"
-    :chat-right-panel-mode="chatRightPanelMode"
     :current-department-id="activeDepartmentId"
     :conversation-items="chatConversationItems"
     :current-workspaces="sidebarShellWorkspaces"
@@ -30,10 +27,6 @@
     @toggle-review-panel="toggleReviewPanel"
     @toggle-side-conversation-list="toggleSideConversationList"
     @toggle-tool-review-panel="toggleToolReviewPanel"
-    @open-reader-directory-if-empty="requestChatReaderDirectoryOpenIfEmpty"
-    @update-conversation-list-tab="updateConversationListTab"
-    @update-chat-left-panel-mode="updateChatLeftPanelMode"
-    @update-chat-right-panel-mode="updateChatRightPanelMode"
     @create-conversation="handleCreateConversationRequest"
     @directory-pick-restricted="handleDirectoryPickRestricted"
   >
@@ -82,7 +75,6 @@
       :conversation-list-tab="conversationListTab"
       :chat-left-panel-mode="chatLeftPanelMode"
       :chat-right-panel-mode="chatRightPanelMode"
-      :reader-directory-open-request="chatReaderDirectoryOpenRequest"
       :supervision-active="sidebarSupervisionActive"
       :supervision-title="sidebarSupervisionTitle"
       @send="send"
@@ -633,8 +625,7 @@ const sideConversationListVisible = ref(loadStoredChatSidePanelVisibility("left"
 const toolReviewPanelOpenVisible = ref(loadStoredChatSidePanelVisibility("right"));
 const conversationListTab = ref<SidebarConversationTab>(loadStoredConversationListTab());
 const chatLeftPanelMode = ref<SidebarConversationTab>(loadStoredChatLeftPanelMode());
-const chatRightPanelMode = ref<ChatRightPanelMode>(loadStoredChatRightPanelMode("review"));
-const chatReaderDirectoryOpenRequest = ref(0);
+const chatRightPanelMode = ref<ChatRightPanelMode>("reader");
 const chatSidePanelWidths = ref(loadStoredChatSidePanelWidths());
 let discoveryRefreshTimer: number | null = null;
 
@@ -811,6 +802,16 @@ watch(
   { immediate: true },
 );
 
+watch(
+  () => String(activeConversationId.value || "").trim(),
+  (conversationId) => {
+    chatRightPanelMode.value = conversationId
+      ? loadStoredChatRightPanelMode("reader", conversationId)
+      : "reader";
+  },
+  { immediate: true },
+);
+
 function updateConversationListTab(value: SidebarConversationTab) {
   const next = normalizeChatLeftPanelMode(value);
   conversationListTab.value = next;
@@ -824,9 +825,12 @@ function updateChatLeftPanelMode(value: SidebarConversationTab) {
 }
 
 function updateChatRightPanelMode(value: ChatRightPanelMode) {
-  const next = normalizeChatRightPanelMode(value, "review");
+  const next = normalizeChatRightPanelMode(value, "reader");
   chatRightPanelMode.value = next;
-  storeChatRightPanelMode(next);
+  const conversationId = String(activeConversationId.value || "").trim();
+  if (conversationId) {
+    storeChatRightPanelMode(next, conversationId);
+  }
   view.value = "chat";
   handleToolReviewPanelOpenChange(true);
 }
@@ -848,10 +852,6 @@ function handleChatSidePanelWidthsChange(value: { leftWidth: number; rightWidth:
 function handleChatSidePanelWidthsCommit(value: { leftWidth: number; rightWidth: number }) {
   handleChatSidePanelWidthsChange(value);
   storeChatSidePanelWidths(chatSidePanelWidths.value);
-}
-
-function requestChatReaderDirectoryOpenIfEmpty() {
-  chatReaderDirectoryOpenRequest.value += 1;
 }
 
 function normalizeDiscovery(payload: DiscoveryPayload): SidebarBridgeConfig | null {
