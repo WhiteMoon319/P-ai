@@ -27,7 +27,7 @@
           @keydown.enter.prevent="setActiveTab(tab.path)"
           @keydown.space.prevent="setActiveTab(tab.path)"
         >
-          <FileText class="h-4 w-4 shrink-0 opacity-70" />
+          <img :src="resolvePathIcon(tab.path)" alt="" class="file-reader-tree-icon h-4 w-4 shrink-0 object-contain" />
           <span class="min-w-0 flex-1 truncate font-medium">{{ tab.title }}</span>
           <button
             type="button"
@@ -142,8 +142,11 @@
                   :title="row.entry.path"
                   @click="handleTreeEntryClick(row.entry)"
                 >
-                  <Folder v-if="row.entry.isDirectory" class="h-4 w-4 shrink-0 text-warning" />
-                  <FileText v-else class="h-4 w-4 shrink-0 opacity-70" />
+                  <img
+                    :src="resolveTreeEntryIcon(row.entry)"
+                    alt=""
+                    class="file-reader-tree-icon h-4 w-4 shrink-0 object-contain"
+                  />
                   <span class="min-w-0 truncate">{{ row.entry.name }}</span>
                 </button>
               </template>
@@ -428,8 +431,11 @@
                     :title="row.entry.path"
                     @click.stop="openFileFromHoverTree(row.entry)"
                   >
-                    <Folder v-if="row.entry.isDirectory" class="h-4 w-4 shrink-0 text-warning" />
-                    <FileText v-else class="h-4 w-4 shrink-0 opacity-70" />
+                    <img
+                      :src="resolveHoverTreeEntryIcon(row.entry)"
+                      alt=""
+                      class="file-reader-tree-icon h-4 w-4 shrink-0 object-contain"
+                    />
                     <span class="min-w-0 truncate">{{ row.entry.name }}</span>
                   </button>
                 </template>
@@ -501,7 +507,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { ChevronDown, ChevronRight, Code2, Eye, ExternalLink, FilePlus, FileText, Folder, Folders, RefreshCw, Search, SquareTerminal, X } from "@lucide/vue";
+import { ChevronDown, ChevronRight, Code2, Eye, ExternalLink, FilePlus, Folders, RefreshCw, Search, SquareTerminal, X } from "@lucide/vue";
 import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
 import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
@@ -509,6 +515,7 @@ import { useI18n } from "vue-i18n";
 import type { IdeContextReferenceItem } from "../../../types/app";
 import { CONTEXT_TEXT_BLOCK_CONTENT_LIMIT } from "../constants";
 import { useFileReaderVirtualCode } from "../composables/use-file-reader-virtual-code";
+import { resolveFileTreeIcon } from "../file-tree-icons";
 import type {
   DirectoryNode,
   FileReaderDirectoryEntry,
@@ -705,6 +712,18 @@ function isHoverDirectoryExpanded(path: string) {
 function isHoverDirectoryCollapsed(path: string) {
   const node = hoverDirectoryTreeNodes.value[normalizePath(path)];
   return node !== undefined && node.loaded && !node.loading && !node.expanded;
+}
+
+function resolvePathIcon(path: string) {
+  return resolveFileTreeIcon(path, false, false);
+}
+
+function resolveTreeEntryIcon(entry: FileReaderDirectoryEntry) {
+  return resolveFileTreeIcon(entry.path, entry.isDirectory, entry.isDirectory && isTreeDirectoryExpanded(entry.path));
+}
+
+function resolveHoverTreeEntryIcon(entry: FileReaderDirectoryEntry) {
+  return resolveFileTreeIcon(entry.path, entry.isDirectory, entry.isDirectory && isHoverDirectoryExpanded(entry.path));
 }
 
 const activeMarkdownSource = computed(() => {
@@ -2216,6 +2235,11 @@ defineExpose({
 }
 .file-reader-scroll-container::-webkit-scrollbar {
   display: none;
+}
+.file-reader-tree-icon {
+  filter:
+    drop-shadow(0 0 0.35px rgb(255 255 255 / 0.45))
+    drop-shadow(0 0 0.45px rgb(15 23 42 / 0.22));
 }
 .file-reader-resize-handle {
   width: 8px;
