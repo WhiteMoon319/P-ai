@@ -5,6 +5,7 @@
 
 ## 最近版本
 
+- [v0.19.5](docs/changelog/releases/v0.19.5.md) - 修复（window-drag-restore-default-size）：标题栏拖动窗口时，若当前窗口已最大化或尺寸已接近屏幕 92%，先恢复到默认尺寸再继续拖动，避免贴边放大后直接拖动仍保持近全屏尺寸。
 - [v0.19.3](docs/changelog/releases/v0.19.3.md) - 修复（chat-sidebar-attachment-downloads-and-missing-media）：侧边栏通过文件选择器添加附件时先统一入队并写入 `downloads/`，图片附件的预览与附件路径提示收敛为单一状态源，同时在历史媒体恢复阶段遇到缺失文件时跳过对应媒体并保持后续附件路径不串位。
 - [v0.19.2](docs/changelog/releases/v0.19.2.md) - 快速设置左上角入口改为“跳过快速设置”文字按钮，点击后更明确地进入设置页并隐藏快速设置窗口。
 - [v0.19.1](docs/changelog/releases/v0.19.1.md) - 修复（chat）：请求图片统一压缩为 WebP。

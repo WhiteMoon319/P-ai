@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-07T16:36:49.750Z",
-  "latestVersion": "v0.19.3",
+  "generatedAt": "2026-07-08T08:42:46.351Z",
+  "latestVersion": "v0.19.5",
   "releases": [
+    {
+      "version": "v0.19.5",
+      "path": "docs/changelog/releases/v0.19.5.md",
+      "summary": "修复（window-drag-restore-default-size）：标题栏拖动窗口时，若当前窗口已最大化或尺寸已接近屏幕 92%，先恢复到默认尺寸再继续拖动，避免贴边放大后直接拖动仍保持近全屏尺寸。"
+    },
     {
       "version": "v0.19.3",
       "path": "docs/changelog/releases/v0.19.3.md",
