@@ -1809,8 +1809,9 @@ ul.ecall-md-list {
 }
 
 .ecall-md-math-block-shell {
-  display: inline-block;
+  display: block;
   position: relative;
+  width: 100%;
   max-width: 100%;
   margin: 0.35rem 0;
   vertical-align: top;
@@ -1818,9 +1819,18 @@ ul.ecall-md-list {
 
 .ecall-md-math-block {
   margin: 0;
+  width: 100%;
+  max-width: 100%;
   overflow-x: auto;
+  overflow-y: hidden;
   padding: 0.1rem 2rem 0.1rem 0.25rem;
   text-align: center;
+  scrollbar-gutter: auto;
+}
+
+.ecall-md-math-block :where(.katex-display) {
+  margin: 0;
+  overflow: visible;
 }
 
 .ecall-md-math-fallback {

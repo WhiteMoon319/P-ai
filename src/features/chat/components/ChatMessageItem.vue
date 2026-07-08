@@ -2360,7 +2360,9 @@ function openResolvedImagePreview(
   --ms-flow-blockquote-indent: 0.68rem;
   min-width: 0;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow: visible !important;
+  max-height: none !important;
+  height: auto !important;
   font-family: inherit;
   font-size: 0.875rem;
   line-height: 1.5;
