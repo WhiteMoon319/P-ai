@@ -46,26 +46,29 @@
         :title="directoryTreeRoot ? t('fileReader.collapseTree') : t('fileReader.expandTree', { path: directoryToggleTargetPath })"
         @click="toggleDirectoryTree"
       >
-        <ListIndentIncrease v-if="directoryTreeRoot" class="h-4 w-4" />
-        <ListIndentDecrease v-else class="h-4 w-4" />
+        <Folders class="h-4 w-4" />
       </button>
     </div>
 
-    <div class="flex min-h-0 flex-1" :class="directoryOnly ? '' : 'flex-row-reverse'">
+    <div ref="fileReaderLayoutRoot" class="relative flex min-h-0 flex-1" :class="directoryOnly ? '' : 'flex-row-reverse'">
       <aside
         v-if="directoryTreeRoot"
         class="flex shrink-0 flex-col border-base-300 bg-base-200/35"
-        :class="directoryOnly ? 'w-full border-r-0' : 'w-64 border-l'"
+        :class="directoryOnly ? 'w-full border-r-0' : 'border-l'"
+        :style="directoryOnly ? undefined : { width: `${effectiveDirectoryTreeWidth}px` }"
       >
         <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-base-300 px-3 text-sm">
           <button
             v-if="tauriRuntimeAvailable"
             type="button"
-            class="btn btn-ghost btn-xs min-w-0 flex-1 truncate justify-start font-medium"
+            class="btn btn-ghost btn-xs min-w-0 flex-1 justify-start gap-1.5 overflow-hidden font-medium"
             :title="directoryTreeRoot.path"
             @click="openDirectoryInFileManager(directoryTreeRoot.path)"
             @contextmenu.prevent.stop="openPathOnlyContextMenu(directoryTreeRoot.path, $event)"
-          >{{ directoryTreeRoot.name }}</button>
+          >
+            <Folders class="h-3.5 w-3.5 shrink-0 opacity-75" />
+            <span class="min-w-0 truncate">{{ directoryTreeRoot.name }}</span>
+          </button>
           <span
             v-else
             class="min-w-0 flex-1 truncate text-xs font-medium"
@@ -154,7 +157,6 @@
         <FloatingScrollbar ref="directoryScrollbarRef" :target="directoryScroller" />
         </div>
       </aside>
-
       <main v-if="!directoryOnly" class="flex min-h-0 flex-1 flex-col overflow-hidden bg-base-100">
         <div
           v-if="activeTab"
@@ -335,6 +337,21 @@
           <span>{{ t('fileReader.noWorkspace') }}</span>
         </slot>
       </main>
+      <div
+        v-if="directoryTreeRoot && !directoryOnly"
+        class="file-reader-resize-handle absolute bottom-0 top-0 z-10"
+        :class="activeDirectoryTreeResize ? 'is-active' : ''"
+        :style="{ right: `${effectiveDirectoryTreeWidth - 4}px` }"
+        role="separator"
+        aria-orientation="vertical"
+        :aria-valuemin="FILE_READER_DIRECTORY_TREE_MIN_WIDTH"
+        :aria-valuemax="FILE_READER_DIRECTORY_TREE_MAX_WIDTH"
+        :aria-valuenow="effectiveDirectoryTreeWidth"
+        tabindex="0"
+        @pointerdown="startDirectoryTreeResize"
+        @keydown.left.prevent="adjustDirectoryTreeWidthByKeyboard(-16)"
+        @keydown.right.prevent="adjustDirectoryTreeWidthByKeyboard(16)"
+      ></div>
     </div>
 
     <div
@@ -484,7 +501,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { ChevronDown, ChevronRight, Code2, Eye, ExternalLink, FilePlus, FileText, Folder, ListIndentDecrease, ListIndentIncrease, RefreshCw, Search, SquareTerminal, X } from "@lucide/vue";
+import { ChevronDown, ChevronRight, Code2, Eye, ExternalLink, FilePlus, FileText, Folder, Folders, RefreshCw, Search, SquareTerminal, X } from "@lucide/vue";
 import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
 import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
@@ -570,6 +587,12 @@ type FileReaderContextMenuTarget = {
 // ==================== Constants ====================
 
 const tauriRuntimeAvailable = isTauriRuntimeAvailable();
+const FILE_READER_DIRECTORY_TREE_MIN_WIDTH = 220;
+const FILE_READER_DIRECTORY_TREE_MAX_WIDTH = 640;
+const FILE_READER_DIRECTORY_TREE_DEFAULT_WIDTH = 320;
+const FILE_READER_CONTENT_MIN_WIDTH = 320;
+const FILE_READER_DIRECTORY_TREE_COLLAPSE_EDGE_RATIO = 0.08;
+const FILE_READER_DIRECTORY_TREE_RESIZE_MOVE_THRESHOLD = 4;
 
 // ==================== State ====================
 
@@ -584,6 +607,7 @@ const directoryTreeFilter = ref("");
 const directoryTreeSearchVisible = ref(false);
 const directoryNodes = ref<Record<string, DirectoryNode>>({});
 const fileDragActive = ref(false);
+const fileReaderLayoutRoot = ref<HTMLElement | null>(null);
 const addressScroller = ref<HTMLElement | null>(null);
 const contentScroller = ref<HTMLElement | null>(null);
 const markdownScroller = ref<HTMLElement | null>(null);
@@ -596,6 +620,9 @@ const showTabs = computed(() => props.showTabs !== false && !props.directoryOnly
 const showPickFileButton = computed(() => props.showPickFileButton !== false && !props.directoryOnly);
 const directoryOnly = computed(() => !!props.directoryOnly);
 const fileReaderWatchSessionId = computed(() => String(props.sessionKey || props.customMarkstreamId || "file-reader").trim());
+const directoryTreeWidth = ref(FILE_READER_DIRECTORY_TREE_DEFAULT_WIDTH);
+const activeDirectoryTreeResize = ref(false);
+const fileReaderLayoutWidth = ref(0);
 
 const hoverDirectoryTreeVisible = ref(false);
 const hoverDirectoryTreeRoot = ref<DirectoryNode | null>(null);
@@ -617,6 +644,14 @@ let watchTargetUpdateTimer = 0;
 let autoRefreshFileTimer = 0;
 let autoRefreshDirectoryTimer = 0;
 const pendingAutoRefreshDirectoryPaths = new Set<string>();
+let directoryTreeResizeStartX = 0;
+let directoryTreeResizeStartWidth = 0;
+let directoryTreeResizePointerId: number | null = null;
+let directoryTreeResizeHandle: HTMLElement | null = null;
+let directoryTreeResizePreviousBodyCursor = "";
+let directoryTreeResizePreviousBodyUserSelect = "";
+let fileReaderLayoutResizeObserver: ResizeObserver | null = null;
+let directoryTreeResizeMoved = false;
 
 // ==================== Computed ====================
 
@@ -696,6 +731,8 @@ const visibleTreeRows = computed<TreeRow[]>(() => {
   if (!root || root.loading || root.error) return [];
   return flattenDirectoryEntries(root.entries, 0, directoryTreeFilter.value);
 });
+
+const effectiveDirectoryTreeWidth = computed(() => clampDirectoryTreeWidth(directoryTreeWidth.value));
 
 const activePathSegments = computed(() => {
   const tab = activeTab.value;
@@ -779,6 +816,98 @@ function handleAddressWheel(event: WheelEvent) {
   const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
   el.scrollLeft += delta;
   updateAddressScrollState();
+}
+
+function measureFileReaderLayoutWidth() {
+  const el = fileReaderLayoutRoot.value;
+  fileReaderLayoutWidth.value = el ? Math.round(el.getBoundingClientRect().width) : 0;
+}
+
+function clampDirectoryTreeWidth(width: number): number {
+  const normalizedWidth = Math.round(Number(width) || FILE_READER_DIRECTORY_TREE_DEFAULT_WIDTH);
+  const layoutWidth = fileReaderLayoutWidth.value;
+  if (layoutWidth <= 0 || directoryOnly.value) {
+    return Math.min(FILE_READER_DIRECTORY_TREE_MAX_WIDTH, Math.max(FILE_READER_DIRECTORY_TREE_MIN_WIDTH, normalizedWidth));
+  }
+  const layoutMax = Math.max(
+    FILE_READER_DIRECTORY_TREE_MIN_WIDTH,
+    layoutWidth - FILE_READER_CONTENT_MIN_WIDTH,
+  );
+  return Math.min(
+    Math.min(FILE_READER_DIRECTORY_TREE_MAX_WIDTH, layoutMax),
+    Math.max(FILE_READER_DIRECTORY_TREE_MIN_WIDTH, normalizedWidth),
+  );
+}
+
+function setDirectoryTreeWidth(width: number) {
+  directoryTreeWidth.value = clampDirectoryTreeWidth(width);
+}
+
+function startDirectoryTreeResize(event: PointerEvent) {
+  if (event.button !== 0 || directoryOnly.value) return;
+  event.preventDefault();
+  activeDirectoryTreeResize.value = true;
+  directoryTreeResizeStartX = event.clientX;
+  directoryTreeResizeStartWidth = effectiveDirectoryTreeWidth.value;
+  directoryTreeResizeMoved = false;
+  directoryTreeResizePointerId = Number.isFinite(event.pointerId) ? event.pointerId : null;
+  directoryTreeResizeHandle = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+  directoryTreeResizeHandle?.setPointerCapture?.(event.pointerId);
+  directoryTreeResizePreviousBodyCursor = document.body.style.cursor;
+  directoryTreeResizePreviousBodyUserSelect = document.body.style.userSelect;
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+  window.addEventListener("pointermove", handleDirectoryTreeResizeMove);
+  window.addEventListener("pointerup", stopDirectoryTreeResize, { once: true });
+  window.addEventListener("pointercancel", stopDirectoryTreeResize, { once: true });
+}
+
+function handleDirectoryTreeResizeMove(event: PointerEvent) {
+  if (!activeDirectoryTreeResize.value) return;
+  if (!directoryTreeResizeMoved && Math.abs(event.clientX - directoryTreeResizeStartX) >= FILE_READER_DIRECTORY_TREE_RESIZE_MOVE_THRESHOLD) {
+    directoryTreeResizeMoved = true;
+  }
+  const delta = directoryOnly.value ? 0 : directoryTreeResizeStartX - event.clientX;
+  setDirectoryTreeWidth(directoryTreeResizeStartWidth + delta);
+}
+
+function shouldCollapseDirectoryTreeFromClientX(clientX: number): boolean {
+  const root = fileReaderLayoutRoot.value;
+  if (!root || directoryOnly.value) return false;
+  const rect = root.getBoundingClientRect();
+  if (!(rect.width > 0)) return false;
+  const threshold = Math.max(24, rect.width * FILE_READER_DIRECTORY_TREE_COLLAPSE_EDGE_RATIO);
+  return clientX >= rect.right - threshold;
+}
+
+function stopDirectoryTreeResize(event?: PointerEvent) {
+  const shouldCollapse = !!event
+    && event.type === "pointerup"
+    && directoryTreeResizeMoved
+    && shouldCollapseDirectoryTreeFromClientX(event.clientX);
+  const restoreWidthOnCollapse = clampDirectoryTreeWidth(directoryTreeResizeStartWidth);
+  window.removeEventListener("pointermove", handleDirectoryTreeResizeMove);
+  window.removeEventListener("pointerup", stopDirectoryTreeResize);
+  window.removeEventListener("pointercancel", stopDirectoryTreeResize);
+  document.body.style.cursor = directoryTreeResizePreviousBodyCursor;
+  document.body.style.userSelect = directoryTreeResizePreviousBodyUserSelect;
+  if (directoryTreeResizeHandle && directoryTreeResizePointerId !== null && directoryTreeResizeHandle.hasPointerCapture?.(directoryTreeResizePointerId)) {
+    directoryTreeResizeHandle.releasePointerCapture(directoryTreeResizePointerId);
+  }
+  directoryTreeResizeHandle = null;
+  directoryTreeResizePointerId = null;
+  activeDirectoryTreeResize.value = false;
+  if (shouldCollapse) {
+    directoryTreeWidth.value = restoreWidthOnCollapse;
+    closeDirectoryTree();
+  } else {
+    persistFileReaderSession();
+  }
+  directoryTreeResizeMoved = false;
+}
+
+function adjustDirectoryTreeWidthByKeyboard(delta: number) {
+  setDirectoryTreeWidth(effectiveDirectoryTreeWidth.value + delta);
 }
 
 // ==================== Auto Refresh Watch ====================
@@ -1295,6 +1424,7 @@ function persistFileReaderSession(key = props.sessionKey) {
     tabs: uniqueTabs,
     activePath: normalizePath(activePath.value),
     directoryRootPath: normalizePath(directoryRootPath.value),
+    directoryTreeWidth: effectiveDirectoryTreeWidth.value,
   };
   window.localStorage.setItem(storageKey, JSON.stringify(state));
 }
@@ -1308,6 +1438,7 @@ async function restoreFileReaderSession(key = props.sessionKey, fallbackRootPath
     activePath.value = "";
     resetVirtualCodeCaches();
     directoryRootPath.value = "";
+    directoryTreeWidth.value = FILE_READER_DIRECTORY_TREE_DEFAULT_WIDTH;
     directoryTreeFilter.value = "";
     directoryTreeSearchVisible.value = false;
     directoryNodes.value = {};
@@ -1327,6 +1458,7 @@ async function restoreFileReaderSession(key = props.sessionKey, fallbackRootPath
     tabs.value = restoredTabs.map((path) => createRestoredTab(path));
     const restoredActivePath = normalizePath(state.activePath || "");
     activePath.value = restoredTabs.includes(restoredActivePath) ? restoredActivePath : restoredTabs[0] || "";
+    setDirectoryTreeWidth(state.directoryTreeWidth || FILE_READER_DIRECTORY_TREE_DEFAULT_WIDTH);
 
     const restoredDirectoryRoot = props.directoryOnly
       ? normalizePath(state.directoryRootPath || fallbackRoot)
@@ -2009,6 +2141,14 @@ onMounted(async () => {
   window.addEventListener("resize", updateAddressScrollState);
   window.addEventListener("pointerdown", handleGlobalPointerDown);
   window.addEventListener("keydown", handleGlobalEscape);
+  measureFileReaderLayoutWidth();
+  if (typeof ResizeObserver !== "undefined" && fileReaderLayoutRoot.value) {
+    fileReaderLayoutResizeObserver = new ResizeObserver(() => {
+      measureFileReaderLayoutWidth();
+      setDirectoryTreeWidth(directoryTreeWidth.value);
+    });
+    fileReaderLayoutResizeObserver.observe(fileReaderLayoutRoot.value);
+  }
   void startFileReaderWatchListener();
   scheduleFileReaderWatchTargetUpdate();
   if (props.enableGlobalDrop === false || !isTauriRuntimeAvailable()) return;
@@ -2033,6 +2173,9 @@ onBeforeUnmount(() => {
   window.removeEventListener("resize", updateAddressScrollState);
   window.removeEventListener("pointerdown", handleGlobalPointerDown);
   window.removeEventListener("keydown", handleGlobalEscape);
+  stopDirectoryTreeResize();
+  fileReaderLayoutResizeObserver?.disconnect();
+  fileReaderLayoutResizeObserver = null;
   if (watchTargetUpdateTimer) window.clearTimeout(watchTargetUpdateTimer);
   if (autoRefreshFileTimer) window.clearTimeout(autoRefreshFileTimer);
   if (autoRefreshDirectoryTimer) window.clearTimeout(autoRefreshDirectoryTimer);
@@ -2073,6 +2216,29 @@ defineExpose({
 }
 .file-reader-scroll-container::-webkit-scrollbar {
   display: none;
+}
+.file-reader-resize-handle {
+  width: 8px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background-color 160ms ease, opacity 160ms ease;
+  opacity: 1;
+}
+.file-reader-resize-handle:hover,
+.file-reader-resize-handle:focus-visible,
+.file-reader-resize-handle.is-active {
+  opacity: 1;
+  background:
+    linear-gradient(
+      to left,
+      transparent 0,
+      transparent 2px,
+      color-mix(in srgb, var(--color-primary) 70%, transparent) 2px,
+      color-mix(in srgb, var(--color-primary) 70%, transparent) 5px,
+      transparent 5px,
+      transparent 100%
+    );
+  outline: none;
 }
 .file-reader-content-scroller {
   scrollbar-width: thin;

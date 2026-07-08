@@ -71,6 +71,7 @@ export type FileReaderSessionState = {
   tabs?: string[];
   activePath?: string;
   directoryRootPath?: string;
+  directoryTreeWidth?: number;
 };
 
 export type FileReaderWatchTarget = {
