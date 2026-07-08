@@ -518,6 +518,7 @@ const IMAGE_FALLBACK_RECENT_USER_MESSAGE_LIMIT: usize = 7;
 
 async fn resolve_image_description_with_vision_fallback(
     state: &AppState,
+    conversation_id: &str,
     vision_api: &ApiConfig,
     vision_resolved: &ResolvedApiConfig,
     image: &BinaryPart,
@@ -534,8 +535,46 @@ async fn resolve_image_description_with_vision_fallback(
         }
     }
 
-    let converted =
-        describe_image_with_vision_api(state, vision_resolved, vision_api, image).await?;
+    let start = std::time::Instant::now();
+    let prepared = conversation_prompt_service().build_vision_description_prepared_prompt(image);
+    let request_text = prepared_prompt_to_fast_request_text(&prepared);
+    let converted = match describe_image_with_vision_api(state, vision_resolved, vision_api, prepared).await {
+        Ok(text) => {
+            let trimmed = text.trim().to_string();
+            record_fast_request_turn_best_effort(
+                state,
+                conversation_id,
+                build_fast_request_turn(
+                    "vision_image_description",
+                    &request_text,
+                    &text,
+                    !trimmed.is_empty(),
+                    trimmed
+                        .is_empty()
+                        .then(|| "图转文返回为空".to_string()),
+                    Some(vision_api.model.clone()),
+                    Some(start.elapsed().as_millis().min(u128::from(u64::MAX)) as u64),
+                ),
+            );
+            text
+        }
+        Err(err) => {
+            record_fast_request_turn_best_effort(
+                state,
+                conversation_id,
+                build_fast_request_turn(
+                    "vision_image_description",
+                    &request_text,
+                    "",
+                    false,
+                    Some(err.clone()),
+                    Some(vision_api.model.clone()),
+                    Some(start.elapsed().as_millis().min(u128::from(u64::MAX)) as u64),
+                ),
+            );
+            return Err(err);
+        }
+    };
     let trimmed = converted.trim().to_string();
     if trimmed.is_empty() {
         return Ok(None);
@@ -666,6 +705,7 @@ fn image_description_block(label: &str, text: &str) -> String {
 
 async fn apply_prompt_image_fallbacks_to_prepared(
     state: &AppState,
+    conversation_id: &str,
     app_config: &AppConfig,
     selected_api: &ApiConfig,
     prepared: &mut PreparedPrompt,
@@ -714,6 +754,7 @@ async fn apply_prompt_image_fallbacks_to_prepared(
             };
             if let Some(text) = resolve_image_description_with_vision_fallback(
                 state,
+                conversation_id,
                 &vision_api,
                 &vision_resolved,
                 &image,
@@ -744,6 +785,7 @@ async fn apply_prompt_image_fallbacks_to_prepared(
                 };
                 if let Some(text) = resolve_image_description_with_vision_fallback(
                     state,
+                    conversation_id,
                     &vision_api,
                     &vision_resolved,
                     &image,
@@ -2770,8 +2812,10 @@ async fn send_chat_message_inner(
                         continue;
                     }
 
+                    let prepared =
+                        conversation_prompt_service().build_vision_description_prepared_prompt(image);
                     let converted =
-                        describe_image_with_vision_api(&state, &vision_resolved, &vision_api, image)
+                        describe_image_with_vision_api(&state, &vision_resolved, &vision_api, prepared)
                             .await?;
                     let converted = converted.trim().to_string();
                     if converted.is_empty() {
@@ -3262,6 +3306,7 @@ async fn send_chat_message_inner(
         persist_user_message_on_next_prepare && !trigger_only;
     if apply_prompt_image_fallbacks_to_prepared(
         &state,
+        &prepared_context.2,
         &app_config,
         &selected_api,
         &mut prepared_context.1,

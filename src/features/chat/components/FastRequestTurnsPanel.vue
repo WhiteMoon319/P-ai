@@ -216,6 +216,7 @@ function kindLabel(kind: string) {
   if (normalized === "title_generation") return t("chat.fastRequest.kindTitleGeneration");
   if (normalized === "task_optimization") return t("chat.fastRequest.kindTaskOptimization");
   if (normalized === "tool_review") return t("chat.fastRequest.kindToolReview");
+  if (normalized === "vision_image_description") return t("chat.fastRequest.kindVisionImageDescription");
   return normalized || t("chat.fastRequest.unknownKind");
 }
 

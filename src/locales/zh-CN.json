@@ -1588,6 +1588,7 @@
       "kindTitleGeneration": "标题生成",
       "kindTaskOptimization": "任务优化",
       "kindToolReview": "工具评估",
+      "kindVisionImageDescription": "图转文",
       "durationMs": "{ms} ms"
     },
     "selection": {

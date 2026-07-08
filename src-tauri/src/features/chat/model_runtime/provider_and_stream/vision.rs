@@ -2,10 +2,8 @@ async fn describe_image_with_vision_api(
     state: &AppState,
     vision_resolved: &ResolvedApiConfig,
     vision_api: &ApiConfig,
-    image: &BinaryPart,
+    prepared: PreparedPrompt,
 ) -> Result<String, String> {
-    let prepared = conversation_prompt_service().build_vision_description_prepared_prompt(image);
-
     let supports_non_stream_fallback =
         request_format_supports_non_stream_fallback(vision_resolved.request_format);
     let prefer_non_stream = supports_non_stream_fallback

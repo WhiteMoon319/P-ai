@@ -228,6 +228,7 @@ async fn get_prompt_preview_inner(
     .await?;
     let _ = apply_prompt_image_fallbacks_to_prepared(
         state,
+        &conversation.id,
         &app_config,
         &api_config,
         &mut prepared,
