@@ -1103,7 +1103,7 @@ defineExpose({ exitMessageSelectionMode: handleExitMessageSelectionMode });
 
 const {
   scrollContainer, composerContainer, toolbarContainer, chatLayoutRoot,
-  latestOwnElasticMinHeight, showJumpToBottom, atConversationBottom, userScrollingDown, userScrollingUp,
+  latestOwnElasticMinHeight, showJumpToBottom, atConversationBottom, userScrollingUp,
   jumpToBottomStyle, jumpAboveBottomStyle, toolbarReservedHeight, floatingToolbarStyle, onScroll,
   noteWheelScrollIntent, beginPointerScrollIntent, prepareBottomAlignmentLayout,
 } = useChatScrollLayout({
@@ -1159,7 +1159,7 @@ const supportsFloatingSessionToolbar = computed(() =>
 
 const showFloatingSessionToolbar = computed(() => {
   if (!supportsFloatingSessionToolbar.value) return false;
-  return atConversationBottom.value || userScrollingDown.value;
+  return atConversationBottom.value;
 });
 
 // ==================== previous user message jump ====================
