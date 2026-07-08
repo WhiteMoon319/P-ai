@@ -10,7 +10,7 @@ export const PANE_WIDTH_LIMITS = {
   right: { min: 260, max: 10000, default: 320 },
 } as const;
 
-export const PANE_CENTER_MIN_WIDTH = 300;
+export const PANE_CENTER_MIN_WIDTH = 350;
 export const PANE_OVERLAY_VISIBLE_MARGIN = 56;
 export const PANE_WIDTH_STORAGE_KEYS = {
   left: "easy_call.chat_left_sidebar_width.v1",
