@@ -50,6 +50,13 @@ export function useWindowShell() {
 
   async function startDrag() {
     if (!appWindow.value) return;
+    try {
+      await invokeTauri("start_current_window_drag");
+      await syncWindowControlsState();
+      return;
+    } catch (error) {
+      console.warn("[WINDOW] backend startDrag failed, fallback to frontend dragging:", error);
+    }
     await appWindow.value.startDragging();
   }
 

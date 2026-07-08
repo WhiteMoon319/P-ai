@@ -34,6 +34,11 @@ fn toggle_current_window_maximize(window: tauri::Window, app: AppHandle) -> Resu
 }
 
 #[tauri::command]
+fn start_current_window_drag(window: tauri::Window, app: AppHandle) -> Result<(), String> {
+    start_window_drag_with_default_restore(&app, window.label())
+}
+
+#[tauri::command]
 fn complete_quick_setup_and_open_chat(app: AppHandle) -> Result<(), String> {
     show_window(&app, "chat")?;
     if let Some(window) = app.get_webview_window("quick-setup") {

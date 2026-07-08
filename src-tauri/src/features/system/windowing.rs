@@ -635,6 +635,51 @@ fn position_window_on_monitor(
     let _ = window.set_position(Position::Physical(PhysicalPosition::new(x, y)));
 }
 
+fn restore_window_to_default_drag_size(
+    window: &tauri::WebviewWindow,
+    label: &str,
+    monitor: &tauri::Monitor,
+) -> Result<(), String> {
+    let outer_position = window
+        .outer_position()
+        .map_err(|err| format!("Read window outer position failed: {err}"))?;
+    let outer_size = window
+        .outer_size()
+        .map_err(|err| format!("Read window outer size failed: {err}"))?;
+    let cursor_position = window
+        .cursor_position()
+        .map_err(|err| format!("Read cursor position failed: {err}"))?;
+    let (resolved_width, resolved_height) =
+        resolved_window_size_for_monitor(label, monitor, None, None);
+    let resolved_width_physical = logical_to_physical_px(resolved_width, monitor.scale_factor());
+    let cursor_offset_x = (cursor_position.x - outer_position.x as f64)
+        .clamp(0.0, outer_size.width.max(1) as f64);
+    let cursor_anchor_ratio = if outer_size.width > 0 {
+        (cursor_offset_x / outer_size.width as f64).clamp(0.15, 0.85)
+    } else {
+        0.5
+    };
+    let cursor_offset_y = (cursor_position.y - outer_position.y as f64).clamp(12.0, 48.0);
+    let monitor_left = monitor.position().x;
+    let monitor_top = monitor.position().y;
+    let monitor_right = monitor_left.saturating_add(monitor.size().width as i32);
+    let max_x = monitor_right.saturating_sub(resolved_width_physical);
+    let target_x =
+        (cursor_position.x.round() as i32) - (resolved_width_physical as f64 * cursor_anchor_ratio).round() as i32;
+    let clamped_x = target_x.clamp(monitor_left, max_x.max(monitor_left));
+    let target_y = (cursor_position.y.round() as i32) - cursor_offset_y.round() as i32;
+    let clamped_y = target_y.max(monitor_top);
+
+    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(
+        resolved_width as f64,
+        resolved_height as f64,
+    )));
+    let _ = window.set_position(Position::Physical(PhysicalPosition::new(
+        clamped_x, clamped_y,
+    )));
+    Ok(())
+}
+
 fn log_offscreen_layout_reset(
     app: &AppHandle,
     label: &str,
@@ -979,6 +1024,47 @@ fn toggle_window_maximize_with_default_restore(
         .is_maximized()
         .map_err(|err| format!("Read window maximized state failed: {err}"))?;
     Ok(maximized)
+}
+
+fn start_window_drag_with_default_restore(app: &AppHandle, label: &str) -> Result<(), String> {
+    let window = app
+        .get_webview_window(label)
+        .ok_or_else(|| format!("Window '{label}' not found"))?;
+    if is_fixed_window_size(label) {
+        return window
+            .start_dragging()
+            .map_err(|err| format!("Start dragging window failed: {err}"));
+    }
+
+    let was_maximized = window
+        .is_maximized()
+        .map_err(|err| format!("Read window maximized state failed: {err}"))?;
+    let restore_monitor = preferred_window_monitor(&window);
+    let should_restore_default_size = if was_maximized {
+        true
+    } else {
+        restore_monitor
+            .as_ref()
+            .map(|monitor| current_window_size_is_near_fullscreen(&window, monitor))
+            .unwrap_or(false)
+    };
+
+    if should_restore_default_size {
+        if was_maximized {
+            window
+                .unmaximize()
+                .map_err(|err| format!("Restore window failed: {err}"))?;
+        }
+        if let Some(monitor) = restore_monitor.as_ref() {
+            restore_window_to_default_drag_size(&window, label, monitor)?;
+            let _ =
+                persist_window_layout_snapshot_with_reason(app, label, "drag_restore_to_default");
+        }
+    }
+
+    window
+        .start_dragging()
+        .map_err(|err| format!("Start dragging window failed: {err}"))
 }
 
 fn toggle_window(app: &AppHandle, label: &str) -> Result<(), String> {

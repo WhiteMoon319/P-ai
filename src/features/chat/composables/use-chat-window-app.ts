@@ -835,6 +835,7 @@ export function useChatWindowApp() {
     terminalApprovalResolving,
     loading,
     saving,
+    startupDataReady,
     startupOverlayVisible,
     startupOverlayMessage,
     startupOverlayDetail,
