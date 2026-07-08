@@ -566,7 +566,13 @@ fn set_conversation_auto_push_remote_contact(
             conversation_meta.conversation_kind.trim(),
             CONVERSATION_KIND_DELEGATE | CONVERSATION_KIND_REMOTE_IM_CONTACT | CONVERSATION_KIND_SYSTEM_NOTIFICATION
         )
-        || !conversation_meta.summary.trim().is_empty()
+        || conversation_meta.status.trim() == "archived"
+        || conversation_meta
+            .archived_at
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_some()
     {
         return Err("仅普通本地会话支持自动推送".to_string());
     }
@@ -1202,7 +1208,7 @@ fn export_conversation_share_json(
     let conversation = conversation_service_v2()
         .get_conversation_snapshot(state.inner(), conversation_id)
         .map_err(|_| "会话不存在或已归档".to_string())?;
-    if !conversation.summary.trim().is_empty()
+    if conversation_is_archived(&conversation)
         || !conversation_visible_in_foreground_lists(&conversation)
     {
         return Err("只能导出未归档会话".to_string());
@@ -1370,7 +1376,7 @@ async fn create_conversation_branch_from_message_internal(
     let source_conversation = conversation_service_v2()
         .try_get_conversation_snapshot(state, source_conversation_id)?
         .filter(|conversation| {
-            conversation.summary.trim().is_empty()
+            !conversation_is_archived(conversation)
                 && conversation_visible_in_foreground_lists(conversation)
                 && conversation_is_local_normal_chat(conversation)
         })

@@ -172,7 +172,6 @@ fn chat_history_source_kind_from_meta(
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .is_some()
-        || !conversation_meta.summary.trim().is_empty()
     {
         return Some("archive");
     }

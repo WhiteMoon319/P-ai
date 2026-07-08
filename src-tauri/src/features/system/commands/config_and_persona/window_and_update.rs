@@ -166,7 +166,13 @@ fn detach_current_conversation_to_window(
     }
 
     let conversation_meta = conversation_service_v2().get_conversation_meta(&state, conversation_id)?;
-    if !conversation_meta.summary.trim().is_empty()
+    if conversation_meta.status.trim() == "archived"
+        || conversation_meta
+            .archived_at
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_some()
         || (!conversation_meta.visible_in_foreground_lists
             && !conversation_meta.is_remote_im_contact)
     {

@@ -901,7 +901,13 @@ fn resolve_user_async_delegate_plan(
         .get_conversation_meta(app_state, conversation_id)
         .ok()
         .filter(|conversation_meta| {
-            conversation_meta.summary.trim().is_empty()
+            conversation_meta.status.trim() != "archived"
+                && conversation_meta
+                    .archived_at
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .is_none()
                 && conversation_meta.visible_in_foreground_lists
                 && !conversation_meta.is_delegate
         })

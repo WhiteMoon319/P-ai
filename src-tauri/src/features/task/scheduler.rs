@@ -1,7 +1,13 @@
 fn task_conversation_meta_available_for_dispatch(
     conversation_meta: &ConversationMetaView,
 ) -> bool {
-    conversation_meta.summary.trim().is_empty()
+    conversation_meta.status.trim() != "archived"
+        && conversation_meta
+            .archived_at
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
         && conversation_meta.conversation_kind.trim() != CONVERSATION_KIND_DELEGATE
         && conversation_meta.id.trim() != SYSTEM_NOTIFICATION_CONVERSATION_ID
         && conversation_meta.conversation_kind.trim() != CONVERSATION_KIND_SYSTEM_NOTIFICATION

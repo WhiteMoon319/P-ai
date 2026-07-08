@@ -2283,7 +2283,7 @@ async fn send_chat_message_inner(
         }
         let requested_conversation = conversation_service_v2()
             .get_conversation_snapshot(state, requested_conversation_id)?;
-        if !requested_conversation.summary.trim().is_empty() {
+        if conversation_is_archived(&requested_conversation) {
             return Ok(None);
         }
         let runtime_state = state_read_runtime_state_cached(state)?;
@@ -2355,7 +2355,13 @@ async fn send_chat_message_inner(
     | -> Result<Option<ConversationPrepareSnapshot>, String> {
         let main_conversation_meta =
             conversation_service_v2().get_conversation_meta(state, main_conversation_id)?;
-        if !main_conversation_meta.summary.trim().is_empty()
+        if main_conversation_meta.status.trim() == "archived"
+            || main_conversation_meta
+                .archived_at
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .is_some()
             || main_conversation_meta.conversation_kind.trim() == CONVERSATION_KIND_DELEGATE
             || main_conversation_meta.conversation_kind.trim()
                 == CONVERSATION_KIND_REMOTE_IM_CONTACT

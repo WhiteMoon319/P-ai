@@ -4972,7 +4972,14 @@ fn ide_chat_conversation_open_result(state: &AppState, conversation_id: &str) ->
         return Err("conversationId is required".to_string());
     }
     let conversation_meta = conversation_service_v2().get_conversation_meta(state, conversation_id)?;
-    if !conversation_meta.summary.trim().is_empty() {
+    if conversation_meta.status.trim() == "archived"
+        || conversation_meta
+            .archived_at
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_some()
+    {
         return Err("conversation is archived".to_string());
     }
     let messages = conversation_service_v2().get_recent_messages_for_frontend_display_only(

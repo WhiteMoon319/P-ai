@@ -273,7 +273,13 @@ fn delegate_runtime_thread_create(
             .get_conversation_meta(app_state, &delegate.conversation_id)
             .ok()
             .filter(|conversation_meta| {
-                conversation_meta.summary.trim().is_empty()
+                conversation_meta.status.trim() != "archived"
+                    && conversation_meta
+                        .archived_at
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .is_none()
                     && conversation_meta.conversation_kind.trim() != CONVERSATION_KIND_DELEGATE
                     && conversation_meta.conversation_kind.trim()
                         != CONVERSATION_KIND_SYSTEM_NOTIFICATION

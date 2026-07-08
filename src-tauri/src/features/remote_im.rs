@@ -2282,9 +2282,7 @@ fn ensure_remote_im_contact_conversation_id(
                 .get_conversation_meta(state, conversation_id)
                 .ok()
                 .filter(|conversation_meta| {
-                    conversation_meta.summary.trim().is_empty()
-                        && conversation_meta.conversation_kind.trim()
-                            == CONVERSATION_KIND_REMOTE_IM_CONTACT
+                    remote_im_meta_is_reusable_active_contact_conversation(conversation_meta)
                 })
                 .map(|conversation_meta| conversation_meta.id.to_string())
         })
@@ -2308,9 +2306,7 @@ fn ensure_remote_im_contact_conversation_id(
         .iter()
         .filter_map(|item| conversation_service_v2().get_conversation_meta(state, item.id.as_str()).ok())
         .find(|conversation_meta| {
-            conversation_meta.summary.trim().is_empty()
-                && conversation_meta.conversation_kind.trim()
-                    == CONVERSATION_KIND_REMOTE_IM_CONTACT
+            remote_im_meta_is_reusable_active_contact_conversation(conversation_meta)
                 && conversation_meta.root_conversation_id.as_deref() == Some(target_key.as_str())
         })
         .map(|conversation_meta| conversation_meta.id.to_string())
@@ -2349,7 +2345,13 @@ fn sync_remote_im_contact_conversation_binding(
     agent_id: &str,
 ) -> Result<(), String> {
     let conversation_meta = conversation_service_v2().get_conversation_meta(state, conversation_id)?;
-    if !conversation_meta.summary.trim().is_empty()
+    if conversation_meta.status.trim() == "archived"
+        || conversation_meta
+            .archived_at
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_some()
         || conversation_meta.conversation_kind.trim() != CONVERSATION_KIND_REMOTE_IM_CONTACT
     {
         return Ok(());
@@ -2382,6 +2384,19 @@ fn sync_remote_im_contact_conversation_binding(
         )?;
     }
     Ok(())
+}
+
+fn remote_im_meta_is_reusable_active_contact_conversation(
+    conversation_meta: &ConversationMetaView,
+) -> bool {
+    conversation_meta.status.trim() != "archived"
+        && conversation_meta
+            .archived_at
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+        && conversation_meta.conversation_kind.trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT
 }
 
 fn resolve_contact_session_target(

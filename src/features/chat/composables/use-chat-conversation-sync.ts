@@ -70,6 +70,49 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     }, { messageCount: 0, textLength: 0, hasAssistantReply: false });
   }
 
+  function remoteConversationActivityAt(item: Record<string, any>): string {
+    return String(item?.lastMessageAt || item?.updatedAt || "").trim();
+  }
+
+  function sortRemoteConversationOverviewItems(items: any[]): any[] {
+    return [...items].sort((a, b) =>
+      remoteConversationActivityAt(b).localeCompare(remoteConversationActivityAt(a))
+      || String(a?.conversationId || "").localeCompare(String(b?.conversationId || ""))
+    );
+  }
+
+  function applyRemoteConversationOverviewAppendedMessage(conversationId: string, message: any): boolean {
+    const cid = String(conversationId || "").trim();
+    const messageId = String(message?.id || "").trim();
+    if (!cid || !message || !messageId || isOverviewDraftMessage(message)) return false;
+    const preview = previewMessageFromChatMessage(message);
+    const messageAt = String(message.createdAt || "").trim();
+    let changed = false;
+    const nextItems = Array.isArray(bindings.remoteImContactConversations?.value)
+      ? bindings.remoteImContactConversations.value.map((item: any) => {
+        if (String(item.conversationId || "").trim() !== cid) {
+          return item;
+        }
+        const existingPreviewMessages = Array.isArray(item.previewMessages) ? item.previewMessages : [];
+        if (existingPreviewMessages.some((previewItem: any) => String(previewItem.messageId || "").trim() === messageId)) {
+          return item;
+        }
+        changed = true;
+        return {
+          ...item,
+          messageCount: Math.max(0, Number(item.messageCount || 0)) + 1,
+          updatedAt: messageAt || item.updatedAt,
+          lastMessageAt: messageAt || item.lastMessageAt,
+          previewMessages: [...existingPreviewMessages, preview].slice(-2),
+        };
+      })
+      : [];
+    if (changed) {
+      bindings.remoteImContactConversations.value = sortRemoteConversationOverviewItems(nextItems);
+    }
+    return changed;
+  }
+
   function matchesForegroundConversation(conversationId?: string | null): boolean {
     const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
     if (!currentConversationId) return false;
@@ -215,7 +258,10 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     });
     if (changed) {
       bindings.unarchivedConversations.value = sortUnarchivedConversationOverviewItems(nextItems);
+      return;
     }
+
+    applyRemoteConversationOverviewAppendedMessage(cid, message);
   }
 
   function setConversationBadge(conversationId: string, status: string) {
@@ -688,6 +734,27 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     });
     if (changed) {
       bindings.unarchivedConversations.value = sortUnarchivedConversationOverviewItems(nextItems);
+      return;
+    }
+
+    let remoteChanged = false;
+    const nextRemoteItems = Array.isArray(bindings.remoteImContactConversations?.value)
+      ? bindings.remoteImContactConversations.value.map((item: any) => {
+        if (String(item.conversationId || "").trim() !== cid) {
+          return item;
+        }
+        remoteChanged = true;
+        return {
+          ...item,
+          messageCount: nextMessages.length,
+          updatedAt: lastMessageAt || item.updatedAt,
+          lastMessageAt: lastMessageAt || item.lastMessageAt,
+          previewMessages,
+        };
+      })
+      : [];
+    if (remoteChanged) {
+      bindings.remoteImContactConversations.value = sortRemoteConversationOverviewItems(nextRemoteItems);
     }
   }
 
@@ -726,6 +793,27 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     });
     if (changed) {
       bindings.unarchivedConversations.value = sortUnarchivedConversationOverviewItems(nextItems);
+      return;
+    }
+
+    let remoteChanged = false;
+    const nextRemoteItems = Array.isArray(bindings.remoteImContactConversations?.value)
+      ? bindings.remoteImContactConversations.value.map((item: any) => {
+        if (String(item.conversationId || "").trim() !== cid) {
+          return item;
+        }
+        remoteChanged = true;
+        return {
+          ...item,
+          messageCount: Math.max(0, Number(remainingCount) || formalMessages.length),
+          updatedAt: lastMessageAt || item.updatedAt,
+          lastMessageAt: lastMessageAt || item.lastMessageAt,
+          previewMessages,
+        };
+      })
+      : [];
+    if (remoteChanged) {
+      bindings.remoteImContactConversations.value = sortRemoteConversationOverviewItems(nextRemoteItems);
     }
   }
 

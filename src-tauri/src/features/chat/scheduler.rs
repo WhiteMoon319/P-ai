@@ -272,7 +272,14 @@ fn chat_pending_event_duplicates_existing_message(
     };
     let conversation_meta = match conversation_service_v2().get_conversation_meta(state, &event.conversation_id)
     {
-        Ok(conversation_meta) if conversation_meta.summary.trim().is_empty() => conversation_meta,
+        Ok(conversation_meta)
+            if conversation_meta.status.trim() != "archived"
+                && conversation_meta
+                    .archived_at
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .is_none() => conversation_meta,
         _ => return Ok(false),
     };
     let paths = message_store::message_store_paths(&state.data_path, &conversation_meta.id)?;
@@ -1873,7 +1880,14 @@ fn maybe_enqueue_goal_continue_after_idle(
         return Ok(false);
     }
     let conversation_meta = match conversation_service_v2().get_conversation_meta(state, conversation_id) {
-        Ok(conversation_meta) if conversation_meta.summary.trim().is_empty() => conversation_meta,
+        Ok(conversation_meta)
+            if conversation_meta.status.trim() != "archived"
+                && conversation_meta
+                    .archived_at
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .is_none() => conversation_meta,
         _ => return Ok(false),
     };
     let Some(goal) = conversation_meta
@@ -2550,7 +2564,14 @@ async fn process_conversation_batch(
     // 目的是把“正式进入历史的时间”作为消息的业务生效时间。
     // 入队时间只用于队列观察，不用于正式会话排序和轮次判断。
     let conversation_meta = match conversation_service_v2().get_conversation_meta(state, conversation_id) {
-        Ok(conversation_meta) if conversation_meta.summary.trim().is_empty() => conversation_meta,
+        Ok(conversation_meta)
+            if conversation_meta.status.trim() != "archived"
+                && conversation_meta
+                    .archived_at
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .is_none() => conversation_meta,
         _ => {
             complete_pending_chat_events_with_error(
                 state,

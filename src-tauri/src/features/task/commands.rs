@@ -19,7 +19,13 @@ fn task_normalize_conversation_for_write(
     let conversation = conversation_service_v2()
         .get_conversation_meta(state, &normalized)
         .map_err(|_| format!("绑定会话不存在：{normalized}"))?;
-    if !conversation.summary.trim().is_empty()
+    if conversation.status.trim() == "archived"
+        || conversation
+            .archived_at
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_some()
         || conversation.conversation_kind.trim() == CONVERSATION_KIND_DELEGATE
     {
         return Err(format!("绑定会话不可用：{normalized}"));

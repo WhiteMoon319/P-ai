@@ -958,7 +958,6 @@ fn usage_kind_key_and_label_from_meta(
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .is_some()
-        || !conversation_meta.summary.trim().is_empty()
     {
         return ("archived".to_string(), "已归档".to_string());
     }
