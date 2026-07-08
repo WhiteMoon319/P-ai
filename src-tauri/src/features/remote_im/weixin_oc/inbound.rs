@@ -301,6 +301,7 @@ mod weixin_oc_inbound_tests {
             receive_files: true,
             streaming_send: false,
             show_tool_calls: false,
+            filter_markdown: false,
             allow_send_files: false,
         };
 

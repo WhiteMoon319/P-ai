@@ -63,6 +63,7 @@ include!("features/chat/conversation_service/mod.rs");
 include!("features/chat/model_runtime.rs");
 include!("features/chat/scheduler.rs");
 include!("features/remote_im/channel_store.rs");
+include!("features/remote_im/markdown_filter.rs");
 include!("features/remote_im/onebot_v11_ws.rs");
 include!("features/remote_im/dingtalk_stream.rs");
 include!("features/remote_im/weixin_oc.rs");

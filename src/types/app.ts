@@ -325,6 +325,7 @@ export type RemoteImChannelConfig = {
   receiveFiles: boolean;
   streamingSend: boolean;
   showToolCalls: boolean;
+  filterMarkdown: boolean;
   allowSendFiles: boolean;
 };
 

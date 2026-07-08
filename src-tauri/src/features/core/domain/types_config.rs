@@ -998,6 +998,8 @@ struct RemoteImChannelConfig {
     #[serde(default)]
     show_tool_calls: bool,
     #[serde(default)]
+    filter_markdown: bool,
+    #[serde(default)]
     allow_send_files: bool,
 }
 

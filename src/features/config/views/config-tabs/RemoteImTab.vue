@@ -30,6 +30,18 @@
                 <div class="mt-1 text-[11px] opacity-60 truncate">
                   {{ platformLabelText(ch.platform) }}
                 </div>
+                <div class="mt-2 flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    class="badge badge-sm h-7 shrink-0 whitespace-nowrap px-3 text-[11px] leading-none transition-colors"
+                    :class="ch.filterMarkdown ? 'badge-accent text-accent-content' : 'bg-base-300 text-base-content border-transparent'"
+                    :title="t('config.remoteIm.filterMarkdownHint')"
+                    :disabled="saving || isChannelOperationBusy(ch.id)"
+                    @click.stop="toggleChannelFilterMarkdown(ch)"
+                  >
+                    {{ ch.filterMarkdown ? t('config.remoteIm.sendAsPlainText') : t('config.remoteIm.sendAsMarkdown') }}
+                  </button>
+                </div>
               </div>
               <input
                 type="checkbox"
@@ -376,6 +388,13 @@
                   <option value="dingtalk">{{ t("config.remoteIm.platformOptions.dingtalk") }}</option>
                   <option value="weixin_oc">{{ t('config.remoteIm.weixinPlatform') }}</option>
                 </select>
+              </div>
+              <div class="border-b-base-content/5 flex items-start justify-between gap-3 border-b border-dashed py-2">
+                <div class="flex flex-col gap-1">
+                  <span>{{ t("config.remoteIm.filterMarkdown") }}</span>
+                  <span class="max-w-80 text-[11px] opacity-60">{{ t("config.remoteIm.filterMarkdownHint") }}</span>
+                </div>
+                <input v-model="selectedChannel.filterMarkdown" type="checkbox" class="toggle toggle-primary toggle-sm mt-0.5" />
               </div>
 
               <!-- OneBot v11 凭证配置 -->
@@ -1002,6 +1021,7 @@ const channelSnapshot = computed(() => {
     receiveFiles: ch.receiveFiles,
     streamingSend: ch.streamingSend,
     showToolCalls: ch.showToolCalls,
+    filterMarkdown: ch.filterMarkdown,
     credentials: credStr,
   });
 });
@@ -1266,6 +1286,7 @@ function newChannel(platform: RemoteImPlatform = "onebot_v11"): RemoteImChannelC
     receiveFiles: true,
     streamingSend: false,
     showToolCalls: false,
+    filterMarkdown: false,
     allowSendFiles: false,
   };
 }
@@ -1304,6 +1325,28 @@ function cloneRemoteImChannel(channel: RemoteImChannelConfig): RemoteImChannelCo
       ? { ...channel.credentials }
       : {},
   };
+}
+
+async function toggleChannelFilterMarkdown(channel: RemoteImChannelConfig) {
+  if (saving.value || isChannelOperationBusy(channel.id)) return;
+  const oldValue = !!channel.filterMarkdown;
+  channel.filterMarkdown = !oldValue;
+  try {
+    const saved = await Promise.resolve(props.saveConfigAction());
+    if (!saved) {
+      channel.filterMarkdown = oldValue;
+      props.setStatusAction(t("config.remoteIm.channelSaveFailed"));
+      return;
+    }
+    await nextTick();
+    lastSavedChannelSnapshot.value = channelSnapshot.value;
+    props.setStatusAction(channel.filterMarkdown
+      ? t("config.remoteIm.filterMarkdownEnabled")
+      : t("config.remoteIm.filterMarkdownDisabled"));
+  } catch (error) {
+    channel.filterMarkdown = oldValue;
+    props.setStatusAction(t("config.remoteIm.channelSaveFailed"));
+  }
 }
 
 function restoreRemovedChannel(index: number, channel: RemoteImChannelConfig) {

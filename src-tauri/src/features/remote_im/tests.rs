@@ -10,6 +10,7 @@
             receive_files: true,
             streaming_send: false,
             show_tool_calls: false,
+            filter_markdown: false,
             allow_send_files: false,
         };
         let mut runtime = RuntimeStateFile::default();
@@ -78,6 +79,7 @@
             receive_files: true,
             streaming_send: false,
             show_tool_calls: false,
+            filter_markdown: false,
             allow_send_files: false,
         };
         assert!(!remote_im_resolve_inbound_activate(&channel, None));

@@ -2664,6 +2664,7 @@
             receive_files: true,
             streaming_send: false,
             show_tool_calls: false,
+            filter_markdown: false,
             allow_send_files: false,
         });
         write_config(&state.config_path, &config).expect("write config");
@@ -5416,6 +5417,7 @@
             receive_files: true,
             streaming_send: false,
             show_tool_calls: false,
+            filter_markdown: false,
             allow_send_files: false,
         });
         write_config(&state.config_path, &config).expect("write config");
@@ -5678,6 +5680,7 @@
             receive_files: true,
             streaming_send: false,
             show_tool_calls: false,
+            filter_markdown: false,
             allow_send_files: false,
         });
         write_config(&state.config_path, &config).expect("write config");

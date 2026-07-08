@@ -390,6 +390,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
         receiveFiles: item.receiveFiles !== false,
         streamingSend: !!item.streamingSend,
         showToolCalls: !!item.showToolCalls,
+        filterMarkdown: !!item.filterMarkdown,
         allowSendFiles: !!item.allowSendFiles,
       })),
       apiProviders: (options.config.apiProviders || []).map((provider) => ({

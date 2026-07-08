@@ -684,6 +684,12 @@
         "dingtalk": "釘釘",
         "weixinOc": "個人微信"
       },
+      "filterMarkdown": "過濾 Markdown",
+      "filterMarkdownHint": "僅在發送到該渠道時清理常見 Markdown 語法，聊天歷史仍保留模型原文。",
+      "sendAsMarkdown": "以Markdown發送",
+      "sendAsPlainText": "以純文字發送",
+      "filterMarkdownEnabled": "已開啟渠道 Markdown 過濾。",
+      "filterMarkdownDisabled": "已關閉渠道 Markdown 過濾。",
       "allowSendFiles": "可發檔案",
       "credentialsJson": "憑證(JSON)",
       "dingtalkCredentials": "釘釘憑證",

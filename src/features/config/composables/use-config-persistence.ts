@@ -167,6 +167,7 @@ function mapRemoteImChannel(item: unknown): RemoteImChannelConfig {
     receiveFiles: (item as { receiveFiles?: unknown })?.receiveFiles !== false,
     streamingSend: !!(item as { streamingSend?: unknown })?.streamingSend,
     showToolCalls: !!(item as { showToolCalls?: unknown })?.showToolCalls,
+    filterMarkdown: !!(item as { filterMarkdown?: unknown })?.filterMarkdown,
     allowSendFiles: !!(item as { allowSendFiles?: unknown })?.allowSendFiles,
   };
 }

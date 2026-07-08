@@ -834,6 +834,7 @@ fn normalize_remote_im_channels(config: &mut AppConfig) {
             receive_files: raw.receive_files,
             streaming_send: raw.streaming_send,
             show_tool_calls: raw.show_tool_calls,
+            filter_markdown: raw.filter_markdown,
             allow_send_files: raw.allow_send_files,
         });
     }

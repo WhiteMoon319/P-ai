@@ -1356,6 +1356,22 @@ fn remote_im_sdk_for_platform(platform: &RemoteImPlatform) -> Box<dyn RemoteImSd
     }
 }
 
+fn remote_im_payload_with_channel_markdown_filtered(
+    channel: &RemoteImChannelConfig,
+    payload: &Value,
+) -> Value {
+    if !channel.filter_markdown {
+        return payload.clone();
+    }
+    let Some(content) = payload.get("content").and_then(Value::as_array) else {
+        return payload.clone();
+    };
+    let filtered_content = remote_im_filter_markdown_content_items(channel, content.clone());
+    let mut object = payload.as_object().cloned().unwrap_or_default();
+    object.insert("content".to_string(), Value::Array(filtered_content));
+    Value::Object(object)
+}
+
 #[cfg(test)]
 fn remote_im_mock_send_via_sdk(
     channel: &RemoteImChannelConfig,
@@ -1393,14 +1409,16 @@ async fn remote_im_send_via_sdk(
     contact: &RemoteImContact,
     payload: &Value,
 ) -> Result<String, String> {
+    let filtered_payload = remote_im_payload_with_channel_markdown_filtered(channel, payload);
+
     #[cfg(test)]
-    if let Some(mock_result) = remote_im_mock_send_via_sdk(channel, contact, payload) {
+    if let Some(mock_result) = remote_im_mock_send_via_sdk(channel, contact, &filtered_payload) {
         return mock_result;
     }
 
     let sdk = remote_im_sdk_for_platform(&channel.platform);
     sdk.validate_channel(channel)?;
-    sdk.send_outbound(channel, contact, payload).await
+    sdk.send_outbound(channel, contact, &filtered_payload).await
 }
 
 #[cfg(test)]
@@ -1418,6 +1436,7 @@ mod remote_im_adapter_tests {
             receive_files: true,
             streaming_send: false,
             show_tool_calls: false,
+            filter_markdown: false,
             allow_send_files: false,
         }
     }
@@ -1432,6 +1451,24 @@ mod remote_im_adapter_tests {
             ]
         });
         assert_eq!(remote_im_payload_text(&payload), "a\nb".to_string());
+    }
+
+    #[test]
+    fn payload_with_channel_markdown_filtered_should_only_clean_text_content() {
+        let mut channel = mock_channel(RemoteImPlatform::OnebotV11, serde_json::json!({}));
+        channel.filter_markdown = true;
+        let payload = serde_json::json!({
+            "channel_id": "ch",
+            "content": [
+                {"type":"text","text":"**加粗**\n- 列表项"},
+                {"type":"image","name":"a.png","bytesBase64":"xxx"}
+            ]
+        });
+
+        let filtered = remote_im_payload_with_channel_markdown_filtered(&channel, &payload);
+
+        assert_eq!(filtered["content"][0]["text"], "加粗\n列表项");
+        assert_eq!(filtered["content"][1]["type"], "image");
     }
 
     #[test]

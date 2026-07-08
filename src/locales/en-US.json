@@ -683,6 +683,12 @@
         "dingtalk": "DingTalk",
         "weixinOc": "Personal WeChat"
       },
+      "filterMarkdown": "Filter Markdown",
+      "filterMarkdownHint": "Clean common Markdown syntax only when sending to this channel. Chat history still keeps the original model output.",
+      "sendAsMarkdown": "Send as Markdown",
+      "sendAsPlainText": "Send as Plain Text",
+      "filterMarkdownEnabled": "Channel Markdown filtering enabled.",
+      "filterMarkdownDisabled": "Channel Markdown filtering disabled.",
       "allowSendFiles": "Allow sending files",
       "credentialsJson": "Credentials (JSON)",
       "dingtalkCredentials": "DingTalk Credentials",
