@@ -712,7 +712,6 @@ pub(super) fn write_jsonl_snapshot_appended_messages_shard(
     let append_plan = plan_appended_message_blocks(
         old_last_message.as_ref(),
         entries,
-        final_meta.conversation_kind.trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT,
     );
     let total_block_count = old_block_ids.len()
         + append_plan.groups.len()
@@ -846,21 +845,14 @@ struct AppendedMessageBlockPlan {
 }
 
 fn appended_message_starts_new_block(
-    previous_message: &ChatMessage,
     next_message: &ChatMessage,
-    allow_remote_im_day_blocks: bool,
 ) -> bool {
-    if message_store_compaction_kind(next_message).is_some() {
-        return true;
-    }
-    allow_remote_im_day_blocks
-        && message_store_message_day_key(previous_message) != message_store_message_day_key(next_message)
+    message_store_compaction_kind(next_message).is_some()
 }
 
 fn plan_appended_message_blocks(
     last_existing_message: Option<&ChatMessage>,
     entries: &[(&ConversationPersistMeta, &ChatMessage)],
-    allow_remote_im_day_blocks: bool,
 ) -> AppendedMessageBlockPlan {
     let mut groups = Vec::<Vec<ChatMessage>>::new();
     let mut current = Vec::<ChatMessage>::new();
@@ -869,7 +861,7 @@ fn plan_appended_message_blocks(
     for (idx, (_, message)) in entries.iter().enumerate() {
         let start_new_block = previous
             .as_ref()
-            .map(|prev| appended_message_starts_new_block(prev, message, allow_remote_im_day_blocks))
+            .map(|_| appended_message_starts_new_block(message))
             .unwrap_or(false);
         if idx == 0 {
             continue_last_block = previous.is_some() && !start_new_block;

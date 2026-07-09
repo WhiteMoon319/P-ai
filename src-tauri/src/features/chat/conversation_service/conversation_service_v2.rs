@@ -5825,6 +5825,33 @@ impl ConversationServiceV2 {
             &conversation_meta,
             std::slice::from_ref(compression_message),
         )?;
+        if conversation_is_remote_im_contact(source) {
+            let latest_block = message_store::read_ready_message_store_block_page(
+                &store_paths,
+                None,
+            )?
+            .ok_or_else(|| {
+                format!(
+                    "远程联系人压缩瘦身失败：缺少最新块，conversation_id={}",
+                    source.id
+                )
+            })?;
+            let previous_message_count = conversation_meta.message_count();
+            let retained_message_count = latest_block.messages.len();
+            let mut compacted_conversation = conversation.clone();
+            compacted_conversation.messages = latest_block.messages;
+            message_store::write_jsonl_snapshot_directory_shard(
+                &store_paths,
+                &compacted_conversation,
+            )?;
+            runtime_log_info(format!(
+                "[远程联系人压缩] 完成，任务=物理瘦身，conversation_id={}，保留块ID={}，压缩前消息数={}，保留消息数={}",
+                source.id,
+                latest_block.selected_block_id,
+                previous_message_count,
+                retained_message_count
+            ));
+        }
         state_mark_conversation_metadata_direct_persisted(state, &conversation.id)?;
 
         drop(guard);

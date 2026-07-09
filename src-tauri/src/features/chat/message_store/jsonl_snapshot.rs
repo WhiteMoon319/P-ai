@@ -63,7 +63,7 @@ fn build_jsonl_snapshot_conversation_blocks(
 ) -> Result<JsonlSnapshotConversationBlocks, String> {
     build_jsonl_snapshot_conversation_blocks_from_refs(
         false,
-        &split_messages_into_conversation_blocks(messages, false),
+        &split_messages_into_conversation_blocks(messages),
     )
 }
 
@@ -117,19 +117,12 @@ fn build_jsonl_snapshot_conversation_blocks_from_refs(
 fn split_conversation_messages_into_blocks(
     conversation: &Conversation,
 ) -> Vec<ConversationBlockMessageRefs<'_>> {
-    split_messages_into_conversation_blocks(
-        &conversation.messages,
-        conversation_is_remote_im_contact(conversation),
-    )
+    split_messages_into_conversation_blocks(&conversation.messages)
 }
 
 fn split_messages_into_conversation_blocks(
     messages: &[ChatMessage],
-    allow_remote_im_day_blocks: bool,
 ) -> Vec<ConversationBlockMessageRefs<'_>> {
-    if allow_remote_im_day_blocks {
-        return split_messages_into_remote_im_compaction_or_day_blocks(messages);
-    }
     let mut raw_blocks = Vec::<Vec<&ChatMessage>>::new();
     let mut current = Vec::<&ChatMessage>::new();
     for message in messages {
@@ -162,50 +155,6 @@ fn should_slim_conversation_block(
         return true;
     }
     block_idx < block_count.saturating_sub(2)
-}
-
-fn split_messages_into_remote_im_compaction_or_day_blocks(
-    messages: &[ChatMessage],
-) -> Vec<ConversationBlockMessageRefs<'_>> {
-    let mut raw_blocks = Vec::<Vec<&ChatMessage>>::new();
-    let mut current = Vec::<&ChatMessage>::new();
-    let mut current_day = String::new();
-    for message in messages {
-        let day = message_store_message_day_key(message);
-        let should_start_new = !current.is_empty()
-            && (message_store_compaction_kind(message).is_some() || day != current_day);
-        if should_start_new {
-            raw_blocks.push(current);
-            current = Vec::new();
-        }
-        current_day = day;
-        current.push(message);
-    }
-    if !current.is_empty() {
-        raw_blocks.push(current);
-    }
-    raw_blocks_to_conversation_block_refs(raw_blocks)
-}
-
-fn split_messages_into_remote_im_day_blocks(
-    messages: &[ChatMessage],
-) -> Vec<ConversationBlockMessageRefs<'_>> {
-    let mut raw_blocks = Vec::<Vec<&ChatMessage>>::new();
-    let mut current = Vec::<&ChatMessage>::new();
-    let mut current_day = String::new();
-    for message in messages {
-        let day = message_store_message_day_key(message);
-        if !current.is_empty() && day != current_day {
-            raw_blocks.push(current);
-            current = Vec::new();
-        }
-        current_day = day;
-        current.push(message);
-    }
-    if !current.is_empty() {
-        raw_blocks.push(current);
-    }
-    raw_blocks_to_conversation_block_refs(raw_blocks)
 }
 
 fn raw_blocks_to_conversation_block_refs(
@@ -453,7 +402,7 @@ mod jsonl_snapshot_conversation_block_tests {
     }
 
     #[test]
-    fn remote_im_conversation_without_compaction_should_split_by_day() {
+    fn remote_im_conversation_without_compaction_should_keep_one_block_across_days() {
         let mut conversation = test_conversation_for_blocks(vec![
             text_message_at("m1", "user", "day 1", "2026-04-20T10:00:00Z"),
             text_message_at("m2", "assistant", "day 1 reply", "2026-04-20T10:01:00Z"),
@@ -464,14 +413,14 @@ mod jsonl_snapshot_conversation_block_tests {
         let blocks = build_jsonl_snapshot_conversation_blocks_for_conversation(&conversation)
             .expect("build remote im blocks");
 
-        assert_eq!(blocks.blocks.len(), 2);
+        assert_eq!(blocks.blocks.len(), 1);
         assert_eq!(blocks.index.items[0].block_id, Some(0));
         assert_eq!(blocks.index.items[1].block_id, Some(0));
-        assert_eq!(blocks.index.items[2].block_id, Some(1));
+        assert_eq!(blocks.index.items[2].block_id, Some(0));
     }
 
     #[test]
-    fn remote_im_day_blocks_should_use_four_am_boundary() {
+    fn remote_im_conversation_should_not_split_at_four_am_boundary() {
         let mut conversation = test_conversation_for_blocks(vec![
             text_message_at("m1", "user", "late night", "2026-04-20T19:00:00Z"),
             text_message_at("m2", "assistant", "before 4am local", "2026-04-20T19:30:00Z"),
@@ -482,14 +431,14 @@ mod jsonl_snapshot_conversation_block_tests {
         let blocks = build_jsonl_snapshot_conversation_blocks_for_conversation(&conversation)
             .expect("build remote im day boundary blocks");
 
-        assert_eq!(blocks.blocks.len(), 2);
+        assert_eq!(blocks.blocks.len(), 1);
         assert_eq!(blocks.index.items[0].block_id, Some(0));
         assert_eq!(blocks.index.items[1].block_id, Some(0));
-        assert_eq!(blocks.index.items[2].block_id, Some(1));
+        assert_eq!(blocks.index.items[2].block_id, Some(0));
     }
 
     #[test]
-    fn remote_im_conversation_should_split_by_day_and_compaction_boundary() {
+    fn remote_im_conversation_should_only_split_at_compaction_boundary() {
         let mut messages = vec![
             text_message_at("m1", "user", "day 1", "2026-04-20T10:00:00Z"),
             text_message_at("m2", "assistant", "day 2 before compaction", "2026-04-21T10:00:00Z"),
@@ -503,11 +452,11 @@ mod jsonl_snapshot_conversation_block_tests {
         let blocks = build_jsonl_snapshot_conversation_blocks_for_conversation(&conversation)
             .expect("build remote im compaction blocks");
 
-        assert_eq!(blocks.blocks.len(), 3);
+        assert_eq!(blocks.blocks.len(), 2);
         assert_eq!(blocks.index.items[0].block_id, Some(0));
-        assert_eq!(blocks.index.items[1].block_id, Some(1));
-        assert_eq!(blocks.index.items[2].block_id, Some(2));
-        assert_eq!(blocks.index.items[3].block_id, Some(2));
+        assert_eq!(blocks.index.items[1].block_id, Some(0));
+        assert_eq!(blocks.index.items[2].block_id, Some(1));
+        assert_eq!(blocks.index.items[3].block_id, Some(1));
     }
 
     fn text_message_at(id: &str, role: &str, text: &str, created_at: &str) -> ChatMessage {
