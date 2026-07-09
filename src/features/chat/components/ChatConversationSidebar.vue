@@ -294,8 +294,13 @@
             <span v-else class="text-sm font-bold">{{ userAvatarInitial }}</span>
           </div>
         </div>
-        <button type="button" class="btn btn-ghost btn-sm" @click="openBatchArchiveCard">
-          {{ t("chat.batchArchive.title") }}
+        <button
+          type="button"
+          class="btn btn-neutral btn-xs min-h-8 rounded-xl px-3 text-sm font-medium shadow-sm"
+          @click="openBatchArchiveCard"
+        >
+          <span>{{ t("chat.batchArchive.entryAction") }}</span>
+          <ChevronRight class="h-3.5 w-3.5" />
         </button>
       </div>
     </div>
@@ -303,10 +308,6 @@
       <div class="modal-box flex h-[min(88vh,44rem)] w-[min(94vw,64rem)] max-w-none flex-col overflow-hidden p-0">
         <div class="flex shrink-0 items-center justify-between gap-3 border-b border-base-300 px-5 py-4">
           <h3 class="text-base font-semibold">{{ t("chat.batchArchive.title") }}</h3>
-          <div class="badge badge-warning badge-outline gap-1.5 whitespace-nowrap">
-            <AlertTriangle class="h-3.5 w-3.5" />
-            <span>{{ t("chat.batchArchive.uiOnlyBadge") }}</span>
-          </div>
         </div>
         <div class="flex min-h-0 flex-1 flex-col bg-base-200/35 px-5 py-4">
           <section class="shrink-0">
@@ -410,7 +411,13 @@
             <button type="button" class="btn btn-sm" @click="closeBatchArchiveCard">
               {{ t("common.cancel") }}
             </button>
-            <button type="button" class="btn btn-primary btn-sm" disabled>
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              :disabled="batchArchiveStartDisabled"
+              @click="submitBatchArchive"
+            >
+              <span v-if="batchArchiveSubmitting" class="loading loading-spinner loading-xs"></span>
               {{ t("chat.batchArchive.startArchive") }}
             </button>
           </div>
@@ -426,7 +433,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
-import { AlertTriangle, Archive, PencilLine, Pin, PinOff, Search, SquarePen, Trash2, Upload } from "@lucide/vue";
+import { Archive, ChevronRight, PencilLine, Pin, PinOff, Search, SquarePen, Trash2, Upload } from "@lucide/vue";
 import CollapsibleGroup from "./CollapsibleGroup.vue";
 import FloatingConversationMenu from "./FloatingConversationMenu.vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ConversationPreviewMessage } from "../../../types/app";
@@ -454,6 +461,12 @@ type DisplayConversationSection = ConversationSection & {
   visibleItems: ChatConversationOverviewItem[];
   hiddenItemCount: number;
   totalItemCount: number;
+};
+type BatchArchiveConversationsOutput = {
+  success: boolean;
+  acceptedConversationIds: string[];
+  skipped: Array<{ conversationId: string; reason: string }>;
+  activeConversationId?: string;
 };
 
 const CONVERSATION_SECTION_UNUSED_DAYS = 7;
@@ -483,6 +496,7 @@ const emit = defineEmits<{
   (e: "deleteConversation", conversationId: string): void;
   (e: "update:activeTab", value: ConversationSidebarTab): void;
   (e: "editTask", task: TaskEntry): void;
+  (e: "batchArchiveCompleted", payload: { archivedConversationIds: string[]; activeConversationId?: string }): void;
 }>();
 
 const { t, locale } = useI18n();
@@ -499,6 +513,7 @@ const batchArchiveDays = ref(30);
 const batchArchiveKeepOnePerWorkspace = ref(true);
 const batchArchiveSelectedModelId = ref("");
 const batchArchiveSelectedConversationIds = ref<Set<string>>(new Set());
+const batchArchiveSubmitting = ref(false);
 const conversationFloatingScrollRef = ref<InstanceType<typeof ChatConversationFloatingScroll> | null>(null);
 const collapsedConversationSectionKeys = ref<Record<string, boolean>>({});
 const conversationSectionOrders = ref<ConversationSectionOrderState>({ local: [], contact: [] });
@@ -631,6 +646,19 @@ const batchArchiveCandidateConversations = computed(() => {
     !preservedConversationIds.has(String(item.conversationId || "").trim()),
   ));
 });
+
+const batchArchiveSelectedCandidateIds = computed(() => {
+  const selectedIds = batchArchiveSelectedConversationIds.value;
+  return batchArchiveCandidateConversations.value
+    .map(batchArchiveConversationId)
+    .filter((id) => !!id && selectedIds.has(id));
+});
+
+const batchArchiveStartDisabled = computed(() =>
+  batchArchiveSubmitting.value
+  || batchArchiveSelectedCandidateIds.value.length === 0
+  || !String(batchArchiveSelectedModelId.value || "").trim(),
+);
 
 watch(
   () => [props.toolReviewApiConfigId, batchArchiveModelOptions.value.map((item) => item.id).join("|")] as const,
@@ -1205,6 +1233,7 @@ function openBatchArchiveCard() {
 }
 
 function closeBatchArchiveCard() {
+  if (batchArchiveSubmitting.value) return;
   batchArchiveCardOpen.value = false;
 }
 
@@ -1239,6 +1268,32 @@ function selectAllBatchArchiveCandidates() {
 
 function clearBatchArchiveSelection() {
   batchArchiveSelectedConversationIds.value = new Set();
+}
+
+async function submitBatchArchive() {
+  const conversationIds = batchArchiveSelectedCandidateIds.value;
+  const reflectionApiConfigId = String(batchArchiveSelectedModelId.value || "").trim();
+  if (conversationIds.length === 0 || !reflectionApiConfigId || batchArchiveSubmitting.value) return;
+  batchArchiveSubmitting.value = true;
+  try {
+    const payload = { conversationIds, reflectionApiConfigId };
+    const result = props.bridgeRequest
+      ? await props.bridgeRequest<BatchArchiveConversationsOutput>("conversation.batchArchive", payload, 30_000)
+      : await invokeTauri<BatchArchiveConversationsOutput>("batch_archive_conversations", { input: payload });
+    batchArchiveSelectedConversationIds.value = new Set();
+    batchArchiveCardOpen.value = false;
+    emit("batchArchiveCompleted", {
+      archivedConversationIds: Array.isArray(result.acceptedConversationIds) ? result.acceptedConversationIds : [],
+      activeConversationId: String(result.activeConversationId || "").trim() || undefined,
+    });
+    if (Array.isArray(result.skipped) && result.skipped.length > 0) {
+      console.warn("[批量归档] 部分会话跳过", result.skipped);
+    }
+  } catch (error) {
+    console.warn("[批量归档] 提交失败", error);
+  } finally {
+    batchArchiveSubmitting.value = false;
+  }
 }
 
 function conversationAgeDays(item: ChatConversationOverviewItem): number {

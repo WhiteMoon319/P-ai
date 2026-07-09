@@ -1151,6 +1151,7 @@ fn main() {
             save_local_chat_image_as,
             stt_transcribe,
             archive_conversation,
+            batch_archive_conversations,
             compact_conversation,
             refresh_models,
             quick_genai_chat,

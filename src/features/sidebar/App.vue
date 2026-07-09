@@ -38,6 +38,7 @@
       :persona="persona"
       :conversation-call-primary-api-config-id="conversationCallPrimaryApiConfigId"
       :preferred-chat-model-id="preferredChatModelId"
+      :tool-review-api-config-id="toolReviewApiConfigId"
       :chat-model-options="chatModelOptions"
       :workspace-access="workspaceAccess"
       :plan-mode-enabled="activeConversationPlanModeEnabled"
@@ -441,6 +442,7 @@ type SidebarPersonaPayload = {
 type SidebarModelPayload = {
   conversationCallPrimaryApiConfigId?: string;
   preferredChatModelId?: string;
+  toolReviewApiConfigId?: string;
   chatModelOptions?: ApiConfigItem[];
 };
 
@@ -527,6 +529,7 @@ const activeAgentId = ref("");
 const persona = ref<SidebarPersonaPayload>({});
 const conversationCallPrimaryApiConfigId = ref("");
 const preferredChatModelId = ref("");
+const toolReviewApiConfigId = ref("");
 const chatModelOptions = ref<ApiConfigItem[]>([]);
 const workspaceAccess = ref<"read_only" | "approval" | "full_access" | "">("approval");
 const workspaceRootPath = ref("");
@@ -1874,6 +1877,7 @@ async function stopSupervisionTask() {
 function applyModelPayload(payload: SidebarModelPayload) {
   conversationCallPrimaryApiConfigId.value = String(payload.conversationCallPrimaryApiConfigId || "").trim();
   preferredChatModelId.value = String(payload.preferredChatModelId || "").trim();
+  toolReviewApiConfigId.value = String(payload.toolReviewApiConfigId || "").trim();
   chatModelOptions.value = Array.isArray(payload.chatModelOptions) ? payload.chatModelOptions : [];
 }
 

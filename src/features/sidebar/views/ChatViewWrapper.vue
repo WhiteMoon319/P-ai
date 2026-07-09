@@ -28,6 +28,7 @@
     record-hotkey=""
     :conversation-call-primary-api-config-id="conversationCallPrimaryApiConfigId"
     :preferred-chat-model-id="preferredChatModelId"
+    :tool-review-api-config-id="toolReviewApiConfigId"
     :tool-review-refresh-tick="0"
     :terminal-approvals="terminalApprovals"
     :terminal-approval-resolving="terminalApprovalResolving"
@@ -189,6 +190,7 @@ const props = defineProps<{
   };
   conversationCallPrimaryApiConfigId: string;
   preferredChatModelId?: string;
+  toolReviewApiConfigId?: string;
   chatModelOptions: ApiConfigItem[];
   workspaceAccess: "read_only" | "approval" | "full_access" | "";
   planModeEnabled: boolean;

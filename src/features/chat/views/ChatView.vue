@@ -27,6 +27,7 @@
         @archive-conversation="handleConversationArchive"
         @export-conversation="handleConversationExport"
         @delete-conversation="handleConversationDelete"
+        @batch-archive-completed="handleBatchArchiveCompleted"
       />
     </div>
 
@@ -1565,6 +1566,13 @@ function handleConversationPinToggle(id: string) { emit("togglePinConversation",
 function handleConversationArchive(id: string) { emit("archiveConversation", String(id || "").trim()); }
 function handleConversationExport(id: string) { emit("exportConversation", String(id || "").trim()); }
 function handleConversationDelete(id: string) { emit("deleteConversation", String(id || "").trim()); }
+function handleBatchArchiveCompleted(payload: { archivedConversationIds: string[]; activeConversationId?: string }) {
+  const currentId = String(props.activeConversationId || "").trim();
+  if (!currentId || !payload.archivedConversationIds.includes(currentId)) return;
+  const nextId = String(payload.activeConversationId || "").trim();
+  if (!nextId || nextId === currentId) return;
+  emit("switchConversation", { conversationId: nextId, kind: "local_unarchived" });
+}
 function handleRebindConversationRecipient() {
   const option = repairRecipientSelectedOption.value;
   const conversationId = String(props.activeConversationId || "").trim();

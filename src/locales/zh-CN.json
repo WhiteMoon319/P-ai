@@ -1360,13 +1360,12 @@
     "unpinConversation": "取消置顶",
     "batchArchive": {
       "title": "批量归档",
-      "hint": "先选择归档条件。实际批量归档功能暂未接入。",
-      "uiOnlyBadge": "当前仅提供参数选择 UI",
+      "entryAction": "去归档",
       "conditionTitle": "归档条件设置",
       "archiveBeforeDays": "归档多少天前的会话",
       "daysLabel": "归档天数",
       "daysSuffix": "天前的会话",
-      "modelLabel": "归档模型",
+      "modelLabel": "归档反思模型",
       "matchedConversations": "将命中的会话",
       "matchedCount": "共 {count} 个",
       "previewTitle": "命中会话预览（共 {count} 个）",
@@ -1377,8 +1376,7 @@
       "selectedCount": "已选 {count} 个",
       "keepOnePerWorkspace": "至少为每个工作目录保留一个归档文件",
       "keepOnePerWorkspaceHint": "开启后，即使会话满足时间条件，也会尽量为每个工作目录保留一个归档结果。",
-      "startArchive": "开始归档",
-      "notImplemented": "当前只提供参数选择 UI，实际归档动作后续再接入。"
+      "startArchive": "开始归档"
     },
     "conversationNoPreview": "暂无消息",
     "defaultWorkspace": "默认会话目录",

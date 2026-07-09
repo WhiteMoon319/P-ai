@@ -10,6 +10,31 @@ struct ConversationCommandStatus {
     success: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BatchArchiveConversationsInput {
+    conversation_ids: Vec<String>,
+    #[serde(alias = "apiConfigId")]
+    reflection_api_config_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BatchArchiveSkippedConversation {
+    conversation_id: String,
+    reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BatchArchiveConversationsOutput {
+    success: bool,
+    accepted_conversation_ids: Vec<String>,
+    skipped: Vec<BatchArchiveSkippedConversation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    active_conversation_id: Option<String>,
+}
+
 #[tauri::command]
 async fn archive_conversation(
     input: ConversationIdOnlyInput,
@@ -129,6 +154,114 @@ async fn archive_conversation(
     Ok(ConversationCommandStatus { success: true })
 }
 
+#[tauri::command]
+async fn batch_archive_conversations(
+    input: BatchArchiveConversationsInput,
+    state: State<'_, AppState>,
+) -> Result<BatchArchiveConversationsOutput, String> {
+    batch_archive_conversations_inner(state.inner(), input).await
+}
+
+pub(crate) async fn batch_archive_conversations_inner(
+    state: &AppState,
+    input: BatchArchiveConversationsInput,
+) -> Result<BatchArchiveConversationsOutput, String> {
+    let started_at = std::time::Instant::now();
+    let conversation_ids = normalize_batch_archive_conversation_ids(&input.conversation_ids);
+    if conversation_ids.is_empty() {
+        return Err("conversationIds is required".to_string());
+    }
+    let (reflection_api, reflection_resolved_api) =
+        resolve_batch_archive_reflection_api_config(state, input.reflection_api_config_id.as_str())?;
+    runtime_log_info(format!(
+        "[批量归档] 开始，任务=批量归档，即时标记，reflection_api_config_id={}，requested_count={}",
+        reflection_api.id,
+        conversation_ids.len()
+    ));
+
+    let runtime = state_read_runtime_state_cached(state)?;
+    let main_conversation_id = runtime
+        .main_conversation_id
+        .as_deref()
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_string();
+    let mut accepted = Vec::<BatchArchiveAcceptedConversation>::new();
+    let mut skipped = Vec::<BatchArchiveSkippedConversation>::new();
+    let mut latest_overview_payload = None::<UnarchivedConversationOverviewUpdatedPayload>;
+    let mut latest_active_conversation_id = None::<String>;
+
+    for conversation_id in conversation_ids {
+        match prepare_batch_archive_conversation(
+            state,
+            &conversation_id,
+            main_conversation_id.as_str(),
+        ) {
+            Ok((source, effective_agent_id)) => {
+                match instant_batch_archive_conversation_metadata_only(state, &reflection_api, &source) {
+                    Ok(archive_result) => {
+                        latest_active_conversation_id =
+                            Some(archive_result.active_conversation_id.clone());
+                        latest_overview_payload = Some(archive_result.overview_payload);
+                        if !archive_result.already_archived {
+                            accepted.push(BatchArchiveAcceptedConversation {
+                                conversation_id: source.id,
+                                effective_agent_id,
+                            });
+                        } else {
+                            skipped.push(BatchArchiveSkippedConversation {
+                                conversation_id: source.id,
+                                reason: "会话已经归档。".to_string(),
+                            });
+                        }
+                    }
+                    Err(err) => skipped.push(BatchArchiveSkippedConversation {
+                        conversation_id: source.id,
+                        reason: decorate_manual_archive_failure_reason(err),
+                    }),
+                }
+            }
+            Err(reason) => skipped.push(BatchArchiveSkippedConversation {
+                conversation_id,
+                reason: decorate_manual_archive_failure_reason(reason),
+            }),
+        }
+    }
+
+    if !accepted.is_empty() {
+        flush_pending_persists_blocking(state)
+            .map_err(|err| format!("批量归档状态写入失败：{}", err))?;
+    }
+    if let Some(payload) = latest_overview_payload.as_ref() {
+        emit_unarchived_conversation_overview_updated_payload(state, payload);
+    }
+
+    let accepted_conversation_ids = accepted
+        .iter()
+        .map(|item| item.conversation_id.clone())
+        .collect::<Vec<_>>();
+    spawn_batch_archive_pipeline(
+        state.clone(),
+        reflection_api.clone(),
+        reflection_resolved_api.clone(),
+        accepted,
+        latest_active_conversation_id.clone(),
+    );
+    runtime_log_info(format!(
+        "[批量归档] 完成，任务=批量归档，即时标记，reflection_api_config_id={}，accepted_count={}，skipped_count={}，duration_ms={}",
+        reflection_api.id,
+        accepted_conversation_ids.len(),
+        skipped.len(),
+        started_at.elapsed().as_millis()
+    ));
+    Ok(BatchArchiveConversationsOutput {
+        success: true,
+        accepted_conversation_ids,
+        skipped,
+        active_conversation_id: latest_active_conversation_id,
+    })
+}
+
 pub(crate) async fn run_archive_pipeline(
     state: &AppState,
     selected_api: &ApiConfig,
@@ -174,6 +307,327 @@ pub(crate) async fn run_archive_pipeline(
     );
 
     result
+}
+
+#[derive(Debug, Clone)]
+struct BatchArchiveAcceptedConversation {
+    conversation_id: String,
+    effective_agent_id: String,
+}
+
+fn normalize_batch_archive_conversation_ids(values: &[String]) -> Vec<String> {
+    let mut seen = std::collections::HashSet::<String>::new();
+    let mut out = Vec::<String>::new();
+    for value in values {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if seen.insert(trimmed.to_string()) {
+            out.push(trimmed.to_string());
+        }
+    }
+    out
+}
+
+fn resolve_batch_archive_reflection_api_config(
+    state: &AppState,
+    reflection_api_config_id: &str,
+) -> Result<(ApiConfig, ResolvedApiConfig), String> {
+    let normalized_api_config_id = reflection_api_config_id.trim();
+    if normalized_api_config_id.is_empty() {
+        return Err("reflectionApiConfigId is required".to_string());
+    }
+    let runtime_snapshot = load_runtime_organization_snapshot(state)?;
+    let app_config = runtime_snapshot.config;
+    let resolved_api_config_id = resolve_model_role_api_config_id(&app_config, normalized_api_config_id)
+        .ok_or_else(|| "reflectionApiConfigId is required".to_string())?;
+    let selected_api = app_config
+        .api_configs
+        .iter()
+        .find(|api| api.id.trim() == resolved_api_config_id.trim())
+        .cloned()
+        .ok_or_else(|| format!("归档反思模型不存在：{}", normalized_api_config_id))?;
+    if !selected_api.enable_text || !selected_api.request_format.is_chat_text() {
+        return Err(format!("归档反思模型不支持文本对话：{}", selected_api.id));
+    }
+    let resolved_api = resolve_api_config(&app_config, Some(selected_api.id.as_str()))?;
+    Ok((selected_api, resolved_api))
+}
+
+fn instant_batch_archive_conversation_metadata_only(
+    state: &AppState,
+    replacement_seed_api: &ApiConfig,
+    source: &Conversation,
+) -> Result<InstantArchiveConversationMutationResult, String> {
+    let guard = state.conversation_lock.lock().map_err(|err| {
+        format!(
+            "Failed to lock state mutex at {}:{} {}: {err}",
+            file!(),
+            line!(),
+            module_path!()
+        )
+    })?;
+    let source_conversation_meta = conversation_service_v2()
+        .get_conversation_meta(state, &source.id)
+        .map_err(|err| format!("当前没有可归档的活动对话：{}", err))?;
+    let source_conversation =
+        conversation_service_v2().build_conversation_record_from_meta_view(&source_conversation_meta);
+    let already_archived = source_conversation_meta.status.trim() == "archived";
+    if !already_archived
+        && !conversation_service_v2().conversation_meta_is_local_normal_chat_meta_view(&source_conversation_meta)
+    {
+        drop(guard);
+        return Err("当前没有可归档的活动对话。".to_string());
+    }
+
+    let runtime = state_read_runtime_state_cached(state)?;
+    let runtime_snapshot = load_runtime_organization_snapshot(state)?;
+    let agents = runtime_snapshot.agents;
+    let chat_index = state_read_chat_index_cached(state)?;
+    let active_conversation_id = if let Some(conversation_id) = chat_index
+        .conversations
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, item)| {
+            let conversation_meta = conversation_service_v2()
+                .get_conversation_meta(state, item.id.as_str())
+                .ok()?;
+            Some((idx, conversation_meta))
+        })
+        .filter(|(_, conversation_meta)| {
+            conversation_meta.id != source.id
+                && conversation_service_v2()
+                    .conversation_meta_is_local_normal_chat_meta_view(conversation_meta)
+        })
+        .max_by(|(idx_a, a), (idx_b, b)| {
+            let a_updated = a.updated_at.trim();
+            let b_updated = b.updated_at.trim();
+            let a_created = a.created_at.trim();
+            let b_created = b.created_at.trim();
+            a_updated
+                .cmp(b_updated)
+                .then_with(|| a_created.cmp(b_created))
+                .then_with(|| idx_a.cmp(idx_b))
+        })
+        .map(|(_, conversation_meta)| conversation_meta.id.to_string())
+    {
+        conversation_id
+    } else {
+        let conversation = build_archive_replacement_conversation(
+            state,
+            &agents,
+            &runtime.assistant_department_agent_id,
+            replacement_seed_api,
+            source,
+        )?;
+        let conversation_id = conversation.id.clone();
+        state_schedule_conversation_persist(state, &conversation)?;
+        conversation_id
+    };
+
+    if !already_archived {
+        let previous_status = source_conversation.status.clone();
+        let now = now_iso();
+        let (conversation, (), _) = state_update_conversation_metadata_cached(
+            state,
+            &source.id,
+            |conversation| {
+                conversation.status = "archived".to_string();
+                conversation.summary.clear();
+                conversation.fast_request_turns.clear();
+                conversation.archived_at = Some(now.clone());
+                conversation.updated_at = now.clone();
+                Ok(())
+            },
+        )?;
+        runtime_log_info(format!(
+            "[批量归档] 完成，任务=即时标记归档，conversation_id={}，previous_status={}，archived_at={}",
+            conversation.id,
+            previous_status,
+            conversation.archived_at.as_deref().unwrap_or("")
+        ));
+    }
+    let app_config = runtime_snapshot.config;
+    let unarchived_conversations =
+        conversation_service_v2().collect_unarchived_conversation_summaries_cached(state, &app_config)?;
+    let overview_payload = UnarchivedConversationOverviewUpdatedPayload {
+        preferred_conversation_id: Some(active_conversation_id.clone()),
+        unarchived_conversations,
+    };
+    drop(guard);
+    Ok(InstantArchiveConversationMutationResult {
+        active_conversation_id,
+        overview_payload,
+        already_archived,
+    })
+}
+
+fn prepare_batch_archive_conversation(
+    state: &AppState,
+    conversation_id: &str,
+    main_conversation_id: &str,
+) -> Result<(Conversation, String), String> {
+    let normalized_conversation_id = conversation_id.trim();
+    if normalized_conversation_id.is_empty() {
+        return Err("conversationId is required".to_string());
+    }
+    let guard = state.conversation_lock.lock().map_err(|err| {
+        format!(
+            "Failed to lock state mutex at {}:{} {}: {err}",
+            file!(),
+            line!(),
+            module_path!()
+        )
+    })?;
+    let runtime_snapshot = load_runtime_organization_snapshot(state)?;
+    let source_meta = conversation_service_v2()
+        .get_conversation_meta(state, normalized_conversation_id)
+        .map_err(|_| "当前没有可归档的活动对话。".to_string())?;
+    if !conversation_service_v2().conversation_meta_is_local_normal_chat_meta_view(&source_meta)
+        && source_meta.status.trim() != "archived"
+    {
+        drop(guard);
+        return Err("当前没有可归档的活动对话。".to_string());
+    }
+    let source = conversation_service_v2().build_conversation_record_from_meta_view(&source_meta);
+    if conversation_is_archived(&source) {
+        drop(guard);
+        return Err("会话已经归档。".to_string());
+    }
+    if source.id.trim() == main_conversation_id.trim() {
+        drop(guard);
+        return Err("系统通知会话暂不支持归档。".to_string());
+    }
+    let effective_agent_id = resolve_batch_archive_effective_agent_id(&runtime_snapshot, &source);
+    if source_meta.department_id.trim().is_empty() {
+        runtime_log_warn(format!(
+            "[批量归档] 跳过部门校验，任务=批量归档元数据校验，conversation_id={}，原因=会话未绑定部门，改为直接归档并跳过归档反思",
+            source.id
+        ));
+    } else if runtime_department_by_id(&runtime_snapshot, source_meta.department_id.trim()).is_none() {
+        runtime_log_warn(format!(
+            "[批量归档] 跳过部门校验，任务=批量归档元数据校验，conversation_id={}，department_id={}，原因=会话绑定部门不存在，改为直接归档并跳过归档反思",
+            source.id,
+            source_meta.department_id
+        ));
+    }
+    let conversation_runtime_state = get_conversation_runtime_state(state, &source.id)?;
+    let disabled_reason = match conversation_runtime_state {
+        MainSessionState::AssistantStreaming => Some("当前会话正在流式输出，请稍后再归档。"),
+        MainSessionState::OrganizingContext => Some("强制归档正在进行中，请稍候。"),
+        MainSessionState::Idle => None,
+    };
+    if let Some(reason) = disabled_reason {
+        drop(guard);
+        return Err(reason.to_string());
+    }
+    drop(guard);
+    Ok((source, effective_agent_id))
+}
+
+fn resolve_batch_archive_effective_agent_id(
+    runtime_snapshot: &RuntimeOrganizationSnapshot,
+    source: &Conversation,
+) -> String {
+    let effective_agent_id = source.agent_id.trim();
+    if effective_agent_id.is_empty() {
+        runtime_log_warn(format!(
+            "[批量归档] 跳过人格校验，任务=批量归档元数据校验，conversation_id={}，原因=会话未绑定人格，不再回退到其他人格；后续如无法确定归档归属，将直接跳过归档反思",
+            source.id
+        ));
+        return String::new();
+    }
+    if runtime_snapshot
+        .agents
+        .iter()
+        .any(|agent| agent.id == effective_agent_id && !agent.is_built_in_user)
+    {
+        return effective_agent_id.to_string();
+    }
+    runtime_log_warn(format!(
+        "[批量归档] 跳过人格校验，任务=批量归档元数据校验，conversation_id={}，agent_id={}，原因=会话绑定人格不存在或不可用，不再回退到其他人格；后续如无法确定归档归属，将直接跳过归档反思",
+        source.id,
+        effective_agent_id
+    ));
+    effective_agent_id.to_string()
+}
+
+fn spawn_batch_archive_pipeline(
+    state: AppState,
+    selected_api: ApiConfig,
+    resolved_api: ResolvedApiConfig,
+    accepted: Vec<BatchArchiveAcceptedConversation>,
+    active_conversation_id: Option<String>,
+) {
+    if accepted.is_empty() {
+        return;
+    }
+    tauri::async_runtime::spawn(async move {
+        let total_count = accepted.len();
+        let panic_safe_task = std::panic::AssertUnwindSafe(async {
+            runtime_log_info(format!(
+                "[批量归档] 开始，任务=后台串行归档维护，api_config_id={}，accepted_count={}",
+                selected_api.id, total_count
+            ));
+            for item in accepted {
+                let item_started_at = std::time::Instant::now();
+                let source = match conversation_service_v2()
+                    .read_archive_pipeline_source_conversation(&state, &item.conversation_id)
+                {
+                    Ok(conversation) => conversation,
+                    Err(err) => {
+                        runtime_log_warn(format!(
+                            "[批量归档] 失败，任务=后台串行归档维护，conversation_id={}，error=读取归档流水线源会话失败：{}",
+                            item.conversation_id, err
+                        ));
+                        continue;
+                    }
+                };
+                if let Err(err) = run_archive_pipeline(
+                    &state,
+                    &selected_api,
+                    &resolved_api,
+                    &source,
+                    &item.effective_agent_id,
+                    active_conversation_id.as_deref(),
+                    None,
+                    "batch_archive_conversations",
+                    "ARCHIVE-BATCH",
+                )
+                .await
+                {
+                    runtime_log_warn(format!(
+                        "[批量归档] 失败，任务=后台串行归档维护，conversation_id={}，error={}，duration_ms={}",
+                        source.id,
+                        err,
+                        item_started_at.elapsed().as_millis()
+                    ));
+                    continue;
+                }
+                runtime_log_info(format!(
+                    "[批量归档] 完成，任务=后台串行归档维护，conversation_id={}，duration_ms={}",
+                    source.id,
+                    item_started_at.elapsed().as_millis()
+                ));
+            }
+            trigger_chat_queue_processing(&state);
+            runtime_log_info(format!(
+                "[批量归档] 完成，任务=后台串行归档维护，api_config_id={}，accepted_count={}",
+                selected_api.id, total_count
+            ));
+        });
+        if futures_util::FutureExt::catch_unwind(panic_safe_task)
+            .await
+            .is_err()
+        {
+            eprintln!(
+                "[批量归档] 失败，任务=后台串行归档维护，api_config_id={}，error=panic",
+                selected_api.id
+            );
+            trigger_chat_queue_processing(&state);
+        }
+    });
 }
 
 async fn run_archive_pipeline_inner(

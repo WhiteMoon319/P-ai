@@ -515,6 +515,7 @@ fn ide_chat_model_payload_for_conversation(state: &AppState, conversation: &Conv
     Ok(serde_json::json!({
         "conversationCallPrimaryApiConfigId": conversation_call_primary_id,
         "preferredChatModelId": preferred_id,
+        "toolReviewApiConfigId": config.tool_review_api_config_id,
         "chatModelOptions": options,
     }))
 }
@@ -5175,6 +5176,15 @@ fn ide_chat_delete_conversation(state: &AppState, params: Value) -> Result<Value
     }))
 }
 
+async fn ide_chat_batch_archive_conversations(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<BatchArchiveConversationsInput>(params)?;
+    let output = batch_archive_conversations_inner(state, input).await?;
+    ide_chat_serialize(output)
+}
+
 fn ide_chat_rebind_conversation_recipient(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<RebindUnarchivedConversationRecipientInput>(params)?;
     let output = rebind_unarchived_conversation_recipient_inner(input, state)?;
@@ -6005,6 +6015,7 @@ async fn ide_chat_handle_jsonrpc_request(
         })(),
         "conversation.createOptions" => ide_chat_create_conversation_options(state),
         "conversation.delete" => ide_chat_delete_conversation(state, request.params),
+        "conversation.batchArchive" => ide_chat_batch_archive_conversations(state, request.params).await,
         "conversation.rebindRecipient" => ide_chat_rebind_conversation_recipient(state, request.params),
         "conversation.rewindPreview" => ide_chat_rewind_preview(state, request.params).await,
         "conversation.rewind" => ide_chat_rewind_conversation(state, request.params).await,
