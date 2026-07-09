@@ -735,7 +735,7 @@ fn tool_loop_is_first_tool_result_in_group(
         .unwrap_or(false)
 }
 
-fn tool_loop_tool_group_has_remote_im_reply_decision(
+fn tool_loop_tool_group_suppresses_pre_tool_auto_send(
     assistant_tool_call_event: &Value,
     tool_result_event: &Value,
 ) -> bool {
@@ -755,12 +755,12 @@ fn tool_loop_tool_group_has_remote_im_reply_decision(
                     .get("function")
                     .and_then(|function| function.get("arguments"))
                     .and_then(remote_im_extract_action_from_tool_arguments);
-                matches!(tool_name, "contact_reply" | "contact_send_files" | "contact_no_reply")
+                tool_name == "contact_no_reply"
                     || (tool_name == "remote_im_send"
                         && (argument_action
                             .as_deref()
-                            .is_some_and(remote_im_is_reply_decision_action)
-                            || action.as_deref().is_some_and(remote_im_is_reply_decision_action)))
+                            .is_some_and(|value| value.eq_ignore_ascii_case("no_reply"))
+                            || action.as_deref().is_some_and(|value| value.eq_ignore_ascii_case("no_reply"))))
             })
         })
         .unwrap_or(false)
@@ -795,12 +795,12 @@ fn maybe_spawn_remote_im_tool_persist_auto_send(
         ));
         return;
     }
-    if tool_loop_tool_group_has_remote_im_reply_decision(
+    if tool_loop_tool_group_suppresses_pre_tool_auto_send(
         assistant_tool_call_event,
         tool_result_event,
     ) {
         runtime_log_info(format!(
-            "[远程IM][工具持久化自动发送] 跳过，任务=tool_persist_auto_send，conversation_id={}，assistant_message_id={}，contact_id={}，reason=contact_tool_decision，text_len={}",
+            "[远程IM][工具持久化自动发送] 跳过，任务=tool_persist_auto_send，conversation_id={}，assistant_message_id={}，contact_id={}，reason=no_reply_decision，text_len={}",
             context.conversation_id,
             assistant_message_id,
             activation_source.remote_contact_id,
@@ -3159,6 +3159,56 @@ mod tool_loop_tests {
                 "contact_no_reply:call-1".to_string(),
             ]
         );
+    }
+
+    fn assistant_contact_tool_event(tool_name: &str) -> Value {
+        serde_json::json!({
+            "role": "assistant",
+            "content": "先说明一下处理方式",
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {
+                        "name": tool_name,
+                        "arguments": "{}"
+                    }
+                }
+            ]
+        })
+    }
+
+    fn contact_tool_result_event(action: &str) -> Value {
+        serde_json::json!({
+            "role": "tool",
+            "tool_call_id": "call-1",
+            "content": serde_json::json!({
+                "ok": true,
+                "action": action
+            }).to_string()
+        })
+    }
+
+    #[test]
+    fn contact_reply_should_not_suppress_pre_tool_auto_send() {
+        let assistant_event = assistant_contact_tool_event("contact_reply");
+        let tool_result_event = contact_tool_result_event("reply");
+
+        assert!(!tool_loop_tool_group_suppresses_pre_tool_auto_send(
+            &assistant_event,
+            &tool_result_event,
+        ));
+    }
+
+    #[test]
+    fn contact_no_reply_should_suppress_pre_tool_auto_send() {
+        let assistant_event = assistant_contact_tool_event("contact_no_reply");
+        let tool_result_event = contact_tool_result_event("no_reply");
+
+        assert!(tool_loop_tool_group_suppresses_pre_tool_auto_send(
+            &assistant_event,
+            &tool_result_event,
+        ));
     }
 
     #[test]

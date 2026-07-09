@@ -113,10 +113,10 @@ const CONTACT_REPLY_TOOL_TEXT_DESCRIPTION: &str =
     "要立刻发给本轮绑定联系人的文本内容；可用标准 Markdown 图片语法 `![说明](本地路径)` 内联发送本地图片。";
 
 const CONTACT_SEND_FILES_TOOL_DESCRIPTION: &str =
-    "联系人专用附件发送工具。立刻把文件发给本轮绑定联系人；图片按图片发送，其他文件按附件发送。它不会取消本轮结束后的自动最终回复。";
+    "联系人专用附件发送工具。立刻把本地文件或网络文件发给本轮绑定联系人；图片按图片发送，其他文件按附件发送。它不会取消本轮结束后的自动最终回复。";
 
 const CONTACT_SEND_FILES_TOOL_FILE_PATHS_DESCRIPTION: &str =
-    "要发送给本轮绑定联系人的文件路径列表。必须传真实本地文件路径，不要传正文里的文件链接。";
+    "要发送给本轮绑定联系人的文件路径或 HTTP(S) URL 列表；图片 URL 会下载后按图片发送，其他 URL 会按附件发送。";
 
 const CONTACT_NO_REPLY_TOOL_DESCRIPTION: &str =
     "联系人专用静默决策工具。声明本轮结束时不要自动向本轮绑定联系人发送最终回复，并可记录本轮不回复的原因供后续轮次参考。";

@@ -8,8 +8,11 @@
 
 ## 修复
 
+- 修复（remote-im）：联系人 `contact_reply` / `contact_send_files` 不再吞掉工具调用前已生成的回复正文，仅 `contact_no_reply` 会阻止工具前正文自动发送。
 - 修复（remote-im）：联系人工作目录变更后立即失效对应会话的系统提示词缓存，避免提示词预览和后续发送继续使用旧 `AGENTS.md` 内容。
 
-## 重构
-
 ## 优化
+
+- 优化（remote-im）：`contact_send_files` 支持 HTTP(S) 网络文件，图片 URL 下载后按图片内容发送，其他 URL 按附件发送。
+
+## 重构

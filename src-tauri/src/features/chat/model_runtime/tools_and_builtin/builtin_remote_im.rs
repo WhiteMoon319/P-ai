@@ -13,6 +13,8 @@ struct BuiltinContactSendFilesTool {
 #[derive(Debug, Clone)]
 struct BuiltinContactNoReplyTool;
 
+const REMOTE_IM_URL_ATTACHMENT_MAX_BYTES: u64 = 100 * 1024 * 1024;
+
 impl RuntimeToolMetadata for BuiltinContactReplyTool {
     fn provider_tool_definition(&self) -> ProviderToolDefinition {
         ProviderToolDefinition::new(
@@ -168,12 +170,144 @@ async fn remote_im_resolve_file_path(state: &AppState, raw: &str) -> Result<Path
     Ok(candidate)
 }
 
+fn remote_im_is_http_url(raw: &str) -> bool {
+    reqwest::Url::parse(raw.trim())
+        .ok()
+        .map(|url| matches!(url.scheme(), "http" | "https"))
+        .unwrap_or(false)
+}
+
+fn remote_im_content_disposition_file_name(raw: &str) -> Option<String> {
+    raw.split(';').find_map(|part| {
+        let trimmed = part.trim();
+        let value = trimmed
+            .strip_prefix("filename*=")
+            .or_else(|| trimmed.strip_prefix("filename="))?
+            .trim()
+            .trim_matches('"');
+        let value = value
+            .strip_prefix("UTF-8''")
+            .or_else(|| value.strip_prefix("utf-8''"))
+            .unwrap_or(value);
+        urlencoding::decode(value)
+            .ok()
+            .map(|decoded| sanitize_download_file_name(&decoded))
+            .filter(|name| !name.trim().is_empty())
+    })
+}
+
+fn remote_im_file_name_from_url(url: &reqwest::Url, content_disposition: Option<&str>) -> String {
+    if let Some(name) = content_disposition.and_then(remote_im_content_disposition_file_name) {
+        return name;
+    }
+    url.path_segments()
+        .and_then(|mut segments| segments.next_back())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .and_then(|value| urlencoding::decode(value).ok().map(|decoded| decoded.to_string()))
+        .map(|value| sanitize_download_file_name(&value))
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "attachment.bin".to_string())
+}
+
+fn remote_im_mime_from_name_or_bytes(file_name: &str, raw: &[u8], header_mime: Option<&str>) -> String {
+    if let Some(mime) = image_mime_from_bytes(raw) {
+        return mime.to_string();
+    }
+    header_mime
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.split(';').next().unwrap_or(value).trim().to_string())
+        .filter(|value| !value.is_empty())
+        .or_else(|| media_mime_from_path(std::path::Path::new(file_name)).map(str::to_string))
+        .unwrap_or_else(|| "application/octet-stream".to_string())
+}
+
+fn remote_im_image_content_item_from_bytes(
+    file_name: &str,
+    mime: &str,
+    raw: &[u8],
+) -> Result<Value, String> {
+    let normalized = normalize_image_bytes_for_llm_request(raw, Some(mime))
+        .map_err(|err| format!("规范化网络图片失败: file_name={file_name}, err={err}"))?;
+    let send_name = remote_im_local_image_send_name(file_name, &normalized.mime);
+    Ok(serde_json::json!({
+        "type": "image",
+        "mime": normalized.mime,
+        "name": send_name,
+        "bytesBase64": B64.encode(&normalized.bytes)
+    }))
+}
+
+async fn remote_im_download_url_content_item(state: &AppState, raw: &str) -> Result<Value, String> {
+    let url = reqwest::Url::parse(raw.trim()).map_err(|err| format!("附件 URL 无效: {err}"))?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(format!("附件 URL 协议不支持: {}", url.scheme()));
+    }
+    let response = state
+        .shared_http_client
+        .get(url.clone())
+        .send()
+        .await
+        .map_err(|err| format!("下载附件失败: url={url}, err={err}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("下载附件失败: url={url}, status={status}"));
+    }
+    if let Some(length) = response.content_length() {
+        if length > REMOTE_IM_URL_ATTACHMENT_MAX_BYTES {
+            return Err(format!(
+                "网络附件过大: url={}, bytes={}, max_bytes={}",
+                url, length, REMOTE_IM_URL_ATTACHMENT_MAX_BYTES
+            ));
+        }
+    }
+    let headers = response.headers().clone();
+    let header_mime = headers
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    let content_disposition = headers
+        .get(reqwest::header::CONTENT_DISPOSITION)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|err| format!("读取网络附件失败: url={url}, err={err}"))?;
+    if bytes.len() as u64 > REMOTE_IM_URL_ATTACHMENT_MAX_BYTES {
+        return Err(format!(
+            "网络附件过大: url={}, bytes={}, max_bytes={}",
+            url,
+            bytes.len(),
+            REMOTE_IM_URL_ATTACHMENT_MAX_BYTES
+        ));
+    }
+    let file_name = remote_im_file_name_from_url(&url, content_disposition.as_deref());
+    let mime = remote_im_mime_from_name_or_bytes(&file_name, &bytes, header_mime.as_deref());
+    if mime.starts_with("image/") {
+        return remote_im_image_content_item_from_bytes(&file_name, &mime, &bytes);
+    }
+    Ok(serde_json::json!({
+        "type": "file",
+        "name": file_name,
+        "mime": mime,
+        "bytesBase64": B64.encode(&bytes)
+    }))
+}
+
 async fn remote_im_build_file_content_items(
     state: &AppState,
     file_paths: &[String],
 ) -> Result<Vec<Value>, String> {
     let mut out = Vec::<Value>::new();
     for raw in file_paths {
+        if remote_im_is_http_url(raw) {
+            out.push(remote_im_download_url_content_item(state, raw).await?);
+            continue;
+        }
         let path = remote_im_resolve_file_path(state, raw).await?;
         let file_name = path
             .file_name()
@@ -205,20 +339,13 @@ async fn remote_im_build_file_content_items(
     Ok(out)
 }
 
-async fn remote_im_outbound_contains_non_image_file(
-    state: &AppState,
-    file_paths: &[String],
-) -> Result<bool, String> {
-    for raw in file_paths {
-        let path = remote_im_resolve_file_path(state, raw).await?;
-        let mime = media_mime_from_path(path.as_path())
-            .unwrap_or("application/octet-stream")
-            .to_string();
-        if !mime.starts_with("image/") {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+fn remote_im_content_contains_file(content: &[Value]) -> bool {
+    content.iter().any(|item| {
+        item.get("type")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .is_some_and(|value| value == "file")
+    })
 }
 
 fn remote_im_local_image_send_name(file_name: &str, mime: &str) -> String {
@@ -464,12 +591,10 @@ async fn builtin_contact_send_files(
     if !contact.allow_send {
         return Err("当前联系人不允许发送消息".to_string());
     }
-    if !contact.allow_send_files
-        && remote_im_outbound_contains_non_image_file(state, &file_paths).await?
-    {
+    let content = remote_im_build_file_content_items(state, &file_paths).await?;
+    if !contact.allow_send_files && remote_im_content_contains_file(&content) {
         return Err("当前联系人已禁止接收非图片文件".to_string());
     }
-    let content = remote_im_build_file_content_items(state, &file_paths).await?;
     let mut result =
         remote_im_send_content_payload(state, &channel, &contact, content, false, "send_files").await?;
     if let Some(obj) = result.as_object_mut() {
@@ -514,5 +639,49 @@ mod remote_im_local_image_tests {
             remote_im_local_image_send_name("result.png", "image/png"),
             "result.png"
         );
+    }
+
+    #[test]
+    fn remote_im_file_name_from_url_should_decode_path_or_content_disposition() {
+        let url = reqwest::Url::parse("https://example.com/files/http%20502.png?token=1")
+            .expect("valid url");
+        assert_eq!(
+            remote_im_file_name_from_url(&url, None),
+            "http 502.png"
+        );
+        assert_eq!(
+            remote_im_file_name_from_url(
+                &url,
+                Some("attachment; filename*=UTF-8''cat%20502.jpg")
+            ),
+            "cat 502.jpg"
+        );
+    }
+
+    #[test]
+    fn remote_im_image_content_item_from_bytes_should_emit_image_payload() {
+        let mut png = Vec::<u8>::new();
+        {
+            let image = image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+                1,
+                1,
+                image::Rgba([1, 2, 3, 255]),
+            ));
+            let mut cursor = std::io::Cursor::new(&mut png);
+            image
+                .write_to(&mut cursor, image::ImageFormat::Png)
+                .expect("write png");
+        }
+
+        let item = remote_im_image_content_item_from_bytes("cat.png", "image/png", &png)
+            .expect("image item");
+
+        assert_eq!(item.get("type").and_then(Value::as_str), Some("image"));
+        assert_eq!(item.get("mime").and_then(Value::as_str), Some("image/webp"));
+        assert_eq!(item.get("name").and_then(Value::as_str), Some("cat.webp"));
+        assert!(item
+            .get("bytesBase64")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.trim().is_empty()));
     }
 }

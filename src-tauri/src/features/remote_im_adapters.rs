@@ -72,18 +72,28 @@ fn remote_im_onebot_message_segments(payload: &Value) -> Vec<Value> {
                 }));
             }
             "file" => {
-                let path = item
-                    .get("path")
+                let bytes_base64 = item
+                    .get("bytesBase64")
                     .and_then(Value::as_str)
                     .map(str::trim)
-                    .filter(|v| !v.is_empty())
-                    .unwrap_or("");
-                if path.is_empty() {
+                    .filter(|v| !v.is_empty());
+                let file_value = if let Some(b64) = bytes_base64 {
+                    format!("base64://{b64}")
+                } else {
+                    item
+                        .get("path")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|v| !v.is_empty())
+                        .map(str::to_string)
+                        .unwrap_or_default()
+                };
+                if file_value.is_empty() {
                     continue;
                 }
                 out.push(serde_json::json!({
                     "type": "file",
-                    "data": {"file": path}
+                    "data": {"file": file_value}
                 }));
             }
             _ => {}
@@ -1477,7 +1487,7 @@ mod remote_im_adapter_tests {
             "content": [
                 {"type":"text","text":"hello"},
                 {"type":"image","bytesBase64":"YWJj"},
-                {"type":"file","path":"C:/tmp/readme.txt"}
+                {"type":"file","bytesBase64":"ZmlsZQ=="}
             ]
         });
         let segments = remote_im_onebot_message_segments(&payload);
@@ -1485,6 +1495,13 @@ mod remote_im_adapter_tests {
         assert_eq!(segments[0].get("type").and_then(Value::as_str), Some("text"));
         assert_eq!(segments[1].get("type").and_then(Value::as_str), Some("image"));
         assert_eq!(segments[2].get("type").and_then(Value::as_str), Some("file"));
+        assert_eq!(
+            segments[2]
+                .get("data")
+                .and_then(|data| data.get("file"))
+                .and_then(Value::as_str),
+            Some("base64://ZmlsZQ==")
+        );
     }
 
     #[test]
