@@ -151,6 +151,8 @@
             'assistant-markdown ecall-assistant-bubble max-w-full',
             blockNeedsWideBubble(block) && !assistantUsesSegmentedMarkdown ? 'ecall-assistant-bubble-wide' : '',
           ]"
+          :data-bubble-background="assistantBubbleBackgroundEnabled ? 'on' : 'off'"
+          :data-segmented-markdown="assistantUsesSegmentedMarkdown ? 'on' : 'off'"
         >
           <div v-if="block.text">
             <div
@@ -2539,6 +2541,35 @@ function openResolvedImagePreview(
 
 .assistant-markdown :deep(.ecall-markdown-content ._mermaid) {
   width: 100%;
+}
+
+.assistant-markdown {
+  --ecall-chat-rich-block-bg: var(--color-base-200);
+}
+
+.assistant-markdown[data-bubble-background="off"],
+.assistant-markdown[data-segmented-markdown="on"] {
+  --ecall-chat-rich-block-bg: var(--color-base-100);
+}
+
+.assistant-markdown :deep(.ecall-md-code-block) {
+  --ecall-md-code-bg: var(--ecall-chat-rich-block-bg);
+}
+
+.assistant-markdown :deep(.ecall-markdown-content :where(blockquote,.blockquote)) {
+  background: var(--ecall-chat-rich-block-bg);
+}
+
+.assistant-markdown :deep(.ecall-markdown-content :where(th,.table-node th)) {
+  background: var(--ecall-chat-rich-block-bg) !important;
+}
+
+.assistant-markdown :deep(.ecall-markdown-content :where(td,.table-node td)) {
+  background: var(--ecall-chat-rich-block-bg) !important;
+}
+
+.assistant-markdown :deep(.ecall-markdown-content .ecall-md-details) {
+  background: var(--ecall-chat-rich-block-bg);
 }
 
 .ecall-assistant-segment-list {
