@@ -1589,7 +1589,7 @@ ul.ecall-md-list {
   margin: 0.25rem 0;
   border-radius: var(--ecall-md-block-radius);
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--color-base-300) 46%, transparent);
+  background: var(--ecall-md-code-bg);
 }
 
 .ecall-md-code-title {
@@ -1597,8 +1597,7 @@ ul.ecall-md-list {
   align-items: center;
   justify-content: space-between;
   padding: 0.4rem 0.75rem;
-  background: color-mix(in srgb, var(--color-base-300) 24%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--color-base-300) 36%, transparent);
+  background: transparent;
 }
 
 .ecall-md-code-lang {
@@ -1644,7 +1643,7 @@ ul.ecall-md-list {
 
 .ecall-md-code-body {
   overflow-x: auto;
-  padding: 0.75rem 1rem;
+  padding: 0.75rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 0.82rem;
   line-height: 1.55;
@@ -1654,7 +1653,6 @@ ul.ecall-md-list {
 
 .ecall-md-code-plain {
   margin: 0 !important;
-  background: color-mix(in srgb, currentColor 5%, transparent);
 }
 
 .ecall-md-code-plain code {
@@ -1692,15 +1690,14 @@ ul.ecall-md-list {
   text-shadow: none !important;
 }
 
-/* 暗色：代码区保持 shiki github-dark 基调，但降低背景存在感 */
-.ecall-md-dark .ecall-md-code-body {
-  background: color-mix(in srgb, #101828 72%, transparent);
+/* 代码块背景跟随 DaisyUI 主题，Shiki 只负责 token 颜色 */
+.ecall-md-dark .ecall-md-code-block {
+  --ecall-md-code-bg: color-mix(in srgb, var(--color-base-300) 50%, transparent);
   color: #e5e7eb;
 }
 
-/* 亮色：代码区保持 shiki github-light 基调，但使用半透明背景 */
-.ecall-md-light .ecall-md-code-body {
-  background: color-mix(in srgb, #f6f8fa 58%, transparent);
+.ecall-md-light .ecall-md-code-block {
+  --ecall-md-code-bg: color-mix(in srgb, var(--color-base-300) 50%, transparent);
   color: #24292f;
 }
 

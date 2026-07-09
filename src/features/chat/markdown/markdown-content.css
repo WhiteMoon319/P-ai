@@ -29,7 +29,7 @@
   --tw-prose-captions: color-mix(in srgb, var(--color-base-content) 78%, transparent);
   --tw-prose-code: currentColor;
   --tw-prose-pre-code: currentColor;
-  --tw-prose-pre-bg: var(--color-base-200);
+  --tw-prose-pre-bg: color-mix(in srgb, var(--color-base-300) 50%, transparent);
   --tw-prose-th-borders: color-mix(in srgb, var(--color-base-content) 22%, transparent);
   --tw-prose-td-borders: color-mix(in srgb, var(--color-base-content) 15%, transparent);
   max-width: none;
