@@ -446,9 +446,12 @@ const BlockRenderer = defineComponent({
         ]);
       }
       if (block.type === "quote") {
+        const nestedBlocks = nestedMarkdownBlocks(block.text, blockProps.streaming);
         return h("blockquote", { key: `${block.type}-${index}-${block.key}`, class: "ecall-md-quote" }, [
-          h(InlineRenderer, {
-            segments: parseInlineSegments(block.text),
+          h(BlockRenderer, {
+            blocks: nestedBlocks,
+            isDark: blockProps.isDark,
+            streaming: blockProps.streaming,
             localImageBasePath: blockProps.localImageBasePath,
             footnoteIndexMap: blockProps.footnoteIndexMap,
           }),

@@ -174,6 +174,12 @@ function mathBlock(raw: string, text: string, key: string): MarkdownBlock {
   };
 }
 
+function stripBlockquoteMarker(line: string): string | null {
+  const match = String(line || "").match(/^\s{0,3}>( ?)(.*)$/);
+  if (!match) return null;
+  return `${match[2] || ""}`;
+}
+
 type DisplayMathDelimiter = {
   open: string;
   close: string;
@@ -400,17 +406,17 @@ export function parseMarkdownBlocks(input: string, streaming = false): MarkdownB
     }
 
     // Blockquote
-    const quoteMatch = line.match(/^\s{0,3}>\s?(.*)$/);
-    if (quoteMatch) {
+    const quoteLine = stripBlockquoteMarker(line);
+    if (quoteLine !== null) {
       flushParagraph();
-      const quoteLines = [quoteMatch[1].trim()];
+      const quoteLines = [quoteLine];
       while (lineIndex + 1 < lines.length) {
-        const nextQuoteMatch = lines[lineIndex + 1].match(/^\s{0,3}>\s?(.*)$/);
-        if (!nextQuoteMatch) break;
-        quoteLines.push(nextQuoteMatch[1].trim());
+        const nextQuoteLine = stripBlockquoteMarker(lines[lineIndex + 1]);
+        if (nextQuoteLine === null) break;
+        quoteLines.push(nextQuoteLine);
         lineIndex += 1;
       }
-      const quoteText = quoteLines.join("\n").trim();
+      const quoteText = quoteLines.join("\n");
       recordFootnoteRefs(quoteText);
       result.push({
         type: "quote",

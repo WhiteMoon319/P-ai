@@ -277,6 +277,56 @@ describe("parseMarkdownBlocks", () => {
     ]);
   });
 
+  it("preserves quoted display math blocks for nested rendering", () => {
+    const blocks = stripKeys(parseMarkdownBlocks([
+      "> The force of interest, \\( \\delta(t) \\), is a function of time ...",
+      ">",
+      "> \\[",
+      "> \\delta(t)=",
+      "> \\begin{cases}",
+      "> 0.07-0.005t, & t\\le 8,\\\\",
+      "> 0.06, & t>8.",
+      "> \\end{cases}",
+      "> \\]",
+      ">",
+      "> Calculate the present value ...",
+    ].join("\n")));
+
+    expect(blocks).toEqual([
+      {
+        type: "quote",
+        text: [
+          "The force of interest, \\( \\delta(t) \\), is a function of time ...",
+          "",
+          "\\[",
+          "\\delta(t)=",
+          "\\begin{cases}",
+          "0.07-0.005t, & t\\le 8,\\\\",
+          "0.06, & t>8.",
+          "\\end{cases}",
+          "\\]",
+          "",
+          "Calculate the present value ...",
+        ].join("\n"),
+      },
+    ]);
+  });
+
+  it("preserves quoted double-dollar display math blocks for nested rendering", () => {
+    const blocks = stripKeys(parseMarkdownBlocks([
+      "> $$",
+      "> E = mc^2",
+      "> $$",
+    ].join("\n")));
+
+    expect(blocks).toEqual([
+      {
+        type: "quote",
+        text: "$$\nE = mc^2\n$$",
+      },
+    ]);
+  });
+
   it("supports whitelisted details blocks", () => {
     const blocks = stripKeys(parseMarkdownBlocks([
       "<details open>",
