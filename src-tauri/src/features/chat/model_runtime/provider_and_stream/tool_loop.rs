@@ -646,6 +646,45 @@ fn remote_im_result_action(tool_result: &str) -> Option<String> {
         .and_then(|value| value.get("action").and_then(Value::as_str).map(str::to_string))
 }
 
+fn finalize_remote_im_stop_model_reply(
+    full_assistant_text: &str,
+    full_activity_reasoning_text: String,
+    final_assistant_provider_meta_override: Option<Value>,
+    tool_history_events: Vec<Value>,
+    trusted_input_tokens: Option<u64>,
+    latest_usage: Option<Value>,
+) -> ModelReply {
+    let last_tool_action = tool_history_events.iter().rev().find_map(|event| {
+        event.get("role")
+            .and_then(Value::as_str)
+            .filter(|role| *role == "tool")?;
+        event.get("content")
+            .and_then(Value::as_str)
+            .and_then(remote_im_result_action)
+    });
+    let final_text = if full_assistant_text.trim().is_empty()
+        && matches!(last_tool_action.as_deref(), Some("no_reply"))
+    {
+        String::new()
+    } else if full_assistant_text.trim().is_empty() {
+        "已发送完成。".to_string()
+    } else {
+        full_assistant_text.to_string()
+    };
+
+    ModelReply {
+        assistant_text: final_text.clone(),
+        final_response_text: final_text,
+        activity_reasoning_text: full_activity_reasoning_text,
+        assistant_provider_meta: final_assistant_provider_meta_override,
+        tool_history_events,
+        suppress_assistant_message: false,
+        trusted_input_tokens,
+        usage: latest_usage,
+        round_logs_recorded_internally: true,
+    }
+}
+
 fn tool_loop_assistant_tool_event_text(event: &Value) -> String {
     match event.get("content") {
         Some(Value::String(text)) => text.trim().to_string(),
@@ -2313,37 +2352,14 @@ async fn run_genai_tool_loop(
         }
 
         if stop_after_remote_im_done_in_turn {
-            let final_text = if full_assistant_text.trim().is_empty() {
-                match tool_history_events
-                    .iter()
-                    .rev()
-                    .find_map(|event| {
-                        event.get("role")
-                            .and_then(Value::as_str)
-                            .filter(|role| *role == "tool")?;
-                        event.get("content")
-                            .and_then(Value::as_str)
-                            .and_then(remote_im_result_action)
-                    })
-                    .as_deref()
-                {
-                    Some("no_reply") => "本轮决定不回复。".to_string(),
-                    _ => "已发送完成。".to_string(),
-                }
-            } else {
-                full_assistant_text.clone()
-            };
-            return Ok(ModelReply {
-                assistant_text: final_text.clone(),
-                final_response_text: final_text,
-                activity_reasoning_text: full_activity_reasoning_text,
-                assistant_provider_meta: final_assistant_provider_meta_override.clone(),
+            return Ok(finalize_remote_im_stop_model_reply(
+                &full_assistant_text,
+                full_activity_reasoning_text,
+                final_assistant_provider_meta_override.clone(),
                 tool_history_events,
-                suppress_assistant_message: false,
                 trusted_input_tokens,
-                usage: latest_usage,
-                round_logs_recorded_internally: true,
-            });
+                latest_usage,
+            ));
         }
     }
 
@@ -2858,37 +2874,14 @@ async fn run_genai_tool_loop_non_stream(
         }
 
         if stop_after_remote_im_done_in_turn {
-            let final_text = if full_assistant_text.trim().is_empty() {
-                match tool_history_events
-                    .iter()
-                    .rev()
-                    .find_map(|event| {
-                        event.get("role")
-                            .and_then(Value::as_str)
-                            .filter(|role| *role == "tool")?;
-                        event.get("content")
-                            .and_then(Value::as_str)
-                            .and_then(remote_im_result_action)
-                    })
-                    .as_deref()
-                {
-                    Some("no_reply") => "本轮决定不回复。".to_string(),
-                    _ => "已发送完成。".to_string(),
-                }
-            } else {
-                full_assistant_text.clone()
-            };
-            return Ok(ModelReply {
-                assistant_text: final_text.clone(),
-                final_response_text: final_text,
-                activity_reasoning_text: full_activity_reasoning_text,
-                assistant_provider_meta: final_assistant_provider_meta_override.clone(),
+            return Ok(finalize_remote_im_stop_model_reply(
+                &full_assistant_text,
+                full_activity_reasoning_text,
+                final_assistant_provider_meta_override.clone(),
                 tool_history_events,
-                suppress_assistant_message: false,
                 trusted_input_tokens,
-                usage: latest_usage,
-                round_logs_recorded_internally: true,
-            });
+                latest_usage,
+            ));
         }
     }
 
@@ -3421,6 +3414,52 @@ mod tool_loop_tests {
         assert_eq!(reply.tool_history_events.len(), 1);
         assert_eq!(reply.trusted_input_tokens, Some(12));
         assert!(reply.assistant_provider_meta.is_some());
+    }
+
+    #[test]
+    fn finalize_remote_im_stop_model_reply_should_suppress_empty_no_reply_message() {
+        let reply = finalize_remote_im_stop_model_reply(
+            "",
+            String::new(),
+            None,
+            vec![serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": "{\"ok\":true,\"action\":\"no_reply\"}"
+            })],
+            Some(12),
+            None,
+        );
+
+        assert!(!reply.suppress_assistant_message);
+        assert!(reply.assistant_text.is_empty());
+        assert!(reply.final_response_text.is_empty());
+        assert_eq!(reply.tool_history_events.len(), 1);
+        assert_eq!(reply.trusted_input_tokens, Some(12));
+        assert_eq!(
+            model_reply_content_state(&reply),
+            ModelReplyContentState::Visible
+        );
+    }
+
+    #[test]
+    fn finalize_remote_im_stop_model_reply_should_keep_send_completion_text() {
+        let reply = finalize_remote_im_stop_model_reply(
+            "",
+            String::new(),
+            None,
+            vec![serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": "{\"ok\":true,\"action\":\"send\"}"
+            })],
+            None,
+            None,
+        );
+
+        assert!(!reply.suppress_assistant_message);
+        assert_eq!(reply.assistant_text, "已发送完成。");
+        assert_eq!(reply.final_response_text, "已发送完成。");
     }
 
     #[test]
