@@ -4185,12 +4185,7 @@ fn ide_chat_list_recent_llm_round_logs_for_web_settings(
         .llm_round_logs
         .lock()
         .map_err(|_| "Failed to lock llm round logs".to_string())?;
-    ide_chat_serialize(
-        logs.iter()
-            .skip(logs.len().saturating_sub(capacity))
-            .map(compact_llm_round_log_entry_for_ui)
-            .collect::<Vec<_>>(),
-    )
+    ide_chat_serialize(recent_llm_round_logs_for_ui(&logs, capacity))
 }
 
 fn ide_chat_get_recent_llm_round_log_section_for_web_settings(
@@ -4219,7 +4214,7 @@ fn ide_chat_get_recent_llm_round_log_section_for_web_settings(
         .llm_round_logs
         .lock()
         .map_err(|_| "Failed to lock llm round logs".to_string())?;
-    ide_chat_serialize(logs.iter().rev().find_map(|entry| {
+    ide_chat_serialize(logs.pipeline_logs.iter().rev().chain(logs.other_logs.iter().rev()).find_map(|entry| {
         find_llm_round_log_entry_by_id(entry, &id)
             .and_then(|entry| llm_round_log_section_value(entry, &section))
     }))
@@ -4232,7 +4227,8 @@ fn ide_chat_clear_recent_llm_round_logs_for_web_settings(
         .llm_round_logs
         .lock()
         .map_err(|_| "Failed to lock llm round logs".to_string())?;
-    logs.clear();
+    logs.pipeline_logs.clear();
+    logs.other_logs.clear();
     pending_chat_round_buffer()
         .lock()
         .map_err(|_| "Failed to lock pending chat round logs".to_string())?

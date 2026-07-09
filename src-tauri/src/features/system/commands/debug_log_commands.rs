@@ -1061,6 +1061,46 @@ fn push_display_llm_log(
     trim_display_llm_logs(logs, capacity);
 }
 
+fn llm_round_log_is_pipeline_scene(scene: &str) -> bool {
+    scene == "chat_pipeline"
+}
+
+fn llm_round_log_bucket_mut<'a>(
+    logs: &'a mut RecentLlmRoundLogs,
+    scene: &str,
+) -> &'a mut std::collections::VecDeque<LlmRoundLogEntry> {
+    if llm_round_log_is_pipeline_scene(scene) {
+        &mut logs.pipeline_logs
+    } else {
+        &mut logs.other_logs
+    }
+}
+
+fn recent_llm_round_logs_for_ui(logs: &RecentLlmRoundLogs, capacity: usize) -> Vec<LlmRoundLogEntry> {
+    let mut items = Vec::new();
+    items.extend(
+        logs.pipeline_logs
+            .iter()
+            .skip(logs.pipeline_logs.len().saturating_sub(capacity))
+            .map(compact_llm_round_log_entry_for_ui),
+    );
+    items.extend(
+        logs.other_logs
+            .iter()
+            .skip(logs.other_logs.len().saturating_sub(capacity))
+            .map(compact_llm_round_log_entry_for_ui),
+    );
+    items
+}
+
+fn recent_llm_round_logs_total_count(logs: &RecentLlmRoundLogs) -> usize {
+    logs.pipeline_logs.len().saturating_add(logs.other_logs.len())
+}
+
+fn recent_llm_round_logs_estimated_json_bytes(logs: &RecentLlmRoundLogs) -> usize {
+    estimate_json_bytes(logs)
+}
+
 fn push_llm_round_log(
     state: Option<&AppState>,
     trace_id: Option<String>,
@@ -1110,7 +1150,7 @@ fn push_llm_round_log(
             .push(entry);
         return;
     }
-    if scene == "chat_pipeline" {
+    if llm_round_log_is_pipeline_scene(scene) {
         let rounds = llm_round_log_group_key(scene, trace_id.as_deref(), group_key.as_deref())
             .and_then(|group_key| {
                 pending_chat_round_buffer()
@@ -1143,14 +1183,18 @@ fn push_llm_round_log(
         let Ok(mut logs) = app_state.llm_round_logs.lock() else {
             return;
         };
-        push_display_llm_log(&mut logs, pipeline_entry, capacity);
+        push_display_llm_log(
+            llm_round_log_bucket_mut(&mut logs, scene),
+            pipeline_entry,
+            capacity,
+        );
         return;
     }
     let capacity = llm_round_log_capacity_for_state(app_state);
     let Ok(mut logs) = app_state.llm_round_logs.lock() else {
         return;
     };
-    push_display_llm_log(&mut logs, entry, capacity);
+    push_display_llm_log(llm_round_log_bucket_mut(&mut logs, scene), entry, capacity);
 }
 
 fn latest_chat_round_headers_and_tools(
@@ -1185,13 +1229,19 @@ fn latest_chat_round_headers_and_tools(
     let Ok(logs) = state.llm_round_logs.lock() else {
         return (Vec::new(), None);
     };
-    let Some(entry) = logs.iter().rev().find(|entry| {
-        entry.scene == "chat"
-            && entry.request_format == request_format.as_str()
-            && entry.provider == provider_name
-            && entry.model == model_name
-            && entry.base_url == base_url
-    }) else {
+    let Some(entry) = logs
+        .pipeline_logs
+        .iter()
+        .rev()
+        .flat_map(|entry| entry.rounds.iter().flatten().rev())
+        .find(|entry| {
+            entry.scene == "chat"
+                && entry.request_format == request_format.as_str()
+                && entry.provider == provider_name
+                && entry.model == model_name
+                && entry.base_url == base_url
+        })
+    else {
         return (Vec::new(), None);
     };
     (
@@ -1207,11 +1257,7 @@ fn list_recent_llm_round_logs(state: State<'_, AppState>) -> Result<Vec<LlmRound
         .llm_round_logs
         .lock()
         .map_err(|_| "Failed to lock llm round logs".to_string())?;
-    Ok(logs
-        .iter()
-        .skip(logs.len().saturating_sub(capacity))
-        .map(compact_llm_round_log_entry_for_ui)
-        .collect::<Vec<_>>())
+    Ok(recent_llm_round_logs_for_ui(&logs, capacity))
 }
 
 fn find_llm_round_log_entry_by_id<'a>(
@@ -1327,8 +1373,10 @@ fn get_recent_llm_round_log_section(
         .lock()
         .map_err(|_| "Failed to lock llm round logs".to_string())?;
     Ok(logs
+        .pipeline_logs
         .iter()
         .rev()
+        .chain(logs.other_logs.iter().rev())
         .find_map(|entry| {
             find_llm_round_log_entry_by_id(entry, &id)
                 .and_then(|entry| llm_round_log_section_value(entry, &section))
@@ -1341,7 +1389,8 @@ fn clear_recent_llm_round_logs(state: State<'_, AppState>) -> Result<bool, Strin
         .llm_round_logs
         .lock()
         .map_err(|_| "Failed to lock llm round logs".to_string())?;
-    logs.clear();
+    logs.pipeline_logs.clear();
+    logs.other_logs.clear();
     pending_chat_round_buffer()
         .lock()
         .map_err(|_| "Failed to lock pending chat round logs".to_string())?
@@ -1549,8 +1598,9 @@ fn dump_memory_cache_stats(state: State<'_, AppState>) -> Result<MemoryCacheStat
         .llm_round_logs
         .lock()
         .map_err(|_| "Failed to lock llm round logs".to_string())?;
-    let llm_round_logs_count = llm_round_logs.len();
-    let llm_round_logs_estimated_json_bytes = estimate_json_bytes(&*llm_round_logs);
+    let llm_round_logs_count = recent_llm_round_logs_total_count(&llm_round_logs);
+    let llm_round_logs_estimated_json_bytes =
+        recent_llm_round_logs_estimated_json_bytes(&llm_round_logs);
 
     let pending_chat_rounds = pending_chat_round_buffer()
         .lock()

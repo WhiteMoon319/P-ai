@@ -3384,7 +3384,7 @@
                 std::collections::HashMap::new(),
             )),
             terminal_pending_approvals: Arc::new(Mutex::new(std::collections::HashMap::new())),
-            llm_round_logs: Arc::new(Mutex::new(std::collections::VecDeque::new())),
+            llm_round_logs: Arc::new(Mutex::new(RecentLlmRoundLogs::default())),
             conversation_runtime_slots: Arc::new(Mutex::new(std::collections::HashMap::new())),
             conversation_processing_claims: Arc::new(Mutex::new(std::collections::HashSet::new())),
             goal_continue_suppressed_conversation_ids: Arc::new(Mutex::new(
@@ -9526,17 +9526,17 @@
         );
         let elapsed_ms = started.elapsed().as_millis();
         let logs = state.llm_round_logs.lock().expect("llm round logs");
-        let stored = logs.back().expect("stored log entry");
+        let stored = logs.other_logs.back().expect("stored log entry");
         let response_bytes = serde_json::to_vec(&stored.response).expect("serialize stored response");
 
         eprintln!(
             "[压测] llm_round_log_large_response 大响应结果：stored_logs={}，response_bytes={}，elapsed={}ms",
-            logs.len(),
+            logs.other_logs.len(),
             response_bytes.len(),
             elapsed_ms
         );
 
-        assert_eq!(logs.len(), 1);
+        assert_eq!(logs.other_logs.len(), 1);
         assert!(response_bytes.len() > 1_500_000);
     }
 
