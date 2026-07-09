@@ -388,7 +388,9 @@ const REMOTE_CONVERSATION_IDENTITY_FALLBACK_MESSAGE_LIMIT: usize = 32;
 
 fn classify_system_prompt_extra_block(block: &str) -> SystemPromptExtraBlockGroup {
     let trimmed = block.trim();
-    if trimmed.contains("<remote im runtime activation>") {
+    if trimmed.contains("<remote im runtime activation>")
+        || trimmed.contains("<remote im contact downloads>")
+    {
         return SystemPromptExtraBlockGroup::ImRules;
     }
     if trimmed.contains("<skill usage>")

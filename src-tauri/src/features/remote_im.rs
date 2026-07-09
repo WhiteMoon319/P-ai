@@ -1794,6 +1794,41 @@ fn remote_im_contact_log_marker(contact: &RemoteImContact) -> String {
     )
 }
 
+fn remote_im_contact_downloads_segment(value: &str, fallback: &str) -> String {
+    let sanitized = sanitize_download_file_name(value);
+    let trimmed = sanitized.trim();
+    if trimmed.is_empty() {
+        fallback.to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn remote_im_contact_downloads_subdir_parts(
+    channel_id: &str,
+    contact_type: &str,
+    contact_id: &str,
+) -> String {
+    format!(
+        "contacts/{}/{}/{}/downloads",
+        remote_im_contact_downloads_segment(channel_id, "unknown-channel"),
+        remote_im_contact_downloads_segment(contact_type, "unknown-type"),
+        remote_im_contact_downloads_segment(contact_id, "unknown-contact")
+    )
+}
+
+fn remote_im_contact_downloads_subdir(contact: &RemoteImContact) -> String {
+    remote_im_contact_downloads_subdir_parts(
+        &contact.channel_id,
+        &contact.remote_contact_type,
+        &contact.remote_contact_id,
+    )
+}
+
+fn remote_im_contact_downloads_relative_dir(contact: &RemoteImContact) -> String {
+    format!("downloads/{}", remote_im_contact_downloads_subdir(contact))
+}
+
 fn remote_im_activation_source_log_label(source: &RemoteImActivationSource) -> String {
     let display_name = source.remote_contact_name.trim();
     let name = if display_name.is_empty() {
@@ -2421,7 +2456,7 @@ fn resolve_contact_session_target(
 fn build_chat_message_from_input(
     input: &RemoteImEnqueueInput,
     conversation_id: &str,
-    contact_id: &str,
+    contact: &RemoteImContact,
     now: &str,
     text: &str,
     images: &[BinaryPart],
@@ -2430,7 +2465,8 @@ fn build_chat_message_from_input(
     data_path: &PathBuf,
 ) -> ChatMessage {
     let mut parts = Vec::<MessagePart>::new();
-    let downloads_subdir = remote_im_conversation_downloads_subdir(conversation_id);
+    let contact_id = contact.id.trim();
+    let downloads_subdir = remote_im_contact_downloads_subdir(contact);
     if !text.is_empty() {
         parts.push(MessagePart::Text {
             text: text.to_string(),
@@ -2516,10 +2552,6 @@ fn build_chat_message_from_input(
         mcp_call: None,
         meme_annotations: None,
     }
-}
-
-fn remote_im_conversation_downloads_subdir(conversation_id: &str) -> String {
-    conversation_id.trim().to_string()
 }
 
 fn create_pending_event(
@@ -3128,7 +3160,7 @@ pub(crate) fn remote_im_enqueue_message_internal(
     let message = build_chat_message_from_input(
         &input,
         &conversation_id,
-        &contact_id,
+        &runtime.remote_im_contacts[contact_idx],
         &now,
         &text,
         &images,

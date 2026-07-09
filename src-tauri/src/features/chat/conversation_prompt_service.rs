@@ -805,6 +805,14 @@ impl ConversationPromptService {
             if let Some(log_stage) = stage_logger {
                 log_stage("prepare_context.workspace_agents_ready");
             }
+            if let Some(downloads_block) =
+                build_remote_im_contact_downloads_block(conversation, state)
+            {
+                blocks.push(downloads_block);
+            }
+            if let Some(log_stage) = stage_logger {
+                log_stage("prepare_context.remote_im_contact_downloads_ready");
+            }
             if mode != PromptBuildMode::SummaryContext && overrides.todo_tool_enabled {
                 blocks.push(build_todo_guide_block());
             }

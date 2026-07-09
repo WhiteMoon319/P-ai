@@ -279,6 +279,25 @@ fn build_human_interface_environment_block(remote_contact_mode: bool) -> String 
     prompt_xml_block("interface", body.trim())
 }
 
+fn build_remote_im_contact_downloads_block(conversation: &Conversation, state: &AppState) -> Option<String> {
+    if !conversation_is_remote_im_contact(conversation) {
+        return None;
+    }
+    let runtime = state_read_runtime_state_cached(state).ok()?;
+    let contact = runtime.remote_im_contacts.iter().find(|contact| {
+        contact.bound_conversation_id.as_deref().map(str::trim) == Some(conversation.id.trim())
+    })?;
+    let relative_dir = remote_im_contact_downloads_relative_dir(contact);
+    let display_dir = assistant_space_display_path(&relative_dir);
+    Some(prompt_xml_block(
+        "remote im contact downloads",
+        format!(
+            "该远程联系人的入站图片、音频和附件会保存到独立下载目录。\n联系人附件目录：{}/\n当用户让你查看、读取或发送该联系人的历史附件时，优先在这个目录下查找。",
+            display_dir.trim_end_matches('/')
+        ),
+    ))
+}
+
 fn build_workspace_agents_md_block(conversation: &Conversation, state: &AppState) -> Option<String> {
     let Some(workspace_root) = conversation_user_main_workspace_root(conversation, state) else {
         return None;
@@ -713,6 +732,75 @@ mod prompt_assembly_tests {
         }]);
 
         assert!(build_workspace_agents_md_block(&conversation, &state).is_none());
+    }
+
+    #[test]
+    fn remote_im_contact_downloads_subdir_should_group_by_contact_identity() {
+        assert_eq!(
+            remote_im_contact_downloads_subdir_parts("onebot-main", "group", "123456"),
+            "contacts/onebot-main/group/123456/downloads"
+        );
+        assert_eq!(
+            remote_im_contact_downloads_subdir_parts("weixin:oc", "private", "wxid/a*b"),
+            "contacts/weixin_oc/private/wxid_a_b/downloads"
+        );
+    }
+
+    #[test]
+    fn build_remote_im_contact_downloads_block_should_inject_contact_directory() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "easy-call-ai-prompt-contact-downloads-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let llm_workspace_path = temp_root.join("llm-workspace");
+        fs::create_dir_all(&llm_workspace_path).expect("create llm workspace");
+        let state = build_test_state(llm_workspace_path);
+        let mut conversation = build_test_conversation(Vec::new());
+        conversation.conversation_kind = CONVERSATION_KIND_REMOTE_IM_CONTACT.to_string();
+
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(RemoteImContact {
+            id: "contact-record-1".to_string(),
+            channel_id: "onebot-main".to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            remote_contact_type: "group".to_string(),
+            remote_contact_id: "123456".to_string(),
+            remote_contact_name: "测试群".to_string(),
+            avatar_url: String::new(),
+            remark_name: String::new(),
+            allow_send: true,
+            allow_send_files: true,
+            allow_receive: true,
+            activation_mode: default_remote_im_contact_activation_mode(),
+            activation_keywords: Vec::new(),
+            mute_keywords: default_remote_im_contact_mute_keywords(),
+            unmute_keywords: default_remote_im_contact_unmute_keywords(),
+            patience_seconds: default_remote_im_contact_patience_seconds(),
+            mute_duration_seconds: default_remote_im_contact_mute_duration_seconds(),
+            activation_cooldown_seconds: 0,
+            route_mode: default_remote_im_contact_route_mode(),
+            bound_department_id: None,
+            bound_agent_id: None,
+            bound_conversation_id: Some(conversation.id.clone()),
+            processing_mode: default_remote_im_contact_processing_mode(),
+            response_strategy: default_remote_im_contact_response_strategy(),
+            response_guidance: default_remote_im_contact_response_guidance(),
+            last_activated_at: None,
+            last_message_at: None,
+            dingtalk_session_webhook: None,
+            dingtalk_session_webhook_expired_time: None,
+            onebot_group_members: Vec::new(),
+            shell_workspaces: Vec::new(),
+        });
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
+
+        let block = build_remote_im_contact_downloads_block(&conversation, &state)
+            .expect("downloads block");
+
+        assert!(block.contains("<remote im contact downloads>"));
+        assert!(block.contains(
+            "{Assistant Space}/downloads/contacts/onebot-main/group/123456/downloads/"
+        ));
     }
 
     #[test]
