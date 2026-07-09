@@ -2510,11 +2510,12 @@ function openResolvedImagePreview(
 .assistant-markdown :deep(.ecall-markdown-content :where(li,.list-item)) {
   margin: 0.12rem 0;
   padding-left: 0;
+  line-height: 1.65;
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(li,.list-item) > :where(p,ul,ol,.paragraph-node,.list-node)) {
-  margin-top: 0.16rem;
-  margin-bottom: 0.16rem;
+  margin-top: 0.2rem;
+  margin-bottom: 0.2rem;
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(blockquote,.blockquote)) {
