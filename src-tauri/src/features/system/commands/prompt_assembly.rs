@@ -281,53 +281,25 @@ fn build_human_interface_environment_block(remote_contact_mode: bool) -> String 
 
 fn build_workspace_agents_md_block(conversation: &Conversation, state: &AppState) -> Option<String> {
     let Some(workspace_root) = conversation_user_main_workspace_root(conversation, state) else {
-        eprintln!("[AGENTS注入] 跳过 main_workspace=（无） reason=未命中用户指定main工作目录");
         return None;
     };
     let agents_path = workspace_root.join("AGENTS.md");
     if !agents_path.is_file() {
-        eprintln!(
-            "[AGENTS注入] 跳过 main_workspace={} reason=根目录缺少AGENTS.md",
-            workspace_root.display()
-        );
         return None;
     }
     let agents_metadata = match std::fs::metadata(&agents_path) {
         Ok(metadata) => metadata,
-        Err(err) => {
-            eprintln!(
-                "[AGENTS注入] 失败 main_workspace={} path={} reason=读取AGENTS.md元数据失败 error={err:?}",
-                workspace_root.display(),
-                agents_path.display()
-            );
-            return None;
-        }
+        Err(_) => return None,
     };
     if agents_metadata.len() > WORKSPACE_AGENTS_MD_MAX_BYTES {
-        eprintln!(
-            "[AGENTS注入] 跳过 main_workspace={} path={} reason=AGENTS.md超过大小上限 size_bytes={} max_bytes={}",
-            workspace_root.display(),
-            agents_path.display(),
-            agents_metadata.len(),
-            WORKSPACE_AGENTS_MD_MAX_BYTES
-        );
         return None;
     }
     match std::fs::read_to_string(&agents_path) {
         Ok(content) => {
             let trimmed = content.trim();
             if trimmed.is_empty() {
-                eprintln!(
-                    "[AGENTS注入] 跳过 main_workspace={} reason=AGENTS.md为空",
-                    workspace_root.display()
-                );
                 return None;
             }
-            eprintln!(
-                "[AGENTS注入] 完成 main_workspace={} chars={}",
-                workspace_root.display(),
-                trimmed.chars().count()
-            );
             Some(prompt_xml_block(
                 "workspace agents",
                 format!(
@@ -337,14 +309,7 @@ fn build_workspace_agents_md_block(conversation: &Conversation, state: &AppState
                 ),
             ))
         }
-        Err(err) => {
-            eprintln!(
-                "[AGENTS注入] 失败 main_workspace={} path={} error={err}",
-                workspace_root.display(),
-                agents_path.display()
-            );
-            None
-        }
+        Err(_) => None,
     }
 }
 

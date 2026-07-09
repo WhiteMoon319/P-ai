@@ -2787,6 +2787,14 @@ fn remote_im_update_contact_workspace(
     contact.shell_workspaces = input.shell_workspaces;
     let output = contact.clone();
     state_write_runtime_state_cached(&state, &runtime)?;
+    if let Some(conversation_id) = output
+        .bound_conversation_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        mark_prompt_cache_rebuild_for_system_environment_by_conversation(&state, conversation_id);
+    }
     Ok(output)
 }
 
