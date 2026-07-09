@@ -442,6 +442,47 @@ fn remote_im_contact_matches_reply_target(
         && source.remote_contact_id.trim() == target.contact_id.trim()
 }
 
+fn remote_im_message_group_sender_id(message: &ChatMessage, contact: &RemoteImContact) -> Option<String> {
+    if !contact.remote_contact_type.trim().eq_ignore_ascii_case("group") {
+        return None;
+    }
+    if message.role.trim() != "user" {
+        return None;
+    }
+    if message_origin_string(message, "kind") != Some("remote_im")
+        || message_origin_string(message, "channel_id") != Some(contact.channel_id.trim())
+        || message_origin_string(message, "contact_type") != Some(contact.remote_contact_type.trim())
+        || message_origin_string(message, "contact_id") != Some(contact.remote_contact_id.trim())
+    {
+        return None;
+    }
+    message_origin_string(message, "sender_id").map(ToOwned::to_owned)
+}
+
+fn remote_im_latest_group_sender_id_for_busy_guided(
+    conversation: &Conversation,
+    contact: &RemoteImContact,
+) -> Option<String> {
+    conversation
+        .messages
+        .iter()
+        .rev()
+        .find_map(|message| remote_im_message_group_sender_id(message, contact))
+}
+
+fn remote_im_busy_guided_same_sender_allowed(
+    contact: &RemoteImContact,
+    current_sender_id: Option<&str>,
+    new_sender_id: &str,
+) -> bool {
+    if !contact.remote_contact_type.trim().eq_ignore_ascii_case("group") {
+        return true;
+    }
+    let current = current_sender_id.map(str::trim).filter(|value| !value.is_empty());
+    let new = new_sender_id.trim();
+    current.is_some_and(|value| value == new) && !new.is_empty()
+}
+
 fn remote_im_text_contains_keyword(text: &str, keyword: &str) -> bool {
     text.to_ascii_lowercase()
         .contains(&keyword.to_ascii_lowercase())
@@ -3192,6 +3233,7 @@ pub(crate) fn remote_im_enqueue_message_internal(
     );
 
     let event_id = Uuid::new_v4().to_string();
+    let new_sender_id_for_guided = input.sender_id.trim().to_string();
     let event = create_pending_event(
         event_id.clone(),
         conversation_id.clone(),
@@ -3264,11 +3306,33 @@ pub(crate) fn remote_im_enqueue_message_internal(
                     return;
                 }
             };
-            let current_work_message = conversation_service_v2()
+            let conversation_snapshot = conversation_service_v2()
                 .try_get_conversation_snapshot(&state_clone, &conversation_id_for_guided)
                 .ok()
-                .flatten()
-                .and_then(|conversation| {
+                .flatten();
+            let current_sender_id = conversation_snapshot.as_ref().and_then(|conversation| {
+                remote_im_latest_group_sender_id_for_busy_guided(conversation, &contact_for_guided)
+            });
+            if !remote_im_busy_guided_same_sender_allowed(
+                &contact_for_guided,
+                current_sender_id.as_deref(),
+                &new_sender_id_for_guided,
+            ) {
+                remote_im_append_channel_log(
+                    &channel_id_for_guided,
+                    "info",
+                    format!(
+                        "[联系人秘书] 忙碌引导跳过: contact={}, conversation_id={}, event_id={}, reason=different_group_sender, current_sender_id={}, new_sender_id={}",
+                        contact_log_label,
+                        conversation_id_for_guided,
+                        event_id_for_guided,
+                        current_sender_id.as_deref().unwrap_or(""),
+                        new_sender_id_for_guided
+                    ),
+                );
+                return;
+            }
+            let current_work_message = conversation_snapshot.and_then(|conversation| {
                     remote_im_collect_secretary_recent_messages(
                         &conversation.messages,
                         1,
