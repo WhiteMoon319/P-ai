@@ -1300,6 +1300,8 @@
       "multiSelect": "Multi-select",
       "showBubbleBackground": "Show bubble background",
       "hideBubbleBackground": "Hide bubble background",
+      "enableSegmentedMarkdown": "Enable segmented messages",
+      "disableSegmentedMarkdown": "Disable segmented messages",
       "showAbsoluteTime": "Show exact time",
       "showRelativeTime": "Show compact time",
       "branchFromMessage": "Create a Conversation Branch from This Message",

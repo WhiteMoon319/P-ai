@@ -79,7 +79,8 @@ defineOptions({
 });
 
 const props = defineProps<{
-  text: string;
+  text?: string;
+  blocks?: MarkdownBlock[];
   isDark?: boolean;
   streaming?: boolean;
   variant?: "chat" | "document";
@@ -268,6 +269,9 @@ function scheduleStreamingParseRetry(delayMs: number) {
 
 const allBlocks = computed<MarkdownBlock[]>(() => {
   void parseRetryTick.value;
+  if (Array.isArray(props.blocks)) {
+    return props.blocks;
+  }
   const text = props.text;
   if (!text) {
     parseState.incrementalParser.reset();

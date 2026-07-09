@@ -149,7 +149,7 @@
           v-if="!showAssistantPreStreamingDots(block)"
           :class="[
             'assistant-markdown ecall-assistant-bubble max-w-full',
-            blockNeedsWideBubble(block) ? 'ecall-assistant-bubble-wide' : '',
+            blockNeedsWideBubble(block) && !assistantUsesSegmentedMarkdown ? 'ecall-assistant-bubble-wide' : '',
           ]"
         >
           <div v-if="block.text">
@@ -160,7 +160,32 @@
               <SidebarLightMarkdown :text="assistantRenderedText" />
             </div>
             <div v-else ref="markdownContainerRef">
+              <div v-if="assistantUsesSegmentedMarkdown" class="ecall-assistant-segment-list">
+                <div
+                  v-for="(segment, segmentIndex) in assistantMarkdownSegments"
+                  :key="segment.key"
+                  :class="[
+                    'ecall-assistant-segment',
+                    segment.kind === 'text' ? 'ecall-assistant-segment-text' : 'ecall-assistant-segment-rich',
+                    segment.kind === 'text' && assistantBubbleBackgroundEnabled
+                      ? 'ecall-assistant-segment-surface'
+                      : 'ecall-assistant-segment-plain',
+                  ]"
+                >
+                  <AppMarkdownRenderer
+                    class="ecall-markdown-content max-w-none"
+                    :blocks="segment.blocks"
+                    :is-dark="markdownIsDark"
+                    :streaming="!!block.isStreaming && segmentIndex === assistantMarkdownSegments.length - 1"
+                    :local-image-base-path="currentWorkspaceRootPath"
+                    :toolcall-preview-map="toolcallPreviewMap"
+                    @math-context-menu="openMathContextMenu"
+                    @click="emit('assistantLinkClick', $event)"
+                  />
+                </div>
+              </div>
               <AppMarkdownRenderer
+                v-else
                 class="ecall-markdown-content max-w-none"
                 :text="assistantRenderedText"
                 :is-dark="markdownIsDark"
@@ -376,13 +401,19 @@
       </li>
       <li>
         <button type="button" @click="handleContextMenuAction('toggleBubbleBackground')">
-          <Paintbrush class="h-4 w-4" />
+          <MessageCircleDashed class="h-4 w-4" />
           <span>{{ assistantBubbleBackgroundEnabled ? t('chat.messageItem.hideBubbleBackground') : t('chat.messageItem.showBubbleBackground') }}</span>
+        </button>
+      </li>
+      <li v-if="assistantBubbleBackgroundEnabled">
+        <button type="button" @click="handleContextMenuAction('toggleSegmentedMarkdown')">
+          <TableRowsSplit class="h-4 w-4" />
+          <span>{{ segmentedMarkdownEnabled ? t('chat.messageItem.disableSegmentedMarkdown') : t('chat.messageItem.enableSegmentedMarkdown') }}</span>
         </button>
       </li>
       <li>
         <button type="button" @click="handleContextMenuAction('toggleTimeDisplayMode')">
-          <FileText class="h-4 w-4" />
+          <Eclipse class="h-4 w-4" />
           <span>{{ chatTimeDisplayMode === 'absolute' ? t('chat.messageItem.showRelativeTime') : t('chat.messageItem.showAbsoluteTime') }}</span>
         </button>
       </li>
@@ -413,6 +444,7 @@ import { ref as moduleRef } from "vue";
 
 const CHAT_BUBBLE_BACKGROUND_STORAGE_KEY = "easy-call.chat.bubble-background.v1";
 const CHAT_TIME_DISPLAY_MODE_STORAGE_KEY = "easy-call.chat.time-display-mode.v1";
+const CHAT_SEGMENTED_MARKDOWN_STORAGE_KEY = "easy-call.chat.segmented-markdown.v1";
 
 type ChatTimeDisplayMode = "relative" | "absolute";
 
@@ -430,6 +462,13 @@ function readChatTimeDisplayModePreference(): ChatTimeDisplayMode {
 
 const chatTimeDisplayModePreference = moduleRef<ChatTimeDisplayMode>(readChatTimeDisplayModePreference());
 
+function readSegmentedMarkdownPreference(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(CHAT_SEGMENTED_MARKDOWN_STORAGE_KEY) === "1";
+}
+
+const segmentedMarkdownPreference = moduleRef(readSegmentedMarkdownPreference());
+
 function writeChatBubbleBackgroundPreference(enabled: boolean) {
   chatBubbleBackgroundPreference.value = enabled;
   if (typeof window !== "undefined") {
@@ -443,12 +482,19 @@ function writeChatTimeDisplayModePreference(mode: ChatTimeDisplayMode) {
     window.localStorage.setItem(CHAT_TIME_DISPLAY_MODE_STORAGE_KEY, mode);
   }
 }
+
+function writeSegmentedMarkdownPreference(enabled: boolean) {
+  segmentedMarkdownPreference.value = enabled;
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(CHAT_SEGMENTED_MARKDOWN_STORAGE_KEY, enabled ? "1" : "0");
+  }
+}
 </script>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect, watchPostEffect } from "vue";
 import { useI18n } from "vue-i18n";
-import { Copy, FileText, ListCheck, Paintbrush, Pause, Play, Split, Undo2 } from "@lucide/vue";
+import { Copy, Eclipse, FileText, ListCheck, MessageCircleDashed, Pause, Play, Split, TableRowsSplit, Undo2 } from "@lucide/vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ChatActivityItem, ChatMessageBlock } from "../../../types/app";
 import {
@@ -456,7 +502,7 @@ import {
   streamBlocksToActivityItems,
 } from "../../../utils/chat-message-semantics";
 import { formatIsoToLocalDateTime } from "../../../utils/time";
-import { AppMarkdownRenderer, initKatex } from "../markdown";
+import { AppMarkdownRenderer, groupMarkdownSegments, initKatex, parseMarkdownBlocks, type MarkdownBlock, type MarkdownSegment } from "../markdown";
 import { normalizeLocalLinkHref } from "../utils/local-link";
 import { textContentSignature } from "../utils/text-signature";
 import { buildToolcallPreviewMap } from "../utils/toolcall-preview";
@@ -527,6 +573,19 @@ const planMarkdownError = ref("");
 const planMarkdownLoading = ref(false);
 const forcePlainMarkdownRender = computed(() => !!props.disableMarkdownRender || debugPlainMarkdownRender);
 const assistantRenderedText = computed(() => formatAssistantStreamingText(props.block));
+const segmentedMarkdownEnabled = segmentedMarkdownPreference;
+const segmentedMarkdownActive = computed(() => segmentedMarkdownEnabled.value && assistantBubbleBackgroundEnabled.value);
+const assistantMarkdownBlocks = computed<MarkdownBlock[]>(() => {
+  if (forcePlainMarkdownRender.value || !segmentedMarkdownActive.value) return [];
+  const text = assistantRenderedText.value;
+  if (!text) return [];
+  return parseMarkdownBlocks(text, !!props.block.isStreaming);
+});
+const assistantMarkdownSegments = computed<MarkdownSegment[]>(() => groupMarkdownSegments(assistantMarkdownBlocks.value));
+const assistantUsesSegmentedMarkdown = computed(() => {
+  if (forcePlainMarkdownRender.value || !segmentedMarkdownActive.value) return false;
+  return assistantMarkdownSegments.value.length > 0;
+});
 const teleportTheme = computed(() => {
   if (typeof document !== "undefined" && document.documentElement.getAttribute("data-host") === "vscode") {
     return undefined;
@@ -808,6 +867,7 @@ function showAssistantPreStreamingDots(block: ChatMessageBlock): boolean {
 
 function bubbleContentEmpty(block: ChatMessageBlock): boolean {
   if (isOwnMessage(block)) return !ownBubbleHasContent(block);
+  if (assistantUsesSegmentedMarkdown.value && !!assistantRenderedText.value) return true;
   if (showAssistantPreStreamingDots(block)) return false;
   return !assistantBubbleHasContent(block);
 }
@@ -1853,6 +1913,9 @@ function handleContextMenuAction(action: string) {
   } else if (action === "toggleBubbleBackground") {
     assistantBubbleBackgroundEnabled.value = !assistantBubbleBackgroundEnabled.value;
     writeChatBubbleBackgroundPreference(assistantBubbleBackgroundEnabled.value);
+  } else if (action === "toggleSegmentedMarkdown") {
+    segmentedMarkdownEnabled.value = !segmentedMarkdownEnabled.value;
+    writeSegmentedMarkdownPreference(segmentedMarkdownEnabled.value);
   } else if (action === "toggleTimeDisplayMode") {
     writeChatTimeDisplayModePreference(chatTimeDisplayMode.value === "absolute" ? "relative" : "absolute");
   } else if (action === "branchFromMessage") {
@@ -2476,6 +2539,38 @@ function openResolvedImagePreview(
 
 .assistant-markdown :deep(.ecall-markdown-content ._mermaid) {
   width: 100%;
+}
+
+.ecall-assistant-segment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ecall-assistant-segment {
+  min-width: 0;
+}
+
+.ecall-assistant-segment-surface {
+  border-radius: var(--radius-box, 1rem);
+  background: var(--color-base-100);
+}
+
+.ecall-assistant-segment-plain {
+  background: transparent;
+}
+
+.ecall-assistant-segment-text {
+  display: inline-block;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.68rem 0.82rem;
+}
+
+.ecall-assistant-segment-rich {
+  display: block;
+  width: 100%;
+  padding: 0;
 }
 
 .ecall-assistant-bubble {

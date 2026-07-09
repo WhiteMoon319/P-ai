@@ -1221,6 +1221,8 @@
       "multiSelect": "多選",
       "showBubbleBackground": "顯示氣泡背景",
       "hideBubbleBackground": "隱藏氣泡背景",
+      "enableSegmentedMarkdown": "開啟分段訊息",
+      "disableSegmentedMarkdown": "關閉分段訊息",
       "showAbsoluteTime": "顯示真實時間",
       "showRelativeTime": "顯示簡略時間",
       "branchFromMessage": "從此訊息開始建立會話分支",
