@@ -16,6 +16,8 @@
         :persona-name-map="personaNameMap"
         :persona-avatar-url-map="personaAvatarUrlMap"
         :active-tab="chatLeftPanelMode"
+        :chat-model-options="chatModelOptions"
+        :tool-review-api-config-id="toolReviewApiConfigId"
         :bridge-request="bridgeRequest"
         @update:active-tab="$emit('update:conversation-list-tab', $event)"
         @edit-task="openTaskEditDialog"
@@ -590,7 +592,7 @@ const props = defineProps<{
   queuedAttachmentNotices: Array<{ id: string; fileName: string; relativePath: string; mime: string }>;
   chatInput: string; instructionPresets: PromptCommandPreset[]; chatInputPlaceholder: string;
   canRecord: boolean; recording: boolean; recordingMs: number; transcribing: boolean; recordHotkey: string;
-  conversationCallPrimaryApiConfigId: string; preferredChatModelId?: string; toolReviewRefreshTick: number; chatModelOptions: ApiConfigItem[];
+  conversationCallPrimaryApiConfigId: string; preferredChatModelId?: string; toolReviewApiConfigId?: string; toolReviewRefreshTick: number; chatModelOptions: ApiConfigItem[];
   planModeEnabled: boolean; chatUsagePercent: number; trimTip: string;
   mediaDragActive: boolean; chatting: boolean; trimming: boolean; trimmingConversationId?: string;
   compactingConversation: boolean; compactingConversationId?: string;

@@ -140,6 +140,7 @@
         :record-hotkey="recordHotkey"
         :conversation-call-primary-api-config-id="conversationCallPrimaryApiConfigId"
         :preferred-chat-model-id="preferredChatModelId"
+        :tool-review-api-config-id="config.toolReviewApiConfigId || ''"
         :tool-review-refresh-tick="toolReviewRefreshTick"
         :terminal-approvals="terminalApprovals"
         :terminal-approval-resolving="terminalApprovalResolving"

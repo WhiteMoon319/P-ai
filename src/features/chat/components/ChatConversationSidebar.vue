@@ -281,16 +281,155 @@
         </div>
       </Transition>
     </ChatConversationFloatingScroll>
+    <div class="shrink-0 border-t border-base-300 bg-base-100/95 px-2 py-2 backdrop-blur">
+      <div class="flex items-center justify-between gap-2">
+        <div class="avatar">
+          <div class="flex h-9 w-9 items-center justify-center rounded-full bg-neutral text-neutral-content">
+            <img
+              v-if="props.userAvatarUrl"
+              :src="props.userAvatarUrl"
+              :alt="props.userAlias || t('chat.userAvatarAlt')"
+              class="h-9 w-9 rounded-full object-cover"
+            />
+            <span v-else class="text-sm font-bold">{{ userAvatarInitial }}</span>
+          </div>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" @click="openBatchArchiveCard">
+          {{ t("chat.batchArchive.title") }}
+        </button>
+      </div>
+    </div>
+    <dialog class="modal" :class="{ 'modal-open': batchArchiveCardOpen }">
+      <div class="modal-box flex h-[min(88vh,44rem)] w-[min(94vw,64rem)] max-w-none flex-col overflow-hidden p-0">
+        <div class="flex shrink-0 items-center justify-between gap-3 border-b border-base-300 px-5 py-4">
+          <h3 class="text-base font-semibold">{{ t("chat.batchArchive.title") }}</h3>
+          <div class="badge badge-warning badge-outline gap-1.5 whitespace-nowrap">
+            <AlertTriangle class="h-3.5 w-3.5" />
+            <span>{{ t("chat.batchArchive.uiOnlyBadge") }}</span>
+          </div>
+        </div>
+        <div class="flex min-h-0 flex-1 flex-col bg-base-200/35 px-5 py-4">
+          <section class="shrink-0">
+            <div class="text-sm font-semibold">{{ t("chat.batchArchive.conditionTitle") }}</div>
+            <div class="mt-3 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.8fr)]">
+              <div class="space-y-2">
+                <label class="block text-sm font-medium" for="batch-archive-days">
+                  {{ t("chat.batchArchive.daysLabel") }}
+                </label>
+                <div class="flex items-center gap-2">
+                  <input
+                    id="batch-archive-days"
+                    v-model.number="batchArchiveDays"
+                    type="number"
+                    min="1"
+                    step="1"
+                    class="input input-bordered w-28"
+                  />
+                  <span class="text-sm text-base-content/70">{{ t("chat.batchArchive.daysSuffix") }}</span>
+                </div>
+              </div>
+              <div class="space-y-2">
+                <label class="block text-sm font-medium" for="batch-archive-model">
+                  {{ t("chat.batchArchive.modelLabel") }}
+                </label>
+                <select id="batch-archive-model" v-model="batchArchiveSelectedModelId" class="select select-bordered w-full">
+                  <option
+                    v-for="option in batchArchiveModelOptions"
+                    :key="option.id"
+                    :value="option.id"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+              </div>
+            </div>
+            <label class="mt-4 flex items-start gap-3 px-1 py-1">
+              <input
+                v-model="batchArchiveKeepOnePerWorkspace"
+                type="checkbox"
+                class="checkbox checkbox-sm mt-0.5"
+              />
+              <div class="min-w-0 space-y-1 text-sm">
+                <div class="font-medium leading-5">{{ t("chat.batchArchive.keepOnePerWorkspace") }}</div>
+                <div class="text-xs leading-5 text-base-content/65">{{ t("chat.batchArchive.keepOnePerWorkspaceHint") }}</div>
+              </div>
+            </label>
+          </section>
+
+          <section class="mt-5 flex min-h-0 flex-1 flex-col">
+            <div class="flex items-center justify-between gap-3">
+              <div class="text-sm font-semibold">
+                {{ t("chat.batchArchive.previewTitle", { count: batchArchiveCandidateConversations.length }) }}
+              </div>
+            </div>
+            <div v-if="batchArchiveCandidateConversations.length === 0" class="mt-3 px-1 py-4 text-sm text-base-content/60">
+              {{ t("chat.batchArchive.empty") }}
+            </div>
+            <div v-else class="mt-3 min-h-0 flex-1 space-y-2 overflow-auto pr-1">
+              <article
+                v-for="item in batchArchiveCandidateConversations"
+                :key="item.conversationId"
+                class="flex items-center gap-3 rounded-lg border border-base-300 bg-base-100 px-3 py-2"
+              >
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-sm shrink-0"
+                  :checked="isBatchArchiveConversationSelected(item)"
+                  @change="toggleBatchArchiveConversation(item, ($event.target as HTMLInputElement).checked)"
+                />
+                <Archive class="h-4 w-4 shrink-0 text-base-content/55" />
+                <div class="min-w-0 flex-1">
+                  <div class="truncate text-sm font-medium">{{ conversationDisplayTitle(item) }}</div>
+                </div>
+                <div class="badge badge-ghost max-w-28 shrink-0 truncate">
+                  {{ conversationWorkspaceLabel(item) }}
+                </div>
+                <div class="w-24 shrink-0 text-right text-xs text-base-content/65">
+                  {{ t("chat.batchArchive.olderThanDays", { count: conversationAgeDays(item) }) }}
+                </div>
+                <div class="w-12 shrink-0 text-right text-xs text-base-content/60">
+                  {{ formatConversationTime(item.updatedAt) }}
+                </div>
+              </article>
+            </div>
+          </section>
+        </div>
+        <div class="flex shrink-0 items-center justify-between gap-3 border-t border-base-300 px-5 py-4">
+          <div class="flex items-center gap-2">
+            <button type="button" class="btn btn-ghost btn-sm" :disabled="batchArchiveCandidateConversations.length === 0" @click="selectAllBatchArchiveCandidates">
+              {{ t("chat.batchArchive.selectAll") }}
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm" :disabled="batchArchiveSelectedConversationIds.size === 0" @click="clearBatchArchiveSelection">
+              {{ t("chat.batchArchive.selectNone") }}
+            </button>
+            <span class="text-xs text-base-content/60">
+              {{ t("chat.batchArchive.selectedCount", { count: batchArchiveSelectedConversationIds.size }) }}
+            </span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" class="btn btn-sm" @click="closeBatchArchiveCard">
+              {{ t("common.cancel") }}
+            </button>
+            <button type="button" class="btn btn-primary btn-sm" disabled>
+              {{ t("chat.batchArchive.startArchive") }}
+            </button>
+          </div>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button @click.prevent="closeBatchArchiveCard">close</button>
+      </form>
+    </dialog>
   </aside>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
-import { Archive, PencilLine, Pin, PinOff, Search, SquarePen, Trash2, Upload } from "@lucide/vue";
+import { AlertTriangle, Archive, PencilLine, Pin, PinOff, Search, SquarePen, Trash2, Upload } from "@lucide/vue";
 import CollapsibleGroup from "./CollapsibleGroup.vue";
 import FloatingConversationMenu from "./FloatingConversationMenu.vue";
-import type { ChatConversationOverviewItem, ConversationPreviewMessage } from "../../../types/app";
+import type { ApiConfigItem, ChatConversationOverviewItem, ConversationPreviewMessage } from "../../../types/app";
 import { stripToolcallMarkers } from "../../../utils/chat-message-semantics";
 import type { TaskEntry } from "../../config/views/config-tabs/task-editor";
 import { invokeTauri } from "../../../services/tauri-api";
@@ -330,6 +469,8 @@ const props = defineProps<{
   personaNameMap: Record<string, string>;
   personaAvatarUrlMap: Record<string, string>;
   activeTab: ConversationSidebarTab;
+  chatModelOptions: ApiConfigItem[];
+  toolReviewApiConfigId?: string;
   bridgeRequest?: <T = unknown>(method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<T>;
 }>();
 
@@ -353,6 +494,11 @@ const conversationSearchQuery = ref("");
 const menuRefs = ref<Record<string, any>>({});
 const showSearch = ref(false);
 const searchInputRef = ref<HTMLInputElement | null>(null);
+const batchArchiveCardOpen = ref(false);
+const batchArchiveDays = ref(30);
+const batchArchiveKeepOnePerWorkspace = ref(true);
+const batchArchiveSelectedModelId = ref("");
+const batchArchiveSelectedConversationIds = ref<Set<string>>(new Set());
 const conversationFloatingScrollRef = ref<InstanceType<typeof ChatConversationFloatingScroll> | null>(null);
 const collapsedConversationSectionKeys = ref<Record<string, boolean>>({});
 const conversationSectionOrders = ref<ConversationSectionOrderState>({ local: [], contact: [] });
@@ -438,6 +584,81 @@ const searchPlaceholder = computed(() =>
   activeConversationTab.value === "task"
     ? t("chat.taskSidebar.searchPlaceholder")
     : t("chat.conversationSearchPlaceholder"),
+);
+
+const userAvatarInitial = computed(() => {
+  const text = String(props.userAlias || t("chat.userAvatarAlt")).trim();
+  return text.charAt(0).toUpperCase() || "U";
+});
+
+const batchArchiveModelOptions = computed<Array<{ id: string; label: string }>>(() =>
+  props.chatModelOptions
+    .filter((item) => item.enableText)
+    .map((item) => ({
+      id: String(item.id || "").trim(),
+      label: String(item.name || item.model || item.id || "").trim(),
+    }))
+    .filter((item) => !!item.id && !!item.label),
+);
+
+const batchArchiveCandidateConversations = computed(() => {
+  const thresholdDays = Math.max(1, Math.round(Number(batchArchiveDays.value || 0)));
+  const now = Date.now();
+  const oldLocalConversations = props.items
+    .filter((item) => {
+      if (!isLocalConversation(item) || item.isSystemNotificationConversation) return false;
+      const updatedAt = Date.parse(String(item.updatedAt || item.lastMessageAt || "").trim());
+      if (!Number.isFinite(updatedAt)) return false;
+      const ageDays = Math.floor((now - updatedAt) / 86_400_000);
+      return ageDays >= thresholdDays;
+    });
+  if (!batchArchiveKeepOnePerWorkspace.value) {
+    return sortBatchArchiveCandidates(oldLocalConversations);
+  }
+  const preservedConversationIds = new Set<string>();
+  const newestByWorkspace = new Map<string, ChatConversationOverviewItem>();
+  for (const item of oldLocalConversations) {
+    const workspaceKey = conversationWorkspaceKey(item);
+    const current = newestByWorkspace.get(workspaceKey);
+    if (!current || conversationTimeValue(item) > conversationTimeValue(current)) {
+      newestByWorkspace.set(workspaceKey, item);
+    }
+  }
+  for (const item of newestByWorkspace.values()) {
+    preservedConversationIds.add(String(item.conversationId || "").trim());
+  }
+  return sortBatchArchiveCandidates(oldLocalConversations.filter((item) =>
+    !preservedConversationIds.has(String(item.conversationId || "").trim()),
+  ));
+});
+
+watch(
+  () => [props.toolReviewApiConfigId, batchArchiveModelOptions.value.map((item) => item.id).join("|")] as const,
+  () => {
+    const quickModelId = String(props.toolReviewApiConfigId || "").trim();
+    const optionIds = batchArchiveModelOptions.value.map((item) => item.id);
+    if (quickModelId && optionIds.includes(quickModelId)) {
+      batchArchiveSelectedModelId.value = quickModelId;
+      return;
+    }
+    if (!optionIds.includes(batchArchiveSelectedModelId.value)) {
+      batchArchiveSelectedModelId.value = optionIds[0] || "";
+    }
+  },
+  { immediate: true },
+);
+
+watch(
+  () => batchArchiveCandidateConversations.value.map((item) => String(item.conversationId || "").trim()).filter(Boolean),
+  (candidateIds) => {
+    const candidateSet = new Set(candidateIds);
+    const next = new Set<string>();
+    for (const id of batchArchiveSelectedConversationIds.value) {
+      if (candidateSet.has(id)) next.add(id);
+    }
+    batchArchiveSelectedConversationIds.value = next;
+  },
+  { immediate: true },
 );
 
 const filteredConversationSections = computed(() => {
@@ -976,6 +1197,72 @@ function handleCardPointerUp(_item: ChatConversationOverviewItem) {
 
 function handleCardPointerLeave() {
   clearLongPressTimer();
+}
+
+function openBatchArchiveCard() {
+  batchArchiveCardOpen.value = true;
+  selectAllBatchArchiveCandidates();
+}
+
+function closeBatchArchiveCard() {
+  batchArchiveCardOpen.value = false;
+}
+
+function batchArchiveConversationId(item: ChatConversationOverviewItem): string {
+  return String(item.conversationId || "").trim();
+}
+
+function isBatchArchiveConversationSelected(item: ChatConversationOverviewItem): boolean {
+  const id = batchArchiveConversationId(item);
+  return !!id && batchArchiveSelectedConversationIds.value.has(id);
+}
+
+function toggleBatchArchiveConversation(item: ChatConversationOverviewItem, checked: boolean) {
+  const id = batchArchiveConversationId(item);
+  if (!id) return;
+  const next = new Set(batchArchiveSelectedConversationIds.value);
+  if (checked) {
+    next.add(id);
+  } else {
+    next.delete(id);
+  }
+  batchArchiveSelectedConversationIds.value = next;
+}
+
+function selectAllBatchArchiveCandidates() {
+  batchArchiveSelectedConversationIds.value = new Set(
+    batchArchiveCandidateConversations.value
+      .map(batchArchiveConversationId)
+      .filter(Boolean),
+  );
+}
+
+function clearBatchArchiveSelection() {
+  batchArchiveSelectedConversationIds.value = new Set();
+}
+
+function conversationAgeDays(item: ChatConversationOverviewItem): number {
+  const updatedAt = conversationTimeValue(item);
+  if (!Number.isFinite(updatedAt)) return 0;
+  return Math.max(0, Math.floor((Date.now() - updatedAt) / 86_400_000));
+}
+
+function conversationTimeValue(item: ChatConversationOverviewItem): number {
+  return Date.parse(String(item.updatedAt || item.lastMessageAt || "").trim()) || 0;
+}
+
+function sortBatchArchiveCandidates(items: ChatConversationOverviewItem[]): ChatConversationOverviewItem[] {
+  return [...items].sort((left, right) => conversationTimeValue(left) - conversationTimeValue(right));
+}
+
+function conversationWorkspaceKey(item: ChatConversationOverviewItem): string {
+  const rootPath = String(item.workspaceRootPath || "").trim();
+  if (rootPath) return rootPath.toLocaleLowerCase();
+  return `label:${conversationWorkspaceLabel(item).toLocaleLowerCase()}`;
+}
+
+function conversationWorkspaceLabel(item: ChatConversationOverviewItem): string {
+  return String(item.workspaceLabel || workspaceNameFromPath(String(item.workspaceRootPath || "").trim()) || t("chat.defaultWorkspace")).trim();
 }
 
 function canToggleConversationPin(item: ChatConversationOverviewItem): boolean {
