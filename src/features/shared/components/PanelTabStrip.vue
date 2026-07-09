@@ -27,10 +27,10 @@
           <button
             type="button"
             role="tab"
-            class="btn btn-ghost btn-sm min-w-0 flex-nowrap"
+            class="btn btn-ghost btn-sm min-w-0 w-full flex-nowrap overflow-hidden"
             :class="[
               tab.key === activeKey ? 'bg-base-100/60' : '',
-              tab.closeable ? 'justify-start' : 'justify-center',
+              tab.closeable ? 'justify-start pr-8' : 'justify-center',
             ]"
             :aria-selected="tab.key === activeKey"
             @click.stop="selectTab(tab)"
@@ -41,6 +41,11 @@
               alt=""
               class="panel-tab-strip-icon size-4 shrink-0 object-contain"
             />
+            <span
+              v-else
+              aria-hidden="true"
+              class="inline-block size-4 shrink-0"
+            ></span>
             <span class="min-w-0 truncate font-medium">{{ tab.label }}</span>
           </button>
           <button
@@ -71,12 +76,39 @@
         <X class="size-4" />
         <span>{{ closeTitle }}</span>
       </button>
+      <button
+        v-if="closeMenuCanCloseLeft"
+        type="button"
+        class="btn btn-ghost btn-sm justify-start"
+        @click.stop="closeMenuTabsToLeft"
+      >
+        <span aria-hidden="true" class="inline-block size-4 shrink-0"></span>
+        <span>{{ closeLeftTitle }}</span>
+      </button>
+      <button
+        v-if="closeMenuCanCloseRight"
+        type="button"
+        class="btn btn-ghost btn-sm justify-start"
+        @click.stop="closeMenuTabsToRight"
+      >
+        <span aria-hidden="true" class="inline-block size-4 shrink-0"></span>
+        <span>{{ closeRightTitle }}</span>
+      </button>
+      <button
+        v-if="closeMenuCanCloseOthers"
+        type="button"
+        class="btn btn-ghost btn-sm justify-start"
+        @click.stop="closeMenuOtherTabs"
+      >
+        <span aria-hidden="true" class="inline-block size-4 shrink-0"></span>
+        <span>{{ closeOthersTitle }}</span>
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { X } from "@lucide/vue";
 import OverlayScrollArea from "./OverlayScrollArea.vue";
 
@@ -94,15 +126,24 @@ const props = withDefaults(defineProps<{
   activeKey?: string;
   ariaLabel?: string;
   closeTitle?: string;
+  closeLeftTitle?: string;
+  closeRightTitle?: string;
+  closeOthersTitle?: string;
 }>(), {
   activeKey: "",
   ariaLabel: "",
   closeTitle: "",
+  closeLeftTitle: "",
+  closeRightTitle: "",
+  closeOthersTitle: "",
 });
 
 const emit = defineEmits<{
   (e: "selectTab", key: string): void;
   (e: "closeTab", key: string): void;
+  (e: "closeTabsToLeft", key: string): void;
+  (e: "closeTabsToRight", key: string): void;
+  (e: "closeOtherTabs", key: string): void;
 }>();
 
 const closeMenu = ref<{ key: string; x: number; y: number } | null>(null);
@@ -136,7 +177,7 @@ function clearLongPress() {
 
 function menuPosition(x: number, y: number) {
   const menuWidth = 132;
-  const menuHeight = 44;
+  const menuHeight = 164;
   const padding = 8;
   return {
     x: Math.min(Math.max(padding, x), Math.max(padding, window.innerWidth - menuWidth - padding)),
@@ -177,13 +218,72 @@ function trackLongPressMove(event: PointerEvent) {
 }
 
 function closeMenuTab() {
-  const key = closeMenu.value?.key || "";
-  const tab = props.tabs.find((item) => item.key === key);
+  const tab = currentCloseMenuTab.value;
   if (!tab) {
     closeMenu.value = null;
     return;
   }
   closeTab(tab);
+}
+
+const currentCloseMenuTab = computed(() => {
+  const key = closeMenu.value?.key || "";
+  return props.tabs.find((item) => item.key === key) || null;
+});
+
+const currentCloseMenuIndex = computed(() => {
+  const key = currentCloseMenuTab.value?.key || "";
+  return props.tabs.findIndex((item) => item.key === key);
+});
+
+const closeableTabs = computed(() => props.tabs.filter((item) => item.closeable && !item.disabled));
+
+const closeMenuCanCloseLeft = computed(() => {
+  const index = currentCloseMenuIndex.value;
+  if (index <= 0) return false;
+  return props.tabs.slice(0, index).some((item) => item.closeable && !item.disabled);
+});
+
+const closeMenuCanCloseRight = computed(() => {
+  const index = currentCloseMenuIndex.value;
+  if (index < 0) return false;
+  return props.tabs.slice(index + 1).some((item) => item.closeable && !item.disabled);
+});
+
+const closeMenuCanCloseOthers = computed(() => {
+  const currentKey = currentCloseMenuTab.value?.key || "";
+  if (!currentKey) return false;
+  return closeableTabs.value.some((item) => item.key !== currentKey);
+});
+
+function closeMenuTabsToLeft() {
+  const tab = currentCloseMenuTab.value;
+  if (!tab || !closeMenuCanCloseLeft.value) {
+    closeMenu.value = null;
+    return;
+  }
+  closeMenu.value = null;
+  emit("closeTabsToLeft", tab.key);
+}
+
+function closeMenuTabsToRight() {
+  const tab = currentCloseMenuTab.value;
+  if (!tab || !closeMenuCanCloseRight.value) {
+    closeMenu.value = null;
+    return;
+  }
+  closeMenu.value = null;
+  emit("closeTabsToRight", tab.key);
+}
+
+function closeMenuOtherTabs() {
+  const tab = currentCloseMenuTab.value;
+  if (!tab || !closeMenuCanCloseOthers.value) {
+    closeMenu.value = null;
+    return;
+  }
+  closeMenu.value = null;
+  emit("closeOtherTabs", tab.key);
 }
 
 function closeFloatingMenu() {

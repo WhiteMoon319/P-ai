@@ -1,7 +1,7 @@
 <template>
   <div class="relative flex h-screen min-h-0 flex-col bg-base-100 text-base-content">
     <header class="flex h-10 shrink-0 items-end gap-2 bg-base-200 px-2" data-tauri-drag-region>
-      <button class="btn btn-ghost btn-sm shrink-0" type="button" title="打开文件" @click.stop="pickFile">
+      <button class="btn btn-ghost btn-sm shrink-0" type="button" :title="t('fileReader.openFile')" @click.stop="pickFile">
         <FilePlus class="h-4 w-4" />
       </button>
       <div class="flex min-w-0 flex-1 items-end gap-1 overflow-hidden" data-tauri-drag-region>
@@ -17,13 +17,14 @@
           @click="fileReaderPanelRef?.setActiveTab(tab.path)"
           @keydown.enter.prevent="fileReaderPanelRef?.setActiveTab(tab.path)"
           @keydown.space.prevent="fileReaderPanelRef?.setActiveTab(tab.path)"
+          @contextmenu.prevent.stop="openTabMenu(tab.path, $event.clientX, $event.clientY)"
         >
           <FileText class="h-4 w-4 shrink-0 opacity-70" />
           <span class="min-w-0 flex-1 truncate font-medium">{{ tab.title }}</span>
           <button
             type="button"
             class="btn btn-ghost btn-xs h-5 min-h-5 w-5 p-0 opacity-60 hover:opacity-100"
-            title="关闭"
+            :title="t('fileReader.close')"
             @click.stop="fileReaderPanelRef?.closeTab(tab.path)"
           >
             <X class="h-3.5 w-3.5" />
@@ -36,10 +37,50 @@
       <button class="btn btn-ghost btn-sm shrink-0" type="button" :title="maximized ? '还原窗口' : '最大化'" @click.stop="toggleMaximizeWindow">
         <Square class="h-3.5 w-3.5" />
       </button>
-      <button class="btn btn-sm btn-ghost shrink-0 hover:bg-error" type="button" title="关闭" @click.stop="closeWindow">
+      <button class="btn btn-sm btn-ghost shrink-0 hover:bg-error" type="button" :title="t('fileReader.close')" @click.stop="closeWindow">
         <X class="h-3.5 w-3.5" />
       </button>
     </header>
+
+    <div
+      v-if="tabMenu"
+      class="fixed z-80 menu rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
+      :style="{ left: `${tabMenu.x}px`, top: `${tabMenu.y}px` }"
+      @pointerdown.stop
+      @contextmenu.prevent.stop
+    >
+      <button type="button" class="btn btn-ghost btn-sm justify-start" @click.stop="closeCurrentTabFromMenu">
+        <X class="size-4" />
+        <span>{{ t('fileReader.close') }}</span>
+      </button>
+      <button
+        v-if="tabMenuCanCloseLeft"
+        type="button"
+        class="btn btn-ghost btn-sm justify-start"
+        @click.stop="closeTabsToLeftFromMenu"
+      >
+        <span aria-hidden="true" class="inline-block size-4 shrink-0"></span>
+        <span>{{ t('fileReader.closeLeft') }}</span>
+      </button>
+      <button
+        v-if="tabMenuCanCloseRight"
+        type="button"
+        class="btn btn-ghost btn-sm justify-start"
+        @click.stop="closeTabsToRightFromMenu"
+      >
+        <span aria-hidden="true" class="inline-block size-4 shrink-0"></span>
+        <span>{{ t('fileReader.closeRight') }}</span>
+      </button>
+      <button
+        v-if="tabMenuCanCloseOthers"
+        type="button"
+        class="btn btn-ghost btn-sm justify-start"
+        @click.stop="closeOtherTabsFromMenu"
+      >
+        <span aria-hidden="true" class="inline-block size-4 shrink-0"></span>
+        <span>{{ t('fileReader.closeOthers') }}</span>
+      </button>
+    </div>
 
     <FileReaderPanel
       ref="fileReaderPanelRef"
@@ -60,6 +101,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { FilePlus, FileText, Minus, Square, X } from "@lucide/vue";
 import { open } from "@tauri-apps/plugin-dialog";
+import { useI18n } from "vue-i18n";
 import FileReaderPanel from "../../features/file-reader/components/FileReaderPanel.vue";
 import type { AppThemeState } from "../../features/shell/theme/theme-types";
 import { isDarkAppTheme, useAppTheme } from "../../features/shell/composables/use-app-theme";
@@ -75,13 +117,32 @@ type FileReaderSessionState = {
 };
 
 const { applyTheme, currentTheme, restoreThemeFromStorage } = useAppTheme();
+const { t } = useI18n();
 const appWindow = getCurrentWindow();
 const maximized = ref(false);
 const fileReaderPanelRef = ref<InstanceType<typeof FileReaderPanel> | null>(null);
 const markdownIsDark = computed(() => isDarkAppTheme(currentTheme.value));
+const tabMenu = ref<{ path: string; x: number; y: number } | null>(null);
 
 let unlistenOpenPath: UnlistenFn | null = null;
 let unlistenThemeChanged: UnlistenFn | null = null;
+
+const currentTabMenuIndex = computed(() => {
+  const path = tabMenu.value?.path || "";
+  if (!path) return -1;
+  return fileReaderPanelRef.value?.tabs.findIndex((tab) => tab.path === path) ?? -1;
+});
+
+const tabMenuCanCloseLeft = computed(() => currentTabMenuIndex.value > 0);
+const tabMenuCanCloseRight = computed(() => {
+  const panel = fileReaderPanelRef.value;
+  if (!panel) return false;
+  return currentTabMenuIndex.value >= 0 && currentTabMenuIndex.value < panel.tabs.length - 1;
+});
+const tabMenuCanCloseOthers = computed(() => {
+  const panel = fileReaderPanelRef.value;
+  return !!panel && currentTabMenuIndex.value >= 0 && panel.tabs.length > 1;
+});
 
 function normalizePath(path: string) {
   return String(path || "")
@@ -112,6 +173,58 @@ function persistFileReaderSession() {
     directoryRootPath: normalizePath(panel.directoryRootPath),
   };
   localStorage.setItem(FILE_READER_SESSION_STORAGE_KEY, JSON.stringify(state));
+}
+
+function menuPosition(x: number, y: number) {
+  const menuWidth = 132;
+  const menuHeight = 164;
+  const padding = 8;
+  return {
+    x: Math.min(Math.max(padding, x), Math.max(padding, window.innerWidth - menuWidth - padding)),
+    y: Math.min(Math.max(padding, y), Math.max(padding, window.innerHeight - menuHeight - padding)),
+  };
+}
+
+function openTabMenu(path: string, x: number, y: number) {
+  const panel = fileReaderPanelRef.value;
+  if (!panel?.tabs.some((tab) => tab.path === path)) return;
+  tabMenu.value = { path, ...menuPosition(x, y) };
+}
+
+function closeTabMenu() {
+  tabMenu.value = null;
+}
+
+function closeCurrentTabFromMenu() {
+  const path = tabMenu.value?.path || "";
+  if (!path) return closeTabMenu();
+  fileReaderPanelRef.value?.closeTab(path);
+  closeTabMenu();
+}
+
+function closeTabsToLeftFromMenu() {
+  const path = tabMenu.value?.path || "";
+  if (!path) return closeTabMenu();
+  fileReaderPanelRef.value?.closeTabsToLeftOf(path);
+  closeTabMenu();
+}
+
+function closeTabsToRightFromMenu() {
+  const path = tabMenu.value?.path || "";
+  if (!path) return closeTabMenu();
+  fileReaderPanelRef.value?.closeTabsToRightOf(path);
+  closeTabMenu();
+}
+
+function closeOtherTabsFromMenu() {
+  const path = tabMenu.value?.path || "";
+  if (!path) return closeTabMenu();
+  fileReaderPanelRef.value?.closeOtherTabs(path);
+  closeTabMenu();
+}
+
+function handleWindowKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape") closeTabMenu();
 }
 
 async function restoreFileReaderSession(loadActiveTab: boolean) {
@@ -164,6 +277,8 @@ async function closeWindow() {
 }
 
 onMounted(async () => {
+  window.addEventListener("pointerdown", closeTabMenu);
+  window.addEventListener("keydown", handleWindowKeydown);
   restoreThemeFromStorage();
   try {
     unlistenThemeChanged = await listen<AppThemeState>("easy-call:theme-changed", (event) => {
@@ -188,6 +303,8 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  window.removeEventListener("pointerdown", closeTabMenu);
+  window.removeEventListener("keydown", handleWindowKeydown);
   unlistenOpenPath?.();
   unlistenThemeChanged?.();
 });

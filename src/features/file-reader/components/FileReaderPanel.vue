@@ -6,8 +6,14 @@
       :active-key="activePath"
       :aria-label="t('fileReader.tabs')"
       :close-title="t('fileReader.close')"
+      :close-left-title="t('fileReader.closeLeft')"
+      :close-right-title="t('fileReader.closeRight')"
+      :close-others-title="t('fileReader.closeOthers')"
       @select-tab="setActiveTab"
       @close-tab="closeTab"
+      @close-tabs-to-left="closeTabsToLeftOf"
+      @close-tabs-to-right="closeTabsToRightOf"
+      @close-other-tabs="closeOtherTabs"
     >
       <template #leading>
         <slot name="tabLeadingActions">
@@ -1812,20 +1818,67 @@ async function openDroppedPaths(paths: string[]) {
 }
 
 function closeTab(path: string) {
+  closeTabsByPaths([path], { preferredActivePath: path });
+}
+
+function closeTabsToLeftOf(path: string) {
+  const index = tabs.value.findIndex((tab) => tab.path === path);
+  if (index <= 0) return;
+  closeTabsByPaths(
+    tabs.value.slice(0, index).map((tab) => tab.path),
+    { preferredActivePath: path },
+  );
+}
+
+function closeTabsToRightOf(path: string) {
   const index = tabs.value.findIndex((tab) => tab.path === path);
   if (index < 0) return;
-  const wasActive = activePath.value === path;
-  tabs.value = tabs.value.filter((tab) => tab.path !== path);
-  clearFileBlockCaches(path);
-  if (wasActive) {
-    activePath.value = tabs.value[Math.max(0, index - 1)]?.path || tabs.value[0]?.path || "";
-    scheduleAddressScrollStateUpdate();
-    const nextTab = tabs.value.find((tab) => tab.path === activePath.value);
-    if (nextTab && !nextTab.loaded && !nextTab.loading) {
-      void openPath(nextTab.path);
-    } else {
-      void resetScrollAndCaptureFirstPage();
-    }
+  closeTabsByPaths(
+    tabs.value.slice(index + 1).map((tab) => tab.path),
+    { preferredActivePath: path },
+  );
+}
+
+function closeOtherTabs(path: string) {
+  closeTabsByPaths(
+    tabs.value.filter((tab) => tab.path !== path).map((tab) => tab.path),
+    { preferredActivePath: path },
+  );
+}
+
+function closeTabsByPaths(paths: string[], options?: { preferredActivePath?: string }) {
+  const normalizedPaths = new Set(paths.map((path) => normalizePath(path)).filter(Boolean));
+  if (normalizedPaths.size === 0) return;
+  const currentTabs = tabs.value;
+  const firstRemovedIndex = currentTabs.findIndex((tab) => normalizedPaths.has(normalizePath(tab.path)));
+  if (firstRemovedIndex < 0) return;
+
+  const nextTabs = currentTabs.filter((tab) => !normalizedPaths.has(normalizePath(tab.path)));
+  const preferredActivePath = normalizePath(options?.preferredActivePath || "");
+  const activeWillRemain = activePath.value && nextTabs.some((tab) => tab.path === activePath.value);
+
+  tabs.value = nextTabs;
+  for (const removedPath of normalizedPaths) {
+    clearFileBlockCaches(removedPath);
+  }
+
+  if (activeWillRemain) return;
+
+  const nextActivePath =
+    (preferredActivePath && nextTabs.find((tab) => tab.path === preferredActivePath)?.path)
+    || nextTabs[Math.max(0, firstRemovedIndex - 1)]?.path
+    || nextTabs[firstRemovedIndex]?.path
+    || nextTabs[0]?.path
+    || "";
+
+  activePath.value = nextActivePath;
+  scheduleAddressScrollStateUpdate();
+
+  const nextTab = nextTabs.find((tab) => tab.path === nextActivePath);
+  if (nextTab && !nextTab.loaded && !nextTab.loading) {
+    void openPath(nextTab.path);
+  } else {
+    void resetScrollAndCaptureFirstPage();
   }
 }
 
@@ -2316,6 +2369,9 @@ defineExpose({
   openPath,
   setActiveTab,
   closeTab,
+  closeTabsToLeftOf,
+  closeTabsToRightOf,
+  closeOtherTabs,
   openDirectoryTree,
   closeDirectoryTree,
   tabs,
