@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-07-09T10:01:09.639Z",
-  "latestVersion": "v0.20.0",
+  "generatedAt": "2026-07-09T10:45:44.289Z",
+  "latestVersion": "v0.21.0",
   "releases": [
     {
-      "version": "v0.20.0",
-      "path": "docs/changelog/releases/v0.20.0.md",
+      "version": "v0.21.0",
+      "path": "docs/changelog/releases/v0.21.0.md",
       "summary": "文件阅读器支持图片、音频和常见视频内嵌预览，并阻止不适合预览的二进制文件被当作文本读取。"
     },
     {

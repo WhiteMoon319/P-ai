@@ -3417,7 +3417,7 @@ mod tool_loop_tests {
     }
 
     #[test]
-    fn finalize_remote_im_stop_model_reply_should_suppress_empty_no_reply_message() {
+    fn finalize_remote_im_stop_model_reply_should_keep_empty_no_reply_message_persistable() {
         let reply = finalize_remote_im_stop_model_reply(
             "",
             String::new(),
