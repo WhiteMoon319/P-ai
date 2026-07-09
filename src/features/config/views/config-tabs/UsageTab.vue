@@ -5,7 +5,7 @@
         <div class="text-xl font-semibold">用量概览</div>
         <div class="mt-1 text-sm opacity-70">综合总量按 输出 x 2 + 缓存写入 + 缓存命中 x 0.02 估算，仅供参考。</div>
       </div>
-      <button class="btn btn-primary btn-sm shrink-0" :disabled="loading" @click="loadOverview">
+      <button class="btn btn-primary btn-sm shrink-0" :disabled="loading" @click="refreshOverview">
         <span v-if="loading" class="loading loading-spinner loading-xs"></span>
         <span>{{ t("common.refresh") }}</span>
       </button>
@@ -248,7 +248,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watchEffect } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../../services/tauri-api";
 import type {
@@ -264,9 +264,9 @@ import { toErrorMessage } from "../../../../utils/error";
 
 const { t } = useI18n();
 
-const loading = ref(false);
 const errorText = ref("");
 const overview = ref<UsageOverview | null>(null);
+const overviewStatus = ref<OverviewStatus | null>(null);
 const conversationPage = ref(1);
 const conversationPageSize = 20;
 const conversationFilter = ref<"all" | "normal" | "delegate" | "contact" | "system" | "archived">("all");
@@ -275,6 +275,16 @@ type SortDirection = "asc" | "desc";
 type SortState<T extends string> = {
   key: T;
   direction: SortDirection;
+};
+type OverviewStatus = {
+  computeState: "idle" | "running";
+  freshness: "never" | "fresh" | "expired";
+  generatedAt?: string | null;
+  lastError?: string | null;
+};
+type OverviewSnapshot<T> = {
+  status: OverviewStatus;
+  data?: T | null;
 };
 type ProviderModelSortKey =
   | "providerLabel"
@@ -309,6 +319,9 @@ const providerModelSort = ref<SortState<ProviderModelSortKey>>({ key: "weightedT
 const agentSort = ref<SortState<AggregateSortKey>>({ key: "weightedTokens", direction: "desc" });
 const kindSort = ref<SortState<AggregateSortKey>>({ key: "weightedTokens", direction: "desc" });
 const conversationSort = ref<SortState<ConversationSortKey>>({ key: "weightedTokens", direction: "desc" });
+const loading = computed(() => overviewStatus.value?.computeState === "running");
+let overviewPollTimer: number | null = null;
+let usageTabUnmounted = false;
 
 const conversationFilterOptions = [
   { value: "all" as const, label: "全部" },
@@ -644,20 +657,63 @@ function conversationAvatarInitial(item: UsageConversationItem): string {
   return text.charAt(0).toUpperCase() || "?";
 }
 
+function stopOverviewPolling() {
+  if (overviewPollTimer != null) {
+    window.clearTimeout(overviewPollTimer);
+    overviewPollTimer = null;
+  }
+}
+
+function scheduleOverviewPolling() {
+  stopOverviewPolling();
+  if (usageTabUnmounted || overviewStatus.value?.computeState !== "running") return;
+  overviewPollTimer = window.setTimeout(() => {
+    void loadOverview();
+  }, 1000);
+}
+
+function applyOverviewSnapshot(snapshot: OverviewSnapshot<UsageOverview>) {
+  overviewStatus.value = snapshot.status;
+  if (snapshot.data) {
+    overview.value = snapshot.data;
+    conversationPage.value = 1;
+  }
+  if (snapshot.status.lastError) {
+    errorText.value = snapshot.status.lastError;
+  }
+  scheduleOverviewPolling();
+}
+
 async function loadOverview() {
-  loading.value = true;
   errorText.value = "";
   try {
-    overview.value = await invokeTauri<UsageOverview>("get_usage_overview");
-    conversationPage.value = 1;
+    const snapshot = await invokeTauri<OverviewSnapshot<UsageOverview>>("get_usage_overview");
+    if (!usageTabUnmounted) {
+      applyOverviewSnapshot(snapshot);
+    }
   } catch (error) {
     errorText.value = toErrorMessage(error);
-  } finally {
-    loading.value = false;
+  }
+}
+
+async function refreshOverview() {
+  errorText.value = "";
+  try {
+    const snapshot = await invokeTauri<OverviewSnapshot<UsageOverview>>("refresh_usage_overview");
+    if (!usageTabUnmounted) {
+      applyOverviewSnapshot(snapshot);
+    }
+  } catch (error) {
+    errorText.value = toErrorMessage(error);
   }
 }
 
 onMounted(() => {
   void loadOverview();
+});
+
+onBeforeUnmount(() => {
+  usageTabUnmounted = true;
+  stopOverviewPolling();
 });
 </script>

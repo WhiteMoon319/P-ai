@@ -19,6 +19,46 @@ struct StorageUsageOverview {
     items: Vec<StorageUsageItem>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OverviewStatus {
+    compute_state: String,
+    freshness: String,
+    generated_at: Option<String>,
+    last_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OverviewSnapshot<T> {
+    status: OverviewStatus,
+    data: Option<T>,
+}
+
+#[derive(Debug, Clone)]
+struct OverviewCacheEntry<T> {
+    computed_at: std::time::Instant,
+    generated_at: String,
+    data: T,
+}
+
+#[derive(Debug, Clone)]
+struct OverviewRuntime<T> {
+    cache: Option<OverviewCacheEntry<T>>,
+    running: bool,
+    last_error: Option<String>,
+}
+
+impl<T> Default for OverviewRuntime<T> {
+    fn default() -> Self {
+        Self {
+            cache: None,
+            running: false,
+            last_error: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct UsageOverviewTotals {
@@ -821,11 +861,85 @@ fn build_storage_usage_overview(state: &AppState) -> Result<StorageUsageOverview
     })
 }
 
+const OVERVIEW_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
+fn overview_freshness<T>(runtime: &OverviewRuntime<T>) -> String {
+    match runtime.cache.as_ref() {
+        None => "never".to_string(),
+        Some(entry) if entry.computed_at.elapsed() < OVERVIEW_CACHE_TTL => "fresh".to_string(),
+        Some(_) => "expired".to_string(),
+    }
+}
+
+fn overview_snapshot<T: Clone>(runtime: &OverviewRuntime<T>) -> OverviewSnapshot<T> {
+    OverviewSnapshot {
+        status: OverviewStatus {
+            compute_state: if runtime.running { "running" } else { "idle" }.to_string(),
+            freshness: overview_freshness(runtime),
+            generated_at: runtime.cache.as_ref().map(|entry| entry.generated_at.clone()),
+            last_error: runtime.last_error.clone(),
+        },
+        data: runtime.cache.as_ref().map(|entry| entry.data.clone()),
+    }
+}
+
+fn storage_overview_runtime() -> &'static tokio::sync::Mutex<OverviewRuntime<StorageUsageOverview>> {
+    static RUNTIME: std::sync::OnceLock<tokio::sync::Mutex<OverviewRuntime<StorageUsageOverview>>> =
+        std::sync::OnceLock::new();
+    RUNTIME.get_or_init(|| tokio::sync::Mutex::new(OverviewRuntime::default()))
+}
+
+async fn start_storage_overview_refresh_if_needed(
+    state: AppState,
+    force: bool,
+) -> OverviewSnapshot<StorageUsageOverview> {
+    let mut runtime = storage_overview_runtime().lock().await;
+    let freshness = overview_freshness(&runtime);
+    let should_start = !runtime.running
+        && (force || (freshness != "fresh" && runtime.last_error.is_none()));
+    if !should_start {
+        return overview_snapshot(&runtime);
+    }
+
+    runtime.running = true;
+    runtime.last_error = None;
+    let snapshot = overview_snapshot(&runtime);
+    tauri::async_runtime::spawn(async move {
+        let result = tauri::async_runtime::spawn_blocking(move || build_storage_usage_overview(&state))
+            .await
+            .map_err(|err| format!("计算存储用量概览任务失败：{err}"))
+            .and_then(|result| result);
+        let mut runtime = storage_overview_runtime().lock().await;
+        runtime.running = false;
+        match result {
+            Ok(data) => {
+                runtime.cache = Some(OverviewCacheEntry {
+                    computed_at: std::time::Instant::now(),
+                    generated_at: now_iso(),
+                    data,
+                });
+                runtime.last_error = None;
+            }
+            Err(err) => {
+                runtime.last_error = Some(err);
+            }
+        }
+    });
+    snapshot
+}
+
 #[tauri::command]
-fn get_storage_usage_overview(
+async fn get_storage_usage_overview(
     state: State<'_, AppState>,
-) -> Result<StorageUsageOverview, String> {
-    build_storage_usage_overview(&state)
+) -> Result<OverviewSnapshot<StorageUsageOverview>, String> {
+    Ok(start_storage_overview_refresh_if_needed(state.inner().clone(), false).await)
+}
+
+#[tauri::command]
+async fn refresh_storage_usage_overview(
+    state: State<'_, AppState>,
+) -> Result<OverviewSnapshot<StorageUsageOverview>, String> {
+    Ok(start_storage_overview_refresh_if_needed(state.inner().clone(), true).await)
 }
 
 fn usage_resolve_api_config_id(conversation: &Conversation, config: &AppConfig) -> String {
@@ -1755,9 +1869,63 @@ fn build_usage_overview(state: &AppState) -> Result<UsageOverview, String> {
     })
 }
 
+fn usage_overview_runtime() -> &'static tokio::sync::Mutex<OverviewRuntime<UsageOverview>> {
+    static RUNTIME: std::sync::OnceLock<tokio::sync::Mutex<OverviewRuntime<UsageOverview>>> =
+        std::sync::OnceLock::new();
+    RUNTIME.get_or_init(|| tokio::sync::Mutex::new(OverviewRuntime::default()))
+}
+
+async fn start_usage_overview_refresh_if_needed(
+    state: AppState,
+    force: bool,
+) -> OverviewSnapshot<UsageOverview> {
+    let mut runtime = usage_overview_runtime().lock().await;
+    let freshness = overview_freshness(&runtime);
+    let should_start = !runtime.running
+        && (force || (freshness != "fresh" && runtime.last_error.is_none()));
+    if !should_start {
+        return overview_snapshot(&runtime);
+    }
+
+    runtime.running = true;
+    runtime.last_error = None;
+    let snapshot = overview_snapshot(&runtime);
+    tauri::async_runtime::spawn(async move {
+        let result = tauri::async_runtime::spawn_blocking(move || build_usage_overview(&state))
+            .await
+            .map_err(|err| format!("计算用量概览任务失败：{err}"))
+            .and_then(|result| result);
+        let mut runtime = usage_overview_runtime().lock().await;
+        runtime.running = false;
+        match result {
+            Ok(data) => {
+                runtime.cache = Some(OverviewCacheEntry {
+                    computed_at: std::time::Instant::now(),
+                    generated_at: data.generated_at.clone(),
+                    data,
+                });
+                runtime.last_error = None;
+            }
+            Err(err) => {
+                runtime.last_error = Some(err);
+            }
+        }
+    });
+    snapshot
+}
+
 #[tauri::command]
-fn get_usage_overview(state: State<'_, AppState>) -> Result<UsageOverview, String> {
-    build_usage_overview(&state)
+async fn get_usage_overview(
+    state: State<'_, AppState>,
+) -> Result<OverviewSnapshot<UsageOverview>, String> {
+    Ok(start_usage_overview_refresh_if_needed(state.inner().clone(), false).await)
+}
+
+#[tauri::command]
+async fn refresh_usage_overview(
+    state: State<'_, AppState>,
+) -> Result<OverviewSnapshot<UsageOverview>, String> {
+    Ok(start_usage_overview_refresh_if_needed(state.inner().clone(), true).await)
 }
 
 fn storage_existing_directory_for_open(path: &PathBuf) -> Result<PathBuf, String> {

@@ -21,7 +21,7 @@
       <button
         class="btn btn-primary btn-sm shrink-0"
         :disabled="storageLoading || !!cleanupBusyKind"
-        @click="loadStorageOverview"
+        @click="refreshStorageOverview"
       >
         <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': storageLoading }" />
         <span>{{ t("config.storage.refreshAction") }}</span>
@@ -280,7 +280,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useI18n } from "vue-i18n";
 import { Download, Eye, EyeOff, FolderOpen, HardDrive, RefreshCw, Trash2, Upload } from "@lucide/vue";
@@ -318,6 +318,18 @@ type StorageUsageOverview = {
   items: StorageUsageItem[];
 };
 
+type OverviewStatus = {
+  computeState: "idle" | "running";
+  freshness: "never" | "fresh" | "expired";
+  generatedAt?: string | null;
+  lastError?: string | null;
+};
+
+type OverviewSnapshot<T> = {
+  status: OverviewStatus;
+  data?: T | null;
+};
+
 type StorageCleanupResult = {
   deletedFileCount: number;
   skippedFileCount: number;
@@ -345,7 +357,7 @@ const showImportPassword = ref(false);
 const needImportPassword = ref(false);
 const selectedImportPackagePath = ref("");
 const storageOverview = ref<StorageUsageOverview | null>(null);
-const storageLoading = ref(false);
+const storageStatus = ref<OverviewStatus | null>(null);
 const storageMessage = ref("");
 const storageMessageIsError = ref(false);
 const cleanupBusyKind = ref("");
@@ -354,6 +366,9 @@ const importPackageFileInput = ref<HTMLInputElement | null>(null);
 const selectedImportPackageFile = ref<File | null>(null);
 const PASSWORD_REQUIRED_CODE = "MIGRATION_PASSWORD_REQUIRED";
 const tauriRuntimeAvailable = isTauriRuntimeAvailable();
+const storageLoading = computed(() => storageStatus.value?.computeState === "running");
+let storagePollTimer: number | null = null;
+let storageTabUnmounted = false;
 const STORAGE_PIE_COLORS = [
   "#2563eb",
   "#16a34a",
@@ -466,15 +481,53 @@ async function readFileAsBase64(file: File): Promise<string> {
   return index >= 0 ? dataUrl.slice(index + marker.length) : dataUrl;
 }
 
+function stopStoragePolling() {
+  if (storagePollTimer != null) {
+    window.clearTimeout(storagePollTimer);
+    storagePollTimer = null;
+  }
+}
+
+function scheduleStoragePolling() {
+  stopStoragePolling();
+  if (storageTabUnmounted || storageStatus.value?.computeState !== "running") return;
+  storagePollTimer = window.setTimeout(() => {
+    void loadStorageOverview();
+  }, 1000);
+}
+
+function applyStorageOverviewSnapshot(snapshot: OverviewSnapshot<StorageUsageOverview>) {
+  storageStatus.value = snapshot.status;
+  if (snapshot.data) {
+    storageOverview.value = snapshot.data;
+  }
+  if (snapshot.status.lastError) {
+    setStorageMessage(snapshot.status.lastError, true);
+  }
+  scheduleStoragePolling();
+}
+
 async function loadStorageOverview() {
-  storageLoading.value = true;
   storageMessage.value = "";
   try {
-    storageOverview.value = await invokeTauri<StorageUsageOverview>("get_storage_usage_overview");
+    const snapshot = await invokeTauri<OverviewSnapshot<StorageUsageOverview>>("get_storage_usage_overview");
+    if (!storageTabUnmounted) {
+      applyStorageOverviewSnapshot(snapshot);
+    }
   } catch (error) {
     setStorageMessage(toErrorMessage(error), true);
-  } finally {
-    storageLoading.value = false;
+  }
+}
+
+async function refreshStorageOverview() {
+  storageMessage.value = "";
+  try {
+    const snapshot = await invokeTauri<OverviewSnapshot<StorageUsageOverview>>("refresh_storage_usage_overview");
+    if (!storageTabUnmounted) {
+      applyStorageOverviewSnapshot(snapshot);
+    }
+  } catch (error) {
+    setStorageMessage(toErrorMessage(error), true);
   }
 }
 
@@ -493,7 +546,7 @@ async function handleCleanupStorageItem(item: StorageUsageItem) {
       input: { cleanupKind },
     });
     setStorageMessage(t("config.storage.cleanupSuccess", { size: formatBytes(result.freedBytes) }));
-    await loadStorageOverview();
+    await refreshStorageOverview();
   } catch (error) {
     setStorageMessage(toErrorMessage(error), true);
   } finally {
@@ -643,5 +696,10 @@ async function handleApplyImport() {
 
 onMounted(() => {
   void loadStorageOverview();
+});
+
+onBeforeUnmount(() => {
+  storageTabUnmounted = true;
+  stopStoragePolling();
 });
 </script>
