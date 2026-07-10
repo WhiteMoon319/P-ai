@@ -1216,6 +1216,10 @@ async fn builtin_read_media(
             return Err("当前多模态模型未启用图片输入".to_string());
         }
         ReadMediaDetectedType::Audio if !selected_api.enable_audio => {
+            runtime_log_debug(format!(
+                "[read_media] 跳过，媒体类型=音频，原因=模型未启用音频输入，api_id={}，api_name={}，api_url={}，模型={}",
+                selected_api.id, selected_api.name, selected_api.base_url, selected_api.model
+            ));
             return Err("当前多模态模型未启用音频输入".to_string());
         }
         ReadMediaDetectedType::Video if !selected_api.enable_video => {

@@ -978,6 +978,60 @@ maxOutputTokens = 8192
     }
 
     #[test]
+    fn read_config_should_materialize_missing_model_enable_audio_as_false() {
+        let root = std::env::temp_dir().join(format!("eca-config-enable-audio-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create temp config dir");
+        let config_path = root.join("app_config.toml");
+        std::fs::write(
+            &config_path,
+            r#"
+hotkey = "Alt+·"
+selectedApiConfigId = "provider-a::model-a"
+assistantDepartmentApiConfigId = "provider-a::model-a"
+
+[[apiProviders]]
+id = "provider-a"
+name = "Provider A"
+requestFormat = "openai"
+enableText = true
+enableImage = false
+enableAudio = false
+enableVideo = false
+enableTools = true
+baseUrl = "https://example.com/v1"
+apiKeys = ["k"]
+cachedModelOptions = ["mimo-v2.5"]
+
+[[apiProviders.models]]
+id = "model-a"
+model = "mimo-v2.5"
+enableImage = true
+enableVideo = false
+enableTools = true
+"#,
+        )
+        .expect("write config");
+
+        let cfg = read_config(&config_path).expect("read config");
+        let provider = cfg
+            .api_providers
+            .iter()
+            .find(|item| item.id == "provider-a")
+            .expect("provider-a exists");
+        let model = provider
+            .models
+            .iter()
+            .find(|item| item.id == "model-a")
+            .expect("model-a exists");
+        assert!(!model.enable_audio);
+
+        let persisted = std::fs::read_to_string(&config_path).expect("read persisted config");
+        assert!(persisted.contains("enableAudio = false"));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn app_config_should_deserialize_legacy_departments_without_timestamps() {
         let mut cfg: AppConfig = toml::from_str(
             r#"

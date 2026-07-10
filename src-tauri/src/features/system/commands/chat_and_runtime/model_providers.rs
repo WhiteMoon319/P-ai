@@ -419,7 +419,6 @@ fn normalize_model_id(input: &str) -> String {
 
 #[derive(Debug, Clone)]
 struct ModelMetadataCandidate {
-    provider_id: String,
     provider_api: String,
     model_id: String,
     context_window_tokens: Option<u32>,
@@ -511,7 +510,7 @@ async fn fetch_model_metadata_inner(
         .ok_or_else(|| "Invalid models.dev payload: expected root object.".to_string())?;
     let requested_base_url = normalize_model_metadata_base_url(&input.base_url);
     let mut candidates = Vec::<ModelMetadataCandidate>::new();
-    for (provider_id, provider_value) in providers {
+    for (_, provider_value) in providers {
         let Some(provider_obj) = provider_value.as_object() else {
             continue;
         };
@@ -560,7 +559,6 @@ async fn fetch_model_metadata_inner(
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
             candidates.push(ModelMetadataCandidate {
-                provider_id: provider_id.to_string(),
                 provider_api: provider_api.clone(),
                 model_id: model_id.to_string(),
                 context_window_tokens,
@@ -573,10 +571,6 @@ async fn fetch_model_metadata_inner(
         }
     }
     if candidates.is_empty() {
-        runtime_log_info(format!(
-            "[模型元数据] 查询完成，模型={}，结果=未命中",
-            requested_model
-        ));
         return Ok(FetchModelMetadataOutput {
             found: false,
             matched_model_id: None,
@@ -588,45 +582,9 @@ async fn fetch_model_metadata_inner(
             enable_video: None,
         });
     }
-    let (selected_candidates, selection_strategy) =
+    let (selected_candidates, _) =
         select_model_metadata_candidates(&candidates, &requested_base_url);
     let merged = merge_model_metadata_candidates(&selected_candidates);
-    let matched_candidates = candidates
-        .iter()
-        .map(|candidate| {
-            format!(
-                "供应商={}，API={}，模型={}，图片={}，音频={}，视频={}，工具={}，上下文={}，输出={}",
-                candidate.provider_id,
-                candidate.provider_api,
-                candidate.model_id,
-                candidate.enable_image,
-                candidate.enable_audio,
-                candidate.enable_video,
-                candidate.enable_tools,
-                candidate
-                    .context_window_tokens
-                    .map(|value| value.to_string())
-                    .unwrap_or_else(|| "未知".to_string()),
-                candidate
-                    .max_output_tokens
-                    .map(|value| value.to_string())
-                    .unwrap_or_else(|| "未知".to_string()),
-            )
-        })
-        .collect::<Vec<_>>();
-    runtime_log_info(format!(
-        "[模型元数据] 查询完成，模型={}，配置URL={}，策略={}，候选数={}，全部候选=[{}]，最终模型={}，图片={}，音频={}，视频={}，工具={}",
-        requested_model,
-        input.base_url.trim(),
-        selection_strategy,
-        matched_candidates.len(),
-        matched_candidates.join("；"),
-        merged.matched_model_id.as_deref().unwrap_or("未知"),
-        merged.enable_image.unwrap_or(false),
-        merged.enable_audio.unwrap_or(false),
-        merged.enable_video.unwrap_or(false),
-        merged.enable_tools.unwrap_or(false),
-    ));
     Ok(merged)
 }
 
@@ -1034,7 +992,6 @@ mod model_metadata_selection_tests {
     use super::*;
 
     fn candidate(
-        provider_id: &str,
         provider_api: &str,
         context_window_tokens: u32,
         max_output_tokens: u32,
@@ -1042,7 +999,6 @@ mod model_metadata_selection_tests {
         enable_video: bool,
     ) -> ModelMetadataCandidate {
         ModelMetadataCandidate {
-            provider_id: provider_id.to_string(),
             provider_api: provider_api.to_string(),
             model_id: "mimo-v2.5".to_string(),
             context_window_tokens: Some(context_window_tokens),
@@ -1057,9 +1013,8 @@ mod model_metadata_selection_tests {
     #[test]
     fn model_metadata_should_prefer_candidates_with_exact_provider_api_url() {
         let candidates = vec![
-            candidate("vercel", "", 1_050_000, 131_100, false, false),
+            candidate("", 1_050_000, 131_100, false, false),
             candidate(
-                "xiaomi-token-plan-cn",
                 "https://token-plan-cn.xiaomimimo.com/v1",
                 1_048_576,
                 131_072,
@@ -1076,7 +1031,10 @@ mod model_metadata_selection_tests {
 
         assert_eq!(strategy, "URL精准匹配");
         assert_eq!(selected.len(), 1);
-        assert_eq!(selected[0].provider_id, "xiaomi-token-plan-cn");
+        assert_eq!(
+            selected[0].provider_api,
+            "https://token-plan-cn.xiaomimimo.com/v1"
+        );
         assert_eq!(merged.context_window_tokens, Some(1_048_576));
         assert_eq!(merged.enable_audio, Some(true));
         assert_eq!(merged.enable_video, Some(true));
@@ -1085,9 +1043,8 @@ mod model_metadata_selection_tests {
     #[test]
     fn model_metadata_should_merge_all_candidates_when_provider_api_url_is_unknown() {
         let candidates = vec![
-            candidate("vercel", "", 1_050_000, 131_100, false, false),
+            candidate("", 1_050_000, 131_100, false, false),
             candidate(
-                "xiaomi",
                 "https://api.xiaomimimo.com/v1",
                 1_048_576,
                 131_072,

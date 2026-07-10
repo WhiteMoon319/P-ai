@@ -1634,16 +1634,12 @@ async function syncModelMetadata(modelCard: ApiModelConfigItem) {
       nextLimits.maxOutputTokensMax = Number(metadata.maxOutputTokens);
     }
     nextLimits.enableImage = metadata.enableImage === true;
-    modelCard.enableImage = metadata.enableImage === true;
     nextLimits.enableVideo = metadata.enableVideo === true;
-    modelCard.enableVideo = metadata.enableVideo === true;
     if (typeof metadata.enableAudio === "boolean") {
       nextLimits.enableAudio = metadata.enableAudio;
-      modelCard.enableAudio = metadata.enableAudio;
     }
     if (typeof metadata.enableTools === "boolean") {
       nextLimits.enableTools = metadata.enableTools;
-      modelCard.enableTools = metadata.enableTools;
     }
     modelCapabilityById.value = {
       ...modelCapabilityById.value,
@@ -1657,15 +1653,6 @@ async function syncModelMetadata(modelCard: ApiModelConfigItem) {
       return;
     }
     console.warn("[API] fetch model metadata failed:", error);
-  }
-}
-
-async function syncSelectedProviderModelMetadata() {
-  const provider = selectedProvider.value;
-  if (!provider || provider.requestFormat === "codex") return;
-  for (const modelCard of provider.models || []) {
-    if (!String(modelCard.model || "").trim()) continue;
-    await syncModelMetadata(modelCard);
   }
 }
 
@@ -2005,19 +1992,9 @@ watch(
       void refreshCodexAuthStatus(provider);
       return;
     }
-    void syncSelectedProviderModelMetadata();
     stopCodexAuthPolling();
   },
   { immediate: true },
-);
-
-watch(
-  () => props.refreshingModels,
-  (refreshing, wasRefreshing) => {
-    if (wasRefreshing && !refreshing && props.modelRefreshOk) {
-      void syncSelectedProviderModelMetadata();
-    }
-  },
 );
 
 watch(

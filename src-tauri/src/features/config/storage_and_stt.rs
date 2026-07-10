@@ -5,6 +5,39 @@ fn ensure_parent_dir(path: &PathBuf) -> Result<(), String> {
     fs::create_dir_all(parent).map_err(|err| format!("Create config directory failed: {err}"))
 }
 
+fn config_missing_enable_audio_field(content: &str) -> bool {
+    let Ok(value) = content.parse::<toml::Value>() else {
+        return false;
+    };
+    let has_missing_model_audio = value
+        .get("apiProviders")
+        .and_then(toml::Value::as_array)
+        .map(|providers| {
+            providers.iter().any(|provider| {
+                provider
+                    .get("models")
+                    .and_then(toml::Value::as_array)
+                    .map(|models| {
+                        models
+                            .iter()
+                            .any(|model| model.get("enableAudio").is_none())
+                    })
+                    .unwrap_or(false)
+            })
+        })
+        .unwrap_or(false);
+    let has_missing_legacy_audio = value
+        .get("apiConfigs")
+        .and_then(toml::Value::as_array)
+        .map(|configs| {
+            configs
+                .iter()
+                .any(|config| config.get("enableAudio").is_none())
+        })
+        .unwrap_or(false);
+    has_missing_model_audio || has_missing_legacy_audio
+}
+
 fn read_config(path: &PathBuf) -> Result<AppConfig, String> {
     let resolved_path = if path.exists() {
         path.clone()
@@ -19,6 +52,7 @@ fn read_config(path: &PathBuf) -> Result<AppConfig, String> {
 
     let content =
         fs::read_to_string(&resolved_path).map_err(|err| format!("Read config failed: {err}"))?;
+    let missing_enable_audio = config_missing_enable_audio_field(&content);
     let mut parsed = toml::from_str::<AppConfig>(&content).map_err(|err| {
         eprintln!(
             "[CONFIG] Parse config failed ({}): {err}",
@@ -27,8 +61,21 @@ fn read_config(path: &PathBuf) -> Result<AppConfig, String> {
         format!("Parse config failed ({}): {err}", resolved_path.display())
     })?;
     normalize_app_config(&mut parsed);
-    if resolved_path != *path {
-        let _ = write_config(path, &parsed);
+    let persist_target = if resolved_path != *path {
+        Some(path)
+    } else if missing_enable_audio {
+        Some(&resolved_path)
+    } else {
+        None
+    };
+    if let Some(target_path) = persist_target {
+        if let Err(err) = write_config(target_path, &parsed) {
+            eprintln!(
+                "[配置] 读取后补全 enableAudio 失败：path={} err={}",
+                target_path.display(),
+                err
+            );
+        }
     }
     Ok(parsed)
 }
