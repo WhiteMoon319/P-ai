@@ -150,6 +150,21 @@
               <div v-if="currentCodexRateLimitCredits" class="text-xs opacity-70">
                 Credits：{{ formatCodexCredits(currentCodexRateLimitCredits) }}
               </div>
+              <div class="flex items-center justify-between gap-3 rounded-box border border-warning/40 bg-warning/10 p-3">
+                <div class="text-xs">
+                  <div class="font-medium">可用重置券：{{ currentCodexResetCreditCount }}</div>
+                  <div class="mt-1 opacity-70">重置会消耗一张券，并立即重置符合条件的 Codex 限额窗口。</div>
+                </div>
+                <button
+                  class="btn btn-sm btn-warning"
+                  type="button"
+                  :disabled="currentCodexResetCreditCount <= 0 || codexResetBusy"
+                  @click="consumeCodexResetCredit"
+                >
+                  <span v-if="codexResetBusy" class="loading loading-spinner loading-xs"></span>
+                  重置额度
+                </button>
+              </div>
             </div>
 
             <div v-else class="mt-2 text-xs opacity-70">
@@ -234,6 +249,7 @@ import type {
   CodexAuthMode,
   CodexAuthStatus,
   CodexCreditsSnapshot,
+  CodexConsumeRateLimitResetCreditResult,
   CodexRateLimitQueryResult,
   CodexRateLimitSnapshot,
   CodexRateLimitWindow,
@@ -269,6 +285,7 @@ const codexAuthPollTimer = ref<number | null>(null);
 const codexRateLimitQueryByProvider = ref<Record<string, CodexRateLimitQueryResult | null>>({});
 const codexRateLimitBusyByProvider = ref<Record<string, boolean>>({});
 const codexRateLimitErrorByProvider = ref<Record<string, string>>({});
+const codexResetBusy = ref(false);
 const reasoningEffortOptions = computed(() => [
   { value: "low", label: t("config.api.reasoningLow") },
   { value: "medium", label: t("config.api.reasoningMedium") },
@@ -297,6 +314,9 @@ const currentCodexRateLimitCredits = computed(() => {
     || currentCodexRateLimitSnapshots.value.find((item) => item.credits)?.credits
     || null
   );
+});
+const currentCodexResetCreditCount = computed(() => {
+  return Math.max(0, Number(currentCodexRateLimitQuery.value?.rateLimitResetCreditCount || 0));
 });
 const currentCodexRateLimitError = computed(() => codexRateLimitErrorByProvider.value[props.provider.id] ?? "");
 const currentCodexRateLimitBusy = computed(() => Boolean(codexRateLimitBusyByProvider.value[props.provider.id]));
@@ -465,6 +485,31 @@ async function refreshCodexRateLimits(status?: CodexAuthStatus | null) {
     return null;
   } finally {
     setCodexRateLimitBusy(providerId, false);
+  }
+}
+
+async function consumeCodexResetCredit() {
+  const providerId = String(props.provider.id || "").trim();
+  if (!providerId || currentCodexResetCreditCount.value <= 0 || codexResetBusy.value) return;
+  if (!window.confirm(`确定消耗 1 张重置券吗？当前有 ${currentCodexResetCreditCount.value} 张可用券。此操作不可撤销。`)) return;
+  codexResetBusy.value = true;
+  try {
+    const result = await invokeTauri<CodexConsumeRateLimitResetCreditResult>("codex_consume_rate_limit_reset_credit", {
+      input: {
+        providerId,
+        authMode: props.provider.codexAuthMode || DEFAULT_CODEX_AUTH_MODE,
+        localAuthPath: props.provider.codexLocalAuthPath || DEFAULT_CODEX_LOCAL_AUTH_PATH,
+        baseUrl: props.provider.codexCustomUrl || props.provider.baseUrl || DEFAULT_CODEX_BASE_URL,
+      },
+    });
+    if (result.outcome !== "reset" && result.outcome !== "alreadyRedeemed") {
+      throw new Error(`额度未重置：${result.outcome || "unknown"}`);
+    }
+    await refreshCodexRateLimits(currentCodexAuthStatus.value);
+  } catch (error) {
+    storeCodexRateLimitError(providerId, error);
+  } finally {
+    codexResetBusy.value = false;
   }
 }
 

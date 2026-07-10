@@ -97,6 +97,7 @@ const WEB_BRIDGE_COMMAND_TIMEOUT_MS: Record<string, number> = {
   check_github_update: WEB_BRIDGE_LONG_TIMEOUT_MS,
   cleanup_storage_legacy_items: WEB_BRIDGE_VERY_LONG_TIMEOUT_MS,
   codex_get_rate_limits: WEB_BRIDGE_LONG_TIMEOUT_MS,
+  codex_consume_rate_limit_reset_credit: WEB_BRIDGE_LONG_TIMEOUT_MS,
   codex_start_oauth_login: WEB_BRIDGE_LONG_TIMEOUT_MS,
   disable_agent_private_memory: WEB_BRIDGE_VERY_LONG_TIMEOUT_MS,
   export_agent_private_memories: WEB_BRIDGE_VERY_LONG_TIMEOUT_MS,

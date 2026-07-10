@@ -1182,6 +1182,7 @@ fn main() {
             apply_import_config_migration_package,
             codex_get_auth_status,
             codex_get_rate_limits,
+            codex_consume_rate_limit_reset_credit,
             codex_start_oauth_login,
             codex_logout,
             check_tools_status,

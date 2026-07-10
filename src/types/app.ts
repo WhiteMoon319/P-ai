@@ -75,7 +75,10 @@ export type CodexRateLimitQueryResult = {
   usageUrl: string;
   preferredSnapshot?: CodexRateLimitSnapshot | null;
   snapshots: CodexRateLimitSnapshot[];
+  rateLimitResetCreditCount: number;
 };
+
+export type CodexConsumeRateLimitResetCreditResult = { outcome: string };
 
 export type ApiToolItem = {
   id: string;

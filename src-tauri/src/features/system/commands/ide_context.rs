@@ -4468,6 +4468,13 @@ async fn ide_chat_codex_get_rate_limits_for_web_settings(params: Value) -> Resul
     ide_chat_serialize(codex_get_rate_limits(input).await?)
 }
 
+async fn ide_chat_codex_consume_rate_limit_reset_credit_for_web_settings(
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<CodexGetRateLimitsInput>(params, "input")?;
+    ide_chat_serialize(codex_consume_rate_limit_reset_credit(input).await?)
+}
+
 fn ide_chat_codex_logout_for_web_settings(params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<CodexLogoutInput>(params, "input")?;
     ide_chat_serialize(codex_logout(input)?)
@@ -6175,6 +6182,7 @@ async fn ide_chat_handle_jsonrpc_request(
         "codex_get_auth_status" => ide_chat_codex_get_auth_status_for_web_settings(request.params).await,
         "codex_start_oauth_login" => ide_chat_codex_start_oauth_login_for_web_settings(request.params).await,
         "codex_get_rate_limits" => ide_chat_codex_get_rate_limits_for_web_settings(request.params).await,
+        "codex_consume_rate_limit_reset_credit" => ide_chat_codex_consume_rate_limit_reset_credit_for_web_settings(request.params).await,
         "codex_logout" => ide_chat_codex_logout_for_web_settings(request.params),
         "list_memories" => ide_chat_list_memories_for_web_settings(state),
         "delete_memory" => ide_chat_delete_memory_for_web_settings(state, request.params),

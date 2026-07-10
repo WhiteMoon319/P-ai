@@ -44,6 +44,13 @@ struct CodexRateLimitQueryResult {
     usage_url: String,
     preferred_snapshot: Option<CodexRateLimitSnapshot>,
     snapshots: Vec<CodexRateLimitSnapshot>,
+    rate_limit_reset_credit_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexConsumeRateLimitResetCreditResult {
+    outcome: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -58,6 +65,14 @@ struct CodexUsagePayload {
     additional_rate_limits: Option<Vec<CodexUsageAdditionalRateLimitDetails>>,
     #[serde(default)]
     rate_limit_reached_type: Option<CodexUsageRateLimitReachedType>,
+    #[serde(default)]
+    rate_limit_reset_credits: Option<CodexUsageRateLimitResetCredits>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct CodexUsageRateLimitResetCredits {
+    #[serde(default)]
+    available_count: i64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -196,6 +211,18 @@ fn codex_usage_endpoint(base_url: &str) -> String {
     }
 }
 
+fn codex_rate_limit_reset_consume_endpoint(base_url: &str) -> String {
+    let (resolved_base, path_style) = codex_usage_resolve_base_url(base_url);
+    match path_style {
+        CodexUsagePathStyle::ChatGptApi => {
+            format!("{resolved_base}/wham/rate-limit-reset-credits/consume")
+        }
+        CodexUsagePathStyle::CodexApi => {
+            format!("{resolved_base}/api/codex/rate-limit-reset-credits/consume")
+        }
+    }
+}
+
 fn codex_window_duration_mins(limit_window_seconds: i32) -> Option<i64> {
     if limit_window_seconds <= 0 {
         return None;
@@ -271,6 +298,7 @@ fn codex_rate_limit_snapshots_from_payload(
         credits,
         additional_rate_limits,
         rate_limit_reached_type,
+        ..
     } = payload;
     let rate_limit_reached_kind = rate_limit_reached_type
         .map(|details| details.kind)
@@ -345,6 +373,43 @@ async fn codex_fetch_usage_payload(
     Ok((payload, body))
 }
 
+async fn codex_consume_rate_limit_reset_credit_request(
+    url: &str,
+    auth: &CodexRuntimeAuth,
+) -> Result<CodexConsumeRateLimitResetCreditResult, CodexUsageRequestError> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|err| CodexUsageRequestError {
+            status_code: None,
+            message: format!("构建 Codex 重置客户端失败: {err}"),
+        })?;
+    let mut request = client
+        .post(url)
+        .header(AUTHORIZATION, format!("Bearer {}", auth.access_token))
+        .header("User-Agent", "easy-call-ai/codex-usage")
+        .json(&serde_json::json!({ "redeem_request_id": Uuid::new_v4().to_string() }));
+    if let Some(account_id) = auth.account_id.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+        request = request.header("ChatGPT-Account-Id", account_id.to_string());
+    }
+    let response = request.send().await.map_err(|err| CodexUsageRequestError {
+        status_code: None,
+        message: format!("请求 Codex 重置额度失败: {err}"),
+    })?;
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(CodexUsageRequestError {
+            status_code: Some(status.as_u16()),
+            message: format!("Codex 重置额度接口返回异常: {status} | {body}"),
+        });
+    }
+    serde_json::from_str(&body).map_err(|err| CodexUsageRequestError {
+        status_code: None,
+        message: format!("解析 Codex 重置额度响应失败: {err}"),
+    })
+}
+
 #[tauri::command]
 async fn codex_get_rate_limits(
     input: CodexGetRateLimitsInput,
@@ -392,6 +457,11 @@ async fn codex_get_rate_limits(
         Err(error) => return Err(error.message),
     };
 
+    let rate_limit_reset_credit_count = payload
+        .rate_limit_reset_credits
+        .as_ref()
+        .map(|credits| credits.available_count.max(0))
+        .unwrap_or(0);
     let snapshots = codex_rate_limit_snapshots_from_payload(payload);
     let preferred_snapshot = snapshots
         .iter()
@@ -437,7 +507,32 @@ async fn codex_get_rate_limits(
         usage_url,
         preferred_snapshot,
         snapshots,
+        rate_limit_reset_credit_count,
     })
+}
+
+#[tauri::command]
+async fn codex_consume_rate_limit_reset_credit(
+    input: CodexGetRateLimitsInput,
+) -> Result<CodexConsumeRateLimitResetCreditResult, String> {
+    let provider_id = input.provider_id.trim();
+    if provider_id.is_empty() {
+        return Err("providerId 不能为空".to_string());
+    }
+    if normalize_codex_auth_mode(&input.auth_mode) == CODEX_AUTH_MODE_CUSTOM_URL {
+        return Err("custom_url 模式不支持官方 Codex 额度重置".to_string());
+    }
+    let auth = read_codex_runtime_auth_snapshot(provider_id, &input.auth_mode, &input.local_auth_path)?;
+    let fresh_auth = ensure_codex_runtime_auth_fresh(&auth).await?;
+    let endpoint = codex_rate_limit_reset_consume_endpoint(&input.base_url);
+    let result = codex_consume_rate_limit_reset_credit_request(&endpoint, &fresh_auth)
+        .await
+        .map_err(|error| error.message)?;
+    runtime_log_info(format!(
+        "[Codex用量] 任务=额度重置 状态=完成 provider_id={} outcome={}",
+        provider_id, result.outcome
+    ));
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -458,6 +553,18 @@ mod codex_usage_tests {
             codex_usage_resolve_base_url("https://example.com/api/codex");
         assert_eq!(base_url, "https://example.com");
         assert_eq!(path_style, CodexUsagePathStyle::CodexApi);
+    }
+
+    #[test]
+    fn codex_reset_credit_consume_endpoint_matches_usage_path_style() {
+        assert_eq!(
+            codex_rate_limit_reset_consume_endpoint("https://chatgpt.com/backend-api/codex"),
+            "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume"
+        );
+        assert_eq!(
+            codex_rate_limit_reset_consume_endpoint("https://example.com/api/codex"),
+            "https://example.com/api/codex/rate-limit-reset-credits/consume"
+        );
     }
 
     #[test]
@@ -485,6 +592,7 @@ mod codex_usage_tests {
             rate_limit_reached_type: Some(CodexUsageRateLimitReachedType {
                 kind: "rate_limit_reached".to_string(),
             }),
+            rate_limit_reset_credits: None,
         });
 
         assert_eq!(snapshots.len(), 1);
