@@ -22,6 +22,7 @@
 
 ## 优化
 
+- 优化（chat）：Codex 协议请求默认使用 Responses API 的 `text.verbosity=low`，在保持推理强度的同时减少可见回复冗余。
 - 优化（remote-im）：更新远程客服默认提示词中的联系人工具说明，明确自动最终回复、即时发送与静默不回复的当前行为。
 - 优化（remote-im）：`contact_send_files` 支持 HTTP(S) 网络文件，图片 URL 下载后按图片内容发送，其他 URL 按附件发送。
 - 优化（remote-im）：远程联系人入站附件按渠道、联系人类型和联系人 ID 分目录保存，并在联系人提示词中注入专属附件目录。

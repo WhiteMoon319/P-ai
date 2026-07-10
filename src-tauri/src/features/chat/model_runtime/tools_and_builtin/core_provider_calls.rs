@@ -716,6 +716,13 @@ fn build_provider_genai_chat_options(
             }
         }));
     }
+    if api_config.request_format == RequestFormat::Codex {
+        options = options.with_extra_body(serde_json::json!({
+            "text": {
+                "verbosity": "low",
+            }
+        }));
+    }
     if let Some(temperature) = api_config.temperature {
         options = options.with_temperature(temperature);
     }
@@ -1360,6 +1367,42 @@ mod openai_responses_genai_request_tests {
 
         assert_eq!(options.prompt_cache_key.as_deref(), Some("conversation-codex"));
         assert_eq!(options.cache_control, None);
+    }
+
+    #[test]
+    fn build_provider_genai_chat_options_should_set_low_verbosity_for_codex() {
+        let api_config = ResolvedApiConfig {
+            provider_id: Some("codex-provider".to_string()),
+            provider_api_keys: Vec::new(),
+            provider_key_cursor: 0,
+            request_format: RequestFormat::Codex,
+            allow_concurrent_requests: false,
+            max_concurrent_requests: None,
+            base_url: DEFAULT_CODEX_BASE_URL.to_string(),
+            api_key: "test-key".to_string(),
+            model: "gpt-5.4".to_string(),
+            reasoning_effort: Some("high".to_string()),
+            temperature: None,
+            max_output_tokens: None,
+            prompt_cache_key: None,
+            extra_headers: Vec::new(),
+            codex_auth: None,
+            codex_auth_mode: None,
+            codex_originator: None,
+            codex_residency_requirement: None,
+            codex_custom_api_key: None,
+        };
+
+        let options = build_provider_genai_chat_options(&api_config, true, true);
+
+        assert_eq!(
+            options.extra_body,
+            Some(serde_json::json!({
+                "text": {
+                    "verbosity": "low",
+                }
+            }))
+        );
     }
 
     #[test]
