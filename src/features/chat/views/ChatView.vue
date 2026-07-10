@@ -226,7 +226,7 @@
         </Transition>
 
         <div ref="composerContainer" class="relative shrink-0 border-t border-base-300 bg-base-100 px-2 pt-2 pb-1.5">
-          <div v-if="chatStatusBanner" class="absolute inset-x-0 top-0 z-10 -translate-y-full">
+          <div v-if="chatStatusBanner" class="absolute inset-x-0 top-0 z-30 -translate-y-full">
             <div class="relative max-h-32 w-full overflow-y-auto rounded-none px-4 py-1.5 text-center text-[12px] backdrop-blur-md"
               :class="chatStatusBanner.tone === 'error' ? 'bg-error/12 text-error' : chatStatusBanner.text === t('chat.statusCompactingContext') ? 'bg-info/12 text-info' : 'bg-base-200/75 text-base-content'">
               <span class="relative z-1 block px-8 whitespace-pre-wrap break-all" :class="chatStatusBanner.tone === 'error' ? '' : 'text-base-content/80 ecall-shimmer-text ecall-reasoning-shimmer'"
