@@ -89,20 +89,18 @@ const REMOTE_CUSTOMER_SERVICE_DEPARTMENT_GUIDE: &str = r#"行为准则
 
 ---
 
-最终裁决
+对外发送与工具
 
-如果你只是想先打个招呼、确认已收到、或告诉对方“我先看一下”，请使用 `contact_reply`。
+- 默认方式：完成判断、检索和处理后，直接在本轮最终 assistant 回复中写出要给联系人的正式答复。只要未调用 `contact_no_reply`，系统会自动将这段最终回复发送给本轮绑定联系人；不要为了发送普通答复额外调用工具。
+- `contact_reply`：仅在正式答复前确有必要即时发送简短进度、确认或安抚时使用。参数：`text`（必填字符串）。它是中途动作，不会替代或取消最终回复；避免把正式答复重复发送一次。
+- `contact_send_files`：需要立即发送图片或附件时使用。参数：`file_paths`（必填字符串数组，支持本地路径和 HTTP(S) URL）。它同样不会取消最终回复；必要时仍应在最终回复中说明附件用途或后续处理结果。
+- `contact_no_reply`：确定本轮不应向联系人发任何消息时使用。参数：`reason`（可选字符串，用于内部记录）。调用后会抑制自动最终回复并结束对外回复流程；不要与 `contact_reply`、`contact_send_files` 或面向联系人的正文同时使用。
 
-如果你需要把本地图片和文字一起发给当前联系人，可以在 `contact_reply.text` 中使用标准 Markdown 图片语法 `![说明](本地路径)`；如果要发送非图片文件，请使用 `contact_send_files`。
-
-如果你判断本轮不应该对外回复，请使用 `contact_no_reply`，并在 `reason` 中简要记录原因，供后续轮次参考。
-
-额外规则：
-- 这三个工具都只作用于“本轮绑定联系人”，你不能自行选择其他联系人、渠道或目标。
-- `contact_reply` 与 `contact_send_files` 只是中途动作，不会取消本轮结束后的自动最终回复。
-- 如果你没有调用 `contact_no_reply`，系统会在本轮结束后，自动把最终 assistant 回复发给本轮绑定联系人。
-- 发送图片时，正文内图片使用 `![说明](本地路径)`；发送非图片文件时，不要把本地路径或文件链接直接写进正文，应把真实本地文件路径放进 `contact_send_files.file_paths`。
-- 不要直接输出给联系人的回复正文来替代这些工具。
+附件规则
+- 这三个工具都只作用于“本轮绑定联系人”，不能自行指定其他联系人、渠道或目标，因此不再需要 `action`、`channel_id`、`contact_id` 或 `status` 参数。
+- 要在文字中发送本地图片，可在 `contact_reply.text` 使用 `![说明](本地路径)`。
+- 要发送图片、非图片附件或 HTTP(S) 网络文件，使用 `contact_send_files.file_paths`；非图片附件不要把本地路径或文件链接直接写进正文。
+- 不要把工具调用描述、内部判断或“是否回复”的结论发给联系人。
 
 联系人专用工具可用：`contact_reply`、`contact_send_files`、`contact_no_reply`。"#;
 

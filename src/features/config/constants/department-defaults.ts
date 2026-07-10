@@ -117,21 +117,18 @@ export const REMOTE_CUSTOMER_SERVICE_DEPARTMENT_DEFAULT: DepartmentDefaultSeed =
 
 ---
 
-最终裁决
+对外发送与工具
 
-如果步骤一不满足，并且通过步骤二的社交资格审查发现“你不是那个人”，或对是否应该主动介入有任何犹豫，你必须使用「远程联系人回复决策工具」来完成回复决策。对于来自联系人的消息，必须且只能通过本工具做出决定：
-- 回复时，使用 action=send。
-- 决定不回复时，使用 action=no_reply（该动作会内置先等待 7 秒，再结束本轮，且不会刷新上次成功回复时间）。
-- 不要直接输出给联系人的回复正文来代替工具调用。
-- action=list 仅用于获取可用联系人。
+- 默认方式：完成判断、检索和处理后，直接在本轮最终 assistant 回复中写出要给联系人的正式答复。只要未调用 \`contact_no_reply\`，系统会自动将这段最终回复发送给本轮绑定联系人；不要为了发送普通答复额外调用工具。
+- \`contact_reply\`：仅在正式答复前确有必要即时发送简短进度、确认或安抚时使用。参数：\`text\`（必填字符串）。它是中途动作，不会替代或取消最终回复；避免把正式答复重复发送一次。
+- \`contact_send_files\`：需要立即发送图片或附件时使用。参数：\`file_paths\`（必填字符串数组，支持本地路径和 HTTP(S) URL）。它同样不会取消最终回复；必要时仍应在最终回复中说明附件用途或后续处理结果。
+- \`contact_no_reply\`：确定本轮不应向联系人发任何消息时使用。参数：\`reason\`（可选字符串，用于内部记录）。调用后会抑制自动最终回复并结束对外回复流程；不要与 \`contact_reply\`、\`contact_send_files\` 或面向联系人的正文同时使用。
 
-参数说明：
-- action：string [list, send, no_reply] —— 动作。list=列出可用联系人；send=向联系人发送消息；no_reply=本轮决定不回复。对于联系人消息，最终必须使用 send 或 no_reply 做出决策。
-- channel_id：string —— action=send 时必填；action=list 时可选（用于按渠道过滤）。
-- contact_id：string —— action=send 时必填；必须使用 action=list 返回的 contact_id，不要使用联系人记录主键（UUID）。
-- file_paths：array —— 可选附件路径列表：图片按图片发送，其他文件按附件发送。
-- status：string [continue, done] —— 发送后状态。continue=还需继续下一步；done=本轮已完成并停止后续工具链。大小写不敏感，内部统一转小写。
-- text：string —— action=send 时可选；要发送的文本内容（当传入 file_paths 时可为空）。
+附件规则
+- 这三个工具都只作用于“本轮绑定联系人”，不能自行指定其他联系人、渠道或目标，因此不再需要 \`action\`、\`channel_id\`、\`contact_id\` 或 \`status\` 参数。
+- 要在文字中发送本地图片，可在 \`contact_reply.text\` 使用 \`![说明](本地路径)\`。
+- 要发送图片、非图片附件或 HTTP(S) 网络文件，使用 \`contact_send_files.file_paths\`；非图片附件不要把本地路径或文件链接直接写进正文。
+- 不要把工具调用描述、内部判断或“是否回复”的结论发给联系人。
 
-远程联系人通讯工具可用（支持 list/send/no_reply）。`,
+联系人专用工具可用：\`contact_reply\`、\`contact_send_files\`、\`contact_no_reply\`。`,
 };
