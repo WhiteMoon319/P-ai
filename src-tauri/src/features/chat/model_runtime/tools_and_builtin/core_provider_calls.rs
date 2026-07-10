@@ -545,7 +545,25 @@ fn provider_genai_headers(api_config: &ResolvedApiConfig) -> genai::Headers {
                 let residency = api_config.codex_residency_requirement.as_deref();
                 headers = codex_genai_headers(originator, session_id, thread_id, residency);
             }
-            headers.merge(api_config.extra_headers.clone());
+            let is_luna = api_config.model.trim().eq_ignore_ascii_case("gpt-5.6-luna");
+            if is_luna {
+                headers.merge(
+                    api_config
+                        .extra_headers
+                        .iter()
+                        .filter(|(key, _)| !key.eq_ignore_ascii_case("user-agent"))
+                        .cloned()
+                        .collect::<Vec<_>>(),
+                );
+                if let Some((_, value)) = headers
+                    .iter_mut()
+                    .find(|(key, _)| key.eq_ignore_ascii_case("user-agent"))
+                {
+                    *value = codex_luna_user_agent();
+                }
+            } else {
+                headers.merge(api_config.extra_headers.clone());
+            }
             headers
         }
         _ => {
@@ -1360,6 +1378,43 @@ mod openai_responses_genai_request_tests {
 
         assert_eq!(options.prompt_cache_key.as_deref(), Some("conversation-codex"));
         assert_eq!(options.cache_control, None);
+    }
+
+    #[test]
+    fn provider_genai_headers_should_use_luna_user_agent_for_local_auth() {
+        let api_config = ResolvedApiConfig {
+            provider_id: Some("codex-provider".to_string()),
+            provider_api_keys: Vec::new(),
+            provider_key_cursor: 0,
+            request_format: RequestFormat::Codex,
+            allow_concurrent_requests: false,
+            max_concurrent_requests: None,
+            base_url: DEFAULT_CODEX_BASE_URL.to_string(),
+            api_key: "test-key".to_string(),
+            model: "gpt-5.6-luna".to_string(),
+            reasoning_effort: Some("medium".to_string()),
+            temperature: None,
+            max_output_tokens: None,
+            prompt_cache_key: None,
+            extra_headers: vec![(
+                "User-Agent".to_string(),
+                "caller-agent/1.0".to_string(),
+            )],
+            codex_auth: None,
+            codex_auth_mode: Some(CODEX_AUTH_MODE_READ_LOCAL.to_string()),
+            codex_originator: Some("codex-tui".to_string()),
+            codex_residency_requirement: None,
+            codex_custom_api_key: None,
+        };
+
+        let headers = provider_genai_headers(&api_config);
+        let user_agent = headers
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case("user-agent"))
+            .map(|(_, value)| value.as_str());
+        let expected_user_agent = codex_luna_user_agent();
+
+        assert_eq!(user_agent, Some(expected_user_agent.as_str()));
     }
 
     #[test]

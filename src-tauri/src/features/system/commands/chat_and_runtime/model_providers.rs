@@ -235,6 +235,9 @@ enum ModelRefreshStrategy {
 
 fn codex_builtin_models() -> Vec<String> {
     vec![
+        "gpt-5.6-sol".to_string(),
+        "gpt-5.6-terra".to_string(),
+        "gpt-5.6-luna".to_string(),
         "gpt-5.5".to_string(),
         "gpt-5.4".to_string(),
         "gpt-5.4-mini".to_string(),

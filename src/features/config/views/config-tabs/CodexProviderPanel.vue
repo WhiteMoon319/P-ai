@@ -246,7 +246,7 @@ const DEFAULT_CODEX_AUTH_MODE: CodexAuthMode = "read_local";
 const DEFAULT_CODEX_LOCAL_AUTH_PATH = "~/.codex/auth.json";
 const DEFAULT_CODEX_ORIGINATOR = "codex-tui";
 const DEFAULT_REASONING_EFFORT = "medium";
-const DEFAULT_CODEX_MODELS = ["gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex", "gpt-5.2"];
+const DEFAULT_CODEX_MODELS = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex", "gpt-5.2"];
 
 const props = defineProps<{
   provider: ApiProviderConfigItem;

@@ -29,6 +29,8 @@ fn app_identity_genai_headers() -> genai::Headers {
     ])
 }
 
+const CODEX_LUNA_USER_AGENT: &str =
+    "codex-tui/0.135.0 (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; 0.135.0)";
 const CODEX_TUI_COMPAT_VERSION: &str = "0.141.0";
 const CODEX_BETA_FEATURES: &str = "remote_compaction_v2";
 
@@ -53,6 +55,10 @@ fn codex_cli_user_agent(originator: &str) -> String {
         os_info.os_type(),
         os_info.version()
     )
+}
+
+fn codex_luna_user_agent() -> String {
+    CODEX_LUNA_USER_AGENT.to_string()
 }
 
 fn codex_genai_headers(
