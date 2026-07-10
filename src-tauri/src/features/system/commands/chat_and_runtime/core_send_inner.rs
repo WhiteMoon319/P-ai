@@ -4226,6 +4226,12 @@ async fn send_chat_message_inner(
                                 delegate_id, intermediate_message_id, err
                             ));
                         }
+                        // 远程应答使用空 Channel 执行，需主动通知当前会话视图刷新。
+                        emit_conversation_message_appended_event(
+                            &state,
+                            &conversation_id,
+                            message,
+                        );
                     }
                     spawn_remote_im_auto_send_contact_assistant_reply(
                         state.clone(),
@@ -4322,6 +4328,8 @@ async fn send_chat_message_inner(
                             delegate_id, message.id, err
                         ));
                     }
+                    // 远程应答不向普通聊天 Channel 推送 delta，最终正文须显式广播。
+                    emit_conversation_message_appended_event(&state, &conversation_id, message);
                 }
                 runtime_log_debug(format!(
                     "[表情替换] 提交后，conversation_id={}，assistant_message_id={}，persisted_annotation_count={}，persisted_tokens=[{}]",
