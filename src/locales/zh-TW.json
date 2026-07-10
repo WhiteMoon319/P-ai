@@ -1748,6 +1748,8 @@
     "importMemoriesDone": "导入完成：新增 {created}，合并 {merged}，总计 {total}。",
     "archiveDeleted": "归档已删除。",
     "unarchivedConversationDeleted": "未归档会话已删除。",
+    "archiveUnarchived": "已取消归档，會話已恢復為普通會話。",
+    "unarchiveArchiveFailed": "取消归档失败: {err}",
     "selectArchiveFirst": "请先选择一个归档。",
     "archiveExported": "归档已导出（{format}）：{path}",
     "importArchiveDone": "归档导入完成：新增 {imported}，覆盖 {replaced}，总计 {total}。",
@@ -1913,7 +1915,8 @@
     "apiCodexLoggedOut": "已退出 Codex 登入。"
   },
   "archives": {
-    "refresh": "刷新归档",
+    "refresh": "刷新",
+    "unarchive": "取消归档",
     "importJson": "导入 JSON",
     "importPreviewTitle": "导入归档确认",
     "importPreviewFile": "文件：{name}",

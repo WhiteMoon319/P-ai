@@ -3638,6 +3638,40 @@
     }
 
     #[test]
+    fn unarchive_archive_should_restore_archived_chat_and_reject_active_chat() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let mut archived = test_chat_conversation("conversation-unarchive", "archived", &now);
+        archived.archived_at = Some(now.clone());
+        state_schedule_conversation_persist(&state, &archived).expect("persist archived conversation");
+        flush_pending_persists_blocking(&state).expect("flush archived conversation");
+
+        conversation_service_v2()
+            .unarchive_archive(&state, &archived.id)
+            .expect("unarchive conversation");
+
+        let restored = state_read_conversation_metadata_cached(&state, &archived.id)
+            .expect("read restored conversation metadata");
+        assert_eq!(restored.status(), "active");
+        assert!(restored.archived_at().is_none());
+        let chat_index = state_read_chat_index_cached(&state).expect("read chat index");
+        let item = chat_index
+            .conversations
+            .iter()
+            .find(|item| item.id == archived.id)
+            .expect("restored chat index item");
+        assert!(!chat_index_item_is_archived(item));
+
+        let active = test_chat_conversation("conversation-unarchive-active", "active", &now);
+        state_schedule_conversation_persist(&state, &active).expect("persist active conversation");
+        flush_pending_persists_blocking(&state).expect("flush active conversation");
+        let error = conversation_service_v2()
+            .unarchive_archive(&state, &active.id)
+            .expect_err("active conversation must not be unarchived");
+        assert!(error.contains("无法恢复"));
+    }
+
+    #[test]
     fn read_app_bootstrap_snapshot_should_build_memory_chat_index_from_storage_snapshot() {
         let state = test_chat_runtime_state();
         let now = now_iso();

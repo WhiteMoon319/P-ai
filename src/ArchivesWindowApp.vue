@@ -79,6 +79,7 @@
         @select-remote-im-contact-block="selectRemoteImContactConversationBlock"
         @export-archive="exportArchive"
         @import-archive-file="prepareArchiveImport"
+        @unarchive-archive="unarchiveArchive"
         @delete-archive="deleteArchive"
         @delete-unarchived-conversation="deleteUnarchivedConversation"
         @delete-delegate-conversation="deleteDelegateConversation"
@@ -297,6 +298,7 @@ const {
   deleteDelegateConversation,
   deleteRemoteImContactConversation,
   deleteArchive,
+  unarchiveArchive,
   exportArchive,
   buildArchiveImportPreview,
   importArchivePayload,

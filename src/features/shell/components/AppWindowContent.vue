@@ -313,6 +313,7 @@
       @select-remote-im-contact-block="selectRemoteImContactConversationBlock"
       @export-archive="exportArchive"
       @import-archive-file="importArchiveFile"
+      @unarchive-archive="unarchiveArchive"
       @delete-archive="deleteArchive"
       @delete-unarchived-conversation="deleteUnarchivedConversation"
       @delete-delegate-conversation="deleteDelegateConversation"
@@ -735,6 +736,7 @@ const props = defineProps<{
   selectRemoteImContactConversationBlock: (blockId?: number | null) => void;
   exportArchive: (payload: { format: "markdown" | "json" }) => void;
   importArchiveFile: (file: File) => void;
+  unarchiveArchive: (id: string) => void;
   deleteArchive: (id: string) => void;
   deleteUnarchivedConversation: (id: string) => void;
   deleteDelegateConversation: (id: string) => void;

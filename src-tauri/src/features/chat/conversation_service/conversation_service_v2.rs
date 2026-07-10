@@ -6065,6 +6065,48 @@ impl ConversationServiceV2 {
         Ok(())
     }
 
+    fn unarchive_archive(
+        &self,
+        state: &AppState,
+        archive_id: &str,
+    ) -> Result<(), String> {
+        let normalized_archive_id = archive_id.trim();
+        if normalized_archive_id.is_empty() {
+            return Err("archiveId is required".to_string());
+        }
+        let guard = state.conversation_lock.lock().map_err(|err| {
+            named_lock_error("conversation_lock", file!(), line!(), module_path!(), &err)
+        })?;
+        let conversation_meta = self
+            .get_conversation_meta(state, normalized_archive_id)
+            .map_err(|_| "Archive not found".to_string())?;
+        if conversation_meta.status.trim() != "archived"
+            || !conversation_meta.visible_in_foreground_lists
+            || conversation_meta.conversation_kind.trim() != CONVERSATION_KIND_CHAT
+        {
+            drop(guard);
+            return Err("该归档会话无法恢复为普通会话".to_string());
+        }
+
+        let now = now_iso();
+        let (conversation, (), _) = state_update_conversation_metadata_cached(
+            state,
+            normalized_archive_id,
+            |conversation| {
+                conversation.status = "active".to_string();
+                conversation.archived_at = None;
+                conversation.updated_at = now.clone();
+                Ok(())
+            },
+        )?;
+        runtime_log_info(format!(
+            "[归档] 完成，任务=取消归档，conversation_id={}",
+            conversation.id
+        ));
+        drop(guard);
+        Ok(())
+    }
+
     fn resolve_archive_target_conversation(
         &self,
         state: &AppState,

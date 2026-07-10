@@ -1748,6 +1748,8 @@
     "importMemoriesDone": "Import done: created {created}, merged {merged}, total {total}.",
     "archiveDeleted": "Archive deleted.",
     "unarchivedConversationDeleted": "Unarchived conversation deleted.",
+    "archiveUnarchived": "Archive canceled; the conversation is now regular.",
+    "unarchiveArchiveFailed": "Failed to unarchive: {err}",
     "selectArchiveFirst": "Please select an archive first.",
     "archiveExported": "Archive exported ({format}): {path}",
     "importArchiveDone": "Archive import finished: added {imported}, replaced {replaced}, total {total}.",
@@ -1913,7 +1915,8 @@
     "apiCodexLoggedOut": "Logged out of Codex."
   },
   "archives": {
-    "refresh": "Refresh Archives",
+    "refresh": "Refresh",
+    "unarchive": "Unarchive",
     "importJson": "Import JSON",
     "importPreviewTitle": "Confirm Archive Import",
     "importPreviewFile": "File: {name}",

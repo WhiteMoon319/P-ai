@@ -40,12 +40,33 @@
         </button>
       </div>
       <div class="flex flex-wrap items-center justify-center gap-2">
-        <button class="btn bg-base-100 border-base-300 hover:bg-base-200" @click="$emit('loadArchives')">{{ t("archives.refresh") }}</button>
-        <button class="btn bg-base-100 border-base-300 hover:bg-base-200" @click="triggerArchiveImport">{{ t("archives.importJson") }}</button>
-        <button class="btn bg-base-100 border-base-300 hover:bg-base-200" :disabled="viewMode !== 'archive' || !selectedArchiveId" @click="$emit('exportArchive', { format: 'markdown' })">{{ t("archives.exportMarkdown") }}</button>
-        <button class="btn bg-base-100 border-base-300 hover:bg-base-200" :disabled="viewMode !== 'archive' || !selectedArchiveId" @click="$emit('exportArchive', { format: 'json' })">{{ t("archives.exportJson") }}</button>
+        <button class="btn btn-neutral" @click="$emit('loadArchives')">
+          <RefreshCw class="h-4 w-4" />
+          {{ t("archives.refresh") }}
+        </button>
         <button
-          class="btn bg-base-100 border-base-300 hover:bg-base-200 text-error"
+          v-if="viewMode === 'archive'"
+          class="btn btn-warning"
+          :disabled="!selectedArchiveId"
+          @click="$emit('unarchiveArchive', selectedArchiveId)"
+        >
+          <Undo2 class="h-4 w-4" />
+          {{ t("archives.unarchive") }}
+        </button>
+        <button class="btn btn-primary" @click="triggerArchiveImport">
+          <Import class="h-4 w-4" />
+          {{ t("archives.importJson") }}
+        </button>
+        <button class="btn btn-primary" :disabled="viewMode !== 'archive' || !selectedArchiveId" @click="$emit('exportArchive', { format: 'markdown' })">
+          <FileDown class="h-4 w-4" />
+          {{ t("archives.exportMarkdown") }}
+        </button>
+        <button class="btn btn-primary" :disabled="viewMode !== 'archive' || !selectedArchiveId" @click="$emit('exportArchive', { format: 'json' })">
+          <FileJson2 class="h-4 w-4" />
+          {{ t("archives.exportJson") }}
+        </button>
+        <button
+          class="btn btn-error"
           :disabled="(viewMode === 'delegate' && !selectedDelegateConversationId) || (viewMode === 'archive' && !selectedArchiveId) || (viewMode === 'current' && (!selectedUnarchivedConversationId || selectedCurrentConversationSummary?.isSystemNotificationConversation)) || (viewMode === 'remoteIm' && !selectedRemoteImContactId)"
           @click="viewMode === 'archive' ? onDeleteArchiveClick(selectedArchiveId) : viewMode === 'delegate' ? onDeleteDelegateClick(selectedDelegateConversationId) : viewMode === 'remoteIm' ? onDeleteRemoteImContactClick(selectedRemoteImContactId) : onDeleteUnarchivedClick(selectedUnarchivedConversationId)"
         >
@@ -233,7 +254,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from "vue";
-import { Trash2 } from "@lucide/vue";
+import { FileDown, FileJson2, Import, RefreshCw, Trash2, Undo2 } from "@lucide/vue";
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import { resolveConversationDisplayTitle } from "../../chat/utils/conversation-title";
@@ -294,6 +315,7 @@ const emit = defineEmits<{
   (e: "selectRemoteImContactConversation", contactId: string): void;
   (e: "selectRemoteImContactBlock", blockId?: number | null): void;
   (e: "exportArchive", payload: { format: "markdown" | "json" }): void;
+  (e: "unarchiveArchive", archiveId: string): void;
   (e: "deleteArchive", archiveId: string): void;
   (e: "deleteUnarchivedConversation", conversationId: string): void;
   (e: "deleteDelegateConversation", conversationId: string): void;

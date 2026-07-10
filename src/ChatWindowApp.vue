@@ -336,6 +336,7 @@
       :select-remote-im-contact-conversation-block="selectRemoteImContactConversationBlock"
       :export-archive="exportArchive"
       :import-archive-file="prepareArchiveImport"
+      :unarchive-archive="unarchiveArchive"
       :delete-archive="deleteArchive"
       :delete-unarchived-conversation="deleteUnarchivedConversation"
       :delete-delegate-conversation="deleteDelegateConversation"

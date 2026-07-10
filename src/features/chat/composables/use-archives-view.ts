@@ -44,6 +44,8 @@ type DeleteDelegateConversationResult = {
   deleted: boolean;
 };
 
+const ARCHIVE_FOCUS_REQUEST_STORAGE_KEY = "easy_call.archives.focus_request.v1";
+
 type UseArchivesViewOptions = {
   t: TrFn;
   setStatus: (text: string) => void;
@@ -526,6 +528,33 @@ export function useArchivesView(options: UseArchivesViewOptions) {
     }
   }
 
+  async function unarchiveArchive(archiveId: string) {
+    const conversationId = String(archiveId || "").trim();
+    if (!conversationId) return;
+    try {
+      await invokeTauri("unarchive_archive", { archiveId: conversationId });
+      selectedArchiveId.value = "";
+      selectedArchiveBlockId.value = null;
+      archiveBlocks.value = [];
+      archiveSummaryText.value = "";
+      archiveMessages.value = [];
+      archiveHasPrevBlock.value = false;
+      archiveHasNextBlock.value = false;
+      selectedUnarchivedConversationId.value = conversationId;
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(ARCHIVE_FOCUS_REQUEST_STORAGE_KEY, JSON.stringify({
+          conversationId,
+          viewMode: "current",
+          createdAt: Date.now(),
+        }));
+      }
+      await loadArchives();
+      options.setStatus(options.t("status.archiveUnarchived"));
+    } catch (e) {
+      options.setStatusError("status.unarchiveArchiveFailed", e);
+    }
+  }
+
   async function deleteUnarchivedConversation(conversationId: string): Promise<DeleteUnarchivedConversationResult | null> {
     if (!conversationId) return null;
     const summary = unarchivedConversations.value.find(
@@ -711,6 +740,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
     deleteDelegateConversation,
     deleteRemoteImContactConversation,
     deleteArchive,
+    unarchiveArchive,
     exportArchive,
     buildArchiveImportPreview,
     importArchivePayload,

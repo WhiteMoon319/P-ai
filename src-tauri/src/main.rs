@@ -1138,6 +1138,7 @@ fn main() {
             get_archive_block_page,
             get_archive_summary,
             delete_archive,
+            unarchive_archive,
             export_archive_to_file,
             import_archives_from_json,
             open_external_url,

@@ -415,6 +415,19 @@ fn delete_archive(archive_id: String, state: State<'_, AppState>) -> Result<(), 
     conversation_service_v2().delete_archive(state.inner(), &archive_id)
 }
 
+#[tauri::command]
+fn unarchive_archive(archive_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    conversation_service_v2().unarchive_archive(state.inner(), &archive_id)?;
+    flush_pending_persists_blocking(state.inner())?;
+    if let Err(err) = emit_unarchived_conversation_overview_updated_from_state(state.inner()) {
+        runtime_log_warn(format!(
+            "[归档] 失败，任务=取消归档后刷新会话概览，archive_id={}，error={}",
+            archive_id, err
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod fast_request_archive_tests {
     use super::*;
