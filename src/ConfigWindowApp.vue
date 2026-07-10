@@ -336,7 +336,7 @@ const config = reactive<AppConfig>({
   webAccessPassword: "",
   githubUpdateMethod: "auto",
   skippedGithubUpdateVersion: "",
-  recordHotkey: isMacPlatform ? "Option+Space" : "Alt",
+  recordHotkey: "CapsLock",
   recordBackgroundWakeEnabled: true,
   minRecordSeconds: 1,
   maxRecordSeconds: 60,

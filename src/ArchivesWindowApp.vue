@@ -193,7 +193,7 @@ const config = reactive<AppConfig>({
   webviewZoomPercent: 100,
   githubUpdateMethod: "auto",
   skippedGithubUpdateVersion: "",
-  recordHotkey: "Alt",
+  recordHotkey: "CapsLock",
   recordBackgroundWakeEnabled: true,
   minRecordSeconds: 1,
   maxRecordSeconds: 60,

@@ -758,14 +758,7 @@ fn default_true() -> bool {
 }
 
 fn default_record_hotkey() -> String {
-    #[cfg(target_os = "macos")]
-    {
-        return "Option+Space".to_string();
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        "Alt".to_string()
-    }
+    "CapsLock".to_string()
 }
 
 fn default_min_record_seconds() -> u32 {

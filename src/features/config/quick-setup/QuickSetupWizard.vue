@@ -603,7 +603,7 @@ function defaultConfig(): AppConfig {
     webAccessPort: 8429,
     webAccessEnabled: true,
     webAccessPassword: "",
-    recordHotkey: isMacPlatform ? "Option+Space" : "Alt",
+    recordHotkey: "CapsLock",
     recordBackgroundWakeEnabled: true,
     minRecordSeconds: 1,
     maxRecordSeconds: 60,
