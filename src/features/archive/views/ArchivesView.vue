@@ -62,56 +62,56 @@
       </div>
     </div>
     <div class="flex flex-1 min-h-0">
-      <div class="w-56 shrink-0 overflow-auto">
-        <ul v-if="viewMode === 'current'" class="menu menu-sm w-full p-0 gap-1">
-          <li v-for="c in unarchivedConversations" :key="c.conversationId">
+      <div class="w-56 min-w-0 shrink-0 overflow-x-hidden overflow-y-auto">
+        <ul v-if="viewMode === 'current'" class="menu menu-sm w-full min-w-0 max-w-full overflow-hidden p-0 gap-1">
+          <li v-for="c in unarchivedConversations" :key="c.conversationId" class="min-w-0 max-w-full overflow-hidden">
             <button
               type="button"
-              class="flex flex-col items-start text-left"
+              class="flex w-full min-w-0 flex-col items-start text-left"
               :class="{ 'menu-active': c.conversationId === selectedUnarchivedConversationId }"
               @click="$emit('selectUnarchivedConversation', c.conversationId)"
             >
-              <span class="font-medium truncate text-sm block">{{ conversationDisplayTitle(c) }}</span>
-              <span class="text-xs opacity-70 truncate block">{{ formatDate(c.lastMessageAt || c.updatedAt) }}</span>
+              <span class="block w-full truncate text-sm font-medium">{{ conversationDisplayTitle(c) }}</span>
+              <span class="block w-full truncate text-xs opacity-70">{{ formatDate(c.lastMessageAt || c.updatedAt) }}</span>
             </button>
           </li>
         </ul>
-        <ul v-else-if="viewMode === 'archive'" class="menu menu-sm w-full p-0 gap-1">
-          <li v-for="a in archives" :key="a.archiveId">
+        <ul v-else-if="viewMode === 'archive'" class="menu menu-sm w-full min-w-0 max-w-full overflow-hidden p-0 gap-1">
+          <li v-for="a in archives" :key="a.archiveId" class="min-w-0 max-w-full overflow-hidden">
             <button
               type="button"
-              class="flex flex-col items-start text-left"
+              class="flex w-full min-w-0 flex-col items-start text-left"
               :class="{ 'menu-active': a.archiveId === selectedArchiveId }"
               @click="$emit('selectArchive', a.archiveId)"
             >
-              <span class="font-medium truncate text-sm block">{{ a.title }}</span>
-              <span v-if="a.archivedAt" class="text-xs opacity-70 truncate block">{{ formatDate(a.archivedAt) }}</span>
+              <span class="block w-full truncate text-sm font-medium">{{ a.title }}</span>
+              <span v-if="a.archivedAt" class="block w-full truncate text-xs opacity-70">{{ formatDate(a.archivedAt) }}</span>
             </button>
           </li>
         </ul>
-        <ul v-else-if="viewMode === 'delegate'" class="menu menu-sm w-full p-0 gap-1">
-          <li v-for="c in delegateConversations" :key="c.conversationId">
+        <ul v-else-if="viewMode === 'delegate'" class="menu menu-sm w-full min-w-0 max-w-full overflow-hidden p-0 gap-1">
+          <li v-for="c in delegateConversations" :key="c.conversationId" class="min-w-0 max-w-full overflow-hidden">
             <button
               type="button"
-              class="flex flex-col items-start text-left"
+              class="flex w-full min-w-0 flex-col items-start text-left"
               :class="{ 'menu-active': c.conversationId === selectedDelegateConversationId }"
               @click="$emit('selectDelegateConversation', c.conversationId)"
             >
-              <span class="font-medium truncate text-sm block">{{ conversationDisplayTitle(c) }}</span>
-              <span class="text-xs opacity-70 truncate block">{{ formatDate(c.archivedAt || c.lastMessageAt || c.updatedAt) }}</span>
+              <span class="block w-full truncate text-sm font-medium">{{ conversationDisplayTitle(c) }}</span>
+              <span class="block w-full truncate text-xs opacity-70">{{ formatDate(c.archivedAt || c.lastMessageAt || c.updatedAt) }}</span>
             </button>
           </li>
         </ul>
-        <ul v-else class="menu menu-sm w-full p-0 gap-1">
-          <li v-for="c in remoteImContactConversations" :key="c.contactId">
+        <ul v-else class="menu menu-sm w-full min-w-0 max-w-full overflow-hidden p-0 gap-1">
+          <li v-for="c in remoteImContactConversations" :key="c.contactId" class="min-w-0 max-w-full overflow-hidden">
             <button
               type="button"
-              class="flex flex-col items-start text-left"
+              class="flex w-full min-w-0 flex-col items-start text-left"
               :class="{ 'menu-active': c.contactId === selectedRemoteImContactId }"
               @click="$emit('selectRemoteImContactConversation', c.contactId)"
             >
-              <span class="font-medium truncate text-sm block">{{ c.contactDisplayName }}</span>
-              <span class="text-xs opacity-70 truncate block">{{ formatDate(c.lastMessageAt || c.updatedAt) }}</span>
+              <span class="block w-full truncate text-sm font-medium">{{ c.contactDisplayName }}</span>
+              <span class="block w-full truncate text-xs opacity-70">{{ formatDate(c.lastMessageAt || c.updatedAt) }}</span>
             </button>
           </li>
         </ul>
