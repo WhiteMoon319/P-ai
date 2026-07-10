@@ -41,11 +41,6 @@
               alt=""
               class="panel-tab-strip-icon size-4 shrink-0 object-contain"
             />
-            <span
-              v-else
-              aria-hidden="true"
-              class="inline-block size-4 shrink-0"
-            ></span>
             <span class="min-w-0 truncate font-medium">{{ tab.label }}</span>
           </button>
           <button
