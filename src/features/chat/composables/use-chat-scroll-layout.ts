@@ -21,7 +21,6 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
   const latestOwnElasticMinHeight = ref(0);
   const jumpToBottomOffset = ref(96);
   const lastBottomState = ref(false);
-  const lastScreenState = ref(false);
   const lastScrollTop = ref(0);
   const userScrollingDown = ref(false);
   const userScrollingUp = ref(false);
@@ -32,7 +31,7 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
   let wheelScrollIntentUntil = 0;
   let pointerScrollIntentActive = false;
 
-  const showJumpToBottom = computed(() => !lastScreenState.value && userScrollingDown.value);
+  const showJumpToBottom = computed(() => !lastBottomState.value && userScrollingDown.value);
   const jumpToBottomStyle = computed(() => ({
     bottom: `${jumpToBottomOffset.value}px`,
   }));
@@ -91,11 +90,6 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
     return distance <= threshold;
   }
 
-  function isInLastScreen(el: HTMLElement): boolean {
-    const distance = el.scrollHeight - (el.scrollTop + el.clientHeight);
-    return distance <= el.clientHeight;
-  }
-
   function updateScrollPositionState(el: HTMLElement, optionsOverride: { notifyReachedBottom?: boolean } = {}) {
     const nearBottom = isNearBottom(el);
     if (optionsOverride.notifyReachedBottom && nearBottom && !lastBottomState.value) {
@@ -106,7 +100,6 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
       userScrollingUp.value = false;
     }
     lastBottomState.value = nearBottom;
-    lastScreenState.value = isInLastScreen(el);
   }
 
   function onScroll() {
