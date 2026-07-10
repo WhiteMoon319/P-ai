@@ -78,7 +78,8 @@
                 >
                   <div class="h-px flex-1 bg-base-300/80"></div>
                   <button type="button" class="btn btn-ghost btn-xs shrink-0 gap-1.5 px-2 text-base-content/60 hover:text-base-content"
-                    :title="t('chat.viewSummary')" @click="openConversationSummary(entry.item.block, $event)">
+                    :title="t('chat.viewSummary')" @click="openConversationSummary(entry.item.block, $event)"
+                    @contextmenu.prevent.stop="openCompactionSummaryContextMenu(entry.item.block, $event)">
                     <History class="h-3.5 w-3.5" />
                     <span>{{ t("chat.viewSummary") }}</span>
                   </button>
@@ -192,6 +193,22 @@
           :is-dark="markdownIsDark"
           @close="closeConversationSummaryCard"
         />
+        <Teleport to="body">
+        <ul
+          v-if="compactionSummaryContextMenu"
+          class="menu fixed z-[1200] w-44 rounded-box border border-base-300 bg-base-100 p-1 text-base-content shadow-xl"
+          :style="{ left: `${compactionSummaryContextMenu.x}px`, top: `${compactionSummaryContextMenu.y}px` }"
+          @contextmenu.prevent.stop
+          @pointerdown.stop
+        >
+          <li>
+            <button type="button" class="text-error" @click="recallCompactionSummaryFromContextMenu">
+              <Undo2 class="h-4 w-4" />
+              <span>{{ t("chat.recall") }}</span>
+            </button>
+          </li>
+        </ul>
+        </Teleport>
         <ConversationAutoPushCard
           :open="autoPushCardOpen"
           :saving="autoPushSaving"
@@ -535,7 +552,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { isDarkAppTheme } from "../../shell/composables/use-app-theme";
-import { ArrowDownToLine, Check, ChevronsDown, ChevronsUp, History, Trash2, X } from "@lucide/vue";
+import { ArrowDownToLine, Check, ChevronsDown, ChevronsUp, History, Trash2, Undo2, X } from "@lucide/vue";
 import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ChatMessageBlock, ChatPersonaPresenceChip, ChatTodoItem, ConversationDelegateStatusSummary, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption, ShellWorkspace } from "../../../types/app";
 import ChatMessageItem from "../components/ChatMessageItem.vue";
@@ -693,6 +710,7 @@ const chatReaderPanelRef = ref<InstanceType<typeof FileReaderPanel> | null>(null
 const chatScrollbarRef = ref<InstanceType<typeof FloatingScrollbar> | null>(null);
 const linkOpenErrorText = ref("");
 const conversationSummaryCard = ref<{ visible: boolean; text: string }>({ visible: false, text: "" });
+const compactionSummaryContextMenu = ref<{ x: number; y: number; block: ChatMessageBlock } | null>(null);
 const composerPanelRef = ref<{ focusInput: (opts?: FocusOptions) => void } | null>(null);
 const taskDialogOpen = ref(false);
 const taskDialogMode = ref<"create" | "edit">("create");
@@ -942,6 +960,32 @@ function openConversationSummary(block: ChatMessageBlock, event?: MouseEvent) {
   if (!text) return;
   conversationSummaryCard.value = { visible: true, text };
 }
+
+function openCompactionSummaryContextMenu(block: ChatMessageBlock, event: MouseEvent) {
+  event.preventDefault();
+  event.stopPropagation();
+  const x = Math.max(8, Math.min(event.clientX, window.innerWidth - 184));
+  const y = Math.max(8, Math.min(event.clientY, window.innerHeight - 48));
+  compactionSummaryContextMenu.value = { x, y, block };
+}
+
+function recallCompactionSummaryFromContextMenu() {
+  const block = compactionSummaryContextMenu.value?.block;
+  compactionSummaryContextMenu.value = null;
+  if (!block) return;
+  const turnId = String(block.sourceMessageId || block.id || "").trim();
+  if (!turnId) return;
+  emit("recallTurn", { turnId });
+}
+
+function closeCompactionSummaryContextMenu() {
+  compactionSummaryContextMenu.value = null;
+}
+
+function handleCompactionSummaryContextMenuKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape") closeCompactionSummaryContextMenu();
+}
+
 function closeConversationSummaryCard() {
   conversationSummaryCard.value = { visible: false, text: "" };
 }
@@ -1684,9 +1728,13 @@ async function openLocalFileInChatReader(path: string) {
 
 onMounted(() => {
   void nextTick(() => chatScrollbarRef.value?.updateThumb());
+  document.addEventListener("pointerdown", closeCompactionSummaryContextMenu);
+  document.addEventListener("keydown", handleCompactionSummaryContextMenuKeydown);
 });
 
 onBeforeUnmount(() => {
+  document.removeEventListener("pointerdown", closeCompactionSummaryContextMenu);
+  document.removeEventListener("keydown", handleCompactionSummaryContextMenuKeydown);
   panesCleanupFns.forEach((fn) => fn());
   stopAudioPlayback();
 });

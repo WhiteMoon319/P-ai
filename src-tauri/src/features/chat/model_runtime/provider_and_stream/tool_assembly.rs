@@ -314,6 +314,7 @@ fn resolve_runtime_tool_current_department<'a>(
 #[derive(Debug, Clone, Copy)]
 struct RuntimeToolPolicy {
     remote_im_contact_conversation: bool,
+    remote_im_reply_delegate: bool,
     delegate_conversation: bool,
 }
 
@@ -323,6 +324,7 @@ impl RuntimeToolPolicy {
             remote_im_contact_conversation: conversation
                 .map(conversation_is_remote_im_contact)
                 .unwrap_or(false),
+            remote_im_reply_delegate: false,
             delegate_conversation: conversation
                 .map(conversation_is_delegate)
                 .unwrap_or(false),
@@ -332,7 +334,7 @@ impl RuntimeToolPolicy {
     fn tool_allowed(self, tool_name: &str) -> bool {
         match tool_name.trim() {
             "contact_reply" | "contact_send_files" | "contact_no_reply" => {
-                self.remote_im_contact_conversation
+                self.remote_im_contact_conversation && self.remote_im_reply_delegate
             }
             "task" => !self.delegate_conversation,
             _ => true,
@@ -350,10 +352,15 @@ fn runtime_tool_policy_from_session(
     let Ok(conversation_id) = goal_tool_conversation_id(tool_session_id) else {
         return RuntimeToolPolicy::from_conversation(None);
     };
+    let remote_im_reply_delegate = tool_session_id
+        .split("::")
+        .nth(2)
+        .is_some_and(|tag| tag.trim().starts_with("remote_reply_delegate:"));
     if let Ok(conversation_meta) = conversation_service_v2().get_conversation_meta(state, &conversation_id) {
         return RuntimeToolPolicy {
             remote_im_contact_conversation: conversation_meta.conversation_kind.trim()
                 == CONVERSATION_KIND_REMOTE_IM_CONTACT,
+            remote_im_reply_delegate,
             delegate_conversation: conversation_meta.conversation_kind.trim()
                 == CONVERSATION_KIND_DELEGATE,
         };

@@ -237,6 +237,9 @@ fn push_tool_loop_round_log(
 struct ToolLoopAutoCompactionContext {
     conversation_id: String,
     request_id: Option<String>,
+    /// 不能从会话级流缓存回读：远程应答委托允许同会话并发。
+    assistant_message_id: Option<String>,
+    remote_im_reply_delegate_id: Option<String>,
     remote_im_auto_send_source: Option<RemoteImActivationSource>,
     prompt_mode: PromptBuildMode,
     agent: AgentProfile,
@@ -781,6 +784,9 @@ fn maybe_spawn_remote_im_tool_persist_auto_send(
     assistant_tool_call_event: &Value,
     tool_result_event: &Value,
 ) {
+    if context.remote_im_reply_delegate_id.is_none() {
+        return;
+    }
     let Some(activation_source) = context.remote_im_auto_send_source.clone() else {
         return;
     };
@@ -824,6 +830,7 @@ fn maybe_spawn_remote_im_tool_persist_auto_send(
         assistant_text,
         None,
         Some(assistant_message_id.to_string()),
+        context.remote_im_reply_delegate_id.clone(),
     );
 }
 
@@ -1057,12 +1064,14 @@ fn persist_completed_tool_group_result(
         tool_result_provider_meta_patch(trusted_input_tokens, selected_api.context_window_tokens);
 
     // 从流式缓存中读取 assistant_message_id，传递给持久化，避免重复生成
-    let assistant_message_id = read_conversation_runtime_snapshot(state, &context.conversation_id)
-        .ok()
-        .and_then(|snapshot| {
-            let id = snapshot.stream_cache.persisted_assistant_message_id.trim();
-            if id.is_empty() { None } else { Some(id.to_string()) }
-        });
+    let assistant_message_id = context.assistant_message_id.clone().or_else(|| {
+        read_conversation_runtime_snapshot(state, &context.conversation_id)
+            .ok()
+            .and_then(|snapshot| {
+                let id = snapshot.stream_cache.persisted_assistant_message_id.trim();
+                if id.is_empty() { None } else { Some(id.to_string()) }
+            })
+    });
 
     let bootstrap_message_id = assistant_message_id
         .clone()
@@ -1093,11 +1102,13 @@ fn persist_completed_tool_group_result(
 
     match append_result {
         Ok(result) => {
-            set_stream_cache_persisted_assistant_message_id(
-                state,
-                &context.conversation_id,
-                &result.0,
-            );
+            if context.remote_im_reply_delegate_id.is_none() {
+                set_stream_cache_persisted_assistant_message_id(
+                    state,
+                    &context.conversation_id,
+                    &result.0,
+                );
+            }
             maybe_spawn_remote_im_tool_persist_auto_send(
                 state,
                 context,
@@ -1564,6 +1575,13 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
     let Some(context) = context else {
         return Ok(false);
     };
+    if context.remote_im_reply_delegate_id.is_some() {
+        runtime_log_info(format!(
+            "[远程应答委托] 跳过，任务=工具续调前自动整理，conversation_id={}，reason=frozen_delegate_snapshot",
+            context.conversation_id
+        ));
+        return Ok(false);
+    }
     if transient_tool_history.is_empty() {
         return Ok(false);
     }

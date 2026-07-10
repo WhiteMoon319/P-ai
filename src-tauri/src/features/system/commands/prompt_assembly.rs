@@ -12,6 +12,7 @@ struct ChatPromptOverrides {
     // 会话主链不允许外部直接注入系统侧块；系统提示词相关块必须由提示词服务内部生成。
     todo_tool_enabled: bool,
     remote_im_activation_sources: Vec<RemoteImActivationSource>,
+    remote_im_profile_message_id: Option<String>,
     latest_images: Option<Vec<PreparedBinaryPayload>>,
     latest_audios: Option<Vec<PreparedBinaryPayload>>,
 }
@@ -562,6 +563,8 @@ mod prompt_assembly_tests {
             provider_system_message_user_fallback_keys: Arc::new(Mutex::new(HashSet::new())),
             provider_request_gates: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             remote_im_contact_runtime_states: Arc::new(Mutex::new(HashMap::new())),
+            remote_im_reply_delegate_runtimes: Arc::new(Mutex::new(HashMap::new())),
+            remote_im_reply_delegate_semaphore: Arc::new(tokio::sync::Semaphore::new(8)),
             remote_im_channel_state_write_locks: Arc::new(Mutex::new(HashMap::new())),
             hidden_skill_snapshot_cache: Arc::new(Mutex::new(String::new())),
             preferred_release_source: Arc::new(Mutex::new(String::new())),

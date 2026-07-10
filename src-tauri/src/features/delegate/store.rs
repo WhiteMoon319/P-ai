@@ -291,6 +291,31 @@ fn delegate_store_update_status(
     delegate_store_get_delegate(data_path, delegate_id)
 }
 
+fn delegate_store_interrupt_unfinished_remote_replies(data_path: &PathBuf) -> Result<Vec<String>, String> {
+    let conn = delegate_store_open(data_path)?;
+    let mut statement = conn
+        .prepare("SELECT delegate_id FROM delegate_record WHERE kind = 'remote_im_reply' AND status = ?1")
+        .map_err(|err| format!("读取未完成远程应答委托失败: {err}"))?;
+    let delegate_ids = statement
+        .query_map(params![DELEGATE_STATUS_DELIVERED], |row| row.get::<_, String>(0))
+        .map_err(|err| format!("读取未完成远程应答委托失败: {err}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|err| format!("读取未完成远程应答委托失败: {err}"))?;
+    drop(statement);
+    if delegate_ids.is_empty() {
+        return Ok(delegate_ids);
+    }
+    let now = now_iso();
+    conn.execute(
+            "UPDATE delegate_record
+             SET status = ?1, updated_at = ?2, completed_at = COALESCE(completed_at, ?2)
+             WHERE kind = 'remote_im_reply' AND status = ?3",
+            params![DELEGATE_STATUS_FAILED, now, DELEGATE_STATUS_DELIVERED],
+        )
+        .map_err(|err| format!("恢复远程应答委托状态失败: {err}"))?;
+    Ok(delegate_ids)
+}
+
 #[cfg(test)]
 mod delegate_store_tests {
     use super::*;

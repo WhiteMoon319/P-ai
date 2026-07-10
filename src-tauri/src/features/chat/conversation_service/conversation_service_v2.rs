@@ -15,6 +15,125 @@ enum ConversationServiceV2ErrorCode {
     StorageCorrupted,
 }
 
+#[cfg(test)]
+mod preserved_conversation_reader_tests {
+    use super::*;
+
+    fn message(id: &str, role: &str, created_at: &str, text: &str) -> ChatMessage {
+        ChatMessage {
+            id: id.to_string(),
+            role: role.to_string(),
+            created_at: created_at.to_string(),
+            speaker_agent_id: None,
+            parts: vec![MessagePart::Text {
+                text: text.to_string(),
+                reasoning_content: None,
+            }],
+            extra_text_blocks: Vec::new(),
+            provider_meta: None,
+            tool_call: None,
+            mcp_call: None,
+            meme_annotations: None,
+        }
+    }
+
+    fn collect(
+        messages_newest_first: Vec<ChatMessage>,
+        anchor_at: OffsetDateTime,
+        max_history_seconds: Option<i64>,
+        min_message_count: usize,
+        max_chars: usize,
+    ) -> Vec<ChatMessage> {
+        let mut selected_newest_first = Vec::<ChatMessage>::new();
+        let mut selected_chars = 0usize;
+        for message in messages_newest_first {
+            match ConversationServiceV2::select_preserved_conversation_message(
+                message,
+                anchor_at,
+                max_history_seconds,
+                min_message_count,
+                selected_newest_first.len(),
+                selected_chars,
+                max_chars,
+            ) {
+                PreservedConversationMessageSelection::Select { message, chars } => {
+                    selected_chars = selected_chars.saturating_add(chars);
+                    selected_newest_first.push(message);
+                }
+                PreservedConversationMessageSelection::Skip => {}
+                PreservedConversationMessageSelection::Stop => break,
+            }
+        }
+        selected_newest_first.reverse();
+        selected_newest_first
+    }
+
+    #[test]
+    fn fixed_boundary_skips_summary_before_consuming_budget() {
+        let mut summary = message("summary", "user", "2026-07-10T12:00:00Z", "旧摘要很长很长");
+        summary.provider_meta = Some(serde_json::json!({
+            "message_meta": { "kind": "context_compaction" }
+        }));
+        let selected = collect(
+            vec![
+                summary,
+                message("assistant", "assistant", "2026-07-10T11:59:00Z", "abcdef"),
+                message("empty", "assistant", "2026-07-10T11:58:30Z", ""),
+                message("tool", "tool", "2026-07-10T11:57:00Z", "不应读取"),
+                message("user", "user", "2026-07-10T11:56:00Z", "uvwxyz"),
+            ],
+            parse_iso("2026-07-10T12:00:00Z").unwrap(),
+            None,
+            0,
+            10,
+        );
+
+        assert_eq!(
+            selected.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(),
+            vec!["user", "assistant"]
+        );
+        assert_eq!(render_prompt_message_text(&selected[0]), "uvw…");
+        assert_eq!(render_prompt_message_text(&selected[1]), "abcdef");
+    }
+
+    #[test]
+    fn dynamic_boundary_keeps_minimum_messages_before_applying_hour_and_char_limits() {
+        let anchor_at = parse_iso("2026-07-10T12:00:00Z").unwrap();
+        let mut messages = (0..7)
+            .map(|index| {
+                message(
+                    format!("m{index}").as_str(),
+                    "user",
+                    "2026-07-10T11:30:00Z",
+                    "abcd",
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut summary = message("summary", "user", "2026-07-10T11:30:00Z", "旧压缩摘要");
+        summary.provider_meta = Some(serde_json::json!({
+            "message_meta": { "kind": "context_compaction" }
+        }));
+        messages.insert(3, summary);
+        messages.push(message(
+            "too-old",
+            "assistant",
+            "2026-07-10T09:00:00Z",
+            "should stop",
+        ));
+
+        let selected = collect(messages, anchor_at, Some(60 * 60), 7, 10);
+
+        assert_eq!(selected.len(), 7);
+        assert!(selected
+            .iter()
+            .all(|item| item.id != "too-old" && item.id != "summary"));
+        assert_eq!(
+            selected.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(),
+            vec!["m6", "m5", "m4", "m3", "m2", "m1", "m0"]
+        );
+    }
+}
+
 impl ConversationServiceV2ErrorCode {
     fn as_str(self) -> &'static str {
         match self {
@@ -598,6 +717,12 @@ struct ConversationExternalMetadataPatch {
 fn conversation_service_v2() -> &'static ConversationServiceV2 {
     static SERVICE: OnceLock<ConversationServiceV2> = OnceLock::new();
     SERVICE.get_or_init(ConversationServiceV2::default)
+}
+
+enum PreservedConversationMessageSelection {
+    Skip,
+    Select { message: ChatMessage, chars: usize },
+    Stop,
 }
 
 #[cfg(test)]
@@ -1301,23 +1426,244 @@ impl ConversationServiceV2 {
         self.read_persisted_conversation(state, conversation_id)
     }
 
-    fn read_archive_pipeline_last_block_conversation(
+    /// 普通 A 的压缩输入复用保留对话读取器，只是其边界为固定 10K 字符。
+    fn read_archive_pipeline_cross_message_context(
         &self,
         state: &AppState,
         conversation_id: &str,
     ) -> Result<Conversation, String> {
-        let source = self.read_persisted_conversation(state, conversation_id)?;
+        const COMPACTION_CONTEXT_MAX_CHARS: usize = 10_000;
+        let conversation_meta = self.get_conversation_meta(state, conversation_id)?;
+        let mut context_messages = self.read_preserved_conversation_messages(
+            state,
+            conversation_id,
+            None,
+            true,
+            None,
+            0,
+            COMPACTION_CONTEXT_MAX_CHARS,
+        )?;
+        materialize_chat_message_parts_from_media_refs(&mut context_messages, &state.data_path);
+        let mut context = self.build_conversation_record_from_meta_view(&conversation_meta);
+        context.messages = context_messages;
+        Ok(context)
+    }
+
+    /// 从全局消息序列向前读取真实会话正文。读取不以 block 为边界：每页仅取四条，
+    /// 每条先过滤旧压缩消息、非 user/assistant 与空正文，随后才计算窗口。
+    ///
+    /// `end_message_id` 为可选上界；传空时使用全局最新消息。远程唤醒在并发下会
+    /// 传入触发消息并排除该消息，防止把触发后到达的新消息提前写进旧摘要。
+    fn read_preserved_conversation_messages(
+        &self,
+        state: &AppState,
+        conversation_id: &str,
+        end_message_id: Option<&str>,
+        include_end_message: bool,
+        max_history_seconds: Option<i64>,
+        min_message_count: usize,
+        max_chars: usize,
+    ) -> Result<Vec<ChatMessage>, String> {
+        const PAGE_SIZE: usize = 4;
+        let conversation_id = conversation_id.trim();
+        if conversation_id.is_empty() {
+            return Err("读取保留对话失败：缺少会话 ID".to_string());
+        }
+        if max_chars == 0 {
+            return Err("读取保留对话失败：最大字符数必须大于 0".to_string());
+        }
         let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
-        let mut block_messages =
-            if let Some(page) = message_store::read_ready_message_store_block_page(&store_paths, None)? {
-                page.messages
-            } else {
-                source.messages.clone()
+        let end_message_id = end_message_id.map(str::trim).filter(|id| !id.is_empty());
+        let Some(anchor_message) = (match end_message_id {
+            Some(message_id) => {
+                message_store::read_ready_message_store_message_by_id(&store_paths, message_id)?
+            }
+            None => message_store::read_ready_message_store_recent_messages(&store_paths, 1)?
+                .and_then(|mut messages| messages.pop()),
+        }) else {
+            return Ok(Vec::new());
+        };
+        if anchor_message.id.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        let anchor_at = parse_iso(&anchor_message.created_at).unwrap_or_else(now_utc);
+        let mut selected_newest_first = Vec::<ChatMessage>::new();
+        let mut selected_chars = 0usize;
+        let mut page_anchor_message_id = anchor_message.id.clone();
+        if include_end_message {
+            match Self::select_preserved_conversation_message(
+                anchor_message,
+                anchor_at,
+                max_history_seconds,
+                min_message_count,
+                selected_newest_first.len(),
+                selected_chars,
+                max_chars,
+            ) {
+                PreservedConversationMessageSelection::Select { message, chars } => {
+                    selected_chars = selected_chars.saturating_add(chars);
+                    selected_newest_first.push(message);
+                }
+                PreservedConversationMessageSelection::Skip
+                | PreservedConversationMessageSelection::Stop => {}
+            }
+        }
+        runtime_log_debug(format!(
+            "[上下文整理] 开始，任务=消息锚定向前读取，conversation_id={}，target_message_id={}，selected_message_count={}，selected_chars={}，max_chars={}",
+            conversation_id,
+            page_anchor_message_id,
+            selected_newest_first.len(),
+            selected_chars,
+            max_chars
+        ));
+        let mut page_index = 0usize;
+        while selected_newest_first.len() < min_message_count || selected_chars < max_chars {
+            runtime_log_debug(format!(
+                "[上下文整理] 开始，任务=向前读取消息页，conversation_id={}，page_index={}，anchor_message_id={}，selected_message_count={}，selected_chars={}，max_chars={}",
+                conversation_id,
+                page_index + 1,
+                page_anchor_message_id,
+                selected_newest_first.len(),
+                selected_chars,
+                max_chars
+            ));
+            let Some(page) = message_store::read_ready_message_store_messages_before(
+                &store_paths,
+                &page_anchor_message_id,
+                PAGE_SIZE,
+            )?
+            else {
+                runtime_log_debug(format!(
+                    "[上下文整理] 完成，任务=向前读取消息页，conversation_id={}，page_index={}，result=store_unavailable",
+                    conversation_id,
+                    page_index + 1
+                ));
+                break;
             };
-        materialize_chat_message_parts_from_media_refs(&mut block_messages, &state.data_path);
-        let mut last_block = source.clone();
-        last_block.messages = block_messages;
-        Ok(last_block)
+            if page.messages.is_empty() {
+                runtime_log_debug(format!(
+                    "[上下文整理] 完成，任务=向前读取消息页，conversation_id={}，page_index={}，result=empty_page，has_more={}",
+                    conversation_id,
+                    page_index + 1,
+                    page.has_more
+                ));
+                break;
+            }
+            page_index = page_index.saturating_add(1);
+            let next_anchor_message_id = page.messages.first().map(|message| message.id.clone());
+            let page_message_count = page.messages.len();
+            let mut page_selected_count = 0usize;
+            let mut page_skipped_count = 0usize;
+            let mut reached_boundary = false;
+            for message in page.messages.into_iter().rev() {
+                match Self::select_preserved_conversation_message(
+                    message,
+                    anchor_at,
+                    max_history_seconds,
+                    min_message_count,
+                    selected_newest_first.len(),
+                    selected_chars,
+                    max_chars,
+                ) {
+                    PreservedConversationMessageSelection::Select { message, chars } => {
+                        selected_chars = selected_chars.saturating_add(chars);
+                        page_selected_count = page_selected_count.saturating_add(1);
+                        selected_newest_first.push(message);
+                    }
+                    PreservedConversationMessageSelection::Skip => {
+                        page_skipped_count = page_skipped_count.saturating_add(1);
+                    }
+                    PreservedConversationMessageSelection::Stop => {
+                        reached_boundary = true;
+                        break;
+                    }
+                }
+            }
+            runtime_log_debug(format!(
+                "[上下文整理] 完成，任务=向前读取消息页，conversation_id={}，page_index={}，page_message_count={}，page_selected_count={}，page_skipped_count={}，selected_message_count={}，selected_chars={}，max_chars={}，has_more={}，next_anchor_message_id={}",
+                conversation_id,
+                page_index,
+                page_message_count,
+                page_selected_count,
+                page_skipped_count,
+                selected_newest_first.len(),
+                selected_chars,
+                max_chars,
+                page.has_more,
+                next_anchor_message_id.as_deref().unwrap_or("")
+            ));
+            if reached_boundary
+                || (selected_newest_first.len() >= min_message_count && selected_chars >= max_chars)
+                || !page.has_more
+            {
+                break;
+            }
+            let Some(next_anchor_message_id) = next_anchor_message_id else {
+                break;
+            };
+            page_anchor_message_id = next_anchor_message_id;
+        }
+        selected_newest_first.reverse();
+        Ok(selected_newest_first)
+    }
+
+    fn select_preserved_conversation_message(
+        message: ChatMessage,
+        anchor_at: OffsetDateTime,
+        max_history_seconds: Option<i64>,
+        min_message_count: usize,
+        selected_message_count: usize,
+        selected_chars: usize,
+        max_chars: usize,
+    ) -> PreservedConversationMessageSelection {
+        let role = message.role.trim().to_ascii_lowercase();
+        if !matches!(role.as_str(), "user" | "assistant")
+            || is_context_compaction_message(&message, role.as_str())
+        {
+            return PreservedConversationMessageSelection::Skip;
+        }
+        let body = render_prompt_message_text(&message);
+        let message_chars = body.chars().count();
+        if message_chars == 0 {
+            return PreservedConversationMessageSelection::Skip;
+        }
+        let must_keep_for_minimum = selected_message_count < min_message_count;
+        let within_history_window = max_history_seconds
+            .map(|seconds| {
+                parse_iso(&message.created_at)
+                    .map(|created_at| {
+                        (anchor_at - created_at).whole_seconds().abs() <= seconds
+                    })
+                    .unwrap_or(false)
+            })
+            .unwrap_or(true);
+        let exceeds_dynamic_char_limit = max_history_seconds.is_some()
+            && selected_chars.saturating_add(message_chars) > max_chars;
+        if !must_keep_for_minimum && (!within_history_window || exceeds_dynamic_char_limit) {
+            return PreservedConversationMessageSelection::Stop;
+        }
+        if must_keep_for_minimum || message_chars <= max_chars.saturating_sub(selected_chars) {
+            return PreservedConversationMessageSelection::Select {
+                message,
+                chars: message_chars,
+            };
+        }
+
+        let visible = body
+            .chars()
+            .take(max_chars.saturating_sub(selected_chars).saturating_sub(1))
+            .collect::<String>();
+        let mut truncated = message;
+        truncated.parts = vec![MessagePart::Text {
+            text: format!("{visible}…"),
+            reasoning_content: None,
+        }];
+        truncated.extra_text_blocks.clear();
+        truncated.provider_meta = None;
+        PreservedConversationMessageSelection::Select {
+            message: truncated,
+            chars: max_chars.saturating_sub(selected_chars),
+        }
     }
 
     fn try_read_persisted_conversation(
@@ -2728,6 +3074,13 @@ impl ConversationServiceV2 {
         ensure_ready_message_store_from_legacy_conversation(state, &conversation_id, &store_paths)?;
         let rewind_state =
             read_ready_store_rewind_state_meta_view(state, &store_paths, &conversation_meta, message_id)?;
+        if is_context_compaction_message(
+            &rewind_state.recalled_user_message,
+            rewind_state.recalled_user_message.role.trim(),
+        ) && Self::is_first_context_compaction_message_in_store(&store_paths, message_id)?
+        {
+            return Err("不能撤回会话的第一条摘要消息。".to_string());
+        }
         let git_snapshot = read_git_snapshot_record_from_provider_meta(
             rewind_state.recalled_user_message.provider_meta.as_ref(),
         );
@@ -2776,6 +3129,42 @@ impl ConversationServiceV2 {
             recalled_user_message: Some(rewind_state.recalled_user_message),
             git_snapshot,
         })
+    }
+
+    fn is_first_context_compaction_message_in_store(
+        store_paths: &message_store::MessageStorePaths,
+        message_id: &str,
+    ) -> Result<bool, String> {
+        let mut before_message_id = message_id.trim().to_string();
+        while !before_message_id.is_empty() {
+            let Some(page) = message_store::read_ready_message_store_messages_before(
+                store_paths,
+                &before_message_id,
+                4,
+            )?
+            else {
+                break;
+            };
+            if page.messages.is_empty() {
+                break;
+            }
+            if page
+                .messages
+                .iter()
+                .any(|message| is_context_compaction_message(message, message.role.trim()))
+            {
+                return Ok(false);
+            }
+            if !page.has_more {
+                break;
+            }
+            before_message_id = page
+                .messages
+                .first()
+                .map(|message| message.id.trim().to_string())
+                .unwrap_or_default();
+        }
+        Ok(true)
     }
 
     fn preview_rewind_conversation(
@@ -5928,6 +6317,121 @@ impl ConversationServiceV2 {
 
         cleanup_pdf_session_memory_cache_for_conversation(&source.id);
         Ok(active_conversation_id)
+    }
+
+    fn remote_im_apply_dynamic_wake_compaction(
+        &self,
+        state: &AppState,
+        conversation_id: &str,
+        trigger_message_id: &str,
+        include_history: bool,
+    ) -> Result<ChatMessage, String> {
+        const WINDOW_SECONDS: i64 = 60 * 60;
+        const WINDOW_MAX_CHARS: usize = 10_000;
+        const WINDOW_MIN_MESSAGES: usize = 7;
+
+        let conversation_id = conversation_id.trim();
+        let trigger_message_id = trigger_message_id.trim();
+        if conversation_id.is_empty() || trigger_message_id.is_empty() {
+            return Err("远程唤醒压缩失败：缺少会话或触发消息 ID".to_string());
+        }
+        let mutation_gate = conversation_mutation_gate(&state.data_path, conversation_id)?;
+        let _guard = mutation_gate.lock().map_err(|err| {
+            named_lock_error(
+                "conversation_mutation_gate",
+                file!(),
+                line!(),
+                module_path!(),
+                &err,
+            )
+        })?;
+        let conversation_meta = self.get_conversation_meta(state, conversation_id)?;
+        if !conversation_meta.is_remote_im_contact {
+            return Err(format!(
+                "远程唤醒压缩失败：目标不是远程联系人会话，conversation_id={conversation_id}"
+            ));
+        }
+        let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
+        ensure_ready_message_store_from_legacy_conversation(state, conversation_id, &store_paths)?;
+        let trigger = message_store::read_ready_message_store_message_by_id(
+            &store_paths,
+            trigger_message_id,
+        )?
+        .ok_or_else(|| format!("远程唤醒压缩失败：触发消息不存在，message_id={trigger_message_id}"))?;
+        let trigger_index = message_store::read_ready_message_store_message_sequence(
+            &store_paths,
+            trigger_message_id,
+        )?
+        .ok_or_else(|| format!("远程唤醒压缩失败：触发消息缺少序号，message_id={trigger_message_id}"))?;
+        let selected = if include_history {
+            // 触发消息可能不是当前批次的最后一条。把它作为读取上界而不包含它，
+            // 触发后已落库的新消息会留在新 block，不能提前写进这次唤醒摘要。
+            self.read_preserved_conversation_messages(
+                state,
+                conversation_id,
+                Some(trigger_message_id),
+                false,
+                Some(WINDOW_SECONDS),
+                WINDOW_MIN_MESSAGES,
+                WINDOW_MAX_CHARS,
+            )?
+        } else {
+            Vec::new()
+        };
+        let preserved_dialogue = selected
+            .iter()
+            .map(|message| {
+                let role = if message.role.trim().eq_ignore_ascii_case("assistant") {
+                    "助理"
+                } else {
+                    "用户"
+                };
+                format!("{role}：{}", render_prompt_message_text(message).trim())
+            })
+            .filter(|line| !line.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let summary = build_compaction_message(
+            "",
+            Some("远程唤醒上下文"),
+            if include_history {
+                "remote_im_wake_dynamic"
+            } else {
+                "remote_im_wake_empty_fallback"
+            },
+            None,
+            (!preserved_dialogue.trim().is_empty()).then_some(preserved_dialogue.as_str()),
+        );
+        let mut persisted_conversation = self.build_conversation_record_from_meta_view(&conversation_meta);
+        persisted_conversation.updated_at = now_iso();
+        let cached_metadata = state_read_conversation_metadata_cached(state, conversation_id)?;
+        let persist_meta = message_store::ConversationPersistMeta::from_conversation_with_spliced_messages(
+            &persisted_conversation,
+            &cached_metadata,
+            std::slice::from_ref(&trigger),
+            &[summary.clone(), trigger.clone()],
+        );
+        message_store::write_jsonl_snapshot_spliced_messages_shard(
+            &store_paths,
+            &persist_meta,
+            trigger_index,
+            1,
+            &[summary.clone(), trigger.clone()],
+        )?;
+        state_mark_conversation_metadata_direct_persisted(state, conversation_id)?;
+        let next_messages = message_store::read_ready_message_store_messages_after(
+            &store_paths,
+            &summary.id,
+            1,
+        )?
+        .map(|page| page.messages)
+        .unwrap_or_default();
+        if next_messages.first().map(|message| message.id.as_str()) != Some(trigger_message_id) {
+            return Err(format!(
+                "远程唤醒压缩写入校验失败：摘要和触发消息顺序错误，conversation_id={conversation_id}"
+            ));
+        }
+        Ok(summary)
     }
 
     fn persist_compaction_message(

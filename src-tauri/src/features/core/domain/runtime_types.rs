@@ -129,8 +129,29 @@ enum RemoteImWorkState {
 }
 
 #[derive(Debug, Clone)]
+struct RemoteImReplyDelegateRuntime {
+    delegate_id: String,
+    contact_id: String,
+    conversation_id: String,
+    trigger_message_id: String,
+    started_at: String,
+    /// 委托启动瞬间冻结的在场 block 快照；之后绝不从全局当前 block 重读。
+    prompt_snapshot_messages: Vec<ChatMessage>,
+    guidance_messages: std::collections::VecDeque<ChatMessage>,
+    /// 已消费的引导会累积到后续委托轮次的私有提示词中，但不写回初始快照。
+    consumed_guidance_messages: Vec<ChatMessage>,
+    /// 取消后禁止排队任务或已返回的模型结果继续写入联系人会话。
+    cancelled: bool,
+    /// 已开始终结，不再接收秘书引导。
+    terminal: bool,
+    session_agent_id: String,
+}
+
+#[derive(Debug, Clone)]
 struct RemoteImContactRuntimeState {
     presence_state: RemoteImPresenceState,
+    last_presence_at: Option<String>,
+    // 旧的 Busy / has_pending 仅为兼容旧调度收尾路径保留；远程应答委托不使用它们排队。
     work_state: RemoteImWorkState,
     has_pending: bool,
     last_success_reply_at: Option<String>,
@@ -142,6 +163,7 @@ impl Default for RemoteImContactRuntimeState {
     fn default() -> Self {
         Self {
             presence_state: RemoteImPresenceState::Away,
+            last_presence_at: None,
             work_state: RemoteImWorkState::Idle,
             has_pending: false,
             last_success_reply_at: None,

@@ -284,6 +284,30 @@ fn chat_metadata_store_read_message_by_id(
     })
 }
 
+fn chat_metadata_store_read_message_sequence(
+    paths: &MessageStorePaths,
+    message_id: &str,
+) -> Result<Option<usize>, String> {
+    let message_id = message_id.trim();
+    if message_id.is_empty() {
+        return Ok(None);
+    }
+    chat_metadata_store_with_read_snapshot(paths, || {
+        let conn = chat_metadata_store_open(&paths.data_path)?;
+        let sequence = conn
+            .query_row(
+                "SELECT sequence FROM message_locator WHERE conversation_id=?1 AND message_id=?2",
+                rusqlite::params![paths.conversation_id, message_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()
+            .map_err(|err| format!("读取 SQLite 消息序号失败: {err}"))?;
+        sequence
+            .map(|value| usize::try_from(value).map_err(|_| "SQLite 消息序号无效".to_string()))
+            .transpose()
+    })
+}
+
 fn chat_metadata_store_read_latest_compaction_message(
     paths: &MessageStorePaths,
 ) -> Result<Option<ChatMessage>, String> {
@@ -1178,6 +1202,9 @@ fn chat_metadata_store_splice_messages(
         let mut changed_blocks = Vec::new();
         let mut rows = Vec::new();
         let mut sequence = first_sequence;
+        let force_slim_closed_remote_blocks = meta.conversation_kind
+            == CONVERSATION_KIND_REMOTE_IM_CONTACT
+            && inserted_messages.iter().any(|message| message_store_compaction_kind(message).is_some());
         for (offset, source) in raw_blocks.iter().enumerate() {
             let block_id = start_block_id + offset as u32;
             let refs = ConversationBlockMessageRefs {
@@ -1185,9 +1212,17 @@ fn chat_metadata_store_splice_messages(
                 block_file: format!("{MESSAGE_STORE_BLOCKS_DIR_NAME}/{block_id:06}.jsonl"),
                 messages: source.messages.clone(),
             };
+            let absolute_block_index = prefix_block_count + offset;
+            let total_rebuilt_block_count = prefix_block_count + raw_blocks.len();
+            let should_slim = should_slim_spliced_block(
+                force_slim_closed_remote_blocks,
+                !meta.summary.trim().is_empty(),
+                absolute_block_index,
+                total_rebuilt_block_count,
+            );
             let block = build_jsonl_snapshot_conversation_block(
                 &refs,
-                should_slim_conversation_block(!meta.summary.trim().is_empty(), prefix_block_count + offset, prefix_block_count + raw_blocks.len()),
+                should_slim,
             )?;
             for item in &block.index_items {
                 rows.push((sequence, item.clone()));
@@ -1197,6 +1232,137 @@ fn chat_metadata_store_splice_messages(
         }
         chat_metadata_store_publish_blocks(paths, &shard_meta, &changed_blocks, &old_block_ids, &rows)
     })
+}
+
+fn should_slim_spliced_block(
+    force_slim_closed_remote_blocks: bool,
+    archived_conversation: bool,
+    block_index: usize,
+    block_count: usize,
+) -> bool {
+    if force_slim_closed_remote_blocks {
+        return block_index < block_count.saturating_sub(1);
+    }
+    should_slim_conversation_block(archived_conversation, block_index, block_count)
+}
+
+#[cfg(test)]
+#[test]
+fn remote_wake_splice_should_slim_every_closed_block_immediately() {
+    assert!(should_slim_spliced_block(true, false, 0, 2));
+    assert!(!should_slim_spliced_block(true, false, 1, 2));
+    assert!(!should_slim_spliced_block(false, false, 0, 2));
+}
+
+#[cfg(test)]
+#[test]
+fn remote_wake_splice_should_preserve_trigger_in_new_block_and_slim_old_block() {
+    let root = std::env::temp_dir().join(format!("eca-remote-wake-splice-{}", Uuid::new_v4()));
+    let data_path = root.join("app_data.json");
+    let message = |id: &str, role: &str, text: &str| ChatMessage {
+        id: id.to_string(),
+        role: role.to_string(),
+        created_at: now_iso(),
+        speaker_agent_id: None,
+        parts: vec![MessagePart::Text {
+            text: text.to_string(),
+            reasoning_content: Some("不应保留的思维链".to_string()),
+        }],
+        extra_text_blocks: vec!["工具细节".to_string()],
+        provider_meta: Some(serde_json::json!({"large": true})),
+        tool_call: Some(vec![serde_json::json!({"name": "tool"})]),
+        mcp_call: None,
+        meme_annotations: None,
+    };
+    let old_assistant = message("old-assistant", "assistant", "旧回答");
+    let old_user = message("old-user", "user", "旧问题");
+    let trigger = message("trigger", "user", "现在需要回答");
+    let following = message("following", "user", "同批后续消息");
+    let conversation = Conversation {
+        id: "remote-wake-conversation".to_string(),
+        title: "remote wake".to_string(),
+        agent_id: DEFAULT_AGENT_ID.to_string(),
+        department_id: String::new(),
+        bound_conversation_id: None,
+        parent_conversation_id: None,
+        child_conversation_ids: Vec::new(),
+        fork_message_cursor: None,
+        unread_count: 0,
+        conversation_kind: CONVERSATION_KIND_REMOTE_IM_CONTACT.to_string(),
+        root_conversation_id: None,
+        delegate_id: None,
+        created_at: now_iso(),
+        updated_at: now_iso(),
+        last_user_at: None,
+        last_assistant_at: None,
+        status: "active".to_string(),
+        summary: String::new(),
+        user_profile_snapshot: String::new(),
+        shell_workspace_path: None,
+        shell_workspaces: Vec::new(),
+        shell_autonomous_mode: false,
+        archived_at: None,
+        messages: vec![
+            old_assistant.clone(),
+            old_user.clone(),
+            trigger.clone(),
+            following.clone(),
+        ],
+        fast_request_turns: Vec::new(),
+        current_todos: Vec::new(),
+        memory_recall_table: Vec::new(),
+        plan_mode_enabled: false,
+        preferred_api_config_id: None,
+        auto_push_remote_contact_id: None,
+        active_goal: None,
+        cumulative_usage: ConversationCumulativeUsage::default(),
+    };
+    let paths = message_store_paths(&data_path, &conversation.id).expect("paths");
+    write_jsonl_snapshot_directory_shard(&paths, &conversation).expect("write fixture");
+    chat_metadata_store_run_v3_migration(&data_path).expect("migrate v3");
+    let mut summary = message("wake-summary", "user", "远程唤醒上下文");
+    summary.provider_meta = Some(serde_json::json!({
+        "message_meta": { "kind": "context_compaction" }
+    }));
+    let after = Conversation {
+        messages: vec![
+            old_assistant,
+            old_user,
+            summary.clone(),
+            trigger.clone(),
+            following.clone(),
+        ],
+        ..conversation
+    };
+    chat_metadata_store_splice_messages(
+        &paths,
+        &ConversationPersistMeta::from_conversation(&after),
+        2,
+        1,
+        &[summary.clone(), trigger.clone()],
+    )
+    .expect("splice remote wake");
+    let old = chat_metadata_store_read_message_by_id(&paths, "old-assistant")
+        .expect("read slimmed old assistant");
+    assert!(old.tool_call.is_none());
+    assert!(old.extra_text_blocks.is_empty());
+    let summary_sequence = chat_metadata_store_read_message_sequence(&paths, "wake-summary")
+        .expect("read summary sequence")
+        .expect("summary sequence");
+    assert_eq!(summary_sequence, 2);
+    let following_after = chat_metadata_store_read_message_by_id(&paths, "following")
+        .expect("read following message");
+    assert_eq!(following_after.id, "following");
+    assert_eq!(
+        chat_metadata_store_compaction_segment(&paths, None)
+            .expect("current block")
+            .messages
+            .iter()
+            .map(|message| message.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["wake-summary", "trigger", "following"]
+    );
+    let _ = fs::remove_dir_all(root);
 }
 
 fn chat_metadata_store_append_messages_unlocked(

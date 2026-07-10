@@ -1941,6 +1941,7 @@ struct ListConversationDelegateStatusesInput {
 #[serde(rename_all = "camelCase")]
 struct ConversationDelegateStatusSummary {
     delegate_id: String,
+    kind: String,
     conversation_id: String,
     root_conversation_id: String,
     title: String,
@@ -2166,6 +2167,10 @@ fn conversation_delegate_summary_from_thread(
         .or_else(|| thread.conversation.archived_at.clone());
     Ok(ConversationDelegateStatusSummary {
         delegate_id: delegate_id.clone(),
+        kind: delegate_store_get_delegate(&app_state.data_path, &delegate_id)
+            .ok()
+            .map(|entry| entry.kind)
+            .unwrap_or_else(|| "normal".to_string()),
         conversation_id: thread.conversation.id.clone(),
         root_conversation_id: thread.root_conversation_id.clone(),
         title: delegate_display_title_from_id(
@@ -2214,6 +2219,10 @@ fn conversation_delegate_summary_from_persisted(
     let completed_at = stored_completed_at.or_else(|| conversation.archived_at.clone());
     Ok(ConversationDelegateStatusSummary {
         delegate_id: delegate_id.clone(),
+        kind: delegate_store_get_delegate(&app_state.data_path, &delegate_id)
+            .ok()
+            .map(|entry| entry.kind)
+            .unwrap_or_else(|| "normal".to_string()),
         conversation_id: conversation.id.clone(),
         root_conversation_id: conversation.root_conversation_id.clone().unwrap_or_default(),
         title: delegate_display_title_from_id(
@@ -2345,11 +2354,12 @@ fn abort_delegate_conversation_inner(
     input: AbortDelegateConversationInput,
     state: &AppState,
 ) -> Result<AbortDelegateConversationResult, String> {
-    let aborted = abort_delegate_runtime_thread(
-        state,
-        &input.delegate_id,
-        "用户从委托状态卡片打断",
-    )?;
+    let entry = delegate_store_get_delegate(&state.data_path, &input.delegate_id)?;
+    let aborted = if entry.kind == "remote_im_reply" {
+        abort_remote_im_reply_delegate(state, &input.delegate_id, "用户从委托状态卡片打断")?
+    } else {
+        abort_delegate_runtime_thread(state, &input.delegate_id, "用户从委托状态卡片打断")?
+    };
     Ok(AbortDelegateConversationResult { aborted })
 }
 
@@ -2565,7 +2575,17 @@ fn get_delegate_conversation_messages(
         .map(|conversation| conversation.messages.clone())
         .ok_or_else(|| "Delegate conversation not found.".to_string())?;
     materialize_chat_message_parts_from_media_refs(&mut messages, &state.data_path);
+    messages.retain(|message| !remote_im_delegate_message_is_internal(message));
     Ok(project_messages_for_frontend_display_only(messages))
+}
+
+fn remote_im_delegate_message_is_internal(message: &ChatMessage) -> bool {
+    message
+        .provider_meta
+        .as_ref()
+        .and_then(|meta| meta.get("remote_im_delegate_internal"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
 }
 
 #[tauri::command]
@@ -2591,6 +2611,7 @@ fn get_delegate_conversation_block_page_inner(
     )?
     .ok_or_else(|| "Delegate conversation not found.".to_string())?;
     materialize_chat_message_parts_from_media_refs(&mut page.messages, &state.data_path);
+    page.messages.retain(|message| !remote_im_delegate_message_is_internal(message));
     page.messages = project_messages_for_frontend_display_only(page.messages);
     Ok(conversation_block_page_output_from_message_store_page(page))
 }

@@ -405,7 +405,13 @@ fn delegate_runtime_thread_archive(
         .lock()
         .map_err(|_| "Failed to lock delegate runtime threads".to_string())?;
     let Some(mut thread) = active.remove(delegate_id.trim()) else {
-        return Ok(());
+        drop(active);
+        let Some(mut conversation) = delegate_conversation_store_read(&app_state.data_path, delegate_id)? else {
+            return Ok(());
+        };
+        conversation.archived_at = Some(archived_at.to_string());
+        conversation.updated_at = archived_at.to_string();
+        return delegate_conversation_store_write_if_not_deleted(app_state, delegate_id, &conversation).map(|_| ());
     };
     drop(active);
     if delegate_runtime_thread_is_deleted(&thread.delegate_id)? {

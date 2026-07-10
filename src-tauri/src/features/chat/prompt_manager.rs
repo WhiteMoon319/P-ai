@@ -764,6 +764,7 @@ fn finalize_system_prompt_with_manager(
             latest_user_intent: None,
             todo_tool_enabled: false,
             remote_im_activation_sources: Vec::new(),
+            remote_im_profile_message_id: None,
             latest_images: None,
             latest_audios: None,
         },

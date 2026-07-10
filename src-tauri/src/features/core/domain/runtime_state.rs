@@ -112,6 +112,9 @@ struct AppState {
         Arc<tokio::sync::Mutex<std::collections::HashMap<String, Arc<ProviderRequestGate>>>>,
     remote_im_contact_runtime_states:
         Arc<Mutex<std::collections::HashMap<String, RemoteImContactRuntimeState>>>,
+    remote_im_reply_delegate_runtimes:
+        Arc<Mutex<std::collections::HashMap<String, RemoteImReplyDelegateRuntime>>>,
+    remote_im_reply_delegate_semaphore: Arc<tokio::sync::Semaphore>,
     remote_im_channel_state_write_locks:
         Arc<Mutex<std::collections::HashMap<String, Arc<Mutex<()>>>>>,
     hidden_skill_snapshot_cache: Arc<Mutex<String>>,
@@ -344,6 +347,10 @@ impl AppState {
             remote_im_contact_runtime_states: Arc::new(Mutex::new(
                 std::collections::HashMap::new(),
             )),
+            remote_im_reply_delegate_runtimes: Arc::new(Mutex::new(
+                std::collections::HashMap::new(),
+            )),
+            remote_im_reply_delegate_semaphore: Arc::new(tokio::sync::Semaphore::new(8)),
             remote_im_channel_state_write_locks: Arc::new(Mutex::new(
                 std::collections::HashMap::new(),
             )),

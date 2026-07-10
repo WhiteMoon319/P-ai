@@ -2418,9 +2418,20 @@
             "你好，这里是最终回复。",
             &[single_source.clone()],
             None,
+            true,
         )
         .expect("single target");
         assert_eq!(single_target, Some(single_source.clone()));
+        assert_eq!(
+            resolve_remote_im_auto_send_target(
+                "你好，这里是最终回复。",
+                &[single_source.clone()],
+                None,
+                false,
+            )
+            .expect("non delegate target"),
+            None,
+        );
 
         let multiple_sources = resolve_remote_im_auto_send_target(
             "你好，这里是最终回复。",
@@ -2435,6 +2446,7 @@
                 },
             ],
             None,
+            true,
         )
         .expect("multiple sources should skip auto send");
         assert!(multiple_sources.is_none());
@@ -2453,6 +2465,7 @@
                 remote_contact_name: "张三".to_string(),
             }],
             Some(&no_reply_decision),
+            true,
         )
         .expect("no_reply should suppress auto send");
         assert!(no_reply_target.is_none());
@@ -3412,6 +3425,8 @@
             remote_im_contact_runtime_states: Arc::new(Mutex::new(
                 std::collections::HashMap::new(),
             )),
+            remote_im_reply_delegate_runtimes: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            remote_im_reply_delegate_semaphore: Arc::new(tokio::sync::Semaphore::new(8)),
             remote_im_channel_state_write_locks: Arc::new(Mutex::new(
                 std::collections::HashMap::new(),
             )),
@@ -7588,6 +7603,15 @@
         assert_eq!(api_config_id, "");
         assert_eq!(agent_id, "");
         assert_eq!(conversation_id, None);
+    }
+
+    #[test]
+    fn delegate_parse_session_parts_should_accept_remote_reply_delegate_session() {
+        let (_, agent_id, conversation_id) = delegate_parse_session_parts(
+            "agent-a::conversation-sub::remote_reply_delegate:delegate-a",
+        );
+        assert_eq!(agent_id, "agent-a");
+        assert_eq!(conversation_id.as_deref(), Some("conversation-sub"));
     }
 
     #[test]

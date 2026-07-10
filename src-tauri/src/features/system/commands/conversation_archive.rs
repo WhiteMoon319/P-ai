@@ -276,8 +276,8 @@ pub(crate) async fn run_archive_pipeline(
     let started_at = std::time::Instant::now();
     let trace_id = Uuid::new_v4().to_string();
     let reflection_source = conversation_service_v2()
-        .read_archive_pipeline_last_block_conversation(state, &source.id)
-        .map_err(|err| format!("读取归档反思最后块失败：{}", err))?;
+        .read_archive_pipeline_cross_message_context(state, &source.id)
+        .map_err(|err| format!("读取归档反思消息锚定上下文失败：{}", err))?;
 
     eprintln!(
         "[ARCHIVE-PIPELINE] 开始: task=archive_maintenance, trace_id={}, agent_id={}, api_id={}, started_at={}",

@@ -17,6 +17,20 @@ fn delegate_parse_session_parts(session_id: &str) -> (String, String, Option<Str
                 Some((*conversation_id).to_string())
             },
         ),
+        [agent_id, conversation_id, runtime_tag]
+            if runtime_tag.starts_with("remote_reply_delegate:") => (
+            String::new(),
+            if agent_id.is_empty() {
+                DEFAULT_AGENT_ID.to_string()
+            } else {
+                (*agent_id).to_string()
+            },
+            if conversation_id.is_empty() {
+                None
+            } else {
+                Some((*conversation_id).to_string())
+            },
+        ),
         [agent_id] => (
             String::new(),
             if agent_id.is_empty() {

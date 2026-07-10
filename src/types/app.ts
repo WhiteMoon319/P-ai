@@ -911,6 +911,7 @@ export type DelegateConversationSummary = {
 
 export type ConversationDelegateStatusSummary = {
   delegateId: string;
+  kind: string;
   conversationId: string;
   rootConversationId: string;
   title: string;

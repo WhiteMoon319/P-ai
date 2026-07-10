@@ -766,6 +766,8 @@ mod message_store_migration_gate_tests {
             provider_system_message_user_fallback_keys: Arc::new(Mutex::new(std::collections::HashSet::new())),
             provider_request_gates: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
             remote_im_contact_runtime_states: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            remote_im_reply_delegate_runtimes: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            remote_im_reply_delegate_semaphore: Arc::new(tokio::sync::Semaphore::new(8)),
             remote_im_channel_state_write_locks: Arc::new(Mutex::new(std::collections::HashMap::new())),
             hidden_skill_snapshot_cache: Arc::new(Mutex::new(String::new())),
             preferred_release_source: Arc::new(Mutex::new(String::new())),

@@ -50,6 +50,20 @@ impl ConversationPersistMeta {
         ConversationShardMeta::from_conversation(conversation).to_persist_meta()
     }
 
+    /// 基于 metadata 快照写局部 splice 时，不能用空 `Conversation.messages`
+    /// 重算消息派生字段；只按实际替换的消息更新这些字段。
+    pub(super) fn from_conversation_with_spliced_messages(
+        conversation: &Conversation,
+        source: &ConversationShardMeta,
+        removed_messages: &[ChatMessage],
+        inserted_messages: &[ChatMessage],
+    ) -> Self {
+        let mut meta = ConversationShardMeta::from_conversation(conversation);
+        meta.preserve_message_derived_fields_from(source);
+        meta.apply_spliced_messages(removed_messages, inserted_messages);
+        meta.to_persist_meta()
+    }
+
     fn conversation_id(&self) -> &str {
         self.id.as_str()
     }
@@ -553,6 +567,69 @@ impl ConversationShardMeta {
             preview_messages = preview_messages[keep_from..].to_vec();
         }
         self.preview_messages = preview_messages;
+    }
+
+    fn apply_spliced_messages(
+        &mut self,
+        removed_messages: &[ChatMessage],
+        inserted_messages: &[ChatMessage],
+    ) {
+        self.message_count = self.message_count.saturating_sub(removed_messages.len());
+        self.body_message_count = self.body_message_count.saturating_sub(
+            removed_messages
+                .iter()
+                .filter(|message| {
+                    matches!(
+                        message.role.trim().to_ascii_lowercase().as_str(),
+                        "user" | "assistant"
+                    )
+                })
+                .count(),
+        );
+        self.body_text_length = self.body_text_length.saturating_sub(
+            removed_messages
+                .iter()
+                .flat_map(|message| message.parts.iter())
+                .filter_map(|part| match part {
+                    MessagePart::Text { text, .. } => Some(text.trim().chars().count()),
+                    _ => None,
+                })
+                .sum::<usize>(),
+        );
+        self.message_count = self.message_count.saturating_add(inserted_messages.len());
+        self.body_message_count = self.body_message_count.saturating_add(
+            inserted_messages
+                .iter()
+                .filter(|message| {
+                    matches!(
+                        message.role.trim().to_ascii_lowercase().as_str(),
+                        "user" | "assistant"
+                    )
+                })
+                .count(),
+        );
+        self.body_text_length = self.body_text_length.saturating_add(
+            inserted_messages
+                .iter()
+                .flat_map(|message| message.parts.iter())
+                .filter_map(|part| match part {
+                    MessagePart::Text { text, .. } => Some(text.trim().chars().count()),
+                    _ => None,
+                })
+                .sum::<usize>(),
+        );
+        if inserted_messages.iter().any(|message| {
+            super::is_context_compaction_message(message, message.role.trim())
+        }) {
+            self.has_context_compaction_message = true;
+        }
+        if let Some(last_title) = inserted_messages
+            .iter()
+            .rev()
+            .find_map(super::summary_context_message_title)
+        {
+            self.latest_summary_title = Some(last_title);
+        }
     }
 
     pub(super) fn apply_truncated_rewind_state(

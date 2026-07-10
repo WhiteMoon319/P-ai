@@ -157,6 +157,13 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
     return currentMessages.findIndex((item) => item.id === turnMessageId);
   }
 
+  function isContextCompactionMessage(message: ChatMessage | undefined): boolean {
+    const providerMeta = (message?.providerMeta || {}) as Record<string, unknown>;
+    const messageMeta = (providerMeta.message_meta || providerMeta.messageMeta || {}) as Record<string, unknown>;
+    const kind = String(messageMeta.kind || "").trim();
+    return kind === "context_compaction" || kind === "summary_context_seed";
+  }
+
   function resolveRegenerateSourceUserMessage(currentMessages: ChatMessage[], turnId: string): { targetUserMessageId: string; keepCountFromLocal: number } | null {
     const directIndex = findMessageIndexByTurnId(currentMessages, turnId);
     if (directIndex < 0) return null;
@@ -292,7 +299,7 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
       // 助理消息撤回：直接用助理消息 ID 作为撤回目标，只删除该助理回复及之后的消息
       // 用户消息撤回：直接用用户消息 ID 作为撤回目标（整轮回退），撤回后回填输入框
       const targetMessageId = turnMessageId;
-      const targetIsUser = directRole === "user";
+      const targetIsUser = directRole === "user" && !isContextCompactionMessage(currentMessages[directIndex]);
       const mode = await options.requestRecallMode({
         turnId: payload.turnId,
         targetUserMessageId: targetMessageId,

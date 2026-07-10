@@ -833,6 +833,8 @@ mod local_image_reference_tests {
             remote_im_contact_runtime_states: Arc::new(Mutex::new(
                 std::collections::HashMap::new(),
             )),
+            remote_im_reply_delegate_runtimes: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            remote_im_reply_delegate_semaphore: Arc::new(tokio::sync::Semaphore::new(8)),
             remote_im_channel_state_write_locks: Arc::new(Mutex::new(
                 std::collections::HashMap::new(),
             )),

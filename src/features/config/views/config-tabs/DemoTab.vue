@@ -580,6 +580,7 @@ function createDemoDelegateStatus(
   const now = new Date().toISOString();
   return {
     delegateId,
+    kind: "normal",
     conversationId: `${delegateId}-conversation`,
     rootConversationId: "demo-root-conversation",
     title,

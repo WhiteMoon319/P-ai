@@ -747,6 +747,22 @@ pub(super) fn read_ready_message_store_message_by_id(
     store.read_message_by_id(message_id).map(Some)
 }
 
+pub(super) fn read_ready_message_store_message_sequence(
+    paths: &MessageStorePaths,
+    message_id: &str,
+) -> Result<Option<usize>, String> {
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_read_message_sequence(paths, message_id);
+    }
+    let Some(store) = ready_jsonl_snapshot_store(paths)? else {
+        return Ok(None);
+    };
+    Ok(store
+        .read_all_messages()?
+        .iter()
+        .position(|message| message.id.trim() == message_id.trim()))
+}
+
 pub(super) fn read_ready_message_store_messages_after_all(
     paths: &MessageStorePaths,
     after_message_id: &str,

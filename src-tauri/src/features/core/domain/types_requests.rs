@@ -181,6 +181,15 @@ struct RuntimeContext {
     trusted_prompt_usage: Option<TrustedPromptUsage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     bound_remote_im_activation_source: Option<RemoteImActivationSource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    remote_im_reply_delegate_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    remote_im_reply_trigger_message_id: Option<String>,
+    /// 仅在进程内传递，不能序列化进任务或持久化状态。
+    #[serde(skip)]
+    remote_im_reply_prompt_snapshot_messages: Option<Vec<ChatMessage>>,
+    #[serde(default)]
+    remote_im_dynamic_boundary: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]

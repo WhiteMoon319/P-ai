@@ -1087,6 +1087,8 @@ mod terminal_workspace_tests {
             provider_system_message_user_fallback_keys: Arc::new(Mutex::new(HashSet::new())),
             provider_request_gates: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             remote_im_contact_runtime_states: Arc::new(Mutex::new(HashMap::new())),
+            remote_im_reply_delegate_runtimes: Arc::new(Mutex::new(HashMap::new())),
+            remote_im_reply_delegate_semaphore: Arc::new(tokio::sync::Semaphore::new(8)),
             hidden_skill_snapshot_cache: Arc::new(Mutex::new(String::new())),
             preferred_release_source: Arc::new(Mutex::new(String::new())),
             remote_im_channel_state_write_locks: Arc::new(Mutex::new(HashMap::new())),

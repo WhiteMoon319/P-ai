@@ -2329,6 +2329,251 @@ fn collect_activated_remote_im_sources(
     activated_remote_im_sources
 }
 
+/// 远程消息已经先统一落库，但不能把同一批的多条消息合并成一次秘书判断。
+/// 每条事件只看它之前已落库的轻量历史和本事件自身，避免较晚消息倒灌到较早
+/// 消息的判断里，也让秘书可以把后续消息准确投递给刚刚启动的委托。
+async fn process_persisted_remote_im_events_individually(
+    state: &AppState,
+    conversation_id: &str,
+    events: &[ChatPendingEvent],
+    event_activate_flags: &[bool],
+    persisted_recent_messages_before_flush: &[ChatMessage],
+    persisted_batch_messages: &[ChatMessage],
+    scheduler_agents: &[AgentProfile],
+) -> Result<(), String> {
+    for (event, should_consult_secretary) in events.iter().zip(event_activate_flags.iter().copied()) {
+        if !should_consult_secretary || !matches!(event.source, ChatEventSource::RemoteIm) {
+            continue;
+        }
+        let Some(sender) = event.sender_info.as_ref() else {
+            continue;
+        };
+        let source = remote_im_activation_source_from_sender(sender);
+        let Some(contact) = remote_im_resolve_secretary_contact(state, std::slice::from_ref(&source))? else {
+            runtime_log_warn(format!(
+                "[远程联系人秘书] 跳过，任务=按事件解析联系人，conversation_id={}，event_id={}",
+                conversation_id, event.id
+            ));
+            continue;
+        };
+        let current_assistant = match remote_im_resolve_contact_assistant_context(state, &contact) {
+            Ok(value) => value,
+            Err(err) => {
+                runtime_log_error(format!(
+                    "[远程联系人秘书] 失败，任务=解析助理上下文，conversation_id={}，contact_id={}，event_id={}，error={}",
+                    conversation_id, contact.id, event.id, err
+                ));
+                continue;
+            }
+        };
+
+        let event_message_ids = event
+            .messages
+            .iter()
+            .map(|message| message.id.as_str())
+            .collect::<std::collections::HashSet<_>>();
+        let event_message_indexes = persisted_batch_messages
+            .iter()
+            .enumerate()
+            .filter_map(|(index, message)| event_message_ids.contains(message.id.as_str()).then_some(index))
+            .collect::<Vec<_>>();
+        let Some(first_event_message_index) = event_message_indexes.first().copied() else {
+            runtime_log_error(format!(
+                "[远程联系人秘书] 失败，任务=定位已落库事件消息，conversation_id={}，contact_id={}，event_id={}",
+                conversation_id, contact.id, event.id
+            ));
+            continue;
+        };
+        let event_messages = event_message_indexes
+            .iter()
+            .filter_map(|index| persisted_batch_messages.get(*index).cloned())
+            .collect::<Vec<_>>();
+        let Some(trigger_message) = event_messages
+            .iter()
+            .rev()
+            .find(|message| message.role.trim().eq_ignore_ascii_case("user"))
+            .cloned()
+        else {
+            runtime_log_warn(format!(
+                "[远程联系人秘书] 跳过，任务=事件没有用户消息，conversation_id={}，contact_id={}，event_id={}",
+                conversation_id, contact.id, event.id
+            ));
+            continue;
+        };
+
+        let mut history_before_event = persisted_recent_messages_before_flush.to_vec();
+        history_before_event.extend_from_slice(&persisted_batch_messages[..first_event_message_index]);
+        let secretary_recent_history = remote_im_collect_secretary_recent_messages(
+            &history_before_event,
+            7,
+            &contact,
+            scheduler_agents,
+            &current_assistant,
+        );
+        let secretary_current_messages = remote_im_collect_secretary_recent_messages(
+            &event_messages,
+            event_messages.len(),
+            &contact,
+            scheduler_agents,
+            &current_assistant,
+        );
+        let active_delegate_ids = remote_im_reply_delegate_active_ids_for_contact(state, &contact.id)?;
+        let decision = match run_remote_im_secretary_decision(
+            state,
+            &contact,
+            &current_assistant,
+            &secretary_recent_history,
+            &secretary_current_messages,
+            &active_delegate_ids,
+        )
+        .await
+        {
+            Ok(value) => value,
+            Err(err) => {
+                runtime_log_warn(format!(
+                    "[远程联系人秘书] 失败，任务=单事件判断降级，conversation_id={}，contact_id={}，event_id={}，error={}",
+                    conversation_id, contact.id, event.id, err
+                ));
+                RemoteImSecretaryDecision {
+                    should_reply: true,
+                    target_delegate_id: None,
+                    reason: format!("秘书判断失败，已降级为始终回复：{err}"),
+                    model_name: String::new(),
+                    emit_log: true,
+                }
+            }
+        };
+        if decision.emit_log {
+            runtime_log_info(format!(
+                "[远程联系人秘书] 完成，任务=单事件判断，conversation_id={}，contact_id={}，event_id={}，should_reply={}，model={}，reason={}",
+                conversation_id,
+                contact.id,
+                event.id,
+                decision.should_reply,
+                if decision.model_name.trim().is_empty() { "fallback" } else { decision.model_name.as_str() },
+                decision.reason
+            ));
+        }
+        if !decision.should_reply {
+            continue;
+        }
+
+        if let Some(target_delegate_id) = decision.target_delegate_id.as_deref() {
+            match remote_im_reply_delegate_enqueue_guidance(state, target_delegate_id, trigger_message.clone()) {
+                Ok(()) => {
+                    runtime_log_info(format!(
+                        "[远程应答委托] 完成，任务=投递单事件引导，conversation_id={}，contact_id={}，delegate_id={}，event_id={}",
+                        conversation_id, contact.id, target_delegate_id, event.id
+                    ));
+                    continue;
+                }
+                Err(err) => runtime_log_warn(format!(
+                    "[远程应答委托] 跳过，任务=目标委托已结束，改为新建委托，conversation_id={}，contact_id={}，delegate_id={}，event_id={}，error={}",
+                    conversation_id, contact.id, target_delegate_id, event.id, err
+                )),
+            }
+        }
+
+        let should_apply_dynamic_wake = normalize_contact_response_strategy(&contact.response_strategy)
+            == "smart_judge"
+            && remote_im_contact_is_away(state, &contact.id)?;
+        let mut force_memory_prompt_snapshot = false;
+        if should_apply_dynamic_wake {
+            if let Err(primary_err) = conversation_service_v2().remote_im_apply_dynamic_wake_compaction(
+                state,
+                conversation_id,
+                &trigger_message.id,
+                true,
+            ) {
+                report_remote_im_dynamic_wake_failure(
+                    state,
+                    conversation_id,
+                    &contact.id,
+                    &event.id,
+                    "历史摘要",
+                    &primary_err,
+                );
+                if let Err(fallback_err) = conversation_service_v2().remote_im_apply_dynamic_wake_compaction(
+                    state,
+                    conversation_id,
+                    &trigger_message.id,
+                    false,
+                ) {
+                    report_remote_im_dynamic_wake_failure(
+                        state,
+                        conversation_id,
+                        &contact.id,
+                        &event.id,
+                        "空摘要降级",
+                        &fallback_err,
+                    );
+                    // 动态 B 不可回退：空摘要也落库失败时，委托只能使用触发消息
+                    // 的内存上下文，绝不能再次读取旧 block。
+                    force_memory_prompt_snapshot = true;
+                }
+            }
+        }
+        remote_im_mark_contact_present(state, &contact.id, "秘书决定通知远程应答委托")?;
+        remote_im_schedule_presence_timeout(state, &contact.id, contact.patience_seconds)?;
+        match spawn_remote_im_reply_delegate(
+            state,
+            &contact.id,
+            conversation_id,
+            &trigger_message,
+            &ChatSessionInfo {
+                department_id: current_assistant.department_id.clone(),
+                agent_id: current_assistant.agent_id.clone(),
+            },
+            source,
+            contact.patience_seconds,
+            normalize_contact_response_strategy(&contact.response_strategy) == "smart_judge",
+            force_memory_prompt_snapshot,
+        ) {
+            Ok(delegate_id) => runtime_log_info(format!(
+                "[远程应答委托] 开始，delegate_id={}，conversation_id={}，contact_id={}，trigger_message_id={}，event_id={}",
+                delegate_id, conversation_id, contact.id, trigger_message.id, event.id
+            )),
+            Err(err) => runtime_log_error(format!(
+                "[远程应答委托] 失败，任务=创建，conversation_id={}，contact_id={}，event_id={}，error={}",
+                conversation_id, contact.id, event.id, err
+            )),
+        }
+    }
+    Ok(())
+}
+
+fn report_remote_im_dynamic_wake_failure(
+    state: &AppState,
+    conversation_id: &str,
+    contact_id: &str,
+    event_id: &str,
+    stage: &str,
+    error: &str,
+) {
+    runtime_log_error(format!(
+        "[远程唤醒压缩] 失败，conversation_id={}，contact_id={}，event_id={}，stage={}，error={}",
+        conversation_id, contact_id, event_id, stage, error
+    ));
+    let app_handle = match state.app_handle.lock() {
+        Ok(handle) => handle.as_ref().cloned(),
+        Err(_) => None,
+    };
+    let Some(app_handle) = app_handle else {
+        return;
+    };
+    if let Err(notification_error) = send_native_notification(
+        &app_handle,
+        "远程唤醒压缩失败",
+        &format!("联系人 {contact_id} 的{stage}失败；已继续启动应答委托。"),
+        false,
+    ) {
+        runtime_log_warn(format!(
+            "[远程唤醒压缩] 跳过，任务=本地错误通知，conversation_id={}，contact_id={}，error={}",
+            conversation_id, contact_id, notification_error
+        ));
+    }
+}
+
 fn remote_im_source_has_pending_queue_event(
     state: &AppState,
     conversation_id: &str,
@@ -2664,9 +2909,31 @@ async fn process_conversation_batch(
     // 2. 判断是否需要激活主助理。
     // 这一步故意放在“写历史之后”，避免出现前端先开流式、
     // 但本批消息还没正式落入历史的时序错乱。
-    let activated_remote_im_sources =
+    let mut activated_remote_im_sources =
         collect_activated_remote_im_sources(&events, &event_activate_flags);
-    let mut should_activate = event_activate_flags.iter().copied().any(|v| v);
+    // 远程联系人不进入主聊天的串行轮次。每条已落库事件都由秘书独立判断，
+    // 并自行创建远程应答委托或投递到已有委托；这里只保留非远程事件的主轮次激活。
+    let mut should_activate = events
+        .iter()
+        .zip(event_activate_flags.iter().copied())
+        .any(|(event, should_activate)| {
+            should_activate && !matches!(event.source, ChatEventSource::RemoteIm)
+        });
+    if !activated_remote_im_sources.is_empty() {
+        process_persisted_remote_im_events_individually(
+            state,
+            conversation_id,
+            &events,
+            &event_activate_flags,
+            &persisted_recent_messages_before_flush,
+            &persisted_batch_messages,
+            &scheduler_agents,
+        )
+        .await?;
+        // 后续主聊天收尾逻辑仅适用于真正启动主轮次的来源，不能再把远程应答委托
+        // 当作主轮次处理，否则会重新引入 Busy/Pending 的串行语义。
+        activated_remote_im_sources.clear();
+    }
     let mut remote_im_skip_decision = None::<String>;
     let mut activating_session_info = events.first().map(|event| event.session_info.clone());
     if should_activate && !activated_remote_im_sources.is_empty() {
@@ -2736,12 +3003,15 @@ async fn process_conversation_batch(
                     &scheduler_agents,
                     &current_assistant,
                 );
+                let active_remote_reply_delegate_ids =
+                    remote_im_reply_delegate_active_ids_for_contact(state, &contact.id)?;
                 let decision = match run_remote_im_secretary_decision(
                     state,
                     &contact,
                     &current_assistant,
                     &secretary_recent_history,
                     &secretary_new_batch_messages,
+                    &active_remote_reply_delegate_ids,
                 )
                 .await
                 {
@@ -2763,6 +3033,7 @@ async fn process_conversation_batch(
                         );
                         RemoteImSecretaryDecision {
                             should_reply: true,
+                            target_delegate_id: None,
                             reason: format!("秘书判断失败，已降级为始终回复：{err}"),
                             model_name: String::new(),
                             emit_log: true,
@@ -2818,6 +3089,118 @@ async fn process_conversation_batch(
                             conversation_id,
                             follow_up_sources.len()
                         ));
+                    }
+                } else if let (Some(target_delegate_id), Some(guidance_message)) = (
+                    decision.target_delegate_id.as_deref(),
+                    persisted_batch_messages
+                        .iter()
+                        .rev()
+                        .find(|message| message.role.trim().eq_ignore_ascii_case("user"))
+                        .cloned(),
+                ) {
+                    remote_im_reply_delegate_enqueue_guidance(
+                        state,
+                        target_delegate_id,
+                        guidance_message,
+                    )?;
+                    should_activate = false;
+                    remote_im_skip_decision = Some("remote_reply_delegate_guidance".to_string());
+                    runtime_log_info(format!(
+                        "[远程应答委托] 完成，任务=投递引导，conversation_id={}，contact_id={}，delegate_id={}",
+                        conversation_id, contact.id, target_delegate_id
+                    ));
+                } else if let (Some(source), Some(trigger_message_id)) = (
+                    activated_remote_im_sources.first().cloned(),
+                    persisted_batch_messages
+                        .iter()
+                        .rev()
+                        .find(|message| message.role.trim().eq_ignore_ascii_case("user"))
+                        .map(|message| message.id.clone()),
+                ) {
+                    let should_apply_dynamic_wake = normalize_contact_response_strategy(
+                        &contact.response_strategy,
+                    ) == "smart_judge"
+                        && remote_im_contact_is_away(state, &contact.id)?;
+                    if should_apply_dynamic_wake {
+                        if let Err(primary_err) = conversation_service_v2()
+                            .remote_im_apply_dynamic_wake_compaction(
+                                state,
+                                conversation_id,
+                                &trigger_message_id,
+                                true,
+                            )
+                        {
+                            runtime_log_error(format!(
+                                "[远程唤醒压缩] 失败，conversation_id={}，contact_id={}，error={}",
+                                conversation_id, contact.id, primary_err
+                            ));
+                            if let Err(fallback_err) = conversation_service_v2()
+                                .remote_im_apply_dynamic_wake_compaction(
+                                    state,
+                                    conversation_id,
+                                    &trigger_message_id,
+                                    false,
+                                )
+                            {
+                                runtime_log_error(format!(
+                                    "[远程唤醒压缩] 失败，任务=空摘要降级，conversation_id={}，contact_id={}，error={}",
+                                    conversation_id, contact.id, fallback_err
+                                ));
+                            } else {
+                                runtime_log_warn(format!(
+                                    "[远程唤醒压缩] 完成，任务=空摘要降级，conversation_id={}，contact_id={}",
+                                    conversation_id, contact.id
+                                ));
+                            }
+                        }
+                    }
+                    remote_im_mark_contact_present(
+                        state,
+                        &contact.id,
+                        "秘书决定通知远程应答委托",
+                    )?;
+                    remote_im_schedule_presence_timeout(
+                        state,
+                        &contact.id,
+                        contact.patience_seconds,
+                    )?;
+                    let trigger_message = conversation_service_v2()
+                        .get_message_by_id_for_frontend_display_only(
+                            state,
+                            conversation_id,
+                            &trigger_message_id,
+                        )?;
+                    match spawn_remote_im_reply_delegate(
+                        state,
+                        &contact.id,
+                        conversation_id,
+                        &trigger_message,
+                        &ChatSessionInfo {
+                            department_id: current_assistant.department_id.clone(),
+                            agent_id: current_assistant.agent_id.clone(),
+                        },
+                        source,
+                        contact.patience_seconds,
+                        normalize_contact_response_strategy(&contact.response_strategy)
+                            == "smart_judge",
+                        false,
+                    ) {
+                        Ok(delegate_id) => {
+                            should_activate = false;
+                            remote_im_skip_decision = Some("remote_reply_delegate".to_string());
+                            runtime_log_info(format!(
+                                "[远程应答委托] 开始，delegate_id={}，conversation_id={}，contact_id={}，trigger_message_id={}",
+                                delegate_id, conversation_id, contact.id, trigger_message_id
+                            ));
+                        }
+                        Err(err) => {
+                            should_activate = false;
+                            remote_im_skip_decision = Some("remote_reply_delegate_start_failed".to_string());
+                            runtime_log_error(format!(
+                                "[远程应答委托] 失败，任务=创建，conversation_id={}，contact_id={}，error={}",
+                                conversation_id, contact.id, err
+                            ));
+                        }
                     }
                 }
             }

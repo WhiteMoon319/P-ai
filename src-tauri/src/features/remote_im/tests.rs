@@ -916,6 +916,8 @@
                 std::collections::HashMap::new(),
             )),
             remote_im_contact_runtime_states: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            remote_im_reply_delegate_runtimes: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            remote_im_reply_delegate_semaphore: Arc::new(tokio::sync::Semaphore::new(8)),
             remote_im_channel_state_write_locks: Arc::new(Mutex::new(std::collections::HashMap::new())),
             hidden_skill_snapshot_cache: Arc::new(Mutex::new(String::new())),
             preferred_release_source: Arc::new(Mutex::new("github".to_string())),
@@ -1693,6 +1695,7 @@
             &current_assistant,
             &history_messages,
             &new_batch_messages,
+            &[],
         );
 
         assert!(prompt.latest_user_text.contains("当前应答部门："));
@@ -1753,11 +1756,84 @@
                 .expect("prepare runtime state");
 
         assert!(activate_assistant);
-        assert!(reason.contains("先过秘书门卫"));
+        assert!(reason.contains("先落库后交由秘书决定"));
         let runtime_states =
             lock_remote_im_contact_runtime_states(&state).expect("lock runtime states");
         let runtime = runtime_states.get("contact-a").expect("runtime exists");
         assert_eq!(runtime.presence_state, RemoteImPresenceState::Present);
         assert_eq!(runtime.work_state, RemoteImWorkState::Idle);
         assert!(!runtime.has_pending);
+    }
+
+    #[test]
+    fn remote_reply_delegate_should_finish_atomically_with_empty_guidance_queue() {
+        let state = remote_im_test_state();
+        let register = |delegate_id: &str| {
+            lock_remote_im_reply_delegate_runtimes(&state)
+                .expect("lock delegate runtimes")
+                .insert(
+                    delegate_id.to_string(),
+                    RemoteImReplyDelegateRuntime {
+                        delegate_id: delegate_id.to_string(),
+                        contact_id: "contact-a".to_string(),
+                        conversation_id: "conversation-a".to_string(),
+                        trigger_message_id: "trigger-a".to_string(),
+                        started_at: now_iso(),
+                        prompt_snapshot_messages: vec![remote_im_test_group_user_message("user-a")],
+                        guidance_messages: std::collections::VecDeque::new(),
+                        consumed_guidance_messages: Vec::new(),
+                        cancelled: false,
+                        terminal: false,
+                        session_agent_id: "agent-a".to_string(),
+                    },
+                );
+            delegate_id.to_string()
+        };
+        let delegate_id = register("delegate-a");
+        assert_eq!(
+            remote_im_reply_delegate_prompt_messages(&state, &delegate_id)
+                .expect("read frozen prompt")
+                .len(),
+            1
+        );
+
+        let first_take = remote_im_reply_delegate_take_guidance_or_finish(&state, &delegate_id)
+            .expect("take empty guidance");
+        assert!(matches!(
+            first_take,
+            RemoteImReplyDelegateNext::Completed(runtime) if runtime.delegate_id == delegate_id
+        ));
+        assert!(!remote_im_reply_delegate_is_active(&state, &delegate_id));
+        assert!(remote_im_reply_delegate_enqueue_guidance(
+            &state,
+            &delegate_id,
+            remote_im_test_group_user_message("user-a"),
+        )
+        .is_err());
+
+        let next_delegate_id = register("delegate-b");
+        remote_im_reply_delegate_enqueue_guidance(
+            &state,
+            &next_delegate_id,
+            remote_im_test_group_user_message("user-b"),
+        )
+        .expect("enqueue guidance before finish");
+        let guidance = remote_im_reply_delegate_take_guidance_or_finish(&state, &next_delegate_id)
+            .expect("take queued guidance");
+        let guidance = match guidance {
+            RemoteImReplyDelegateNext::Guidance(messages) => messages,
+            _ => panic!("delegate should remain active for queued guidance"),
+        };
+        assert_eq!(guidance.len(), 1);
+        assert_eq!(
+            remote_im_reply_delegate_prompt_messages(&state, &next_delegate_id)
+                .expect("read prompt with consumed guidance")
+                .len(),
+            2
+        );
+        assert!(matches!(
+            remote_im_reply_delegate_take_guidance_or_finish(&state, &next_delegate_id)
+                .expect("finish after guidance"),
+            RemoteImReplyDelegateNext::Completed(runtime) if runtime.delegate_id == next_delegate_id
+        ));
     }

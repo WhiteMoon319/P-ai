@@ -358,6 +358,17 @@ async fn run_deferred_setup(app_handle: AppHandle) {
     emit_progress("初始化委托存储");
     if let Err(err) = delegate_store_open(&app_state.data_path) {
         eprintln!("[启动-延迟] 初始化委托存储失败：{err}");
+    } else {
+        match delegate_store_interrupt_unfinished_remote_replies(&app_state.data_path) {
+            Ok(delegate_ids) => {
+                for delegate_id in delegate_ids {
+                    if let Err(err) = delegate_runtime_thread_archive(app_state.inner(), &delegate_id, &now_iso()) {
+                        eprintln!("[启动-延迟] 归档中断远程应答委托失败，delegate_id={delegate_id}，error={err}");
+                    }
+                }
+            }
+            Err(err) => eprintln!("[启动-延迟] 收口未完成远程应答委托失败：{err}"),
+        }
     }
     let ide_context_runtime = app_handle.state::<IdeContextRuntime>().inner().clone();
     start_web_access_server(

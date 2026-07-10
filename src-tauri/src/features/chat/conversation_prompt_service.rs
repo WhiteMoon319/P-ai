@@ -839,9 +839,9 @@ impl ConversationPromptService {
         state: Option<&AppState>,
         conversation: &Conversation,
         agent: &AgentProfile,
+        trigger_message_id: Option<&str>,
     ) -> Vec<String> {
-        const PROFILE_USER_LIMIT: usize = 3;
-        const PROFILE_MEMORY_LIMIT_PER_USER: usize = 4;
+        const PROFILE_MEMORY_LIMIT: usize = 12;
 
         if !conversation_is_remote_im_contact(conversation) {
             return Vec::new();
@@ -850,53 +850,39 @@ impl ConversationPromptService {
             return Vec::new();
         };
 
-        let mut targets = Vec::<(String, String)>::new();
-        let mut seen_user_ids = std::collections::HashSet::<String>::new();
-        for message in conversation.messages.iter().rev() {
-            let Some(role) = prompt_role_for_message(message, &agent.id) else {
-                break;
-            };
-            if is_context_compaction_message(message, role.as_str())
-                || is_tool_review_report_message(message)
-            {
-                continue;
-            }
-            if role != "user" {
-                break;
-            }
-            let Some(user_id) = remote_im_message_canonical_user_id(message) else {
-                continue;
-            };
-            if !seen_user_ids.insert(user_id.clone()) {
-                continue;
-            }
-            let display_name = prompt_speaker_label(message, &Vec::new(), "");
-            targets.push((user_id, display_name));
-            if targets.len() >= PROFILE_USER_LIMIT {
-                break;
-            }
-        }
-
-        let mut blocks = Vec::<String>::new();
-        for (user_id, display_name) in targets {
-            match build_transient_user_profile_snapshot_block_for_user(
-                &state.data_path,
-                agent,
-                &user_id,
-                &display_name,
-                PROFILE_MEMORY_LIMIT_PER_USER,
-            ) {
-                Ok(Some(block)) => blocks.push(block),
-                Ok(None) => {}
-                Err(err) => {
-                    runtime_log_error(format!(
-                        "[用户画像] 失败，任务=build_remote_im_transient_profile_blocks，conversation_id={}，user_id={}，error={}",
-                        conversation.id, user_id, err
-                    ));
-                }
+        let trigger_message_id = trigger_message_id.map(str::trim).filter(|id| !id.is_empty());
+        let target_message = trigger_message_id
+            .and_then(|id| conversation.messages.iter().find(|message| message.id == id))
+            .or_else(|| {
+                conversation.messages.iter().rev().find(|message| {
+                    prompt_role_for_message(message, &agent.id).as_deref() == Some("user")
+                        && !is_context_compaction_message(message, "user")
+                })
+            });
+        let Some(target_message) = target_message else {
+            return Vec::new();
+        };
+        let Some(user_id) = remote_im_message_canonical_user_id(target_message) else {
+            return Vec::new();
+        };
+        let display_name = prompt_speaker_label(target_message, &Vec::new(), "");
+        match build_transient_user_profile_snapshot_block_for_user(
+            &state.data_path,
+            agent,
+            &user_id,
+            &display_name,
+            PROFILE_MEMORY_LIMIT,
+        ) {
+            Ok(Some(block)) => vec![block],
+            Ok(None) => Vec::new(),
+            Err(err) => {
+                runtime_log_error(format!(
+                    "[用户画像] 失败，任务=build_remote_im_transient_profile_blocks，conversation_id={}，user_id={}，error={}",
+                    conversation.id, user_id, err
+                ));
+                Vec::new()
             }
         }
-        blocks
     }
 
     fn build_latest_user_payload(
@@ -972,6 +958,7 @@ impl ConversationPromptService {
                     state,
                     conversation,
                     agent,
+                    overrides.remote_im_profile_message_id.as_deref(),
                 ));
                 (
                     latest_user_text,
