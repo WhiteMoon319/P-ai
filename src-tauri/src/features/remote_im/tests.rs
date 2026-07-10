@@ -59,12 +59,62 @@
         assert_eq!(contact.activation_mode, "never");
         assert!(contact.activation_keywords.is_empty());
         assert_eq!(contact.activation_cooldown_seconds, 0);
+        assert_eq!(contact.response_strategy, "smart_judge");
 
         // 第二次入队应复用同一联系人
         let now2 = now_iso();
         let contact_id_2 = remote_im_upsert_contact_for_inbound(&mut runtime, &channel, &input, &now2);
         assert_eq!(contact_id, contact_id_2);
         assert_eq!(runtime.remote_im_contacts.len(), 1);
+    }
+
+    #[test]
+    fn create_pending_event_should_guide_only_activated_private_messages() {
+        let sender = |remote_contact_type: &str| RemoteImMessageSource {
+            channel_id: "channel-a".to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            im_name: "QQ".to_string(),
+            remote_contact_type: remote_contact_type.to_string(),
+            remote_contact_id: "contact-a".to_string(),
+            remote_contact_name: "联系人".to_string(),
+            sender_id: "sender-a".to_string(),
+            sender_name: "联系人".to_string(),
+            sender_avatar_url: None,
+            platform_message_id: None,
+        };
+        let session_info = || ChatSessionInfo {
+            department_id: ASSISTANT_DEPARTMENT_ID.to_string(),
+            agent_id: DEFAULT_AGENT_ID.to_string(),
+        };
+
+        let private_event = create_pending_event(
+            "event-private".to_string(),
+            "conversation-a".to_string(),
+            Vec::new(),
+            true,
+            session_info(),
+            sender("private"),
+        );
+        let inactive_private_event = create_pending_event(
+            "event-private-inactive".to_string(),
+            "conversation-a".to_string(),
+            Vec::new(),
+            false,
+            session_info(),
+            sender("private"),
+        );
+        let group_event = create_pending_event(
+            "event-group".to_string(),
+            "conversation-a".to_string(),
+            Vec::new(),
+            true,
+            session_info(),
+            sender("group"),
+        );
+
+        assert_eq!(private_event.queue_mode, ChatQueueMode::Guided);
+        assert_eq!(inactive_private_event.queue_mode, ChatQueueMode::Normal);
+        assert_eq!(group_event.queue_mode, ChatQueueMode::Normal);
     }
 
     #[test]

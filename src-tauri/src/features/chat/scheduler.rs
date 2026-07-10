@@ -1954,6 +1954,7 @@ async fn process_claimed_conversation_batch(
         );
     }
     emit_chat_queue_snapshot(state);
+    trigger_pending_guided_queue_processing(state);
     if conversation_has_guided_queue_events(state, conversation_id).unwrap_or(false) {
         trigger_guided_queue_processing(state, conversation_id);
     } else if conversation_has_pending_queue_events(state, conversation_id).unwrap_or(false) {
@@ -2045,6 +2046,7 @@ async fn process_guided_queue_when_idle(
         ));
     }
     emit_chat_queue_snapshot(state);
+    trigger_pending_guided_queue_processing(state);
     if conversation_has_guided_queue_events(state, conversation_id).unwrap_or(false) {
         trigger_guided_queue_processing(state, conversation_id);
     } else if result.is_ok()
@@ -2068,6 +2070,21 @@ pub(crate) fn trigger_guided_queue_processing(state: &AppState, conversation_id:
             ));
         }
     });
+}
+
+fn trigger_pending_guided_queue_processing(state: &AppState) {
+    let conversation_ids = lock_conversation_runtime_slots(state)
+        .map(|slots| {
+            slots
+                .iter()
+                .filter(|(_, slot)| slot.pending_queue.iter().any(|event| event.queue_mode == ChatQueueMode::Guided))
+                .map(|(conversation_id, _)| conversation_id.clone())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    for conversation_id in conversation_ids {
+        trigger_guided_queue_processing(state, &conversation_id);
+    }
 }
 
 // ==================== 状态机管理函数 ====================
@@ -2329,6 +2346,15 @@ fn collect_activated_remote_im_sources(
     activated_remote_im_sources
 }
 
+fn remote_im_event_requires_reply_delegate(event: &ChatPendingEvent) -> bool {
+    matches!(event.source, ChatEventSource::RemoteIm)
+        && event
+            .sender_info
+            .as_ref()
+            .map(|sender| sender.remote_contact_type.trim().eq_ignore_ascii_case("group"))
+            .unwrap_or(false)
+}
+
 /// 远程消息已经先统一落库，但不能把同一批的多条消息合并成一次秘书判断。
 /// 每条事件只看它之前已落库的轻量历史和本事件自身，避免较晚消息倒灌到较早
 /// 消息的判断里，也让秘书可以把后续消息准确投递给刚刚启动的委托。
@@ -2342,7 +2368,7 @@ async fn process_persisted_remote_im_events_individually(
     scheduler_agents: &[AgentProfile],
 ) -> Result<(), String> {
     for (event, should_consult_secretary) in events.iter().zip(event_activate_flags.iter().copied()) {
-        if !should_consult_secretary || !matches!(event.source, ChatEventSource::RemoteIm) {
+        if !should_consult_secretary || !remote_im_event_requires_reply_delegate(event) {
             continue;
         }
         let Some(sender) = event.sender_info.as_ref() else {
@@ -2474,7 +2500,7 @@ async fn process_persisted_remote_im_events_individually(
             }
         }
 
-        let should_apply_dynamic_wake = normalize_contact_response_strategy(&contact.response_strategy)
+        let should_apply_dynamic_wake = effective_remote_im_contact_response_strategy(&contact)
             == "smart_judge"
             && remote_im_contact_is_away(state, &contact.id)?;
         let mut force_memory_prompt_snapshot = false;
@@ -2526,7 +2552,7 @@ async fn process_persisted_remote_im_events_individually(
             },
             source,
             contact.patience_seconds,
-            normalize_contact_response_strategy(&contact.response_strategy) == "smart_judge",
+            effective_remote_im_contact_response_strategy(&contact) == "smart_judge",
             force_memory_prompt_snapshot,
         ) {
             Ok(delegate_id) => runtime_log_info(format!(
@@ -2909,17 +2935,26 @@ async fn process_conversation_batch(
     // 2. 判断是否需要激活主助理。
     // 这一步故意放在“写历史之后”，避免出现前端先开流式、
     // 但本批消息还没正式落入历史的时序错乱。
-    let mut activated_remote_im_sources =
+    let all_activated_remote_im_sources =
         collect_activated_remote_im_sources(&events, &event_activate_flags);
-    // 远程联系人不进入主聊天的串行轮次。每条已落库事件都由秘书独立判断，
-    // 并自行创建远程应答委托或投递到已有委托；这里只保留非远程事件的主轮次激活。
+    let mut secretary_remote_im_sources = all_activated_remote_im_sources
+        .iter()
+        .filter(|source| source.remote_contact_type.trim().eq_ignore_ascii_case("group"))
+        .cloned()
+        .collect::<Vec<_>>();
+    // 私聊直接进入绑定会话的主助理串行轮次；群聊才由秘书独立判断，并创建或续用远程应答委托。
+    let activated_remote_im_sources = all_activated_remote_im_sources
+        .into_iter()
+        .filter(|source| !source.remote_contact_type.trim().eq_ignore_ascii_case("group"))
+        .collect::<Vec<_>>();
     let mut should_activate = events
         .iter()
         .zip(event_activate_flags.iter().copied())
         .any(|(event, should_activate)| {
-            should_activate && !matches!(event.source, ChatEventSource::RemoteIm)
+            should_activate && (!matches!(event.source, ChatEventSource::RemoteIm)
+                || !remote_im_event_requires_reply_delegate(event))
         });
-    if !activated_remote_im_sources.is_empty() {
+    if !secretary_remote_im_sources.is_empty() {
         process_persisted_remote_im_events_individually(
             state,
             conversation_id,
@@ -2930,13 +2965,12 @@ async fn process_conversation_batch(
             &scheduler_agents,
         )
         .await?;
-        // 后续主聊天收尾逻辑仅适用于真正启动主轮次的来源，不能再把远程应答委托
-        // 当作主轮次处理，否则会重新引入 Busy/Pending 的串行语义。
-        activated_remote_im_sources.clear();
+        // 远程应答委托不参与主轮次收尾。
+        secretary_remote_im_sources.clear();
     }
     let mut remote_im_skip_decision = None::<String>;
     let mut activating_session_info = events.first().map(|event| event.session_info.clone());
-    if should_activate && !activated_remote_im_sources.is_empty() {
+    if should_activate && !secretary_remote_im_sources.is_empty() {
         if let Some(contact) = remote_im_resolve_secretary_contact(state, &activated_remote_im_sources)? {
             match remote_im_resolve_contact_assistant_context(state, &contact) {
                 Ok(resolved_assistant) => {
@@ -3117,9 +3151,8 @@ async fn process_conversation_batch(
                         .find(|message| message.role.trim().eq_ignore_ascii_case("user"))
                         .map(|message| message.id.clone()),
                 ) {
-                    let should_apply_dynamic_wake = normalize_contact_response_strategy(
-                        &contact.response_strategy,
-                    ) == "smart_judge"
+                    let should_apply_dynamic_wake =
+                        effective_remote_im_contact_response_strategy(&contact) == "smart_judge"
                         && remote_im_contact_is_away(state, &contact.id)?;
                     if should_apply_dynamic_wake {
                         if let Err(primary_err) = conversation_service_v2()
@@ -3181,8 +3214,7 @@ async fn process_conversation_batch(
                         },
                         source,
                         contact.patience_seconds,
-                        normalize_contact_response_strategy(&contact.response_strategy)
-                            == "smart_judge",
+                        effective_remote_im_contact_response_strategy(&contact) == "smart_judge",
                         false,
                     ) {
                         Ok(delegate_id) => {

@@ -202,10 +202,10 @@
                       <button
                         type="button"
                         class="badge badge-sm shrink-0 gap-1.5"
-                        :class="normalizeResponseStrategy(item.responseStrategy) === 'smart_judge' ? 'badge-accent' : 'badge-ghost'"
+                        :class="contactResponseStrategy(item) === 'smart_judge' ? 'badge-accent' : 'badge-ghost'"
                         :title="contactResponseStrategyHintText(item)"
-                        :disabled="contactsDisabled || isContactOperationBusy(item.id)"
-                        @click.stop="openContactPillMenu($event, item, 'response')"
+                        :disabled="contactsDisabled || isContactOperationBusy(item.id) || isPrivateContact(item)"
+                        @click.stop="!isPrivateContact(item) && openContactPillMenu($event, item, 'response')"
                       >
                         {{ contactResponseStrategyLabel(item) }}
                         <ChevronUp class="h-3.5 w-3.5 opacity-70" />
@@ -672,6 +672,7 @@
                   <select
                     class="select select-bordered select-sm w-full"
                     v-model="contactDraft.responseStrategy"
+                    :disabled="isPrivateContact(selectedContact)"
                   >
                     <option value="always_reply">{{ t("config.remoteIm.responseStrategyAlways") }}</option>
                     <option value="smart_judge">{{ t("config.remoteIm.responseStrategySmart") }}</option>
@@ -1204,7 +1205,7 @@ function buildContactDraftFromContact(item: RemoteImContact): ContactEditDraft {
     activationKeywordsText: item.activationKeywords.join(", "),
     muteKeywordsText: (Array.isArray(item.muteKeywords) ? item.muteKeywords : [t("config.remoteIm.defaultMuteKeyword")]).join(", "),
     unmuteKeywordsText: (Array.isArray(item.unmuteKeywords) ? item.unmuteKeywords : [t("config.remoteIm.defaultUnmuteKeyword")]).join(", "),
-    responseStrategy: normalizeResponseStrategy(item.responseStrategy),
+    responseStrategy: contactResponseStrategy(item),
     responseGuidance: String(item.responseGuidance || "").trim(),
     patienceSeconds: Math.max(0, Number(item.patienceSeconds || 60)),
     muteDurationSeconds: Math.max(0, Number(item.muteDurationSeconds || 600)),
@@ -1931,8 +1932,16 @@ function contactResponseStrategyOptions(): Array<{
   ];
 }
 
+function isPrivateContact(item: Pick<RemoteImContact, "remoteContactType"> | null | undefined): boolean {
+  return String(item?.remoteContactType || "").trim().toLowerCase() === "private";
+}
+
+function contactResponseStrategy(item: RemoteImContact): NonNullable<RemoteImContact["responseStrategy"]> {
+  return isPrivateContact(item) ? "always_reply" : normalizeResponseStrategy(item.responseStrategy);
+}
+
 function contactResponseStrategyLabel(item: RemoteImContact): string {
-  return normalizeResponseStrategy(item.responseStrategy) === "smart_judge"
+  return contactResponseStrategy(item) === "smart_judge"
     ? t("config.remoteIm.responseStrategySmart")
     : t("config.remoteIm.responseStrategyAlways");
 }
@@ -1941,14 +1950,14 @@ async function selectContactResponseStrategy(
   item: RemoteImContact,
   strategy: NonNullable<RemoteImContact["responseStrategy"]>,
 ) {
-  if (contactsDisabled.value) return;
+  if (contactsDisabled.value || isPrivateContact(item)) return;
   const nextStrategy = normalizeResponseStrategy(strategy);
   if (normalizeResponseStrategy(item.responseStrategy) === nextStrategy) return;
   await withContactOperation(item.id, () => saveContactActivation(item, { responseStrategy: nextStrategy }));
 }
 
 async function cycleContactResponseStrategy(item: RemoteImContact) {
-  if (contactsDisabled.value) return;
+  if (contactsDisabled.value || isPrivateContact(item)) return;
   const current = normalizeResponseStrategy(item.responseStrategy);
   const next = current === "smart_judge" ? "always_reply" : "smart_judge";
   await withContactOperation(item.id, () => saveContactActivation(item, { responseStrategy: next }));
@@ -2069,9 +2078,9 @@ async function saveContactDraft() {
       JSON.stringify(nextUnmuteKeywords) !== JSON.stringify(currentUnmuteKeywords);
     const nextActivationMode = normalizeActivationMode(draft.activationMode);
     const modeChanged = nextActivationMode !== normalizeActivationMode(item.activationMode || "never");
-    const nextResponseStrategy = normalizeResponseStrategy(draft.responseStrategy);
+    const nextResponseStrategy = isPrivateContact(item) ? "always_reply" : normalizeResponseStrategy(draft.responseStrategy);
     const responseStrategyChanged =
-      nextResponseStrategy !== normalizeResponseStrategy(item.responseStrategy);
+      nextResponseStrategy !== contactResponseStrategy(item);
     const nextResponseGuidance = String(draft.responseGuidance || "").trim();
     const currentResponseGuidance = String(item.responseGuidance || "").trim();
     const responseGuidanceChanged = nextResponseGuidance !== currentResponseGuidance;
@@ -2639,7 +2648,7 @@ function contactActivationHintText(item: RemoteImContact): string {
 }
 
 function contactResponseStrategyHintText(item: RemoteImContact): string {
-  return normalizeResponseStrategy(item.responseStrategy) === "smart_judge"
+  return contactResponseStrategy(item) === "smart_judge"
     ? t("config.remoteIm.responseStrategySmartHint")
     : t("config.remoteIm.responseStrategyAlwaysHint");
 }

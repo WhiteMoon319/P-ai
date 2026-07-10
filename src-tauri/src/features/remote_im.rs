@@ -294,7 +294,9 @@ fn remote_im_upsert_contact_for_inbound(
         bound_agent_id: None,
         bound_conversation_id: None,
         processing_mode: "continuous".to_string(),
-        response_strategy: default_remote_im_contact_response_strategy(),
+        response_strategy: default_remote_im_contact_response_strategy_for_type(
+            input.remote_contact_type.as_str(),
+        ),
         response_guidance: default_remote_im_contact_response_guidance(),
         last_activated_at: None,
         last_message_at: Some(now.to_string()),
@@ -363,6 +365,29 @@ fn normalize_contact_response_strategy(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
         "smart_judge" => "smart_judge".to_string(),
         _ => "always_reply".to_string(),
+    }
+}
+
+fn remote_im_contact_is_private(contact: &RemoteImContact) -> bool {
+    contact
+        .remote_contact_type
+        .trim()
+        .eq_ignore_ascii_case("private")
+}
+
+fn default_remote_im_contact_response_strategy_for_type(remote_contact_type: &str) -> String {
+    if remote_contact_type.trim().eq_ignore_ascii_case("private") {
+        "always_reply".to_string()
+    } else {
+        "smart_judge".to_string()
+    }
+}
+
+fn effective_remote_im_contact_response_strategy(contact: &RemoteImContact) -> String {
+    if remote_im_contact_is_private(contact) {
+        "always_reply".to_string()
+    } else {
+        normalize_contact_response_strategy(&contact.response_strategy)
     }
 }
 
@@ -1813,7 +1838,7 @@ async fn run_remote_im_secretary_guided_decision(
     current_work_message: Option<&RemoteImSecretaryMessageDigest>,
     new_message: &RemoteImSecretaryMessageDigest,
 ) -> Result<RemoteImSecretaryGuideDecision, String> {
-    if normalize_contact_response_strategy(&contact.response_strategy) == "always_reply" {
+    if effective_remote_im_contact_response_strategy(contact) == "always_reply" {
         return Ok(RemoteImSecretaryGuideDecision {
             should_interrupt: true,
             reason: String::new(),
@@ -1990,7 +2015,7 @@ async fn run_remote_im_secretary_decision(
     new_batch_messages: &[RemoteImSecretaryMessageDigest],
     active_delegate_ids: &[String],
 ) -> Result<RemoteImSecretaryDecision, String> {
-    if normalize_contact_response_strategy(&contact.response_strategy) == "always_reply" {
+    if effective_remote_im_contact_response_strategy(contact) == "always_reply" {
         return Ok(RemoteImSecretaryDecision {
             should_reply: true,
             target_delegate_id: None,
@@ -3267,12 +3292,18 @@ fn create_pending_event(
     session_info: ChatSessionInfo,
     sender_info: RemoteImMessageSource,
 ) -> ChatPendingEvent {
+    let queue_mode = if activate_assistant && sender_info.remote_contact_type.trim().eq_ignore_ascii_case("private")
+    {
+        ChatQueueMode::Guided
+    } else {
+        ChatQueueMode::Normal
+    };
     ChatPendingEvent {
         id: event_id,
         conversation_id,
         created_at: now_iso(),
         source: ChatEventSource::RemoteIm,
-        queue_mode: ChatQueueMode::Normal,
+        queue_mode,
         messages,
         activate_assistant,
         assistant_message_id: None,
@@ -3372,7 +3403,9 @@ fn remote_im_update_contact_activation(
     contact.patience_seconds = input.patience_seconds;
     contact.mute_duration_seconds = input.mute_duration_seconds;
     contact.activation_cooldown_seconds = input.activation_cooldown_seconds;
-    contact.response_strategy = normalize_contact_response_strategy(&input.response_strategy);
+    if !remote_im_contact_is_private(contact) {
+        contact.response_strategy = normalize_contact_response_strategy(&input.response_strategy);
+    }
     contact.response_guidance = normalize_contact_response_guidance(&input.response_guidance);
     let output = contact.clone();
     state_write_runtime_state_cached(&state, &runtime)?;
@@ -3920,6 +3953,7 @@ pub(crate) fn remote_im_enqueue_message_internal(
             platform_message_id: input.platform_message_id,
         },
     );
+    let should_trigger_guided_queue = event.queue_mode == ChatQueueMode::Guided;
     let ingress = ingress_chat_event(state, event)?;
     let ingress_mode = match &ingress {
         ChatEventIngress::Direct(_) => "direct",
@@ -4106,7 +4140,11 @@ pub(crate) fn remote_im_enqueue_message_internal(
         });
     }
     state_write_runtime_state_cached(state, &runtime)?;
-    trigger_chat_event_after_ingress(state, ingress);
+    if should_trigger_guided_queue && matches!(&ingress, ChatEventIngress::Queued { .. }) {
+        trigger_guided_queue_processing(state, &conversation_id);
+    } else {
+        trigger_chat_event_after_ingress(state, ingress);
+    }
     Ok(RemoteImEnqueueResult {
         event_id,
         conversation_id,

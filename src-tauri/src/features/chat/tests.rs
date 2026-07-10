@@ -2608,6 +2608,31 @@
     }
 
     #[test]
+    fn remote_im_event_requires_reply_delegate_should_only_match_group_messages() {
+        let created_at = now_iso();
+        let mut private_event = test_pending_event("conversation-a");
+        private_event.source = ChatEventSource::RemoteIm;
+        private_event.created_at = created_at.clone();
+        private_event.sender_info = Some(RemoteImMessageSource {
+            channel_id: "remote-im-a".to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            im_name: "QQ".to_string(),
+            remote_contact_type: "private".to_string(),
+            remote_contact_id: "contact-a".to_string(),
+            remote_contact_name: "张三".to_string(),
+            sender_id: "contact-a".to_string(),
+            sender_name: "张三".to_string(),
+            sender_avatar_url: None,
+            platform_message_id: None,
+        });
+        let mut group_event = private_event.clone();
+        group_event.sender_info.as_mut().expect("测试消息来源存在").remote_contact_type = "group".to_string();
+
+        assert!(!remote_im_event_requires_reply_delegate(&private_event));
+        assert!(remote_im_event_requires_reply_delegate(&group_event));
+    }
+
+    #[test]
     fn filter_remote_im_follow_up_sources_should_wait_for_pending_queue_message() {
         let state = test_chat_runtime_state();
         let created_at = now_iso();
