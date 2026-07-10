@@ -392,6 +392,7 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
                 model: String((model as { model?: unknown }).model || "").trim(),
                 deprecated: !!(model as { deprecated?: unknown }).deprecated,
                 enableImage: !!(model as { enableImage?: unknown }).enableImage,
+                enableAudio: !!(model as { enableAudio?: unknown }).enableAudio,
                 enableVideo: !!(model as { enableVideo?: unknown }).enableVideo,
                 enableTools: (model as { enableTools?: unknown }).enableTools !== false,
                 reasoningEffort: String((model as { reasoningEffort?: unknown }).reasoningEffort || DEFAULT_REASONING_EFFORT).trim() || DEFAULT_REASONING_EFFORT,

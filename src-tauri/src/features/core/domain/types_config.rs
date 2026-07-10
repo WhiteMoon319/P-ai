@@ -575,6 +575,8 @@ struct ApiModelConfig {
     #[serde(default = "default_false")]
     enable_image: bool,
     #[serde(default = "default_false")]
+    enable_audio: bool,
+    #[serde(default = "default_false")]
     enable_video: bool,
     #[serde(default = "default_true")]
     enable_tools: bool,
@@ -599,6 +601,7 @@ impl Default for ApiModelConfig {
             model: "gpt-4o-mini".to_string(),
             deprecated: false,
             enable_image: false,
+            enable_audio: false,
             enable_video: false,
             enable_tools: true,
             reasoning_effort: default_reasoning_effort(),

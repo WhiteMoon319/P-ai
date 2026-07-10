@@ -417,6 +417,77 @@ fn normalize_model_id(input: &str) -> String {
         .collect::<String>()
 }
 
+#[derive(Debug, Clone)]
+struct ModelMetadataCandidate {
+    provider_id: String,
+    provider_api: String,
+    model_id: String,
+    context_window_tokens: Option<u32>,
+    max_output_tokens: Option<u32>,
+    enable_image: bool,
+    enable_tools: bool,
+    enable_audio: bool,
+    enable_video: bool,
+}
+
+fn normalize_model_metadata_base_url(value: &str) -> String {
+    let raw = value.trim();
+    let Ok(mut parsed) = reqwest::Url::parse(raw) else {
+        return raw.trim_end_matches('/').to_string();
+    };
+    let scheme = parsed.scheme().to_ascii_lowercase();
+    let _ = parsed.set_scheme(&scheme);
+    if let Some(host) = parsed.host_str() {
+        let _ = parsed.set_host(Some(&host.to_ascii_lowercase()));
+    }
+    if parsed.path() != "/" {
+        let path = parsed.path().trim_end_matches('/').to_string();
+        parsed.set_path(&path);
+    }
+    parsed.to_string()
+}
+
+fn select_model_metadata_candidates<'a>(
+    candidates: &'a [ModelMetadataCandidate],
+    requested_base_url: &str,
+) -> (Vec<&'a ModelMetadataCandidate>, &'static str) {
+    let url_matched = candidates
+        .iter()
+        .filter(|candidate| {
+            !requested_base_url.is_empty()
+                && normalize_model_metadata_base_url(&candidate.provider_api) == requested_base_url
+        })
+        .collect::<Vec<_>>();
+    if url_matched.is_empty() {
+        (candidates.iter().collect(), "未匹配URL，候选合并最大值")
+    } else {
+        (url_matched, "URL精准匹配")
+    }
+}
+
+fn merge_model_metadata_candidates(
+    selected_candidates: &[&ModelMetadataCandidate],
+) -> FetchModelMetadataOutput {
+    FetchModelMetadataOutput {
+        found: true,
+        matched_model_id: selected_candidates
+            .first()
+            .map(|candidate| candidate.model_id.clone()),
+        context_window_tokens: selected_candidates
+            .iter()
+            .filter_map(|candidate| candidate.context_window_tokens)
+            .max(),
+        max_output_tokens: selected_candidates
+            .iter()
+            .filter_map(|candidate| candidate.max_output_tokens)
+            .max(),
+        enable_image: Some(selected_candidates.iter().any(|candidate| candidate.enable_image)),
+        enable_tools: Some(selected_candidates.iter().any(|candidate| candidate.enable_tools)),
+        enable_audio: Some(selected_candidates.iter().any(|candidate| candidate.enable_audio)),
+        enable_video: Some(selected_candidates.iter().any(|candidate| candidate.enable_video)),
+    }
+}
+
 #[tauri::command]
 async fn fetch_model_metadata(
     state: State<'_, AppState>,
@@ -438,12 +509,20 @@ async fn fetch_model_metadata_inner(
     let providers = root
         .as_object()
         .ok_or_else(|| "Invalid models.dev payload: expected root object.".to_string())?;
-    let mut best_match: Option<FetchModelMetadataOutput> = None;
-    let mut best_sort_key: Option<(u8, u8, u64, u32, u32, u8)> = None;
-    for provider_obj in providers.values().filter_map(Value::as_object) {
+    let requested_base_url = normalize_model_metadata_base_url(&input.base_url);
+    let mut candidates = Vec::<ModelMetadataCandidate>::new();
+    for (provider_id, provider_value) in providers {
+        let Some(provider_obj) = provider_value.as_object() else {
+            continue;
+        };
         let Some(models_obj) = provider_obj.get("models").and_then(Value::as_object) else {
             continue;
         };
+        let provider_api = provider_obj
+            .get("api")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
         for (model_id, model_value) in models_obj
             .iter()
             .filter(|(model_id, _)| model_id_exact_match(requested_model, model_id))
@@ -480,44 +559,24 @@ async fn fetch_model_metadata_inner(
                 .get("tool_call")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
-
-            // 冲突时优先“可用信息更完整”，其次“上限更大”。
-            let numeric_count = context_window_tokens.is_some() as u8 + max_output_tokens.is_some() as u8;
-            let capability_count =
-                enable_image as u8 + enable_tools as u8 + enable_audio as u8 + enable_video as u8;
-            let has_any_usable = (numeric_count > 0 || capability_count > 0) as u8;
-            let context_value = context_window_tokens.unwrap_or(0);
-            let output_value = max_output_tokens.unwrap_or(0);
-            let size_sum = u64::from(context_value) + u64::from(output_value);
-            let candidate_sort_key = (
-                has_any_usable,
-                numeric_count,
-                size_sum,
-                context_value,
-                output_value,
-                capability_count,
-            );
-
-            let should_take = match best_sort_key {
-                None => true,
-                Some(current) => candidate_sort_key > current,
-            };
-            if should_take {
-                best_sort_key = Some(candidate_sort_key);
-                best_match = Some(FetchModelMetadataOutput {
-                    found: true,
-                    matched_model_id: Some(model_id.to_string()),
-                    context_window_tokens,
-                    max_output_tokens,
-                    enable_image: Some(enable_image),
-                    enable_tools: Some(enable_tools),
-                    enable_audio: Some(enable_audio),
-                    enable_video: Some(enable_video),
-                });
-            }
+            candidates.push(ModelMetadataCandidate {
+                provider_id: provider_id.to_string(),
+                provider_api: provider_api.clone(),
+                model_id: model_id.to_string(),
+                context_window_tokens,
+                max_output_tokens,
+                enable_image,
+                enable_tools,
+                enable_audio,
+                enable_video,
+            });
         }
     }
-    let Some(best_match) = best_match else {
+    if candidates.is_empty() {
+        runtime_log_info(format!(
+            "[模型元数据] 查询完成，模型={}，结果=未命中",
+            requested_model
+        ));
         return Ok(FetchModelMetadataOutput {
             found: false,
             matched_model_id: None,
@@ -528,8 +587,47 @@ async fn fetch_model_metadata_inner(
             enable_audio: None,
             enable_video: None,
         });
-    };
-    Ok(best_match)
+    }
+    let (selected_candidates, selection_strategy) =
+        select_model_metadata_candidates(&candidates, &requested_base_url);
+    let merged = merge_model_metadata_candidates(&selected_candidates);
+    let matched_candidates = candidates
+        .iter()
+        .map(|candidate| {
+            format!(
+                "供应商={}，API={}，模型={}，图片={}，音频={}，视频={}，工具={}，上下文={}，输出={}",
+                candidate.provider_id,
+                candidate.provider_api,
+                candidate.model_id,
+                candidate.enable_image,
+                candidate.enable_audio,
+                candidate.enable_video,
+                candidate.enable_tools,
+                candidate
+                    .context_window_tokens
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "未知".to_string()),
+                candidate
+                    .max_output_tokens
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "未知".to_string()),
+            )
+        })
+        .collect::<Vec<_>>();
+    runtime_log_info(format!(
+        "[模型元数据] 查询完成，模型={}，配置URL={}，策略={}，候选数={}，全部候选=[{}]，最终模型={}，图片={}，音频={}，视频={}，工具={}",
+        requested_model,
+        input.base_url.trim(),
+        selection_strategy,
+        matched_candidates.len(),
+        matched_candidates.join("；"),
+        merged.matched_model_id.as_deref().unwrap_or("未知"),
+        merged.enable_image.unwrap_or(false),
+        merged.enable_audio.unwrap_or(false),
+        merged.enable_video.unwrap_or(false),
+        merged.enable_tools.unwrap_or(false),
+    ));
+    Ok(merged)
 }
 
 #[tauri::command]
@@ -929,4 +1027,93 @@ async fn test_voice_connection_inner(input: TestVoiceConnectionInput) -> Result<
         kind, elapsed_ms
     ));
     Ok(TestVoiceConnectionResult { elapsed_ms })
+}
+
+#[cfg(test)]
+mod model_metadata_selection_tests {
+    use super::*;
+
+    fn candidate(
+        provider_id: &str,
+        provider_api: &str,
+        context_window_tokens: u32,
+        max_output_tokens: u32,
+        enable_audio: bool,
+        enable_video: bool,
+    ) -> ModelMetadataCandidate {
+        ModelMetadataCandidate {
+            provider_id: provider_id.to_string(),
+            provider_api: provider_api.to_string(),
+            model_id: "mimo-v2.5".to_string(),
+            context_window_tokens: Some(context_window_tokens),
+            max_output_tokens: Some(max_output_tokens),
+            enable_image: true,
+            enable_tools: true,
+            enable_audio,
+            enable_video,
+        }
+    }
+
+    #[test]
+    fn model_metadata_should_prefer_candidates_with_exact_provider_api_url() {
+        let candidates = vec![
+            candidate("vercel", "", 1_050_000, 131_100, false, false),
+            candidate(
+                "xiaomi-token-plan-cn",
+                "https://token-plan-cn.xiaomimimo.com/v1",
+                1_048_576,
+                131_072,
+                true,
+                true,
+            ),
+        ];
+        let requested_base_url =
+            normalize_model_metadata_base_url("https://token-plan-cn.xiaomimimo.com/v1/");
+
+        let (selected, strategy) =
+            select_model_metadata_candidates(&candidates, &requested_base_url);
+        let merged = merge_model_metadata_candidates(&selected);
+
+        assert_eq!(strategy, "URL精准匹配");
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].provider_id, "xiaomi-token-plan-cn");
+        assert_eq!(merged.context_window_tokens, Some(1_048_576));
+        assert_eq!(merged.enable_audio, Some(true));
+        assert_eq!(merged.enable_video, Some(true));
+    }
+
+    #[test]
+    fn model_metadata_should_merge_all_candidates_when_provider_api_url_is_unknown() {
+        let candidates = vec![
+            candidate("vercel", "", 1_050_000, 131_100, false, false),
+            candidate(
+                "xiaomi",
+                "https://api.xiaomimimo.com/v1",
+                1_048_576,
+                131_072,
+                true,
+                true,
+            ),
+        ];
+        let requested_base_url = normalize_model_metadata_base_url("https://proxy.example.com/v1");
+
+        let (selected, strategy) =
+            select_model_metadata_candidates(&candidates, &requested_base_url);
+        let merged = merge_model_metadata_candidates(&selected);
+
+        assert_eq!(strategy, "未匹配URL，候选合并最大值");
+        assert_eq!(selected.len(), 2);
+        assert_eq!(merged.context_window_tokens, Some(1_050_000));
+        assert_eq!(merged.max_output_tokens, Some(131_100));
+        assert_eq!(merged.enable_audio, Some(true));
+        assert_eq!(merged.enable_video, Some(true));
+    }
+
+    #[test]
+    fn model_metadata_base_url_should_preserve_case_sensitive_path() {
+        assert_ne!(
+            normalize_model_metadata_base_url("https://api.example.com/V1"),
+            normalize_model_metadata_base_url("https://api.example.com/v1"),
+        );
+    }
 }

@@ -286,6 +286,8 @@ struct QuickGenaiChatInput {
 struct FetchModelMetadataInput {
     request_format: RequestFormat,
     model: String,
+    #[serde(default)]
+    base_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

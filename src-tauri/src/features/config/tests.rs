@@ -48,6 +48,47 @@
     }
 
     #[test]
+    fn normalize_app_config_should_not_promote_legacy_video_capability_to_audio() {
+        let mut cfg = AppConfig::default();
+        let provider = cfg
+            .api_providers
+            .first_mut()
+            .expect("default provider exists");
+        provider.enable_audio = true;
+        let model = provider.models.first_mut().expect("default model exists");
+        model.enable_audio = false;
+        model.enable_video = true;
+
+        normalize_app_config(&mut cfg);
+
+        let provider = cfg
+            .api_providers
+            .first()
+            .expect("default provider exists after normalization");
+        assert!(!provider.models[0].enable_audio);
+        assert!(!provider.enable_audio);
+        assert!(provider.models[0].enable_video);
+    }
+
+    #[test]
+    fn legacy_api_config_video_capability_should_not_migrate_to_audio() {
+        let mut cfg = AppConfig::default();
+        cfg.api_providers.clear();
+        let api = cfg.api_configs.first_mut().expect("default API config exists");
+        api.enable_audio = true;
+        api.enable_video = true;
+
+        normalize_app_config(&mut cfg);
+
+        let provider = cfg
+            .api_providers
+            .first()
+            .expect("legacy API config should migrate to provider");
+        assert!(!provider.models[0].enable_audio);
+        assert!(provider.models[0].enable_video);
+    }
+
+    #[test]
     fn startup_window_label_should_allow_codex_local_auth_without_api_key() {
         let mut cfg = AppConfig::default();
         let api_id = cfg.assistant_department_api_config_id.clone();
@@ -1065,6 +1106,7 @@ model = "gpt-4.1"
                         model: "gpt-4.1".to_string(),
                         deprecated: false,
                         enable_image: false,
+                        enable_audio: false,
                         enable_video: false,
                         enable_tools: true,
                         reasoning_effort: default_reasoning_effort(),
@@ -1079,6 +1121,7 @@ model = "gpt-4.1"
                         model: "gpt-4.1-mini".to_string(),
                         deprecated: false,
                         enable_image: false,
+                        enable_audio: false,
                         enable_video: false,
                         enable_tools: true,
                         reasoning_effort: default_reasoning_effort(),
@@ -1151,6 +1194,7 @@ model = "gpt-4.1"
                     model: "gpt-5.4".to_string(),
                     deprecated: false,
                     enable_image: false,
+                    enable_audio: false,
                     enable_video: false,
                     enable_tools: true,
                     reasoning_effort: default_reasoning_effort(),

@@ -122,6 +122,7 @@ export type ApiModelConfigItem = {
   model: string;
   deprecated?: boolean;
   enableImage: boolean;
+  enableAudio?: boolean;
   enableVideo?: boolean;
   enableTools: boolean;
   reasoningEffort?: string;

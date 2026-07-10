@@ -219,6 +219,7 @@ fn migrate_legacy_api_configs_into_providers(config: &mut AppConfig) {
                     model: legacy.model.clone(),
                     deprecated: false,
                     enable_image: legacy.enable_image,
+                    enable_audio: false,
                     enable_video: legacy.enable_video,
                     enable_tools: legacy.enable_tools,
                     reasoning_effort: legacy.reasoning_effort.clone(),
@@ -329,7 +330,7 @@ fn expand_api_configs_from_providers(config: &mut AppConfig) {
                 max_concurrent_requests: provider.max_concurrent_requests,
                 enable_text: provider.enable_text,
                 enable_image: model.enable_image,
-                enable_audio: provider.enable_audio || model.enable_video,
+                enable_audio: model.enable_audio,
                 enable_video: model.enable_video,
                 enable_tools: model.enable_tools,
                 tools: provider.tools.clone(),
@@ -513,7 +514,7 @@ fn normalize_api_tools(config: &mut AppConfig) {
                 }
             }
         }
-        provider.enable_audio = provider.enable_audio || provider.models.iter().any(|model| model.enable_video);
+        provider.enable_audio = provider.models.iter().any(|model| model.enable_audio);
         if provider.request_format.is_codex() {
             provider.enable_image = true;
             provider.enable_video = false;

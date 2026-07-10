@@ -312,7 +312,7 @@
                       </div>
                     </div>
 
-                    <div v-if="activeCapability === 'text'" class="grid gap-2 md:grid-cols-5">
+                    <div v-if="activeCapability === 'text'" class="grid gap-2 md:grid-cols-6">
                       <label
                         class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2"
                         :class="{ 'opacity-60': isModelImageToggleDisabled(modelCard) }">
@@ -322,6 +322,17 @@
                           type="checkbox"
                           class="checkbox checkbox-sm"
                           :disabled="isModelImageToggleDisabled(modelCard)"
+                        />
+                      </label>
+                      <label
+                        class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2"
+                        :class="{ 'opacity-60': isModelAudioToggleDisabled(modelCard) }">
+                        <span class="text-sm">{{ t("config.api.capAudio") }}</span>
+                        <input
+                          v-model="modelCard.enableAudio"
+                          type="checkbox"
+                          class="checkbox checkbox-sm"
+                          :disabled="isModelAudioToggleDisabled(modelCard)"
                         />
                       </label>
                       <label
@@ -942,8 +953,20 @@ function shouldShowModelVideoToggle(modelCard: ApiModelConfigItem): boolean {
   return true;
 }
 
+function shouldShowModelAudioToggle(modelCard: ApiModelConfigItem): boolean {
+  const capability = modelCapability(modelCard);
+  if (capability?.metadataFound) {
+    return capability.enableAudio === true;
+  }
+  return true;
+}
+
 function isModelImageToggleDisabled(modelCard: ApiModelConfigItem): boolean {
   return !shouldShowModelImageToggle(modelCard);
+}
+
+function isModelAudioToggleDisabled(modelCard: ApiModelConfigItem): boolean {
+  return !shouldShowModelAudioToggle(modelCard);
 }
 
 function isModelVideoToggleDisabled(modelCard: ApiModelConfigItem): boolean {
@@ -1059,6 +1082,7 @@ function cloneProvider(provider: ApiProviderConfigItem): ApiProviderConfigItem {
         model: String(model.model || "").trim(),
         deprecated: !!model.deprecated,
         enableImage: !!model.enableImage,
+        enableAudio: !!model.enableAudio,
         enableVideo: !!model.enableVideo,
         enableTools: model.enableTools !== false,
         reasoningEffort: normalizedModelReasoningEffort(provider, model),
@@ -1126,6 +1150,7 @@ function normalizeProviderForCompare(provider: ApiProviderConfigItem) {
         model: String(model.model || "").trim(),
         deprecated: !!model.deprecated,
         enableImage: !!model.enableImage,
+        enableAudio: !!model.enableAudio,
         enableVideo: !!model.enableVideo,
         enableTools: model.enableTools !== false,
         reasoningEffort: normalizedModelReasoningEffort(provider, model),
@@ -1213,6 +1238,7 @@ function createModel(seed: string, name = "gpt-4o-mini"): ApiModelConfigItem {
     id: `api-model-${seed}`,
     model: name,
     enableImage: false,
+    enableAudio: false,
     enableVideo: false,
     enableTools: true,
     reasoningEffort: DEFAULT_REASONING_EFFORT,
@@ -1588,6 +1614,7 @@ async function syncModelMetadata(modelCard: ApiModelConfigItem) {
       input: {
         requestFormat: provider.requestFormat,
         model,
+        baseUrl: provider.baseUrl,
       },
     });
     if (!metadata?.found) {
@@ -1612,6 +1639,7 @@ async function syncModelMetadata(modelCard: ApiModelConfigItem) {
     modelCard.enableVideo = metadata.enableVideo === true;
     if (typeof metadata.enableAudio === "boolean") {
       nextLimits.enableAudio = metadata.enableAudio;
+      modelCard.enableAudio = metadata.enableAudio;
     }
     if (typeof metadata.enableTools === "boolean") {
       nextLimits.enableTools = metadata.enableTools;
