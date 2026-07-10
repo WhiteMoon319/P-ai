@@ -500,7 +500,6 @@ type IdeContextQueryResult = {
 const SYSTEM_NOTIFICATION_CONVERSATION_ID = "system-notification-conversation";
 const SYSTEM_NOTIFICATION_DISPLAY_TITLE = "P-ai系统";
 const SIDEBAR_DRAFT_USER_ID_PREFIX = "__draft_user__:";
-
 type SidebarConversationTab = ChatLeftPanelMode;
 
 const transport = useWsTransport();
@@ -2132,20 +2131,23 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
   sendSubmitting.value = true;
   if (!hadForegroundRound) busy.value = true;
   try {
-    const result = await transport.request<{ queued?: boolean; assistantMessageId?: string }>("chat.send", {
+    const result = await transport.request<{ queued?: boolean; userMessageId?: string; assistantMessageId?: string; accepted?: boolean; ingress?: string }>("chat.send", {
       conversationId: activeConversationId.value,
       text,
       images,
       attachments,
       extraTextBlocks,
     });
+    const userMessageId = String(result?.userMessageId || "").trim();
     const assistantMessageId = String(result?.assistantMessageId || "").trim();
+    if (optimisticDraftId && userMessageId) {
+      replaceOptimisticOwnUserDraftById(optimisticDraftId, userMessageId);
+    }
     if (assistantMessageId) {
       streamingAssistantMessageId.value = assistantMessageId;
     }
-    if (result?.queued) {
-      if (optimisticDraftId) removeOptimisticOwnUserDraftById(optimisticDraftId);
-      if (!hadForegroundRound) busy.value = false;
+    if ((result?.queued || result?.accepted === false || String(result?.ingress || "").trim() === "queued") && !hadForegroundRound) {
+      busy.value = false;
     }
   } catch (error) {
     if (!hadForegroundRound) {
@@ -2602,6 +2604,33 @@ function normalizeSidebarMessages(nextMessages: ChatMessage[], previousMessages:
   return normalized;
 }
 
+function replaceOptimisticOwnUserDraftById(draftId: string, committedId: string) {
+  const normalizedDraftId = String(draftId || "").trim();
+  const normalizedCommittedId = String(committedId || "").trim();
+  if (!normalizedDraftId || !normalizedCommittedId) return false;
+  const draftIndex = messages.value.findIndex((item) => String(item.id || "").trim() === normalizedDraftId);
+  if (draftIndex < 0) return false;
+  const draftMessage = messages.value[draftIndex];
+  const committedMessage = messageWithStableRenderId(
+    {
+      ...draftMessage,
+      id: normalizedCommittedId,
+      providerMeta: {
+        ...((draftMessage.providerMeta || {}) as Record<string, unknown>),
+        _optimistic: undefined,
+      },
+    },
+    stableRenderIdFromMessage(draftMessage) || normalizedCommittedId,
+  );
+  const nextMessages = [...messages.value];
+  nextMessages[draftIndex] = committedMessage;
+  messages.value = nextMessages.filter((item, index) => {
+    if (index === draftIndex) return true;
+    return String(item.id || "").trim() !== normalizedCommittedId;
+  });
+  return true;
+}
+
 function replaceOptimisticOwnUserDraftIfNeeded(message: ChatMessage): boolean {
   if (!isLocalOwnUserMessage(message)) return false;
   const draftIndex = messages.value.findIndex((item) => isOptimisticOwnUserDraft(item));
@@ -2821,10 +2850,11 @@ function registerNotifications() {
   });
   transport.onNotification("chat.historyFlushed", appendMessages);
   transport.onNotification("chat.roundStarted", (payload) => {
-    const value = payload as { conversationId?: string };
+    const value = payload as { conversationId?: string; assistantMessageId?: string };
     if (value.conversationId === activeConversationId.value) {
       busy.value = true;
       clearStreamingState();
+      streamingAssistantMessageId.value = String(value.assistantMessageId || "").trim();
     }
   });
   transport.onNotification("chat.assistantDelta", (payload) => {

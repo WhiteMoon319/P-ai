@@ -5302,8 +5302,9 @@ fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, Strin
         })),
         &attachment_entries,
     );
+    let user_message_id = Uuid::new_v4().to_string();
     let user_message = ChatMessage {
-        id: Uuid::new_v4().to_string(),
+        id: user_message_id.clone(),
         role: "user".to_string(),
         created_at: now_iso(),
         speaker_agent_id: None,
@@ -5328,6 +5329,7 @@ fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, Strin
     runtime_context.root_conversation_id = Some(conversation_id.clone());
     runtime_context.executor_agent_id = Some(agent_id.clone());
     runtime_context.executor_department_id = Some(department_id.clone());
+    let assistant_message_id = Uuid::new_v4().to_string();
     let event = ChatPendingEvent {
         id: event_id.clone(),
         conversation_id: conversation_id.clone(),
@@ -5336,7 +5338,7 @@ fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, Strin
         queue_mode: ChatQueueMode::Normal,
         messages: vec![user_message],
         activate_assistant: true,
-        assistant_message_id: None,
+        assistant_message_id: Some(assistant_message_id.clone()),
         session_info: ChatSessionInfo {
             department_id,
             agent_id,
@@ -5345,13 +5347,24 @@ fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, Strin
         sender_info: None,
     };
     let ingress = ingress_chat_event(state, event)?;
-    let queued = matches!(ingress, ChatEventIngress::Queued { .. });
+    let (accepted, duplicate, ingress_label) = match &ingress {
+        ChatEventIngress::Direct(_) => (true, false, "direct"),
+        ChatEventIngress::Queued { .. } => (true, false, "queued"),
+        ChatEventIngress::Duplicate { .. } => (false, true, "duplicate"),
+    };
+    let queued = ingress_label == "queued";
     trigger_chat_event_after_ingress(state, ingress);
     Ok(serde_json::json!({
+        "accepted": accepted,
+        "duplicate": duplicate,
         "conversationId": conversation_id,
         "eventId": event_id,
+        "traceId": request_id,
         "requestId": request_id,
+        "ingress": ingress_label,
         "queued": queued,
+        "userMessageId": user_message_id,
+        "assistantMessageId": assistant_message_id,
     }))
 }
 
@@ -6862,6 +6875,82 @@ mod ide_context_tests {
             .expect("lock ide context test mutex")
     }
 
+    fn ide_context_test_state() -> AppState {
+        let root = std::env::temp_dir().join(format!("eca-ide-context-test-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create temp test root");
+        std::fs::create_dir_all(root.join("llm-workspace")).expect("create temp llm workspace");
+        AppState {
+            app_handle: Arc::new(Mutex::new(None)),
+            config_path: root.join("app_config.toml"),
+            data_path: root.join("app_data.json"),
+            llm_workspace_path: root.join("llm-workspace"),
+            shared_http_client: reqwest::Client::new(),
+            terminal_shell: detect_default_terminal_shell(),
+            terminal_shell_candidates: detect_terminal_shell_candidates(),
+            conversation_lock: Arc::new(ConversationDomainLock::new()),
+            memory_lock: Arc::new(Mutex::new(())),
+            cached_config: Arc::new(Mutex::new(None)),
+            cached_config_mtime: Arc::new(Mutex::new(None)),
+            cached_agents: Arc::new(Mutex::new(None)),
+            cached_agents_mtime: Arc::new(Mutex::new(None)),
+            cached_runtime_state: Arc::new(Mutex::new(None)),
+            cached_runtime_state_mtime: Arc::new(Mutex::new(None)),
+            cached_chat_index: Arc::new(Mutex::new(None)),
+            cached_conversation_metadata: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            cached_conversation_mtimes: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            cached_app_data: Arc::new(Mutex::new(None)),
+            cached_app_data_signature: Arc::new(Mutex::new(None)),
+            cached_app_data_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            app_data_persist_pending: Arc::new(Mutex::new(None)),
+            app_data_persist_notify: Arc::new(tokio::sync::Notify::new()),
+            app_data_persist_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            app_data_persist_latest_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            conversation_persist_pending: Arc::new(Mutex::new(None)),
+            conversation_persist_notify: Arc::new(tokio::sync::Notify::new()),
+            conversation_persist_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            conversation_persist_latest_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            cached_conversation_dirty_ids: Arc::new(Mutex::new(std::collections::HashSet::new())),
+            cached_deleted_conversation_ids: Arc::new(Mutex::new(std::collections::HashSet::new())),
+            app_data_persist_write_lock: Arc::new(Mutex::new(())),
+            last_panic_snapshot: Arc::new(Mutex::new(None)),
+            inflight_chat_abort_handles: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            inflight_tool_abort_handles: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            inflight_completed_tool_history: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            terminal_session_roots: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            terminal_live_sessions: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
+            terminal_pending_approvals: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            llm_round_logs: Arc::new(Mutex::new(RecentLlmRoundLogs::default())),
+            conversation_runtime_slots: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            conversation_processing_claims: Arc::new(Mutex::new(std::collections::HashSet::new())),
+            goal_continue_suppressed_conversation_ids: Arc::new(Mutex::new(
+                std::collections::HashSet::new(),
+            )),
+            pending_chat_result_senders: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            pending_chat_delta_channels: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            accepted_submit_trace_ids: Arc::new(Mutex::new(std::collections::VecDeque::new())),
+            active_chat_view_bindings: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            conversation_list_activity_marks: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            dequeue_lock: Arc::new(Mutex::new(())),
+            task_scheduler_notify: Arc::new(tokio::sync::Notify::new()),
+            delegate_runtime_threads: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            delegate_recent_threads: Arc::new(Mutex::new(std::collections::VecDeque::new())),
+            provider_streaming_disabled_keys: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            provider_system_message_user_fallback_keys: Arc::new(Mutex::new(
+                std::collections::HashSet::new(),
+            )),
+            provider_request_gates: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
+            remote_im_contact_runtime_states: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            remote_im_reply_delegate_runtimes: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            remote_im_reply_delegate_semaphore: Arc::new(tokio::sync::Semaphore::new(8)),
+            remote_im_channel_state_write_locks: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            hidden_skill_snapshot_cache: Arc::new(Mutex::new(String::new())),
+            preferred_release_source: Arc::new(Mutex::new("github".to_string())),
+            migration_preview_dirs: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            delegate_active_ids: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
+            backend_ready: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }
+    }
+
     #[test]
     fn ide_context_remote_password_accepts_human_input_format() {
         let runtime = IdeContextRuntime::new();
@@ -7155,5 +7244,66 @@ mod ide_context_tests {
         let refreshed = err.1.expect("should issue refreshed token");
         let auth = runtime.bridge_auth.lock().expect("lock auth");
         assert!(auth.valid_tokens.contains_key(&refreshed));
+    }
+
+    #[test]
+    fn ide_chat_send_message_should_return_formal_assistant_message_id_immediately() {
+        let state = ide_context_test_state();
+        let created = conversation_service_v2()
+            .create_conversation(
+                &state,
+                &CreateUnarchivedConversationInput {
+                    api_config_id: None,
+                    agent_id: Some(DEFAULT_AGENT_ID.to_string()),
+                    department_id: Some(ASSISTANT_DEPARTMENT_ID.to_string()),
+                    title: Some("IDE发送即时assistant气泡".to_string()),
+                    copy_source_conversation_id: None,
+                    shell_workspaces: None,
+                    shell_autonomous_mode: None,
+                },
+            )
+            .expect("create conversation");
+
+        let result = ide_chat_send_message(
+            &state,
+            serde_json::json!({
+                "conversationId": created.conversation_id,
+                "text": "你好",
+            }),
+        )
+        .expect("send message");
+
+        let assistant_message_id = result
+            .get("assistantMessageId")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        let user_message_id = result
+            .get("userMessageId")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        let accepted = result
+            .get("accepted")
+            .and_then(Value::as_bool);
+        let ingress = result
+            .get("ingress")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+
+        assert!(
+            !user_message_id.is_empty(),
+            "chat.send 应立即返回正式 userMessageId"
+        );
+        assert!(
+            !assistant_message_id.is_empty(),
+            "chat.send 应立即返回正式 assistantMessageId"
+        );
+        assert_eq!(accepted, Some(true));
+        assert!(!ingress.is_empty(), "chat.send 应返回 ingress");
     }
 }
