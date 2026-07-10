@@ -1405,18 +1405,12 @@ fn usage_ensure_conversation_meta_model_name_resolved(
     api_config_id: &str,
     config: &AppConfig,
 ) -> Result<ConversationCumulativeUsage, String> {
-    let (updated_meta, _, _) = state_update_conversation_metadata_cached(
+    conversation_service_v2().backfill_conversation_cumulative_usage_model_name(
         state,
         conversation_id,
-        |cached| {
-            Ok(usage_backfill_cumulative_model_name(
-                &mut cached.cumulative_usage,
-                api_config_id,
-                config,
-            ))
-        },
-    )?;
-    Ok(updated_meta.cumulative_usage.clone())
+        api_config_id,
+        config,
+    )
 }
 
 fn usage_push_conversation(

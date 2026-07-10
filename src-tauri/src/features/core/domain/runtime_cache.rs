@@ -611,6 +611,59 @@ fn state_mark_conversation_metadata_direct_persisted(
     Ok(meta)
 }
 
+fn state_mark_conversation_metadata_cached_persisted(
+    state: &AppState,
+    conversation_id: &str,
+) -> Result<(), String> {
+    let mutation_gate = conversation_mutation_gate(&state.data_path, conversation_id)?;
+    let _guard = mutation_gate.lock().map_err(|err| {
+        named_lock_error("conversation_mutation_gate", file!(), line!(), module_path!(), &err)
+    })?;
+    let disk_mtime = conversation_shard_modified_time(&state.data_path, conversation_id);
+    {
+        let mut cached_mtimes = state
+            .cached_conversation_mtimes
+            .lock()
+            .map_err(|_| "Failed to lock cached conversation mtimes".to_string())?;
+        cached_mtimes.insert(conversation_id.to_string(), disk_mtime);
+    }
+    {
+        let mut dirty_ids = state
+            .cached_conversation_dirty_ids
+            .lock()
+            .map_err(|_| "Failed to lock cached conversation dirty ids".to_string())?;
+        dirty_ids.remove(conversation_id);
+    }
+    {
+        let mut deleted_ids = state
+            .cached_deleted_conversation_ids
+            .lock()
+            .map_err(|_| "Failed to lock cached deleted conversation ids".to_string())?;
+        deleted_ids.remove(conversation_id);
+    }
+    {
+        let mut pending = state
+            .conversation_persist_pending
+            .lock()
+            .map_err(|_| "Failed to lock pending conversation persist".to_string())?;
+        let should_clear_slot = if let Some(slot) = pending.as_mut() {
+            slot.conversations.remove(conversation_id);
+            slot.metadata_conversation_ids.remove(conversation_id);
+            slot.deleted_conversation_ids.remove(conversation_id);
+            slot.conversations.is_empty()
+                && slot.metadata_conversation_ids.is_empty()
+                && slot.deleted_conversation_ids.is_empty()
+        } else {
+            false
+        };
+        if should_clear_slot {
+            *pending = None;
+        }
+    }
+    refresh_cached_app_data_dirty(state);
+    Ok(())
+}
+
 fn state_update_conversation_metadata_cached<T>(
     state: &AppState,
     conversation_id: &str,

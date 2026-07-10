@@ -360,7 +360,7 @@ fn instant_batch_archive_conversation_metadata_only(
     replacement_seed_api: &ApiConfig,
     source: &Conversation,
 ) -> Result<InstantArchiveConversationMutationResult, String> {
-    let guard = state.conversation_lock.lock().map_err(|err| {
+    let _guard = state.conversation_lock.lock().map_err(|err| {
         format!(
             "Failed to lock state mutex at {}:{} {}: {err}",
             file!(),
@@ -368,99 +368,12 @@ fn instant_batch_archive_conversation_metadata_only(
             module_path!()
         )
     })?;
-    let source_conversation_meta = conversation_service_v2()
-        .get_conversation_meta(state, &source.id)
-        .map_err(|err| format!("当前没有可归档的活动对话：{}", err))?;
-    let source_conversation =
-        conversation_service_v2().build_conversation_record_from_meta_view(&source_conversation_meta);
-    let already_archived = source_conversation_meta.status.trim() == "archived";
-    if !already_archived
-        && !conversation_service_v2().conversation_meta_is_local_normal_chat_meta_view(&source_conversation_meta)
-    {
-        drop(guard);
-        return Err("当前没有可归档的活动对话。".to_string());
-    }
-
-    let runtime = state_read_runtime_state_cached(state)?;
-    let runtime_snapshot = load_runtime_organization_snapshot(state)?;
-    let agents = runtime_snapshot.agents;
-    let chat_index = state_read_chat_index_cached(state)?;
-    let active_conversation_id = if let Some(conversation_id) = chat_index
-        .conversations
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, item)| {
-            let conversation_meta = conversation_service_v2()
-                .get_conversation_meta(state, item.id.as_str())
-                .ok()?;
-            Some((idx, conversation_meta))
-        })
-        .filter(|(_, conversation_meta)| {
-            conversation_meta.id != source.id
-                && conversation_service_v2()
-                    .conversation_meta_is_local_normal_chat_meta_view(conversation_meta)
-        })
-        .max_by(|(idx_a, a), (idx_b, b)| {
-            let a_updated = a.updated_at.trim();
-            let b_updated = b.updated_at.trim();
-            let a_created = a.created_at.trim();
-            let b_created = b.created_at.trim();
-            a_updated
-                .cmp(b_updated)
-                .then_with(|| a_created.cmp(b_created))
-                .then_with(|| idx_a.cmp(idx_b))
-        })
-        .map(|(_, conversation_meta)| conversation_meta.id.to_string())
-    {
-        conversation_id
-    } else {
-        let conversation = build_archive_replacement_conversation(
-            state,
-            &agents,
-            &runtime.assistant_department_agent_id,
-            replacement_seed_api,
-            source,
-        )?;
-        let conversation_id = conversation.id.clone();
-        state_schedule_conversation_persist(state, &conversation)?;
-        conversation_id
-    };
-
-    if !already_archived {
-        let previous_status = source_conversation.status.clone();
-        let now = now_iso();
-        let (conversation, (), _) = state_update_conversation_metadata_cached(
-            state,
-            &source.id,
-            |conversation| {
-                conversation.status = "archived".to_string();
-                conversation.summary.clear();
-                conversation.fast_request_turns.clear();
-                conversation.archived_at = Some(now.clone());
-                conversation.updated_at = now.clone();
-                Ok(())
-            },
-        )?;
-        runtime_log_info(format!(
-            "[批量归档] 完成，任务=即时标记归档，conversation_id={}，previous_status={}，archived_at={}",
-            conversation.id,
-            previous_status,
-            conversation.archived_at.as_deref().unwrap_or("")
-        ));
-    }
-    let app_config = runtime_snapshot.config;
-    let unarchived_conversations =
-        conversation_service_v2().collect_unarchived_conversation_summaries_cached(state, &app_config)?;
-    let overview_payload = UnarchivedConversationOverviewUpdatedPayload {
-        preferred_conversation_id: Some(active_conversation_id.clone()),
-        unarchived_conversations,
-    };
-    drop(guard);
-    Ok(InstantArchiveConversationMutationResult {
-        active_conversation_id,
-        overview_payload,
-        already_archived,
-    })
+    conversation_service_v2().archive_conversation(
+        state,
+        replacement_seed_api,
+        source,
+        "batch_archive_conversations",
+    )
 }
 
 fn prepare_batch_archive_conversation(

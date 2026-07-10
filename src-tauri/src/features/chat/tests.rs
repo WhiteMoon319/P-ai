@@ -3947,7 +3947,8 @@
     fn foreground_snapshot_should_include_cached_preferred_model() {
         let state = test_chat_runtime_state();
         let now = now_iso();
-        let conversation = test_chat_conversation("conversation-snapshot-model", "active", &now);
+        let mut conversation = test_chat_conversation("conversation-snapshot-model", "active", &now);
+        conversation.messages.push(test_text_message("assistant", "最后一条消息", &now));
         write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
         state_mark_conversation_direct_persisted(&state, &conversation)
             .expect("mark persisted");
@@ -3973,6 +3974,7 @@
             snapshot.preferred_api_config_id.as_deref(),
             Some("api-model-snapshot")
         );
+        assert_eq!(snapshot.last_message_id.as_deref(), Some(conversation.messages[0].id.as_str()));
         assert!(
             !summaries_json.contains("preferredApiConfigId"),
             "conversation overview must not carry model metadata"
@@ -4268,6 +4270,7 @@
             .expect("store meta exists");
         assert_eq!(meta.message_count(), 3);
         assert_eq!(meta.body_message_count(), 3);
+        assert_eq!(meta.last_message_id(), Some(appended.id.as_str()));
         assert!(meta.has_assistant_reply());
 
         let stored_messages = message_store::read_ready_message_store_all_messages(&store_paths)

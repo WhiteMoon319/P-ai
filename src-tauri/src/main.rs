@@ -1064,6 +1064,7 @@ fn main() {
             set_active_unarchived_conversation,
             switch_active_conversation_snapshot,
             get_foreground_conversation_light_snapshot,
+            get_foreground_conversation_freshness_snapshot,
             mark_conversation_read,
             set_conversation_plan_mode,
             set_conversation_preferred_model,

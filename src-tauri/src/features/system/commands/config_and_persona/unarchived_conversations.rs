@@ -128,6 +128,47 @@ async fn get_foreground_conversation_light_snapshot(
     .map_err(|err| format!("读取前台轻量快照任务异常：{err}"))?
 }
 
+#[tauri::command]
+async fn get_foreground_conversation_freshness_snapshot(
+    input: ForegroundConversationFreshnessInput,
+    state: State<'_, AppState>,
+) -> Result<ForegroundConversationFreshnessOutput, String> {
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        get_foreground_conversation_freshness_snapshot_blocking(input, &app_state)
+    })
+    .await
+    .map_err(|err| format!("读取前台 freshness 快照任务异常：{err}"))?
+}
+
+fn get_foreground_conversation_freshness_snapshot_blocking(
+    input: ForegroundConversationFreshnessInput,
+    state: &AppState,
+) -> Result<ForegroundConversationFreshnessOutput, String> {
+    let conversation_meta = conversation_service_v2().get_foreground_conversation_meta_for_fast_path(
+        state,
+        input.conversation_id.as_deref(),
+        input.agent_id.as_deref(),
+    )?;
+    Ok(if let Some(conversation_meta) = conversation_meta {
+        let last_message_id = if conversation_meta.last_message_id.is_some() {
+            conversation_meta.last_message_id
+        } else {
+            build_foreground_conversation_snapshot_from_meta_view(state, &conversation_meta, 1)?
+                .last_message_id
+        };
+        ForegroundConversationFreshnessOutput {
+            conversation_id: conversation_meta.id,
+            last_message_id,
+        }
+    } else {
+        ForegroundConversationFreshnessOutput {
+            conversation_id: String::new(),
+            last_message_id: None,
+        }
+    })
+}
+
 fn get_foreground_conversation_light_snapshot_blocking(
     input: ForegroundConversationLightSnapshotInput,
     state: &AppState,
@@ -191,6 +232,7 @@ fn get_foreground_conversation_light_snapshot_blocking(
     Ok(ForegroundConversationLightSnapshotOutput {
         conversation_id: snapshot.conversation_id,
         messages: snapshot.messages,
+        last_message_id: snapshot.last_message_id,
         has_more_history: snapshot.has_more_history,
         runtime_state: snapshot.runtime_state,
         current_todo: snapshot.current_todo,

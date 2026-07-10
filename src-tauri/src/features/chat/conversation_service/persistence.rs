@@ -105,6 +105,7 @@ fn build_foreground_conversation_snapshot_from_conversation(
     Ok(ForegroundConversationSnapshotCore {
         conversation_id: conversation.id.clone(),
         messages,
+        last_message_id: conversation.messages.last().map(|message| message.id.clone()),
         has_more_history,
         runtime_state: unarchived_conversation_runtime_state(state, &conversation.id),
         current_todo: conversation_current_todo_text(conversation),
@@ -138,9 +139,14 @@ fn build_foreground_conversation_snapshot_from_meta_view(
         let start = total_messages.saturating_sub(recent_limit);
         (messages[start..].to_vec(), start > 0)
     };
+    let last_message_id = conversation_meta
+        .last_message_id
+        .clone()
+        .or_else(|| messages.last().map(|message| message.id.clone()));
     Ok(ForegroundConversationSnapshotCore {
         conversation_id: conversation_id.clone(),
         messages,
+        last_message_id,
         has_more_history,
         runtime_state: unarchived_conversation_runtime_state(state, &conversation_id),
         current_todo: conversation_current_todo_text_from_items(&conversation_meta.current_todos),

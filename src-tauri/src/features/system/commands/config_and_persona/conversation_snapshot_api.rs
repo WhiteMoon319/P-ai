@@ -844,6 +844,8 @@ struct SwitchActiveConversationSnapshotOutput {
 struct ForegroundConversationLightSnapshotOutput {
     conversation_id: String,
     messages: Vec<ChatMessage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    last_message_id: Option<String>,
     has_more_history: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     runtime_state: Option<MainSessionState>,
@@ -869,12 +871,30 @@ struct ForegroundConversationLightSnapshotOutput {
 struct ForegroundConversationSnapshotCore {
     conversation_id: String,
     messages: Vec<ChatMessage>,
+    last_message_id: Option<String>,
     has_more_history: bool,
     runtime_state: Option<MainSessionState>,
     current_todo: Option<String>,
     current_todos: Vec<ConversationTodoItem>,
     preferred_api_config_id: Option<String>,
     active_goal: Option<ConversationGoalState>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ForegroundConversationFreshnessInput {
+    #[serde(default)]
+    conversation_id: Option<String>,
+    #[serde(default)]
+    agent_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ForegroundConversationFreshnessOutput {
+    conversation_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    last_message_id: Option<String>,
 }
 
 const DEFAULT_FOREGROUND_SNAPSHOT_RECENT_LIMIT: usize = 4;

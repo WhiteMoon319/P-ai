@@ -205,15 +205,21 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
   }
 
   async function requestLatestFormalTailMessageId(conversationId: string): Promise<string> {
-    const snapshot = await invokeTauri<any>("get_foreground_conversation_light_snapshot", {
+    const snapshot = await invokeTauri<any>("get_foreground_conversation_freshness_snapshot", {
       input: {
         conversationId,
         agentId: null,
-        limit: options.foregroundSnapshotRecentLimit,
       },
     });
-    const messages = formalizeMessages(Array.isArray(snapshot?.messages) ? snapshot.messages : []);
-    return String(messages[messages.length - 1]?.id || "").trim();
+    return String(snapshot?.lastMessageId || "").trim();
+  }
+
+  async function markConversationReadOnForegroundFocus(conversationId: string): Promise<void> {
+    const normalizedConversationId = String(conversationId || "").trim();
+    if (!normalizedConversationId) return;
+    await invokeTauri("mark_conversation_read", {
+      conversationId: normalizedConversationId,
+    });
   }
 
   async function requestConversationRuntimeSnapshot(conversationId: string): Promise<ConversationRuntimeSnapshot> {
@@ -340,6 +346,12 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
       tailMatched: latestTailId === currentTailId,
     });
     if (latestTailId === currentTailId) {
+      try {
+        await markConversationReadOnForegroundFocus(conversationId);
+      }
+      catch (error) {
+        console.warn("[聊天前台恢复] focus 已读同步失败:", error);
+      }
       logFocusReconcile(seq, "tail 判定前台未过时", {
         conversationId,
         reason,

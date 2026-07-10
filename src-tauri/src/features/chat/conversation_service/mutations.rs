@@ -500,6 +500,7 @@ struct ReadyStoreRewindState {
     keep_count: usize,
     removed_messages: Vec<ChatMessage>,
     recalled_user_message: ChatMessage,
+    remaining_last_message_id: Option<String>,
     remaining_last_message_at: Option<String>,
     remaining_last_user_at: Option<String>,
     remaining_last_assistant_at: Option<String>,
@@ -519,6 +520,7 @@ fn read_ready_store_rewind_state_meta_view(
 ) -> Result<ReadyStoreRewindState, String> {
     let rewind_slice = message_store::read_ready_message_store_rewind_slice(store_paths, message_id)?
         .ok_or_else(|| "Target message not found in active conversation.".to_string())?;
+    let mut remaining_last_message_id = None::<String>;
     let mut remaining_last_message_at = None::<String>;
     let mut remaining_last_user_at = None::<String>;
     let mut remaining_last_assistant_at = None::<String>;
@@ -541,6 +543,9 @@ fn read_ready_store_rewind_state_meta_view(
         };
         if page.messages.is_empty() {
             break;
+        }
+        if remaining_last_message_id.is_none() {
+            remaining_last_message_id = page.messages.last().map(|message| message.id.clone());
         }
         if remaining_last_message_at.is_none() {
             remaining_last_message_at = page.messages.last().map(|message| message.created_at.clone());
@@ -624,6 +629,7 @@ fn read_ready_store_rewind_state_meta_view(
         keep_count: rewind_slice.keep_count,
         removed_messages: rewind_slice.removed_messages,
         recalled_user_message: rewind_slice.recalled_user_message,
+        remaining_last_message_id,
         remaining_last_message_at,
         remaining_last_user_at,
         remaining_last_assistant_at,

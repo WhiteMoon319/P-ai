@@ -240,6 +240,7 @@ struct ConversationMetaView {
     current_todos: Vec<ConversationTodoItem>,
     active_goal: Option<ConversationGoalState>,
     fast_request_turns: Vec<FastRequestTurn>,
+    last_message_id: Option<String>,
     preview_messages: Vec<ConversationMetaPreviewMessage>,
 }
 
@@ -365,6 +366,22 @@ struct MessageProviderMetaBatchPatchInput {
 
 impl ConversationMetaView {
     fn from_meta(meta: &message_store::ConversationShardMeta) -> Self {
+        let preview_messages = meta
+            .preview_messages()
+            .iter()
+            .map(|item| ConversationMetaPreviewMessage {
+                message_id: item.message_id.clone(),
+                role: item.role.clone(),
+                speaker_agent_id: item.speaker_agent_id.clone(),
+                created_at: item.created_at.clone(),
+                text_preview: item.text_preview.clone(),
+                has_image: item.has_image,
+                has_pdf: item.has_pdf,
+                has_audio: item.has_audio,
+                has_attachment: item.has_attachment,
+            })
+            .collect::<Vec<_>>();
+        let last_message_id = meta.last_message_id().map(ToOwned::to_owned);
         Self {
             id: meta.id().to_string(),
             title: meta.title().to_string(),
@@ -406,21 +423,8 @@ impl ConversationMetaView {
             current_todos: meta.current_todos().to_vec(),
             active_goal: meta.active_goal().cloned(),
             fast_request_turns: meta.fast_request_turns().to_vec(),
-            preview_messages: meta
-                .preview_messages()
-                .iter()
-                .map(|item| ConversationMetaPreviewMessage {
-                    message_id: item.message_id.clone(),
-                    role: item.role.clone(),
-                    speaker_agent_id: item.speaker_agent_id.clone(),
-                    created_at: item.created_at.clone(),
-                    text_preview: item.text_preview.clone(),
-                    has_image: item.has_image,
-                    has_pdf: item.has_pdf,
-                    has_audio: item.has_audio,
-                    has_attachment: item.has_attachment,
-                })
-                .collect(),
+            last_message_id,
+            preview_messages,
         }
     }
 }
@@ -1017,6 +1021,14 @@ impl ConversationServiceV2 {
             .unwrap_or(false)
     }
 
+    fn mark_conversation_metadata_cached_persisted(
+        &self,
+        state: &AppState,
+        conversation_id: &str,
+    ) -> Result<(), String> {
+        state_mark_conversation_metadata_cached_persisted(state, conversation_id)
+    }
+
     fn increment_conversation_unread_count_if_background(
         &self,
         state: &AppState,
@@ -1085,7 +1097,7 @@ impl ConversationServiceV2 {
             &ready_meta.to_persist_meta(),
             updated_message,
         )?;
-        state_mark_conversation_metadata_direct_persisted(state, conversation_id)?;
+        self.mark_conversation_metadata_cached_persisted(state, conversation_id)?;
         Ok(())
     }
 
@@ -2377,32 +2389,34 @@ impl ConversationServiceV2 {
         } else {
             conversation_meta.unread_count.saturating_add(1)
         };
-        let (_, (), _) = state_update_conversation_metadata_cached(
+        let (updated_meta, (), _) = state_update_conversation_meta_cached(
             state,
             normalized_conversation_id,
             |cached| {
-                cached.unread_count = unread_count;
-                cached.updated_at = updated_at.clone();
-                cached.last_user_at = last_user_at.clone();
-                cached.last_assistant_at = last_assistant_at.clone();
+                let mut metadata_conversation =
+                    self.build_conversation_snapshot_from_meta(cached, Vec::new());
+                metadata_conversation.unread_count = unread_count;
+                metadata_conversation.updated_at = updated_at.clone();
+                metadata_conversation.last_user_at = last_user_at.clone();
+                metadata_conversation.last_assistant_at = last_assistant_at.clone();
+                cached.apply_metadata_fields_from_conversation(&metadata_conversation);
+                cached.apply_appended_messages(std::slice::from_ref(message));
                 Ok(())
             },
         )?;
-        let mut updated_meta_view = conversation_meta.clone();
-        updated_meta_view.unread_count = unread_count;
-        updated_meta_view.updated_at = updated_at.clone();
-        updated_meta_view.last_user_at = last_user_at.clone();
-        updated_meta_view.last_assistant_at = last_assistant_at.clone();
+        let metadata_conversation =
+            self.build_conversation_snapshot_from_meta(&updated_meta, Vec::new());
+        state_upsert_chat_index_conversation_cached(state, &metadata_conversation)?;
         let mut ready_meta = self
             .ensure_appendable_ready_message_store(state, normalized_conversation_id)?;
-        ready_meta.apply_metadata_fields_from_meta_view(&updated_meta_view);
+        ready_meta.apply_metadata_fields_from_meta(&updated_meta);
         ready_meta.apply_appended_messages(std::slice::from_ref(message));
         message_store::write_jsonl_snapshot_appended_messages_shard_from_meta(
             &store_paths,
             &ready_meta,
             std::slice::from_ref(message),
         )?;
-        state_mark_conversation_metadata_direct_persisted(state, normalized_conversation_id)?;
+        self.mark_conversation_metadata_cached_persisted(state, normalized_conversation_id)?;
         Ok(())
     }
 
@@ -2460,32 +2474,34 @@ impl ConversationServiceV2 {
         } else {
             conversation_meta.unread_count.saturating_add(messages.len())
         };
-        let (_, (), _) = state_update_conversation_metadata_cached(
+        let (updated_meta, (), _) = state_update_conversation_meta_cached(
             state,
             normalized_conversation_id,
             |cached| {
-                cached.unread_count = unread_count;
-                cached.updated_at = updated_at.clone();
-                cached.last_user_at = last_user_at.clone();
-                cached.last_assistant_at = last_assistant_at.clone();
+                let mut metadata_conversation =
+                    self.build_conversation_snapshot_from_meta(cached, Vec::new());
+                metadata_conversation.unread_count = unread_count;
+                metadata_conversation.updated_at = updated_at.clone();
+                metadata_conversation.last_user_at = last_user_at.clone();
+                metadata_conversation.last_assistant_at = last_assistant_at.clone();
+                cached.apply_metadata_fields_from_conversation(&metadata_conversation);
+                cached.apply_appended_messages(messages);
                 Ok(())
             },
         )?;
-        let mut updated_meta_view = conversation_meta.clone();
-        updated_meta_view.unread_count = unread_count;
-        updated_meta_view.updated_at = updated_at.clone();
-        updated_meta_view.last_user_at = last_user_at.clone();
-        updated_meta_view.last_assistant_at = last_assistant_at.clone();
+        let metadata_conversation =
+            self.build_conversation_snapshot_from_meta(&updated_meta, Vec::new());
+        state_upsert_chat_index_conversation_cached(state, &metadata_conversation)?;
         let mut ready_meta = self
             .ensure_appendable_ready_message_store(state, normalized_conversation_id)?;
-        ready_meta.apply_metadata_fields_from_meta_view(&updated_meta_view);
+        ready_meta.apply_metadata_fields_from_meta(&updated_meta);
         ready_meta.apply_appended_messages(messages);
         message_store::write_jsonl_snapshot_appended_messages_shard_from_meta(
             &store_paths,
             &ready_meta,
             messages,
         )?;
-        state_mark_conversation_metadata_direct_persisted(state, normalized_conversation_id)?;
+        self.mark_conversation_metadata_cached_persisted(state, normalized_conversation_id)?;
         Ok(())
     }
 
@@ -2536,32 +2552,43 @@ impl ConversationServiceV2 {
         } else {
             conversation_meta.unread_count.saturating_add(1)
         };
-        let (updated_meta_conversation, (), _) = state_update_conversation_metadata_cached(
+        let (updated_meta, (), _) = state_update_conversation_meta_cached(
             state,
             conversation_id,
             |cached| {
-                cached.unread_count = unread_count;
-                cached.updated_at = updated_at.clone();
-                cached.last_user_at = Some(updated_at.clone());
+                let mut metadata_conversation =
+                    self.build_conversation_snapshot_from_meta(cached, Vec::new());
+                metadata_conversation.unread_count = unread_count;
+                metadata_conversation.updated_at = updated_at.clone();
+                metadata_conversation.last_user_at = Some(updated_at.clone());
                 if !memory_recall_ids.is_empty() {
                     for memory_id in &memory_recall_ids {
-                        if !cached.memory_recall_table.iter().any(|item| item == memory_id) {
-                            cached.memory_recall_table.push(memory_id.clone());
+                        if !metadata_conversation
+                            .memory_recall_table
+                            .iter()
+                            .any(|item| item == memory_id)
+                        {
+                            metadata_conversation.memory_recall_table.push(memory_id.clone());
                         }
                     }
                 }
+                cached.apply_metadata_fields_from_conversation(&metadata_conversation);
+                cached.apply_appended_messages(std::slice::from_ref(&input.message));
                 Ok(())
             },
         )?;
+        let metadata_conversation =
+            self.build_conversation_snapshot_from_meta(&updated_meta, Vec::new());
+        state_upsert_chat_index_conversation_cached(state, &metadata_conversation)?;
         let mut ready_meta = self.ensure_appendable_ready_message_store(state, conversation_id)?;
-        ready_meta.apply_metadata_fields_from_conversation(&updated_meta_conversation);
+        ready_meta.apply_metadata_fields_from_meta(&updated_meta);
         ready_meta.apply_appended_messages(std::slice::from_ref(&input.message));
         message_store::write_jsonl_snapshot_appended_messages_shard_from_meta(
             &store_paths,
             &ready_meta,
             std::slice::from_ref(&input.message),
         )?;
-        state_mark_conversation_metadata_direct_persisted(state, conversation_id)?;
+        self.mark_conversation_metadata_cached_persisted(state, conversation_id)?;
         Ok(())
     }
 
@@ -2761,36 +2788,30 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn get_foreground_snapshot(
+    fn get_foreground_conversation_meta_for_fast_path(
         &self,
         state: &AppState,
         conversation_id: Option<&str>,
         agent_id: Option<&str>,
-        recent_limit: usize,
-    ) -> Result<ForegroundConversationSnapshotCore, String> {
-        let direct_conversation_id = conversation_id
+    ) -> Result<Option<ConversationMetaView>, String> {
+        if let Some(conversation_id) = conversation_id
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned);
-
-        let mut snapshot = if let Some(conversation_id) = direct_conversation_id {
-            let conversation_meta = self.get_conversation_meta(state, &conversation_id)?;
+        {
+            let conversation_meta = self.get_conversation_meta(state, conversation_id)?;
             if self.conversation_meta_is_unarchived_meta_view(&conversation_meta)
                 && (conversation_meta.visible_in_foreground_lists
                     || conversation_meta.is_remote_im_contact)
             {
-                build_foreground_conversation_snapshot_from_meta_view(
-                    state,
-                    &conversation_meta,
-                    recent_limit,
-                )?
-            } else {
-                return Err(format!(
-                    "Conversation not available for chat view: {}",
-                    conversation_id
-                ));
+                return Ok(Some(conversation_meta));
             }
-        } else if let Some(main_conversation_id) = state_read_runtime_state_cached(state)?
+            return Err(format!(
+                "Conversation not available for chat view: {}",
+                conversation_id
+            ));
+        }
+
+        if let Some(main_conversation_id) = state_read_runtime_state_cached(state)?
             .main_conversation_id
             .as_deref()
             .map(str::trim)
@@ -2804,42 +2825,55 @@ impl ConversationServiceV2 {
                     main_conversation_id
                 ));
             }
+            return Ok(Some(conversation_meta));
+        }
+
+        let mut app_config = state_read_config_cached(state)?;
+        let runtime = state_read_runtime_state_cached(state)?;
+        let agents = state_read_agents_cached(state)?;
+        let effective_agent_id = self.resolve_effective_agent_id_for_read(
+            state,
+            &mut app_config,
+            &agents,
+            &runtime.assistant_department_agent_id,
+            agent_id.unwrap_or_default(),
+        )?;
+        if let Some(target_conversation_id) =
+            self.resolve_latest_foreground_conversation_id(state, &effective_agent_id)?
+        {
+            return self
+                .get_conversation_meta(state, &target_conversation_id)
+                .map(Some);
+        }
+        Ok(None)
+    }
+
+    fn get_foreground_snapshot(
+        &self,
+        state: &AppState,
+        conversation_id: Option<&str>,
+        agent_id: Option<&str>,
+        recent_limit: usize,
+    ) -> Result<ForegroundConversationSnapshotCore, String> {
+        let mut snapshot = if let Some(conversation_meta) =
+            self.get_foreground_conversation_meta_for_fast_path(state, conversation_id, agent_id)?
+        {
             build_foreground_conversation_snapshot_from_meta_view(
                 state,
                 &conversation_meta,
                 recent_limit,
             )?
         } else {
-            let mut app_config = state_read_config_cached(state)?;
-            let runtime = state_read_runtime_state_cached(state)?;
-            let agents = state_read_agents_cached(state)?;
-            let effective_agent_id = self.resolve_effective_agent_id_for_read(
-                state,
-                &mut app_config,
-                &agents,
-                &runtime.assistant_department_agent_id,
-                agent_id.unwrap_or_default(),
-            )?;
-            if let Some(target_conversation_id) =
-                self.resolve_latest_foreground_conversation_id(state, &effective_agent_id)?
-            {
-                let conversation_meta = self.get_conversation_meta(state, &target_conversation_id)?;
-                build_foreground_conversation_snapshot_from_meta_view(
-                    state,
-                    &conversation_meta,
-                    recent_limit,
-                )?
-            } else {
-                ForegroundConversationSnapshotCore {
-                    conversation_id: String::new(),
-                    messages: Vec::new(),
-                    has_more_history: false,
-                    runtime_state: None,
-                    current_todo: None,
-                    current_todos: Vec::new(),
-                    preferred_api_config_id: None,
-                    active_goal: None,
-                }
+            ForegroundConversationSnapshotCore {
+                conversation_id: String::new(),
+                messages: Vec::new(),
+                last_message_id: None,
+                has_more_history: false,
+                runtime_state: None,
+                current_todo: None,
+                current_todos: Vec::new(),
+                preferred_api_config_id: None,
+                active_goal: None,
             }
         };
 
@@ -3092,34 +3126,38 @@ impl ConversationServiceV2 {
             started_at,
         )?;
         let updated_at = now_iso();
-        let mut updated_meta = message_store::read_ready_message_store_meta(&store_paths)?
-            .ok_or_else(|| {
-                format!(
-                    "撤回会话消息失败：缺少 ready 消息元数据，conversation_id={conversation_id}"
-                )
-            })?;
-        updated_meta.apply_metadata_fields_from_meta_view(&conversation_meta);
-        updated_meta.apply_truncated_rewind_state(
-            rewind_state.keep_count,
-            rewind_state.remaining_todos.clone(),
-            updated_at,
-            rewind_state.remaining_last_user_at.clone(),
-            rewind_state.remaining_last_assistant_at.clone(),
-            rewind_state.remaining_last_message_at.clone(),
-            rewind_state.remaining_body_message_count,
-            rewind_state.remaining_body_text_length,
-            rewind_state.remaining_last_assistant_at.is_some(),
-            rewind_state.remaining_has_context_compaction_message,
-            rewind_state.remaining_latest_summary_title.clone(),
-            rewind_state.remaining_preview_messages.clone(),
-        );
+        let (updated_meta, (), _) = state_update_conversation_meta_cached(
+            state,
+            &conversation_id,
+            |cached| {
+                cached.apply_truncated_rewind_state(
+                    rewind_state.keep_count,
+                    rewind_state.remaining_todos.clone(),
+                    updated_at.clone(),
+                    rewind_state.remaining_last_user_at.clone(),
+                    rewind_state.remaining_last_assistant_at.clone(),
+                    rewind_state.remaining_last_message_id.clone(),
+                    rewind_state.remaining_last_message_at.clone(),
+                    rewind_state.remaining_body_message_count,
+                    rewind_state.remaining_body_text_length,
+                    rewind_state.remaining_last_assistant_at.is_some(),
+                    rewind_state.remaining_has_context_compaction_message,
+                    rewind_state.remaining_latest_summary_title.clone(),
+                    rewind_state.remaining_preview_messages.clone(),
+                );
+                Ok(())
+            },
+        )?;
+        let metadata_conversation =
+            self.build_conversation_snapshot_from_meta(&updated_meta, Vec::new());
+        state_upsert_chat_index_conversation_cached(state, &metadata_conversation)?;
         let current_todo = conversation_current_todo_text_from_items(&rewind_state.remaining_todos);
         message_store::write_jsonl_snapshot_truncated_messages_shard_from_meta(
             &store_paths,
             &updated_meta,
             rewind_state.keep_count,
         )?;
-        state_mark_conversation_metadata_direct_persisted(state, &conversation_id)?;
+        self.mark_conversation_metadata_cached_persisted(state, &conversation_id)?;
         Ok(RewindConversationMutationResult {
             conversation_id,
             removed_count: rewind_state.removed_messages.len(),
@@ -4267,6 +4305,27 @@ impl ConversationServiceV2 {
             emit_provider_context_usage_update_from_conversation(state, &conversation, usage);
         }
         Ok(changed)
+    }
+
+    fn backfill_conversation_cumulative_usage_model_name(
+        &self,
+        state: &AppState,
+        conversation_id: &str,
+        api_config_id: &str,
+        config: &AppConfig,
+    ) -> Result<ConversationCumulativeUsage, String> {
+        let (updated_meta, _, _) = state_update_conversation_metadata_cached(
+            state,
+            conversation_id,
+            |cached| {
+                Ok(usage_backfill_cumulative_model_name(
+                    &mut cached.cumulative_usage,
+                    api_config_id,
+                    config,
+                ))
+            },
+        )?;
+        Ok(updated_meta.cumulative_usage.clone())
     }
 
     fn enqueue_delegate_completion_notification(
@@ -5455,7 +5514,7 @@ impl ConversationServiceV2 {
                 &ready_meta.to_persist_meta(),
                 &changed_messages,
             )?;
-            state_mark_conversation_metadata_direct_persisted(state, normalized_conversation_id)?;
+            self.mark_conversation_metadata_cached_persisted(state, normalized_conversation_id)?;
         }
         Ok(result)
     }
@@ -6509,35 +6568,42 @@ impl ConversationServiceV2 {
         .map(|page| page.selected_block_id);
         let compression_message_id = compression_message.id.clone();
         let now = now_iso();
-        let (conversation, (), _) = state_update_conversation_metadata_cached(
+        let (conversation_meta, (), _) = state_update_conversation_meta_cached(
             state,
             &source.id,
             |cached| {
-                cached.user_profile_snapshot =
+                let mut metadata_conversation =
+                    self.build_conversation_snapshot_from_meta(cached, Vec::new());
+                metadata_conversation.user_profile_snapshot =
                     refreshed_user_profile_snapshot.clone().unwrap_or_default();
-                cached.updated_at = now.clone();
-                cached.last_user_at = Some(now.clone());
+                metadata_conversation.updated_at = now.clone();
+                metadata_conversation.last_user_at = Some(now.clone());
+                cached.apply_metadata_fields_from_conversation(&metadata_conversation);
+                cached.apply_appended_messages(std::slice::from_ref(compression_message));
                 Ok(())
             },
         )?;
-        let active_conversation_id = Some(conversation.id.clone());
-        let mut conversation_meta = message_store::read_ready_message_store_meta(&store_paths)?
+        let metadata_conversation =
+            self.build_conversation_snapshot_from_meta(&conversation_meta, Vec::new());
+        state_upsert_chat_index_conversation_cached(state, &metadata_conversation)?;
+        let active_conversation_id = Some(metadata_conversation.id.clone());
+        let mut ready_meta = message_store::read_ready_message_store_meta(&store_paths)?
             .ok_or_else(|| {
                 format!(
                     "写入上下文整理消息失败：缺少 ready 消息元数据，conversation_id={}",
-                    conversation.id
+                    metadata_conversation.id
                 )
             })?;
-        conversation_meta.apply_metadata_fields_from_conversation(&conversation);
-        conversation_meta.apply_appended_messages(std::slice::from_ref(compression_message));
+        ready_meta.apply_metadata_fields_from_meta(&conversation_meta);
+        ready_meta.apply_appended_messages(std::slice::from_ref(compression_message));
         message_store::write_jsonl_snapshot_appended_messages_shard_from_meta(
             &store_paths,
-            &conversation_meta,
+            &ready_meta,
             std::slice::from_ref(compression_message),
         )?;
         // v3 保留远程联系人的完整 JSONL 历史；压缩消息只作为新消息追加。
         // 旧的“仅保留最后 block”策略会删掉正文并触发整会话 snapshot 重写。
-        state_mark_conversation_metadata_direct_persisted(state, &conversation.id)?;
+        self.mark_conversation_metadata_cached_persisted(state, &metadata_conversation.id)?;
 
         drop(guard);
 
@@ -6748,19 +6814,26 @@ impl ConversationServiceV2 {
                 history_flush_time,
             )?;
         conversation.updated_at = history_flush_time.to_string();
-        let (metadata_conversation, (), _) = state_update_conversation_metadata_cached(
+        let (metadata_conversation, (), _) = state_update_conversation_meta_cached(
             state,
             &conversation.id,
             |cached| {
-                cached.user_profile_snapshot = conversation.user_profile_snapshot.clone();
-                cached.memory_recall_table = conversation.memory_recall_table.clone();
-                cached.unread_count = conversation.unread_count;
-                cached.updated_at = conversation.updated_at.clone();
-                cached.last_user_at = conversation.last_user_at.clone();
-                cached.last_assistant_at = conversation.last_assistant_at.clone();
+                let mut metadata_snapshot =
+                    self.build_conversation_snapshot_from_meta(cached, Vec::new());
+                metadata_snapshot.user_profile_snapshot = conversation.user_profile_snapshot.clone();
+                metadata_snapshot.memory_recall_table = conversation.memory_recall_table.clone();
+                metadata_snapshot.unread_count = conversation.unread_count;
+                metadata_snapshot.updated_at = conversation.updated_at.clone();
+                metadata_snapshot.last_user_at = conversation.last_user_at.clone();
+                metadata_snapshot.last_assistant_at = conversation.last_assistant_at.clone();
+                cached.apply_metadata_fields_from_conversation(&metadata_snapshot);
+                cached.apply_appended_messages(&persisted_batch_messages);
                 Ok(())
             },
         )?;
+        let metadata_snapshot =
+            self.build_conversation_snapshot_from_meta(&metadata_conversation, Vec::new());
+        state_upsert_chat_index_conversation_cached(state, &metadata_snapshot)?;
         self.persist_scheduler_flush_appended_messages_v2(
             state,
             &metadata_conversation,
@@ -6891,7 +6964,7 @@ impl ConversationServiceV2 {
     fn persist_scheduler_flush_appended_messages_v2(
         &self,
         state: &AppState,
-        conversation: &Conversation,
+        conversation_meta: &message_store::ConversationShardMeta,
         appended_messages: &[ChatMessage],
         runtime: &RuntimeStateFile,
         remote_im_runtime_before: Option<Vec<u8>>,
@@ -6902,22 +6975,22 @@ impl ConversationServiceV2 {
                 runtime.remote_im_contact_checkpoints.clone(),
             ))
             .ok();
-        let paths = message_store::message_store_paths(&state.data_path, &conversation.id)?;
-        let mut conversation_meta = message_store::read_ready_message_store_meta(&paths)?
+        let paths = message_store::message_store_paths(&state.data_path, conversation_meta.id())?;
+        let mut ready_meta = message_store::read_ready_message_store_meta(&paths)?
             .ok_or_else(|| {
                 format!(
                     "历史回灌落盘失败：缺少 ready 消息元数据，conversation_id={}",
-                    conversation.id
+                    conversation_meta.id()
                 )
             })?;
-        conversation_meta.apply_metadata_fields_from_conversation(conversation);
-        conversation_meta.apply_appended_messages(appended_messages);
+        ready_meta.apply_metadata_fields_from_meta(conversation_meta);
+        ready_meta.apply_appended_messages(appended_messages);
         message_store::write_jsonl_snapshot_appended_messages_shard_from_meta(
             &paths,
-            &conversation_meta,
+            &ready_meta,
             appended_messages,
         )?;
-        state_mark_conversation_metadata_direct_persisted(state, &conversation.id)?;
+        self.mark_conversation_metadata_cached_persisted(state, conversation_meta.id())?;
         if remote_im_runtime_changed {
             state_write_runtime_state_cached(state, runtime)?;
         }
@@ -7524,7 +7597,7 @@ impl ConversationServiceV2 {
             &ready_meta.to_persist_meta(),
             &updated_messages,
         )?;
-        state_mark_conversation_metadata_direct_persisted(state, conversation_id)?;
+        self.mark_conversation_metadata_cached_persisted(state, conversation_id)?;
         Ok(())
     }
 }

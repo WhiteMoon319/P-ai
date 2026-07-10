@@ -35,6 +35,7 @@ pub(super) struct ConversationPersistMeta {
     cumulative_usage: ConversationCumulativeUsage,
     active_goal: Option<ConversationGoalState>,
     fast_request_turns: Vec<FastRequestTurn>,
+    last_message_id: Option<String>,
     last_message_at: Option<String>,
     message_count: usize,
     body_message_count: usize,
@@ -61,6 +62,16 @@ impl ConversationPersistMeta {
         let mut meta = ConversationShardMeta::from_conversation(conversation);
         meta.preserve_message_derived_fields_from(source);
         meta.apply_spliced_messages(removed_messages, inserted_messages);
+        if source
+            .last_message_id
+            .as_deref()
+            .is_some_and(|tail_id| removed_messages.iter().any(|message| message.id == tail_id))
+        {
+            if let Some(last_inserted) = inserted_messages.last() {
+                meta.last_message_id = Some(last_inserted.id.clone());
+                meta.last_message_at = Some(last_inserted.created_at.clone());
+            }
+        }
         meta.to_persist_meta()
     }
 
@@ -173,6 +184,8 @@ pub(super) struct ConversationShardMeta {
     active_goal: Option<ConversationGoalState>,
     #[serde(default)]
     fast_request_turns: Vec<FastRequestTurn>,
+    #[serde(default)]
+    last_message_id: Option<String>,
     #[serde(default)]
     last_message_at: Option<String>,
     #[serde(default)]
@@ -289,6 +302,10 @@ impl ConversationShardMeta {
 
     pub(super) fn has_context_compaction_message(&self) -> bool {
         self.has_context_compaction_message
+    }
+
+    pub(super) fn last_message_id(&self) -> Option<&str> {
+        self.last_message_id.as_deref()
     }
 
     pub(super) fn latest_summary_title(&self) -> Option<&str> {
@@ -484,6 +501,7 @@ impl ConversationShardMeta {
     }
 
     pub(super) fn preserve_message_derived_fields_from(&mut self, source: &ConversationShardMeta) {
+        self.last_message_id = source.last_message_id.clone();
         self.last_message_at = source.last_message_at.clone();
         self.message_count = source.message_count;
         self.body_message_count = source.body_message_count;
@@ -536,6 +554,7 @@ impl ConversationShardMeta {
             self.latest_summary_title = Some(last_title);
         }
         if let Some(last_message) = messages.last() {
+            self.last_message_id = Some(last_message.id.clone());
             self.last_message_at = Some(last_message.created_at.clone());
         }
         let mut preview_messages = self.preview_messages.clone();
@@ -639,6 +658,7 @@ impl ConversationShardMeta {
         updated_at: String,
         last_user_at: Option<String>,
         last_assistant_at: Option<String>,
+        last_message_id: Option<String>,
         last_message_at: Option<String>,
         body_message_count: usize,
         body_text_length: usize,
@@ -651,6 +671,7 @@ impl ConversationShardMeta {
         self.updated_at = updated_at;
         self.last_user_at = last_user_at;
         self.last_assistant_at = last_assistant_at;
+        self.last_message_id = last_message_id;
         self.last_message_at = last_message_at;
         self.message_count = keep_count;
         self.body_message_count = body_message_count;
@@ -695,6 +716,7 @@ impl ConversationShardMeta {
             cumulative_usage: conversation.cumulative_usage.clone(),
             active_goal: conversation.active_goal.clone(),
             fast_request_turns: conversation.fast_request_turns.clone(),
+            last_message_id: conversation.messages.last().map(|message| message.id.clone()),
             last_message_at: conversation.messages.last().map(|message| message.created_at.clone()),
             message_count: conversation.messages.len(),
             body_message_count: super::conversation_body_message_count(conversation),
@@ -784,6 +806,7 @@ impl ConversationShardMeta {
             cumulative_usage: meta.cumulative_usage.clone(),
             active_goal: meta.active_goal.clone(),
             fast_request_turns: meta.fast_request_turns.clone(),
+            last_message_id: meta.last_message_id.clone(),
             last_message_at: meta.last_message_at.clone(),
             message_count: meta.message_count,
             body_message_count: meta.body_message_count,
@@ -829,6 +852,7 @@ impl ConversationShardMeta {
             cumulative_usage: self.cumulative_usage.clone(),
             active_goal: self.active_goal.clone(),
             fast_request_turns: self.fast_request_turns.clone(),
+            last_message_id: self.last_message_id.clone(),
             last_message_at: self.last_message_at.clone(),
             message_count: self.message_count,
             body_message_count: self.body_message_count,
