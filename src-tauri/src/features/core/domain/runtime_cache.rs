@@ -165,6 +165,9 @@ fn sort_chat_index_items(items: &mut Vec<ChatIndexConversationItem>) {
 fn collect_chat_index_items_from_storage(
     data_path: &PathBuf,
 ) -> Result<Vec<ChatIndexConversationItem>, String> {
+    if let Some(items) = message_store::chat_metadata_store_list_chat_index(data_path)? {
+        return Ok(items);
+    }
     let conv_dir = app_layout_chat_conversations_dir(data_path);
     if !conv_dir.exists() {
         if !app_layout_exists(data_path) && data_path.exists() {
@@ -548,6 +551,10 @@ fn state_mark_conversation_metadata_direct_persisted(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<message_store::ConversationShardMeta, String> {
+    let mutation_gate = conversation_mutation_gate(&state.data_path, conversation_id)?;
+    let _guard = mutation_gate.lock().map_err(|err| {
+        named_lock_error("conversation_mutation_gate", file!(), line!(), module_path!(), &err)
+    })?;
     let meta = read_conversation_meta_shard(&state.data_path, conversation_id)?;
     let disk_mtime = conversation_shard_modified_time(&state.data_path, conversation_id);
     {
@@ -613,6 +620,10 @@ fn state_update_conversation_metadata_cached<T>(
     if normalized_conversation_id.is_empty() {
         return Err("Conversation id is empty".to_string());
     }
+    let mutation_gate = conversation_mutation_gate(&state.data_path, normalized_conversation_id)?;
+    let _guard = mutation_gate.lock().map_err(|err| {
+        named_lock_error("conversation_mutation_gate", file!(), line!(), module_path!(), &err)
+    })?;
     let conversation_meta =
         state_read_conversation_metadata_cached(state, normalized_conversation_id)?;
     let mut conversation = conversation_service_v2()
@@ -689,6 +700,10 @@ fn state_update_conversation_meta_cached<T>(
     if normalized_conversation_id.is_empty() {
         return Err("Conversation id is empty".to_string());
     }
+    let mutation_gate = conversation_mutation_gate(&state.data_path, normalized_conversation_id)?;
+    let _guard = mutation_gate.lock().map_err(|err| {
+        named_lock_error("conversation_mutation_gate", file!(), line!(), module_path!(), &err)
+    })?;
     let mut conversation_meta =
         state_read_conversation_metadata_cached(state, normalized_conversation_id)?;
     let result = updater(&mut conversation_meta)?;
@@ -935,10 +950,16 @@ fn state_write_conversation_cached(
         .app_data_persist_latest_seq
         .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
         + 1;
-    let _write_guard = state
-        .app_data_persist_write_lock
-        .lock()
-        .map_err(|_| "Failed to lock app data persist write lock".to_string())?;
+    let mutation_gate = conversation_mutation_gate(&state.data_path, &conversation.id)?;
+    let _guard = mutation_gate.lock().map_err(|err| {
+        named_lock_error(
+            "conversation_mutation_gate",
+            file!(),
+            line!(),
+            module_path!(),
+            &err,
+        )
+    })?;
     let _ = write_conversation_shard(&state.data_path, conversation)?;
     let disk_mtime = conversation_shard_modified_time(&state.data_path, &conversation.id);
     sync_cached_conversation_metadata(state, conversation)?;
@@ -980,10 +1001,16 @@ fn state_delete_conversation_cached(
         .app_data_persist_latest_seq
         .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
         + 1;
-    let _write_guard = state
-        .app_data_persist_write_lock
-        .lock()
-        .map_err(|_| "Failed to lock app data persist write lock".to_string())?;
+    let mutation_gate = conversation_mutation_gate(&state.data_path, conversation_id)?;
+    let _guard = mutation_gate.lock().map_err(|err| {
+        named_lock_error(
+            "conversation_mutation_gate",
+            file!(),
+            line!(),
+            module_path!(),
+            &err,
+        )
+    })?;
     let _ = delete_conversation_shard(&state.data_path, conversation_id)?;
     remove_cached_conversation_metadata(state, conversation_id)?;
     {
@@ -1419,6 +1446,10 @@ fn state_schedule_conversation_persist(
     state: &AppState,
     conversation: &Conversation,
 ) -> Result<u64, String> {
+    let mutation_gate = conversation_mutation_gate(&state.data_path, &conversation.id)?;
+    let _guard = mutation_gate.lock().map_err(|err| {
+        named_lock_error("conversation_mutation_gate", file!(), line!(), module_path!(), &err)
+    })?;
     let seq = state
         .conversation_persist_latest_seq
         .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
@@ -1495,6 +1526,10 @@ fn state_schedule_conversation_delete(
     if normalized_conversation_id.is_empty() {
         return Err("Conversation id is empty".to_string());
     }
+    let mutation_gate = conversation_mutation_gate(&state.data_path, normalized_conversation_id)?;
+    let _guard = mutation_gate.lock().map_err(|err| {
+        named_lock_error("conversation_mutation_gate", file!(), line!(), module_path!(), &err)
+    })?;
     let seq = state
         .conversation_persist_latest_seq
         .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
@@ -1556,51 +1591,119 @@ fn state_schedule_conversation_delete(
 ///
 /// 返回是否实际写出了内容（用于日志），错误不向上传播为致命，调用方记录即可。
 fn flush_pending_persists_blocking(state: &AppState) -> Result<bool, String> {
-    let _write_guard = state.app_data_persist_write_lock.lock().map_err(|err| {
-        named_lock_error(
-            "app_data_persist_write_lock",
-            file!(),
-            line!(),
-            module_path!(),
-            &err,
-        )
-    })?;
+    // 只用 app-data gate 原子地取走队列；本地 chat 的文件 I/O 必须再按会话 gate 协调，
+    // 不能因为退出 flush 把不同会话串行化。
+    let (pending_conversations, pending_app_data) = {
+        let _write_guard = state.app_data_persist_write_lock.lock().map_err(|err| {
+            named_lock_error(
+                "app_data_persist_write_lock",
+                file!(),
+                line!(),
+                module_path!(),
+                &err,
+            )
+        })?;
+        let pending_conversations = state
+            .conversation_persist_pending
+            .lock()
+            .map_err(|_| "Failed to lock pending conversation persist".to_string())?
+            .take();
+        let pending_app_data = state
+            .app_data_persist_pending
+            .lock()
+            .map_err(|_| "Failed to lock pending app data persist".to_string())?
+            .take();
+        (pending_conversations, pending_app_data)
+    };
     let mut wrote_anything = false;
 
-    let pending_conversations = state
-        .conversation_persist_pending
-        .lock()
-        .map_err(|_| "Failed to lock pending conversation persist".to_string())?
-        .take();
     if let Some(pending) = pending_conversations {
-        let skip_directly_persisted: std::collections::HashSet<String> = {
-            let dirty = state
-                .cached_conversation_dirty_ids
-                .lock()
-                .map_err(|_| "Failed to lock cached conversation dirty ids".to_string())?;
-            pending
-                .conversations
-                .keys()
-                .filter(|conversation_id| !dirty.contains(*conversation_id))
-                .cloned()
-                .collect()
-        };
         for conversation_id in &pending.deleted_conversation_ids {
+            let mutation_gate = conversation_mutation_gate(&state.data_path, conversation_id)?;
+            let _guard = mutation_gate.lock().map_err(|err| {
+                named_lock_error(
+                    "conversation_mutation_gate",
+                    file!(),
+                    line!(),
+                    module_path!(),
+                    &err,
+                )
+            })?;
             delete_conversation_shard(&state.data_path, conversation_id)?;
+            if let Ok(mut deleted_ids) = state.cached_deleted_conversation_ids.lock() {
+                deleted_ids.remove(conversation_id);
+            }
             wrote_anything = true;
         }
         for (conversation_id, conversation) in pending.conversations.iter() {
-            if skip_directly_persisted.contains(conversation_id) {
-                continue;
+            let mutation_gate = conversation_mutation_gate(&state.data_path, conversation_id)?;
+            let _guard = mutation_gate.lock().map_err(|err| {
+                named_lock_error(
+                    "conversation_mutation_gate",
+                    file!(),
+                    line!(),
+                    module_path!(),
+                    &err,
+                )
+            })?;
+            let skip_directly_persisted = {
+                let dirty = state.cached_conversation_dirty_ids.lock().map_err(|err| {
+                    named_lock_error(
+                        "cached_conversation_dirty_ids",
+                        file!(),
+                        line!(),
+                        module_path!(),
+                        &err,
+                    )
+                })?;
+                !dirty.contains(conversation_id)
+            };
+            if !skip_directly_persisted {
+                write_conversation_shard(&state.data_path, conversation)?;
+                state.cached_conversation_dirty_ids
+                    .lock()
+                    .map_err(|err| {
+                        named_lock_error(
+                            "cached_conversation_dirty_ids",
+                            file!(),
+                            line!(),
+                            module_path!(),
+                            &err,
+                        )
+                    })?
+                    .remove(conversation_id);
+                wrote_anything = true;
             }
-            write_conversation_shard(&state.data_path, conversation)?;
-            wrote_anything = true;
         }
         for conversation_id in &pending.metadata_conversation_ids {
             if pending.conversations.contains_key(conversation_id)
                 || pending.deleted_conversation_ids.contains(conversation_id)
-                || skip_directly_persisted.contains(conversation_id)
             {
+                continue;
+            }
+            let mutation_gate = conversation_mutation_gate(&state.data_path, conversation_id)?;
+            let _guard = mutation_gate.lock().map_err(|err| {
+                named_lock_error(
+                    "conversation_mutation_gate",
+                    file!(),
+                    line!(),
+                    module_path!(),
+                    &err,
+                )
+            })?;
+            let skip_directly_persisted = {
+                let dirty = state.cached_conversation_dirty_ids.lock().map_err(|err| {
+                    named_lock_error(
+                        "cached_conversation_dirty_ids",
+                        file!(),
+                        line!(),
+                        module_path!(),
+                        &err,
+                    )
+                })?;
+                !dirty.contains(conversation_id)
+            };
+            if skip_directly_persisted {
                 continue;
             }
             let Some(conversation_meta) = ({
@@ -1613,29 +1716,32 @@ fn flush_pending_persists_blocking(state: &AppState) -> Result<bool, String> {
                 continue;
             };
             write_conversation_meta_shard_from_meta(&state.data_path, &conversation_meta)?;
+            state.cached_conversation_dirty_ids
+                .lock()
+                .map_err(|err| {
+                    named_lock_error(
+                        "cached_conversation_dirty_ids",
+                        file!(),
+                        line!(),
+                        module_path!(),
+                        &err,
+                    )
+                })?
+                .remove(conversation_id);
             wrote_anything = true;
-        }
-        if let Ok(mut dirty_ids) = state.cached_conversation_dirty_ids.lock() {
-            for conversation_id in pending.conversations.keys() {
-                dirty_ids.remove(conversation_id);
-            }
-            for conversation_id in &pending.metadata_conversation_ids {
-                dirty_ids.remove(conversation_id);
-            }
-        }
-        if let Ok(mut deleted_ids) = state.cached_deleted_conversation_ids.lock() {
-            for conversation_id in &pending.deleted_conversation_ids {
-                deleted_ids.remove(conversation_id);
-            }
         }
     }
 
-    let pending_app_data = state
-        .app_data_persist_pending
-        .lock()
-        .map_err(|_| "Failed to lock pending app data persist".to_string())?
-        .take();
     if let Some(pending) = pending_app_data {
+        let _write_guard = state.app_data_persist_write_lock.lock().map_err(|err| {
+            named_lock_error(
+                "app_data_persist_write_lock",
+                file!(),
+                line!(),
+                module_path!(),
+                &err,
+            )
+        })?;
         #[allow(deprecated)]
         write_app_data(&state.data_path, &pending.data)?;
         wrote_anything = true;
@@ -1646,9 +1752,7 @@ fn flush_pending_persists_blocking(state: &AppState) -> Result<bool, String> {
         }
     }
 
-    state
-        .cached_app_data_dirty
-        .store(false, std::sync::atomic::Ordering::Release);
+    refresh_cached_app_data_dirty(state);
     Ok(wrote_anything)
 }
 
@@ -1788,63 +1892,71 @@ fn start_conversation_persist_worker(state: &AppState) -> Result<(), String> {
                 }
 
                 let data_path = state_clone.data_path.clone();
-                let write_lock = state_clone.app_data_persist_write_lock.clone();
                 let dirty_ids_for_write = state_clone.cached_conversation_dirty_ids.clone();
                 let cached_conversation_metadata_for_write =
                     state_clone.cached_conversation_metadata.clone();
                 let pending_for_write = pending.clone();
                 let write_result = tokio::task::spawn_blocking(move || {
-                    let _write_guard = write_lock.lock().map_err(|err| {
-                        named_lock_error(
-                            "app_data_persist_write_lock",
-                            file!(),
-                            line!(),
-                            module_path!(),
-                            &err,
-                        )
-                    })?;
                     for conversation_id in &pending_for_write.deleted_conversation_ids {
-                        delete_conversation_shard(&data_path, conversation_id)?;
-                    }
-                    // 在持有写锁的临界区内复核 dirty 集合：直写路径（如工具结果追加）
-                    // 完成后会把会话从 dirty_ids 移除并写入更新版本。若此处发现批快照中
-                    // 的会话已不在 dirty 集合，说明磁盘上已是更新的直写版本，跳过写入，
-                    // 避免用过期批快照覆盖（lost update）。
-                    let skip_directly_persisted: std::collections::HashSet<String> = {
-                        let dirty = dirty_ids_for_write.lock().map_err(|err| {
+                        let mutation_gate = conversation_mutation_gate(&data_path, conversation_id)?;
+                        let _guard = mutation_gate.lock().map_err(|err| {
                             named_lock_error(
-                                "cached_conversation_dirty_ids",
+                                "conversation_mutation_gate",
                                 file!(),
                                 line!(),
                                 module_path!(),
                                 &err,
                             )
                         })?;
-                        pending_for_write
-                            .conversations
-                            .keys()
-                            .filter(|conversation_id| !dirty.contains(*conversation_id))
-                            .cloned()
-                            .collect()
-                    };
+                        delete_conversation_shard(&data_path, conversation_id)?;
+                    }
                     for (conversation_id, conversation) in pending_for_write.conversations.iter() {
-                        if skip_directly_persisted.contains(conversation_id) {
-                            continue;
+                        let mutation_gate = conversation_mutation_gate(&data_path, conversation_id)?;
+                        let _guard = mutation_gate.lock().map_err(|err| {
+                            named_lock_error(
+                                "conversation_mutation_gate",
+                                file!(),
+                                line!(),
+                                module_path!(),
+                                &err,
+                            )
+                        })?;
+                        // 直写路径会在同一会话 gate 内移除 dirty 标记。若这里已被移除，
+                        // 说明磁盘已有更新版本，不能再用后台快照覆盖。
+                        let skip_directly_persisted = {
+                            let dirty = dirty_ids_for_write.lock().map_err(|err| {
+                                named_lock_error(
+                                    "cached_conversation_dirty_ids",
+                                    file!(),
+                                    line!(),
+                                    module_path!(),
+                                    &err,
+                                )
+                            })?;
+                            !dirty.contains(conversation_id)
+                        };
+                        if !skip_directly_persisted {
+                            write_conversation_shard(&data_path, conversation)?;
                         }
-                        write_conversation_shard(&data_path, conversation)?;
                     }
                     for conversation_id in &pending_for_write.metadata_conversation_ids {
                         if pending_for_write.conversations.contains_key(conversation_id)
-                            || pending_for_write
-                                .deleted_conversation_ids
-                                .contains(conversation_id)
-                            || skip_directly_persisted.contains(conversation_id)
+                            || pending_for_write.deleted_conversation_ids.contains(conversation_id)
                         {
                             continue;
                         }
+                        let mutation_gate = conversation_mutation_gate(&data_path, conversation_id)?;
+                        let _guard = mutation_gate.lock().map_err(|err| {
+                            named_lock_error(
+                                "conversation_mutation_gate",
+                                file!(),
+                                line!(),
+                                module_path!(),
+                                &err,
+                            )
+                        })?;
                         let Some(conversation_meta) = ({
-                            let cached =
-                                cached_conversation_metadata_for_write.lock().map_err(|err| {
+                            let cached = cached_conversation_metadata_for_write.lock().map_err(|err| {
                                 named_lock_error(
                                     "cached_conversation_metadata",
                                     file!(),

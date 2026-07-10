@@ -460,14 +460,81 @@ fn remote_im_message_group_sender_id(message: &ChatMessage, contact: &RemoteImCo
 }
 
 fn remote_im_latest_group_sender_id_for_busy_guided(
-    conversation: &Conversation,
+    state: &AppState,
+    conversation_id: &str,
     contact: &RemoteImContact,
-) -> Option<String> {
-    conversation
-        .messages
-        .iter()
-        .rev()
-        .find_map(|message| remote_im_message_group_sender_id(message, contact))
+) -> Result<Option<String>, String> {
+    let conversation_id = conversation_id.trim();
+    if conversation_id.is_empty() || !contact.remote_contact_type.trim().eq_ignore_ascii_case("group") {
+        return Ok(None);
+    }
+    let paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
+    ensure_ready_message_store_from_legacy_conversation(state, conversation_id, &paths)?;
+    let mut page = message_store::read_ready_message_store_recent_messages_page(&paths, 100)?;
+    while let Some(current) = page {
+        if let Some(sender_id) = current
+            .messages
+            .iter()
+            .rev()
+            .find_map(|message| remote_im_message_group_sender_id(message, contact))
+        {
+            return Ok(Some(sender_id));
+        }
+        if !current.has_more {
+            return Ok(None);
+        }
+        let Some(before_message_id) = current.messages.first().map(|message| message.id.as_str()) else {
+            return Ok(None);
+        };
+        page = message_store::read_ready_message_store_messages_before(
+            &paths,
+            before_message_id,
+            100,
+        )?;
+    }
+    Ok(None)
+}
+
+fn remote_im_latest_secretary_work_message_for_busy_guided(
+    state: &AppState,
+    conversation_id: &str,
+    contact: &RemoteImContact,
+    agents: &[AgentProfile],
+    current_assistant: &RemoteImConversationAssistantContext,
+) -> Result<Option<RemoteImSecretaryMessageDigest>, String> {
+    let conversation_id = conversation_id.trim();
+    if conversation_id.is_empty() {
+        return Ok(None);
+    }
+    let paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
+    ensure_ready_message_store_from_legacy_conversation(state, conversation_id, &paths)?;
+    let mut page = message_store::read_ready_message_store_recent_messages_page(&paths, 100)?;
+    while let Some(current) = page {
+        if let Some(message) = remote_im_collect_secretary_recent_messages(
+            &current.messages,
+            1,
+            contact,
+            agents,
+            current_assistant,
+        )
+        .into_iter()
+        .next()
+        {
+            return Ok(Some(message));
+        }
+        if !current.has_more {
+            return Ok(None);
+        }
+        let Some(before_message_id) = current.messages.first().map(|message| message.id.as_str()) else {
+            return Ok(None);
+        };
+        page = message_store::read_ready_message_store_messages_before(
+            &paths,
+            before_message_id,
+            100,
+        )?;
+    }
+    Ok(None)
 }
 
 fn remote_im_busy_guided_same_sender_allowed(
@@ -3306,13 +3373,13 @@ pub(crate) fn remote_im_enqueue_message_internal(
                     return;
                 }
             };
-            let conversation_snapshot = conversation_service_v2()
-                .try_get_conversation_snapshot(&state_clone, &conversation_id_for_guided)
-                .ok()
-                .flatten();
-            let current_sender_id = conversation_snapshot.as_ref().and_then(|conversation| {
-                remote_im_latest_group_sender_id_for_busy_guided(conversation, &contact_for_guided)
-            });
+            let current_sender_id = remote_im_latest_group_sender_id_for_busy_guided(
+                &state_clone,
+                &conversation_id_for_guided,
+                &contact_for_guided,
+            )
+            .ok()
+            .flatten();
             if !remote_im_busy_guided_same_sender_allowed(
                 &contact_for_guided,
                 current_sender_id.as_deref(),
@@ -3332,17 +3399,15 @@ pub(crate) fn remote_im_enqueue_message_internal(
                 );
                 return;
             }
-            let current_work_message = conversation_snapshot.and_then(|conversation| {
-                    remote_im_collect_secretary_recent_messages(
-                        &conversation.messages,
-                        1,
-                        &contact_for_guided,
-                        &agents,
-                        &current_assistant,
-                    )
-                    .into_iter()
-                    .next()
-                });
+            let current_work_message = remote_im_latest_secretary_work_message_for_busy_guided(
+                &state_clone,
+                &conversation_id_for_guided,
+                &contact_for_guided,
+                &agents,
+                &current_assistant,
+            )
+            .ok()
+            .flatten();
             let Some(new_message_digest) = remote_im_secretary_message_digest(
                 &guided_candidate_message,
                 &contact_for_guided,

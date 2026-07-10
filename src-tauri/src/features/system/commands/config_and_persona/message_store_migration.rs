@@ -302,6 +302,28 @@ fn empty_message_store_migration_preflight_report() -> MessageStoreMigrationPref
     }
 }
 
+fn run_v3_chat_metadata_migration_at_startup(state: &AppState) -> Result<(), String> {
+    let runtime = state_read_runtime_state_cached(state)?;
+    if runtime.message_store_migration_version < DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES {
+        let conversations_dir = app_layout_chat_conversations_dir(&state.data_path);
+        if let Ok(entries) = fs::read_dir(conversations_dir) {
+            for entry in entries.flatten() {
+                if entry.path().extension().and_then(|value| value.to_str()) == Some("json") {
+                    return Err(format!(
+                        "聊天存储 v3 迁移前置条件未满足：发现 v1 会话文件 {}，必须先完成既有 v1→v2 迁移",
+                        entry.path().display()
+                    ));
+                }
+            }
+        }
+    }
+    message_store::chat_metadata_store_run_v3_migration(&state.data_path)?;
+    let mut runtime = state_read_runtime_state_cached(state)?;
+    runtime.message_store_migration_version = DATA_MIGRATION_VERSION_V3_CHAT_METADATA_SQLITE;
+    state_write_runtime_state_cached(state, &runtime)?;
+    Ok(())
+}
+
 fn message_store_migration_current_version_recorded(state: &AppState) -> Result<bool, String> {
     Ok(state_read_runtime_state_cached(state)?.message_store_migration_version
         >= DATA_MIGRATION_CURRENT_VERSION)

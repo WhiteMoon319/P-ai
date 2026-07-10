@@ -191,9 +191,9 @@ fn conversation_todo_list(state: &AppState, conversation_id: &str) -> Result<Vec
         return Ok(conversation.current_todos);
     }
     conversation_service_v2()
-        .try_get_conversation_snapshot(state, conversation_id.trim())?
-        .map(|conversation| conversation.current_todos.clone())
-        .ok_or_else(|| format!("未找到会话，conversation_id={conversation_id}"))
+        .get_conversation_meta(state, conversation_id.trim())
+        .map(|conversation_meta| conversation_meta.current_todos)
+        .map_err(|_| format!("未找到会话，conversation_id={conversation_id}"))
 }
 
 #[cfg(test)]
@@ -216,7 +216,7 @@ fn conversation_todo_replace(
     }
 
     conversation_service_v2()
-        .get_conversation_snapshot(state, conversation_id.trim())
+        .get_conversation_meta(state, conversation_id.trim())
         .map_err(|_| format!("未找到会话，conversation_id={conversation_id}"))?;
     conversation_service_v2().set_current_todos(
         state,

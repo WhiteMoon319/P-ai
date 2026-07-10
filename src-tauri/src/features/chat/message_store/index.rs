@@ -8,6 +8,10 @@ struct MessageStoreIndexItem {
     byte_len: u64,
     #[serde(default, skip_serializing)]
     compaction_kind: Option<String>,
+    #[serde(default, skip_serializing)]
+    role: String,
+    #[serde(default, skip_serializing)]
+    created_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -42,6 +46,8 @@ impl MessageStoreIndexFile {
         let mut next = self.clone();
         for item in &mut next.items {
             item.compaction_kind = None;
+            item.role.clear();
+            item.created_at.clear();
         }
         next.positions_by_message_id.clear();
         next.compaction_boundary_positions.clear();
@@ -281,6 +287,8 @@ fn message_store_index_item_for_message_in_block(
         offset,
         byte_len,
         compaction_kind: message_store_compaction_kind(message),
+        role: message.role.trim().to_string(),
+        created_at: message.created_at.trim().to_string(),
     }
 }
 
@@ -288,4 +296,27 @@ fn message_store_index_item_block_key(item: &MessageStoreIndexItem) -> String {
     item.block_id
         .map(|block_id| block_id.to_string())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+#[test]
+fn message_store_index_persistent_view_should_ignore_runtime_only_locator_fields() {
+    let persisted = MessageStoreIndexFile::new(
+        MESSAGE_STORE_MANIFEST_VERSION,
+        vec![MessageStoreIndexItem {
+            message_id: "message-1".to_string(),
+            block_id: Some(0),
+            offset: 0,
+            byte_len: 42,
+            compaction_kind: Some("context_compaction".to_string()),
+            role: "assistant".to_string(),
+            created_at: "2026-07-10T00:00:00Z".to_string(),
+        }],
+    );
+    let restored: MessageStoreIndexFile = serde_json::from_str(
+        &serde_json::to_string(&persisted).expect("serialize index"),
+    )
+    .expect("deserialize index");
+
+    assert_eq!(persisted.persistent_view().items, restored.persistent_view().items);
 }

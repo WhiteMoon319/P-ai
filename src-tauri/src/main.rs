@@ -847,6 +847,10 @@ fn main() {
         eprintln!("[自动更新] 清理便携版更新临时文件失败: {err}");
     }
     init_last_panic_snapshot_slot(state.last_panic_snapshot.clone());
+    if let Err(err) = run_v3_chat_metadata_migration_at_startup(&state) {
+        eprintln!("[启动] 聊天存储 v3 迁移失败，停止启动: {err}");
+        return;
+    }
     {
         let panic_slot = state.last_panic_snapshot.clone();
         let previous_hook = std::panic::take_hook();

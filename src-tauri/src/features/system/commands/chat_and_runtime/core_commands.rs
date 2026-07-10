@@ -199,7 +199,7 @@ fn resolve_plan_file_for_conversation_id(
     conversation_id: &str,
     raw_path: &str,
 ) -> Result<ResolvedPlanFilePath, String> {
-    let conversation = conversation_service_v2().get_conversation_snapshot(state, conversation_id)?;
+    let conversation = conversation_service_v2().get_conversation_metadata_record(state, conversation_id)?;
     let base_root = terminal_default_workspace_for_conversation_resolved(state, Some(&conversation))
         .map(|workspace| workspace.path)
         .or_else(|_| plan_assistant_space_canonical(state))?;
@@ -383,7 +383,7 @@ async fn confirm_plan_and_continue_inner(
             agent_id,
         )
     };
-    let conversation = conversation_service_v2().get_conversation_snapshot(state, conversation_id)?;
+    let conversation = conversation_service_v2().get_conversation_prompt_context(state, conversation_id)?;
     let continue_event_id = format!("confirm-plan-continue-{}", Uuid::new_v4());
     let preview = build_trim_compaction_preview_result(state, &selected_api, &conversation)?;
     let should_compact_before_continue =
@@ -944,7 +944,7 @@ fn resolve_user_async_delegate_plan(
         return Err(SAME_PERSONA_BACKGROUND_DELEGATE_REASON.to_string());
     }
     let conversation = conversation_service_v2()
-        .get_conversation_snapshot(app_state, conversation_id)?;
+        .get_conversation_metadata_record(app_state, conversation_id)?;
     let target_agent = agents
         .iter()
         .find(|agent| agent.id == target_agent_id && !agent.is_built_in_user)

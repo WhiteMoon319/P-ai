@@ -1310,7 +1310,19 @@ fn decide_archive_before_send_from_usage(
     usage: &PromptUsageResolution,
     last_user_at: Option<&str>,
     has_assistant_reply: bool,
+    current_segment_is_compaction_summary_only: bool,
 ) -> (ArchiveDecision, &'static str) {
+    if current_segment_is_compaction_summary_only {
+        return (
+            ArchiveDecision {
+                should_archive: false,
+                forced: false,
+                reason: "current_segment_compaction_summary_only".to_string(),
+                usage_ratio: usage.usage_ratio,
+            },
+            "current_segment_compaction_summary_only",
+        );
+    }
     let decision = match usage.source {
         "cached_effective_prompt_tokens"
         | "cached_usage_ratio"

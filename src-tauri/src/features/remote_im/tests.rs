@@ -1631,8 +1631,17 @@
             cumulative_usage: ConversationCumulativeUsage::default(),
         };
 
-        let current_sender =
-            remote_im_latest_group_sender_id_for_busy_guided(&conversation, &contact);
+        let state = remote_im_test_state();
+        let store_paths = message_store::message_store_paths(&state.data_path, &conversation.id)
+            .expect("message store paths");
+        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
+            .expect("write group conversation");
+        let current_sender = remote_im_latest_group_sender_id_for_busy_guided(
+            &state,
+            &conversation.id,
+            &contact,
+        )
+        .expect("read latest group sender");
 
         assert!(remote_im_busy_guided_same_sender_allowed(
             &contact,

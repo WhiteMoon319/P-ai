@@ -24,6 +24,20 @@ pub(super) struct MessageStorePaths {
     blobs_dir: PathBuf,
 }
 
+impl MessageStorePaths {
+    fn is_local_chat_conversation(&self) -> bool {
+        self.shard_dir.parent() == Some(app_layout_chat_conversations_dir(&self.data_path).as_path())
+    }
+
+    fn is_v3_ready(&self) -> Result<bool, String> {
+        Ok(self.is_local_chat_conversation() && chat_metadata_store_is_ready(&self.data_path)?)
+    }
+}
+
+pub(super) fn message_store_is_v3_ready(paths: &MessageStorePaths) -> Result<bool, String> {
+    paths.is_v3_ready()
+}
+
 pub(super) fn message_store_paths(
     data_path: &PathBuf,
     conversation_id: &str,
@@ -141,6 +155,9 @@ fn directory_children_modified_time(path: &PathBuf) -> Option<std::time::SystemT
 pub(super) fn message_store_shard_modified_time(
     paths: &MessageStorePaths,
 ) -> Option<std::time::SystemTime> {
+    if paths.is_v3_ready().unwrap_or(false) {
+        return path_modified_time(&chat_metadata_store_db_path(&paths.data_path));
+    }
     [
         &paths.legacy_conversation_file,
         &paths.manifest_file,

@@ -95,6 +95,13 @@ fn active_plan_records_in_progress(
     conversation_id: &str,
 ) -> Result<Vec<ActivePlanRecord>, String> {
     let paths = message_store_paths(data_path, conversation_id)?;
+    if paths.is_v3_ready()? {
+        return Ok(chat_metadata_store_read_active_plans(data_path, conversation_id)?
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|record| record.status.trim() == ACTIVE_PLAN_STATUS_IN_PROGRESS)
+            .collect());
+    }
     Ok(read_active_plan_records(&paths.active_plans_file)?
         .into_iter()
         .rev()
@@ -124,6 +131,19 @@ pub(super) fn active_plan_append_in_progress(
     if record.path.is_empty() {
         return Err("计划路径为空，无法写入执行中计划。".to_string());
     }
+    let mutation_gate = conversation_mutation_gate(data_path, conversation_id)?;
+    let _guard = mutation_gate.lock().map_err(|err| {
+        named_lock_error(
+            "conversation_mutation_gate",
+            file!(),
+            line!(),
+            module_path!(),
+            &err,
+        )
+    })?;
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_append_active_plan(&paths, &record);
+    }
     append_active_plan_record(&paths.active_plans_file, &record)?;
     Ok(())
 }
@@ -139,6 +159,23 @@ pub(super) fn active_plan_complete_by_path(
         return Err("计划路径为空，无法完成执行中计划。".to_string());
     }
     let paths = message_store_paths(data_path, conversation_id)?;
+    let mutation_gate = conversation_mutation_gate(data_path, conversation_id)?;
+    let _guard = mutation_gate.lock().map_err(|err| {
+        named_lock_error(
+            "conversation_mutation_gate",
+            file!(),
+            line!(),
+            module_path!(),
+            &err,
+        )
+    })?;
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_complete_active_plan_by_path(
+            &paths,
+            normalized_path,
+            completion_text,
+        );
+    }
     let mut records = read_active_plan_records(&paths.active_plans_file)?;
     let Some(index) = records
         .iter()

@@ -1,6 +1,7 @@
 pub(super) const CONVERSATION_META_SCHEMA_VERSION: u32 = 1;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(super) struct ConversationPersistMeta {
     meta_schema_version: u32,
     id: String,
@@ -51,6 +52,15 @@ impl ConversationPersistMeta {
 
     fn conversation_id(&self) -> &str {
         self.id.as_str()
+    }
+
+    fn apply_to_conversation(&self, target: &mut Conversation) -> Result<(), String> {
+        let raw = serde_json::to_value(self)
+            .map_err(|err| format!("序列化会话持久化 metadata 失败: {err}"))?;
+        let meta = serde_json::from_value::<ConversationShardMeta>(raw)
+            .map_err(|err| format!("解析会话持久化 metadata 失败: {err}"))?;
+        meta.apply_to_conversation(target);
+        Ok(())
     }
 }
 

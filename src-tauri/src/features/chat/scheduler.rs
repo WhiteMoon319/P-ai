@@ -1898,7 +1898,7 @@ fn maybe_enqueue_goal_continue_after_idle(
     else {
         return Ok(false);
     };
-    let conversation = conversation_service_v2().get_conversation_snapshot(state, conversation_id)?;
+    let conversation = conversation_service_v2().get_conversation_prompt_context(state, conversation_id)?;
     let goal_turn = goal_continue_turn_for_conversation(&conversation, &goal.goal_id);
     let now = now_iso();
     let prompt = render_goal_continuation_prompt(&goal.objective);
@@ -2646,8 +2646,9 @@ async fn process_conversation_batch(
         }
         prepared_batches.push(prepared_messages);
     }
-    let persisted_conversation_before_flush =
-        conversation_service_v2().try_get_conversation_snapshot(state, conversation_id).ok().flatten();
+    let persisted_recent_messages_before_flush = conversation_service_v2()
+        .get_conversation_recent_messages(state, conversation_id, 7)
+        .unwrap_or_default();
     let commit_result = conversation_service_v2().commit_scheduler_history_flush(
         state,
         conversation_id,
@@ -2720,10 +2721,7 @@ async fn process_conversation_batch(
                     department_id: current_assistant.department_id.clone(),
                     agent_id: current_assistant.agent_id.clone(),
                 });
-                let previous_history_messages = persisted_conversation_before_flush
-                    .as_ref()
-                    .map(|conversation| conversation.messages.as_slice())
-                    .unwrap_or(&[]);
+                let previous_history_messages = persisted_recent_messages_before_flush.as_slice();
                 let secretary_recent_history = remote_im_collect_secretary_recent_messages(
                     previous_history_messages,
                     7,

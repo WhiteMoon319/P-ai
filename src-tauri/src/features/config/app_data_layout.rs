@@ -644,6 +644,17 @@ fn write_conversation_shard(path: &PathBuf, conversation: &Conversation) -> Resu
     fs::create_dir_all(app_layout_chat_conversations_dir(path))
         .map_err(|err| format!("Create chat conversations dir failed: {err}"))?;
     let store_paths = message_store::message_store_paths(path, &conversation.id)?;
+    if message_store::message_store_is_v3_ready(&store_paths)?
+        && message_store::read_ready_message_store_meta(&store_paths)?.is_some()
+    {
+        // v3 的正文只能由 append/replace/truncate/splice 原子接口发布。
+        // 后台 metadata 刷新不得整读或重建 locator 与 JSONL block。
+        write_conversation_meta_shard_from_meta(
+            path,
+            &message_store::ConversationShardMeta::from_conversation(conversation),
+        )?;
+        return Ok(true);
+    }
     message_store::write_jsonl_snapshot_directory_shard_if_changed(&store_paths, conversation)
 }
 
@@ -1117,6 +1128,10 @@ fn state_write_conversation_shell_workspace_metadata_direct(
     if conversation_id.is_empty() {
         return Ok(false);
     }
+    let mutation_gate = conversation_mutation_gate(&state.data_path, conversation_id)?;
+    let _guard = mutation_gate.lock().map_err(|err| {
+        named_lock_error("conversation_mutation_gate", file!(), line!(), module_path!(), &err)
+    })?;
     let conversation_meta = state_read_conversation_metadata_cached(state, conversation_id)?;
     let mut conversation =
         conversation_service_v2().build_conversation_snapshot_from_meta(&conversation_meta, Vec::new());
@@ -1169,10 +1184,6 @@ fn migrate_empty_shell_workspaces_to_assistant_workspace(
         if conversation_id.is_empty() {
             continue;
         }
-        let _guard = lock_conversation_with_metrics(
-            context.state,
-            "data_migration_v2_empty_shell_workspaces_item",
-        )?;
         let conversation_meta =
             match state_read_conversation_metadata_cached(context.state, conversation_id) {
                 Ok(meta) => meta,
@@ -1284,8 +1295,6 @@ fn sync_assistant_workspace_label_for_unarchived_conversations(
         if conversation_id.is_empty() {
             continue;
         }
-        let _guard =
-            lock_conversation_with_metrics(state, "sync_assistant_workspace_label_item")?;
         let conversation_meta = match state_read_conversation_metadata_cached(state, conversation_id)
         {
             Ok(meta) => meta,

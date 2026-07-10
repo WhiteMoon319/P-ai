@@ -11,6 +11,9 @@ pub(super) fn write_jsonl_snapshot_directory_shard(
 ) -> Result<MessageStoreDirectorySnapshotWrite, String> {
     let normalized_conversation =
         normalize_conversation_media_refs_for_message_store(paths, conversation);
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_write_snapshot(paths, &normalized_conversation);
+    }
     if let Some(existing_manifest) = read_message_store_manifest(&paths.manifest_file)?
         .filter(MessageStoreManifest::should_read_jsonl)
     {
@@ -528,6 +531,9 @@ pub(super) fn write_conversation_directory_meta_shard(
     meta: &ConversationPersistMeta,
 ) -> Result<(), String> {
     let shard_meta = ConversationShardMeta::from_persist_meta(meta);
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_write_meta_only(paths, &shard_meta);
+    }
     write_conversation_shard_meta_atomic(&paths.meta_file, &shard_meta)
 }
 
@@ -670,6 +676,9 @@ pub(super) fn write_jsonl_snapshot_appended_messages_shard(
     let final_meta = final_meta
         .or_else(|| entries.last().map(|(meta, _)| *meta))
         .ok_or_else(|| "追加 JSONL 消息失败：缺少最终 meta".to_string())?;
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_append_messages(paths, final_meta, &entries.iter().map(|(_, message)| (*message).clone()).collect::<Vec<_>>());
+    }
     let manifest = read_message_store_manifest(&paths.manifest_file)?
         .ok_or_else(|| format!("追加 JSONL 消息失败：缺少 manifest，conversation_id={}", paths.conversation_id))?;
     if !manifest.should_read_jsonl() {
@@ -911,6 +920,9 @@ fn write_jsonl_snapshot_truncated_messages_shard_with_persist_meta(
             meta.conversation_id()
         ));
     }
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_truncate_messages(paths, meta, keep_count);
+    }
     let manifest = read_message_store_manifest(&paths.manifest_file)?.ok_or_else(|| {
         format!(
             "截断 JSONL 消息失败：缺少 manifest，conversation_id={}",
@@ -1020,6 +1032,9 @@ pub(super) fn write_jsonl_snapshot_replaced_message_shard(
             meta.conversation_id()
         ));
     }
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_replace_message(paths, meta, message);
+    }
     let manifest = read_message_store_manifest(&paths.manifest_file)?.ok_or_else(|| {
         format!(
             "替换 JSONL 消息失败：缺少 manifest，conversation_id={}",
@@ -1046,6 +1061,28 @@ pub(super) fn write_jsonl_snapshot_replaced_message_shard(
     write_jsonl_snapshot_messages_shard(paths, &snapshot)
 }
 
+pub(super) fn write_jsonl_snapshot_replaced_messages_shard(
+    paths: &MessageStorePaths,
+    meta: &ConversationPersistMeta,
+    messages: &[ChatMessage],
+) -> Result<MessageStoreDirectorySnapshotWrite, String> {
+    if meta.conversation_id() != paths.conversation_id {
+        return Err(format!(
+            "批量替换 JSONL 消息失败：meta 会话 ID 不一致，expected={}，actual={}",
+            paths.conversation_id,
+            meta.conversation_id()
+        ));
+    }
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_replace_messages(paths, meta, messages);
+    }
+    let mut result = None;
+    for message in messages {
+        result = Some(write_jsonl_snapshot_replaced_message_shard(paths, meta, message)?);
+    }
+    result.ok_or_else(|| format!("批量替换 JSONL 消息失败：消息为空，conversation_id={}", paths.conversation_id))
+}
+
 pub(super) fn write_jsonl_snapshot_spliced_messages_shard(
     paths: &MessageStorePaths,
     meta: &ConversationPersistMeta,
@@ -1059,6 +1096,9 @@ pub(super) fn write_jsonl_snapshot_spliced_messages_shard(
             paths.conversation_id,
             meta.conversation_id()
         ));
+    }
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_splice_messages(paths, meta, start_index, delete_count, inserted_messages);
     }
     let manifest = read_message_store_manifest(&paths.manifest_file)?.ok_or_else(|| {
         format!(

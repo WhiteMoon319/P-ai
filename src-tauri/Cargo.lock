@@ -1847,6 +1847,7 @@ dependencies = [
  "md5",
  "once_cell",
  "os_info",
+ "parking_lot",
  "pdf_oxide",
  "rayon",
  "rdev",

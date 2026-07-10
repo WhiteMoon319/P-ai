@@ -202,6 +202,43 @@ struct TimedConversationLockGuard<'a> {
     _guard: std::sync::MutexGuard<'a, ()>,
 }
 
+static CONVERSATION_MUTATION_GATES: OnceLock<Mutex<std::collections::HashMap<String, std::sync::Weak<ConversationMutationGate>>>> = OnceLock::new();
+
+struct ConversationMutationGate {
+    inner: parking_lot::ReentrantMutex<()>,
+}
+
+impl ConversationMutationGate {
+    fn lock(&self) -> Result<parking_lot::ReentrantMutexGuard<'_, ()>, String> {
+        Ok(self.inner.lock())
+    }
+}
+
+fn conversation_mutation_gate(
+    data_path: &std::path::PathBuf,
+    conversation_id: &str,
+) -> Result<std::sync::Arc<ConversationMutationGate>, String> {
+    let conversation_id = conversation_id.trim();
+    if conversation_id.is_empty() {
+        return Err("conversationId is required.".to_string());
+    }
+    let key = format!("{}:{}", data_path.display(), conversation_id);
+    let gates = CONVERSATION_MUTATION_GATES
+        .get_or_init(|| Mutex::new(std::collections::HashMap::new()));
+    let mut gates = gates
+        .lock()
+        .map_err(|err| named_lock_error("conversation_mutation_gates", file!(), line!(), module_path!(), &err))?;
+    gates.retain(|_, gate| gate.strong_count() > 0);
+    if let Some(gate) = gates.get(&key).and_then(std::sync::Weak::upgrade) {
+        return Ok(gate);
+    }
+    let gate = std::sync::Arc::new(ConversationMutationGate {
+        inner: parking_lot::ReentrantMutex::new(()),
+    });
+    gates.insert(key, std::sync::Arc::downgrade(&gate));
+    Ok(gate)
+}
+
 impl Drop for TimedConversationLockGuard<'_> {
     fn drop(&mut self) {
         let held_ms = self.acquired_at.elapsed().as_millis();

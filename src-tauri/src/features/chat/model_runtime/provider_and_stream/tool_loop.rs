@@ -515,7 +515,15 @@ fn tool_loop_active_conversation_snapshot(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<Option<Conversation>, String> {
-    conversation_service_v2().try_get_conversation_snapshot(state, conversation_id)
+    let conversation_id = conversation_id.trim();
+    if conversation_id.is_empty() {
+        return Ok(None);
+    }
+    match conversation_service_v2().get_conversation_prompt_context(state, conversation_id) {
+        Ok(conversation) => Ok(Some(conversation)),
+        Err(err) if err.contains("CONV_NOT_FOUND") || err.contains("not found") || err.contains("不存在") => Ok(None),
+        Err(err) => Err(err),
+    }
 }
 
 fn build_tool_loop_prepared_for_continuation(
@@ -1586,6 +1594,7 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
         &usage,
         source.last_user_at.as_deref(),
         archive_pipeline_has_assistant_reply(&source),
+        conversation_current_segment_is_compaction_summary_only(&source),
     );
     runtime_log_info(format!(
         "[聊天] 工具续调前上下文整理检查 conversation_id={} should_archive={} forced={} usage_ratio={:.4} source={} reason={} effective_prompt_tokens={} context_window_tokens={} estimated={}",

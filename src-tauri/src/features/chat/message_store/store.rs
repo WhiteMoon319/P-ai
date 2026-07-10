@@ -115,6 +115,7 @@ struct ConversationJsonMessageStore<'a> {
 struct JsonlSnapshotMessageStore {
     messages_file: PathBuf,
     index_file: Option<PathBuf>,
+    sqlite_index: Option<Arc<MessageStoreIndexFile>>,
 }
 
 #[derive(Debug, Clone)]
@@ -205,6 +206,7 @@ impl JsonlSnapshotMessageStore {
         Self {
             messages_file,
             index_file: None,
+            sqlite_index: None,
         }
     }
 
@@ -212,6 +214,15 @@ impl JsonlSnapshotMessageStore {
         Self {
             messages_file,
             index_file: Some(index_file),
+            sqlite_index: None,
+        }
+    }
+
+    fn with_sqlite_index(messages_file: PathBuf, index: MessageStoreIndexFile) -> Self {
+        Self {
+            messages_file,
+            index_file: None,
+            sqlite_index: Some(Arc::new(index)),
         }
     }
 
@@ -223,6 +234,9 @@ impl JsonlSnapshotMessageStore {
     }
 
     fn index(&self) -> Result<Option<Arc<MessageStoreIndexFile>>, String> {
+        if let Some(index) = self.sqlite_index.as_ref() {
+            return Ok(Some(Arc::clone(index)));
+        }
         let Some(index_file) = self.index_file.as_ref() else {
             return Ok(None);
         };
@@ -426,6 +440,9 @@ fn message_store_backend_for_conversation<'a>(
 pub(super) fn read_ready_message_store_directory_conversation(
     paths: &MessageStorePaths,
 ) -> Result<Option<Conversation>, String> {
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_read_conversation(paths);
+    }
     let Some(manifest) = read_message_store_manifest(&paths.manifest_file)? else {
         return Ok(None);
     };
@@ -456,6 +473,9 @@ pub(super) fn read_ready_message_store_directory_conversation(
 pub(super) fn read_ready_message_store_meta(
     paths: &MessageStorePaths,
 ) -> Result<Option<ConversationShardMeta>, String> {
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_read_meta(paths);
+    }
     let Some(manifest) = read_message_store_manifest(&paths.manifest_file)? else {
         return Ok(None);
     };
@@ -488,16 +508,44 @@ pub(super) fn read_ready_message_store_meta(
 pub(super) fn read_ready_message_store_all_messages(
     paths: &MessageStorePaths,
 ) -> Result<Option<Vec<ChatMessage>>, String> {
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_with_read_snapshot(paths, || {
+            let index = chat_metadata_store_read_index(paths)?
+                .ok_or_else(|| format!("读取 SQLite 会话索引失败，conversation_id={}", paths.conversation_id))?;
+            JsonlSnapshotMessageStore::with_sqlite_index(paths.messages_file.clone(), index)
+                .read_all_messages()
+        })
+        .map(Some);
+    }
     let Some(store) = ready_jsonl_snapshot_store(paths)? else {
         return Ok(None);
     };
     store.read_all_messages().map(Some)
 }
 
+pub(super) fn read_ready_message_store_latest_compaction_message(
+    paths: &MessageStorePaths,
+) -> Result<Option<ChatMessage>, String> {
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_read_latest_compaction_message(paths);
+    }
+    let Some(store) = ready_jsonl_snapshot_store(paths)? else {
+        return Ok(None);
+    };
+    Ok(store
+        .read_current_compaction_segment()?
+        .messages
+        .into_iter()
+        .next())
+}
+
 pub(super) fn read_ready_message_store_recent_messages(
     paths: &MessageStorePaths,
     limit: usize,
 ) -> Result<Option<Vec<ChatMessage>>, String> {
+    if paths.is_v3_ready()? {
+        return Ok(Some(chat_metadata_store_read_recent_page(paths, limit, false)?.messages));
+    }
     let Some(store) = ready_jsonl_snapshot_store(paths)? else {
         return Ok(None);
     };
@@ -508,6 +556,9 @@ pub(super) fn read_ready_message_store_recent_messages_page(
     paths: &MessageStorePaths,
     limit: usize,
 ) -> Result<Option<MessageStoreLimitPage>, String> {
+    if paths.is_v3_ready()? {
+        return Ok(Some(chat_metadata_store_read_recent_page(paths, limit, false)?));
+    }
     let Some(store) = ready_jsonl_snapshot_store(paths)? else {
         return Ok(None);
     };
@@ -518,6 +569,9 @@ pub(super) fn read_ready_message_store_recent_messages_page_cached(
     paths: &MessageStorePaths,
     limit: usize,
 ) -> Result<Option<MessageStoreLimitPage>, String> {
+    if paths.is_v3_ready()? {
+        return Ok(Some(chat_metadata_store_read_recent_page(paths, limit, true)?));
+    }
     let Some(manifest) = read_message_store_manifest(&paths.manifest_file)? else {
         return Ok(None);
     };
@@ -594,6 +648,9 @@ pub(super) fn read_ready_message_store_latest_block_paths(
     paths: &MessageStorePaths,
     block_limit: usize,
 ) -> Result<Option<Vec<PathBuf>>, String> {
+    if paths.is_v3_ready()? {
+        return Ok(Some(chat_metadata_store_latest_block_paths(paths, block_limit)?));
+    }
     let Some(manifest) = read_message_store_manifest(&paths.manifest_file)? else {
         return Ok(None);
     };
@@ -627,6 +684,9 @@ fn read_ready_message_store_recent_blocks_page_with_cache(
     block_limit: usize,
     use_block_cache: bool,
 ) -> Result<Option<MessageStoreLimitPage>, String> {
+    if paths.is_v3_ready()? {
+        return Ok(Some(chat_metadata_store_read_recent_blocks_page(paths, block_limit, use_block_cache)?));
+    }
     let Some(manifest) = read_message_store_manifest(&paths.manifest_file)? else {
         return Ok(None);
     };
@@ -678,6 +738,9 @@ pub(super) fn read_ready_message_store_message_by_id(
     paths: &MessageStorePaths,
     message_id: &str,
 ) -> Result<Option<ChatMessage>, String> {
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_read_message_by_id(paths, message_id).map(Some);
+    }
     let Some(store) = ready_jsonl_snapshot_store(paths)? else {
         return Ok(None);
     };
@@ -688,6 +751,9 @@ pub(super) fn read_ready_message_store_messages_after_all(
     paths: &MessageStorePaths,
     after_message_id: &str,
 ) -> Result<Option<Vec<ChatMessage>>, String> {
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_read_messages_after_all(paths, after_message_id).map(Some);
+    }
     let Some(store) = ready_jsonl_snapshot_store(paths)? else {
         return Ok(None);
     };
@@ -698,6 +764,22 @@ pub(super) fn read_ready_message_store_rewind_slice(
     paths: &MessageStorePaths,
     message_id: &str,
 ) -> Result<Option<MessageStoreRewindSlice>, String> {
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_with_read_snapshot(paths, || {
+        let anchor = chat_metadata_store_read_locator_by_id(paths, message_id)?
+            .ok_or_else(|| format!("Message not found: {}", message_id.trim()))?;
+        let conn = chat_metadata_store_open(&paths.data_path)?;
+        let locators = chat_metadata_store_query_locators(&conn, &paths.conversation_id, "AND sequence>=?2", &[&anchor.sequence])?;
+        let removed_messages = chat_metadata_store_read_messages_for_locators(paths, &locators, false)?;
+        let recalled_user_message = removed_messages.first().cloned()
+            .ok_or_else(|| format!("Message not found: {}", message_id.trim()))?;
+        Ok(Some(MessageStoreRewindSlice {
+            keep_count: anchor.sequence as usize,
+            removed_messages,
+            recalled_user_message,
+        }))
+        });
+    }
     let Some(manifest) = read_message_store_manifest(&paths.manifest_file)? else {
         return Ok(None);
     };
@@ -780,6 +862,9 @@ pub(super) fn read_message_store_status(
 pub(super) fn read_ready_message_store_status(
     paths: &MessageStorePaths,
 ) -> Result<Option<MessageStoreStatus>, String> {
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_status(paths);
+    }
     let Some(manifest) = read_message_store_manifest(&paths.manifest_file)? else {
         return Ok(None);
     };
@@ -807,6 +892,9 @@ pub(super) fn read_ready_message_store_status(
 pub(super) fn read_ready_message_store_index_summary(
     paths: &MessageStorePaths,
 ) -> Result<Option<MessageStoreIndexSummary>, String> {
+    if paths.is_v3_ready()? {
+        return Ok(Some(chat_metadata_store_index_summary(paths)?));
+    }
     let Some(manifest) = read_message_store_manifest(&paths.manifest_file)? else {
         return Ok(None);
     };
@@ -872,6 +960,9 @@ pub(super) fn read_ready_message_store_index_summary(
 pub(super) fn read_ready_message_store_chat_snapshot(
     paths: &MessageStorePaths,
 ) -> Result<Option<MessageStoreChatSnapshot>, String> {
+    if paths.is_v3_ready()? {
+        return Ok(Some(chat_metadata_store_chat_snapshot(paths)?));
+    }
     let Some(manifest) = read_message_store_manifest(&paths.manifest_file)? else {
         return Ok(None);
     };
@@ -906,6 +997,47 @@ pub(super) fn read_ready_message_store_branch_selection(
     paths: &MessageStorePaths,
     selected_message_ids: &[String],
 ) -> Result<Option<MessageStoreBranchSelection>, String> {
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_with_read_snapshot(paths, || {
+        let mut locators = selected_message_ids.iter()
+            .map(|message_id| chat_metadata_store_read_locator_by_id(paths, message_id))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter().flatten().collect::<Vec<_>>();
+        locators.sort_by_key(|locator| locator.sequence);
+        let first_sequence = locators.first().map(|locator| locator.sequence);
+        let conn = chat_metadata_store_open(&paths.data_path)?;
+        let first_selected_ordinal = match first_sequence {
+            Some(sequence) => conn.query_row(
+                "SELECT COUNT(*) FROM message_locator WHERE conversation_id=?1 AND sequence<=?2 AND compaction_kind IS NULL",
+                rusqlite::params![paths.conversation_id, sequence],
+                |row| row.get::<_, i64>(0),
+            ).map_err(|err| format!("统计 SQLite 分支选择位置失败: {err}"))? as usize,
+            None => 0,
+        };
+        let latest_compaction_locator = conn.query_row(
+            "SELECT sequence, message_id, block_id, byte_offset, byte_len, compaction_kind, role, created_at
+             FROM message_locator WHERE conversation_id=?1 AND compaction_kind IS NOT NULL ORDER BY sequence DESC LIMIT 1",
+            [&paths.conversation_id],
+            |row| Ok(ChatMetadataLocator {
+                sequence: row.get(0)?,
+                item: MessageStoreIndexItem {
+                    message_id: row.get(1)?, block_id: Some(row.get::<_, i64>(2)? as u32),
+                    offset: row.get::<_, i64>(3)? as u64, byte_len: row.get::<_, i64>(4)? as u64,
+                    compaction_kind: row.get(5)?, role: row.get(6)?, created_at: row.get(7)?,
+                },
+            }),
+        ).optional().map_err(|err| format!("读取 SQLite 最新压缩消息失败: {err}"))?;
+        let latest_compaction_message = latest_compaction_locator.map(|locator| {
+            chat_metadata_store_read_messages_for_locators(paths, &[locator], false)?.pop()
+                .ok_or_else(|| "读取 SQLite 最新压缩消息为空".to_string())
+        }).transpose()?;
+        Ok(Some(MessageStoreBranchSelection {
+            selected_messages: chat_metadata_store_read_messages_for_locators(paths, &locators, false)?,
+            first_selected_ordinal,
+            latest_compaction_message,
+        }))
+        });
+    }
     let Some(manifest) = read_message_store_manifest(&paths.manifest_file)? else {
         return Ok(None);
     };
@@ -961,6 +1093,9 @@ pub(super) fn read_ready_message_store_branch_selection(
 pub(super) fn read_message_store_manifest_status(
     paths: &MessageStorePaths,
 ) -> Result<Option<MessageStoreStatus>, String> {
+    if paths.is_v3_ready()? {
+        return read_ready_message_store_status(paths);
+    }
     let Some(manifest) = read_message_store_manifest(&paths.manifest_file)? else {
         return Ok(None);
     };
@@ -983,6 +1118,9 @@ pub(super) fn read_ready_message_store_messages_before(
     before_message_id: &str,
     limit: usize,
 ) -> Result<Option<MessageStoreLimitPage>, String> {
+    if paths.is_v3_ready()? {
+        return Ok(Some(chat_metadata_store_read_messages_before(paths, before_message_id, limit)?));
+    }
     let Some(store) = ready_jsonl_snapshot_store(paths)? else {
         return Ok(None);
     };
@@ -994,6 +1132,9 @@ pub(super) fn read_ready_message_store_messages_after(
     after_message_id: &str,
     limit: usize,
 ) -> Result<Option<MessageStoreLimitPage>, String> {
+    if paths.is_v3_ready()? {
+        return Ok(Some(chat_metadata_store_read_messages_after(paths, after_message_id, limit)?));
+    }
     let Some(store) = ready_jsonl_snapshot_store(paths)? else {
         return Ok(None);
     };
@@ -1003,6 +1144,9 @@ pub(super) fn read_ready_message_store_messages_after(
 pub(super) fn read_ready_message_store_current_compaction_segment(
     paths: &MessageStorePaths,
 ) -> Result<Option<MessageStoreCompactionSegment>, String> {
+    if paths.is_v3_ready()? {
+        return Ok(Some(chat_metadata_store_compaction_segment(paths, None)?));
+    }
     let Some(store) = ready_jsonl_snapshot_store(paths)? else {
         return Ok(None);
     };
@@ -1013,6 +1157,9 @@ pub(super) fn read_ready_message_store_compaction_segment_before(
     paths: &MessageStorePaths,
     boundary_message_id: &str,
 ) -> Result<Option<MessageStoreCompactionSegment>, String> {
+    if paths.is_v3_ready()? {
+        return Ok(Some(chat_metadata_store_compaction_segment(paths, Some(boundary_message_id))?));
+    }
     let Some(store) = ready_jsonl_snapshot_store(paths)? else {
         return Ok(None);
     };
@@ -1025,17 +1172,24 @@ pub(super) fn read_ready_message_store_block_page(
     paths: &MessageStorePaths,
     requested_block_id: Option<u32>,
 ) -> Result<Option<MessageStoreBlockPage>, String> {
-    let Some(manifest) = read_message_store_manifest(&paths.manifest_file)? else {
-        return Ok(None);
+    if paths.is_v3_ready()? {
+        return Ok(Some(chat_metadata_store_block_page(paths, requested_block_id)?));
+    }
+    let index = if let Some(index) = chat_metadata_store_read_index(paths)? {
+        index
+    } else {
+        let Some(manifest) = read_message_store_manifest(&paths.manifest_file)? else {
+            return Ok(None);
+        };
+        if !manifest.should_read_jsonl() {
+            return Ok(None);
+        }
+        validate_ready_message_store_snapshot_integrity(paths, &manifest)?;
+        if !paths.index_file.exists() {
+            return Ok(None);
+        }
+        (*read_message_store_index_file(&paths.index_file)?).clone()
     };
-    if !manifest.should_read_jsonl() {
-        return Ok(None);
-    }
-    validate_ready_message_store_snapshot_integrity(paths, &manifest)?;
-    if !paths.index_file.exists() {
-        return Ok(None);
-    }
-    let index = read_message_store_index_file(&paths.index_file)?;
     if index.items.is_empty() {
         return Ok(Some(MessageStoreBlockPage {
             blocks: Vec::new(),
@@ -1081,6 +1235,9 @@ pub(super) fn read_message_store_current_compaction_segment_for_conversation(
     paths: &MessageStorePaths,
     conversation: &Conversation,
 ) -> Result<MessageStoreCompactionSegment, String> {
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_compaction_segment(paths, None);
+    }
     message_store_backend_for_conversation(paths, conversation)?
         .read_current_compaction_segment()
 }
@@ -1090,6 +1247,9 @@ pub(super) fn read_message_store_compaction_segment_before_for_conversation(
     conversation: &Conversation,
     boundary_message_id: &str,
 ) -> Result<MessageStoreCompactionSegment, String> {
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_compaction_segment(paths, Some(boundary_message_id));
+    }
     message_store_backend_for_conversation(paths, conversation)?
         .read_compaction_segment_before(boundary_message_id)
 }
@@ -1103,6 +1263,46 @@ pub(super) fn append_message_store_tool_group_result(
     provider_meta_patch: Option<Value>,
     assistant_message_id: Option<&str>,
 ) -> Result<MessageStoreToolCallResultAppend, String> {
+    if paths.is_v3_ready()? {
+        let mut ready_meta = message_store::read_ready_message_store_meta(paths)?
+            .ok_or_else(|| format!("追加工具结果失败：缺少 ready 消息元数据，conversation_id={}", paths.conversation_id))?;
+        let tail_messages = message_store::read_ready_message_store_recent_messages_page_cached(paths, 1)?
+            .map(|page| page.messages)
+            .unwrap_or_default();
+        let mut next = ready_meta.clone().into_conversation(tail_messages);
+        let append = append_tool_group_result_to_conversation(
+            &mut next,
+            agent_id,
+            assistant_tool_call_event,
+            tool_result_event,
+            provider_meta_patch,
+            assistant_message_id,
+        )?;
+        ready_meta.apply_metadata_fields_from_conversation(&next);
+        let updated_message = next.messages.last().ok_or_else(|| {
+            format!("追加工具结果失败：缺少目标助理消息，conversation_id={}", paths.conversation_id)
+        })?;
+        if append.created {
+            ready_meta.apply_appended_messages(std::slice::from_ref(updated_message));
+            write_jsonl_snapshot_appended_messages_shard_from_meta(
+                paths,
+                &ready_meta,
+                std::slice::from_ref(updated_message),
+            )?;
+        } else {
+            write_jsonl_snapshot_replaced_message_shard(
+                paths,
+                &ready_meta.to_persist_meta(),
+                updated_message,
+            )?;
+        }
+        return Ok(MessageStoreToolCallResultAppend {
+            conversation: next,
+            assistant_message_id: append.assistant_message_id,
+            created: append.created,
+            tool_event_count: append.tool_event_count,
+        });
+    }
     let mut next = conversation.clone();
     let append = append_tool_group_result_to_conversation(
         &mut next,
@@ -1359,6 +1559,12 @@ fn validate_tool_group_result_append(
 fn ready_jsonl_snapshot_store(
     paths: &MessageStorePaths,
 ) -> Result<Option<JsonlSnapshotMessageStore>, String> {
+    if let Some(index) = chat_metadata_store_read_index(paths)? {
+        return Ok(Some(JsonlSnapshotMessageStore::with_sqlite_index(
+            paths.messages_file.clone(),
+            index,
+        )));
+    }
     let Some(manifest) = read_message_store_manifest(&paths.manifest_file)? else {
         return Ok(None);
     };
@@ -1620,30 +1826,41 @@ fn validate_conversation_shard_meta_id(
 pub(super) fn delete_message_store_shard_artifacts(
     paths: &MessageStorePaths,
 ) -> Result<bool, String> {
-    if paths.shard_dir.exists() {
-        validate_message_store_shard_dir_for_delete(paths)?;
+    let delete_artifacts = || {
+        let sqlite_deleted = if paths.is_v3_ready()? {
+            chat_metadata_store_delete_conversation_unlocked(paths)?
+        } else {
+            false
+        };
+        if paths.shard_dir.exists() {
+            validate_message_store_shard_dir_for_delete(paths)?;
+        }
+        let mut changed = sqlite_deleted;
+        if paths.legacy_conversation_file.exists() {
+            fs::remove_file(&paths.legacy_conversation_file).map_err(|err| {
+                format!(
+                    "删除旧会话分片失败，path={}，error={err}",
+                    paths.legacy_conversation_file.display()
+                )
+            })?;
+            changed = true;
+        }
+        if paths.shard_dir.exists() {
+            fs::remove_dir_all(&paths.shard_dir).map_err(|err| {
+                format!(
+                    "删除目录型会话分片失败，path={}，error={err}",
+                    paths.shard_dir.display()
+                )
+            })?;
+            forget_message_store_index_cache(&paths.index_file);
+            changed = true;
+        }
+        Ok(changed)
+    };
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_with_delete_gate(paths, delete_artifacts);
     }
-    let mut changed = false;
-    if paths.legacy_conversation_file.exists() {
-        fs::remove_file(&paths.legacy_conversation_file).map_err(|err| {
-            format!(
-                "删除旧会话分片失败，path={}，error={err}",
-                paths.legacy_conversation_file.display()
-            )
-        })?;
-        changed = true;
-    }
-    if paths.shard_dir.exists() {
-        fs::remove_dir_all(&paths.shard_dir).map_err(|err| {
-            format!(
-                "删除目录型会话分片失败，path={}，error={err}",
-                paths.shard_dir.display()
-            )
-        })?;
-        forget_message_store_index_cache(&paths.index_file);
-        changed = true;
-    }
-    Ok(changed)
+    delete_artifacts()
 }
 
 #[cfg(test)]

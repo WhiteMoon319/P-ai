@@ -51,24 +51,33 @@ fn ensure_ready_message_store_from_legacy_conversation(
     if normalized_conversation_id.is_empty() {
         return Err("conversationId is required.".to_string());
     }
-    if message_store::read_ready_message_store_status(store_paths)?.is_some() {
-        return Ok(());
+    let mutation_gate = conversation_mutation_gate(&state.data_path, normalized_conversation_id)?;
+    {
+        let _guard = mutation_gate.lock().map_err(|err| {
+            named_lock_error("conversation_mutation_gate", file!(), line!(), module_path!(), &err)
+        })?;
+        if message_store::read_ready_message_store_status(store_paths)?.is_some() {
+            return Ok(());
+        }
+        let conversation = read_legacy_conversation_snapshot_for_ready_store_recovery(
+            state,
+            normalized_conversation_id,
+        )?;
+        let recovery_job_id = format!("runtime-ready-store-recover-{normalized_conversation_id}");
+        let recovery_reason = format!(
+            "运行时补建 ready message store，conversation_id={normalized_conversation_id}"
+        );
+        conversation_service_v2().apply_privileged_snapshot_overwrite_inner(
+            state,
+            &ConversationOverwriteAudit {
+                job_id: recovery_job_id,
+                source: ConversationOverwriteSource::MigrationRecovery,
+                operator: "runtime_ready_store_recover".to_string(),
+                reason: recovery_reason,
+            },
+            &conversation,
+        )?;
     }
-    let conversation =
-        read_legacy_conversation_snapshot_for_ready_store_recovery(state, normalized_conversation_id)?;
-    let recovery_job_id = format!("runtime-ready-store-recover-{normalized_conversation_id}");
-    let recovery_reason =
-        format!("运行时补建 ready message store，conversation_id={normalized_conversation_id}");
-    conversation_service_v2().apply_privileged_snapshot_overwrite_inner(
-        state,
-        &ConversationOverwriteAudit {
-            job_id: recovery_job_id,
-            source: ConversationOverwriteSource::MigrationRecovery,
-            operator: "runtime_ready_store_recover".to_string(),
-            reason: recovery_reason,
-        },
-        &conversation,
-    )?;
     flush_pending_persists_blocking(state)?;
     Ok(())
 }

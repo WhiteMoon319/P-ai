@@ -3330,6 +3330,7 @@
             &usage,
             Some(&now_iso()),
             true,
+            false,
         );
 
         assert_eq!(source, "trusted_prompt_usage");
@@ -5245,6 +5246,278 @@
         let chat_index = state_read_chat_index_cached(&state).expect("read memory chat index");
         assert!(chat_index.conversations.is_empty());
         assert!(!app_layout_chat_index_path(&state.data_path).exists());
+    }
+
+    #[test]
+    fn conversation_delete_should_not_be_overwritten_by_waiting_metadata_update() {
+        let state = std::sync::Arc::new(test_chat_runtime_state());
+        let now = now_iso();
+        let conversation = test_chat_conversation("conversation-delete-metadata-race", "active", &now);
+        state_schedule_conversation_persist(&state, &conversation).expect("schedule persist");
+
+        let mutation_gate = conversation_mutation_gate(&state.data_path, &conversation.id)
+            .expect("mutation gate");
+        let guard = mutation_gate.lock().expect("hold mutation gate");
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (result_tx, result_rx) = std::sync::mpsc::channel();
+        let state_for_update = std::sync::Arc::clone(&state);
+        let conversation_id = conversation.id.clone();
+        let metadata_update = std::thread::spawn(move || {
+            started_tx.send(()).expect("notify metadata update start");
+            let result = state_update_conversation_metadata_cached(
+                &state_for_update,
+                &conversation_id,
+                |cached| {
+                    cached.title = "must-not-resurrect".to_string();
+                    Ok(())
+                },
+            );
+            result_tx.send(result).expect("return metadata update result");
+        });
+        started_rx.recv().expect("wait metadata update start");
+        assert!(matches!(result_rx.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
+
+        state_schedule_conversation_delete(&state, &conversation.id).expect("schedule delete while holding gate");
+        drop(guard);
+        let result = result_rx.recv().expect("wait metadata update result");
+        metadata_update.join().expect("join metadata update");
+        assert!(result.is_err());
+        assert!(state_read_conversation_metadata_cached(&state, &conversation.id).is_err());
+        assert!(state.cached_deleted_conversation_ids.lock().expect("read deleted ids").contains(&conversation.id));
+        let pending = state.conversation_persist_pending.lock().expect("read pending delete");
+        assert!(pending.as_ref().expect("pending exists").deleted_conversation_ids.contains(&conversation.id));
+    }
+
+    #[test]
+    fn conversation_delete_should_not_be_overwritten_by_waiting_shell_workspace_direct_write() {
+        let state = std::sync::Arc::new(test_chat_runtime_state());
+        let now = now_iso();
+        let conversation = test_chat_conversation("conversation-delete-workspace-race", "active", &now);
+        write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
+        state_mark_conversation_direct_persisted(&state, &conversation)
+            .expect("mark persisted");
+
+        let mutation_gate = conversation_mutation_gate(&state.data_path, &conversation.id)
+            .expect("mutation gate");
+        let guard = mutation_gate.lock().expect("hold mutation gate");
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (result_tx, result_rx) = std::sync::mpsc::channel();
+        let state_for_write = std::sync::Arc::clone(&state);
+        let conversation_id = conversation.id.clone();
+        let workspace_path = state.llm_workspace_path.to_string_lossy().to_string();
+        let direct_write = std::thread::spawn(move || {
+            started_tx.send(()).expect("notify direct write start");
+            let result = state_write_conversation_shell_workspace_metadata_direct(
+                &state_for_write,
+                &conversation_id,
+                vec![ShellWorkspaceConfig {
+                    id: "main".to_string(),
+                    name: "main".to_string(),
+                    path: workspace_path,
+                    level: SHELL_WORKSPACE_LEVEL_MAIN.to_string(),
+                    access: SHELL_WORKSPACE_ACCESS_APPROVAL.to_string(),
+                    built_in: false,
+                }],
+            );
+            result_tx.send(result).expect("return direct write result");
+        });
+        started_rx.recv().expect("wait direct write start");
+        assert!(matches!(result_rx.try_recv(), Err(std::sync::mpsc::TryRecvError::Empty)));
+
+        state_schedule_conversation_delete(&state, &conversation.id)
+            .expect("schedule delete while holding gate");
+        drop(guard);
+        let result = result_rx.recv().expect("wait direct write result");
+        direct_write.join().expect("join direct write");
+
+        assert!(result.is_err());
+        assert!(state_read_conversation_metadata_cached(&state, &conversation.id).is_err());
+        assert!(state
+            .cached_deleted_conversation_ids
+            .lock()
+            .expect("read deleted ids")
+            .contains(&conversation.id));
+        let pending = state
+            .conversation_persist_pending
+            .lock()
+            .expect("read pending delete");
+        assert!(pending
+            .as_ref()
+            .expect("pending exists")
+            .deleted_conversation_ids
+            .contains(&conversation.id));
+    }
+
+    #[test]
+    fn update_unarchived_conversation_by_id_should_publish_v3_message_replacements() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let mut conversation =
+            test_chat_conversation("conversation-v3-generic-message-update", "active", &now);
+        let mut message = test_text_message("assistant", "待更新工具审查", &now);
+        message.id = "tool-review-message".to_string();
+        message.tool_call = Some(vec![serde_json::json!({
+            "tool_call_id": "call-v3-review",
+            "content": "原始结果"
+        })]);
+        conversation.messages.push(message);
+        write_conversation_shard(&state.data_path, &conversation).expect("write v2 conversation");
+        message_store::chat_metadata_store_run_v3_migration(&state.data_path)
+            .expect("migrate conversation to v3");
+
+        conversation_service_v2()
+            .update_unarchived_conversation_by_id(&state, &conversation.id, |updated| {
+                updated.messages[0].tool_call.as_mut().expect("tool call")[0]["content"] =
+                    serde_json::Value::String("已审查结果".to_string());
+                Ok(())
+            })
+            .expect("update v3 message");
+
+        let paths = message_store::message_store_paths(&state.data_path, &conversation.id)
+            .expect("message store paths");
+        let stored = message_store::read_ready_message_store_message_by_id(
+            &paths,
+            "tool-review-message",
+        )
+        .expect("read stored message")
+        .expect("stored message exists");
+        assert_eq!(
+            stored.tool_call.as_ref().expect("stored tool call")[0]["content"],
+            serde_json::Value::String("已审查结果".to_string())
+        );
+    }
+
+    #[test]
+    fn pending_worker_snapshot_taken_before_delete_should_not_rewrite_conversation() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let conversation = test_chat_conversation("conversation-delete-worker-full-race", "active", &now);
+        start_conversation_persist_worker(&state).expect("start persist worker");
+
+        let mutation_gate = conversation_mutation_gate(&state.data_path, &conversation.id)
+            .expect("mutation gate");
+        let guard = mutation_gate.lock().expect("hold mutation gate");
+        state_schedule_conversation_persist(&state, &conversation).expect("schedule full persist");
+        for _ in 0..100 {
+            if state
+                .conversation_persist_pending
+                .lock()
+                .expect("read pending")
+                .is_none()
+            {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(state
+            .conversation_persist_pending
+            .lock()
+            .expect("pending snapshot taken")
+            .is_none());
+
+        state_schedule_conversation_delete(&state, &conversation.id)
+            .expect("schedule delete after worker took snapshot");
+        drop(guard);
+        for _ in 0..100 {
+            let pending_is_empty = state
+                .conversation_persist_pending
+                .lock()
+                .expect("read pending")
+                .is_none();
+            let delete_flushed = !state
+                .cached_deleted_conversation_ids
+                .lock()
+                .expect("read deleted ids")
+                .contains(&conversation.id);
+            if pending_is_empty && delete_flushed {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+
+        assert!(state
+            .conversation_persist_pending
+            .lock()
+            .expect("pending delete flushed")
+            .is_none());
+        assert!(!app_layout_chat_conversations_dir(&state.data_path)
+            .join(&conversation.id)
+            .exists());
+        assert!(state_read_chat_index_cached(&state)
+            .expect("read chat index")
+            .conversations
+            .iter()
+            .all(|item| item.id != conversation.id));
+    }
+
+    #[test]
+    fn pending_worker_metadata_taken_before_delete_should_not_rewrite_conversation() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let conversation = test_chat_conversation("conversation-delete-worker-meta-race", "active", &now);
+        write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
+        state_mark_conversation_direct_persisted(&state, &conversation)
+            .expect("mark persisted");
+        start_conversation_persist_worker(&state).expect("start persist worker");
+
+        let mutation_gate = conversation_mutation_gate(&state.data_path, &conversation.id)
+            .expect("mutation gate");
+        let guard = mutation_gate.lock().expect("hold mutation gate");
+        state_update_conversation_metadata_cached(&state, &conversation.id, |cached| {
+            cached.title = "must-not-write".to_string();
+            Ok(())
+        })
+        .expect("schedule metadata update");
+        for _ in 0..100 {
+            if state
+                .conversation_persist_pending
+                .lock()
+                .expect("read pending")
+                .is_none()
+            {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(state
+            .conversation_persist_pending
+            .lock()
+            .expect("pending metadata taken")
+            .is_none());
+
+        state_schedule_conversation_delete(&state, &conversation.id)
+            .expect("schedule delete after worker took metadata");
+        drop(guard);
+        for _ in 0..100 {
+            let pending_is_empty = state
+                .conversation_persist_pending
+                .lock()
+                .expect("read pending")
+                .is_none();
+            let delete_flushed = !state
+                .cached_deleted_conversation_ids
+                .lock()
+                .expect("read deleted ids")
+                .contains(&conversation.id);
+            if pending_is_empty && delete_flushed {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+
+        assert!(state
+            .conversation_persist_pending
+            .lock()
+            .expect("pending delete flushed")
+            .is_none());
+        assert!(!app_layout_chat_conversations_dir(&state.data_path)
+            .join(&conversation.id)
+            .exists());
+        assert!(state_read_chat_index_cached(&state)
+            .expect("read chat index")
+            .conversations
+            .iter()
+            .all(|item| item.id != conversation.id));
     }
 
     #[test]

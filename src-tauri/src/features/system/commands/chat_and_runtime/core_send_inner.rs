@@ -189,6 +189,19 @@ fn trim_conversation_for_prompt_request(conversation: &Conversation) -> Conversa
     trimmed
 }
 
+fn conversation_current_segment_is_compaction_summary_only(conversation: &Conversation) -> bool {
+    let Some(segment_start) = conversation.messages.iter().rposition(|message| {
+        is_context_compaction_message(message, message.role.trim())
+    }) else {
+        return false;
+    };
+
+    matches!(
+        &conversation.messages[segment_start..],
+        [message] if is_context_compaction_message(message, message.role.trim())
+    )
+}
+
 const REMOTE_IM_AUTO_COMPACTION_IDLE_HOURS: i64 = 10;
 const REMOTE_IM_AUTO_COMPACTION_MIN_MESSAGES: usize = 7;
 
@@ -1032,10 +1045,22 @@ fn conversation_has_visible_title_from_store(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<bool, String> {
-    Ok(conversation_service_v2()
-        .try_get_conversation_snapshot(state, conversation_id)?
-        .map(|conversation| conversation_has_visible_title(&conversation))
-        .unwrap_or(false))
+    let conversation_meta = match conversation_service_v2().get_conversation_meta(state, conversation_id) {
+        Ok(conversation_meta) => conversation_meta,
+        Err(err) if err.contains("CONV_NOT_FOUND") => return Ok(false),
+        Err(err) => return Err(err),
+    };
+    if !conversation_meta.title.trim().is_empty() {
+        return Ok(true);
+    }
+    if conversation_meta.latest_summary_title.is_none() {
+        return Ok(false);
+    }
+    let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
+    ensure_ready_message_store_from_legacy_conversation(state, conversation_id, &store_paths)?;
+    Ok(message_store::read_ready_message_store_latest_compaction_message(&store_paths)?
+        .as_ref()
+        .is_some_and(summary_context_message_title_blocks_auto_title))
 }
 
 fn auto_title_generation_inflight(
@@ -2324,7 +2349,7 @@ async fn send_chat_message_inner(
             );
         }
         let requested_conversation = conversation_service_v2()
-            .get_conversation_snapshot(state, requested_conversation_id)?;
+            .get_conversation_prompt_context(state, requested_conversation_id)?;
         if conversation_is_archived(&requested_conversation) {
             return Ok(None);
         }
@@ -2869,7 +2894,6 @@ async fn send_chat_message_inner(
     log_run_stage("attachments_processed");
 
     let mut archived_before_send_any = false;
-    let mut compaction_restart_count = 0usize;
     let mut persist_user_message_on_next_prepare = true;
 
     let mut preloaded_prepare_snapshot = preloaded_prepare_snapshot;
@@ -2942,10 +2966,13 @@ async fn send_chat_message_inner(
         )
         .unwrap_or(snapshot.prompt_conversation_before.plan_mode_enabled);
         let storage_conversation = if trigger_only {
-            let latest_message = snapshot
-                .storage_conversation_before
-                .messages
-                .last()
+            let latest_message = conversation_service_v2()
+                .get_conversation_recent_messages(
+                    &state,
+                    &snapshot.storage_conversation_before.id,
+                    1,
+                )?
+                .pop()
                 .ok_or_else(|| "当前对话没有可供继续处理的消息。".to_string())?;
             if latest_message
                 .speaker_agent_id
@@ -3392,13 +3419,6 @@ async fn send_chat_message_inner(
                         &done_message,
                         None,
                     ));
-                    compaction_restart_count = compaction_restart_count.saturating_add(1);
-                    if compaction_restart_count > 3 {
-                        return Err(format!(
-                            "远程联系人会话自动压缩重启次数过多，conversation_id={}, count={}",
-                            conversation_for_compaction.id, compaction_restart_count
-                        ));
-                    }
                     restart_dispatch_round_after_context_compaction(
                         &state,
                         &mut runtime_context,
@@ -3435,6 +3455,7 @@ async fn send_chat_message_inner(
             &usage_resolution,
             conversation_for_compaction.last_user_at.as_deref(),
             archive_pipeline_has_assistant_reply(&conversation_for_compaction),
+            conversation_current_segment_is_compaction_summary_only(&conversation_for_compaction),
         );
         eprintln!(
             "[归档] 发送前检查: should_archive={}, forced={}, reason={}, usage_ratio={:.4}, source={}, latest_real_effective_prompt_tokens={:?}, latest_real_usage_ratio={:?}, estimated_prompt_tokens={:?}, context_window_tokens={}",
@@ -3494,14 +3515,9 @@ async fn send_chat_message_inner(
                             conversation_for_compaction.id, decision.reason, done_message
                         ));
                     }
-                    compaction_restart_count = compaction_restart_count.saturating_add(1);
-                    if compaction_restart_count > 3 {
-                        return Err("上下文整理后仍无法恢复发送，重开调度次数已超过上限。".to_string());
-                    }
                     runtime_log_info(format!(
-                        "[聊天调度] 发送前整理命中，当前调度闭口并准备重开: conversation_id={}，restart_count={}，reason={}",
+                        "[聊天调度] 发送前整理命中，当前调度闭口并准备重开: conversation_id={}，reason={}",
                         conversation_for_compaction.id,
-                        compaction_restart_count,
                         decision.reason
                     ));
                     restart_dispatch_round_after_context_compaction(
@@ -3676,14 +3692,9 @@ async fn send_chat_message_inner(
             log_run_stage(&request_finish_stage);
 
             if restart_after_compaction {
-                compaction_restart_count = compaction_restart_count.saturating_add(1);
-                if compaction_restart_count > 3 {
-                    return Err("上下文整理后仍无法恢复发送，重开调度次数已超过上限。".to_string());
-                }
                 runtime_log_info(format!(
-                    "[聊天调度] 续调整理命中，当前调度闭口并准备重开: conversation_id={}，restart_count={}",
-                    conversation_id,
-                    compaction_restart_count
+                    "[聊天调度] 续调整理命中，当前调度闭口并准备重开: conversation_id={}",
+                    conversation_id
                 ));
                 restart_dispatch_round_after_context_compaction(
                     &state,
@@ -4430,6 +4441,27 @@ mod core_send_inner_tests {
             }
         }));
         message
+    }
+
+    #[test]
+    fn current_segment_compaction_summary_only_should_ignore_preceding_history() {
+        let now = now_iso();
+        let mut messages = vec![
+            test_message_at("old-user", "user", &now),
+            test_message_at("old-assistant", "assistant", &now),
+            test_compaction_message_at("summary", &now),
+        ];
+        let conversation = test_remote_im_conversation_with_messages(messages.clone());
+
+        assert!(conversation_current_segment_is_compaction_summary_only(
+            &conversation
+        ));
+
+        messages.push(test_message_at("new-user", "user", &now));
+        let conversation = test_remote_im_conversation_with_messages(messages);
+        assert!(!conversation_current_segment_is_compaction_summary_only(
+            &conversation
+        ));
     }
 
     fn test_remote_im_conversation_with_messages(messages: Vec<ChatMessage>) -> Conversation {

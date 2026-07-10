@@ -9,6 +9,7 @@ mod message_store {
     include!("meta.rs");
     include!("index.rs");
     include!("active_plan.rs");
+    include!("sqlite.rs");
     include!("jsonl_snapshot.rs");
     include!("verification.rs");
     include!("store.rs");
