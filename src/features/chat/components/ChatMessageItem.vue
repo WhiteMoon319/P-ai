@@ -53,20 +53,23 @@
           class="flex flex-col opacity-90"
         >
           <details
-            v-if="showActivityPanel(block)"
             ref="activityDetailsRef"
             class="collapse rounded-none min-w-55"
+            :class="{ 'pointer-events-none': !showActivityPanel(block) }"
             :open="activityPanelOpen(block)"
             @toggle="onActivityToggle"
           >
-            <summary class="collapse-title px-0 py-0.5 min-h-0 text-[12px] font-normal flex items-center gap-1.5 text-base-content/55 hover:bg-base-200">
+            <summary
+              class="collapse-title px-0 py-0.5 min-h-0 text-[12px] font-normal flex items-center gap-1.5 text-base-content/55"
+              :class="showActivityPanel(block) ? 'hover:bg-base-200 cursor-pointer' : 'cursor-default'"
+            >
               <span class="flex min-w-0 flex-1 items-center gap-1.5">
                 <span class="shrink-0">
-                  {{ `${activityStatusText(block)}${activityReasoningCountLabel(block)}` }}
+                  {{ activitySummaryLabel(block) }}
                 </span>
-                <span v-if="activityToolCountsLabel(block)" class="inline-flex h-3 items-center text-base-content/40">·</span>
+                <span v-if="showActivityPanel(block) && activityToolCountsLabel(block)" class="inline-flex h-3 items-center text-base-content/40">·</span>
                 <span
-                  v-if="activityToolCountsLabel(block)"
+                  v-if="showActivityPanel(block) && activityToolCountsLabel(block)"
                   v-memo="[activityToolCountsLabel(block)]"
                   class="min-w-0 truncate text-base-content/55"
                 >
@@ -75,7 +78,7 @@
               </span>
             </summary>
             <div
-              v-if="activityPanelOpen(block)"
+              v-if="showActivityPanel(block) && activityPanelOpen(block)"
               class="collapse-content px-0 pb-1 pt-2 text-xs text-base-content/70"
               @click="collapseDetailsFromContentClick"
             >
@@ -135,12 +138,6 @@
               </div>
             </div>
           </details>
-          <div
-            v-else
-            class="-ml-2 inline-flex w-fit items-center rounded-full bg-base-200/70 px-2 py-0.5 text-[12px] leading-5 text-base-content/45"
-          >
-            {{ t('chat.messageItem.notThought') }}
-          </div>
         </div>
       </template>
 
@@ -916,6 +913,13 @@ function showActivitySummary(block: ChatMessageBlock): boolean {
   if (isOwnMessage(block)) return false;
   if (showActivityPanel(block)) return true;
   return !block.isStreaming;
+}
+
+function activitySummaryLabel(block: ChatMessageBlock): string {
+  if (!showActivityPanel(block)) {
+    return t('chat.messageItem.notThought');
+  }
+  return `${activityStatusText(block)}${activityReasoningCountLabel(block)}`;
 }
 
 function hasExpandableActivityItem(item: ChatActivityItem): boolean {
