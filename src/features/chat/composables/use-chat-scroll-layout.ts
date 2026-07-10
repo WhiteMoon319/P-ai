@@ -24,6 +24,7 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
   const lastScrollTop = ref(0);
   const userScrollingDown = ref(false);
   const userScrollingUp = ref(false);
+  const sessionControlPanelVisible = ref(true);
   let composerResizeObserver: ResizeObserver | null = null;
   let chatLayoutResizeObserver: ResizeObserver | null = null;
   let pendingComposerResizeFrame = 0;
@@ -100,6 +101,7 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
       userScrollingUp.value = false;
     }
     lastBottomState.value = nearBottom;
+    return nearBottom;
   }
 
   function onScroll() {
@@ -118,7 +120,10 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
       }
     }
     lastScrollTop.value = nextScrollTop;
-    updateScrollPositionState(el, { notifyReachedBottom: true });
+    const nearBottom = updateScrollPositionState(el, { notifyReachedBottom: true });
+    if (userInitiatedScroll && nextScrollTop !== previousScrollTop) {
+      sessionControlPanelVisible.value = nearBottom;
+    }
   }
 
   function noteWheelScrollIntent() {
@@ -175,7 +180,7 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
       }
       const el = scrollContainer.value;
       if (el) {
-        updateScrollPositionState(el);
+        sessionControlPanelVisible.value = updateScrollPositionState(el);
         lastScrollTop.value = el.scrollTop;
         userScrollingDown.value = false;
         userScrollingUp.value = false;
@@ -223,7 +228,7 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
         updateLatestOwnElasticMinHeight();
         const el = scrollContainer.value;
         if (el) {
-          updateScrollPositionState(el);
+          sessionControlPanelVisible.value = updateScrollPositionState(el);
           lastScrollTop.value = el.scrollTop;
           userScrollingDown.value = false;
           userScrollingUp.value = false;
@@ -258,6 +263,7 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
     atConversationBottom: lastBottomState,
     userScrollingDown,
     userScrollingUp,
+    sessionControlPanelVisible,
     jumpToBottomStyle,
     jumpAboveBottomStyle,
     toolbarReservedHeight,
