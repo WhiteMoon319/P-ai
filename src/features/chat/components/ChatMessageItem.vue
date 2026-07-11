@@ -135,6 +135,14 @@
                     <div v-else class="text-xs text-base-content/45">{{ toolTimelineText('noArgs') }}</div>
                   </div>
                 </details>
+                <button
+                  type="button"
+                  class="btn btn-sm mt-2 w-full border-0 bg-base-300 text-base-content/70 hover:bg-base-300 hover:text-base-content"
+                  data-selection-ignore="true"
+                  @click.stop="closeActivityDetails"
+                >
+                  {{ t("common.collapse") }}
+                </button>
               </div>
             </div>
           </details>
@@ -566,7 +574,7 @@ const resolvedImageSrcMap = ref<Record<string, string>>({});
 const markdownContainerRef = ref<HTMLElement | null>(null);
 const activityDetailsRef = ref<HTMLDetailsElement | null>(null);
 const activityExpanded = ref(false);
-const expandedActivityItemKey = ref("");
+const expandedActivityItemKeys = ref<Set<string>>(new Set());
 const planMarkdownText = ref("");
 const planMarkdownError = ref("");
 const planMarkdownLoading = ref(false);
@@ -684,7 +692,7 @@ function detailsOpenFromEvent(event: Event): boolean {
 function onActivityToggle(event: Event): void {
   activityExpanded.value = detailsOpenFromEvent(event);
   if (!activityExpanded.value) {
-    expandedActivityItemKey.value = "";
+    expandedActivityItemKeys.value = new Set();
   }
 }
 
@@ -694,20 +702,18 @@ function closeActivityDetails(): void {
     details.open = false;
   }
   activityExpanded.value = false;
-  expandedActivityItemKey.value = "";
-}
-
-function handleActivityOutsidePointerDown(event: PointerEvent): void {
-  if (!activityExpanded.value) return;
-  const details = activityDetailsRef.value;
-  const target = event.target;
-  if (!(details instanceof HTMLDetailsElement) || !(target instanceof Node)) return;
-  if (details.contains(target)) return;
-  closeActivityDetails();
+  expandedActivityItemKeys.value = new Set();
 }
 
 function onActivityItemToggle(item: ChatActivityItem, event: Event): void {
-  expandedActivityItemKey.value = detailsOpenFromEvent(event) ? activityItemKey(item) : "";
+  const key = activityItemKey(item);
+  const next = new Set(expandedActivityItemKeys.value);
+  if (detailsOpenFromEvent(event)) {
+    next.add(key);
+  } else {
+    next.delete(key);
+  }
+  expandedActivityItemKeys.value = next;
 }
 
 function collapseDetailsFromContentClick(event: MouseEvent): void {
@@ -1035,7 +1041,7 @@ function activityItemKey(item: ChatActivityItem): string {
 }
 
 function isActivityItemExpanded(item: ChatActivityItem): boolean {
-  return expandedActivityItemKey.value === activityItemKey(item);
+  return expandedActivityItemKeys.value.has(activityItemKey(item));
 }
 
 function activityItemOpen(block: ChatMessageBlock, item: ChatActivityItem): boolean {
@@ -2216,7 +2222,6 @@ onMounted(() => {
   relativeTimeNowTimer = window.setInterval(() => {
     relativeTimeNowTick.value = Date.now();
   }, 60_000);
-  document.addEventListener("pointerdown", handleActivityOutsidePointerDown, true);
 });
 
 onBeforeUnmount(() => {
@@ -2226,7 +2231,6 @@ onBeforeUnmount(() => {
     relativeTimeNowTimer = 0;
   }
   disposed = true;
-  document.removeEventListener("pointerdown", handleActivityOutsidePointerDown, true);
 });
 
 function resolvedImageSrc(
