@@ -1,5 +1,5 @@
 <template>
-  <div v-if="hasActiveOrPendingTodo" class="pointer-events-none sticky -top-3 z-20 flex justify-center pb-1">
+  <div v-if="hasActiveOrPendingTodo" class="pointer-events-none flex justify-center pb-1">
     <div
       class="dropdown dropdown-bottom pointer-events-auto"
       :aria-label="t('config.task.fields.todo')"

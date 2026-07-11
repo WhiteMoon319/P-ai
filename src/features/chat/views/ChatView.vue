@@ -43,6 +43,9 @@
         </div>
 
         <div class="relative flex min-h-0 flex-1 overflow-hidden" @mouseenter="chatScrollbarRef?.reveal()" @mouseleave="chatScrollbarRef?.hide()">
+          <div class="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center px-3 pt-0">
+            <ConversationTodoDropdown :todos="normalizedConversationTodos" :persona-name="personaName" />
+          </div>
           <div
             ref="scrollContainer"
             class="ecall-chat-scroll-container relative flex flex-1 min-h-0 flex-col overflow-x-hidden overflow-y-auto px-0 py-3"
@@ -52,7 +55,6 @@
             @wheel="handleConversationWheelInput"
             @pointerdown="beginPointerScrollIntent"
           >
-          <ConversationTodoDropdown :todos="normalizedConversationTodos" :persona-name="personaName" />
           <div class="ecall-chat-history-flow flex min-w-0 shrink-0 flex-col">
             <div
               v-if="showNoMoreHistoryDivider"
@@ -243,20 +245,27 @@
         </Transition>
 
         <div ref="composerContainer" class="relative shrink-0 border-t border-base-300 bg-base-100 px-2 pt-2 pb-1.5">
-          <div v-if="chatStatusBanner" class="absolute inset-x-0 top-0 z-30 -translate-y-full">
-            <div class="relative max-h-32 w-full overflow-y-auto rounded-none px-4 py-1.5 text-center text-[12px] backdrop-blur-md"
-              :class="chatStatusBanner.tone === 'error' ? 'bg-error/12 text-error' : chatStatusBanner.text === t('chat.statusCompactingContext') ? 'bg-info/12 text-info' : 'bg-base-200/75 text-base-content'">
-              <span class="relative z-1 block px-8 whitespace-pre-wrap break-all" :class="chatStatusBanner.tone === 'error' ? '' : 'text-base-content/80 ecall-shimmer-text ecall-reasoning-shimmer'"
-                :data-shimmer-text="chatStatusBanner.tone === 'error' ? '' : chatStatusBanner.text">{{ chatStatusBanner.text }}</span>
+          <div v-if="chatStatusBanner" class="absolute inset-x-0 top-0 z-30 -translate-y-full px-2 pb-2 pt-0">
+            <div
+              class="max-h-36 w-full overflow-hidden rounded-box border px-3 py-2 text-[12px] shadow-sm backdrop-blur-md sm:px-4"
+              :class="chatStatusBanner.tone === 'error' ? 'border-error/30 bg-error/12 text-error' : chatStatusBanner.text === t('chat.statusCompactingContext') ? 'border-info/25 bg-info/10 text-info' : 'border-base-300/70 bg-base-200/85 text-base-content'"
+            >
+              <div class="flex items-start gap-2 sm:gap-3">
+                <span
+                  class="min-w-0 flex-1 whitespace-pre-wrap break-all pt-1"
+                  :class="chatStatusBanner.tone === 'error' ? '' : 'text-base-content/80 ecall-shimmer-text ecall-reasoning-shimmer'"
+                  :data-shimmer-text="chatStatusBanner.tone === 'error' ? '' : chatStatusBanner.text"
+                >{{ chatStatusBanner.text }}</span>
               <button
                 v-if="chatStatusBanner.tone === 'error'"
                 type="button"
-                class="btn btn-ghost btn-xs absolute right-2 top-1 h-5 min-h-5 w-5 p-0 text-error hover:bg-error/15"
+                class="btn btn-circle btn-ghost btn-sm mt-0.5 h-10 min-h-10 w-10 shrink-0 p-0 text-error hover:bg-error/15"
                 :title="t('common.close')"
                 @click="$emit('clearChatError')"
               >
-                <X class="h-3.5 w-3.5" />
+                <X class="h-4.5 w-4.5" />
               </button>
+              </div>
             </div>
           </div>
           <ChatApprovalPanel
