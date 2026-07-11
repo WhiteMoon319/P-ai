@@ -730,7 +730,9 @@ export function streamBlocksToActivitySummaryItems(rawBlocks: unknown, running =
         id: tool.toolCallId || `stream-summary-${blockIndex}-tool-${toolIndex}`,
         toolCallId: tool.toolCallId || undefined,
         name: tool.name,
-        argsText: "",
+        // 折叠标题只依赖 name；但同一批 summary item 也可能被明细层读取。
+        // 参数保留在完整工具变量里，这里不再主动清空，避免圆点明细丢参。
+        argsText: tool.argsText || "",
         status: tool.status === "doing" ? "doing" : "done",
       });
     }

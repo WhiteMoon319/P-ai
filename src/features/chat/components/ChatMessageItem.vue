@@ -930,6 +930,7 @@ function hasExpandableActivityItem(item: ChatActivityItem): boolean {
 
 function resolvedActivityItems(block: ChatMessageBlock): ChatActivityItem[] {
   if (!activityPanelOpen(block)) return block.activityItems;
+  // 展开圆点明细时优先读完整工具变量 _streamBlocks，避免继续使用空参 summary。
   const meta = (block.providerMeta || {}) as Record<string, unknown>;
   const streamBlocks = normalizeAssistantStreamBlocks(meta._streamBlocks);
   if (streamBlocks.length <= 0) return block.activityItems;
@@ -1707,49 +1708,20 @@ function summarizeExternalTool(name: string, args: unknown): string {
   return toolTimelineText("missingArgs");
 }
 
-function isToolSummaryPlaceholder(summary: string): boolean {
-  const text = summary.trim();
-  if (!text) return true;
-  return text === toolTimelineText("missingArgs")
-    || text === toolTimelineText("noArgs")
-    || text === toolTimelineText("checkArgs")
-    || text === toolTimelineText("notProvided");
-}
-
-function fallbackToolSummaryText(args: unknown): string {
-  if (args === undefined || args === null) return "";
-  if (typeof args === "string") return args.trim();
-  if (typeof args !== "object") return String(args);
-  const obj = args as Record<string, unknown>;
-  return compactObjectEntries(obj)
-    || compactSingleLineJson(obj, 180)
-    || toCompactValue(obj);
-}
-
 function toolCallSummaryText(toolCall: { name: string; argsText: string; status?: "doing" | "done" }): string {
   const toolName = String(toolCall.name || "").trim() || "unknown";
   const args = normalizeToolCallArgs(toolCall.argsText);
 
   if (internalToolNames.has(toolName)) {
-    if (toolName === "read" || toolName === "read_file") {
-      const summary = summarizeReadFileTool(args);
-      return isToolSummaryPlaceholder(summary) ? (fallbackToolSummaryText(args) || summary) : summary;
-    }
-    if (toolName === "read_media") {
-      const summary = summarizeReadMediaTool(args);
-      return isToolSummaryPlaceholder(summary) ? (fallbackToolSummaryText(args) || summary) : summary;
-    }
+    if (toolName === "read" || toolName === "read_file") return summarizeReadFileTool(args);
+    if (toolName === "read_media") return summarizeReadMediaTool(args);
     if (toolName === "apply_patch") return summarizeApplyPatchTool(args);
     if (toolName === "exec" || toolName === "shell_exec") return summarizeCommandTool(args);
-    if (toolName.includes("file")) {
-      const summary = summarizeFileTool(args);
-      return isToolSummaryPlaceholder(summary) ? (fallbackToolSummaryText(args) || summary) : summary;
-    }
+    if (toolName.includes("file")) return summarizeFileTool(args);
     const builtinSummary = summarizeBuiltinTool(toolName, args);
-    if (builtinSummary && !isToolSummaryPlaceholder(builtinSummary)) return builtinSummary;
-    const fallback = fallbackToolSummaryText(args);
-    if (fallback) return fallback;
-    return builtinSummary || toolTimelineText("missingArgs");
+    if (builtinSummary) return builtinSummary;
+    const compact = toCompactValue(args);
+    return compact || toolTimelineText("missingArgs");
   }
 
   return summarizeExternalTool(toolCallDisplayName(toolName), args);
