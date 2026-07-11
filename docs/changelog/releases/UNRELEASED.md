@@ -15,6 +15,7 @@
 - 修复（chat）：流式工具展开后的圆点明细不再显示"缺少参数"；`streamBlocksToActivitySummaryItems` 不再主动清空 `argsText`，展开时稳定读取 `_streamBlocks` 完整工具参数，移除 `isToolSummaryPlaceholder`/`fallbackToolSummaryText` 无效文案层 fallback。
 - 修复（chat）：assistant 流式收口改为按既定 `assistant_message_id` 定向写入，不再要求目标消息必须是尾消息；停止/失败 partial 与工具历史兜底也不再补建替代 assistant，目标消息缺失或已关闭时改为跳过写入，避免并发消息互相抢占尾消息导致错写或 `MSG_NOT_WRITABLE`。
 - 修复（chat）：上下文整理成功后重开调度不再受固定次数上限误拦截；当前消息段仅剩摘要时跳过重复整理，长工具链可继续完成后续处理。
+- 修复（chat）：assistant 正式消息写入收敛到当前调度持有的 `assistant_message_id`；工具结果、final text、压缩续跑与委托链路均按该 UUID 定向落盘，不再按尾消息猜目标或在写入阶段补建替代 assistant。
 - 修复（chat）：浮动会话控制面板显示时，状态提示条保持在其上方，不再遮挡错误内容。
 - 修复（chat）：无图标的会话标签不再预留图标空位，避免标签文字偏移。
 - 修复（chat）：SQLite 消息存储读取当前上下文时从最新摘要后的消息开始，避免本地会话提示词错误为空。

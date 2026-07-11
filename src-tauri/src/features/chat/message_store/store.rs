@@ -1381,74 +1381,69 @@ fn append_tool_group_result_to_conversation(
         validate_tool_group_result_append(&assistant_tool_call_event, &tool_result_event)?;
     let group_call_ids = tool_call_ids_from_assistant_tool_event(&assistant_tool_call_event);
     let now = now_iso();
+    let target_id = assistant_message_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "追加工具结果失败：缺少 assistantMessageId".to_string())?;
     let target_idx = conversation
         .messages
-        .last()
-        .filter(|message| message.role.trim() == "assistant")
-        .filter(|message| {
-            message
-                .speaker_agent_id
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                == Some(agent_id.trim())
-        })
-        .map(|_| conversation.messages.len().saturating_sub(1));
-    let (assistant_message_id, created, tool_event_count) = if let Some(idx) = target_idx {
-        let message = conversation
-            .messages
-            .get_mut(idx)
-            .ok_or_else(|| "追加工具结果失败：目标助理消息不存在".to_string())?;
-        let events = message.tool_call.get_or_insert_with(Vec::new);
-        if tool_history_contains_tool_result_id(events, &tool_call_id) {
-            merge_provider_meta_patch(&mut message.provider_meta, provider_meta_patch);
-            return Ok(ToolGroupResultAppend {
-                assistant_message_id: message.id.clone(),
-                created: false,
-                tool_event_count: events.len(),
-            });
-        }
-        if !tool_history_contains_assistant_tool_group(events, &group_call_ids) {
-            events.push(assistant_tool_call_event);
-        }
-        events.push(tool_result_event);
-        message.created_at = if message.created_at.trim().is_empty() {
-            now.clone()
-        } else {
-            message.created_at.clone()
-        };
+        .iter()
+        .rposition(|message| message.id.trim() == target_id)
+        .ok_or_else(|| {
+            format!("追加工具结果失败：目标 assistant message 不存在，assistantMessageId={target_id}")
+        })?;
+    let message = conversation
+        .messages
+        .get_mut(target_idx)
+        .ok_or_else(|| {
+            format!("追加工具结果失败：目标 assistant message 不存在，assistantMessageId={target_id}")
+        })?;
+    if message.role.trim() != "assistant" {
+        return Err(format!(
+            "追加工具结果失败：目标消息不是 assistant，assistantMessageId={}",
+            message.id
+        ));
+    }
+    let target_agent_id = message
+        .speaker_agent_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_default();
+    if target_agent_id != agent_id.trim() {
+        return Err(format!(
+            "追加工具结果失败：目标 assistant message 的 speaker_agent_id 不匹配，assistantMessageId={}，expectedAgentId={}，actualAgentId={}",
+            message.id,
+            agent_id.trim(),
+            target_agent_id
+        ));
+    }
+    let events = message.tool_call.get_or_insert_with(Vec::new);
+    if tool_history_contains_tool_result_id(events, &tool_call_id) {
         merge_provider_meta_patch(&mut message.provider_meta, provider_meta_patch);
-        (message.id.clone(), false, events.len())
+        return Ok(ToolGroupResultAppend {
+            assistant_message_id: message.id.clone(),
+            created: false,
+            tool_event_count: events.len(),
+        });
+    }
+    if !tool_history_contains_assistant_tool_group(events, &group_call_ids) {
+        events.push(assistant_tool_call_event);
+    }
+    events.push(tool_result_event);
+    message.created_at = if message.created_at.trim().is_empty() {
+        now.clone()
     } else {
-        let message_id = assistant_message_id
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToString::to_string)
-            .unwrap_or_else(|| Uuid::new_v4().to_string());
-        let assistant_message = ChatMessage {
-            id: message_id.clone(),
-            role: "assistant".to_string(),
-            created_at: now.clone(),
-            speaker_agent_id: Some(agent_id.trim().to_string()),
-            parts: vec![MessagePart::Text {
-                text: String::new(),
-                reasoning_content: None,
-            }],
-            extra_text_blocks: Vec::new(),
-            provider_meta: provider_meta_patch.filter(|value| value.as_object().is_some_and(|obj| !obj.is_empty())),
-            tool_call: Some(vec![assistant_tool_call_event, tool_result_event]),
-            mcp_call: None,
-            meme_annotations: None,
-        };
-        let assistant_message_id = message_id;
-        conversation.messages.push(assistant_message);
-        (assistant_message_id, true, 2)
+        message.created_at.clone()
     };
+    merge_provider_meta_patch(&mut message.provider_meta, provider_meta_patch);
+    let assistant_message_id = message.id.clone();
+    let tool_event_count = events.len();
     conversation.updated_at = now.clone();
     conversation.last_assistant_at = Some(now);
     Ok(ToolGroupResultAppend {
         assistant_message_id,
-        created,
+        created: false,
         tool_event_count,
     })
 }
@@ -2775,6 +2770,38 @@ mod message_store_reader_tests {
     }
 
     #[test]
+    fn append_tool_group_result_should_merge_into_target_assistant_by_id_even_if_not_tail() {
+        let mut assistant = test_message("assistant-1", "assistant");
+        assistant.speaker_agent_id = Some("agent-a".to_string());
+        let mut conversation = test_conversation(vec![
+            assistant,
+            test_message("user-2", "user"),
+        ]);
+        let (call_event, result_event) = test_single_tool_group_result("call-by-id", "read_file");
+
+        let append = append_tool_group_result_to_conversation(
+            &mut conversation,
+            "agent-a",
+            call_event,
+            result_event,
+            None,
+            Some("assistant-1"),
+        )
+        .expect("append group result by id");
+
+        assert!(!append.created);
+        assert_eq!(append.assistant_message_id, "assistant-1");
+        assert_eq!(conversation.messages.len(), 2);
+        assert_eq!(
+            conversation.messages[0]
+                .tool_call
+                .as_ref()
+                .map(Vec::len),
+            Some(2)
+        );
+    }
+
+    #[test]
     fn append_tool_group_result_should_merge_into_last_same_assistant() {
         let mut assistant = test_message("assistant-1", "assistant");
         assistant.speaker_agent_id = Some("agent-a".to_string());
@@ -2790,7 +2817,7 @@ mod message_store_reader_tests {
             call_event,
             result_event,
             None,
-            None,
+            Some("assistant-1"),
         )
         .expect("append group result");
 
@@ -2808,13 +2835,13 @@ mod message_store_reader_tests {
     }
 
     #[test]
-    fn append_tool_group_result_should_create_when_tail_is_not_same_assistant() {
+    fn append_tool_group_result_should_reject_missing_assistant_message_id() {
         let mut assistant = test_message("assistant-1", "assistant");
-        assistant.speaker_agent_id = Some("agent-b".to_string());
+        assistant.speaker_agent_id = Some("agent-a".to_string());
         let mut conversation = test_conversation(vec![assistant]);
         let (call_event, result_event) = test_single_tool_group_result("call-1", "read_file");
 
-        let append = append_tool_group_result_to_conversation(
+        let err = append_tool_group_result_to_conversation(
             &mut conversation,
             "agent-a",
             call_event,
@@ -2822,15 +2849,29 @@ mod message_store_reader_tests {
             None,
             None,
         )
-        .expect("append group result");
+        .expect_err("missing assistant message id should fail");
 
-        assert!(append.created);
-        assert_ne!(append.assistant_message_id, "assistant-1");
-        assert_eq!(conversation.messages.len(), 2);
-        assert_eq!(
-            conversation.messages[1].speaker_agent_id.as_deref(),
-            Some("agent-a")
-        );
+        assert!(err.contains("缺少 assistantMessageId"));
+        assert_eq!(conversation.messages.len(), 1);
+    }
+
+    #[test]
+    fn append_tool_group_result_should_reject_missing_target_assistant() {
+        let mut conversation = test_conversation(vec![test_message("user-1", "user")]);
+        let (call_event, result_event) = test_single_tool_group_result("call-1", "read_file");
+
+        let err = append_tool_group_result_to_conversation(
+            &mut conversation,
+            "agent-a",
+            call_event,
+            result_event,
+            None,
+            Some("assistant-missing"),
+        )
+        .expect_err("missing target assistant should fail");
+
+        assert!(err.contains("目标 assistant message 不存在"));
+        assert_eq!(conversation.messages.len(), 1);
     }
 
     #[test]
@@ -2845,7 +2886,7 @@ mod message_store_reader_tests {
             call_event,
             result_event,
             None,
-            None,
+            Some("assistant-1"),
         )
         .expect_err("mismatch should fail");
 
@@ -2870,7 +2911,7 @@ mod message_store_reader_tests {
                 "effectivePromptTokens": 123_u64,
                 "contextUsageRatio": 0.5,
             })),
-            None,
+            Some("assistant-1"),
         )
         .expect("append group result");
 
@@ -2906,7 +2947,7 @@ mod message_store_reader_tests {
             group_event.clone(),
             result_a,
             None,
-            None,
+            Some("assistant-1"),
         )
         .expect("append first group result");
         let second = append_tool_group_result_to_conversation(
@@ -2915,7 +2956,7 @@ mod message_store_reader_tests {
             group_event,
             result_b,
             None,
-            None,
+            Some("assistant-1"),
         )
         .expect("append second group result");
 

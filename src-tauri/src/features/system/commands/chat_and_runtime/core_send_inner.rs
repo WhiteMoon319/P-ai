@@ -487,41 +487,56 @@ fn conversation_upsert_final_assistant_message(
     current_agent_id: &str,
     assistant_message: ChatMessage,
     now: &str,
-) -> ChatMessage {
+) -> Result<ChatMessage, String> {
+    let target_id = assistant_message.id.trim();
+    if target_id.is_empty() {
+        return Err("assistantMessageId is required.".to_string());
+    }
     let target_idx = conversation
         .messages
-        .last()
-        .filter(|message| message.role.trim() == "assistant")
-        .filter(|message| {
-            message
-                .speaker_agent_id
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                == Some(current_agent_id.trim())
-        })
-        .map(|_| conversation.messages.len().saturating_sub(1));
-    if let Some(idx) = target_idx {
-        if let Some(existing) = conversation.messages.get_mut(idx) {
-            let existing_id = existing.id.clone();
-            let existing_created_at = existing.created_at.clone();
-            let existing_tool_call = existing.tool_call.take();
-            *existing = assistant_message;
-            existing.id = existing_id;
-            existing.created_at = existing_created_at;
-            if existing.tool_call.as_ref().map(|items| items.is_empty()).unwrap_or(true) {
-                existing.tool_call = existing_tool_call;
-            }
-            conversation.updated_at = now.to_string();
-            conversation.last_assistant_at = Some(now.to_string());
-            return existing.clone();
-        }
+        .iter()
+        .rposition(|message| message.id.trim() == target_id)
+        .ok_or_else(|| format!("目标 assistant message 不存在：{target_id}"))?;
+    let existing = conversation
+        .messages
+        .get_mut(target_idx)
+        .ok_or_else(|| format!("目标 assistant message 不存在：{target_id}"))?;
+    if existing.role.trim() != "assistant" {
+        return Err(format!(
+            "目标消息不是 assistant，assistantMessageId={target_id}"
+        ));
     }
-    conversation.messages.push(assistant_message.clone());
-    increment_conversation_unread_count(conversation, 1);
+    let existing_agent_id = existing
+        .speaker_agent_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_default();
+    if existing_agent_id != current_agent_id.trim() {
+        return Err(format!(
+            "目标 assistant message 的 speaker_agent_id 不匹配，assistantMessageId={}，expectedAgentId={}，actualAgentId={}",
+            target_id,
+            current_agent_id.trim(),
+            existing_agent_id
+        ));
+    }
+    let existing_id = existing.id.clone();
+    let existing_created_at = existing.created_at.clone();
+    let existing_tool_call = existing.tool_call.take();
+    *existing = assistant_message;
+    existing.id = existing_id;
+    existing.created_at = existing_created_at;
+    if existing
+        .tool_call
+        .as_ref()
+        .map(|items| items.is_empty())
+        .unwrap_or(true)
+    {
+        existing.tool_call = existing_tool_call;
+    }
     conversation.updated_at = now.to_string();
     conversation.last_assistant_at = Some(now.to_string());
-    assistant_message
+    Ok(existing.clone())
 }
 
 fn remote_im_find_contact_by_conversation<'a>(
@@ -1648,6 +1663,7 @@ fn persist_failed_chat_completed_tool_history(
         "",
         "",
         &completed_tool_history,
+        None,
     )?;
     runtime_log_info(format!(
         "[聊天] 失败前工具历史落盘检查 完成 session={} persisted={} conversation_id={} tool_event_count={} error={}",
@@ -1790,6 +1806,14 @@ fn persist_aborted_chat_partial_result(
     let completed_tool_history = inflight_completed_tool_history(state, chat_key)?;
     let partial_tool_history =
         merge_stream_block_tool_history(&completed_tool_history, &stream_cache.stream_blocks);
+    let abort_assistant_message_id = {
+        let value = stream_cache.persisted_assistant_message_id.trim();
+        if value.is_empty() {
+            None
+        } else {
+            Some(value)
+        }
+    };
     let persist_result = conversation_service_v2().persist_stop_chat_partial_message(
         state,
         Some(conversation_id),
@@ -1799,6 +1823,7 @@ fn persist_aborted_chat_partial_result(
         &reasoning_text,
         "",
         &partial_tool_history,
+        abort_assistant_message_id,
     )?;
     if !persist_result.persisted {
         return Ok(None);
@@ -1832,7 +1857,7 @@ fn restart_dispatch_round_after_context_compaction(
     department_id: &str,
     agent_id: &str,
     dispatch_reason: &str,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let request_id = format!("chat-{}", Uuid::new_v4());
     let dispatch_id = Uuid::new_v4().to_string();
     runtime_context.request_id = Some(request_id.clone());
@@ -1844,6 +1869,16 @@ fn restart_dispatch_round_after_context_compaction(
     let stream_started_at = now_iso();
     let stream_started_at_ms = now_unix_ms();
     let assistant_message_id = Uuid::new_v4().to_string();
+    conversation_service_v2().bootstrap_streaming_assistant_message(
+        state,
+        &AssistantMessageBootstrapInput {
+            conversation_id: conversation_id.to_string(),
+            assistant_message_id: assistant_message_id.clone(),
+            speaker_agent_id: agent_id.to_string(),
+            created_at: Some(stream_started_at.clone()),
+            provider_meta_patch: None,
+        },
+    )?;
     reset_conversation_stream_runtime_cache(
         state,
         conversation_id,
@@ -1874,10 +1909,10 @@ fn restart_dispatch_round_after_context_compaction(
         MainSessionState::AssistantStreaming,
     )?;
     runtime_log_info(format!(
-        "[聊天调度] 压缩后新一轮开始事件已发送 conversation_id={} request_id={} department_id={} agent_id={} reason={}",
-        conversation_id, request_id, department_id, agent_id, activation_reason
+        "[聊天调度] 压缩后新一轮开始事件已发送 conversation_id={} request_id={} assistant_message_id={} department_id={} agent_id={} reason={}",
+        conversation_id, request_id, assistant_message_id, department_id, agent_id, activation_reason
     ));
-    Ok(())
+    Ok(assistant_message_id)
 }
 
 async fn send_chat_message_inner(
@@ -1897,6 +1932,15 @@ async fn send_chat_message_inner(
     if runtime_context.request_id.is_none() {
         runtime_context.request_id = Some(trace_id.clone());
     }
+    // 本次调度上下文持有的唯一 assistant_message_id。
+    // 若上游（如 activate_main_assistant）已创建，则沿用；否则在此生成并创建消息。
+    let mut dispatch_assistant_message_id = input
+        .assistant_message_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
 
     // ========== 提前初始化流式缓存 ==========
     // 在调度开始时就创建后端流式缓存，避免首回还没开始就切换会话导致丢失流式草稿。
@@ -1921,26 +1965,25 @@ async fn send_chat_message_inner(
             if !early_department_id.is_empty() && !early_agent_id.is_empty() {
                 let stream_started_at = now_iso();
                 let stream_started_at_ms = now_unix_ms();
-                let early_assistant_message_id = input
+                if input
                     .assistant_message_id
                     .as_deref()
                     .map(str::trim)
                     .filter(|value| !value.is_empty())
-                    .map(ToOwned::to_owned)
-                    .or_else(|| {
-                        read_conversation_runtime_snapshot(state, cid)
-                            .ok()
-                            .and_then(|snapshot| {
-                                let value =
-                                    snapshot.stream_cache.persisted_assistant_message_id.trim();
-                                if value.is_empty() {
-                                    None
-                                } else {
-                                    Some(value.to_string())
-                                }
-                            })
-                    })
-                    .unwrap_or_else(|| Uuid::new_v4().to_string());
+                    .is_none()
+                {
+                    // 直入 send_chat_message_inner 的路径（如委托）在此创建本轮 assistant 消息。
+                    conversation_service_v2().bootstrap_streaming_assistant_message(
+                        state,
+                        &AssistantMessageBootstrapInput {
+                            conversation_id: cid.to_string(),
+                            assistant_message_id: dispatch_assistant_message_id.clone(),
+                            speaker_agent_id: early_agent_id.to_string(),
+                            created_at: Some(stream_started_at.clone()),
+                            provider_meta_patch: None,
+                        },
+                    )?;
+                }
                 let _ = reset_conversation_stream_runtime_cache(
                     state,
                     cid,
@@ -1948,7 +1991,7 @@ async fn send_chat_message_inner(
                     trace_id.as_str(),
                     &early_department_id,
                     early_agent_id,
-                    &early_assistant_message_id,
+                    &dispatch_assistant_message_id,
                     &stream_started_at,
                     stream_started_at_ms,
                 );
@@ -1980,6 +2023,35 @@ async fn send_chat_message_inner(
             }
         }
     }
+    }
+    if runtime_context.remote_im_reply_delegate_id.is_some() {
+        if let Some(ref session) = input.session {
+            if let Some(cid) = session
+                .conversation_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+            {
+                let speaker_agent_id = runtime_context
+                    .executor_agent_id
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or_else(|| session.agent_id.trim());
+                if !speaker_agent_id.is_empty() {
+                    conversation_service_v2().bootstrap_streaming_assistant_message(
+                        state,
+                        &AssistantMessageBootstrapInput {
+                            conversation_id: cid.to_string(),
+                            assistant_message_id: dispatch_assistant_message_id.clone(),
+                            speaker_agent_id: speaker_agent_id.to_string(),
+                            created_at: Some(now_iso()),
+                            provider_meta_patch: None,
+                        },
+                    )?;
+                }
+            }
+        }
     }
     let oldest_queue_created_at = input
         .oldest_queue_created_at
@@ -3372,12 +3444,7 @@ async fn send_chat_message_inner(
                     .map(str::trim)
                     .filter(|value| !value.is_empty())
                     .map(ToOwned::to_owned),
-                assistant_message_id: input
-                    .assistant_message_id
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .map(ToOwned::to_owned),
+                assistant_message_id: Some(dispatch_assistant_message_id.clone()),
                 remote_im_reply_delegate_id: runtime_context
                     .remote_im_reply_delegate_id
                     .as_deref()
@@ -3536,7 +3603,7 @@ async fn send_chat_message_inner(
                         &done_message,
                         None,
                     ));
-                    restart_dispatch_round_after_context_compaction(
+                    dispatch_assistant_message_id = restart_dispatch_round_after_context_compaction(
                         &state,
                         &mut runtime_context,
                         &conversation_for_compaction.id,
@@ -3653,7 +3720,7 @@ async fn send_chat_message_inner(
                         conversation_for_compaction.id,
                         decision.reason
                     ));
-                    restart_dispatch_round_after_context_compaction(
+                    dispatch_assistant_message_id = restart_dispatch_round_after_context_compaction(
                         &state,
                         &mut runtime_context,
                         &conversation_for_compaction.id,
@@ -3830,7 +3897,7 @@ async fn send_chat_message_inner(
                     "[聊天调度] 续调整理命中，当前调度闭口并准备重开: conversation_id={}",
                     conversation_id
                 ));
-                restart_dispatch_round_after_context_compaction(
+                dispatch_assistant_message_id = restart_dispatch_round_after_context_compaction(
                     &state,
                     &mut runtime_context,
                     &conversation_id,
@@ -4124,27 +4191,7 @@ async fn send_chat_message_inner(
         }
         provider_meta = Some(meta);
     }
-    let assistant_message_id = input
-        .assistant_message_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .or_else(|| read_conversation_runtime_snapshot(&state, &conversation_id)
-        .ok()
-        .and_then(|snapshot| {
-            let value = snapshot.stream_cache.persisted_assistant_message_id.trim();
-            if value.is_empty() {
-                None
-            } else {
-                Some(value.to_string())
-            }
-        }))
-        .unwrap_or_else(|| {
-            let generated = Uuid::new_v4().to_string();
-            set_stream_cache_persisted_assistant_message_id(&state, &conversation_id, &generated);
-            generated
-        });
+    let assistant_message_id = dispatch_assistant_message_id.clone();
     log_run_stage("model_reply_ready");
 
     let mut persisted_assistant_message: Option<ChatMessage> = None;
@@ -4285,16 +4332,6 @@ async fn send_chat_message_inner(
                         .unwrap_or_default(),
                     final_text.replace('\n', "\\n")
                 ));
-                conversation_service_v2().bootstrap_streaming_assistant_message(
-                    &state,
-                    &AssistantMessageBootstrapInput {
-                        conversation_id: conversation_id.clone(),
-                        assistant_message_id: assistant_message_id.clone(),
-                        speaker_agent_id: current_agent.id.clone(),
-                        created_at: Some(assistant_message.created_at.clone()),
-                        provider_meta_patch: None,
-                    },
-                )?;
                 conversation_service_v2().append_final_text_to_assistant_message(
                     &state,
                     &AssistantMessageFinalTextAppendInput {
@@ -4375,7 +4412,7 @@ async fn send_chat_message_inner(
                     &current_agent.id,
                     assistant_message,
                     &now,
-                ));
+                )?);
             }
             delegate_runtime_thread_conversation_update(&state, &conversation_id, conversation)?;
         }
@@ -5420,7 +5457,7 @@ mod core_send_inner_tests {
             cumulative_usage: ConversationCumulativeUsage::default(),
         };
         let final_message = build_assistant_message_from_request_sequence(
-            "assistant-new".to_string(),
+            "assistant-existing".to_string(),
             "agent-a",
             now.clone(),
             &[
@@ -5456,7 +5493,8 @@ mod core_send_inner_tests {
             "agent-a",
             final_message,
             &now,
-        );
+        )
+        .expect("upsert by assistant_message_id should succeed");
 
         assert_eq!(conversation.messages.len(), 1);
         assert_eq!(persisted.id, "assistant-existing");

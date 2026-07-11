@@ -166,6 +166,49 @@ fn build_stop_chat_partial_assistant_message(
     )
 }
 
+fn build_stop_chat_partial_assistant_message_for_id(
+    assistant_message_id: &str,
+    agent_id: &str,
+    created_at: &str,
+    speaker_agent_id: Option<String>,
+    existing_tool_call: Option<Vec<Value>>,
+    existing_provider_meta: Option<Value>,
+    partial_assistant_text: &str,
+    partial_activity_reasoning_text: &str,
+    completed_tool_history: &[Value],
+) -> ChatMessage {
+    let request_messages = assistant_request_sequence_from_tool_history(
+        completed_tool_history,
+        partial_assistant_text,
+        partial_activity_reasoning_text,
+    );
+    let mut message = build_assistant_message_from_request_sequence(
+        assistant_message_id.trim().to_string(),
+        agent_id,
+        if created_at.trim().is_empty() {
+            now_iso()
+        } else {
+            created_at.to_string()
+        },
+        &request_messages,
+        existing_provider_meta,
+    );
+    message.speaker_agent_id = speaker_agent_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .or_else(|| Some(agent_id.trim().to_string()));
+    // 工具结果可能已按 ID 提前写入既有消息；若本次只补 partial 正文，必须保留既有 tool_call。
+    if message
+        .tool_call
+        .as_ref()
+        .map(|items| items.is_empty())
+        .unwrap_or(true)
+    {
+        message.tool_call = existing_tool_call;
+    }
+    message
+}
+
 fn apply_stop_chat_partial_message(
     conversation: &mut Conversation,
     assistant_message: &ChatMessage,
@@ -174,6 +217,42 @@ fn apply_stop_chat_partial_message(
     conversation.updated_at = assistant_message.created_at.clone();
     conversation.last_assistant_at = Some(assistant_message.created_at.clone());
     conversation.id.clone()
+}
+
+fn apply_stop_chat_partial_message_by_id(
+    conversation: &mut Conversation,
+    assistant_message: &ChatMessage,
+) -> Result<String, String> {
+    let target_id = assistant_message.id.trim();
+    if target_id.is_empty() {
+        return Err("assistantMessageId is required.".to_string());
+    }
+    let target_idx = conversation
+        .messages
+        .iter()
+        .rposition(|message| message.id.trim() == target_id)
+        .ok_or_else(|| {
+            format!("目标 assistant message 不存在，assistantMessageId={target_id}")
+        })?;
+    let existing = conversation
+        .messages
+        .get_mut(target_idx)
+        .ok_or_else(|| {
+            format!("目标 assistant message 不存在，assistantMessageId={target_id}")
+        })?;
+    if existing.role.trim() != "assistant" {
+        return Err(format!(
+            "目标消息不是 assistant，assistantMessageId={target_id}"
+        ));
+    }
+    let existing_id = existing.id.clone();
+    let existing_created_at = existing.created_at.clone();
+    *existing = assistant_message.clone();
+    existing.id = existing_id;
+    existing.created_at = existing_created_at;
+    conversation.updated_at = assistant_message.created_at.clone();
+    conversation.last_assistant_at = Some(assistant_message.created_at.clone());
+    Ok(conversation.id.clone())
 }
 
 fn read_latest_archive_summary_from_chat_index(state: &AppState) -> Result<Option<String>, String> {

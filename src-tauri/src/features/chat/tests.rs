@@ -5274,7 +5274,7 @@
     }
 
     #[test]
-    fn conversation_service_v2_should_forbid_final_text_append_on_non_tail_assistant() {
+    fn conversation_service_v2_should_allow_final_text_append_on_non_tail_assistant() {
         let state = test_chat_runtime_state();
         let now = now_iso();
         let mut conversation =
@@ -5294,21 +5294,30 @@
         state_mark_conversation_direct_persisted(&state, &conversation)
             .expect("mark direct persisted");
 
-        let err = conversation_service_v2()
+        let append = conversation_service_v2()
             .append_final_text_to_assistant_message(
                 &state,
                 &AssistantMessageFinalTextAppendInput {
                     conversation_id: conversation.id.clone(),
                     assistant_message_id: "assistant-non-tail".to_string(),
-                    final_text: "不应该成功".to_string(),
+                    final_text: "按 ID 写入成功".to_string(),
                     reasoning_text: None,
                     provider_meta_patch: None,
                     meme_annotations: None,
                 },
             )
-            .expect_err("non-tail assistant should be rejected");
+            .expect("non-tail assistant should still be writable by id");
 
-        assert!(err.contains("MSG_NOT_WRITABLE"));
+        assert!(append.final_text_committed);
+        assert_eq!(append.assistant_message_id, "assistant-non-tail");
+
+        let stored = conversation_service_v2()
+            .read_message_by_id(&state, &conversation.id, "assistant-non-tail")
+            .expect("read updated assistant message");
+        match &stored.parts[0] {
+            MessagePart::Text { text, .. } => assert_eq!(text, "按 ID 写入成功"),
+            _ => panic!("expected text part"),
+        }
     }
 
     #[test]

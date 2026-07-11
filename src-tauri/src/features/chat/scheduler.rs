@@ -3581,6 +3581,16 @@ async fn activate_main_assistant(
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| Uuid::new_v4().to_string());
+    conversation_service_v2().bootstrap_streaming_assistant_message(
+        state,
+        &AssistantMessageBootstrapInput {
+            conversation_id: conversation_id.to_string(),
+            assistant_message_id: assistant_message_id.clone(),
+            speaker_agent_id: executor_agent_id.clone(),
+            created_at: Some(stream_started_at.clone()),
+            provider_meta_patch: None,
+        },
+    )?;
     reset_conversation_stream_runtime_cache(
         state,
         conversation_id,

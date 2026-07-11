@@ -1063,36 +1063,25 @@ fn persist_completed_tool_group_result(
     let provider_meta_patch =
         tool_result_provider_meta_patch(trusted_input_tokens, selected_api.context_window_tokens);
 
-    // 从流式缓存中读取 assistant_message_id，传递给持久化，避免重复生成
-    let assistant_message_id = context.assistant_message_id.clone().or_else(|| {
-        read_conversation_runtime_snapshot(state, &context.conversation_id)
-            .ok()
-            .and_then(|snapshot| {
-                let id = snapshot.stream_cache.persisted_assistant_message_id.trim();
-                if id.is_empty() { None } else { Some(id.to_string()) }
-            })
-    });
-
-    let bootstrap_message_id = assistant_message_id
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| Uuid::new_v4().to_string());
-    conversation_service_v2().bootstrap_streaming_assistant_message(
-        state,
-        &AssistantMessageBootstrapInput {
-            conversation_id: context.conversation_id.clone(),
-            assistant_message_id: bootstrap_message_id.clone(),
-            speaker_agent_id: context.agent.id.clone(),
-            created_at: None,
-            provider_meta_patch: None,
-        },
-    )?;
+    // 只认当前调度上下文中的 assistant_message_id，禁止回读会话级缓存或补生成。
+    let assistant_message_id = context
+        .assistant_message_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| {
+            format!(
+                "当前调度缺少 assistant_message_id，无法写入工具结果，conversation_id={}",
+                context.conversation_id
+            )
+        })?;
     let append_result = conversation_service_v2()
         .append_tool_event_to_assistant_message(
             state,
             &AssistantMessageToolAppendInput {
                 conversation_id: context.conversation_id.clone(),
-                assistant_message_id: bootstrap_message_id,
+                assistant_message_id: assistant_message_id.clone(),
                 assistant_tool_event: assistant_tool_call_event.clone(),
                 tool_result_event: tool_result_event.clone(),
                 provider_meta_patch,
@@ -1731,6 +1720,7 @@ fn persist_tool_loop_compaction_checkpoint(
             partial_activity_reasoning_text,
             "",
             &history_for_checkpoint,
+            context.assistant_message_id.as_deref(),
         )?;
         runtime_log_info(format!(
             "[上下文整理] 完成，任务=interrupt_checkpoint，conversation_id={}，reason={}，persisted={}，assistant_message_id={}，tool_event_count={}",
