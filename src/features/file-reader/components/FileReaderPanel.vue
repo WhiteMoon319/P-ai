@@ -1545,11 +1545,12 @@ async function restoreFileReaderSession(key = props.sessionKey, fallbackRootPath
     directoryTreeSearchVisible.value = false;
     directoryNodes.value = {};
 
-    const fallbackRoot = props.directoryOnly ? normalizePath(fallbackRootPath || "") : "";
+    const initialRoot = normalizePath(fallbackRootPath || "");
     if (!storageKey) {
-      if (fallbackRoot) {
-        directoryRootPath.value = fallbackRoot;
-        await loadDirectory(fallbackRoot, true);
+      // 无会话缓存且当前没有打开文件：自动展开工作区目录
+      if (initialRoot) {
+        directoryRootPath.value = initialRoot;
+        await loadDirectory(initialRoot, true);
       }
       return;
     }
@@ -1562,23 +1563,28 @@ async function restoreFileReaderSession(key = props.sessionKey, fallbackRootPath
     activePath.value = restoredTabs.includes(restoredActivePath) ? restoredActivePath : restoredTabs[0] || "";
     setDirectoryTreeWidth(state.directoryTreeWidth || FILE_READER_DIRECTORY_TREE_DEFAULT_WIDTH);
 
-    const restoredDirectoryRoot = props.directoryOnly
-      ? normalizePath(state.directoryRootPath || fallbackRoot)
-      : fallbackRoot;
-    if (restoredDirectoryRoot) {
-      directoryRootPath.value = restoredDirectoryRoot;
-    }
+    const restoredDirectoryRoot = normalizePath(state.directoryRootPath || "");
 
     await nextTick();
     if (restoreId !== restoringSessionId) return;
     suppressSessionPersist = false;
 
-    if (restoredDirectoryRoot) {
-      await loadDirectory(restoredDirectoryRoot, true);
-    }
-    if (restoreId !== restoringSessionId) return;
     if (activePath.value) {
+      // 有已打开文件：恢复文件；目录仅在会话里曾展开时恢复
+      if (restoredDirectoryRoot) {
+        directoryRootPath.value = restoredDirectoryRoot;
+        await loadDirectory(restoredDirectoryRoot, true);
+      }
+      if (restoreId !== restoringSessionId) return;
       await openPath(activePath.value);
+      return;
+    }
+
+    // 没有打开任何文件：自动展开目录（优先上次目录，否则工作区根）
+    const rootToOpen = restoredDirectoryRoot || initialRoot;
+    if (rootToOpen) {
+      directoryRootPath.value = rootToOpen;
+      await loadDirectory(rootToOpen, true);
     }
   } finally {
     if (restoreId === restoringSessionId) {

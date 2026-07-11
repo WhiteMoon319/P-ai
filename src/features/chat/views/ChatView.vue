@@ -1348,6 +1348,20 @@ function selectChatRightPanelMode(mode: ChatRightPanelMode) {
   }
 }
 
+// 打开右侧面板 / 切到 reader / 工作区变化时：无打开文件则自动展开目录
+watch(
+  () => [
+    effectiveToolReviewPanelOpen.value,
+    props.chatRightPanelMode,
+    String(props.currentWorkspaceRootPath || "").trim(),
+    String(props.activeConversationId || "").trim(),
+  ] as const,
+  ([panelOpen, mode]) => {
+    if (!panelOpen || mode !== "reader") return;
+    void openChatReaderDirectoryIfEmpty();
+  },
+);
+
 function selectMonitorPanelTab(key: string) {
   if (key !== "delegate" && key !== "tasks" && key !== "tools" && key !== "fastRequests") return;
   selectChatRightPanelMode(key);
