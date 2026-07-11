@@ -1,6 +1,6 @@
 import { computed, type Ref } from "vue";
 import type { ChatMessageBlock } from "../../../types/app";
-import { type ChatRenderItem, isCompactionBlock, isRightAlignedMessage } from "../utils/chat-render";
+import { type ChatRenderItem, isRightAlignedMessage } from "../utils/chat-render";
 
 export function useChatBlockTracking(
   messageBlocks: Ref<ChatMessageBlock[]>,
@@ -39,24 +39,23 @@ export function useChatBlockTracking(
     return findLatestMessageIdByPredicate((block) => isOwnUserMessage(block));
   });
 
-  const latestSummaryMessageId = computed(() => {
-    return findLatestMessageIdByPredicate((block) => isCompactionBlock(block));
-  });
-
   const latestOwnElasticItemId = computed(() => {
-    const targetMessageId = latestOwnMessageId.value
-      || latestSummaryMessageId.value;
-    if (targetMessageId) {
+    // 1) 有用户气泡时，始终盯最新用户消息
+    const ownMessageId = latestOwnMessageId.value;
+    if (ownMessageId) {
       for (let idx = chatRenderItems.value.length - 1; idx >= 0; idx -= 1) {
         const item = chatRenderItems.value[idx];
-        if ((item.kind === "message" || item.kind === "compaction") && blockBelongsToMessageId(item.block, targetMessageId)) {
+        if (item.kind === "message" && blockBelongsToMessageId(item.block, ownMessageId)) {
           return item.id;
         }
       }
     }
+
+    // 2) 没有用户气泡时，在所有分割线里取时间线上最新的一个
+    //    当前分割线只有 compaction / plan_started
     for (let idx = chatRenderItems.value.length - 1; idx >= 0; idx -= 1) {
       const item = chatRenderItems.value[idx];
-      if (item.kind === "plan_started") {
+      if (item.kind === "compaction" || item.kind === "plan_started") {
         return item.id;
       }
     }
