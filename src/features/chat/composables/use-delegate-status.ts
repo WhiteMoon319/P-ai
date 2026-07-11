@@ -18,6 +18,7 @@ type DelegateStatusUpdatedPayload = {
   conversationId?: string;
   delegateId?: string;
   status?: string;
+  summary?: ConversationDelegateStatusSummary;
 };
 
 export function useDelegateStatus(options: UseDelegateStatusOptions) {
@@ -38,35 +39,9 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
 
   let delegateStatusUpdatedUnlisten: UnlistenFn | null = null;
   let delegateClockTimer: ReturnType<typeof window.setInterval> | null = null;
-  let delegateRefreshTimer: ReturnType<typeof window.setInterval> | null = null;
   let disposed = false;
-  let requestSeq = 0;
-
-  async function refresh() {
-    const conversationId = String(activeConversationId.value || "").trim();
-    if (!enabled() || !conversationId || !panelOpen.value) {
-      requestSeq += 1;
-      rawDelegateStatuses.value = [];
-      delegateStatusesErrorText.value = "";
-      return;
-    }
-    const seq = ++requestSeq;
-    try {
-      const statuses = hasBridgeRequest()
-        ? await options.bridgeRequest!.value!("delegate.statuses", { conversationId }, 10000) as ConversationDelegateStatusSummary[]
-        : await invokeTauri<ConversationDelegateStatusSummary[]>(
-            "list_conversation_delegate_statuses",
-            { input: { conversationId } },
-          );
-      if (seq !== requestSeq) return;
-      rawDelegateStatuses.value = statuses;
-      delegateClockNowMs.value = Date.now();
-      delegateStatusesErrorText.value = "";
-    } catch (error) {
-      if (seq !== requestSeq) return;
-      delegateStatusesErrorText.value = `委托状态加载失败：${String(error)}`;
-    }
-  }
+  let hydrateRequestSeq = 0;
+  let hydratedConversationId = "";
 
   function payloadMatchesActiveConversation(payload: DelegateStatusUpdatedPayload | null | undefined) {
     const activeId = String(activeConversationId.value || "").trim();
@@ -76,8 +51,33 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
     return String(payload?.conversationId || "").trim() === activeId;
   }
 
-  function syncPanelState() {
-    void refresh();
+  function clearStatusesWhenConversationChanges() {
+    hydrateRequestSeq += 1;
+    hydratedConversationId = "";
+    rawDelegateStatuses.value = [];
+    delegateStatusesErrorText.value = "";
+  }
+
+  async function hydrateStatusesWhenPanelOpens() {
+    const conversationId = String(activeConversationId.value || "").trim();
+    if (!enabled() || !panelOpen.value || !conversationId || hydratedConversationId === conversationId) return;
+    const seq = ++hydrateRequestSeq;
+    try {
+      const statuses = hasBridgeRequest()
+        ? await options.bridgeRequest!.value!("delegate.statuses", { conversationId }, 10000) as ConversationDelegateStatusSummary[]
+        : await invokeTauri<ConversationDelegateStatusSummary[]>(
+            "list_conversation_delegate_statuses",
+            { input: { conversationId } },
+          );
+      if (seq !== hydrateRequestSeq || !panelOpen.value || activeConversationId.value.trim() !== conversationId) return;
+      rawDelegateStatuses.value = Array.isArray(statuses) ? statuses : [];
+      delegateClockNowMs.value = Date.now();
+      delegateStatusesErrorText.value = "";
+      hydratedConversationId = conversationId;
+    } catch (error) {
+      if (seq !== hydrateRequestSeq) return;
+      delegateStatusesErrorText.value = `委托状态加载失败：${String(error)}`;
+    }
   }
 
   function delegateElapsedMs(status: ConversationDelegateStatusSummary, nowMs: number) {
@@ -122,18 +122,6 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
     }
   }
 
-  function syncDelegateRefreshTimer() {
-    const shouldRun = enabled() && panelOpen.value && hasRunningDelegates();
-    if (shouldRun && delegateRefreshTimer == null && typeof window !== "undefined") {
-      delegateRefreshTimer = window.setInterval(() => {
-        void refresh();
-      }, 1000);
-    } else if (!shouldRun && delegateRefreshTimer != null) {
-      window.clearInterval(delegateRefreshTimer);
-      delegateRefreshTimer = null;
-    }
-  }
-
   async function openDelegateArchiveDetail(status: ConversationDelegateStatusSummary) {
     const conversationId = String(status?.conversationId || status?.delegateId || "").trim();
     if (!conversationId) return;
@@ -162,15 +150,20 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
           input: { delegateId },
         });
       }
-      await refresh();
     } catch (error) {
       delegateStatusesErrorText.value = `打断委托失败：${String(error)}`;
     }
   }
 
   watch(
+    () => String(activeConversationId.value || "").trim(),
+    () => clearStatusesWhenConversationChanges(),
+    { immediate: true },
+  );
+
+  watch(
     () => [enabled(), panelOpen.value, String(activeConversationId.value || "").trim()],
-    () => syncPanelState(),
+    () => { void hydrateStatusesWhenPanelOpens(); },
     { immediate: true },
   );
 
@@ -180,17 +173,10 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
     { immediate: true },
   );
 
-  watch(
-    () => [enabled(), panelOpen.value, rawDelegateStatuses.value.map((status) => `${status.delegateId}:${status.active}:${status.status}`).join("|")],
-    () => syncDelegateRefreshTimer(),
-    { immediate: true },
-  );
-
   onMounted(() => {
     if (isTauriRuntimeAvailable()) {
       void listen<DelegateStatusUpdatedPayload>(DELEGATE_STATUS_UPDATED_EVENT, (event) => {
-        if (!panelOpen.value || !payloadMatchesActiveConversation(event.payload)) return;
-        void refresh();
+        applyStatusEvent(event.payload);
       }).then((unlisten) => {
         if (disposed) {
           unlisten();
@@ -216,10 +202,6 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
       window.clearInterval(delegateClockTimer);
       delegateClockTimer = null;
     }
-    if (delegateRefreshTimer != null) {
-      window.clearInterval(delegateRefreshTimer);
-      delegateRefreshTimer = null;
-    }
     if (typeof window !== "undefined") {
       window.removeEventListener(DELEGATE_STATUS_UPDATED_EVENT, handleBridgeDelegateStatusUpdated);
     }
@@ -227,8 +209,62 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
 
   function handleBridgeDelegateStatusUpdated(event: Event) {
     const payload = (event as CustomEvent<DelegateStatusUpdatedPayload>).detail;
-    if (!panelOpen.value || !payloadMatchesActiveConversation(payload)) return;
-    void refresh();
+    applyStatusEvent(payload);
+  }
+
+  function applyStatusEvent(payload: DelegateStatusUpdatedPayload | null | undefined) {
+    if (!enabled() || !panelOpen.value || !payloadMatchesActiveConversation(payload)) return;
+    const delegateId = String(payload?.delegateId || "").trim();
+    const status = String(payload?.status || "").trim();
+    const rootConversationId = String(payload?.rootConversationId || payload?.conversationId || "").trim();
+    if (!delegateId || !status || !rootConversationId) return;
+
+    const now = new Date().toISOString();
+    const active = status === "running" || status === "delivered";
+    const eventSummary = payload?.summary;
+    const summary = eventSummary
+      && eventSummary.delegateId === delegateId
+      && eventSummary.rootConversationId === rootConversationId
+      ? {
+          ...eventSummary,
+          status,
+          active,
+          updatedAt: now,
+          completedAt: active ? undefined : eventSummary.completedAt || now,
+        }
+      : null;
+    const index = rawDelegateStatuses.value.findIndex((item) => item.delegateId === delegateId);
+    if (index >= 0) {
+      const current = rawDelegateStatuses.value[index];
+      rawDelegateStatuses.value.splice(index, 1, {
+        ...current,
+        ...summary,
+        status,
+        active,
+        updatedAt: now,
+        completedAt: active ? undefined : current.completedAt || now,
+      });
+    } else {
+      rawDelegateStatuses.value.push(summary || {
+        delegateId,
+        kind: "",
+        conversationId: delegateId,
+        rootConversationId,
+        title: "",
+        status,
+        active,
+        startedAt: now,
+        updatedAt: now,
+        completedAt: active ? undefined : now,
+        elapsedMs: 0,
+        requestCount: 0,
+        toolCallCount: 0,
+        lastToolName: "",
+        tokenCount: 0,
+      });
+    }
+    delegateClockNowMs.value = Date.now();
+    delegateStatusesErrorText.value = "";
   }
 
   return {

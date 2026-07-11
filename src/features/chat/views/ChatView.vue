@@ -1374,7 +1374,7 @@ const {
   openDelegateArchiveDetail, abortDelegate,
 } = useDelegateStatus({
   activeConversationId: toRef(props, "activeConversationId"),
-  panelOpen: computed(() => !sidebarMode.value),
+  panelOpen: computed(() => !sidebarMode.value && effectiveToolReviewPanelOpen.value && props.chatRightPanelMode === "delegate"),
   enabled: computed(() => !sidebarMode.value),
   bridgeRequest: toRef(props, "bridgeRequest"),
 });

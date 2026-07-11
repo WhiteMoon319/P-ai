@@ -1,4 +1,5 @@
 const DELEGATE_DB_FILE_NAME: &str = "delegate_store.db";
+const DELEGATE_STATUS_RUNNING: &str = "running";
 const DELEGATE_STATUS_DELIVERED: &str = "delivered";
 const DELEGATE_STATUS_COMPLETED: &str = "completed";
 const DELEGATE_STATUS_FAILED: &str = "failed";

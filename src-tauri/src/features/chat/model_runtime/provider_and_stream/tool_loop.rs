@@ -1008,6 +1008,19 @@ fn sync_completed_tool_history_cache(
             "[聊天] 同步已完成工具历史缓存失败 (session={}): {}",
             chat_session_key, err
         );
+        return;
+    }
+    if let Ok(Some(thread)) = delegate_runtime_thread_list(state).map(|threads| {
+        threads
+            .into_iter()
+            .find(|thread| delegate_thread_chat_key(thread) == chat_session_key)
+    }) {
+        let _ = emit_conversation_delegate_status_updated(
+            state,
+            &thread.root_conversation_id,
+            &thread.delegate_id,
+            DELEGATE_STATUS_RUNNING,
+        );
     }
 }
 

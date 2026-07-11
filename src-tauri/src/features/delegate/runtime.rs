@@ -11,6 +11,8 @@ struct ConversationDelegateStatusUpdatedPayload {
     root_conversation_id: String,
     delegate_id: String,
     status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    summary: Option<ConversationDelegateStatusSummary>,
 }
 
 fn emit_conversation_delegate_status_updated(
@@ -19,10 +21,12 @@ fn emit_conversation_delegate_status_updated(
     delegate_id: &str,
     status: &str,
 ) -> Result<(), String> {
+    let summary = conversation_delegate_status_summary_for_event(app_state, delegate_id, status);
     let payload = ConversationDelegateStatusUpdatedPayload {
         root_conversation_id: root_conversation_id.to_string(),
         delegate_id: delegate_id.to_string(),
         status: status.to_string(),
+        summary,
     };
     let app_handle = {
         let guard = app_state
@@ -42,6 +46,44 @@ fn emit_conversation_delegate_status_updated(
         serde_json::json!(payload),
     );
     Ok(())
+}
+
+fn conversation_delegate_status_summary_for_event(
+    app_state: &AppState,
+    delegate_id: &str,
+    status: &str,
+) -> Option<ConversationDelegateStatusSummary> {
+    let delegate_id = delegate_id.trim();
+    if delegate_id.is_empty() {
+        return None;
+    }
+    let summary = delegate_runtime_thread_get(app_state, delegate_id)
+        .ok()
+        .flatten()
+        .map(|thread| conversation_delegate_summary_from_thread(app_state, &thread, true))
+        .or_else(|| {
+            delegate_recent_thread_list(app_state)
+                .ok()
+                .and_then(|threads| {
+                    threads
+                        .into_iter()
+                        .find(|thread| thread.delegate_id == delegate_id)
+                })
+                .map(|thread| conversation_delegate_summary_from_thread(app_state, &thread, false))
+        })
+        .or_else(|| {
+            delegate_runtime_thread_conversation_get(app_state, delegate_id)
+                .ok()
+                .flatten()
+                .map(|conversation| {
+                    conversation_delegate_summary_from_persisted(app_state, &conversation)
+                })
+        })
+        .and_then(Result::ok)?;
+    let mut summary = summary;
+    summary.status = status.to_string();
+    summary.active = matches!(status, DELEGATE_STATUS_RUNNING | DELEGATE_STATUS_DELIVERED);
+    Some(summary)
 }
 
 fn deleted_delegate_conversation_ids(
@@ -315,7 +357,7 @@ fn delegate_runtime_thread_create(
         app_state,
         &delegate.conversation_id,
         &thread_id,
-        "running",
+        DELEGATE_STATUS_RUNNING,
     ) {
         runtime_log_info(format!(
             "[委托状态] 广播失败: 阶段=开始, root_conversation_id={}, delegate_id={}, error={}",
