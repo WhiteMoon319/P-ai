@@ -245,25 +245,25 @@
         </Transition>
 
         <div ref="composerContainer" class="relative shrink-0 border-t border-base-300 bg-base-100 px-2 pt-2 pb-1.5">
-          <div v-if="chatStatusBanner" class="absolute inset-x-0 top-0 z-30 -translate-y-full px-2 pb-2 pt-0">
+          <div v-if="chatStatusBanner" class="pointer-events-none absolute inset-x-0 top-0 z-30 flex -translate-y-full justify-center px-2 pb-2 pt-0">
             <div
-              class="max-h-36 w-full overflow-hidden rounded-box border px-3 py-2 text-[12px] shadow-sm backdrop-blur-md sm:px-4"
+              class="pointer-events-auto max-h-36 w-fit max-w-full overflow-hidden rounded-full border px-4 py-2 text-[12px] shadow-sm backdrop-blur-md"
               :class="chatStatusBanner.tone === 'error' ? 'border-error/30 bg-error/12 text-error' : chatStatusBanner.text === t('chat.statusCompactingContext') ? 'border-info/25 bg-info/10 text-info' : 'border-base-300/70 bg-base-200/85 text-base-content'"
             >
-              <div class="flex items-start gap-2 sm:gap-3">
+              <div class="flex items-center gap-2 sm:gap-3">
                 <span
-                  class="min-w-0 flex-1 whitespace-pre-wrap break-all pt-1"
+                  class="min-w-0 whitespace-pre-wrap break-words text-center leading-5"
                   :class="chatStatusBanner.tone === 'error' ? '' : 'text-base-content/80 ecall-shimmer-text ecall-reasoning-shimmer'"
                   :data-shimmer-text="chatStatusBanner.tone === 'error' ? '' : chatStatusBanner.text"
                 >{{ chatStatusBanner.text }}</span>
               <button
                 v-if="chatStatusBanner.tone === 'error'"
                 type="button"
-                class="btn btn-circle btn-ghost btn-sm mt-0.5 h-10 min-h-10 w-10 shrink-0 p-0 text-error hover:bg-error/15"
+                class="btn btn-circle btn-ghost btn-sm h-8 min-h-8 w-8 shrink-0 p-0 text-error hover:bg-error/15"
                 :title="t('common.close')"
                 @click="$emit('clearChatError')"
               >
-                <X class="h-4.5 w-4.5" />
+                <X class="h-4 w-4" />
               </button>
               </div>
             </div>
