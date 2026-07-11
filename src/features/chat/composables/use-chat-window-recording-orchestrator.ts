@@ -218,7 +218,7 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     const normalizedConversationId = String(conversationId || "").trim();
     if (!normalizedConversationId) return;
     await invokeTauri("mark_conversation_read", {
-      conversationId: normalizedConversationId,
+      input: { conversationId: normalizedConversationId },
     });
   }
 
