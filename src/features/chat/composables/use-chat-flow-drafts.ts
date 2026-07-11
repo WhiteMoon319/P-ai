@@ -8,9 +8,9 @@ import {
   streamBlocksToToolCalls,
   streamBlocksToToolHistoryEvents,
 } from "../../../utils/chat-message-semantics";
-import { consumeClosedMarkdownBlocks } from "./use-chat-flow-text";
+import { consumeClosedMarkdownBlocks, mergeAssistantText } from "./use-chat-flow-text";
 import { readMessagePlainText } from "./use-chat-flow-utils";
-import { messageWithStableRenderId, messageWithoutStableRenderId, stableRenderIdFromMessage } from "../utils/stable-render-id";
+import { messageWithStableRenderId, stableRenderIdFromMessage } from "../utils/stable-render-id";
 
 export const DRAFT_ASSISTANT_ID_PREFIX = "__draft_assistant__:";
 export const DRAFT_USER_ID_PREFIX = "__draft_user__:";
@@ -18,6 +18,30 @@ export const DRAFT_USER_ID_PREFIX = "__draft_user__:";
 type UpdateMessageTextOptions = {
   preserveActivityProjection?: boolean;
 };
+
+function mergeAssistantParts(
+  draft: ChatMessage,
+  finalMessage?: ChatMessage,
+): ChatMessage["parts"] {
+  if (!finalMessage) return draft.parts;
+  const draftText = readMessagePlainText(draft);
+  const finalText = readMessagePlainText(finalMessage);
+  const mergedText = mergeAssistantText(draftText, finalText);
+  const finalParts = Array.isArray(finalMessage.parts) ? finalMessage.parts : [];
+  const nonTextParts = finalParts.filter((part) => {
+    if (!part || typeof part !== "object") return false;
+    return String((part as { type?: unknown }).type || "").trim() !== "text";
+  });
+  if (!mergedText && nonTextParts.length === 0) {
+    return draft.parts;
+  }
+  const nextParts: ChatMessage["parts"] = [];
+  if (mergedText) {
+    nextParts.push({ type: "text", text: mergedText });
+  }
+  nextParts.push(...nonTextParts);
+  return nextParts.length > 0 ? nextParts : draft.parts;
+}
 
 function messageHasActivityEvents(message: ChatMessage): boolean {
   if (normalizeChatActivityItems(message.activityItems).length > 0) return true;
@@ -368,32 +392,44 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     const messageIdx = current.findIndex((m) => m.id === messageId);
     if (messageIdx < 0) return;
     const draft = current[messageIdx];
-
-    if (finalMessage) {
-      const messageSpeakerAgentId = resolveAssistantMessageSpeakerAgentId(draft);
-      const finalSpeakerAgentId = String(finalMessage.speakerAgentId || "").trim();
-      const messageToApply = messageWithoutStableRenderId({
-        ...finalMessage,
-        speakerAgentId: finalSpeakerAgentId || messageSpeakerAgentId,
-      });
-      const deduped = current.filter((m, idx) => idx === messageIdx || m.id !== finalMessage.id);
-      const nextMessageIdx = deduped.findIndex((m) => m.id === messageId);
-      if (nextMessageIdx < 0) {
-        options.allMessages.value = deduped;
-        return;
-      }
-      options.allMessages.value = deduped.map((m, idx) => (idx === nextMessageIdx ? messageToApply : m));
-      return;
-    }
-
+    const stableRenderId = stableRenderIdFromMessage(draft) || messageId;
     const draftMeta = ((draft.providerMeta || {}) as Record<string, unknown>);
-    const nextMeta = { ...draftMeta };
-    delete (nextMeta as Record<string, unknown>)._streaming;
-    delete (nextMeta as Record<string, unknown>)._preStreamingStatusText;
-    delete (nextMeta as Record<string, unknown>)._toolStatusText;
-    delete (nextMeta as Record<string, unknown>)._toolStatusState;
-    const normalized: ChatMessage = { ...draft, providerMeta: nextMeta };
-    options.allMessages.value = current.map((m, idx) => (idx === messageIdx ? normalized : m));
+    const finalMeta = ((finalMessage?.providerMeta || {}) as Record<string, unknown>);
+    const speakerAgentId = String(finalMessage?.speakerAgentId || "").trim()
+      || resolveAssistantMessageSpeakerAgentId(draft);
+
+    // 完成态只收口流式状态，不整条替换气泡身份。
+    // 保留原 messageId / _stableRenderId，避免 virtual list key 变化导致跳位。
+    const nextMeta: Record<string, unknown> = finalMessage
+      ? { ...draftMeta, ...finalMeta }
+      : { ...draftMeta };
+    delete nextMeta._streaming;
+    delete nextMeta._preStreamingStatusText;
+    delete nextMeta._toolStatusText;
+    delete nextMeta._toolStatusState;
+
+    const normalized = messageWithStableRenderId({
+      ...draft,
+      id: messageId,
+      role: finalMessage?.role || draft.role,
+      createdAt: String(draft.createdAt || finalMessage?.createdAt || "").trim() || draft.createdAt,
+      speakerAgentId,
+      parts: mergeAssistantParts(draft, finalMessage),
+      toolCall: finalMessage?.toolCall ?? draft.toolCall,
+      activityItems: finalMessage?.activityItems ?? draft.activityItems,
+      extraTextBlocks: finalMessage?.extraTextBlocks ?? draft.extraTextBlocks,
+      providerMeta: nextMeta,
+    } satisfies ChatMessage, stableRenderId);
+
+    const finalId = String(finalMessage?.id || "").trim();
+    const nextMessages = finalId && finalId !== messageId
+      ? current.filter((message, index) => index === messageIdx || message.id !== finalId)
+      : current;
+    const nextMessageIdx = nextMessages.findIndex((message) => message.id === messageId);
+    if (nextMessageIdx < 0) return;
+    options.allMessages.value = nextMessages.map((message, index) => (
+      index === nextMessageIdx ? normalized : message
+    ));
   }
 
   function applyAssistantDeltaToMessage(messageId: string, delta: string) {
