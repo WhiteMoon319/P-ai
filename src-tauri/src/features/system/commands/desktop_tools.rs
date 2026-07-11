@@ -1491,6 +1491,8 @@ fn file_reader_file_kind(extension: &str) -> &'static str {
 }
 
 fn file_reader_extension_is_unsupported(extension: &str) -> bool {
+    // 注意：不要把 "ts" 放进黑名单——TypeScript 源码也是 .ts；
+    // MPEG-TS 请用更具体的 mts/m2ts。
     matches!(
         extension,
         "3g2" | "3gp" | "7z" | "a" | "aac" | "accdb" | "aif" | "aiff" | "amr" | "ape"
@@ -1504,7 +1506,7 @@ fn file_reader_extension_is_unsupported(extension: &str) -> bool {
             | "orc" | "otf" | "pak" | "parquet" | "pdf" | "pfx" | "pkg" | "png" | "ppt"
             | "pptx" | "psd" | "pyc" | "pyo" | "rar" | "raw" | "rm" | "rmvb" | "rpm"
             | "rtf" | "scr" | "so" | "sqlite" | "sqlite3" | "svg" | "sys" | "tar" | "tgz"
-            | "tif" | "tiff" | "ts" | "ttf" | "vob" | "war" | "wasm" | "wav" | "weba"
+            | "tif" | "tiff" | "ttf" | "vob" | "war" | "wasm" | "wav" | "weba"
             | "webm" | "webp" | "wma" | "wmv" | "woff" | "woff2" | "xls" | "xlsx" | "xz"
             | "zip" | "zst"
     )

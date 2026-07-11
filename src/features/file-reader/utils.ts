@@ -16,7 +16,9 @@ const VIDEO_FILE_EXTENSIONS = new Set([
 const UNSUPPORTED_MEDIA_EXTENSIONS = new Set([
   "3g2", "3gp", "aif", "aiff", "amr", "ape", "asf", "avi", "caf", "flv",
   "heic", "heif", "m2ts", "mid", "midi", "mkv", "mov", "mpeg", "mpg", "mts",
-  "psd", "raw", "rm", "rmvb", "tif", "tiff", "ts", "vob", "wma", "wmv",
+  // 注意：不要把 "ts" 放进黑名单——TypeScript 源码也是 .ts；
+  // MPEG-TS 请用更具体的 mts/m2ts。
+  "psd", "raw", "rm", "rmvb", "tif", "tiff", "vob", "wma", "wmv",
 ]);
 
 const UNSUPPORTED_BINARY_EXTENSIONS = new Set([
