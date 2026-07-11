@@ -1219,12 +1219,21 @@ function applyMemeAnnotationReplacements(text: string, annotations?: MemeAnnotat
     if (!token || !imagePath) continue;
     const nextIndex = text.indexOf(token, cursor);
     if (nextIndex < 0) continue;
+    let replaceStart = nextIndex;
+    let replaceEnd = nextIndex + token.length;
+    // AI 常写成 (:坏笑:) / （:坏笑:），替换时一并吃掉成对括号
+    const open = replaceStart > 0 ? text[replaceStart - 1] : "";
+    const close = replaceEnd < text.length ? text[replaceEnd] : "";
+    if ((open === "(" && close === ")") || (open === "（" && close === "）")) {
+      replaceStart -= 1;
+      replaceEnd += 1;
+    }
     const alt = token.startsWith(":") && token.endsWith(":") && token.length > 2
       ? token.slice(1, -1)
       : token;
-    result += text.slice(cursor, nextIndex);
+    result += text.slice(cursor, replaceStart);
     result = appendMemeImageBlock(result, `![${alt}](${imagePath})`);
-    cursor = nextIndex + token.length;
+    cursor = replaceEnd;
     while (cursor < text.length && /[ \t]/.test(text[cursor] || "")) {
       cursor += 1;
     }
