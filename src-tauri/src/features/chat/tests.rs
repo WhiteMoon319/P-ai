@@ -5050,6 +5050,47 @@
     }
 
     #[test]
+    fn conversation_service_v2_should_bootstrap_delegate_in_delegate_store() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let mut conversation =
+            test_chat_conversation("delegate-bootstrap-store", "active", &now);
+        conversation.conversation_kind = CONVERSATION_KIND_DELEGATE.to_string();
+        conversation.root_conversation_id = Some("root-conversation".to_string());
+        conversation.delegate_id = Some(conversation.id.clone());
+        conversation
+            .messages
+            .push(test_text_message("user", "执行委托任务", &now));
+        delegate_conversation_store_write(&state.data_path, &conversation)
+            .expect("persist delegate conversation");
+
+        let bootstrap = conversation_service_v2()
+            .bootstrap_streaming_assistant_message(
+                &state,
+                &AssistantMessageBootstrapInput {
+                    conversation_id: conversation.id.clone(),
+                    assistant_message_id: "assistant-delegate-bootstrap".to_string(),
+                    speaker_agent_id: DEFAULT_AGENT_ID.to_string(),
+                    created_at: Some(now),
+                    provider_meta_patch: None,
+                },
+            )
+            .expect("bootstrap delegate assistant should succeed");
+
+        assert!(bootstrap.created);
+        let stored = delegate_runtime_thread_conversation_get(&state, &conversation.id)
+            .expect("read delegate conversation")
+            .expect("delegate conversation should remain in delegate store");
+        assert!(stored
+            .messages
+            .iter()
+            .any(|message| message.id == "assistant-delegate-bootstrap"));
+        assert!(conversation_service_v2()
+            .get_conversation_meta(&state, &conversation.id)
+            .is_err());
+    }
+
+    #[test]
     fn conversation_service_v2_should_refresh_preview_after_appending_final_text() {
         let state = test_chat_runtime_state();
         let now = now_iso();

@@ -7488,16 +7488,6 @@ impl ConversationServiceV2 {
         if speaker_agent_id.is_empty() {
             return Err("speakerAgentId is required.".to_string());
         }
-        if self
-            .get_message_by_id_for_frontend_display_only(state, conversation_id, assistant_message_id)
-            .is_ok()
-        {
-            return Ok(AssistantMessageBootstrapResult {
-                conversation_id: conversation_id.to_string(),
-                assistant_message_id: assistant_message_id.to_string(),
-                created: false,
-            });
-        }
         let created_at = input
             .created_at
             .as_deref()
@@ -7521,6 +7511,44 @@ impl ConversationServiceV2 {
             meme_annotations: None,
         };
         merge_provider_meta_patch_v2(&mut message.provider_meta, input.provider_meta_patch.clone());
+
+        // 委托线程的 conversation_id 固定等于 delegate_id（delegate-<UUID>），
+        // 只能写入委托存储；缺失时不可回退到正式会话存储。
+        if conversation_id.starts_with("delegate-") {
+            let mut conversation = delegate_runtime_thread_conversation_get(state, conversation_id)?
+                .ok_or_else(|| format!("委托会话不存在，conversationId={conversation_id}"))?;
+            if conversation
+                .messages
+                .iter()
+                .any(|existing| existing.id.trim() == assistant_message_id)
+            {
+                return Ok(AssistantMessageBootstrapResult {
+                    conversation_id: conversation_id.to_string(),
+                    assistant_message_id: assistant_message_id.to_string(),
+                    created: false,
+                });
+            }
+            conversation.messages.push(message);
+            conversation.updated_at = now_iso();
+            conversation.last_assistant_at = Some(conversation.updated_at.clone());
+            increment_conversation_unread_count(&mut conversation, 1);
+            delegate_runtime_thread_conversation_update(state, conversation_id, conversation)?;
+            return Ok(AssistantMessageBootstrapResult {
+                conversation_id: conversation_id.to_string(),
+                assistant_message_id: assistant_message_id.to_string(),
+                created: true,
+            });
+        }
+        if self
+            .get_message_by_id_for_frontend_display_only(state, conversation_id, assistant_message_id)
+            .is_ok()
+        {
+            return Ok(AssistantMessageBootstrapResult {
+                conversation_id: conversation_id.to_string(),
+                assistant_message_id: assistant_message_id.to_string(),
+                created: false,
+            });
+        }
         let mutation_gate = conversation_mutation_gate(&state.data_path, conversation_id)?;
         let _guard = mutation_gate.lock().map_err(|err| {
             named_lock_error(
