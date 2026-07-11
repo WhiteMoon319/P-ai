@@ -1850,6 +1850,17 @@ fn persist_aborted_chat_partial_result(
     }))
 }
 
+fn main_assistant_activation_should_reject_latest_message(
+    latest_message: &ChatMessage,
+    assistant_agent_id: &str,
+) -> bool {
+    latest_message
+        .speaker_agent_id
+        .as_deref()
+        .map(str::trim)
+        == Some(assistant_agent_id.trim())
+}
+
 fn restart_dispatch_round_after_context_compaction(
     state: &AppState,
     runtime_context: &mut RuntimeContext,
@@ -1965,13 +1976,26 @@ async fn send_chat_message_inner(
             if !early_department_id.is_empty() && !early_agent_id.is_empty() {
                 let stream_started_at = now_iso();
                 let stream_started_at_ms = now_unix_ms();
-                if input
+                let bootstrap_in_current_dispatch = input
                     .assistant_message_id
                     .as_deref()
                     .map(str::trim)
                     .filter(|value| !value.is_empty())
-                    .is_none()
-                {
+                    .is_none();
+                if input.trigger_only && bootstrap_in_current_dispatch {
+                    if let Some(latest_message) = conversation_service_v2()
+                        .get_conversation_recent_messages(state, cid, 1)?
+                        .pop()
+                    {
+                        if main_assistant_activation_should_reject_latest_message(
+                            &latest_message,
+                            early_agent_id,
+                        ) {
+                            return Err("当前最后一条消息来自助理自身，无需重复激活。".to_string());
+                        }
+                    }
+                }
+                if bootstrap_in_current_dispatch {
                     // 直入 send_chat_message_inner 的路径（如委托）在此创建本轮 assistant 消息。
                     conversation_service_v2().bootstrap_streaming_assistant_message(
                         state,
@@ -3128,22 +3152,6 @@ async fn send_chat_message_inner(
                 conversation.messages = messages;
                 conversation
             } else {
-            let latest_message = conversation_service_v2()
-                .get_conversation_recent_messages(
-                    &state,
-                    &snapshot.storage_conversation_before.id,
-                    1,
-                )?
-                .pop()
-                .ok_or_else(|| "当前对话没有可供继续处理的消息。".to_string())?;
-            if latest_message
-                .speaker_agent_id
-                .as_deref()
-                .map(str::trim)
-                == Some(current_agent.id.as_str())
-            {
-                return Err("当前最后一条消息来自助理自身，无需重复激活。".to_string());
-            }
             snapshot.storage_conversation_before.clone()
             }
         } else if !persist_user_message {
@@ -4774,6 +4782,31 @@ mod core_send_inner_tests {
             }
         }));
         message
+    }
+
+    #[test]
+    fn main_assistant_activation_should_reject_latest_message_from_same_agent() {
+        let latest = test_message_at("assistant-existing", "assistant", &now_iso());
+        assert!(main_assistant_activation_should_reject_latest_message(
+            &latest,
+            "agent-a",
+        ));
+    }
+
+    #[test]
+    fn main_assistant_activation_should_allow_latest_user_or_other_agent_message() {
+        let user_message = test_message_at("user-latest", "user", &now_iso());
+        assert!(!main_assistant_activation_should_reject_latest_message(
+            &user_message,
+            "agent-a",
+        ));
+
+        let mut other_assistant_message = test_message_at("assistant-other", "assistant", &now_iso());
+        other_assistant_message.speaker_agent_id = Some("agent-b".to_string());
+        assert!(!main_assistant_activation_should_reject_latest_message(
+            &other_assistant_message,
+            "agent-a",
+        ));
     }
 
     #[test]

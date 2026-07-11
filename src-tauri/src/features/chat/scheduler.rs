@@ -3581,6 +3581,17 @@ async fn activate_main_assistant(
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| Uuid::new_v4().to_string());
+    if let Some(latest_message) = conversation_service_v2()
+        .get_conversation_recent_messages(state, conversation_id, 1)?
+        .pop()
+    {
+        if main_assistant_activation_should_reject_latest_message(
+            &latest_message,
+            executor_agent_id.as_str(),
+        ) {
+            return Err("当前最后一条消息来自助理自身，无需重复激活。".to_string());
+        }
+    }
     conversation_service_v2().bootstrap_streaming_assistant_message(
         state,
         &AssistantMessageBootstrapInput {
