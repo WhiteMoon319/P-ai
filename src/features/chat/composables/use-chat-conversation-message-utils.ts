@@ -3,6 +3,7 @@ import {
   preserveStableRenderId,
   providerMetaWithoutStableRenderId,
 } from "../utils/stable-render-id";
+import { messageHasVisibleContent } from "./use-chat-flow-utils";
 
 type ConversationMessageUtilsOptions = {
   draftAssistantIdPrefix: string;
@@ -100,6 +101,11 @@ export function useChatConversationMessageUtils(options: ConversationMessageUtil
             return [];
           }
           replaced = true;
+          // 本地已有可见内容时原样保留，禁止被远端同 id 覆盖。
+          // 典型场景：stop 后 partial 落盘变长/变空，前台不应 1 秒后突然改画面。
+          if (messageHasVisibleContent(message)) {
+            return [message];
+          }
           return [incomingMessage];
         });
         continue;
@@ -178,6 +184,11 @@ export function useChatConversationMessageUtils(options: ConversationMessageUtil
     let changed = false;
     const nextMessages = messages.map((message) => {
       if (String(message?.id || "").trim() !== targetMessageId) {
+        return message;
+      }
+      // 本地已有可见内容时原样保留，禁止被远端同 id 覆盖。
+      // 包含：空消息抹掉、以及 stop 后 partial 变长导致画面突增。
+      if (messageHasVisibleContent(message)) {
         return message;
       }
       changed = true;

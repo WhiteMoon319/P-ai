@@ -52,6 +52,33 @@ export function readMessagePlainText(message?: ChatMessage): string {
     .join("");
 }
 
+/** 消息是否已有可见内容。有内容时，除撤回外禁止前端删除。 */
+export function messageHasVisibleContent(message?: ChatMessage | null): boolean {
+  if (!message) return false;
+  if (readMessagePlainText(message).trim()) return true;
+  const parts = Array.isArray(message.parts) ? message.parts : [];
+  if (parts.some((part) => {
+    if (!part || typeof part !== "object") return false;
+    return String((part as { type?: unknown }).type || "").trim() !== "text";
+  })) {
+    return true;
+  }
+  if (Array.isArray(message.extraTextBlocks) && message.extraTextBlocks.some((item) => String(item || "").trim())) {
+    return true;
+  }
+  if (Array.isArray(message.toolCall) && message.toolCall.length > 0) return true;
+  if (Array.isArray(message.activityItems) && message.activityItems.length > 0) return true;
+  const meta = (message.providerMeta || {}) as Record<string, unknown>;
+  if (String(meta._streamTail || "").trim()) return true;
+  if (Array.isArray(meta._streamSegments) && meta._streamSegments.some((item) => String(item || "").trim())) {
+    return true;
+  }
+  if (Array.isArray(meta._streamBlocks) && meta._streamBlocks.length > 0) return true;
+  if (String(meta._preStreamingStatusText || "").trim()) return true;
+  if (String(meta._toolStatusText || "").trim()) return true;
+  return false;
+}
+
 export function formalizeMessages(messages: ChatMessage[]): ChatMessage[] {
   return messages.filter((item) => {
     const messageId = String(item?.id || "").trim();

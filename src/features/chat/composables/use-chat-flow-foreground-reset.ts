@@ -56,9 +56,9 @@ export function useChatFlowForegroundReset(options: UseChatFlowForegroundResetOp
       options.removeMessage(pendingUserDraftId);
     }
     const round = options.getRound();
-    if (round.phase === "streaming") {
-      options.removeMessage(round.messageId);
-    } else if (round.phase === "queued") {
+    if (round.phase === "streaming" || round.phase === "queued") {
+      // 有内容则 finalize；空气泡才会被 removeMessage 清掉。
+      options.finalizeMessage(round.messageId);
       options.removeMessage(round.messageId);
     }
     options.setRound({ phase: "idle" });

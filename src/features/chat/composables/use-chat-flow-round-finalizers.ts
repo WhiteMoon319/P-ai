@@ -1,19 +1,9 @@
 import type { ChatMessage } from "../../../types/app";
 import { DRAFT_USER_ID_PREFIX, summarizeToolCallsText as formatToolCallsText } from "./use-chat-flow-drafts";
 import { mergeAssistantText } from "./use-chat-flow-text";
+import { messageHasVisibleContent } from "./use-chat-flow-utils";
 
 export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
-  function messageHasVisibleContent(message?: ChatMessage | null): boolean {
-    const parts = Array.isArray(message?.parts) ? message.parts : [];
-    return parts.some((part) => {
-      if (!part || typeof part !== "object") return false;
-      if (String(part.type || "").trim() === "text") {
-        return !!String((part as { text?: string }).text || "").trim();
-      }
-      return true;
-    });
-  }
-
   function finalizeDeferredRoundCompletion() {
     const deferredRoundCompletion = bindings.getDeferredRoundCompletion();
     const round = bindings.getRound();

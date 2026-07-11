@@ -289,7 +289,12 @@ export function useChatConversationSync(bindings: Record<string, any>) {
   function buildConversationMessagesAfterAnchor(conversationId: string): string | null {
     const cid = String(conversationId || "").trim();
     if (!cid) return null;
-    const cachedDisplay = freezeConversationMessages(bindings.conversationMessageCache.value[cid] || []);
+    // 前台会话以当前 allMessages 为准，避免 stop 后仍用过期 cache 当 after 锚点。
+    const isForeground = String(bindings.currentChatConversationId.value || "").trim() === cid;
+    const sourceMessages = isForeground
+      ? bindings.allMessages.value
+      : (bindings.conversationMessageCache.value[cid] || []);
+    const cachedDisplay = freezeConversationMessages(sourceMessages);
     const cachedFormal = formalizeConversationMessages(cachedDisplay);
     const lastFormalMessageId = String(cachedFormal[cachedFormal.length - 1]?.id || "").trim();
     return lastFormalMessageId || null;
@@ -426,18 +431,27 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     conversationId: string,
     payloadMessages: any[],
     fallbackMode?: string | null,
+    options?: { baseMessages?: any[] },
   ) {
     const cid = String(conversationId || "").trim();
     const nextPayloadMessages = freezeConversationMessages(Array.isArray(payloadMessages) ? payloadMessages : []);
-    const cachedDisplay = freezeConversationMessages(bindings.conversationMessageCache.value[cid] || []);
-    const cachedFormal = formalizeConversationMessages(cachedDisplay);
+    // 前台以当前 allMessages 为底；后台才回落到 conversationMessageCache。
+    // 不能只用过期 cache，否则 stop 冻结的正文会被整表替换冲掉。
+    const baseDisplay = Array.isArray(options?.baseMessages)
+      ? freezeConversationMessages(options.baseMessages)
+      : freezeConversationMessages(bindings.conversationMessageCache.value[cid] || []);
     const fallback = String(fallbackMode || "").trim();
     if (fallback === "recent_limit") {
-      return nextPayloadMessages;
+      // recent 页也只做合并，不整表替换，避免盖掉本地已有可见内容。
+      const recentMerged = mergeMessagesIntoTimeline(baseDisplay, nextPayloadMessages);
+      return reuseStableMessageReferences(
+        recentMerged.length > 0 ? recentMerged : baseDisplay,
+        baseDisplay,
+      );
     }
-    const nextMerged = mergeMessagesIntoTimeline(cachedFormal, nextPayloadMessages);
-    const fallbackMerged = nextMerged.length > 0 ? nextMerged : cachedDisplay;
-    return reuseStableMessageReferences(fallbackMerged, cachedDisplay);
+    const nextMerged = mergeMessagesIntoTimeline(baseDisplay, nextPayloadMessages);
+    const fallbackMerged = nextMerged.length > 0 ? nextMerged : baseDisplay;
+    return reuseStableMessageReferences(fallbackMerged, baseDisplay);
   }
 
   async function applyConversationMessagesAfterSynced(payload: Record<string, any>) {
@@ -459,13 +473,19 @@ export function useChatConversationSync(bindings: Record<string, any>) {
       }
       return;
     }
+    const isForeground = String(bindings.currentChatConversationId.value || "").trim() === conversationId;
     const nextMessages = mergeConversationMessagesFromSyncPayload(
       conversationId,
       Array.isArray(payload?.messages) ? payload.messages : [],
       payload?.fallbackMode ?? null,
+      {
+        baseMessages: isForeground
+          ? bindings.allMessages.value
+          : (bindings.conversationMessageCache.value[conversationId] || []),
+      },
     );
     cacheConversationMessages(conversationId, nextMessages);
-    if (String(bindings.currentChatConversationId.value || "").trim() === conversationId) {
+    if (isForeground) {
       if (!areMessagesEquivalent(bindings.allMessages.value, nextMessages)) {
         bindings.allMessages.value = nextMessages;
       }

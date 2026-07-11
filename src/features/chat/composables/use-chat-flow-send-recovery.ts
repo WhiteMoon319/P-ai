@@ -97,6 +97,7 @@ export function useChatFlowSendRecovery(options: UseChatFlowSendRecoveryOptions)
 
     const latestRound = options.getRound();
     if (latestRound.phase === "streaming" && latestRound.gen === gen) {
+      // 有内容保留；空气泡才删。removeMessage 入口也会再拦一层。
       options.removeMessage(latestRound.messageId);
       const pendingUserDraftId = options.getPendingUserDraftIdForGen(gen);
       if (pendingUserDraftId) options.removeMessage(pendingUserDraftId);

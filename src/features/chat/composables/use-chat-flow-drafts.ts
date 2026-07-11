@@ -9,7 +9,7 @@ import {
   streamBlocksToToolHistoryEvents,
 } from "../../../utils/chat-message-semantics";
 import { consumeClosedMarkdownBlocks, mergeAssistantText } from "./use-chat-flow-text";
-import { readMessagePlainText } from "./use-chat-flow-utils";
+import { readMessagePlainText, messageHasVisibleContent } from "./use-chat-flow-utils";
 import { messageWithStableRenderId, stableRenderIdFromMessage } from "../utils/stable-render-id";
 
 export const DRAFT_ASSISTANT_ID_PREFIX = "__draft_assistant__:";
@@ -368,6 +368,14 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
 
   function removeMessage(messageId: string) {
     if (!messageId) return;
+    const existing = options.allMessages.value.find((message) => message.id === messageId);
+    // 有内容的消息禁止删除；撤回走后端截断/整表替换，不经过这里。
+    if (messageHasVisibleContent(existing)) {
+      if (String(existing?.role || "").trim() === "assistant") {
+        finalizeMessage(messageId);
+      }
+      return;
+    }
     if (messageId === pendingUserDraftId) {
       pendingUserDraftId = "";
     }
@@ -382,7 +390,24 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
   function removeLegacyAssistantDrafts() {
     options.allMessages.value = options.allMessages.value.filter((message) => {
       const messageId = String(message?.id || "").trim();
-      return !messageId.startsWith(DRAFT_ASSISTANT_ID_PREFIX);
+      if (!messageId.startsWith(DRAFT_ASSISTANT_ID_PREFIX)) return true;
+      // 旧 draft 前缀也可能已有可见内容，仍禁止删除。
+      return messageHasVisibleContent(message);
+    }).map((message) => {
+      const messageId = String(message?.id || "").trim();
+      if (!messageId.startsWith(DRAFT_ASSISTANT_ID_PREFIX) || !messageHasVisibleContent(message)) {
+        return message;
+      }
+      // 有内容的 draft 前缀消息：只收口流式态，不删。
+      const meta = { ...((message.providerMeta || {}) as Record<string, unknown>) };
+      delete meta._streaming;
+      delete meta._preStreamingStatusText;
+      delete meta._toolStatusText;
+      delete meta._toolStatusState;
+      return {
+        ...message,
+        providerMeta: meta,
+      };
     });
   }
 

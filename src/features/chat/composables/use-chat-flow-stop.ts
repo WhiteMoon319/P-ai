@@ -25,11 +25,6 @@ type UseChatFlowStopOptions = {
     assistantText?: string;
     assistantMessage?: ChatMessage;
   }>;
-  refreshMessageById?: (input: {
-    conversationId: string;
-    messageId: string;
-  }) => Promise<boolean | void>;
-  onReloadMessages: () => Promise<void>;
   t: (key: string, params?: Record<string, unknown>) => string;
   getRound: () => RoundState;
   setRound: (next: RoundState) => void;
@@ -68,39 +63,10 @@ function stringifyStopError(error: unknown): string {
 }
 
 export function useChatFlowStop(options: UseChatFlowStopOptions) {
-  async function tryRefreshStreamingMessage(round: RoundState): Promise<boolean> {
-    if (round.phase !== "streaming") return false;
-    const conversationId = String(options.getConversationId ? options.getConversationId() : "").trim();
-    const messageId = String(round.messageId || "").trim();
-    if (!conversationId || !messageId || !options.refreshMessageById) return false;
-    try {
-      console.info("[聊天] 停止后开始刷新流式消息", {
-        conversationId,
-        messageId,
-      });
-      const refreshed = await options.refreshMessageById({
-        conversationId,
-        messageId,
-      });
-      console.info("[聊天] 停止后刷新流式消息完成", {
-        conversationId,
-        messageId,
-        refreshed: refreshed !== false,
-      });
-      return refreshed !== false;
-    } catch (error) {
-      const et = stringifyStopError(error);
-      console.warn(`[聊天] 停止后刷新流式消息失败，conversationId=${conversationId}，messageId=${messageId}，错误=${et}`);
-      return false;
-    }
-  }
-
   async function finishLocalStoppedRound(input?: {
     statusState?: "failed" | "";
-    assistantHandling?: "remove" | "preserve" | "keep_refreshed";
   }) {
     const statusState = input?.statusState || "";
-    const assistantHandling = input?.assistantHandling || "remove";
     options.advanceGeneration();
     options.setSendChatActiveGen(0);
     options.clearDeferredRoundCompletion();
@@ -116,12 +82,15 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
 
     const round = options.getRound();
     if (round.phase === "streaming") {
-      if (assistantHandling === "preserve") {
-        options.updateMessageText(round.messageId, undefined, undefined, "", normalizeAssistantStreamBlocks(options.streamBlocks?.value || []));
-        options.finalizeMessage(round.messageId);
-      } else if (assistantHandling === "remove") {
-        options.removeMessage(round.messageId);
-      }
+      // 停止后原样冻结当前流式画面；后续落盘结果不再回写前台。
+      options.updateMessageText(
+        round.messageId,
+        undefined,
+        undefined,
+        "",
+        normalizeAssistantStreamBlocks(options.streamBlocks?.value || []),
+      );
+      options.finalizeMessage(round.messageId);
       options.deleteSendStartedAtMs(round.gen);
     } else if (round.phase === "queued") {
       options.finalizeMessage(round.messageId);
@@ -150,34 +119,9 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
       : undefined;
     const partialAssistantText = options.latestAssistantText.value || readMessagePlainText(activeMessage);
     const partialStreamBlocks = normalizeAssistantStreamBlocks(options.streamBlocks?.value || []);
-    const localStopSucceeded = async () => {
-      const refreshed = await tryRefreshStreamingMessage(round);
-      await finishLocalStoppedRound({
-        assistantHandling: round.phase !== "streaming"
-          ? "remove"
-          : (refreshed ? "keep_refreshed" : "preserve"),
-      });
-    };
-    if (round.phase === "queued") {
-      if (stopSession && options.invokeStopChatMessage) {
-        try {
-          await options
-          .invokeStopChatMessage({
-            session: cid ? { ...stopSession, conversationId: cid } : stopSession,
-            partialAssistantText,
-            partialStreamBlocks,
-          });
-          await localStopSucceeded();
-          return;
-        } catch (error) {
-          const et = stringifyStopError(error);
-          console.warn(`[聊天] queued 停止后端中断失败，apiConfigId=${stopSession.apiConfigId}，agentId=${stopSession.agentId}，错误=${et}`);
-        }
-      } else {
-        await localStopSucceeded();
-        return;
-      }
-    }
+
+    // 先钉死当前画面，再通知后端打断；后端 partial 只负责落盘，不改前台。
+    await finishLocalStoppedRound();
 
     if (stopSession && options.invokeStopChatMessage) {
       try {
@@ -186,15 +130,14 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
           partialAssistantText,
           partialStreamBlocks,
         });
-        await localStopSucceeded();
-        return;
       } catch (error) {
         const et = stringifyStopError(error);
         console.warn(`[聊天] 停止消息失败，apiConfigId=${stopSession.apiConfigId}，agentId=${stopSession.agentId}，len=${partialAssistantText.length}，错误=${et}`);
+        options.toolStatusState.value = "failed";
+        options.toolStatusText.value =
+          summarizeToolCallsText(options.streamBlocks?.value || []) || options.t("status.interrupted");
       }
     }
-
-    await finishLocalStoppedRound({ statusState: "failed" });
   }
 
   return {
