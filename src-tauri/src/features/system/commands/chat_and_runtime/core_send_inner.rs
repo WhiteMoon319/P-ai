@@ -546,6 +546,60 @@ fn remote_im_find_contact_by_conversation<'a>(
     conversation_service_v2().find_remote_im_contact_by_conversation_in_data(data, conversation_id)
 }
 
+fn remote_im_auto_send_source_for_contact_conversation(
+    state: &AppState,
+    conversation_id: &str,
+) -> Result<Option<RemoteImActivationSource>, String> {
+    let conversation_id = conversation_id.trim();
+    if conversation_id.is_empty() {
+        return Ok(None);
+    }
+    let runtime = state_read_runtime_state_cached(state)?;
+    Ok(runtime
+        .remote_im_contacts
+        .iter()
+        .find(|contact| {
+            contact
+                .bound_conversation_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                == Some(conversation_id)
+        })
+        .map(|contact| RemoteImActivationSource {
+            channel_id: contact.channel_id.clone(),
+            platform: contact.platform.clone(),
+            remote_contact_type: contact.remote_contact_type.clone(),
+            remote_contact_id: contact.remote_contact_id.clone(),
+            remote_contact_name: contact.remote_contact_name.clone(),
+        }))
+}
+
+fn resolve_remote_im_auto_send_source(
+    state: &AppState,
+    conversation_id: &str,
+    is_remote_im_contact_conversation: bool,
+    runtime_context: &RuntimeContext,
+    activation_sources: &[RemoteImActivationSource],
+) -> Result<Option<RemoteImActivationSource>, String> {
+    if runtime_context
+        .remote_im_reply_delegate_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_some()
+    {
+        return Ok(effective_bound_remote_im_activation_source(
+            Some(runtime_context),
+            activation_sources,
+        ));
+    }
+    if is_remote_im_contact_conversation {
+        return remote_im_auto_send_source_for_contact_conversation(state, conversation_id);
+    }
+    Ok(None)
+}
+
 fn remote_im_contact_tool_history_events(
     tool_name: &str,
     args_value: Value,
@@ -3439,6 +3493,13 @@ async fn send_chat_message_inner(
             };
         }
         log_run_stage("prepare_context.prompt_built");
+        let remote_im_auto_send_source = resolve_remote_im_auto_send_source(
+            &state,
+            &conversation.id,
+            snapshot.is_remote_im_contact_conversation,
+            &runtime_context,
+            &remote_im_activation_sources,
+        )?;
         let tool_loop_auto_compaction_context = if snapshot.is_runtime_conversation
             || runtime_context.remote_im_dynamic_boundary
         {
@@ -3459,15 +3520,7 @@ async fn send_chat_message_inner(
                     .map(str::trim)
                     .filter(|value| !value.is_empty())
                     .map(ToOwned::to_owned),
-                remote_im_auto_send_source: runtime_context
-                    .remote_im_reply_delegate_id
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .and_then(|_| effective_bound_remote_im_activation_source(
-                        Some(&runtime_context),
-                        &remote_im_activation_sources,
-                    )),
+                remote_im_auto_send_source: remote_im_auto_send_source,
                 prompt_mode,
                 agent: current_agent.clone(),
                 agents: snapshot.agents.clone(),
@@ -4045,19 +4098,23 @@ async fn send_chat_message_inner(
             .as_deref()
             .map(|delegate_id| !remote_im_reply_delegate_is_active(&state, delegate_id))
             .unwrap_or(false);
+    let remote_im_auto_send_source = resolve_remote_im_auto_send_source(
+        &state,
+        &conversation_id,
+        is_remote_im_contact_conversation,
+        &runtime_context,
+        &remote_im_activation_sources,
+    )?;
     let mut remote_im_reply_decision =
         remote_im_extract_reply_decision_from_tool_history(&tool_history_events);
     let pending_remote_im_auto_send_target = resolve_remote_im_auto_send_target(
         &final_response_text,
-        effective_bound_remote_im_activation_source(
-            Some(&runtime_context),
-            &remote_im_activation_sources,
-        )
-        .as_ref()
-        .map(std::slice::from_ref)
-        .unwrap_or(&[]),
+        remote_im_auto_send_source
+            .as_ref()
+            .map(std::slice::from_ref)
+            .unwrap_or(&[]),
         remote_im_reply_decision.as_ref(),
-        runtime_context.remote_im_reply_delegate_id.is_some(),
+        remote_im_auto_send_source.is_some(),
     )?;
     if let Some(target) = pending_remote_im_auto_send_target.as_ref() {
         if remote_im_reply_decision.is_none() {

@@ -784,9 +784,6 @@ fn maybe_spawn_remote_im_tool_persist_auto_send(
     assistant_tool_call_event: &Value,
     tool_result_event: &Value,
 ) {
-    if context.remote_im_reply_delegate_id.is_none() {
-        return;
-    }
     let Some(activation_source) = context.remote_im_auto_send_source.clone() else {
         return;
     };
