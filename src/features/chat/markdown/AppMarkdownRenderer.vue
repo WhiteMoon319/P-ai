@@ -72,6 +72,10 @@ import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import { isAbsoluteLocalPath, normalizeLocalLinkHref } from "../utils/local-link";
 import { parseMarkdownBlocks, parseInlineSegments, normalizedTableRow, type MarkdownBlock, type InlineSegment } from "./parse-markdown";
 import { IncrementalMarkdownBlockParser } from "./incremental-markdown";
+import {
+  consumeCrossParagraphToolGroup,
+  consumeGroupedToolcallRefs,
+} from "./toolcall-ref-group";
 import CodeBlockPreviewDialog from "../components/dialogs/CodeBlockPreviewDialog.vue";
 
 defineOptions({
@@ -439,6 +443,31 @@ const BlockRenderer = defineComponent({
     },
   },
   setup(blockProps) {
+    const renderToolcallPill = (
+      ids: string[],
+      key: string,
+    ): VNodeChild => {
+      const count = ids.length;
+      return h("button", {
+        key,
+        type: "button",
+        class: "ecall-md-toolcall-ref",
+        title: count > 1 ? ids.map((id) => `toolcall:${id}`).join("\n") : `toolcall:${ids[0]}`,
+        "data-toolcall-id": ids[0],
+        "data-toolcall-pill": "true",
+        onClick: (event: MouseEvent) => {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleToolcallPreview(ids, event.currentTarget instanceof HTMLButtonElement ? event.currentTarget : null);
+        },
+      }, [
+        h(Wrench, { class: "ecall-md-toolcall-ref-icon" }),
+        count > 1
+          ? h("span", { class: "ecall-md-toolcall-ref-count" }, `+${count}`)
+          : null,
+      ]);
+    };
+
     const renderBlock = (block: MarkdownBlock, index: number): VNodeChild => {
       if (block.type === "heading") {
         return h(headingTag(block.level), { key: `${block.type}-${index}-${block.key}`, class: "ecall-md-heading" }, [
@@ -572,7 +601,93 @@ const BlockRenderer = defineComponent({
       ]);
     };
 
-    return () => blockProps.blocks.map((block, index) => renderBlock(block, index));
+    return () => {
+      const nodes: VNodeChild[] = [];
+      for (let index = 0; index < blockProps.blocks.length; index += 1) {
+        const block = blockProps.blocks[index];
+        const grouped = consumeCrossParagraphToolGroup(blockProps.blocks, index);
+        if (grouped && grouped.ids.length > 0) {
+          const pill = renderToolcallPill(
+            grouped.ids,
+            `toolcall-group-pill-${index}-${grouped.endIndex}`,
+          );
+
+          if (grouped.mode === "replace") {
+            // marker-only 起点：整段替换为一个合并扳手；若终点带正文，紧跟其后渲染剩余正文
+            if (!grouped.stripLeadingOnEnd || grouped.endIndex === index) {
+              nodes.push(h("p", {
+                key: `toolcall-group-${index}-${grouped.endIndex}`,
+                class: "ecall-md-paragraph",
+              }, [pill]));
+            } else {
+              nodes.push(h("p", {
+                key: `toolcall-group-${index}-${grouped.endIndex}`,
+                class: "ecall-md-paragraph",
+              }, [
+                pill,
+                ...(grouped.endBodySegments.length > 0
+                  ? renderSegments(
+                    grouped.endBodySegments,
+                    `toolcall-group-end-${index}`,
+                    blockProps.localImageBasePath,
+                    {
+                      onToolcallClick: toggleToolcallPreview,
+                      footnoteIndexMap: blockProps.footnoteIndexMap,
+                    },
+                  )
+                  : []),
+              ]));
+            }
+            index = grouped.endIndex;
+            continue;
+          }
+
+          // trailing 模式：保留起始正文，尾部 tools 换成合并扳手
+          const startChildren: VNodeChild[] = [];
+          if (grouped.startBodySegments.length > 0) {
+            startChildren.push(...renderSegments(
+              grouped.startBodySegments,
+              `toolcall-group-start-${index}`,
+              blockProps.localImageBasePath,
+              {
+                onToolcallClick: toggleToolcallPreview,
+                footnoteIndexMap: blockProps.footnoteIndexMap,
+              },
+            ));
+          }
+          startChildren.push(pill);
+          nodes.push(h("p", {
+            key: `toolcall-group-start-${index}`,
+            class: "ecall-md-paragraph",
+          }, startChildren));
+
+          // 中间 marker-only 段落已被吞掉；终点若有正文（strip leading 后），单独输出
+          if (grouped.endIndex > index && grouped.stripLeadingOnEnd && grouped.endBodySegments.length > 0) {
+            nodes.push(h("p", {
+              key: `toolcall-group-end-${grouped.endIndex}`,
+              class: "ecall-md-paragraph",
+            }, renderSegments(
+              grouped.endBodySegments,
+              `toolcall-group-end-body-${grouped.endIndex}`,
+              blockProps.localImageBasePath,
+              {
+                onToolcallClick: toggleToolcallPreview,
+                footnoteIndexMap: blockProps.footnoteIndexMap,
+              },
+            )));
+          } else if (grouped.endIndex > index && !grouped.stripLeadingOnEnd) {
+            // 终点是 marker-only，已并入 pill，无需再画
+          } else if (grouped.endIndex > index && grouped.stripLeadingOnEnd && grouped.endBodySegments.length === 0) {
+            // 终点只剩 leading tools，已并入 pill
+          }
+
+          index = grouped.endIndex;
+          continue;
+        }
+        nodes.push(renderBlock(block, index));
+      }
+      return nodes;
+    };
   },
 });
 
@@ -817,22 +932,6 @@ function renderSegments(
   localImageBasePath = "",
   options: RenderSegmentOptions = {},
 ): VNodeChild[] {
-  function consumeGroupedToolcallRefs(startIndex: number): { ids: string[]; endIndex: number } | null {
-    const startSegment = segments[startIndex];
-    if (startSegment?.type !== "toolcall_ref") return null;
-    const ids = [startSegment.id];
-    let cursor = startIndex;
-    while (cursor + 2 < segments.length) {
-      const spacer = segments[cursor + 1];
-      const nextTool = segments[cursor + 2];
-      if (spacer?.type !== "text" || spacer.text.trim() !== "") break;
-      if (nextTool?.type !== "toolcall_ref") break;
-      ids.push(nextTool.id);
-      cursor += 2;
-    }
-    return { ids, endIndex: cursor };
-  }
-
   const nodes: VNodeChild[] = [];
   for (let index = 0; index < segments.length; index += 1) {
     const segment = segments[index];
@@ -845,7 +944,7 @@ function renderSegments(
       continue;
     }
     if (segment.type === "toolcall_ref") {
-      const grouped = consumeGroupedToolcallRefs(index);
+      const grouped = consumeGroupedToolcallRefs(segments, index);
       const ids = grouped?.ids || [segment.id];
       index = grouped?.endIndex ?? index;
       const count = ids.length;

@@ -12,6 +12,7 @@
 
 ## 修复
 
+- 修复（chat）：正文内联工具徽标对连续 `[toolcall:...]` 统一收成一个扳手；同段允许无空白相邻或仅空白间隔，跨换行的 marker-only / 段尾-段首连续工具也替换为单徽章，避免完成态拆开或叠加。
 - 修复（chat）：模型选项思维等级只在 `reasoningEffort` 合法时显示；聊天下拉/配置页优先按字段现算标签，并统一快速配置等写入口，避免偶发只显示模型名。
 - 修复（chat）：尾部弹性锚点在没有用户气泡时，改为取时间线上最新的分割线（`compaction` 与 `plan_started`），不再优先压缩而漏掉计划执行分割线。
 - 修复（chat）：流式工具展开后的圆点明细不再显示"缺少参数"；`streamBlocksToActivitySummaryItems` 不再主动清空 `argsText`，展开时稳定读取 `_streamBlocks` 完整工具参数，移除 `isToolSummaryPlaceholder`/`fallbackToolSummaryText` 无效文案层 fallback。

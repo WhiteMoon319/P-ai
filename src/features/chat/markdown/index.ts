@@ -6,4 +6,10 @@ export { parseMarkdownBlocks, parseInlineSegments, normalizedTableRow } from "./
 export type { MarkdownBlock, InlineSegment } from "./parse-markdown";
 export { groupMarkdownSegments } from "./markdown-segments";
 export type { MarkdownSegment } from "./markdown-segments";
+export {
+  consumeCrossParagraphToolGroup,
+  consumeGroupedMarkerOnlyParagraphs,
+  consumeGroupedToolcallRefs,
+  isMarkerOnlyParagraph,
+} from "./toolcall-ref-group";
 export { initKatex } from "./init-katex";

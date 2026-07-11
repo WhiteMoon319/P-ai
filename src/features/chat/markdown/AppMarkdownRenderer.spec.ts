@@ -33,4 +33,28 @@ describe("AppMarkdownRenderer", () => {
     expect(html).toContain("\\delta(t)=");
     expect(html).toContain("Calculate the present value");
   });
+
+  it("groups adjacent toolcall badges into one wrench with count", async () => {
+    const html = await renderMarkdown("前文[toolcall:a][toolcall:b] [toolcall:c] 后文");
+    expect((html.match(/data-toolcall-pill="true"/g) || []).length).toBe(1);
+    expect(html).toContain("ecall-md-toolcall-ref-count");
+    expect(html).toContain("+3");
+    expect(html).toContain("data-toolcall-id=\"a\"");
+    expect(html).toContain("toolcall:a\ntoolcall:b\ntoolcall:c");
+  });
+
+  it("groups consecutive marker-only paragraphs into one wrench", async () => {
+    const html = await renderMarkdown("[toolcall:a][toolcall:b]\n\n[toolcall:c]\n\n后面正文");
+    expect((html.match(/data-toolcall-pill="true"/g) || []).length).toBe(1);
+    expect(html).toContain("+3");
+    expect(html).toContain("后面正文");
+  });
+
+  it("groups tools across blank lines between paragraphs", async () => {
+    const html = await renderMarkdown("前文 [toolcall:a][toolcall:b]\n\n[toolcall:c]\n\n[toolcall:d] 后文");
+    expect((html.match(/data-toolcall-pill="true"/g) || []).length).toBe(1);
+    expect(html).toContain("+4");
+    expect(html).toContain("前文");
+    expect(html).toContain("后文");
+  });
 });
