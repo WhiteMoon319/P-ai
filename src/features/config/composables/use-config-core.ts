@@ -2,6 +2,7 @@ import type { ComputedRef } from "vue";
 import type { ApiConfigItem, ApiModelConfigItem, ApiProviderConfigItem, AppConfig, CodexAuthMode, RemoteImChannelConfig, RemoteImPlatform } from "../../../types/app";
 import { defaultToolBindings } from "../utils/builtin-tools";
 import { normalizeApiRequestFormat } from "../utils/api-request-format";
+import { apiConfigDisplayName as buildApiConfigDisplayName } from "../utils/api-config-display";
 
 function normalizeRemoteImPlatform(value: unknown): RemoteImPlatform {
   const text = String(value || "").trim().toLowerCase();
@@ -41,25 +42,8 @@ export function useConfigCore(options: UseConfigCoreOptions) {
   const DEFAULT_CODEX_LOCAL_AUTH_PATH = "~/.codex/auth.json";
   const DEFAULT_REASONING_EFFORT = "medium";
 
-  function reasoningEffortDisplayLabel(value: string): string {
-    const normalized = String(value || "").trim().toLowerCase();
-    if (normalized === "none" || normalized === "minimal") {
-      return options.t ? options.t("config.api.reasoningOff") : "不思考";
-    }
-    if (normalized === "low") {
-      return options.t ? options.t("config.api.reasoningLow") : "低";
-    }
-    if (normalized === "high") {
-      return options.t ? options.t("config.api.reasoningHigh") : "高";
-    }
-    if (normalized === "xhigh") {
-      return options.t ? options.t("config.api.reasoningXHigh") : "极高";
-    }
-    return options.t ? options.t("config.api.reasoningMedium") : "中";
-  }
-
   function apiConfigDisplayName(providerName: string, modelValue: string, reasoningEffort: string): string {
-    return `${providerName}/${modelValue} · ${reasoningEffortDisplayLabel(reasoningEffort)}`;
+    return buildApiConfigDisplayName(providerName, modelValue, reasoningEffort, options.t);
   }
 
   function toFiniteMaxOutputTokens(value: unknown): number {

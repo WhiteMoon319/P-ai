@@ -387,6 +387,7 @@ import ChatSelectionActionPanel from "./ChatSelectionActionPanel.vue";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import { useChatQueue } from "../composables/use-chat-queue";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
+import { formatApiConfigOptionLabel } from "../../config/utils/api-config-display";
 
 type BinaryAttachment = { mime: string; bytesBase64: string };
 type QueuedAttachmentNotice = { id: string; fileName: string; relativePath: string; mime: string };
@@ -604,7 +605,7 @@ const normalizedChatModelOptions = computed(() =>
   (Array.isArray(props.chatModelOptions) ? props.chatModelOptions : [])
     .map((item) => ({
       id: String(item?.id || "").trim(),
-      name: String(item?.name || "").trim(),
+      name: formatApiConfigOptionLabel(item, t),
     }))
     .filter((item) => !!item.id && !!item.name),
 );

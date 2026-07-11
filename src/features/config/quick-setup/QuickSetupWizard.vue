@@ -353,6 +353,7 @@ import { useAvatarCache } from "../../chat/composables/use-avatar-cache";
 import { isDarkAppTheme, useAppTheme } from "../../shell/composables/use-app-theme";
 import { defaultToolBindings } from "../utils/builtin-tools";
 import { normalizeApiRequestFormat } from "../utils/api-request-format";
+import { apiConfigDisplayName } from "../utils/api-config-display";
 import { MODEL_ROLE_EXPERT_API_CONFIG_ID } from "../utils/model-role-options";
 import { hasUsableTextLlm } from "./usable-text-llm";
 
@@ -998,7 +999,7 @@ function upsertProvider(draft: AdvancedDraft, stableIds?: { providerId: string; 
   config.apiProviders = [...nextProviders, provider];
   config.apiConfigs = [...(config.apiConfigs || []).filter((item) => !item.id.startsWith(`${providerId}::`)), {
     id: endpointId,
-    name: `${provider.name}/${draft.model.trim()}`,
+    name: apiConfigDisplayName(provider.name, draft.model.trim(), "medium"),
     requestFormat: provider.requestFormat,
     allowConcurrentRequests: true,
     maxConcurrentRequests: null,

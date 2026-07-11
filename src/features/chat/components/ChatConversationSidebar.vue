@@ -442,6 +442,7 @@ import type { TaskEntry } from "../../config/views/config-tabs/task-editor";
 import { invokeTauri } from "../../../services/tauri-api";
 import { usePipelineStatus } from "../../shell/composables/use-pipeline-status";
 import { formatConversationListTime } from "../utils/conversation-time";
+import { formatApiConfigOptionLabel } from "../../config/utils/api-config-display";
 import {
   applyConversationSectionOrder,
   buildRecentConversationSection,
@@ -611,7 +612,7 @@ const batchArchiveModelOptions = computed<Array<{ id: string; label: string }>>(
     .filter((item) => item.enableText)
     .map((item) => ({
       id: String(item.id || "").trim(),
-      label: String(item.name || item.model || item.id || "").trim(),
+      label: formatApiConfigOptionLabel(item, t),
     }))
     .filter((item) => !!item.id && !!item.label),
 );

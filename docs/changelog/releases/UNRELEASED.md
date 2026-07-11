@@ -12,6 +12,7 @@
 
 ## 修复
 
+- 修复（chat）：模型选项思维等级只在 `reasoningEffort` 合法时显示；聊天下拉/配置页优先按字段现算标签，并统一快速配置等写入口，避免偶发只显示模型名。
 - 修复（chat）：尾部弹性锚点在没有用户气泡时，改为取时间线上最新的分割线（`compaction` 与 `plan_started`），不再优先压缩而漏掉计划执行分割线。
 - 修复（chat）：流式工具展开后的圆点明细不再显示"缺少参数"；`streamBlocksToActivitySummaryItems` 不再主动清空 `argsText`，展开时稳定读取 `_streamBlocks` 完整工具参数，移除 `isToolSummaryPlaceholder`/`fallbackToolSummaryText` 无效文案层 fallback。
 - 修复（chat）：assistant 流式收口改为按既定 `assistant_message_id` 定向写入，不再要求目标消息必须是尾消息；停止/失败 partial 与工具历史兜底也不再补建替代 assistant，目标消息缺失或已关闭时改为跳过写入，避免并发消息互相抢占尾消息导致错写或 `MSG_NOT_WRITABLE`。

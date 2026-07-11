@@ -493,6 +493,7 @@ import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
 import { invokeTauri } from "../../../../services/tauri-api";
 import CodexProviderPanel from "./CodexProviderPanel.vue";
 import { normalizeApiRequestFormat } from "../../utils/api-request-format";
+import { apiConfigDisplayName, reasoningEffortDisplayLabel as sharedReasoningEffortDisplayLabel } from "../../utils/api-config-display";
 
 type ApiCapability = "text" | "voice" | "embedding" | "rerank";
 type ProviderPresetCategory = "official" | "domestic" | "openaiCompatible" | "local";
@@ -742,20 +743,7 @@ function activeModelCount(provider: ApiProviderConfigItem | null | undefined): n
 }
 
 function reasoningEffortDisplayLabel(value: string): string {
-  switch (String(value || "").trim().toLowerCase()) {
-    case "none":
-    case "minimal":
-      return t("config.api.reasoningOff");
-    case "low":
-      return t("config.api.reasoningLow");
-    case "high":
-      return t("config.api.reasoningHigh");
-    case "xhigh":
-      return t("config.api.reasoningXHigh");
-    case "medium":
-    default:
-      return t("config.api.reasoningMedium");
-  }
+  return sharedReasoningEffortDisplayLabel(value, t);
 }
 
 function modelDisplayLabel(
@@ -764,13 +752,10 @@ function modelDisplayLabel(
 ): string {
   const providerLabel = String(provider?.name || provider?.id || "").trim();
   const modelLabel = String(model?.model || "").trim() || t("config.api.unnamedModel");
-  const reasoningLabel = reasoningEffortDisplayLabel(
-    provider && model
-      ? normalizedModelReasoningEffort(provider, model)
-      : String(model?.reasoningEffort || DEFAULT_REASONING_EFFORT),
-  );
-  if (!providerLabel) return `${modelLabel} · ${reasoningLabel}`;
-  return `${providerLabel}/${modelLabel} · ${reasoningLabel}`;
+  const reasoningValue = provider && model
+    ? normalizedModelReasoningEffort(provider, model)
+    : String(model?.reasoningEffort || "").trim();
+  return apiConfigDisplayName(providerLabel, modelLabel, reasoningValue, t);
 }
 
 const providerList = computed(() => props.config.apiProviders || []);
