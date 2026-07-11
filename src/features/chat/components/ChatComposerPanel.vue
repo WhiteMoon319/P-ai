@@ -261,24 +261,20 @@
       </Teleport>
       <div class="flex items-center justify-between">
         <div class="flex items-center">
-          <button
-            class="btn btn-sm btn-circle shrink-0"
-            :class="supervisionActive ? 'btn-primary' : 'btn-ghost'"
-            :disabled="frozen || supervisionDisabled"
-            :title="supervisionTitle || t('chat.supervision.buttonTitle')"
-            @click="emit('openSupervisionTask')"
+          <div
+            :class="supervisionActive ? 'aura aura-rainbow aura-sm' : undefined"
+            :style="supervisionActive ? { '--aura-radius': '9999px' } : undefined"
           >
-            <Target class="h-3.5 w-3.5" />
-          </button>
-          <button
-            v-if="!sidebarMode"
-            class="btn btn-sm btn-circle btn-ghost shrink-0"
-            :disabled="frozen"
-            :title="t('chat.command')"
-            @click="toggleInstructionPanel"
-          >
-            <Layers2 class="h-3.5 w-3.5" />
-          </button>
+            <button
+              class="btn btn-sm btn-circle shrink-0"
+              :class="supervisionActive ? 'btn-primary' : 'btn-ghost'"
+              :disabled="frozen || supervisionDisabled"
+              :title="supervisionTitle || t('chat.supervision.buttonTitle')"
+              @click="emit('openSupervisionTask')"
+            >
+              <Target class="h-3.5 w-3.5" />
+            </button>
+          </div>
           <button
             v-if="!sidebarMode"
             class="btn btn-sm btn-circle btn-ghost shrink-0"
@@ -379,7 +375,7 @@
 <script setup lang="ts">
 import { Teleport, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Bot, CalendarPlus, ChevronDown, ClipboardList, CornerRightUp, FileText, History, Layers2, Menu, Mic, Minus, Paperclip, Plus, Settings, Square, Target, X } from "@lucide/vue";
+import { Bot, CalendarPlus, ChevronDown, ClipboardList, CornerRightUp, FileText, History, Menu, Mic, Minus, Paperclip, Plus, Settings, Square, Target, X } from "@lucide/vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption } from "../../../types/app";
 import { invokeTauri } from "../../../services/tauri-api";
 import ChatQueuePreview from "./ChatQueuePreview.vue";
