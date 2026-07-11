@@ -51,6 +51,7 @@
       :streaming-text="streamingText"
       :tool-status-text="toolStatusText"
       :tool-status-state="toolStatusState"
+      :chat-error-text="chatErrorText"
       :stream-blocks="streamBlocks"
       :streaming-assistant-message-id="streamingAssistantMessageId"
       :busy="busy"
@@ -80,6 +81,7 @@
       :supervision-title="sidebarSupervisionTitle"
       @send="send"
       @stop="stop"
+      @clear-chat-error="clearChatError"
       @remove-clipboard-image="removeClipboardImage"
       @remove-queued-attachment-notice="removeQueuedAttachmentNotice"
       @pick-attachments="pickAttachments"
@@ -273,6 +275,7 @@ import CreateConversationDialog, { type SidebarCreateDepartmentOption } from "./
 import WorkspaceDirectoryPickerDialog from "../shared/components/WorkspaceDirectoryPickerDialog.vue";
 import { useWsTransport, type SidebarBridgeConfig } from "./composables/use-ws-transport";
 import { isTauriRuntimeAvailable } from "../../services/tauri-api";
+import { formatI18nError } from "../../utils/error";
 import ToolReviewTargetDialog from "../chat/components/ToolReviewTargetDialog.vue";
 import ChatSupervisionTaskDialog from "../chat/components/dialogs/ChatSupervisionTaskDialog.vue";
 import type { ChatWorkspaceChoice } from "../chat/composables/use-chat-workspace";
@@ -559,6 +562,7 @@ const queuedAttachmentNotices = computed<SidebarQueuedAttachmentNotice[]>(() => 
 const streamingText = ref("");
 const toolStatusText = ref("");
 const toolStatusState = ref<"running" | "done" | "failed" | "">("");
+const chatErrorText = ref("");
 const streamBlocks = ref<ReturnType<typeof normalizeAssistantStreamBlocks>>([]);
 const streamingAssistantMessageId = ref("");
 const busy = ref(false);
@@ -1180,9 +1184,18 @@ function clearStreamingState() {
   streamingAssistantMessageId.value = "";
 }
 
+function clearChatError() {
+  chatErrorText.value = "";
+}
+
+function setChatErrorText(error: unknown) {
+  chatErrorText.value = formatI18nError(t, "status.requestFailed", error);
+}
+
 function resetActiveConversationTransientState(_reason: string) {
   busy.value = false;
   clearStreamingState();
+  clearChatError();
 }
 
 function applyRuntimeStreamCache(runtime: SidebarConversationRuntimePayload | null | undefined) {
@@ -1235,6 +1248,7 @@ async function applyOpenConversationResult(result: OpenConversationResult) {
     ? resultActiveGoal
     : null;
   clearStreamingState();
+  clearChatError();
   applyRuntimeStreamCache(result.runtime);
   selectedBlockId.value = null;
   hasPrevBlock.value = true;
@@ -1524,6 +1538,7 @@ async function deleteConversation(conversationId: string) {
     sidebarTodos.value = [];
     activeConversationGoal.value = null;
     clearStreamingState();
+    clearChatError();
     workspaceRootPath.value = "";
     workspaceRootName.value = "";
   } catch (error) {
@@ -2128,6 +2143,7 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
   inputText.value = "";
   clipboardImages.value = [];
   queuedAttachmentEntries.value = [];
+  clearChatError();
   sendSubmitting.value = true;
   if (!hadForegroundRound) busy.value = true;
   try {
@@ -2158,7 +2174,7 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
     if (!inputText.value.trim()) inputText.value = text;
     clipboardImages.value = [...previousClipboardImages, ...clipboardImages.value];
     queuedAttachmentEntries.value = [...previousQueuedAttachmentEntries, ...queuedAttachmentEntries.value];
-    transport.errorText.value = String(error || t('sidebar.sendFailed'));
+    setChatErrorText(error || t("sidebar.sendFailed"));
   } finally {
     sendSubmitting.value = false;
   }
@@ -2854,6 +2870,7 @@ function registerNotifications() {
     if (value.conversationId === activeConversationId.value) {
       busy.value = true;
       clearStreamingState();
+      clearChatError();
       streamingAssistantMessageId.value = String(value.assistantMessageId || "").trim();
     }
   });
@@ -2886,13 +2903,23 @@ function registerNotifications() {
     }
   });
   transport.onNotification("chat.roundFinished", (payload) => {
-    const value = payload as { conversationId?: string; assistantMessage?: ChatMessage };
+    const value = payload as {
+      conversationId?: string;
+      assistantMessage?: ChatMessage;
+      status?: string;
+      error?: unknown;
+    };
     if (value.conversationId !== activeConversationId.value) return;
     busy.value = false;
     streamingAssistantMessageId.value = String(value.assistantMessage?.id || "").trim();
     // 先追加正式消息再清流式状态，避免 Vue 先删草稿再插正式消息导致一帧闪烁。
     if (value.assistantMessage) appendMessages({ conversationId: value.conversationId, message: value.assistantMessage });
     clearStreamingState();
+    if (String(value.status || "").trim() === "failed") {
+      setChatErrorText(value.error || t("status.requestUnknownReason"));
+      return;
+    }
+    clearChatError();
   });
 }
 

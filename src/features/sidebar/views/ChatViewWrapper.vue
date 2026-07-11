@@ -15,7 +15,7 @@
     :frontend-round-phase="chatFrontendRoundPhase"
     :tool-status-text="toolStatusText"
     :tool-status-state="toolStatusState"
-    chat-error-text=""
+    :chat-error-text="chatErrorText"
     :clipboard-images="clipboardImages"
     :queued-attachment-notices="queuedAttachmentNotices"
     :chat-input="input"
@@ -90,7 +90,7 @@
     @send-chat="$emit('send', $event)"
     @stop-chat="$emit('stop')"
     @load-older-history="$emit('loadPrevBlock')"
-    @clear-chat-error="noop"
+    @clear-chat-error="$emit('clearChatError')"
     @reached-bottom="noop"
     @jump-to-conversation-bottom="noop"
     @add-mention="noop"
@@ -204,6 +204,7 @@ const props = defineProps<{
   streamingText: string;
   toolStatusText: string;
   toolStatusState: "running" | "done" | "failed" | "";
+  chatErrorText?: string;
   streamBlocks: AssistantStreamBlock[];
   streamingAssistantMessageId?: string;
   busy: boolean;
@@ -237,6 +238,7 @@ defineEmits<{
   "update:input": [value: string];
   send: [payload?: { extraTextBlocks?: string[] }];
   stop: [];
+  clearChatError: [];
   removeClipboardImage: [index: number];
   removeQueuedAttachmentNotice: [index: number];
   pickAttachments: [];
@@ -287,6 +289,7 @@ const personaAvatarUrlMap = computed<Record<string, string>>(() => {
   if (props.activeAgentId && assistantAvatarUrl.value) next[props.activeAgentId] = assistantAvatarUrl.value;
   return next;
 });
+const chatErrorText = computed(() => String(props.chatErrorText || "").trim());
 const sidebarMentionEntries = computed<ChatMentionEntry[]>(() => {
   const nameMap = personaNameMap.value;
   const avatarMap = personaAvatarUrlMap.value;
