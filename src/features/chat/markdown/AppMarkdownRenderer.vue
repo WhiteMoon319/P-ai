@@ -34,10 +34,7 @@
           ref="toolcallScrollerRef"
           class="ecall-md-toolcall-scroll max-h-80 overflow-y-auto"
         >
-          <div v-if="activeToolcallPreviews.length === 1 && activeToolcallPreviews[0]?.body" class="px-2 py-1.5">
-            <pre class="m-0 whitespace-pre-wrap break-all text-xs leading-relaxed text-base-content/75"><code>{{ activeToolcallPreviews[0].body }}</code></pre>
-          </div>
-          <div v-else-if="activeToolcallPreviews.length > 1" class="py-1">
+          <div v-if="activeToolcallPreviews.length > 0" class="py-1">
             <div
               v-for="(preview, index) in activeToolcallPreviews"
               :key="preview.id"
@@ -164,11 +161,8 @@ function resolveMathCopyText(text: string, raw: string, display: boolean): strin
 
 const activeToolcallPopupTitle = computed(() => {
   const count = activeToolcallPreviews.value.length;
-  if (count <= 1) {
-    return activeToolcallPreviews.value[0]?.title
-      || activeToolcallPreviews.value[0]?.label
-      || t("chat.shareExport.toolLabel");
-  }
+  if (count <= 0) return t("chat.shareExport.toolLabel");
+  if (count === 1) return t("chat.shareExport.toolLabel");
   return `${t("chat.shareExport.toolLabel")} +${count}`;
 });
 
