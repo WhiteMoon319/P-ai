@@ -37,7 +37,17 @@
     <pre
       ref="logContainer"
       class="flex-1 overflow-auto border-t border-base-300 bg-base-100 p-3 font-mono text-xs leading-5 whitespace-pre-wrap break-words"
-    ><code v-if="filteredLogs.length === 0" class="opacity-50">{{ loading ? '正在加载...' : '暂无日志' }}</code><code v-else>{{ renderedText }}</code></pre>
+    >
+      <code v-if="filteredLogs.length === 0" class="opacity-50">{{ loading ? "正在加载..." : "暂无日志" }}</code>
+      <template v-else>
+        <div
+          v-for="item in filteredLogs"
+          :key="item.id"
+          class="runtime-log-line"
+          :class="levelClass(item.level)"
+        >{{ formatLine(item) }}</div>
+      </template>
+    </pre>
 
     <footer class="flex h-6 shrink-0 items-center gap-2 border-t border-base-300 bg-base-200 px-3 text-xs opacity-60">
       <span>显示 {{ filteredLogs.length }} / {{ logs.length }}</span>
@@ -96,8 +106,6 @@ const filteredLogs = computed(() =>
     return true;
   }),
 );
-
-const renderedText = computed(() => filteredLogs.value.map(formatLine).join("\n"));
 
 watch(filteredLogs, () => {
   if (autoScroll.value) {
@@ -225,6 +233,23 @@ function extractModule(message: string): string | null {
   return m?.[1]?.trim() || null;
 }
 
+function levelClass(level: string): string {
+  switch (String(level || "").trim().toLowerCase()) {
+    case "error":
+      return "text-error";
+    case "warn":
+    case "warning":
+      return "text-warning";
+    case "debug":
+      return "text-info";
+    case "trace":
+      return "opacity-60";
+    case "info":
+    default:
+      return "text-base-content";
+  }
+}
+
 function formatLine(item: RuntimeLogEntry): string {
   const time = formatTime(item.createdAt);
   const parts = [`[${time}]`, item.level.toUpperCase(), item.message];
@@ -239,3 +264,10 @@ function formatTime(value: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 </script>
+
+<style scoped>
+.runtime-log-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+</style>
