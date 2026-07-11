@@ -48,7 +48,25 @@
                 <span class="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-base-200 text-[10px] font-medium leading-none text-base-content/65">
                   {{ index + 1 }}
                 </span>
-                <span class="min-w-0 whitespace-normal break-all font-normal leading-relaxed">{{ preview.title || preview.label }}</span>
+                <div class="min-w-0 whitespace-normal break-all font-normal leading-relaxed">
+                  <template v-if="splitToolcallPreviewTitle(preview).name">
+                    <span>{{ splitToolcallPreviewTitle(preview).name }}</span>
+                    <span v-if="splitToolcallPreviewTitle(preview).pathText || splitToolcallPreviewTitle(preview).rest || preview.filePath"> · </span>
+                  </template>
+                  <a
+                    v-if="preview.filePath"
+                    href="#"
+                    class="ecall-md-link"
+                    :data-href="preview.filePath"
+                    :title="preview.filePath"
+                    @click="handleToolcallFileLinkClick($event, preview.filePath)"
+                  >{{ splitToolcallPreviewTitle(preview).pathText || preview.fileLabel || preview.filePath }}</a>
+                  <template v-if="preview.filePath && splitToolcallPreviewTitle(preview).rest">
+                    <span> · {{ splitToolcallPreviewTitle(preview).rest }}</span>
+                  </template>
+                  <span v-else-if="!preview.filePath && splitToolcallPreviewTitle(preview).rest">{{ splitToolcallPreviewTitle(preview).rest }}</span>
+                  <span v-else-if="!preview.filePath && !splitToolcallPreviewTitle(preview).name">{{ preview.title || preview.label }}</span>
+                </div>
               </div>
               <pre
                 v-if="preview.body"
@@ -89,7 +107,7 @@ const props = defineProps<{
   streaming?: boolean;
   variant?: "chat" | "document";
   localImageBasePath?: string;
-  toolcallPreviewMap?: Record<string, { title?: string; body?: string }>;
+  toolcallPreviewMap?: Record<string, { title?: string; body?: string; filePath?: string; fileLabel?: string }>;
 }>();
 const emit = defineEmits<{
   (e: "click", event: MouseEvent): void;
@@ -124,9 +142,18 @@ const activeToolcallPreviews = computed(() => {
         label: `toolcall:${id}`,
         title: String(preview.title || "").trim(),
         body: String(preview.body || "").trim(),
+        filePath: String(preview.filePath || "").trim(),
+        fileLabel: String(preview.fileLabel || preview.filePath || "").trim(),
       };
     })
-    .filter((preview): preview is { id: string; label: string; title: string; body: string } => !!preview);
+    .filter((preview): preview is {
+      id: string;
+      label: string;
+      title: string;
+      body: string;
+      filePath: string;
+      fileLabel: string;
+    } => !!preview);
 });
 
 function resolveMathCopyText(text: string, raw: string, display: boolean): string {
@@ -148,6 +175,70 @@ const activeToolcallPopupTitle = computed(() => {
 function closeToolcallPreview() {
   activeToolcallIds.value = [];
   activeToolcallAnchorEl.value = null;
+}
+
+function splitToolcallPreviewTitle(preview: {
+  title?: string;
+  filePath?: string;
+  fileLabel?: string;
+}): { name: string; rest: string; pathText: string } {
+  const title = String(preview.title || "").trim();
+  const filePath = String(preview.filePath || "").trim();
+  const fileLabel = String(preview.fileLabel || filePath).trim();
+  if (!title) {
+    return { name: "", rest: "", pathText: fileLabel };
+  }
+  if (!filePath) {
+    const parts = title.split(" · ");
+    if (parts.length <= 1) return { name: title, rest: "", pathText: "" };
+    return {
+      name: parts[0] || "",
+      rest: parts.slice(1).join(" · "),
+      pathText: "",
+    };
+  }
+
+  // title 形如 "read · E:/a.ts · offset: 150"
+  const separator = " · ";
+  const parts = title.split(separator);
+  if (parts.length === 0) return { name: title, rest: "", pathText: fileLabel };
+
+  const name = parts[0] || "";
+  const remaining = parts.slice(1);
+  // 优先匹配完整 path / label
+  let pathIndex = remaining.findIndex((part) => {
+    const text = part.trim();
+    return text === filePath || text === fileLabel || normalizeLocalLinkHref(text) === normalizeLocalLinkHref(filePath);
+  });
+  if (pathIndex < 0) {
+    // 次选：包含路径片段
+    pathIndex = remaining.findIndex((part) => part.includes(filePath) || (fileLabel && part.includes(fileLabel)));
+  }
+  if (pathIndex < 0) {
+    return {
+      name,
+      rest: remaining.join(separator),
+      pathText: fileLabel || filePath,
+    };
+  }
+
+  const pathText = remaining[pathIndex]?.trim() || fileLabel || filePath;
+  const restParts = remaining.filter((_, index) => index !== pathIndex);
+  return {
+    name,
+    rest: restParts.join(separator),
+    pathText,
+  };
+}
+
+function handleToolcallFileLinkClick(event: MouseEvent, filePath: string) {
+  event.preventDefault();
+  event.stopPropagation();
+  const path = String(filePath || "").trim();
+  if (!path) return;
+  // 复用正文链接点击链路：ChatMessageItem -> ChatView.assistantLinkClick
+  emit("click", event);
+  closeToolcallPreview();
 }
 
 async function positionToolcallPopup() {
@@ -215,6 +306,7 @@ function handleDocumentPointerDown(event: PointerEvent) {
     return;
   }
   if (target instanceof HTMLElement && target.closest('[data-toolcall-pill="true"]')) return;
+  if (target instanceof HTMLElement && target.closest(".ecall-md-toolcall-popup")) return;
   if (toolcallPopupRef.value?.contains(target)) return;
   closeToolcallPreview();
 }

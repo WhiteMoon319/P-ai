@@ -665,7 +665,7 @@ const assistantMetaText = computed(() => joinNonEmpty([
   assistantDebugMeta.value,
 ]));
 const streamingHeaderStatus = computed(() => assistantStreamingHeaderStatus(props.block));
-const toolcallPreviewMap = computed<Record<string, { title: string; body: string }>>(() => {
+const toolcallPreviewMap = computed<Record<string, { title: string; body: string; filePath?: string; fileLabel?: string }>>(() => {
   const previews = buildToolcallPreviewMap(props.block.activityItems, toolTimelineText("noArgs"));
   for (const item of props.block.activityItems) {
     if (item.kind !== "tool") continue;
