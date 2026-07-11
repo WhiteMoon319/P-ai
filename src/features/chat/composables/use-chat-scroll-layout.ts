@@ -69,7 +69,10 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
       scrollEl.clientHeight
       - parseFloat(scrollStyles.paddingTop || "0")
       - parseFloat(scrollStyles.paddingBottom || "0");
-    const nextMinHeight = Math.max(0, scrollViewportHeight - toolbarReservedHeight.value - TODO_DROPDOWN_SAFE_GAP);
+    const nextMinHeight = Math.max(
+      0,
+      Math.round((scrollViewportHeight - toolbarReservedHeight.value - TODO_DROPDOWN_SAFE_GAP) * 0.95),
+    );
     if (latestOwnElasticMinHeight.value !== nextMinHeight) {
       latestOwnElasticMinHeight.value = nextMinHeight;
     }
