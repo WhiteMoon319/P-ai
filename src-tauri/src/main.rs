@@ -368,11 +368,11 @@ async fn run_deferred_setup(app_handle: AppHandle) {
             Ok(delegate_ids) => {
                 for delegate_id in delegate_ids {
                     if let Err(err) = delegate_runtime_thread_archive(app_state.inner(), &delegate_id, &now_iso()) {
-                        runtime_log_error(format!("[启动-延迟] 归档中断远程应答委托失败，delegate_id={delegate_id}，error={err}"));
+                        runtime_log_error(format!("[启动-延迟] 归档中断远程委托失败，delegate_id={delegate_id}，error={err}"));
                     }
                 }
             }
-            Err(err) => runtime_log_error(format!("[启动-延迟] 收口未完成远程应答委托失败：{err}")),
+            Err(err) => runtime_log_error(format!("[启动-延迟] 收口未完成远程委托失败：{err}")),
         }
     }
     let ide_context_runtime = app_handle.state::<IdeContextRuntime>().inner().clone();

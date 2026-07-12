@@ -44,7 +44,7 @@ where
         .collect::<Vec<_>>())
 }
 
-#[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, rmcp::schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct ArchiveMemoryDraft {
     #[serde(default)]
@@ -57,7 +57,7 @@ struct ArchiveMemoryDraft {
     tags: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, rmcp::schemars::JsonSchema)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, rmcp::schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 enum ArchiveMemoryActionKind {
     Create,
@@ -65,7 +65,7 @@ enum ArchiveMemoryActionKind {
     Merge,
 }
 
-#[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, rmcp::schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
 struct ArchiveMemoryActionDraft {
     action: ArchiveMemoryActionKind,

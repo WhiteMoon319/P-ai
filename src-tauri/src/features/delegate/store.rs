@@ -1055,13 +1055,16 @@ fn delegate_store_update_status(
 fn delegate_store_interrupt_unfinished_remote_replies(data_path: &PathBuf) -> Result<Vec<String>, String> {
     let conn = delegate_store_open(data_path)?;
     let mut statement = conn
-        .prepare("SELECT delegate_id FROM delegate_record WHERE kind = 'remote_im_reply' AND status = ?1")
-        .map_err(|err| format!("读取未完成远程应答委托失败: {err}"))?;
+        .prepare(
+            "SELECT delegate_id FROM delegate_record
+             WHERE kind IN ('remote_im_reply', 'remote_im_departure_reflection') AND status = ?1",
+        )
+        .map_err(|err| format!("读取未完成远程委托失败: {err}"))?;
     let delegate_ids = statement
         .query_map(params![DELEGATE_STATUS_DELIVERED], |row| row.get::<_, String>(0))
-        .map_err(|err| format!("读取未完成远程应答委托失败: {err}"))?
+        .map_err(|err| format!("读取未完成远程委托失败: {err}"))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|err| format!("读取未完成远程应答委托失败: {err}"))?;
+        .map_err(|err| format!("读取未完成远程委托失败: {err}"))?;
     drop(statement);
     if delegate_ids.is_empty() {
         return Ok(delegate_ids);
@@ -1070,10 +1073,10 @@ fn delegate_store_interrupt_unfinished_remote_replies(data_path: &PathBuf) -> Re
     conn.execute(
             "UPDATE delegate_record
              SET status = ?1, updated_at = ?2, completed_at = COALESCE(completed_at, ?2)
-             WHERE kind = 'remote_im_reply' AND status = ?3",
+             WHERE kind IN ('remote_im_reply', 'remote_im_departure_reflection') AND status = ?3",
             params![DELEGATE_STATUS_FAILED, now, DELEGATE_STATUS_DELIVERED],
         )
-        .map_err(|err| format!("恢复远程应答委托状态失败: {err}"))?;
+        .map_err(|err| format!("恢复远程委托状态失败: {err}"))?;
     for delegate_id in &delegate_ids {
         let entry = delegate_store_get_delegate(data_path, delegate_id)?;
         delegate_snapshot_store_sync_from_entry(data_path, &entry)?;
@@ -1240,6 +1243,36 @@ mod delegate_store_tests {
 
         assert_eq!(snapshot.delegate_id, entry.delegate_id);
         assert_eq!(snapshot.status, DELEGATE_STATUS_DELIVERED);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn unfinished_remote_delegate_recovery_should_include_departure_reflection() {
+        let root = std::env::temp_dir().join(format!(
+            "easy-call-delegate-remote-recovery-{}",
+            Uuid::new_v4()
+        ));
+        let data_path = root.join("app_data.json");
+        let mut reply_input = test_delegate_input();
+        reply_input.kind = "remote_im_reply".to_string();
+        let reply = delegate_store_create_delegate(&data_path, &reply_input)
+            .expect("create remote reply");
+        let mut reflection_input = test_delegate_input();
+        reflection_input.kind = "remote_im_departure_reflection".to_string();
+        let reflection = delegate_store_create_delegate(&data_path, &reflection_input)
+            .expect("create departure reflection");
+
+        let interrupted = delegate_store_interrupt_unfinished_remote_replies(&data_path)
+            .expect("interrupt unfinished remote delegates");
+
+        assert!(interrupted.contains(&reply.delegate_id));
+        assert!(interrupted.contains(&reflection.delegate_id));
+        assert_eq!(
+            delegate_store_get_delegate(&data_path, &reflection.delegate_id)
+                .expect("read reflection")
+                .status,
+            DELEGATE_STATUS_FAILED
+        );
         let _ = fs::remove_dir_all(root);
     }
 

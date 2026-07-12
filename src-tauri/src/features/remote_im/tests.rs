@@ -1577,6 +1577,64 @@
     }
 
     #[test]
+    fn departure_reflection_delegate_should_bind_contact_conversation_and_owner() {
+        let mut contact = remote_im_test_contact("contact-a", "conversation-a");
+        contact.remote_contact_type = "group".to_string();
+        let conversation = Conversation {
+            id: "conversation-a".to_string(),
+            title: "群会话".to_string(),
+            agent_id: "agent-a".to_string(),
+            department_id: "department-a".to_string(),
+            bound_conversation_id: None,
+            parent_conversation_id: None,
+            child_conversation_ids: Vec::new(),
+            fork_message_cursor: None,
+            unread_count: 0,
+            conversation_kind: CONVERSATION_KIND_REMOTE_IM_CONTACT.to_string(),
+            root_conversation_id: None,
+            delegate_id: None,
+            created_at: now_iso(),
+            updated_at: now_iso(),
+            last_user_at: None,
+            last_assistant_at: None,
+            status: "active".to_string(),
+            summary: String::new(),
+            user_profile_snapshot: String::new(),
+            shell_workspace_path: None,
+            shell_workspaces: Vec::new(),
+            shell_autonomous_mode: false,
+            archived_at: None,
+            messages: Vec::new(),
+            fast_request_turns: Vec::new(),
+            current_todos: Vec::new(),
+            memory_recall_table: Vec::new(),
+            plan_mode_enabled: false,
+            preferred_api_config_id: None,
+            auto_push_remote_contact_id: None,
+            active_goal: None,
+            cumulative_usage: ConversationCumulativeUsage::default(),
+        };
+        let assistant = RemoteImConversationAssistantContext {
+            department_id: "department-a".to_string(),
+            department_name: "客服部".to_string(),
+            agent_id: "agent-a".to_string(),
+            agent_name: "客服".to_string(),
+        };
+
+        let input = remote_im_departure_reflection_delegate_input(
+            &contact,
+            &conversation,
+            &assistant,
+        );
+
+        assert_eq!(input.kind, "remote_im_departure_reflection");
+        assert_eq!(input.conversation_id, "conversation-a");
+        assert_eq!(input.target_department_id, "department-a");
+        assert_eq!(input.target_agent_id, "agent-a");
+        assert!(!input.notify_assistant_when_done);
+    }
+
+    #[test]
     fn remote_im_secretary_message_digest_should_include_group_member_identity_and_media_placeholder() {
         let mut contact = remote_im_test_contact("contact-a", "conversation-a");
         contact.remote_contact_type = "group".to_string();
@@ -1912,4 +1970,44 @@
                 .expect("finish after guidance"),
             RemoteImReplyDelegateNext::Completed(runtime) if runtime.delegate_id == next_delegate_id
         ));
+    }
+
+    #[tokio::test]
+    async fn presence_timeout_should_not_depart_while_reply_delegate_is_active() {
+        let state = remote_im_test_state();
+        let presence_at = now_iso();
+        lock_remote_im_contact_runtime_states(&state)
+            .expect("lock contact states")
+            .insert(
+                "contact-a".to_string(),
+                RemoteImContactRuntimeState {
+                    presence_state: RemoteImPresenceState::Present,
+                    last_presence_at: Some(presence_at),
+                    ..RemoteImContactRuntimeState::default()
+                },
+            );
+        lock_remote_im_reply_delegate_runtimes(&state)
+            .expect("lock delegate runtimes")
+            .insert(
+                "delegate-a".to_string(),
+                RemoteImReplyDelegateRuntime {
+                    delegate_id: "delegate-a".to_string(),
+                    contact_id: "contact-a".to_string(),
+                    conversation_id: "conversation-a".to_string(),
+                    trigger_message_id: "trigger-a".to_string(),
+                    started_at: now_iso(),
+                    prompt_snapshot_messages: vec![remote_im_test_group_user_message("user-a")],
+                    guidance_messages: std::collections::VecDeque::new(),
+                    consumed_guidance_messages: Vec::new(),
+                    cancelled: false,
+                    terminal: false,
+                    session_agent_id: "agent-a".to_string(),
+                },
+            );
+
+        remote_im_schedule_presence_timeout(&state, "contact-a", 0)
+            .expect("schedule timeout");
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+
+        assert!(!remote_im_contact_is_away(&state, "contact-a").expect("read presence"));
     }
