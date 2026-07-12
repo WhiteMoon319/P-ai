@@ -2006,3 +2006,160 @@
 
         assert!(!remote_im_contact_is_away(&state, "contact-a").expect("read presence"));
     }
+
+    #[test]
+    fn assistant_and_secretary_debounce_keys_should_enforce_cardinality() {
+        let state = remote_im_test_state();
+        let left = remote_im_assistant_debounce_key(&state, "contact-a", "user-a");
+        let left_again = remote_im_assistant_debounce_key(&state, "contact-a", "user-a");
+        let right = remote_im_assistant_debounce_key(&state, "contact-a", "user-b");
+        let secretary = remote_im_secretary_debounce_key(&state, "contact-a");
+        let secretary_again = remote_im_secretary_debounce_key(&state, "contact-a");
+        assert_eq!(left, left_again);
+        assert_ne!(left, right);
+        assert_eq!(secretary, secretary_again);
+        assert_ne!(left, secretary);
+    }
+
+    #[tokio::test]
+    async fn assistant_and_secretary_debounces_should_be_mutually_exclusive() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact("contact-a", "conversation-a");
+        contact.activation_mode = "keyword".to_string();
+        contact.activation_keywords = vec!["@助理".to_string()];
+        {
+            let mut states = lock_remote_im_contact_runtime_states(&state).expect("lock states");
+            remote_im_contact_runtime_state_mut(&mut states, &contact.id).presence_state =
+                RemoteImPresenceState::Present;
+        }
+        let event = |id: &str, sender_id: &str, text: &str| {
+            let mut message = remote_im_test_group_user_message(sender_id);
+            message.id = format!("message-{id}");
+            message.parts = vec![MessagePart::Text {
+                text: text.to_string(),
+                reasoning_content: None,
+            }];
+            create_pending_event(
+                format!("event-{id}"),
+                "conversation-a".to_string(),
+                vec![message],
+                true,
+                ChatSessionInfo {
+                    department_id: "department-a".to_string(),
+                    agent_id: "agent-a".to_string(),
+                },
+                RemoteImMessageSource {
+                    channel_id: "channel-a".to_string(),
+                    platform: RemoteImPlatform::OnebotV11,
+                    im_name: "QQ".to_string(),
+                    remote_contact_type: "group".to_string(),
+                    remote_contact_id: "group-88".to_string(),
+                    remote_contact_name: "项目群".to_string(),
+                    sender_id: sender_id.to_string(),
+                    sender_name: sender_id.to_string(),
+                    sender_avatar_url: None,
+                    platform_message_id: None,
+                },
+            )
+        };
+
+        observe_remote_im_persisted_event(&state, &contact, &event("normal", "user-a", "普通消息"))
+            .expect("create secretary debounce");
+        observe_remote_im_persisted_event(&state, &contact, &event("wake", "user-b", "@助理 看这里"))
+            .expect("accelerate secretary debounce");
+        {
+            let debounces = remote_im_debounce_state().lock().expect("lock debounce state");
+            let assistant_prefix = format!(
+                "{}::{}::",
+                state.data_path.to_string_lossy(),
+                contact.id
+            );
+            assert!(!debounces
+                .assistant_by_sender
+                .keys()
+                .any(|key| key.starts_with(&assistant_prefix)));
+            let secretary = debounces
+                .secretary_by_contact
+                .get(&remote_im_secretary_debounce_key(&state, &contact.id))
+                .expect("secretary debounce exists");
+            assert!(secretary.must_reply);
+        }
+
+        clear_remote_im_debounces_for_contact(&state, &contact.id).expect("clear debounces");
+        observe_remote_im_persisted_event(&state, &contact, &event("wake-2", "user-a", "@助理 回答"))
+            .expect("create assistant debounce");
+        observe_remote_im_persisted_event(&state, &contact, &event("normal-2", "user-b", "普通跟话"))
+            .expect("observe while assistant debounce exists");
+        let debounces = remote_im_debounce_state().lock().expect("lock debounce state");
+        let assistant_prefix = format!(
+            "{}::{}::",
+            state.data_path.to_string_lossy(),
+            contact.id
+        );
+        assert_eq!(
+            debounces
+                .assistant_by_sender
+                .keys()
+                .filter(|key| key.starts_with(&assistant_prefix))
+                .count(),
+            1
+        );
+        assert!(!debounces
+            .secretary_by_contact
+            .contains_key(&remote_im_secretary_debounce_key(&state, &contact.id)));
+    }
+
+    #[tokio::test]
+    async fn mute_should_clear_pending_remote_im_debounces() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact("contact-a", "conversation-a");
+        contact.activation_mode = "keyword".to_string();
+        contact.activation_keywords = vec!["@助理".to_string()];
+        let mut message = remote_im_test_group_user_message("user-a");
+        message.parts = vec![MessagePart::Text {
+            text: "@助理 回答".to_string(),
+            reasoning_content: None,
+        }];
+        let event = create_pending_event(
+            "event-wake".to_string(),
+            "conversation-a".to_string(),
+            vec![message],
+            true,
+            ChatSessionInfo {
+                department_id: "department-a".to_string(),
+                agent_id: "agent-a".to_string(),
+            },
+            RemoteImMessageSource {
+                channel_id: "channel-a".to_string(),
+                platform: RemoteImPlatform::OnebotV11,
+                im_name: "QQ".to_string(),
+                remote_contact_type: "group".to_string(),
+                remote_contact_id: "group-88".to_string(),
+                remote_contact_name: "项目群".to_string(),
+                sender_id: "user-a".to_string(),
+                sender_name: "张三".to_string(),
+                sender_avatar_url: None,
+                platform_message_id: None,
+            },
+        );
+        observe_remote_im_persisted_event(&state, &contact, &event).expect("create debounce");
+        {
+            let mut states = lock_remote_im_contact_runtime_states(&state).expect("lock states");
+            remote_im_contact_runtime_state_mut(&mut states, &contact.id).mute_until =
+                Some(remote_im_resolve_mute_until(now_utc(), 60));
+        }
+        observe_remote_im_persisted_event(&state, &contact, &event).expect("clear muted debounce");
+        let debounces = remote_im_debounce_state().lock().expect("lock debounce state");
+        let assistant_prefix = format!(
+            "{}::{}::",
+            state.data_path.to_string_lossy(),
+            contact.id
+        );
+        assert!(!debounces
+            .assistant_by_sender
+            .keys()
+            .any(|key| key.starts_with(&assistant_prefix)));
+        assert!(!debounces
+            .secretary_by_contact
+            .contains_key(&remote_im_secretary_debounce_key(&state, &contact.id)));
+    }

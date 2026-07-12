@@ -2358,7 +2358,7 @@ fn remote_im_event_requires_reply_delegate(event: &ChatPendingEvent) -> bool {
 /// 远程消息已经先统一落库，但不能把同一批的多条消息合并成一次秘书判断。
 /// 每条事件只看它之前已落库的轻量历史和本事件自身，避免较晚消息倒灌到较早
 /// 消息的判断里，也让秘书可以把后续消息准确投递给刚刚启动的委托。
-async fn process_persisted_remote_im_events_individually(
+async fn process_persisted_remote_im_events_individually_now(
     state: &AppState,
     conversation_id: &str,
     events: &[ChatPendingEvent],
@@ -2366,6 +2366,7 @@ async fn process_persisted_remote_im_events_individually(
     persisted_recent_messages_before_flush: &[ChatMessage],
     persisted_batch_messages: &[ChatMessage],
     scheduler_agents: &[AgentProfile],
+    must_reply_override: bool,
 ) -> Result<(), String> {
     for (event, should_consult_secretary) in events.iter().zip(event_activate_flags.iter().copied()) {
         if !should_consult_secretary || !remote_im_event_requires_reply_delegate(event) {
@@ -2453,29 +2454,44 @@ async fn process_persisted_remote_im_events_individually(
             });
         let active_delegate_ids =
             remote_im_reply_delegate_active_ids_for_contact(state, &contact.id)?;
-        let decision = match run_remote_im_secretary_decision(
-            state,
-            &contact,
-            &current_assistant,
-            &secretary_recent_history,
-            &secretary_current_messages,
-            &work_ledger,
-            &active_delegate_ids,
-        )
-        .await
-        {
-            Ok(value) => value,
-            Err(err) => {
-                runtime_log_warn(format!(
-                    "[远程联系人秘书] 失败，任务=单事件判断降级，conversation_id={}，contact_id={}，event_id={}，error={}",
-                    conversation_id, contact.id, event.id, err
-                ));
-                RemoteImSecretaryDecision {
-                    should_reply: true,
-                    target_delegate_id: None,
-                    reason: format!("秘书判断失败，已降级为始终回复：{err}"),
-                    model_name: String::new(),
-                    emit_log: true,
+        let decision = if must_reply_override && active_delegate_ids.is_empty() {
+            RemoteImSecretaryDecision {
+                should_reply: true,
+                target_delegate_id: None,
+                reason: "明确喊到助理且当前没有运行应答委托".to_string(),
+                model_name: String::new(),
+                emit_log: true,
+            }
+        } else {
+            match run_remote_im_secretary_decision(
+                state,
+                &contact,
+                &current_assistant,
+                &secretary_recent_history,
+                &secretary_current_messages,
+                &work_ledger,
+                &active_delegate_ids,
+            )
+            .await
+            {
+                Ok(mut value) => {
+                    if must_reply_override {
+                        value.should_reply = true;
+                    }
+                    value
+                }
+                Err(err) => {
+                    runtime_log_warn(format!(
+                        "[远程联系人秘书] 失败，任务=单事件判断降级，conversation_id={}，contact_id={}，event_id={}，error={}",
+                        conversation_id, contact.id, event.id, err
+                    ));
+                    RemoteImSecretaryDecision {
+                        should_reply: true,
+                        target_delegate_id: None,
+                        reason: format!("秘书判断失败，已降级为始终回复：{err}"),
+                        model_name: String::new(),
+                        emit_log: true,
+                    }
                 }
             }
         };
@@ -2491,6 +2507,14 @@ async fn process_persisted_remote_im_events_individually(
             ));
         }
         if !decision.should_reply {
+            continue;
+        }
+        if remote_im_contact_is_muted(state, &contact.id)? {
+            clear_remote_im_debounces_for_contact(state, &contact.id)?;
+            runtime_log_info(format!(
+                "[远程联系人防抖] 跳过，任务=发起应答，contact_id={}，reason=联系人处于闭嘴状态",
+                contact.id
+            ));
             continue;
         }
 
@@ -2576,6 +2600,89 @@ async fn process_persisted_remote_im_events_individually(
         }
     }
     Ok(())
+}
+
+async fn process_persisted_remote_im_events_individually(
+    state: &AppState,
+    _conversation_id: &str,
+    events: &[ChatPendingEvent],
+    event_activate_flags: &[bool],
+    _persisted_recent_messages_before_flush: &[ChatMessage],
+    _persisted_batch_messages: &[ChatMessage],
+    _scheduler_agents: &[AgentProfile],
+) -> Result<(), String> {
+    let _ = event_activate_flags;
+    for event in events {
+        if !remote_im_event_requires_reply_delegate(event) {
+            continue;
+        }
+        let Some(sender) = event.sender_info.as_ref() else {
+            continue;
+        };
+        let source = remote_im_activation_source_from_sender(sender);
+        let Some(contact) = remote_im_resolve_secretary_contact(state, std::slice::from_ref(&source))?
+        else {
+            continue;
+        };
+        observe_remote_im_persisted_event(state, &contact, event)?;
+    }
+    Ok(())
+}
+
+async fn process_remote_im_reply_debounce(
+    state: &AppState,
+    entry: RemoteImReplyDebounceReady,
+) -> Result<(), String> {
+    let sender = entry
+        .event
+        .sender_info
+        .as_ref()
+        .ok_or_else(|| "防抖消息缺少远程联系人来源".to_string())?;
+    let source = remote_im_activation_source_from_sender(sender);
+    let contact = remote_im_resolve_secretary_contact(state, std::slice::from_ref(&source))?
+        .ok_or_else(|| "防抖消息无法解析远程联系人".to_string())?;
+    if remote_im_contact_is_muted(state, &contact.id)? {
+        clear_remote_im_debounces_for_contact(state, &contact.id)?;
+        runtime_log_info(format!(
+            "[远程联系人防抖] 跳过，任务=定时触发，contact_id={}，reason=联系人处于闭嘴状态",
+            contact.id
+        ));
+        return Ok(());
+    }
+    let conversation_id = entry.event.conversation_id.clone();
+    let context = conversation_service_v2().get_conversation_prompt_context(state, &conversation_id)?;
+    let start_index = context
+        .messages
+        .iter()
+        .position(|message| message.id == entry.start_message_id)
+        .ok_or_else(|| format!("防抖起点消息不存在：{}", entry.start_message_id))?;
+    let end_index = context
+        .messages
+        .iter()
+        .position(|message| message.id == entry.end_message_id)
+        .ok_or_else(|| format!("防抖终点消息不存在：{}", entry.end_message_id))?;
+    if end_index < start_index {
+        return Err(format!(
+            "防抖消息边界倒置：start={}，end={}",
+            entry.start_message_id, entry.end_message_id
+        ));
+    }
+    let history = context.messages[..start_index].to_vec();
+    let batch = context.messages[start_index..=end_index].to_vec();
+    let mut event = entry.event;
+    event.messages = batch.clone();
+    let agents = state_read_agents_cached(state).unwrap_or_default();
+    process_persisted_remote_im_events_individually_now(
+        state,
+        &conversation_id,
+        &[event],
+        &[true],
+        &history,
+        &batch,
+        &agents,
+        entry.must_reply,
+    )
+    .await
 }
 
 fn report_remote_im_dynamic_wake_failure(
@@ -2964,7 +3071,8 @@ async fn process_conversation_batch(
             should_activate && (!matches!(event.source, ChatEventSource::RemoteIm)
                 || !remote_im_event_requires_reply_delegate(event))
         });
-    if !secretary_remote_im_sources.is_empty() {
+    let has_remote_group_messages = events.iter().any(remote_im_event_requires_reply_delegate);
+    if has_remote_group_messages {
         process_persisted_remote_im_events_individually(
             state,
             conversation_id,
@@ -2976,7 +3084,9 @@ async fn process_conversation_batch(
         )
         .await?;
         // 远程应答委托不参与主轮次收尾。
-        secretary_remote_im_sources.clear();
+        if !secretary_remote_im_sources.is_empty() {
+            secretary_remote_im_sources.clear();
+        }
     }
     let mut remote_im_skip_decision = None::<String>;
     let mut activating_session_info = events.first().map(|event| event.session_info.clone());
