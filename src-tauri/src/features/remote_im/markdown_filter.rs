@@ -24,7 +24,23 @@ fn remote_im_strip_simple_markdown(input: &str) -> String {
         }
     }
 
-    out.join("\n").trim().to_string()
+    strip_remote_im_terminal_period(out.join("\n").trim())
+}
+
+fn strip_remote_im_terminal_period(input: &str) -> String {
+    if let Some(without_period) = input.strip_suffix('。') {
+        return without_period.to_string();
+    }
+    if let Some(without_period) = input.strip_suffix('.') {
+        if without_period
+            .chars()
+            .next_back()
+            .is_some_and(|ch| ch.is_ascii_alphabetic())
+        {
+            return without_period.to_string();
+        }
+    }
+    input.to_string()
 }
 
 fn strip_markdown_line_prefixes(line: &str) -> String {
@@ -257,9 +273,19 @@ console.log(result);
 const result = await runTask();
 console.log(result);
 
-如需更多信息，可以查看 截图说明 或访问 https://example.com/docs。"#;
+如需更多信息，可以查看 截图说明 或访问 https://example.com/docs"#;
 
         assert_eq!(remote_im_strip_simple_markdown(input), expected);
+    }
+
+    #[test]
+    fn strip_simple_markdown_should_soften_terminal_period() {
+        assert_eq!(remote_im_strip_simple_markdown("好的。"), "好的");
+        assert_eq!(remote_im_strip_simple_markdown("版本 2。"), "版本 2");
+        assert_eq!(remote_im_strip_simple_markdown("Okay."), "Okay");
+        assert_eq!(remote_im_strip_simple_markdown("3.0"), "3.0");
+        assert_eq!(remote_im_strip_simple_markdown("收到."), "收到.");
+        assert_eq!(remote_im_strip_simple_markdown("Wait..."), "Wait...");
     }
 
     #[test]
