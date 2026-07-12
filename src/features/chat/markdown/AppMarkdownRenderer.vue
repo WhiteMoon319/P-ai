@@ -1419,6 +1419,10 @@ const MathBlock = defineComponent({
 
 // ==================== Mermaid Block ====================
 
+function normalizeMermaidCodeForRender(code: string): string {
+  return code.replace(/\\n/gi, "<br/>");
+}
+
 const MermaidBlock = defineComponent({
   name: "MermaidBlock",
   props: {
@@ -1456,7 +1460,7 @@ const MermaidBlock = defineComponent({
           securityLevel: "strict",
         });
         const id = `ecall-mermaid-${mermaidProps.blockKey}-${currentRender}`;
-        const { svg } = await mermaid.render(id, code);
+        const { svg } = await mermaid.render(id, normalizeMermaidCodeForRender(code));
         if (currentRender !== renderCount) return;
         svgHtml.value = svg;
         error.value = "";
