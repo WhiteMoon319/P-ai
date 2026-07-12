@@ -362,7 +362,7 @@ fn build_remote_im_activation_runtime_block(
         .join("\n");
     let block = match (ui_language.trim(), sources.len()) {
         ("en-US", 1) => format!(
-            "This round was activated by exactly one remote IM source, and this round is now bound to that current contact.\n{}\nIf you do not call `contact_no_reply`, the system may automatically send your final assistant reply to the bound current contact at the end of this round.\nUse `contact_reply` for an immediate short acknowledgement. To send an inline local image with text, write standard Markdown image syntax like `![description](local/path.png)` in `contact_reply.text`; for non-image files, use `contact_send_files` with real local file paths.",
+            "This round was activated by exactly one remote IM source, and this round is now bound to that current contact.\n{}\nIf you do not call `contact_no_reply`, the system may automatically send your final assistant reply to the bound current contact at the end of this round.\nUse `contact_reply` for an immediate short acknowledgement. To send an inline local image with text, use `![description](ABSOLUTE_IMAGE_PATH)` in `contact_reply.text`. `ABSOLUTE_IMAGE_PATH` is a syntax placeholder: replace it with the real absolute path, and never output the placeholder or a relative path. For non-image files, use `contact_send_files` with real local file paths.",
             source_lines
         ),
         ("en-US", _) => format!(
@@ -370,7 +370,7 @@ fn build_remote_im_activation_runtime_block(
             source_lines
         ),
         ("zh-TW", 1) => format!(
-            "本輪由唯一一個遠端 IM 來源啟動，且本輪已綁定該目前聯絡人。\n{}\n若你未呼叫 `contact_no_reply`，系統可能會在本輪結束後自動將最終回覆發送給本輪綁定聯絡人。\n若你只是要先回一句、告知正在處理，請使用 `contact_reply`；若要把本機圖片和文字一起發出，請在 `contact_reply.text` 使用標準 Markdown 圖片語法 `![說明](本機路徑)`；若要發非圖片檔案，請使用 `contact_send_files` 並傳真實本機檔案路徑。",
+            "本輪由唯一一個遠端 IM 來源啟動，且本輪已綁定該目前聯絡人。\n{}\n若你未呼叫 `contact_no_reply`，系統可能會在本輪結束後自動將最終回覆發送給本輪綁定聯絡人。\n若你只是要先回一句、告知正在處理，請使用 `contact_reply`；若要把本機圖片和文字一起發出，請在 `contact_reply.text` 使用 `![說明](ABSOLUTE_IMAGE_PATH)`。`ABSOLUTE_IMAGE_PATH` 只是語法佔位符，輸出時必須替換為真實絕對路徑，不得原樣輸出或使用相對路徑；若要發非圖片檔案，請使用 `contact_send_files` 並傳真實本機檔案路徑。",
             source_lines
         ),
         ("zh-TW", _) => format!(
@@ -378,7 +378,7 @@ fn build_remote_im_activation_runtime_block(
             source_lines
         ),
         (_, 1) => format!(
-            "本轮由唯一一个远程 IM 来源激活，且本轮已绑定该当前联系人。\n{}\n如果你没有调用 `contact_no_reply`，系统可能会在本轮结束后自动将最终回复发送给本轮绑定联系人。\n如果你只是要先回一句、告知正在处理，请使用 `contact_reply`；如果要把本地图片和文字一起发出，请在 `contact_reply.text` 使用标准 Markdown 图片语法 `![说明](本地路径)`；如果要发非图片文件，请使用 `contact_send_files` 并传真实本地文件路径。",
+            "本轮由唯一一个远程 IM 来源激活，且本轮已绑定该当前联系人。\n{}\n如果你没有调用 `contact_no_reply`，系统可能会在本轮结束后自动将最终回复发送给本轮绑定联系人。\n如果你只是要先回一句、告知正在处理，请使用 `contact_reply`；如果要把本地图片和文字一起发出，请在 `contact_reply.text` 使用 `![说明](ABSOLUTE_IMAGE_PATH)`。`ABSOLUTE_IMAGE_PATH` 只是语法占位符，输出时必须替换为真实绝对路径，不得原样输出或使用相对路径；如果要发非图片文件，请使用 `contact_send_files` 并传真实本地文件路径。",
             source_lines
         ),
         _ => format!(

@@ -9,11 +9,15 @@
 - 当你说明改动落点、建议用户查看某个文件、总结相关代码位置、列举相关文件、引用本地文档或给出网页资料时，使用可点击引用。
 - 当你还不知道绝对路径，或只是泛指某类文件时，先用普通文字描述，等路径明确后再给引用。
 - 文件链接的标签使用纯文本文件名即可，最终回复里直接给出可点击结果，不需要额外解释链接语法。
-- 本地文件：[file.rs](/abs/path/file.rs)
-- 本地文件带行号：[file.rs](/abs/path/file.rs:12)
+- 本地文件格式：`[文件名](ABSOLUTE_FILE_PATH)`
+- 本地文件带行号格式：`[文件名](ABSOLUTE_FILE_PATH:LINE)`
+- `ABSOLUTE_FILE_PATH` 和 `LINE` 只是语法占位符；输出时必须用真实绝对路径和行号完整替换，不得原样输出占位符，也不得使用相对路径。
+- 正确示例：`[file.rs](C:/workspace/project/src/file.rs)`、`[file.rs](C:/workspace/project/src/file.rs:12)`、`[file.rs](/home/user/project/src/file.rs:12)`。
+- 错误示例：`[file.rs](ABSOLUTE_FILE_PATH)`、`[file.rs](src/file.rs)`。
 - 网页：[文档](https://example.com)
-- 本地路径使用盘符开头的绝对路径更容易被前端识别。
+- Windows 绝对路径必须以盘符或 UNC 前缀开头；Linux/macOS 绝对路径必须以 `/` 开头。路径包含空格时，把链接目标放在尖括号内，例如 `[My File.rs](<C:/My Project/src/My File.rs:12>)`。
 - 行内 code 用于命令、变量名、函数名、字段名、配置键、简短代码片段等技术内容。
 - 文件链接标签直接使用文件名文本本身，保持可点击引用的自然显示。
 - 当本地已经有图片文件需要直接展示时，直接使用前端可识别的 Markdown 图片形式输出结果。
-- 本地图片：![结果图](E:/path/to/result.png)
+- 本地图片格式：`![说明](ABSOLUTE_IMAGE_PATH)`；`ABSOLUTE_IMAGE_PATH` 必须替换为真实绝对路径，不得原样输出。
+- 正确示例：`![结果图](C:/workspace/project/result.png)`、`![结果图](/home/user/project/result.png)`。
