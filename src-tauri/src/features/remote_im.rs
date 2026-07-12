@@ -498,6 +498,21 @@ fn remote_im_reply_delegate_register(
         let _ = delegate_store_update_status(&state.data_path, &delegate_id, DELEGATE_STATUS_FAILED);
         return Err(format!("创建远程应答委托会话失败: {err}"));
     }
+    let system_reminder = build_remote_im_reply_delegate_system_reminder(
+        state,
+        contact_id,
+        conversation_id,
+        trigger_message,
+        &session_info.agent_id,
+        &prompt_snapshot_messages,
+    );
+    let snapshot_trigger_message = prompt_snapshot_messages
+        .iter_mut()
+        .find(|message| message.id == trigger_message_id)
+        .ok_or_else(|| "远程应答委托无法注入系统提醒：冻结上文缺少触发消息".to_string())?;
+    snapshot_trigger_message
+        .extra_text_blocks
+        .insert(0, system_reminder);
     let runtime = RemoteImReplyDelegateRuntime {
         delegate_id: delegate_id.clone(),
         contact_id: contact_id.to_string(),
@@ -527,6 +542,122 @@ fn remote_im_reply_delegate_register(
         return Err(err);
     }
     Ok(delegate_id)
+}
+
+fn build_remote_im_reply_delegate_system_reminder(
+    state: &AppState,
+    contact_id: &str,
+    conversation_id: &str,
+    trigger_message: &ChatMessage,
+    agent_id: &str,
+    prompt_snapshot_messages: &[ChatMessage],
+) -> String {
+    const PROFILE_MEMORY_LIMIT: usize = 12;
+    let profile = remote_im_message_canonical_user_id(trigger_message)
+        .and_then(|user_id| {
+            let agents = state_read_agents_cached(state).ok()?;
+            let agent = agents.iter().find(|agent| agent.id == agent_id)?;
+            match build_transient_user_profile_snapshot_block_for_user(
+                &state.data_path,
+                agent,
+                &user_id,
+                "",
+                PROFILE_MEMORY_LIMIT,
+            ) {
+                Ok(block) => block,
+                Err(err) => {
+                    runtime_log_error(format!(
+                        "[用户画像] 失败，任务=冻结远程应答系统提醒，contact_id={}，user_id={}，error={}",
+                        contact_id, user_id, err
+                    ));
+                    None
+                }
+            }
+        })
+        .unwrap_or_else(|| "（暂无）".to_string());
+    let contacts = state_read_runtime_state_cached(state)
+        .map(|runtime| runtime.remote_im_contacts)
+        .unwrap_or_default();
+    let other_delegates = lock_remote_im_reply_delegate_runtimes(state)
+        .map(|runtimes| {
+            runtimes
+                .values()
+                .filter(|runtime| {
+                    runtime.conversation_id == conversation_id
+                        && !runtime.cancelled
+                        && !runtime.terminal
+                })
+                .map(|runtime| {
+                    let name = contacts
+                        .iter()
+                        .find(|contact| contact.id == runtime.contact_id)
+                        .map(remote_im_secretary_contact_display_name)
+                        .unwrap_or_else(|| runtime.contact_id.clone());
+                    let summary = runtime
+                        .prompt_snapshot_messages
+                        .iter()
+                        .find(|message| message.id == runtime.trigger_message_id)
+                        .map(render_message_content_for_model)
+                        .map(|text| remote_im_secretary_truncate_text(&text, 100))
+                        .unwrap_or_else(|| "（无文本）".to_string());
+                    format!("- {name}：\"{summary}\"")
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let reply_ledger = build_remote_im_reply_ledger(
+        prompt_snapshot_messages,
+        trigger_message.id.as_str(),
+        agent_id,
+    );
+    format!(
+        "[系统提醒]\n当前联系人画像：\n{}\n\n当前会话正在处理的应答委托：\n{}\n\n当前会话应答账本：\n{}",
+        profile,
+        if other_delegates.is_empty() {
+            "（无）".to_string()
+        } else {
+            other_delegates.join("\n")
+        },
+        if reply_ledger.is_empty() {
+            "（无）".to_string()
+        } else {
+            reply_ledger.join("\n")
+        }
+    )
+}
+
+fn build_remote_im_reply_ledger(
+    messages: &[ChatMessage],
+    trigger_message_id: &str,
+    agent_id: &str,
+) -> Vec<String> {
+    let mut pending_user_text: Option<String> = None;
+    let mut ledger = Vec::<String>::new();
+    for message in messages {
+        if message.id == trigger_message_id {
+            break;
+        }
+        match prompt_role_for_message(message, agent_id).as_deref() {
+            Some("user") => {
+                let text = remote_im_secretary_truncate_text(
+                    &render_message_content_for_model(message),
+                    100,
+                );
+                pending_user_text = (!text.trim().is_empty()).then_some(text);
+            }
+            Some("assistant") => {
+                if let Some(user_text) = pending_user_text.take() {
+                    let reply_text = remote_im_secretary_truncate_text(
+                        &render_message_content_for_model(message),
+                        100,
+                    );
+                    ledger.push(format!("- 已应答：\"{user_text}\" → \"{reply_text}\""));
+                }
+            }
+            _ => {}
+        }
+    }
+    ledger
 }
 
 fn remote_im_reply_delegate_prompt_messages(

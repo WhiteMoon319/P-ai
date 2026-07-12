@@ -1644,6 +1644,32 @@
     }
 
     #[test]
+    fn remote_im_reply_ledger_should_only_include_completed_pairs_before_trigger() {
+        let mut answered_user = remote_im_test_group_user_message("user-a");
+        answered_user.parts = vec![MessagePart::Text {
+            text: "上一句".to_string(),
+            reasoning_content: None,
+        }];
+        let mut assistant = remote_im_test_group_user_message("assistant");
+        assistant.role = "assistant".to_string();
+        assistant.speaker_agent_id = Some("agent-a".to_string());
+        assistant.parts = vec![MessagePart::Text {
+            text: "已经回答".to_string(),
+            reasoning_content: None,
+        }];
+        let trigger = remote_im_test_group_user_message("user-a");
+
+        assert_eq!(
+            build_remote_im_reply_ledger(
+                &[answered_user, assistant, trigger.clone()],
+                &trigger.id,
+                "agent-a",
+            ),
+            vec!["- 已应答：\"上一句\" → \"已经回答\""]
+        );
+    }
+
+    #[test]
     fn busy_guided_same_sender_gate_should_only_allow_same_group_member() {
         let mut contact = remote_im_test_contact("contact-a", "conversation-a");
         contact.remote_contact_type = "group".to_string();

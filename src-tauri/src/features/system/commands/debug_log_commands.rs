@@ -509,17 +509,7 @@ fn normalize_prepared_prompt_messages(messages: &mut [Value]) {
 }
 
 fn prepared_prompt_latest_user_text_blocks_for_json(prepared: &PreparedPrompt) -> Vec<String> {
-    let mut blocks = Vec::<String>::new();
-    for text in [
-        prepared.latest_user_meta_text.trim(),
-        prepared.latest_user_text.trim(),
-    ] {
-        if !text.is_empty() {
-            blocks.push(text.to_string());
-        }
-    }
-    blocks.extend(prepared_prompt_latest_user_extra_blocks(prepared));
-    blocks
+    prepared_prompt_latest_user_text_blocks(prepared)
 }
 
 fn prepared_prompt_to_messages_json(prepared: &PreparedPrompt) -> Vec<Value> {

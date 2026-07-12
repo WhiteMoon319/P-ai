@@ -3560,6 +3560,41 @@
     }
 
     #[test]
+    fn remote_im_system_reminder_should_precede_meta_and_trigger_text() {
+        let prepared = PreparedPrompt {
+            preamble: String::new(),
+            history_messages: Vec::new(),
+            latest_user_text: "触发消息".to_string(),
+            latest_user_meta_text: "meta".to_string(),
+            latest_user_extra_text: String::new(),
+            latest_user_extra_blocks: vec![
+                "[系统提醒]\n固定快照".to_string(),
+                "普通附加块".to_string(),
+            ],
+            latest_images: Vec::new(),
+            latest_audios: Vec::new(),
+        };
+
+        let expected = vec!["[系统提醒]\n固定快照", "meta", "触发消息", "普通附加块"];
+        assert_eq!(prepared_prompt_latest_user_text_blocks(&prepared), expected);
+
+        let first_messages = prepared_prompt_to_messages_json(&prepared);
+        let second_messages = prepared_prompt_to_messages_json(&prepared);
+        assert_eq!(first_messages, second_messages, "同一冻结上文重复组装必须完全一致");
+        let content = first_messages
+            .last()
+            .and_then(|message| message.get("content"))
+            .and_then(Value::as_array)
+            .expect("latest user content array");
+        let text_blocks = content
+            .iter()
+            .filter_map(|block| block.get("text").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        assert_eq!(text_blocks, expected);
+        assert!(!text_blocks.iter().any(|text| text.contains("user profile snapshot")));
+    }
+
+    #[test]
     fn state_read_app_data_cached_should_strip_runtime_conversations() {
         let state = test_chat_runtime_state();
         let now = now_iso();

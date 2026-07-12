@@ -239,6 +239,13 @@ fn prepared_prompt_prepend_latest_user_extra_block(
 
 fn prepared_prompt_latest_user_text_blocks(prepared: &PreparedPrompt) -> Vec<String> {
     let mut blocks = Vec::<String>::new();
+    let extra_blocks = prepared_prompt_latest_user_extra_blocks(prepared);
+    blocks.extend(
+        extra_blocks
+            .iter()
+            .filter(|block| block.starts_with("[系统提醒]"))
+            .cloned(),
+    );
     for text in [
         prepared.latest_user_meta_text.trim(),
         prepared.latest_user_text.trim(),
@@ -247,7 +254,11 @@ fn prepared_prompt_latest_user_text_blocks(prepared: &PreparedPrompt) -> Vec<Str
             blocks.push(text.to_string());
         }
     }
-    blocks.extend(prepared_prompt_latest_user_extra_blocks(prepared));
+    blocks.extend(
+        extra_blocks
+            .into_iter()
+            .filter(|block| !block.starts_with("[系统提醒]")),
+    );
     if blocks.is_empty() {
         blocks.push(" ".to_string());
     }

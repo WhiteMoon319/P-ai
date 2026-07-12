@@ -3443,12 +3443,6 @@ async fn send_chat_message_inner(
             }),
             todo_tool_enabled: todo_enabled,
             remote_im_activation_sources: remote_im_activation_sources.clone(),
-            remote_im_profile_message_id: runtime_context
-                .remote_im_reply_trigger_message_id
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(ToOwned::to_owned),
             latest_images: (!trigger_only).then_some(effective_images.clone()),
             latest_audios: (!trigger_only).then_some(effective_audios.clone()),
             ..Default::default()

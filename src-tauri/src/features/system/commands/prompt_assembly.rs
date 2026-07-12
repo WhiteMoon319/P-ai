@@ -12,7 +12,6 @@ struct ChatPromptOverrides {
     // 会话主链不允许外部直接注入系统侧块；系统提示词相关块必须由提示词服务内部生成。
     todo_tool_enabled: bool,
     remote_im_activation_sources: Vec<RemoteImActivationSource>,
-    remote_im_profile_message_id: Option<String>,
     latest_images: Option<Vec<PreparedBinaryPayload>>,
     latest_audios: Option<Vec<PreparedBinaryPayload>>,
 }

@@ -834,57 +834,6 @@ impl ConversationPromptService {
         blocks
     }
 
-    fn build_remote_im_transient_profile_blocks(
-        &self,
-        state: Option<&AppState>,
-        conversation: &Conversation,
-        agent: &AgentProfile,
-        trigger_message_id: Option<&str>,
-    ) -> Vec<String> {
-        const PROFILE_MEMORY_LIMIT: usize = 12;
-
-        if !conversation_is_remote_im_contact(conversation) {
-            return Vec::new();
-        }
-        let Some(state) = state else {
-            return Vec::new();
-        };
-
-        let trigger_message_id = trigger_message_id.map(str::trim).filter(|id| !id.is_empty());
-        let target_message = trigger_message_id
-            .and_then(|id| conversation.messages.iter().find(|message| message.id == id))
-            .or_else(|| {
-                conversation.messages.iter().rev().find(|message| {
-                    prompt_role_for_message(message, &agent.id).as_deref() == Some("user")
-                        && !is_context_compaction_message(message, "user")
-                })
-            });
-        let Some(target_message) = target_message else {
-            return Vec::new();
-        };
-        let Some(user_id) = remote_im_message_canonical_user_id(target_message) else {
-            return Vec::new();
-        };
-        let display_name = prompt_speaker_label(target_message, &Vec::new(), "");
-        match build_transient_user_profile_snapshot_block_for_user(
-            &state.data_path,
-            agent,
-            &user_id,
-            &display_name,
-            PROFILE_MEMORY_LIMIT,
-        ) {
-            Ok(Some(block)) => vec![block],
-            Ok(None) => Vec::new(),
-            Err(err) => {
-                runtime_log_error(format!(
-                    "[用户画像] 失败，任务=build_remote_im_transient_profile_blocks，conversation_id={}，user_id={}，error={}",
-                    conversation.id, user_id, err
-                ));
-                Vec::new()
-            }
-        }
-    }
-
     fn build_latest_user_payload(
         &self,
         _mode: PromptBuildMode,
@@ -954,12 +903,6 @@ impl ConversationPromptService {
                 if let Some(log_stage) = stage_logger {
                     log_stage("prepare_context.attachment_hints_ready");
                 }
-                extra_blocks.extend(self.build_remote_im_transient_profile_blocks(
-                    state,
-                    conversation,
-                    agent,
-                    overrides.remote_im_profile_message_id.as_deref(),
-                ));
                 (
                     latest_user_text,
                     prepared.latest_user_meta_text.clone(),
