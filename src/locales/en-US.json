@@ -2227,6 +2227,7 @@
     "changelogLoading": "Loading remote changelog...",
     "changelogEmpty": "No changelog content available.",
     "updateNow": "Update Now",
+    "hasUpdate": "Update",
     "updateAndRestart": "Update and Restart",
     "updating": "Updating",
     "cancelUpdate": "Cancel Update",

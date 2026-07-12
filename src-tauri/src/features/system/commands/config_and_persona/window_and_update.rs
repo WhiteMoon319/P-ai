@@ -515,6 +515,7 @@ fn set_skipped_github_update_version(
         state_write_config_cached(&state, &config)?;
         eprintln!("[自动更新] 已保存跳过版本：version={normalized}");
     }
+    sync_update_state_from_skip_version(&app, &normalized);
     let data = state_read_agents_runtime_snapshot(&state)?;
     let runtime_config = runtime_config_with_private_organization(&state, &config, &data)?;
     let _ = app.emit("easy-call:config-updated", &runtime_config);

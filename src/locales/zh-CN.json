@@ -2227,6 +2227,7 @@
     "changelogLoading": "正在读取远程更新日志...",
     "changelogEmpty": "暂无更新日志内容",
     "updateNow": "立即更新",
+    "hasUpdate": "有更新",
     "updateAndRestart": "更新并重启",
     "updating": "正在更新",
     "cancelUpdate": "取消更新",

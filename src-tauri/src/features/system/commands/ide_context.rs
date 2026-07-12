@@ -4393,13 +4393,21 @@ fn ide_chat_set_skipped_github_update_version_for_web_settings(
         state_write_config_cached(state, &config)?;
         eprintln!("[自动更新] 已保存跳过版本：version={normalized}");
     }
+    sync_update_state_from_skip_version(app, &normalized);
     let data = state_read_agents_runtime_snapshot(state)?;
     let runtime_config = runtime_config_with_private_organization(state, &config, &data)?;
     let _ = app.emit("easy-call:config-updated", &runtime_config);
     ide_chat_serialize(runtime_config)
 }
 
-async fn ide_chat_check_github_update_for_web_settings(params: Value) -> Result<Value, String> {
+fn ide_chat_get_github_update_state_for_web_settings(app: &AppHandle) -> Result<Value, String> {
+    ide_chat_serialize(get_github_update_state(app.clone())?)
+}
+
+async fn ide_chat_check_github_update_for_web_settings(
+    app: &AppHandle,
+    params: Value,
+) -> Result<Value, String> {
     let (update_method, respect_cooldown) = match params {
         Value::Object(mut map) => {
             let update_method = map
@@ -4416,7 +4424,7 @@ async fn ide_chat_check_github_update_for_web_settings(params: Value) -> Result<
         }
         _ => (None, None),
     };
-    ide_chat_serialize(check_github_update(update_method, respect_cooldown).await?)
+    ide_chat_serialize(check_github_update(app.clone(), update_method, respect_cooldown).await?)
 }
 
 async fn ide_chat_start_github_update_for_web_settings(
@@ -6187,8 +6195,9 @@ async fn ide_chat_handle_jsonrpc_request(
         "set_github_update_method" => ide_chat_set_github_update_method_for_web_settings(state, app, request.params),
         "set_skipped_github_update_version" => {
             ide_chat_set_skipped_github_update_version_for_web_settings(state, app, request.params)
-        }
-        "check_github_update" => ide_chat_check_github_update_for_web_settings(request.params).await,
+        },
+        "get_github_update_state" => ide_chat_get_github_update_state_for_web_settings(app),
+        "check_github_update" => ide_chat_check_github_update_for_web_settings(app, request.params).await,
         "start_github_update" => ide_chat_start_github_update_for_web_settings(app, request.params).await,
         "cancel_github_update" => ide_chat_cancel_github_update_for_web_settings().await,
         "apply_prepared_github_update" => ide_chat_apply_prepared_github_update_for_web_settings(app).await,

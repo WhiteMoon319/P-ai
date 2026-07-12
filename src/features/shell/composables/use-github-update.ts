@@ -2,7 +2,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { computed, onBeforeUnmount, ref, type Ref } from "vue";
 import { i18n } from "../../../i18n";
 import { invokeTauri, isTauriRuntimeAvailable, onWebBridgeNotification } from "../../../services/tauri-api";
-import type { GithubUpdateInfo, UpdateProgressPayload } from "../types/update";
+import type { GithubUpdateInfo, GithubUpdateState, UpdateProgressPayload } from "../types/update";
 import type { GithubUpdateMethod } from "../../../types/app";
 
 const t = i18n.global.t;
@@ -53,27 +53,31 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   const updateProgressPercent = ref<number | null>(null);
   const updateRuntimeKind = ref<"installer" | "portable">("installer");
   const latestCheckResult = ref<GithubUpdateInfo | null>(null);
+  const currentUpdateState = ref<GithubUpdateState | null>(null);
   const checkingUpdate = computed(() => checkingUpdateRequest.value || updateInProgress.value);
   const updateUiMode = ref<"foreground" | "background" | null>(null);
   const skippedVersion = computed(() => normalizeSkippedVersion(options.skippedVersion.value));
 
   const updateSuppressedBySkip = computed(() => {
-    const latestVersion = String(latestCheckResult.value?.latestVersion || "").trim();
+    const latestVersion = String(
+      currentUpdateState.value?.latestVersion || latestCheckResult.value?.latestVersion || "",
+    ).trim();
     return !!latestVersion && !!skippedVersion.value && latestVersion === skippedVersion.value;
   });
   const shouldShowUpdateAction = computed(() => {
-    if (updateReadyToRestart.value || updateInProgress.value) return true;
-    return !!latestCheckResult.value?.hasUpdate && !updateSuppressedBySkip.value;
+    if (updateReadyToRestart.value) return !updateSuppressedBySkip.value;
+    return !!currentUpdateState.value?.hasVisibleUpdate && !updateSuppressedBySkip.value;
   });
   const hasAvailableUpdate = computed(() => shouldShowUpdateAction.value);
   const showUpdateToLatestButton = computed(() => shouldShowUpdateAction.value);
-  const latestUpdateVersion = computed(() => String(latestCheckResult.value?.latestVersion || "").trim());
+  const latestUpdateVersion = computed(() =>
+    String(currentUpdateState.value?.latestVersion || latestCheckResult.value?.latestVersion || "").trim(),
+  );
   const updateDialogSkipVersionVisible = computed(() =>
     updateDialogOpen.value
-    && updateDialogPrimaryAction.value === "download"
+    && (updateDialogPrimaryAction.value === "download" || updateDialogPrimaryAction.value === "restart")
     && !!latestUpdateVersion.value
     && !updateInProgress.value
-    && !updateReadyToRestart.value,
   );
   const updateDialogCancelUpdateVisible = computed(() =>
     updateInProgress.value
@@ -83,8 +87,6 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
 
   let updateProgressUnlisten: UnlistenFn | null = null;
   let webUpdateProgressUnlisten: (() => void) | null = null;
-  let autoCheckStarted = false;
-
   function runtimeLabel(kind: "installer" | "portable") {
     return kind === "portable" ? t("about.runtimePortable") : t("about.runtimeInstaller");
   }
@@ -136,6 +138,39 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     updateDialogOpen.value = true;
   }
 
+  function openPreparedUpdateDialog() {
+    const latestVersion = latestUpdateVersion.value;
+    const currentVersion = String(
+      currentUpdateState.value?.currentVersion || latestCheckResult.value?.currentVersion || "",
+    ).trim();
+    const runtimeKind = currentUpdateState.value?.runtimeKind || latestCheckResult.value?.runtimeKind || "installer";
+    const releaseNotes = String(
+      currentUpdateState.value?.releaseNotes || latestCheckResult.value?.releaseNotes || "",
+    ).trim();
+    updateDialogReleaseUrl.value = currentUpdateState.value?.releaseUrl || latestCheckResult.value?.releaseUrl || "";
+    updateDialogKind.value = "info";
+    updateDialogPrimaryAction.value = "restart";
+    updateProgressPercent.value = null;
+    updateStage.value = "ready";
+    updateDialogTitle.value = t("about.updateDownloaded");
+    const lines = [
+      t("about.currentVersion", { version: currentVersion || envVersionFallback() }),
+      t("about.latestVersion", { version: latestVersion }),
+      t("about.currentRuntime", { kind: runtimeLabel(runtimeKind) }),
+    ];
+    if (releaseNotes) {
+      lines.push("");
+      lines.push(t("about.releaseNotes"));
+      lines.push(releaseNotes);
+    }
+    updateDialogBody.value = lines.join("\n");
+    updateDialogOpen.value = true;
+  }
+
+  function envVersionFallback() {
+    return latestCheckResult.value?.currentVersion || currentUpdateState.value?.currentVersion || "";
+  }
+
   function currentUpdateMethod(): GithubUpdateMethod {
     const value = options.updateMethod.value;
     return value === "direct" || value === "proxy" ? value : "auto";
@@ -150,6 +185,46 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   async function saveSkippedVersion(version: string) {
     const saved = await invokeTauri<{ skippedGithubUpdateVersion?: string }>("set_skipped_github_update_version", { version });
     applySkippedVersion(saved.skippedGithubUpdateVersion || "");
+    if (currentUpdateState.value) {
+      currentUpdateState.value = {
+        ...currentUpdateState.value,
+        skippedVersion: saved.skippedGithubUpdateVersion || "",
+        hasVisibleUpdate: false,
+      };
+    }
+  }
+
+  function syncCurrentUpdateState(state: GithubUpdateState | null | undefined) {
+    if (!state) return;
+    currentUpdateState.value = state;
+    updateRuntimeKind.value = state.runtimeKind;
+    updateReadyToRestart.value = !!state.hasPreparedUpdate;
+    if (state.releaseUrl) updateDialogReleaseUrl.value = state.releaseUrl;
+    if (state.hasPreparedUpdate) {
+      latestCheckResult.value = {
+        currentVersion: state.currentVersion,
+        latestVersion: state.latestVersion,
+        hasUpdate: true,
+        releaseUrl: state.releaseUrl,
+        updateSource: "github",
+        accessMode: "direct",
+        releaseNotes: state.releaseNotes,
+        publishedAt: state.publishedAt,
+        runtimeKind: state.runtimeKind,
+        canForceUpdate: true,
+      };
+    }
+  }
+
+  async function refreshGithubUpdateState() {
+    try {
+      const state = await invokeTauri<GithubUpdateState>("get_github_update_state");
+      syncCurrentUpdateState(state);
+      return state;
+    } catch (error) {
+      console.warn("[UPDATE] get_github_update_state failed:", error);
+      return null;
+    }
   }
 
   function syncDialogFromProgress(payload: UpdateProgressPayload) {
@@ -167,7 +242,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       updateDialogKind.value = "error";
       updateDialogTitle.value = t("about.updateFailed");
       updateDialogBody.value = payload.error ? `${payload.message}\n\n${payload.error}` : payload.message;
-      if (previousUiMode !== "background") {
+      if (previousUiMode === "foreground") {
         updateDialogOpen.value = true;
       }
       return;
@@ -193,7 +268,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
           hasUpdate: true,
         };
       }
-      if (previousUiMode !== "background") {
+      if (previousUiMode === "foreground") {
         updateDialogOpen.value = true;
       }
       updateDialogKind.value = "info";
@@ -221,7 +296,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       updateDialogPrimaryAction.value = null;
       return;
     }
-    if (previousUiMode !== "background") {
+    if (previousUiMode === "foreground") {
       updateDialogOpen.value = true;
       updateDialogPrimaryAction.value = null;
     }
@@ -236,6 +311,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     updateInProgress.value = !["failed", "completed", "ready", "cancelled"].includes(payload.stage);
     syncDialogFromProgress(payload);
     options.status.value = payload.error ? payload.error : payload.message;
+    void refreshGithubUpdateState();
   }
 
   async function checkGithubUpdate(silent: boolean, respectCooldown = false) {
@@ -253,6 +329,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       latestCheckResult.value = result;
       updateRuntimeKind.value = result.runtimeKind;
       updateDialogReleaseUrl.value = result.releaseUrl || "";
+      const latestState = await refreshGithubUpdateState();
       if (!result?.hasUpdate) {
         updateReadyToRestart.value = false;
         if (!silent) {
@@ -263,7 +340,11 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       }
       options.status.value = t("about.foundNewVersion", { latest: result.latestVersion, current: result.currentVersion });
       if (!silent || !updateSuppressedBySkip.value) {
-        openCheckResultDialog(result);
+        if (latestState?.hasPreparedUpdate && latestState.latestVersion === result.latestVersion) {
+          openPreparedUpdateDialog();
+        } else {
+          openCheckResultDialog(result);
+        }
       }
       return result;
     } catch (error) {
@@ -385,40 +466,26 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     options.status.value = t("about.skipVersionSaved", { version });
   }
 
-  async function autoCheckGithubUpdate() {
-    if (autoCheckStarted) return;
-    autoCheckStarted = true;
-    await checkGithubUpdate(true, true);
-  }
-
   async function manualCheckGithubUpdate() {
     await checkGithubUpdate(false);
   }
 
   async function triggerUpdateToLatest() {
     if (updateReadyToRestart.value) {
-      await applyPreparedGithubUpdate();
+      openPreparedUpdateDialog();
       return;
     }
     if (updateInProgress.value || checkingUpdateRequest.value) {
-      if (updateUiMode.value !== "background") {
+      if (updateUiMode.value === "foreground") {
         updateDialogOpen.value = true;
       }
       return;
     }
-    if (latestCheckResult.value?.hasUpdate) {
-      if (updateSuppressedBySkip.value) {
-        await saveSkippedVersion("");
-      }
-      await startGithubUpdate(false, false);
+    if (currentUpdateState.value?.hasVisibleUpdate) {
+      openPreparedUpdateDialog();
       return;
     }
-    const result = await checkGithubUpdate(false);
-    if (result?.hasUpdate) {
-      if (updateSuppressedBySkip.value) {
-        await saveSkippedVersion("");
-      }
-    }
+    await refreshGithubUpdateState();
   }
 
   if (isTauriRuntimeAvailable()) {
@@ -444,7 +511,6 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     updateProgressUnlisten = null;
     webUpdateProgressUnlisten?.();
     webUpdateProgressUnlisten = null;
-    autoCheckStarted = false;
   });
 
   return {
@@ -454,6 +520,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     updateInProgress,
     updateCancelPending,
     latestCheckResult,
+    currentUpdateState,
     updateDialogOpen,
     updateDialogTitle,
     updateDialogBody,
@@ -466,7 +533,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     closeUpdateDialog,
     openUpdateRelease,
     confirmUpdateDialogPrimary,
-    autoCheckGithubUpdate,
+    refreshGithubUpdateState,
     manualCheckGithubUpdate,
     triggerUpdateToLatest,
     cancelGithubUpdate,

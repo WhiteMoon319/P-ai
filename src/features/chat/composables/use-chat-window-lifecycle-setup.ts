@@ -55,8 +55,7 @@ export function useChatWindowLifecycleSetup(bindings: Record<string, any>) {
       },
       afterMountedReady: async () => {
         await bindings.initializeDetachedChatWindow();
-        // 自动更新检查不应阻塞聊天窗口可用性，后台触发即可。
-        void bindings.autoCheckGithubUpdate();
+        void bindings.refreshGithubUpdateState();
       },
   });
   useAppWatchers({

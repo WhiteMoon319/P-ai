@@ -24,3 +24,19 @@ export type UpdateProgressPayload = {
   percent?: number;
   error?: string;
 };
+
+export type GithubUpdateState = {
+  stage: string;
+  currentVersion: string;
+  latestVersion: string;
+  runtimeKind: UpdateRuntimeKind;
+  hasPreparedUpdate: boolean;
+  hasVisibleUpdate: boolean;
+  releaseNotes: string;
+  releaseUrl: string;
+  publishedAt?: string;
+  preparedAt?: string;
+  lastCheckedAt?: string;
+  lastError?: string;
+  skippedVersion: string;
+};

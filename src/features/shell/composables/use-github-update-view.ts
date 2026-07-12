@@ -22,20 +22,22 @@ export function useGithubUpdateView(bindings: GithubUpdateViewBindings) {
 
   const updateToLatestLabel = computed(() =>
     githubUpdate.updateReadyToRestart.value
-      ? bindings.t("about.updateAndRestart")
+      ? bindings.t("about.hasUpdate")
       : githubUpdate.updateInProgress.value
         ? bindings.t("about.updating")
-        : bindings.t("about.updateNow"),
+        : bindings.t("about.hasUpdate"),
   );
   const updateToLatestTitle = computed(() => {
-    const latestVersion = String(githubUpdate.latestCheckResult.value?.latestVersion || "").trim();
+    const latestVersion = String(
+      githubUpdate.currentUpdateState.value?.latestVersion || githubUpdate.latestCheckResult.value?.latestVersion || "",
+    ).trim();
     if (githubUpdate.updateReadyToRestart.value && latestVersion) {
       return bindings.t("about.updateReadyAction", { version: latestVersion });
     }
     if (latestVersion) {
-      return bindings.t("about.updateAvailableAction", { version: latestVersion });
+      return bindings.t("about.updateReadyAction", { version: latestVersion });
     }
-    return bindings.t("about.updateNow");
+    return bindings.t("about.hasUpdate");
   });
 
   return {

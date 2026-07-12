@@ -296,6 +296,8 @@ async fn run_deferred_setup(app_handle: AppHandle) {
     ) {
         eprintln!("[启动-延迟] 启动录音热键探针失败: {err}");
     }
+    emit_progress("启动静默更新检查");
+    start_github_auto_update_worker(app_handle.clone());
     emit_progress("配置自检");
     match state_read_config_cached(app_state.inner()) {
         Ok(mut config) => {
@@ -1013,6 +1015,7 @@ fn main() {
             detach_current_conversation_to_window,
             get_detached_chat_window_info,
             set_chat_window_active,
+            get_github_update_state,
             check_github_update,
             start_github_update,
             cancel_github_update,

@@ -119,6 +119,22 @@
       class="relative z-30 flex h-full min-w-0 flex-nowrap items-center justify-end gap-1 px-2"
     >
       <button
+        v-if="showUpdateToLatestButton"
+        class="btn btn-success btn-sm h-8 min-h-8 gap-2 px-3 relative shadow-sm"
+        :title="updateToLatestTitle || ''"
+        @click.stop="$emit('update-to-latest')"
+      >
+        <span
+          v-if="hasAvailableUpdate && !checkingUpdate"
+          class="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-error"
+          aria-hidden="true"
+        ></span>
+        <span v-if="checkingUpdate" class="loading loading-spinner loading-xs"></span>
+        <Download v-else class="h-3.5 w-3.5" />
+        <span>{{ updateToLatestLabel }}</span>
+      </button>
+
+      <button
         class="btn btn-ghost btn-sm"
         :class="toolReviewPanelOpenVisible ? 'btn-active bg-base-100 hover:bg-base-100' : ''"
         :title="t('chat.rightSidebarToggle')"

@@ -728,7 +728,7 @@ export function useChatWindowApp() {
     getChatFlow: () => chatFlow,
     ensureMessageStoreMigrationGate,
     syncWindowControlsState,
-    autoCheckGithubUpdate: shellData.githubUpdate.autoCheckGithubUpdate,
+    refreshGithubUpdateState: shellData.githubUpdate.refreshGithubUpdateState,
     loadDelegateConversations,
     loadArchives,
     unarchivedConversations,

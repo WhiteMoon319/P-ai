@@ -47,12 +47,17 @@ const UPDATE_STAGE_COMPLETED: &str = "completed";
 const UPDATE_STAGE_CANCELLED: &str = "cancelled";
 const UPDATE_STAGE_FAILED: &str = "failed";
 const GITHUB_AUTO_UPDATE_COOLDOWN_HOURS: i64 = 8;
+const GITHUB_AUTO_UPDATE_POLL_MINUTES: u64 = 10;
+const GITHUB_AUTO_UPDATE_STARTUP_DELAY_SECONDS: u64 = 45;
 
 static UPDATE_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 static UPDATE_CANCEL_REQUESTED: AtomicBool = AtomicBool::new(false);
 static PREPARED_GITHUB_UPDATE: Mutex<Option<PreparedGithubUpdate>> = Mutex::new(None);
 static LAST_AUTO_UPDATE_CHECKED_AT: std::sync::Mutex<Option<OffsetDateTime>> =
     std::sync::Mutex::new(None);
+static GITHUB_UPDATE_STATE: std::sync::LazyLock<std::sync::Mutex<GithubUpdateState>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(GithubUpdateState::default()));
+static GITHUB_AUTO_UPDATE_WORKER_STARTED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -114,6 +119,24 @@ struct UpdateProgressPayload {
     content_length: Option<u64>,
     percent: Option<f64>,
     error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct GithubUpdateState {
+    stage: String,
+    current_version: String,
+    latest_version: String,
+    runtime_kind: String,
+    has_prepared_update: bool,
+    has_visible_update: bool,
+    release_notes: String,
+    release_url: String,
+    published_at: Option<String>,
+    prepared_at: Option<String>,
+    last_checked_at: Option<String>,
+    last_error: Option<String>,
+    skipped_version: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -400,6 +423,7 @@ fn current_portable_target() -> String {
 }
 
 fn emit_update_progress(app: &AppHandle, payload: UpdateProgressPayload) {
+    sync_update_state_from_progress(app, &payload);
     let _ = app.emit(PORTABLE_UPDATE_EVENT_NAME, payload.clone());
     match serde_json::to_value(payload) {
         Ok(value) => ide_chat_broadcast_notification(PORTABLE_UPDATE_EVENT_NAME, value),
@@ -574,6 +598,126 @@ fn mark_auto_update_check_now() -> Result<(), String> {
     Ok(())
 }
 
+fn read_last_auto_update_checked_at_rfc3339() -> Option<String> {
+    LAST_AUTO_UPDATE_CHECKED_AT
+        .lock()
+        .ok()
+        .and_then(|guard| *guard)
+        .map(format_offset_datetime_to_local_rfc3339)
+}
+
+fn current_skipped_update_version(app: &AppHandle) -> String {
+    let state = app.state::<AppState>();
+    state_read_config_cached(state.inner())
+        .map(|mut config| {
+            normalize_app_config(&mut config);
+            config.skipped_github_update_version.trim().to_string()
+        })
+        .unwrap_or_default()
+}
+
+fn update_github_update_state<F>(updater: F)
+where
+    F: FnOnce(&mut GithubUpdateState),
+{
+    if let Ok(mut state) = GITHUB_UPDATE_STATE.lock() {
+        updater(&mut state);
+    }
+}
+
+fn snapshot_github_update_state() -> GithubUpdateState {
+    GITHUB_UPDATE_STATE
+        .lock()
+        .map(|state| state.clone())
+        .unwrap_or_default()
+}
+
+fn refresh_update_visibility(state: &mut GithubUpdateState) {
+    let latest_version = state.latest_version.trim();
+    let skipped_version = state.skipped_version.trim();
+    state.has_visible_update = state.has_prepared_update
+        && !latest_version.is_empty()
+        && (skipped_version.is_empty() || latest_version != skipped_version);
+}
+
+fn sync_update_state_from_check_result(app: &AppHandle, result: &GithubUpdateInfo) {
+    let skipped_version = current_skipped_update_version(app);
+    update_github_update_state(|state| {
+        let previously_prepared = state.has_prepared_update
+            && !state.latest_version.trim().is_empty()
+            && state.latest_version.trim() == result.latest_version.trim();
+        state.stage = if previously_prepared {
+            UPDATE_STAGE_READY.to_string()
+        } else {
+            "idle".to_string()
+        };
+        state.current_version = result.current_version.clone();
+        state.latest_version = result.latest_version.clone();
+        state.runtime_kind = result.runtime_kind.clone();
+        state.release_notes = result.release_notes.clone();
+        state.release_url = result.release_url.clone();
+        state.published_at = result.published_at.clone();
+        state.last_checked_at = read_last_auto_update_checked_at_rfc3339();
+        state.last_error = None;
+        state.skipped_version = skipped_version;
+        state.has_prepared_update = previously_prepared;
+        if !previously_prepared {
+            state.prepared_at = None;
+        }
+        refresh_update_visibility(state);
+    });
+}
+
+fn sync_update_state_from_progress(app: &AppHandle, payload: &UpdateProgressPayload) {
+    let skipped_version = current_skipped_update_version(app);
+    update_github_update_state(|state| {
+        state.stage = payload.stage.clone();
+        state.current_version = payload.current_version.clone().unwrap_or_default();
+        if let Some(target_version) = payload.target_version.clone() {
+            state.latest_version = target_version;
+        }
+        state.runtime_kind = payload.runtime_kind.clone();
+        state.last_checked_at = read_last_auto_update_checked_at_rfc3339();
+        state.skipped_version = skipped_version;
+        match payload.stage.as_str() {
+            UPDATE_STAGE_READY => {
+                state.has_prepared_update = true;
+                state.prepared_at = Some(format_offset_datetime_to_local_rfc3339(now_utc()));
+                state.last_error = None;
+            }
+            UPDATE_STAGE_FAILED => {
+                state.has_prepared_update = false;
+                state.prepared_at = None;
+                state.last_error = payload.error.clone().or_else(|| Some(payload.message.clone()));
+            }
+            UPDATE_STAGE_CANCELLED => {
+                state.has_prepared_update = false;
+                state.prepared_at = None;
+                state.last_error = None;
+            }
+            UPDATE_STAGE_COMPLETED => {
+                state.has_prepared_update = false;
+                state.has_visible_update = false;
+                state.prepared_at = None;
+                state.last_error = None;
+            }
+            _ => {
+                state.last_error = None;
+            }
+        }
+        if payload.stage != UPDATE_STAGE_COMPLETED {
+            refresh_update_visibility(state);
+        }
+    });
+}
+
+fn sync_update_state_from_skip_version(_app: &AppHandle, version: &str) {
+    update_github_update_state(|state| {
+        state.skipped_version = version.trim().to_string();
+        refresh_update_visibility(state);
+    });
+}
+
 fn build_skipped_auto_update_result(runtime_kind: UpdateRuntimeKind) -> GithubUpdateInfo {
     let current_version = env!("CARGO_PKG_VERSION").to_string();
     GithubUpdateInfo {
@@ -591,7 +735,28 @@ fn build_skipped_auto_update_result(runtime_kind: UpdateRuntimeKind) -> GithubUp
 }
 
 #[tauri::command]
+fn get_github_update_state(app: AppHandle) -> Result<GithubUpdateState, String> {
+    let runtime = detect_update_runtime_paths()?;
+    let skipped_version = current_skipped_update_version(&app);
+    update_github_update_state(|state| {
+        if state.current_version.trim().is_empty() {
+            state.current_version = env!("CARGO_PKG_VERSION").to_string();
+        }
+        if state.runtime_kind.trim().is_empty() {
+            state.runtime_kind = runtime.runtime_kind.as_str().to_string();
+        }
+        state.skipped_version = skipped_version;
+        if state.last_checked_at.is_none() {
+            state.last_checked_at = read_last_auto_update_checked_at_rfc3339();
+        }
+        refresh_update_visibility(state);
+    });
+    Ok(snapshot_github_update_state())
+}
+
+#[tauri::command]
 async fn check_github_update(
+    app: AppHandle,
     update_method: Option<String>,
     respect_cooldown: Option<bool>,
 ) -> Result<GithubUpdateInfo, String> {
@@ -603,7 +768,9 @@ async fn check_github_update(
                 "[自动更新] 自动检查仍处于 {} 小时冷却期，本次跳过远端检查",
                 GITHUB_AUTO_UPDATE_COOLDOWN_HOURS
             );
-            return Ok(build_skipped_auto_update_result(runtime.runtime_kind));
+            let result = build_skipped_auto_update_result(runtime.runtime_kind);
+            sync_update_state_from_check_result(&app, &result);
+            return Ok(result);
         }
         mark_auto_update_check_now()?;
     }
@@ -645,6 +812,7 @@ async fn check_github_update(
         runtime_kind: runtime.runtime_kind.as_str().to_string(),
         can_force_update: true,
     };
+    sync_update_state_from_check_result(&app, &result);
     Ok(result)
 }
 
@@ -1360,6 +1528,77 @@ async fn prepare_portable_update(
         ),
     );
     Ok(())
+}
+
+async fn run_auto_update_cycle(app: AppHandle) {
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = app;
+        return;
+    }
+    if UPDATE_IN_PROGRESS.load(Ordering::SeqCst) {
+        return;
+    }
+    let state = snapshot_github_update_state();
+    if state.has_prepared_update && state.has_visible_update {
+        return;
+    }
+    let result = check_github_update(app.clone(), None, Some(true)).await;
+    let result = match result {
+        Ok(result) => result,
+        Err(err) => {
+            runtime_log_warn(format!("[自动更新] 自动检查失败：error={err}"));
+            update_github_update_state(|state| {
+                state.last_error = Some(err.clone());
+                state.last_checked_at = read_last_auto_update_checked_at_rfc3339();
+            });
+            return;
+        }
+    };
+    let skipped_version = current_skipped_update_version(&app);
+    if !result.has_update {
+        return;
+    }
+    if !skipped_version.is_empty() && skipped_version == result.latest_version {
+        runtime_log_info(format!(
+            "[自动更新] 跳过，latest_version={}，reason=版本已被用户跳过",
+            result.latest_version
+        ));
+        return;
+    }
+    if state.has_prepared_update && state.latest_version == result.latest_version {
+        return;
+    }
+    if let Err(err) = start_github_update(app.clone(), false, None).await {
+        runtime_log_warn(format!(
+            "[自动更新] 静默准备失败：latest_version={}，error={err}",
+            result.latest_version
+        ));
+    }
+}
+
+fn start_github_auto_update_worker(app: AppHandle) {
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = app;
+        return;
+    }
+    if GITHUB_AUTO_UPDATE_WORKER_STARTED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(tokio::time::Duration::from_secs(
+            GITHUB_AUTO_UPDATE_STARTUP_DELAY_SECONDS,
+        ))
+        .await;
+        loop {
+            run_auto_update_cycle(app.clone()).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(
+                GITHUB_AUTO_UPDATE_POLL_MINUTES * 60,
+            ))
+            .await;
+        }
+    });
 }
 
 #[tauri::command]

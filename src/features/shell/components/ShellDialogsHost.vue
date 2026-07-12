@@ -113,18 +113,18 @@ function updateDialogCloseLabel() {
 }
 
 function canShowUpdateSecondaryActions() {
-  return !props.updateDialogPrimaryAction;
+  return true;
 }
 </script>
 
 <template>
   <dialog class="modal" :class="{ 'modal-open': updateDialogOpen }">
-    <div class="modal-box max-w-md">
+    <div class="modal-box w-[min(92vw,48rem)] max-w-[48rem] overflow-x-hidden">
       <h3 class="font-semibold text-base">
         {{ updateDialogTitle }}
       </h3>
       <pre
-        class="mt-2 whitespace-pre-wrap text-sm"
+        class="mt-2 whitespace-pre-wrap break-words text-sm overflow-x-hidden"
         :class="updateDialogKind === 'error' ? 'text-error' : 'text-base-content'"
       >{{ updateDialogBody }}</pre>
       <progress

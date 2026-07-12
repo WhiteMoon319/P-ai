@@ -192,7 +192,7 @@ export function useChatWindowLifecycleOrchestrator(bindings: Record<string, any>
     setStatus: bindings.setStatus,
     formatRequestFailed: (error: unknown) => formatI18nError(bindings.tr, "status.requestFailed", error),
     initializeDetachedChatWindow: bindings.initializeDetachedChatWindow,
-    autoCheckGithubUpdate: bindings.autoCheckGithubUpdate,
+    refreshGithubUpdateState: bindings.refreshGithubUpdateState,
     config: bindings.config,
     configTab: bindings.configTab,
     personas: bindings.personas,

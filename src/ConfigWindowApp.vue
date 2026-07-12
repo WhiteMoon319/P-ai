@@ -684,7 +684,7 @@ const {
   closeUpdateDialog,
   openUpdateRelease,
   confirmUpdateDialogPrimary,
-  autoCheckGithubUpdate,
+  refreshGithubUpdateState,
   manualCheckGithubUpdate,
   triggerUpdateToLatest,
   cancelGithubUpdate,
@@ -870,7 +870,7 @@ useAppLifecycle({
     startupOverlayMessage.value = message || "等待后端加载中...";
   },
   afterMountedReady: async () => {
-    await autoCheckGithubUpdate();
+    await refreshGithubUpdateState();
   },
 });
 
