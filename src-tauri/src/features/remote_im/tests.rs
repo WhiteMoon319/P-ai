@@ -1728,69 +1728,6 @@
     }
 
     #[test]
-    fn busy_guided_same_sender_gate_should_only_allow_same_group_member() {
-        let mut contact = remote_im_test_contact("contact-a", "conversation-a");
-        contact.remote_contact_type = "group".to_string();
-        contact.remote_contact_id = "group-88".to_string();
-        let conversation = Conversation {
-            id: "conversation-a".to_string(),
-            title: "群会话".to_string(),
-            agent_id: DEFAULT_AGENT_ID.to_string(),
-            department_id: ASSISTANT_DEPARTMENT_ID.to_string(),
-            bound_conversation_id: None,
-            parent_conversation_id: None,
-            child_conversation_ids: Vec::new(),
-            fork_message_cursor: None,
-            unread_count: 0,
-            conversation_kind: CONVERSATION_KIND_REMOTE_IM_CONTACT.to_string(),
-            root_conversation_id: None,
-            delegate_id: None,
-            created_at: now_iso(),
-            updated_at: now_iso(),
-            last_user_at: None,
-            last_assistant_at: None,
-            status: "active".to_string(),
-            summary: String::new(),
-            user_profile_snapshot: String::new(),
-            shell_workspace_path: None,
-            shell_workspaces: Vec::new(),
-            shell_autonomous_mode: false,
-            archived_at: None,
-            messages: vec![remote_im_test_group_user_message("user-a")],
-            fast_request_turns: Vec::new(),
-            current_todos: Vec::new(),
-            memory_recall_table: Vec::new(),
-            plan_mode_enabled: false,
-            preferred_api_config_id: None,
-            auto_push_remote_contact_id: None,
-            active_goal: None,
-            cumulative_usage: ConversationCumulativeUsage::default(),
-        };
-
-        let state = remote_im_test_state();
-        let store_paths = message_store::message_store_paths(&state.data_path, &conversation.id)
-            .expect("message store paths");
-        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
-            .expect("write group conversation");
-        let current_sender = remote_im_latest_group_sender_id_for_busy_guided(
-            &state,
-            &conversation.id,
-            &contact,
-        )
-        .expect("read latest group sender");
-
-        assert!(remote_im_busy_guided_same_sender_allowed(
-            &contact,
-            current_sender.as_deref(),
-            "user-a",
-        ));
-        assert!(!remote_im_busy_guided_same_sender_allowed(
-            &contact,
-            current_sender.as_deref(),
-            "user-b",
-        ));
-    }
-
     #[test]
     fn build_remote_im_secretary_prepared_prompt_should_include_boundary_and_latest_marker() {
         let mut contact = remote_im_test_contact("contact-a", "conversation-a");

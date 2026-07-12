@@ -25,7 +25,6 @@ struct RemoteImEnqueueInput {
 }
 
 const FAST_REQUEST_KIND_REMOTE_IM_REPLY_DECISION: &str = "remote_im_reply_decision";
-const FAST_REQUEST_KIND_REMOTE_IM_INTERRUPT_DECISION: &str = "remote_im_interrupt_decision";
 
 fn provider_meta_string(meta: &Option<Value>, key: &str) -> Option<String> {
     meta.as_ref()
@@ -1529,114 +1528,6 @@ fn remote_im_contact_matches_reply_target(
         && source.remote_contact_id.trim() == target.contact_id.trim()
 }
 
-fn remote_im_message_group_sender_id(message: &ChatMessage, contact: &RemoteImContact) -> Option<String> {
-    if !contact.remote_contact_type.trim().eq_ignore_ascii_case("group") {
-        return None;
-    }
-    if message.role.trim() != "user" {
-        return None;
-    }
-    if message_origin_string(message, "kind") != Some("remote_im")
-        || message_origin_string(message, "channel_id") != Some(contact.channel_id.trim())
-        || message_origin_string(message, "contact_type") != Some(contact.remote_contact_type.trim())
-        || message_origin_string(message, "contact_id") != Some(contact.remote_contact_id.trim())
-    {
-        return None;
-    }
-    message_origin_string(message, "sender_id").map(ToOwned::to_owned)
-}
-
-fn remote_im_latest_group_sender_id_for_busy_guided(
-    state: &AppState,
-    conversation_id: &str,
-    contact: &RemoteImContact,
-) -> Result<Option<String>, String> {
-    let conversation_id = conversation_id.trim();
-    if conversation_id.is_empty() || !contact.remote_contact_type.trim().eq_ignore_ascii_case("group") {
-        return Ok(None);
-    }
-    let paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
-    ensure_ready_message_store_from_legacy_conversation(state, conversation_id, &paths)?;
-    let mut page = message_store::read_ready_message_store_recent_messages_page(&paths, 100)?;
-    while let Some(current) = page {
-        if let Some(sender_id) = current
-            .messages
-            .iter()
-            .rev()
-            .find_map(|message| remote_im_message_group_sender_id(message, contact))
-        {
-            return Ok(Some(sender_id));
-        }
-        if !current.has_more {
-            return Ok(None);
-        }
-        let Some(before_message_id) = current.messages.first().map(|message| message.id.as_str()) else {
-            return Ok(None);
-        };
-        page = message_store::read_ready_message_store_messages_before(
-            &paths,
-            before_message_id,
-            100,
-        )?;
-    }
-    Ok(None)
-}
-
-fn remote_im_latest_secretary_work_message_for_busy_guided(
-    state: &AppState,
-    conversation_id: &str,
-    contact: &RemoteImContact,
-    agents: &[AgentProfile],
-    current_assistant: &RemoteImConversationAssistantContext,
-) -> Result<Option<RemoteImSecretaryMessageDigest>, String> {
-    let conversation_id = conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Ok(None);
-    }
-    let paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
-    ensure_ready_message_store_from_legacy_conversation(state, conversation_id, &paths)?;
-    let mut page = message_store::read_ready_message_store_recent_messages_page(&paths, 100)?;
-    while let Some(current) = page {
-        if let Some(message) = remote_im_collect_secretary_recent_messages(
-            &current.messages,
-            1,
-            contact,
-            agents,
-            current_assistant,
-        )
-        .into_iter()
-        .next()
-        {
-            return Ok(Some(message));
-        }
-        if !current.has_more {
-            return Ok(None);
-        }
-        let Some(before_message_id) = current.messages.first().map(|message| message.id.as_str()) else {
-            return Ok(None);
-        };
-        page = message_store::read_ready_message_store_messages_before(
-            &paths,
-            before_message_id,
-            100,
-        )?;
-    }
-    Ok(None)
-}
-
-fn remote_im_busy_guided_same_sender_allowed(
-    contact: &RemoteImContact,
-    current_sender_id: Option<&str>,
-    new_sender_id: &str,
-) -> bool {
-    if !contact.remote_contact_type.trim().eq_ignore_ascii_case("group") {
-        return true;
-    }
-    let current = current_sender_id.map(str::trim).filter(|value| !value.is_empty());
-    let new = new_sender_id.trim();
-    current.is_some_and(|value| value == new) && !new.is_empty()
-}
-
 fn remote_im_text_contains_keyword(text: &str, keyword: &str) -> bool {
     text.to_ascii_lowercase()
         .contains(&keyword.to_ascii_lowercase())
@@ -1816,16 +1707,6 @@ fn remote_im_prepare_enqueue_runtime_state(
     Ok((activate_assistant, reason))
 }
 
-fn remote_im_secretary_should_upgrade_guided(
-    state: &AppState,
-    conversation_id: &str,
-) -> Result<bool, String> {
-    Ok(matches!(
-        get_conversation_runtime_state(state, conversation_id)?,
-        MainSessionState::AssistantStreaming
-    ))
-}
-
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RemoteImSecretaryMessageDigest {
@@ -1851,22 +1732,6 @@ struct RemoteImSecretaryDecision {
     target_delegate_id: Option<String>,
     reason: String,
     model_name: String,
-    emit_log: bool,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RemoteImSecretaryGuideDecisionReply {
-    #[serde(default, alias = "should_interrupt")]
-    should_interrupt: bool,
-    #[serde(default)]
-    reason: String,
-}
-
-#[derive(Debug, Clone)]
-struct RemoteImSecretaryGuideDecision {
-    should_interrupt: bool,
-    reason: String,
     emit_log: bool,
 }
 
@@ -2239,200 +2104,6 @@ JSON 只能包含字段：shouldReply, targetDelegateId, reason。"
     }
 }
 
-fn build_remote_im_secretary_guided_goal(
-    language: &str,
-    contact: &RemoteImContact,
-    current_assistant: &RemoteImConversationAssistantContext,
-    current_work_message: Option<&RemoteImSecretaryMessageDigest>,
-    new_message: &RemoteImSecretaryMessageDigest,
-) -> String {
-    let guidance = normalize_contact_response_guidance(&contact.response_guidance);
-    let contact_name = remote_im_secretary_contact_display_name(contact);
-    let contact_type = remote_im_secretary_contact_type_label(&contact.remote_contact_type);
-    let department_name = remote_im_secretary_context_display_name(
-        &current_assistant.department_name,
-        &current_assistant.department_id,
-        "当前部门",
-    );
-    let agent_name = remote_im_secretary_context_display_name(
-        &current_assistant.agent_name,
-        &current_assistant.agent_id,
-        "当前助理",
-    );
-    let current_work_text = current_work_message
-        .map(|item| remote_im_secretary_message_line(item, ""))
-        .unwrap_or_else(|| "（无）".to_string());
-    let new_message_text = remote_im_secretary_message_line(new_message, "（最新）");
-    format!(
-        "请使用{language}完成远程联系人忙碌中的引导判断。\n\
-你是秘书。助理正在处理当前激活消息，此时又来了新消息。\n\
-你只负责判断：是否应该优先让助理先看这条新消息，并把它升级为引导消息。\n\
-如果不值得打断当前工作，就返回 shouldInterrupt=false。\n\
-如果值得优先插队，就返回 shouldInterrupt=true。\n\
-请优先遵守“什么时候应该回答”这段规则；如果规则不够，再按常识判断。\n\
-只返回一个 JSON 对象，不要输出 Markdown、代码块或额外解释。\n\
-JSON 只能包含字段：shouldInterrupt, reason。\n\n\
-当前应答部门：\n- 名称：{}\n\n\
-当前助理：\n- 名称：{}\n\n\
-当前联系人：\n- 名称：{contact_name}\n- 类型：{contact_type}\n\n\
-什么时候应该回答：\n{guidance}\n\n\
-助理当前正在处理的激活消息：\n{}\n\n\
-刚到的新消息：\n{}\n\n\
-请直接输出 JSON。",
-        department_name,
-        agent_name,
-        current_work_text,
-        new_message_text,
-    )
-}
-
-async fn run_remote_im_secretary_guided_decision(
-    state: &AppState,
-    contact: &RemoteImContact,
-    current_assistant: &RemoteImConversationAssistantContext,
-    current_work_message: Option<&RemoteImSecretaryMessageDigest>,
-    new_message: &RemoteImSecretaryMessageDigest,
-) -> Result<RemoteImSecretaryGuideDecision, String> {
-    if effective_remote_im_contact_response_strategy(contact) == "always_reply" {
-        return Ok(RemoteImSecretaryGuideDecision {
-            should_interrupt: true,
-            reason: String::new(),
-            emit_log: false,
-        });
-    }
-
-    let review_api_config_id = current_tool_review_api_config_id(state)?
-        .ok_or_else(|| "未配置快速模型".to_string())?;
-    let app_config = state_read_config_cached(state)?;
-    let selected_api = resolve_selected_api_config(&app_config, Some(&review_api_config_id))
-        .ok_or_else(|| format!("快速模型配置不存在：{}", review_api_config_id))?;
-    if !selected_api.enable_text || !selected_api.request_format.is_chat_text() {
-        return Err("快速模型不支持文本对话".to_string());
-    }
-    let resolved_api = resolve_api_config(&app_config, Some(&review_api_config_id))?;
-    let model_name = if selected_api.model.trim().is_empty() {
-        resolved_api.model.clone()
-    } else {
-        selected_api.model.trim().to_string()
-    };
-    let language = terminal_smart_review_language(&app_config.ui_language);
-    let prepared = PreparedPrompt {
-        preamble: build_remote_im_secretary_guided_goal(
-            language,
-            contact,
-            current_assistant,
-            current_work_message,
-            new_message,
-        ),
-        history_messages: Vec::new(),
-        latest_user_text: String::new(),
-        latest_user_meta_text: String::new(),
-        latest_user_extra_text: String::new(),
-        latest_user_extra_blocks: Vec::new(),
-        latest_images: Vec::new(),
-        latest_audios: Vec::new(),
-    };
-    let request_text = prepared_prompt_to_fast_request_text(&prepared);
-    let record_conversation_id = contact
-        .bound_conversation_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned);
-    let execution = invoke_model_with_policy(
-        &resolved_api,
-        &model_name,
-        prepared,
-        CallPolicy {
-            scene: "Remote IM secretary guided review",
-            timeout_secs: Some(12),
-            json_only: true,
-        },
-        Some(state),
-    )
-    .await;
-    push_model_call_log_parts(Some(state), &execution);
-    let duration_ms = execution.log_parts.elapsed_ms;
-    let reply = match execution.result {
-        Ok(reply) => reply,
-        Err(err) => {
-            if let Some(conversation_id) = record_conversation_id.as_deref() {
-                record_fast_request_turn_best_effort(
-                    state,
-                    conversation_id,
-                    build_fast_request_turn(
-                        FAST_REQUEST_KIND_REMOTE_IM_INTERRUPT_DECISION,
-                        &request_text,
-                        "",
-                        false,
-                        Some(err.clone()),
-                        Some(model_name.clone()),
-                        Some(duration_ms),
-                    ),
-                );
-            }
-            return Err(err);
-        }
-    };
-    let raw_text = if reply.final_response_text.trim().is_empty() {
-        reply.assistant_text.trim()
-    } else {
-        reply.final_response_text.trim()
-    };
-    let parsed = match serde_json::from_str::<RemoteImSecretaryGuideDecisionReply>(
-        remote_im_secretary_extract_json(raw_text),
-    )
-    {
-        Ok(parsed) => {
-            if let Some(conversation_id) = record_conversation_id.as_deref() {
-                record_fast_request_turn_best_effort(
-                    state,
-                    conversation_id,
-                    build_fast_request_turn(
-                        FAST_REQUEST_KIND_REMOTE_IM_INTERRUPT_DECISION,
-                        &request_text,
-                        raw_text,
-                        true,
-                        None,
-                        Some(model_name.clone()),
-                        Some(duration_ms),
-                    ),
-                );
-            }
-            parsed
-        }
-        Err(err) => {
-            let message = format!("解析秘书引导 JSON 失败: {err}; raw={}", raw_text.trim());
-            if let Some(conversation_id) = record_conversation_id.as_deref() {
-                record_fast_request_turn_best_effort(
-                    state,
-                    conversation_id,
-                    build_fast_request_turn(
-                        FAST_REQUEST_KIND_REMOTE_IM_INTERRUPT_DECISION,
-                        &request_text,
-                        raw_text,
-                        false,
-                        Some(message.clone()),
-                        Some(model_name.clone()),
-                        Some(duration_ms),
-                    ),
-                );
-            }
-            return Err(message);
-        }
-    };
-    runtime_log_debug(format!(
-        "[远程联系人秘书] 忙碌引导快速判断完成: contact_id={} model_name={} should_interrupt={}",
-        contact.id,
-        model_name,
-        parsed.should_interrupt
-    ));
-    Ok(RemoteImSecretaryGuideDecision {
-        should_interrupt: parsed.should_interrupt,
-        reason: parsed.reason.trim().to_string(),
-        emit_log: true,
-    })
-}
 fn remote_im_secretary_extract_json(raw: &str) -> &str {
     let trimmed = raw.trim();
     if let Some(stripped) = trimmed.strip_prefix("```json") {
@@ -4361,31 +4032,17 @@ pub(crate) fn remote_im_enqueue_message_internal(
         &attachments,
         &state.data_path,
     );
-    let guided_candidate_message = message.clone();
-
     let (activate_assistant, state_reason) = remote_im_prepare_enqueue_runtime_state(
         state,
         &runtime.remote_im_contacts[contact_idx],
         &text,
     )?;
-    let should_handle_busy_guided_entry = {
-        let runtime_states = lock_remote_im_contact_runtime_states(state)?;
-        runtime_states
-            .get(&contact_id)
-            .map(|item| {
-                item.presence_state == RemoteImPresenceState::Present
-                    && item.work_state == RemoteImWorkState::Busy
-                    && item.has_pending
-            })
-            .unwrap_or(false)
-    };
     runtime_log_info(format!(
         "[远程联系人状态机] 入站消息 接入: contact_id={}, conversation_id={}, activate_assistant={}, reason={}",
         contact_id, conversation_id, activate_assistant, state_reason
     ));
 
     let event_id = Uuid::new_v4().to_string();
-    let new_sender_id_for_guided = input.sender_id.trim().to_string();
     let event = create_pending_event(
         event_id.clone(),
         conversation_id.clone(),
@@ -4428,172 +4085,6 @@ pub(crate) fn remote_im_enqueue_message_internal(
             state_reason
         ),
     );
-    let busy_guided_candidate =
-        should_handle_busy_guided_entry && matches!(&ingress, ChatEventIngress::Queued { .. });
-    if busy_guided_candidate {
-        let state_clone = state.clone();
-        let contact_for_guided = runtime.remote_im_contacts[contact_idx].clone();
-        let channel_id_for_guided = input.channel_id.trim().to_string();
-        let conversation_id_for_guided = conversation_id.clone();
-        let event_id_for_guided = event_id.clone();
-        let contact_log_label = remote_im_contact_log_label(&contact_for_log);
-        let guided_candidate_message = guided_candidate_message.clone();
-        tokio::spawn(async move {
-            let agents = state_read_agents_cached(&state_clone).unwrap_or_default();
-            let current_assistant = match remote_im_secretary_current_assistant_context(
-                &state_clone,
-                &conversation_id_for_guided,
-            )
-            .or_else(|_| remote_im_resolve_contact_assistant_context(&state_clone, &contact_for_guided))
-            {
-                Ok(value) => value,
-                Err(err) => {
-                    remote_im_append_channel_log(
-                        &channel_id_for_guided,
-                        "warn",
-                        format!(
-                            "[联系人秘书] 忙碌引导跳过: contact={}, conversation_id={}, event_id={}, error={}",
-                            contact_log_label, conversation_id_for_guided, event_id_for_guided, err
-                        ),
-                    );
-                    return;
-                }
-            };
-            let current_sender_id = remote_im_latest_group_sender_id_for_busy_guided(
-                &state_clone,
-                &conversation_id_for_guided,
-                &contact_for_guided,
-            )
-            .ok()
-            .flatten();
-            if !remote_im_busy_guided_same_sender_allowed(
-                &contact_for_guided,
-                current_sender_id.as_deref(),
-                &new_sender_id_for_guided,
-            ) {
-                remote_im_append_channel_log(
-                    &channel_id_for_guided,
-                    "info",
-                    format!(
-                        "[联系人秘书] 忙碌引导跳过: contact={}, conversation_id={}, event_id={}, reason=different_group_sender, current_sender_id={}, new_sender_id={}",
-                        contact_log_label,
-                        conversation_id_for_guided,
-                        event_id_for_guided,
-                        current_sender_id.as_deref().unwrap_or(""),
-                        new_sender_id_for_guided
-                    ),
-                );
-                return;
-            }
-            let current_work_message = remote_im_latest_secretary_work_message_for_busy_guided(
-                &state_clone,
-                &conversation_id_for_guided,
-                &contact_for_guided,
-                &agents,
-                &current_assistant,
-            )
-            .ok()
-            .flatten();
-            let Some(new_message_digest) = remote_im_secretary_message_digest(
-                &guided_candidate_message,
-                &contact_for_guided,
-                &agents,
-                &current_assistant,
-            ) else {
-                return;
-            };
-            match run_remote_im_secretary_guided_decision(
-                &state_clone,
-                &contact_for_guided,
-                &current_assistant,
-                current_work_message.as_ref(),
-                &new_message_digest,
-            )
-            .await
-            {
-                Ok(decision) => {
-                    let should_upgrade_guided = match remote_im_secretary_should_upgrade_guided(
-                        &state_clone,
-                        &conversation_id_for_guided,
-                    ) {
-                        Ok(value) => value,
-                        Err(err) => {
-                            remote_im_append_channel_log(
-                                &channel_id_for_guided,
-                                "warn",
-                                format!(
-                                    "[联系人秘书] 忙碌引导状态判断失败: contact={}, conversation_id={}, event_id={}, error={}",
-                                    contact_log_label,
-                                    conversation_id_for_guided,
-                                    event_id_for_guided,
-                                    err
-                                ),
-                            );
-                            false
-                        }
-                    };
-                    if decision.emit_log {
-                        remote_im_append_channel_log(
-                            &channel_id_for_guided,
-                            "info",
-                            format!(
-                                "[联系人秘书] 忙碌引导判断: contact={}, conversation_id={}, result={}, route={}, reason={}",
-                                contact_log_label,
-                                conversation_id_for_guided,
-                                if decision.should_interrupt { "需要优先处理" } else { "继续排队" },
-                                if decision.should_interrupt {
-                                    if should_upgrade_guided {
-                                        "升级引导"
-                                    } else {
-                                        "直接激活"
-                                    }
-                                } else {
-                                    "继续排队"
-                                },
-                                decision.reason
-                            ),
-                        );
-                    }
-                    if decision.should_interrupt {
-                        if should_upgrade_guided {
-                            if let Err(err) = mark_queue_event_guided_with_log(
-                                &state_clone,
-                                &event_id_for_guided,
-                                decision.emit_log,
-                            ) {
-                                remote_im_append_channel_log(
-                                    &channel_id_for_guided,
-                                    "warn",
-                                    format!(
-                                        "[联系人秘书] 忙碌引导升级失败: contact={}, conversation_id={}, event_id={}, error={}",
-                                        contact_log_label,
-                                        conversation_id_for_guided,
-                                        event_id_for_guided,
-                                        err
-                                    ),
-                                );
-                            }
-                        } else {
-                            trigger_chat_queue_processing(&state_clone);
-                        }
-                    }
-                }
-                Err(err) => {
-                    remote_im_append_channel_log(
-                        &channel_id_for_guided,
-                        "warn",
-                        format!(
-                            "[联系人秘书] 忙碌引导判断失败: contact={}, conversation_id={}, event_id={}, error={}",
-                            contact_log_label,
-                            conversation_id_for_guided,
-                            event_id_for_guided,
-                            err
-                        ),
-                    );
-                }
-            }
-        });
-    }
     state_write_runtime_state_cached(state, &runtime)?;
     if should_trigger_guided_queue && matches!(&ingress, ChatEventIngress::Queued { .. }) {
         trigger_guided_queue_processing(state, &conversation_id);

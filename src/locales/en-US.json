@@ -1632,7 +1632,6 @@
       "unknownKind": "Fast request",
       "kindRemoteIm": "Remote IM",
       "kindRemoteImReplyDecision": "Reply decision",
-      "kindRemoteImInterruptDecision": "Busy interrupt decision",
       "kindTitleGeneration": "Title generation",
       "kindTaskOptimization": "Task optimization",
       "kindToolReview": "Tool assessment",

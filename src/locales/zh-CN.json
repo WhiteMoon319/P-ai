@@ -1610,7 +1610,6 @@
       "unknownKind": "轻量请求",
       "kindRemoteIm": "远程 IM",
       "kindRemoteImReplyDecision": "回复判断",
-      "kindRemoteImInterruptDecision": "忙碌打断判断",
       "kindTitleGeneration": "标题生成",
       "kindTaskOptimization": "任务优化",
       "kindToolReview": "工具评估",
