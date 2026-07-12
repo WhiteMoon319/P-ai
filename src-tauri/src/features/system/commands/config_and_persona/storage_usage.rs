@@ -1399,20 +1399,6 @@ fn usage_backfill_cumulative_model_name(
     usage_backfill_provider_model_breakdown(cumulative, &provider_key, &model_name)
 }
 
-fn usage_ensure_conversation_meta_model_name_resolved(
-    state: &AppState,
-    conversation_id: &str,
-    api_config_id: &str,
-    config: &AppConfig,
-) -> Result<ConversationCumulativeUsage, String> {
-    conversation_service_v2().backfill_conversation_cumulative_usage_model_name(
-        state,
-        conversation_id,
-        api_config_id,
-        config,
-    )
-}
-
 fn usage_push_conversation(
     conversation: &mut Conversation,
     message_count: usize,
@@ -1540,7 +1526,6 @@ fn usage_push_conversation(
 
 fn usage_push_conversation_meta(
     conversation_meta: &mut ConversationMetaView,
-    state: &AppState,
     config: &AppConfig,
     api_config_name_map: &std::collections::HashMap<String, String>,
     agent_name_map: &std::collections::HashMap<String, String>,
@@ -1574,20 +1559,11 @@ fn usage_push_conversation_meta(
     }
 
     let api_config_id = usage_resolve_api_config_id_from_meta(conversation_meta, config);
-    if let Ok(updated_usage) = usage_ensure_conversation_meta_model_name_resolved(
-        state,
-        &conversation_meta.id,
+    let _ = usage_backfill_cumulative_model_name(
+        &mut conversation_meta.cumulative_usage,
         &api_config_id,
         config,
-    ) {
-        conversation_meta.cumulative_usage = updated_usage;
-    } else {
-        let _ = usage_backfill_cumulative_model_name(
-            &mut conversation_meta.cumulative_usage,
-            &api_config_id,
-            config,
-        );
-    }
+    );
     let cumulative = conversation_meta.cumulative_usage.clone().normalized_legacy_totals();
     let weighted = conversation_cumulative_usage_weighted_tokens(&cumulative);
     if !cumulative.is_empty() || weighted > 0 {
@@ -1692,6 +1668,183 @@ fn usage_push_conversation_meta(
     conversations.push(usage_item);
 }
 
+fn usage_push_delegate_snapshot(
+    snapshot: &DelegateConversationSnapshot,
+    config: &AppConfig,
+    api_config_name_map: &std::collections::HashMap<String, String>,
+    agent_name_map: &std::collections::HashMap<String, String>,
+    agent_avatar_path_map: &std::collections::HashMap<String, String>,
+    agent_avatar_updated_at_map: &std::collections::HashMap<String, String>,
+    department_name_map: &std::collections::HashMap<String, String>,
+    totals: &mut UsageOverviewTotals,
+    conversations: &mut Vec<UsageConversationItem>,
+    by_provider_model: &mut std::collections::HashMap<String, UsageProviderModelAggregateItem>,
+    by_model: &mut std::collections::HashMap<String, UsageAggregateItem>,
+    by_api_config: &mut std::collections::HashMap<String, UsageAggregateItem>,
+    by_agent: &mut std::collections::HashMap<String, UsageAggregateItem>,
+    by_department: &mut std::collections::HashMap<String, UsageAggregateItem>,
+    by_kind: &mut std::collections::HashMap<String, UsageAggregateItem>,
+) {
+    totals.conversation_count = totals.conversation_count.saturating_add(1);
+    if snapshot
+        .archived_at
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_some()
+    {
+        totals.archived_conversation_count = totals.archived_conversation_count.saturating_add(1);
+    } else {
+        totals.active_conversation_count = totals.active_conversation_count.saturating_add(1);
+    }
+    totals.delegate_conversation_count = totals.delegate_conversation_count.saturating_add(1);
+
+    let cumulative = snapshot.cumulative_usage.clone().normalized_legacy_totals();
+    let weighted = conversation_cumulative_usage_weighted_tokens(&cumulative);
+    if !cumulative.is_empty() || weighted > 0 {
+        totals.with_usage_conversation_count = totals.with_usage_conversation_count.saturating_add(1);
+    }
+    totals.weighted_tokens = totals.weighted_tokens.saturating_add(weighted);
+    totals.input_tokens = totals.input_tokens.saturating_add(cumulative.input_tokens);
+    totals.output_tokens = totals.output_tokens.saturating_add(cumulative.output_tokens);
+    totals.total_tokens = totals.total_tokens.saturating_add(cumulative.total_tokens);
+    totals.cache_read_tokens = totals.cache_read_tokens.saturating_add(cumulative.cache_read_tokens);
+    totals.cache_write_tokens = totals.cache_write_tokens.saturating_add(cumulative.cache_write_tokens);
+    totals.reasoning_tokens = totals.reasoning_tokens.saturating_add(cumulative.reasoning_tokens);
+
+    let department_id = snapshot.target_department_id.trim().to_string();
+    let api_config_id = if department_id.is_empty() {
+        String::new()
+    } else {
+        config
+            .departments
+            .iter()
+            .find(|item| item.id.trim() == department_id)
+            .map(|item| {
+                let primary = item.api_config_id.trim();
+                if !primary.is_empty() {
+                    return primary.to_string();
+                }
+                item.api_config_ids
+                    .iter()
+                    .find_map(|value| {
+                        let trimmed = value.trim();
+                        if trimmed.is_empty() {
+                            None
+                        } else {
+                            Some(trimmed.to_string())
+                        }
+                    })
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default()
+    };
+    let api_config_name = api_config_name_map.get(&api_config_id).cloned().unwrap_or_else(|| {
+        if api_config_id.is_empty() {
+            "未绑定配置".to_string()
+        } else {
+            api_config_id.clone()
+        }
+    });
+    let model_name = usage_preferred_model_name_for_display(
+        &cumulative,
+        usage_resolve_model_name_from_api_config_id(&api_config_id, config),
+    );
+    let provider_key = usage_provider_key_from_api_config_id(&api_config_id, config);
+    let provider_label = usage_provider_label_from_api_config_id(&api_config_id, config);
+    let agent_id = snapshot.target_agent_id.trim().to_string();
+    let agent_name = agent_name_map.get(&agent_id).cloned().unwrap_or_else(|| {
+        if agent_id.is_empty() {
+            "未绑定人格".to_string()
+        } else {
+            agent_id.clone()
+        }
+    });
+    let department_name = department_name_map
+        .get(&department_id)
+        .cloned()
+        .unwrap_or_else(|| {
+            if department_id.is_empty() {
+                "未绑定部门".to_string()
+            } else {
+                department_id.clone()
+            }
+        });
+    let usage_item = UsageConversationItem {
+        conversation_id: snapshot.conversation_id.clone(),
+        title: snapshot.title.clone(),
+        summary_title: None,
+        updated_at: snapshot.updated_at.clone(),
+        archived_at: snapshot.archived_at.clone(),
+        agent_id: agent_id.clone(),
+        agent_name: agent_name.clone(),
+        department_id: department_id.clone(),
+        department_name: department_name.clone(),
+        avatar_path: agent_avatar_path_map.get(&agent_id).cloned(),
+        avatar_updated_at: agent_avatar_updated_at_map.get(&agent_id).cloned(),
+        api_config_id: api_config_id.clone(),
+        api_config_name: api_config_name.clone(),
+        model_name: model_name.clone(),
+        conversation_kind: CONVERSATION_KIND_DELEGATE.to_string(),
+        is_delegate: true,
+        is_system_notification_conversation: false,
+        message_count: snapshot.message_count,
+        weighted_tokens: weighted,
+        input_tokens: cumulative.input_tokens,
+        output_tokens: cumulative.output_tokens,
+        total_tokens: cumulative.total_tokens,
+        cache_read_tokens: cumulative.cache_read_tokens,
+        cache_write_tokens: cumulative.cache_write_tokens,
+        reasoning_tokens: cumulative.reasoning_tokens,
+    };
+    usage_push_provider_model_breakdown(
+        &cumulative,
+        config,
+        provider_key,
+        provider_label,
+        model_name.clone(),
+        by_provider_model,
+    );
+    usage_aggregate_push(
+        by_model,
+        if model_name == "unknown" {
+            "unknown_model".to_string()
+        } else {
+            model_name
+        },
+        usage_item.model_name.clone(),
+        &usage_item,
+    );
+    usage_aggregate_push(
+        by_api_config,
+        if api_config_id.trim().is_empty() {
+            "unbound_api_config".to_string()
+        } else {
+            api_config_id
+        },
+        api_config_name,
+        &usage_item,
+    );
+    usage_aggregate_push(by_agent, agent_id, agent_name, &usage_item);
+    usage_aggregate_push(
+        by_department,
+        if department_id.trim().is_empty() {
+            "unbound_department".to_string()
+        } else {
+            department_id
+        },
+        department_name,
+        &usage_item,
+    );
+    usage_aggregate_push(
+        by_kind,
+        "delegate".to_string(),
+        "委托".to_string(),
+        &usage_item,
+    );
+    conversations.push(usage_item);
+}
+
 fn build_usage_overview(state: &AppState) -> Result<UsageOverview, String> {
     let config = state_read_config_cached(state)?;
     let runtime = state_read_agents_runtime_snapshot(state)?;
@@ -1740,7 +1893,6 @@ fn build_usage_overview(state: &AppState) -> Result<UsageOverview, String> {
         };
         usage_push_conversation_meta(
             &mut conversation_meta,
-            state,
             &config,
             &api_config_name_map,
             &agent_name_map,
@@ -1811,19 +1963,12 @@ fn build_usage_overview(state: &AppState) -> Result<UsageOverview, String> {
             &mut by_kind,
         );
     }
-    for mut conversation in delegate_persisted_conversation_list(state)? {
-        let delegate_id = conversation
-            .delegate_id
-            .clone()
-            .unwrap_or_else(|| conversation.id.clone());
-        if !seen_delegate_ids.insert(delegate_id) {
+    for snapshot in delegate_persisted_conversation_summary_list(state)? {
+        if !seen_delegate_ids.insert(snapshot.delegate_id.clone()) {
             continue;
         }
-        let message_count = conversation.messages.len();
-        usage_push_conversation(
-            &mut conversation,
-            message_count,
-            state,
+        usage_push_delegate_snapshot(
+            &snapshot,
             &config,
             &api_config_name_map,
             &agent_name_map,
@@ -2304,6 +2449,28 @@ mod storage_usage_tests {
         }
     }
 
+    fn storage_usage_test_delegate_input(conversation_id: &str, delegate_id: &str) -> DelegateCreateInput {
+        DelegateCreateInput {
+            kind: "wait".to_string(),
+            conversation_id: conversation_id.to_string(),
+            parent_delegate_id: None,
+            source_department_id: ASSISTANT_DEPARTMENT_ID.to_string(),
+            target_department_id: ASSISTANT_DEPARTMENT_ID.to_string(),
+            source_agent_id: DEFAULT_AGENT_ID.to_string(),
+            target_agent_id: DEFAULT_AGENT_ID.to_string(),
+            title: "测试委托".to_string(),
+            why: "测试背景".to_string(),
+            goal: "测试目标".to_string(),
+            todo: "测试待办".to_string(),
+            notify_assistant_when_done: false,
+            call_stack: vec![delegate_id.to_string()],
+        }
+    }
+
+    fn storage_usage_test_delegate_legacy_path(data_path: &PathBuf, conversation_id: &str) -> PathBuf {
+        delegate_conversation_store_dir(data_path).join(format!("{conversation_id}.json"))
+    }
+
     #[test]
     fn storage_image_text_cache_estimated_freed_bytes_should_track_runtime_payload() {
         let mut runtime = RuntimeStateFile::default();
@@ -2378,10 +2545,8 @@ mod storage_usage_tests {
         let legacy_only =
             storage_usage_test_conversation("delegate-legacy", CONVERSATION_KIND_DELEGATE);
         delegate_conversation_store_write(&data_path, &ready).expect("write ready delegate store");
-        let ready_legacy_path =
-            delegate_conversation_store_path(&data_path, &ready.id).expect("ready legacy path");
-        let legacy_only_path = delegate_conversation_store_path(&data_path, &legacy_only.id)
-            .expect("legacy only path");
+        let ready_legacy_path = storage_usage_test_delegate_legacy_path(&data_path, &ready.id);
+        let legacy_only_path = storage_usage_test_delegate_legacy_path(&data_path, &legacy_only.id);
         write_json_file_atomic(&ready_legacy_path, &ready, "legacy ready delegate")
             .expect("write ready legacy delegate");
         write_json_file_atomic(&legacy_only_path, &legacy_only, "legacy only delegate")
@@ -2441,7 +2606,7 @@ mod storage_usage_tests {
     }
 
     #[test]
-    fn usage_overview_should_backfill_legacy_model_name_into_persisted_usage() {
+    fn usage_overview_should_resolve_legacy_model_name_without_persisting_usage() {
         let state = storage_usage_test_state();
         let config = AppConfig {
             api_providers: vec![ApiProviderConfig {
@@ -2490,23 +2655,15 @@ mod storage_usage_tests {
 
         let persisted = conversation_service_v2()
             .get_conversation_meta(&state, &conversation.id)
-            .expect("read migrated conversation meta");
-        let (_provider_key, provider_models) = persisted
-            .cumulative_usage
-            .by_provider_model
-            .iter()
-            .find(|(_provider_key, models)| models.contains_key("real-model-v1"))
-            .expect("provider usage");
-        let bucket = provider_models
-            .get("real-model-v1")
-            .expect("real model usage");
-        assert_eq!(bucket.total_tokens, 18);
-        assert_eq!(bucket.input_tokens, 11);
-        assert_eq!(bucket.output_tokens, 7);
+            .expect("read conversation meta after overview");
+        assert!(
+            persisted.cumulative_usage.by_provider_model.is_empty(),
+            "usage overview should stay read-only and not mutate persisted conversation metadata"
+        );
     }
 
     #[test]
-    fn usage_overview_should_persist_unknown_when_legacy_model_name_cannot_be_resolved() {
+    fn usage_overview_should_resolve_unknown_legacy_model_without_persisting_usage() {
         let state = storage_usage_test_state();
         let config = AppConfig {
             departments: vec![default_assistant_department("missing-provider::missing-model")],
@@ -2543,15 +2700,11 @@ mod storage_usage_tests {
 
         let persisted = conversation_service_v2()
             .get_conversation_meta(&state, &conversation.id)
-            .expect("read migrated conversation meta");
-        let (_provider_key, provider_models) = persisted
-            .cumulative_usage
-            .by_provider_model
-            .iter()
-            .find(|(_provider_key, models)| models.contains_key("unknown"))
-            .expect("unknown provider usage");
-        let bucket = provider_models.get("unknown").expect("unknown model usage");
-        assert_eq!(bucket.total_tokens, 5);
+            .expect("read conversation meta after overview");
+        assert!(
+            persisted.cumulative_usage.by_provider_model.is_empty(),
+            "usage overview should not persist fallback unknown model breakdown into metadata"
+        );
     }
 
     #[test]
@@ -2606,4 +2759,69 @@ mod storage_usage_tests {
             .expect("conversation item");
         assert_eq!(conversation_item.model_name, "big-model");
     }
+
+    #[test]
+    fn usage_overview_should_read_delegate_usage_from_snapshot_only() {
+        let state = storage_usage_test_state();
+        let config = AppConfig {
+            departments: vec![default_assistant_department("provider-a::model-a")],
+            ..AppConfig::default()
+        };
+        state_write_config_cached(&state, &config).expect("write config");
+
+        let entry = delegate_store_create_delegate(
+            &state.data_path,
+            &storage_usage_test_delegate_input("root-conversation", "delegate-snapshot-only"),
+        )
+        .expect("create delegate");
+        let mut conversation =
+            storage_usage_test_conversation(&entry.delegate_id, CONVERSATION_KIND_DELEGATE);
+        conversation.title = "快照委托".to_string();
+        conversation.cumulative_usage = ConversationCumulativeUsage {
+            input_tokens: 21,
+            output_tokens: 8,
+            total_tokens: 29,
+            by_provider_model: std::collections::BTreeMap::from([(
+                "provider-a".to_string(),
+                std::collections::BTreeMap::from([(
+                    "delegate-model".to_string(),
+                    ConversationUsageBucket {
+                        input_tokens: 21,
+                        output_tokens: 8,
+                        total_tokens: 29,
+                        ..ConversationUsageBucket::default()
+                    },
+                )]),
+            )]),
+            ..ConversationCumulativeUsage::default()
+        };
+        delegate_conversation_store_write(&state.data_path, &conversation)
+            .expect("write delegate conversation");
+
+        let paths = delegate_conversation_message_store_paths(&state.data_path, &entry.delegate_id)
+            .expect("delegate paths");
+        message_store::delete_message_store_shard_artifacts(&paths)
+            .expect("delete delegate conversation shard");
+
+        let overview = build_usage_overview(&state).expect("build usage overview");
+        let conversation_item = overview
+            .conversations
+            .iter()
+            .find(|item| item.conversation_id == conversation.id)
+            .expect("delegate conversation item");
+        assert_eq!(conversation_item.model_name, "delegate-model");
+        assert_eq!(conversation_item.weighted_tokens, 16);
+        assert_eq!(conversation_item.input_tokens, 21);
+        assert_eq!(conversation_item.output_tokens, 8);
+        assert_eq!(conversation_item.message_count, 2);
+        assert!(
+            overview.by_provider_model.iter().any(|item| {
+                item.model_name == "delegate-model"
+                    && item.input_tokens == 21
+                    && item.output_tokens == 8
+            }),
+            "delegate snapshot usage should contribute provider/model breakdown"
+        );
+    }
+
 }

@@ -15,6 +15,7 @@ struct DelegateConversationSnapshot {
     why: String,
     goal: String,
     todo: String,
+    target_department_id: String,
     target_agent_id: String,
     status: String,
     created_at: String,
@@ -317,6 +318,12 @@ fn delegate_store_migrate_snapshot_columns(conn: &Connection) -> Result<(), Stri
                 .to_string(),
         );
     }
+    if !columns.contains("snapshot_cumulative_usage_json") {
+        sql.push(
+            "ALTER TABLE delegate_record ADD COLUMN snapshot_cumulative_usage_json TEXT NOT NULL DEFAULT ''"
+                .to_string(),
+        );
+    }
     sql.push(
         "CREATE INDEX IF NOT EXISTS idx_delegate_record_snapshot_updated_at ON delegate_record(snapshot_updated_at DESC)"
             .to_string(),
@@ -378,6 +385,24 @@ fn delegate_row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<DelegateEn
 fn delegate_snapshot_row_to_entry(
     row: &rusqlite::Row<'_>,
 ) -> rusqlite::Result<DelegateConversationSnapshot> {
+    let cumulative_usage_json = row.get::<_, String>("cumulative_usage_json")?;
+    let cumulative_usage = if cumulative_usage_json.trim().is_empty() {
+        ConversationCumulativeUsage {
+            input_tokens: row.get::<_, i64>("input_token_count")? as u64,
+            output_tokens: row.get::<_, i64>("output_token_count")? as u64,
+            cache_read_tokens: row.get::<_, i64>("cache_read_token_count")? as u64,
+            cache_write_tokens: row.get::<_, i64>("cache_write_token_count")? as u64,
+            ..ConversationCumulativeUsage::default()
+        }
+    } else {
+        serde_json::from_str::<ConversationCumulativeUsage>(&cumulative_usage_json).map_err(|err| {
+            rusqlite::Error::FromSqlConversionFailure(
+                cumulative_usage_json.len(),
+                rusqlite::types::Type::Text,
+                Box::new(err),
+            )
+        })?
+    };
     Ok(DelegateConversationSnapshot {
         delegate_id: row.get("delegate_id")?,
         kind: row.get("kind")?,
@@ -387,6 +412,7 @@ fn delegate_snapshot_row_to_entry(
         why: row.get("why")?,
         goal: row.get("goal")?,
         todo: row.get("todo")?,
+        target_department_id: row.get("target_department_id")?,
         target_agent_id: row.get("target_agent_id")?,
         status: row.get("status")?,
         created_at: row.get("created_at")?,
@@ -398,13 +424,7 @@ fn delegate_snapshot_row_to_entry(
         step_count: row.get::<_, i64>("step_count")? as usize,
         tool_call_count: row.get::<_, i64>("tool_call_count")? as usize,
         last_tool_name: row.get("last_tool_name")?,
-        cumulative_usage: ConversationCumulativeUsage {
-            input_tokens: row.get::<_, i64>("input_token_count")? as u64,
-            output_tokens: row.get::<_, i64>("output_token_count")? as u64,
-            cache_read_tokens: row.get::<_, i64>("cache_read_token_count")? as u64,
-            cache_write_tokens: row.get::<_, i64>("cache_write_token_count")? as u64,
-            ..ConversationCumulativeUsage::default()
-        },
+        cumulative_usage,
     })
 }
 
@@ -536,6 +556,7 @@ fn delegate_snapshot_from_entry_and_conversation(
         why: entry.why.clone(),
         goal: entry.goal.clone(),
         todo: entry.todo.clone(),
+        target_department_id: entry.target_department_id.clone(),
         target_agent_id: if entry.target_agent_id.trim().is_empty() {
             conversation.agent_id.clone()
         } else {
@@ -570,6 +591,7 @@ fn delegate_snapshot_from_entry(
         why: entry.why.clone(),
         goal: entry.goal.clone(),
         todo: entry.todo.clone(),
+        target_department_id: entry.target_department_id.clone(),
         target_agent_id: entry.target_agent_id.clone(),
         status: entry.status.clone(),
         created_at: entry.created_at.clone(),
@@ -604,6 +626,7 @@ fn delegate_snapshot_store_read(
             why,
             goal,
             todo,
+            target_department_id,
             target_agent_id,
             status,
             created_at,
@@ -618,7 +641,8 @@ fn delegate_snapshot_store_read(
             snapshot_input_token_count AS input_token_count,
             snapshot_output_token_count AS output_token_count,
             snapshot_cache_read_token_count AS cache_read_token_count,
-            snapshot_cache_write_token_count AS cache_write_token_count
+            snapshot_cache_write_token_count AS cache_write_token_count,
+            snapshot_cumulative_usage_json AS cumulative_usage_json
         FROM delegate_record
         WHERE delegate_id=?1 AND snapshot_conversation_id!=''",
         params![delegate_id.trim()],
@@ -643,6 +667,7 @@ fn delegate_snapshot_store_list_from_db(
                 why,
                 goal,
                 todo,
+                target_department_id,
                 target_agent_id,
                 status,
                 created_at,
@@ -657,7 +682,8 @@ fn delegate_snapshot_store_list_from_db(
                 snapshot_input_token_count AS input_token_count,
                 snapshot_output_token_count AS output_token_count,
                 snapshot_cache_read_token_count AS cache_read_token_count,
-                snapshot_cache_write_token_count AS cache_write_token_count
+                snapshot_cache_write_token_count AS cache_write_token_count,
+                snapshot_cumulative_usage_json AS cumulative_usage_json
             FROM delegate_record
             WHERE snapshot_conversation_id!=''
             ORDER BY COALESCE(snapshot_archived_at, snapshot_last_message_at, snapshot_updated_at) DESC,
@@ -689,6 +715,8 @@ fn delegate_snapshot_store_upsert_db(
     snapshot: &DelegateConversationSnapshot,
 ) -> Result<(), String> {
     let conn = delegate_store_open(data_path)?;
+    let cumulative_usage_json = serde_json::to_string(&snapshot.cumulative_usage)
+        .map_err(|err| format!("序列化委托快照累计用量失败，delegate_id={}，error={err}", snapshot.delegate_id))?;
     let affected = conn.execute(
         "UPDATE delegate_record SET
             snapshot_conversation_id=?2,
@@ -702,7 +730,8 @@ fn delegate_snapshot_store_upsert_db(
             snapshot_input_token_count=?10,
             snapshot_output_token_count=?11,
             snapshot_cache_read_token_count=?12,
-            snapshot_cache_write_token_count=?13
+            snapshot_cache_write_token_count=?13,
+            snapshot_cumulative_usage_json=?14
         WHERE delegate_id=?1",
         params![
             snapshot.delegate_id,
@@ -718,6 +747,7 @@ fn delegate_snapshot_store_upsert_db(
             snapshot.cumulative_usage.output_tokens as i64,
             snapshot.cumulative_usage.cache_read_tokens as i64,
             snapshot.cumulative_usage.cache_write_tokens as i64,
+            cumulative_usage_json,
         ],
     )
     .map_err(|err| format!("写入委托快照失败，delegate_id={}，error={err}", snapshot.delegate_id))?;
@@ -748,7 +778,8 @@ fn delegate_snapshot_store_delete_db(
             snapshot_input_token_count=0,
             snapshot_output_token_count=0,
             snapshot_cache_read_token_count=0,
-            snapshot_cache_write_token_count=0
+            snapshot_cache_write_token_count=0,
+            snapshot_cumulative_usage_json=''
         WHERE delegate_id=?1 AND snapshot_conversation_id!=''",
         params![delegate_id.trim()],
     )
@@ -1186,6 +1217,7 @@ mod delegate_store_tests {
 
         assert_eq!(snapshot.delegate_id, entry.delegate_id);
         assert_eq!(snapshot.root_conversation_id, entry.conversation_id);
+        assert_eq!(snapshot.target_department_id, entry.target_department_id);
         assert_eq!(snapshot.target_agent_id, entry.target_agent_id);
         assert_eq!(snapshot.status, entry.status);
         assert_eq!(snapshot.message_count, 0);

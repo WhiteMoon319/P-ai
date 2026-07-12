@@ -2220,6 +2220,7 @@ fn conversation_delegate_summary_from_thread(
             why: String::new(),
             goal: String::new(),
             todo: String::new(),
+            target_department_id: String::new(),
             target_agent_id: thread.target_agent_id.clone(),
             status: status.clone(),
             created_at: started_at.clone(),
