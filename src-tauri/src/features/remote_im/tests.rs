@@ -1895,6 +1895,25 @@
     }
 
     #[test]
+    fn private_contact_should_bypass_presence_mute_and_secretary_state() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact("contact-private", "conversation-private");
+        contact.remote_contact_type = "private".to_string();
+        contact.activation_mode = "never".to_string();
+        contact.mute_keywords = vec!["闭嘴".to_string()];
+
+        let (activate_assistant, reason) =
+            remote_im_prepare_enqueue_runtime_state(&state, &contact, "闭嘴")
+                .expect("prepare private runtime state");
+
+        assert!(activate_assistant);
+        assert!(reason.contains("直接调度绑定会话"));
+        assert!(!lock_remote_im_contact_runtime_states(&state)
+            .expect("lock runtime states")
+            .contains_key(&contact.id));
+    }
+
+    #[test]
     fn remote_reply_delegate_should_finish_atomically_with_empty_guidance_queue() {
         let state = remote_im_test_state();
         let register = |delegate_id: &str| {

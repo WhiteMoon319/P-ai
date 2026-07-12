@@ -2650,25 +2650,24 @@ async fn process_remote_im_reply_debounce(
         return Ok(());
     }
     let conversation_id = entry.event.conversation_id.clone();
-    let context = conversation_service_v2().get_conversation_prompt_context(state, &conversation_id)?;
-    let start_index = context
-        .messages
-        .iter()
-        .position(|message| message.id == entry.start_message_id)
-        .ok_or_else(|| format!("防抖起点消息不存在：{}", entry.start_message_id))?;
-    let end_index = context
-        .messages
-        .iter()
-        .position(|message| message.id == entry.end_message_id)
-        .ok_or_else(|| format!("防抖终点消息不存在：{}", entry.end_message_id))?;
-    if end_index < start_index {
-        return Err(format!(
-            "防抖消息边界倒置：start={}，end={}",
-            entry.start_message_id, entry.end_message_id
-        ));
-    }
-    let history = context.messages[..start_index].to_vec();
-    let batch = context.messages[start_index..=end_index].to_vec();
+    let active_delegate_ids =
+        remote_im_reply_delegate_active_ids_for_contact(state, &contact.id)?;
+    let (history, batch) = if entry.must_reply && active_delegate_ids.is_empty() {
+        let message = conversation_service_v2()
+            .get_message_by_id_for_frontend_display_only(
+                state,
+                &conversation_id,
+                &entry.end_message_id,
+            )?;
+        (Vec::new(), vec![message])
+    } else {
+        read_remote_im_debounce_secretary_messages(
+            state,
+            &conversation_id,
+            &entry.start_message_id,
+            &entry.end_message_id,
+        )?
+    };
     let mut event = entry.event;
     event.messages = batch.clone();
     let agents = state_read_agents_cached(state).unwrap_or_default();
@@ -2683,6 +2682,59 @@ async fn process_remote_im_reply_debounce(
         entry.must_reply,
     )
     .await
+}
+
+fn read_remote_im_debounce_secretary_messages(
+    state: &AppState,
+    conversation_id: &str,
+    start_message_id: &str,
+    end_message_id: &str,
+) -> Result<(Vec<ChatMessage>, Vec<ChatMessage>), String> {
+    const HISTORY_READ_LIMIT: usize = 50;
+    const RANGE_PAGE_SIZE: usize = 100;
+    let paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
+    ensure_ready_message_store_from_legacy_conversation(state, conversation_id, &paths)?;
+    let start = message_store::read_ready_message_store_message_by_id(&paths, start_message_id)?
+        .ok_or_else(|| format!("防抖起点消息不存在：{start_message_id}"))?;
+    let history = message_store::read_ready_message_store_messages_before(
+        &paths,
+        start_message_id,
+        HISTORY_READ_LIMIT,
+    )?
+    .map(|page| page.messages)
+    .unwrap_or_default();
+    let mut batch = vec![start];
+    if start_message_id == end_message_id {
+        return Ok((history, batch));
+    }
+    let mut after_message_id = start_message_id.to_string();
+    loop {
+        let page = message_store::read_ready_message_store_messages_after(
+            &paths,
+            &after_message_id,
+            RANGE_PAGE_SIZE,
+        )?
+        .ok_or_else(|| format!("防抖范围读取失败：after={after_message_id}"))?;
+        if page.messages.is_empty() {
+            return Err(format!("防抖终点消息不存在：{end_message_id}"));
+        }
+        let has_more = page.has_more;
+        let mut reached_end = false;
+        for message in page.messages {
+            after_message_id = message.id.clone();
+            reached_end = message.id == end_message_id;
+            batch.push(message);
+            if reached_end {
+                break;
+            }
+        }
+        if reached_end {
+            return Ok((history, batch));
+        }
+        if !has_more {
+            return Err(format!("防抖终点消息不存在：{end_message_id}"));
+        }
+    }
 }
 
 fn report_remote_im_dynamic_wake_failure(

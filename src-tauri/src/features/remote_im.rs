@@ -1905,6 +1905,16 @@ fn remote_im_prepare_enqueue_runtime_state(
     contact: &RemoteImContact,
     message_text: &str,
 ) -> Result<(bool, String), String> {
+    if contact
+        .remote_contact_type
+        .trim()
+        .eq_ignore_ascii_case("private")
+    {
+        return Ok((
+            true,
+            "私聊禁用秘书与在场状态，消息直接调度绑定会话".to_string(),
+        ));
+    }
     let mut runtime_states = lock_remote_im_contact_runtime_states(state)?;
     let runtime = remote_im_contact_runtime_state_mut(&mut runtime_states, &contact.id);
     let previous_presence = runtime.presence_state;
@@ -1912,13 +1922,23 @@ fn remote_im_prepare_enqueue_runtime_state(
     let previous_pending = runtime.has_pending;
     let now = now_utc();
     let mut mute_prefix = String::new();
-    if let Some(mute_until) = runtime.mute_until.clone() {
+    let supports_mute = contact
+        .remote_contact_type
+        .trim()
+        .eq_ignore_ascii_case("group");
+    if !supports_mute {
+        runtime.mute_until = None;
+    }
+    if supports_mute {
+        if let Some(mute_until) = runtime.mute_until.clone() {
         if remote_im_is_mute_expired(&mute_until, now) {
             runtime.mute_until = None;
             mute_prefix = format!("闭嘴超时自动解除(截止={mute_until})；");
         }
+        }
     }
-    if let Some(keyword) = remote_im_find_matched_keyword(message_text, &contact.mute_keywords) {
+    if supports_mute {
+        if let Some(keyword) = remote_im_find_matched_keyword(message_text, &contact.mute_keywords) {
         let mute_until = remote_im_resolve_mute_until(now, contact.mute_duration_seconds);
         runtime.mute_until = Some(mute_until.clone());
         let reason = format!(
@@ -1951,8 +1971,9 @@ fn remote_im_prepare_enqueue_runtime_state(
             ),
         );
         return Ok((false, reason));
+        }
     }
-    if runtime.mute_until.is_some() {
+    if supports_mute && runtime.mute_until.is_some() {
         if let Some(keyword) = remote_im_find_matched_keyword(message_text, &contact.unmute_keywords) {
             runtime.mute_until = None;
             mute_prefix.push_str(&format!("命中张嘴词“{}”，解除闭嘴；", keyword));

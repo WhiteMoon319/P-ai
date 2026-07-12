@@ -164,7 +164,7 @@
                     <span class="badge badge-sm shrink-0" :class="item.remoteContactType === 'group' ? 'badge-secondary' : 'badge-primary'">
                       {{ item.remoteContactType === "group" ? t("config.remoteIm.group") : t("config.remoteIm.private") }}
                     </span>
-                    <div>
+                    <div v-if="!isPrivateContact(item)">
                       <button
                         type="button"
                         class="badge badge-sm shrink-0 gap-1.5 transition-colors"
@@ -178,7 +178,7 @@
                       </button>
                     </div>
                     <span
-                      v-if="contactKeywordModeMissingKeywords(item)"
+                      v-if="!isPrivateContact(item) && contactKeywordModeMissingKeywords(item)"
                       class="badge badge-sm badge-warning shrink-0 gap-1.5"
                       :title="t('config.remoteIm.keywordMissingHint')"
                     >
@@ -198,7 +198,7 @@
                         <ChevronUp class="h-3.5 w-3.5 opacity-70" />
                       </button>
                     </div>
-                    <div>
+                    <div v-if="!isPrivateContact(item)">
                       <button
                         type="button"
                         class="badge badge-sm shrink-0 gap-1.5"
@@ -601,7 +601,10 @@
                 </div>
               </li>
 
-              <li class="list-row flex items-start justify-between gap-3">
+              <li
+                v-if="selectedContact && !isPrivateContact(selectedContact)"
+                class="list-row flex items-start justify-between gap-3"
+              >
                 <div class="font-medium">{{ t("config.remoteIm.activateMode") }}</div>
                 <div class="flex w-64 flex-col gap-2">
                   <select
@@ -623,7 +626,10 @@
                 </div>
               </li>
 
-              <li class="list-row flex items-start justify-between gap-3">
+              <li
+                v-if="selectedContact && !isPrivateContact(selectedContact)"
+                class="list-row flex items-start justify-between gap-3"
+              >
                 <div class="font-medium">{{ t("config.remoteIm.muteKeywords") }}</div>
                 <div class="flex w-64 flex-col gap-2">
                   <input
@@ -638,7 +644,10 @@
                 </div>
               </li>
 
-              <li class="list-row flex items-start justify-between gap-3">
+              <li
+                v-if="selectedContact && !isPrivateContact(selectedContact)"
+                class="list-row flex items-start justify-between gap-3"
+              >
                 <div class="font-medium">{{ t("config.remoteIm.unmuteKeywords") }}</div>
                 <div class="flex w-64 flex-col gap-2">
                   <input
@@ -653,7 +662,10 @@
                 </div>
               </li>
 
-              <li class="list-row flex items-center justify-between gap-3">
+              <li
+                v-if="selectedContact && !isPrivateContact(selectedContact)"
+                class="list-row flex items-center justify-between gap-3"
+              >
                 <div class="font-medium">{{ t("config.remoteIm.muteDuration") }}</div>
                 <div class="flex w-64 items-center gap-2">
                   <input
@@ -666,13 +678,15 @@
                 </div>
               </li>
 
-              <li class="list-row flex items-start justify-between gap-3">
+              <li
+                v-if="selectedContact && !isPrivateContact(selectedContact)"
+                class="list-row flex items-start justify-between gap-3"
+              >
                 <div class="font-medium">{{ t("config.remoteIm.responseStrategy") }}</div>
                 <div class="flex w-64 flex-col gap-2">
                   <select
                     class="select select-bordered select-sm w-full"
                     v-model="contactDraft.responseStrategy"
-                    :disabled="isPrivateContact(selectedContact)"
                   >
                     <option value="always_reply">{{ t("config.remoteIm.responseStrategyAlways") }}</option>
                     <option value="smart_judge">{{ t("config.remoteIm.responseStrategySmart") }}</option>
@@ -681,7 +695,10 @@
                 </div>
               </li>
 
-              <li class="list-row flex items-start justify-between gap-3">
+              <li
+                v-if="selectedContact && !isPrivateContact(selectedContact)"
+                class="list-row flex items-start justify-between gap-3"
+              >
                 <div class="font-medium">{{ t("config.remoteIm.responseGuidance") }}</div>
                 <div class="flex w-64 flex-col gap-2">
                   <textarea
@@ -695,7 +712,10 @@
                 </div>
               </li>
 
-              <li class="list-row flex items-center justify-between gap-3">
+              <li
+                v-if="selectedContact && !isPrivateContact(selectedContact)"
+                class="list-row flex items-center justify-between gap-3"
+              >
                 <div class="font-medium">{{ t("config.remoteIm.patienceExit") }}</div>
                 <div class="flex w-64 items-center gap-2">
                   <input
@@ -1205,7 +1225,7 @@ function buildContactDraftFromContact(item: RemoteImContact): ContactEditDraft {
     activationKeywordsText: item.activationKeywords.join(", "),
     muteKeywordsText: (Array.isArray(item.muteKeywords) ? item.muteKeywords : [t("config.remoteIm.defaultMuteKeyword")]).join(", "),
     unmuteKeywordsText: (Array.isArray(item.unmuteKeywords) ? item.unmuteKeywords : [t("config.remoteIm.defaultUnmuteKeyword")]).join(", "),
-    responseStrategy: contactResponseStrategy(item),
+    responseStrategy: normalizeResponseStrategy(item.responseStrategy),
     responseGuidance: String(item.responseGuidance || "").trim(),
     patienceSeconds: Math.max(0, Number(item.patienceSeconds || 60)),
     muteDurationSeconds: Math.max(0, Number(item.muteDurationSeconds || 600)),
@@ -2078,9 +2098,9 @@ async function saveContactDraft() {
       JSON.stringify(nextUnmuteKeywords) !== JSON.stringify(currentUnmuteKeywords);
     const nextActivationMode = normalizeActivationMode(draft.activationMode);
     const modeChanged = nextActivationMode !== normalizeActivationMode(item.activationMode || "never");
-    const nextResponseStrategy = isPrivateContact(item) ? "always_reply" : normalizeResponseStrategy(draft.responseStrategy);
+    const nextResponseStrategy = normalizeResponseStrategy(draft.responseStrategy);
     const responseStrategyChanged =
-      nextResponseStrategy !== contactResponseStrategy(item);
+      nextResponseStrategy !== normalizeResponseStrategy(item.responseStrategy);
     const nextResponseGuidance = String(draft.responseGuidance || "").trim();
     const currentResponseGuidance = String(item.responseGuidance || "").trim();
     const responseGuidanceChanged = nextResponseGuidance !== currentResponseGuidance;
