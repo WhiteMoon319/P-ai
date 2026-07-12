@@ -413,6 +413,9 @@ fn discard_message_store_migration_item(
 }
 
 fn refresh_message_store_migration_caches(state: &AppState) -> Result<(), String> {
+    // 这里只刷新普通会话消息仓库迁移相关缓存。
+    // 委托快照缓存只镜像当前委托目录型正文仓库；旧格式委托若需要升级，职责在迁移服务本身，
+    // 绝不能让运行期委托列表/快照路径为了观察旧格式变化而额外承担兼容或补刷逻辑。
     *state
         .cached_app_data
         .lock()

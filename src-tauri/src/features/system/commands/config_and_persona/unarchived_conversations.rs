@@ -1861,29 +1861,26 @@ fn list_delegate_conversations_inner(
             })
         })
         .collect::<Vec<_>>();
-    for conversation in delegate_persisted_conversation_summary_list(state)? {
-        let delegate_id = conversation
-            .delegate_id
-            .clone()
-            .unwrap_or_else(|| conversation.conversation_id.clone());
+    for snapshot in delegate_persisted_conversation_summary_list(state)? {
+        let delegate_id = snapshot.delegate_id.clone();
         if !seen_ids.insert(delegate_id.clone()) {
             continue;
         }
         summaries.push(DelegateConversationSummary {
-            conversation_id: conversation.conversation_id.clone(),
+            conversation_id: snapshot.conversation_id.clone(),
             title: delegate_display_title_from_id(
                 state,
                 &delegate_id,
                 None,
-                Some(&conversation.title),
+                Some(&snapshot.title),
             ),
-            updated_at: conversation.updated_at.clone(),
-            last_message_at: conversation.last_message_at.clone(),
-            message_count: conversation.message_count,
-            agent_id: conversation.agent_id.clone(),
+            updated_at: snapshot.updated_at.clone(),
+            last_message_at: snapshot.last_message_at.clone(),
+            message_count: snapshot.message_count,
+            agent_id: snapshot.target_agent_id.clone(),
             delegate_id: Some(delegate_id),
-            root_conversation_id: conversation.root_conversation_id.clone(),
-            archived_at: conversation.archived_at.clone(),
+            root_conversation_id: Some(snapshot.root_conversation_id.clone()),
+            archived_at: snapshot.archived_at.clone(),
         });
     }
     summaries.sort_by(|a, b| {
@@ -1929,12 +1926,12 @@ fn delegate_title_is_generic(value: &str) -> bool {
     )
 }
 
-fn delegate_display_title_from_entry(entry: &DelegateEntry) -> String {
-    let explicit_title = clean_delegate_display_title(&entry.title);
+fn delegate_display_title_parts(title: &str, goal: &str, todo: &str, why: &str) -> String {
+    let explicit_title = clean_delegate_display_title(title);
     if !delegate_title_is_generic(&explicit_title) {
         return explicit_title;
     }
-    [entry.goal.as_str(), entry.todo.as_str(), entry.why.as_str()]
+    [goal, todo, why]
     .iter()
     .map(|value| clean_delegate_display_title(value))
     .find(|value| !value.is_empty())
@@ -1947,14 +1944,23 @@ fn delegate_display_title_from_entry(entry: &DelegateEntry) -> String {
     })
 }
 
+fn delegate_display_title_from_snapshot(snapshot: &DelegateConversationSnapshot) -> String {
+    delegate_display_title_parts(
+        &snapshot.title,
+        &snapshot.goal,
+        &snapshot.todo,
+        &snapshot.why,
+    )
+}
+
 fn delegate_display_title_from_id(
     app_state: &AppState,
     delegate_id: &str,
     conversation: Option<&Conversation>,
     fallback_title: Option<&str>,
 ) -> String {
-    if let Ok(entry) = delegate_store_get_delegate(&app_state.data_path, delegate_id) {
-        let title = delegate_display_title_from_entry(&entry);
+    if let Ok(Some(snapshot)) = delegate_snapshot_cache_get(&app_state.data_path, delegate_id) {
+        let title = delegate_display_title_from_snapshot(&snapshot);
         if !title.trim().is_empty() {
             return title;
         }
@@ -2163,16 +2169,16 @@ fn conversation_delegate_status_from_entry(
     delegate_id: &str,
     active: bool,
 ) -> (String, String, Option<String>) {
-    match delegate_store_get_delegate(&app_state.data_path, delegate_id) {
-        Ok(entry) => {
-            let status = if active && entry.status == DELEGATE_STATUS_DELIVERED {
+    match delegate_snapshot_cache_get(&app_state.data_path, delegate_id) {
+        Ok(Some(snapshot)) => {
+            let status = if active && snapshot.status == DELEGATE_STATUS_DELIVERED {
                 "running".to_string()
             } else {
-                entry.status
+                snapshot.status
             };
-            (status, entry.created_at, entry.completed_at)
+            (status, snapshot.created_at, snapshot.completed_at)
         }
-        Err(_) => {
+        _ => {
             let status = if active {
                 "running".to_string()
             } else {
@@ -2204,15 +2210,35 @@ fn conversation_delegate_summary_from_thread(
     } else {
         stored_started_at
     };
+    let snapshot = delegate_snapshot_cache_get(&app_state.data_path, &delegate_id)?
+        .unwrap_or_else(|| DelegateConversationSnapshot {
+            delegate_id: delegate_id.clone(),
+            kind: "normal".to_string(),
+            conversation_id: thread.conversation.id.clone(),
+            root_conversation_id: thread.root_conversation_id.clone(),
+            title: thread.title.clone(),
+            why: String::new(),
+            goal: String::new(),
+            todo: String::new(),
+            target_agent_id: thread.target_agent_id.clone(),
+            status: status.clone(),
+            created_at: started_at.clone(),
+            updated_at: thread.conversation.updated_at.clone(),
+            completed_at: stored_completed_at.clone(),
+            archived_at: thread.archived_at.clone().or_else(|| thread.conversation.archived_at.clone()),
+            last_message_at: thread.conversation.messages.last().map(|message| message.created_at.clone()),
+            message_count: thread.conversation.messages.len(),
+            step_count: stats.request_count,
+            tool_call_count: stats.tool_call_count,
+            last_tool_name: stats.last_tool_name.clone(),
+            cumulative_usage: stats.cumulative_usage.clone(),
+        });
     let completed_at = stored_completed_at
         .or_else(|| thread.archived_at.clone())
         .or_else(|| thread.conversation.archived_at.clone());
     Ok(ConversationDelegateStatusSummary {
         delegate_id: delegate_id.clone(),
-        kind: delegate_store_get_delegate(&app_state.data_path, &delegate_id)
-            .ok()
-            .map(|entry| entry.kind)
-            .unwrap_or_else(|| "normal".to_string()),
+        kind: snapshot.kind.clone(),
         conversation_id: thread.conversation.id.clone(),
         root_conversation_id: thread.root_conversation_id.clone(),
         title: delegate_display_title_from_id(
@@ -2236,61 +2262,44 @@ fn conversation_delegate_summary_from_thread(
         output_token_count: stats.cumulative_usage.output_tokens,
         cache_read_token_count: stats.cumulative_usage.cache_read_tokens,
         cache_write_token_count: stats.cumulative_usage.cache_write_tokens,
-        target_agent_id: delegate_store_get_delegate(&app_state.data_path, &delegate_id)
-            .ok()
-            .map(|entry| entry.target_agent_id),
+        target_agent_id: Some(snapshot.target_agent_id.clone()),
     })
 }
 
-fn conversation_delegate_summary_from_persisted(
+fn conversation_delegate_summary_from_snapshot(
     app_state: &AppState,
-    conversation: &Conversation,
+    snapshot: &DelegateConversationSnapshot,
 ) -> Result<ConversationDelegateStatusSummary, String> {
-    let delegate_id = conversation
-        .delegate_id
-        .clone()
-        .unwrap_or_else(|| conversation.id.clone());
-    let stats = conversation_delegate_stats_from_conversation(conversation, &[]);
     let (status, stored_started_at, stored_completed_at) =
-        conversation_delegate_status_from_entry(app_state, &delegate_id, false);
+        conversation_delegate_status_from_entry(app_state, &snapshot.delegate_id, false);
     let started_at = if stored_started_at.trim().is_empty() {
-        conversation.created_at.clone()
+        snapshot.created_at.clone()
     } else {
         stored_started_at
     };
-    let completed_at = stored_completed_at.or_else(|| conversation.archived_at.clone());
+    let completed_at = stored_completed_at.or_else(|| snapshot.archived_at.clone());
     Ok(ConversationDelegateStatusSummary {
-        delegate_id: delegate_id.clone(),
-        kind: delegate_store_get_delegate(&app_state.data_path, &delegate_id)
-            .ok()
-            .map(|entry| entry.kind)
-            .unwrap_or_else(|| "normal".to_string()),
-        conversation_id: conversation.id.clone(),
-        root_conversation_id: conversation.root_conversation_id.clone().unwrap_or_default(),
-        title: delegate_display_title_from_id(
-            app_state,
-            conversation.delegate_id.as_deref().unwrap_or(&conversation.id),
-            Some(conversation),
-            Some(&conversation.title),
-        ),
+        delegate_id: snapshot.delegate_id.clone(),
+        kind: snapshot.kind.clone(),
+        conversation_id: snapshot.conversation_id.clone(),
+        root_conversation_id: snapshot.root_conversation_id.clone(),
+        title: delegate_display_title_from_snapshot(snapshot),
         status,
         active: false,
-        started_at: started_at.clone(),
-        updated_at: conversation.updated_at.clone(),
-        completed_at: completed_at.clone(),
-        archived_at: conversation.archived_at.clone(),
+        started_at,
+        updated_at: snapshot.updated_at.clone(),
+        completed_at,
+        archived_at: snapshot.archived_at.clone(),
         elapsed_ms: 0,
-        request_count: stats.request_count,
-        tool_call_count: stats.tool_call_count,
-        last_tool_name: stats.last_tool_name,
-        token_count: stats.token_count,
-        input_token_count: stats.cumulative_usage.input_tokens,
-        output_token_count: stats.cumulative_usage.output_tokens,
-        cache_read_token_count: stats.cumulative_usage.cache_read_tokens,
-        cache_write_token_count: stats.cumulative_usage.cache_write_tokens,
-        target_agent_id: delegate_store_get_delegate(&app_state.data_path, &delegate_id)
-            .ok()
-            .map(|entry| entry.target_agent_id),
+        request_count: snapshot.step_count,
+        tool_call_count: snapshot.tool_call_count,
+        last_tool_name: snapshot.last_tool_name.clone(),
+        token_count: conversation_cumulative_usage_weighted_tokens(&snapshot.cumulative_usage),
+        input_token_count: snapshot.cumulative_usage.input_tokens,
+        output_token_count: snapshot.cumulative_usage.output_tokens,
+        cache_read_token_count: snapshot.cumulative_usage.cache_read_tokens,
+        cache_write_token_count: snapshot.cumulative_usage.cache_write_tokens,
+        target_agent_id: Some(snapshot.target_agent_id.clone()),
     })
 }
 
@@ -2362,32 +2371,20 @@ fn list_conversation_delegate_statuses_inner(
         summaries.len()
     ));
     runtime_log_info(format!(
-        "[委托状态] 开始，任务=list_conversation_delegate_statuses，stage=persisted_conversations，root_conversation_id={}",
+        "[委托状态] 开始，任务=list_conversation_delegate_statuses，stage=persisted_snapshots，root_conversation_id={}",
         root_conversation_id
     ));
-    for conversation in delegate_persisted_conversation_list(state)? {
-        if conversation
-            .root_conversation_id
-            .as_deref()
-            .map(str::trim)
-            != Some(root_conversation_id)
-        {
+    for snapshot in delegate_persisted_snapshot_list_by_root(state, root_conversation_id)? {
+        if !seen_ids.insert(snapshot.delegate_id.clone()) {
             continue;
         }
-        let delegate_id = conversation
-            .delegate_id
-            .clone()
-            .unwrap_or_else(|| conversation.id.clone());
-        if !seen_ids.insert(delegate_id) {
-            continue;
-        }
-        summaries.push(conversation_delegate_summary_from_persisted(
+        summaries.push(conversation_delegate_summary_from_snapshot(
             state,
-            &conversation,
+            &snapshot,
         )?);
     }
     runtime_log_info(format!(
-        "[委托状态] 完成，任务=list_conversation_delegate_statuses，stage=persisted_conversations，root_conversation_id={}，summary_count={}",
+        "[委托状态] 完成，任务=list_conversation_delegate_statuses，stage=persisted_snapshots，root_conversation_id={}，summary_count={}",
         root_conversation_id,
         summaries.len()
     ));

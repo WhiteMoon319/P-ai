@@ -359,6 +359,9 @@ async fn run_deferred_setup(app_handle: AppHandle) {
     if let Err(err) = delegate_store_open(&app_state.data_path) {
         eprintln!("[启动-延迟] 初始化委托存储失败：{err}");
     } else {
+        if let Err(err) = delegate_snapshot_cache_ensure_loaded(&app_state.data_path) {
+            eprintln!("[启动-延迟] 初始化委托快照失败：{err}");
+        }
         match delegate_store_interrupt_unfinished_remote_replies(&app_state.data_path) {
             Ok(delegate_ids) => {
                 for delegate_id in delegate_ids {

@@ -72,11 +72,11 @@ fn conversation_delegate_status_summary_for_event(
                 .map(|thread| conversation_delegate_summary_from_thread(app_state, &thread, false))
         })
         .or_else(|| {
-            delegate_runtime_thread_conversation_get(app_state, delegate_id)
+            delegate_snapshot_cache_get(&app_state.data_path, delegate_id)
                 .ok()
                 .flatten()
-                .map(|conversation| {
-                    conversation_delegate_summary_from_persisted(app_state, &conversation)
+                .map(|snapshot| {
+                    conversation_delegate_summary_from_snapshot(app_state, &snapshot)
                 })
         })
         .and_then(Result::ok)?;
@@ -740,21 +740,8 @@ fn delegate_runtime_thread_conversation_delete_by_root(
             delegate_ids.insert(thread.delegate_id);
         }
     }
-    for conversation in delegate_persisted_conversation_list(app_state)? {
-        if conversation
-            .root_conversation_id
-            .as_deref()
-            .map(str::trim)
-            != Some(normalized_root_conversation_id)
-        {
-            continue;
-        }
-        delegate_ids.insert(
-            conversation
-                .delegate_id
-                .clone()
-                .unwrap_or_else(|| conversation.id.clone()),
-        );
+    for snapshot in delegate_persisted_snapshot_list_by_root(app_state, normalized_root_conversation_id)? {
+        delegate_ids.insert(snapshot.delegate_id);
     }
 
     let mut deleted_count = 0usize;
@@ -772,6 +759,13 @@ fn delegate_persisted_conversation_list(app_state: &AppState) -> Result<Vec<Conv
 
 fn delegate_persisted_conversation_summary_list(
     app_state: &AppState,
-) -> Result<Vec<DelegatePersistedConversationSummary>, String> {
-    delegate_conversation_store_summary_list(&app_state.data_path)
+) -> Result<Vec<DelegateConversationSnapshot>, String> {
+    delegate_snapshot_cache_list(&app_state.data_path)
+}
+
+fn delegate_persisted_snapshot_list_by_root(
+    app_state: &AppState,
+    root_conversation_id: &str,
+) -> Result<Vec<DelegateConversationSnapshot>, String> {
+    delegate_snapshot_cache_list_by_root(&app_state.data_path, root_conversation_id)
 }
