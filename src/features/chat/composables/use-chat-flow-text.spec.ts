@@ -14,6 +14,10 @@ describe("mergeAssistantText", () => {
     expect(mergeAssistantText("hello world", "hello there")).toBe("hello world");
   });
 
+  it("rejects a final snapshot that changes an already rendered block boundary", () => {
+    expect(mergeAssistantText("第一段\n\n第二段", "第一段\n第二段尾部")).toBe("第一段\n\n第二段");
+  });
+
   it("returns final when current is empty", () => {
     expect(mergeAssistantText("", "final")).toBe("final");
   });
