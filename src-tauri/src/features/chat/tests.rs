@@ -7727,6 +7727,18 @@
     }
 
     #[test]
+    fn delegate_session_helpers_should_handle_remote_reply_delegate_session() {
+        let session_id = "agent-a::conversation-sub::remote_reply_delegate:delegate-a";
+
+        assert_eq!(delegate_session_agent_id(session_id), "agent-a");
+        assert_eq!(
+            delegate_session_conversation_id(session_id).as_deref(),
+            Some("conversation-sub")
+        );
+        assert!(delegate_session_is_remote_reply_delegate(session_id));
+    }
+
+    #[test]
     fn inflight_chat_key_should_use_department_not_agent() {
         assert_eq!(
             inflight_chat_key("dept-a", Some("conversation-main")),

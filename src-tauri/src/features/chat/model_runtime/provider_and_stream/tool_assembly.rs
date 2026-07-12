@@ -352,10 +352,7 @@ fn runtime_tool_policy_from_session(
     let Ok(conversation_id) = goal_tool_conversation_id(tool_session_id) else {
         return RuntimeToolPolicy::from_conversation(None);
     };
-    let remote_im_reply_delegate = tool_session_id
-        .split("::")
-        .nth(2)
-        .is_some_and(|tag| tag.trim().starts_with("remote_reply_delegate:"));
+    let remote_im_reply_delegate = delegate_session_is_remote_reply_delegate(tool_session_id);
     if let Ok(conversation_meta) = conversation_service_v2().get_conversation_meta(state, &conversation_id) {
         return RuntimeToolPolicy {
             remote_im_contact_conversation: conversation_meta.conversation_kind.trim()

@@ -474,7 +474,8 @@ async fn builtin_delegate(
         Ok(value) => value,
         Err(err) => return Ok(delegate_failed_result(err)),
     };
-    let (_, session_agent_id, source_conversation_id) = delegate_parse_session_parts(session_id);
+    let session_agent_id = delegate_session_agent_id(session_id);
+    let source_conversation_id = delegate_session_conversation_id(session_id);
     let source_agent_id = source_agent_id
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -579,7 +580,8 @@ async fn delegate_execute_sync(
         Ok(value) => value,
         Err(err) => return Ok(delegate_failed_result(err)),
     };
-    let (_, session_agent_id, source_conversation_id) = delegate_parse_session_parts(session_id);
+    let session_agent_id = delegate_session_agent_id(session_id);
+    let source_conversation_id = delegate_session_conversation_id(session_id);
     let source_agent_id = source_agent_id
         .map(str::trim)
         .filter(|value| !value.is_empty())

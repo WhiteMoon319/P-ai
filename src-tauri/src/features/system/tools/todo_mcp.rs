@@ -166,10 +166,7 @@ fn build_todo_guide_block() -> String {
 }
 
 fn todo_target_conversation_id(session_id: &str) -> Result<String, String> {
-    let (_, _, conversation_id) = delegate_parse_session_parts(session_id);
-    conversation_id
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
+    delegate_session_conversation_id(session_id)
         .ok_or_else(|| "todo 工具缺少 conversation_id，无法定位当前会话".to_string())
 }
 

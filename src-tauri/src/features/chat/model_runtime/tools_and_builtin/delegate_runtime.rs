@@ -44,6 +44,26 @@ fn delegate_parse_session_parts(session_id: &str) -> (String, String, Option<Str
     }
 }
 
+fn delegate_session_conversation_id(session_id: &str) -> Option<String> {
+    let (_, _, conversation_id) = delegate_parse_session_parts(session_id);
+    conversation_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn delegate_session_agent_id(session_id: &str) -> String {
+    let (_, agent_id, _) = delegate_parse_session_parts(session_id);
+    agent_id
+}
+
+fn delegate_session_is_remote_reply_delegate(session_id: &str) -> bool {
+    let normalized = session_id.trim();
+    normalized
+        .split("::")
+        .nth(2)
+        .is_some_and(|tag| tag.trim().starts_with("remote_reply_delegate:"))
+}
+
 fn delegate_build_task_prompt_block(
     title: &str,
     why: &str,

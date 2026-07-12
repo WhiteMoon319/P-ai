@@ -115,13 +115,7 @@ fn terminal_workspace_path_from_conversation(
 
 fn terminal_session_conversation_id(session_id: &str) -> Option<String> {
     let normalized = normalize_terminal_tool_session_id(session_id);
-    let (_, conversation_id) = normalized.split_once("::")?;
-    let trimmed = conversation_id.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
+    delegate_session_conversation_id(&normalized)
 }
 
 fn terminal_session_conversation(state: &AppState, session_id: &str) -> Result<Option<Conversation>, String> {
@@ -1581,6 +1575,16 @@ mod terminal_workspace_tests {
         );
 
         let _ = std::fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn terminal_session_conversation_id_should_parse_remote_reply_delegate_session() {
+        let session_id =
+            "agent-a::conversation-sub::remote_reply_delegate:delegate-a".to_string();
+
+        let conversation_id = terminal_session_conversation_id(&session_id);
+
+        assert_eq!(conversation_id.as_deref(), Some("conversation-sub"));
     }
 
     #[test]

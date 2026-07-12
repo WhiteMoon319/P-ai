@@ -1,6 +1,6 @@
 fn session_tool_source_conversation_id(session_id: &str) -> Result<String, String> {
-    let (_, _, conversation_id) = delegate_parse_session_parts(session_id);
-    conversation_id.ok_or_else(|| "固定会话工具缺少 conversation_id".to_string())
+    delegate_session_conversation_id(session_id)
+        .ok_or_else(|| "固定会话工具缺少 conversation_id".to_string())
 }
 
 fn builtin_get_session(

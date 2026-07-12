@@ -252,10 +252,7 @@ fn goal_cancel_goal_inner(
 }
 
 fn goal_tool_conversation_id(session_id: &str) -> Result<String, String> {
-    let (_, _, conversation_id) = delegate_parse_session_parts(session_id);
-    conversation_id
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
+    delegate_session_conversation_id(session_id)
         .ok_or_else(|| "缺少当前工具调用会话 ID，无法操作 goal。".to_string())
 }
 

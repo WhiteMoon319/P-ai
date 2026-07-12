@@ -512,8 +512,8 @@ async fn remote_im_send_content_payload(
 }
 
 fn contact_tool_target_conversation_id(session_id: &str) -> Result<String, String> {
-    let (_, _, conversation_id) = delegate_parse_session_parts(session_id);
-    conversation_id.ok_or_else(|| "联系人专用工具缺少 conversation_id，无法定位当前联系人".to_string())
+    delegate_session_conversation_id(session_id)
+        .ok_or_else(|| "联系人专用工具缺少 conversation_id，无法定位当前联系人".to_string())
 }
 
 fn remote_im_bound_contact_context_from_runtime(

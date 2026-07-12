@@ -180,7 +180,7 @@ async fn builtin_task(
     executor_agent_id: &str,
     args: TaskToolArgsWire,
 ) -> Result<Value, String> {
-    let (_, _, bound_conversation_id) = delegate_parse_session_parts(session_id);
+    let bound_conversation_id = delegate_session_conversation_id(session_id);
     if let Some(conversation_id) = bound_conversation_id.as_deref() {
         let delegate_conversation = conversation_service_v2()
             .get_conversation_meta(app_state, conversation_id)

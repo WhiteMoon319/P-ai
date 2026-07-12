@@ -203,16 +203,7 @@ fn detect_read_media_type(path: &std::path::Path) -> Option<ReadMediaDetectedTyp
 }
 
 fn read_file_conversation_cache_key(session_id: &str) -> String {
-    session_id
-        .split_once("::")
-        .and_then(|(_, conversation_id)| {
-            let trimmed = conversation_id.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed.to_string())
-            }
-        })
+    delegate_session_conversation_id(session_id)
         .unwrap_or_else(|| session_id.trim().to_string())
 }
 
@@ -1772,6 +1763,17 @@ fn read_file_request_should_accept_new_and_legacy_argument_names() {
         assert_eq!(legacy.path, "E:\\docs\\b.md");
         assert_eq!(legacy.offset, Some(3));
         assert_eq!(legacy.limit, Some(7));
+}
+
+#[cfg(test)]
+#[test]
+fn read_file_conversation_cache_key_should_strip_remote_reply_delegate_runtime_tag() {
+        let session_id = "agent-a::conversation-sub::remote_reply_delegate:delegate-a";
+
+        assert_eq!(
+            read_file_conversation_cache_key(session_id),
+            "conversation-sub"
+        );
 }
 
 #[cfg(test)]

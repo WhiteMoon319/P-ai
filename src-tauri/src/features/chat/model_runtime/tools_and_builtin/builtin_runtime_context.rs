@@ -58,7 +58,8 @@ async fn builtin_organize_context(
         let app_config = state_read_config_cached(app_state)?;
         let selected_api = resolve_selected_api_config(&app_config, Some(api_config_id))
             .ok_or_else(|| "No API config configured. Please add one.".to_string())?;
-        let (_, session_agent_id, session_conversation_id) = delegate_parse_session_parts(session_id);
+        let session_agent_id = delegate_session_agent_id(session_id);
+        let session_conversation_id = delegate_session_conversation_id(session_id);
         let requested_agent_id = agent_id.trim();
         let effective_agent_id = if requested_agent_id.is_empty() {
             session_agent_id.trim().to_string()
