@@ -247,7 +247,7 @@
         <div ref="composerContainer" class="relative shrink-0 border-t border-base-300 bg-base-100 px-2 pt-2 pb-1.5">
           <div v-if="chatStatusBanner" class="pointer-events-none absolute inset-x-0 top-0 z-30 flex -translate-y-full justify-center px-2 pb-2 pt-0">
             <div
-              class="pointer-events-auto max-h-36 w-fit max-w-full overflow-hidden rounded-full border px-4 py-2 text-[12px] shadow-sm backdrop-blur-md"
+              class="pointer-events-auto max-h-36 w-fit max-w-full overflow-hidden rounded-box border px-4 py-2 text-[12px] shadow-sm backdrop-blur-md"
               :class="chatStatusBanner.tone === 'error' ? 'border-error/30 bg-error/12 text-error' : chatStatusBanner.text === t('chat.statusCompactingContext') ? 'border-info/25 bg-info/10 text-info' : 'border-base-300/70 bg-base-200/85 text-base-content'"
             >
               <div class="flex items-center gap-2 sm:gap-3">
