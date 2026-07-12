@@ -63,6 +63,8 @@ type UseConfigPersistenceOptions = {
   syncUserAliasFromPersona: () => void;
   preloadPersonaAvatars: () => Promise<void>;
   syncTrayIcon: (agentId?: string) => Promise<void>;
+  perfNow?: () => number;
+  perfLog?: (label: string, startedAt: number) => void;
 };
 
 function mapDepartmentConfig(item: unknown): AppConfig["departments"][number] {
@@ -731,11 +733,28 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
     options.suppressAutosave.value = true;
     options.loading.value = true;
     options.setStatus(options.t("status.loadingConfig"));
+    const perfNow = options.perfNow;
+    const perfLog = options.perfLog;
     try {
+      const tInvoke = perfNow?.();
       const snapshot = await invokeTauri<AppBootstrapSnapshot>("load_app_bootstrap_snapshot");
+      if (tInvoke !== undefined) perfLog?.("loadBootstrapSnapshot/invoke", tInvoke);
+
+      const tApplyConfig = perfNow?.();
       applyLoadedConfig(snapshot.config);
+      if (tApplyConfig !== undefined) perfLog?.("loadBootstrapSnapshot/applyConfig", tApplyConfig);
+
+      const tApplyPersonas = perfNow?.();
       applyLoadedPersonas(snapshot.agents);
+      if (tApplyPersonas !== undefined) perfLog?.("loadBootstrapSnapshot/applyPersonas", tApplyPersonas);
+
+      const tApplyChatSettings = perfNow?.();
       applyLoadedChatSettings(snapshot.chatSettings);
+      if (tApplyChatSettings !== undefined) {
+        perfLog?.("loadBootstrapSnapshot/applyChatSettings", tApplyChatSettings);
+      }
+
+      const tSnapshotJson = perfNow?.();
       lastChatSettingsJson = JSON.stringify({
         assistantDepartmentAgentId: options.assistantDepartmentAgentId.value,
         userAlias: options.userAlias.value,
@@ -752,8 +771,20 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
         sttApiConfigId: options.config.sttApiConfigId || null,
         sttAutoSend: !!options.config.sttAutoSend,
       });
+      if (tSnapshotJson !== undefined) {
+        perfLog?.("loadBootstrapSnapshot/snapshotJson", tSnapshotJson);
+      }
+
+      const tPreloadAvatars = perfNow?.();
       await options.preloadPersonaAvatars();
+      if (tPreloadAvatars !== undefined) {
+        perfLog?.("loadBootstrapSnapshot/preloadPersonaAvatars", tPreloadAvatars);
+      }
+
+      const tSyncTray = perfNow?.();
       await options.syncTrayIcon(options.assistantDepartmentAgentId.value);
+      if (tSyncTray !== undefined) perfLog?.("loadBootstrapSnapshot/syncTrayIcon", tSyncTray);
+
       options.setStatus(options.t("status.configLoaded"));
       return true;
     } catch (e) {

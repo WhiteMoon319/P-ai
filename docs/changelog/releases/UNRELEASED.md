@@ -10,6 +10,8 @@
 
 ## 维护
 
+- 维护（config）：`loadBootstrapSnapshot` 增加分段 PERF 日志，便于定位 bootstrap 刷新耗时落在 invoke / apply / 头像预热 / 托盘同步等哪一段。
+
 ## 修复
 
 - 修复（chat）：会话窗口状态/错误看板改用主题圆角 `rounded-box`，不再使用胶囊 `rounded-full`。

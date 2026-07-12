@@ -62,6 +62,8 @@ export function useChatServiceAssemblies(bindings: Record<string, any>) {
     syncUserAliasFromPersona: bindings.syncUserAliasFromPersona,
     preloadPersonaAvatars: bindings.preloadPersonaAvatars,
     syncTrayIcon: configRuntime.syncTrayIcon,
+    perfNow: bindings.perfNow,
+    perfLog: bindings.perfLog,
   });
   const configEditors = useConfigEditors({
     t: bindings.tr,
