@@ -22,6 +22,14 @@ const TRANSIENT_PROVIDER_META_KEYS = [
   "_stableRenderId",
 ];
 
+const AUTHORITATIVE_USAGE_PROVIDER_META_KEYS = [
+  "contextUsagePercent",
+  "contextUsageRatio",
+  "effectivePromptTokens",
+  "providerPromptTokens",
+  "contextWindowTokens",
+];
+
 export function useChatConversationMessageUtils(options: ConversationMessageUtilsOptions) {
   function isAssistantDraftMessage(message?: any): boolean {
     return String(message?.id || "").trim().startsWith(options.draftAssistantIdPrefix);
@@ -44,6 +52,21 @@ export function useChatConversationMessageUtils(options: ConversationMessageUtil
         delete providerMeta[key];
         changed = true;
       }
+    }
+    return changed ? { ...message, providerMeta } : message;
+  }
+
+  function mergeAuthoritativeUsageProviderMeta(message: any, incomingMessage: any): any {
+    const incomingProviderMeta = incomingMessage?.providerMeta;
+    if (!incomingProviderMeta || typeof incomingProviderMeta !== "object") return message;
+    const providerMeta = { ...(message?.providerMeta || {}) } as Record<string, unknown>;
+    let changed = false;
+    for (const key of AUTHORITATIVE_USAGE_PROVIDER_META_KEYS) {
+      if (!Object.prototype.hasOwnProperty.call(incomingProviderMeta, key)) continue;
+      const nextValue = (incomingProviderMeta as Record<string, unknown>)[key];
+      if (Object.is(providerMeta[key], nextValue)) continue;
+      providerMeta[key] = nextValue;
+      changed = true;
     }
     return changed ? { ...message, providerMeta } : message;
   }
@@ -101,10 +124,10 @@ export function useChatConversationMessageUtils(options: ConversationMessageUtil
             return [];
           }
           replaced = true;
-          // 本地已有可见内容时原样保留，禁止被远端同 id 覆盖。
+          // 本地已有可见内容时冻结正文，仅接收后端权威用量元数据。
           // 典型场景：stop 后 partial 落盘变长/变空，前台不应 1 秒后突然改画面。
           if (messageHasVisibleContent(message)) {
-            return [message];
+            return [mergeAuthoritativeUsageProviderMeta(message, incomingMessage)];
           }
           return [incomingMessage];
         });
@@ -186,10 +209,14 @@ export function useChatConversationMessageUtils(options: ConversationMessageUtil
       if (String(message?.id || "").trim() !== targetMessageId) {
         return message;
       }
-      // 本地已有可见内容时原样保留，禁止被远端同 id 覆盖。
+      // 本地已有可见内容时冻结正文，仅接收后端权威用量元数据。
       // 包含：空消息抹掉、以及 stop 后 partial 变长导致画面突增。
       if (messageHasVisibleContent(message)) {
-        return message;
+        const mergedMessage = mergeAuthoritativeUsageProviderMeta(message, nextMessage);
+        if (mergedMessage !== message) {
+          changed = true;
+        }
+        return mergedMessage;
       }
       changed = true;
       return nextMessage;

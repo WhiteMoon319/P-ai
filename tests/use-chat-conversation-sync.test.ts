@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ref, shallowRef } from "vue";
 import type { ChatMessage } from "../src/types/app";
 import { useChatConversationSync } from "../src/features/chat/composables/use-chat-conversation-sync";
+import { useChatConversationMessageUtils } from "../src/features/chat/composables/use-chat-conversation-message-utils";
 
 const hoisted = vi.hoisted(() => ({
   invokeTauriMock: vi.fn(),
@@ -105,5 +106,49 @@ describe("useChatConversationSync", () => {
     }, { preserveExistingHistory: true });
 
     expect(allMessages.value.map((message) => message.id)).toEqual([]);
+  });
+});
+
+describe("useChatConversationMessageUtils", () => {
+  const utils = useChatConversationMessageUtils({
+    draftAssistantIdPrefix: "__draft_assistant__:",
+    ensureConversationMessageIds: (messages) => messages,
+  });
+
+  const localMessage: ChatMessage = {
+    ...textMessage("assistant-1", "assistant", "打断时保留的正文"),
+    providerMeta: {
+      contextUsagePercent: 10,
+      contextUsageRatio: 0.1,
+      model: "local-model",
+    },
+  };
+  const incomingMessage: ChatMessage = {
+    ...textMessage("assistant-1", "assistant", "后端稍后落盘的更长正文"),
+    providerMeta: {
+      contextUsagePercent: 42,
+      contextUsageRatio: 0.42,
+      effectivePromptTokens: 420,
+      providerPromptTokens: 400,
+      contextWindowTokens: 1000,
+      model: "remote-model",
+    },
+  };
+
+  it.each([
+    ["mergeMessagesIntoTimeline", () => utils.mergeMessagesIntoTimeline([localMessage], [incomingMessage])],
+    ["replaceConversationMessage", () => utils.replaceConversationMessage([localMessage], incomingMessage)],
+  ])("keeps visible content but refreshes authoritative usage through %s", (_name, applyUpdate) => {
+    const [result] = applyUpdate();
+
+    expect(result.parts).toEqual(localMessage.parts);
+    expect(result.providerMeta).toMatchObject({
+      contextUsagePercent: 42,
+      contextUsageRatio: 0.42,
+      effectivePromptTokens: 420,
+      providerPromptTokens: 400,
+      contextWindowTokens: 1000,
+      model: "local-model",
+    });
   });
 });

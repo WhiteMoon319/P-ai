@@ -69,6 +69,16 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
   }
 
   function handleStreamingEvent(currentGen: number, parsed: AssistantDeltaEvent) {
+    if (parsed.kind === "context_usage_update") {
+      const p = readContextUsageUpdatePayload(parsed.message);
+      const activeConversationId = options.getConversationId ? options.getConversationId() : "";
+      if (p && (!activeConversationId || p.conversationId === activeConversationId)) {
+        if (options.contextUsagePreview) {
+          options.contextUsagePreview.value = p;
+        }
+      }
+      return;
+    }
     if (!currentGen) {
       return;
     }
@@ -83,20 +93,7 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
     if (currentRound.gen !== currentGen) {
       return;
     }
-    if (parsed.kind === "context_usage_update") {
-      const p = readContextUsageUpdatePayload(parsed.message);
-      const activeConversationId = options.getConversationId ? options.getConversationId() : "";
-      if (p && (!activeConversationId || p.conversationId === activeConversationId)) {
-        if (options.contextUsagePreview) {
-          options.contextUsagePreview.value = p;
-        }
-      }
-      return;
-    }
     if (parsed.kind === "round_completed") {
-      if (options.contextUsagePreview) {
-        options.contextUsagePreview.value = null;
-      }
       const p = readRoundCompletedPayload(parsed.message);
       const result = {
         assistantText: String(p?.assistantText || ""),

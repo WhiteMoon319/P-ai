@@ -1747,6 +1747,121 @@ describe("useChatFlow stream isolation", () => {
       "思维链1",
     ]);
   });
+
+  it("accepts context usage broadcasts after the foreground round is idle", async () => {
+    const contextUsagePreview = ref(null);
+    const flow = useChatFlow({
+      chatting: ref(false),
+      trimming: ref(false),
+      getConversationId: () => "conversation-1",
+      getSession: () => ({ apiConfigId: "api-1", agentId: "agent-1" }),
+      chatInput: ref(""),
+      clipboardImages: ref([]),
+      latestUserText: ref(""),
+      latestUserImages: ref([]),
+      latestAssistantText: ref(""),
+      toolStatusText: ref(""),
+      toolStatusState: ref(""),
+      contextUsagePreview,
+      chatErrorText: ref(""),
+      allMessages: shallowRef<ChatMessage[]>([]),
+      visibleMessageBlockCount: ref(0),
+      t: (key) => key,
+      formatRequestFailed: (error) => String(error),
+      removeBinaryPlaceholders: (text) => text,
+      invokeSendChatMessage: vi.fn(async () => acceptedSendResult()),
+      onReloadMessages: vi.fn(async () => {}),
+    });
+
+    await flow.handleExternalAssistantDelta({
+      conversationId: "conversation-1",
+      event: {
+        kind: "context_usage_update",
+        message: JSON.stringify({
+          conversationId: "conversation-1",
+          contextUsageRatio: 0.42,
+          contextUsagePercent: 42,
+          effectivePromptTokens: 420,
+          contextWindowTokens: 1000,
+        }),
+      },
+    });
+
+    expect(contextUsagePreview.value).toMatchObject({
+      conversationId: "conversation-1",
+      contextUsagePercent: 42,
+      effectivePromptTokens: 420,
+    });
+  });
+
+  it("keeps the latest context usage preview after the round completes", async () => {
+    const contextUsagePreview = ref(null);
+    type ChannelLike = {
+      emit: (event: AssistantDeltaEvent) => void;
+    };
+    let capturedChannel: ChannelLike | null = null;
+    const flow = useChatFlow({
+      chatting: ref(false),
+      trimming: ref(false),
+      getConversationId: () => "conversation-1",
+      getSession: () => ({ apiConfigId: "api-1", agentId: "agent-1" }),
+      chatInput: ref("new question"),
+      clipboardImages: ref([]),
+      latestUserText: ref(""),
+      latestUserImages: ref([]),
+      latestAssistantText: ref(""),
+      toolStatusText: ref(""),
+      toolStatusState: ref(""),
+      contextUsagePreview,
+      chatErrorText: ref(""),
+      allMessages: shallowRef<ChatMessage[]>([]),
+      visibleMessageBlockCount: ref(0),
+      t: (key) => key,
+      formatRequestFailed: (error) => String(error),
+      removeBinaryPlaceholders: (text) => text,
+      invokeSendChatMessage: ({ onDelta }) => {
+        capturedChannel = onDelta as unknown as ChannelLike;
+        return Promise.resolve(acceptedSendResult());
+      },
+      onReloadMessages: vi.fn(async () => {}),
+    });
+
+    void flow.sendChat();
+    await Promise.resolve();
+    capturedChannel!.emit({
+      kind: "history_flushed",
+      message: JSON.stringify({
+        conversationId: "conversation-1",
+        messageCount: 1,
+        activateAssistant: true,
+      }),
+    });
+    await flushAsyncSteps();
+    capturedChannel!.emit({
+      kind: "context_usage_update",
+      message: JSON.stringify({
+        conversationId: "conversation-1",
+        contextUsageRatio: 0.42,
+        contextUsagePercent: 42,
+        effectivePromptTokens: 420,
+        contextWindowTokens: 1000,
+      }),
+    });
+    capturedChannel!.emit({
+      kind: "round_completed",
+      message: JSON.stringify({
+        conversationId: "conversation-1",
+        assistantText: "answer",
+        assistantMessage: textMessage("assistant-1", "assistant", "answer"),
+      }),
+    });
+    await flushAsyncSteps();
+
+    expect(contextUsagePreview.value).toMatchObject({
+      conversationId: "conversation-1",
+      contextUsagePercent: 42,
+    });
+  });
 });
 
 describe("useChatRuntime force archive conversation sync", () => {
