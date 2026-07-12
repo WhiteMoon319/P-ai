@@ -1766,6 +1766,10 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.ecall-chat-scroll-container {
+  overflow-anchor: none;
+}
+
 .chat-jump-action-enter-active,
 .chat-jump-action-leave-active {
   transition: opacity 120ms ease-out, transform 120ms ease-out;
