@@ -84,7 +84,7 @@ import { useI18n } from "vue-i18n";
 import { Check, Copy, Maximize2, Wrench } from "@lucide/vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
-import { isAbsoluteLocalPath, normalizeLocalLinkHref } from "../utils/local-link";
+import { isAbsoluteLocalPath, normalizeLocalLinkHref, parseLocalFileReference } from "../utils/local-link";
 import { parseMarkdownBlocks, parseInlineSegments, normalizedTableRow, type MarkdownBlock, type InlineSegment } from "./parse-markdown";
 import { IncrementalMarkdownBlockParser } from "./incremental-markdown";
 import {
@@ -1104,13 +1104,20 @@ function renderSegments(
         continue;
       }
       const isExternalUrl = /^https?:\/\//i.test(href);
+      const localReference = isExternalUrl ? null : parseLocalFileReference(href);
+      const lineSuffix = localReference?.line
+        ? `:${localReference.line}${localReference.column ? `:${localReference.column}` : ""}`
+        : "";
+      const linkText = lineSuffix && !segment.text.trim().endsWith(lineSuffix)
+        ? `${segment.text}${lineSuffix}`
+        : segment.text;
       nodes.push(h("a", {
         key: `${keyPrefix}-a-${index}`,
         href: isExternalUrl ? href : "#",
         "data-href": isExternalUrl ? undefined : href,
         class: "ecall-md-link",
         ...(isExternalUrl ? { target: "_blank", rel: "noopener noreferrer" } : {}),
-      }, segment.text));
+      }, linkText));
       continue;
     }
     if (segment.type === "image") {

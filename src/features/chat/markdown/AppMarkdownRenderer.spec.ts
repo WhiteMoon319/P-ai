@@ -57,4 +57,10 @@ describe("AppMarkdownRenderer", () => {
     expect(html).toContain("前文");
     expect(html).toContain("后文");
   });
+
+  it("shows the target line for local file links", async () => {
+    const html = await renderMarkdown("[README.md](E:/github/easy_call_ai/README.md:57)");
+    expect(html).toContain(">README.md:57</a>");
+    expect(html).toContain("data-href=\"E:/github/easy_call_ai/README.md:57\"");
+  });
 });

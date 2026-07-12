@@ -1719,7 +1719,9 @@ async function handleAssistantLinkClick(event: MouseEvent) {
       return;
     }
     try {
-      if (canOpenInFileReader(localPath) || !fileExtensionFromPath(localPath)) { await openLocalFileInChatReader(localPath); }
+      if (canOpenInFileReader(localPath) || !fileExtensionFromPath(localPath)) {
+        await openLocalFileInChatReader(localPath, localReference?.line);
+      }
       else if (tauriRuntimeAvailable) { await invokeTauri("open_local_file_directory", { path: localPath }); }
       else { throw new Error(t("status.openLinkUnsupportedInWeb")); }
       linkOpenErrorText.value = "";
@@ -1737,14 +1739,14 @@ async function handleAssistantLinkClick(event: MouseEvent) {
   }
 }
 
-async function openLocalFileInChatReader(path: string) {
+async function openLocalFileInChatReader(path: string, line?: number) {
   emit("update:chatRightPanelMode", "reader");
   if (!props.initialToolReviewPanelOpen) {
     emit("toolReviewPanelOpenChange", true);
   }
   await nextTick();
   await nextTick();
-  await chatReaderPanelRef.value?.openPath(path);
+  await chatReaderPanelRef.value?.openPath(path, { targetLine: line });
 }
 
 // ==================== lifecycle ====================

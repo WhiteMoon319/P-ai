@@ -1744,7 +1744,24 @@ function reportFileReaderActionFailure(action: string, path: string, error: unkn
 
 // ==================== Public API ====================
 
-async function openPath(path: string, options: { reuseActiveTab?: boolean } = {}) {
+async function scrollActiveFileToLine(line: number) {
+  const tab = activeTab.value;
+  if (!tab || !Number.isFinite(line) || line < 1) return;
+  if (tab.kind === "markdown" && !tab.rawMode) {
+    tab.rawMode = true;
+    replaceTabState(tab);
+  }
+  await nextTick();
+  await nextTick();
+  const scroller = activeContentScroller();
+  if (!scroller) return;
+  const totalLines = Math.max(1, tab.totalLines || splitContentLines(tab.content).length);
+  const progress = Math.min(1, Math.max(0, (line - 1) / Math.max(1, totalLines - 1)));
+  scroller.scrollTop = progress * Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+  captureVisibleRangeContextNow({ force: true });
+}
+
+async function openPath(path: string, options: { reuseActiveTab?: boolean; targetLine?: number } = {}) {
   const normalizedPath = normalizePath(path);
   if (!normalizedPath) return;
   const shouldResetScrollAfterOpen = !sameNormalizedPath(activePath.value, normalizedPath);
@@ -1808,6 +1825,9 @@ async function openPath(path: string, options: { reuseActiveTab?: boolean } = {}
       void nextTick(() => captureVisibleRangeContextNow({ force: true }));
     }
     emit("openPath", resolvedPath);
+    if (options.targetLine) {
+      await scrollActiveFileToLine(options.targetLine);
+    }
   } catch (error) {
     tab.loaded = true;
     tab.loading = false;
