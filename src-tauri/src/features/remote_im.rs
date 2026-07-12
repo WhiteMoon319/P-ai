@@ -503,7 +503,6 @@ fn remote_im_reply_delegate_register(
         conversation_id,
         trigger_message,
         &session_info.agent_id,
-        &prompt_snapshot_messages,
     );
     let snapshot_trigger_message = prompt_snapshot_messages
         .iter_mut()
@@ -549,7 +548,6 @@ fn build_remote_im_reply_delegate_system_reminder(
     conversation_id: &str,
     trigger_message: &ChatMessage,
     agent_id: &str,
-    prompt_snapshot_messages: &[ChatMessage],
 ) -> String {
     const PROFILE_MEMORY_LIMIT: usize = 12;
     let profile = remote_im_message_canonical_user_id(trigger_message)
@@ -604,59 +602,99 @@ fn build_remote_im_reply_delegate_system_reminder(
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    let reply_ledger = build_remote_im_reply_ledger(
-        prompt_snapshot_messages,
-        trigger_message.id.as_str(),
-        agent_id,
-    );
+    let work_ledger = build_remote_im_assistant_work_ledger(state, contact_id, conversation_id)
+        .unwrap_or_else(|err| {
+            runtime_log_warn(format!(
+                "[助理工作账本] 降级，任务=生成应答系统提醒，contact_id={}，error={}",
+                contact_id, err
+            ));
+            "（无）".to_string()
+        });
     format!(
-        "[系统提醒]\n当前联系人画像：\n{}\n\n当前会话正在处理的应答委托：\n{}\n\n当前会话应答账本：\n{}",
+        "[系统提醒]\n当前联系人画像：\n{}\n\n当前会话正在处理的应答委托：\n{}\n\n助理工作账本：\n{}",
         profile,
         if other_delegates.is_empty() {
             "（无）".to_string()
         } else {
             other_delegates.join("\n")
         },
-        if reply_ledger.is_empty() {
-            "（无）".to_string()
-        } else {
-            reply_ledger.join("\n")
-        }
+        work_ledger
     )
 }
 
-fn build_remote_im_reply_ledger(
-    messages: &[ChatMessage],
-    trigger_message_id: &str,
-    agent_id: &str,
-) -> Vec<String> {
-    let mut pending_user_text: Option<String> = None;
-    let mut ledger = Vec::<String>::new();
-    for message in messages {
-        if message.id == trigger_message_id {
-            break;
-        }
-        match prompt_role_for_message(message, agent_id).as_deref() {
-            Some("user") => {
-                let text = remote_im_secretary_truncate_text(
-                    &render_message_content_for_model(message),
-                    100,
-                );
-                pending_user_text = (!text.trim().is_empty()).then_some(text);
-            }
-            Some("assistant") => {
-                if let Some(user_text) = pending_user_text.take() {
-                    let reply_text = remote_im_secretary_truncate_text(
-                        &render_message_content_for_model(message),
-                        100,
-                    );
-                    ledger.push(format!("- 已应答：\"{user_text}\" → \"{reply_text}\""));
-                }
-            }
-            _ => {}
-        }
+fn build_remote_im_assistant_work_ledger(
+    state: &AppState,
+    contact_id: &str,
+    conversation_id: &str,
+) -> Result<String, String> {
+    const LEDGER_LIMIT: usize = 12;
+    let expected_title = format!("远程应答 · {}", contact_id.trim());
+    let mut snapshots = delegate_persisted_snapshot_list_by_root(state, conversation_id)?
+        .into_iter()
+        .filter(|item| item.kind == "remote_im_reply" && item.title == expected_title)
+        .collect::<Vec<_>>();
+    snapshots.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+    snapshots.truncate(LEDGER_LIMIT);
+    let mut lines = Vec::new();
+    for snapshot in snapshots {
+        let thread = delegate_runtime_thread_get_any(state, &snapshot.delegate_id)?;
+        let messages = thread
+            .as_ref()
+            .map(|item| item.conversation.messages.as_slice())
+            .unwrap_or_default();
+        let task = messages
+            .iter()
+            .find(|message| message.role == "user")
+            .map(render_message_content_for_model)
+            .map(|text| remote_im_secretary_truncate_text(&text, 100))
+            .filter(|text| !text.trim().is_empty())
+            .unwrap_or_else(|| snapshot.goal.clone());
+        let terminal_reason = messages.iter().rev().find_map(|message| {
+            message
+                .provider_meta
+                .as_ref()?
+                .get("remote_im_work_ledger_terminal_reason")?
+                .as_str()
+                .map(ToOwned::to_owned)
+        });
+        let result = messages
+            .iter()
+            .rev()
+            .find(|message| {
+                message.role == "assistant"
+                    && message
+                        .provider_meta
+                        .as_ref()
+                        .and_then(|meta| meta.get("remote_im_work_ledger_terminal_reason"))
+                        .is_none()
+            })
+            .map(render_message_content_for_model)
+            .map(|text| remote_im_secretary_truncate_text(&text, 100))
+            .filter(|text| !text.trim().is_empty());
+        let status = match snapshot.status.as_str() {
+            DELEGATE_STATUS_COMPLETED => "已完成",
+            DELEGATE_STATUS_FAILED => "失败",
+            _ => "运行中",
+        };
+        let outcome = if snapshot.status == DELEGATE_STATUS_COMPLETED {
+            result.map(|text| format!("；结果：\"{text}\"")).unwrap_or_default()
+        } else if snapshot.status == DELEGATE_STATUS_FAILED {
+            terminal_reason
+                .map(|text| format!("；原因：{}", remote_im_secretary_truncate_text(&text, 100)))
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
+        lines.push(format!(
+            "- [{status}] 委托 ID：{}；任务：\"{}\"；开始：{}{}",
+            snapshot.delegate_id, task, snapshot.created_at, outcome
+        ));
     }
-    ledger
+    Ok(if lines.is_empty() {
+        "（无）".to_string()
+    } else {
+        lines.join("\n")
+    })
 }
 
 fn remote_im_reply_delegate_prompt_messages(
@@ -803,6 +841,31 @@ fn remote_im_reply_delegate_finalize(
     reason: &str,
 ) -> Result<(), String> {
     let archived_at = now_iso();
+    if let Err(err) = remote_im_reply_delegate_mirror_message(
+        state,
+        &runtime.delegate_id,
+        ChatMessage {
+            id: Uuid::new_v4().to_string(),
+            role: "system".to_string(),
+            created_at: archived_at.clone(),
+            speaker_agent_id: Some(runtime.session_agent_id.clone()),
+            parts: Vec::new(),
+            extra_text_blocks: Vec::new(),
+            provider_meta: Some(serde_json::json!({
+                "remote_im_work_ledger_terminal_reason": reason,
+                "remote_im_work_ledger_terminal_status": status,
+            })),
+            tool_call: None,
+            mcp_call: None,
+            meme_annotations: None,
+        },
+        Some("remote_im_work_ledger_terminal"),
+    ) {
+        runtime_log_warn(format!(
+            "[助理工作账本] 降级，任务=记录应答终态，delegate_id={}，error={}",
+            runtime.delegate_id, err
+        ));
+    }
     delegate_runtime_thread_archive(state, &runtime.delegate_id, &archived_at)?;
     delegate_store_update_status(&state.data_path, &runtime.delegate_id, status)?;
     if let Err(err) = emit_conversation_delegate_status_updated(
@@ -1057,8 +1120,33 @@ fn spawn_remote_im_departure_reflection_delegate(
     state: &AppState,
     contact_id: &str,
 ) -> Result<String, String> {
-    let (contact, context, assistant) =
+    let (contact, mut context, assistant) =
         remote_im_departure_reflection_context(state, contact_id)?;
+    let work_ledger = build_remote_im_assistant_work_ledger(state, contact_id, &context.id)
+        .unwrap_or_else(|err| {
+            runtime_log_warn(format!(
+                "[助理工作账本] 降级，任务=离场反思，contact_id={}，error={}",
+                contact_id, err
+            ));
+            "（无）".to_string()
+        });
+    context.messages.push(ChatMessage {
+        id: Uuid::new_v4().to_string(),
+        role: "system".to_string(),
+        created_at: now_iso(),
+        speaker_agent_id: Some(assistant.agent_id.clone()),
+        parts: vec![MessagePart::Text {
+            text: format!("[系统提醒]\n助理工作账本：\n{work_ledger}"),
+            reasoning_content: None,
+        }],
+        extra_text_blocks: Vec::new(),
+        provider_meta: Some(serde_json::json!({
+            "remote_im_assistant_work_ledger": true,
+        })),
+        tool_call: None,
+        mcp_call: None,
+        meme_annotations: None,
+    });
     let runtime_snapshot = load_runtime_organization_snapshot(state)?;
     let department = runtime_department_by_id(&runtime_snapshot, &assistant.department_id)
         .ok_or_else(|| format!("负责部门不存在：{}", assistant.department_id))?;
@@ -2043,7 +2131,7 @@ fn build_remote_im_secretary_prepared_prompt(
     current_assistant: &RemoteImConversationAssistantContext,
     history_messages: &[RemoteImSecretaryMessageDigest],
     new_batch_messages: &[RemoteImSecretaryMessageDigest],
-    active_delegate_ids: &[String],
+    work_ledger: &str,
 ) -> PreparedPrompt {
     let guidance = normalize_contact_response_guidance(&contact.response_guidance);
     let contact_name = remote_im_secretary_contact_display_name(contact);
@@ -2082,19 +2170,15 @@ JSON 只能包含字段：shouldReply, targetDelegateId, reason。"
 最近 7 条已处理历史消息\n{}\n\n\
 ================ 未处理边界 ================\n\
 以下是本次未处理新消息，按时间从旧到新排列，最后一条是最新消息\n{}\n\n\
-当前活跃远程应答委托：
+助理工作账本：
 {}
 
-如果新消息应继续某个活跃委托，targetDelegateId 必须填该委托 ID；如果是独立问题或没有活跃委托，targetDelegateId 留空。\n\n请直接输出 JSON。",
+如果新消息应继续账本中某个运行中委托，targetDelegateId 必须填该委托 ID；如果是独立问题或没有运行中委托，targetDelegateId 留空。\n\n请直接输出 JSON。",
             department_name,
             agent_name,
             remote_im_secretary_messages_to_text(history_messages, false),
             remote_im_secretary_messages_to_text(new_batch_messages, true),
-            if active_delegate_ids.is_empty() {
-                "（无）".to_string()
-            } else {
-                active_delegate_ids.join("\n")
-            },
+            work_ledger,
         ),
         latest_user_meta_text: String::new(),
         latest_user_extra_text: String::new(),
@@ -2139,6 +2223,7 @@ async fn run_remote_im_secretary_decision(
     current_assistant: &RemoteImConversationAssistantContext,
     history_messages: &[RemoteImSecretaryMessageDigest],
     new_batch_messages: &[RemoteImSecretaryMessageDigest],
+    work_ledger: &str,
     active_delegate_ids: &[String],
 ) -> Result<RemoteImSecretaryDecision, String> {
     if effective_remote_im_contact_response_strategy(contact) == "always_reply" {
@@ -2172,7 +2257,7 @@ async fn run_remote_im_secretary_decision(
         current_assistant,
         history_messages,
         new_batch_messages,
-        active_delegate_ids,
+        work_ledger,
     );
     let request_text = prepared_prompt_to_fast_request_text(&prepared);
     let record_conversation_id = contact

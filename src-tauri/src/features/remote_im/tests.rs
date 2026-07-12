@@ -69,6 +69,89 @@
     }
 
     #[test]
+    fn assistant_work_ledger_should_project_completed_remote_reply_delegate() {
+        let state = remote_im_test_state();
+        let mut root_conversation = build_conversation_record(
+            "",
+            "agent-a",
+            "department-a",
+            "远程联系人会话",
+            CONVERSATION_KIND_REMOTE_IM_CONTACT,
+            None,
+            None,
+        );
+        root_conversation.id = "conversation-a".to_string();
+        state_write_conversation_cached(&state, &root_conversation).expect("write root conversation");
+        let delegate = delegate_store_create_delegate(
+            &state.data_path,
+            &DelegateCreateInput {
+                kind: "remote_im_reply".to_string(),
+                conversation_id: "conversation-a".to_string(),
+                parent_delegate_id: None,
+                source_department_id: "department-a".to_string(),
+                target_department_id: "department-a".to_string(),
+                source_agent_id: "agent-a".to_string(),
+                target_agent_id: "agent-a".to_string(),
+                title: "远程应答 · contact-a".to_string(),
+                why: "远程联系人消息触发应答".to_string(),
+                goal: "处理报价问题".to_string(),
+                todo: "生成并发送远程应答".to_string(),
+                notify_assistant_when_done: false,
+                call_stack: Vec::new(),
+            },
+        )
+        .expect("create delegate");
+        delegate_runtime_thread_create(&state, &delegate, "", None, None)
+            .expect("create delegate thread");
+        let message = |role: &str, text: &str| ChatMessage {
+            id: Uuid::new_v4().to_string(),
+            role: role.to_string(),
+            created_at: now_iso(),
+            speaker_agent_id: (role == "assistant").then(|| "agent-a".to_string()),
+            parts: vec![MessagePart::Text {
+                text: text.to_string(),
+                reasoning_content: None,
+            }],
+            extra_text_blocks: Vec::new(),
+            provider_meta: None,
+            tool_call: None,
+            mcp_call: None,
+            meme_annotations: None,
+        };
+        remote_im_reply_delegate_mirror_message(
+            &state,
+            &delegate.delegate_id,
+            message("user", "报价是多少"),
+            None,
+        )
+        .expect("mirror user");
+        remote_im_reply_delegate_mirror_message(
+            &state,
+            &delegate.delegate_id,
+            message("assistant", "报价是一百元"),
+            None,
+        )
+        .expect("mirror assistant");
+        delegate_store_update_status(
+            &state.data_path,
+            &delegate.delegate_id,
+            DELEGATE_STATUS_COMPLETED,
+        )
+        .expect("complete delegate");
+
+        let ledger = build_remote_im_assistant_work_ledger(
+            &state,
+            "contact-a",
+            "conversation-a",
+        )
+        .expect("build ledger");
+        assert!(ledger.contains("[已完成]"));
+        assert!(ledger.contains(&delegate.delegate_id));
+        assert!(ledger.contains("报价是多少"));
+        assert!(ledger.contains("报价是一百元"));
+    }
+
+    #[test]
     fn create_pending_event_should_guide_only_activated_private_messages() {
         let sender = |remote_contact_type: &str| RemoteImMessageSource {
             channel_id: "channel-a".to_string(),
@@ -1702,33 +1785,6 @@
     }
 
     #[test]
-    fn remote_im_reply_ledger_should_only_include_completed_pairs_before_trigger() {
-        let mut answered_user = remote_im_test_group_user_message("user-a");
-        answered_user.parts = vec![MessagePart::Text {
-            text: "上一句".to_string(),
-            reasoning_content: None,
-        }];
-        let mut assistant = remote_im_test_group_user_message("assistant");
-        assistant.role = "assistant".to_string();
-        assistant.speaker_agent_id = Some("agent-a".to_string());
-        assistant.parts = vec![MessagePart::Text {
-            text: "已经回答".to_string(),
-            reasoning_content: None,
-        }];
-        let trigger = remote_im_test_group_user_message("user-a");
-
-        assert_eq!(
-            build_remote_im_reply_ledger(
-                &[answered_user, assistant, trigger.clone()],
-                &trigger.id,
-                "agent-a",
-            ),
-            vec!["- 已应答：\"上一句\" → \"已经回答\""]
-        );
-    }
-
-    #[test]
-    #[test]
     fn build_remote_im_secretary_prepared_prompt_should_include_boundary_and_latest_marker() {
         let mut contact = remote_im_test_contact("contact-a", "conversation-a");
         contact.remote_contact_type = "group".to_string();
@@ -1766,7 +1822,7 @@
             &current_assistant,
             &history_messages,
             &new_batch_messages,
-            &[],
+            "- [运行中] 委托 ID：delegate-a；任务：\"交期确认\"",
         );
 
         assert!(prompt.latest_user_text.contains("当前应答部门："));
@@ -1781,6 +1837,8 @@
             .latest_user_text
             .contains("================ 未处理边界 ================"));
         assert!(prompt.latest_user_text.contains("最后一条是最新消息"));
+        assert!(prompt.latest_user_text.contains("助理工作账本："));
+        assert!(prompt.latest_user_text.contains("委托 ID：delegate-a"));
         assert!(prompt
             .latest_user_text
             .contains("[群友 张三/user-7](2026-06-28 10:03:00)（最新）：老板现在就等结论"));

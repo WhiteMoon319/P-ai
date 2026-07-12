@@ -2443,13 +2443,23 @@ async fn process_persisted_remote_im_events_individually(
             scheduler_agents,
             &current_assistant,
         );
-        let active_delegate_ids = remote_im_reply_delegate_active_ids_for_contact(state, &contact.id)?;
+        let work_ledger = build_remote_im_assistant_work_ledger(state, &contact.id, conversation_id)
+            .unwrap_or_else(|err| {
+                runtime_log_warn(format!(
+                    "[助理工作账本] 降级，任务=秘书单事件判断，contact_id={}，error={}",
+                    contact.id, err
+                ));
+                "（无）".to_string()
+            });
+        let active_delegate_ids =
+            remote_im_reply_delegate_active_ids_for_contact(state, &contact.id)?;
         let decision = match run_remote_im_secretary_decision(
             state,
             &contact,
             &current_assistant,
             &secretary_recent_history,
             &secretary_current_messages,
+            &work_ledger,
             &active_delegate_ids,
         )
         .await
@@ -3037,6 +3047,18 @@ async fn process_conversation_batch(
                     &scheduler_agents,
                     &current_assistant,
                 );
+                let work_ledger = build_remote_im_assistant_work_ledger(
+                    state,
+                    &contact.id,
+                    &conversation_id,
+                )
+                .unwrap_or_else(|err| {
+                    runtime_log_warn(format!(
+                        "[助理工作账本] 降级，任务=秘书批次判断，contact_id={}，error={}",
+                        contact.id, err
+                    ));
+                    "（无）".to_string()
+                });
                 let active_remote_reply_delegate_ids =
                     remote_im_reply_delegate_active_ids_for_contact(state, &contact.id)?;
                 let decision = match run_remote_im_secretary_decision(
@@ -3045,6 +3067,7 @@ async fn process_conversation_batch(
                     &current_assistant,
                     &secretary_recent_history,
                     &secretary_new_batch_messages,
+                    &work_ledger,
                     &active_remote_reply_delegate_ids,
                 )
                 .await
