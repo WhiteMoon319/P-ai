@@ -45,6 +45,13 @@ function pickPathFromRecord(data: Record<string, unknown>): string {
   return "";
 }
 
+function readToolOffset(data: Record<string, unknown>): number | undefined {
+  const raw = data.offset ?? data.start;
+  const parsed = typeof raw === "number" ? raw : Number.parseInt(String(raw ?? ""), 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return undefined;
+  return Math.floor(parsed);
+}
+
 /**
  * 从工具参数中提取首个可打开的文件路径。
  * 仅用于预览展示/点击打开，不改消息语义。
@@ -65,7 +72,11 @@ export function extractToolcallFilePath(toolName: string, argsText: string): str
       return looksLikeLocalPath(parsed) ? (normalizeLocalLinkHref(parsed) || parsed.trim()) : "";
     }
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return pickPathFromRecord(parsed as Record<string, unknown>);
+      const record = parsed as Record<string, unknown>;
+      const path = pickPathFromRecord(record);
+      if (!path) return "";
+      const offset = name === "read" || name === "read_file" ? readToolOffset(record) : undefined;
+      return offset ? `${path}:${offset}` : path;
     }
   } catch {
     if (looksLikeLocalPath(text)) {

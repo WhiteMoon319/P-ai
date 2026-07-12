@@ -6,7 +6,14 @@ describe("extractToolcallFilePath", () => {
     expect(extractToolcallFilePath("read", JSON.stringify({
       path: "E:\\\\github\\\\easy_call_ai\\\\src\\\\a.ts",
       offset: 150,
-    }))).toMatch(/easy_call_ai[\\/]+src[\\/]+a\.ts$/i);
+    }))).toMatch(/easy_call_ai[\\/]+src[\\/]+a\.ts:150$/i);
+  });
+
+  it("does not use read limit as a target line", () => {
+    expect(extractToolcallFilePath("read", JSON.stringify({
+      path: "E:/repo/file.ts",
+      limit: 80,
+    }))).toBe("E:/repo/file.ts");
   });
 
   it("reads absolute_path variants", () => {
