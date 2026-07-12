@@ -37,6 +37,8 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
   let pendingVirtualResizeFrame = 0;
   const pendingVirtualResizeElements = new Set<HTMLElement>();
   let virtualItemResizeObserver: ResizeObserver | null = null;
+  let completionLayoutGuardActive = false;
+  let completionLayoutGuardFrame = 0;
 
   const initialBottomOffset = ref(0);
   let conversationVirtualizerResetRequest = 0;
@@ -102,7 +104,7 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     // -> _scrollToOffset -> scrollToFn，把 scrollTop 连续往下补，维持距底部固定偏移。
     // 这会让聊天窗口在流式期间“自己往下走”。这里仅屏蔽 adjustments 驱动的
     // 底层修正滚动，不影响手动滚动或显式的 scrollToBottom 路径。
-    if (chatStreamingActive() && Math.round(Number(options.adjustments || 0)) !== 0) {
+    if ((chatStreamingActive() || completionLayoutGuardActive) && Math.round(Number(options.adjustments || 0)) !== 0) {
       return;
     }
     scrollEl.scrollTo({
@@ -195,6 +197,28 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       latestOwnTailContentHeight: Math.round(latestOwnTailContentHeight.value),
     };
   });
+
+  watch(
+    () => chatStreamingActive(),
+    (isStreaming, wasStreaming) => {
+      if (!wasStreaming || isStreaming) return;
+      const scrollEl = scrollContainer.value;
+      if (!scrollEl || typeof window === "undefined") return;
+      const preservedScrollTop = scrollEl.scrollTop;
+      completionLayoutGuardActive = true;
+      if (completionLayoutGuardFrame) {
+        window.cancelAnimationFrame(completionLayoutGuardFrame);
+      }
+      completionLayoutGuardFrame = window.requestAnimationFrame(() => {
+        completionLayoutGuardFrame = window.requestAnimationFrame(() => {
+          completionLayoutGuardFrame = 0;
+          scrollEl.scrollTop = preservedScrollTop;
+          completionLayoutGuardActive = false;
+          scrollbarRef.value?.updateThumb();
+        });
+      });
+    },
+  );
 
   // ==================== helpers ====================
 
@@ -427,6 +451,11 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
   );
 
   onBeforeUnmount(() => {
+    if (completionLayoutGuardFrame && typeof window !== "undefined") {
+      window.cancelAnimationFrame(completionLayoutGuardFrame);
+      completionLayoutGuardFrame = 0;
+    }
+    completionLayoutGuardActive = false;
     conversationVirtualizerResetRequest += 1;
     pendingConversationBottomInitializationId = "";
     virtualItemResizeObserver?.disconnect();
