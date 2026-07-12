@@ -258,7 +258,7 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
   }
 
   async function handleRecallTurn(payload: { turnId: string }) {
-    console.info("[会话撤回] 点击撤回", {
+    console.debug("[会话撤回] 点击撤回", {
       turnId: payload?.turnId,
       chatting: options.chatting.value,
       trimming: options.trimming.value,
@@ -266,12 +266,12 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
       rewindInFlight,
     });
     if (rewindInFlight) {
-      console.info("[会话撤回] 跳过：已有撤回流程正在进行", { turnId: payload?.turnId });
+      console.warn("[会话撤回] 跳过：已有撤回流程正在进行", { turnId: payload?.turnId });
       return;
     }
     if (options.chatting.value || options.trimming.value || options.compactingConversation.value) {
       const message = t('dialogs.rewind.failedBusy');
-      console.info("[会话撤回] 失败：当前会话处于忙碌状态", {
+      console.error("[会话撤回] 失败：当前会话处于忙碌状态", {
         turnId: payload?.turnId,
         chatting: options.chatting.value,
         trimming: options.trimming.value,
@@ -304,7 +304,7 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
         turnId: payload.turnId,
         targetUserMessageId: targetMessageId,
       });
-      console.info("[会话撤回] 弹窗选择结果", {
+      console.debug("[会话撤回] 弹窗选择结果", {
         mode,
         turnId: payload.turnId,
         targetMessageId,
@@ -334,7 +334,7 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
       options.selectedMentions.value = extractRecallableMentions(recalledMessage);
       options.clipboardImages.value = await extractRecallableImages(recalledMessage);
       options.queuedAttachmentNotices.value = extractRecallableAttachmentNotices(recalledMessage);
-      console.info("[会话撤回] 已回填输入框", {
+      console.debug("[会话撤回] 已回填输入框", {
         textLength: options.chatInput.value.length,
         mentionCount: options.selectedMentions.value.length,
         imageCount: options.clipboardImages.value.length,
@@ -356,7 +356,7 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
 
   async function handleRegenerateTurn(payload: { turnId: string }) {
     if (rewindInFlight) {
-      console.info("[重新生成] 跳过：已有撤回/重新生成流程正在进行", { turnId: payload?.turnId });
+      console.warn("[重新生成] 跳过：已有撤回/重新生成流程正在进行", { turnId: payload?.turnId });
       return;
     }
     if (options.chatting.value || options.trimming.value || options.compactingConversation.value) {

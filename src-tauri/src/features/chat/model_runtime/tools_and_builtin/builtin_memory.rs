@@ -317,7 +317,7 @@ fn upsert_memories(
             "result.id=None"
         };
         let id_text = result.id.as_deref().unwrap_or("none");
-        eprintln!(
+        runtime_log_info(format!(
             "[简单记忆回灌] 任务名=简单记忆回灌 状态=完成 触发条件={} id={} memory_type={} tags={} judgment_len={} tags_count={} 耗时毫秒={}",
             trigger,
             id_text,
@@ -326,7 +326,7 @@ fn upsert_memories(
             draft.judgment.chars().count(),
             draft.tags.len(),
             elapsed_ms
-        );
+        ));
     }
     Ok((results, total_memories))
 }
@@ -606,13 +606,13 @@ fn builtin_memory_save(
         .filter_map(|source_id| source_display_map.get(source_id).cloned())
         .collect::<Vec<_>>();
     if memory_contains_sensitive(&draft.judgment, &draft.tags) {
-        eprintln!(
+        runtime_log_warn(format!(
             "[简单记忆回灌] 任务名=简单记忆回灌 状态=跳过 触发条件=敏感内容检测 id=none memory_type={} tags={} judgment_len={} tags_count={} 耗时毫秒=0",
             draft.memory_type,
             draft.tags.join(","),
             draft.judgment.chars().count(),
             draft.tags.len()
-        );
+        ));
         return Ok(serde_json::json!({
           "ok": false,
           "action": action,

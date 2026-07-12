@@ -514,7 +514,7 @@ async fn invoke_model_with_policy(
         && provider_system_message_user_fallback(app_state, &resolved_api.base_url)
         && move_system_preamble_to_user_prompt(&mut prepared)
     {
-        runtime_log_info(format!(
+        runtime_log_warn(format!(
             "[推理] key={}, scene={} 已在本次运行内启用 system->user 降级，当前回合直接改写提示词",
             stream_cache_key, policy.scene
         ));
@@ -581,7 +581,7 @@ async fn invoke_model_with_policy(
             if !move_system_preamble_to_user_prompt(&mut fallback) {
                 Err(err)
             } else {
-                runtime_log_info(format!(
+                runtime_log_warn(format!(
                     "[推理] 检测到上游不支持 system message，已在本次运行内切换 system->user 降级重试: key={}, scene={}, err={}",
                     stream_cache_key, policy.scene, err
                 ));
@@ -616,7 +616,7 @@ async fn invoke_model_with_policy(
                     stream_cache_key, policy.scene, mark_err
                 ));
             }
-            runtime_log_info(format!(
+            runtime_log_error(format!(
                 "[推理] 流式失败，已在本次运行内切换为非流式: key={}, scene={}, err={}",
                 stream_cache_key, policy.scene, err
             ));

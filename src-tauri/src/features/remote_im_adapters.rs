@@ -228,14 +228,14 @@ fn remote_im_is_dingtalk_private_target_likely_conversation_id(remote_contact_id
 }
 
 fn remote_im_log(level: &str, event: &str, fields: Value) {
-    eprintln!(
+    runtime_log_info(format!(
         "{}",
         serde_json::json!({
             "level": level,
             "event": event,
             "fields": fields
         })
-    );
+    ));
 }
 
 include!("remote_im/feishu_sdk.rs");

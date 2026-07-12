@@ -1762,7 +1762,7 @@ mod terminal_exec_tests {
 
     async fn verify_default_workspace_skip_for_shell(kind: &str) -> Result<(), String> {
         let Some(shell) = shell_candidate_by_kind(kind) else {
-            eprintln!("[TEST] skip shell kind={kind}: not available on this machine");
+            runtime_log_warn(format!("[测试] 跳过 Shell，类型={kind}: 当前设备不可用"));
             return Ok(());
         };
 
@@ -1813,7 +1813,7 @@ mod terminal_exec_tests {
 
     async fn verify_dev_null_read_command_for_shell(kind: &str) -> Result<(), String> {
         let Some(shell) = shell_candidate_by_kind(kind) else {
-            eprintln!("[TEST] skip shell kind={kind}: not available on this machine");
+            runtime_log_warn(format!("[测试] 跳过 Shell，类型={kind}: 当前设备不可用"));
             return Ok(());
         };
 
@@ -2441,7 +2441,7 @@ mod terminal_exec_tests {
     #[tokio::test]
     async fn shell_exec_result_should_not_expose_session_id() -> Result<(), String> {
         let Some(shell) = shell_candidate_by_kind("git-bash") else {
-            eprintln!("[TEST] skip shell kind=git-bash: not available on this machine");
+            runtime_log_warn(format!("[测试] 跳过 Shell，类型=git-bash: 当前设备不可用"));
             return Ok(());
         };
         let root = std::env::temp_dir().join(format!("eca-terminal-no-session-id-{}", Uuid::new_v4()));

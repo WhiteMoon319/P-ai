@@ -105,10 +105,10 @@ fn lock_message_store_index_cache(
     std::collections::HashMap<PathBuf, CachedMessageStoreIndexFile>,
 > {
     message_store_index_cache().lock().unwrap_or_else(|poison| {
-        eprintln!(
+        runtime_log_info(format!(
             "[消息存储] 消息索引缓存锁已污染，继续使用内部状态，error={:?}",
             poison
-        );
+        ));
         poison.into_inner()
     })
 }

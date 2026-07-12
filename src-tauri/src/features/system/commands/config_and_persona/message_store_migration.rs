@@ -7,10 +7,10 @@ fn message_store_migration_lock() -> &'static std::sync::Mutex<()> {
 
 fn lock_message_store_migration() -> std::sync::MutexGuard<'static, ()> {
     message_store_migration_lock().lock().unwrap_or_else(|poison| {
-        eprintln!(
+        runtime_log_info(format!(
             "[消息存储迁移] 迁移锁已污染，继续串行执行恢复，error={:?}",
             poison
-        );
+        ));
         poison.into_inner()
     })
 }
@@ -69,10 +69,10 @@ fn emit_message_store_migration_progress(
     payload: MessageStoreMigrationProgressPayload,
 ) {
     if let Err(err) = app.emit(MESSAGE_STORE_MIGRATION_PROGRESS_EVENT, payload) {
-        eprintln!(
+        runtime_log_error(format!(
             "[消息存储迁移] 进度事件发送失败：event={}，error={:?}",
             MESSAGE_STORE_MIGRATION_PROGRESS_EVENT, err
-        );
+        ));
     }
 }
 
@@ -336,10 +336,10 @@ fn record_data_migration_current_version(state: &AppState) -> Result<(), String>
     }
     runtime.message_store_migration_version = DATA_MIGRATION_CURRENT_VERSION;
     state_write_runtime_state_cached(state, &runtime)?;
-    eprintln!(
+    runtime_log_info(format!(
         "[消息存储迁移] 完成 task=record_message_store_migration_current_version version={}",
         DATA_MIGRATION_CURRENT_VERSION
-    );
+    ));
     Ok(())
 }
 
@@ -404,11 +404,11 @@ fn discard_message_store_migration_item(
         changed = true;
     }
     changed |= delete_conversation_shard(&state.data_path, conversation_id)?;
-    eprintln!(
+    runtime_log_error(format!(
         "[消息存储迁移] 抛弃异常会话：conversation_id={}，mode=delete，reason={}",
         conversation_id,
         item.reason.as_deref().unwrap_or("未提供原因")
-    );
+    ));
     Ok(changed)
 }
 

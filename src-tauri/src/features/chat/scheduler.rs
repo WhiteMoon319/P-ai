@@ -216,7 +216,7 @@ fn lock_conversation_runtime_slots(
     match state.conversation_runtime_slots.lock() {
         Ok(guard) => Ok(guard),
         Err(poisoned) => {
-            eprintln!("[聊天调度] 警告: conversation_runtime_slots 锁已 poison，正在继续恢复使用");
+            runtime_log_info(format!("[聊天调度] 警告: conversation_runtime_slots 锁已 poison，正在继续恢复使用"));
             Ok(poisoned.into_inner())
         }
     }
@@ -228,9 +228,9 @@ fn lock_conversation_processing_claims(
     match state.conversation_processing_claims.lock() {
         Ok(guard) => Ok(guard),
         Err(poisoned) => {
-            eprintln!(
+            runtime_log_info(format!(
                 "[聊天调度] 警告: conversation_processing_claims 锁已 poison，正在继续恢复使用"
-            );
+            ));
             Ok(poisoned.into_inner())
         }
     }
@@ -402,10 +402,10 @@ pub(crate) fn recall_queue_event(
     }
     drop(slots);
     if removed.is_some() {
-        eprintln!(
+        runtime_log_info(format!(
             "[聊天调度] 队列消息退回输入框: id={}, queue_len={}",
             event_id, remaining_queue_len
-        );
+        ));
         emit_chat_queue_snapshot(state);
         complete_pending_chat_events_with_error(
             state,
@@ -497,10 +497,10 @@ pub(crate) fn clear_conversation_queue(
         .collect::<Vec<_>>();
     drop(slots);
     if removed_count > 0 {
-        eprintln!(
+        runtime_log_info(format!(
             "[聊天调度] 清空会话队列: conversation_id={}, removed_count={}",
             trimmed_conversation_id, removed_count
-        );
+        ));
         emit_chat_queue_snapshot(state);
         complete_pending_chat_events_with_error(state, &removed_event_ids, error_message)?;
     }
@@ -1496,7 +1496,7 @@ fn set_stream_cache_persisted_assistant_message_id(
     let mut slots = match lock_conversation_runtime_slots(state) {
         Ok(slots) => slots,
         Err(err) => {
-            eprintln!("[聊天流式缓存] 更新 persisted_assistant_message_id 失败，锁错误: {err}");
+            runtime_log_error(format!("[聊天流式缓存] 更新 persisted_assistant_message_id 失败，锁错误: {err}"));
             return;
         }
     };
@@ -1693,7 +1693,7 @@ fn dispatch_assistant_delta_to_active_view(
             .unwrap_or(&[]);
         let (block_count, reasoning_len, text_len, tool_count) =
             stream_blocks_debug_counts(stream_cache_blocks);
-        runtime_log_info(format!(
+        runtime_log_error(format!(
             "[聊天流式块][后端发送] conversation_id={} kind={} channel_targets={} delivered={} failed={} has_stream_cache={} block_count={} reasoning_len={} text_len={} tool_count={}",
             conversation_id.trim(),
             event.kind.as_deref().unwrap_or("delta"),
@@ -1749,7 +1749,7 @@ pub(crate) fn trigger_chat_queue_processing(state: &AppState) {
     let state_clone = state.clone();
     tauri::async_runtime::spawn(async move {
         if let Err(err) = process_chat_queue(&state_clone).await {
-            eprintln!("[聊天调度] process_chat_queue 失败: {}", err);
+            runtime_log_error(format!("[聊天调度] process_chat_queue 失败: {}", err));
         }
     });
 }
@@ -1763,7 +1763,7 @@ pub(crate) fn is_chat_event_queued(state: &AppState, event_id: &str) -> Result<b
 
 pub(crate) async fn process_chat_queue_for_event(state: &AppState, event_id: &str) {
     if let Err(err) = process_chat_queue(state).await {
-        eprintln!("[聊天调度] process_chat_queue 失败: {}", err);
+        runtime_log_error(format!("[聊天调度] process_chat_queue 失败: {}", err));
     }
     if is_chat_event_queued(state, event_id).unwrap_or(false) {
         emit_chat_queue_snapshot(state);
@@ -1777,7 +1777,7 @@ pub(crate) async fn process_chat_event_after_ingress(state: &AppState, ingress: 
             if let Err(err) =
                 process_claimed_conversation_batch(state, &conversation_id, vec![event]).await
             {
-                eprintln!("[聊天调度] 处理直接事件失败: {}", err);
+                runtime_log_error(format!("[聊天调度] 处理直接事件失败: {}", err));
             }
         }
         ChatEventIngress::Queued { event_id } => {
@@ -1948,10 +1948,10 @@ async fn process_claimed_conversation_batch(
 ) -> Result<(), String> {
     let result = process_conversation_batch(state, conversation_id, events).await;
     if let Err(release_err) = release_conversation_processing_claim(state, conversation_id) {
-        eprintln!(
+        runtime_log_error(format!(
             "[聊天调度] 释放会话处理声明失败: conversation_id={}, error={}",
             conversation_id, release_err
-        );
+        ));
     }
     emit_chat_queue_snapshot(state);
     trigger_pending_guided_queue_processing(state);
@@ -2180,10 +2180,10 @@ fn set_conversation_runtime_state(
         (old_state_cn, new_state_cn)
     };
 
-    eprintln!(
+    runtime_log_info(format!(
         "[聊天调度] 会话状态转换: conversation_id={}, {} -> {}",
         conversation_id, old_state_cn, new_state_cn
-    );
+    ));
 
     emit_chat_queue_snapshot(state);
     Ok(())
@@ -2470,7 +2470,7 @@ async fn process_persisted_remote_im_events_individually(
             }
         };
         if decision.emit_log {
-            runtime_log_info(format!(
+            runtime_log_warn(format!(
                 "[远程联系人秘书] 完成，任务=单事件判断，conversation_id={}，contact_id={}，event_id={}，should_reply={}，model={}，reason={}",
                 conversation_id,
                 contact.id,
@@ -2636,7 +2636,7 @@ fn filter_remote_im_follow_up_sources_for_pending_queue(
             let has_pending_queue =
                 remote_im_source_has_pending_queue_event(state, conversation_id, source);
             if has_pending_queue {
-                runtime_log_info(format!(
+                runtime_log_warn(format!(
                     "[远程联系人状态机] 待办续跑跳过: conversation_id={}，remote_contact_id={}，reason=等待队列消息先写入历史",
                     conversation_id,
                     source.remote_contact_id
@@ -2734,7 +2734,7 @@ pub(crate) async fn process_chat_queue(state: &AppState) -> Result<(), String> {
             if let Err(err) =
                 process_claimed_conversation_batch(&state_clone, &conversation_id, events).await
             {
-                eprintln!("[聊天调度] 处理会话失败 {}: {}", conversation_id, err);
+                runtime_log_error(format!("[聊天调度] 处理会话失败 {}: {}", conversation_id, err));
             }
         });
     }
@@ -3075,7 +3075,7 @@ async fn process_conversation_batch(
                     }
                 };
                 if decision.emit_log {
-                    eprintln!(
+                    runtime_log_warn(format!(
                         "[远程联系人秘书] 决策完成: conversation_id={}, contact_id={}, should_reply={}, model={}, reason={}",
                         conversation_id,
                         contact.id,
@@ -3086,7 +3086,7 @@ async fn process_conversation_batch(
                             decision.model_name.as_str()
                         },
                         decision.reason
-                    );
+                    ));
                     remote_im_append_channel_log(
                         &contact.channel_id,
                         "info",
@@ -3360,11 +3360,11 @@ async fn process_conversation_batch(
                             None,
                             "queue",
                         );
-                        eprintln!(
+                        runtime_log_info(format!(
                             "[远程联系人状态机] 待办续跑 开始: conversation_id={}, source_count={}",
                             conversation_id,
                             follow_up_sources.len()
-                        );
+                        ));
                         match activate_main_assistant(
                             state,
                             activating_session_info,
@@ -3654,7 +3654,7 @@ async fn activate_main_assistant(
         let config = match config {
             Ok(c) => c,
             Err(err) => {
-                eprintln!("[聊天调度] 读取配置失败，跳过 typing 启动: error={}", err);
+                runtime_log_warn(format!("[聊天调度] 读取配置失败，跳过 typing 启动: error={}", err));
                 AppConfig::default()
             }
         };
@@ -3667,10 +3667,10 @@ async fn activate_main_assistant(
                     remote_im_channel_with_effective_credentials(state, channel).ok()?;
                 let credentials = WeixinOcCredentials::from_value(&effective_channel.credentials);
                 if credentials.token.trim().is_empty() {
-                    eprintln!(
+                    runtime_log_warn(format!(
                         "[聊天调度] 跳过个人微信 typing: 缺少有效 token, channel_id={}, remote_contact_id={}",
                         src.channel_id, src.remote_contact_id
-                    );
+                    ));
                     return None;
                 }
                 Some((
@@ -3795,16 +3795,16 @@ async fn activate_main_assistant(
     if let Err(err) =
         set_conversation_remote_im_activation_sources(state, conversation_id, Vec::new())
     {
-        eprintln!(
+        runtime_log_error(format!(
             "[聊天调度] 清理远程IM激活来源失败: conversation_id={}, error={}",
             conversation_id, err
-        );
+        ));
     }
     if let Err(err) = set_conversation_remote_im_assistant_context(state, conversation_id, None) {
-        eprintln!(
+        runtime_log_error(format!(
             "[聊天调度] 清理远程IM当前助理失败: conversation_id={}, error={}",
             conversation_id, err
-        );
+        ));
     }
 
     set_conversation_runtime_state_and_emit(state, conversation_id, MainSessionState::Idle)?;
@@ -3905,19 +3905,19 @@ fn emit_history_flushed_event(
         Err(_) => None,
     };
     let Some(app_handle) = app_handle else {
-        eprintln!(
+        runtime_log_error(format!(
             "[聊天调度] history_flushed emit 失败: app_handle unavailable, conversation_id={}, event_ids={:?}",
             conversation_id, event_ids
-        );
+        ));
         return;
     };
     match app_handle.emit(CHAT_HISTORY_FLUSHED_EVENT, payload) {
         Ok(_) => {}
         Err(err) => {
-            eprintln!(
+            runtime_log_error(format!(
                 "[聊天调度] history_flushed emit 失败: conversation_id={}, event_ids={:?}, error={}",
                 conversation_id, event_ids, err
-            );
+            ));
         }
     }
 }
@@ -3939,10 +3939,10 @@ fn emit_round_started_event(
         Err(_) => None,
     };
     let Some(app_handle) = app_handle else {
-        eprintln!(
+        runtime_log_error(format!(
             "[聊天推送] emit round_started 失败: app_handle unavailable, conversation_id={}",
             conversation_id
-        );
+        ));
         return;
     };
     let payload = serde_json::json!({
@@ -3959,10 +3959,10 @@ fn emit_round_started_event(
     ide_chat_broadcast_notification("chat.roundStarted", payload.clone());
     match app_handle.emit(CHAT_ROUND_STARTED_EVENT, payload) {
         Ok(_) => {}
-        Err(err) => eprintln!(
+        Err(err) => runtime_log_error(format!(
             "[聊天推送] emit round_started 失败: conversation_id={}, error={}",
             conversation_id, err
-        ),
+        )),
     }
 }
 
@@ -3979,10 +3979,10 @@ fn emit_round_completed_event(
         Err(_) => None,
     };
     let Some(app_handle) = app_handle else {
-        eprintln!(
+        runtime_log_error(format!(
             "[聊天推送] emit round_completed 失败: app_handle unavailable, conversation_id={}",
             conversation_id
-        );
+        ));
         return;
     };
     let payload = serde_json::json!({
@@ -4000,10 +4000,10 @@ fn emit_round_completed_event(
     ide_chat_broadcast_notification("chat.roundFinished", payload.clone());
     match app_handle.emit(CHAT_ROUND_COMPLETED_EVENT, payload) {
         Ok(_) => {}
-        Err(err) => eprintln!(
+        Err(err) => runtime_log_error(format!(
             "[聊天推送] emit round_completed 失败: conversation_id={}, error={}",
             conversation_id, err
-        ),
+        )),
     }
 }
 
@@ -4191,10 +4191,10 @@ fn emit_round_failed_event(
         Err(_) => None,
     };
     let Some(app_handle) = app_handle else {
-        eprintln!(
+        runtime_log_error(format!(
             "[聊天推送] emit round_failed 失败: app_handle unavailable, conversation_id={}",
             conversation_id
-        );
+        ));
         return;
     };
     let payload = serde_json::json!({
@@ -4207,10 +4207,10 @@ fn emit_round_failed_event(
     ide_chat_broadcast_notification("chat.roundFinished", payload.clone());
     match app_handle.emit(CHAT_ROUND_FAILED_EVENT, payload) {
         Ok(_) => {}
-        Err(err) => eprintln!(
+        Err(err) => runtime_log_error(format!(
             "[聊天推送] emit round_failed 失败: conversation_id={}, error={}",
             conversation_id, err
-        ),
+        )),
     }
 }
 
@@ -4304,10 +4304,10 @@ fn collect_active_chat_view_activations(
         .iter()
         .map(|(window_label, binding)| format!("{}=>{}", window_label, binding.conversation_id))
         .collect::<Vec<_>>();
-    eprintln!(
+    runtime_log_debug(format!(
         "[聊天调度] 绑定快照: conversation_id={}, bindings={:?}",
         conversation_id, binding_snapshot
-    );
+    ));
     let exact = bindings
         .iter()
         .filter_map(|(window_label, binding)| {
@@ -4320,19 +4320,19 @@ fn collect_active_chat_view_activations(
         })
         .collect::<Vec<_>>();
     if !exact.is_empty() {
-        eprintln!(
+        runtime_log_info(format!(
             "[聊天调度] 绑定筛选命中(exact): conversation_id={}, hit={}",
             conversation_id,
             exact.len()
-        );
+        ));
         return Ok(exact);
     }
 
-    eprintln!(
+    runtime_log_info(format!(
         "[聊天调度] 绑定筛选未命中: conversation_id={}, bindings_count={}",
         conversation_id,
         bindings.len()
-    );
+    ));
     Ok(Vec::new())
 }
 

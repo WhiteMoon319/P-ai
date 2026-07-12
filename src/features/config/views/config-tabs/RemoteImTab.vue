@@ -1503,7 +1503,7 @@ async function saveChannels() {
               [selectedChannel.value.id]: status,
             };
           } catch (err) {
-            console.warn("[RemoteImTab] restart channel failed:", err);
+            console.warn("[远程IM] restart channel failed:", err);
             void refreshChannelStatus();
           }
         }
@@ -1549,7 +1549,7 @@ async function toggleChannelEnabled(channel: RemoteImChannelConfig, enabled: boo
             [channel.id]: status,
           };
         } catch (err) {
-          console.warn("[RemoteImTab] restart channel failed:", err);
+          console.warn("[远程IM] restart channel failed:", err);
           props.setStatusAction(t('config.remoteIm.channelToggleFailed', { error: String(err) }));
           void refreshChannelStatus();
         }
@@ -2680,7 +2680,7 @@ async function refreshChannelStatus() {
       [channelId]: status,
     };
   } catch (error) {
-    console.error("[RemoteImTab] refreshChannelStatus failed:", error);
+    console.error("[远程IM] refreshChannelStatus failed:", error);
     if (selectedChannel.value?.id === channelId) {
       channelStatus.value = null;
     }

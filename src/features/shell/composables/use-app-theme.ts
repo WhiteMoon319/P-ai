@@ -309,7 +309,7 @@ export function useAppTheme() {
   function emitThemeChanged(state: AppThemeState) {
     const payload = cloneThemeState(state);
     return emit("easy-call:theme-changed", payload).catch((error) => {
-      console.warn("[THEME] emit easy-call:theme-changed failed:", error);
+      console.warn("[主题] emit easy-call:theme-changed failed:", error);
     });
   }
 

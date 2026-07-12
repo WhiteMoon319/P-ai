@@ -29,11 +29,11 @@ fn normalize_runtime_organization_department_children(config: &mut AppConfig) {
             .map(|(parent_id, child_id)| format!("{parent_id}->{child_id}"))
             .collect::<Vec<_>>()
             .join(", ");
-        eprintln!(
+        runtime_log_warn(format!(
             "[运行组织] 跳过成环部门关系: count={}, edges={}",
             removed.len(),
             edges
-        );
+        ));
     }
 }
 

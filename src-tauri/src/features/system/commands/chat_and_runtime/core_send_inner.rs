@@ -1069,20 +1069,20 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
             .as_deref()
             .is_some_and(|delegate_id| !remote_im_reply_delegate_is_active(&state, delegate_id))
         {
-            runtime_log_info(format!(
+            runtime_log_warn(format!(
                 "[远程IM][自动发送] 跳过: conversation_id={}，reason=remote_delegate_not_active",
                 conversation_id
             ));
             return;
         }
         let started = std::time::Instant::now();
-        eprintln!(
+        runtime_log_info(format!(
             "[远程IM][自动发送] 开始: conversation_id={}, channel_id={}, contact_id={}, text_len={}",
             conversation_id,
             activation_source.channel_id,
             activation_source.remote_contact_id,
             assistant_text.chars().count()
-        );
+        ));
         match remote_im_auto_send_and_record_decision(
             &state,
             &activation_source,
@@ -1101,23 +1101,23 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
                     &now_iso(),
                     None,
                 );
-                eprintln!(
+                runtime_log_info(format!(
                     "[远程IM][自动发送] 完成: conversation_id={}, channel_id={}, contact_id={}, action={}, elapsed_ms={}",
                     conversation_id,
                     activation_source.channel_id,
                     activation_source.remote_contact_id,
                     action,
                     started.elapsed().as_millis()
-                );
+                ));
             }
             Ok(RemoteImAutoSendExecutionOutcome::SkippedEmptyReply) => {
-                eprintln!(
+                runtime_log_warn(format!(
                     "[远程IM][自动发送] 跳过: conversation_id={}, channel_id={}, contact_id={}, reason=empty_reply, elapsed_ms={}",
                     conversation_id,
                     activation_source.channel_id,
                     activation_source.remote_contact_id,
                     started.elapsed().as_millis()
-                );
+                ));
                 remote_im_append_channel_log(
                     &activation_source.channel_id,
                     "info",
@@ -1136,14 +1136,14 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
                     &now_iso(),
                     Some(&err),
                 );
-                eprintln!(
+                runtime_log_error(format!(
                     "[远程IM][自动发送] 失败: conversation_id={}, channel_id={}, contact_id={}, error={}, elapsed_ms={}",
                     conversation_id,
                     activation_source.channel_id,
                     activation_source.remote_contact_id,
                     err,
                     started.elapsed().as_millis()
-                );
+                ));
             }
         }
     });
@@ -1719,7 +1719,7 @@ fn persist_failed_chat_completed_tool_history(
         &completed_tool_history,
         None,
     )?;
-    runtime_log_info(format!(
+    runtime_log_error(format!(
         "[聊天] 失败前工具历史落盘检查 完成 session={} persisted={} conversation_id={} tool_event_count={} error={}",
         chat_key,
         persist_result.persisted,
@@ -2315,11 +2315,11 @@ async fn send_chat_message_inner(
             })
             .collect::<Vec<_>>()
             .join(" | ");
-        eprintln!(
+        runtime_log_info(format!(
             "[聊天耗时] 汇总 原因={}，阶段={}",
             reason,
             summary
-        );
+        ));
     };
     log_chat_stage("send_chat_message_inner.start");
 
@@ -2800,7 +2800,7 @@ async fn send_chat_message_inner(
             .as_millis()
             .min(u128::from(u64::MAX)) as u64;
         prepare_detail_parts.push(format!("候选模型构建={}ms(count={})", candidate_models_ms, candidate_api_ids.len()));
-        runtime_log_info(format!(
+        runtime_log_warn(format!(
             "[会话模型] 调度，任务=构建候选模型，会话ID={}，单次指定模型={}，会话首选模型={}，会话首选已应用={}，部门失败自动切换={}，候选队列={}",
             requested_conversation_id_for_prepare
                 .as_deref()
@@ -3161,9 +3161,9 @@ async fn send_chat_message_inner(
             log_run_stage("prepare_context.foreground_conversation_ready");
             snapshot
         } else {
-            eprintln!(
+            runtime_log_warn(format!(
                 "[聊天发送] 缺少 conversation_id 且未找到系统通知会话，拒绝构建请求上下文"
-            );
+            ));
             return Err("缺少 conversation_id".to_string());
         };
         let remote_im_reply_prompt_snapshot_messages = runtime_context
@@ -3178,10 +3178,10 @@ async fn send_chat_message_inner(
         }
         log_run_stage("prepare_context.conversation_snapshot_ready");
         if !trigger_only && conversation_is_system_notification(&snapshot.prompt_conversation_before) {
-            eprintln!(
+            runtime_log_error(format!(
                 "[聊天发送] 拒绝，原因=系统通知会话不支持发言，conversation_id={}",
                 snapshot.prompt_conversation_before.id
-            );
+            ));
             return Err("系统通知会话不支持发言。".to_string());
         }
         log_run_stage("prepare_context.archive_summary_ready");
@@ -3597,10 +3597,10 @@ async fn send_chat_message_inner(
     let is_runtime_conversation = prepared_context.10;
     if is_runtime_conversation {
         if let Some(conversation_id) = requested_conversation_id.as_deref() {
-            eprintln!(
+            runtime_log_warn(format!(
                 "[归档] 发送前检查 跳过: conversation_id={}, reason=delegate_runtime_thread",
                 conversation_id
-            );
+            ));
         }
     } else {
         if runtime_context.remote_im_reply_delegate_id.is_none() {
@@ -3608,13 +3608,13 @@ async fn send_chat_message_inner(
                 &conversation_for_compaction,
                 ignore_trailing_user_message_for_idle_compaction,
             ) {
-            eprintln!(
+            runtime_log_info(format!(
                 "[远程联系人压缩] 开始，任务=发送前自动压缩，conversation_id={}, message_count={}, idle_hours={}, threshold_hours={}",
                 conversation_for_compaction.id,
                 conversation_for_compaction.messages.len(),
                 elapsed_hours,
                 REMOTE_IM_AUTO_COMPACTION_IDLE_HOURS
-            );
+            ));
             let _ = on_delta.send(round_completed_delta_event(
                 &conversation_for_compaction.id,
                 runtime_context.request_id.as_deref(),
@@ -3688,7 +3688,7 @@ async fn send_chat_message_inner(
         if runtime_context.remote_im_dynamic_boundary
             || runtime_context.remote_im_reply_delegate_id.is_some()
         {
-            runtime_log_info(format!(
+            runtime_log_warn(format!(
                 "[远程唤醒压缩] 跳过，任务=发送前自动整理，conversation_id={}，reason={}",
                 conversation_for_compaction.id,
                 if runtime_context.remote_im_dynamic_boundary {
@@ -3718,7 +3718,7 @@ async fn send_chat_message_inner(
             archive_pipeline_has_assistant_reply(&conversation_for_compaction),
             conversation_current_segment_is_compaction_summary_only(&conversation_for_compaction),
         );
-        eprintln!(
+        runtime_log_info(format!(
             "[归档] 发送前检查: should_archive={}, forced={}, reason={}, usage_ratio={:.4}, source={}, latest_real_effective_prompt_tokens={:?}, latest_real_usage_ratio={:?}, estimated_prompt_tokens={:?}, context_window_tokens={}",
             decision.should_archive,
             decision.forced,
@@ -3729,7 +3729,7 @@ async fn send_chat_message_inner(
             latest_real_usage.map(|usage| usage.context_usage_ratio),
             usage_resolution.estimated_prompt_tokens.or(estimated_prompt_tokens_before_send),
             selected_api.context_window_tokens
-        );
+        ));
         if decision.should_archive {
             let _ = on_delta.send(round_completed_delta_event(
                 &conversation_for_compaction.id,
@@ -4586,18 +4586,18 @@ async fn send_chat_message_inner(
         inflight.remove(&chat_key);
     }
     if let Err(err) = clear_inflight_tool_abort_handle(state, &chat_key) {
-        eprintln!(
+        runtime_log_error(format!(
             "[聊天] 清理进行中工具中断句柄失败 (session={}): {}",
             chat_key, err
-        );
+        ));
     }
     let final_result = match result {
         Ok(inner) => inner,
         Err(_) => {
-            eprintln!(
+            runtime_log_info(format!(
                 "[聊天] 用户中止聊天请求 (session={})",
                 chat_key
-            );
+            ));
             Err(CHAT_ABORTED_BY_USER_ERROR.to_string())
         }
     };
@@ -4657,7 +4657,7 @@ async fn send_chat_message_inner(
                 &chat_key,
                 err,
             ) {
-                Ok(true) => runtime_log_info(format!(
+                Ok(true) => runtime_log_error(format!(
                     "[聊天] 模型失败前工具历史已落盘: session={} error={}",
                     chat_key, err
                 )),
@@ -4671,10 +4671,10 @@ async fn send_chat_message_inner(
     }
     if should_clear_completed_tool_history {
         if let Err(err) = clear_inflight_completed_tool_history(state, &chat_key) {
-            eprintln!(
+            runtime_log_error(format!(
                 "[聊天] 清理已完成工具历史缓存失败 (session={}): {}",
                 chat_key, err
-            );
+            ));
         }
     }
     let timeline = stage_timeline.lock().ok().map(|items| items.clone());

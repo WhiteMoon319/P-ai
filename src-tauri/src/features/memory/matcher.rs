@@ -879,10 +879,10 @@ fn memory_mixed_ranked_items(
                 }
             }
             Err(err) => {
-                eprintln!(
-                    "[MEMORY] vector search failed, fallback to bm25-only path. err={}",
+                runtime_log_warn(format!(
+                    "[记忆] 向量搜索失败，降级为仅 BM25 检索。 err={}",
                     err
-                );
+                ));
             }
         }
     }
@@ -977,10 +977,10 @@ fn memory_mixed_ranked_items(
                     rerank_map = map;
                 }
                 Err(err) => {
-                    eprintln!(
-                        "[MEMORY] rerank failed, fallback to non-rerank scoring. err={}",
+                    runtime_log_warn(format!(
+                        "[记忆] 重排失败，降级为不重排评分。 err={}",
                         err
-                    );
+                    ));
                 }
             }
         }

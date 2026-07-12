@@ -1425,11 +1425,11 @@ impl ReadFileReader for PdfFileReader {
         ) {
             Ok(value) => value,
             Err(err) if include_images && !is_pdf_page_limit_exceeded_error(&err) => {
-                eprintln!(
+                runtime_log_warn(format!(
                     "[read] PDF 页图提取失败，降级为文本读取，file={}，err={}",
                     path.display(),
                     err
-                );
+                ));
                 let mut fallback = get_or_extract_pdf_structured(
                     state,
                     &conversation_id,
@@ -1599,13 +1599,13 @@ async fn builtin_read_file(
     let started = std::time::Instant::now();
     let path = ensure_absolute_file_path(&request)?;
     let detected = detect_read_file_type(&path);
-    eprintln!(
+    runtime_log_info(format!(
         "[read] 开始，任务=read，session_id={}，api_config_id={}，{}，detected_type={}",
         session_id,
         api_config_id,
         read_file_log_target(&path),
         detected.as_str()
-    );
+    ));
     if matches!(detected, ReadFileDetectedType::Unknown) {
         return Err(format!(
             "暂不支持该文件类型：{}",
@@ -1637,15 +1637,15 @@ async fn builtin_read_file(
     let result = reader.read(state, session_id, api_config_id, &request, detected);
     let elapsed_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
     match &result {
-        Ok(_) => eprintln!(
+        Ok(_) => runtime_log_info(format!(
             "[read] 完成，任务=read，session_id={}，api_config_id={}，reader={}，detected_type={}，elapsed_ms={}",
             session_id,
             api_config_id,
             reader.reader_kind(),
             detected.as_str(),
             elapsed_ms
-        ),
-        Err(err) => eprintln!(
+        )),
+        Err(err) => runtime_log_error(format!(
             "[read] 失败，任务=read，session_id={}，api_config_id={}，reader={}，detected_type={}，elapsed_ms={}，error={}",
             session_id,
             api_config_id,
@@ -1653,7 +1653,7 @@ async fn builtin_read_file(
             detected.as_str(),
             elapsed_ms,
             err
-        ),
+        )),
     }
     result
 }

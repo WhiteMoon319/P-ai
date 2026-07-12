@@ -61,7 +61,7 @@ export function useChatQueue(options: UseChatQueueOptions = {}) {
         : await invokeTauri<ChatQueueEvent[]>("get_chat_queue_snapshot");
       queueEvents.value = events || [];
     } catch (error) {
-      console.error("[CHAT-QUEUE] Failed to refresh queue:", error);
+      console.error("[聊天队列] Failed to refresh queue:", error);
       queueEvents.value = [];
     }
   }
@@ -78,7 +78,7 @@ export function useChatQueue(options: UseChatQueueOptions = {}) {
         : await invokeTauri<MainSessionState>("get_main_session_state_snapshot");
       sessionState.value = state || "idle";
     } catch (error) {
-      console.error("[CHAT-QUEUE] Failed to refresh session state:", error);
+      console.error("[聊天队列] Failed to refresh session state:", error);
     }
   }
 
@@ -94,7 +94,7 @@ export function useChatQueue(options: UseChatQueueOptions = {}) {
       }
       return result || { removed: false, messageText: "" };
     } catch (error) {
-      console.error("[CHAT-QUEUE] Failed to recall queue event:", error);
+      console.error("[聊天队列] Failed to recall queue event:", error);
       return { removed: false, messageText: "" };
     }
   }
@@ -111,7 +111,7 @@ export function useChatQueue(options: UseChatQueueOptions = {}) {
       }
       return updated;
     } catch (error) {
-      console.error("[CHAT-QUEUE] Failed to mark event guided:", error);
+      console.error("[聊天队列] Failed to mark event guided:", error);
       return false;
     }
   }

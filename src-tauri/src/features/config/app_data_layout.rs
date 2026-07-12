@@ -718,7 +718,7 @@ where
 {
     let content = fs::read_to_string(path).map_err(|err| format!("Read app_data failed: {err}"))?;
     serde_json::from_str::<T>(&content).map_err(|err| {
-        eprintln!("[CONFIG] Parse {label} failed ({}): {err}", path.display());
+        runtime_log_error(format!("[配置] 解析{label}失败 ({}): {err}", path.display()));
         format!("Parse {label} failed ({}): {err}", path.display())
     })
 }

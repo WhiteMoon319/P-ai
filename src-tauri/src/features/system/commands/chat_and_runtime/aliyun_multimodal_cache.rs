@@ -599,7 +599,7 @@ async fn maybe_prepare_aliyun_multimodal_urls_for_candidate(
     }
     if is_aliyun_dashscope_coding_base_url(&resolved_api.base_url) {
         decode_prepared_prompt_binaries_base64(&state.data_path, prepared_prompt)?;
-        runtime_log_info(format!(
+        runtime_log_warn(format!(
             "[百炼多模态URL缓存] 跳过，任务=prepare_multimodal_url_cache，触发条件=百炼Coding地址，处理=保留base64，会话ID={}，模型={}",
             conversation.id,
             model_name

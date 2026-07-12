@@ -9908,12 +9908,12 @@
         let json_bytes = serde_json::to_vec(&messages).expect("serialize large prepared messages");
         let elapsed_ms = started.elapsed().as_millis();
 
-        eprintln!(
+        runtime_log_info(format!(
             "[压测] prepared_prompt_to_messages_json 大上下文结果：messages={}，bytes={}，elapsed={}ms",
             messages.len(),
             json_bytes.len(),
             elapsed_ms
-        );
+        ));
 
         assert!(json_bytes.len() > 1_500_000);
     }
@@ -9950,12 +9950,12 @@
         let stored = logs.other_logs.back().expect("stored log entry");
         let response_bytes = serde_json::to_vec(&stored.response).expect("serialize stored response");
 
-        eprintln!(
+        runtime_log_info(format!(
             "[压测] llm_round_log_large_response 大响应结果：stored_logs={}，response_bytes={}，elapsed={}ms",
             logs.other_logs.len(),
             response_bytes.len(),
             elapsed_ms
-        );
+        ));
 
         assert_eq!(logs.other_logs.len(), 1);
         assert!(response_bytes.len() > 1_500_000);
@@ -10099,14 +10099,14 @@
         }
         let total_ms = started.elapsed().as_millis() as u64;
         let avg_ms = total_ms / u64::from(runs);
-        eprintln!(
+        runtime_log_info(format!(
             "[提示词性能探针] build_prepared_prompt_for_mode 平均耗时={}ms, total={}ms, runs={}, history_len={}, latest_extra_len={}",
             avg_ms,
             total_ms,
             runs,
             history_len,
             latest_extra_len
-        );
+        ));
     }
 
     #[test]

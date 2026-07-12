@@ -56,7 +56,7 @@ async function runStartupStep(
     ]);
     return true;
   } catch (error) {
-    console.error(`[LIFECYCLE] startup step failed: ${label}`, error);
+    console.error(`[生命周期] 启动步骤失败: ${label}`, error);
     onFailed?.(label, error);
     return false;
   } finally {
@@ -92,7 +92,7 @@ async function waitForBackendReady(): Promise<void> {
       if (settled) return;
       settled = true;
       cleanup();
-      console.info(`[LIFECYCLE] 后端已就绪（${source}）`);
+      console.info(`[生命周期] 后端已就绪（${source}）`);
       resolve();
     };
     const checkReady = () => {
@@ -168,7 +168,7 @@ export function useAppLifecycle(options: UseAppLifecycleOptions) {
         });
         await waitForBackendReady();
       } catch (error) {
-        console.warn("[LIFECYCLE] wait backend ready failed, continue startup refresh", error);
+        console.warn("[生命周期] 等待后端就绪失败，继续执行启动刷新", error);
       }
 
       // 监听后端阶段 2 延迟初始化进度，实时显示卡在哪一步
@@ -220,7 +220,7 @@ export function useAppLifecycle(options: UseAppLifecycleOptions) {
         });
         await options.beforeRefreshData?.();
       } catch (error) {
-        console.error("[LIFECYCLE] startup safety gate failed: beforeRefreshData", error);
+        console.error("[生命周期] 启动安全门失败: beforeRefreshData", error);
         options.onStartupStepFailed?.("beforeRefreshData", error);
         options.onStartupOverlayChange?.(false, "");
         return;
@@ -243,7 +243,7 @@ export function useAppLifecycle(options: UseAppLifecycleOptions) {
         });
         await options.refreshAllViewData();
       } catch (error) {
-        console.error("[LIFECYCLE] startup refresh failed: refreshAllViewData", error);
+        console.error("[生命周期] 启动刷新失败: refreshAllViewData", error);
         options.onStartupStepFailed?.("refreshAllViewData", error);
         options.onStartupOverlayChange?.(false, "");
         return;
@@ -286,7 +286,7 @@ export function useAppLifecycle(options: UseAppLifecycleOptions) {
         options.onStartupStepFailed,
       );
     } catch (error) {
-      console.error("[LIFECYCLE] startup lifecycle failed:", error);
+      console.error("[生命周期] 启动生命周期失败:", error);
       options.onStartupStepFailed?.("startupLifecycle", error);
     } finally {
       if (unlistenProgress) unlistenProgress();

@@ -491,10 +491,10 @@ async fn builtin_bing_search_fallback(state: &AppState, query: &str) -> Result<V
             Selector::parse("p").map_err(|err| format!("Parse selector failed: {err}"))?;
         let url = format!("{base}/search?q={}", urlencoding::encode(raw_query));
         last_request_url = Some(url.clone());
-        eprintln!(
+        runtime_log_info(format!(
             "[工具调试] websearch 请求地址，query={}，url={}",
             raw_query, url
-        );
+        ));
         let resp = client
             .get(&url)
             .header(

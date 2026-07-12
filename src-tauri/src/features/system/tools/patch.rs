@@ -381,10 +381,10 @@ fn apply_patch_restore_backup_record(
                     }
                 }
                 if let Err(err) = std::fs::remove_file(&path) {
-                    eprintln!(
+                    runtime_log_warn(format!(
                         "[apply_patch撤回] 删除文件失败（跳过）: path={}, error={}",
                         terminal_path_for_user(&path), err
-                    );
+                    ));
                     continue;
                 }
                 restored = restored.saturating_add(1);
@@ -399,10 +399,10 @@ fn apply_patch_restore_backup_record(
                 let raw = match std::fs::read(apply_patch_blob_path(data_path, blob_file)) {
                     Ok(data) => data,
                     Err(err) => {
-                        eprintln!(
+                        runtime_log_warn(format!(
                             "[apply_patch撤回] 读取删除备份失败（跳过）: path={}, error={}",
                             terminal_path_for_user(&path), err
-                        );
+                        ));
                         continue;
                     }
                 };
@@ -412,10 +412,10 @@ fn apply_patch_restore_backup_record(
                 }
                 let _ = apply_patch_write_parent_dir(&path);
                 if let Err(err) = std::fs::write(&path, raw) {
-                    eprintln!(
+                    runtime_log_warn(format!(
                         "[apply_patch撤回] 恢复文件失败（跳过）: path={}, error={}",
                         terminal_path_for_user(&path), err
-                    );
+                    ));
                     continue;
                 }
                 restored = restored.saturating_add(1);
@@ -430,10 +430,10 @@ fn apply_patch_restore_backup_record(
                 let raw = match std::fs::read(apply_patch_blob_path(data_path, blob_file)) {
                     Ok(data) => data,
                     Err(err) => {
-                        eprintln!(
+                        runtime_log_warn(format!(
                             "[apply_patch撤回] 读取修改备份失败（跳过）: path={}, error={}",
                             terminal_path_for_user(&path), err
-                        );
+                        ));
                         continue;
                     }
                 };
@@ -447,10 +447,10 @@ fn apply_patch_restore_backup_record(
                 }
                 let _ = apply_patch_write_parent_dir(&path);
                 if let Err(err) = std::fs::write(&path, raw) {
-                    eprintln!(
+                    runtime_log_warn(format!(
                         "[apply_patch撤回] 恢复文件失败（跳过）: path={}, error={}",
                         terminal_path_for_user(&path), err
-                    );
+                    ));
                     continue;
                 }
                 restored = restored.saturating_add(1);
@@ -466,10 +466,10 @@ fn apply_patch_restore_backup_record(
                 let raw = match std::fs::read(apply_patch_blob_path(data_path, blob_file)) {
                     Ok(data) => data,
                     Err(err) => {
-                        eprintln!(
+                        runtime_log_warn(format!(
                             "[apply_patch撤回] 读取移动备份失败（跳过）: path={}, error={}",
                             terminal_path_for_user(&to_path), err
-                        );
+                        ));
                         continue;
                     }
                 };
@@ -491,10 +491,10 @@ fn apply_patch_restore_backup_record(
                 }
                 let _ = apply_patch_write_parent_dir(&from_path);
                 if let Err(err) = std::fs::write(&from_path, raw) {
-                    eprintln!(
+                    runtime_log_warn(format!(
                         "[apply_patch撤回] 恢复原始文件失败（跳过）: path={}, error={}",
                         terminal_path_for_user(&from_path), err
-                    );
+                    ));
                     continue;
                 }
                 // 删除移动后的文件（如果和原始路径不同）
@@ -1683,14 +1683,14 @@ async fn builtin_apply_patch_with_name(
     ));
     let elapsed_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
     if let Some(failure) = outcome.failure {
-        eprintln!(
+        runtime_log_error(format!(
             "[补丁执行] 失败 task=apply_patch session={} changed={} failed_index={} elapsed_ms={} record_id={}",
             normalized_session,
             outcome.changed.len(),
             failure.index,
             elapsed_ms,
             backup_record.record_id
-        );
+        ));
         return Ok(serde_json::json!({
             "ok": false,
             "approved": true,
@@ -1711,13 +1711,13 @@ async fn builtin_apply_patch_with_name(
             "backupRecordPath": record_path.as_ref().map(|path| terminal_path_for_user(path)),
         }));
     }
-    eprintln!(
+    runtime_log_info(format!(
         "[补丁执行] 完成 task=apply_patch session={} changed={} elapsed_ms={} record_id={}",
         normalized_session,
         outcome.changed.len(),
         elapsed_ms,
         backup_record.record_id
-    );
+    ));
     Ok(serde_json::json!({
         "ok": true,
         "approved": true,

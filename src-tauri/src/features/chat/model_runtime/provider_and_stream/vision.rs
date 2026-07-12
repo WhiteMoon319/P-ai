@@ -47,7 +47,7 @@ async fn describe_image_with_vision_api(
                             vision_resolved.base_url, mark_err
                         ));
                     }
-                    runtime_log_info(format!(
+                    runtime_log_warn(format!(
                         "[视觉] 流式失败，已在本次运行内切换非流式重试: base_url={}, model={}, err={}",
                         vision_resolved.base_url, vision_api.model, err
                     ));

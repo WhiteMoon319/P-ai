@@ -115,7 +115,7 @@ fn apply_cached_system_message_user_fallback_to_prepared(
     if provider_system_message_user_fallback(app_state, base_url)
         && move_system_preamble_to_user_prompt(prepared)
     {
-        runtime_log_info(format!(
+        runtime_log_warn(format!(
             "[聊天] base_url={} 已在本次运行内启用 system->user 降级，当前回合直接改写提示词",
             base_url
         ));
@@ -152,7 +152,7 @@ async fn retry_openai_responses_with_system_message_user_fallback(
     if !move_system_preamble_to_user_prompt(&mut fallback) {
         return Err(err);
     }
-    runtime_log_info(format!(
+    runtime_log_warn(format!(
         "[聊天] 检测到上游不支持 system message，已在本次运行内切换 system->user 降级重试: base_url={}, model={}, err={}",
         api_config.base_url, model_name, err
     ));
@@ -697,12 +697,12 @@ async fn call_model_openai_style(
                             api_config.base_url, mark_err
                         ));
                     }
-                    runtime_log_info(format!(
+                    runtime_log_warn(format!(
                         "[聊天] 流式失败，已在本次运行内切换非流式重试: base_url={}, model={}, err={}",
                         api_config.base_url, model_name, err
                     ));
                     if selected_api.enable_tools {
-                        runtime_log_info(format!(
+                        runtime_log_warn(format!(
                             "[聊天] 当前 API 已启用工具，非流式兜底将继续尝试工具调用: base_url={}",
                             api_config.base_url
                         ));

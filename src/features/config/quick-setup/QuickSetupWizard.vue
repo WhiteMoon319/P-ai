@@ -715,7 +715,7 @@ function applyUiLanguage(value: string) {
 function setUiLanguage(value: AppConfig["uiLanguage"]) {
   applyUiLanguage(value);
   void emit("easy-call:locale-changed", normalizeLocale(value)).catch((error) => {
-    console.warn("[LOCALE] emit easy-call:locale-changed failed:", error);
+    console.warn("[语言] emit easy-call:locale-changed failed:", error);
   });
 }
 

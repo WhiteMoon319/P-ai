@@ -216,10 +216,10 @@ fn normalize_single_active_main_conversation(data: &mut AppData) -> bool {
             .get(keep_idx)
             .map(|item| item.id.clone())
             .unwrap_or_default();
-        eprintln!(
+        runtime_log_info(format!(
             "[会话] 归一化未归档会话激活标记: active_conversation_id={}",
             keep_id
-        );
+        ));
     }
     changed
 }
@@ -1363,13 +1363,13 @@ fn archive_conversation_now(
     conv.archived_at = Some(now.clone());
     conv.updated_at = now;
     let archive_id = conv.id.clone();
-    eprintln!(
+    runtime_log_info(format!(
         "[会话] 已归档: conversation_id={}, previous_status={}, reason=\"{}\", summary=\"{}\"",
         conv.id,
         previous_status,
         reason,
         summary
-    );
+    ));
     clear_screenshot_artifact_cache();
     Some(archive_id)
 }
@@ -1401,13 +1401,13 @@ fn prepared_image_payload_for_llm_request(
             saved_path,
         },
         Err(err) => {
-            eprintln!(
+            runtime_log_warn(format!(
                 "[图片规范化] 跳过请求压缩，原因={}，mime={}，base64_len={}，path={}",
                 err,
                 mime,
                 bytes_base64.len(),
                 saved_path.as_deref().unwrap_or("未保存")
-            );
+            ));
             PreparedBinaryPayload {
                 mime,
                 content: bytes_base64,
@@ -2399,14 +2399,14 @@ fn resolve_media_from_message(
                     match resolve_stored_binary_base64(path, bytes_base64) {
                         Ok(value) => value,
                         Err(err) => {
-                            eprintln!(
+                            runtime_log_error(format!(
                                 "{} 解析图片附件失败，mime={}，data_path={}，bytes_base64_len={}，error={}",
                                 log_prefix,
                                 mime,
                                 path.to_string_lossy(),
                                 bytes_base64.len(),
                                 err
-                            );
+                            ));
                             continue;
                         }
                     }
@@ -2433,14 +2433,14 @@ fn resolve_media_from_message(
                     match resolve_stored_binary_base64(path, bytes_base64) {
                         Ok(value) => value,
                         Err(err) => {
-                            eprintln!(
+                            runtime_log_error(format!(
                                 "{} 解析音频附件失败，mime={}，data_path={}，bytes_base64_len={}，error={}",
                                 log_prefix,
                                 mime,
                                 path.to_string_lossy(),
                                 bytes_base64.len(),
                                 err
-                            );
+                            ));
                             continue;
                         }
                     }
@@ -3451,10 +3451,10 @@ fn build_prompt_with_mode(
                             .unwrap_or_else(|_| state.llm_workspace_path.clone());
                         let file_path = workspace_root.join(relative_path);
                         let Some(file_path_str) = file_path.to_str() else {
-                            eprintln!(
+                            runtime_log_warn(format!(
                                 "[PDF提取] 跳过 路径包含非UTF-8字符, conversation_id={}, relative_path={}",
                                 conversation.id, relative_path
-                            );
+                            ));
                             continue;
                         };
                         let conversation_id = conversation.id.clone();
@@ -3510,10 +3510,10 @@ fn build_prompt_with_mode(
                                     ));
                                     continue;
                                 }
-                                eprintln!(
+                                runtime_log_error(format!(
                                     "[PDF提取] 失败 conversation_id={}, file_name={}, error={:?}",
                                     conversation_id, file_name, e
-                                );
+                                ));
                             }
                         }
                     }

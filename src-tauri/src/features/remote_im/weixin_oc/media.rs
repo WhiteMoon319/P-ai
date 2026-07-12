@@ -233,20 +233,20 @@ fn weixin_oc_push_normalized_image_and_attachment(
     let normalized_image = match normalize_image_bytes_for_llm_request(raw, Some(mime)) {
         Ok(image) => Some(image),
         Err(err) => {
-            eprintln!(
+            runtime_log_error(format!(
                 "[远程IM][个人微信事件] 图片规范化失败，改按附件入队，file_name={}，mime={}，err={}",
                 file_name, mime, err
-            );
+            ));
             return match weixin_oc_build_attachment_meta(state, file_name, mime, raw) {
                 Ok((attachment, relative_path)) => {
                     attachments.push(attachment);
                     Some(build_attachment_notice_text(0, &relative_path))
                 }
                 Err(save_err) => {
-                    eprintln!(
+                    runtime_log_warn(format!(
                         "[远程IM][个人微信事件] 图片降级附件落盘失败，改仅保留文字提示，file_name={}，mime={}，err={}",
                         file_name, mime, save_err
-                    );
+                    ));
                     Some(format!(
                         "[系统提示] 收到一张图片，但未能作为图片输入提供给模型，原因：{}。同时附件保存也失败：{}。",
                         err.trim(),
@@ -271,10 +271,10 @@ fn weixin_oc_push_normalized_image_and_attachment(
             relative_path
         }
         Err(err) => {
-            eprintln!(
+            runtime_log_error(format!(
                 "[远程IM][个人微信事件] 图片附件落盘失败，继续保留模型图片输入，file_name={}，mime={}，err={}",
                 file_name, attachment_mime, err
-            );
+            ));
             if let Some(image) = normalized_image {
                 images.push(BinaryPart {
                     mime: image.mime,

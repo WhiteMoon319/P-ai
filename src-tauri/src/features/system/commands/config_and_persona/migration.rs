@@ -809,7 +809,7 @@ async fn export_config_migration_package(
     let payload_started_at = std::time::Instant::now();
     let payload = build_export_payload(state.inner())?;
     let payload_elapsed_ms = payload_started_at.elapsed().as_millis();
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[迁移包导出] 完成 task=export_config_migration_package trigger=tauri_command stage=build_export_payload provider_count={} api_config_count={} memory_count={} duration_ms={}",
         payload.config.api_providers.len(),
         payload.config.api_configs.len(),
@@ -823,7 +823,7 @@ async fn export_config_migration_package(
         exported_at: now_iso(),
     };
     write_migration_package(&path, input.password.trim(), &manifest, &payload)?;
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[迁移包导出] 完成 task=export_config_migration_package trigger=tauri_command stage=write_migration_package path={} provider_count={} api_config_count={} memory_count={} total_duration_ms={}",
         path.to_string_lossy(),
         payload.config.api_providers.len(),

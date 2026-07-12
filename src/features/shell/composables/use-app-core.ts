@@ -22,7 +22,7 @@ export function useAppCore(options: UseAppCoreOptions) {
   function perfLog(label: string, startedAt: number) {
     if (!options.perfDebug) return;
     const cost = Math.round((perfNow() - startedAt) * 10) / 10;
-    console.log(`[PERF] ${label}: ${cost}ms`);
+    console.log(`[性能] ${label}: ${cost}ms`);
   }
 
   function setStatus(text: string) {
@@ -45,7 +45,7 @@ export function useAppCore(options: UseAppCoreOptions) {
     options.config.uiLanguage = lang;
     options.locale.value = lang;
     void emit("easy-call:locale-changed", lang).catch((error) => {
-      console.warn("[LOCALE] emit easy-call:locale-changed failed:", error);
+      console.warn("[语言] emit easy-call:locale-changed failed:", error);
     });
     return true;
   }

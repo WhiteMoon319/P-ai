@@ -138,10 +138,10 @@ async fn archive_conversation(
                 .await
                 .is_err()
             {
-                eprintln!(
+                runtime_log_error(format!(
                     "[归档] 失败，任务=后台归档维护，conversation_id={}，error=panic",
                     source_conversation_id
-                );
+                ));
                 trigger_chat_queue_processing(&state_cloned);
             }
         });
@@ -247,7 +247,7 @@ pub(crate) async fn batch_archive_conversations_inner(
         accepted,
         latest_active_conversation_id.clone(),
     );
-    runtime_log_info(format!(
+    runtime_log_warn(format!(
         "[批量归档] 完成，任务=批量归档，即时标记，reflection_api_config_id={}，accepted_count={}，skipped_count={}，duration_ms={}",
         reflection_api.id,
         accepted_conversation_ids.len(),
@@ -279,10 +279,10 @@ pub(crate) async fn run_archive_pipeline(
         .read_archive_pipeline_cross_message_context(state, &source.id)
         .map_err(|err| format!("读取归档反思消息锚定上下文失败：{}", err))?;
 
-    eprintln!(
-        "[ARCHIVE-PIPELINE] 开始: task=archive_maintenance, trace_id={}, agent_id={}, api_id={}, started_at={}",
+    runtime_log_debug(format!(
+        "[归档流程] 开始: task=archive_maintenance, trace_id={}, agent_id={}, api_id={}, started_at={}",
         trace_id, effective_agent_id, selected_api.id, started_at.elapsed().as_millis()
-    );
+    ));
 
     let result = run_archive_pipeline_inner(
         state,
@@ -301,10 +301,10 @@ pub(crate) async fn run_archive_pipeline(
     .await;
 
     let elapsed_ms = started_at.elapsed().as_millis();
-    eprintln!(
-        "[ARCHIVE-PIPELINE] 完成: task=archive_maintenance, trace_id={}, agent_id={}, api_id={}, elapsed_ms={}",
+    runtime_log_debug(format!(
+        "[归档流程] 完成: task=archive_maintenance, trace_id={}, agent_id={}, api_id={}, elapsed_ms={}",
         trace_id, effective_agent_id, selected_api.id, elapsed_ms
-    );
+    ));
 
     result
 }
@@ -534,10 +534,10 @@ fn spawn_batch_archive_pipeline(
             .await
             .is_err()
         {
-            eprintln!(
+            runtime_log_error(format!(
                 "[批量归档] 失败，任务=后台串行归档维护，api_config_id={}，error=panic",
                 selected_api.id
-            );
+            ));
             trigger_chat_queue_processing(&state);
         }
     });
@@ -565,7 +565,7 @@ async fn run_archive_pipeline_inner(
         archive_pipeline_message_count_for_delete(reflection_source)
     ));
     if let Some(reason) = reflection_skip_warning.as_ref() {
-        runtime_log_info(format!(
+        runtime_log_warn(format!(
             "[归档] 跳过归档反思，任务=后台归档维护，conversation_id={}，原因={}，行为=直接完成归档，不阻塞主流程",
             source.id, reason
         ));
@@ -588,8 +588,8 @@ async fn run_archive_pipeline_inner(
                         owner_agent.private_memory_enabled,
                     )?;
 
-                    eprintln!(
-                        "[{}] trace={} begin api={} model={} format={} conversation={} ownerAgent={}",
+                    runtime_log_debug(format!(
+                        "[{}] trace={} 开始，api={} model={} format={} conversation={} ownerAgent={}",
                         trace_tag,
                         trace_id,
                         selected_api.id,
@@ -597,7 +597,7 @@ async fn run_archive_pipeline_inner(
                         resolved_api.request_format,
                         source.id,
                         owner_agent_id
-                    );
+                    ));
 
                     let body_reporting_source = build_archive_body_reporting_conversation(
                         reporting_source.as_ref(),
@@ -626,7 +626,7 @@ async fn run_archive_pipeline_inner(
                         )?;
                         (archive_warning, Some(applied_report), archive_body_tokens)
                     } else {
-                        runtime_log_info(format!(
+                        runtime_log_warn(format!(
                             "[SummaryContext] 跳过，场景=archive，conversation_id={}，原因=正文不足1000token，body_tokens={:.0}，threshold={:.0}",
                             source.id,
                             archive_body_tokens,
@@ -664,10 +664,10 @@ async fn run_archive_pipeline_inner(
         return Err("归档后维护失败：会话尚未标记为已归档。".to_string());
     }
     let archive_id = archived_conversation.id.to_string();
-    eprintln!(
+    runtime_log_info(format!(
         "[归档] 开始，任务=后台维护，conversation_id={}，reason=\"{}\"",
         archived_conversation.id, archive_reason
-    );
+    ));
     clear_screenshot_artifact_cache();
     mark_tasks_as_session_lost(&state.data_path, &source.id);
     let active_conversation_id = prepared_active_conversation_id
@@ -700,29 +700,29 @@ async fn run_archive_pipeline_inner(
 
     match cleanup_backup_records_from_messages(&state.data_path, &source.messages) {
         Ok(cleaned) if cleaned > 0 => {
-            eprintln!(
+            runtime_log_info(format!(
                 "[归档] apply_patch 备份清理完成: conversation={}, cleaned={}",
                 source.id, cleaned
-            );
+            ));
         }
         Err(err) => {
-            eprintln!(
+            runtime_log_error(format!(
                 "[归档] apply_patch 备份清理失败: conversation={}, error={}",
                 source.id, err
-            );
+            ));
         }
         _ => {}
     }
 
     if let Err(e) = cleanup_pdf_cache_for_conversation(&state, &source.id) {
-        eprintln!(
+        runtime_log_error(format!(
             "[归档] 清理 PDF 缓存失败: conversation={}, error={}",
             source.id, e
-        );
+        ));
     }
 
     if let Some(applied_report) = applied_report.as_ref() {
-        eprintln!(
+        runtime_log_debug(format!(
             "[SummaryContext] 完成，场景=archive，trace_id={}，conversation_id={}，merged_memories={}，merged_groups={}，profile_applied={}，profile_skipped={}，useful_accept={}，penalized={}，natural_decay={}",
             trace_id,
             source.id,
@@ -733,14 +733,14 @@ async fn run_archive_pipeline_inner(
             applied_report.memory_feedback.useful_accepted_count,
             applied_report.memory_feedback.penalized_count,
             applied_report.memory_feedback.natural_decay_count
-        );
+        ));
     } else {
-        eprintln!(
+        runtime_log_warn(format!(
             "[SummaryContext] 跳过完成，场景=archive，trace_id={}，conversation_id={}，body_tokens={:.0}",
             trace_id,
             source.id,
             archive_body_tokens
-        );
+        ));
     }
     let merged_memories = applied_report
         .as_ref()

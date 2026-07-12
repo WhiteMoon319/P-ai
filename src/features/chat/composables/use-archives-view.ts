@@ -565,7 +565,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
       return null;
     }
     try {
-      console.info("[ARCHIVES] delete current unarchived conversation", { conversationId });
+      console.info("[归档] delete current unarchived conversation", { conversationId });
       const result = await invokeTauri<DeleteUnarchivedConversationResult>("delete_unarchived_conversation", {
         input: { conversationId },
       });

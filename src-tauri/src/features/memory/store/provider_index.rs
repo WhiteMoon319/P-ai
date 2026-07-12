@@ -238,7 +238,7 @@ where
         .map(|p| p.exists())
         .unwrap_or(false);
     if !force && old_provider_id.as_deref() == Some(new_provider_id.trim()) && provider_store_exists {
-        runtime_log_info(format!(
+        runtime_log_warn(format!(
             "[记忆存储] 跳过，任务=向量索引同步，reason=no_op，provider_id={}",
             new_provider_id.trim()
         ));

@@ -62,7 +62,7 @@ fn repair_conversation_preferred_model_for_snapshot_meta(
             conversation_id,
             repaired.clone(),
         )?;
-        runtime_log_info(format!(
+        runtime_log_debug(format!(
             "[会话首选模型] 完成，任务=加载快照自动修复，conversation_id={}，旧值={}，新值={}",
             conversation_id,
             current.unwrap_or(""),
@@ -93,7 +93,7 @@ fn switch_active_conversation_snapshot(
             )?;
     }
     let unarchived_conversations = result.unarchived_conversations;
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[前台重型快照] 完成，conversation_id={}，message_count={}，has_more_history={}，summary_count={}，duration_ms={}",
         snapshot.conversation_id,
         snapshot.messages.len(),
@@ -221,7 +221,7 @@ fn get_foreground_conversation_light_snapshot_blocking(
         }
         stream_cache = Some(runtime_snapshot.stream_cache);
     }
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[前台轻量快照] 完成，conversation_id={}，message_count={}，has_more_history={}，duration_ms={}",
         snapshot.conversation_id,
         snapshot.messages.len(),
@@ -3006,13 +3006,13 @@ fn request_conversation_messages_after_async(
     let fallback_limit = input.fallback_limit.clamp(1, 50);
     let state_clone = state.inner().clone();
     let request_id_clone = request_id.clone();
-    eprintln!(
+    runtime_log_warn(format!(
         "[聊天推送] 收到异步补消息请求: request_id={}, conversation_id={}, after_message_id={}, fallback_limit={}",
         request_id,
         conversation_id,
         after_message_id.as_deref().unwrap_or(""),
         fallback_limit
-    );
+    ));
     tauri::async_runtime::spawn(async move {
         let payload = match resolve_unarchived_conversation_messages_after(
             &state_clone,
@@ -3021,13 +3021,13 @@ fn request_conversation_messages_after_async(
             fallback_limit,
         ) {
             Ok((messages, fallback_mode)) => {
-                eprintln!(
+                runtime_log_warn(format!(
                     "[聊天推送] 异步补消息完成: request_id={}, conversation_id={}, message_count={}, fallback_mode={}",
                     request_id_clone,
                     conversation_id,
                     messages.len(),
                     fallback_mode.as_deref().unwrap_or("")
-                );
+                ));
                 ConversationMessagesAfterAsyncPayload {
                     request_id: request_id_clone.clone(),
                     conversation_id: conversation_id.clone(),
@@ -3038,10 +3038,10 @@ fn request_conversation_messages_after_async(
                 }
             }
             Err(error) => {
-                eprintln!(
+                runtime_log_error(format!(
                     "[聊天推送] 异步补消息失败: request_id={}, conversation_id={}, error={}",
                     request_id_clone, conversation_id, error
-                );
+                ));
                 ConversationMessagesAfterAsyncPayload {
                     request_id: request_id_clone.clone(),
                     conversation_id: conversation_id.clone(),
@@ -3057,21 +3057,21 @@ fn request_conversation_messages_after_async(
             Err(_) => None,
         };
         let Some(app_handle) = app_handle else {
-            eprintln!(
+            runtime_log_warn(format!(
                 "[聊天推送] 异步补消息 emit 跳过: app_handle unavailable, request_id={}, conversation_id={}",
                 request_id_clone, conversation_id
-            );
+            ));
             return;
         };
         match app_handle.emit("easy-call:conversation-messages-after-synced", &payload) {
-            Ok(_) => eprintln!(
+            Ok(_) => runtime_log_info(format!(
                 "[聊天推送] 异步补消息 emit 成功: request_id={}, conversation_id={}",
                 request_id_clone, conversation_id
-            ),
-            Err(err) => eprintln!(
+            )),
+            Err(err) => runtime_log_error(format!(
                 "[聊天推送] 异步补消息 emit 失败: request_id={}, conversation_id={}, error={}",
                 request_id_clone, conversation_id, err
-            ),
+            )),
         }
     });
 

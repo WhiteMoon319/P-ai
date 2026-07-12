@@ -302,13 +302,13 @@ fn spawn_delegate_task(
                     }),
                     delegate_for_publish.notify_assistant_when_done,
                 ) {
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[委托线程] 投递委托完成消息失败: delegate_id={}, target_agent_id={}, root_conversation_id={}, error={}",
                         delegate_for_publish.delegate_id,
                         delegate_for_publish.target_agent_id,
                         root_conversation_id,
                         err
-                    );
+                    ));
                 }
             }
             Err(err) => {
@@ -330,13 +330,13 @@ fn spawn_delegate_task(
                     }),
                     delegate_for_publish.notify_assistant_when_done,
                 ) {
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[委托线程] 投递委托失败消息失败: delegate_id={}, target_agent_id={}, root_conversation_id={}, error={}",
                         delegate_for_publish.delegate_id,
                         delegate_for_publish.target_agent_id,
                         root_conversation_id,
                         enqueue_err
-                    );
+                    ));
                 }
             }
         }
@@ -507,10 +507,10 @@ async fn builtin_delegate(
     }
 
     if preflight.current_thread.is_some() {
-        eprintln!(
+        runtime_log_info(format!(
             "[工具][委托] 委托线程内禁止再次调用 delegate：mode=background, session_id={}",
             session_id
-        );
+        ));
         return Ok(delegate_failed_result(DELEGATE_THREAD_BACKGROUND_ONLY_REASON));
     }
     if let Some(reason) = same_persona_background_delegate_block_reason(

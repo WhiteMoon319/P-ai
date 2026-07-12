@@ -1,9 +1,9 @@
 fn mark_tasks_as_session_lost(data_path: &PathBuf, conversation_id: &str) {
     let Ok(tasks) = task_store_list_task_records(data_path) else {
-        eprintln!(
+        runtime_log_error(format!(
             "[TASK-CLEANUP] 查询任务列表失败: conversation_id={}",
             conversation_id
-        );
+        ));
         return;
     };
     for task in &tasks {
@@ -21,10 +21,10 @@ fn mark_tasks_as_session_lost(data_path: &PathBuf, conversation_id: &str) {
                 completion_conclusion: "会话丢失".to_string(),
             },
         ) {
-            eprintln!(
+            runtime_log_error(format!(
                 "[TASK-CLEANUP] 标记任务失败: task_id={}, conversation_id={}, error={}",
                 task.task_id, conversation_id, err
-            );
+            ));
         }
     }
 }
@@ -161,10 +161,10 @@ fn apply_memory_actions_into_store(
                         continue;
                     }
                     if let Err(err) = memory_store_delete_memory(data_path, &source_id) {
-                        eprintln!(
-                            "[ARCHIVE-PIPELINE] delete merged source memory failed: id={}, err={}",
+                        runtime_log_error(format!(
+                            "[归档流程] 删除已合并来源记忆失败: id={}, err={}",
                             source_id, err
-                        );
+                        ));
                     }
                 }
                 stats.merged_groups += 1;
@@ -889,10 +889,10 @@ fn emit_archive_history_flushed_event(
     let app_handle = match state.app_handle.lock().ok().and_then(|guard| guard.clone()) {
         Some(handle) => handle,
         None => {
-            eprintln!(
-                "[ARCHIVE-PIPELINE] history_flushed emit skipped: app_handle unavailable, source_conversation_id={}, active_conversation_id={}",
+            runtime_log_warn(format!(
+                "[归档流程] history_flushed 事件发送跳过: app_handle unavailable, source_conversation_id={}, active_conversation_id={}",
                 source_conversation_id, active_conversation_id
-            );
+            ));
             return;
         }
     };
@@ -907,21 +907,21 @@ fn emit_archive_history_flushed_event(
         "sourceConversationId": source_conversation_id,
     });
     if let Err(err) = app_handle.emit(CHAT_HISTORY_FLUSHED_EVENT, payload) {
-        eprintln!(
-            "[ARCHIVE-PIPELINE] history_flushed emit failed: source_conversation_id={}, active_conversation_id={}, archive_id={}, error={}",
+        runtime_log_error(format!(
+            "[归档流程] history_flushed 事件发送失败: source_conversation_id={}, active_conversation_id={}, archive_id={}, error={}",
             source_conversation_id, active_conversation_id, archive_id, err
-        );
+        ));
     } else {
-        eprintln!(
-            "[ARCHIVE-PIPELINE] history_flushed emitted: source_conversation_id={}, active_conversation_id={}, archive_id={}",
+        runtime_log_info(format!(
+            "[归档流程] history_flushed 事件发送完成: source_conversation_id={}, active_conversation_id={}, archive_id={}",
             source_conversation_id, active_conversation_id, archive_id
-        );
+        ));
     }
     if let Err(err) = emit_unarchived_conversation_overview_updated_from_state(state) {
-        eprintln!(
+        runtime_log_error(format!(
             "[会话概览] archive_history_flushed 后推送失败: source_conversation_id={}, error={}",
             source_conversation_id, err
-        );
+        ));
     }
 }
 
@@ -935,10 +935,10 @@ fn emit_compaction_history_flushed_event(
     let app_handle = match state.app_handle.lock().ok().and_then(|guard| guard.clone()) {
         Some(handle) => handle,
         None => {
-            eprintln!(
-                "[ARCHIVE-PIPELINE] 上下文整理 history_flushed 发送跳过: app_handle 不可用, conversation_id={}",
+            runtime_log_warn(format!(
+                "[归档流程] 上下文整理 history_flushed 发送跳过: app_handle 不可用, conversation_id={}",
                 conversation_id
-            );
+            ));
             return;
         }
     };
@@ -953,21 +953,21 @@ fn emit_compaction_history_flushed_event(
         "compactionApplied": true,
     });
     if let Err(err) = app_handle.emit(CHAT_HISTORY_FLUSHED_EVENT, payload) {
-        eprintln!(
-            "[ARCHIVE-PIPELINE] 上下文整理 history_flushed 发送失败: conversation_id={}, error={}",
+        runtime_log_error(format!(
+            "[归档流程] 上下文整理 history_flushed 发送失败: conversation_id={}, error={}",
             conversation_id, err
-        );
+        ));
     } else {
-        eprintln!(
-            "[ARCHIVE-PIPELINE] 上下文整理 history_flushed 已发送: conversation_id={}, message_count={}",
+        runtime_log_info(format!(
+            "[归档流程] 上下文整理 history_flushed 已发送: conversation_id={}, message_count={}",
             conversation_id, message_count
-        );
+        ));
     }
     if let Err(err) = emit_unarchived_conversation_overview_updated_from_state(state) {
-        eprintln!(
+        runtime_log_error(format!(
             "[会话概览] compaction_history_flushed 后推送失败: conversation_id={}, error={}",
             conversation_id, err
-        );
+        ));
     }
 }
 
@@ -1000,10 +1000,10 @@ fn emit_deleted_history_flushed_event(
     let app_handle = match state.app_handle.lock().ok().and_then(|guard| guard.clone()) {
         Some(handle) => handle,
         None => {
-            eprintln!(
-                "[ARCHIVE-PIPELINE] 删除 history_flushed 发送跳过: app_handle 不可用, deleted_conversation_id={}, active_conversation_id={}",
+            runtime_log_warn(format!(
+                "[归档流程] 删除 history_flushed 发送跳过: app_handle 不可用, deleted_conversation_id={}, active_conversation_id={}",
                 deleted_conversation_id, active_conversation_id
-            );
+            ));
             return;
         }
     };
@@ -1017,15 +1017,15 @@ fn emit_deleted_history_flushed_event(
         "deleteReason": delete_reason,
     });
     if let Err(err) = app_handle.emit(CHAT_HISTORY_FLUSHED_EVENT, payload) {
-        eprintln!(
-            "[ARCHIVE-PIPELINE] 删除 history_flushed 发送失败: deleted_conversation_id={}, active_conversation_id={}, error={}",
+        runtime_log_error(format!(
+            "[归档流程] 删除 history_flushed 发送失败: deleted_conversation_id={}, active_conversation_id={}, error={}",
             deleted_conversation_id, active_conversation_id, err
-        );
+        ));
     } else {
-        eprintln!(
-            "[ARCHIVE-PIPELINE] 删除 history_flushed 已发送: deleted_conversation_id={}, active_conversation_id={}",
+        runtime_log_info(format!(
+            "[归档流程] 删除 history_flushed 已发送: deleted_conversation_id={}, active_conversation_id={}",
             deleted_conversation_id, active_conversation_id
-        );
+        ));
     }
 }
 
@@ -1302,14 +1302,14 @@ async fn summarize_archive_summary_with_fallback(
                     );
                 }
                 if attempt < MAX_JSON_RETRIES {
-                    eprintln!(
+                    runtime_log_warn(format!(
                         "[SummaryContext] 归档反思 JSON 无效，准备重试: conversation_id={}, api_id={}, attempt={}，next_retry_secs={}，error={}",
                         reporting_source.id,
                         selected_api.id,
                         attempt,
                         RETRY_DELAY_SECS,
                         last_err
-                    );
+                    ));
                     tokio::time::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
                 }
             }
@@ -1390,10 +1390,10 @@ fn resolve_context_compaction_primary_model(
         {
             Ok(api) => api,
             Err(err) => {
-                eprintln!(
+                runtime_log_warn(format!(
                     "[SummaryContext] 会话模型解析失败，沿用调用方模型: trace_id={}, conversation_id={}, fallback_api_id={}, err={}",
                     trace_id, source.id, selected_api.id, err
-                );
+                ));
                 selected_api.clone()
             }
         };
@@ -1401,10 +1401,10 @@ fn resolve_context_compaction_primary_model(
         return Ok((selected_api.clone(), resolved_api.clone()));
     }
     let primary_resolved_api = resolve_api_config(&app_config, Some(primary_api.id.as_str()))?;
-    eprintln!(
+    runtime_log_debug(format!(
         "[SummaryContext] 使用会话模型执行压缩: trace_id={}, conversation_id={}, conversation_api_id={}, incoming_api_id={}",
         trace_id, source.id, primary_api.id, selected_api.id
-    );
+    ));
     Ok((primary_api, primary_resolved_api))
 }
 
@@ -1485,7 +1485,7 @@ async fn summarize_compaction_with_model_attempt(
             Err(err) => {
                 last_err = err.to_string();
                 if !err.is_invalid_json() {
-                    eprintln!(
+                    runtime_log_warn(format!(
                         "[SummaryContext] 上下文整理失败，不重试非 JSON 错误: trace_id={}, conversation_id={}, model_role={}, api_id={}, attempt={}，err={}",
                         trace_id,
                         source.id,
@@ -1493,7 +1493,7 @@ async fn summarize_compaction_with_model_attempt(
                         selected_api.id,
                         attempt,
                         last_err
-                    );
+                    ));
                     return Err(format!(
                         "{}失败（非 JSON 错误不重试）：{}",
                         model_role.label(),
@@ -1501,8 +1501,8 @@ async fn summarize_compaction_with_model_attempt(
                     ));
                 }
                 if attempt < MAX_JSON_RETRIES {
-                    eprintln!(
-                        "[ARCHIVE-PIPELINE] 上下文整理 JSON 无效，准备重试: trace_id={}, conversation_id={}, model_role={}, api_id={}, attempt={}，next_retry_secs={}，error={}",
+                    runtime_log_warn(format!(
+                        "[归档流程] 上下文整理 JSON 无效，准备重试: trace_id={}, conversation_id={}, model_role={}, api_id={}, attempt={}，next_retry_secs={}，error={}",
                         trace_id,
                         source.id,
                         model_role.label(),
@@ -1510,14 +1510,14 @@ async fn summarize_compaction_with_model_attempt(
                         attempt,
                         RETRY_DELAY_SECS,
                         last_err
-                    );
+                    ));
                     tokio::time::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
                 }
             }
         }
     }
 
-    eprintln!(
+    runtime_log_error(format!(
         "[SummaryContext] 上下文整理失败: trace_id={}, conversation_id={}, model_role={}, api_id={}, attempts={}, err={}",
         trace_id,
         source.id,
@@ -1525,7 +1525,7 @@ async fn summarize_compaction_with_model_attempt(
         selected_api.id,
         MAX_JSON_RETRIES,
         last_err
-    );
+    ));
     Err(format!(
         "{}失败（JSON 解析已重试{}次）：{}",
         model_role.label(),
@@ -1582,14 +1582,14 @@ async fn summarize_compaction_with_fallback(
 
     match resolve_compaction_quick_model(state, &selected_api.id) {
         Ok(Some((quick_selected_api, quick_resolved_api))) => {
-            eprintln!(
+            runtime_log_error(format!(
                 "[SummaryContext] 会话模型压缩失败，切换快速模型: trace_id={}, conversation_id={}, conversation_api_id={}, quick_api_id={}, reason={}",
                 trace_id,
                 source.id,
                 selected_api.id,
                 quick_selected_api.id,
                 failures.last().map(String::as_str).unwrap_or("")
-            );
+            ));
             match summarize_compaction_with_model_attempt(
                 state,
                 &quick_selected_api,
@@ -1609,27 +1609,27 @@ async fn summarize_compaction_with_fallback(
             }
         }
         Ok(None) => {
-            eprintln!(
+            runtime_log_warn(format!(
                 "[SummaryContext] 快速模型跳过: trace_id={}, conversation_id={}, conversation_api_id={}, reason=not_configured_or_same_as_conversation",
                 trace_id, source.id, selected_api.id
-            );
+            ));
             failures.push("快速模型未配置或与会话模型相同，已跳过".to_string());
         }
         Err(err) => {
-            eprintln!(
+            runtime_log_error(format!(
                 "[SummaryContext] 快速模型解析失败: trace_id={}, conversation_id={}, conversation_api_id={}, err={}",
                 trace_id, source.id, selected_api.id, err
-            );
+            ));
             failures.push(format!("快速模型解析失败：{}", err));
         }
     }
 
-    eprintln!(
+    runtime_log_error(format!(
         "[SummaryContext] 上下文整理失败，压缩摘要留空继续主流程: trace_id={}, conversation_id={}, errors={}",
         trace_id,
         source.id,
         failures.join("；")
-    );
+    ));
     (
         empty_memory_curation_draft(),
         Some(format!(

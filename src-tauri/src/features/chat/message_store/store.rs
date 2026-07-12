@@ -145,10 +145,10 @@ fn lock_message_store_block_file_cache(
     std::collections::HashMap<PathBuf, CachedMessageStoreBlockFile>,
 > {
     message_store_block_file_cache().lock().unwrap_or_else(|poison| {
-        eprintln!(
+        runtime_log_info(format!(
             "[消息存储] 会话块缓存锁已污染，继续使用内部状态，error={:?}",
             poison
-        );
+        ));
         poison.into_inner()
     })
 }
@@ -427,10 +427,10 @@ fn message_store_backend_for_conversation<'a>(
         }
     }
     if let Some(reason) = manifest.and_then(|item| item.stale_jsonl_reason()) {
-        eprintln!(
+        runtime_log_warn(format!(
             "[消息存储] 跳过目录型消息 store，conversation_id={}，reason={}",
             conversation.id, reason
-        );
+        ));
     }
     Ok(MessageStoreBackend::ConversationJson(
         ConversationJsonMessageStore::new(conversation),

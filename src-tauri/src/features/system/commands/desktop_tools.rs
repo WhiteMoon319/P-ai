@@ -107,12 +107,12 @@ fn demo_send_native_notification(app: AppHandle) -> Result<NativeNotificationDem
         .permission_state()
         .map_err(|err| format!("读取通知权限失败：{err}"))?;
 
-    eprintln!(
+    runtime_log_info(format!(
         "[通知Demo] 完成，permission_before={}，permission_after={}，sent_at={}",
         permission_before,
         permission_after,
         sent_at
-    );
+    ));
 
     Ok(NativeNotificationDemoResult {
         permission_before: permission_before.to_string(),
@@ -471,7 +471,7 @@ fn install_host_runtime_prerequisite_sync(
     }
 
     if let Err(first_err) = run_winget_host_runtime_install(&normalized, false) {
-        eprintln!("[依赖安装] 普通安装失败，准备请求管理员权限，kind={}，error={}", normalized, first_err);
+        runtime_log_error(format!("[依赖安装] 普通安装失败，准备请求管理员权限，kind={}，error={}", normalized, first_err));
         run_winget_host_runtime_install(&normalized, true)?;
     }
 
@@ -1690,13 +1690,13 @@ fn log_file_reader_read_burst(window_label: &str, path: &str) {
         })
         .collect::<Vec<_>>()
         .join("；");
-    eprintln!(
+    runtime_log_debug(format!(
         "[文件阅读窗口] 高频读取，任务=read_file_reader_file，窗口={}，100ms内次数={}，当前路径={}，最近读取=[{}]",
         window_label,
         traces.len(),
         path,
         recent
-    );
+    ));
 }
 
 fn truncate_single_line(line: &str, max_chars: usize) -> String {

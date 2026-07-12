@@ -10,8 +10,9 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use super::now_iso;
+use super::runtime_log_debug;
 use super::runtime_log_error;
-use super::runtime_log_info;
+use super::runtime_log_warn;
 use super::terminal_workspace_path_from_conversation;
 use super::AppState;
 use super::Conversation;
@@ -241,7 +242,7 @@ pub(crate) async fn create_main_workspace_git_ghost_snapshot_record(
     user_message_id: &str,
 ) -> Option<UserMessageGitGhostSnapshotRecord> {
     if !GIT_GHOST_SNAPSHOT_ENABLED {
-        runtime_log_info(format!(
+        runtime_log_warn(format!(
             "[Git幽灵快照] 跳过，conversation_id={}，message_id={}，reason=feature_disabled",
             conversation.id, user_message_id
         ));
@@ -278,7 +279,7 @@ async fn create_git_ghost_snapshot_record_for_workspace(
         Ok(value) => value,
         Err(err) => {
             record.error = Some(err);
-            runtime_log_info(format!(
+            runtime_log_warn(format!(
                 "[Git幽灵快照] 跳过，conversation_id={}，message_id={}，workspace={}，reason=not_git_repo",
                 conversation_id,
                 user_message_id,
@@ -423,7 +424,7 @@ async fn create_git_ghost_snapshot_record_for_workspace(
     let _ = fs::remove_file(&temp_index_path);
     record.status = "created".to_string();
     record.ghost_commit_id = Some(commit_id.clone());
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[Git幽灵快照] 完成，conversation_id={}，message_id={}，workspace={}，commit_id={}",
         conversation_id,
         user_message_id,
@@ -509,7 +510,7 @@ pub(crate) async fn restore_main_workspace_from_git_ghost_snapshot(
     snapshot: &UserMessageGitGhostSnapshotRecord,
 ) -> Result<(), String> {
     if !GIT_GHOST_SNAPSHOT_ENABLED {
-        runtime_log_info(format!(
+        runtime_log_warn(format!(
             "[Git幽灵快照] 跳过恢复，conversation_id={}，message_id={}，reason=feature_disabled",
             snapshot.conversation_id, snapshot.user_message_id
         ));

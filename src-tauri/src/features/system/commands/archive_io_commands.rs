@@ -104,20 +104,20 @@ fn normalize_media_for_import(data_path: &PathBuf, mime: &str, stored: &str) -> 
         let decoded = match resolve_stored_binary_base64(data_path, trimmed) {
             Ok(v) => v,
             Err(err) => {
-                eprintln!(
-                    "[ARCHIVE-IMPORT] resolve stored ref failed: marker={}, err={}",
+                runtime_log_error(format!(
+                    "[归档导入] 解析已存储引用失败: marker={}, err={}",
                     trimmed, err
-                );
+                ));
                 return trimmed.to_string();
             }
         };
         return match externalize_stored_binary_base64(data_path, mime, &decoded) {
             Ok(v) => v,
             Err(err) => {
-                eprintln!(
-                    "[ARCHIVE-IMPORT] externalize resolved media failed: marker={}, err={}",
+                runtime_log_error(format!(
+                    "[归档导入] 外置已解析媒体失败: marker={}, err={}",
                     trimmed, err
-                );
+                ));
                 trimmed.to_string()
             }
         };
@@ -125,11 +125,11 @@ fn normalize_media_for_import(data_path: &PathBuf, mime: &str, stored: &str) -> 
     match externalize_stored_binary_base64(data_path, mime, trimmed) {
         Ok(v) => v,
         Err(err) => {
-            eprintln!(
-                "[ARCHIVE-IMPORT] externalize media base64 failed: value_prefix={}, err={}",
+            runtime_log_error(format!(
+                "[归档导入] 外置媒体 base64 失败: value_prefix={}, err={}",
                 trimmed.chars().take(32).collect::<String>(),
                 err
-            );
+            ));
             trimmed.to_string()
         }
     }

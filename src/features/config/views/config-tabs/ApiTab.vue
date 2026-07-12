@@ -1637,7 +1637,7 @@ async function syncModelMetadata(modelCard: ApiModelConfigItem) {
     if (message.includes("暂无模型元数据缓存")) {
       return;
     }
-    console.warn("[API] fetch model metadata failed:", error);
+    console.warn("[API] 获取模型元数据失败:", error);
   }
 }
 
@@ -1780,7 +1780,7 @@ async function openProviderSite(preset: ProviderPreset) {
   try {
     await invokeTauri("open_external_url", { url: preset.docsUrl });
   } catch (error) {
-    console.warn("[API] open provider docs failed:", error);
+    console.warn("[API] 打开供应商文档失败:", error);
   }
 }
 

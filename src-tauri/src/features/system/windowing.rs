@@ -128,10 +128,10 @@ fn detached_chat_window_for_conversation(conversation_id: &str) -> Option<String
         return None;
     }
     let guard = detached_chat_windows().lock().unwrap_or_else(|poison| {
-        eprintln!(
+        runtime_log_info(format!(
             "[独立聊天窗口] 会话到窗口映射锁已中毒，继续恢复读取：error={:?}",
             poison
-        );
+        ));
         poison.into_inner()
     });
     guard.get(cid).cloned()
@@ -143,10 +143,10 @@ fn detached_chat_conversation_for_window(label: &str) -> Option<String> {
         return None;
     }
     let guard = detached_chat_windows().lock().unwrap_or_else(|poison| {
-        eprintln!(
+        runtime_log_info(format!(
             "[独立聊天窗口] 窗口到会话映射锁已中毒，继续恢复读取：error={:?}",
             poison
-        );
+        ));
         poison.into_inner()
     });
     guard.iter().find_map(|(conversation_id, mapped_label)| {
@@ -284,7 +284,7 @@ fn schedule_file_reader_window_creation(app: &AppHandle, path: String) -> Result
         .name("file-reader-window-create".to_string())
         .spawn(move || {
             let started_at = std::time::Instant::now();
-            eprintln!("[文件阅读窗口] 开始创建窗口：window_label={}", FILE_READER_WINDOW_LABEL);
+            runtime_log_info(format!("[文件阅读窗口] 开始创建窗口：window_label={}", FILE_READER_WINDOW_LABEL));
             if app_handle.get_webview_window(FILE_READER_WINDOW_LABEL).is_some() {
                 let _ = focus_file_reader_window(&app_handle);
                 let _ = emit_file_reader_open_path(&app_handle, &path);
@@ -309,21 +309,21 @@ fn schedule_file_reader_window_creation(app: &AppHandle, path: String) -> Result
             {
                 Ok(window) => window,
                 Err(err) => {
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[文件阅读窗口] 创建失败：window_label={}，error={}",
                         FILE_READER_WINDOW_LABEL,
                         err
-                    );
+                    ));
                     return;
                 }
             };
 
             if let Err(err) = apply_window_layout_before_show(&app_handle, FILE_READER_WINDOW_LABEL) {
-                eprintln!(
+                runtime_log_error(format!(
                     "[文件阅读窗口] 应用窗口布局失败：window_label={}，error={}",
                     FILE_READER_WINDOW_LABEL,
                     err
-                );
+                ));
             }
             let _ = window.unminimize();
             let _ = window.show();
@@ -333,11 +333,11 @@ fn schedule_file_reader_window_creation(app: &AppHandle, path: String) -> Result
                 "show_file_reader_window",
             );
             let _ = window.set_focus();
-            eprintln!(
+            runtime_log_info(format!(
                 "[文件阅读窗口] 窗口已显示：window_label={}，elapsed_ms={}",
                 FILE_READER_WINDOW_LABEL,
                 started_at.elapsed().as_millis()
-            );
+            ));
         })
         .map(|_| ())
         .map_err(|err| format!("调度创建文件阅读窗口失败：{err}"))
@@ -362,11 +362,11 @@ fn schedule_detached_chat_window_creation(
             let _ = unregister_detached_chat_window_by_label(&timeout_window_label);
             let state = timeout_app_handle.state::<AppState>();
             let _ = emit_unarchived_conversation_overview_updated_from_state(&state);
-            eprintln!(
+            runtime_log_error(format!(
                 "[独立聊天窗口] 创建超时：conversation_id={}，window_label={}，timeout_ms=12000",
                 timeout_conversation_id,
                 timeout_window_label
-            );
+            ));
         }
     });
 
@@ -377,11 +377,11 @@ fn schedule_detached_chat_window_creation(
         .name("detached-chat-window-create".to_string())
         .spawn(move || {
         let started_at = std::time::Instant::now();
-        eprintln!(
+        runtime_log_info(format!(
             "[独立聊天窗口] 开始创建窗口：conversation_id={}，window_label={}",
             window_conversation_id,
             window_label
-        );
+        ));
         let app_handle = window_app_handle;
         if app_handle.get_webview_window(&window_label).is_some() {
             let _ = focus_detached_chat_window(&app_handle, &window_label);
@@ -407,21 +407,21 @@ fn schedule_detached_chat_window_creation(
                 let _ = unregister_detached_chat_window_by_label(&window_label);
                 let state = app_handle.state::<AppState>();
                 let _ = emit_unarchived_conversation_overview_updated_from_state(&state);
-                eprintln!(
+                runtime_log_error(format!(
                     "[独立聊天窗口] 创建失败：conversation_id={}，window_label={}，error={}",
                     window_conversation_id,
                     window_label,
                     err
-                );
+                ));
                 return;
             }
         };
-        eprintln!(
+        runtime_log_info(format!(
             "[独立聊天窗口] 窗口对象已创建：conversation_id={}，window_label={}，elapsed_ms={}",
             window_conversation_id,
             window_label,
             started_at.elapsed().as_millis()
-        );
+        ));
 
         let event_app_handle = app_handle.clone();
         let event_window_label = window_label.clone();
@@ -430,14 +430,14 @@ fn schedule_detached_chat_window_creation(
                 if let Some(conversation_id) =
                     unregister_detached_chat_window_by_label(&event_window_label)
                 {
-                    eprintln!(
+                    runtime_log_info(format!(
                         "[独立聊天窗口] 释放会话占用：conversation_id={}，window_label={}",
                         conversation_id,
                         event_window_label
-                    );
+                    ));
                     let state = event_app_handle.state::<AppState>();
                     if let Err(err) = emit_unarchived_conversation_overview_updated_from_state(&state) {
-                        eprintln!("[独立聊天窗口] 刷新会话概览失败：error={}", err);
+                        runtime_log_error(format!("[独立聊天窗口] 刷新会话概览失败：error={}", err));
                     }
                 }
             }
@@ -445,22 +445,22 @@ fn schedule_detached_chat_window_creation(
         });
 
         if let Err(err) = apply_window_layout_before_show(&app_handle, &window_label) {
-            eprintln!(
+            runtime_log_error(format!(
                 "[独立聊天窗口] 应用窗口布局失败：window_label={}，error={}",
                 window_label,
                 err
-            );
+            ));
         }
         let _ = window.unminimize();
         let _ = window.show();
         ensure_window_visible_after_show(&app_handle, &window_label, "show_detached_chat_window");
         let _ = window.set_focus();
-        eprintln!(
+        runtime_log_info(format!(
             "[独立聊天窗口] 窗口已显示：conversation_id={}，window_label={}，elapsed_ms={}",
             window_conversation_id,
             window_label,
             started_at.elapsed().as_millis()
-        );
+        ));
     })
     .map(|_| ())
     .map_err(|err| {
@@ -905,22 +905,22 @@ fn attach_window_layout_persistence(app: &AppHandle) {
                 if let Err(err) =
                     persist_window_layout_snapshot_with_reason(&app_handle, &label, "resized")
                 {
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[窗口] 持久化窗口布局失败: label={}, error={}",
                         label.trim(),
                         err
-                    );
+                    ));
                 }
             }
             tauri::WindowEvent::Moved(_) => {
                 if let Err(err) =
                     persist_window_layout_snapshot_with_reason(&app_handle, &label, "moved")
                 {
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[窗口] 持久化窗口布局失败: label={}, error={}",
                         label.trim(),
                         err
-                    );
+                    ));
                 }
             }
             tauri::WindowEvent::CloseRequested { .. } => {
@@ -929,22 +929,22 @@ fn attach_window_layout_persistence(app: &AppHandle) {
                     &label,
                     "close_requested",
                 ) {
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[窗口] 持久化窗口布局失败: label={}, error={}",
                         label.trim(),
                         err
-                    );
+                    ));
                 }
             }
             tauri::WindowEvent::Destroyed => {
                 if let Err(err) =
                     persist_window_layout_snapshot_with_reason(&app_handle, &label, "destroyed")
                 {
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[窗口] 持久化窗口布局失败: label={}, error={}",
                         label.trim(),
                         err
-                    );
+                    ));
                 }
             }
             _ => {}
@@ -1158,7 +1158,7 @@ fn show_chat_entry_window(app: &AppHandle) -> Result<(), String> {
             startup_window_label_for_config(&config)
         }
         Err(err) => {
-            eprintln!("[托盘] 读取对话入口配置失败: {err}");
+            runtime_log_error(format!("[托盘] 读取对话入口配置失败: {err}"));
             "quick-setup"
         }
     };
@@ -1185,24 +1185,24 @@ fn dispatch_tray_action(app: &AppHandle, source: &'static str, action: &'static 
     if let Err(err) = std::thread::Builder::new()
         .name(thread_name)
         .spawn(move || {
-            eprintln!("[托盘] 收到动作：source={}，action={}", source, action);
+            runtime_log_info(format!("[托盘] 收到动作：source={}，action={}", source, action));
             match run_tray_action(&app_handle, action) {
                 Ok(()) => {
-                    eprintln!("[托盘] 动作完成：source={}，action={}", source, action);
+                    runtime_log_info(format!("[托盘] 动作完成：source={}，action={}", source, action));
                 }
                 Err(err) => {
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[托盘] 动作失败：source={}，action={}，error={}",
                         source, action, err
-                    );
+                    ));
                 }
             }
         })
     {
-        eprintln!(
+        runtime_log_error(format!(
             "[托盘] 调度动作失败：source={}，action={}，error={}",
             source, action, err
-        );
+        ));
     }
 }
 
@@ -1405,7 +1405,7 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
             } else if id == "runtime-logs" {
                 dispatch_tray_action(app, "menu", "runtime-logs");
             } else if id == "quit" {
-                eprintln!("[托盘] 收到动作：source=menu，action=quit");
+                runtime_log_info(format!("[托盘] 收到动作：source=menu，action=quit"));
                 graceful_exit_app(app, 0);
             }
         })
@@ -1459,7 +1459,7 @@ fn webview_window_url_for_label(label: &str) -> &'static str {
 }
 
 fn rebuild_crashed_window(app: &AppHandle, label: &str) {
-    eprintln!("[WebView心跳] 窗口崩溃恢复开始: label={label}");
+    runtime_log_error(format!("[WebView心跳] 窗口崩溃恢复开始: label={label}"));
     // 尝试关闭旧窗口
     if let Some(window) = app.get_webview_window(label) {
         let _ = window.destroy();
@@ -1503,10 +1503,10 @@ fn rebuild_crashed_window(app: &AppHandle, label: &str) {
             let _ = window.set_focus();
             // 重置 pong 时间戳
             webview_record_pong(label);
-            eprintln!("[WebView心跳] 窗口崩溃恢复完成: label={label}");
+            runtime_log_error(format!("[WebView心跳] 窗口崩溃恢复完成: label={label}"));
         }
         Err(err) => {
-            eprintln!("[WebView心跳] 窗口重建失败: label={label}, error={err}");
+            runtime_log_error(format!("[WebView心跳] 窗口重建失败: label={label}, error={err}"));
         }
     }
 }
@@ -1548,10 +1548,10 @@ fn start_webview_heartbeat_monitor(app: &AppHandle) {
                     };
                     let threshold = WEBVIEW_HEARTBEAT_INTERVAL_MS * (WEBVIEW_HEARTBEAT_MAX_MISS as u64 + 1);
                     if missed > threshold {
-                        eprintln!(
+                        runtime_log_debug(format!(
                             "[WebView心跳] 检测到窗口无响应: label={}, missed_ms={}, threshold_ms={}",
                             label, missed, threshold
-                        );
+                        ));
                         rebuild_crashed_window(&app_handle, label);
                     }
                 }

@@ -512,7 +512,7 @@ fn parse_angel_memory_payload(payload: &str) -> Result<Vec<AngelNormalizedMemory
         let tags = tags_by_memory.remove(item.id.trim()).unwrap_or_default();
         let normalized_tags = normalize_memory_keywords(&tags);
         if normalized_tags.is_empty() {
-            runtime_log_info(format!(
+            runtime_log_warn(format!(
                 "[记忆导入] 跳过记录：标签归一化后为空 id={} judgment={} original_tags={:?}",
                 item.id.trim(),
                 item.judgment.trim(),
@@ -745,7 +745,7 @@ fn import_angel_memories_by_scope(
 
     for item in items {
         if memory_contains_sensitive(&item.judgment, &item.tags) {
-            runtime_log_info(format!(
+            runtime_log_warn(format!(
                 "[记忆导入] 跳过记录：命中敏感内容 id={} judgment={} tags={:?}",
                 item.id,
                 item.judgment,

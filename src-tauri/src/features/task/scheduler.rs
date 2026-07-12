@@ -356,7 +356,7 @@ fn task_fail_missing_bound_conversation(
         ),
     )?;
     if changed {
-        runtime_log_info(format!(
+        runtime_log_error(format!(
             "[任务调度] 失败，任务=绑定会话丢失，task_id={}，conversation_id={}",
             task.task_id,
             conversation_id
@@ -381,7 +381,7 @@ fn task_fail_unavailable_owner(
         ),
     )?;
     if changed {
-        runtime_log_info(format!(
+        runtime_log_error(format!(
             "[任务调度] 失败，任务=负责人不可用，task_id={}，reason={}",
             task.task_id,
             reason.trim()
@@ -550,12 +550,12 @@ async fn task_dispatch_due_task(
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        eprintln!(
+        runtime_log_info(format!(
             "[任务调度] 会话{}的任务{}，投递中，requested_conversation_id={}",
             session.conversation_id,
             task.task_id,
             requested
-        );
+        ));
     }
     let request_id = format!("task-dispatch-{}", Uuid::new_v4());
     let ingress = task_enqueue_conversation_trigger(state, task, session)?;
@@ -645,7 +645,7 @@ fn task_build_dispatch_candidates(
         if !session.system_task
             && !task_conversation_is_ready_for_immediate_dispatch(state, &session.conversation_id)?
         {
-            runtime_log_info(format!(
+            runtime_log_warn(format!(
                 "[任务调度] 跳过，任务=会话忙碌等待收尾补检查，task_id={}，conversation_id={}",
                 task.task_id, session.conversation_id
             ));
@@ -787,20 +787,20 @@ fn start_task_scheduler(state: AppState) {
         loop {
             let tick_started_at = std::time::Instant::now();
             if let Err(err) = task_scheduler_tick(&state).await {
-                eprintln!(
+                runtime_log_error(format!(
                     "[任务调度] 调度轮询失败，error={}，durationMs={}，dataPath={}",
                     err,
                     tick_started_at.elapsed().as_millis(),
                     state.data_path.to_string_lossy()
-                );
+                ));
             }
             if let Err(err) = task_scheduler_wait(&state).await {
-                eprintln!(
+                runtime_log_error(format!(
                     "[任务调度] 等待下一次触发失败，error={}，durationMs={}，dataPath={}",
                     err,
                     tick_started_at.elapsed().as_millis(),
                     state.data_path.to_string_lossy()
-                );
+                ));
                 tokio::time::sleep(std::time::Duration::from_secs(TASK_SCHEDULER_FALLBACK_SECONDS)).await;
             }
         }

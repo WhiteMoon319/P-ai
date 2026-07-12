@@ -135,19 +135,19 @@ fn detach_current_conversation_to_window(
     state: State<'_, AppState>,
 ) -> Result<DetachedChatWindowOutput, String> {
     let conversation_id = input.conversation_id.trim();
-    eprintln!(
+    runtime_log_info(format!(
         "[独立聊天窗口] 收到独立窗口请求：conversation_id={}",
         conversation_id
-    );
+    ));
     if conversation_id.is_empty() {
-        eprintln!("[独立聊天窗口] 拒绝：当前没有可独立出去的会话");
+        runtime_log_error(format!("[独立聊天窗口] 拒绝：当前没有可独立出去的会话"));
         return Err("当前没有可独立出去的会话。".to_string());
     }
     if get_conversation_runtime_state(&state, conversation_id)? == MainSessionState::OrganizingContext {
-        eprintln!(
+        runtime_log_error(format!(
             "[独立聊天窗口] 拒绝：会话正在整理上下文 conversation_id={}",
             conversation_id
-        );
+        ));
         return Err("当前会话正在整理上下文，暂时不能独立出去。".to_string());
     }
     let runtime = state_read_runtime_state_cached(&state)?;
@@ -158,10 +158,10 @@ fn detach_current_conversation_to_window(
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned);
     if system_notification_conversation_id.as_deref() == Some(conversation_id) {
-        eprintln!(
+        runtime_log_error(format!(
             "[独立聊天窗口] 拒绝：系统通知会话不能独立打开 conversation_id={}",
             conversation_id
-        );
+        ));
         return Err("系统通知会话不能独立打开，请选择一个普通会话。".to_string());
     }
 
@@ -176,10 +176,10 @@ fn detach_current_conversation_to_window(
         || (!conversation_meta.visible_in_foreground_lists
             && !conversation_meta.is_remote_im_contact)
     {
-        eprintln!(
+        runtime_log_error(format!(
             "[独立聊天窗口] 拒绝：会话不在前台列表 conversation_id={}",
             conversation_id
-        );
+        ));
         return Err("只能独立打开未归档前台会话或远程联系人会话。".to_string());
     }
     let title = if !conversation_meta.title.trim().is_empty() {
@@ -202,17 +202,17 @@ fn detach_current_conversation_to_window(
     } else {
         conversation_id.to_string()
     };
-    eprintln!(
+    runtime_log_info(format!(
         "[独立聊天窗口] 准备创建窗口：conversation_id={}，title={}",
         conversation_id,
         title
-    );
+    ));
     let window_label = open_detached_chat_window(&app, conversation_id, Some(&title))?;
-    eprintln!(
+    runtime_log_info(format!(
         "[独立聊天窗口] 窗口请求已登记：conversation_id={}，window_label={}",
         conversation_id,
         window_label
-    );
+    ));
     clear_conversation_list_activity_mark(&state, conversation_id);
     emit_unarchived_conversation_overview_updated_from_state(&state)?;
     Ok(DetachedChatWindowOutput {
@@ -244,7 +244,7 @@ fn set_chat_window_active(active: bool) {
     static CHAT_WINDOW_INACTIVE_LOGGED_ONCE: std::sync::atomic::AtomicBool =
         std::sync::atomic::AtomicBool::new(false);
     if !active && !CHAT_WINDOW_INACTIVE_LOGGED_ONCE.swap(true, std::sync::atomic::Ordering::Relaxed) {
-        eprintln!("[系统] 聊天窗口激活状态变更：跳过");
+        runtime_log_warn(format!("[系统] 聊天窗口激活状态变更：跳过"));
     }
     set_record_hotkey_probe_chat_window_active(active);
 }
@@ -463,11 +463,11 @@ fn set_preferred_release_source(state: &AppState, source: &str) {
             *slot = source.to_string();
         }
         Err(err) => {
-            eprintln!(
+            runtime_log_error(format!(
                 "set_preferred_release_source 锁定 preferred_release_source 失败：source={}, err={}",
                 source,
                 err
-            );
+            ));
         }
     }
 }
@@ -493,7 +493,7 @@ fn set_github_update_method(
     if config.github_update_method != normalized {
         config.github_update_method = normalized.clone();
         state_write_config_cached(&state, &config)?;
-        eprintln!("[自动更新] 更新方式偏好已保存：method={normalized}");
+        runtime_log_info(format!("[自动更新] 更新方式偏好已保存：method={normalized}"));
     }
     let data = state_read_agents_runtime_snapshot(&state)?;
     let runtime_config = runtime_config_with_private_organization(&state, &config, &data)?;
@@ -513,7 +513,7 @@ fn set_skipped_github_update_version(
     if config.skipped_github_update_version != normalized {
         config.skipped_github_update_version = normalized.clone();
         state_write_config_cached(&state, &config)?;
-        eprintln!("[自动更新] 已保存跳过版本：version={normalized}");
+        runtime_log_warn(format!("[自动更新] 已保存跳过版本：version={normalized}"));
     }
     sync_update_state_from_skip_version(&app, &normalized);
     let data = state_read_agents_runtime_snapshot(&state)?;
@@ -542,7 +542,7 @@ fn set_ui_language(
     if config.ui_language != normalized {
         config.ui_language = normalized.clone();
         state_write_config_cached(&state, &config)?;
-        eprintln!("[配置] 界面语言已保存：ui_language={normalized}");
+        runtime_log_info(format!("[配置] 界面语言已保存：ui_language={normalized}"));
     }
     let data = state_read_agents_runtime_snapshot(&state)?;
     let runtime_config = runtime_config_with_private_organization(&state, &config, &data)?;
@@ -779,10 +779,10 @@ fn stop_removed_remote_im_channel_runtimes(
             match channel.platform {
                 RemoteImPlatform::OnebotV11 => {
                     if let Err(err) = onebot_v11_ws_manager().stop_channel(&channel_id).await {
-                        eprintln!(
+                        runtime_log_error(format!(
                             "[远程IM] 删除渠道后停止 OneBot v11 运行态失败: channel_id={}, error={}",
                             channel_id, err
-                        );
+                        ));
                     }
                 }
                 RemoteImPlatform::Dingtalk => {
@@ -796,10 +796,10 @@ fn stop_removed_remote_im_channel_runtimes(
             if let Err(err) =
                 remote_im_delete_channel_private_state(&state, &channel.platform, &channel_id)
             {
-                eprintln!(
+                runtime_log_error(format!(
                     "[远程IM] 删除渠道后清理私有状态失败: channel_id={}, platform={:?}, error={}",
                     channel_id, channel.platform, err
-                );
+                ));
             }
         }
     });
@@ -858,18 +858,18 @@ fn save_config_inner(
     }
     if base_config.hotkey != main_config.hotkey {
         if let Err(err) = register_hotkey_from_config(&app, &main_config) {
-            eprintln!(
+            runtime_log_error(format!(
                 "[热键] 召唤热键运行时注册失败，配置已保存但该热键暂不可用：hotkey={}, err={}",
                 main_config.hotkey,
                 err
-            );
+            ));
         }
     }
     if !main_config.web_access_enabled && IDE_CONTEXT_BRIDGE_STARTED.load(Ordering::SeqCst) {
-        eprintln!(
+        runtime_log_info(format!(
             "[网络访问] 配置已关闭，停止 Web 访问服务: port={}",
             base_config.web_access_port
-        );
+        ));
         tauri::async_runtime::spawn(async move {
             shutdown_web_access_server().await;
         });
@@ -879,13 +879,13 @@ fn save_config_inner(
                 || base_config.web_access_password != main_config.web_access_password)
                 && IDE_CONTEXT_BRIDGE_STARTED.load(Ordering::SeqCst)))
     {
-        eprintln!(
+        runtime_log_info(format!(
             "[网络访问] 配置已启用、端口或密码已变更，重启 Web 访问服务: old_enabled={}, new_enabled={}, old_port={}, new_port={}",
             base_config.web_access_enabled,
             main_config.web_access_enabled,
             base_config.web_access_port,
             main_config.web_access_port
-        );
+        ));
         let app = app.clone();
         let state = state.clone();
         let ide_context_runtime = ide_context_runtime.clone();
@@ -900,7 +900,7 @@ fn save_config_inner(
     }
     match apply_webview_zoom_percent(&app, main_config.webview_zoom_percent) {
         Ok(percent) => emit_webview_zoom_percent_updated(&app, percent),
-        Err(err) => eprintln!("[外观] 应用界面缩放失败：{}", err),
+        Err(err) => runtime_log_error(format!("[外观] 应用界面缩放失败：{}", err)),
     }
     let runtime_config = runtime_config_with_private_organization(&state, &main_config, &data)
         .map_err(|err| format!("配置已保存，但运行时配置刷新失败：{err}"))?;

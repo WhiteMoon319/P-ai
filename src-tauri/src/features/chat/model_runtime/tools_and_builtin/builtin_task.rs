@@ -27,10 +27,10 @@ fn task_tool_target_scope_from_conversation(
     }
     state_read_runtime_state_cached(app_state)
         .map_err(|err| {
-            eprintln!(
+            runtime_log_error(format!(
                 "[任务] target_scope解析失败: conversation_id={}, error={:?}",
                 conversation_id, err
-            );
+            ));
             err
         })
         .ok()
@@ -240,7 +240,7 @@ async fn builtin_task(
                     .trigger
                     .ok_or_else(|| "task.trigger is required for action=create".to_string())?,
             };
-            eprintln!(
+            runtime_log_info(format!(
                 "[任务] 状态=开始 action=create request_id={} goal={} origin_conversation_id={} trigger={} todo_present={}",
                 runtime_context.request_id.as_deref().unwrap_or(""),
                 create_input.goal.trim(),
@@ -248,7 +248,7 @@ async fn builtin_task(
                 serde_json::to_string(&create_input.trigger)
                     .unwrap_or_else(|_| "<invalid trigger>".to_string()),
                 !create_input.todo.trim().is_empty()
-            );
+            ));
             let data_path = app_state.data_path.clone();
             let create_input_for_io = task_create_input_for_write(app_state, &create_input)?;
             let task = run_task_store_io(move || {
@@ -270,11 +270,11 @@ async fn builtin_task(
                 completion_state,
                 completion_conclusion: args.completion_conclusion.unwrap_or_default(),
             };
-            eprintln!(
+            runtime_log_info(format!(
                 "[任务] 状态=开始 action=complete task_id={} completion_state={}",
                 complete_input.task_id,
                 complete_input.completion_state
-            );
+            ));
             let data_path = app_state.data_path.clone();
             let complete_input_for_io = complete_input.clone();
             let task = run_task_store_io(move || {

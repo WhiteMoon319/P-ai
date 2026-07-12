@@ -91,10 +91,10 @@ pub(crate) async fn run_context_compaction_pipeline(
         &source.id,
         MainSessionState::OrganizingContext,
     )?;
-    eprintln!(
-        "[ARCHIVE-PIPELINE] 开始: task=context_compaction, trace_id={}, agent_id={}, api_id={}, started_at={}",
+    runtime_log_debug(format!(
+        "[归档流程] 开始: task=context_compaction, trace_id={}, agent_id={}, api_id={}, started_at={}",
         trace_id, effective_agent_id, selected_api.id, started_at.elapsed().as_millis()
-    );
+    ));
 
     let result = run_context_compaction_pipeline_inner(
         state,
@@ -115,15 +115,15 @@ pub(crate) async fn run_context_compaction_pipeline(
     if let Err(state_err) =
         set_conversation_runtime_state_and_emit(state, &source.id, MainSessionState::Idle)
     {
-        eprintln!(
-            "[ARCHIVE-PIPELINE] 警告: 状态恢复失败, trace_id={}, elapsed_ms={}, error={}",
+        runtime_log_error(format!(
+            "[归档流程] 警告: 状态恢复失败, trace_id={}, elapsed_ms={}, error={}",
             trace_id, elapsed_ms, state_err
-        );
+        ));
     } else {
-        eprintln!(
-            "[ARCHIVE-PIPELINE] 完成: task=context_compaction, trace_id={}, agent_id={}, api_id={}, elapsed_ms={}",
+        runtime_log_debug(format!(
+            "[归档流程] 完成: task=context_compaction, trace_id={}, agent_id={}, api_id={}, elapsed_ms={}",
             trace_id, effective_agent_id, selected_api.id, elapsed_ms
-        );
+        ));
     }
 
     result
@@ -167,10 +167,10 @@ async fn run_context_compaction_pipeline_inner(
             &active_conversation_id,
             "no_assistant_reply_deleted",
         );
-        eprintln!(
-            "[ARCHIVE-PIPELINE] 整理前直接删除：conversation_id={}, reason=no_assistant_reply_deleted, next_conversation_id={}",
+        runtime_log_info(format!(
+            "[归档流程] 整理前直接删除：conversation_id={}, reason=no_assistant_reply_deleted, next_conversation_id={}",
             source.id, active_conversation_id
-        );
+        ));
         return Ok(ForceArchiveResult {
             archived: false,
             archive_id: None,
@@ -191,8 +191,8 @@ async fn run_context_compaction_pipeline_inner(
         .map_err(|err| format!("读取消息锚定压缩上下文失败：{}", err))?;
     let (owner_agent, owner_agent_id, user_alias) = resolve_archive_owner_context(state, source)?;
 
-    eprintln!(
-        "[{}] trace={} begin api={} model={} format={} conversation={} ownerAgent={}",
+    runtime_log_debug(format!(
+        "[{}] trace={} 开始，api={} model={} format={} conversation={} ownerAgent={}",
         trace_tag,
         trace_id,
         selected_api.id,
@@ -200,7 +200,7 @@ async fn run_context_compaction_pipeline_inner(
         resolved_api.request_format,
         source.id,
         owner_agent_id
-    );
+    ));
 
     let (summary_draft, compaction_warning) = summarize_compaction_with_fallback(
         state,
@@ -256,22 +256,22 @@ async fn run_context_compaction_pipeline_inner(
     )?;
     let active_conversation_id = persist_result.active_conversation_id;
     let compression_message_id = persist_result.compression_message_id;
-    eprintln!(
-        "[ARCHIVE-PIPELINE] 上下文整理消息写入校验通过: conversation_id={}, message_id={}",
+    runtime_log_info(format!(
+        "[归档流程] 上下文整理消息写入校验通过: conversation_id={}, message_id={}",
         source.id, compression_message_id
-    );
+    ));
     match clear_apply_patch_temp(&state.data_path) {
         Ok((record_count, blob_count)) => {
-            eprintln!(
+            runtime_log_info(format!(
                 "[apply_patch缓存] 完成，任务=clear_temp_on_compaction，conversation_id={}，记录条数={}，备份条数={}",
                 source.id, record_count, blob_count
-            );
+            ));
         }
         Err(err) => {
-            eprintln!(
+            runtime_log_error(format!(
                 "[apply_patch缓存] 失败，任务=clear_temp_on_compaction，conversation_id={}，error={}",
                 source.id, err
-            );
+            ));
         }
     }
     emit_compaction_history_flushed_event(
@@ -282,7 +282,7 @@ async fn run_context_compaction_pipeline_inner(
         activate_after_flush,
     );
 
-    eprintln!(
+    runtime_log_debug(format!(
         "[SummaryContext] 完成，场景=compaction，trace_id={}，conversation_id={}，merged_memories={}，merged_groups={}，profile_applied={}，profile_skipped={}，useful_accept={}，penalized={}，natural_decay={}",
         trace_id,
         source.id,
@@ -293,7 +293,7 @@ async fn run_context_compaction_pipeline_inner(
         applied_report.memory_feedback.useful_accepted_count,
         applied_report.memory_feedback.penalized_count,
         applied_report.memory_feedback.natural_decay_count
-    );
+    ));
 
     Ok(ForceArchiveResult {
         archived: false,

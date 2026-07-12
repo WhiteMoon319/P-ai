@@ -670,38 +670,38 @@ fn extract_message_content_detail(event: &Value) -> OnebotParsedMessage {
     let message_field = event.get("message");
     if let Some(arr) = message_field.and_then(|v| v.as_array()) {
         let result = parse_onebot_message_array_detail(arr);
-        eprintln!(
+        runtime_log_info(format!(
             "[远程IM][OneBot v11 事件] 解析数组格式 message: text_len={}, media_items={}, embedded_refs={}",
             result.text.len(),
             result.media_refs.len(),
             result.embedded_refs.len()
-        );
+        ));
         return result;
     }
     if let Some(msg_str) = message_field.and_then(|v| v.as_str()) {
         let parsed = parse_onebot_cq_string_detail(msg_str);
-        eprintln!(
+        runtime_log_info(format!(
             "[远程IM][OneBot v11 事件] 解析字符串格式消息: text_len={}, media_items={}, embedded_refs={}",
             parsed.text.len(),
             parsed.media_refs.len(),
             parsed.embedded_refs.len()
-        );
+        ));
         return parsed;
     }
     if let Some(raw) = event.get("raw_message").and_then(|v| v.as_str()) {
         let parsed = parse_onebot_cq_string_detail(raw);
-        eprintln!(
+        runtime_log_info(format!(
             "[远程IM][OneBot v11 事件] 解析原始消息 raw_message: text_len={}, media_items={}, embedded_refs={}",
             parsed.text.len(),
             parsed.media_refs.len(),
             parsed.embedded_refs.len()
-        );
+        ));
         return parsed;
     }
-    eprintln!(
+    runtime_log_info(format!(
         "[远程IM][OneBot v11 事件] message 字段类型未识别: {:?}",
         message_field.map(|v| v.to_string())
-    );
+    ));
     OnebotParsedMessage::default()
 }
 

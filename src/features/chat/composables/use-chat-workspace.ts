@@ -134,7 +134,7 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
       });
       applyChatWorkspaceState(state);
     } catch (error) {
-      console.warn("[SHELL] refresh chat workspace failed:", error);
+      console.warn("[工作区] refresh chat workspace failed:", error);
     }
   }
 

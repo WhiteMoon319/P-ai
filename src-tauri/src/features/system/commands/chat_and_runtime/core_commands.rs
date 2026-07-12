@@ -452,7 +452,7 @@ async fn confirm_plan_and_continue_inner(
             ));
         }
         ChatEventIngress::Duplicate { event_id } => {
-            runtime_log_info(format!(
+            runtime_log_warn(format!(
                 "[计划] 确认后继续执行重复，已忽略 conversation_id={} event_id={}",
                 conversation_id, event_id
             ));
@@ -1033,18 +1033,18 @@ fn emit_conversation_message_appended_event(
     let app_handle = match app_state.app_handle.lock() {
         Ok(guard) => guard.as_ref().cloned(),
         Err(err) => {
-            eprintln!(
+            runtime_log_error(format!(
                 "[聊天推送] append 消息事件发送失败：锁已损坏，conversation_id={}, error={:?}",
                 conversation_id, err
-            );
+            ));
             None
         }
     };
     let Some(app_handle) = app_handle else {
-        eprintln!(
+        runtime_log_error(format!(
             "[聊天推送] append 消息事件发送失败：app_handle 不可用，conversation_id={}",
             conversation_id
-        );
+        ));
         return;
     };
     let payload = ConversationMessageAppendedPayload {
@@ -1053,12 +1053,12 @@ fn emit_conversation_message_appended_event(
     };
     ide_chat_broadcast_notification("conversation.messageAppended", serde_json::json!(&payload));
     if let Err(err) = app_handle.emit(CHAT_CONVERSATION_MESSAGE_APPENDED_EVENT, payload) {
-        eprintln!(
+        runtime_log_error(format!(
             "[聊天推送] append 消息事件发送失败：conversation_id={}, message_id={}, error={}",
             conversation_id,
             message.id,
             err
-        );
+        ));
     }
 }
 
@@ -1098,13 +1098,13 @@ fn append_delegate_result_message_and_emit(
                 )
                 .await
                 {
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[委托结果] 追加后继续主助理失败: conversation_id={}, department_id={}, agent_id={}, error={}",
                         conversation_id,
                         session_info.department_id,
                         session_info.agent_id,
                         err
-                    );
+                    ));
                 }
             }
         });
@@ -1133,12 +1133,12 @@ fn spawn_user_mention_failure_message(app_state: AppState, failure: UserMentionF
                 "error": failure.reason,
             }),
         ) {
-            eprintln!(
+            runtime_log_error(format!(
                 "[用户@委托] 写回失败结果消息失败: conversation_id={}, target_agent_id={}, error={}",
                 failure.root_conversation_id,
                 failure.target_agent_id,
                 err
-            );
+            ));
         }
     });
 }
@@ -1193,12 +1193,12 @@ fn spawn_user_async_delegate(app_state: AppState, plan: UserAsyncDelegatePlan) -
                     &text,
                     "user_async_delegate_completion",
                 ) {
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[用户异步委托] 投递完成系统通知失败: conversation_id={}, target_agent_id={}, error={}",
                         plan.root_conversation_id,
                         plan.target_agent_id,
                         err
-                    );
+                    ));
                 }
                 if let Err(err) = enqueue_user_mention_result_message(
                     &app_state,
@@ -1217,12 +1217,12 @@ fn spawn_user_async_delegate(app_state: AppState, plan: UserAsyncDelegatePlan) -
                         "targetAgentId": plan.target_agent_id,
                     }),
                 ) {
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[用户异步委托] 写回完成结果消息失败: conversation_id={}, target_agent_id={}, error={}",
                         plan.root_conversation_id,
                         plan.target_agent_id,
                         err
-                    );
+                    ));
                 }
             }
             Err(err) => {
@@ -1245,12 +1245,12 @@ fn spawn_user_async_delegate(app_state: AppState, plan: UserAsyncDelegatePlan) -
                         "error": err,
                     }),
                 ) {
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[用户异步委托] 写回失败结果消息失败: conversation_id={}, target_agent_id={}, error={}",
                         plan.root_conversation_id,
                         plan.target_agent_id,
                         enqueue_err
-                    );
+                    ));
                 }
             }
         }
@@ -1336,12 +1336,12 @@ fn spawn_user_mention_delegate(app_state: AppState, plan: UserMentionPlan) {
                         "targetAgentId": plan.target_agent_id,
                     }),
                 ) {
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[用户@委托] 写回完成结果消息失败: conversation_id={}, target_agent_id={}, error={}",
                         plan.root_conversation_id,
                         plan.target_agent_id,
                         err
-                    );
+                    ));
                 }
             }
             Err(err) => {
@@ -1364,12 +1364,12 @@ fn spawn_user_mention_delegate(app_state: AppState, plan: UserMentionPlan) {
                         "error": err,
                     }),
                 ) {
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[用户@委托] 写回失败结果消息失败: conversation_id={}, target_agent_id={}, error={}",
                         plan.root_conversation_id,
                         plan.target_agent_id,
                         enqueue_err
-                    );
+                    ));
                 }
             }
         }
@@ -1394,16 +1394,16 @@ fn spawn_user_mention_after_message_flushed(
                 }
             }
             Ok(Err(err)) => {
-                eprintln!(
+                runtime_log_warn(format!(
                     "[用户@委托] 用户消息落库前调度失败，跳过委托: event_id={}, error={}",
                     event_id, err
-                );
+                ));
             }
             Err(_) => {
-                eprintln!(
+                runtime_log_warn(format!(
                     "[用户@委托] 用户消息落库结果丢失，跳过委托: event_id={}",
                     event_id
-                );
+                ));
             }
         }
     });
@@ -1538,7 +1538,7 @@ async fn submit_chat_message_inner(
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
         .ok_or_else(|| {
-            eprintln!("[聊天发送] 缺少 department_id，拒绝提交用户消息");
+            runtime_log_warn(format!("[聊天发送] 缺少 department_id，拒绝提交用户消息"));
             "缺少 department_id".to_string()
         })?;
     let conversation_id = session
@@ -1548,7 +1548,7 @@ async fn submit_chat_message_inner(
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
         .ok_or_else(|| {
-            eprintln!("[聊天发送] 缺少 conversation_id，拒绝提交用户消息");
+            runtime_log_warn(format!("[聊天发送] 缺少 conversation_id，拒绝提交用户消息"));
             "缺少 conversation_id".to_string()
         })?;
 
@@ -1598,7 +1598,7 @@ async fn submit_chat_message_inner(
             input.payload.mentions.as_ref(),
         )?;
 
-        eprintln!(
+        runtime_log_info(format!(
             "[聊天发送] 提交前准备耗时：总计={}ms，读取配置={}ms，读取应用数据={}ms，解析部门={}ms，会话解析={}ms，conversation_id={}，department_id={}，agent_id={}",
             prepare_started_at.elapsed().as_millis(),
             config_elapsed_ms,
@@ -1608,7 +1608,7 @@ async fn submit_chat_message_inner(
             conversation_id,
             department.id,
             agent_id
-        );
+        ));
 
         (
             department.id.clone(),
@@ -1803,7 +1803,7 @@ async fn send_chat_message(
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
         .ok_or_else(|| {
-            eprintln!("[聊天发送] 缺少 department_id，拒绝发送用户消息");
+            runtime_log_warn(format!("[聊天发送] 缺少 department_id，拒绝发送用户消息"));
             "缺少 department_id".to_string()
         })?;
     let conversation_id = session
@@ -1813,7 +1813,7 @@ async fn send_chat_message(
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
         .ok_or_else(|| {
-            eprintln!("[聊天发送] 缺少 conversation_id，拒绝发送用户消息");
+            runtime_log_warn(format!("[聊天发送] 缺少 conversation_id，拒绝发送用户消息"));
             "缺少 conversation_id".to_string()
         })?;
 
@@ -1863,7 +1863,7 @@ async fn send_chat_message(
             input.payload.mentions.as_ref(),
         )?;
 
-        eprintln!(
+        runtime_log_info(format!(
             "[聊天发送] 发送前准备耗时：总计={}ms，读取配置={}ms，读取应用数据={}ms，解析部门={}ms，会话解析={}ms，conversation_id={}，department_id={}，agent_id={}",
             prepare_started_at.elapsed().as_millis(),
             config_elapsed_ms,
@@ -1873,7 +1873,7 @@ async fn send_chat_message(
             conversation_id,
             department.id,
             agent_id
-        );
+        ));
 
         (
             department.id.clone(),
@@ -2036,7 +2036,7 @@ async fn send_user_mention_message_inner(
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
         .ok_or_else(|| {
-            eprintln!("[聊天发送] 缺少 department_id，拒绝发送用户@委托消息");
+            runtime_log_warn(format!("[聊天发送] 缺少 department_id，拒绝发送用户@委托消息"));
             "缺少 department_id".to_string()
         })?;
     let conversation_id = session
@@ -2046,7 +2046,7 @@ async fn send_user_mention_message_inner(
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
         .ok_or_else(|| {
-            eprintln!("[聊天发送] 缺少 conversation_id，拒绝发送用户@委托消息");
+            runtime_log_warn(format!("[聊天发送] 缺少 conversation_id，拒绝发送用户@委托消息"));
             "缺少 conversation_id".to_string()
         })?;
 
@@ -2096,7 +2096,7 @@ async fn send_user_mention_message_inner(
             input.payload.mentions.as_ref(),
         )?;
 
-        eprintln!(
+        runtime_log_info(format!(
             "[聊天发送] 用户@委托发送前准备耗时：总计={}ms，读取配置={}ms，读取应用数据={}ms，解析部门={}ms，会话解析={}ms，conversation_id={}，department_id={}，agent_id={}，mention_count={}",
             prepare_started_at.elapsed().as_millis(),
             config_elapsed_ms,
@@ -2107,7 +2107,7 @@ async fn send_user_mention_message_inner(
             department.id,
             agent_id,
             mention_count
-        );
+        ));
 
         (
             department.id.clone(),
@@ -2401,11 +2401,11 @@ async fn stop_chat_message(
         }
     }
     if aborted_delegate_children > 0 {
-        eprintln!(
+        runtime_log_info(format!(
             "[聊天] 停止请求已级联到同步委托子会话: session={}, child_count={}",
             chat_key,
             aborted_delegate_children
-        );
+        ));
     }
     let conversation_id = requested_conversation_id.clone();
     Ok(StopChatResult {
@@ -2547,13 +2547,13 @@ async fn interrupt_conversation_runtime(
             "interrupt_conversation_runtime",
         )?;
     }
-    eprintln!(
+    runtime_log_info(format!(
         "[聊天调度] 会话运行已中断: conversation_id={}, aborted={}, cleared_queue_count={}, child_abort_count={}",
         conversation_id,
         aborted,
         cleared_queue_count,
         aborted_delegate_children
-    );
+    ));
     Ok(InterruptConversationRuntimeResult {
         aborted,
         cleared_queue_count,
@@ -2633,7 +2633,7 @@ async fn get_conversation_runtime_snapshot(
         return Err("conversationId 不能为空".to_string());
     }
     let snapshot = read_conversation_runtime_snapshot(state.inner(), normalized_conversation_id)?;
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[聊天运行态恢复] 完成，任务=读取会话运行态快照，conversation_id={}，runtime_state={:?}，is_processing={}，pending_queue_count={}，has_visible_progress={}，assistant_text_len={}，stream_block_count={}",
         snapshot.conversation_id,
         snapshot.runtime_state,

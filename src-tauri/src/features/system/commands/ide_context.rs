@@ -1256,7 +1256,7 @@ fn ide_context_web_access_enabled(state: &AppState) -> bool {
     match state_read_config_cached(state) {
         Ok(config) => config.web_access_enabled,
         Err(err) => {
-            eprintln!("[网络访问] 读取配置失败，按关闭处理: {}", err);
+            runtime_log_error(format!("[网络访问] 读取配置失败，按关闭处理: {}", err));
             false
         }
     }
@@ -1603,7 +1603,7 @@ fn ide_context_consume_bridge_token_with_state(
             .unwrap_or(false);
         if should_restore {
             if let Err(err) = ide_context_try_restore_persisted_bridge_token(state, runtime) {
-                eprintln!("[IDE 上下文桥] 恢复持久化 Web 访问令牌失败: {}", err);
+                runtime_log_error(format!("[IDE 上下文桥] 恢复持久化 Web 访问令牌失败: {}", err));
             }
         }
     }
@@ -1643,10 +1643,10 @@ fn ide_context_normalize_time_or_now(field_name: &str, raw: &str) -> String {
     match normalize_rfc3339_to_utc_storage(field_name, trimmed) {
         Ok(value) => value,
         Err(err) => {
-            eprintln!(
+            runtime_log_info(format!(
                 "[IDE 上下文桥] 时间字段非法，回退当前时间: field={}, value={}, error={}",
                 field_name, trimmed, err
-            );
+            ));
             now_iso()
         }
     }
@@ -1730,10 +1730,10 @@ fn ide_context_prune_expired_snapshots(
     let now = now_utc();
     snapshots.retain(|client_id, snapshot| {
         if ide_context_snapshot_is_expired(snapshot, &now) {
-            eprintln!(
+            runtime_log_debug(format!(
                 "[IDE 上下文桥] 快照过期已清理: client_id={}, updated_at={}",
                 client_id, snapshot.updated_at
-            );
+            ));
             false
         } else {
             true
@@ -1988,10 +1988,10 @@ async fn prepare_ide_context_bridge_server_start(
     let config = match state_read_config_cached(state) {
         Ok(config) => config,
         Err(err) => {
-            eprintln!(
+            runtime_log_error(format!(
                 "[网络访问] 读取配置失败，使用默认端口: {}",
                 err
-            );
+            ));
             AppConfig::default()
         }
     };
@@ -2005,7 +2005,7 @@ async fn prepare_ide_context_bridge_server_start(
         port_service
             .set_listen_addr(WEB_ACCESS_SERVICE_ID, None)
             .await;
-        eprintln!("[网络访问] 跳过启动：网络访问已关闭");
+        runtime_log_warn(format!("[网络访问] 跳过启动：网络访问已关闭"));
         return None;
     }
     port_service
@@ -2025,7 +2025,7 @@ async fn prepare_ide_context_bridge_server_start(
             port_service
                 .set_last_error(WEB_ACCESS_SERVICE_ID, Some(err.clone()))
                 .await;
-            eprintln!("[网络访问] 监听失败: {}", err);
+            runtime_log_error(format!("[网络访问] 监听失败: {}", err));
             return None;
         }
     };
@@ -2049,7 +2049,7 @@ async fn prepare_ide_context_bridge_server_start(
             port_service
                 .set_last_error(WEB_ACCESS_SERVICE_ID, Some(err.clone()))
                 .await;
-            eprintln!("[网络访问] 初始化远程访问密码失败: {}", err);
+            runtime_log_error(format!("[网络访问] 初始化远程访问密码失败，error={}", err));
             return None;
         }
     };
@@ -2066,7 +2066,7 @@ async fn prepare_ide_context_bridge_server_start(
         port_service
             .set_last_error(WEB_ACCESS_SERVICE_ID, Some(err.clone()))
             .await;
-        eprintln!("[网络访问] 写入发现文件失败: {}", err);
+        runtime_log_error(format!("[网络访问] 写入发现文件失败，error={}", err));
         return None;
     }
     port_service
@@ -2080,7 +2080,7 @@ async fn prepare_ide_context_bridge_server_start(
             &format!("服务启动，监听 {}", bridge_url),
         )
         .await;
-    eprintln!("[网络访问] 已监听 {}", bridge_url);
+    runtime_log_info(format!("[网络访问] 已监听 {}", bridge_url));
     Some((listener, port, bridge_url))
 }
 
@@ -2110,13 +2110,13 @@ fn spawn_ide_context_bridge_server_task(
                     if let Ok(mut slot) = ide_context_bridge_shutdown_slot().lock() {
                         slot.take();
                     }
-                    eprintln!("[网络访问] 收到停机信号，停止监听 {}", bridge_url);
+                    runtime_log_info(format!("[网络访问] 收到停机信号，停止监听 {}", bridge_url));
                     break;
                 }
                 result = listener.accept() => match result {
                     Ok(result) => result,
                     Err(err) => {
-                        eprintln!("[网络访问] 接收连接失败: {}", err);
+                        runtime_log_error(format!("[网络访问] 接收连接失败: {}", err));
                         continue;
                     }
                 },
@@ -2149,10 +2149,10 @@ async fn bind_ide_context_bridge_listener(
         Ok(listener) => Ok((listener, port)),
         Err(err) => {
             if err.kind() == std::io::ErrorKind::AddrInUse {
-                eprintln!("[网络访问] 固定端口已占用，无法启动: {}", addr);
+                runtime_log_info(format!("[网络访问] 固定端口已占用，无法启动: {}", addr));
                 Err(format!("固定端口 {} 已被占用，请释放后重试", port))
             } else {
-                eprintln!("[网络访问] 固定端口监听失败 {}: {}", addr, err);
+                runtime_log_error(format!("[网络访问] 固定端口监听失败 {}: {}", addr, err));
                 Err(format!("固定端口 {} 监听失败: {}", port, err))
             }
         }
@@ -3957,15 +3957,15 @@ fn ide_chat_cleanup_storage_legacy_items_for_web_settings(
         _ => return Err(format!("未知存储清理类型：{cleanup_kind}")),
     };
     let _migration_guard = lock_message_store_migration();
-    eprintln!(
+    runtime_log_info(format!(
         "[存储] 开始，任务=清理{}，cleanup_kind={}",
         label,
         cleanup_kind
-    );
+    ));
     let started_at = std::time::Instant::now();
     let result = cleanup_storage_legacy_scope(state, scope);
     match &result {
-        Ok(report) => eprintln!(
+        Ok(report) => runtime_log_warn(format!(
             "[存储] 完成，任务=清理{}，cleanup_kind={}，删除文件数={}，跳过文件数={}，释放字节={}，耗时毫秒={}",
             label,
             cleanup_kind,
@@ -3973,14 +3973,14 @@ fn ide_chat_cleanup_storage_legacy_items_for_web_settings(
             report.skipped_file_count,
             report.freed_bytes,
             started_at.elapsed().as_millis()
-        ),
-        Err(err) => eprintln!(
+        )),
+        Err(err) => runtime_log_error(format!(
             "[存储] 失败，任务=清理{}，cleanup_kind={}，error={}，耗时毫秒={}",
             label,
             cleanup_kind,
             err,
             started_at.elapsed().as_millis()
-        ),
+        )),
     }
     ide_chat_serialize(result?)
 }
@@ -4037,7 +4037,7 @@ fn ide_chat_export_config_migration_package_for_web_settings(
     ));
     let payload_started_at = std::time::Instant::now();
     let payload = build_export_payload(state)?;
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[迁移包导出] 完成 task=export_config_migration_package trigger=web_settings stage=build_export_payload provider_count={} api_config_count={} memory_count={} duration_ms={}",
         payload.config.api_providers.len(),
         payload.config.api_configs.len(),
@@ -4062,7 +4062,7 @@ fn ide_chat_export_config_migration_package_for_web_settings(
     let path = exports_dir.join(&file_name);
     write_migration_package(&path, input.password.trim(), &manifest, &payload)?;
     let bytes = fs::read(&path).map_err(|err| format!("读取迁移包失败: {err}"))?;
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[迁移包导出] 完成 task=export_config_migration_package trigger=web_settings stage=write_migration_package path={} provider_count={} api_config_count={} memory_count={} total_duration_ms={}",
         path.to_string_lossy(),
         payload.config.api_providers.len(),
@@ -4365,7 +4365,7 @@ fn ide_chat_set_github_update_method_for_web_settings(
     if config.github_update_method != normalized {
         config.github_update_method = normalized.clone();
         state_write_config_cached(state, &config)?;
-        eprintln!("[自动更新] 更新方式偏好已保存：method={normalized}");
+        runtime_log_info(format!("[自动更新] 更新方式偏好已保存：method={normalized}"));
     }
     let data = state_read_agents_runtime_snapshot(state)?;
     let runtime_config = runtime_config_with_private_organization(state, &config, &data)?;
@@ -4391,7 +4391,7 @@ fn ide_chat_set_skipped_github_update_version_for_web_settings(
     if config.skipped_github_update_version != normalized {
         config.skipped_github_update_version = normalized.clone();
         state_write_config_cached(state, &config)?;
-        eprintln!("[自动更新] 已保存跳过版本：version={normalized}");
+        runtime_log_warn(format!("[自动更新] 已保存跳过版本：version={normalized}"));
     }
     sync_update_state_from_skip_version(app, &normalized);
     let data = state_read_agents_runtime_snapshot(state)?;
@@ -4539,7 +4539,7 @@ async fn remote_im_restart_channel_inner(
     if channel_id.is_empty() {
         return Err("channelId 为必填项。".to_string());
     }
-    eprintln!("[远程IM] 重启渠道: {}", channel_id);
+    runtime_log_info(format!("[远程IM] 重启渠道: {}", channel_id));
     onebot_v11_ws_manager()
         .add_log(&channel_id, "info", "[远程IM] 收到渠道重启请求")
         .await;
@@ -4567,10 +4567,10 @@ async fn remote_im_restart_channel_inner(
         .reconcile_channel_runtime(&effective_channel)
         .await
         .map_err(|err| format!("重启渠道失败: {}", err))?;
-    eprintln!(
+    runtime_log_info(format!(
         "[远程IM] 渠道 {} 已按配置收敛: enabled={}, platform={:?}",
         channel_id, channel.enabled, channel.platform
-    );
+    ));
 
     if channel.enabled && channel.platform == RemoteImPlatform::OnebotV11 {
         manager
@@ -4586,10 +4586,10 @@ async fn remote_im_restart_channel_inner(
                 .reconcile_channel_runtime(&channel_clone, state_clone)
                 .await
             {
-                eprintln!(
+                runtime_log_error(format!(
                     "[远程IM] 钉钉渠道收敛失败: channel_id={}, platform={:?}, error={}",
                     channel_clone.id, channel_clone.platform, err
-                );
+                ));
             }
         });
     } else if channel.platform == RemoteImPlatform::WeixinOc {
@@ -4794,11 +4794,11 @@ fn ide_chat_remote_im_update_contact_department_binding_for_web_settings(
     let conversation_id = ensure_remote_im_contact_conversation_id(state, contact)?;
     let output = contact.clone();
     state_write_runtime_state_cached(state, &runtime)?;
-    eprintln!(
+    runtime_log_info(format!(
         "[远程IM] 完成，任务=更新联系人处理部门，contact_id={}，conversation_id={}",
         output.id,
         conversation_id
-    );
+    ));
     ide_chat_serialize(output)
 }
 
@@ -6363,11 +6363,11 @@ async fn start_web_access_server(
         .await;
     match outcome {
         Ok(LocalPortServiceStartOutcome::SkippedAlreadyRunning) => {
-            eprintln!("[网络访问] 跳过重复启动：服务已在运行或正在启动");
+            runtime_log_warn(format!("[网络访问] 跳过重复启动：服务已在运行或正在启动"));
         }
         Ok(LocalPortServiceStartOutcome::Started) => {}
         Err(err) => {
-            eprintln!("[网络访问] 启动流程失败: {}", err);
+            runtime_log_error(format!("[网络访问] 启动流程失败: {}", err));
         }
     }
 }
@@ -6409,14 +6409,14 @@ async fn shutdown_ide_context_bridge_server_inner() {
                 port_service
                     .add_log(WEB_ACCESS_SERVICE_ID, "info", "服务已停止")
                     .await;
-                eprintln!("[网络访问] 已停止");
+                runtime_log_info(format!("[网络访问] 已停止"));
             }
             Ok(Err(err)) => {
                 IDE_CONTEXT_BRIDGE_STARTED.store(false, Ordering::SeqCst);
                 port_service
                     .set_last_error(WEB_ACCESS_SERVICE_ID, Some(err.to_string()))
                     .await;
-                eprintln!("[网络访问] 等待服务任务退出失败: {}", err);
+                runtime_log_error(format!("[网络访问] 等待服务任务退出失败: {}", err));
             }
             Err(_) => {
                 IDE_CONTEXT_BRIDGE_STARTED.store(false, Ordering::SeqCst);
@@ -6426,12 +6426,12 @@ async fn shutdown_ide_context_bridge_server_inner() {
                         Some("等待服务任务退出超时，已强制清理状态".to_string()),
                     )
                     .await;
-                eprintln!("[网络访问] 等待服务任务退出超时，已强制清理状态");
+                runtime_log_error(format!("[网络访问] 等待服务任务退出超时，已强制清理状态"));
             }
         },
         None => {
             IDE_CONTEXT_BRIDGE_STARTED.store(false, Ordering::SeqCst);
-            eprintln!("[网络访问] 停机时未找到服务任务句柄，已清理状态");
+            runtime_log_info(format!("[网络访问] 停机时未找到服务任务句柄，已清理状态"));
         }
     }
     if let Ok(mut slot) = ide_context_bridge_shutdown_slot().lock() {
@@ -6453,7 +6453,7 @@ pub(crate) async fn shutdown_web_access_server() {
         })
         .await
     {
-        eprintln!("[网络访问] 停止流程失败: {}", err);
+        runtime_log_error(format!("[网络访问] 停止流程失败: {}", err));
     }
 }
 
@@ -6471,7 +6471,7 @@ async fn restart_web_access_server(
         })
         .await
     {
-        eprintln!("[网络访问] 重启流程失败: {}", err);
+        runtime_log_error(format!("[网络访问] 重启流程失败: {}", err));
     }
 }
 
@@ -6502,7 +6502,7 @@ async fn ide_context_ws_handle_connection(
     {
         Ok(ws_stream) => ws_stream,
         Err(err) => {
-            eprintln!("[IDE 上下文桥] WebSocket 握手失败 {}: {}", peer_addr, err);
+            runtime_log_error(format!("[IDE 上下文桥] WebSocket 握手失败 {}: {}", peer_addr, err));
             return;
         }
     };
@@ -6519,10 +6519,10 @@ async fn ide_context_ws_handle_connection(
         return;
     }
     if path != IDE_CONTEXT_BRIDGE_PATH {
-        eprintln!("[IDE 上下文桥] 非法路径 {} from {}", path, peer_addr);
+        runtime_log_info(format!("[IDE 上下文桥] 非法路径 {} from {}", path, peer_addr));
         return;
     }
-    eprintln!("[IDE 上下文桥] 客户端已连接: {}", peer_addr);
+    runtime_log_info(format!("[IDE 上下文桥] 客户端已连接: {}", peer_addr));
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
     let mut connected_client_id = String::new();
     let mut authenticated = ide_context_peer_is_local(&peer_addr);
@@ -6579,10 +6579,10 @@ async fn ide_context_ws_handle_connection(
                                             if let Err(publish_err) =
                                                 publish_ide_context_bridge_discovery(port, &remote_password)
                                             {
-                                                eprintln!(
+                                                runtime_log_error(format!(
                                                     "[IDE 上下文桥] 过期后重写发现文件失败: {}",
                                                     publish_err
-                                                );
+                                                ));
                                             }
                                         }
                                     }
@@ -6638,7 +6638,7 @@ async fn ide_context_ws_handle_connection(
             Ok(tokio_tungstenite::tungstenite::Message::Close(_)) => break,
             Ok(_) => {}
             Err(err) => {
-                eprintln!("[IDE 上下文桥] 客户端消息错误 {}: {}", peer_addr, err);
+                runtime_log_error(format!("[IDE 上下文桥] 客户端消息错误 {}: {}", peer_addr, err));
                 break;
             }
         }
@@ -6650,11 +6650,11 @@ async fn ide_context_ws_handle_connection(
                 snapshots.remove(&connected_client_id);
             }
             Err(_) => {
-                eprintln!("[IDE 上下文桥] 清理客户端缓存失败: {}", connected_client_id);
+                runtime_log_error(format!("[IDE 上下文桥] 清理客户端缓存失败: {}", connected_client_id));
             }
         }
     }
-    eprintln!("[IDE 上下文桥] 客户端已断开: {}", peer_addr);
+    runtime_log_info(format!("[IDE 上下文桥] 客户端已断开: {}", peer_addr));
 }
 
 async fn ide_context_chat_ws_handle_connection(
@@ -6664,7 +6664,7 @@ async fn ide_context_chat_ws_handle_connection(
     state: AppState,
     ide_context_runtime: IdeContextRuntime,
 ) {
-    eprintln!("[VSCode 侧边栏] 客户端已连接: {}", peer_addr);
+    runtime_log_info(format!("[VSCode 侧边栏] 客户端已连接: {}", peer_addr));
     let client_id = Uuid::new_v4().to_string();
     let mut authenticated = ide_context_peer_is_local(&peer_addr);
     let connection_id = web_access_register_connection(
@@ -6812,10 +6812,10 @@ async fn ide_context_chat_ws_handle_connection(
                                                     if let Err(publish_err) =
                                                         publish_ide_context_bridge_discovery(current_port, &remote_password)
                                                     {
-                                                        eprintln!(
+                                                        runtime_log_error(format!(
                                                             "[VSCode 侧边栏] 过期后重写发现文件失败: {}",
                                                             publish_err
-                                                        );
+                                                        ));
                                                     }
                                                 }
                                             }
@@ -6850,7 +6850,7 @@ async fn ide_context_chat_ws_handle_connection(
             Ok(tokio_tungstenite::tungstenite::Message::Close(_)) => break,
             Ok(_) => {}
             Err(err) => {
-                eprintln!("[VSCode 侧边栏] 客户端消息错误 {}: {}", peer_addr, err);
+                runtime_log_error(format!("[VSCode 侧边栏] 客户端消息错误 {}: {}", peer_addr, err));
                 break;
             }
         }
@@ -6865,11 +6865,11 @@ async fn ide_context_chat_ws_handle_connection(
     if opened_conversation_id.is_some() {
         let sidebar_label = ide_chat_sidebar_window_label(&client_id);
         if let Err(err) = ide_chat_release_sidebar_conversation(&state, &sidebar_label) {
-            eprintln!("[VSCode 侧边栏] 释放会话占用失败: {}", err);
+            runtime_log_error(format!("[VSCode 侧边栏] 释放会话占用失败: {}", err));
         }
     }
     writer.abort();
-    eprintln!("[VSCode 侧边栏] 客户端已断开: {}", peer_addr);
+    runtime_log_info(format!("[VSCode 侧边栏] 客户端已断开: {}", peer_addr));
 }
 
 #[cfg(test)]

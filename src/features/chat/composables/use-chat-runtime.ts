@@ -194,7 +194,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
         },
       });
       const msgs = ensureConversationMessageIds(Array.isArray(snapshot?.messages) ? snapshot.messages : []);
-      if (options.perfDebug) console.log(`[PERF] loadAllMessages count=${msgs.length}`);
+      if (options.perfDebug) console.log(`[性能] loadAllMessages count=${msgs.length}`);
       const recent = Array.isArray(msgs) ? msgs.slice(-RECENT_MESSAGE_WINDOW) : [];
       options.allMessages.value = recent;
     } catch (e) {

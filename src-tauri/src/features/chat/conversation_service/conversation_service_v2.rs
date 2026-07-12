@@ -1694,10 +1694,10 @@ impl ConversationServiceV2 {
                 let conversation_meta = match self.get_conversation_meta(state, item.id.as_str()) {
                     Ok(conversation_meta) => conversation_meta,
                     Err(err) => {
-                        eprintln!(
+                        runtime_log_error(format!(
                             "[会话索引读取] 状态=失败，任务=collect_unarchived_conversation_summaries_cached，conversation_id={}，error={}",
                             item.id, err
-                        );
+                        ));
                         return None;
                     }
                 };
@@ -3001,16 +3001,16 @@ impl ConversationServiceV2 {
         {
             match cleanup_backup_records_from_messages(&state.data_path, &cleanup_conversation.messages) {
                 Ok(cleaned) if cleaned > 0 => {
-                    eprintln!(
+                    runtime_log_info(format!(
                         "[会话删除] apply_patch 备份清理完成: conversation={}, cleaned={}",
                         normalized_conversation_id, cleaned
-                    );
+                    ));
                 }
                 Err(err) => {
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[会话删除] apply_patch 备份清理失败: conversation={}, error={}",
                         normalized_conversation_id, err
-                    );
+                    ));
                 }
                 _ => {}
             }
@@ -3071,7 +3071,7 @@ impl ConversationServiceV2 {
                 MainSessionState::AssistantStreaming => "助理流式输出",
                 MainSessionState::OrganizingContext => "整理上下文",
             };
-            runtime_log_info(format!(
+            runtime_log_error(format!(
                 "[会话撤回] 失败，任务=rewind_conversation_from_message，conversation_id={}，原因=会话运行中，runtime_state={}",
                 conversation_id, runtime_state_text
             ));
@@ -3229,7 +3229,7 @@ impl ConversationServiceV2 {
             .iter()
             .filter(|record_id| apply_patch_record_path(&state.data_path, record_id).exists())
             .count();
-        runtime_log_info(format!(
+        runtime_log_debug(format!(
             "[会话撤回] 预览诊断，任务=preview_rewind_conversation，conversation_id={}，message_id={}，removed_messages={}，backup_record_ids={}，existing_backup_count={}，missing_backup_count={}",
             conversation_id,
             message_id,
@@ -4201,10 +4201,10 @@ impl ConversationServiceV2 {
                 Ok(conversation_meta) => conversation_meta,
                 Err(err) => {
                     drop(guard);
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[会话索引读取] 状态=失败，任务=read_unarchived_conversation_summary，conversation_id={}，error={}",
                         normalized_conversation_id, err
-                    );
+                    ));
                     return Ok(None);
                 }
             };
@@ -4405,7 +4405,7 @@ impl ConversationServiceV2 {
             || !source_conversation_meta.visible_in_foreground_lists
             || self.conversation_meta_is_system_notification_meta_view(&source_conversation_meta)
         {
-            runtime_log_info(format!(
+            runtime_log_warn(format!(
                 "[自动推送] 跳过，任务=解析推送源会话，source_conversation_id={}，remote_contact_id={}，reason=source_conversation_not_eligible",
                 normalized_source_conversation_id,
                 normalized_remote_contact_id
@@ -4581,12 +4581,12 @@ impl ConversationServiceV2 {
     ) -> Conversation {
         if is_remote_im_contact_conversation && remote_im_contact_processing_mode == "qa" {
             let trimmed = remote_im_trim_conversation_for_qa_mode(conversation_before);
-            eprintln!(
+            runtime_log_info(format!(
                 "[远程IM] 问答模式裁剪会话上下文: conversation_id={}, original_messages={}, trimmed_messages={}",
                 conversation_before.id,
                 conversation_before.messages.len(),
                 trimmed.messages.len()
-            );
+            ));
             return trimmed;
         }
         conversation_before.clone()
@@ -5747,10 +5747,10 @@ impl ConversationServiceV2 {
                         ) {
                             Ok(conversation_meta) => conversation_meta,
                             Err(err) => {
-                                eprintln!(
+                                runtime_log_error(format!(
                                     "[会话索引读取] 状态=失败，任务=collect_block_cache_whitelist_conversation_ids，conversation_id={}，error={}",
                                     item.id, err
-                                );
+                                ));
                                 return None;
                             }
                         };
@@ -5960,10 +5960,10 @@ impl ConversationServiceV2 {
             .filter_map(|item| match self.get_conversation_meta(state, item.id.as_str()) {
                 Ok(conversation_meta) => Some(conversation_meta),
                 Err(err) => {
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[会话索引读取] 状态=失败，任务=list_archives，conversation_id={}，error={}",
                         item.id, err
-                    );
+                    ));
                     None
                 }
             })
@@ -6386,16 +6386,16 @@ impl ConversationServiceV2 {
         }
         match cleanup_backup_records_from_messages(&state.data_path, &source_conversation.messages) {
             Ok(cleaned) if cleaned > 0 => {
-                eprintln!(
+                runtime_log_info(format!(
                     "[会话删除] apply_patch 备份清理完成: conversation={}, cleaned={}",
                     source.id, cleaned
-                );
+                ));
             }
             Err(err) => {
-                eprintln!(
+                runtime_log_error(format!(
                     "[会话删除] apply_patch 备份清理失败: conversation={}, error={}",
                     source.id, err
-                );
+                ));
             }
             _ => {}
         }
@@ -6933,7 +6933,7 @@ impl ConversationServiceV2 {
                 for memory_id in &recall_ids {
                     conversation.memory_recall_table.push(memory_id.clone());
                 }
-                eprintln!(
+                runtime_log_debug(format!(
                     "[记忆RAG][出队消息写入] conversation_id={} user_message_id={} agent_id={} retrieved_memory_ids={:?}",
                     conversation_id,
                     persisted.id,
@@ -6945,7 +6945,7 @@ impl ConversationServiceV2 {
                         .and_then(Value::as_array)
                         .map(|items| items.iter().filter_map(Value::as_str).collect::<Vec<_>>())
                         .unwrap_or_default()
-                );
+                ));
             }
             let persisted_for_event = persisted.clone();
             match persisted.role.trim() {

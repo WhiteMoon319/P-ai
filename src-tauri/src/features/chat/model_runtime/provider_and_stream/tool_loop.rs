@@ -798,7 +798,7 @@ fn maybe_spawn_remote_im_tool_persist_auto_send(
     }
     let assistant_text = tool_loop_assistant_tool_event_text(assistant_tool_call_event);
     if assistant_text.is_empty() {
-        runtime_log_info(format!(
+        runtime_log_warn(format!(
             "[远程IM][工具持久化自动发送] 跳过，任务=tool_persist_auto_send，conversation_id={}，assistant_message_id={}，contact_id={}，reason=empty_text",
             context.conversation_id,
             assistant_message_id,
@@ -810,7 +810,7 @@ fn maybe_spawn_remote_im_tool_persist_auto_send(
         assistant_tool_call_event,
         tool_result_event,
     ) {
-        runtime_log_info(format!(
+        runtime_log_warn(format!(
             "[远程IM][工具持久化自动发送] 跳过，任务=tool_persist_auto_send，conversation_id={}，assistant_message_id={}，contact_id={}，reason=no_reply_decision，text_len={}",
             context.conversation_id,
             assistant_message_id,
@@ -1001,10 +1001,10 @@ fn sync_completed_tool_history_cache(
         return;
     };
     if let Err(err) = replace_inflight_completed_tool_history(state, chat_session_key, events) {
-        eprintln!(
+        runtime_log_error(format!(
             "[聊天] 同步已完成工具历史缓存失败 (session={}): {}",
             chat_session_key, err
-        );
+        ));
         return;
     }
     if let Ok(Some(thread)) = delegate_runtime_thread_list(state).map(|threads| {
@@ -1473,18 +1473,18 @@ async fn execute_prepared_tool_call_group(
         register_inflight_tool_abort_handle(state, chat_session_key, abort_handle)?;
         let result = futures_util::future::Abortable::new(run_group, abort_registration).await;
         if let Err(err) = clear_inflight_tool_abort_handle(state, chat_session_key) {
-            eprintln!(
+            runtime_log_error(format!(
                 "[聊天] 清理进行中工具组中断句柄失败 (session={}): {}",
                 chat_session_key, err
-            );
+            ));
         }
         match result {
             Ok(inner) => inner,
             Err(_) => {
-                eprintln!(
+                runtime_log_info(format!(
                     "[聊天] 用户中止工具组调用 (session={})",
                     chat_session_key
-                );
+                ));
                 Err(CHAT_ABORTED_BY_USER_ERROR.to_string())
             }
         }
@@ -1575,7 +1575,7 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
         return Ok(false);
     };
     if context.remote_im_reply_delegate_id.is_some() {
-        runtime_log_info(format!(
+        runtime_log_warn(format!(
             "[远程应答委托] 跳过，任务=工具续调前自动整理，conversation_id={}，reason=frozen_delegate_snapshot",
             context.conversation_id
         ));
@@ -1593,7 +1593,7 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
         transient_tool_history,
     )?
     else {
-        runtime_log_info(format!(
+        runtime_log_warn(format!(
             "[聊天] 工具续调前上下文整理检查 跳过 conversation_id={} 原因=会话不存在或已归档",
             context.conversation_id
         ));
@@ -1747,7 +1747,7 @@ fn persist_tool_loop_compaction_checkpoint(
         clear_inflight_completed_tool_history(state, chat_session_key)?;
         persist_result
     } else {
-        runtime_log_info(format!(
+        runtime_log_warn(format!(
             "[上下文整理] 跳过，任务=interrupt_checkpoint，conversation_id={}，reason={}，原因=无可落盘内容",
             context.conversation_id, reason
         ));

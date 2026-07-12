@@ -390,13 +390,13 @@ async fn onebot_resolve_inbound_media(
             }
         }
         let Some(raw) = resolved_raw else {
-            eprintln!(
+            runtime_log_warn(format!(
                 "[远程IM][OneBot v11 事件] 媒体下载失败，skip，kind={:?}，ref={}，file_id={}，err={}",
                 item.kind,
                 item.file_ref,
                 item.file_id.clone().unwrap_or_default(),
                 last_err
-            );
+            ));
             continue;
         };
         let hint = resolved_mime.as_deref().or(item.mime_hint.as_deref());
@@ -413,10 +413,10 @@ async fn onebot_resolve_inbound_media(
                 let normalized = match normalize_image_bytes_for_llm_request(&raw, Some(&mime)) {
                     Ok(value) => value,
                     Err(err) => {
-                        eprintln!(
+                        runtime_log_error(format!(
                             "[远程IM][OneBot v11 事件] 图片规范化失败，改按附件入队，name={}，mime={}，err={}",
                             file_name, mime, err
-                        );
+                        ));
                         match persist_raw_attachment_to_downloads(state, &file_name, &mime, &raw) {
                             Ok(saved) => {
                                 let relative_path = workspace_relative_path(state, &saved);
@@ -431,10 +431,10 @@ async fn onebot_resolve_inbound_media(
                                 ));
                             }
                             Err(save_err) => {
-                                eprintln!(
+                                runtime_log_warn(format!(
                                     "[远程IM][OneBot v11 事件] 图片降级附件落盘失败，改仅保留文字提示，name={}，err={}",
                                     file_name, save_err
-                                );
+                                ));
                                 notices.push(format!(
                                     "[系统提示] 收到一张图片，但未能作为图片输入提供给模型，原因：{}。同时附件保存也失败：{}。",
                                     err.trim(),
@@ -462,10 +462,10 @@ async fn onebot_resolve_inbound_media(
                         });
                     }
                     Err(err) => {
-                        eprintln!(
+                        runtime_log_warn(format!(
                             "[远程IM][OneBot v11 事件] 附件落盘失败，skip，name={}，err={}",
                             file_name, err
-                        );
+                        ));
                     }
                 }
             }

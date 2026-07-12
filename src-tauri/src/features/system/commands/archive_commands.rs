@@ -118,7 +118,7 @@ async fn get_prompt_preview_inner(
                 })
         })
         .unwrap_or_default();
-    eprintln!(
+    runtime_log_info(format!(
         "[请求体预览][当前消息提取] mode={:?} requested_conversation_id={:?} selected_conversation_id={} agent_id={} latest_user_message_id={} latest_user_retrieved_memory_ids={:?}",
         preview_mode,
         input.conversation_id,
@@ -126,7 +126,7 @@ async fn get_prompt_preview_inner(
         agent.id,
         latest_user_message_id,
         latest_user_retrieved_memory_ids
-    );
+    ));
 
     let user_name = user_persona_name(&data);
     let user_intro = user_persona_intro(&data);
@@ -243,7 +243,7 @@ async fn get_prompt_preview_inner(
     let request_body_json =
         serde_json::to_string_pretty(&prepared_prompt_to_messages_json(&prepared))
             .map_err(|err| format!("序列化请求预览失败：{err}"))?;
-    eprintln!(
+    runtime_log_info(format!(
         "[请求体预览] 完成: mode={:?} conversation_id={} latest_user_text_len={} latest_images={} latest_audios={} request_has_memory_board={} request_len={}",
         preview_mode,
         conversation.id,
@@ -252,7 +252,7 @@ async fn get_prompt_preview_inner(
         prepared.latest_audios.len(),
         request_body_json.contains("<memory_context>"),
         request_body_json.len()
-    );
+    ));
     Ok(PromptPreview {
         preamble: prepared.preamble,
         latest_user_text: prepared.latest_user_text,

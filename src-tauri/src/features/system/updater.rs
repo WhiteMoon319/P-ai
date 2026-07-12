@@ -355,21 +355,21 @@ fn updater_public_key() -> Result<&'static str, String> {
 fn shutdown_background_services_before_windows_updater_exit(app: AppHandle) {
     // tauri-plugin-updater 在 Windows 安装版会启动安装器后直接 std::process::exit(0)，
     // 必须挂到 on_before_exit，并保留默认 cleanup_before_exit，才能在硬退出前收干净运行态。
-    eprintln!("[自动更新] Windows 安装器退出前开始优雅停机后台服务");
+    runtime_log_info(format!("[自动更新] Windows 安装器退出前开始优雅停机后台服务"));
     let cleanup_app = app.clone();
     let handle = thread::spawn(move || {
         tauri::async_runtime::block_on(graceful_shutdown_background_services_with_timeout(&app))
     });
     match handle.join() {
         Ok(true) => {
-            eprintln!("[自动更新] Windows 安装器退出前优雅停机后台服务完成");
+            runtime_log_info(format!("[自动更新] Windows 安装器退出前优雅停机后台服务完成"));
         }
         Ok(false) => {
-            eprintln!("[自动更新] Windows 安装器退出前优雅停机后台服务超时");
+            runtime_log_error(format!("[自动更新] Windows 安装器退出前优雅停机后台服务超时"));
             show_background_shutdown_timeout_dialog(&cleanup_app);
         }
         Err(_) => {
-            eprintln!("[自动更新] Windows 安装器退出前优雅停机后台服务失败：停机线程异常退出");
+            runtime_log_error(format!("[自动更新] Windows 安装器退出前优雅停机后台服务失败：停机线程异常退出"));
         }
     }
     cleanup_app.cleanup_before_exit();
@@ -427,7 +427,7 @@ fn emit_update_progress(app: &AppHandle, payload: UpdateProgressPayload) {
     let _ = app.emit(PORTABLE_UPDATE_EVENT_NAME, payload.clone());
     match serde_json::to_value(payload) {
         Ok(value) => ide_chat_broadcast_notification(PORTABLE_UPDATE_EVENT_NAME, value),
-        Err(err) => eprintln!("[自动更新] 广播 Web 更新进度失败：{}", err),
+        Err(err) => runtime_log_error(format!("[自动更新] 广播 Web 更新进度失败：{}", err)),
     }
 }
 
@@ -764,10 +764,10 @@ async fn check_github_update(
     let runtime = detect_update_runtime_paths()?;
     if respect_cooldown.unwrap_or(false) {
         if should_skip_auto_update_check()? {
-            eprintln!(
+            runtime_log_warn(format!(
                 "[自动更新] 自动检查仍处于 {} 小时冷却期，本次跳过远端检查",
                 GITHUB_AUTO_UPDATE_COOLDOWN_HOURS
-            );
+            ));
             let result = build_skipped_auto_update_result(runtime.runtime_kind);
             sync_update_state_from_check_result(&app, &result);
             return Ok(result);
@@ -790,7 +790,7 @@ async fn check_github_update(
     .await {
         Ok(notes) => notes,
         Err(err) => {
-            eprintln!("[自动更新] 远程更新日志读取失败：{err}");
+            runtime_log_error(format!("[自动更新] 远程更新日志读取失败：{err}"));
             payload.body.clone().unwrap_or_default()
         }
     };
@@ -956,11 +956,11 @@ fn cleanup_portable_update_temp_artifacts(temp_root: &StdPath) {
             continue;
         }
         if let Err(err) = remove_if_exists(&path) {
-            eprintln!(
+            runtime_log_error(format!(
                 "[自动更新] 清理便携版更新临时文件失败: path={}，error={}",
                 path.display(),
                 err
-            );
+            ));
         }
     }
 }

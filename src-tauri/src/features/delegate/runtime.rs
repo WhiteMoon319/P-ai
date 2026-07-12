@@ -114,7 +114,7 @@ fn delegate_conversation_store_write_if_not_deleted(
         .lock()
         .map_err(|_| "Failed to lock deleted delegate conversation ids".to_string())?;
     if deleted.contains(normalized_delegate_id) {
-        runtime_log_info(format!(
+        runtime_log_warn(format!(
             "[委托会话] 跳过，任务=写入已删除委托会话，delegate_id={}",
             normalized_delegate_id
         ));
@@ -225,7 +225,7 @@ fn delegate_capture_workspace_snapshot(
 ) -> Option<DelegateWorkspaceSnapshot> {
     let snapshot = delegate_parent_shell_workspace(app_state, root_conversation_id, parent_chat_session_key)
         .and_then(|conversation| delegate_workspace_snapshot_from_conversation(&conversation));
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[委托工作目录] 捕获快照 conversation_id={} parent_chat_session_key={} shell_workspace_path={} shell_workspaces={} shell_autonomous_mode={}",
         root_conversation_id,
         parent_chat_session_key.unwrap_or(""),
@@ -359,7 +359,7 @@ fn delegate_runtime_thread_create(
         &thread_id,
         DELEGATE_STATUS_RUNNING,
     ) {
-        runtime_log_info(format!(
+        runtime_log_error(format!(
             "[委托状态] 广播失败: 阶段=开始, root_conversation_id={}, delegate_id={}, error={}",
             delegate.conversation_id,
             thread_id,
@@ -517,13 +517,13 @@ fn abort_delegate_runtime_thread(
         &thread.conversation.id,
         "委托已被打断，队列消息已清理",
     ) {
-        runtime_log_info(format!(
+        runtime_log_error(format!(
             "[委托会话] 清理队列失败: delegate_id={}, error={}",
             normalized_delegate_id, err
         ));
     }
     if let Err(err) = release_conversation_processing_claim(app_state, &thread.conversation.id) {
-        runtime_log_info(format!(
+        runtime_log_error(format!(
             "[委托会话] 释放处理声明失败: delegate_id={}, error={}",
             normalized_delegate_id, err
         ));
@@ -535,7 +535,7 @@ fn abort_delegate_runtime_thread(
             MainSessionState::Idle,
         )
     {
-        runtime_log_info(format!(
+        runtime_log_error(format!(
             "[委托会话] 重置运行态失败: delegate_id={}, error={}",
             normalized_delegate_id, err
         ));
@@ -554,7 +554,7 @@ fn abort_delegate_runtime_thread(
         normalized_delegate_id,
         DELEGATE_STATUS_FAILED,
     ) {
-        runtime_log_info(format!(
+        runtime_log_error(format!(
             "[委托状态] 广播失败: 阶段=打断, root_conversation_id={}, delegate_id={}, error={}",
             thread.root_conversation_id,
             normalized_delegate_id,

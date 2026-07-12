@@ -136,18 +136,18 @@ fn save_agents_inner(
 
     for agent_id in &removed_agent_ids {
         let started_at = std::time::Instant::now();
-        eprintln!(
+        runtime_log_info(format!(
             "[会话] 开始，任务=导出并删除私有记忆，status=开始，agent_id={}，trigger=agent_removed",
             agent_id
-        );
+        ));
         let export = match memory_store_export_agent_private_memories(&state.data_path, agent_id) {
             Ok(export) => export,
             Err(error) => {
                 let elapsed_ms = started_at.elapsed().as_millis();
-                eprintln!(
+                runtime_log_error(format!(
                     "[会话] 失败，任务=导出并删除私有记忆，status=失败，agent_id={}，trigger=agent_removed，stage=export，duration_ms={}，error={}",
                     agent_id, elapsed_ms, error
-                );
+                ));
                 return Err(error);
             }
         };
@@ -155,37 +155,37 @@ fn save_agents_inner(
             Ok(deleted) => deleted,
             Err(error) => {
                 let elapsed_ms = started_at.elapsed().as_millis();
-                eprintln!(
+                runtime_log_error(format!(
                     "[会话] 失败，任务=导出并删除私有记忆，status=失败，agent_id={}，trigger=agent_removed，stage=delete，duration_ms={}，error={}",
                     agent_id, elapsed_ms, error
-                );
+                ));
                 return Err(error);
             }
         };
         let elapsed_ms = started_at.elapsed().as_millis();
-        eprintln!(
+        runtime_log_info(format!(
             "[会话] 完成，任务=导出并删除私有记忆，status=完成，agent_id={}，export.count={}，export.path={}，deleted={}，duration_ms={}",
             agent_id,
             export.count,
             export.path,
             deleted,
             elapsed_ms
-        );
+        ));
     }
     for agent_id in &disabled_private_memory_agent_ids {
         let started_at = std::time::Instant::now();
-        eprintln!(
+        runtime_log_info(format!(
             "[会话] 开始，任务=导出并删除私有记忆，status=开始，agent_id={}，trigger=private_memory_disabled",
             agent_id
-        );
+        ));
         let export = match memory_store_export_agent_private_memories(&state.data_path, agent_id) {
             Ok(export) => export,
             Err(error) => {
                 let elapsed_ms = started_at.elapsed().as_millis();
-                eprintln!(
+                runtime_log_error(format!(
                     "[会话] 失败，任务=导出并删除私有记忆，status=失败，agent_id={}，trigger=private_memory_disabled，stage=export，duration_ms={}，error={}",
                     agent_id, elapsed_ms, error
-                );
+                ));
                 return Err(error);
             }
         };
@@ -193,22 +193,22 @@ fn save_agents_inner(
             Ok(deleted) => deleted,
             Err(error) => {
                 let elapsed_ms = started_at.elapsed().as_millis();
-                eprintln!(
+                runtime_log_error(format!(
                     "[会话] 失败，任务=导出并删除私有记忆，status=失败，agent_id={}，trigger=private_memory_disabled，stage=delete，duration_ms={}，error={}",
                     agent_id, elapsed_ms, error
-                );
+                ));
                 return Err(error);
             }
         };
         let elapsed_ms = started_at.elapsed().as_millis();
-        eprintln!(
+        runtime_log_info(format!(
             "[会话] 完成，任务=导出并删除私有记忆，status=完成，agent_id={}，export.count={}，export.path={}，deleted={}，duration_ms={}",
             agent_id,
             export.count,
             export.path,
             deleted,
             elapsed_ms
-        );
+        ));
     }
 
     let affected_agent_ids = previous_agents

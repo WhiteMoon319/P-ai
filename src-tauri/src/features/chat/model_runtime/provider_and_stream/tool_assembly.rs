@@ -641,7 +641,7 @@ impl RuntimeJsonTool for BuiltinOperateTool {
             }
             let args_value = serde_json::to_value(&args).unwrap_or(Value::Null);
             runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.start name=operate args={}",
+                "[工具调试] 内置工具执行开始 name=operate args={}",
                 debug_value_snippet(&args_value, 240)
             ));
             let result = run_operate_tool(args)
@@ -653,10 +653,10 @@ impl RuntimeJsonTool for BuiltinOperateTool {
                 });
             match &result {
                 Ok(v) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.ok name=operate result={}",
+                    "[工具调试] 内置工具执行完成 name=operate result={}",
                     debug_value_snippet(v, 240)
                 )),
-                Err(err) => eprintln!("[工具执行] 内置工具 operate 执行失败: 错误={err}"),
+                Err(err) => runtime_log_error(format!("[工具执行] 内置工具 operate 执行失败: 错误={err}")),
             }
             result
         })
@@ -682,7 +682,7 @@ impl RuntimeJsonTool for BuiltinReadFileTool {
         Box::pin(async move {
             let args_value = serde_json::to_value(&args).unwrap_or(Value::Null);
             runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.start name=read args={}",
+                "[工具调试] 内置工具执行开始 name=read args={}",
                 debug_value_snippet(&args_value, 240)
             ));
             let result = builtin_read_file(
@@ -695,10 +695,10 @@ impl RuntimeJsonTool for BuiltinReadFileTool {
             .map_err(ToolInvokeError::from);
             match &result {
                 Ok(v) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.ok name=read result={}",
+                    "[工具调试] 内置工具执行完成 name=read result={}",
                     debug_value_snippet(v, 240)
                 )),
-                Err(err) => eprintln!("[工具执行] 内置工具 read 执行失败: 错误={err}"),
+                Err(err) => runtime_log_error(format!("[工具执行] 内置工具 read 执行失败: 错误={err}")),
             }
             result
         })
@@ -724,7 +724,7 @@ impl RuntimeJsonTool for BuiltinReadMediaTool {
         Box::pin(async move {
             let args_value = serde_json::to_value(&args).unwrap_or(Value::Null);
             runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.start name=read_media args={}",
+                "[工具调试] 内置工具执行开始 name=read_media args={}",
                 debug_value_snippet(&args_value, 240)
             ));
             let result = builtin_read_media(
@@ -738,10 +738,10 @@ impl RuntimeJsonTool for BuiltinReadMediaTool {
             .map_err(ToolInvokeError::from);
             match &result {
                 Ok(v) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.ok name=read_media result={}",
+                    "[工具调试] 内置工具执行完成 name=read_media result={}",
                     debug_value_snippet(v, 240)
                 )),
-                Err(err) => eprintln!("[工具执行] 内置工具 read_media 执行失败: 错误={err}"),
+                Err(err) => runtime_log_error(format!("[工具执行] 内置工具 read_media 执行失败: 错误={err}")),
             }
             result
         })

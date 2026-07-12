@@ -115,7 +115,7 @@ fn try_undo_apply_patch_from_removed_messages(
         empty_content_tool_event_count,
         tool_names,
     ) = collect_tool_result_diagnostics_from_messages(removed_messages);
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[会话撤回] 工具备份诊断，任务=try_undo_apply_patch_from_removed_messages，removed_messages={}，messages_with_tool_call={}，tool_events={}，parseable_tool_events={}，tool_events_with_backup_id={}，empty_content_tool_events={}，backup_record_ids={}，tool_names={}",
         removed_messages.len(),
         message_count_with_tool_call,
@@ -139,37 +139,37 @@ fn try_undo_apply_patch_from_removed_messages(
     for record_id in ids.iter().rev() {
         let record_path = apply_patch_record_path(&state.data_path, record_id);
         if !record_path.exists() {
-            eprintln!(
+            runtime_log_warn(format!(
                 "[apply_patch撤回] 跳过：备份记录不存在，record_id={}",
                 record_id
-            );
+            ));
             continue;
         }
         let record = match apply_patch_read_backup_record(&record_path) {
             Ok(r) => r,
             Err(err) => {
-                eprintln!(
+                runtime_log_warn(format!(
                     "[apply_patch撤回] 跳过：读取备份记录失败，record_id={}，error={}",
                     record_id, err
-                );
+                ));
                 continue;
             }
         };
         let (restored, overwritten) = match apply_patch_restore_backup_record(&state.data_path, &record) {
             Ok(result) => result,
             Err(err) => {
-                eprintln!(
+                runtime_log_warn(format!(
                     "[apply_patch撤回] 跳过：恢复备份失败，record_id={}，error={}",
                     record_id, err
-                );
+                ));
                 continue;
             }
         };
         if let Err(err) = apply_patch_cleanup_backup_record_by_value(&state.data_path, &record) {
-            eprintln!(
+            runtime_log_error(format!(
                 "[apply_patch撤回] 警告：清理备份记录失败，record_id={}，error={}",
                 record_id, err
-            );
+            ));
         }
         total_restored = total_restored.saturating_add(restored);
         all_overwritten.extend(overwritten);
@@ -189,18 +189,18 @@ fn cleanup_backup_records_by_ids(data_path: &PathBuf, ids: &[String]) -> Result<
         let record = match apply_patch_read_backup_record(&record_path) {
             Ok(r) => r,
             Err(err) => {
-                eprintln!(
+                runtime_log_warn(format!(
                     "[apply_patch清理] 跳过：读取备份记录失败，record_id={}，error={}",
                     record_id, err
-                );
+                ));
                 continue;
             }
         };
         if let Err(err) = apply_patch_cleanup_backup_record_by_value(data_path, &record) {
-            eprintln!(
+            runtime_log_warn(format!(
                 "[apply_patch清理] 跳过：清理备份失败，record_id={}，error={}",
                 record_id, err
-            );
+            ));
             continue;
         }
         cleaned = cleaned.saturating_add(1);

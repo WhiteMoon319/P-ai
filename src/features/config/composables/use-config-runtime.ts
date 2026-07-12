@@ -58,7 +58,7 @@ export function useConfigRuntime(options: UseConfigRuntimeOptions) {
         },
       });
     } catch (e) {
-      console.warn("[TRAY] sync icon failed:", e);
+      console.warn("[托盘] sync icon failed:", e);
     }
   }
 
@@ -128,7 +128,7 @@ export function useConfigRuntime(options: UseConfigRuntimeOptions) {
     ).trim() || "~/.codex/auth.json";
     const isCodex = effectiveRequestFormat === "codex";
     if (isCodex) {
-      console.info(`[API] Codex mode detected: skipping API key validation; using empty candidate API key for selectedApiConfig=${options.selectedApiConfig.value.id}`);
+      console.warn(`[API] 检测到 Codex 模式：跳过 API Key 校验，使用空候选 API Key，selectedApiConfig=${options.selectedApiConfig.value.id}`);
     }
     const apiKeys = Array.isArray(provider?.apiKeys)
       ? provider.apiKeys.map((value) => String(value || "").trim()).filter(Boolean)

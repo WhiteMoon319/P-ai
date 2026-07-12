@@ -148,7 +148,7 @@ fn memory_store_list_profile_memories_by_user_id_visible_for_agent(
 ) -> Result<Vec<MemoryEntry>, String> {
     let started_at = std::time::Instant::now();
     let Some(user_id_tag) = profile_user_id_tag(user_id) else {
-        runtime_log_info(format!(
+        runtime_log_warn(format!(
             "[用户画像] 跳过，任务=fast_profile_lookup，user_id={}，agent_id={}，private_memory_enabled={}，requested_limit={}，reason=empty_user_id，elapsed_ms={}",
             user_id.trim(),
             agent_id.trim(),

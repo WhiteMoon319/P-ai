@@ -1712,7 +1712,7 @@ function toggleToolReviewPanel() {
 }
 
 function handleDirectoryPickRestricted() {
-  console.info("[Sidebar工作区] 跳过选择目录：web/sidebar 不允许唤起本机目录");
+  console.warn("[Sidebar工作区] 跳过选择目录：web/sidebar 不允许唤起本机目录");
   transport.errorText.value = t("sidebar.openDirectoryRestricted");
 }
 
@@ -2199,7 +2199,7 @@ function findMessageIndexByTurnId(turnId: string): number {
 async function recallTurn(payload: { turnId: string }) {
   if (!activeConversationId.value) return;
   if (rewindInFlight) {
-    console.info("[会话撤回] 跳过：已有撤回流程正在进行", { turnId: payload?.turnId });
+    console.warn("[会话撤回] 跳过：已有撤回流程正在进行", { turnId: payload?.turnId });
     return;
   }
   if (busy.value || compacting.value) {

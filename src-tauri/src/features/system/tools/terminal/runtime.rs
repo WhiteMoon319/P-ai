@@ -63,10 +63,10 @@ async fn terminal_live_kill_child_with_timeout(
     .await
     {
         Ok(_) => {}
-        Err(_) => eprintln!(
+        Err(_) => runtime_log_error(format!(
             "[终端] live shell 关闭等待超时: context={}, timeout_ms={}",
             context, TERMINAL_LIVE_CLOSE_WAIT_MS
-        ),
+        )),
     }
 }
 

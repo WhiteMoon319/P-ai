@@ -33,7 +33,7 @@ fn handle_global_shortcut_probe(app: &AppHandle, shortcut: &Shortcut, state: Sho
     let config = match state_read_config_cached(app_state.inner()) {
         Ok(config) => config,
         Err(err) => {
-            eprintln!("[快捷键] 读取配置失败：error={err}");
+            runtime_log_error(format!("[快捷键] 读取配置失败：error={err}"));
             return;
         }
     };
@@ -42,14 +42,14 @@ fn handle_global_shortcut_probe(app: &AppHandle, shortcut: &Shortcut, state: Sho
         if let Err(err) = std::thread::Builder::new()
             .name("global-shortcut-chat-toggle".to_string())
             .spawn(move || {
-                eprintln!("[快捷键] 收到召唤热键，开始切换聊天窗口");
+                runtime_log_info(format!("[快捷键] 收到召唤热键，开始切换聊天窗口"));
                 match toggle_window(&app_handle, "chat") {
-                    Ok(()) => eprintln!("[快捷键] 聊天窗口切换完成"),
-                    Err(err) => eprintln!("[快捷键] 聊天窗口切换失败：error={err}"),
+                    Ok(()) => runtime_log_info(format!("[快捷键] 聊天窗口切换完成")),
+                    Err(err) => runtime_log_error(format!("[快捷键] 聊天窗口切换失败：error={err}")),
                 }
             })
         {
-            eprintln!("[快捷键] 调度聊天窗口切换失败：error={err}");
+            runtime_log_error(format!("[快捷键] 调度聊天窗口切换失败：error={err}"));
         }
     }
 }
@@ -481,7 +481,7 @@ fn start_record_hotkey_probe(app: AppHandle, config_path: std::path::PathBuf) ->
             _ => {}
         };
         if let Err(err) = rdev::listen(callback) {
-            eprintln!("[RDEV-RECORD-PROBE] listen failed: {err:?}");
+            runtime_log_error(format!("[RDEV-RECORD-PROBE] listen failed: {err:?}"));
         }
     });
     Ok(())

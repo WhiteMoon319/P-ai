@@ -301,7 +301,7 @@ fn resolve_terminal_approval_request(
 
     let Some(pending_request) = sender else {
         runtime_log_debug(format!(
-            "[TOOL-DEBUG] terminal approval request not found: {}",
+            "[工具调试] 未找到终端审批请求: {}",
             trimmed
         ));
         return Ok(false);
@@ -309,7 +309,7 @@ fn resolve_terminal_approval_request(
 
     if pending_request.sender.send(approved).is_err() {
         runtime_log_debug(format!(
-            "[TOOL-DEBUG] terminal approval receiver dropped: {}",
+            "[工具调试] 终端审批接收端已关闭: {}",
             trimmed
         ));
         return Ok(false);

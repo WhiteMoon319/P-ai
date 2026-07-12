@@ -37,12 +37,12 @@ async function runRefreshStep<T>(
     timer = setTimeout(() => {
       timeoutReported = true;
       const error = viewRefreshTimeoutError(label);
-      console.warn(`[VIEW] refresh step slow: ${label}`, error);
+      console.warn(`[视图] refresh step slow: ${label}`, error);
       onSlow?.(label, error);
     }, VIEW_REFRESH_STEP_TIMEOUT_MS);
     return await task();
   } catch (error) {
-    console.error(`[VIEW] refresh step failed: ${label}`, error);
+    console.error(`[视图] refresh step failed: ${label}`, error);
     if (!timeoutReported) {
       onFailed?.(label, error);
     }
@@ -123,7 +123,7 @@ export function useViewRefresh(options: UseViewRefreshOptions) {
         await refreshAllViewData();
         windowBootstrapped.value = true;
       } catch (error) {
-        console.error("[VIEW] window bootstrap refresh failed:", error);
+        console.error("[视图] window bootstrap refresh failed:", error);
       }
       return;
     }

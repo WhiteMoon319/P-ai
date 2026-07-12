@@ -196,7 +196,7 @@ fn memory_sync_vectors_after_delete(data_path: &PathBuf, memory_ids: &[String]) 
     let provider_id = match memory_store_active_embedding_provider_id(&conn) {
         Ok(Some(id)) if !id.trim().is_empty() => id,
         _ => {
-            runtime_log_info("[记忆向量同步] 跳过，任务=after_delete，原因=no_active_provider".to_string());
+            runtime_log_warn("[记忆向量同步] 跳过，任务=after_delete，原因=no_active_provider".to_string());
             return true;
         }
     };
@@ -247,7 +247,7 @@ fn memory_sync_vectors_after_upsert(data_path: &PathBuf, memory_ids: &[String]) 
     }
     let Some((provider_id, _model_name, embedder)) = memory_build_active_embedder(data_path)
     else {
-        runtime_log_info("[记忆向量同步] 跳过，任务=after_upsert，原因=no_active_embedder".to_string());
+        runtime_log_warn("[记忆向量同步] 跳过，任务=after_upsert，原因=no_active_embedder".to_string());
         return true;
     };
     let started = std::time::Instant::now();

@@ -121,7 +121,7 @@ export function useTerminalApproval(options: UseTerminalApprovalOptions) {
         },
       });
     } catch (error) {
-      console.warn("[TERMINAL] resolve_terminal_approval failed:", error);
+      console.warn("[终端] resolve_terminal_approval failed:", error);
     } finally {
       options.queue.value.splice(targetIndex, 1);
       options.resolving.value = false;
@@ -153,7 +153,7 @@ export function useTerminalApproval(options: UseTerminalApprovalOptions) {
         },
       });
     } catch (error) {
-      console.warn(`[TERMINAL] ${command} failed:`, error);
+      console.warn(`[终端] ${command} failed:`, error);
     } finally {
       options.queue.value.splice(targetIndex, 1);
       options.resolving.value = false;

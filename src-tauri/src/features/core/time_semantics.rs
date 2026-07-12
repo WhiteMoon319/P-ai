@@ -39,7 +39,7 @@ fn local_utc_offset() -> Option<UtcOffset> {
     match UtcOffset::current_local_offset() {
         Ok(offset) => Some(offset),
         Err(err) => {
-            runtime_log_info(format!(
+            runtime_log_error(format!(
                 "[时间语义] 获取本地 UTC 偏移失败，回退为 UTC 显示: {err}"
             ));
             None

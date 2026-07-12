@@ -450,7 +450,7 @@ fn persist_payload_images_to_workspace_downloads(
             continue;
         }
         let Ok(raw) = B64.decode(image.bytes_base64.trim()) else {
-            eprintln!("[CHAT] skip persist image to downloads: invalid base64, index={idx}");
+            runtime_log_warn(format!("[CHAT] skip persist image to downloads: invalid base64, index={idx}"));
             continue;
         };
         let suggested = format!("queued-image-{}", idx + 1);
@@ -460,7 +460,7 @@ fn persist_payload_images_to_workspace_downloads(
                 notices.push(build_attachment_notice_text(idx, &relative));
             }
             Err(err) => {
-                eprintln!("[CHAT] persist queued image to downloads failed: index={}, err={}", idx, err);
+                runtime_log_error(format!("[CHAT] persist queued image to downloads failed: index={}, err={}", idx, err));
             }
         }
     }

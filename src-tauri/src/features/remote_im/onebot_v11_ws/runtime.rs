@@ -54,10 +54,10 @@ impl OnebotV11WsManager {
         if stopped.is_err() {
             self.add_log(channel_id, "warn", "停止渠道连接超时，连接可能仍在退出中")
                 .await;
-            eprintln!(
+            runtime_log_error(format!(
                 "[远程IM][OneBot v11 WS] 停止渠道连接超时，连接可能仍在退出中: {}",
                 channel_id
-            );
+            ));
         }
         self.connections.write().await.remove(channel_id);
         Ok(())
@@ -70,19 +70,19 @@ impl OnebotV11WsManager {
         };
         self.add_log(channel_id, "info", "开始等待渠道连接任务组退出")
             .await;
-        eprintln!(
+        runtime_log_info(format!(
             "[远程IM][OneBot v11 WS] 开始等待渠道连接任务组退出: channel_id={}",
             channel_id
-        );
+        ));
         runtime.cancel.cancel();
         runtime.tasks.close();
         runtime.tasks.wait().await;
         self.add_log(channel_id, "info", "渠道连接任务组已退出")
             .await;
-        eprintln!(
+        runtime_log_info(format!(
             "[远程IM][OneBot v11 WS] 渠道连接任务组已退出: channel_id={}",
             channel_id
-        );
+        ));
     }
 
     async fn force_clear_channel_runtime_state(&self, channel_id: &str) {
@@ -109,30 +109,30 @@ impl OnebotV11WsManager {
 
     async fn stop_channel_inner(&self, channel_id: &str) -> Result<(), String> {
         let started_at = std::time::Instant::now();
-        eprintln!(
+        runtime_log_info(format!(
             "[远程IM][OneBot v11 WS] 开始停止渠道: channel_id={}",
             channel_id
-        );
+        ));
         self.add_log(channel_id, "info", "开始停止渠道").await;
 
         // 1. 停止事件消费器
         if let Err(err) = self.stop_event_consumer_inner(channel_id).await {
             self.add_log(channel_id, "warn", &format!("停止事件消费器失败: {}", err))
                 .await;
-            eprintln!(
+            runtime_log_error(format!(
                 "[远程IM][OneBot v11 WS] 停止事件消费器失败: channel_id={}, error={}",
                 channel_id, err
-            );
+            ));
         }
 
         // 2. 停止活动 WebSocket 连接
         if let Err(err) = self.stop_onebot_connection_inner(channel_id).await {
             self.add_log(channel_id, "warn", &format!("停止活动连接失败: {}", err))
                 .await;
-            eprintln!(
+            runtime_log_error(format!(
                 "[远程IM][OneBot v11 WS] 停止活动连接失败: channel_id={}, error={}",
                 channel_id, err
-            );
+            ));
         }
 
         // 3. 取消 runtime（触发 axum graceful shutdown）并等待 serve 任务退出
@@ -147,10 +147,10 @@ impl OnebotV11WsManager {
                     let _ = handle.await;
                     self.add_log(channel_id, "warn", "停止渠道超时，已强制中止 serve 任务")
                         .await;
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[远程IM][OneBot v11 WS] 停止渠道超时，已强制中止 serve 任务: {}",
                         channel_id
-                    );
+                    ));
                 }
             }
         }
@@ -162,11 +162,11 @@ impl OnebotV11WsManager {
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
         self.add_log(channel_id, "info", "渠道服务器已停止").await;
-        eprintln!(
+        runtime_log_info(format!(
             "[远程IM][OneBot v11 WS] 渠道已停止: channel_id={}, duration_ms={}",
             channel_id,
             started_at.elapsed().as_millis()
-        );
+        ));
         Ok(())
     }
 
@@ -302,7 +302,7 @@ impl OnebotV11WsManager {
                     .set_last_error(channel_id, Some(message.clone()))
                     .await;
                 self.add_log(channel_id, "error", &message).await;
-                eprintln!("[远程IM][OneBot v11 WS] {}", message);
+                runtime_log_error(format!("[远程IM][OneBot v11 WS] 失败，error={}", message));
                 return Err(message);
             }
         };
@@ -363,10 +363,10 @@ impl OnebotV11WsManager {
         let port_service_for_task = self.port_service.clone();
 
         let task_handle = tokio::spawn(async move {
-            eprintln!(
+            runtime_log_info(format!(
                 "[远程IM][OneBot v11 WS] 渠道 {} axum serve 启动: {}",
                 channel_id_owned, actual_addr
-            );
+            ));
             port_service_for_task
                 .add_log(&channel_id_owned, "info", &format!("axum serve 已启动: {}", actual_addr))
                 .await;
@@ -384,18 +384,18 @@ impl OnebotV11WsManager {
                         &format!("axum serve 退出异常: {}", err),
                     )
                     .await;
-                eprintln!(
+                runtime_log_error(format!(
                     "[远程IM][OneBot v11 WS] 渠道 {} axum serve 退出异常: {}",
                     channel_id_owned, err
-                );
+                ));
             } else {
                 port_service_for_task
                     .add_log(&channel_id_owned, "info", "axum serve 正常退出")
                     .await;
-                eprintln!(
+                runtime_log_info(format!(
                     "[远程IM][OneBot v11 WS] 渠道 {} axum serve 正常退出",
                     channel_id_owned
-                );
+                ));
             }
             // serve 退出后 listener 自动 drop，端口立即释放
         });
@@ -410,10 +410,10 @@ impl OnebotV11WsManager {
             &format!("服务器启动，监听 {}", actual_addr_for_log),
         )
         .await;
-        eprintln!(
+        runtime_log_info(format!(
             "[远程IM][OneBot v11 WS] 渠道 {} 开始监听 {}",
             channel_id, actual_addr_for_log
-        );
+        ));
         Ok(())
     }
 
@@ -463,10 +463,10 @@ async fn onebot_ws_handler(
             format!("拒绝连接（token 无效）: {}", peer_addr),
         )
         .await;
-        eprintln!(
+        runtime_log_error(format!(
             "[远程IM][OneBot v11 WS] 渠道 {} 拒绝连接（token 无效）: {}",
             state.channel_id, peer_addr
-        );
+        ));
         return axum::response::Response::builder()
             .status(axum::http::StatusCode::FORBIDDEN)
             .body(axum::body::Body::empty())
@@ -498,10 +498,10 @@ async fn handle_ws_connection(socket: WebSocket, peer_addr: SocketAddr, state: O
             format!("检测到已有连接，正在尝试替换: {}", peer_addr),
         )
         .await;
-        eprintln!(
+        runtime_log_info(format!(
             "[远程IM][OneBot v11 WS] 渠道 {} 检测到已有连接，正在尝试替换: {}",
             channel_id, peer_addr
-        );
+        ));
         let existing_sender = {
             state
                 .connection_stop_senders
@@ -535,10 +535,10 @@ async fn handle_ws_connection(socket: WebSocket, peer_addr: SocketAddr, state: O
         )
         .await;
         if replaced.is_err() {
-            eprintln!(
+            runtime_log_error(format!(
                 "[远程IM][OneBot v11 WS] 渠道 {} 替换旧连接超时，拒绝新连接: {}",
                 channel_id, peer_addr
-            );
+            ));
             append_channel_log(
                 &state.port_service,
                 &channel_id,
@@ -564,10 +564,10 @@ async fn handle_ws_connection(socket: WebSocket, peer_addr: SocketAddr, state: O
         .await
         .insert(channel_id.clone(), connection_stop_tx);
 
-    eprintln!(
+    runtime_log_info(format!(
         "[远程IM][OneBot v11 WS] 渠道 {} 客户端已连接: {}",
         channel_id, peer_addr_str
-    );
+    ));
     append_channel_log(
         &state.port_service,
         &channel_id,

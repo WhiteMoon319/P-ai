@@ -65,7 +65,7 @@ export function useChatWindowMediaOrchestrator(bindings: Record<string, any>) {
         const recognizedText = String(text || "").trim();
         const matched = bindings.matchBackgroundVoiceScreenshotKeyword(recognizedText, keywords);
         if (!matched) {
-          console.info(
+          console.warn(
             "[后台语音截图] 跳过：未命中关键词，关键词数=%d，转写长度=%d",
             keywords.length,
             recognizedText.length,

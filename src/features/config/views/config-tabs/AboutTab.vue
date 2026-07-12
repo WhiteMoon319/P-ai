@@ -91,7 +91,7 @@ onMounted(async () => {
   try {
     appVersion.value = await invokeTauri<string>("get_app_version");
   } catch (error) {
-    console.warn("[AboutTab] load app version failed:", error);
+    console.warn("[关于] load app version failed:", error);
     appVersion.value = "unknown";
   }
 });
@@ -101,7 +101,7 @@ async function openRepository() {
     const url = await invokeTauri<string>("get_project_repository_url");
     void invokeTauri("open_external_url", { url });
   } catch (error) {
-    console.warn("[AboutTab] resolve project repository failed:", error);
+    console.warn("[关于] resolve project repository failed:", error);
   }
 }
 

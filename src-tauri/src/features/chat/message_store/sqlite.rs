@@ -1028,7 +1028,7 @@ fn chat_metadata_store_publish_blocks(
         if operation_root.exists() && fs::remove_dir_all(&operation_root).is_err() { cleaned = false; }
         if cleaned {
             if let Err(err) = conn.execute("DELETE FROM storage_operations WHERE operation_id=?1 AND state='committed'", [&operation_id]) {
-                eprintln!("[消息存储] 清理已提交 SQLite operation 延后，operation_id={}，error={err}", operation_id);
+                runtime_log_info(format!("[消息存储] 清理已提交 SQLite operation 延后，operation_id={}，error={err}", operation_id));
             }
         }
     chat_metadata_store_write_result(&conn, paths)

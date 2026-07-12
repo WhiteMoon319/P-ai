@@ -222,7 +222,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       syncCurrentUpdateState(state);
       return state;
     } catch (error) {
-      console.warn("[UPDATE] get_github_update_state failed:", error);
+      console.warn("[自动更新] get_github_update_state failed:", error);
       return null;
     }
   }
@@ -353,7 +353,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
         updateDialogPrimaryAction.value = null;
         openUpdateDialog(t("about.checkFailedDialog", { error: String(error) }), "error");
       }
-      console.warn("[UPDATE] check_github_update failed:", error);
+      console.warn("[自动更新] check_github_update failed:", error);
     } finally {
       checkingUpdateRequest.value = false;
     }
@@ -399,7 +399,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
         updateDialogOpen.value = true;
       }
       options.status.value = t("about.startUpdateFailedStatus", { error: String(error) });
-      console.warn("[UPDATE] start_github_update failed:", error);
+      console.warn("[自动更新] start_github_update failed:", error);
     }
   }
 
@@ -440,7 +440,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       updateDialogTitle.value = t("about.updateFailed");
       updateDialogBody.value = t("about.applyUpdateFailed", { error: String(error) });
       options.status.value = t("about.applyUpdateFailedStatus", { error: String(error) });
-      console.warn("[UPDATE] apply_prepared_github_update failed:", error);
+      console.warn("[自动更新] apply_prepared_github_update failed:", error);
     }
   }
 
@@ -496,7 +496,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
         updateProgressUnlisten = unlisten;
       })
       .catch((error) => {
-        console.warn("[UPDATE] listen easy-call:update-status failed:", error);
+        console.warn("[自动更新] listen easy-call:update-status failed:", error);
       });
   } else {
     webUpdateProgressUnlisten = onWebBridgeNotification("easy-call:update-status", (payload) => {

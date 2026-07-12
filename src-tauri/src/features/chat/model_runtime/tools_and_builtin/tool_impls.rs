@@ -28,7 +28,7 @@ impl RuntimeJsonTool for BuiltinFetchTool {
     fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
         runtime_log_debug(format!(
-            "[TOOL-DEBUG] execute_builtin_tool.start name=fetch args={}",
+            "[工具调试] 内置工具执行开始 name=fetch args={}",
             debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
         ));
         let result = builtin_fetch(&self.app_state, &args.url, args.max_length.unwrap_or(1800))
@@ -36,10 +36,10 @@ impl RuntimeJsonTool for BuiltinFetchTool {
             .map_err(ToolInvokeError::from);
         match &result {
             Ok(v) => runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.ok name=fetch result={}",
+                "[工具调试] 内置工具执行完成 name=fetch result={}",
                 debug_value_snippet(v, 240)
             )),
-            Err(err) => eprintln!("[工具执行] 内置工具 fetch 执行失败: 错误={err}"),
+            Err(err) => runtime_log_error(format!("[工具执行] 内置工具 fetch 执行失败: 错误={err}")),
         }
         result
         })
@@ -75,7 +75,7 @@ impl RuntimeJsonTool for BuiltinBingSearchTool {
     fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
         runtime_log_debug(format!(
-            "[TOOL-DEBUG] execute_builtin_tool.start name=websearch args={}",
+            "[工具调试] 内置工具执行开始 name=websearch args={}",
             debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
         ));
         let result = builtin_bing_search(&self.app_state, &args.query)
@@ -83,11 +83,11 @@ impl RuntimeJsonTool for BuiltinBingSearchTool {
             .map_err(ToolInvokeError::from);
         match &result {
             Ok(v) => runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.ok name=websearch result={}",
+                "[工具调试] 内置工具执行完成 name=websearch result={}",
                 debug_value_snippet(v, 240)
             )),
             Err(err) => {
-                eprintln!("[工具执行] 内置工具 websearch 执行失败: 错误={err}")
+                runtime_log_error(format!("[工具执行] 内置工具 websearch 执行失败: 错误={err}"))
             }
         }
         result
@@ -168,18 +168,18 @@ impl RuntimeJsonTool for BuiltinRememberTool {
             "memory": args.memory,
         });
         runtime_log_debug(format!(
-            "[TOOL-DEBUG] execute_builtin_tool.start name=remember args={}",
+            "[工具调试] 内置工具执行开始 name=remember args={}",
             debug_value_snippet(&args_json, 240)
         ));
         let result = builtin_memory_save(&self.app_state, &self.memory_context, args_json)
             .map_err(ToolInvokeError::from);
         match &result {
             Ok(v) => runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.ok name=remember result={}",
+                "[工具调试] 内置工具执行完成 name=remember result={}",
                 debug_value_snippet(v, 240)
             )),
             Err(err) => {
-                eprintln!("[工具执行] 内置工具 remember 执行失败: 错误={err}")
+                runtime_log_error(format!("[工具执行] 内置工具 remember 执行失败: 错误={err}"))
             }
         }
         result
@@ -221,7 +221,7 @@ impl RuntimeJsonTool for BuiltinRecallTool {
         Box::pin(async move {
         let args_json = serde_json::to_value(&args).unwrap_or(Value::Null);
         runtime_log_debug(format!(
-            "[TOOL-DEBUG] execute_builtin_tool.start name=recall args={}",
+            "[工具调试] 内置工具执行开始 name=recall args={}",
             debug_value_snippet(&args_json, 240)
         ));
         let result = builtin_recall(
@@ -235,10 +235,10 @@ impl RuntimeJsonTool for BuiltinRecallTool {
             .map_err(ToolInvokeError::from);
         match &result {
             Ok(v) => runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.ok name=recall result={}",
+                "[工具调试] 内置工具执行完成 name=recall result={}",
                 debug_value_snippet(v, 240)
             )),
-            Err(err) => eprintln!("[工具执行] 内置工具 recall 执行失败: 错误={err}"),
+            Err(err) => runtime_log_error(format!("[工具执行] 内置工具 recall 执行失败: 错误={err}")),
         }
         result
         })
@@ -265,17 +265,17 @@ impl RuntimeJsonTool for BuiltinReloadTool {
 
     fn call_typed(&self, _args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
-            runtime_log_debug("[TOOL-DEBUG] execute_builtin_tool.start name=reload".to_string());
+            runtime_log_debug("[工具调试] 内置工具执行开始 name=reload".to_string());
             let result = builtin_reload(&self.app_state)
                 .await
                 .map_err(ToolInvokeError::from);
             match &result {
                 Ok(v) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.ok name=reload result={}",
+                    "[工具调试] 内置工具执行完成 name=reload result={}",
                     debug_value_snippet(v, 240)
                 )),
                 Err(err) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.err name=reload err={err}"
+                    "[工具调试] 内置工具执行失败 name=reload err={err}"
                 )),
             }
             result
@@ -306,7 +306,7 @@ impl RuntimeJsonTool for BuiltinOrganizeContextTool {
     fn call_typed(&self, _args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
             runtime_log_debug(
-                "[TOOL-DEBUG] execute_builtin_tool.start name=organize_context".to_string(),
+                "[工具调试] 内置工具执行开始 name=organize_context".to_string(),
             );
             let result = builtin_organize_context(
                 &self.app_state,
@@ -318,11 +318,11 @@ impl RuntimeJsonTool for BuiltinOrganizeContextTool {
             .map_err(ToolInvokeError::from);
             match &result {
                 Ok(v) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.ok name=organize_context result={}",
+                    "[工具调试] 内置工具执行完成 name=organize_context result={}",
                     debug_value_snippet(v, 240)
                 )),
                 Err(err) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.err name=organize_context err={err}"
+                    "[工具调试] 内置工具执行失败 name=organize_context err={err}"
                 )),
             }
             result
@@ -636,7 +636,7 @@ impl RuntimeJsonTool for BuiltinConfigTool {
         Box::pin(async move {
             let args_value = serde_json::to_value(&args).unwrap_or(Value::Null);
             runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.start name=config args={}",
+                "[工具调试] 内置工具执行开始 name=config args={}",
                 debug_value_snippet(&args_value, 240)
             ));
             let app_root = self
@@ -684,7 +684,7 @@ impl RuntimeJsonTool for BuiltinConfigTool {
                 }
             }
             runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.ok name=config result={}",
+                "[工具调试] 内置工具执行完成 name=config result={}",
                 debug_value_snippet(&result, 240)
             ));
             Ok(result)
@@ -709,7 +709,7 @@ impl RuntimeJsonTool for BuiltinTerminalExecTool {
         Box::pin(async move {
         let args_json = serde_json::to_value(&args).unwrap_or(Value::Null);
         runtime_log_debug(format!(
-            "[TOOL-DEBUG] execute_builtin_tool.start name=exec args={}",
+            "[工具调试] 内置工具执行开始 name=exec args={}",
             debug_value_snippet(&args_json, 240)
         ));
         let resolved_action = args
@@ -734,16 +734,16 @@ impl RuntimeJsonTool for BuiltinTerminalExecTool {
         match &result {
             Ok(v) => {
                 runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.ok name=exec result={}",
+                    "[工具调试] 内置工具执行完成 name=exec result={}",
                     debug_value_snippet(v, 240)
                 ));
                 runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.ok name=exec summary={}",
+                    "[工具调试] 内置工具执行完成 name=exec summary={}",
                     debug_exec_result_summary(v)
                 ));
             }
             Err(err) => {
-                eprintln!("[工具执行] 内置工具 exec 执行失败: 错误={err}")
+                runtime_log_error(format!("[工具执行] 内置工具 exec 执行失败: 错误={err}"))
             }
         }
         result
@@ -802,7 +802,7 @@ impl RuntimeJsonTool for BuiltinWriteFileTool {
     fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
         runtime_log_debug(format!(
-            "[TOOL-DEBUG] execute_builtin_tool.start name=write args={}",
+            "[工具调试] 内置工具执行开始 name=write args={}",
             debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
         ));
         let result = builtin_write_file(&self.app_state, &self.session_id, args)
@@ -810,10 +810,10 @@ impl RuntimeJsonTool for BuiltinWriteFileTool {
             .map_err(ToolInvokeError::from);
         match &result {
             Ok(v) => runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.ok name=write result={}",
+                "[工具调试] 内置工具执行完成 name=write result={}",
                 debug_value_snippet(v, 240)
             )),
-            Err(err) => eprintln!("[工具执行] 内置工具 write 执行失败: 错误={err}"),
+            Err(err) => runtime_log_error(format!("[工具执行] 内置工具 write 执行失败: 错误={err}")),
         }
         result
         })
@@ -845,7 +845,7 @@ impl RuntimeJsonTool for BuiltinDeleteFileTool {
     fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
         runtime_log_debug(format!(
-            "[TOOL-DEBUG] execute_builtin_tool.start name=delete args={}",
+            "[工具调试] 内置工具执行开始 name=delete args={}",
             debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
         ));
         let result = builtin_delete_file(&self.app_state, &self.session_id, args)
@@ -853,10 +853,10 @@ impl RuntimeJsonTool for BuiltinDeleteFileTool {
             .map_err(ToolInvokeError::from);
         match &result {
             Ok(v) => runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.ok name=delete result={}",
+                "[工具调试] 内置工具执行完成 name=delete result={}",
                 debug_value_snippet(v, 240)
             )),
-            Err(err) => eprintln!("[工具执行] 内置工具 delete 执行失败: 错误={err}"),
+            Err(err) => runtime_log_error(format!("[工具执行] 内置工具 delete 执行失败: 错误={err}")),
         }
         result
         })
@@ -891,7 +891,7 @@ impl RuntimeJsonTool for BuiltinUpdateFileTool {
     fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
         runtime_log_debug(format!(
-            "[TOOL-DEBUG] execute_builtin_tool.start name=update args={}",
+            "[工具调试] 内置工具执行开始 name=update args={}",
             debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
         ));
         let result = builtin_update_file(&self.app_state, &self.session_id, args)
@@ -899,10 +899,10 @@ impl RuntimeJsonTool for BuiltinUpdateFileTool {
             .map_err(ToolInvokeError::from);
         match &result {
             Ok(v) => runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.ok name=update result={}",
+                "[工具调试] 内置工具执行完成 name=update result={}",
                 debug_value_snippet(v, 240)
             )),
-            Err(err) => eprintln!("[工具执行] 内置工具 update 执行失败: 错误={err}"),
+            Err(err) => runtime_log_error(format!("[工具执行] 内置工具 update 执行失败: 错误={err}")),
         }
         result
         })
@@ -935,7 +935,7 @@ impl RuntimeJsonTool for BuiltinMoveFileTool {
     fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
         runtime_log_debug(format!(
-            "[TOOL-DEBUG] execute_builtin_tool.start name=move args={}",
+            "[工具调试] 内置工具执行开始 name=move args={}",
             debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
         ));
         let result = builtin_move_file(&self.app_state, &self.session_id, args)
@@ -943,10 +943,10 @@ impl RuntimeJsonTool for BuiltinMoveFileTool {
             .map_err(ToolInvokeError::from);
         match &result {
             Ok(v) => runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.ok name=move result={}",
+                "[工具调试] 内置工具执行完成 name=move result={}",
                 debug_value_snippet(v, 240)
             )),
-            Err(err) => eprintln!("[工具执行] 内置工具 move 执行失败: 错误={err}"),
+            Err(err) => runtime_log_error(format!("[工具执行] 内置工具 move 执行失败: 错误={err}")),
         }
         result
         })
@@ -1017,17 +1017,17 @@ impl RuntimeToolDyn for BuiltinTodoTool {
             let args = parse_runtime_tool_args::<TodoWriteRequest>(&args_json)?;
             let args_value = serde_json::to_value(&args).unwrap_or(Value::Null);
             runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.start name=todo args={}",
+                "[工具调试] 内置工具执行开始 name=todo args={}",
                 debug_value_snippet(&args_value, 240)
             ));
             let result = builtin_todo(&self.app_state, &self.session_id, args)
                 .map(ProviderToolResult::text);
             match &result {
                 Ok(v) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.ok name=todo result={}",
+                    "[工具调试] 内置工具执行完成 name=todo result={}",
                     debug_text_snippet(&v.display_text, 240)
                 )),
-                Err(err) => eprintln!("[工具执行] 内置工具 todo 执行失败: 错误={err}"),
+                Err(err) => runtime_log_error(format!("[工具执行] 内置工具 todo 执行失败: 错误={err}")),
             }
             result
         })
@@ -1067,17 +1067,17 @@ impl RuntimeJsonTool for BuiltinPlanTool {
     fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
         runtime_log_debug(format!(
-            "[TOOL-DEBUG] execute_builtin_tool.start name=plan args={}",
+            "[工具调试] 内置工具执行开始 name=plan args={}",
             debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
         ));
         let result = builtin_plan(&self.app_state, &self.session_id, args)
             .map_err(ToolInvokeError::from);
         match &result {
             Ok(v) => runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.ok name=plan result={}",
+                "[工具调试] 内置工具执行完成 name=plan result={}",
                 debug_value_snippet(v, 240)
             )),
-            Err(err) => eprintln!("[工具执行] 内置工具 plan 执行失败: 错误={err}"),
+            Err(err) => runtime_log_error(format!("[工具执行] 内置工具 plan 执行失败: 错误={err}")),
         }
         result
         })
@@ -1140,17 +1140,17 @@ impl RuntimeJsonTool for BuiltinCreateGoalTool {
     fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
             runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.start name=create_goal args={}",
+                "[工具调试] 内置工具执行开始 name=create_goal args={}",
                 debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
             ));
             let result = goal_create_for_session(&self.app_state, &self.session_id, args)
                 .map_err(ToolInvokeError::from);
             match &result {
                 Ok(v) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.ok name=create_goal result={}",
+                    "[工具调试] 内置工具执行完成 name=create_goal result={}",
                     debug_value_snippet(v, 240)
                 )),
-                Err(err) => eprintln!("[工具执行] 内置工具 create_goal 执行失败: 错误={err}"),
+                Err(err) => runtime_log_error(format!("[工具执行] 内置工具 create_goal 执行失败: 错误={err}")),
             }
             result
         })
@@ -1184,17 +1184,17 @@ impl RuntimeJsonTool for BuiltinUpdateGoalTool {
     fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
             runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.start name=update_goal args={}",
+                "[工具调试] 内置工具执行开始 name=update_goal args={}",
                 debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
             ));
             let result = goal_update_for_session(&self.app_state, &self.session_id, args)
                 .map_err(ToolInvokeError::from);
             match &result {
                 Ok(v) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.ok name=update_goal result={}",
+                    "[工具调试] 内置工具执行完成 name=update_goal result={}",
                     debug_value_snippet(v, 240)
                 )),
-                Err(err) => eprintln!("[工具执行] 内置工具 update_goal 执行失败: 错误={err}"),
+                Err(err) => runtime_log_error(format!("[工具执行] 内置工具 update_goal 执行失败: 错误={err}")),
             }
             result
         })
@@ -1226,17 +1226,17 @@ impl RuntimeJsonTool for BuiltinGetSessionTool {
     fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
             runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.start name=get_session args={}",
+                "[工具调试] 内置工具执行开始 name=get_session args={}",
                 debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
             ));
             let result =
                 builtin_get_session(&self.app_state, &self.session_id, args).map_err(ToolInvokeError::from);
             match &result {
                 Ok(v) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.ok name=get_session result={}",
+                    "[工具调试] 内置工具执行完成 name=get_session result={}",
                     debug_value_snippet(v, 240)
                 )),
-                Err(err) => eprintln!("[工具执行] 内置工具 get_session 执行失败: 错误={err}"),
+                Err(err) => runtime_log_error(format!("[工具执行] 内置工具 get_session 执行失败: 错误={err}")),
             }
             result
         })
@@ -1269,17 +1269,17 @@ impl RuntimeJsonTool for BuiltinInformSessionTool {
     fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
             runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.start name=inform_session args={}",
+                "[工具调试] 内置工具执行开始 name=inform_session args={}",
                 debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
             ));
             let result = builtin_inform_session(&self.app_state, &self.session_id, args)
                 .map_err(ToolInvokeError::from);
             match &result {
                 Ok(v) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.ok name=inform_session result={}",
+                    "[工具调试] 内置工具执行完成 name=inform_session result={}",
                     debug_value_snippet(v, 240)
                 )),
-                Err(err) => eprintln!("[工具执行] 内置工具 inform_session 执行失败: 错误={err}"),
+                Err(err) => runtime_log_error(format!("[工具执行] 内置工具 inform_session 执行失败: 错误={err}")),
             }
             result
         })
@@ -1294,7 +1294,7 @@ impl RuntimeJsonTool for BuiltinTaskTool {
     fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
         runtime_log_debug(format!(
-            "[TOOL-DEBUG] execute_builtin_tool.start name=task args={}",
+            "[工具调试] 内置工具执行开始 name=task args={}",
             debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
         ));
         let result = builtin_task(
@@ -1309,10 +1309,10 @@ impl RuntimeJsonTool for BuiltinTaskTool {
             .map_err(ToolInvokeError::from);
         match &result {
             Ok(v) => runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.ok name=task result={}",
+                "[工具调试] 内置工具执行完成 name=task result={}",
                 debug_value_snippet(v, 240)
             )),
-            Err(err) => eprintln!("[工具执行] 内置工具 task 执行失败: 错误={err}"),
+            Err(err) => runtime_log_error(format!("[工具执行] 内置工具 task 执行失败: 错误={err}")),
         }
         result
         })
@@ -1355,7 +1355,7 @@ impl RuntimeJsonTool for BuiltinDelegateTool {
     fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
         runtime_log_debug(format!(
-            "[TOOL-DEBUG] execute_builtin_tool.start name=delegate args={}",
+            "[工具调试] 内置工具执行开始 name=delegate args={}",
             debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
         ));
         let result = builtin_delegate(
@@ -1369,10 +1369,10 @@ impl RuntimeJsonTool for BuiltinDelegateTool {
             .map_err(ToolInvokeError::from);
         match &result {
             Ok(v) => runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.ok name=delegate result={}",
+                "[工具调试] 内置工具执行完成 name=delegate result={}",
                 debug_value_snippet(v, 240)
             )),
-            Err(err) => eprintln!("[工具执行] 内置工具 delegate 执行失败: 错误={err}"),
+            Err(err) => runtime_log_error(format!("[工具执行] 内置工具 delegate 执行失败: 错误={err}")),
         }
         result
         })

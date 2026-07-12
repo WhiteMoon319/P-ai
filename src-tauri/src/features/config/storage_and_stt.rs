@@ -54,10 +54,10 @@ fn read_config(path: &PathBuf) -> Result<AppConfig, String> {
         fs::read_to_string(&resolved_path).map_err(|err| format!("Read config failed: {err}"))?;
     let missing_enable_audio = config_missing_enable_audio_field(&content);
     let mut parsed = toml::from_str::<AppConfig>(&content).map_err(|err| {
-        eprintln!(
-            "[CONFIG] Parse config failed ({}): {err}",
+        runtime_log_error(format!(
+            "[配置] 解析配置失败 ({}): {err}",
             resolved_path.display()
-        );
+        ));
         format!("Parse config failed ({}): {err}", resolved_path.display())
     })?;
     normalize_app_config(&mut parsed);
@@ -70,11 +70,11 @@ fn read_config(path: &PathBuf) -> Result<AppConfig, String> {
     };
     if let Some(target_path) = persist_target {
         if let Err(err) = write_config(target_path, &parsed) {
-            eprintln!(
+            runtime_log_error(format!(
                 "[配置] 读取后补全 enableAudio 失败：path={} err={}",
                 target_path.display(),
                 err
-            );
+            ));
         }
     }
     Ok(parsed)
@@ -1194,11 +1194,11 @@ fn normalize_departments(config: &mut AppConfig) {
             .map(|(parent_id, child_id)| format!("{parent_id}->{child_id}"))
             .collect::<Vec<_>>()
             .join(", ");
-        eprintln!(
+        runtime_log_warn(format!(
             "[配置] 跳过成环部门关系: count={}, edges={}",
             removed_cyclic_edges.len(),
             edges
-        );
+        ));
     }
 
     out.sort_by_key(|item| (built_in_department_rank(&item.id), item.order_index));

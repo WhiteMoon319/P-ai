@@ -86,7 +86,7 @@ export function useAppBootstrap(options: AppBootstrapOptions) {
           ),
         );
       } else {
-        console.info("[BOOTSTRAP] skipping terminal approval listener: not chat window");
+        console.warn("[启动] 跳过终端审批监听：当前不是聊天窗口");
       }
       unlisteners.push(
         await listen<ConversationApiSettingsPayload>(

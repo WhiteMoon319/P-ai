@@ -41,7 +41,7 @@ async fn list_tool_review_commit_options_internal_command(
         conversation_id, page, page_size
     ));
     if conversation_id.is_empty() {
-        runtime_log_info("[工具审查][commit列表] 跳过 conversation_id 为空".to_string());
+        runtime_log_warn("[工具审查][commit列表] 跳过 conversation_id 为空".to_string());
         return Ok(ListToolReviewCommitOptionsOutput { total: 0, page, page_size, commits: Vec::new() });
     }
     let conversation = with_tool_review_conversation(state, conversation_id, |conversation| {

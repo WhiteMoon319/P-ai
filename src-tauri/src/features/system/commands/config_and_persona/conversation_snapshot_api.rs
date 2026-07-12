@@ -721,10 +721,10 @@ fn unarchived_conversation_runtime_state(
         Ok(MainSessionState::Idle) => None,
         Ok(value) => Some(value),
         Err(err) => {
-            eprintln!(
+            runtime_log_error(format!(
                 "[会话] 读取运行态失败，任务=unarchived_runtime_state，conversation_id={}，error={}",
                 conversation_id, err
-            );
+            ));
             None
         }
     }
@@ -775,7 +775,7 @@ fn list_unarchived_conversations_blocking(
     };
     let result = conversation_service_v2().create_conversation(state, &create_input)?;
     emit_unarchived_conversation_overview_updated_payload(state, &result.overview_payload);
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[会话] 完成，任务=确保默认未归档会话，conversation_id={}，overview_count={}",
         result.conversation_id,
         result.overview_payload.unarchived_conversations.len()
@@ -991,7 +991,7 @@ fn emit_unarchived_conversation_overview_updated_payload(
 ) {
     ide_chat_broadcast_notification("conversation.overviewUpdated", serde_json::json!(payload));
     let started_at = std::time::Instant::now();
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[会话概览] 开始，任务=推送未归档会话概览，preferred_conversation_id={}，conversation_count={}",
         payload.preferred_conversation_id.as_deref().unwrap_or(""),
         payload.unarchived_conversations.len()
@@ -1016,7 +1016,7 @@ fn emit_unarchived_conversation_overview_updated_payload(
         ));
         return;
     }
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[会话概览] 完成，任务=推送未归档会话概览，event={}，preferred_conversation_id={}，conversation_count={}，duration_ms={}",
         CHAT_CONVERSATION_OVERVIEW_UPDATED_EVENT,
         payload.preferred_conversation_id.as_deref().unwrap_or(""),
@@ -1080,16 +1080,16 @@ fn emit_conversation_todos_updated_payload(
     let app_handle = match state.app_handle.lock() {
         Ok(guard) => guard.as_ref().cloned(),
         Err(err) => {
-            eprintln!("[Todo] 获取 app_handle 失败：锁已损坏，error={:?}", err);
+            runtime_log_error(format!("[Todo] 获取 app_handle 失败：锁已损坏，error={:?}", err));
             None
         }
     };
     let Some(app_handle) = app_handle else {
-        eprintln!("[Todo] 推送跳过：无法获取 app_handle");
+        runtime_log_warn(format!("[Todo] 推送跳过：无法获取 app_handle"));
         return;
     };
     if let Err(err) = app_handle.emit("easy-call:conversation-todos-updated", payload) {
-        eprintln!("[Todo] 推送失败：错误={}", err);
+        runtime_log_error(format!("[Todo] 推送失败：错误={}", err));
     }
 }
 
@@ -1100,16 +1100,16 @@ fn emit_conversation_pin_updated_payload(
     let app_handle = match state.app_handle.lock() {
         Ok(guard) => guard.as_ref().cloned(),
         Err(err) => {
-            eprintln!("[会话置顶] 获取 app_handle 失败：锁已损坏，error={:?}", err);
+            runtime_log_error(format!("[会话置顶] 获取 app_handle 失败：锁已损坏，error={:?}", err));
             None
         }
     };
     let Some(app_handle) = app_handle else {
-        eprintln!("[会话置顶] 推送跳过：无法获取 app_handle");
+        runtime_log_warn(format!("[会话置顶] 推送跳过：无法获取 app_handle"));
         return;
     };
     if let Err(err) = app_handle.emit("easy-call:conversation-pin-updated", payload) {
-        eprintln!("[会话置顶] 推送失败：错误={}", err);
+        runtime_log_error(format!("[会话置顶] 推送失败：错误={}", err));
     }
 }
 
@@ -1146,7 +1146,7 @@ fn emit_conversation_runtime_state_updated_payload(
         ));
         return;
     }
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[会话运行态] 完成，任务=推送会话运行态，conversation_id={}，state={:?}，duration_ms={}",
         payload.conversation_id,
         payload.runtime_state,
@@ -1231,12 +1231,12 @@ fn emit_unarchived_conversation_overview_updated_from_state(state: &AppState) ->
     let emit_started_at = std::time::Instant::now();
     emit_unarchived_conversation_overview_updated_payload(state, &payload);
     let emit_elapsed_ms = emit_started_at.elapsed().as_millis();
-    eprintln!(
+    runtime_log_debug(format!(
         "[会话概览] 状态刷新耗时：总计={}ms，构建概览={}ms，事件推送={}ms",
         total_started_at.elapsed().as_millis(),
         payload_elapsed_ms,
         emit_elapsed_ms
-    );
+    ));
     Ok(())
 }
 

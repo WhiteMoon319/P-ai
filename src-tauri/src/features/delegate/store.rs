@@ -245,7 +245,7 @@ fn delegate_store_migrate_why_goal_todo(conn: &Connection) -> Result<(), String>
     );
     conn.execute_batch(&sql)
         .map_err(|err| format!("迁移委托字段 why/goal/todo 失败: {err}"))?;
-    eprintln!("[委托] 完成，任务=迁移字段why_goal_todo");
+    runtime_log_info(format!("[委托] 完成，任务=迁移字段why_goal_todo"));
     Ok(())
 }
 
@@ -348,11 +348,11 @@ fn delegate_call_stack_from_json(raw: &str) -> Vec<String> {
     match serde_json::from_str(raw) {
         Ok(items) => items,
         Err(err) => {
-            eprintln!(
+            runtime_log_error(format!(
                 "[委托] 解析调用栈失败，raw={}, error={}",
                 raw,
                 err
-            );
+            ));
             Vec::new()
         }
     }
@@ -884,7 +884,7 @@ fn delegate_snapshot_cache_ensure_loaded(data_path: &PathBuf) -> Result<(), Stri
     if cache.contains_key(&key) {
         return Ok(());
     }
-    runtime_log_info("[委托快照] 首次读取检查开始".to_string());
+    runtime_log_debug("[委托快照] 首次读取检查开始".to_string());
     // 首次读取是唯一允许触发空表重建的入口；普通写路径、错误路径都不允许绕到这里补扫真相层。
     // 这里故意只看当前目录型正文仓库。旧格式是否存在、何时迁移，都只能由迁移服务单独负责，
     // 运行期列表与快照缓存绝不能为了“看见旧数据”再去碰旧格式。
@@ -894,7 +894,7 @@ fn delegate_snapshot_cache_ensure_loaded(data_path: &PathBuf) -> Result<(), Stri
     let snapshots = delegate_snapshot_store_list_from_db(data_path)?;
     let snapshot_cache = delegate_snapshot_cache_build(snapshots);
     cache.insert(key, snapshot_cache);
-    runtime_log_info("[委托快照] 首次读取检查完成".to_string());
+    runtime_log_debug("[委托快照] 首次读取检查完成".to_string());
     Ok(())
 }
 
@@ -902,7 +902,7 @@ fn delegate_snapshot_store_rebuild_from_truth_if_empty(data_path: &PathBuf) -> R
     if !delegate_snapshot_store_is_empty(data_path)? {
         return Ok(());
     }
-    runtime_log_info("[委托快照] 快照表为空，开始重建".to_string());
+    runtime_log_debug("[委托快照] 快照表为空，开始重建".to_string());
     let conversations = delegate_conversation_store_list(data_path)?;
     let conversation_count = conversations.len();
     for conversation in conversations {
@@ -914,7 +914,7 @@ fn delegate_snapshot_store_rebuild_from_truth_if_empty(data_path: &PathBuf) -> R
         let snapshot = delegate_snapshot_from_entry_and_conversation(&entry, &conversation);
         delegate_snapshot_store_upsert_db(data_path, &snapshot)?;
     }
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[委托快照] 快照表重建完成，conversation_count={}",
         conversation_count
     ));
@@ -1041,12 +1041,12 @@ fn delegate_store_update_status(
             delegate_id.trim()
         ));
     }
-    eprintln!(
+    runtime_log_info(format!(
         "[委托] 更新状态成功，delegate_id={}, status={}, completed_at={}",
         delegate_id.trim(),
         status.trim(),
         completed_at.as_deref().unwrap_or("-")
-    );
+    ));
     let entry = delegate_store_get_delegate(data_path, delegate_id)?;
     delegate_snapshot_store_sync_from_entry(data_path, &entry)?;
     Ok(entry)

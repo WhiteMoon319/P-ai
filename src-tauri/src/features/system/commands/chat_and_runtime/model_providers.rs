@@ -87,10 +87,10 @@ async fn ensure_models_dev_cache_current(state: &AppState) -> Result<ModelsDevCa
         Some(cache) => match fetch_models_dev_root(state).await {
             Ok(root) => write_models_dev_cache_file(state, &root),
             Err(err) => {
-                eprintln!(
+                runtime_log_error(format!(
                     "[models.dev缓存] 刷新失败，回退旧缓存: error={:?}, updated_at={}, fetched_at_ms={}",
                     err, cache.updated_at, cache.fetched_at_ms
-                );
+                ));
                 Ok(cache)
             }
         },
@@ -611,10 +611,10 @@ async fn refresh_models_inner(
     }
 
     if let Err(err) = ensure_models_dev_cache_current(&state).await {
-        eprintln!(
+        runtime_log_error(format!(
             "[models.dev缓存] 刷新模型时更新元数据缓存失败: error={:?}",
             err
-        );
+        ));
     }
 
     match input.request_format {
@@ -765,12 +765,12 @@ fn resolve_model_adapter_kind_label(model_name: &str) -> String {
         Ok(genai::adapter::AdapterKind::Ollama) => genai::adapter::AdapterKind::OpenAI.to_string(),
         Ok(kind) => kind.to_string(),
         Err(err) => {
-            eprintln!(
+            runtime_log_info(format!(
                 "[模型适配器] 状态=回退 模型={} 适配器={} 原因={:?}",
                 stripped,
                 genai::adapter::AdapterKind::OpenAI,
                 err
-            );
+            ));
             genai::adapter::AdapterKind::OpenAI.to_string()
         }
     }

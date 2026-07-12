@@ -45,20 +45,20 @@ fn mcp_try_attach_windows_process_tree_guard_for_label(
     command_label: &str,
 ) -> Option<McpProcessTreeGuard> {
     let Some(pid) = transport.id() else {
-        eprintln!(
+        runtime_log_warn(format!(
             "[MCP] Windows 进程树托管跳过：未取得子进程 pid，command={}",
             command_label
-        );
+        ));
         return None;
     };
 
     match mcp_create_windows_job_kill_on_close(pid) {
         Ok(guard) => Some(guard),
         Err(err) => {
-            eprintln!(
+            runtime_log_error(format!(
                 "[MCP] Windows 进程树托管失败：pid={}，command={}，error={}",
                 pid, command_label, err
-            );
+            ));
             None
         }
     }
@@ -315,10 +315,10 @@ fn mcp_runtime_state_set(
     let mut guard = match mcp_runtime_state_store().lock() {
         Ok(guard) => guard,
         Err(poisoned) => {
-            eprintln!(
-                "[MCP] mcp_runtime_state_set lock poisoned for server_id={}: {}",
+            runtime_log_info(format!(
+                "[MCP] 设置 MCP 运行状态时锁中毒 for server_id={}: {}",
                 server_id, poisoned
-            );
+            ));
             poisoned.into_inner()
         }
     };
@@ -338,10 +338,10 @@ fn mcp_runtime_state_remove(server_id: &str) {
     let mut guard = match mcp_runtime_state_store().lock() {
         Ok(guard) => guard,
         Err(poisoned) => {
-            eprintln!(
-                "[MCP] mcp_runtime_state_remove lock poisoned for server_id={}: {}",
+            runtime_log_info(format!(
+                "[MCP] 移除 MCP 运行状态时锁中毒 for server_id={}: {}",
                 server_id, poisoned
-            );
+            ));
             poisoned.into_inner()
         }
     };
@@ -355,10 +355,10 @@ where
     let mut guard = match mcp_runtime_state_store().lock() {
         Ok(guard) => guard,
         Err(poisoned) => {
-            eprintln!(
-                "[MCP] mcp_runtime_state_update lock poisoned for server_id={}: {}",
+            runtime_log_info(format!(
+                "[MCP] 更新 MCP 运行状态时锁中毒 for server_id={}: {}",
                 server_id, poisoned
-            );
+            ));
             poisoned.into_inner()
         }
     };

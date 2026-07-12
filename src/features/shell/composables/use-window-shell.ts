@@ -55,7 +55,7 @@ export function useWindowShell() {
       await syncWindowControlsState();
       return;
     } catch (error) {
-      console.warn("[WINDOW] backend startDrag failed, fallback to frontend dragging:", error);
+      console.warn("[窗口] backend startDrag failed, fallback to frontend dragging:", error);
     }
     await appWindow.value.startDragging();
   }
@@ -67,7 +67,7 @@ export function useWindowShell() {
       await appWindow.value.setAlwaysOnTop(desired);
       alwaysOnTop.value = desired;
     } catch (error) {
-      console.error("[WINDOW] setAlwaysOnTop failed:", error);
+      console.error("[窗口] setAlwaysOnTop failed:", error);
     }
   }
 
@@ -76,7 +76,7 @@ export function useWindowShell() {
     try {
       await appWindow.value.minimize();
     } catch (error) {
-      console.error("[WINDOW] minimize failed:", error);
+      console.error("[窗口] minimize failed:", error);
     }
   }
 
@@ -86,13 +86,13 @@ export function useWindowShell() {
       maximized.value = await invokeTauri<boolean>("toggle_current_window_maximize");
       return;
     } catch (error) {
-      console.warn("[WINDOW] backend toggleMaximize failed, fallback to frontend toggle:", error);
+      console.warn("[窗口] backend toggleMaximize failed, fallback to frontend toggle:", error);
     }
     try {
       await appWindow.value.toggleMaximize();
       maximized.value = await appWindow.value.isMaximized();
     } catch (error) {
-      console.error("[WINDOW] fallback toggleMaximize failed:", error);
+      console.error("[窗口] fallback toggleMaximize failed:", error);
     }
   }
 

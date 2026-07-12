@@ -130,15 +130,15 @@ fn mcp_current_server_matches_probe(
     match load_server_by_id(state, &probe_server.id) {
         Ok(current) => {
             if !current.enabled {
-                runtime_log_info(format!(
-                    "[MCP Supervisor] 跳过提交 server_id={} trigger={} reason=disabled",
+                runtime_log_warn(format!(
+                    "[MCP监管] 跳过提交 server_id={} trigger={} reason=disabled",
                     probe_server.id, trigger
                 ));
                 return None;
             }
             if current.definition_json != probe_server.definition_json {
-                runtime_log_info(format!(
-                    "[MCP Supervisor] 跳过提交 server_id={} trigger={} reason=definition_changed",
+                runtime_log_warn(format!(
+                    "[MCP监管] 跳过提交 server_id={} trigger={} reason=definition_changed",
                     probe_server.id, trigger
                 ));
                 return None;
@@ -146,8 +146,8 @@ fn mcp_current_server_matches_probe(
             Some(current)
         }
         Err(err) => {
-            runtime_log_info(format!(
-                "[MCP Supervisor] 跳过提交 server_id={} trigger={} reason=missing error={}",
+            runtime_log_warn(format!(
+                "[MCP监管] 跳过提交 server_id={} trigger={} reason=missing error={}",
                 probe_server.id, trigger, err
             ));
             None
@@ -170,7 +170,7 @@ fn mcp_start_supervisor_probe_for_server(state: AppState, server: McpServerConfi
             Ok(permit) => permit,
             Err(err) => {
                 runtime_log_warn(format!(
-                    "[MCP Supervisor] 跳过 server_id={} trigger={} reason=semaphore_closed error={}",
+                    "[MCP监管] 跳过 server_id={} trigger={} reason=semaphore_closed error={}",
                     server.id, trigger, err
                 ));
                 return;
@@ -194,7 +194,7 @@ fn mcp_start_supervisor_probe_all_from_policy(state: AppState, trigger: &'static
         }
     }
     runtime_log_info(format!(
-        "[MCP Supervisor] 开始 trigger={} enabled_servers={} stdio_concurrency={} remote_concurrency={}",
+        "[MCP监管] 开始 trigger={} enabled_servers={} stdio_concurrency={} remote_concurrency={}",
         trigger,
         started,
         MCP_SUPERVISOR_STDIO_CONCURRENCY,
@@ -210,7 +210,7 @@ async fn mcp_probe_server_tools_background(
 ) {
     let started = std::time::Instant::now();
     runtime_log_info(format!(
-        "[MCP Supervisor] 开始 server_id={} trigger={}",
+        "[MCP监管] 开始 server_id={} trigger={}",
         server.id, trigger
     ));
     let tools_res = mcp_list_server_tools_runtime(&server).await;
@@ -226,7 +226,7 @@ async fn mcp_probe_server_tools_background(
             mcp_runtime_state_mark_probe_failure(&current_server, status, &err);
             let label = if status == "timeout" { "超时" } else { "失败" };
             runtime_log_warn(format!(
-                "[MCP Supervisor] {} server_id={} trigger={} duration_ms={} error={}",
+                "[MCP监管] {} server_id={} trigger={} duration_ms={} error={}",
                 label,
                 server.id,
                 trigger,
@@ -258,7 +258,7 @@ async fn mcp_probe_server_tools_background(
             };
             mcp_runtime_state_mark_probe_failure(&current_server, "failed", &err);
             runtime_log_warn(format!(
-                "[MCP Supervisor] 失败 server_id={} trigger={} stage=merge_policy duration_ms={} error={}",
+                "[MCP监管] 失败 server_id={} trigger={} stage=merge_policy duration_ms={} error={}",
                 server.id,
                 trigger,
                 started.elapsed().as_millis(),
@@ -286,7 +286,7 @@ async fn mcp_probe_server_tools_background(
     refresh_global_tool_schema_cache(&state);
     mark_prompt_cache_rebuild_for_all_final_system_sources(&state);
     runtime_log_info(format!(
-        "[MCP Supervisor] 完成 server_id={} trigger={} tools={} duration_ms={}",
+        "[MCP监管] 完成 server_id={} trigger={} tools={} duration_ms={}",
         server.id,
         trigger,
         tool_count,

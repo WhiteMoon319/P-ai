@@ -94,13 +94,13 @@ fn read_message_store_manifest_for_resume(
         }
         Err(err) => {
             let backup_path = backup_corrupt_message_store_manifest(paths, &raw)?;
-            eprintln!(
+            runtime_log_error(format!(
                 "[消息存储迁移] manifest 解析失败，已备份并执行恢复重建：conversation_id={}，path={}，backup={}，error={}",
                 paths.conversation_id,
                 paths.manifest_file.display(),
                 backup_path.display(),
                 err
-            );
+            ));
             Ok(None)
         }
     }
@@ -140,10 +140,10 @@ pub(super) fn resume_jsonl_snapshot_migration(
                 });
             }
             Err(err) => {
-                eprintln!(
+                runtime_log_error(format!(
                     "[消息存储迁移] ready 快照校验失败，执行恢复重建：conversation_id={}，error={}",
                     paths.conversation_id, err
-                );
+                ));
             }
         }
         return run_jsonl_snapshot_migration(paths, conversation, false);
@@ -215,12 +215,12 @@ pub(super) fn recover_ready_jsonl_snapshot_manifest_from_directory(
     );
     write_message_store_index_atomic(&paths.index_file, &rebuilt.index)?;
     write_message_store_manifest_atomic(&paths.manifest_file, &ready_manifest)?;
-    eprintln!(
+    runtime_log_info(format!(
         "[消息存储迁移] 完成 task=恢复目录型会话 ready manifest conversation_id={} message_count={} bytes={}",
         paths.conversation_id,
         ready_manifest.source_message_count(),
         ready_manifest.messages_jsonl_bytes()
-    );
+    ));
     Ok(Some(ready_manifest))
 }
 

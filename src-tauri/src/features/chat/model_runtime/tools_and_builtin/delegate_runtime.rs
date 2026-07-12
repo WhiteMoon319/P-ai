@@ -356,12 +356,12 @@ async fn delegate_run_thread_to_completion(
                 &delegate.delegate_id,
                 DELEGATE_STATUS_FAILED,
             ) {
-                eprintln!(
+                runtime_log_error(format!(
                     "[委托线程] 创建失败后更新委托状态失败: delegate_id={}, status={}, error={}",
                     delegate.delegate_id,
                     DELEGATE_STATUS_FAILED,
                     status_err
-                );
+                ));
             }
             if let Err(status_err) = emit_conversation_delegate_status_updated(
                 &app_state,
@@ -369,12 +369,12 @@ async fn delegate_run_thread_to_completion(
                 &delegate.delegate_id,
                 DELEGATE_STATUS_FAILED,
             ) {
-                eprintln!(
+                runtime_log_error(format!(
                     "[委托状态] 广播失败: 阶段=创建失败, root_conversation_id={}, delegate_id={}, error={}",
                     delegate.conversation_id,
                     delegate.delegate_id,
                     status_err
-                );
+                ));
             }
             return Err(err);
         }
@@ -386,25 +386,25 @@ async fn delegate_run_thread_to_completion(
         &delegate.target_agent_id,
         &delegate.delegate_id,
     ) {
-        eprintln!(
+        runtime_log_error(format!(
             "[委托线程] 推送开工信号失败: function=delegate_run_thread_to_completion, delegate_thread_id={}, delegate_id={}, target_agent_id={}, error={}",
             delegate_thread_id,
             delegate.delegate_id,
             delegate.target_agent_id,
             err
-        );
+        ));
     }
     let mut run_result = Err("未尝试任何候选模型".to_string());
     let mut errors = Vec::<String>::new();
     for api_config_id in target_api_config_ids.iter() {
         if let Err(err) = delegate_runtime_thread_touch(&app_state, &delegate_thread_id) {
-            eprintln!(
+            runtime_log_error(format!(
                 "[委托线程] 更新运行模型失败: function=delegate_run_thread_to_completion, delegate_thread_id={}, delegate_id={}, api_config_id={}, error={}",
                 delegate_thread_id,
                 delegate.delegate_id,
                 api_config_id,
                 err
-            );
+            ));
         }
         match delegate_execute_agent_initial_run(
             &app_state,
@@ -431,27 +431,27 @@ async fn delegate_run_thread_to_completion(
             if let Err(err) =
                 delegate_runtime_thread_archive(&app_state, &delegate_thread_id, &completed_at)
             {
-                eprintln!(
+                runtime_log_error(format!(
                     "[委托线程] 归档运行线程失败: function=delegate_run_thread_to_completion, delegate_thread_id={}, delegate_id={}, status={}, archived_at={}, error={}",
                     delegate_thread_id,
                     delegate.delegate_id,
                     DELEGATE_STATUS_COMPLETED,
                     completed_at,
                     err
-                );
+                ));
             }
             if let Err(err) = delegate_store_update_status(
                 &app_state.data_path,
                 &delegate.delegate_id,
                 DELEGATE_STATUS_COMPLETED,
             ) {
-                eprintln!(
+                runtime_log_error(format!(
                     "[委托线程] 更新委托状态失败: function=delegate_run_thread_to_completion, delegate_thread_id={}, delegate_id={}, status={}, error={}",
                     delegate_thread_id,
                     delegate.delegate_id,
                     DELEGATE_STATUS_COMPLETED,
                     err
-                );
+                ));
             }
             if let Err(err) = emit_conversation_delegate_status_updated(
                 &app_state,
@@ -459,12 +459,12 @@ async fn delegate_run_thread_to_completion(
                 &delegate.delegate_id,
                 DELEGATE_STATUS_COMPLETED,
             ) {
-                eprintln!(
+                runtime_log_error(format!(
                     "[委托状态] 广播失败: 阶段=完成, root_conversation_id={}, delegate_id={}, error={}",
                     delegate.conversation_id,
                     delegate.delegate_id,
                     err
-                );
+                ));
             }
             if let Err(err) = emit_agent_work_signal(
                 &app_state,
@@ -473,13 +473,13 @@ async fn delegate_run_thread_to_completion(
                 &delegate.target_agent_id,
                 &delegate.delegate_id,
             ) {
-                eprintln!(
+                runtime_log_error(format!(
                     "[委托线程] 推送停工信号失败: function=delegate_run_thread_to_completion, delegate_thread_id={}, delegate_id={}, target_agent_id={}, error={}",
                     delegate_thread_id,
                     delegate.delegate_id,
                     delegate.target_agent_id,
                     err
-                );
+                ));
             }
             Ok(result)
         }
@@ -488,27 +488,27 @@ async fn delegate_run_thread_to_completion(
             if let Err(remove_err) =
                 delegate_runtime_thread_archive(&app_state, &delegate_thread_id, &archived_at)
             {
-                eprintln!(
+                runtime_log_error(format!(
                     "[委托线程] 归档运行线程失败: function=delegate_run_thread_to_completion, delegate_thread_id={}, delegate_id={}, status={}, archived_at={}, error={}",
                     delegate_thread_id,
                     delegate.delegate_id,
                     DELEGATE_STATUS_FAILED,
                     archived_at,
                     remove_err
-                );
+                ));
             }
             if let Err(status_err) = delegate_store_update_status(
                 &app_state.data_path,
                 &delegate.delegate_id,
                 DELEGATE_STATUS_FAILED,
             ) {
-                eprintln!(
+                runtime_log_error(format!(
                     "[委托线程] 更新委托状态失败: function=delegate_run_thread_to_completion, delegate_thread_id={}, delegate_id={}, status={}, error={}",
                     delegate_thread_id,
                     delegate.delegate_id,
                     DELEGATE_STATUS_FAILED,
                     status_err
-                );
+                ));
             }
             if let Err(status_err) = emit_conversation_delegate_status_updated(
                 &app_state,
@@ -516,12 +516,12 @@ async fn delegate_run_thread_to_completion(
                 &delegate.delegate_id,
                 DELEGATE_STATUS_FAILED,
             ) {
-                eprintln!(
+                runtime_log_error(format!(
                     "[委托状态] 广播失败: 阶段=失败, root_conversation_id={}, delegate_id={}, error={}",
                     delegate.conversation_id,
                     delegate.delegate_id,
                     status_err
-                );
+                ));
             }
             if let Err(stop_err) = emit_agent_work_signal(
                 &app_state,
@@ -530,13 +530,13 @@ async fn delegate_run_thread_to_completion(
                 &delegate.target_agent_id,
                 &delegate.delegate_id,
             ) {
-                eprintln!(
+                runtime_log_error(format!(
                     "[委托线程] 推送停工信号失败: function=delegate_run_thread_to_completion, delegate_thread_id={}, delegate_id={}, target_agent_id={}, error={}",
                     delegate_thread_id,
                     delegate.delegate_id,
                     delegate.target_agent_id,
                     stop_err
-                );
+                ));
             }
             Err(err)
         }

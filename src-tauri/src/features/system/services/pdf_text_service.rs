@@ -159,7 +159,7 @@ fn truncate_pdf_pages_to_token_limit(
         .get_or_init(|| tiktoken_rs::cl100k_base().ok())
         .as_ref()
     else {
-        eprintln!("[PDF提取] tiktoken 初始化失败，跳过 30K token 截断。");
+        runtime_log_warn(format!("[PDF提取] tiktoken 初始化失败，跳过 30K token 截断。"));
         return Ok(());
     };
 
@@ -331,7 +331,7 @@ pub(crate) fn cleanup_pdf_cache_for_conversation(
     runtime.pdf_text_cache.retain_mut(|entry| {
         entry.conversation_ids.retain(|id| id != conversation_id);
         if entry.conversation_ids.is_empty() {
-            eprintln!("[PDF缓存清理] 删除文本缓存条目 file={}, hash={}", entry.file_name, entry.file_hash);
+            runtime_log_info(format!("[PDF缓存清理] 删除文本缓存条目 file={}, hash={}", entry.file_name, entry.file_hash));
             false
         } else {
             entry.updated_at = chrono::Utc::now().to_rfc3339();
@@ -342,7 +342,7 @@ pub(crate) fn cleanup_pdf_cache_for_conversation(
     runtime.pdf_image_cache.retain_mut(|entry| {
         entry.conversation_ids.retain(|id| id != conversation_id);
         if entry.conversation_ids.is_empty() {
-            eprintln!("[PDF缓存清理] 删除图片缓存条目 file={}, hash={}", entry.file_name, entry.file_hash);
+            runtime_log_info(format!("[PDF缓存清理] 删除图片缓存条目 file={}, hash={}", entry.file_name, entry.file_hash));
             false
         } else {
             entry.updated_at = chrono::Utc::now().to_rfc3339();
@@ -353,10 +353,10 @@ pub(crate) fn cleanup_pdf_cache_for_conversation(
     let removed_text = original_text_len - runtime.pdf_text_cache.len();
     let removed_image = original_image_len - runtime.pdf_image_cache.len();
     if removed_text > 0 || removed_image > 0 {
-        eprintln!(
+        runtime_log_info(format!(
             "[PDF缓存清理] 完成 conversation_id={}, removed_text={}, removed_image={}",
             conversation_id, removed_text, removed_image
-        );
+        ));
     }
 
     state_write_runtime_state_cached(state, &runtime)?;

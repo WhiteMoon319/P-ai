@@ -282,7 +282,7 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
   async function requestRecallMode(payload: { turnId: string; targetUserMessageId: string }): Promise<RecallMode> {
     cancelPendingRewindConfirm();
     const availability = await getUndoAvailabilityForTurn(payload.targetUserMessageId);
-    console.info("[会话撤回] 打开撤回弹窗", {
+    console.debug("[会话撤回] 打开撤回弹窗", {
       turnId: payload.turnId,
       targetUserMessageId: payload.targetUserMessageId,
       canUndoPatch: availability.canUndo,
@@ -344,7 +344,7 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
 
   async function requestCreateConversationBranchFromMessageConfirm(payload: { turnId: string; targetUserMessageId: string }): Promise<boolean> {
     cancelPendingBranchFromMessageConfirm();
-    console.info("[会话分支] 打开从消息创建分支确认弹窗", {
+    console.debug("[会话分支] 打开从消息创建分支确认弹窗", {
       turnId: payload.turnId,
       targetUserMessageId: payload.targetUserMessageId,
     });

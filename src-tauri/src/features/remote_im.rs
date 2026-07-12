@@ -827,7 +827,7 @@ fn remote_im_schedule_presence_timeout(
             && runtime.last_presence_at.as_deref() == Some(expected_presence_at.as_str())
         {
             runtime.presence_state = RemoteImPresenceState::Away;
-            runtime_log_info(format!(
+            runtime_log_error(format!(
                 "[远程联系人在场] 完成，任务=耐心超时离场，contact_id={}，patience_seconds={}",
                 contact_id, patience_seconds
             ));
@@ -1253,7 +1253,7 @@ fn remote_im_prepare_enqueue_runtime_state(
             "{}命中闭嘴词“{}”，进入闭嘴直到 {}，直接拦截后续判定",
             mute_prefix, keyword, mute_until
         );
-        eprintln!(
+        runtime_log_info(format!(
             "[远程联系人状态机] 入站判定 完成: contact_id={}, presence={:?}, work={:?}, pending={}, activate_assistant={}, reason={}",
             contact.id,
             runtime.presence_state,
@@ -1261,7 +1261,7 @@ fn remote_im_prepare_enqueue_runtime_state(
             runtime.has_pending,
             false,
             reason
-        );
+        ));
         remote_im_append_channel_log(
             &contact.channel_id,
             "info",
@@ -1290,7 +1290,7 @@ fn remote_im_prepare_enqueue_runtime_state(
                 "{}当前仍处于闭嘴期(截止={})，未命中张嘴词，直接拦截后续判定",
                 mute_prefix, mute_until
             );
-            eprintln!(
+            runtime_log_info(format!(
                 "[远程联系人状态机] 入站判定 完成: contact_id={}, presence={:?}, work={:?}, pending={}, activate_assistant={}, reason={}",
                 contact.id,
                 runtime.presence_state,
@@ -1298,7 +1298,7 @@ fn remote_im_prepare_enqueue_runtime_state(
                 runtime.has_pending,
                 false,
                 reason
-            );
+            ));
             remote_im_append_channel_log(
                 &contact.channel_id,
                 "info",
@@ -1333,7 +1333,7 @@ fn remote_im_prepare_enqueue_runtime_state(
             )
         }
     };
-    eprintln!(
+    runtime_log_info(format!(
         "[远程联系人状态机] 入站判定 完成: contact_id={}, presence={:?}, work={:?}, pending={}, activate_assistant={}, reason={}",
         contact.id,
         runtime.presence_state,
@@ -1341,7 +1341,7 @@ fn remote_im_prepare_enqueue_runtime_state(
         runtime.has_pending,
         activate_assistant,
         reason
-    );
+    ));
     remote_im_append_channel_log(
         &contact.channel_id,
         "info",
@@ -2246,10 +2246,10 @@ fn remote_im_handle_persisted_event_after_history_flush_runtime(
         // 每个已落库远程事件都必须单独交给秘书判断；不能因同一批前一条
         // 消息已经激活而跳过后续消息。
         activated_contacts_in_batch.insert(format!("{}:{}", contact.id, event.id));
-        eprintln!(
+        runtime_log_info(format!(
             "[远程联系人状态机] 激活调度 开始: contact_id={}, conversation_id={}",
             contact.id, conversation.id
-        );
+        ));
     }
     remote_im_append_channel_log(
         &contact.channel_id,
@@ -2302,14 +2302,14 @@ fn remote_im_finalize_round_completion(
             value => value,
         };
         if let Some(error) = failed_error {
-            eprintln!(
+            runtime_log_error(format!(
                 "[远程联系人状态机] 轮次结束 失败: contact_id={}, presence={:?}->{:?}, pending={}, error={}",
                 contact.id,
                 previous_presence,
                 runtime.presence_state,
                 previous_pending,
                 error
-            );
+            ));
             remote_im_append_channel_log(
                 &contact.channel_id,
                 "warn",
@@ -2371,7 +2371,7 @@ fn remote_im_finalize_round_completion(
             runtime.presence_state = RemoteImPresenceState::Present;
             follow_up_sources.push(source.clone());
         }
-        eprintln!(
+        runtime_log_info(format!(
             "[远程联系人状态机] 轮次结束 完成: contact_id={}, decision={}, presence={:?}->{:?}, pending={}->{}, no_reply_count={}->{}, follow_up={}, last_success_reply_at={}",
             contact.id,
             decision_label,
@@ -2383,7 +2383,7 @@ fn remote_im_finalize_round_completion(
             runtime.consecutive_no_reply_count,
             should_follow_up_after_round,
             runtime.last_success_reply_at.as_deref().unwrap_or("")
-        );
+        ));
         remote_im_append_channel_log(
             &contact.channel_id,
             "info",
@@ -2429,13 +2429,13 @@ fn remote_im_finalize_async_send_result(
     if send_ok {
         runtime.last_success_reply_at = Some(now.to_string());
     }
-    eprintln!(
+    runtime_log_error(format!(
         "[远程联系人状态机] 异步发送{}: contact_id={}, last_success_reply_at={}, error={}",
         if send_ok { "完成" } else { "失败" },
         contact.id,
         runtime.last_success_reply_at.as_deref().unwrap_or(""),
         error.unwrap_or("")
-    );
+    ));
     remote_im_append_channel_log(
         &contact.channel_id,
         if send_ok { "info" } else { "warn" },
@@ -3212,14 +3212,14 @@ fn build_chat_message_from_input(
                 &img.bytes_base64,
             )
                 .unwrap_or_else(|err| {
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[远程IM] 入站图片外置化失败，保留原始内容: conversation_id={}，contact_id={}，mime={}，bytes_len={}，error={}",
                         conversation_id,
                         contact_id,
                         img.mime,
                         img.bytes_base64.len(),
                         err
-                    );
+                    ));
                     img.bytes_base64.clone()
                 });
         parts.push(MessagePart::Image {
@@ -3238,14 +3238,14 @@ fn build_chat_message_from_input(
                 &audio.bytes_base64,
             )
                 .unwrap_or_else(|err| {
-                    eprintln!(
+                    runtime_log_error(format!(
                         "[远程IM] 入站音频外置化失败，保留原始内容: conversation_id={}，contact_id={}，mime={}，bytes_len={}，error={}",
                         conversation_id,
                         contact_id,
                         audio.mime,
                         audio.bytes_base64.len(),
                         err
-                    );
+                    ));
                     audio.bytes_base64.clone()
                 });
         parts.push(MessagePart::Audio {
@@ -3444,10 +3444,10 @@ fn remote_im_update_contact_route_mode(
     let requested_mode = normalize_contact_route_mode(&input.route_mode);
     let final_mode = remote_im_resolve_effective_route_mode(&config, contact);
     if requested_mode != final_mode {
-        eprintln!(
+        runtime_log_info(format!(
             "[远程IM] 联系人路由模式已被约束修正: contact_id={}, requested={}, final={}",
             contact.id, requested_mode, final_mode
-        );
+        ));
     }
     contact.route_mode = final_mode;
     let output = contact.clone();
@@ -3508,7 +3508,7 @@ fn remote_im_update_contact_department_binding(
     let conversation_id = ensure_remote_im_contact_conversation_id(state.inner(), contact)?;
     let output = contact.clone();
     state_write_runtime_state_cached(&state, &runtime)?;
-    eprintln!(
+    runtime_log_info(format!(
         "[远程IM] 完成，任务=更新联系人处理部门，contact_id={}，conversation_id={}，department_id={}，agent_id={}",
         output.id,
         conversation_id,
@@ -3522,7 +3522,7 @@ fn remote_im_update_contact_department_binding(
             .get_conversation_meta(state.inner(), &conversation_id)
             .map(|conversation| conversation.agent_id)
             .unwrap_or_default()
-    );
+    ));
     Ok(output)
 }
 
@@ -3718,17 +3718,17 @@ fn remote_im_clear_contact_conversation(
         return Err("contact_id 为必填项。".to_string());
     }
     let started_at = std::time::Instant::now();
-    eprintln!(
+    runtime_log_info(format!(
         "[远程IM][联系人会话][清空] 开始: contact_id={}",
         contact_id
-    );
+    ));
     let cleared =
         conversation_service_v2().clear_remote_im_contact_conversation(state.inner(), contact_id)?;
-    eprintln!(
+    runtime_log_info(format!(
         "[远程IM][联系人会话][清空] 完成: contact_id={}, elapsed_ms={}",
         contact_id,
         started_at.elapsed().as_millis()
-    );
+    ));
     Ok(cleared)
 }
 
@@ -3778,13 +3778,13 @@ pub(crate) fn remote_im_enqueue_message_internal(
         if looks_like_default_contact {
             contact.allow_send = true;
             contact.allow_receive = true;
-            eprintln!(
+            runtime_log_info(format!(
                 "[远程IM] 自动开启收信: contact_id={}, contact_name={}, channel_id={}, platform={:?}, reason=matched_default_contact",
                 contact.id,
                 contact.remote_contact_name,
                 channel.id,
                 channel.platform
-            );
+            ));
             allow_receive = true;
         }
     }
@@ -3818,7 +3818,7 @@ pub(crate) fn remote_im_enqueue_message_internal(
             format!("{}({})", sender_name, sender_id)
         }
     };
-    eprintln!(
+    runtime_log_info(format!(
         "[远程IM] 入站消息路由完成: contact_id={}, channel_id={}, department_id={}, agent_id={}, conversation_id={}, route_mode={}, processing_mode={}",
         contact_id,
         input.channel_id.trim(),
@@ -3827,8 +3827,8 @@ pub(crate) fn remote_im_enqueue_message_internal(
         conversation_id,
         runtime.remote_im_contacts[contact_idx].route_mode,
         runtime.remote_im_contacts[contact_idx].processing_mode
-    );
-    eprintln!(
+    ));
+    runtime_log_info(format!(
         "[远程IM] 入站媒体摘要: contact_id={}, channel_id={}, text_len={}, image_count={}, image_mimes={:?}, audio_count={}, attachment_count={}, attachment_names={:?}",
         contact_id,
         input.channel_id.trim(),
@@ -3838,7 +3838,7 @@ pub(crate) fn remote_im_enqueue_message_internal(
         audios.len(),
         attachments.len(),
         attachments.iter().map(|item| item.file_name.clone()).collect::<Vec<_>>()
-    );
+    ));
     remote_im_append_channel_log(
         input.channel_id.trim(),
         "info",
@@ -3868,13 +3868,13 @@ pub(crate) fn remote_im_enqueue_message_internal(
             input.remote_contact_id.trim(),
             platform_message_id,
         )? {
-            eprintln!(
+            runtime_log_info(format!(
                 "[远程IM] 入站消息去重: channel_id={}, contact_id={}, conversation_id={}, platform_message_id={}",
                 input.channel_id.trim(),
                 input.remote_contact_id.trim(),
                 conversation_id,
                 platform_message_id
-            );
+            ));
             remote_im_append_channel_log(
                 input.channel_id.trim(),
                 "info",
@@ -3924,10 +3924,10 @@ pub(crate) fn remote_im_enqueue_message_internal(
             })
             .unwrap_or(false)
     };
-    eprintln!(
+    runtime_log_info(format!(
         "[远程联系人状态机] 入站消息 接入: contact_id={}, conversation_id={}, activate_assistant={}, reason={}",
         contact_id, conversation_id, activate_assistant, state_reason
-    );
+    ));
 
     let event_id = Uuid::new_v4().to_string();
     let new_sender_id_for_guided = input.sender_id.trim().to_string();

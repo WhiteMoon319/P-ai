@@ -119,12 +119,12 @@ fn abort_delegate_runtime_descendant_threads(
         let aborted_tool = abort_inflight_tool_abort_handle(state, &child_chat_key)?;
         if aborted_chat || aborted_tool {
             aborted_count += 1;
-            eprintln!(
+            runtime_log_info(format!(
                 "[聊天] 已中止同步委托子会话: parent_session={}, child_session={}, delegate_id={}",
                 parent_chat_key,
                 child_chat_key,
                 thread.delegate_id
-            );
+            ));
         }
         aborted_count += abort_delegate_runtime_descendants_by_parent_session(state, &child_chat_key)?;
     }

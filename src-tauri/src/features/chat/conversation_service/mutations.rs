@@ -55,11 +55,11 @@ fn maybe_undo_rewind_apply_patch(
         undone_patch_count, overwritten_files.len(), message_id
     ));
     if undone_patch_count > 0 {
-        eprintln!(
+        runtime_log_info(format!(
             "[会话撤回] 已执行 apply_patch 反向撤回: patches={}, message_id={}",
             undone_patch_count,
             message_id
-        );
+        ));
     }
     if !overwritten_files.is_empty() {
         runtime_log_warn(format!(
@@ -386,7 +386,7 @@ fn create_unarchived_conversation_shared(
         unarchived_conversations: conversation_service_v2()
             .collect_unarchived_conversation_summaries_cached(state, &app_config)?,
     };
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[会话] 完成，任务=新建未归档会话，阶段=构建概览，conversation_id={}，overview_count={}，duration_ms={}",
         conversation_id,
         overview_payload.unarchived_conversations.len(),

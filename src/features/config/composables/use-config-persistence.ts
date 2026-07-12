@@ -501,7 +501,7 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
     options.saving.value = true;
     options.setStatus(options.t("status.savingConfig"));
     try {
-      console.info("[CONFIG] save_config invoked");
+      console.info("[配置] save_config invoked");
       const saved = await invokeTauri<AppConfig>("save_config", { config: options.buildConfigPayload() });
       options.config.hotkey = saved.hotkey;
       options.config.uiLanguage = options.normalizeLocale(saved.uiLanguage);
@@ -596,12 +596,12 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
       options.config.apiConfigs.splice(0, options.config.apiConfigs.length, ...saved.apiConfigs);
       options.normalizeApiBindingsLocal();
       options.lastSavedConfigJson.value = options.buildConfigSnapshotJson();
-      console.info("[CONFIG] save_config success");
+      console.info("[配置] save_config success");
       options.setStatus(options.t("status.configSaved"));
       return true;
     } catch (e) {
       const saveError = classifySaveConfigError(e);
-      console.error("[CONFIG] save_config failed:", e);
+      console.error("[配置] save_config failed:", e);
       if (saveError.kind === "backend_404") {
         options.setStatus(options.t("status.saveConfigBackend404"));
       } else if (saveError.kind === "hotkey_conflict") {
@@ -1004,7 +1004,7 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
     if (conversationApiSettingsSaving || nextPayloadJson === lastConversationApiSettingsJson) return;
     conversationApiSettingsSaving = true;
     try {
-      console.info("[CONFIG] patch_conversation_api_settings invoked");
+      console.info("[配置] patch_conversation_api_settings invoked");
       const saved = await invokeTauri<ConversationApiSettings>("patch_conversation_api_settings", {
         input: normalizedPatch,
       });
@@ -1022,9 +1022,9 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
         sttApiConfigId: options.config.sttApiConfigId || null,
         sttAutoSend: !!options.config.sttAutoSend,
       });
-      console.info("[CONFIG] patch_conversation_api_settings success");
+      console.info("[配置] patch_conversation_api_settings success");
     } catch (e) {
-      console.error("[CONFIG] patch_conversation_api_settings failed:", e);
+      console.error("[配置] patch_conversation_api_settings failed:", e);
       options.setStatusError("status.saveConversationLlmFailed", e);
     } finally {
       conversationApiSettingsSaving = false;
@@ -1040,7 +1040,7 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
       options.setStatus("已还原未保存配置");
       return true;
     } catch (e) {
-      console.error("[CONFIG] restore_last_saved_config_snapshot failed:", e);
+      console.error("[配置] restore_last_saved_config_snapshot failed:", e);
       options.setStatusError("status.loadConfigFailed", e);
       return false;
     }

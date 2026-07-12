@@ -20,10 +20,10 @@ pub(super) fn write_jsonl_snapshot_directory_shard(
         if let Some(reason) =
             jsonl_snapshot_directory_incremental_fallback_reason(paths, &existing_manifest)
         {
-            eprintln!(
+            runtime_log_error(format!(
                 "[消息存储] ready 快照基线不可用于增量写入，回退全量重写：conversation_id={}，reason={}",
                 paths.conversation_id, reason
-            );
+            ));
         } else {
             return write_jsonl_snapshot_directory_shard_incremental(
                 paths,
@@ -56,10 +56,10 @@ pub(super) fn write_jsonl_snapshot_directory_shard_if_changed(
         }
         Ok(None) => {}
         Err(err) => {
-            eprintln!(
+            runtime_log_error(format!(
                 "[消息存储] ready 快照读取失败，改为强制重写：conversation_id={}，error={}",
                 paths.conversation_id, err
-            );
+            ));
         }
     }
     write_jsonl_snapshot_directory_shard(paths, &normalized_conversation)?;
@@ -105,14 +105,14 @@ fn normalize_conversation_media_refs_for_message_store(
                             }
                         }
                         Err(err) => {
-                            eprintln!(
+                            runtime_log_error(format!(
                                 "[消息存储] 媒体外置化失败，保留原始内容: conversation_id={}，message_id={}，mime={}，bytes_len={}，error={}",
                                 paths.conversation_id,
                                 message.id,
                                 mime,
                                 bytes_base64.len(),
                                 err
-                            );
+                            ));
                         }
                     }
                 }
@@ -210,11 +210,11 @@ fn write_jsonl_snapshot_directory_shard_incremental(
     let old_block_count = old_block_ids.len();
     let new_block_count = source_blocks.len();
     if new_block_count < old_block_count {
-        eprintln!(
+        runtime_log_info(format!(
             "[消息存储] 增量写入命中 block 数量减少，回退全量重写：conversation_id={}，old_count={}，new_count={}",
             paths.conversation_id,
             old_block_count, new_block_count
-        );
+        ));
         return write_jsonl_snapshot_directory_shard_full(paths, conversation);
     }
     for (idx, block) in source_blocks.iter().enumerate().take(old_block_count) {
@@ -224,13 +224,13 @@ fn write_jsonl_snapshot_directory_shard_incremental(
         {
             continue;
         }
-        eprintln!(
+        runtime_log_info(format!(
             "[消息存储] 增量写入命中 block 顺序不一致，回退全量重写：conversation_id={}，index={}，old_block={:?}，new_block={}",
             paths.conversation_id,
             idx,
             old_block_ids.get(idx),
             block.block_file
-        );
+        ));
         return write_jsonl_snapshot_directory_shard_full(paths, conversation);
     }
 

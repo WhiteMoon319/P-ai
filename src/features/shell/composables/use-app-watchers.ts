@@ -107,7 +107,7 @@ export function useAppWatchers(options: UseAppWatchersOptions) {
       try {
         await options.refreshToolsStatus();
       } catch (error) {
-        console.error("[WATCH] refreshToolsStatus failed:", error);
+        console.error("[监听] refreshToolsStatus failed:", error);
         options.toolStatuses.value = options.defaultApiTools().map((tool) => ({
           id: tool.id,
           status: "failed",

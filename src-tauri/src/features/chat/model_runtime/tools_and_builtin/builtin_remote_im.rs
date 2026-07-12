@@ -74,7 +74,7 @@ impl RuntimeJsonTool for BuiltinContactReplyTool {
     fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
             runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.start name=contact_reply args={}",
+                "[工具调试] 内置工具执行开始 name=contact_reply args={}",
                 debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
             ));
             let result = builtin_contact_reply(&self.app_state, &self.session_id, args)
@@ -82,11 +82,11 @@ impl RuntimeJsonTool for BuiltinContactReplyTool {
                 .map_err(ToolInvokeError::from);
             match &result {
                 Ok(v) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.ok name=contact_reply result={}",
+                    "[工具调试] 内置工具执行完成 name=contact_reply result={}",
                     debug_value_snippet(v, 240)
                 )),
                 Err(err) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.err name=contact_reply err={err}"
+                    "[工具调试] 内置工具执行失败 name=contact_reply err={err}"
                 )),
             }
             result
@@ -102,7 +102,7 @@ impl RuntimeJsonTool for BuiltinContactSendFilesTool {
     fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
             runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.start name=contact_send_files args={}",
+                "[工具调试] 内置工具执行开始 name=contact_send_files args={}",
                 debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
             ));
             let result = builtin_contact_send_files(&self.app_state, &self.session_id, args)
@@ -110,11 +110,11 @@ impl RuntimeJsonTool for BuiltinContactSendFilesTool {
                 .map_err(ToolInvokeError::from);
             match &result {
                 Ok(v) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.ok name=contact_send_files result={}",
+                    "[工具调试] 内置工具执行完成 name=contact_send_files result={}",
                     debug_value_snippet(v, 240)
                 )),
                 Err(err) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.err name=contact_send_files err={err}"
+                    "[工具调试] 内置工具执行失败 name=contact_send_files err={err}"
                 )),
             }
             result
@@ -130,17 +130,17 @@ impl RuntimeJsonTool for BuiltinContactNoReplyTool {
     fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
         Box::pin(async move {
             runtime_log_debug(format!(
-                "[TOOL-DEBUG] execute_builtin_tool.start name=contact_no_reply args={}",
+                "[工具调试] 内置工具执行开始 name=contact_no_reply args={}",
                 debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
             ));
             let result = builtin_contact_no_reply(args).map_err(ToolInvokeError::from);
             match &result {
                 Ok(v) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.ok name=contact_no_reply result={}",
+                    "[工具调试] 内置工具执行完成 name=contact_no_reply result={}",
                     debug_value_snippet(v, 240)
                 )),
                 Err(err) => runtime_log_debug(format!(
-                    "[TOOL-DEBUG] execute_builtin_tool.err name=contact_no_reply err={err}"
+                    "[工具调试] 内置工具执行失败 name=contact_no_reply err={err}"
                 )),
             }
             result
