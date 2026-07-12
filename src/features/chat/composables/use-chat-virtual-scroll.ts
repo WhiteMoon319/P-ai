@@ -39,6 +39,8 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
   let virtualItemResizeObserver: ResizeObserver | null = null;
   let completionLayoutGuardActive = false;
   let completionLayoutGuardFrame = 0;
+  let explicitVirtualScrollActive = false;
+  let explicitVirtualScrollFrame = 0;
 
   const initialBottomOffset = ref(0);
   let conversationVirtualizerResetRequest = 0;
@@ -102,9 +104,9 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     // 覆盖 virtualizer 的尺寸修正滚动：我们定位到流式消息高度持续增长时，
     // @tanstack/virtual 会走 ResizeObserver -> resizeItem -> applyScrollAdjustment
     // -> _scrollToOffset -> scrollToFn，把 scrollTop 连续往下补，维持距底部固定偏移。
-    // 这会让聊天窗口在流式期间“自己往下走”。这里仅屏蔽 adjustments 驱动的
-    // 底层修正滚动，不影响手动滚动或显式的 scrollToBottom 路径。
-    if ((chatStreamingActive() || completionLayoutGuardActive) && Math.round(Number(options.adjustments || 0)) !== 0) {
+    // 这会让聊天窗口在流式期间“自己往下走”。尺寸变化既可能携带 adjustments，
+    // 也可能以普通 offset 重定位，因此流式期间只放行我们明确发起的滚动到底。
+    if ((chatStreamingActive() || completionLayoutGuardActive) && !explicitVirtualScrollActive) {
       return;
     }
     scrollEl.scrollTo({
@@ -380,7 +382,15 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       if (requestId !== conversationVirtualizerResetRequest) return;
       if (renderItems.value.length > 0) {
+        explicitVirtualScrollActive = true;
+        if (explicitVirtualScrollFrame) {
+          cancelAnimationFrame(explicitVirtualScrollFrame);
+        }
         virtualizer.value.scrollToEnd({ behavior });
+        explicitVirtualScrollFrame = requestAnimationFrame(() => {
+          explicitVirtualScrollFrame = 0;
+          explicitVirtualScrollActive = false;
+        });
       }
       // smooth 滚动依赖浏览器原生动画，强制赋值 scrollTop 会打断它；仅在 auto 时兜底钳制到真实底端
       if (behavior !== "smooth") {
@@ -456,6 +466,11 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       completionLayoutGuardFrame = 0;
     }
     completionLayoutGuardActive = false;
+    if (explicitVirtualScrollFrame && typeof window !== "undefined") {
+      window.cancelAnimationFrame(explicitVirtualScrollFrame);
+      explicitVirtualScrollFrame = 0;
+    }
+    explicitVirtualScrollActive = false;
     conversationVirtualizerResetRequest += 1;
     pendingConversationBottomInitializationId = "";
     virtualItemResizeObserver?.disconnect();
