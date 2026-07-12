@@ -211,11 +211,25 @@ Tauri 管理 3 个无边框窗口：`main`（配置，900×900）、`chat`（对
 - 归档需要根据最新实现情况修正计划书，进行归档报告。
 - 归档文件命名必须带日期，如 `20260220_重启FTS5混合检索计划.md`
 
-### 日志标准
+### 日志等级与用法
+
+| 等级 | 函数 | 适用场景 |
+|---|---|---|
+| error | `runtime_log_error` | 操作失败、非预期异常 |
+| warn | `runtime_log_warn` | 降级、兜底、跳过、重试 |
+| info | `runtime_log_info` | 正常流程节点、服务状态切换、用户可见行为变化 |
+| debug | `runtime_log_debug` | 开发者排查细节、变量值、状态快照 |
+| trace | 无函数，仅 `[TRACE]` 前缀触发 | 执行追踪 |
+
+#### 实际行为
+
+- `eprintln!` 宏在 `main.rs:29-33` 被重定义为 `runtime_log_info`，约 532 处调用全部走 info 级别。**新增日志不要用 `eprintln!` 打非 info 级别的内容，直接用对应 `runtime_log_*` 函数。**
+- `normalize_runtime_log`（`debug_log_commands.rs:343`）会从消息前缀自动提升级别：`[ERROR]`→error、`[WARN]`→warn、`[INFO]`→info、`[DEBUG]`→debug、`[TRACE]`→trace。
+
+### 日志约定
 - 日志文案默认使用中文，避免中英混杂；仅在必要时保留英文标识（如集合名、配置键名、异常类名）。
 - 任务型日志统一前缀：`[睡眠维护]`、`[睡眠]`、`[简单记忆回灌]`，便于平台日志检索。
 - 状态表达统一使用：`开始`、`完成`、`跳过`、`失败`，不要再使用 `status=success/failed/skipped` 风格。
 - 日志内容应包含可排障字段：任务名、触发条件（如供应商变化/模式）、关键计数（如写入条数/失败条数）、耗时毫秒。
 - 异常日志必须带异常信息（Rust 使用 `{:?}` 或 `Display`，TypeScript 包含 `error.message` 和必要的 `error.stack`），避免只打印"失败"无上下文。
-- 高频循环日志仅输出聚合信息，避免每条记录都打印 info/warn 级别日志；明细使用 debug/trace 级别。
-- 用户可见行为变化（例如切换模式、禁用功能、跳过原因）必须有一条清晰 INFO 日志。
+- 高频循环日志仅输出聚合信息，避免每条记录都打印 info/warn 级别日志；明细使用 debug 级别。
