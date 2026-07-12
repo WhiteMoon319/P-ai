@@ -296,6 +296,7 @@
               ref="markdownScroller"
               class="file-reader-content file-reader-markdown-scroller mx-auto h-full w-full max-w-300 overflow-auto px-4 py-4"
               @scroll="captureVisibleRangeContext"
+              @click="openMarkdownFileLink"
               @mouseup="captureCurrentTextSelection"
               @keyup="captureCurrentTextSelection"
               @contextmenu.prevent="openActiveFileContextMenu"
@@ -557,6 +558,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { ChevronDown, ChevronRight, Code2, Eye, ExternalLink, FilePlus, Folders, RefreshCw, Search, SquareTerminal } from "@lucide/vue";
 import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
 import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
+import { isAbsoluteLocalPath, normalizeLocalLinkHref, parseLocalFileReference } from "../../chat/utils/local-link";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import PanelTabStrip from "../../shared/components/PanelTabStrip.vue";
 import { useI18n } from "vue-i18n";
@@ -1834,6 +1836,25 @@ async function openPath(path: string, options: { reuseActiveTab?: boolean; targe
     tab.error = error instanceof Error ? error.message : String(error);
     replaceTabState(tab);
   }
+}
+
+async function openMarkdownFileLink(event: MouseEvent) {
+  const anchor = (event.target as HTMLElement | null)?.closest("a") as HTMLAnchorElement | null;
+  if (!anchor) return;
+  const rawHref = anchor.getAttribute("data-href") || anchor.getAttribute("href") || "";
+  const href = normalizeLocalLinkHref(rawHref);
+  if (!href || href === "#" || href.startsWith("#") || /^https?:\/\//i.test(href)) return;
+
+  const reference = parseLocalFileReference(href);
+  const referencedPath = reference?.path || href;
+  const tab = activeTab.value;
+  if (!tab) return;
+  const targetPath = isAbsoluteLocalPath(referencedPath)
+    ? referencedPath
+    : `${directoryFromPath(tab.path)}/${referencedPath.replace(/^\.\//, "")}`;
+  event.preventDefault();
+  event.stopPropagation();
+  await openPath(targetPath, { targetLine: reference?.line });
 }
 
 async function openDroppedPaths(paths: string[]) {
