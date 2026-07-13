@@ -19,11 +19,6 @@ type UseChatRewindActionsOptions = {
   activeAgentId: Ref<string>;
   currentConversationId: Ref<string>;
   allMessages: ShallowRef<ChatMessage[]>;
-  maybeUpdateConversationOverviewFromLoadedMessages: (
-    conversationId: string,
-    messages: ChatMessage[],
-    remainingCount: number,
-  ) => void;
   chatting: Ref<boolean>;
   trimming: Ref<boolean>;
   compactingConversation: Ref<boolean>;

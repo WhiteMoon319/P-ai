@@ -9,7 +9,10 @@ export function useChatRuntimeWatchers(bindings: Record<string, any>) {
     }),
     ({ mode }) => {
       if (mode !== "chat" || !bindings.startupDataReady.value) return;
-      void bindings.refreshChatUnarchivedConversations().catch((error: unknown) => {
+      const syncOverview = typeof bindings.syncUnarchivedConversationOverviewChangedSinceWatermark === "function"
+        ? bindings.syncUnarchivedConversationOverviewChangedSinceWatermark
+        : bindings.refreshChatUnarchivedConversations;
+      void syncOverview("runtime_watcher").catch((error: unknown) => {
         bindings.setStatusError("status.loadMessagesFailed", error);
       });
     },

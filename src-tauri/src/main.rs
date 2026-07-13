@@ -1052,6 +1052,7 @@ fn main() {
             set_department_primary_api_config,
             get_chat_snapshot,
             list_unarchived_conversations,
+            list_unarchived_conversations_changed_since,
             get_conversation_section_orders,
             set_active_unarchived_conversation,
             switch_active_conversation_snapshot,

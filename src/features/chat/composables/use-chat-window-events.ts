@@ -26,7 +26,6 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
           void bindings.getChatFlow().handleExternalHistoryFlushed(event.payload);
         } else if (payloadConversationId) {
           bindings.mergeIncomingMessagesIntoCache(payloadConversationId, bindings.readMessagesFromPayload(event.payload));
-          bindings.setConversationBadge(payloadConversationId, "completed");
         }
       }).then((unlisten) => {
         bindings.unlisteners.chatHistoryFlushed = unlisten;
@@ -48,19 +47,12 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
           if (assistantMessage && assistantMessageId && !messageAlreadyCached) {
             bindings.cacheConversationMessages(payloadConversationId, [...cachedMessages, assistantMessage]);
           }
-          if (!assistantMessageId || !messageAlreadyCached) {
-            if (assistantMessage && assistantMessageId) {
-              bindings.applyConversationOverviewAppendedMessage(payloadConversationId, assistantMessage);
-            }
-          }
-          bindings.setConversationBadge(payloadConversationId, "completed");
           void bindings.getChatFlow().handleExternalRoundCompleted(event.payload);
           return;
         }
         if (!bindings.matchesForegroundConversation(payloadConversationId)) return;
         bindings.clearConversationBadge(payloadConversationId);
         bindings.toolReviewRefreshTick.value += 1;
-        bindings.updateForegroundConversationOverviewFromMessages(payloadConversationId || currentConversationId, assistantMessage);
         void bindings.getChatFlow().handleExternalRoundCompleted(event.payload).finally(() => {
           void bindings.refreshActiveSupervisionTask({ silent: true });
         });

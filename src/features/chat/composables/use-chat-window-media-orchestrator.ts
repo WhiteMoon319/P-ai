@@ -116,6 +116,7 @@ export function useChatWindowMediaOrchestrator(bindings: Record<string, any>) {
     stopSpeechRecording,
     prewarmMicrophone,
     refreshChatUnarchivedConversations: bindings.refreshChatUnarchivedConversations,
+    syncUnarchivedConversationOverviewChangedSinceWatermark: bindings.syncUnarchivedConversationOverviewChangedSinceWatermark,
     freezeForegroundConversation: bindings.freezeForegroundConversation,
     restoreForegroundConversationProjection: bindings.restoreForegroundConversationProjection,
     switchUnarchivedConversation: bindings.switchUnarchivedConversation,

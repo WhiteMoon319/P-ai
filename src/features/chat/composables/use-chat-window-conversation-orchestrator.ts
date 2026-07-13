@@ -28,7 +28,6 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
     inferHasMoreHistoryFromSnapshot,
     clearConversationBadge,
     markConversationReadPersisted,
-    applyConversationOverviewAppendedMessage,
     setConversationBadge,
     readConversationIdFromPayload,
     readMessagesFromPayload,
@@ -49,12 +48,8 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
     applyConversationOverviewItemUpdated,
     applyConversationPinUpdated,
     applyConversationRuntimeStateUpdated,
-    isOverviewDraftMessage,
-    previewMessageFromChatMessage,
     unarchivedConversationActivityAt,
     sortUnarchivedConversationOverviewItems,
-    updateForegroundConversationOverviewFromMessages,
-    maybeUpdateForegroundConversationOverviewFromLoadedMessages,
   } = useChatConversationSync(bindings.sync);
 
   const chatForeground = useChatForegroundOrchestrator({
@@ -155,6 +150,7 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
     freezeConversationMessages,
     reuseStableMessageReferences,
     refreshUnarchivedConversationOverview: chatForeground.refreshUnarchivedConversationOverview,
+    syncUnarchivedConversationOverviewChangedSinceWatermark: chatForeground.syncUnarchivedConversationOverviewChangedSinceWatermark,
     refreshRemoteImConversationOverview: chatForeground.refreshRemoteImConversationOverview,
     switchUnarchivedConversation: chatForeground.switchUnarchivedConversation,
     setStatusError: bindings.setStatusError,
@@ -174,6 +170,7 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
     forwardingConversationSelection: bindings.forwardingConversationSelection,
     trimming: bindings.trimming,
     refreshUnarchivedConversationOverview: chatForeground.refreshUnarchivedConversationOverview,
+    syncUnarchivedConversationOverviewChangedSinceWatermark: chatForeground.syncUnarchivedConversationOverviewChangedSinceWatermark,
     switchUnarchivedConversation: chatForeground.switchUnarchivedConversation,
     requestConversationLightSnapshot: chatForeground.requestConversationLightSnapshot,
     applyConversationSnapshot,
@@ -207,6 +204,10 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
 
   async function refreshChatUnarchivedConversations() {
     await chatForeground.refreshChatUnarchivedConversations();
+  }
+
+  async function syncUnarchivedConversationOverviewChangedSinceWatermark(reason?: string) {
+    await chatForeground.syncUnarchivedConversationOverviewChangedSinceWatermark(reason);
   }
 
   async function sendChatFromCurrentWindow(overrides?: { extraTextBlocks?: string[] }) {
@@ -249,7 +250,6 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
     inferHasMoreHistoryFromSnapshot,
     clearConversationBadge,
     markConversationReadPersisted,
-    applyConversationOverviewAppendedMessage,
     setConversationBadge,
     readConversationIdFromPayload,
     readMessagesFromPayload,
@@ -270,12 +270,8 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
     applyConversationOverviewItemUpdated,
     applyConversationPinUpdated,
     applyConversationRuntimeStateUpdated,
-    isOverviewDraftMessage,
-    previewMessageFromChatMessage,
     unarchivedConversationActivityAt,
     sortUnarchivedConversationOverviewItems,
-    updateForegroundConversationOverviewFromMessages,
-    maybeUpdateForegroundConversationOverviewFromLoadedMessages,
     pickForegroundConversationId: chatForeground.pickForegroundConversationId,
     clearForegroundConversation: chatForeground.clearForegroundConversation,
     initializeDetachedChatWindow: chatForeground.initializeDetachedChatWindow,
@@ -283,9 +279,9 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
     detachCurrentConversationToWindow: chatForeground.detachCurrentConversationToWindow,
     hasActiveForegroundConversation: chatForeground.hasActiveForegroundConversation,
     requestConversationLightSnapshot: chatForeground.requestConversationLightSnapshot,
-    requestUnarchivedConversationOverview: chatForeground.requestUnarchivedConversationOverview,
     refreshRemoteImConversationOverview: chatForeground.refreshRemoteImConversationOverview,
     refreshUnarchivedConversationOverview: chatForeground.refreshUnarchivedConversationOverview,
+    syncUnarchivedConversationOverviewChangedSinceWatermark,
     recoverForegroundConversationFromOverview: chatForeground.recoverForegroundConversationFromOverview,
     syncCurrentConversationWorkspaceLabel: chatForeground.syncCurrentConversationWorkspaceLabel,
     switchUnarchivedConversation: chatForeground.switchUnarchivedConversation,

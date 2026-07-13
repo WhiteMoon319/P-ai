@@ -25,7 +25,11 @@ export function useChatRemoteConversationOrchestrator(bindings: Record<string, a
         error,
       });
     }
-    await bindings.refreshUnarchivedConversationOverview();
+    if (typeof bindings.syncUnarchivedConversationOverviewChangedSinceWatermark === "function") {
+      await bindings.syncUnarchivedConversationOverviewChangedSinceWatermark("open_conversation_in_detached_window");
+    } else {
+      await bindings.refreshUnarchivedConversationOverview();
+    }
     await bindings.refreshRemoteImConversationOverview();
   }
 

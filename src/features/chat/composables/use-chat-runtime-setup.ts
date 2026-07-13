@@ -245,7 +245,6 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
       activeAgentId: bindings.currentForegroundAgentId,
       currentConversationId: bindings.currentChatConversationId,
       allMessages: bindings.allMessages,
-      maybeUpdateConversationOverviewFromLoadedMessages: bindings.maybeUpdateForegroundConversationOverviewFromLoadedMessages,
       chatting: bindings.chatting,
       trimming: bindings.trimming,
       compactingConversation: bindings.compactingConversation,

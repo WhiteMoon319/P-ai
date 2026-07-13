@@ -750,6 +750,293 @@ async fn list_unarchived_conversations(
         .map_err(|err| format!("读取未归档会话列表任务异常：{err}"))?
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ListUnarchivedConversationsChangedSinceInput {
+    #[serde(default)]
+    since: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ListUnarchivedConversationsChangedSinceOutput {
+    changed: Vec<UnarchivedConversationSummary>,
+    #[serde(default)]
+    deleted_ids: Vec<String>,
+    server_time: String,
+}
+
+#[derive(Debug, Default)]
+struct OverviewBroadcastWatermarkState {
+    conversation_times: std::collections::HashMap<String, String>,
+    removed_times: std::collections::HashMap<String, String>,
+    known_ids: std::collections::HashSet<String>,
+    known_ids_initialized: bool,
+    last_server_time: String,
+}
+
+static OVERVIEW_BROADCAST_WATERMARK_STATE: OnceLock<Mutex<OverviewBroadcastWatermarkState>> =
+    OnceLock::new();
+
+fn overview_broadcast_watermark_state() -> &'static Mutex<OverviewBroadcastWatermarkState> {
+    OVERVIEW_BROADCAST_WATERMARK_STATE
+        .get_or_init(|| Mutex::new(OverviewBroadcastWatermarkState::default()))
+}
+
+fn overview_next_server_time_locked(state: &mut OverviewBroadcastWatermarkState) -> String {
+    let now = now_iso();
+    let next = if state.last_server_time.trim().is_empty() || now > state.last_server_time {
+        now
+    } else {
+        parse_iso(&state.last_server_time)
+            .and_then(|value| value.checked_add(time::Duration::seconds(1)))
+            .and_then(|value| value.format(&Rfc3339).ok())
+            .unwrap_or(now)
+    };
+    state.last_server_time = next.clone();
+    next
+}
+
+fn overview_reserve_server_time() -> String {
+    match overview_broadcast_watermark_state().lock() {
+        Ok(mut guard) => overview_next_server_time_locked(&mut guard),
+        Err(err) => {
+            runtime_log_error(format!(
+                "[会话概览水位] 失败，任务=生成服务端水位，error={:?}",
+                err
+            ));
+            now_iso()
+        }
+    }
+}
+
+fn overview_remember_full_list_at(summaries: &[UnarchivedConversationSummary], server_time: &str) {
+    let ids = summaries
+        .iter()
+        .map(|item| item.conversation_id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .collect::<std::collections::HashSet<_>>();
+    match overview_broadcast_watermark_state().lock() {
+        Ok(mut guard) => {
+            guard.known_ids = ids;
+            guard.known_ids_initialized = true;
+            guard
+                .conversation_times
+                .retain(|_, changed_at| changed_at.as_str() > server_time);
+            guard
+                .removed_times
+                .retain(|_, removed_at| removed_at.as_str() > server_time);
+        }
+        Err(err) => {
+            runtime_log_error(format!(
+                "[会话概览水位] 失败，任务=记录全量基线，error={:?}",
+                err
+            ));
+        }
+    }
+}
+
+fn overview_register_item_broadcast(conversation_id: &str) -> String {
+    let cid = conversation_id.trim();
+    if cid.is_empty() {
+        return overview_reserve_server_time();
+    }
+    match overview_broadcast_watermark_state().lock() {
+        Ok(mut guard) => {
+            let server_time = overview_next_server_time_locked(&mut guard);
+            guard
+                .conversation_times
+                .insert(cid.to_string(), server_time.clone());
+            guard.removed_times.remove(cid);
+            guard.known_ids.insert(cid.to_string());
+            guard.known_ids_initialized = true;
+            server_time
+        }
+        Err(err) => {
+            runtime_log_error(format!(
+                "[会话概览水位] 失败，任务=记录单项广播，conversation_id={}，error={:?}",
+                cid, err
+            ));
+            now_iso()
+        }
+    }
+}
+
+fn overview_register_missing_item(conversation_id: &str) {
+    let cid = conversation_id.trim();
+    if cid.is_empty() {
+        return;
+    }
+    match overview_broadcast_watermark_state().lock() {
+        Ok(mut guard) => {
+            if !guard.known_ids.contains(cid) && !guard.conversation_times.contains_key(cid) {
+                return;
+            }
+            let server_time = overview_next_server_time_locked(&mut guard);
+            guard.conversation_times.remove(cid);
+            guard.removed_times.insert(cid.to_string(), server_time);
+            guard.known_ids.remove(cid);
+            guard.known_ids_initialized = true;
+        }
+        Err(err) => {
+            runtime_log_error(format!(
+                "[会话概览水位] 失败，任务=记录单项移除，conversation_id={}，error={:?}",
+                cid, err
+            ));
+        }
+    }
+}
+
+fn overview_register_full_broadcast(
+    summaries: &[UnarchivedConversationSummary],
+) -> String {
+    let current_ids = summaries
+        .iter()
+        .map(|item| item.conversation_id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .collect::<std::collections::HashSet<_>>();
+    match overview_broadcast_watermark_state().lock() {
+        Ok(mut guard) => {
+            let server_time = overview_next_server_time_locked(&mut guard);
+            let removed_ids = if guard.known_ids_initialized {
+                guard
+                    .known_ids
+                    .difference(&current_ids)
+                    .cloned()
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            };
+            for id in &current_ids {
+                guard
+                    .conversation_times
+                    .insert(id.clone(), server_time.clone());
+                guard.removed_times.remove(id);
+            }
+            for id in removed_ids {
+                guard.conversation_times.remove(&id);
+                guard.removed_times.insert(id, server_time.clone());
+            }
+            guard.known_ids = current_ids;
+            guard.known_ids_initialized = true;
+            server_time
+        }
+        Err(err) => {
+            runtime_log_error(format!(
+                "[会话概览水位] 失败，任务=记录全量广播，error={:?}",
+                err
+            ));
+            now_iso()
+        }
+    }
+}
+
+fn overview_watermark_changes_since(
+    since: &str,
+) -> (Vec<String>, Vec<String>, String) {
+    match overview_broadcast_watermark_state().lock() {
+        Ok(guard) => {
+            let changed_ids = guard
+                .conversation_times
+                .iter()
+                .filter(|(_, changed_at)| changed_at.trim() > since)
+                .map(|(conversation_id, _)| conversation_id.clone())
+                .collect::<Vec<_>>();
+            let deleted_ids = guard
+                .removed_times
+                .iter()
+                .filter(|(_, removed_at)| removed_at.trim() > since)
+                .map(|(conversation_id, _)| conversation_id.clone())
+                .collect::<Vec<_>>();
+            let server_time = guard.last_server_time.trim().to_string();
+            (changed_ids, deleted_ids, server_time)
+        }
+        Err(err) => {
+            runtime_log_error(format!(
+                "[会话概览水位] 失败，任务=读取差量水位，since={}，error={:?}",
+                since, err
+            ));
+            (Vec::new(), Vec::new(), now_iso())
+        }
+    }
+}
+
+fn overview_updated_payload_with_server_time(
+    payload: &UnarchivedConversationOverviewUpdatedPayload,
+    server_time: &str,
+) -> serde_json::Value {
+    let mut value = serde_json::json!(payload);
+    if let serde_json::Value::Object(ref mut object) = value {
+        object.insert(
+            "serverTime".to_string(),
+            serde_json::Value::String(server_time.to_string()),
+        );
+    }
+    value
+}
+
+#[tauri::command]
+async fn list_unarchived_conversations_changed_since(
+    input: ListUnarchivedConversationsChangedSinceInput,
+    state: State<'_, AppState>,
+) -> Result<ListUnarchivedConversationsChangedSinceOutput, String> {
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        list_unarchived_conversations_changed_since_blocking(&app_state, &input)
+    })
+    .await
+    .map_err(|err| format!("读取未归档会话列表差量任务异常：{err}"))?
+}
+
+fn list_unarchived_conversations_changed_since_blocking(
+    state: &AppState,
+    input: &ListUnarchivedConversationsChangedSinceInput,
+) -> Result<ListUnarchivedConversationsChangedSinceOutput, String> {
+    let since = input
+        .since
+        .as_deref()
+        .map(str::trim)
+        .unwrap_or_default();
+    if since.is_empty() {
+        let server_time = overview_reserve_server_time();
+        let changed = list_unarchived_conversations_blocking(state)?;
+        overview_remember_full_list_at(&changed, &server_time);
+        return Ok(ListUnarchivedConversationsChangedSinceOutput {
+            changed,
+            deleted_ids: Vec::new(),
+            server_time,
+        });
+    }
+
+    let (changed_ids, mut deleted_ids, server_time) = overview_watermark_changes_since(since);
+    let changed_id_set = changed_ids
+        .iter()
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .collect::<std::collections::HashSet<_>>();
+    let all = list_unarchived_conversations_blocking(state)?;
+    let changed = all
+        .into_iter()
+        .filter(|item| changed_id_set.contains(item.conversation_id.trim()))
+        .collect::<Vec<_>>();
+    let changed_result_ids = changed
+        .iter()
+        .map(|item| item.conversation_id.trim().to_string())
+        .collect::<std::collections::HashSet<_>>();
+    for id in changed_id_set {
+        if !changed_result_ids.contains(&id) && !deleted_ids.iter().any(|deleted_id| deleted_id == &id) {
+            deleted_ids.push(id);
+        }
+    }
+    deleted_ids.sort();
+    deleted_ids.dedup();
+    Ok(ListUnarchivedConversationsChangedSinceOutput {
+        changed,
+        deleted_ids,
+        server_time,
+    })
+}
+
 fn list_unarchived_conversations_blocking(
     state: &AppState,
 ) -> Result<Vec<UnarchivedConversationSummary>, String> {
@@ -857,8 +1144,8 @@ struct ForegroundConversationLightSnapshotOutput {
     preferred_api_config_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     active_goal: Option<ConversationGoalState>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    unarchived_conversations: Vec<UnarchivedConversationSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    conversation: Option<UnarchivedConversationSummary>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     stream_cache: Option<ConversationStreamRuntimeCacheSnapshot>,
     #[serde(default)]
@@ -957,6 +1244,7 @@ struct UnarchivedConversationOverviewUpdatedPayload {
 #[serde(rename_all = "camelCase")]
 struct UnarchivedConversationOverviewItemUpdatedPayload {
     conversation: UnarchivedConversationSummary,
+    server_time: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -989,12 +1277,15 @@ fn emit_unarchived_conversation_overview_updated_payload(
     state: &AppState,
     payload: &UnarchivedConversationOverviewUpdatedPayload,
 ) {
-    ide_chat_broadcast_notification("conversation.overviewUpdated", serde_json::json!(payload));
+    let server_time = overview_register_full_broadcast(&payload.unarchived_conversations);
+    let event_payload = overview_updated_payload_with_server_time(payload, &server_time);
+    ide_chat_broadcast_notification("conversation.overviewUpdated", event_payload.clone());
     let started_at = std::time::Instant::now();
     runtime_log_debug(format!(
-        "[会话概览] 开始，任务=推送未归档会话概览，preferred_conversation_id={}，conversation_count={}",
+        "[会话概览] 开始，任务=推送未归档会话概览，preferred_conversation_id={}，conversation_count={}，server_time={}",
         payload.preferred_conversation_id.as_deref().unwrap_or(""),
-        payload.unarchived_conversations.len()
+        payload.unarchived_conversations.len(),
+        server_time
     ));
     let app_handle = match state.app_handle.lock() {
         Ok(guard) => guard.as_ref().cloned(),
@@ -1007,7 +1298,7 @@ fn emit_unarchived_conversation_overview_updated_payload(
         runtime_log_warn("[会话概览] 跳过，任务=推送未归档会话概览，原因=app_handle_missing".to_string());
         return;
     };
-    if let Err(err) = app_handle.emit(CHAT_CONVERSATION_OVERVIEW_UPDATED_EVENT, payload) {
+    if let Err(err) = app_handle.emit(CHAT_CONVERSATION_OVERVIEW_UPDATED_EVENT, &event_payload) {
         runtime_log_error(format!(
             "[会话概览] 失败，任务=推送未归档会话概览，event={}，error={}，duration_ms={}",
             CHAT_CONVERSATION_OVERVIEW_UPDATED_EVENT,
@@ -1017,10 +1308,11 @@ fn emit_unarchived_conversation_overview_updated_payload(
         return;
     }
     runtime_log_debug(format!(
-        "[会话概览] 完成，任务=推送未归档会话概览，event={}，preferred_conversation_id={}，conversation_count={}，duration_ms={}",
+        "[会话概览] 完成，任务=推送未归档会话概览，event={}，preferred_conversation_id={}，conversation_count={}，server_time={}，duration_ms={}",
         CHAT_CONVERSATION_OVERVIEW_UPDATED_EVENT,
         payload.preferred_conversation_id.as_deref().unwrap_or(""),
         payload.unarchived_conversations.len(),
+        server_time,
         started_at.elapsed().as_millis()
     ));
 }
@@ -1029,8 +1321,16 @@ fn emit_unarchived_conversation_overview_item_updated_payload(
     state: &AppState,
     payload: &UnarchivedConversationOverviewItemUpdatedPayload,
 ) {
-    ide_chat_broadcast_notification("conversation.overviewItemUpdated", serde_json::json!(payload));
     let conversation_id = payload.conversation.conversation_id.trim();
+    let server_time = overview_register_item_broadcast(conversation_id);
+    let emitted_payload = UnarchivedConversationOverviewItemUpdatedPayload {
+        conversation: payload.conversation.clone(),
+        server_time,
+    };
+    ide_chat_broadcast_notification(
+        "conversation.overviewItemUpdated",
+        serde_json::json!(&emitted_payload),
+    );
     let app_handle = match state.app_handle.lock() {
         Ok(guard) => guard.as_ref().cloned(),
         Err(err) => {
@@ -1048,7 +1348,7 @@ fn emit_unarchived_conversation_overview_item_updated_payload(
         ));
         return;
     };
-    if let Err(err) = app_handle.emit("easy-call:conversation-overview-item-updated", payload) {
+    if let Err(err) = app_handle.emit("easy-call:conversation-overview-item-updated", &emitted_payload) {
         runtime_log_error(format!(
             "[会话概览] 失败，任务=推送单会话概览，conversation_id={}，error={}",
             conversation_id, err
@@ -1063,11 +1363,15 @@ fn emit_unarchived_conversation_overview_item_updated_from_state(
     let Some(conversation) = conversation_service_v2()
         .read_unarchived_conversation_summary(state, conversation_id)?
     else {
+        overview_register_missing_item(conversation_id);
         return Ok(false);
     };
     emit_unarchived_conversation_overview_item_updated_payload(
         state,
-        &UnarchivedConversationOverviewItemUpdatedPayload { conversation },
+        &UnarchivedConversationOverviewItemUpdatedPayload {
+            conversation,
+            server_time: String::new(),
+        },
     );
     Ok(true)
 }

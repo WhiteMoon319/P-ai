@@ -40,6 +40,7 @@ type UseChatWindowRecordingOrchestratorOptions = {
   stopSpeechRecording: (discard: boolean) => Promise<unknown>;
   prewarmMicrophone: () => Promise<unknown>;
   refreshChatUnarchivedConversations: () => Promise<void>;
+  syncUnarchivedConversationOverviewChangedSinceWatermark: (reason?: string) => Promise<void>;
   freezeForegroundConversation: (reason: string) => void;
   restoreForegroundConversationProjection: (conversationId: string, reason: string) => Promise<void>;
   switchUnarchivedConversation: (conversationId: string) => Promise<void>;
@@ -236,16 +237,22 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     await recoverForegroundConversationBySwitch(conversationId);
   }
 
+  async function recoverChatAfterForegroundWake(reason: string) {
+    const activeConversationId = String(options.currentChatConversationId.value || "").trim();
+    if (activeConversationId) {
+      await reconcileForegroundConversationAfterFreeze(activeConversationId, reason);
+    }
+    await options.syncUnarchivedConversationOverviewChangedSinceWatermark(reason);
+  }
+
   async function syncChatWindowActiveState(reason = "unknown") {
     if (!isPrimaryChatWindow()) return;
     const active = isChatWindowActiveNow();
-    if (options.chatWindowActiveSynced.value === active) return;
+    const activeChanged = options.chatWindowActiveSynced.value !== active;
+    if (!activeChanged && !active) return;
     options.chatWindowActiveSynced.value = active;
     if (active) {
-      const activeConversationId = String(options.currentChatConversationId.value || "").trim();
-      if (activeConversationId) {
-        await reconcileForegroundConversationAfterFreeze(activeConversationId, reason);
-      }
+      await recoverChatAfterForegroundWake(reason);
     }
     clearRecordHotkeyProbeState();
     void invokeTauri("set_chat_window_active", { active }).catch((error) => {

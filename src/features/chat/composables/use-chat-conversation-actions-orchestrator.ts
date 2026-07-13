@@ -208,7 +208,11 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
         });
         const effectiveTargetConversationId = String(result?.targetConversationId || targetConversationId).trim();
         if (!effectiveTargetConversationId) return;
-        await bindings.refreshUnarchivedConversationOverview();
+        if (typeof bindings.syncUnarchivedConversationOverviewChangedSinceWatermark === "function") {
+          await bindings.syncUnarchivedConversationOverviewChangedSinceWatermark("forward_selection_to_remote_contact");
+        } else {
+          await bindings.refreshUnarchivedConversationOverview();
+        }
         await bindings.refreshRemoteImConversationOverview();
         await bindings.switchRemoteImContactConversation(
           String(result?.remoteContactId || remoteContactId).trim(),
@@ -229,7 +233,11 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
         });
         const effectiveTargetConversationId = String(result?.targetConversationId || targetConversationId).trim();
         if (!effectiveTargetConversationId) return;
-        await bindings.refreshUnarchivedConversationOverview();
+        if (typeof bindings.syncUnarchivedConversationOverviewChangedSinceWatermark === "function") {
+          await bindings.syncUnarchivedConversationOverviewChangedSinceWatermark("forward_selection_to_local_conversation");
+        } else {
+          await bindings.refreshUnarchivedConversationOverview();
+        }
         const snapshot = await bindings.requestConversationLightSnapshot(effectiveTargetConversationId);
         bindings.applyConversationSnapshot(snapshot);
         bindings.setStatus(bindings.tr("status.conversationSelectionForwarded", {

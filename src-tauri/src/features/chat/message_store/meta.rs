@@ -205,6 +205,62 @@ pub(super) struct ConversationShardMeta {
 }
 
 impl ConversationShardMeta {
+    fn preview_message_from_chat_message(
+        message: &ChatMessage,
+    ) -> Option<ConversationShardPreviewMessage> {
+        if !matches!(
+            message.role.trim().to_ascii_lowercase().as_str(),
+            "user" | "assistant" | "tool"
+        ) {
+            return None;
+        }
+        let preview = ConversationShardPreviewMessage {
+            message_id: message.id.clone(),
+            role: message.role.clone(),
+            speaker_agent_id: message.speaker_agent_id.clone(),
+            created_at: Some(message.created_at.clone())
+                .filter(|value| !value.trim().is_empty()),
+            text_preview: super::build_conversation_preview_text(message),
+            has_image: message.parts.iter().any(|part| {
+                matches!(part, MessagePart::Image { mime, .. } if !mime.trim().eq_ignore_ascii_case("application/pdf"))
+            }),
+            has_pdf: message.parts.iter().any(|part| {
+                matches!(part, MessagePart::Image { mime, .. } if mime.trim().eq_ignore_ascii_case("application/pdf"))
+            }),
+            has_audio: message
+                .parts
+                .iter()
+                .any(|part| matches!(part, MessagePart::Audio { .. })),
+            has_attachment: super::conversation_message_has_attachment(message),
+        };
+        if preview.text_preview.trim().is_empty()
+            && !preview.has_image
+            && !preview.has_pdf
+            && !preview.has_audio
+            && !preview.has_attachment
+        {
+            return None;
+        }
+        Some(preview)
+    }
+
+    fn body_text_length_for_message(message: &ChatMessage) -> usize {
+        if !matches!(
+            message.role.trim().to_ascii_lowercase().as_str(),
+            "user" | "assistant"
+        ) {
+            return 0;
+        }
+        message
+            .parts
+            .iter()
+            .filter_map(|part| match part {
+                MessagePart::Text { text, .. } => Some(text.trim().chars().count()),
+                _ => None,
+            })
+            .sum()
+    }
+
     pub(super) fn schema_version(&self) -> u32 {
         self.meta_schema_version
     }
@@ -537,7 +593,10 @@ impl ConversationShardMeta {
         );
         if messages
             .iter()
-            .any(|message| message.role.trim().eq_ignore_ascii_case("assistant"))
+            .any(|message| {
+                message.role.trim().eq_ignore_ascii_case("assistant")
+                    && Self::preview_message_from_chat_message(message).is_some()
+            })
         {
             self.has_assistant_reply = true;
         }
@@ -558,34 +617,59 @@ impl ConversationShardMeta {
             self.last_message_at = Some(last_message.created_at.clone());
         }
         let mut preview_messages = self.preview_messages.clone();
-        preview_messages.extend(messages.iter().filter(|message| {
-            matches!(
-                message.role.trim().to_ascii_lowercase().as_str(),
-                "user" | "assistant" | "tool"
-            )
-        }).map(|message| ConversationShardPreviewMessage {
-            message_id: message.id.clone(),
-            role: message.role.clone(),
-            speaker_agent_id: message.speaker_agent_id.clone(),
-            created_at: Some(message.created_at.clone()).filter(|value| !value.trim().is_empty()),
-            text_preview: super::build_conversation_preview_text(message),
-            has_image: message.parts.iter().any(|part| {
-                matches!(part, MessagePart::Image { mime, .. } if !mime.trim().eq_ignore_ascii_case("application/pdf"))
-            }),
-            has_pdf: message.parts.iter().any(|part| {
-                matches!(part, MessagePart::Image { mime, .. } if mime.trim().eq_ignore_ascii_case("application/pdf"))
-            }),
-            has_audio: message
-                .parts
+        preview_messages.extend(
+            messages
                 .iter()
-                .any(|part| matches!(part, MessagePart::Audio { .. })),
-            has_attachment: super::conversation_message_has_attachment(message),
-        }));
+                .filter_map(Self::preview_message_from_chat_message),
+        );
         if preview_messages.len() > 2 {
             let keep_from = preview_messages.len().saturating_sub(2);
             preview_messages = preview_messages[keep_from..].to_vec();
         }
         self.preview_messages = preview_messages;
+    }
+
+    pub(super) fn apply_replaced_message(
+        &mut self,
+        previous_message: &ChatMessage,
+        updated_message: &ChatMessage,
+    ) {
+        let previous_body_text_length = Self::body_text_length_for_message(previous_message);
+        let updated_body_text_length = Self::body_text_length_for_message(updated_message);
+        self.body_text_length = self
+            .body_text_length
+            .saturating_sub(previous_body_text_length)
+            .saturating_add(updated_body_text_length);
+        if updated_message
+            .role
+            .trim()
+            .eq_ignore_ascii_case("assistant")
+        {
+            self.has_assistant_reply = true;
+        }
+
+        let next_preview = Self::preview_message_from_chat_message(updated_message);
+        if let Some(position) = self
+            .preview_messages
+            .iter()
+            .position(|item| item.message_id.trim() == updated_message.id.trim())
+        {
+            if let Some(preview) = next_preview {
+                self.preview_messages[position] = preview;
+            } else {
+                self.preview_messages.remove(position);
+            }
+        } else if self.last_message_id.as_deref().map(str::trim)
+            == Some(updated_message.id.trim())
+        {
+            if let Some(preview) = next_preview {
+                self.preview_messages.push(preview);
+            }
+        }
+        if self.preview_messages.len() > 2 {
+            let keep_from = self.preview_messages.len().saturating_sub(2);
+            self.preview_messages = self.preview_messages[keep_from..].to_vec();
+        }
     }
 
     fn apply_spliced_messages(

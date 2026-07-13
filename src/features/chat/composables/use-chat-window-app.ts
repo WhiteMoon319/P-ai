@@ -33,6 +33,7 @@ import { useChatWindowConfigOrchestrator } from "./use-chat-window-config-orches
 
 type ConversationActionsBridge = {
   refreshChatUnarchivedConversations: () => Promise<void>;
+  syncUnarchivedConversationOverviewChangedSinceWatermark: (reason?: string) => Promise<void>;
   freezeForegroundConversation: (reason: string) => void;
   restoreForegroundConversationProjection: (conversationId: string, reason: string) => Promise<void>;
   switchUnarchivedConversation: (conversationId: string) => Promise<void>;
@@ -98,6 +99,7 @@ export function useChatWindowApp() {
     backgroundVoiceScreenshotMode,
     instructionPresets,
     conversationForegroundSyncing,
+    lastOverviewSyncAt,
     backgroundConversationBadgeMap,
     conversationMessageCache,
     latestUserText,
@@ -155,6 +157,7 @@ export function useChatWindowApp() {
   });
   let conversationActions: ConversationActionsBridge = {
     refreshChatUnarchivedConversations: async () => {},
+    syncUnarchivedConversationOverviewChangedSinceWatermark: async () => {},
     freezeForegroundConversation: () => {},
     restoreForegroundConversationProjection: async () => {},
     switchUnarchivedConversation: async () => {},
@@ -164,6 +167,8 @@ export function useChatWindowApp() {
     applyConversationRuntimeStateUpdated: () => {},
   };
   const refreshChatUnarchivedConversations = () => conversationActions.refreshChatUnarchivedConversations();
+  const syncUnarchivedConversationOverviewChangedSinceWatermark = (reason?: string) =>
+    conversationActions.syncUnarchivedConversationOverviewChangedSinceWatermark(reason);
   const freezeForegroundConversation = (reason: string) => conversationActions.freezeForegroundConversation(reason);
   const restoreForegroundConversationProjection = (conversationId: string, reason: string) =>
     conversationActions.restoreForegroundConversationProjection(conversationId, reason);
@@ -410,6 +415,7 @@ export function useChatWindowApp() {
     getChatFlow: () => chatFlow,
     applyConversationRuntimeStateUpdated,
     refreshChatUnarchivedConversations,
+    syncUnarchivedConversationOverviewChangedSinceWatermark,
     freezeForegroundConversation,
     restoreForegroundConversationProjection,
     switchUnarchivedConversation,
@@ -783,7 +789,7 @@ export function useChatWindowApp() {
       if (String(currentChatConversationId.value || "").trim() === conversationId) {
         currentChatPreferredApiConfigId.value = String(result.preferredApiConfigId || "").trim();
       }
-      await refreshChatUnarchivedConversations();
+      await syncUnarchivedConversationOverviewChangedSinceWatermark("rebind_conversation_recipient");
       setStatus(t("status.conversationRecipientRebound"));
     } catch (error) {
       setStatusError("status.rebindConversationRecipientFailed", error);

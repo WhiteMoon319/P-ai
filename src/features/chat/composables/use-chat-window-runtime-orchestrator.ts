@@ -117,6 +117,7 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
       detachedChatWindow: bindings.detachedChatWindow,
       tauriWindowLabel: bindings.tauriWindowLabel,
       unarchivedConversations: bindings.unarchivedConversations,
+      lastOverviewSyncAt: bindings.lastOverviewSyncAt,
       remoteImContactConversations: bindings.remoteImContactConversations,
       allMessages: bindings.allMessages,
       hasMoreBackendHistory: bindings.hasMoreBackendHistory,
@@ -151,6 +152,7 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     currentForegroundConversationSummary: bindings.currentForegroundConversationSummary,
     currentForegroundApiConfigId: bindings.currentForegroundApiConfigId,
     unarchivedConversations: bindings.unarchivedConversations,
+    lastOverviewSyncAt: bindings.lastOverviewSyncAt,
     remoteImContactConversations: bindings.remoteImContactConversations,
     conversationForegroundSyncing: bindings.conversationForegroundSyncing,
     trimmingConversationId: bindings.trimmingConversationId,
@@ -194,6 +196,7 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
 
   bindings.conversationApi.bind({
     refreshChatUnarchivedConversations: conversationOrchestrator.refreshChatUnarchivedConversations,
+    syncUnarchivedConversationOverviewChangedSinceWatermark: conversationOrchestrator.syncUnarchivedConversationOverviewChangedSinceWatermark,
     freezeForegroundConversation: conversationOrchestrator.freezeForegroundConversation,
     restoreForegroundConversationProjection: conversationOrchestrator.restoreForegroundConversationProjection,
     switchUnarchivedConversation: conversationOrchestrator.switchUnarchivedConversation,
@@ -292,7 +295,6 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     foregroundTailLatestReady: bindings.foregroundTailLatestReady,
     isOptimisticOwnUserDraft: bindings.isOptimisticOwnUserDraft,
     isLocalOwnUserMessage: bindings.isLocalOwnUserMessage,
-    maybeUpdateForegroundConversationOverviewFromLoadedMessages: conversationOrchestrator.maybeUpdateForegroundConversationOverviewFromLoadedMessages,
     deleteUnarchivedConversationFromArchives: bindings.deleteUnarchivedConversationFromArchives,
     sendChatFromCurrentWindow: bindings.sendChatFromCurrentWindow,
     setStatusError: bindings.setStatusError,

@@ -8,6 +8,60 @@ import { readLastActiveConversationId } from "../utils/last-active-conversation"
 const t = i18n.global.t;
 
 export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
+  function overviewActivityAt(item: Record<string, any>): string {
+    return String(item?.lastMessageAt || item?.updatedAt || "").trim();
+  }
+
+  function sortOverviewItems(items: any[]): any[] {
+    return [...items].sort((a, b) => {
+      if (!!a?.isSystemNotificationConversation !== !!b?.isSystemNotificationConversation) {
+        return Number(!!b?.isSystemNotificationConversation) - Number(!!a?.isSystemNotificationConversation);
+      }
+      if (!!a?.isPinned !== !!b?.isPinned) {
+        return Number(!!b?.isPinned) - Number(!!a?.isPinned);
+      }
+      if (a?.isPinned && b?.isPinned) {
+        const aIndex = Number.isFinite(Number(a?.pinIndex)) ? Number(a.pinIndex) : Number.MAX_SAFE_INTEGER;
+        const bIndex = Number.isFinite(Number(b?.pinIndex)) ? Number(b.pinIndex) : Number.MAX_SAFE_INTEGER;
+        return aIndex - bIndex || String(a?.conversationId || "").localeCompare(String(b?.conversationId || ""));
+      }
+      return overviewActivityAt(b).localeCompare(overviewActivityAt(a))
+        || String(a?.conversationId || "").localeCompare(String(b?.conversationId || ""));
+    });
+  }
+
+  function applyOverviewChangedSincePayload(payload: Record<string, any> | null | undefined) {
+    const changed = Array.isArray(payload?.changed) ? payload.changed : [];
+    const deletedIds = new Set(
+      (Array.isArray(payload?.deletedIds) ? payload.deletedIds : [])
+        .map((id: unknown) => String(id || "").trim())
+        .filter(Boolean),
+    );
+    const changedById = new Map<string, any>();
+    for (const item of changed) {
+      const conversationId = String(item?.conversationId || "").trim();
+      if (conversationId) changedById.set(conversationId, item);
+    }
+    if (changedById.size > 0 || deletedIds.size > 0) {
+      const nextItems = bindings.unarchivedConversations.value
+        .filter((item: any) => !deletedIds.has(String(item?.conversationId || "").trim()))
+        .map((item: any) => {
+          const conversationId = String(item?.conversationId || "").trim();
+          return changedById.get(conversationId) || item;
+        });
+      for (const [conversationId, item] of changedById) {
+        if (!nextItems.some((existing: any) => String(existing?.conversationId || "").trim() === conversationId)) {
+          nextItems.push(item);
+        }
+      }
+      bindings.unarchivedConversations.value = sortOverviewItems(nextItems);
+    }
+    const serverTime = String(payload?.serverTime || "").trim();
+    if (serverTime && bindings.lastOverviewSyncAt) {
+      bindings.lastOverviewSyncAt.value = serverTime;
+    }
+  }
+
   function currentConversationId(): string {
     return String(bindings.currentChatConversationId.value || "").trim();
   }
@@ -151,8 +205,10 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
     });
   }
 
-  async function requestUnarchivedConversationOverview() {
-    return invokeTauri<any[]>("list_unarchived_conversations");
+  async function requestUnarchivedConversationOverviewChangedSince(since: string) {
+    return invokeTauri<Record<string, any>>("list_unarchived_conversations_changed_since", {
+      input: { since: String(since || "").trim() || null },
+    });
   }
 
   async function refreshRemoteImConversationOverview() {
@@ -160,8 +216,31 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
   }
 
   async function refreshUnarchivedConversationOverview() {
-    const items = await requestUnarchivedConversationOverview();
-    bindings.unarchivedConversations.value = Array.isArray(items) ? items : [];
+    const payload = await requestUnarchivedConversationOverviewChangedSince("");
+    bindings.unarchivedConversations.value = sortOverviewItems(Array.isArray(payload?.changed) ? payload.changed : []);
+    const serverTime = String(payload?.serverTime || "").trim();
+    if (serverTime && bindings.lastOverviewSyncAt) {
+      bindings.lastOverviewSyncAt.value = serverTime;
+    }
+  }
+
+  async function syncUnarchivedConversationOverviewChangedSinceWatermark(reason = "unknown") {
+    const since = String(bindings.lastOverviewSyncAt?.value || "").trim();
+    if (!since) {
+      await refreshUnarchivedConversationOverview();
+      return;
+    }
+    try {
+      const payload = await requestUnarchivedConversationOverviewChangedSince(since);
+      applyOverviewChangedSincePayload(payload);
+    } catch (error) {
+      console.warn("[会话概览] 差量补漏失败，回退全量刷新", {
+        reason,
+        since,
+        error,
+      });
+      await refreshUnarchivedConversationOverview();
+    }
   }
 
   function pickForegroundConversationId(candidates: any[]): string {
@@ -455,18 +534,18 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
         input: { conversationId },
       }).then((result) => {
         console.info("[独立聊天窗口][前端链路] invoke detach_current_conversation_to_window 已返回", result);
-        void refreshUnarchivedConversationOverview();
+        void syncUnarchivedConversationOverviewChangedSinceWatermark("detach_current_conversation_done");
       }).catch((error) => {
         console.error("[独立聊天窗口][前端链路] 打开独立窗口失败", error);
         bindings.setStatusError("status.loadMessagesFailed", error);
-        void refreshUnarchivedConversationOverview();
+        void syncUnarchivedConversationOverviewChangedSinceWatermark("detach_current_conversation_failed");
       });
       clearForegroundConversation("detach_current_conversation");
       const systemNotificationConversationId = String(bindings.unarchivedConversations.value.find((item: any) => !!item.isSystemNotificationConversation)?.conversationId || "").trim();
       if (systemNotificationConversationId) {
         await switchUnarchivedConversation(systemNotificationConversationId);
       } else {
-        await refreshUnarchivedConversationOverview();
+        await syncUnarchivedConversationOverviewChangedSinceWatermark("detach_current_conversation_missing_system");
       }
       bindings.setStatus(t('chat.foregroundOrchestrator.detachedRequestSent'));
     } catch (error) {
@@ -503,9 +582,9 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
 
   return {
     requestConversationLightSnapshot,
-    requestUnarchivedConversationOverview,
     refreshRemoteImConversationOverview,
     refreshUnarchivedConversationOverview,
+    syncUnarchivedConversationOverviewChangedSinceWatermark,
     pickForegroundConversationId,
     clearForegroundConversation,
     recoverForegroundConversationFromOverview,

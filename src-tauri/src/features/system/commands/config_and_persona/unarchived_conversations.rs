@@ -228,6 +228,8 @@ fn get_foreground_conversation_light_snapshot_blocking(
         snapshot.has_more_history,
         started_at.elapsed().as_millis()
     ));
+    let conversation = conversation_service_v2()
+        .read_unarchived_conversation_summary(state, &snapshot.conversation_id)?;
 
     Ok(ForegroundConversationLightSnapshotOutput {
         conversation_id: snapshot.conversation_id,
@@ -239,9 +241,7 @@ fn get_foreground_conversation_light_snapshot_blocking(
         current_todos: snapshot.current_todos,
         preferred_api_config_id: snapshot.preferred_api_config_id,
         active_goal: snapshot.active_goal,
-        unarchived_conversations: conversation_service_v2()
-            .list_unarchived_conversation_summaries(state)?
-            .summaries,
+        conversation,
         stream_cache,
         should_bind_stream,
         resume_projection_authoritative,

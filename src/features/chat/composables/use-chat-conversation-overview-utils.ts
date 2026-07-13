@@ -1,42 +1,4 @@
-import { stripToolcallMarkers } from "../../../utils/chat-message-semantics";
-
-type ConversationOverviewUtilsOptions = {
-  draftAssistantIdPrefix: string;
-};
-
-export function useChatConversationOverviewUtils(options: ConversationOverviewUtilsOptions) {
-  function isOverviewDraftMessage(message?: any): boolean {
-    const messageId = String(message?.id || "").trim();
-    return messageId.startsWith(options.draftAssistantIdPrefix) || messageId.startsWith("__draft_user__:");
-  }
-
-  function previewMessageFromChatMessage(message: any) {
-    const parts = Array.isArray(message.parts) ? message.parts : [];
-    const textPreview = stripToolcallMarkers(parts
-      .filter((part: any) => part && typeof part === "object" && (part as { type?: unknown }).type === "text")
-      .map((part: any) => String((part as { text?: unknown }).text || "").trim())
-      .filter(Boolean)
-      .join(" | ")
-    ).slice(0, 160);
-    const providerMeta = (message.providerMeta || {}) as Record<string, unknown>;
-    const attachmentEntries = Array.isArray(providerMeta.attachments) ? providerMeta.attachments : [];
-    const hasPdfAttachment = attachmentEntries.some((entry) => {
-      const item = entry as Record<string, unknown>;
-      return String(item?.mime || "").toLowerCase().includes("pdf");
-    });
-    return {
-      messageId: String(message.id || "").trim(),
-      role: String(message.role || "").trim() || "assistant",
-      speakerAgentId: String(message.speakerAgentId || "").trim() || undefined,
-      createdAt: String(message.createdAt || "").trim() || undefined,
-      textPreview: textPreview || undefined,
-      hasImage: parts.some((part: any) => part && typeof part === "object" && (part as { type?: unknown }).type === "image"),
-      hasPdf: hasPdfAttachment,
-      hasAudio: parts.some((part: any) => part && typeof part === "object" && (part as { type?: unknown }).type === "audio"),
-      hasAttachment: attachmentEntries.length > 0,
-    };
-  }
-
+export function useChatConversationOverviewUtils() {
   function unarchivedConversationActivityAt(item: Record<string, any>): string {
     return String(item.lastMessageAt || item.updatedAt || "").trim();
   }
@@ -61,8 +23,6 @@ export function useChatConversationOverviewUtils(options: ConversationOverviewUt
   }
 
   return {
-    isOverviewDraftMessage,
-    previewMessageFromChatMessage,
     sortUnarchivedConversationOverviewItems,
     unarchivedConversationActivityAt,
   };

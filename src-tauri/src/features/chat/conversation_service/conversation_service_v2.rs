@@ -1107,6 +1107,11 @@ impl ConversationServiceV2 {
         conversation_id: &str,
         updated_message: &ChatMessage,
     ) -> Result<(), String> {
+        let previous_message = self.get_raw_message_by_id(
+            state,
+            conversation_id,
+            updated_message.id.trim(),
+        )?;
         let paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
         let mut ready_meta = message_store::read_ready_message_store_meta(&paths)?
             .ok_or_else(|| {
@@ -1122,16 +1127,21 @@ impl ConversationServiceV2 {
             })?;
         let updated_at = updated_message.created_at.clone();
         let last_assistant_at = Some(updated_at.clone());
-        let (updated_meta_conversation, (), _) = state_update_conversation_metadata_cached(
+        let (updated_meta, (), _) = state_update_conversation_meta_cached(
             state,
             conversation_id,
             |cached| {
-                cached.updated_at = updated_at.clone();
-                cached.last_assistant_at = last_assistant_at.clone();
+                let mut metadata_conversation =
+                    self.build_conversation_snapshot_from_meta(cached, Vec::new());
+                metadata_conversation.updated_at = updated_at.clone();
+                metadata_conversation.last_assistant_at = last_assistant_at.clone();
+                cached.apply_metadata_fields_from_conversation(&metadata_conversation);
+                cached.apply_replaced_message(&previous_message, updated_message);
                 Ok(())
             },
         )?;
-        ready_meta.apply_metadata_fields_from_conversation(&updated_meta_conversation);
+        ready_meta.apply_metadata_fields_from_meta(&updated_meta);
+        ready_meta.preserve_message_derived_fields_from(&updated_meta);
         message_store::write_jsonl_snapshot_replaced_message_shard(
             &paths,
             &ready_meta.to_persist_meta(),
@@ -1464,7 +1474,17 @@ impl ConversationServiceV2 {
                 &err,
             )
         })?;
-        self.append_message_locked(state, conversation_id, message)
+        self.append_message_locked(state, conversation_id, message)?;
+        if let Err(err) = emit_unarchived_conversation_overview_item_updated_from_state(
+            state,
+            conversation_id,
+        ) {
+            runtime_log_warn(format!(
+                "[会话概览] 跳过，任务=单消息写入后推送单会话，conversation_id={}，error={}",
+                conversation_id, err
+            ));
+        }
+        Ok(())
     }
 
     fn append_message_locked(
@@ -1618,6 +1638,15 @@ impl ConversationServiceV2 {
             messages,
         )?;
         self.mark_conversation_metadata_cached_persisted(state, normalized_conversation_id)?;
+        if let Err(err) = emit_unarchived_conversation_overview_item_updated_from_state(
+            state,
+            normalized_conversation_id,
+        ) {
+            runtime_log_warn(format!(
+                "[会话概览] 跳过，任务=批量消息写入后推送单会话，conversation_id={}，error={}",
+                normalized_conversation_id, err
+            ));
+        }
         Ok(())
     }
 
@@ -1705,6 +1734,15 @@ impl ConversationServiceV2 {
             std::slice::from_ref(&input.message),
         )?;
         self.mark_conversation_metadata_cached_persisted(state, conversation_id)?;
+        if let Err(err) = emit_unarchived_conversation_overview_item_updated_from_state(
+            state,
+            conversation_id,
+        ) {
+            runtime_log_warn(format!(
+                "[会话概览] 跳过，任务=用户消息写入后推送单会话，conversation_id={}，error={}",
+                conversation_id, err
+            ));
+        }
         Ok(())
     }
 

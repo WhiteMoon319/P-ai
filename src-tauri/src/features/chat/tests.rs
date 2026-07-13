@@ -5163,8 +5163,11 @@
         let meta_before = message_store::read_ready_message_store_meta(&store_paths)
             .expect("read ready meta before final text")
             .expect("ready meta exists before final text");
-        assert_eq!(meta_before.preview_messages().len(), 2);
-        assert_eq!(meta_before.preview_messages()[1].text_preview, "");
+        assert_eq!(meta_before.preview_messages().len(), 1);
+        assert_eq!(
+            meta_before.preview_messages()[0].text_preview,
+            "你会rust语言吗"
+        );
 
         conversation_service_v2()
             .append_final_text_to_assistant_message(

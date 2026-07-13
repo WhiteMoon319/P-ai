@@ -32,86 +32,9 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     ensureConversationMessageIds: bindings.ensureConversationMessageIds,
   });
   const {
-    isOverviewDraftMessage,
-    previewMessageFromChatMessage,
     sortUnarchivedConversationOverviewItems,
     unarchivedConversationActivityAt,
-  } = useChatConversationOverviewUtils({
-    draftAssistantIdPrefix: bindings.DRAFT_ASSISTANT_ID_PREFIX,
-  });
-
-  function conversationBodyRole(message: any): string {
-    return String(message?.role || "").trim().toLowerCase();
-  }
-
-  function isConversationBodyMessage(message: any): boolean {
-    const role = conversationBodyRole(message);
-    return role === "user" || role === "assistant";
-  }
-
-  function conversationMessageBodyTextLength(message: any): number {
-    if (!isConversationBodyMessage(message)) return 0;
-    const parts = Array.isArray(message?.parts) ? message.parts : [];
-    return parts
-      .filter((part: any) => part && typeof part === "object" && String(part.type || "").trim() === "text")
-      .map((part: any) => Array.from(String(part.text || "").trim()).length)
-      .reduce((total: number, count: number) => total + count, 0);
-  }
-
-  function conversationBodyStats(messages: any[]): { messageCount: number; textLength: number; hasAssistantReply: boolean } {
-    return (Array.isArray(messages) ? messages : []).reduce((stats, message) => {
-      if (!isConversationBodyMessage(message)) return stats;
-      stats.messageCount += 1;
-      stats.textLength += conversationMessageBodyTextLength(message);
-      if (conversationBodyRole(message) === "assistant") {
-        stats.hasAssistantReply = true;
-      }
-      return stats;
-    }, { messageCount: 0, textLength: 0, hasAssistantReply: false });
-  }
-
-  function remoteConversationActivityAt(item: Record<string, any>): string {
-    return String(item?.lastMessageAt || item?.updatedAt || "").trim();
-  }
-
-  function sortRemoteConversationOverviewItems(items: any[]): any[] {
-    return [...items].sort((a, b) =>
-      remoteConversationActivityAt(b).localeCompare(remoteConversationActivityAt(a))
-      || String(a?.conversationId || "").localeCompare(String(b?.conversationId || ""))
-    );
-  }
-
-  function applyRemoteConversationOverviewAppendedMessage(conversationId: string, message: any): boolean {
-    const cid = String(conversationId || "").trim();
-    const messageId = String(message?.id || "").trim();
-    if (!cid || !message || !messageId || isOverviewDraftMessage(message)) return false;
-    const preview = previewMessageFromChatMessage(message);
-    const messageAt = String(message.createdAt || "").trim();
-    let changed = false;
-    const nextItems = Array.isArray(bindings.remoteImContactConversations?.value)
-      ? bindings.remoteImContactConversations.value.map((item: any) => {
-        if (String(item.conversationId || "").trim() !== cid) {
-          return item;
-        }
-        const existingPreviewMessages = Array.isArray(item.previewMessages) ? item.previewMessages : [];
-        if (existingPreviewMessages.some((previewItem: any) => String(previewItem.messageId || "").trim() === messageId)) {
-          return item;
-        }
-        changed = true;
-        return {
-          ...item,
-          messageCount: Math.max(0, Number(item.messageCount || 0)) + 1,
-          updatedAt: messageAt || item.updatedAt,
-          lastMessageAt: messageAt || item.lastMessageAt,
-          previewMessages: [...existingPreviewMessages, preview].slice(-2),
-        };
-      })
-      : [];
-    if (changed) {
-      bindings.remoteImContactConversations.value = sortRemoteConversationOverviewItems(nextItems);
-    }
-    return changed;
-  }
+  } = useChatConversationOverviewUtils();
 
   function matchesForegroundConversation(conversationId?: string | null): boolean {
     const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
@@ -225,45 +148,6 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     });
   }
 
-  function applyConversationOverviewAppendedMessage(conversationId: string, message: any) {
-    const cid = String(conversationId || "").trim();
-    const messageId = String(message?.id || "").trim();
-    if (!cid || !message || !messageId || isOverviewDraftMessage(message)) return;
-    const preview = previewMessageFromChatMessage(message);
-    const messageAt = String(message.createdAt || "").trim();
-    let changed = false;
-    const nextItems = bindings.unarchivedConversations.value.map((item: any) => {
-      if (String(item.conversationId || "").trim() !== cid) {
-        return item;
-      }
-      const existingPreviewMessages = Array.isArray(item.previewMessages) ? item.previewMessages : [];
-      if (existingPreviewMessages.some((previewItem: any) => String(previewItem.messageId || "").trim() === messageId)) {
-        return item;
-      }
-      changed = true;
-      const shouldMarkUnread = cid !== String(bindings.currentChatConversationId.value || "").trim();
-      const isBodyMessage = isConversationBodyMessage(message);
-      const isAssistantReply = conversationBodyRole(message) === "assistant";
-      return {
-        ...item,
-        messageCount: Math.max(0, Number(item.messageCount || 0)) + 1,
-        bodyMessageCount: Math.max(0, Number(item.bodyMessageCount ?? item.messageCount ?? 0)) + (isBodyMessage ? 1 : 0),
-        bodyTextLength: Math.max(0, Number(item.bodyTextLength || 0)) + conversationMessageBodyTextLength(message),
-        hasAssistantReply: item.hasAssistantReply !== false || isAssistantReply,
-        unreadCount: Math.max(0, Number(item.unreadCount || 0)) + (shouldMarkUnread ? 1 : 0),
-        updatedAt: messageAt || item.updatedAt,
-        lastMessageAt: messageAt || item.lastMessageAt,
-        previewMessages: [...existingPreviewMessages, preview].slice(-2),
-      };
-    });
-    if (changed) {
-      bindings.unarchivedConversations.value = sortUnarchivedConversationOverviewItems(nextItems);
-      return;
-    }
-
-    applyRemoteConversationOverviewAppendedMessage(cid, message);
-  }
-
   function setConversationBadge(conversationId: string, status: string) {
     const cid = String(conversationId || "").trim();
     if (!cid) return;
@@ -282,8 +166,6 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     const cachedFormal = formalizeConversationMessages(cachedDisplay);
     const nextCached = mergeMessagesIntoTimeline(cachedFormal, incoming);
     cacheConversationMessages(cid, nextCached);
-    const latestMessage = incoming[incoming.length - 1];
-    if (latestMessage) applyConversationOverviewAppendedMessage(cid, latestMessage);
   }
 
   function buildConversationMessagesAfterAnchor(conversationId: string): string | null {
@@ -511,23 +393,16 @@ export function useChatConversationSync(bindings: Record<string, any>) {
 
     const cachedDisplay = freezeConversationMessages(bindings.conversationMessageCache.value[conversationId] || []);
     const cachedFormal = formalizeConversationMessages(cachedDisplay);
-    const messageAlreadyCached = cachedFormal.some((item) => String(item?.id || "").trim() === messageId);
     const nextCached = mergeMessagesIntoTimeline(cachedFormal, [message]);
     cacheConversationMessages(conversationId, nextCached);
 
     const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
     if (conversationId !== currentConversationId) {
-      if (!messageAlreadyCached) {
-        applyConversationOverviewAppendedMessage(conversationId, message);
-      }
-      setConversationBadge(conversationId, "completed");
       return;
     }
 
     bindings.allMessages.value = mergeMessagesIntoTimeline(bindings.allMessages.value, [message]);
     bindings.foregroundTailLatestReady.value = true;
-    clearConversationBadge(conversationId);
-    updateForegroundConversationOverviewFromMessages(conversationId, message);
   }
 
   function applyConversationSnapshot(
@@ -583,8 +458,8 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     bindings.foregroundTailLatestReady.value = true;
     cacheConversationMessages(nextConversationId, nextMessages);
     clearConversationBadge(nextConversationId);
-    if (Array.isArray(snapshot.unarchivedConversations)) {
-      bindings.unarchivedConversations.value = snapshot.unarchivedConversations;
+    if (snapshot.conversation) {
+      applyConversationOverviewItemUpdated({ conversation: snapshot.conversation });
     }
   }
 
@@ -617,6 +492,10 @@ export function useChatConversationSync(bindings: Record<string, any>) {
   function applyConversationOverviewUpdated(payload?: Record<string, any> | null) {
     if (!Array.isArray(payload?.unarchivedConversations)) return;
     bindings.unarchivedConversations.value = payload.unarchivedConversations;
+    const serverTime = String(payload?.serverTime || "").trim();
+    if (serverTime && bindings.lastOverviewSyncAt) {
+      bindings.lastOverviewSyncAt.value = serverTime;
+    }
   }
 
   function applyConversationOverviewItemUpdated(payload?: Record<string, any> | null) {
@@ -629,12 +508,16 @@ export function useChatConversationSync(bindings: Record<string, any>) {
         return item;
       }
       replaced = true;
-      return { ...item, ...conversation };
+      return conversation;
     });
     if (!replaced) {
       nextItems.push(conversation);
     }
     bindings.unarchivedConversations.value = sortUnarchivedConversationOverviewItems(nextItems);
+    const serverTime = String(payload?.serverTime || "").trim();
+    if (serverTime && bindings.lastOverviewSyncAt) {
+      bindings.lastOverviewSyncAt.value = serverTime;
+    }
   }
 
   function applyConversationPinUpdated(payload?: Record<string, any> | null) {
@@ -718,125 +601,6 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     }
   }
 
-  function updateForegroundConversationOverviewFromMessages(conversationId: string, assistantMessage?: any) {
-    const cid = String(conversationId || "").trim();
-    if (!cid) return;
-    const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
-    if (cid !== currentConversationId) return;
-    const formalMessages = bindings.allMessages.value.filter((message: any) => !isOverviewDraftMessage(message));
-    const nextMessages = assistantMessage
-      ? [...formalMessages, assistantMessage].filter((message, index, items) => {
-        const messageId = String(message?.id || "").trim();
-        if (!messageId) return true;
-        return items.findIndex((item) => String(item?.id || "").trim() === messageId) === index;
-      })
-      : formalMessages;
-    const previewMessages = nextMessages.slice(-2).map(previewMessageFromChatMessage);
-    const lastMessage = nextMessages[nextMessages.length - 1];
-    const lastMessageAt = String(lastMessage?.createdAt || "").trim();
-    const bodyStats = conversationBodyStats(nextMessages);
-    let changed = false;
-    const nextItems = bindings.unarchivedConversations.value.map((item: any) => {
-      if (String(item.conversationId || "").trim() !== cid) {
-        return item;
-      }
-      changed = true;
-      return {
-        ...item,
-        messageCount: nextMessages.length,
-        bodyMessageCount: bodyStats.messageCount,
-        bodyTextLength: bodyStats.textLength,
-        hasAssistantReply: bodyStats.hasAssistantReply,
-        updatedAt: lastMessageAt || item.updatedAt,
-        lastMessageAt: lastMessageAt || item.lastMessageAt,
-        previewMessages,
-      };
-    });
-    if (changed) {
-      bindings.unarchivedConversations.value = sortUnarchivedConversationOverviewItems(nextItems);
-      return;
-    }
-
-    let remoteChanged = false;
-    const nextRemoteItems = Array.isArray(bindings.remoteImContactConversations?.value)
-      ? bindings.remoteImContactConversations.value.map((item: any) => {
-        if (String(item.conversationId || "").trim() !== cid) {
-          return item;
-        }
-        remoteChanged = true;
-        return {
-          ...item,
-          messageCount: nextMessages.length,
-          updatedAt: lastMessageAt || item.updatedAt,
-          lastMessageAt: lastMessageAt || item.lastMessageAt,
-          previewMessages,
-        };
-      })
-      : [];
-    if (remoteChanged) {
-      bindings.remoteImContactConversations.value = sortRemoteConversationOverviewItems(nextRemoteItems);
-    }
-  }
-
-  function maybeUpdateForegroundConversationOverviewFromLoadedMessages(
-    conversationId: string,
-    messages: any[],
-    remainingCount: number,
-  ) {
-    const cid = String(conversationId || "").trim();
-    if (!cid) return;
-    const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
-    if (cid !== currentConversationId) return;
-    const formalMessages = (Array.isArray(messages) ? messages : [])
-      .filter((message) => !isOverviewDraftMessage(message));
-    const requiredPreviewCount = Math.min(2, Math.max(0, Number(remainingCount) || 0));
-    if (requiredPreviewCount <= 0) return;
-    if (formalMessages.length < requiredPreviewCount) return;
-    const previewMessages = formalMessages
-      .slice(-requiredPreviewCount)
-      .map(previewMessageFromChatMessage);
-    const lastMessage = formalMessages[formalMessages.length - 1];
-    const lastMessageAt = String(lastMessage?.createdAt || "").trim();
-    let changed = false;
-    const nextItems = bindings.unarchivedConversations.value.map((item: any) => {
-      if (String(item.conversationId || "").trim() !== cid) {
-        return item;
-      }
-      changed = true;
-      return {
-        ...item,
-        messageCount: Math.max(0, Number(remainingCount) || formalMessages.length),
-        updatedAt: lastMessageAt || item.updatedAt,
-        lastMessageAt: lastMessageAt || item.lastMessageAt,
-        previewMessages,
-      };
-    });
-    if (changed) {
-      bindings.unarchivedConversations.value = sortUnarchivedConversationOverviewItems(nextItems);
-      return;
-    }
-
-    let remoteChanged = false;
-    const nextRemoteItems = Array.isArray(bindings.remoteImContactConversations?.value)
-      ? bindings.remoteImContactConversations.value.map((item: any) => {
-        if (String(item.conversationId || "").trim() !== cid) {
-          return item;
-        }
-        remoteChanged = true;
-        return {
-          ...item,
-          messageCount: Math.max(0, Number(remainingCount) || formalMessages.length),
-          updatedAt: lastMessageAt || item.updatedAt,
-          lastMessageAt: lastMessageAt || item.lastMessageAt,
-          previewMessages,
-        };
-      })
-      : [];
-    if (remoteChanged) {
-      bindings.remoteImContactConversations.value = sortRemoteConversationOverviewItems(nextRemoteItems);
-    }
-  }
-
   return {
     matchesForegroundConversation,
     formalizeConversationMessages,
@@ -858,7 +622,6 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     inferHasMoreHistoryFromSnapshot,
     clearConversationBadge,
     markConversationReadPersisted,
-    applyConversationOverviewAppendedMessage,
     setConversationBadge,
     readConversationIdFromPayload,
     readMessagesFromPayload,
@@ -879,11 +642,7 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     applyConversationOverviewItemUpdated,
     applyConversationPinUpdated,
     applyConversationRuntimeStateUpdated,
-    isOverviewDraftMessage,
-    previewMessageFromChatMessage,
     unarchivedConversationActivityAt,
     sortUnarchivedConversationOverviewItems,
-    updateForegroundConversationOverviewFromMessages,
-    maybeUpdateForegroundConversationOverviewFromLoadedMessages,
   };
 }

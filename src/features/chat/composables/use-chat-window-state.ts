@@ -90,6 +90,7 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
   const backgroundVoiceScreenshotMode = ref<"desktop" | "focused_window">("focused_window");
   const instructionPresets = ref<PromptCommandPreset[]>([]);
   const conversationForegroundSyncing = ref(false);
+  const lastOverviewSyncAt = ref("");
   const backgroundConversationBadgeMap = ref<Record<string, BackgroundConversationBadgeState>>({});
   const conversationMessageCache = ref<Record<string, ChatMessage[]>>({});
   const latestUserText = ref("");
@@ -171,6 +172,7 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
     backgroundVoiceScreenshotMode,
     instructionPresets,
     conversationForegroundSyncing,
+    lastOverviewSyncAt,
     backgroundConversationBadgeMap,
     conversationMessageCache,
     latestUserText,

@@ -195,6 +195,15 @@ impl ConversationServiceV2 {
         mark_stream_final_committed_v2(&mut target_message.provider_meta);
 
         self.persist_replaced_ready_message_locked(state, conversation_id, &target_message)?;
+        if let Err(err) = emit_unarchived_conversation_overview_item_updated_from_state(
+            state,
+            conversation_id,
+        ) {
+            runtime_log_warn(format!(
+                "[会话概览] 跳过，任务=assistant final 写回后推送单会话，conversation_id={}，error={}",
+                conversation_id, err
+            ));
+        }
         runtime_log_debug(format!(
             "[表情替换] FinalAppend完成，conversation_id={}，assistant_message_id={}，stored_annotation_count={}，stored_tokens=[{}]",
             conversation_id,
@@ -287,7 +296,7 @@ impl ConversationServiceV2 {
             });
         }
         if self
-            .get_message_by_id_for_frontend_display_only(state, conversation_id, assistant_message_id)
+            .get_raw_message_by_id(state, conversation_id, assistant_message_id)
             .is_ok()
         {
             return Ok(AssistantMessageBootstrapResult {
@@ -578,6 +587,16 @@ impl ConversationServiceV2 {
                 target_id
             }
         };
+
+        if let Err(err) = emit_unarchived_conversation_overview_item_updated_from_state(
+            state,
+            &conversation_id,
+        ) {
+            runtime_log_warn(format!(
+                "[会话概览] 跳过，任务=停止生成持久化后推送单会话，conversation_id={}，error={}",
+                conversation_id, err
+            ));
+        }
 
         Ok(StopChatPersistResult {
             persisted: true,
