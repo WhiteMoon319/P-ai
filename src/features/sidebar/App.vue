@@ -48,12 +48,9 @@
       :remote-im-contact-conversations="remoteImContactConversations"
       :clipboard-images="composerClipboardImages"
       :queued-attachment-notices="queuedAttachmentNotices"
-      :streaming-text="streamingText"
       :tool-status-text="toolStatusText"
       :tool-status-state="toolStatusState"
       :chat-error-text="chatErrorText"
-      :stream-blocks="streamBlocks"
-      :streaming-assistant-message-id="streamingAssistantMessageId"
       :busy="busy"
       :runtime-state="activeConversationRuntimeState"
       :has-prev-block="hasPrevBlock"
@@ -261,6 +258,7 @@ import type { ApiConfigItem, ChatConversationOverviewItem, ChatMessage, ChatTodo
 import { removeBinaryPlaceholders, messageText } from "../../utils/chat-message";
 import {
   applyAssistantToolEventToStreamBlocks,
+  appendTextDeltaToStreamBlocks,
   assistantTextFromStreamBlocks,
   normalizeAssistantStreamBlocks,
 } from "../../utils/chat-message-semantics";
@@ -559,11 +557,9 @@ const queuedAttachmentNotices = computed<SidebarQueuedAttachmentNotice[]>(() => 
   relativePath: item.relativePath,
   mime: item.mime,
 })));
-const streamingText = ref("");
 const toolStatusText = ref("");
 const toolStatusState = ref<"running" | "done" | "failed" | "">("");
 const chatErrorText = ref("");
-const streamBlocks = ref<ReturnType<typeof normalizeAssistantStreamBlocks>>([]);
 const streamingAssistantMessageId = ref("");
 const busy = ref(false);
 const sendSubmitting = ref(false);
@@ -1177,11 +1173,52 @@ function normalizeConversationRuntimeState(value: unknown): ChatConversationOver
 }
 
 function clearStreamingState() {
-  streamingText.value = "";
   toolStatusText.value = "";
   toolStatusState.value = "";
-  streamBlocks.value = [];
   streamingAssistantMessageId.value = "";
+}
+
+function writeRuntimeStreamCacheToMessage(cache: NonNullable<SidebarConversationRuntimePayload["streamCache"]>) {
+  const messageId = String(cache.persistedAssistantMessageId || streamingAssistantMessageId.value || "").trim();
+  if (!messageId) return;
+  streamingAssistantMessageId.value = messageId;
+  const blocks = normalizeAssistantStreamBlocks(cache.streamBlocks);
+  const index = messages.value.findIndex((message) => String(message.id || "").trim() === messageId);
+  const previous = index >= 0 ? messages.value[index] : undefined;
+  const previousMeta = (previous?.providerMeta || {}) as Record<string, unknown>;
+  const message: ChatMessage = {
+    ...(previous || {
+      id: messageId,
+      role: "assistant",
+      createdAt: new Date().toISOString(),
+      speakerAgentId: activeAgentId.value || undefined,
+      parts: [{ type: "text", text: "" }],
+    }),
+    contentBlocks: blocks,
+    providerMeta: {
+      ...previousMeta,
+      _streaming: true,
+      _toolStatusText: String(cache.toolStatusText || ""),
+      _toolStatusState: normalizeToolStatusState(cache.toolStatusState),
+    },
+  };
+  messages.value = index >= 0
+    ? messages.value.map((item, itemIndex) => itemIndex === index ? message : item)
+    : [...messages.value, message];
+}
+
+function finishStreamingMessage(messageId: string) {
+  const normalizedId = String(messageId || "").trim();
+  if (!normalizedId) return;
+  messages.value = messages.value.map((message) => {
+    if (String(message.id || "").trim() !== normalizedId) return message;
+    const meta = { ...((message.providerMeta || {}) as Record<string, unknown>) };
+    delete meta._streaming;
+    delete meta._preStreamingStatusText;
+    delete meta._toolStatusText;
+    delete meta._toolStatusState;
+    return { ...message, providerMeta: meta };
+  });
 }
 
 function clearChatError() {
@@ -1201,12 +1238,7 @@ function resetActiveConversationTransientState(_reason: string) {
 function applyRuntimeStreamCache(runtime: SidebarConversationRuntimePayload | null | undefined) {
   const cache = runtime?.streamCache;
   if (!cache) return;
-  streamingAssistantMessageId.value = String(cache.persistedAssistantMessageId || "").trim();
-  const blocks = normalizeAssistantStreamBlocks(cache.streamBlocks);
-  if (blocks.length > 0 || streamBlocks.value.length === 0) {
-    streamBlocks.value = blocks;
-  }
-  streamingText.value = assistantTextFromStreamBlocks(streamBlocks.value) || String(cache.assistantText || "");
+  writeRuntimeStreamCacheToMessage(cache);
   toolStatusText.value = String(cache.toolStatusText || "");
   toolStatusState.value = normalizeToolStatusState(cache.toolStatusState);
 }
@@ -2182,10 +2214,12 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
 
 async function stop() {
   if (!activeConversationId.value) return;
+  const activeMessage = messages.value.find((message) => String(message.id || "").trim() === streamingAssistantMessageId.value);
+  const blocks = normalizeAssistantStreamBlocks(activeMessage?.contentBlocks);
   await transport.request("chat.stop", {
     conversationId: activeConversationId.value,
-    partialAssistantText: streamingText.value,
-    partialStreamBlocks: normalizeAssistantStreamBlocks(streamBlocks.value),
+    partialAssistantText: assistantTextFromStreamBlocks(blocks),
+    partialStreamBlocks: blocks,
   });
   busy.value = false;
 }
@@ -2889,7 +2923,14 @@ function registerNotifications() {
     }
     if (kind === "assistant_tool_event" && value.event) {
       if (hasStreamCache) return;
-      streamBlocks.value = applyAssistantToolEventToStreamBlocks(streamBlocks.value, value.event.message || "");
+      const activeMessage = messages.value.find((message) => String(message.id || "").trim() === streamingAssistantMessageId.value);
+      const blocks = applyAssistantToolEventToStreamBlocks(activeMessage?.contentBlocks, value.event.message || "");
+      writeRuntimeStreamCacheToMessage({
+        persistedAssistantMessageId: streamingAssistantMessageId.value,
+        streamBlocks: blocks,
+        toolStatusText: toolStatusText.value,
+        toolStatusState: toolStatusState.value,
+      });
       return;
     }
     if (kind === "assistant_tool_result") return;
@@ -2897,7 +2938,14 @@ function registerNotifications() {
     if (kind === "activity_reasoning_delta") {
       return;
     } else if (!hasStreamCache) {
-      streamingText.value += delta;
+      const activeMessage = messages.value.find((message) => String(message.id || "").trim() === streamingAssistantMessageId.value);
+      const blocks = appendTextDeltaToStreamBlocks(activeMessage?.contentBlocks, delta);
+      writeRuntimeStreamCacheToMessage({
+        persistedAssistantMessageId: streamingAssistantMessageId.value,
+        streamBlocks: blocks,
+        toolStatusText: toolStatusText.value,
+        toolStatusState: toolStatusState.value,
+      });
     } else {
       return;
     }
@@ -2911,9 +2959,10 @@ function registerNotifications() {
     };
     if (value.conversationId !== activeConversationId.value) return;
     busy.value = false;
-    streamingAssistantMessageId.value = String(value.assistantMessage?.id || "").trim();
+    const finishedMessageId = String(value.assistantMessage?.id || streamingAssistantMessageId.value || "").trim();
     // 先追加正式消息再清流式状态，避免 Vue 先删草稿再插正式消息导致一帧闪烁。
     if (value.assistantMessage) appendMessages({ conversationId: value.conversationId, message: value.assistantMessage });
+    finishStreamingMessage(finishedMessageId);
     clearStreamingState();
     if (String(value.status || "").trim() === "failed") {
       setChatErrorText(value.error || t("status.requestUnknownReason"));

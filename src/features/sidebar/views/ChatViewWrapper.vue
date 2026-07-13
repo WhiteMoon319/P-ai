@@ -147,13 +147,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import type { ApiConfigItem, AssistantStreamBlock, ChatConversationOverviewItem, ChatMentionEntry, ChatMessage, ChatTodoItem, IdeContextWorkspaceGroup, RemoteImContactConversationOption } from "../../../types/app";
-import {
-  assistantTextFromStreamBlocks,
-  normalizeAssistantStreamBlocks,
-  streamBlocksToToolCalls,
-  streamBlocksToToolHistoryEvents,
-} from "../../../utils/chat-message-semantics";
+import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMessage, ChatTodoItem, IdeContextWorkspaceGroup, RemoteImContactConversationOption } from "../../../types/app";
 import { stableRenderIdFromMessage } from "../../chat/utils/stable-render-id";
 import ChatView from "../../chat/views/ChatView.vue";
 import { useChatMessageBlocks } from "../../chat/composables/use-chat-turns";
@@ -201,12 +195,9 @@ const props = defineProps<{
   remoteImContactConversations: RemoteImContactConversationOption[];
   clipboardImages: Array<{ mime: string; bytesBase64: string }>;
   queuedAttachmentNotices: Array<{ id: string; fileName: string; relativePath: string; mime: string }>;
-  streamingText: string;
   toolStatusText: string;
   toolStatusState: "running" | "done" | "failed" | "";
   chatErrorText?: string;
-  streamBlocks: AssistantStreamBlock[];
-  streamingAssistantMessageId?: string;
   busy: boolean;
   runtimeState?: string;
   hasPrevBlock: boolean;
@@ -317,8 +308,6 @@ const effectiveCurrentTheme = computed(() => isVsCodeHost ? vscodeTheme.value : 
 const scrollToBottomRequest = ref(0);
 const latestOwnMessageAlignRequest = ref(0);
 const scrollToBottomBehavior = ref<"auto" | "smooth" | "smooth_light">("auto");
-const streamingDraftCreatedAt = ref("");
-const streamingDraftStartedAtMs = ref(0);
 let lastSeenOwnMessageKey = "";
 const chatFrontendRoundPhase = computed<"idle" | "waiting" | "queued" | "streaming">(() => {
   if (props.busy) return "streaming";
@@ -409,110 +398,14 @@ onBeforeUnmount(() => {
 });
 
 watch(
-  () => [
-    props.busy,
-    props.messages,
-    props.streamingText,
-    props.toolStatusText,
-    props.toolStatusState,
-    props.streamBlocks,
-    props.streamingAssistantMessageId,
-  ] as const,
-  () => {
-    const next = [...props.messages];
-    const text = String(props.streamingText || "");
-    const toolStatusText = String(props.toolStatusText || "");
-    const streamingAssistantMessageId = String(props.streamingAssistantMessageId || "").trim();
-    const streamBlocks = normalizeAssistantStreamBlocks(props.streamBlocks);
-    const blockText = assistantTextFromStreamBlocks(streamBlocks);
-    const blockToolCalls = streamBlocksToToolCalls(streamBlocks);
-    if (
-      props.busy
-      || text.trim()
-      || blockText.trim()
-      || toolStatusText.trim()
-      || props.toolStatusState
-      || blockToolCalls.length > 0
-      || streamBlocks.length > 0
-    ) {
-      if (!streamingDraftCreatedAt.value) {
-        streamingDraftCreatedAt.value = new Date().toISOString();
-        streamingDraftStartedAtMs.value = Date.now();
-      }
-      const hasStreamingContent = !!(
-        text.trim()
-        || blockText.trim()
-        || toolStatusText.trim()
-        || props.toolStatusState
-        || blockToolCalls.length > 0
-        || streamBlocks.length > 0
-      );
-      if (!streamingAssistantMessageId) {
-        allMessages.value = next;
-        return;
-      }
-      const projectedMessage: ChatMessage = {
-        id: streamingAssistantMessageId,
-        role: "assistant",
-        createdAt: streamingDraftCreatedAt.value,
-        speakerAgentId: props.activeAgentId || undefined,
-        parts: [{ type: "text", text: blockText || text }],
-        extraTextBlocks: [],
-        providerMeta: {
-          _streaming: true,
-          _streamSegments: [text],
-          _toolStatusText: toolStatusText,
-          _toolStatusState: props.toolStatusState,
-          assistantContentBlocks: streamBlocks,
-          _preStreamingStatusText: hasStreamingContent ? "" : "等待回复",
-          _frontendDispatchElapsedMs: Date.now() - streamingDraftStartedAtMs.value,
-        },
-        toolCall: streamBlocksToToolHistoryEvents(streamBlocks) || [],
-      };
-      const targetId = String(projectedMessage.id || "").trim();
-      const existingIdx = targetId
-        ? next.findIndex((message) => String(message.id || "").trim() === targetId)
-        : -1;
-      if (existingIdx >= 0) {
-        const previous = next[existingIdx];
-        next[existingIdx] = {
-          ...projectedMessage,
-          createdAt: String(previous?.createdAt || projectedMessage.createdAt || ""),
-          providerMeta: {
-            ...((previous?.providerMeta || {}) as Record<string, unknown>),
-            ...((projectedMessage.providerMeta || {}) as Record<string, unknown>),
-          },
-        };
-      } else {
-        next.push(projectedMessage);
-      }
-    } else {
-      streamingDraftCreatedAt.value = "";
-      streamingDraftStartedAtMs.value = 0;
-      const existingById = new Map(allMessages.value.map((message) => [String(message.id || "").trim(), message]));
-      for (let index = 0; index < next.length; index += 1) {
-        const messageId = String(next[index]?.id || "").trim();
-        const existing = existingById.get(messageId);
-        const existingMeta = (existing?.providerMeta || {}) as Record<string, unknown>;
-        if (!existing || existingMeta._streaming !== true) continue;
-        const completedMeta = { ...existingMeta };
-        delete completedMeta._streaming;
-        delete completedMeta._preStreamingStatusText;
-        delete completedMeta._toolStatusText;
-        delete completedMeta._toolStatusState;
-        next[index] = { ...existing, providerMeta: completedMeta };
-      }
-    }
-    allMessages.value = next;
-  },
+  () => props.messages,
+  (next) => { allMessages.value = [...next]; },
   { immediate: true, deep: true },
 );
 
 watch(
   () => props.activeConversationId,
   () => {
-    streamingDraftCreatedAt.value = "";
-    streamingDraftStartedAtMs.value = 0;
     lastSeenOwnMessageKey = latestOwnMessageKey(Array.isArray(props.messages) ? props.messages : []);
   },
   { immediate: true },
