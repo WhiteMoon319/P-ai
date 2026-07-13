@@ -291,11 +291,11 @@ onMounted(async () => {
   const path = new URLSearchParams(window.location.search).get("path") || "";
   await restoreFileReaderSession(!path);
   if (path) {
-    void fileReaderPanelRef.value?.openPath(path);
+    void fileReaderPanelRef.value?.openPath(path, { revealInDirectoryTree: true });
   }
   try {
     unlistenOpenPath = await listen<{ path?: string }>("file-reader-open-path", (event) => {
-      void fileReaderPanelRef.value?.openPath(event.payload?.path || "");
+      void fileReaderPanelRef.value?.openPath(event.payload?.path || "", { revealInDirectoryTree: true });
     });
   } catch (error) {
     console.error("[文件阅读窗口] 监听打开文件事件失败", error);

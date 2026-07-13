@@ -586,6 +586,7 @@ import type {
 import {
   blockLineNumbers,
   directoryFromPath,
+  directoryPathChain,
   extensionFromPath,
   fileKindFromPath,
   formatLineSuffix,
@@ -1635,7 +1636,7 @@ async function scrollActiveFileToLine(line: number) {
   captureVisibleRangeContextNow({ force: true });
 }
 
-async function openPath(path: string, options: { reuseActiveTab?: boolean; targetLine?: number } = {}) {
+async function openPath(path: string, options: { reuseActiveTab?: boolean; targetLine?: number; revealInDirectoryTree?: boolean } = {}) {
   const normalizedPath = normalizePath(path);
   if (!normalizedPath) return;
   const shouldResetScrollAfterOpen = !sameNormalizedPath(activePath.value, normalizedPath);
@@ -1645,6 +1646,9 @@ async function openPath(path: string, options: { reuseActiveTab?: boolean; targe
     scheduleAddressScrollStateUpdate();
     if (shouldResetScrollAfterOpen) {
       void resetScrollAndCaptureFirstPage();
+    }
+    if (options.revealInDirectoryTree) {
+      await revealPathInDirectoryTree(normalizedPath);
     }
     return;
   }
@@ -1671,6 +1675,9 @@ async function openPath(path: string, options: { reuseActiveTab?: boolean; targe
       void resetActiveContentScrollToTop();
     }
     emit("openPath", normalizedPath);
+    if (options.revealInDirectoryTree) {
+      await revealPathInDirectoryTree(normalizedPath);
+    }
     return;
   }
   try {
@@ -1699,6 +1706,9 @@ async function openPath(path: string, options: { reuseActiveTab?: boolean; targe
       void nextTick(() => captureVisibleRangeContextNow({ force: true }));
     }
     emit("openPath", resolvedPath);
+    if (options.revealInDirectoryTree) {
+      await revealPathInDirectoryTree(resolvedPath);
+    }
     if (options.targetLine) {
       await scrollActiveFileToLine(options.targetLine);
     }
@@ -1908,6 +1918,32 @@ async function openDirectoryTree(path: string) {
   if (!normalizedPath) return;
   directoryRootPath.value = normalizedPath;
   await loadDirectory(normalizedPath, true);
+}
+
+async function revealPathInDirectoryTree(path: string) {
+  const rootPath = normalizePath(directoryRootPath.value);
+  const targetDirectoryPath = directoryFromPath(path);
+  const chain = directoryPathChain(rootPath, targetDirectoryPath);
+  if (chain.length === 0) return;
+
+  directoryTreeFilter.value = "";
+  for (const directoryPath of chain) {
+    const node = treeDirectoryNode(directoryPath);
+    if (!node?.loaded || node.error) {
+      await loadDirectory(directoryPath, true);
+    } else {
+      updateDirectoryNode(directoryPath, { expanded: true, error: "" });
+    }
+  }
+
+  await nextTick();
+  const targetPath = normalizePath(path);
+  const rowIndex = visibleTreeRows.value.findIndex((row) =>
+    row.kind === "entry" && !row.entry.isDirectory && sameNormalizedPath(row.entry.path, targetPath)
+  );
+  const scroller = directoryScroller.value;
+  if (rowIndex < 0 || !scroller) return;
+  scroller.scrollTop = Math.max(0, rowIndex * 28 - Math.round(scroller.clientHeight / 2));
 }
 
 function closeDirectoryTree() {

@@ -207,6 +207,40 @@ export function directoryFromPath(path: string) {
   return normalized.slice(0, slashIndex);
 }
 
+function normalizeDirectoryPath(path: string) {
+  const normalized = normalizePath(path);
+  if (normalized === "/") return "/";
+  const trimmed = normalized.replace(/\/+$/, "");
+  if (/^[A-Za-z]:$/.test(trimmed)) return `${trimmed}/`;
+  return trimmed;
+}
+
+function joinDirectoryPath(base: string, segment: string) {
+  if (!base || base === "/") return `/${segment}`;
+  return base.endsWith("/") ? `${base}${segment}` : `${base}/${segment}`;
+}
+
+export function directoryPathChain(rootPath: string, targetDirectoryPath: string) {
+  const root = normalizeDirectoryPath(rootPath);
+  const target = normalizeDirectoryPath(targetDirectoryPath);
+  if (!root || !target) return [];
+  const rootLower = root.toLowerCase();
+  const targetLower = target.toLowerCase();
+  const childPrefix = root.endsWith("/") ? rootLower : `${rootLower}/`;
+  if (targetLower !== rootLower && !targetLower.startsWith(childPrefix)) return [];
+  if (targetLower === rootLower) return [root];
+
+  const suffixStart = root.length + (root.endsWith("/") ? 0 : 1);
+  const suffixParts = target.slice(suffixStart).split("/").filter(Boolean);
+  const chain = [root];
+  let current = root;
+  for (const part of suffixParts) {
+    current = joinDirectoryPath(current, part);
+    chain.push(current);
+  }
+  return chain;
+}
+
 export function normalizeDirectoryEntries(entries: FileReaderDirectoryEntry[]) {
   return entries.map((entry) => ({
     ...entry,
