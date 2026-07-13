@@ -178,23 +178,33 @@ fn notify_local_chat_round_completed(
         &conversation_meta,
         notification_settings.ui_language,
     );
+    let title = notification_title_for_conversation_meta(
+        state,
+        &conversation_meta,
+        notification_settings.ui_language,
+        false,
+    );
     let body = native_notification_text_excerpt(
         assistant_text,
         NATIVE_NOTIFICATION_BODY_MAX_CHARS,
     );
-    let final_body = if body.trim().is_empty() {
-        local_chat_notification_text(
-            notification_settings.ui_language,
-            "已完成本轮回复。",
-            "已完成本輪回覆。",
-            "Finished this reply.",
-        )
-    } else {
-        body
-    };
+    let final_body = notification_body_with_speaker(
+        &speaker_name,
+        if body.trim().is_empty() {
+            local_chat_notification_text(
+                notification_settings.ui_language,
+                "已完成本轮回复。",
+                "已完成本輪回覆。",
+                "Finished this reply.",
+            )
+        } else {
+            body
+        },
+        notification_settings.ui_language,
+    );
     if let Err(err) = send_native_notification(
         &app_handle,
-        &speaker_name,
+        &title,
         &final_body,
         notification_settings.sound_enabled,
     ) {
@@ -203,6 +213,113 @@ fn notify_local_chat_round_completed(
             conversation_id, err
         ));
     }
+}
+
+fn notification_body_with_speaker(speaker_name: &str, body: String, ui_language: &str) -> String {
+    let body = body.trim();
+    let speaker_name = speaker_name.trim();
+    if speaker_name.is_empty() {
+        return body.to_string();
+    }
+    match ui_language.trim() {
+        "en-US" => format!("{speaker_name}: {body}"),
+        _ => format!("{speaker_name}：{body}"),
+    }
+}
+
+fn notification_title_for_conversation_meta(
+    state: &AppState,
+    conversation_meta: &ConversationMetaView,
+    ui_language: &str,
+    failed: bool,
+) -> String {
+    let base_title = notification_conversation_display_title(conversation_meta, ui_language);
+    let department_name = notification_department_name_for_conversation_meta(state, conversation_meta);
+    notification_title_from_parts(&base_title, department_name.as_deref(), ui_language, failed)
+}
+
+fn notification_title_from_parts(
+    base_title: &str,
+    department_name: Option<&str>,
+    ui_language: &str,
+    failed: bool,
+) -> String {
+    let mut parts = vec![base_title.trim().to_string()];
+    if let Some(department_name) = department_name
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        parts.push(department_name.to_string());
+    }
+    if failed {
+        parts.push(local_chat_notification_text(
+            ui_language,
+            "失败",
+            "失敗",
+            "Failed",
+        ));
+    }
+    parts.join(" · ")
+}
+
+fn notification_conversation_display_title(
+    conversation_meta: &ConversationMetaView,
+    ui_language: &str,
+) -> String {
+    notification_conversation_display_title_from_parts(
+        &conversation_meta.id,
+        &conversation_meta.title,
+        conversation_meta.latest_summary_title.as_deref(),
+        conversation_meta.last_message_at.as_deref(),
+        &conversation_meta.updated_at,
+        ui_language,
+    )
+}
+
+fn notification_conversation_display_title_from_parts(
+    conversation_id: &str,
+    title: &str,
+    summary_title: Option<&str>,
+    last_message_at: Option<&str>,
+    updated_at: &str,
+    ui_language: &str,
+) -> String {
+    normalized_notification_title_part(title, conversation_id)
+        .or_else(|| {
+            summary_title
+                .and_then(|value| normalized_notification_title_part(value, conversation_id))
+        })
+        .or_else(|| {
+            last_message_at
+                .or(Some(updated_at))
+                .and_then(|value| notification_fallback_title_from_time(value, ui_language))
+        })
+        .unwrap_or_else(|| {
+            local_chat_notification_text(
+                ui_language,
+                "未命名会话",
+                "未命名會話",
+                "Untitled conversation",
+            )
+        })
+}
+
+fn normalized_notification_title_part(value: &str, conversation_id: &str) -> Option<String> {
+    let title = value.trim();
+    if title.is_empty() || title == conversation_id.trim() {
+        return None;
+    }
+    Some(title.to_string())
+}
+
+fn notification_fallback_title_from_time(value: &str, _ui_language: &str) -> Option<String> {
+    let raw_value = value.trim();
+    if raw_value.is_empty() {
+        return None;
+    }
+    let parsed = chrono::DateTime::parse_from_rfc3339(raw_value).ok()?;
+    let local = parsed.with_timezone(&chrono::Local);
+    Some(local.format("%m/%d %H:%M").to_string())
 }
 
 fn local_chat_notification_text(
@@ -255,6 +372,28 @@ fn notification_speaker_name_for_conversation_meta(
                 conversation_meta.id, agent_id, err
             ));
             agent_id.to_string()
+        }
+    }
+}
+
+fn notification_department_name_for_conversation_meta(
+    state: &AppState,
+    conversation_meta: &ConversationMetaView,
+) -> Option<String> {
+    let department_id = conversation_meta.department_id.trim();
+    if department_id.is_empty() {
+        return None;
+    }
+    match state_read_config_cached(state) {
+        Ok(config) => department_by_id(&config, department_id)
+            .map(|department| department.name.trim().to_string())
+            .filter(|name| !name.is_empty()),
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[通知] 跳过，任务=读取部门名称失败后省略部门，conversation_id={}，department_id={}，error={}",
+                conversation_meta.id, department_id, err
+            ));
+            None
         }
     }
 }
@@ -381,25 +520,30 @@ fn notify_local_chat_round_failed(state: &AppState, conversation_id: &str, error
         &conversation_meta,
         notification_settings.ui_language,
     );
+    let title = notification_title_for_conversation_meta(
+        state,
+        &conversation_meta,
+        notification_settings.ui_language,
+        true,
+    );
     let body = native_notification_text_excerpt(
         error_text,
         NATIVE_NOTIFICATION_BODY_MAX_CHARS,
     );
-    let final_body = if body.trim().is_empty() {
-        local_chat_notification_text(
-            notification_settings.ui_language,
-            "本轮调度失败。",
-            "本輪調度失敗。",
-            "This round failed.",
-        )
-    } else {
-        body
-    };
-    let title = match notification_settings.ui_language {
-        "en-US" => format!("{speaker_name} response failed"),
-        "zh-TW" => format!("{speaker_name} 調度失敗"),
-        _ => format!("{speaker_name} 调度失败"),
-    };
+    let final_body = notification_body_with_speaker(
+        &speaker_name,
+        if body.trim().is_empty() {
+            local_chat_notification_text(
+                notification_settings.ui_language,
+                "本轮调度失败。",
+                "本輪調度失敗。",
+                "This round failed.",
+            )
+        } else {
+            body
+        },
+        notification_settings.ui_language,
+    );
     if let Err(err) = send_native_notification(
         &app_handle,
         &title,
@@ -412,4 +556,3 @@ fn notify_local_chat_round_failed(state: &AppState, conversation_id: &str, error
         ));
     }
 }
-

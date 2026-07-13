@@ -6931,6 +6931,64 @@
     }
 
     #[test]
+    fn notification_conversation_display_title_should_prefer_title_then_summary_then_time() {
+        let expected_time_title = chrono::DateTime::parse_from_rfc3339("2026-07-13T10:20:00+08:00")
+            .expect("parse fallback time")
+            .with_timezone(&chrono::Local)
+            .format("%m/%d %H:%M")
+            .to_string();
+        assert_eq!(
+            notification_conversation_display_title_from_parts(
+                "conversation-a",
+                "正式标题",
+                Some("摘要标题"),
+                Some("2026-07-13T10:20:00+08:00"),
+                "2026-07-13T10:00:00+08:00",
+                "zh-CN",
+            ),
+            "正式标题"
+        );
+        assert_eq!(
+            notification_conversation_display_title_from_parts(
+                "conversation-a",
+                "conversation-a",
+                Some("摘要标题"),
+                Some("2026-07-13T10:20:00+08:00"),
+                "2026-07-13T10:00:00+08:00",
+                "zh-CN",
+            ),
+            "摘要标题"
+        );
+        assert_eq!(
+            notification_conversation_display_title_from_parts(
+                "conversation-a",
+                "",
+                None,
+                Some("2026-07-13T10:20:00+08:00"),
+                "2026-07-13T10:00:00+08:00",
+                "zh-CN",
+            ),
+            expected_time_title
+        );
+    }
+
+    #[test]
+    fn notification_title_from_parts_should_append_department_and_failure_suffix() {
+        assert_eq!(
+            notification_title_from_parts("会话标题", Some("客服部"), "zh-CN", false),
+            "会话标题 · 客服部"
+        );
+        assert_eq!(
+            notification_title_from_parts("会话标题", Some("客服部"), "zh-CN", true),
+            "会话标题 · 客服部 · 失败"
+        );
+        assert_eq!(
+            notification_title_from_parts("Session", None, "en-US", true),
+            "Session · Failed"
+        );
+    }
+
+    #[test]
     fn normalize_single_active_main_conversation_should_keep_summary_only_foreground_chat_active() {
         let now = now_iso();
         let later = (now_utc() + time::Duration::minutes(1))
