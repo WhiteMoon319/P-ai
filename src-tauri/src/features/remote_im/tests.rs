@@ -1869,7 +1869,8 @@
     #[test]
     fn remote_im_prepare_enqueue_runtime_state_should_activate_secretary_for_next_wave_when_present_idle() {
         let state = remote_im_test_state();
-        let contact = remote_im_test_contact("contact-a", "conversation-a");
+        let mut contact = remote_im_test_contact("contact-a", "conversation-a");
+        contact.remote_contact_type = "group".to_string();
         {
             let mut runtime_states =
                 lock_remote_im_contact_runtime_states(&state).expect("lock runtime states");
