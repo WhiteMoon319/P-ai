@@ -5,6 +5,7 @@ include!("archive_lifecycle.rs");
 include!("assistant_message_mutations.rs");
 include!("scheduler_history_flush.rs");
 include!("history_mutations.rs");
+include!("prompt_prepare.rs");
 include!("persistence.rs");
 include!("archive.rs");
 include!("session_notification_support.rs");
