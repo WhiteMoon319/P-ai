@@ -314,36 +314,30 @@
 
                     <div v-if="activeCapability === 'text'" class="grid gap-2 md:grid-cols-6">
                       <label
-                        class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2"
-                        :class="{ 'opacity-60': isModelImageToggleDisabled(modelCard) }">
+                        class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
                         <span class="text-sm">{{ t("config.api.capImage") }}</span>
                         <input
                           v-model="modelCard.enableImage"
                           type="checkbox"
                           class="checkbox checkbox-sm"
-                          :disabled="isModelImageToggleDisabled(modelCard)"
                         />
                       </label>
                       <label
-                        class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2"
-                        :class="{ 'opacity-60': isModelAudioToggleDisabled(modelCard) }">
+                        class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
                         <span class="text-sm">{{ t("config.api.capAudio") }}</span>
                         <input
                           v-model="modelCard.enableAudio"
                           type="checkbox"
                           class="checkbox checkbox-sm"
-                          :disabled="isModelAudioToggleDisabled(modelCard)"
                         />
                       </label>
                       <label
-                        class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2"
-                        :class="{ 'opacity-60': isModelVideoToggleDisabled(modelCard) }">
+                        class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
                         <span class="text-sm">{{ t("config.api.capVideo") }}</span>
                         <input
                           v-model="modelCard.enableVideo"
                           type="checkbox"
                           class="checkbox checkbox-sm"
-                          :disabled="isModelVideoToggleDisabled(modelCard)"
                         />
                       </label>
                       <label
@@ -916,46 +910,6 @@ function isOpenaiModelAdapter(adapter: string | undefined): boolean {
 
 function isDeepSeekModelAdapter(adapter: string | undefined): boolean {
   return String(adapter || "").trim().toLowerCase() === "deepseek";
-}
-
-function modelCapability(modelCard: ApiModelConfigItem): ModelCapabilityLimits | undefined {
-  return modelCapabilityById.value[modelCard.id];
-}
-
-function shouldShowModelImageToggle(modelCard: ApiModelConfigItem): boolean {
-  const capability = modelCapability(modelCard);
-  if (capability?.metadataFound) {
-    return capability.enableImage === true;
-  }
-  return true;
-}
-
-function shouldShowModelVideoToggle(modelCard: ApiModelConfigItem): boolean {
-  const capability = modelCapability(modelCard);
-  if (capability?.metadataFound) {
-    return capability.enableVideo === true;
-  }
-  return true;
-}
-
-function shouldShowModelAudioToggle(modelCard: ApiModelConfigItem): boolean {
-  const capability = modelCapability(modelCard);
-  if (capability?.metadataFound) {
-    return capability.enableAudio === true;
-  }
-  return true;
-}
-
-function isModelImageToggleDisabled(modelCard: ApiModelConfigItem): boolean {
-  return !shouldShowModelImageToggle(modelCard);
-}
-
-function isModelAudioToggleDisabled(modelCard: ApiModelConfigItem): boolean {
-  return !shouldShowModelAudioToggle(modelCard);
-}
-
-function isModelVideoToggleDisabled(modelCard: ApiModelConfigItem): boolean {
-  return !shouldShowModelVideoToggle(modelCard);
 }
 
 function openaiReasoningEffortValue(modelCard: ApiModelConfigItem): string {

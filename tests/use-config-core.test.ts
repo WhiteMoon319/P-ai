@@ -65,7 +65,7 @@ describe("useConfigCore", () => {
     expect(config.apiProviders[0].models[0].model).toBe("gpt-4.1");
     expect(config.apiConfigs).toHaveLength(1);
     expect(config.apiConfigs[0].id).toBe("api-provider-legacy-1::api-model-legacy-1");
-    expect(config.apiConfigs[0].name).toBe("Legacy OpenAI/gpt-4.1");
+    expect(config.apiConfigs[0].name).toBe("Legacy OpenAI/gpt-4.1 · 中");
   });
 
   it("expands one provider into independent endpoint configs per model", () => {
@@ -124,8 +124,8 @@ describe("useConfigCore", () => {
       "provider-openai::model-mini",
     ]);
     expect(config.apiConfigs.map((item) => item.name)).toEqual([
-      "OpenAI Main/gpt-4.1",
-      "OpenAI Main/gpt-4.1-mini",
+      "OpenAI Main/gpt-4.1 · 中",
+      "OpenAI Main/gpt-4.1-mini · 中",
     ]);
     expect(config.apiConfigs[0].apiKey).toBe("key-1");
     expect(config.selectedApiConfigId).toBe("provider-openai::model-main");
