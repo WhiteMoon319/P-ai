@@ -93,7 +93,7 @@ fn upsert_runtime_image_text_cache(
 }
 
 fn plan_mode_prompt_block() -> &'static str {
-    "<plan mode>\n先不要直接开始实现。\n先理解用户目标，调查当前上下文或代码，并主动消除会明显改变计划骨架的关键疑问。\n当目标明确、约束明确、现状已调查充分，并且关键疑问已消除后，再调用 plan 工具的 present 动作呈现计划。\n在我明确确认之前，严禁直接修改代码或开始实施。\n</plan mode>"
+    "<plan mode>\n先理解用户目标，调查当前上下文或代码，并主动消除会明显改变需求、边界、风险或验收口径的关键疑问。\n当目标、约束、现状已清楚，并且需要计划文档承载需求边界时，再调用 plan.present 呈现计划。\n计划用于对齐需求、边界、风险、术语、测试和最终呈现。\n得到我明确确认后，再开始修改代码或实施。\n</plan mode>"
 }
 
 fn conversation_latest_user_has_plan_mode_block(
