@@ -3,7 +3,10 @@
     <div v-if="title" class="px-4 pt-3 text-xs text-base-content/65">{{ title }}</div>
     <div
       class="tool-review-code-main relative min-h-0 flex-1 overflow-hidden"
-      :class="{ 'tool-review-code-main-with-lines': isPatchMode }"
+      :class="{
+        'tool-review-code-main-with-lines': showGutter,
+        'tool-review-code-main-with-patch-lines': isPatchMode,
+      }"
       @mouseenter="scrollbarRef?.reveal()"
       @mouseleave="scrollbarRef?.hide()"
     >
@@ -24,8 +27,10 @@ import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 const props = defineProps<{
   title?: string;
   code: string;
+  lang?: string;
   mode?: "plain" | "patch";
   isDark?: boolean;
+  showLineNumbers?: boolean;
 }>();
 
 const scrollerRef = ref<HTMLElement | null>(null);
@@ -38,6 +43,7 @@ const SHIKI_LANGUAGE_KEYS = new Set(
 );
 
 const isPatchMode = computed(() => props.mode === "patch");
+const showGutter = computed(() => isPatchMode.value || props.showLineNumbers === true);
 
 async function updateHighlightedCode() {
   const code = String(props.code || "");
@@ -63,20 +69,29 @@ async function updateHighlightedCode() {
 }
 
 function resolveLanguage() {
-  const key = props.mode === "patch" ? "diff" : "text";
+  const requested = String(props.lang || "").trim().toLowerCase();
+  const key = props.mode === "patch" ? "diff" : requested || "text";
   return SHIKI_LANGUAGE_KEYS.has(key) ? key : "text";
 }
 
 function normalizeShikiLineHtml(html: string, code: string, mode?: "plain" | "patch") {
   const compactHtml = html.replace(/<\/span>\s+<span class="line"/g, '</span><span class="line"');
-  if (mode !== "patch") return compactHtml;
-  const lineMeta = buildPatchLineMeta(code);
+  if (mode !== "patch" && props.showLineNumbers !== true) return compactHtml;
+  const lineMeta = mode === "patch" ? buildPatchLineMeta(code) : buildPlainLineMeta(code);
   let lineIndex = 0;
   return compactHtml.replace(/<span class="line"/g, () => {
     const meta = lineMeta[lineIndex] || { gutter: "", kindClass: "" };
     lineIndex += 1;
     return `<span class="line ${meta.kindClass}" data-gutter="${escapeHtmlAttribute(meta.gutter)}"`;
   });
+}
+
+function buildPlainLineMeta(code: string) {
+  const lineCount = String(code || "").split("\n").length;
+  return Array.from({ length: lineCount }, (_, index) => ({
+    gutter: String(index + 1),
+    kindClass: "tool-review-plain-line",
+  }));
 }
 
 function buildPatchLineMeta(code: string) {
@@ -137,7 +152,7 @@ function escapeHtmlAttribute(value: string) {
 }
 
 watch(
-  () => [props.code, props.mode] as const,
+  () => [props.code, props.mode, props.lang, props.showLineNumbers] as const,
   () => {
     void updateHighlightedCode();
   },
@@ -154,7 +169,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .tool-review-code-main {
-  background: #101828;
+  background: var(--color-base-200);
 }
 
 .tool-review-code-scroller {
@@ -170,7 +185,7 @@ onBeforeUnmount(() => {
 .tool-review-code-view {
   height: 100%;
   min-height: 100%;
-  background: #101828;
+  background: var(--color-base-200);
 }
 
 .tool-review-raw-pre {
@@ -178,8 +193,8 @@ onBeforeUnmount(() => {
   margin: 0;
   padding: 0.75rem 1rem;
   white-space: pre;
-  color: #e5e7eb;
-  background: #101828;
+  color: var(--color-base-content);
+  background: var(--color-base-200);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -190,7 +205,7 @@ onBeforeUnmount(() => {
   padding: 0.75rem 0;
   border: 0;
   border-radius: 0;
-  background: #101828 !important;
+  background: var(--color-base-200) !important;
   box-shadow: none;
   overflow: visible;
 }
@@ -214,6 +229,11 @@ onBeforeUnmount(() => {
   color: #64748b;
   user-select: none;
   white-space: pre;
+}
+
+.tool-review-code-main-with-lines:not(.tool-review-code-main-with-patch-lines) :deep(.tool-review-code-view .line::before) {
+  width: 2.75rem;
+  padding: 0 0.75rem 0 0.5rem;
 }
 
 .tool-review-code-main-with-lines :deep(.tool-review-code-view .line::before) {

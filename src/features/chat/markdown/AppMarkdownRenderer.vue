@@ -1325,7 +1325,6 @@ ul.ecall-md-list {
 .ecall-md-code-lang {
   font-size: 0.72rem;
   color: color-mix(in srgb, currentColor 80%, transparent);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .ecall-md-code-actions {
@@ -1366,7 +1365,6 @@ ul.ecall-md-list {
 .ecall-md-code-body {
   overflow-x: auto;
   padding: 0.75rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 0.82rem;
   line-height: 1.55;
   margin: 0 !important;
@@ -1415,12 +1413,10 @@ ul.ecall-md-list {
 /* 代码块背景跟随 DaisyUI 主题，Shiki 只负责 token 颜色 */
 .ecall-md-dark .ecall-md-code-block {
   --ecall-md-code-bg: color-mix(in srgb, var(--color-base-300) 50%, transparent);
-  color: #e5e7eb;
 }
 
 .ecall-md-light .ecall-md-code-block {
   --ecall-md-code-bg: color-mix(in srgb, var(--color-base-300) 50%, transparent);
-  color: #24292f;
 }
 
 /* ==================== Inline Code ==================== */
@@ -1428,7 +1424,6 @@ ul.ecall-md-list {
   border-radius: 0.28rem;
   background: color-mix(in srgb, currentColor 10%, transparent);
   padding: 0.08rem 0.28rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 0.86em;
 }
 
@@ -1557,7 +1552,6 @@ ul.ecall-md-list {
   padding: 0.5rem 2.2rem 0.5rem 0.65rem;
   background: color-mix(in srgb, currentColor 8%, transparent);
   border-radius: 0.4rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.82rem;
   overflow-x: auto;
 }

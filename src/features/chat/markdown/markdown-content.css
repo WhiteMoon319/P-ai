@@ -1,18 +1,10 @@
 .ecall-markdown-content {
-  --ecall-md-body-weight: var(--ecall-md-body-weight-setting, 450);
-  --ecall-md-heading-weight: var(--ecall-md-heading-weight-setting, 700);
-  --ecall-md-strong-weight: var(--ecall-md-strong-weight-setting, 700);
-  --ecall-md-code-weight: var(--ecall-md-code-weight-setting, 550);
-  --ecall-md-table-heading-weight: var(--ecall-md-table-heading-weight-setting, 650);
   --ecall-md-block-radius: var(--radius-box, 0.5rem);
   color: inherit;
   min-width: 0;
   max-width: 100%;
   overflow-x: clip;
   font-family: inherit;
-  font-weight: var(--ecall-md-body-weight);
-  font-variation-settings: "wght" var(--ecall-md-body-weight);
-  text-rendering: optimizeLegibility;
 }
 
 .ecall-markdown-content.prose {
@@ -97,15 +89,11 @@
 }
 
 .ecall-markdown-content :where(h1,h2,h3,h4,.heading-node) {
-  font-weight: var(--ecall-md-heading-weight);
-  font-variation-settings: "wght" var(--ecall-md-heading-weight);
   letter-spacing: 0;
 }
 
 .ecall-markdown-content :where(strong,.strong-node) {
   color: inherit;
-  font-weight: var(--ecall-md-strong-weight);
-  font-variation-settings: "wght" var(--ecall-md-strong-weight);
 }
 
 .ecall-markdown-content .ecall-md-details {
@@ -119,8 +107,6 @@
   cursor: pointer;
   list-style: none;
   padding: 0.34rem 0.46rem;
-  font-weight: var(--ecall-md-strong-weight);
-  font-variation-settings: "wght" var(--ecall-md-strong-weight);
 }
 
 .ecall-markdown-content .ecall-md-details-summary::-webkit-details-marker {
@@ -151,18 +137,6 @@
   border-radius: 0.42rem;
   background: color-mix(in srgb, var(--color-base-100) 78%, var(--color-base-300));
   padding: 0.06rem 0.38rem;
-  font-family: var(
-    --ms-font-mono,
-    ui-monospace,
-    "SFMono-Regular",
-    "SF Mono",
-    Menlo,
-    Monaco,
-    Consolas,
-    "Liberation Mono",
-    "Courier New",
-    monospace
-  );
   font-size: 0.92em;
   line-height: 1.4;
   vertical-align: baseline;
@@ -228,7 +202,6 @@
 
 .ecall-markdown-content .ecall-md-footnote-item::marker {
   color: color-mix(in srgb, var(--color-base-content) 72%, transparent);
-  font-weight: var(--ecall-md-strong-weight);
 }
 
 .ecall-markdown-content .ecall-md-footnote-item:target,
@@ -255,20 +228,6 @@
   background: var(--color-base-300) !important;
   border-radius: 0.4rem !important;
   padding: 0.08rem 0.3rem !important;
-  font-family: var(
-    --ms-font-mono,
-    ui-monospace,
-    "SFMono-Regular",
-    "SF Mono",
-    Menlo,
-    Monaco,
-    Consolas,
-    "Liberation Mono",
-    "Courier New",
-    monospace
-  );
-  font-weight: var(--ecall-md-code-weight);
-  font-variation-settings: "wght" var(--ecall-md-code-weight);
 }
 
 .ecall-markdown-content .table-node-wrapper {
@@ -296,8 +255,6 @@
   border-right: 1px solid color-mix(in srgb, var(--color-base-content) 14%, transparent) !important;
   padding: 0.38rem 0.52rem;
   text-align: left;
-  font-weight: var(--ecall-md-table-heading-weight);
-  font-variation-settings: "wght" var(--ecall-md-table-heading-weight);
 }
 
 .ecall-markdown-content :where(th:last-child,.table-node th:last-child) {

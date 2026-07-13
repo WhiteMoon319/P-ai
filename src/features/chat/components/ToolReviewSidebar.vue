@@ -772,35 +772,6 @@ onBeforeUnmount(() => {
 }
 
 .assistant-markdown :deep(.ecall-markdown-content) {
-  --ms-font-sans: var(
-    --app-font-family,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    "Helvetica Neue",
-    Arial,
-    sans-serif
-  );
-  --ms-text-body: 0.875rem;
-  --ms-leading-body: 1.5;
-  --ms-text-h1: 1.02rem;
-  --ms-leading-h1: 1.5;
-  --ms-text-h2: 0.98rem;
-  --ms-leading-h2: 1.5;
-  --ms-text-h3: 0.94rem;
-  --ms-leading-h3: 1.5;
-  --ms-text-h4: 0.9rem;
-  --ms-text-h5: 0.875rem;
-  --ms-text-h6: 0.875rem;
-  --ms-flow-paragraph-y: 0.25rem;
-  --ms-flow-list-y: 0.25rem;
-  --ms-flow-list-item-y: 0.12rem;
-  --ms-flow-list-indent: 1.05rem;
-  --ms-flow-list-indent-mobile: 1.05rem;
-  --ms-flow-blockquote-y: 0.25rem;
-  --ms-flow-blockquote-indent: 0.68rem;
   min-width: 0;
   max-width: 100%;
   overflow-x: hidden;
