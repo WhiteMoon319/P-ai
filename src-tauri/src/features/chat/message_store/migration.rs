@@ -176,18 +176,11 @@ pub(super) fn recover_ready_jsonl_snapshot_manifest_from_directory(
     let Some(manifest) = read_message_store_manifest(&paths.manifest_file)? else {
         return Ok(None);
     };
-    if manifest.should_read_jsonl() {
-        validate_ready_message_store_snapshot_integrity(paths, &manifest)?;
-        return Ok(Some(manifest));
-    }
     if !matches!(
         (manifest.message_store_kind, manifest.migration_state),
         (
             MessageStoreKind::JsonlSnapshot,
-            MessageStoreMigrationState::Building
-                | MessageStoreMigrationState::Failed
-                | MessageStoreMigrationState::Rollback
-                | MessageStoreMigrationState::None
+            MessageStoreMigrationState::Ready | MessageStoreMigrationState::Building
         )
     ) {
         return Ok(None);
@@ -197,16 +190,10 @@ pub(super) fn recover_ready_jsonl_snapshot_manifest_from_directory(
         Err(_) => return Ok(None),
     };
     validate_conversation_shard_meta_id(paths, &meta)?;
-    let rebuilt = match rebuild_ready_message_store_snapshot_from_blocks(paths) {
+    let rebuilt = match repair_and_rebuild_ready_message_store_snapshot_from_blocks(paths) {
         Ok(rebuilt) => rebuilt,
         Err(_) => return Ok(None),
     };
-    if rebuilt.message_count != manifest.source_message_count() {
-        return Ok(None);
-    }
-    if rebuilt.last_message_id != manifest.last_message_id().trim() {
-        return Ok(None);
-    }
     let ready_manifest = MessageStoreManifest::jsonl_snapshot_ready_for_messages(
         rebuilt.message_count,
         rebuilt.last_message_id.clone(),

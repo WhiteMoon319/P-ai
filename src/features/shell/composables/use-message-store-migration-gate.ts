@@ -13,6 +13,7 @@ type MessageStoreMigrationPreflightItem = {
 };
 
 type MessageStoreMigrationPreflightReport = {
+  migrationRequired?: boolean;
   totalConversations: number;
   readyCount: number;
   legacyCount: number;
@@ -100,6 +101,13 @@ export function useMessageStoreMigrationGate(bindings: MessageStoreMigrationGate
     const report = await invokeTauri<MessageStoreMigrationPreflightReport>(
       "check_message_store_migration",
     );
+    if (report.migrationRequired) {
+      messageStoreMigration.visible = true;
+      messageStoreMigration.mode = "checking";
+      messageStoreMigration.message = "正在迁移会话消息仓库...";
+      await runMessageStoreMigrationFromGate(false);
+      return;
+    }
     if (report.blockedCount > 0) {
       messageStoreMigration.visible = true;
       messageStoreMigration.mode = "blocked";

@@ -509,6 +509,9 @@ fn read_conversation_meta_shard(
         }
         Ok(Some(_)) | Ok(None) | Err(_) => {}
     }
+    if message_store::message_store_is_v3_ready(&store_paths)? {
+        return Err(format!("Conversation '{conversation_id}' not found."));
+    }
     if message_store::read_message_store_manifest_status(&store_paths)?.is_some() {
         let conversation = read_conversation_shard_raw(path, conversation_id)?;
         let rebuilt = message_store::ConversationShardMeta::from_conversation(&conversation);
@@ -550,7 +553,11 @@ fn refresh_conversation_meta_shard_if_needed(
         if meta.schema_version() >= message_store::CONVERSATION_META_SCHEMA_VERSION {
             return Ok(false);
         }
-    } else if message_store::read_message_store_manifest_status(&store_paths)?.is_none() {
+    }
+    if message_store::message_store_is_v3_ready(&store_paths)? {
+        return Ok(false);
+    }
+    if message_store::read_message_store_manifest_status(&store_paths)?.is_none() {
         let conversation_path = app_layout_chat_conversation_path(path, conversation_id);
         if !conversation_path.exists() && (app_layout_exists(path) || !path.exists()) {
             return Ok(false);
@@ -579,6 +586,9 @@ fn read_conversation_shard_raw(path: &PathBuf, conversation_id: &str) -> Result<
             return Ok(repaired);
         }
         return Ok(conversation);
+    }
+    if message_store::message_store_is_v3_ready(&store_paths)? {
+        return Err(format!("Conversation '{conversation_id}' not found."));
     }
     let recovered_manifest =
         message_store::recover_ready_jsonl_snapshot_manifest_from_directory(&store_paths)?;

@@ -1629,27 +1629,10 @@ pub(super) fn validate_ready_message_store_snapshot_integrity(
     if index_matches && manifest_matches {
         return Ok(());
     }
-    write_message_store_index_atomic(&paths.index_file, &rebuilt.index)?;
-    let repaired_manifest = MessageStoreManifest::jsonl_snapshot_ready_for_messages(
-        rebuilt.message_count,
-        rebuilt.last_message_id.clone(),
-        rebuilt.total_bytes,
-        manifest.messages_index_revision.max(1),
-    );
-    write_message_store_manifest_atomic(&paths.manifest_file, &repaired_manifest)?;
-    runtime_log_warn(format!(
-        "[消息存储] 完成，任务=ready快照基于blocks自修复，conversation_id={}，manifest_count={}，rebuilt_count={}，manifest_last={}，rebuilt_last={}，manifest_bytes={}，rebuilt_bytes={}，index_matched_before={}，manifest_matched_before={}",
-        paths.conversation_id,
-        manifest.source_message_count(),
-        rebuilt.message_count,
-        manifest.last_message_id(),
-        rebuilt.last_message_id,
-        manifest.messages_jsonl_bytes(),
-        rebuilt.total_bytes,
-        index_matches,
-        manifest_matches
-    ));
-    Ok(())
+    Err(format!(
+        "ready JSONL 快照与 blocks 不一致，conversation_id={}，index_matched={}，manifest_matched={}",
+        paths.conversation_id, index_matches, manifest_matches
+    ))
 }
 
 #[derive(Debug, Clone)]
@@ -1662,6 +1645,19 @@ struct RebuiltReadyMessageStoreSnapshot {
 
 fn rebuild_ready_message_store_snapshot_from_blocks(
     paths: &MessageStorePaths,
+) -> Result<RebuiltReadyMessageStoreSnapshot, String> {
+    rebuild_message_store_snapshot_from_blocks(paths, false)
+}
+
+fn repair_and_rebuild_ready_message_store_snapshot_from_blocks(
+    paths: &MessageStorePaths,
+) -> Result<RebuiltReadyMessageStoreSnapshot, String> {
+    rebuild_message_store_snapshot_from_blocks(paths, true)
+}
+
+fn rebuild_message_store_snapshot_from_blocks(
+    paths: &MessageStorePaths,
+    repair_invalid_lines: bool,
 ) -> Result<RebuiltReadyMessageStoreSnapshot, String> {
     let mut block_entries = fs::read_dir(&paths.blocks_dir)
         .map_err(|err| {
@@ -1689,17 +1685,32 @@ fn rebuild_ready_message_store_snapshot_from_blocks(
     let mut items = Vec::<MessageStoreIndexItem>::new();
     let mut total_bytes = 0_u64;
     let mut last_message_id = String::new();
+    let mut seen_message_ids = std::collections::HashSet::<String>::new();
 
     for (block_id, block_path) in block_entries {
-        let report = verify_jsonl_snapshot_file(&block_path, usize::MAX, "").map_err(|err| {
-            format!(
-                "校验会话块失败，conversation_id={}，block_id={}，path={}，error={err}",
-                paths.conversation_id,
-                block_id,
-                block_path.display()
-            )
-        })?;
+        let (report, discarded_count, duplicate_count) = if repair_invalid_lines {
+            repair_jsonl_snapshot_file(&block_path, &mut seen_message_ids)?
+        } else {
+            (verify_jsonl_snapshot_file(&block_path, usize::MAX, "")?, 0, 0)
+        };
+        if discarded_count > 0 || duplicate_count > 0 {
+            runtime_log_warn(format!(
+                "[消息存储迁移] 完成，任务=清理block异常行，conversation_id={}，block_id={}，损坏行数={}，重复行数={}",
+                paths.conversation_id, block_id, discarded_count, duplicate_count
+            ));
+        }
         if report.message_count == 0 {
+            if repair_invalid_lines {
+                fs::remove_file(&block_path).map_err(|err| {
+                    format!(
+                        "删除修复后空 block 失败，conversation_id={}，block_id={}，path={}，error={err}",
+                        paths.conversation_id,
+                        block_id,
+                        block_path.display()
+                    )
+                })?;
+                continue;
+            }
             return Err(format!(
                 "校验会话块失败，conversation_id={}，block_id={}，path={}，error=空 block 文件不允许作为 ready 快照真相",
                 paths.conversation_id,
@@ -3626,7 +3637,7 @@ mod message_store_reader_tests {
     }
 
     #[test]
-    fn message_store_ready_reader_should_repair_index_manifest_count_mismatch() {
+    fn message_store_ready_reader_should_reject_index_manifest_count_mismatch_without_writing() {
         let root = std::env::temp_dir().join(format!(
             "easy-call-message-store-index-count-mismatch-{}",
             Uuid::new_v4()
@@ -3642,20 +3653,19 @@ mod message_store_reader_tests {
         write_message_store_manifest_atomic(&paths.manifest_file, &manifest)
             .expect("write stale manifest");
 
-        let messages = read_ready_message_store_recent_messages(&paths, 1)
-            .expect("stale manifest count should self-heal")
-            .expect("ready messages should exist");
-        let repaired_manifest = read_message_store_manifest(&paths.manifest_file)
-            .expect("read repaired manifest")
+        let error = read_ready_message_store_recent_messages(&paths, 1)
+            .expect_err("stale manifest count must not self-heal during read");
+        let stored_manifest = read_message_store_manifest(&paths.manifest_file)
+            .expect("read stored manifest")
             .expect("manifest exists");
 
-        assert_eq!(messages.len(), 1);
-        assert_eq!(repaired_manifest.source_message_count(), 1);
+        assert!(error.contains("与 blocks 不一致"));
+        assert_eq!(stored_manifest.source_message_count(), 2);
         let _ = fs::remove_dir_all(root);
     }
 
     #[test]
-    fn message_store_ready_reader_should_repair_index_manifest_last_id_mismatch() {
+    fn message_store_ready_reader_should_reject_manifest_last_id_mismatch_without_writing() {
         let root = std::env::temp_dir().join(format!(
             "easy-call-message-store-index-last-id-mismatch-{}",
             Uuid::new_v4()
@@ -3671,20 +3681,19 @@ mod message_store_reader_tests {
         write_message_store_manifest_atomic(&paths.manifest_file, &manifest)
             .expect("write stale manifest");
 
-        let messages = read_ready_message_store_recent_messages(&paths, 1)
-            .expect("stale manifest last id should self-heal")
-            .expect("ready messages should exist");
-        let repaired_manifest = read_message_store_manifest(&paths.manifest_file)
-            .expect("read repaired manifest")
+        let error = read_ready_message_store_recent_messages(&paths, 1)
+            .expect_err("stale manifest last id must not self-heal during read");
+        let stored_manifest = read_message_store_manifest(&paths.manifest_file)
+            .expect("read stored manifest")
             .expect("manifest exists");
 
-        assert_eq!(messages.len(), 1);
-        assert_eq!(repaired_manifest.last_message_id(), "m1");
+        assert!(error.contains("与 blocks 不一致"));
+        assert_eq!(stored_manifest.last_message_id(), "wrong-last-id");
         let _ = fs::remove_dir_all(root);
     }
 
     #[test]
-    fn message_store_ready_reader_should_still_reject_broken_block_content() {
+    fn message_store_ready_reader_should_reject_broken_block_without_writing() {
         let root = std::env::temp_dir().join(format!(
             "easy-call-message-store-broken-block-{}",
             Uuid::new_v4()
@@ -3697,10 +3706,11 @@ mod message_store_reader_tests {
         let original = fs::read_to_string(&block_path).expect("read block");
         fs::write(&block_path, "x".repeat(original.len())).expect("corrupt block");
 
-        let err = read_ready_message_store_recent_messages(&paths, 1)
-            .expect_err("broken block content should still fail");
+        let error = read_ready_message_store_recent_messages(&paths, 1)
+            .expect_err("broken block content must not self-heal during read");
 
-        assert!(err.contains("校验会话块失败"));
+        assert!(error.contains("校验会话块失败") || error.contains("JSONL"));
+        assert!(block_path.exists());
         let _ = fs::remove_dir_all(root);
     }
 

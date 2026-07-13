@@ -201,7 +201,7 @@ async fn remote_im_restart_channel(
 }
 
 #[tauri::command]
-fn frontend_ready_start_remote_im_services(app: AppHandle) -> Result<bool, String> {
+async fn frontend_ready_start_remote_im_services(app: AppHandle) -> Result<bool, String> {
     static BACKGROUND_SERVICES_START_REQUESTED: std::sync::atomic::AtomicBool =
         std::sync::atomic::AtomicBool::new(false);
     if BACKGROUND_SERVICES_START_REQUESTED
@@ -217,12 +217,46 @@ fn frontend_ready_start_remote_im_services(app: AppHandle) -> Result<bool, Strin
         return Ok(false);
     }
 
-    runtime_log_info(format!("[启动] 前端已就绪，开始异步启动后台服务"));
     let startup_state = app.state::<AppState>().inner().clone();
+    refresh_conversation_meta_after_migration(startup_state.clone()).await;
+    runtime_log_info(format!("[启动] 迁移门闩已完成，开始异步启动后台服务"));
     tauri::async_runtime::spawn(async move {
         start_background_services_after_frontend_ready(app, startup_state).await;
     });
     Ok(true)
+}
+
+async fn refresh_conversation_meta_after_migration(state: AppState) {
+    let started = std::time::Instant::now();
+    let result = tokio::task::spawn_blocking(move || {
+        let chat_index = collect_chat_index_items_from_storage(&state.data_path)?;
+        let mut refreshed = 0usize;
+        for item in &chat_index {
+            if refresh_conversation_meta_shard_if_needed(&state.data_path, item.id.as_str())? {
+                refreshed += 1;
+            }
+        }
+        Ok::<(usize, usize), String>((chat_index.len(), refreshed))
+    })
+    .await;
+    match result {
+        Ok(Ok((total, refreshed))) => runtime_log_info(format!(
+            "[启动] 完成，任务=迁移后会话meta预热，conversation_count={}，refreshed={}，elapsed_ms={}",
+            total,
+            refreshed,
+            started.elapsed().as_millis()
+        )),
+        Ok(Err(err)) => runtime_log_warn(format!(
+            "[启动] 失败，任务=迁移后会话meta预热，error={}，elapsed_ms={}",
+            err,
+            started.elapsed().as_millis()
+        )),
+        Err(err) => runtime_log_warn(format!(
+            "[启动] 失败，任务=迁移后会话meta预热，error={}，elapsed_ms={}",
+            err,
+            started.elapsed().as_millis()
+        )),
+    }
 }
 
 /// 阶段 2 延迟初始化：在 backend_ready 之后异步执行，避免阻塞前端首屏渲染。
@@ -245,50 +279,6 @@ async fn run_deferred_setup(app_handle: AppHandle) {
     if let Err(err) = start_conversation_persist_worker(app_state.inner()) {
         runtime_log_error(format!("[启动-延迟] 启动会话后台持久化服务失败: {err}"));
     }
-    {
-        let meta_refresh_state = app_state.inner().clone();
-        tauri::async_runtime::spawn(async move {
-            let started = std::time::Instant::now();
-            let result = tokio::task::spawn_blocking(move || {
-                let chat_index = collect_chat_index_items_from_storage(&meta_refresh_state.data_path)?;
-                let mut refreshed = 0usize;
-                for item in &chat_index {
-                    if refresh_conversation_meta_shard_if_needed(
-                        &meta_refresh_state.data_path,
-                        item.id.as_str(),
-                    )? {
-                        refreshed += 1;
-                    }
-                }
-                Ok::<(usize, usize), String>((chat_index.len(), refreshed))
-            })
-            .await;
-            match result {
-                Ok(Ok((total, refreshed))) => {
-                    runtime_log_info(format!(
-                        "[启动-延迟] 完成，任务=会话meta预热，conversation_count={}，refreshed={}，elapsed_ms={}",
-                        total,
-                        refreshed,
-                        started.elapsed().as_millis()
-                    ));
-                }
-                Ok(Err(err)) => {
-                    runtime_log_warn(format!(
-                        "[启动-延迟] 失败，任务=会话meta预热，error={}，elapsed_ms={}",
-                        err,
-                        started.elapsed().as_millis()
-                    ));
-                }
-                Err(err) => {
-                    runtime_log_warn(format!(
-                        "[启动-延迟] 失败，任务=会话meta预热，error={}，elapsed_ms={}",
-                        err,
-                        started.elapsed().as_millis()
-                    ));
-                }
-            }
-        });
-    }
     emit_progress("启动录音热键探针");
     if let Err(err) = start_record_hotkey_probe(
         app_handle.clone(),
@@ -296,8 +286,6 @@ async fn run_deferred_setup(app_handle: AppHandle) {
     ) {
         runtime_log_error(format!("[启动-延迟] 启动录音热键探针失败: {err}"));
     }
-    emit_progress("启动静默更新检查");
-    start_github_auto_update_worker(app_handle.clone());
     emit_progress("配置自检");
     match state_read_config_cached(app_state.inner()) {
         Ok(mut config) => {
@@ -863,10 +851,6 @@ fn main() {
         runtime_log_error(format!("[自动更新] 清理便携版更新临时文件失败: {err}"));
     }
     init_last_panic_snapshot_slot(state.last_panic_snapshot.clone());
-    if let Err(err) = run_v3_chat_metadata_migration_at_startup(&state) {
-        runtime_log_error(format!("[启动] 聊天存储 v3 迁移失败，停止启动: {err}"));
-        return;
-    }
     {
         let panic_slot = state.last_panic_snapshot.clone();
         let previous_hook = std::panic::take_hook();
@@ -993,6 +977,8 @@ fn main() {
                 .store(true, std::sync::atomic::Ordering::Release);
             let _ = app_handle.emit("easy-call:backend-ready", ());
             runtime_log_info(format!("[启动] 后端就绪信号已发出（阶段 1 完成）"));
+
+            start_github_auto_update_worker(app_handle.clone());
 
             // ========== 阶段 2：异步完成剩余初始化 ==========
             let deferred_handle = app_handle.clone();

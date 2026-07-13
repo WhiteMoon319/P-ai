@@ -240,8 +240,26 @@ fn chat_metadata_store_v3_conversation_migration_key(conversation_id: &str) -> S
     format!("{CHAT_STORAGE_MIGRATION_KEY}:conversation:{conversation_id}")
 }
 
-fn chat_metadata_store_is_ready(data_path: &PathBuf) -> Result<bool, String> {
+pub(super) fn chat_metadata_store_is_ready(data_path: &PathBuf) -> Result<bool, String> {
     chat_metadata_store_migration_is_completed(data_path, CHAT_STORAGE_MIGRATION_KEY)
+}
+
+pub(super) fn chat_metadata_store_contains_conversation(
+    data_path: &PathBuf,
+    conversation_id: &str,
+) -> Result<bool, String> {
+    let conn = chat_metadata_store_open(data_path)?;
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM conversation_metadata WHERE conversation_id=?1)",
+        [conversation_id],
+        |row| row.get(0),
+    )
+    .map_err(|err| {
+        format!(
+            "确认 SQLite 会话是否存在失败，conversation_id={}，error={err}",
+            conversation_id
+        )
+    })
 }
 
 fn chat_metadata_store_read_messages_for_locators(
@@ -1622,7 +1640,7 @@ fn chat_metadata_store_collect_v2_conversation_paths(
         let entry = entry.map_err(|err| format!("读取 v2 会话目录项失败: {err}"))?;
         let path = entry.path();
         if path.extension().and_then(|value| value.to_str()) == Some("json") {
-            return Err(format!("v3 迁移前必须先完成 v1→v2，发现旧会话文件: {}", path.display()));
+            continue;
         }
         if !path.is_dir() {
             continue;
@@ -1660,24 +1678,61 @@ fn chat_metadata_store_cleanup_v2_metadata_files(
 }
 
 pub(super) fn chat_metadata_store_run_v3_migration(data_path: &PathBuf) -> Result<(), String> {
-    let paths = chat_metadata_store_collect_v2_conversation_paths(data_path)?;
     if chat_metadata_store_is_ready(data_path)? {
-        chat_metadata_store_recover_operations(data_path)?;
-        chat_metadata_store_cleanup_v2_metadata_files(&paths)?;
-        return Ok(());
+        return chat_metadata_store_recover_operations(data_path);
     }
+    let paths = chat_metadata_store_collect_v2_conversation_paths(data_path)?;
+    let mut migrated_paths = Vec::new();
+    let mut skipped_count = 0usize;
     for paths in &paths {
         let migration_key = chat_metadata_store_v3_conversation_migration_key(&paths.conversation_id);
         if chat_metadata_store_migration_is_completed(data_path, &migration_key)?
-            && chat_metadata_store_read_meta(paths)?.is_some()
+            && chat_metadata_store_contains_conversation(data_path, &paths.conversation_id)?
         {
+            migrated_paths.push(paths.clone());
             continue;
         }
-        chat_metadata_store_import_v2_conversation(paths)?;
-        chat_metadata_store_mark_migration_completed(data_path, &migration_key)?;
+        match recover_ready_jsonl_snapshot_manifest_from_directory(paths) {
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                skipped_count += 1;
+                runtime_log_warn(format!(
+                    "[聊天存储迁移] 跳过，任务=恢复v2 building会话，conversation_id={}",
+                    paths.conversation_id
+                ));
+                continue;
+            }
+            Err(err) => {
+                skipped_count += 1;
+                runtime_log_warn(format!(
+                    "[聊天存储迁移] 跳过，任务=恢复v2 building会话，conversation_id={}，异常={}",
+                    paths.conversation_id, err
+                ));
+                continue;
+            }
+        }
+        match chat_metadata_store_import_v2_conversation(paths) {
+            Ok(()) => {
+                chat_metadata_store_mark_migration_completed(data_path, &migration_key)?;
+                migrated_paths.push(paths.clone());
+            }
+            Err(err) => {
+                skipped_count += 1;
+                runtime_log_warn(format!(
+                    "[聊天存储迁移] 跳过，任务=v3会话迁移，conversation_id={}，异常={}",
+                    paths.conversation_id, err
+                ));
+            }
+        }
+    }
+    if skipped_count > 0 {
+        runtime_log_warn(format!(
+            "[聊天存储迁移] 完成，任务=v3逐会话迁移，跳过会话数={}",
+            skipped_count
+        ));
     }
     chat_metadata_store_mark_migration_completed(data_path, CHAT_STORAGE_MIGRATION_KEY)?;
-    chat_metadata_store_cleanup_v2_metadata_files(&paths)
+    chat_metadata_store_cleanup_v2_metadata_files(&migrated_paths)
 }
 
 fn chat_metadata_store_compaction_segment(
@@ -2107,6 +2162,45 @@ fn v3_chat_metadata_migration_should_import_v2_metadata_and_remove_v2_files() {
 
 #[cfg(test)]
 #[test]
+fn v3_chat_metadata_migration_should_recover_building_from_blocks_and_drop_bad_lines() {
+    let root = std::env::temp_dir().join(format!("eca-chat-v3-recover-building-{}", Uuid::new_v4()));
+    let data_path = root.join("app_data.json");
+    let message = |id: &str| ChatMessage {
+        id: id.to_string(),
+        role: "user".to_string(),
+        created_at: now_iso(),
+        speaker_agent_id: None,
+        parts: vec![MessagePart::Text { text: id.to_string(), reasoning_content: None }],
+        extra_text_blocks: Vec::new(),
+        provider_meta: None,
+        tool_call: None,
+        mcp_call: None,
+        meme_annotations: None,
+    };
+    let conversation = Conversation {
+        id: "conv-v3-recover-building".to_string(), title: "恢复 building".to_string(), agent_id: DEFAULT_AGENT_ID.to_string(), department_id: String::new(), bound_conversation_id: None, parent_conversation_id: None, child_conversation_ids: Vec::new(), fork_message_cursor: None, unread_count: 0, conversation_kind: CONVERSATION_KIND_CHAT.to_string(), root_conversation_id: None, delegate_id: None, created_at: now_iso(), updated_at: now_iso(), last_user_at: None, last_assistant_at: None, status: "active".to_string(), summary: String::new(), user_profile_snapshot: String::new(), shell_workspace_path: None, shell_workspaces: Vec::new(), shell_autonomous_mode: false, archived_at: None, messages: vec![message("m1"), message("m2")], fast_request_turns: Vec::new(), current_todos: Vec::new(), memory_recall_table: Vec::new(), plan_mode_enabled: false, preferred_api_config_id: None, auto_push_remote_contact_id: None, active_goal: None, cumulative_usage: ConversationCumulativeUsage::default(),
+    };
+    let paths = message_store_paths(&data_path, &conversation.id).expect("paths");
+    write_jsonl_snapshot_directory_shard(&paths, &conversation).expect("write v2 fixture");
+    let block_path = paths.blocks_dir.join("000000.jsonl");
+    let mut block = fs::read_to_string(&block_path).expect("read block");
+    block.push_str("{broken json line}\n");
+    block.push_str(&encode_jsonl_snapshot_message(&message("m3")).expect("encode tail message"));
+    fs::write(&block_path, block).expect("write interrupted block");
+    let building = MessageStoreManifest::jsonl_snapshot_building(&conversation);
+    write_message_store_manifest_atomic(&paths.manifest_file, &building).expect("write building manifest");
+
+    chat_metadata_store_run_v3_migration(&data_path).expect("recover building and migrate v3");
+
+    let page = chat_metadata_store_read_recent_page(&paths, 10, false).expect("read recovered messages");
+    assert_eq!(page.messages.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(), vec!["m1", "m2", "m3"]);
+    assert!(!fs::read_to_string(&block_path).expect("read repaired block").contains("broken json line"));
+    let _ = fs::remove_dir_all(root);
+}
+
+
+#[cfg(test)]
+#[test]
 fn v3_chat_metadata_mutations_should_publish_only_sql_locator_and_blocks() {
     let root = std::env::temp_dir().join(format!("eca-chat-v3-mutations-{}", Uuid::new_v4()));
     let data_path = root.join("app_data.json");
@@ -2273,14 +2367,16 @@ fn v3_chat_metadata_mutations_should_publish_only_sql_locator_and_blocks() {
 
 #[cfg(test)]
 #[test]
-fn v3_chat_metadata_migration_should_refuse_legacy_conversation_file() {
+fn v3_chat_metadata_migration_should_keep_legacy_conversation_file_without_blocking() {
     let root = std::env::temp_dir().join(format!("eca-chat-v3-legacy-{}", Uuid::new_v4()));
     let data_path = root.join("app_data.json");
     let legacy_dir = app_layout_chat_conversations_dir(&data_path);
     fs::create_dir_all(&legacy_dir).expect("create legacy chat dir");
     fs::write(legacy_dir.join("legacy.json"), "{}").expect("write legacy conversation");
-    let error = chat_metadata_store_run_v3_migration(&data_path).expect_err("legacy must block v3");
-    assert!(error.contains("v1→v2"));
+    chat_metadata_store_run_v3_migration(&data_path)
+        .expect("legacy must not block v3 startup migration");
+    assert!(legacy_dir.join("legacy.json").exists());
+    assert!(chat_metadata_store_is_ready(&data_path).expect("global v3 may advance"));
     let _ = fs::remove_dir_all(root);
 }
 

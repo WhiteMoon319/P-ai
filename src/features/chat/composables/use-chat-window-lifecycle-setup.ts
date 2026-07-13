@@ -45,13 +45,8 @@ export function useChatWindowLifecycleSetup(bindings: Record<string, any>) {
         bindings.setStatus(`启动步骤失败：${label}：${bindings.formatRequestFailed(error)}`);
       },
       afterSafetyGateReady: async () => {
-        void invokeTauri<boolean>("frontend_ready_start_remote_im_services")
-          .then((started) => {
-            console.info("[启动] 前端 mounted ready 已通知后端启动后台服务", { started });
-          })
-          .catch((error) => {
-            console.warn("[启动] 通知后端启动后台服务失败", error);
-          });
+        const started = await invokeTauri<boolean>("frontend_ready_start_remote_im_services");
+        console.info("[启动] 迁移后会话准备完成，已通知后端启动后台服务", { started });
       },
       afterMountedReady: async () => {
         await bindings.initializeDetachedChatWindow();

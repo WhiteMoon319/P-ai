@@ -18,6 +18,7 @@ fn lock_message_store_migration() -> std::sync::MutexGuard<'static, ()> {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct MessageStoreMigrationPreflightReport {
+    migration_required: bool,
     total_conversations: usize,
     ready_count: usize,
     legacy_count: usize,
@@ -39,10 +40,7 @@ struct MessageStoreMigrationPreflightItem {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RunMessageStoreMigrationInput {
-    #[serde(default)]
-    discard_invalid: bool,
-}
+struct RunMessageStoreMigrationInput {}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -249,34 +247,12 @@ fn preflight_message_store_conversation(
                 }
                 return item;
             }
-            match message_store::recover_ready_jsonl_snapshot_manifest_from_directory(&paths) {
-                Ok(Some(manifest)) => {
-                    return preflight_ready_message_store_conversation(
-                        &paths,
-                        conversation_id,
-                        manifest.source_message_count(),
-                    );
-                }
-                Ok(None) => {}
-                Err(err) => {
-                    return MessageStoreMigrationPreflightItem {
-                        conversation_id: conversation_id.to_string(),
-                        title: String::new(),
-                        status: "blocked".to_string(),
-                        message_count: status.source_message_count,
-                        reason: Some(err),
-                    };
-                }
-            }
             MessageStoreMigrationPreflightItem {
                 conversation_id: conversation_id.to_string(),
                 title: String::new(),
-                status: "blocked".to_string(),
+                status: "ready".to_string(),
                 message_count: status.source_message_count,
-                reason: Some(format!(
-                    "消息仓库 manifest 未处于 ready JSONL 状态：kind={}，state={}",
-                    status.message_store_kind, status.migration_state
-                )),
+                reason: None,
             }
         }
         Ok(None) => preflight_legacy_conversation(data_path, conversation_id),
@@ -292,6 +268,7 @@ fn preflight_message_store_conversation(
 
 fn empty_message_store_migration_preflight_report() -> MessageStoreMigrationPreflightReport {
     MessageStoreMigrationPreflightReport {
+        migration_required: false,
         total_conversations: 0,
         ready_count: 0,
         legacy_count: 0,
@@ -302,45 +279,9 @@ fn empty_message_store_migration_preflight_report() -> MessageStoreMigrationPref
     }
 }
 
-fn run_v3_chat_metadata_migration_at_startup(state: &AppState) -> Result<(), String> {
-    let runtime = state_read_runtime_state_cached(state)?;
-    if runtime.message_store_migration_version < DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES {
-        let conversations_dir = app_layout_chat_conversations_dir(&state.data_path);
-        if let Ok(entries) = fs::read_dir(conversations_dir) {
-            for entry in entries.flatten() {
-                if entry.path().extension().and_then(|value| value.to_str()) == Some("json") {
-                    return Err(format!(
-                        "聊天存储 v3 迁移前置条件未满足：发现 v1 会话文件 {}，必须先完成既有 v1→v2 迁移",
-                        entry.path().display()
-                    ));
-                }
-            }
-        }
-    }
-    message_store::chat_metadata_store_run_v3_migration(&state.data_path)?;
-    let mut runtime = state_read_runtime_state_cached(state)?;
-    runtime.message_store_migration_version = DATA_MIGRATION_VERSION_V3_CHAT_METADATA_SQLITE;
-    state_write_runtime_state_cached(state, &runtime)?;
-    Ok(())
-}
-
 fn message_store_migration_current_version_recorded(state: &AppState) -> Result<bool, String> {
     Ok(state_read_runtime_state_cached(state)?.message_store_migration_version
         >= DATA_MIGRATION_CURRENT_VERSION)
-}
-
-fn record_data_migration_current_version(state: &AppState) -> Result<(), String> {
-    let mut runtime = state_read_runtime_state_cached(state)?;
-    if runtime.message_store_migration_version >= DATA_MIGRATION_CURRENT_VERSION {
-        return Ok(());
-    }
-    runtime.message_store_migration_version = DATA_MIGRATION_CURRENT_VERSION;
-    state_write_runtime_state_cached(state, &runtime)?;
-    runtime_log_info(format!(
-        "[消息存储迁移] 完成 task=record_message_store_migration_current_version version={}",
-        DATA_MIGRATION_CURRENT_VERSION
-    ));
-    Ok(())
 }
 
 fn build_message_store_migration_preflight_report(
@@ -358,6 +299,7 @@ fn build_message_store_migration_preflight_report(
     let busy_count = items.iter().filter(|item| item.status == "busy").count();
     let blocked_count = items.iter().filter(|item| item.status == "blocked").count();
     MessageStoreMigrationPreflightReport {
+        migration_required: true,
         total_conversations: items.len(),
         ready_count,
         legacy_count,
@@ -376,40 +318,7 @@ fn check_message_store_migration(
     if message_store_migration_current_version_recorded(&state)? {
         return Ok(empty_message_store_migration_preflight_report());
     }
-    let report = build_message_store_migration_preflight_report(&state);
-    if report.blocked_count == 0 && report.legacy_count == 0 {
-        record_data_migration_current_version(&state)?;
-    }
-    Ok(report)
-}
-
-fn discard_message_store_migration_item(
-    state: &AppState,
-    item: &MessageStoreMigrationPreflightItem,
-) -> Result<bool, String> {
-    let conversation_id = item.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Ok(false);
-    }
-    let _ = message_store::message_store_paths(&state.data_path, conversation_id)?;
-    let conversation_file = app_layout_chat_conversation_path(&state.data_path, conversation_id);
-    let mut changed = false;
-    if conversation_file.exists() {
-        fs::remove_file(&conversation_file).map_err(|err| {
-            format!(
-                "删除异常旧会话文件失败，path={}，error={err}",
-                conversation_file.display()
-            )
-        })?;
-        changed = true;
-    }
-    changed |= delete_conversation_shard(&state.data_path, conversation_id)?;
-    runtime_log_error(format!(
-        "[消息存储迁移] 抛弃异常会话：conversation_id={}，mode=delete，reason={}",
-        conversation_id,
-        item.reason.as_deref().unwrap_or("未提供原因")
-    ));
-    Ok(changed)
+    Ok(build_message_store_migration_preflight_report(&state))
 }
 
 fn refresh_message_store_migration_caches(state: &AppState) -> Result<(), String> {
@@ -442,7 +351,7 @@ fn refresh_message_store_migration_caches(state: &AppState) -> Result<(), String
 fn run_message_store_migration(
     app: AppHandle,
     state: State<'_, AppState>,
-    input: RunMessageStoreMigrationInput,
+    _input: RunMessageStoreMigrationInput,
 ) -> Result<MessageStoreMigrationRunReport, String> {
     let _migration_guard = lock_message_store_migration();
     let mut report = MessageStoreMigrationRunReport {
@@ -454,6 +363,15 @@ fn run_message_store_migration(
     if message_store_migration_current_version_recorded(&state)? {
         return Ok(report);
     }
+    let mut runtime = state_read_runtime_state_cached(&state)?;
+    if runtime.message_store_migration_version
+        >= DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES
+    {
+        message_store::chat_metadata_store_run_v3_migration(&state.data_path)?;
+        runtime.message_store_migration_version = DATA_MIGRATION_VERSION_V3_CHAT_METADATA_SQLITE;
+        state_write_runtime_state_cached(&state, &runtime)?;
+        return Ok(report);
+    }
     let preflight = build_message_store_migration_preflight_report(&state);
     let blocked = preflight
         .items
@@ -461,19 +379,7 @@ fn run_message_store_migration(
         .filter(|item| item.status == "blocked")
         .cloned()
         .collect::<Vec<_>>();
-    if !blocked.is_empty() && !input.discard_invalid {
-        return Err(format!(
-            "消息仓库迁移预验证失败：blocked_count={}，请确认是否抛弃异常会话后继续",
-            blocked.len()
-        ));
-    }
-    if !blocked.is_empty() {
-        for item in &blocked {
-            if discard_message_store_migration_item(&state, item)? {
-                report.discarded_count += 1;
-            }
-        }
-    }
+    report.failed_count += blocked.len();
 
     let runnable_items = preflight
         .items
@@ -548,7 +454,12 @@ fn run_message_store_migration(
         }
     }
     refresh_message_store_migration_caches(&state)?;
-    record_data_migration_current_version(&state)?;
+    runtime.message_store_migration_version =
+        DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES;
+    state_write_runtime_state_cached(&state, &runtime)?;
+    message_store::chat_metadata_store_run_v3_migration(&state.data_path)?;
+    runtime.message_store_migration_version = DATA_MIGRATION_VERSION_V3_CHAT_METADATA_SQLITE;
+    state_write_runtime_state_cached(&state, &runtime)?;
     Ok(report)
 }
 
@@ -785,6 +696,7 @@ mod message_store_migration_gate_tests {
         assert!(!message_store_migration_current_version_recorded(&state).expect("read gate"));
         assert_eq!(report.legacy_count, 1);
         assert_eq!(report.items[0].status, "legacyReadyToMigrate");
+
         let _ = fs::remove_dir_all(root);
     }
 }
