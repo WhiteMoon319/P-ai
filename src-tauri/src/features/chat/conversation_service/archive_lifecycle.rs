@@ -807,6 +807,114 @@ impl ConversationServiceV2 {
             selected_archive_id,
         })
     }
+    fn archive_conversation(
+        &self,
+        state: &AppState,
+        selected_api: &ApiConfig,
+        source: &Conversation,
+        archive_reason: &str,
+    ) -> Result<InstantArchiveConversationMutationResult, String> {
+        let mutation_gate = conversation_mutation_gate(&state.data_path, &source.id)?;
+        let guard = mutation_gate.lock().map_err(|err| {
+            named_lock_error(
+                "conversation_mutation_gate",
+                file!(),
+                line!(),
+                module_path!(),
+                &err,
+            )
+        })?;
+        let source_conversation_meta = self
+            .get_conversation_meta(state, &source.id)
+            .map_err(|err| format!("当前没有可归档的活动对话：{}", err))?;
+        let source_conversation =
+            self.build_conversation_record_from_meta_view(&source_conversation_meta);
+        let already_archived = source_conversation_meta.status.trim() == "archived";
+        if !already_archived
+            && !self.conversation_meta_is_local_normal_chat_meta_view(&source_conversation_meta)
+        {
+            drop(guard);
+            return Err("当前没有可归档的活动对话。".to_string());
+        }
+
+        let runtime = state_read_runtime_state_cached(state)?;
+        let runtime_snapshot = load_runtime_organization_snapshot(state)?;
+        let agents = runtime_snapshot.agents;
+        let chat_index = state_read_chat_index_cached(state)?;
+        let active_conversation_id = if let Some(conversation_id) = chat_index
+            .conversations
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, item)| {
+                let conversation_meta = self.get_conversation_meta(state, item.id.as_str()).ok()?;
+                Some((idx, conversation_meta))
+            })
+            .filter(|(_, conversation_meta)| {
+                conversation_meta.id != source.id
+                    && self.conversation_meta_is_local_normal_chat_meta_view(conversation_meta)
+            })
+            .max_by(|(idx_a, a), (idx_b, b)| {
+                let a_updated = a.updated_at.trim();
+                let b_updated = b.updated_at.trim();
+                let a_created = a.created_at.trim();
+                let b_created = b.created_at.trim();
+                a_updated
+                    .cmp(b_updated)
+                    .then_with(|| a_created.cmp(b_created))
+                    .then_with(|| idx_a.cmp(idx_b))
+            })
+            .map(|(_, conversation_meta)| conversation_meta.id.to_string())
+        {
+            conversation_id
+        } else {
+            let conversation = build_archive_replacement_conversation(
+                state,
+                &agents,
+                &runtime.assistant_department_agent_id,
+                selected_api,
+                source,
+            )?;
+            let conversation_id = conversation.id.clone();
+            state_schedule_conversation_persist(state, &conversation)?;
+            conversation_id
+        };
+
+        if !already_archived {
+            let previous_status = source_conversation.status.clone();
+            let now = now_iso();
+            let (conversation, (), _) = state_update_conversation_metadata_cached(
+                state,
+                &source.id,
+                |conversation| {
+                    conversation.status = "archived".to_string();
+                    conversation.summary.clear();
+                    conversation.fast_request_turns.clear();
+                    conversation.archived_at = Some(now.clone());
+                    conversation.updated_at = now.clone();
+                    Ok(())
+                },
+            )?;
+            runtime_log_info(format!(
+                "[归档] 完成，任务=即时标记归档，conversation_id={}，previous_status={}，reason={}，archived_at={}",
+                conversation.id,
+                previous_status,
+                archive_reason,
+                conversation.archived_at.as_deref().unwrap_or("")
+            ));
+        }
+        let app_config = runtime_snapshot.config;
+        let unarchived_conversations =
+            self.collect_unarchived_conversation_summaries_cached(state, &app_config)?;
+        let overview_payload = UnarchivedConversationOverviewUpdatedPayload {
+            preferred_conversation_id: Some(active_conversation_id.clone()),
+            unarchived_conversations,
+        };
+        drop(guard);
+        Ok(InstantArchiveConversationMutationResult {
+            active_conversation_id,
+            overview_payload,
+            already_archived,
+        })
+    }
 
 }
-
