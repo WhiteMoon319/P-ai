@@ -10237,6 +10237,10 @@
             .join("chat")
             .join("conversation_service")
             .join("remote_im_sessions.rs");
+        let allowed_archive_lifecycle = features_root
+            .join("chat")
+            .join("conversation_service")
+            .join("archive_lifecycle.rs");
         // 既有归档命令仍持有两处全局锁；保留精确例外，禁止扩散到其他命令文件。
         let allowed_legacy_conversation_archive = features_root
             .join("system")
@@ -10248,6 +10252,7 @@
         for path in collect_rs_files(&features_root) {
             if path == allowed_main
                 || path == allowed_remote_im_sessions
+                || path == allowed_archive_lifecycle
                 || path == allowed_legacy_conversation_archive
                 || path == self_test_file
             {
