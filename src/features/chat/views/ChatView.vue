@@ -1109,6 +1109,7 @@ const { chatRenderItems, messageMemoKey } = useChatVirtualList({
 });
 
 const virtualRenderItems = computed<ChatRenderItem[]>(() => [...chatRenderItems.value]);
+const olderHistoryCorrectionAllowed = ref(false);
 const showNoMoreHistoryDivider = computed(() =>
   !!String(props.activeConversationId || "").trim()
   && props.messageBlocks.length > 0
@@ -1188,6 +1189,7 @@ const {
   latestOwnElasticItemId,
   latestOwnElasticMinHeight,
   chatting: toRef(props, "chatting"),
+  olderHistoryCorrectionAllowed,
   debugEnabled: computed(() => !sidebarMode.value),
   onUserScroll: () => onScroll(),
 });
@@ -1425,6 +1427,7 @@ const {
   scrollConversationToBottomLightweight: scrollVirtualizerToConversationBottomLightweight,
   resetConversationToBottom: resetVirtualizerAtConversationBottom,
   refreshObservedVirtualItemElements,
+  olderHistoryCorrectionAllowed,
   props: {
     hasMoreHistory: toRef(props, "hasMoreHistory"), loadingOlderHistory: toRef(props, "loadingOlderHistory"),
     chatting: toRef(props, "chatting"), conversationBusy: conversationInteractionBusy, frozen: toRef(props, "frozen"),

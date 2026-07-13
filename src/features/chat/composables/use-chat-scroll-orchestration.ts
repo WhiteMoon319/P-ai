@@ -10,6 +10,7 @@ export interface UseChatScrollOrchestrationOptions {
   resetConversationToBottom: (behavior?: "auto" | "smooth") => void;
   scrollConversationToBottomLightweight: (behavior?: "auto" | "smooth") => void;
   refreshObservedVirtualItemElements: () => void;
+  olderHistoryCorrectionAllowed?: Ref<boolean>;
   props: {
     hasMoreHistory: Ref<boolean>;
     loadingOlderHistory: Ref<boolean>;
@@ -37,6 +38,7 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
     resetConversationToBottom,
     scrollConversationToBottomLightweight,
     refreshObservedVirtualItemElements,
+    olderHistoryCorrectionAllowed,
     props,
     emit,
   } = options;
@@ -76,11 +78,17 @@ export function useChatScrollOrchestration(options: UseChatScrollOrchestrationOp
     clearOlderHistoryReleaseTimer();
     olderHistoryCooldownUntil = 0;
     olderHistoryRequestPending.value = false;
+    if (olderHistoryCorrectionAllowed) {
+      olderHistoryCorrectionAllowed.value = false;
+    }
   }
 
   function armOlderHistoryRequestGate() {
     clearOlderHistoryReleaseTimer();
     olderHistoryRequestPending.value = true;
+    if (olderHistoryCorrectionAllowed) {
+      olderHistoryCorrectionAllowed.value = true;
+    }
     olderHistoryCooldownUntil = Date.now() + OLDER_HISTORY_MAX_COOLDOWN_MS;
     pendingOlderHistoryReleaseTimer = window.setTimeout(() => {
       pendingOlderHistoryReleaseTimer = 0;

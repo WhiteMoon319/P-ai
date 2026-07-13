@@ -11,6 +11,7 @@ interface UseChatVirtualScrollOptions {
   latestOwnElasticItemId: Ref<string>;
   latestOwnElasticMinHeight: Ref<number>;
   chatting?: Ref<boolean> | boolean;
+  olderHistoryCorrectionAllowed?: Ref<boolean> | boolean;
   debugEnabled?: Ref<boolean> | boolean;
   onUserScroll: () => void;
 }
@@ -24,6 +25,7 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     latestOwnElasticItemId,
     latestOwnElasticMinHeight,
     chatting,
+    olderHistoryCorrectionAllowed,
     debugEnabled,
     onUserScroll,
   } = options;
@@ -93,6 +95,13 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     return !!configured;
   }
 
+  function olderHistoryCorrectionActive(): boolean {
+    const configured = typeof olderHistoryCorrectionAllowed === "object" && olderHistoryCorrectionAllowed && "value" in olderHistoryCorrectionAllowed
+      ? olderHistoryCorrectionAllowed.value
+      : olderHistoryCorrectionAllowed;
+    return !!configured;
+  }
+
   function virtualizerScrollToFn(
     offset: number,
     options: { adjustments?: number; behavior?: ScrollBehavior },
@@ -106,7 +115,11 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     // -> _scrollToOffset -> scrollToFn，把 scrollTop 连续往下补，维持距底部固定偏移。
     // 这会让聊天窗口在流式期间“自己往下走”。尺寸变化既可能携带 adjustments，
     // 也可能以普通 offset 重定位，因此流式期间只放行我们明确发起的滚动到底。
-    if ((chatStreamingActive() || completionLayoutGuardActive) && !explicitVirtualScrollActive) {
+    if (
+      (chatStreamingActive() || completionLayoutGuardActive)
+      && !explicitVirtualScrollActive
+      && !olderHistoryCorrectionActive()
+    ) {
       return;
     }
     scrollEl.scrollTo({
