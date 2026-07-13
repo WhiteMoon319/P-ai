@@ -1306,6 +1306,7 @@
     "runtimeIdle": "Idle",
     "runtimeStreaming": "Replying",
     "runtimeOrganizing": "Organizing",
+    "runtimeTyping": "Typing......",
     "previewImage": "[Image]",
     "previewPdf": "[PDF]",
     "previewAudio": "[Audio]",

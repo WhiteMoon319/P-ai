@@ -19,9 +19,9 @@
           <div class="avatar">
             <div class="flex h-10 w-10 items-center justify-center rounded-full bg-neutral text-neutral-content">
               <img
-                v-if="lastSpeakerAvatarUrl(item)"
-                :src="lastSpeakerAvatarUrl(item)"
-                :alt="lastSpeakerLabel(item)"
+                v-if="displaySpeakerAvatarUrl(item)"
+                :src="displaySpeakerAvatarUrl(item)"
+                :alt="displaySpeakerLabel(item)"
                 class="h-10 w-10 rounded-full object-cover"
               />
               <span v-else class="text-sm font-bold">{{ conversationInitial(item) }}</span>
@@ -54,6 +54,7 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
 import { stripToolcallMarkers } from "../../../utils/chat-message-semantics";
 
 type ConversationListItem = {
@@ -63,6 +64,7 @@ type ConversationListItem = {
   updatedAt: string;
   lastMessageAt?: string;
   departmentName?: string;
+  agentId?: string;
   runtimeState?: string;
   detachedWindowOpen?: boolean;
   detachedWindowLabel?: string;
@@ -95,6 +97,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   select: [conversationId: string];
 }>();
+const { t } = useI18n();
 
 function formatDate(value: string) {
   if (!value) return "";
@@ -108,7 +111,7 @@ function displayTitle(item: ConversationListItem): string {
 }
 
 function conversationInitial(item: ConversationListItem): string {
-  const text = lastSpeakerLabel(item) || displayTitle(item) || item.departmentName || "?";
+  const text = displaySpeakerLabel(item) || displayTitle(item) || item.departmentName || "?";
   return text.trim()[0]?.toUpperCase() || "?";
 }
 
@@ -141,7 +144,34 @@ function lastSpeakerAvatarUrl(item: ConversationListItem): string {
   return String(props.persona.personaAvatarUrlMap?.[speakerId] || "").trim();
 }
 
+function conversationAssistantId(item: ConversationListItem): string {
+  return String(item.agentId || "").trim();
+}
+
+function conversationAssistantLabel(item: ConversationListItem): string {
+  const agentId = conversationAssistantId(item);
+  if (!agentId) return lastSpeakerLabel(item);
+  return String(props.persona.personaNameMap?.[agentId] || agentId).trim();
+}
+
+function conversationAssistantAvatarUrl(item: ConversationListItem): string {
+  const agentId = conversationAssistantId(item);
+  if (!agentId) return "";
+  return String(props.persona.personaAvatarUrlMap?.[agentId] || "").trim();
+}
+
+function displaySpeakerLabel(item: ConversationListItem): string {
+  if (!conversationBusy(item)) return lastSpeakerLabel(item);
+  return conversationAssistantLabel(item);
+}
+
+function displaySpeakerAvatarUrl(item: ConversationListItem): string {
+  if (!conversationBusy(item)) return lastSpeakerAvatarUrl(item);
+  return conversationAssistantAvatarUrl(item) || lastSpeakerAvatarUrl(item);
+}
+
 function previewLine(item: ConversationListItem): string {
+  if (conversationBusy(item)) return t("chat.runtimeTyping");
   const latest = lastPreviewMessage(item);
   if (latest) {
     const text = stripToolcallMarkers(latest.textPreview || "");
@@ -152,6 +182,11 @@ function previewLine(item: ConversationListItem): string {
     if (latest.hasAttachment) return "[附件]";
   }
   return String(item.departmentName || "").trim() || "暂无消息";
+}
+
+function conversationBusy(item: ConversationListItem): boolean {
+  const state = String(item.runtimeState || "").trim();
+  return state === "assistant_streaming" || state === "organizing_context" || state === "archiving" || state === "compacting";
 }
 
 function unreadCount(item: ConversationListItem): string {

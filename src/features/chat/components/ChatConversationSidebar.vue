@@ -128,12 +128,12 @@
                         <div class="avatar relative overflow-visible">
                           <div class="flex h-10 w-10 items-center justify-center rounded-full bg-neutral text-neutral-content">
                             <img
-                              v-if="sideListLastSpeakerAvatarUrl(item)"
-                              :src="sideListLastSpeakerAvatarUrl(item)"
-                              :alt="sideListLastSpeakerLabel(item)"
+                              v-if="sideListDisplaySpeakerAvatarUrl(item)"
+                              :src="sideListDisplaySpeakerAvatarUrl(item)"
+                              :alt="sideListDisplaySpeakerLabel(item)"
                               class="w-10 h-10 rounded-full object-cover"
                             />
-                            <span v-else class="text-sm font-bold">{{ sideListLastSpeakerInitial(item) }}</span>
+                            <span v-else class="text-sm font-bold">{{ sideListDisplaySpeakerInitial(item) }}</span>
                           </div>
                           <span
                             v-if="isRecentConversationSection(section.key)"
@@ -245,7 +245,7 @@
                           {{ latestPreviewLine(item) }}
                         </span>
                         <div class="flex shrink-0 items-center gap-2">
-                          <span v-if="conversationPipelineStatus(item) === 'busy' || conversationRuntimeBusy(item)" class="loading loading-spinner loading-xs text-primary" :title="conversationStatusText(item)"></span>
+                          <span v-if="conversationBusy(item)" class="loading loading-spinner loading-xs text-primary" :title="conversationStatusText(item)"></span>
                           <span v-else-if="conversationPipelineStatus(item) === 'error'" class="badge badge-error badge-xs">{{ t("common.failed") }}</span>
                           <span v-else-if="conversationStatusText(item)" class="text-[11px] text-base-content/60">{{ conversationStatusText(item) }}</span>
                           <span
@@ -1405,6 +1405,10 @@ function conversationRuntimeBusy(item: ChatConversationOverviewItem): boolean {
     || item.runtimeState === "compacting";
 }
 
+function conversationBusy(item: ChatConversationOverviewItem): boolean {
+  return conversationPipelineStatus(item) === "busy" || conversationRuntimeBusy(item);
+}
+
 function conversationStatusText(item: ChatConversationOverviewItem): string {
   if (item.runtimeState && item.runtimeState !== "idle") return runtimeStateText(item.runtimeState);
   const pipelineStatus = conversationPipelineStatus(item);
@@ -1449,6 +1453,7 @@ function hasVisiblePreview(preview: ConversationPreviewMessage): boolean {
 }
 
 function latestPreviewLine(item: ChatConversationOverviewItem): string {
+  if (conversationBusy(item)) return t("chat.runtimeTyping");
   const previews = normalizedPreviewMessages(item);
   const latestPreview = [...previews].reverse().find(hasVisiblePreview);
   if (!latestPreview) return t("chat.conversationNoPreview");
@@ -1495,6 +1500,37 @@ function sideListLastSpeakerAvatarUrl(item: ChatConversationOverviewItem): strin
   }
   return props.personaAvatarUrlMap?.[speakerId] || "";
 }
+
+function sideListConversationAssistantId(item: ChatConversationOverviewItem): string {
+  return String(item.agentId || "").trim();
+}
+
+function sideListConversationAssistantLabel(item: ChatConversationOverviewItem): string {
+  const agentId = sideListConversationAssistantId(item);
+  if (!agentId) return sideListLastSpeakerLabel(item);
+  return props.personaNameMap?.[agentId] || agentId;
+}
+
+function sideListConversationAssistantAvatarUrl(item: ChatConversationOverviewItem): string {
+  const agentId = sideListConversationAssistantId(item);
+  if (!agentId) return "";
+  return props.personaAvatarUrlMap?.[agentId] || "";
+}
+
+function sideListDisplaySpeakerLabel(item: ChatConversationOverviewItem): string {
+  if (!conversationBusy(item)) return sideListLastSpeakerLabel(item);
+  return sideListConversationAssistantLabel(item);
+}
+
+function sideListDisplaySpeakerInitial(item: ChatConversationOverviewItem): string {
+  return sideListDisplaySpeakerLabel(item).charAt(0).toUpperCase() || "?";
+}
+
+function sideListDisplaySpeakerAvatarUrl(item: ChatConversationOverviewItem): string {
+  if (!conversationBusy(item)) return sideListLastSpeakerAvatarUrl(item);
+  return sideListConversationAssistantAvatarUrl(item) || sideListLastSpeakerAvatarUrl(item);
+}
+
 </script>
 
 <style scoped>

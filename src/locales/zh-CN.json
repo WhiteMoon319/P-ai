@@ -1417,6 +1417,7 @@
     "runtimeIdle": "空闲",
     "runtimeStreaming": "回复中",
     "runtimeOrganizing": "整理中",
+    "runtimeTyping": "正在输入......",
     "previewImage": "[图片]",
     "previewPdf": "[PDF]",
     "previewAudio": "[语音]",

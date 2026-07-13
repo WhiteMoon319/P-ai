@@ -74,13 +74,13 @@
                   <div class="avatar relative overflow-visible">
                     <div class="w-10 h-10 rounded-full bg-error text-error-content">
                       <img
-                        v-if="lastSpeakerAvatarUrl(item)"
-                        :src="lastSpeakerAvatarUrl(item)"
-                        :alt="lastSpeakerLabel(item)"
+                        v-if="displaySpeakerAvatarUrl(item)"
+                        :src="displaySpeakerAvatarUrl(item)"
+                        :alt="displaySpeakerLabel(item)"
                         class="w-10 h-10 rounded-full object-cover"
                       />
                       <span v-else class="flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold">
-                        {{ lastSpeakerInitial(item) }}
+                        {{ displaySpeakerInitial(item) }}
                       </span>
                     </div>
                     <span
@@ -193,7 +193,7 @@
                     {{ latestPreviewLine(item) }}
                   </span>
                   <div class="flex shrink-0 items-center gap-2">
-                    <span v-if="conversationPipelineStatus(item) === 'busy' || conversationRuntimeBusy(item)" class="loading loading-spinner loading-xs text-primary" :title="conversationStatusText(item)"></span>
+                    <span v-if="conversationBusy(item)" class="loading loading-spinner loading-xs text-primary" :title="conversationStatusText(item)"></span>
                     <span v-else-if="conversationPipelineStatus(item) === 'error'" class="badge badge-error badge-xs">{{ t("common.failed") }}</span>
                     <span v-else-if="conversationStatusText(item)" class="text-[11px] text-base-content/60">{{ conversationStatusText(item) }}</span>
                     <span
@@ -660,6 +660,10 @@ function conversationRuntimeBusy(item: ChatConversationOverviewItem): boolean {
     || item.runtimeState === "compacting";
 }
 
+function conversationBusy(item: ChatConversationOverviewItem): boolean {
+  return conversationPipelineStatus(item) === "busy" || conversationRuntimeBusy(item);
+}
+
 function conversationStatusText(item: ChatConversationOverviewItem): string {
   if (item.runtimeState && item.runtimeState !== "idle") return runtimeStateText(item.runtimeState);
   const pipelineStatus = conversationPipelineStatus(item);
@@ -735,6 +739,7 @@ function hasVisiblePreview(preview: ConversationPreviewMessage): boolean {
 }
 
 function latestPreviewLine(item: ChatConversationOverviewItem): string {
+  if (conversationBusy(item)) return t("chat.runtimeTyping");
   const previews = normalizedPreviewMessages(item);
   const latestPreview = [...previews].reverse().find(hasVisiblePreview);
   if (!latestPreview) return t("chat.conversationNoPreview");
@@ -790,6 +795,37 @@ function lastSpeakerAvatarUrl(item: ChatConversationOverviewItem): string {
 
   return props.personaAvatarUrlMap?.[speakerId] || "";
 }
+
+function conversationAssistantId(item: ChatConversationOverviewItem): string {
+  return String(item.agentId || "").trim();
+}
+
+function conversationAssistantLabel(item: ChatConversationOverviewItem): string {
+  const agentId = conversationAssistantId(item);
+  if (!agentId) return lastSpeakerLabel(item);
+  return props.personaNameMap?.[agentId] || agentId;
+}
+
+function conversationAssistantAvatarUrl(item: ChatConversationOverviewItem): string {
+  const agentId = conversationAssistantId(item);
+  if (!agentId) return "";
+  return props.personaAvatarUrlMap?.[agentId] || "";
+}
+
+function displaySpeakerLabel(item: ChatConversationOverviewItem): string {
+  if (!conversationBusy(item)) return lastSpeakerLabel(item);
+  return conversationAssistantLabel(item);
+}
+
+function displaySpeakerInitial(item: ChatConversationOverviewItem): string {
+  return displaySpeakerLabel(item).charAt(0).toUpperCase() || "?";
+}
+
+function displaySpeakerAvatarUrl(item: ChatConversationOverviewItem): string {
+  if (!conversationBusy(item)) return lastSpeakerAvatarUrl(item);
+  return conversationAssistantAvatarUrl(item) || lastSpeakerAvatarUrl(item);
+}
+
 </script>
 
 <style scoped>
