@@ -701,6 +701,7 @@ fn archive_pipeline_message_plain_text(message: &ChatMessage) -> String {
 #[derive(Debug, Clone, PartialEq)]
 struct PreservedDialogueEntry {
     role: String,
+    remote_speaker_label: Option<String>,
     text: String,
 }
 
@@ -737,6 +738,7 @@ fn archive_pipeline_preserved_dialogue_by_token_budget(
                 full_consumed_tokens += next_tokens;
                 full_recent.push(PreservedDialogueEntry {
                     role: role.to_string(),
+                    remote_speaker_label: remote_im_sender_display_name(message),
                     text,
                 });
                 if full_consumed_tokens >= full_budget {
@@ -758,6 +760,7 @@ fn archive_pipeline_preserved_dialogue_by_token_budget(
         compact_consumed_tokens += compact_tokens;
         compact_older.push(PreservedDialogueEntry {
             role: role.to_string(),
+            remote_speaker_label: remote_im_sender_display_name(message),
             text: compact_text,
         });
         if compact_consumed_tokens >= compact_budget {
@@ -1231,6 +1234,13 @@ fn build_compaction_preserved_dialogue_block(
         .map(|entry| {
             let speaker = if entry.role.eq_ignore_ascii_case("assistant") {
                 assistant_name.trim()
+            } else if let Some(remote_speaker_label) = entry
+                .remote_speaker_label
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                remote_speaker_label
             } else {
                 user_alias.trim()
             };

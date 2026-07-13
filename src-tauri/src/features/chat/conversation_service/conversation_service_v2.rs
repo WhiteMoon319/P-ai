@@ -132,6 +132,73 @@ mod preserved_conversation_reader_tests {
             vec!["m6", "m5", "m4", "m3", "m2", "m1", "m0"]
         );
     }
+
+    #[test]
+    fn remote_group_branch_preserved_dialogue_should_keep_sender_nickname() {
+        let mut remote_message = message(
+            "remote-user",
+            "user",
+            "2026-07-10T11:56:00Z",
+            "查看这个计划",
+        );
+        remote_message.provider_meta = Some(serde_json::json!({
+            "origin": {
+                "kind": "remote_im",
+                "contact_type": "group",
+                "contact_id": "group-1",
+                "contact_name": "测试群",
+                "sender_id": "member-001",
+                "sender_name": "群友甲"
+            }
+        }));
+
+        assert_eq!(
+            remote_im_sender_display_name(&remote_message).as_deref(),
+            Some("群友甲")
+        );
+        assert_eq!(
+            build_remote_im_wake_preserved_dialogue(std::slice::from_ref(&remote_message)),
+            "群友甲：查看这个计划"
+        );
+        let mut sender_id_fallback = remote_message.clone();
+        if let Some(origin) = sender_id_fallback
+            .provider_meta
+            .as_mut()
+            .and_then(Value::as_object_mut)
+            .and_then(|meta| meta.get_mut("origin"))
+            .and_then(Value::as_object_mut)
+        {
+            origin.remove("sender_name");
+        }
+        assert_eq!(
+            remote_im_sender_display_name(&sender_id_fallback).as_deref(),
+            Some("member-001")
+        );
+
+        let mut branch_copy = remote_message.clone();
+        branch_copy.id = "branch-remote-user".to_string();
+        let mut branch = build_conversation_record(
+            "",
+            "agent-a",
+            "dept-a",
+            "测试分支",
+            CONVERSATION_KIND_REMOTE_IM_CONTACT,
+            Some("remote_im_contact:channel-a:group:group-1".to_string()),
+            None,
+        );
+        branch.parent_conversation_id = Some("source-conversation".to_string());
+        branch.messages = vec![branch_copy];
+        let preserved = build_compaction_preserved_dialogue_block(
+            &branch,
+            "本地昵称",
+            "助理",
+            10_000,
+        );
+        assert_eq!(preserved, "群友甲：查看这个计划");
+        assert!(!preserved.contains("用户："));
+        assert!(!preserved.contains("本地昵称："));
+        assert!(!preserved.contains("测试群"));
+    }
 }
 
 impl ConversationServiceV2ErrorCode {

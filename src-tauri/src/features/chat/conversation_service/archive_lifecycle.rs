@@ -1,3 +1,20 @@
+fn build_remote_im_wake_preserved_dialogue(messages: &[ChatMessage]) -> String {
+    messages
+        .iter()
+        .map(|message| {
+            let speaker = if message.role.trim().eq_ignore_ascii_case("assistant") {
+                "助理".to_string()
+            } else {
+                remote_im_sender_display_name(message)
+                    .unwrap_or_else(|| "远程联系人".to_string())
+            };
+            format!("{speaker}：{}", render_prompt_message_text(message).trim())
+        })
+        .filter(|line| !line.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 impl ConversationServiceV2 {
     fn list_archives(
         &self,
@@ -565,19 +582,7 @@ impl ConversationServiceV2 {
         } else {
             Vec::new()
         };
-        let preserved_dialogue = selected
-            .iter()
-            .map(|message| {
-                let role = if message.role.trim().eq_ignore_ascii_case("assistant") {
-                    "助理"
-                } else {
-                    "用户"
-                };
-                format!("{role}：{}", render_prompt_message_text(message).trim())
-            })
-            .filter(|line| !line.trim().is_empty())
-            .collect::<Vec<_>>()
-            .join("\n");
+        let preserved_dialogue = build_remote_im_wake_preserved_dialogue(&selected);
         let summary = build_compaction_message(
             "",
             Some("远程唤醒上下文"),

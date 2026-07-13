@@ -1871,6 +1871,30 @@ fn prompt_speaker_label(
         .unwrap_or_else(|| speaker_id.to_string())
 }
 
+fn remote_im_sender_display_name(message: &ChatMessage) -> Option<String> {
+    let origin = remote_im_origin_from_message(message)?;
+    let is_group = remote_im_origin_string(origin, "contact_type")
+        .unwrap_or("")
+        .eq_ignore_ascii_case("group");
+    if let Some(sender_name) = remote_im_origin_string(origin, "sender_name") {
+        return Some(sender_name.to_string());
+    }
+    if !is_group {
+        if let Some(contact_name) = remote_im_origin_string(origin, "contact_name") {
+            return Some(contact_name.to_string());
+        }
+    }
+    if let Some(sender_id) = remote_im_origin_string(origin, "sender_id") {
+        return Some(sender_id.to_string());
+    }
+    if !is_group {
+        if let Some(contact_id) = remote_im_origin_string(origin, "contact_id") {
+            return Some(contact_id.to_string());
+        }
+    }
+    None
+}
+
 fn build_prompt_speaker_block(
     message: &ChatMessage,
     agents: &[AgentProfile],
