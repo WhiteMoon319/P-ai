@@ -10245,6 +10245,10 @@
             .join("chat")
             .join("conversation_service")
             .join("history_mutations.rs");
+        let allowed_delegate_resolution = features_root
+            .join("chat")
+            .join("conversation_service")
+            .join("delegate_resolution.rs");
         // 既有归档命令仍持有两处全局锁；保留精确例外，禁止扩散到其他命令文件。
         let allowed_legacy_conversation_archive = features_root
             .join("system")
@@ -10258,6 +10262,7 @@
                 || path == allowed_remote_im_sessions
                 || path == allowed_archive_lifecycle
                 || path == allowed_history_mutations
+                || path == allowed_delegate_resolution
                 || path == allowed_legacy_conversation_archive
                 || path == self_test_file
             {
