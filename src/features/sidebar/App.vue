@@ -257,6 +257,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMessage, ChatTodoItem, ConversationGoalState, IdeContextWorkspaceGroup, ShellWorkspace } from "../../types/app";
 import { removeBinaryPlaceholders, messageText } from "../../utils/chat-message";
 import { formatConversationFallbackTitle } from "../chat/utils/conversation-title";
+import { formalizeMessages } from "../chat/composables/use-chat-flow-utils";
 import { messageWithStableRenderId, preserveStableRenderId, stableRenderIdFromMessage } from "../chat/utils/stable-render-id";
 import { useI18n } from "vue-i18n";
 import SidebarLayout from "./layouts/SidebarLayout.vue";
@@ -318,12 +319,33 @@ const SYSTEM_NOTIFICATION_CONVERSATION_ID = "system-notification-conversation";
 const SYSTEM_NOTIFICATION_DISPLAY_TITLE = "P-ai系统";
 const SIDEBAR_DRAFT_USER_ID_PREFIX = "__draft_user__:";
 type SidebarConversationTab = ChatLeftPanelMode;
+type ConversationChangedSinceResult = {
+  changed?: ConversationSummary[];
+  deletedIds?: string[];
+  serverTime?: string;
+};
+type ConversationRuntimeSnapshot = {
+  runtimeState?: string;
+  isProcessing?: boolean;
+  hasPendingQueue?: boolean;
+  pendingQueueCount?: number;
+  streamCache?: {
+    hasVisibleProgress?: boolean;
+  } | null;
+};
+type ConversationFreshnessSnapshot = {
+  conversationId?: string;
+  lastMessageId?: string | null;
+};
 
 const transport = useWsTransport();
 const { t } = useI18n();
 const conversations = ref<ConversationSummary[]>([]);
 const remoteImContactConversations = ref<RemoteImContactConversationSummary[]>([]);
 const sidebarViewerId = ref("");
+const lastOverviewSyncAt = ref("");
+const sidebarActiveSynced = ref<boolean | null>(null);
+let sidebarForegroundReconciling = false;
 const activeConversationId = ref("");
 const activeTitle = computed(() => {
   const item = activeSummary.value;
@@ -794,6 +816,7 @@ async function refreshList() {
     remoteImContactConversations?: RemoteImContactConversationSummary[];
     persona?: SidebarPersonaPayload;
     viewerId?: string;
+    serverTime?: string;
   }>("conversation.list");
   const localConversations = Array.isArray(result.unarchivedConversations)
     ? result.unarchivedConversations
@@ -815,6 +838,8 @@ async function refreshList() {
   }
   syncConversationTabForRemoteContacts();
   sidebarViewerId.value = String(result.viewerId || sidebarViewerId.value || "").trim();
+  const serverTime = String(result.serverTime || "").trim();
+  if (serverTime) lastOverviewSyncAt.value = serverTime;
   if (result.persona && !activeConversationId.value) persona.value = result.persona;
   // Sidebar 会话列表日志已移除
 }
@@ -892,6 +917,56 @@ function patchConversationOverviewItem(conversation?: ConversationSummary | null
     nextItems.push(conversation);
   }
   conversations.value = sortConversationSummaries(nextItems);
+}
+
+function applyConversationOverviewChangedSincePayload(payload?: ConversationChangedSinceResult | null) {
+  const serverTime = String(payload?.serverTime || "").trim();
+  const changed = Array.isArray(payload?.changed) ? payload.changed : [];
+  const deletedIds = new Set(
+    (Array.isArray(payload?.deletedIds) ? payload.deletedIds : [])
+      .map((id) => String(id || "").trim())
+      .filter(Boolean),
+  );
+  if (!lastOverviewSyncAt.value) {
+    conversations.value = sortConversationSummaries(changed);
+  } else if (changed.length > 0 || deletedIds.size > 0) {
+    const changedById = new Map<string, ConversationSummary>();
+    for (const item of changed) {
+      const conversationId = String(item?.conversationId || "").trim();
+      if (conversationId) changedById.set(conversationId, item);
+    }
+    const nextItems = conversations.value
+      .filter((item) => !deletedIds.has(String(item.conversationId || "").trim()))
+      .map((item) => {
+        const conversationId = String(item.conversationId || "").trim();
+        return changedById.get(conversationId) || item;
+      });
+    for (const [conversationId, item] of changedById) {
+      if (!nextItems.some((existing) => String(existing.conversationId || "").trim() === conversationId)) {
+        nextItems.push(item);
+      }
+    }
+    conversations.value = sortConversationSummaries(nextItems);
+  }
+  if (serverTime) lastOverviewSyncAt.value = serverTime;
+}
+
+async function syncConversationOverviewChangedSinceWatermark(reason = "unknown") {
+  const since = String(lastOverviewSyncAt.value || "").trim();
+  try {
+    const payload = await transport.request<ConversationChangedSinceResult>("conversation.changedSince", {
+      since: since || null,
+    });
+    applyConversationOverviewChangedSincePayload(payload);
+  } catch (error) {
+    console.warn("[Sidebar会话概览] 差量补漏失败，回退全量刷新", {
+      reason,
+      since,
+      error,
+    });
+    lastOverviewSyncAt.value = "";
+    await refreshList();
+  }
 }
 
 function isSidebarSystemConversation(item: ConversationSummary): boolean {
@@ -1048,6 +1123,80 @@ async function applyOpenConversationResult(result: OpenConversationResult) {
   view.value = "chat";
   syncConversationTabForActiveConversation();
   void refreshCreateConversationOptionsIfNeeded();
+}
+
+function currentFormalTailMessageId(): string {
+  const formalMessages = formalizeMessages(Array.isArray(messages.value) ? messages.value : []);
+  return String(formalMessages[formalMessages.length - 1]?.id || "").trim();
+}
+
+function sidebarConversationIsStreaming(): boolean {
+  return !!busy.value || !!String(streamingAssistantMessageId.value || "").trim();
+}
+
+async function requestConversationRuntimeSnapshot(conversationId: string): Promise<ConversationRuntimeSnapshot> {
+  return await transport.request<ConversationRuntimeSnapshot>("conversation.runtimeSnapshot", {
+    conversationId,
+  });
+}
+
+async function requestLatestFormalTailMessageId(conversationId: string): Promise<string> {
+  const snapshot = await transport.request<ConversationFreshnessSnapshot>("conversation.freshnessSnapshot", {
+    conversationId,
+    agentId: null,
+  });
+  return String(snapshot?.lastMessageId || "").trim();
+}
+
+async function markConversationReadOnSidebarFocus(conversationId: string): Promise<void> {
+  const normalizedConversationId = String(conversationId || "").trim();
+  if (!normalizedConversationId) return;
+  await transport.request("conversation.markRead", {
+    conversationId: normalizedConversationId,
+  });
+}
+
+async function reconcileActiveConversationAfterWake(reason: string) {
+  const conversationId = String(activeConversationId.value || "").trim();
+  if (!conversationId || sidebarForegroundReconciling) return;
+  sidebarForegroundReconciling = true;
+  try {
+    const runtimeSnapshot = await requestConversationRuntimeSnapshot(conversationId);
+    const backendStreaming = String(runtimeSnapshot?.runtimeState || "").trim() === "assistant_streaming";
+    const frontendStreaming = sidebarConversationIsStreaming();
+    if (backendStreaming || frontendStreaming) {
+      if (
+        backendStreaming !== frontendStreaming
+        || !String(streamingAssistantMessageId.value || "").trim()
+        || !!runtimeSnapshot?.streamCache?.hasVisibleProgress
+      ) {
+        await openConversation(conversationId);
+      }
+      return;
+    }
+
+    const currentTailId = currentFormalTailMessageId();
+    const latestTailId = await requestLatestFormalTailMessageId(conversationId);
+    if (latestTailId === currentTailId) {
+      await markConversationReadOnSidebarFocus(conversationId);
+      return;
+    }
+    await openConversation(conversationId);
+  } catch (error) {
+    console.warn("[Sidebar前台恢复] 状态对账失败", {
+      reason,
+      conversationId,
+      error,
+    });
+  } finally {
+    sidebarForegroundReconciling = false;
+  }
+}
+
+async function handleSidebarForegroundWake(reason: string) {
+  if (!transport.connected.value || !transport.bridgeReady.value || !transport.authenticated.value) return;
+  await syncConversationOverviewChangedSinceWatermark(reason);
+  await reconcileActiveConversationAfterWake(reason);
 }
 
 function syncConversationTabForActiveConversation() {
@@ -2352,6 +2501,7 @@ function appendMessages(next: unknown) {
 async function initializeAfterBridgeAuthenticated() {
   if (!transport.connected.value || !transport.authenticated.value) return;
   await refreshList();
+  await syncConversationOverviewChangedSinceWatermark("initialize_after_bridge_authenticated");
   const currentConversationId = String(activeConversationId.value || "").trim();
   const initialConversationId = pickInitialSidebarConversationId(visibleConversations.value);
   const initialSummary = visibleConversations.value.find((item) =>
@@ -2465,15 +2615,19 @@ function registerNotifications() {
     void initializeAfterBridgeAuthenticated();
   });
   transport.onNotification("conversation.overviewUpdated", (payload) => {
-    const value = payload as { unarchivedConversations?: ConversationSummary[] };
+    const value = payload as { unarchivedConversations?: ConversationSummary[]; serverTime?: string };
     if (Array.isArray(value.unarchivedConversations)) {
       conversations.value = value.unarchivedConversations;
       syncConversationTabForRemoteContacts();
     }
+    const serverTime = String(value.serverTime || "").trim();
+    if (serverTime) lastOverviewSyncAt.value = serverTime;
   });
   transport.onNotification("conversation.overviewItemUpdated", (payload) => {
-    const value = payload as { conversation?: ConversationSummary };
+    const value = payload as { conversation?: ConversationSummary; serverTime?: string };
     patchConversationOverviewItem(value.conversation);
+    const serverTime = String(value.serverTime || "").trim();
+    if (serverTime) lastOverviewSyncAt.value = serverTime;
   });
   transport.onNotification("ideContext.updated", () => {
     void refreshIdeContextGroups();
@@ -2656,20 +2810,43 @@ function handleWindowMessage(event: MessageEvent) {
 }
 
 function handleDocumentVisibilityChange() {
-  if (document.visibilityState !== "visible") return;
+  void syncSidebarActiveState("visibilitychange");
+}
+
+function isSidebarActiveNow(): boolean {
+  return document.visibilityState === "visible" && document.hasFocus();
+}
+
+async function syncSidebarActiveState(reason: string) {
+  const active = isSidebarActiveNow();
+  const activeChanged = sidebarActiveSynced.value !== active;
+  if (!activeChanged && !active) return;
+  sidebarActiveSynced.value = active;
+  if (!active) return;
   if (!transport.connected.value || !transport.bridgeReady.value || !transport.authenticated.value) {
     void reconnectSidebarBridge({
       forceReloadActiveConversation: false,
-      reason: "visibility_visible_reconnect",
+      reason: `${reason}_reconnect`,
     }).catch(() => {});
     return;
   }
-  void transport.ping().catch(() => {
+  try {
+    await transport.ping();
+    await handleSidebarForegroundWake(reason);
+  } catch {
     void reconnectSidebarBridge({
       forceReloadActiveConversation: false,
-      reason: "visibility_visible_ping_failed",
+      reason: `${reason}_ping_failed`,
     }).catch(() => {});
-  });
+  }
+}
+
+function handleWindowFocus() {
+  void syncSidebarActiveState("focus");
+}
+
+function handleWindowBlur() {
+  void syncSidebarActiveState("blur");
 }
 
 onMounted(() => {
@@ -2679,6 +2856,8 @@ onMounted(() => {
   });
   window.addEventListener("message", handleWindowMessage);
   window.addEventListener("paste", handleWindowPaste);
+  window.addEventListener("focus", handleWindowFocus);
+  window.addEventListener("blur", handleWindowBlur);
   document.addEventListener("visibilitychange", handleDocumentVisibilityChange);
   if (isTauriRuntimeAvailable()) {
     void import("@tauri-apps/api/event")
@@ -2697,7 +2876,10 @@ onBeforeUnmount(() => {
   cancelPendingRewindConfirm();
   window.removeEventListener("message", handleWindowMessage);
   window.removeEventListener("paste", handleWindowPaste);
+  window.removeEventListener("focus", handleWindowFocus);
+  window.removeEventListener("blur", handleWindowBlur);
   document.removeEventListener("visibilitychange", handleDocumentVisibilityChange);
+  sidebarActiveSynced.value = null;
   if (unlistenCodeReviewFn) unlistenCodeReviewFn();
 });
 </script>

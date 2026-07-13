@@ -18,6 +18,7 @@ async fn ide_chat_handle_jsonrpc_request(
             "ts": chrono::Utc::now().to_rfc3339(),
         })),
         "conversation.list" => ide_chat_conversation_list(state, &sidebar_viewer_id),
+        "conversation.changedSince" => ide_chat_conversation_changed_since(state, request.params).await,
         "conversation.open" => ide_chat_parse_params::<IdeChatConversationInput>(request.params)
             .and_then(|input| {
                 let result = ide_chat_conversation_open_result(state, &input.conversation_id)?;
@@ -34,6 +35,9 @@ async fn ide_chat_handle_jsonrpc_request(
         }),
         "conversation.blockPage" => ide_chat_conversation_block_page(state, request.params),
         "conversation.fastRequestTurns" => ide_chat_conversation_fast_request_turns(state, request.params),
+        "conversation.runtimeSnapshot" => ide_chat_conversation_runtime_snapshot(state, request.params),
+        "conversation.freshnessSnapshot" => ide_chat_conversation_freshness_snapshot(state, request.params).await,
+        "conversation.markRead" => ide_chat_mark_conversation_read(state, request.params),
         "conversation.create" => (|| {
             let result = ide_chat_create_conversation(state, request.params)?;
             if let Some(conversation_id) = result
