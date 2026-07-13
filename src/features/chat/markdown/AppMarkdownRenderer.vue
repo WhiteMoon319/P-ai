@@ -81,7 +81,7 @@
 <script setup lang="ts">
 import { Teleport, computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, ref, useAttrs, watch, type PropType, type VNodeChild } from "vue";
 import { useI18n } from "vue-i18n";
-import { Check, Copy, Maximize2, Wrench } from "@lucide/vue";
+import { Wrench } from "@lucide/vue";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import { normalizeLocalLinkHref, parseLocalFileReference } from "../utils/local-link";
 import { parseMarkdownBlocks, parseInlineSegments, normalizedTableRow, type MarkdownBlock, type InlineSegment } from "./parse-markdown";
@@ -90,9 +90,8 @@ import {
   consumeCrossParagraphToolGroup,
   consumeGroupedToolcallRefs,
 } from "./toolcall-ref-group";
-import CodeBlockPreviewDialog from "../components/dialogs/CodeBlockPreviewDialog.vue";
+import CodeBlock from "./CodeBlock";
 import MarkdownImage from "./MarkdownImage";
-import MermaidBlock from "./MermaidBlock";
 import { stableMarkdownRuntimeKey } from "./markdown-runtime-key";
 
 defineOptions({
@@ -624,6 +623,10 @@ const BlockRenderer = defineComponent({
           blockKey: block.key,
           isDark: blockProps.isDark,
           streaming: blockProps.streaming,
+          copyText: t("common.copy"),
+          copiedText: "已复制",
+          expandText: t("common.expand"),
+          preparingText: t("chat.statusPreparingMessage"),
         });
       }
       if (block.type === "math") {
@@ -1036,146 +1039,6 @@ const InlineMath = defineComponent({
         return h("span", { class: "ecall-md-inline-math-wrap", onContextmenu: openContextMenu }, [mathNode]);
       }
       return h("span", { class: "ecall-md-inline-math-wrap ecall-md-inline-math-fallback", onContextmenu: openContextMenu }, [mathNode]);
-    };
-  },
-});
-
-// ==================== Code Block ====================
-
-const CodeBlock = defineComponent({
-  name: "CodeBlock",
-  props: {
-    lang: { type: String, default: "" },
-    code: { type: String, default: "" },
-    blockKey: { type: String, default: "" },
-    isDark: { type: Boolean, default: false },
-    streaming: { type: Boolean, default: false },
-  },
-  setup(codeProps) {
-    const highlightedHtml = ref("");
-    const copied = ref(false);
-    const previewOpen = ref(false);
-    let copyTimer = 0;
-    let highlightAbort: AbortController | null = null;
-
-    const isMermaid = computed(() => codeProps.lang === "mermaid");
-
-    async function highlight() {
-      if (isMermaid.value) return;
-      if (!codeProps.code) {
-        highlightedHtml.value = "";
-        return;
-      }
-      if (highlightAbort) highlightAbort.abort();
-      highlightAbort = new AbortController();
-      const signal = highlightAbort.signal;
-
-      try {
-        const { codeToHtml } = await import("shiki");
-        if (signal.aborted) return;
-        const html = await codeToHtml(codeProps.code, {
-          lang: codeProps.lang || "text",
-          theme: codeProps.isDark ? "github-dark" : "github-light",
-        });
-        if (signal.aborted) return;
-        highlightedHtml.value = html;
-      } catch {
-        highlightedHtml.value = "";
-      }
-    }
-
-    watch(
-      () => [codeProps.code, codeProps.lang, codeProps.isDark, codeProps.streaming],
-      () => {
-        // 已闭合的代码块（出现在 blocks 里）可以直接高亮
-        highlight();
-      },
-      { immediate: true },
-    );
-
-    async function copyCode() {
-      try {
-        await navigator.clipboard.writeText(codeProps.code || "");
-        copied.value = true;
-        if (copyTimer) clearTimeout(copyTimer);
-        copyTimer = window.setTimeout(() => {
-          copied.value = false;
-          copyTimer = 0;
-        }, 1500);
-      } catch {
-        copied.value = false;
-      }
-    }
-
-    function openPreview() {
-      previewOpen.value = true;
-    }
-
-    function closePreview() {
-      previewOpen.value = false;
-    }
-
-    onBeforeUnmount(() => {
-      if (copyTimer) {
-        clearTimeout(copyTimer);
-        copyTimer = 0;
-      }
-      if (highlightAbort) {
-        highlightAbort.abort();
-        highlightAbort = null;
-      }
-    });
-
-    return () => {
-      if (isMermaid.value) {
-        return h(MermaidBlock, {
-          code: codeProps.code,
-          blockKey: codeProps.blockKey,
-          isDark: codeProps.isDark,
-          streaming: codeProps.streaming,
-          copyText: t("common.copy"),
-          copiedText: "已复制",
-          preparingText: t("chat.statusPreparingMessage"),
-        });
-      }
-
-      // 标题栏：左边语言名，右边复制按钮
-      const titleBar = h("div", { class: "ecall-md-code-title" }, [
-        h("span", { class: "ecall-md-code-lang" }, codeProps.lang || "text"),
-        h("div", { class: "ecall-md-code-actions" }, [
-          h("button", {
-            type: "button",
-            class: "ecall-md-code-action",
-            title: t("common.expand"),
-            onClick: openPreview,
-          }, [h(Maximize2, { class: "ecall-md-code-action-icon" })]),
-          h("button", {
-            type: "button",
-            class: "ecall-md-code-action ecall-md-code-copy",
-            title: copied.value ? "已复制" : t("common.copy"),
-            "aria-label": copied.value ? "已复制" : t("common.copy"),
-            onClick: copyCode,
-          }, [h(copied.value ? Check : Copy, { class: "ecall-md-code-action-icon" })]),
-        ]),
-      ]);
-
-      // 代码区
-      const codeArea = highlightedHtml.value
-        ? h("div", { class: "ecall-md-code-body", innerHTML: highlightedHtml.value })
-        : h("pre", { class: "ecall-md-code-body ecall-md-code-plain" }, [h("code", null, codeProps.code)]);
-
-      // 圆角外壳
-      return h("div", { class: "ecall-md-code-block" }, [
-        titleBar,
-        codeArea,
-        h(CodeBlockPreviewDialog, {
-          open: previewOpen.value,
-          lang: codeProps.lang,
-          code: codeProps.code,
-          isDark: codeProps.isDark,
-          onClose: closePreview,
-        }),
-      ]);
     };
   },
 });
