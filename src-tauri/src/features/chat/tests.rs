@@ -6172,6 +6172,7 @@
         conversation.last_user_at = Some(now.clone());
         state_schedule_conversation_persist(&state, &conversation)
             .expect("persist conversation");
+        flush_pending_persists_blocking(&state).expect("flush contact conversation");
 
         let items = conversation_service_v2()
             .list_remote_im_contact_conversations(&state)
