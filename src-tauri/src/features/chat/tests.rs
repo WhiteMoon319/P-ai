@@ -10257,6 +10257,10 @@
             .join("chat")
             .join("conversation_service")
             .join("context_reads.rs");
+        let allowed_foreground_lifecycle = features_root
+            .join("chat")
+            .join("conversation_service")
+            .join("foreground_lifecycle.rs");
         // 既有归档命令仍持有两处全局锁；保留精确例外，禁止扩散到其他命令文件。
         let allowed_legacy_conversation_archive = features_root
             .join("system")
@@ -10273,6 +10277,7 @@
                 || path == allowed_delegate_resolution
                 || path == allowed_conversation_reads
                 || path == allowed_context_reads
+                || path == allowed_foreground_lifecycle
                 || path == allowed_legacy_conversation_archive
                 || path == self_test_file
             {
