@@ -1179,7 +1179,7 @@ const {
 const {
   virtualizer, virtualEntries, totalVirtualSize, measureVirtualRow,
   latestOwnTailContentHeight, scheduleVirtualMeasure, syncViewportMetrics,
-  scrollVirtualizerToConversationBottomLightweight,
+  scrollVirtualizerToIndex, scrollVirtualizerToConversationBottomLightweight,
   resetVirtualizerAtConversationBottom, refreshObservedVirtualItemElements,
 } = useChatVirtualScroll({
   renderItems: virtualRenderItems,
@@ -1454,7 +1454,7 @@ function scrollToUserMessageTarget(target: { index: number; item: ChatRenderItem
   if (!target) return;
   armProgrammaticScrollPaginationSuppression();
   scheduleVirtualMeasure();
-  virtualizer.value.scrollToIndex(target.index, { align: "start", behavior: "smooth" });
+  scrollVirtualizerToIndex(target.index, { align: "start", behavior: "smooth" });
   void nextTick(() => {
     chatScrollbarRef.value?.updateThumb();
     scrollNavigationTick.value += 1;

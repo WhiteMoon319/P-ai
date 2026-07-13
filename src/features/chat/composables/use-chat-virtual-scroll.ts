@@ -115,6 +115,17 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     });
   }
 
+  function markExplicitVirtualScrollForNextFrame() {
+    explicitVirtualScrollActive = true;
+    if (explicitVirtualScrollFrame) {
+      cancelAnimationFrame(explicitVirtualScrollFrame);
+    }
+    explicitVirtualScrollFrame = requestAnimationFrame(() => {
+      explicitVirtualScrollFrame = 0;
+      explicitVirtualScrollActive = false;
+    });
+  }
+
   function debugVirtualScrollState(label: string) {
     const scrollEl = scrollContainer.value;
     const rows = virtualizer.value.getVirtualItems();
@@ -382,15 +393,8 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       if (requestId !== conversationVirtualizerResetRequest) return;
       if (renderItems.value.length > 0) {
-        explicitVirtualScrollActive = true;
-        if (explicitVirtualScrollFrame) {
-          cancelAnimationFrame(explicitVirtualScrollFrame);
-        }
+        markExplicitVirtualScrollForNextFrame();
         virtualizer.value.scrollToEnd({ behavior });
-        explicitVirtualScrollFrame = requestAnimationFrame(() => {
-          explicitVirtualScrollFrame = 0;
-          explicitVirtualScrollActive = false;
-        });
       }
       // smooth 滚动依赖浏览器原生动画，强制赋值 scrollTop 会打断它；仅在 auto 时兜底钳制到真实底端
       if (behavior !== "smooth") {
@@ -428,6 +432,14 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
   function syncViewportMetrics() {
     scheduleVirtualMeasure();
     void nextTick(() => scrollbarRef.value?.updateThumb());
+  }
+
+  function scrollVirtualizerToIndex(
+    index: number,
+    options?: { align?: "auto" | "start" | "center" | "end"; behavior?: ScrollBehavior },
+  ) {
+    markExplicitVirtualScrollForNextFrame();
+    virtualizer.value.scrollToIndex(index, options);
   }
 
   // ==================== lifecycle ====================
@@ -501,6 +513,7 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     refreshObservedVirtualItemElements,
     scheduleVirtualMeasure,
     syncViewportMetrics,
+    scrollVirtualizerToIndex,
     scrollVirtualizerToConversationBottomLightweight,
     resetVirtualizerAtConversationBottom,
   };
