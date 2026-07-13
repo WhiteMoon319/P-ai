@@ -72,54 +72,61 @@ function patchDialogOpenMethods(win: GuardedWindow) {
   win[DIALOG_PATCH_KEY] = true;
 }
 
-function isDialogVisiblyOpen(dialog: HTMLDialogElement): boolean {
-  return dialog.open || dialog.classList.contains("modal-open");
+function isModalElement(node: Element): boolean {
+  return node instanceof HTMLDialogElement || node.classList.contains("modal");
+}
+
+function isModalVisiblyOpen(element: Element): boolean {
+  return (
+    (element instanceof HTMLDialogElement && element.open)
+    || element.classList.contains("modal-open")
+  );
 }
 
 function installDialogOpenObserver(win: GuardedWindow) {
   if (win[DIALOG_OBSERVER_KEY]) return;
 
-  const dialogOpenStates = new WeakMap<HTMLDialogElement, boolean>();
-  const rememberDialog = (dialog: HTMLDialogElement) => {
-    dialogOpenStates.set(dialog, isDialogVisiblyOpen(dialog));
+  const modalOpenStates = new WeakMap<Element, boolean>();
+  const rememberModal = (modal: Element) => {
+    modalOpenStates.set(modal, isModalVisiblyOpen(modal));
   };
-  const handleDialogStateChange = (dialog: HTMLDialogElement) => {
-    const wasOpen = dialogOpenStates.get(dialog) ?? false;
-    const isOpen = isDialogVisiblyOpen(dialog);
-    dialogOpenStates.set(dialog, isOpen);
+  const handleModalStateChange = (modal: Element) => {
+    const wasOpen = modalOpenStates.get(modal) ?? false;
+    const isOpen = isModalVisiblyOpen(modal);
+    modalOpenStates.set(modal, isOpen);
     if (!wasOpen && isOpen) {
       clearNativeTextSelection();
     }
   };
-  const handleAddedDialog = (dialog: HTMLDialogElement) => {
-    const isOpen = isDialogVisiblyOpen(dialog);
-    dialogOpenStates.set(dialog, isOpen);
+  const handleAddedModal = (modal: Element) => {
+    const isOpen = isModalVisiblyOpen(modal);
+    modalOpenStates.set(modal, isOpen);
     if (isOpen) {
       clearNativeTextSelection();
     }
   };
   const handleAddedNode = (node: Node) => {
     if (!(node instanceof Element)) return;
-    if (node instanceof HTMLDialogElement) {
-      handleAddedDialog(node);
+    if (isModalElement(node)) {
+      handleAddedModal(node);
     }
-    node.querySelectorAll("dialog").forEach((dialog) => {
-      if (dialog instanceof HTMLDialogElement) {
-        handleAddedDialog(dialog);
+    node.querySelectorAll("dialog, .modal").forEach((modal) => {
+      if (isModalElement(modal)) {
+        handleAddedModal(modal);
       }
     });
   };
 
-  document.querySelectorAll("dialog").forEach((dialog) => {
-    if (dialog instanceof HTMLDialogElement) {
-      rememberDialog(dialog);
+  document.querySelectorAll("dialog, .modal").forEach((modal) => {
+    if (isModalElement(modal)) {
+      rememberModal(modal);
     }
   });
 
   const observer = new MutationObserver((records) => {
     for (const record of records) {
-      if (record.type === "attributes" && record.target instanceof HTMLDialogElement) {
-        handleDialogStateChange(record.target);
+      if (record.type === "attributes" && record.target instanceof Element && isModalElement(record.target)) {
+        handleModalStateChange(record.target);
         continue;
       }
       record.addedNodes.forEach(handleAddedNode);
