@@ -40,9 +40,7 @@
 import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import DepartmentPersonaSelect from "../../shared/components/DepartmentPersonaSelect.vue";
-import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
-
-export type SidebarCreateDepartmentOption = DepartmentPersonaOption;
+import type { SidebarCreateDepartmentOption } from "../sidebar-app-types";
 
 const { t } = useI18n();
 

@@ -269,7 +269,7 @@ import SidebarLayout from "./layouts/SidebarLayout.vue";
 import ChatViewWrapper from "./views/ChatViewWrapper.vue";
 import SidebarCompactionDialog from "./views/SidebarCompactionDialog.vue";
 import SidebarReviewPanel from "./views/SidebarReviewPanel.vue";
-import CreateConversationDialog, { type SidebarCreateDepartmentOption } from "./views/CreateConversationDialog.vue";
+import CreateConversationDialog from "./views/CreateConversationDialog.vue";
 import WorkspaceDirectoryPickerDialog from "../shared/components/WorkspaceDirectoryPickerDialog.vue";
 import { useWsTransport, type SidebarBridgeConfig } from "./composables/use-ws-transport";
 import { isTauriRuntimeAvailable } from "../../services/tauri-api";
@@ -280,6 +280,29 @@ import type { ChatWorkspaceChoice } from "../chat/composables/use-chat-workspace
 import type { ToolReviewCodeReviewScope, ToolReviewCommitOption, ToolReviewReportRecord } from "../chat/composables/use-chat-tool-review";
 import type { TerminalApprovalConversationItem, TerminalApprovalRequestPayload } from "../shell/composables/use-terminal-approval";
 import { readLastActiveConversationId, writeLastActiveConversationId } from "../chat/utils/last-active-conversation";
+import type {
+  BlockPageResult,
+  CompactionPreviewResult,
+  ConversationSummary,
+  CreateConversationOptionsResult,
+  DiscoveryPayload,
+  GoalMutationOutput,
+  IdeContextQueryResult,
+  OpenConversationResult,
+  RemoteImContactConversationSummary,
+  RewindConversationPreviewResult,
+  RewindConversationResult,
+  SidebarAssistantDeltaPayload,
+  SidebarAttachmentPayload,
+  SidebarClipboardImage,
+  SidebarConversationRuntimePayload,
+  SidebarCreateDepartmentOption,
+  SidebarModelPayload,
+  SidebarPersonaPayload,
+  SidebarQueuedAttachmentEntry,
+  SidebarQueuedAttachmentNotice,
+  SidebarWorkspacePermission,
+} from "./sidebar-app-types";
 import {
   loadStoredChatLeftPanelMode,
   loadStoredChatRightPanelMode,
@@ -297,206 +320,6 @@ import {
   type ChatLeftPanelMode,
   type ChatRightPanelMode,
 } from "../chat/composables/chat-ui-layout-storage";
-
-type ConversationSummary = {
-  conversationId: string;
-  title: string;
-  summaryTitle?: string;
-  updatedAt: string;
-  lastMessageAt?: string;
-  messageCount?: number;
-  bodyMessageCount?: number;
-  bodyTextLength?: number;
-  unreadCount?: number;
-  agentId?: string;
-  departmentId?: string;
-  departmentName?: string;
-  runtimeState?: string;
-  planModeEnabled?: boolean;
-  detachedWindowOpen?: boolean;
-  detachedWindowLabel?: string;
-  isSystemNotificationConversation?: boolean;
-  isMainConversation?: boolean;
-  isActive?: boolean;
-  isPinned?: boolean;
-  pinIndex?: number;
-  workspaceLabel?: string;
-  workspaceRootPath?: string;
-  currentTodo?: string;
-  activeGoal?: ConversationGoalState | null;
-  currentTodos?: ChatTodoItem[];
-  state?: ChatConversationOverviewItem["state"];
-  previewMessages?: Array<{
-    messageId: string;
-    role: ChatMessage["role"];
-    speakerAgentId?: string;
-    createdAt?: string;
-    textPreview?: string;
-    hasImage?: boolean;
-    hasPdf?: boolean;
-    hasAudio?: boolean;
-    hasAttachment?: boolean;
-  }>;
-};
-
-type RemoteImContactConversationSummary = {
-  contactId: string;
-  conversationId: string;
-  title: string;
-  updatedAt: string;
-  lastMessageAt?: string;
-  messageCount: number;
-  channelId: string;
-  channelName?: string;
-  contactDisplayName: string;
-  boundDepartmentId?: string;
-  boundAgentId?: string;
-  processingMode?: string;
-  previewMessages?: ConversationSummary["previewMessages"];
-};
-
-type OpenConversationResult = {
-  conversationId: string;
-  title: string;
-  agentId?: string;
-  departmentId?: string;
-  messages: ChatMessage[];
-  runtime?: SidebarConversationRuntimePayload | null;
-  persona?: SidebarPersonaPayload;
-  model?: SidebarModelPayload;
-  currentTodos?: ChatTodoItem[];
-  activeGoal?: ConversationGoalState | null;
-};
-
-type SidebarWorkspacePermission = {
-  access?: "read_only" | "approval" | "full_access" | "";
-  workspaceName?: string;
-  rootPath?: string;
-};
-
-type SidebarClipboardImage = {
-  mime: string;
-  bytesBase64: string;
-};
-
-type SidebarQueuedAttachmentEntry = {
-  id: string;
-  fileName: string;
-  relativePath: string;
-  mime: string;
-  imageBytesBase64?: string;
-};
-
-type SidebarQueuedAttachmentNotice = {
-  id: string;
-  fileName: string;
-  relativePath: string;
-  mime: string;
-};
-
-type SidebarAttachmentPayload = {
-  fileName: string;
-  relativePath: string;
-  mime: string;
-};
-
-type RewindConversationResult = {
-  conversationId: string;
-  removedCount: number;
-  remainingCount: number;
-  recalledUserMessage?: ChatMessage;
-  conversation?: OpenConversationResult;
-};
-
-type RewindConversationPreviewResult = {
-  conversationId: string;
-  canUndoPatch: boolean;
-  hint?: string | null;
-};
-
-type BlockPageResult = {
-  selectedBlockId: number;
-  messages: ChatMessage[];
-  hasPrevBlock: boolean;
-  hasNextBlock: boolean;
-};
-
-type CompactionPreviewResult = {
-  conversationId: string;
-  canCompact: boolean;
-  messageCount: number;
-  hasAssistantReply: boolean;
-  isEmpty: boolean;
-  contextUsagePercent: number;
-  compactionDisabledReason?: string | null;
-};
-
-type SidebarPersonaPayload = {
-  userAlias?: string;
-  userAvatarUrl?: string;
-  assistantName?: string;
-  assistantAvatarUrl?: string;
-  personaNameMap?: Record<string, string>;
-  personaAvatarUrlMap?: Record<string, string>;
-};
-
-type SidebarModelPayload = {
-  conversationCallPrimaryApiConfigId?: string;
-  preferredChatModelId?: string;
-  toolReviewApiConfigId?: string;
-  chatModelOptions?: ApiConfigItem[];
-};
-
-type SidebarStreamCachePayload = {
-  assistantText?: string;
-  toolStatusText?: string;
-  toolStatusState?: string;
-  streamBlocks?: unknown[];
-  persistedAssistantMessageId?: string;
-};
-
-type SidebarConversationRuntimePayload = {
-  runtimeState?: string;
-  streamCache?: SidebarStreamCachePayload;
-};
-
-type GoalMutationOutput = {
-  conversationId: string;
-  goal: ConversationGoalState;
-};
-
-type SidebarAssistantDeltaPayload = {
-  conversationId?: string;
-  event?: {
-    delta?: string;
-    kind?: string;
-    toolName?: string;
-    toolCallId?: string;
-    toolStatus?: string;
-    toolArgs?: string;
-    message?: string;
-    streamCache?: SidebarStreamCachePayload;
-  };
-};
-
-type CreateConversationOptionsResult = {
-  departments: SidebarCreateDepartmentOption[];
-  defaultDepartmentId: string;
-  defaultAgentId?: string;
-};
-
-type DiscoveryPayload = {
-  chatUrl?: string;
-  bridgeUrl?: string;
-  url?: string;
-  token?: string;
-  workspaceRoots?: Array<{ path?: string; name?: string }>;
-};
-
-type IdeContextQueryResult = {
-  groups?: IdeContextWorkspaceGroup[];
-  updatedAt?: string;
-};
 
 const SYSTEM_NOTIFICATION_CONVERSATION_ID = "system-notification-conversation";
 const SYSTEM_NOTIFICATION_DISPLAY_TITLE = "P-ai系统";
