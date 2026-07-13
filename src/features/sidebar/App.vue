@@ -2193,6 +2193,15 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
     }
     if (assistantMessageId) {
       streamingAssistantMessageId.value = assistantMessageId;
+      const queued = result?.queued || result?.accepted === false || String(result?.ingress || "").trim() === "queued";
+      if (!queued) {
+        writeRuntimeStreamCacheToMessage({
+          persistedAssistantMessageId: assistantMessageId,
+          streamBlocks: [],
+          toolStatusText: "",
+          toolStatusState: "",
+        });
+      }
     }
     if ((result?.queued || result?.accepted === false || String(result?.ingress || "").trim() === "queued") && !hadForegroundRound) {
       busy.value = false;
@@ -2906,6 +2915,12 @@ function registerNotifications() {
       clearStreamingState();
       clearChatError();
       streamingAssistantMessageId.value = String(value.assistantMessageId || "").trim();
+      writeRuntimeStreamCacheToMessage({
+        persistedAssistantMessageId: streamingAssistantMessageId.value,
+        streamBlocks: [],
+        toolStatusText: "",
+        toolStatusState: "",
+      });
     }
   });
   transport.onNotification("chat.assistantDelta", (payload) => {
