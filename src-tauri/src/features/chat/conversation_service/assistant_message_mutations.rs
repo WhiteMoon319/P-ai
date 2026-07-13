@@ -426,5 +426,164 @@ impl ConversationServiceV2 {
         self.mark_conversation_metadata_cached_persisted(state, conversation_id)?;
         Ok(())
     }
-}
+    fn persist_stop_chat_partial_message(
+        &self,
+        state: &AppState,
+        requested_conversation_id: Option<&str>,
+        requested_department_id: Option<&str>,
+        agent_id: &str,
+        partial_assistant_text: &str,
+        partial_activity_reasoning_text: &str,
+        partial_inline_activity_text: &str,
+        completed_tool_history: &[Value],
+        assistant_message_id: Option<&str>,
+    ) -> Result<StopChatPersistResult, String> {
+        let should_persist = !partial_assistant_text.trim().is_empty()
+            || !partial_activity_reasoning_text.trim().is_empty()
+            || !completed_tool_history.is_empty();
+        if !should_persist {
+            return Ok(StopChatPersistResult {
+                persisted: false,
+                conversation_id: None,
+                assistant_message: None,
+            });
+        }
 
+        let app_config = load_runtime_organization_snapshot(state)?.config;
+        let api_config_id =
+            resolve_stop_chat_api_config_id(&app_config, requested_department_id, agent_id)?;
+        if !app_config.api_configs.iter().any(|api| api.id == api_config_id) {
+            return Err(format!("Selected API config '{api_config_id}' not found."));
+        }
+        let Some(target) = resolve_stop_chat_target(state, requested_conversation_id, agent_id)? else {
+            return Ok(StopChatPersistResult {
+                persisted: false,
+                conversation_id: None,
+                assistant_message: None,
+            });
+        };
+
+        let target_assistant_message_id = assistant_message_id
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned);
+        // 调度开始已 bootstrap 时，必须按该 UUID 原地更新；不能再因“尾消息是 assistant”跳过。
+        if target_assistant_message_id.is_none() {
+            if let Some(result) = build_stop_chat_skip_result(&target) {
+                return Ok(result);
+            }
+        }
+
+        let conversation_id = target.conversation_id().to_string();
+        let mut assistant_message = if let Some(assistant_message_id) = target_assistant_message_id.as_deref()
+        {
+            match &target {
+                StopChatConversationTarget::Runtime(conversation) => {
+                    let existing = conversation
+                        .messages
+                        .iter()
+                        .rev()
+                        .find(|message| message.id.trim() == assistant_message_id)
+                        .ok_or_else(|| {
+                            format!(
+                                "目标 assistant message 不存在，assistantMessageId={assistant_message_id}"
+                            )
+                        })?;
+                    if existing.role.trim() != "assistant" {
+                        return Err(format!(
+                            "目标消息不是 assistant，assistantMessageId={assistant_message_id}"
+                        ));
+                    }
+                    build_stop_chat_partial_assistant_message_for_id(
+                        assistant_message_id,
+                        agent_id,
+                        &existing.created_at,
+                        existing.speaker_agent_id.clone(),
+                        existing.tool_call.clone(),
+                        existing.provider_meta.clone(),
+                        partial_assistant_text,
+                        partial_activity_reasoning_text,
+                        completed_tool_history,
+                    )
+                }
+                StopChatConversationTarget::PersistedRef { .. } => {
+                    let existing = self.read_current_writable_assistant_message(
+                        state,
+                        &conversation_id,
+                        assistant_message_id,
+                    )?;
+                    build_stop_chat_partial_assistant_message_for_id(
+                        assistant_message_id,
+                        agent_id,
+                        &existing.created_at,
+                        existing.speaker_agent_id.clone(),
+                        existing.tool_call.clone(),
+                        existing.provider_meta.clone(),
+                        partial_assistant_text,
+                        partial_activity_reasoning_text,
+                        completed_tool_history,
+                    )
+                }
+            }
+        } else {
+            build_stop_chat_partial_assistant_message(
+                agent_id,
+                partial_assistant_text,
+                partial_activity_reasoning_text,
+                partial_inline_activity_text,
+                completed_tool_history,
+            )
+        };
+        let assistant_message_seed = assistant_message.id.clone();
+        populate_assistant_meme_annotations(
+            state,
+            &assistant_message_seed,
+            &mut assistant_message,
+        )?;
+        let conversation_id = match target {
+            StopChatConversationTarget::Runtime(mut conversation) => {
+                if target_assistant_message_id.is_some() {
+                    let target_id =
+                        apply_stop_chat_partial_message_by_id(&mut conversation, &assistant_message)?;
+                    delegate_runtime_thread_conversation_update(state, &target_id, conversation)
+                        .map(|_| target_id)?
+                } else {
+                    let target_id =
+                        apply_stop_chat_partial_message(&mut conversation, &assistant_message);
+                    delegate_runtime_thread_conversation_update(state, &target_id, conversation)
+                        .map(|_| target_id.to_string())?
+                }
+            }
+            StopChatConversationTarget::PersistedRef { conversation_id, .. } => {
+                let target_id = conversation_id.to_string();
+                let mutation_gate = conversation_mutation_gate(&state.data_path, &target_id)?;
+                let _guard = mutation_gate.lock().map_err(|err| {
+                    named_lock_error(
+                        "conversation_mutation_gate",
+                        file!(),
+                        line!(),
+                        module_path!(),
+                        &err,
+                    )
+                })?;
+                if target_assistant_message_id.is_some() {
+                    self.persist_replaced_ready_message_locked(
+                        state,
+                        &target_id,
+                        &assistant_message,
+                    )?;
+                } else {
+                    self.append_message_locked(state, &target_id, &assistant_message)?;
+                }
+                target_id
+            }
+        };
+
+        Ok(StopChatPersistResult {
+            persisted: true,
+            conversation_id: Some(conversation_id),
+            assistant_message: Some(assistant_message),
+        })
+    }
+
+}
