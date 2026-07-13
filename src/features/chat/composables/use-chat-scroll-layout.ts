@@ -2,6 +2,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Ref, watch } 
 
 const TODO_DROPDOWN_SAFE_GAP = 30;
 const FLOATING_TOOLBAR_MIN_RESERVE = 24;
+const SESSION_CONTROL_PANEL_HIDE_DELAY_MS = 200;
 
 type UseChatScrollLayoutOptions = {
   activeConversationId: Ref<string>;
@@ -31,6 +32,7 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
   let pendingChatLayoutResizeFrame = 0;
   let wheelScrollIntentUntil = 0;
   let pointerScrollIntentActive = false;
+  let sessionControlPanelHideTimer: ReturnType<typeof setTimeout> | null = null;
 
   const showJumpToBottom = computed(() => !lastBottomState.value && userScrollingDown.value);
   const jumpToBottomStyle = computed(() => ({
@@ -94,6 +96,24 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
     return distance <= threshold;
   }
 
+  function updateSessionControlPanelVisibility(nearBottom: boolean) {
+    if (nearBottom) {
+      if (sessionControlPanelHideTimer) {
+        clearTimeout(sessionControlPanelHideTimer);
+        sessionControlPanelHideTimer = null;
+      }
+      sessionControlPanelVisible.value = true;
+      return;
+    }
+    if (sessionControlPanelHideTimer) return;
+    sessionControlPanelHideTimer = setTimeout(() => {
+      sessionControlPanelHideTimer = null;
+      if (!lastBottomState.value) {
+        sessionControlPanelVisible.value = false;
+      }
+    }, SESSION_CONTROL_PANEL_HIDE_DELAY_MS);
+  }
+
   function updateScrollPositionState(el: HTMLElement, optionsOverride: { notifyReachedBottom?: boolean } = {}) {
     const nearBottom = isNearBottom(el);
     if (optionsOverride.notifyReachedBottom && nearBottom && !lastBottomState.value) {
@@ -104,6 +124,7 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
       userScrollingUp.value = false;
     }
     lastBottomState.value = nearBottom;
+    updateSessionControlPanelVisibility(nearBottom);
     return nearBottom;
   }
 
@@ -123,10 +144,7 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
       }
     }
     lastScrollTop.value = nextScrollTop;
-    const nearBottom = updateScrollPositionState(el, { notifyReachedBottom: true });
-    if (userInitiatedScroll && nextScrollTop !== previousScrollTop) {
-      sessionControlPanelVisible.value = nearBottom;
-    }
+    updateScrollPositionState(el, { notifyReachedBottom: true });
   }
 
   function noteWheelScrollIntent() {
@@ -211,6 +229,10 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
     if (typeof window !== "undefined") {
       window.removeEventListener("pointerup", endPointerScrollIntent);
       window.removeEventListener("pointercancel", endPointerScrollIntent);
+    }
+    if (sessionControlPanelHideTimer) {
+      clearTimeout(sessionControlPanelHideTimer);
+      sessionControlPanelHideTimer = null;
     }
   });
 
