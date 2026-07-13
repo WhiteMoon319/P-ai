@@ -94,7 +94,7 @@ fn default_window_size(label: &str) -> (u32, u32) {
 
 fn minimum_window_size(label: &str) -> (u32, u32) {
     match label {
-        "main" => (520_u32, 520_u32),
+        "main" => (900_u32, 600_u32),
         "chat" => (520_u32, 520_u32),
         "archives" => (560_u32, 560_u32),
         "quick-setup" => (800_u32, 600_u32),
@@ -105,7 +105,7 @@ fn minimum_window_size(label: &str) -> (u32, u32) {
 
 fn restore_window_minimum_size(label: &str) -> (u32, u32) {
     match label {
-        "main" => (600_u32, 600_u32),
+        "main" => (900_u32, 600_u32),
         _ => minimum_window_size(label),
     }
 }
