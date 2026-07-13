@@ -563,7 +563,12 @@ import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import PanelTabStrip from "../../shared/components/PanelTabStrip.vue";
 import { useI18n } from "vue-i18n";
 import type { IdeContextReferenceItem } from "../../../types/app";
-import { CONTEXT_TEXT_BLOCK_CONTENT_LIMIT } from "../constants";
+import {
+  buildFileReaderContextMeta,
+  buildFileReaderContextReference,
+  fileReaderLineReference,
+  resolveFileReaderSelectedLineRange,
+} from "../file-reader-context";
 import { useFileReaderVirtualCode } from "../composables/use-file-reader-virtual-code";
 import { resolveFileTreeIcon } from "../file-tree-icons";
 import type {
@@ -584,15 +589,11 @@ import {
   extensionFromPath,
   fileKindFromPath,
   formatLineSuffix,
-  hashText,
   isPreviewMediaKind,
   isTextFileKind,
-  languageIdFromTab,
   normalizeDirectoryEntries,
   normalizePath,
   normalizeSelectedText,
-  relativePathFromWorkspace,
-  resolveRawSelectedLineRange,
   resolveVisibleLineRange,
   sameNormalizedPath,
   splitContentLines,
@@ -1171,7 +1172,7 @@ function openActiveFileContextMenu(event: MouseEvent) {
     kind: "file",
     path: normalizePath(tab.path),
     selectedText: selectionContext?.selectedText || "",
-    lineReference: selectionContext ? fileLineReference(tab.path, selectionContext.lineRange) : "",
+    lineReference: selectionContext ? fileReaderLineReference(tab.path, selectionContext.lineRange) : "",
   };
   contextMenuOpen.value = true;
 }
@@ -1193,12 +1194,8 @@ function readCurrentFileSelection(): { selectedText: string; lineRange: { startL
   if (!selectedText) return null;
   return {
     selectedText,
-    lineRange: resolveSelectedLineRange(tab, scroller, selectedText, range),
+    lineRange: resolveFileReaderSelectedLineRange(tab, scroller, selectedText, range),
   };
-}
-
-function fileLineReference(path: string, lineRange: { startLine?: number; endLine?: number }) {
-  return `${normalizePath(path)}${formatLineSuffix(lineRange.startLine, lineRange.endLine)}`;
 }
 
 async function copyTextToClipboard(text: string) {
@@ -1263,8 +1260,8 @@ function captureCurrentTextSelection() {
   const selectedText = normalizeSelectedText(selection.toString());
   if (!selectedText) return;
 
-  const lineRange = resolveSelectedLineRange(tab, scroller, selectedText, range);
-  const meta = buildContextMeta(tab);
+  const lineRange = resolveFileReaderSelectedLineRange(tab, scroller, selectedText, range);
+  const meta = buildFileReaderContextMeta(tab, props.initialRootPath || "");
   const capturedAt = new Date().toISOString();
   const selectionKey = [
     meta.filePath,
@@ -1305,7 +1302,7 @@ function captureVisibleRangeContextNow(options: { force?: boolean } = {}) {
     ? collectVirtualizedVisibleContent(tab, lineRange)
     : splitContentLines(tab.content).slice(lineRange.startLine - 1, lineRange.endLine).join("\n").trim();
   if (!content) return;
-  const meta = buildContextMeta(tab);
+  const meta = buildFileReaderContextMeta(tab, props.initialRootPath || "");
   const visibleRangeKey = [meta.filePath, lineRange.startLine, lineRange.endLine, content].join("\n");
   if (!options.force && visibleRangeKey === lastCapturedVisibleRangeKey) return;
   lastCapturedVisibleRangeKey = visibleRangeKey;
@@ -1328,36 +1325,11 @@ function emitContextReference(input: {
   displayLabel: string;
   capturedAt: string;
 }) {
-  const meta = buildContextMeta(input.tab);
-  const languageId = languageIdFromTab(input.tab);
-  emit("captureContextReference", {
-    id: `file-reader-context:${hashText([
-      meta.filePath,
-      input.source,
-      input.lineRange.startLine || "",
-      input.lineRange.endLine || "",
-    ].join("\n"))}`,
-    workspacePath: meta.workspacePath,
-    workspaceName: meta.workspaceName,
-    filePath: meta.filePath,
-    fileName: input.tab.title,
-    relativePath: meta.relativePath,
-    startLine: input.lineRange.startLine,
-    endLine: input.lineRange.endLine,
-    displayLabel: input.displayLabel,
-    content: input.content,
-    languageId,
-    source: input.source,
-    capturedAt: input.capturedAt,
-    textBlock: buildContextTextBlock({
-      filePath: meta.filePath,
-      lineRange: input.lineRange,
-      languageId,
-      source: input.source,
-      capturedAt: input.capturedAt,
-      content: input.content,
-    }),
-  });
+  emit("captureContextReference", buildFileReaderContextReference({
+    ...input,
+    initialRootPath: props.initialRootPath || "",
+    t: (key, params) => String(t(key, params ?? {})),
+  }));
 }
 
 function activeContentScroller() {
@@ -1404,106 +1376,6 @@ function isTabRawMode(tab: FileTab | null | undefined) {
   if (!tab) return false;
   if (tab.kind === "markdown") return tab.rawMode;
   return false;
-}
-
-function buildContextMeta(tab: FileTab) {
-  const filePath = normalizePath(tab.path);
-  const workspacePath = normalizePath(props.initialRootPath || directoryFromPath(filePath));
-  return {
-    filePath,
-    workspacePath,
-    workspaceName: titleFromPath(workspacePath),
-    relativePath: relativePathFromWorkspace(filePath, workspacePath),
-  };
-}
-
-function resolveSelectedLineRange(tab: FileTab, scroller: HTMLElement, selectedText: string, range?: Range): { startLine: number; endLine: number } {
-  if (tab.virtualized) {
-    const virtualizedLineRange = range ? resolveVirtualizedSelectedLineRange(range) : null;
-    if (virtualizedLineRange) return virtualizedLineRange;
-    return resolveVisibleLineRange(scroller, Math.max(1, tab.totalLines));
-  }
-  if (tab.kind === "markdown" && !isTabRawMode(tab)) {
-    return resolveVisibleLineRange(scroller, Math.max(1, splitContentLines(tab.content).length));
-  }
-  return resolveRawSelectedLineRange(tab.content, selectedText)
-    || resolveVisibleLineRange(scroller, Math.max(1, splitContentLines(tab.content).length));
-}
-
-function resolveVirtualizedSelectedLineRange(range: Range): { startLine: number; endLine: number } | null {
-  const startLine = resolveVirtualizedBoundaryLine(range.startContainer, range.startOffset);
-  const endLine = resolveVirtualizedBoundaryLine(range.endContainer, range.endOffset);
-  if (!startLine || !endLine) return null;
-  return {
-    startLine: Math.min(startLine, endLine),
-    endLine: Math.max(startLine, endLine),
-  };
-}
-
-function resolveVirtualizedBoundaryLine(container: Node, offset: number): number | null {
-  const element = container.nodeType === Node.ELEMENT_NODE
-    ? container as Element
-    : container.parentElement;
-  const row = element?.closest<HTMLElement>(".file-reader-code-virtual-row");
-  if (!row) return null;
-  const blockStartLine = Number(row.dataset.startLine || 0);
-  const blockEndLine = Number(row.dataset.endLine || 0);
-  if (!Number.isFinite(blockStartLine) || !Number.isFinite(blockEndLine) || blockStartLine <= 0 || blockEndLine < blockStartLine) {
-    return null;
-  }
-
-  const shikiLine = element?.closest<HTMLElement>(".file-reader-code-virtual-shiki .line");
-  if (shikiLine && row.contains(shikiLine)) {
-    const lineElements = Array.from(row.querySelectorAll<HTMLElement>(".file-reader-code-virtual-shiki code .line"));
-    const index = lineElements.indexOf(shikiLine);
-    if (index >= 0) {
-      return Math.max(blockStartLine, Math.min(blockEndLine, blockStartLine + index));
-    }
-  }
-
-  const rawPre = row.querySelector<HTMLElement>(".file-reader-code-virtual-raw");
-  if (rawPre && (container === rawPre || rawPre.contains(container))) {
-    const lineIndex = lineIndexWithinElement(rawPre, container, offset);
-    if (lineIndex != null) {
-      return Math.max(blockStartLine, Math.min(blockEndLine, blockStartLine + lineIndex));
-    }
-  }
-
-  return blockStartLine;
-}
-
-function lineIndexWithinElement(root: HTMLElement, container: Node, offset: number): number | null {
-  const range = document.createRange();
-  try {
-    range.selectNodeContents(root);
-    range.setEnd(container, offset);
-    return Math.max(0, range.toString().split("\n").length - 1);
-  } catch {
-    return null;
-  } finally {
-    range.detach();
-  }
-}
-
-function buildContextTextBlock(input: {
-  filePath: string;
-  lineRange: { startLine?: number; endLine?: number };
-  languageId: string;
-  source: string;
-  capturedAt: string;
-  content: string;
-}) {
-  const location = `${input.filePath}${formatLineSuffix(input.lineRange.startLine, input.lineRange.endLine)}`;
-  const contentLength = input.content.length;
-  if (contentLength > CONTEXT_TEXT_BLOCK_CONTENT_LIMIT) {
-    return `${t('fileReader.referenceFile', { location })}${t('fileReader.referenceTruncated', { count: contentLength })}`;
-  }
-  return [
-    t('fileReader.referenceFile', { location }),
-    "```text",
-    input.content,
-    "```",
-  ].join("\n");
 }
 
 // ==================== Helpers ====================
