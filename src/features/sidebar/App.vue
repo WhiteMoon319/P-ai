@@ -272,6 +272,7 @@ import SidebarReviewPanel from "./views/SidebarReviewPanel.vue";
 import CreateConversationDialog from "./views/CreateConversationDialog.vue";
 import WorkspaceDirectoryPickerDialog from "../shared/components/WorkspaceDirectoryPickerDialog.vue";
 import { useWsTransport, type SidebarBridgeConfig } from "./composables/use-ws-transport";
+import { useSidebarAttachments } from "./composables/use-sidebar-attachments";
 import { isTauriRuntimeAvailable } from "../../services/tauri-api";
 import { formatI18nError } from "../../utils/error";
 import ToolReviewTargetDialog from "../chat/components/ToolReviewTargetDialog.vue";
@@ -294,13 +295,10 @@ import type {
   RewindConversationResult,
   SidebarAssistantDeltaPayload,
   SidebarAttachmentPayload,
-  SidebarClipboardImage,
   SidebarConversationRuntimePayload,
   SidebarCreateDepartmentOption,
   SidebarModelPayload,
   SidebarPersonaPayload,
-  SidebarQueuedAttachmentEntry,
-  SidebarQueuedAttachmentNotice,
   SidebarWorkspacePermission,
 } from "./sidebar-app-types";
 import {
@@ -362,24 +360,6 @@ const vscodeIdeContextGroups = ref<IdeContextWorkspaceGroup[]>([]);
 const messages = ref<ChatMessage[]>([]);
 const sidebarTodos = ref<ChatTodoItem[]>([]);
 const inputText = ref("");
-const clipboardImages = ref<SidebarClipboardImage[]>([]);
-const queuedAttachmentEntries = ref<SidebarQueuedAttachmentEntry[]>([]);
-const attachmentBackedClipboardImages = computed<SidebarClipboardImage[]>(() => queuedAttachmentEntries.value
-  .filter((item) => item.mime.startsWith("image/") && !!String(item.imageBytesBase64 || "").trim())
-  .map((item) => ({
-    mime: item.mime,
-    bytesBase64: String(item.imageBytesBase64 || "").trim(),
-  })));
-const composerClipboardImages = computed<SidebarClipboardImage[]>(() => [
-  ...clipboardImages.value,
-  ...attachmentBackedClipboardImages.value,
-]);
-const queuedAttachmentNotices = computed<SidebarQueuedAttachmentNotice[]>(() => queuedAttachmentEntries.value.map((item) => ({
-  id: item.id,
-  fileName: item.fileName,
-  relativePath: item.relativePath,
-  mime: item.mime,
-})));
 const toolStatusText = ref("");
 const toolStatusState = ref<"running" | "done" | "failed" | "">("");
 const chatErrorText = ref("");
@@ -387,6 +367,27 @@ const streamingAssistantMessageId = ref("");
 const busy = ref(false);
 const sendSubmitting = ref(false);
 const compacting = ref(false);
+const view = ref<"list" | "chat">("chat");
+const {
+  attachmentInputRef,
+  clipboardImages,
+  composerClipboardImages,
+  queuedAttachmentEntries,
+  queuedAttachmentNotices,
+  appendClipboardImagesFromPaste,
+  buildQueuedAttachmentPayload,
+  handleAttachmentInputChange,
+  pickAttachments,
+  removeClipboardImage,
+  removeQueuedAttachmentNotice,
+} = useSidebarAttachments({
+  view,
+  busy,
+  compacting,
+  errorText: transport.errorText,
+  t,
+  queueAttachment: (input) => transport.request("chat.queueAttachment", input),
+});
 const chatViewWrapperRef = ref<{ exitMessageSelectionMode: () => void; chatUsagePercent?: number } | null>(null);
 const chatUsagePercent = computed(() => chatViewWrapperRef.value?.chatUsagePercent ?? 0);
 const compactionDialogOpen = ref(false);
@@ -424,7 +425,6 @@ const supervisionErrorText = ref("");
 const activeConversationGoal = ref<ConversationGoalState | null>(null);
 const selectedBlockId = ref<number | null>(null);
 const hasPrevBlock = ref(false);
-const view = ref<"list" | "chat">("chat");
 const rewindConfirmDialogOpen = ref(false);
 const rewindConfirmCanUndoPatch = ref(false);
 let rewindConfirmResolver: ((mode: "message_only" | "with_patch" | "cancel") => void) | null = null;
@@ -432,7 +432,6 @@ const branchFromMessageConfirmDialogOpen = ref(false);
 let branchFromMessageConfirmResolver: ((confirmed: boolean) => void) | null = null;
 let rewindInFlight = false;
 const currentWorkspaceName = ref("");
-const attachmentInputRef = ref<HTMLInputElement | null>(null);
 const workspacePickerOpen = ref(false);
 const workspacePickerSaving = ref(false);
 const workspaceDraftChoices = ref<ChatWorkspaceChoice[]>([]);
@@ -1842,145 +1841,6 @@ async function confirmCompaction() {
   } finally {
     compacting.value = false;
   }
-}
-
-function readBlobAsDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error || new Error("读取剪贴板图片失败"));
-    reader.readAsDataURL(blob);
-  });
-}
-
-function pastedImageFiles(event: ClipboardEvent): File[] {
-  const data = event.clipboardData;
-  if (!data) return [];
-  const filesFromItems = data.items && data.items.length > 0
-    ? Array.from(data.items)
-      .filter((item) => item.kind === "file" && item.type.toLowerCase().startsWith("image/"))
-      .map((item) => item.getAsFile())
-      .filter((file): file is File => !!file)
-    : [];
-  if (filesFromItems.length > 0) return filesFromItems;
-  return data.files
-    ? Array.from(data.files).filter((file) => String(file.type || "").toLowerCase().startsWith("image/"))
-    : [];
-}
-
-async function appendClipboardImagesFromPaste(event: ClipboardEvent) {
-  if (view.value !== "chat" || compacting.value) return;
-  const files = pastedImageFiles(event);
-  if (files.length === 0) return;
-  event.preventDefault();
-  try {
-    for (const file of files) {
-      const dataUrl = await readBlobAsDataUrl(file);
-      const bytesBase64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : "";
-      if (!bytesBase64) continue;
-      clipboardImages.value.push({
-        mime: String(file.type || "image/png").trim() || "image/png",
-        bytesBase64,
-      });
-    }
-  } catch (error) {
-    transport.errorText.value = String(error || t('sidebar.readClipboardImageFailed'));
-  }
-}
-
-function removeClipboardImage(index: number) {
-  if (index < 0) return;
-  if (index < clipboardImages.value.length) {
-    clipboardImages.value.splice(index, 1);
-    return;
-  }
-  const attachmentImageIndex = index - clipboardImages.value.length;
-  if (attachmentImageIndex < 0) return;
-  const attachmentImageIds = queuedAttachmentEntries.value
-    .filter((item) => item.mime.startsWith("image/") && !!String(item.imageBytesBase64 || "").trim())
-    .map((item) => item.id);
-  const targetId = attachmentImageIds[attachmentImageIndex];
-  if (!targetId) return;
-  queuedAttachmentEntries.value = queuedAttachmentEntries.value.filter((item) => item.id !== targetId);
-}
-
-function removeQueuedAttachmentNotice(index: number) {
-  if (index < 0 || index >= queuedAttachmentEntries.value.length) return;
-  queuedAttachmentEntries.value.splice(index, 1);
-}
-
-function attachmentPayloadKey(item: SidebarAttachmentPayload): string {
-  return `${item.relativePath.replace(/\\/g, "/").toLowerCase()}::${item.mime.toLowerCase()}`;
-}
-
-function buildQueuedAttachmentPayload(): SidebarAttachmentPayload[] {
-  const merged = new Map<string, SidebarAttachmentPayload>();
-  for (const item of queuedAttachmentEntries.value) {
-    const fileName = String(item.fileName || "").trim();
-    const relativePath = String(item.relativePath || "").trim().replace(/\\/g, "/");
-    const mime = String(item.mime || "").trim();
-    if (!fileName || !relativePath) continue;
-    const normalized = { fileName, relativePath, mime };
-    const key = attachmentPayloadKey(normalized);
-    if (merged.has(key)) continue;
-    merged.set(key, normalized);
-  }
-  return Array.from(merged.values());
-}
-
-function pickAttachments() {
-  if (busy.value || compacting.value) return;
-  if (!attachmentInputRef.value) return;
-  attachmentInputRef.value.value = "";
-  attachmentInputRef.value.click();
-}
-
-async function appendAttachmentFiles(files: File[]) {
-  const supported = files.filter((file) => {
-    const mime = String(file.type || "").toLowerCase();
-    return mime.startsWith("image/") || mime === "application/pdf";
-  });
-  if (supported.length === 0) return;
-  try {
-    for (const file of supported) {
-      const dataUrl = await readBlobAsDataUrl(file);
-      const bytesBase64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : "";
-      if (!bytesBase64) continue;
-      const queued = await transport.request<{
-        mime: string;
-        fileName: string;
-        savedPath: string;
-        attachAsMedia: boolean;
-        bytesBase64?: string | null;
-      }>("chat.queueAttachment", {
-        fileName: String(file.name || "").trim() || "attachment",
-        mime: String(file.type || "").trim() || "application/octet-stream",
-        bytesBase64,
-      });
-      const mime = String(queued.mime || "").trim().toLowerCase();
-      const savedPath = String(queued.savedPath || "").trim();
-      const relativePath = savedPath.replace(/\\/g, "/").replace(/^.*\/downloads\//, "downloads/");
-      const fileName = String(queued.fileName || "").trim() || relativePath.split("/").pop() || "attachment";
-      const id = `${relativePath || fileName}::${mime}`;
-      if (!queuedAttachmentEntries.value.some((item) => item.id === id)) {
-        queuedAttachmentEntries.value.push({
-          id,
-          fileName,
-          relativePath: relativePath || savedPath || fileName,
-          mime,
-          imageBytesBase64: mime.startsWith("image/") ? String(queued.bytesBase64 || "").trim() || undefined : undefined,
-        });
-      }
-    }
-  } catch (error) {
-    transport.errorText.value = String(error || t('sidebar.readClipboardImageFailed'));
-  }
-}
-
-function handleAttachmentInputChange(event: Event) {
-  const target = event.target as HTMLInputElement | null;
-  const files = target?.files ? Array.from(target.files) : [];
-  void appendAttachmentFiles(files);
 }
 
 async function send(payload?: { extraTextBlocks?: string[] }) {
