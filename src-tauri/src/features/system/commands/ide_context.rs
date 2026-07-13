@@ -6124,6 +6124,26 @@ async fn ide_chat_handle_jsonrpc_request(
         "workspace.directory.list" => ide_chat_workspace_directory_list(request.params),
         "fileReader.directory.list" => ide_chat_file_reader_directory_list(request.params),
         "fileReader.readFile" => ide_chat_file_reader_read(request.params),
+        "read_chat_image_data_url" => (|| {
+            let input = ide_chat_parse_param_field::<ChatImageDataUrlInput>(request.params, "input")?;
+            let media_ref = input.media_ref.trim();
+            if media_ref.is_empty() {
+                return ide_chat_serialize(ChatImageDataUrlOutput {
+                    data_url: String::new(),
+                });
+            }
+            if stored_binary_ref_from_marker(media_ref).is_none() {
+                return Err("Chat image mediaRef is invalid.".to_string());
+            }
+            let mime = input.mime.trim().to_ascii_lowercase();
+            if !mime.starts_with("image/") {
+                return Err("Chat image mime is invalid.".to_string());
+            }
+            let base64 = resolve_stored_binary_base64(&state.data_path, media_ref)?;
+            ide_chat_serialize(ChatImageDataUrlOutput {
+                data_url: format!("data:{mime};base64,{base64}"),
+            })
+        })(),
         "ideContext.query" => ide_chat_parse_params::<IdeContextWorkspaceQueryInput>(request.params)
             .and_then(|input| serde_json::to_value(query_ide_context_references_internal(input, ide_context_runtime)?)
                 .map_err(|err| format!("serialize IDE context query result failed: {err}"))),
