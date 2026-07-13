@@ -1707,13 +1707,6 @@ fn truncate_single_line(line: &str, max_chars: usize) -> String {
     }
 }
 
-fn truncate_long_lines(text: &str, max_chars: usize) -> String {
-    text.lines()
-        .map(|line| truncate_single_line(line, max_chars))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 fn file_reader_decode_text_content(path: &PathBuf) -> Result<String, String> {
     decode_text_file_from_path(path)
         .map(|decoded| decoded.text)
@@ -1764,11 +1757,17 @@ fn file_reader_rope_lines_to_string(
 
 #[tauri::command]
 fn read_file_reader_file(window: tauri::Window, path: String) -> Result<FileReaderFilePayload, String> {
+    read_file_reader_file_inner(path, Some(window.label()))
+}
+
+fn read_file_reader_file_inner(path: String, window_label: Option<&str>) -> Result<FileReaderFilePayload, String> {
     let raw_path = path.trim();
     if raw_path.is_empty() {
         return Err("path is required".to_string());
     }
-    log_file_reader_read_burst(window.label(), raw_path);
+    if let Some(label) = window_label {
+        log_file_reader_read_burst(label, raw_path);
+    }
     let file_path = PathBuf::from(raw_path);
     if !file_path.exists() {
         return Err(format!("文件不存在：{raw_path}"));
@@ -1802,7 +1801,7 @@ fn read_file_reader_file(window: tauri::Window, path: String) -> Result<FileRead
     let kind = file_reader_file_kind(&file_key).to_string();
     let rope = file_reader_decode_text_rope(&file_path)?;
     let total_lines = file_reader_rope_line_count(&rope);
-    let virtualized = true;
+    let virtualized = kind == "code";
     let content = if kind == "markdown" {
         rope.to_string()
     } else if virtualized {
@@ -1821,7 +1820,7 @@ fn read_file_reader_file(window: tauri::Window, path: String) -> Result<FileRead
         force_plain,
         virtualized,
         total_lines,
-        block_line_count: FILE_READER_BLOCK_LINE_COUNT,
+        block_line_count: if virtualized { FILE_READER_BLOCK_LINE_COUNT } else { 0 },
     })
 }
 

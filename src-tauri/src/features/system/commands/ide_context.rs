@@ -665,6 +665,14 @@ struct IdeChatFileReaderReadInput {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct IdeChatFileReaderReadBlockInput {
+    path: String,
+    start_line: usize,
+    line_count: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct IdeChatReadPlanFileInput {
     conversation_id: String,
     path: String,
@@ -740,63 +748,18 @@ fn ide_chat_file_reader_directory_list(params: Value) -> Result<Value, String> {
 
 fn ide_chat_file_reader_read(params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatFileReaderReadInput>(params)?;
-    let path = input.path.trim();
-    if path.is_empty() {
-        return Err("path is required".to_string());
-    }
-    let file_path = PathBuf::from(path);
-    if !file_path.exists() {
-        return Err(format!("文件不存在：{path}"));
-    }
-    if !file_path.is_file() {
-        return Err(format!("目标不是文件：{path}"));
-    }
-    let metadata = fs::metadata(&file_path).map_err(|err| format!("读取文件信息失败：{err}"))?;
-    let file_size = metadata.len();
-    let force_plain = file_size > FILE_READER_PLAIN_TEXT_THRESHOLD;
-    let resolved_path = file_path.canonicalize().unwrap_or_else(|_| file_path.clone());
-    let extension = file_path
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default()
-        .trim()
-        .to_ascii_lowercase();
-    let name = file_path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or(path)
-        .to_string();
-    let file_key = if extension.is_empty() {
-        name.trim().to_ascii_lowercase()
-    } else {
-        extension.clone()
-    };
-    if file_reader_extension_is_unsupported(&file_key) {
-        return Err("此类文件不适合在文件阅读器中直接读取".to_string());
-    }
-    let content = match decode_text_file_from_path(&file_path) {
-        Ok(decoded) => {
-            if force_plain {
-                truncate_long_lines(&decoded.text, FILE_READER_LINE_TRUNCATE_CHARS)
-            } else {
-                decoded.text
-            }
-        }
-        Err(_) => return Err("此文件不是可预览的文本文件".to_string()),
-    };
-    let total_lines = content.lines().count().max(1);
-    serde_json::to_value(FileReaderFilePayload {
-        path: resolved_path.to_string_lossy().replace('\\', "/"),
-        name,
-        extension: file_key.clone(),
-        kind: file_reader_file_kind(&file_key).to_string(),
-        content,
-        force_plain,
-        virtualized: false,
-        total_lines,
-        block_line_count: 0,
-    })
-    .map_err(|err| format!("serialize file reader payload failed: {err}"))
+    serde_json::to_value(read_file_reader_file_inner(input.path, None)?)
+        .map_err(|err| format!("serialize file reader payload failed: {err}"))
+}
+
+fn ide_chat_file_reader_read_block(params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatFileReaderReadBlockInput>(params)?;
+    serde_json::to_value(read_file_reader_file_block(
+        input.path,
+        input.start_line,
+        input.line_count,
+    )?)
+    .map_err(|err| format!("serialize file reader block failed: {err}"))
 }
 
 fn ide_chat_delegate_statuses(state: &AppState, params: Value) -> Result<Value, String> {
@@ -6124,6 +6087,7 @@ async fn ide_chat_handle_jsonrpc_request(
         "workspace.directory.list" => ide_chat_workspace_directory_list(request.params),
         "fileReader.directory.list" => ide_chat_file_reader_directory_list(request.params),
         "fileReader.readFile" => ide_chat_file_reader_read(request.params),
+        "fileReader.readFileBlock" => ide_chat_file_reader_read_block(request.params),
         "read_chat_image_data_url" => (|| {
             let input = ide_chat_parse_param_field::<ChatImageDataUrlInput>(request.params, "input")?;
             let media_ref = input.media_ref.trim();
