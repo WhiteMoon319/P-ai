@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "changelog:build": "node scripts/build-changelog.mjs",
+    "clean:cargo-cache": "powershell -ExecutionPolicy Bypass -File scripts/clean-cargo-cache.ps1",
+    "clean:cargo-cache:all": "powershell -ExecutionPolicy Bypass -File scripts/clean-cargo-cache.ps1 -All",
     "dev": "vite",
     "build": "tsc && vite build",
     "package:vscode-sidebar": "powershell -ExecutionPolicy Bypass -File scripts/package-vscode-sidebar.ps1",

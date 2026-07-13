@@ -76,14 +76,14 @@ custom-protocol = ["tauri/custom-protocol"]
 
 [profile.dev]
 debug = 1
-incremental = false
+incremental = true
 
 [profile.dev.package."*"]
 debug = 0
 
 [profile.test]
 debug = 1
-incremental = false
+incremental = true
 
 [profile.test.package."*"]
 debug = 0
