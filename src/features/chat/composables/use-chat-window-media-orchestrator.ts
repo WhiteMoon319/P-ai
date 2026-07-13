@@ -104,6 +104,7 @@ export function useChatWindowMediaOrchestrator(bindings: Record<string, any>) {
     currentChatConversationId: bindings.currentChatConversationId,
     currentForegroundAgentId: bindings.currentForegroundAgentId,
     startupDataReady: bindings.startupDataReady,
+    chatting: bindings.chatting,
     recordHotkeyProbeLastSeq: bindings.recordHotkeyProbeLastSeq,
     recordHotkeyProbeDown: bindings.recordHotkeyProbeDown,
     chatWindowActiveSynced: bindings.chatWindowActiveSynced,

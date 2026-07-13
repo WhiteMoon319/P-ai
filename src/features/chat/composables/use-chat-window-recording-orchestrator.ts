@@ -16,6 +16,7 @@ type UseChatWindowRecordingOrchestratorOptions = {
   currentChatConversationId: Ref<string>;
   currentForegroundAgentId: Ref<string>;
   startupDataReady: Ref<boolean>;
+  chatting: Ref<boolean>;
   recordHotkeyProbeLastSeq: Ref<number>;
   recordHotkeyProbeDown: Ref<boolean>;
   chatWindowActiveSynced: Ref<boolean | null>;
@@ -31,6 +32,7 @@ type UseChatWindowRecordingOrchestratorOptions = {
       statusText?: string;
       reason?: string;
     }) => number;
+    frontendRoundPhase?: Ref<"idle" | "queued" | "waiting" | "streaming">;
   } | null | undefined;
   applyConversationRuntimeStateUpdated: (payload: {
     conversationId: string;
@@ -193,31 +195,44 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     await options.switchUnarchivedConversation(conversationId);
   }
 
+  function frontendConversationIsStreaming(): boolean {
+    const chatFlow = options.getChatFlow();
+    const phase = String(chatFlow?.frontendRoundPhase?.value || "").trim();
+    return !!options.chatting.value || phase === "queued" || phase === "streaming";
+  }
+
+  async function recoverForegroundConversationAfterDeadChannel(
+    conversationId: string,
+    chatFlow: ReturnType<UseChatWindowRecordingOrchestratorOptions["getChatFlow"]>,
+  ) {
+    if (chatFlow?.bindActiveConversationStream) {
+      await chatFlow.bindActiveConversationStream(conversationId, true);
+    }
+    await recoverForegroundConversationBySwitch(conversationId);
+  }
+
   async function reconcileForegroundConversationAfterFreeze(conversationId: string, _reason: string) {
     const chatFlow = options.getChatFlow();
-
-    // 第一步只判断“流式绑定通道是否还活着”。
-    // 这里绝不能把 probe=true 误当成正文健康，只能用来判断是否需要先重绑当前会话的流式通道。
-    if (!chatFlow?.probeBoundChannel) {
-      if (chatFlow?.bindActiveConversationStream) {
-        await chatFlow.bindActiveConversationStream(conversationId, true);
-      }
-      await recoverForegroundConversationBySwitch(conversationId);
-      return;
-    }
-
-    const probeHealthy = await chatFlow.probeBoundChannel(conversationId);
-    if (!probeHealthy) {
-      if (chatFlow?.bindActiveConversationStream) {
-        await chatFlow.bindActiveConversationStream(conversationId, true);
-      }
-      await recoverForegroundConversationBySwitch(conversationId);
-      return;
-    }
-
     const runtimeSnapshot = await requestConversationRuntimeSnapshot(conversationId);
     const runtimeState = String(runtimeSnapshot?.runtimeState || "").trim();
-    if (runtimeState === "assistant_streaming" || runtimeState === "organizing_context" || runtimeState === "compacting") {
+    const backendStreaming = runtimeState === "assistant_streaming";
+    const frontendStreaming = frontendConversationIsStreaming();
+
+    if (backendStreaming && frontendStreaming) {
+      if (!chatFlow?.probeBoundChannel) {
+        await recoverForegroundConversationAfterDeadChannel(conversationId, chatFlow);
+        return;
+      }
+      const probeHealthy = await chatFlow.probeBoundChannel(conversationId);
+      if (probeHealthy) {
+        return;
+      }
+      await recoverForegroundConversationAfterDeadChannel(conversationId, chatFlow);
+      return;
+    }
+
+    if (backendStreaming !== frontendStreaming) {
+      await recoverForegroundConversationBySwitch(conversationId);
       return;
     }
 
