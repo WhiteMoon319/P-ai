@@ -1,9 +1,6 @@
 import type { Ref } from "vue";
 import type { AssistantStreamBlock } from "../../../types/app";
-import {
-  normalizeAssistantStreamBlocks,
-  streamBlocksActivitySignature,
-} from "../../../utils/chat-message-semantics";
+import { normalizeAssistantStreamBlocks } from "../../../utils/chat-message-semantics";
 import {
   assistantEventHasVisibleProgress,
   readDeltaMessage,
@@ -18,7 +15,6 @@ import type { PendingTerminalEvent, RoundState } from "./use-chat-flow-types";
 type UseChatFlowStreamingEventsOptions = {
   toolStatusText: Ref<string>;
   toolStatusState: Ref<"running" | "done" | "failed" | "">;
-  streamBlocks?: Ref<AssistantStreamBlock[]>;
   contextUsagePreview?: Ref<ContextUsageUpdatePayload | null>;
   reasoningStartedAtMs: Ref<number>;
   getRound: () => RoundState;
@@ -37,12 +33,6 @@ type UseChatFlowStreamingEventsOptions = {
   handleRoundFailed: (gen: number, error: unknown) => Promise<void>;
   getMessageStreamBlocks: (messageId: string) => AssistantStreamBlock[];
   syncStreamBlocksToMessage: (messageId: string, rawBlocks?: AssistantStreamBlock[]) => void;
-  syncCurrentDisplayStateToConversationStreamCache: () => void;
-  applyConversationStreamCacheSnapshotToDisplay: (
-    conversationId: string,
-    snapshot?: any,
-    input?: { ignoreActivationId?: boolean },
-  ) => boolean;
   updateMessageText: (
     messageId: string,
     streamSegments?: string[],
@@ -55,19 +45,6 @@ type UseChatFlowStreamingEventsOptions = {
 };
 
 export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOptions) {
-  function shouldPreserveMessageProjection(parsed: AssistantDeltaEvent): boolean {
-    return parsed.kind === "activity_reasoning_delta";
-  }
-
-  function shouldCorrectMessageProjectionFromSnapshot(
-    messageId: string,
-    snapshotBlocks: AssistantStreamBlock[],
-  ): boolean {
-    if (!messageId || snapshotBlocks.length <= 0) return false;
-    const currentMessageBlocks = options.getMessageStreamBlocks(messageId);
-    return streamBlocksActivitySignature(currentMessageBlocks) !== streamBlocksActivitySignature(snapshotBlocks);
-  }
-
   function handleStreamingEvent(currentGen: number, parsed: AssistantDeltaEvent) {
     if (parsed.kind === "context_usage_update") {
       const p = readContextUsageUpdatePayload(parsed.message);
@@ -143,32 +120,16 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
       parsed.kind === "activity_reasoning_delta"
       || parsed.kind === "assistant_tool_event"
       || parsed.kind === "assistant_tool_result";
-    let shouldCorrectProjectionFromSnapshot = false;
-    let authoritativeBlocks: AssistantStreamBlock[] = currentRound.phase === "streaming"
-      ? options.getMessageStreamBlocks(currentRound.messageId)
-      : [];
+    let receivedCanonicalBlocks = false;
     if (conversationId && parsed.streamCache) {
       const streamCacheMessageId = String(parsed.streamCache.persistedAssistantMessageId || "").trim();
       if (streamCacheMessageId && currentRound.messageId && streamCacheMessageId !== currentRound.messageId) {
         return;
       }
       const snapshotBlocks = normalizeAssistantStreamBlocks(parsed.streamCache.streamBlocks);
-      if (currentRound.phase === "streaming") {
-        shouldCorrectProjectionFromSnapshot = shouldCorrectMessageProjectionFromSnapshot(
-          currentRound.messageId,
-          snapshotBlocks,
-        );
-      }
-      options.applyConversationStreamCacheSnapshotToDisplay(
-        conversationId,
-        parsed.streamCache,
-        { ignoreActivationId: true },
-      );
-      if (snapshotBlocks.length > 0) {
-        authoritativeBlocks = snapshotBlocks;
-        if (options.streamBlocks) {
-          options.streamBlocks.value = snapshotBlocks;
-        }
+      if (currentRound.phase === "streaming" && snapshotBlocks.length > 0) {
+        options.syncStreamBlocksToMessage(currentRound.messageId, snapshotBlocks);
+        receivedCanonicalBlocks = true;
       }
     }
 
@@ -183,54 +144,11 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
       if (delta && options.reasoningStartedAtMs.value === 0) options.reasoningStartedAtMs.value = Date.now();
     }
 
-    if (currentRound.phase === "streaming") {
-      if (parsed.kind === "tool_status") {
-        options.updateMessageText(
-          currentRound.messageId,
-          undefined,
-          undefined,
-          "",
-          authoritativeBlocks,
-          { preserveActivityProjection: true },
-        );
-      } else if (isActivityProjectionEvent) {
-        options.syncStreamBlocksToMessage(currentRound.messageId, authoritativeBlocks);
-        options.updateMessageText(
-          currentRound.messageId,
-          undefined,
-          undefined,
-          "",
-          authoritativeBlocks,
-          { preserveActivityProjection: shouldPreserveMessageProjection(parsed) },
-        );
-      } else if (parsed.streamCache && shouldCorrectProjectionFromSnapshot) {
-        options.syncStreamBlocksToMessage(currentRound.messageId, authoritativeBlocks);
-        options.updateMessageText(
-          currentRound.messageId,
-          undefined,
-          undefined,
-          "",
-          authoritativeBlocks,
-          { preserveActivityProjection: shouldPreserveMessageProjection(parsed) },
-        );
-      } else if (parsed.streamCache && parsed.kind !== "tool_status") {
-        options.updateMessageText(
-          currentRound.messageId,
-          undefined,
-          undefined,
-          "",
-          authoritativeBlocks,
-          { preserveActivityProjection: true },
-        );
-      }
-    }
-
-    if (parsed.kind === "tool_status" || isActivityProjectionEvent || parsed.streamCache) {
+    if (parsed.kind === "tool_status" || isActivityProjectionEvent || receivedCanonicalBlocks) {
       return;
     }
 
     options.enqueueStreamDelta(currentGen, delta);
-    options.syncCurrentDisplayStateToConversationStreamCache();
   }
 
   return {

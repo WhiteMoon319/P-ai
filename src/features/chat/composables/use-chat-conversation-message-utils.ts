@@ -18,7 +18,6 @@ const TRANSIENT_PROVIDER_META_KEYS = [
   "_preStreamingStatusText",
   "_frontendDispatchStartedAtMs",
   "_frontendDispatchElapsedMs",
-  "_streamBlocks",
   "_stableRenderId",
 ];
 

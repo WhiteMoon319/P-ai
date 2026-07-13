@@ -2,13 +2,13 @@ import type { Ref } from "vue";
 import type { AssistantStreamBlock, ChatMentionTarget, ChatMessage } from "../../../types/app";
 import {
   assistantTextFromStreamBlocks,
+  assistantContentBlocksFromMessage,
   appendTextDeltaToStreamBlocks,
   normalizeAssistantStreamBlocks,
   normalizeChatActivityItems,
   streamBlocksToToolCalls,
-  streamBlocksToToolHistoryEvents,
 } from "../../../utils/chat-message-semantics";
-import { consumeClosedMarkdownBlocks, mergeAssistantText } from "./use-chat-flow-text";
+import { consumeClosedMarkdownBlocks } from "./use-chat-flow-text";
 import { readMessagePlainText, messageHasVisibleContent } from "./use-chat-flow-utils";
 import { messageWithStableRenderId, stableRenderIdFromMessage } from "../utils/stable-render-id";
 
@@ -18,30 +18,6 @@ export const DRAFT_USER_ID_PREFIX = "__draft_user__:";
 type UpdateMessageTextOptions = {
   preserveActivityProjection?: boolean;
 };
-
-function mergeAssistantParts(
-  draft: ChatMessage,
-  finalMessage?: ChatMessage,
-): ChatMessage["parts"] {
-  if (!finalMessage) return draft.parts;
-  const draftText = readMessagePlainText(draft);
-  const finalText = readMessagePlainText(finalMessage);
-  const mergedText = mergeAssistantText(draftText, finalText);
-  const finalParts = Array.isArray(finalMessage.parts) ? finalMessage.parts : [];
-  const nonTextParts = finalParts.filter((part) => {
-    if (!part || typeof part !== "object") return false;
-    return String((part as { type?: unknown }).type || "").trim() !== "text";
-  });
-  if (!mergedText && nonTextParts.length === 0) {
-    return draft.parts;
-  }
-  const nextParts: ChatMessage["parts"] = [];
-  if (mergedText) {
-    nextParts.push({ type: "text", text: mergedText });
-  }
-  nextParts.push(...nonTextParts);
-  return nextParts.length > 0 ? nextParts : draft.parts;
-}
 
 function messageHasActivityEvents(message: ChatMessage): boolean {
   if (normalizeChatActivityItems(message.activityItems).length > 0) return true;
@@ -63,7 +39,7 @@ function assistantMessageHasVisibleProgress(message?: ChatMessage | null): boole
   if (Array.isArray(meta._streamSegments) && meta._streamSegments.some((item) => String(item || "").trim())) {
     return true;
   }
-  const streamBlocks = normalizeAssistantStreamBlocks(meta._streamBlocks);
+  const streamBlocks = assistantContentBlocksFromMessage(message);
   return streamBlocks.length > 0 || !!assistantTextFromStreamBlocks(streamBlocks).trim();
 }
 
@@ -105,8 +81,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
   function getMessageStreamBlocks(messageId: string): AssistantStreamBlock[] {
     if (!messageId) return [];
     const draft = options.allMessages.value.find((item) => item.id === messageId);
-    const meta = (draft?.providerMeta || {}) as Record<string, unknown>;
-    return normalizeAssistantStreamBlocks(meta._streamBlocks);
+    return assistantContentBlocksFromMessage(draft);
   }
 
   function loadStreamBlocksFromMessage(messageId: string) {
@@ -116,8 +91,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
       return;
     }
     const draft = options.allMessages.value.find((item) => item.id === messageId);
-    const meta = (draft?.providerMeta || {}) as Record<string, unknown>;
-    const blocks = normalizeAssistantStreamBlocks(meta._streamBlocks);
+    const blocks = assistantContentBlocksFromMessage(draft);
     if (blocks.length > 0 || options.streamBlocks.value.length === 0) {
       options.streamBlocks.value = blocks;
     }
@@ -281,19 +255,14 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
 
   function syncStreamBlocksToMessage(messageId: string, rawBlocks?: AssistantStreamBlock[]) {
     if (!messageId) return;
-    const blocks = normalizeAssistantStreamBlocks(rawBlocks || options.streamBlocks?.value || []);
+    const blocks = normalizeAssistantStreamBlocks(rawBlocks);
     options.allMessages.value = options.allMessages.value.map((message) => {
       if (message.id !== messageId) return message;
       const meta = ((message.providerMeta || {}) as Record<string, unknown>);
       return {
         ...message,
-        parts: [{ type: "text", text: assistantTextFromStreamBlocks(blocks) }],
-        toolCall: streamBlocksToToolHistoryEvents(blocks),
-        activityItems: undefined,
-        providerMeta: {
-          ...meta,
-          _streamBlocks: blocks,
-        },
+        contentBlocks: blocks,
+        providerMeta: meta,
       };
     });
   }
@@ -333,8 +302,6 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
       ? ""
       : String(options.toolStatusText.value || "").trim();
     const streamBlocks = normalizeAssistantStreamBlocks(rawBlocks || options.streamBlocks?.value || []);
-    const blockText = assistantTextFromStreamBlocks(streamBlocks);
-    const preserveActivityProjection = !!updateOptions?.preserveActivityProjection;
     const stableRenderId = stableRenderIdFromMessage(existingMessage) || messageId;
     const existingMeta = ((existingMessage?.providerMeta || {}) as Record<string, unknown>);
     const msg = messageWithStableRenderId({
@@ -342,11 +309,10 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
       role: "assistant",
       createdAt: String(existingMessage?.createdAt || new Date().toISOString()),
       speakerAgentId: agentId,
-      parts: [{ type: "text", text: blockText || String(options.latestAssistantText.value || "") }],
-      toolCall: preserveActivityProjection
-        ? existingMessage?.toolCall
-        : streamBlocksToToolHistoryEvents(streamBlocks),
-      activityItems: undefined,
+      parts: existingMessage?.parts || [{ type: "text", text: "" }],
+      contentBlocks: streamBlocks,
+      toolCall: existingMessage?.toolCall,
+      activityItems: existingMessage?.activityItems,
       providerMeta: {
         ...existingMeta,
         _streaming: true,
@@ -358,7 +324,6 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
         _toolStatusState: String(options.toolStatusState.value || ""),
         _frontendDispatchStartedAtMs: options.getFrontendDispatchStartedAtMs(),
         _frontendDispatchElapsedMs: options.currentFrontendDispatchElapsedMs(),
-        _streamBlocks: streamBlocks,
       },
     } satisfies ChatMessage, stableRenderId);
     const cur = options.allMessages.value;
@@ -419,15 +384,11 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     const draft = current[messageIdx];
     const stableRenderId = stableRenderIdFromMessage(draft) || messageId;
     const draftMeta = ((draft.providerMeta || {}) as Record<string, unknown>);
-    const finalMeta = ((finalMessage?.providerMeta || {}) as Record<string, unknown>);
-    const speakerAgentId = String(finalMessage?.speakerAgentId || "").trim()
-      || resolveAssistantMessageSpeakerAgentId(draft);
+    const speakerAgentId = resolveAssistantMessageSpeakerAgentId(draft);
 
     // 完成态只收口流式状态，不整条替换气泡身份。
     // 保留原 messageId / _stableRenderId，避免 virtual list key 变化导致跳位。
-    const nextMeta: Record<string, unknown> = finalMessage
-      ? { ...draftMeta, ...finalMeta }
-      : { ...draftMeta };
+    const nextMeta: Record<string, unknown> = { ...draftMeta };
     delete nextMeta._streaming;
     delete nextMeta._preStreamingStatusText;
     delete nextMeta._toolStatusText;
@@ -436,13 +397,13 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     const normalized = messageWithStableRenderId({
       ...draft,
       id: messageId,
-      role: finalMessage?.role || draft.role,
-      createdAt: String(draft.createdAt || finalMessage?.createdAt || "").trim() || draft.createdAt,
+      role: draft.role,
+      createdAt: draft.createdAt,
       speakerAgentId,
-      parts: mergeAssistantParts(draft, finalMessage),
-      toolCall: finalMessage?.toolCall ?? draft.toolCall,
-      activityItems: finalMessage?.activityItems ?? draft.activityItems,
-      extraTextBlocks: finalMessage?.extraTextBlocks ?? draft.extraTextBlocks,
+      parts: draft.parts,
+      toolCall: draft.toolCall,
+      activityItems: draft.activityItems,
+      extraTextBlocks: draft.extraTextBlocks,
       providerMeta: nextMeta,
     } satisfies ChatMessage, stableRenderId);
 
@@ -460,16 +421,15 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
   function applyAssistantDeltaToMessage(messageId: string, delta: string) {
     if (!messageId || !delta) return;
     options.latestAssistantText.value += delta;
-    if (options.streamBlocks) {
-      options.streamBlocks.value = appendTextDeltaToStreamBlocks(options.streamBlocks.value, delta);
-    }
+    const blocks = appendTextDeltaToStreamBlocks(getMessageStreamBlocks(messageId), delta);
+    syncStreamBlocksToMessage(messageId, blocks);
     const currentSegments = readMessageStreamSegments(messageId);
     const currentTail = readMessageStreamTail(messageId);
     const parsed = consumeClosedMarkdownBlocks(`${currentTail}${delta}`);
     const nextStreamSegments = parsed.chunks.length > 0
       ? [...currentSegments, ...parsed.chunks]
       : currentSegments;
-    updateMessageText(messageId, nextStreamSegments, parsed.tail, delta, undefined, {
+    updateMessageText(messageId, nextStreamSegments, parsed.tail, delta, blocks, {
       preserveActivityProjection: true,
     });
   }

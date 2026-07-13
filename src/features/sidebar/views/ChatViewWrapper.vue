@@ -463,7 +463,7 @@ watch(
           _streamSegments: [text],
           _toolStatusText: toolStatusText,
           _toolStatusState: props.toolStatusState,
-          _streamBlocks: streamBlocks,
+          assistantContentBlocks: streamBlocks,
           _preStreamingStatusText: hasStreamingContent ? "" : "等待回复",
           _frontendDispatchElapsedMs: Date.now() - streamingDraftStartedAtMs.value,
         },
@@ -489,6 +489,19 @@ watch(
     } else {
       streamingDraftCreatedAt.value = "";
       streamingDraftStartedAtMs.value = 0;
+      const existingById = new Map(allMessages.value.map((message) => [String(message.id || "").trim(), message]));
+      for (let index = 0; index < next.length; index += 1) {
+        const messageId = String(next[index]?.id || "").trim();
+        const existing = existingById.get(messageId);
+        const existingMeta = (existing?.providerMeta || {}) as Record<string, unknown>;
+        if (!existing || existingMeta._streaming !== true) continue;
+        const completedMeta = { ...existingMeta };
+        delete completedMeta._streaming;
+        delete completedMeta._preStreamingStatusText;
+        delete completedMeta._toolStatusText;
+        delete completedMeta._toolStatusState;
+        next[index] = { ...existing, providerMeta: completedMeta };
+      }
     }
     allMessages.value = next;
   },

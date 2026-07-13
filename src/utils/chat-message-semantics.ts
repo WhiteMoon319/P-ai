@@ -540,6 +540,11 @@ export function normalizeAssistantStreamBlocks(rawBlocks: unknown): AssistantStr
   return blocks;
 }
 
+export function assistantContentBlocksFromMessage(message: unknown): AssistantStreamBlock[] {
+  const value = message && typeof message === "object" ? message as Record<string, unknown> : {};
+  return normalizeAssistantStreamBlocks(value.contentBlocks);
+}
+
 export function assistantTextFromStreamBlocks(rawBlocks: unknown): string {
   return normalizeAssistantStreamBlocks(rawBlocks)
     .map((block) => {

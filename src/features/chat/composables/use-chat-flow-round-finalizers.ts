@@ -1,6 +1,5 @@
 import type { ChatMessage } from "../../../types/app";
 import { DRAFT_USER_ID_PREFIX, summarizeToolCallsText as formatToolCallsText } from "./use-chat-flow-drafts";
-import { mergeAssistantText } from "./use-chat-flow-text";
 import { messageHasVisibleContent } from "./use-chat-flow-utils";
 
 export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
@@ -16,11 +15,6 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
     const { result } = deferredRoundCompletion;
     bindings.setDeferredRoundCompletion(null);
 
-    bindings.latestAssistantText.value = mergeAssistantText(
-      bindings.latestAssistantText.value,
-      String(result.assistantText || ""),
-    );
-
     bindings.clearChatErrorText();
     if (String(bindings.toolStatusState.value || "") === "running") {
       bindings.toolStatusState.value = "done";
@@ -29,7 +23,6 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
       ) || bindings.t("status.toolCallDone");
     }
 
-    bindings.updateMessageText(messageId);
     bindings.finalizeMessage(messageId, result.assistantMessage);
     bindings.clearConversationStreamCache(bindings.getConversationId ? bindings.getConversationId() : "");
     bindings.submitPending && (bindings.submitPending.value = false);
@@ -52,11 +45,6 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
     bindings.sendStartedAtMsByGen.delete(gen);
     const round = bindings.getRound();
     if (round.phase !== "queued" || round.gen !== gen) return;
-    bindings.latestAssistantText.value = mergeAssistantText(
-      bindings.latestAssistantText.value,
-      String(result.assistantText || ""),
-    );
-    bindings.updateMessageText(round.messageId);
     bindings.finalizeMessage(round.messageId, result.assistantMessage);
     bindings.setPendingTerminalEvent(null);
     bindings.setDeferredRoundCompletion(null);
@@ -96,7 +84,6 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
     }
     // failed 只清理空气泡；一旦已经有可见内容，就保留当前消息并结束流式态。
     if (messageHasVisibleContent(queuedMessage)) {
-      bindings.updateMessageText(round.messageId);
       bindings.finalizeMessage(round.messageId);
     } else {
       bindings.removeMessage(round.messageId);

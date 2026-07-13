@@ -602,6 +602,8 @@ export type ChatMessage = {
   createdAt?: string;
   speakerAgentId?: string;
   parts: MessagePart[];
+  /** 助理消息的正式内容源；流式快照直接写入，完成/停止不得重建。 */
+  contentBlocks?: AssistantStreamBlock[];
   extraTextBlocks?: string[];
   providerMeta?: {
     dispatchElapsedMs?: number;
@@ -678,6 +680,7 @@ export type ChatMessageBlock = {
   speakerAgentId?: string;
   createdAt?: string;
   providerMeta?: ChatMessage["providerMeta"];
+  contentBlocks?: AssistantStreamBlock[];
   mentions?: ChatMentionTarget[];
   text: string;
   images: Array<{ mime: string; bytesBase64?: string; mediaRef?: string }>;

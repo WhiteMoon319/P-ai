@@ -83,13 +83,6 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
     const round = options.getRound();
     if (round.phase === "streaming") {
       // 停止后原样冻结当前流式画面；后续落盘结果不再回写前台。
-      options.updateMessageText(
-        round.messageId,
-        undefined,
-        undefined,
-        "",
-        normalizeAssistantStreamBlocks(options.streamBlocks?.value || []),
-      );
       options.finalizeMessage(round.messageId);
       options.deleteSendStartedAtMs(round.gen);
     } else if (round.phase === "queued") {

@@ -9,6 +9,7 @@ import {
 } from "../../../utils/chat-message";
 import {
   assistantTextFromStreamBlocks,
+  assistantContentBlocksFromMessage,
   normalizeAssistantStreamBlocks,
   normalizeChatActivityItems,
   projectMessageForDisplay,
@@ -23,12 +24,33 @@ function baseActivityForMessage(
   isStreaming: boolean,
   streamBlocks: ReturnType<typeof normalizeAssistantStreamBlocks>,
 ) {
-  if (isStreaming) {
+  if (isStreaming && streamBlocks.length > 0) {
     return projectStreamingChatActivityForDisplay({
       activityItems: projection.activityItems,
       streamBlocks,
       running: true,
     });
+  }
+  if (streamBlocks.length > 0) {
+    const items = streamBlocksToActivityItems(streamBlocks, false)
+      .filter((item) => item.kind === "reasoning" || item.kind === "tool");
+    const activityToolCountsByName: Record<string, number> = {};
+    let activityReasoningCharCount = 0;
+    for (const item of items) {
+      if (item.kind === "reasoning") {
+        activityReasoningCharCount += String(item.text || "").length;
+        continue;
+      }
+      const name = String(item.name || "").trim() || "unknown";
+      activityToolCountsByName[name] = (activityToolCountsByName[name] || 0) + 1;
+    }
+    return {
+      items,
+      activityReasoningCharCount,
+      activityToolCountsByName,
+      activityRunning: false,
+      activityStatus: items.length > 0 ? "complete" as const : "idle" as const,
+    };
   }
   return {
     items: projection.activityItems,
@@ -99,7 +121,7 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
 
   function providerMetaSignature(message: ChatMessage): string {
     const meta = (message.providerMeta || {}) as Record<string, unknown>;
-    const streamBlocksSignature = streamBlocksActivitySignature(meta._streamBlocks);
+    const streamBlocksSignature = streamBlocksActivitySignature(assistantContentBlocksFromMessage(message));
     const attachments = Array.isArray(meta.attachments) ? meta.attachments.length : 0;
     return [
       String(meta.messageKind || ""),
@@ -267,7 +289,7 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
       : [];
     const streamTail = String(meta._streamTail ?? "");
     const streamAnimatedDelta = String(meta._streamAnimatedDelta ?? "");
-    const streamBlocks = normalizeAssistantStreamBlocks(meta._streamBlocks);
+    const streamBlocks = assistantContentBlocksFromMessage(message);
     const streamingDisplayText = assistantTextFromStreamBlocks(streamBlocks);
     const streamBlockToolCalls = streamBlocksToToolCalls(streamBlocks);
     const streamBlockActivityItems = streamBlocksToActivityItems(streamBlocks, false);
@@ -312,8 +334,9 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
       speakerAgentId: projection.speakerAgentId,
       createdAt: String(message.createdAt || "").trim() || undefined,
       providerMeta: message.providerMeta,
+      contentBlocks: message.contentBlocks,
       mentions: projection.mentions,
-      text: !!meta._streaming && streamingDisplayText.trim()
+      text: streamBlocks.length > 0
         ? streamingDisplayText
         : projection.text,
       images: projection.images,

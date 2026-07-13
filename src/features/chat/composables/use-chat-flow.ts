@@ -133,7 +133,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
     latestAssistantText: options.latestAssistantText,
     toolStatusText: options.toolStatusText,
     toolStatusState: options.toolStatusState,
-    streamBlocks: options.streamBlocks,
     getActiveRoundAgentId: () => activeRoundAgentId,
     getConversationId: options.getConversationId,
     getSendStartedAtMs: (gen) => sendStartedAtMsByGen.get(gen) || 0,
@@ -210,7 +209,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
   const streamingEvents = useChatFlowStreamingEvents({
     toolStatusText: options.toolStatusText,
     toolStatusState: options.toolStatusState,
-    streamBlocks: options.streamBlocks,
     contextUsagePreview: options.contextUsagePreview,
     reasoningStartedAtMs,
     getRound: () => round,
@@ -227,8 +225,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
     handleRoundFailed,
     getMessageStreamBlocks,
     syncStreamBlocksToMessage,
-    syncCurrentDisplayStateToConversationStreamCache,
-    applyConversationStreamCacheSnapshotToDisplay,
     updateMessageText,
     enqueueStreamDelta: roundFinalizers.enqueueStreamDelta,
   });
