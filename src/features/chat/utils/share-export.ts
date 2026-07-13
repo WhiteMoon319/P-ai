@@ -1,6 +1,7 @@
 import { i18n } from "../../../i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ChatMessageBlock } from "../../../types/app";
+import { stripToolcallMarkers } from "../../../utils/chat-message-semantics";
 
 const t = i18n.global.t;
 
@@ -61,7 +62,7 @@ export async function prepareShareEntries(
       displayName: shareDisplayName(block, options.userAlias, options.personaNameMap),
       avatarSrc: shareAvatarSrc(block, options.userAvatarUrl, options.personaAvatarUrlMap),
       createdAtText: formatShareTime(block.createdAt),
-      text: String(block.text || "").trim(),
+      text: stripToolcallMarkers(block.text || ""),
       toolCalls: Array.isArray(block.toolCalls)
         ? block.toolCalls.map((call) => ({
           name: String(call?.name || "").trim(),

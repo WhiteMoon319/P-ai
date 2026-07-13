@@ -1,12 +1,13 @@
 import { ref } from "vue";
 import type { ChatMessageBlock } from "../../../types/app";
+import { stripToolcallMarkers } from "../../../utils/chat-message-semantics";
 
 export function useChatMessageActions() {
   const playingAudioId = ref("");
   let activeAudio: HTMLAudioElement | null = null;
 
   async function copyMessage(block: ChatMessageBlock) {
-    const copyText = block.text || "";
+    const copyText = stripToolcallMarkers(block.text || "");
     if (!copyText) return;
     try {
       await navigator.clipboard.writeText(copyText);

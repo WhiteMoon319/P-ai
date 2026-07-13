@@ -1,5 +1,6 @@
 import { computed, watch, type Ref } from "vue";
 import type { ChatMessageBlock, ConversationForwardTarget } from "../../../types/app";
+import { stripToolcallMarkers } from "../../../utils/chat-message-semantics";
 
 export interface UseChatSelectionOptions {
   chatRenderItems: Ref<{ renderId: string; block: ChatMessageBlock }[]>;
@@ -102,7 +103,7 @@ export function useChatSelection(options: UseChatSelectionOptions) {
 
   function selectionBlockSummary(block: ChatMessageBlock): string {
     const parts: string[] = [];
-    const text = String(block.text || "").trim();
+    const text = stripToolcallMarkers(block.text || "");
     if (text) parts.push(text);
     if (block.images.length > 0) parts.push(t("chat.imageCount", { count: block.images.length }));
     if (block.audios.length > 0) parts.push(t("chat.audioCount", { count: block.audios.length }));
