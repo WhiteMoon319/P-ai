@@ -521,6 +521,7 @@
             @review-item="runToolReviewForCall" @review-batch="runToolReviewForBatch"
             @open-delegate-detail="openDelegateArchiveDetail"
             @abort-delegate="abortDelegate"
+            @assistant-link-click="handleAssistantLinkClick"
           />
         </div>
       </div>

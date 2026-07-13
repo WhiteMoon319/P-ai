@@ -159,8 +159,15 @@
         <span class="loading loading-spinner loading-sm"></span>
         加载中
       </div>
-      <div v-else-if="delegateResultText" class="tool-review-report-markdown assistant-markdown text-sm leading-7 text-base-content/80">
-        <AppMarkdownRenderer :text="delegateResultText" :is-dark="markdownIsDark" />
+      <div
+        v-else-if="delegateResultText"
+        class="tool-review-report-markdown assistant-markdown text-sm leading-7 text-base-content/80"
+      >
+        <AppMarkdownRenderer
+          :text="delegateResultText"
+          :is-dark="markdownIsDark"
+          @click="handleDelegateResultLinkClick"
+        />
       </div>
       <div v-else class="whitespace-pre-wrap wrap-break-word text-sm leading-7 text-base-content/80">
         没有可显示的结果
@@ -185,7 +192,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useAttrs } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useAttrs } from "vue";
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ArchiveBlockPage, ChatMessage, ConversationDelegateStatusSummary, ShellWorkspace } from "../../../types/app";
@@ -236,6 +243,7 @@ const emit = defineEmits<{
   (e: "reviewBatch", batchKey: string): void;
   (e: "openDelegateDetail", status: ConversationDelegateStatusSummary): void;
   (e: "abortDelegate", status: ConversationDelegateStatusSummary): void;
+  (e: "assistantLinkClick", event: MouseEvent): void;
 }>();
 
 const { t, locale } = useI18n();
@@ -245,6 +253,15 @@ const delegateResultLoading = ref(false);
 const delegateResultTitle = ref("");
 const delegateResultText = ref("");
 const rootAttrs = useAttrs();
+
+async function handleDelegateResultLinkClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null;
+  if (!target?.closest("a")) return;
+  event.preventDefault();
+  delegateResultDialogOpen.value = false;
+  await nextTick();
+  emit("assistantLinkClick", event);
+}
 const collapsedToolAssessmentSectionKeys = ref<Record<string, boolean>>({});
 const collapsedDelegateSectionKeys = ref<Record<string, boolean>>({
   running: false,
