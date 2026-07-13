@@ -2046,7 +2046,7 @@ function pastedImageFiles(event: ClipboardEvent): File[] {
 }
 
 async function appendClipboardImagesFromPaste(event: ClipboardEvent) {
-  if (view.value !== "chat" || busy.value || compacting.value) return;
+  if (view.value !== "chat" || compacting.value) return;
   const files = pastedImageFiles(event);
   if (files.length === 0) return;
   event.preventDefault();
