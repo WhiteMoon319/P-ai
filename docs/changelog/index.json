@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-09T10:45:44.289Z",
-  "latestVersion": "v0.21.0",
+  "generatedAt": "2026-07-13T03:58:06.593Z",
+  "latestVersion": "v0.30.0",
   "releases": [
+    {
+      "version": "v0.30.0",
+      "path": "docs/changelog/releases/v0.30.0.md",
+      "summary": "远程联系人应答升级为独立委托流程：可在会话控制面板查看进度、结果和历史，也可取消任务；群聊支持更可靠的喊话防抖、在场判断和离场反思。"
+    },
     {
       "version": "v0.21.0",
       "path": "docs/changelog/releases/v0.21.0.md",

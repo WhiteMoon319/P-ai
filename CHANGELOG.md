@@ -5,6 +5,7 @@
 
 ## 最近版本
 
+- [v0.30.0](docs/changelog/releases/v0.30.0.md) - 远程联系人应答升级为独立委托流程：可在会话控制面板查看进度、结果和历史，也可取消任务；群聊支持更可靠的喊话防抖、在场判断和离场反思。
 - [v0.21.0](docs/changelog/releases/v0.21.0.md) - 文件阅读器支持图片、音频和常见视频内嵌预览，并阻止不适合预览的二进制文件被当作文本读取。
 - [v0.19.5](docs/changelog/releases/v0.19.5.md) - 修复（window-drag-restore-default-size）：标题栏拖动窗口时，若当前窗口已最大化或尺寸已接近屏幕 92%，先恢复到默认尺寸再继续拖动，避免贴边放大后直接拖动仍保持近全屏尺寸。
 - [v0.19.3](docs/changelog/releases/v0.19.3.md) - 修复（chat-sidebar-attachment-downloads-and-missing-media）：侧边栏通过文件选择器添加附件时先统一入队并写入 `downloads/`，图片附件的预览与附件路径提示收敛为单一状态源，同时在历史媒体恢复阶段遇到缺失文件时跳过对应媒体并保持后续附件路径不串位。
