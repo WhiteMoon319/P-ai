@@ -20,6 +20,7 @@
 
 ## 修复
 
+- 修复（sidebar）：web 侧栏根节点文字色改为跟随 `data-theme` 的 `base-content`，不再误用仅 VS Code 宿主定义的 `--pai-sidebar-fg`。
 - 修复（chat）：`read` 工具明细中的文件路径点击时携带 `offset` 作为目标行号，并明确不把 `limit` 当作行号。
 - 修复（chat）：带行号的本地 Markdown 文件链接会在可见标签中显示行号，APP 文件阅读器点击后切换到原文模式并定位目标行。
 - 修复（prompt）：本地文件与图片 Markdown 教学改用明确的绝对路径语法占位符，并要求输出时替换为真实绝对路径，避免模型误把示例路径当成可用路径。

@@ -62,8 +62,22 @@ body,
   height: 100%;
   margin: 0;
   overflow: hidden;
+}
+
+/* VS Code webview：跟随宿主侧栏前景/背景 */
+html[data-host="vscode"],
+html[data-host="vscode"] body,
+html[data-host="vscode"] #app {
   background: var(--pai-sidebar-bg);
   color: var(--pai-sidebar-fg);
+}
+
+/* 纯 web 侧栏：走应用 data-theme / DaisyUI 主题色，不要用未定义的 vscode 变量 */
+html[data-host="web"],
+html[data-host="web"] body,
+html[data-host="web"] #app {
+  background: var(--color-base-100);
+  color: var(--color-base-content);
 }
 
 body {
