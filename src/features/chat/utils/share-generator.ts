@@ -8,9 +8,8 @@ import {
   projectMessageForDisplay,
   stripToolcallMarkers,
 } from "../../../utils/chat-message-semantics";
-import ShareDocument, {
-  type ShareDocumentEntry,
-} from "../components/ShareDocument.vue";
+import ShareDocument from "../components/ShareDocument.vue";
+import type { ShareDocumentEntry } from "../components/share-document-types";
 import projectQrUrl from "../../../assets/pai-project-qr.png";
 import appIconUrl from "../../../../src-tauri/icons/128x128.png";
 
