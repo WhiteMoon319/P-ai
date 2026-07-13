@@ -4,16 +4,16 @@
       <slot name="leading" />
     </div>
 
-    <OverlayScrollArea class="min-w-0 flex-1" orientation="horizontal">
+    <div ref="tabListHostRef" class="min-w-0 flex-1 overflow-hidden">
       <div
         role="tablist"
-        class="flex min-w-max items-center gap-0"
+        class="flex w-full min-w-0 items-center gap-0"
         :aria-label="ariaLabel"
       >
         <div
           v-for="(tab, tabIndex) in tabs"
           :key="tab.key"
-          class="group relative flex max-w-60 flex-none"
+          class="group relative flex min-w-8 max-w-40 flex-1 basis-0 overflow-hidden"
           :class="[
             tab.disabled ? 'pointer-events-none opacity-45' : 'cursor-pointer',
             tabBorderClass(tab.key, tabIndex),
@@ -31,7 +31,7 @@
             class="btn btn-ghost btn-sm min-w-0 w-full flex-nowrap overflow-hidden"
             :class="[
               tab.key === activeKey ? 'bg-base-100/60' : '',
-              tab.closeable ? 'justify-start pr-8' : 'justify-center',
+              shouldReserveCloseSpace(tab) ? 'justify-start pr-8' : 'justify-center',
             ]"
             :aria-selected="tab.key === activeKey"
             @click.stop="selectTab(tab)"
@@ -45,9 +45,12 @@
             <span class="min-w-0 truncate font-medium">{{ tab.label }}</span>
           </button>
           <button
-            v-if="tab.closeable"
+            v-if="tab.closeable && shouldShowCloseButton(tab)"
             type="button"
-            class="btn btn-ghost btn-xs btn-circle pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 border border-base-300 bg-base-100 opacity-0 transition-opacity hover:opacity-100 focus:pointer-events-auto focus:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100"
+            class="btn btn-ghost btn-xs btn-circle absolute right-1 top-1/2 -translate-y-1/2 border border-base-300 bg-base-100"
+            :class="tab.key === activeKey
+              ? 'opacity-100'
+              : 'pointer-events-none opacity-0 transition-opacity hover:opacity-100 focus:pointer-events-auto focus:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100'"
             :title="closeTitle"
             @click.stop="closeTab(tab)"
           >
@@ -55,7 +58,7 @@
           </button>
         </div>
       </div>
-    </OverlayScrollArea>
+    </div>
 
     <div v-if="$slots.actions" class="flex shrink-0 items-center gap-1">
       <slot name="actions" />
@@ -104,9 +107,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { X } from "@lucide/vue";
-import OverlayScrollArea from "./OverlayScrollArea.vue";
 
 type PanelTabStripItem = {
   key: string;
@@ -116,6 +118,8 @@ type PanelTabStripItem = {
   closeable?: boolean;
   disabled?: boolean;
 };
+
+const CLOSE_BUTTON_MIN_TAB_WIDTH = 72;
 
 const props = withDefaults(defineProps<{
   tabs: PanelTabStripItem[];
@@ -142,10 +146,32 @@ const emit = defineEmits<{
   (e: "closeOtherTabs", key: string): void;
 }>();
 
+const tabListHostRef = ref<HTMLElement | null>(null);
+const hostWidth = ref(0);
 const closeMenu = ref<{ key: string; x: number; y: number } | null>(null);
 let longPressTimer: ReturnType<typeof setTimeout> | null = null;
 let longPressStart: { key: string; x: number; y: number } | null = null;
 let suppressNextSelectKey = "";
+let hostResizeObserver: ResizeObserver | null = null;
+
+const estimatedTabWidth = computed(() => {
+  const tabCount = Math.max(props.tabs.length, 1);
+  const available = Math.max(hostWidth.value, 0);
+  if (available <= 0) return 160;
+  return Math.min(160, available / tabCount);
+});
+
+const compactInactiveClose = computed(() => estimatedTabWidth.value < CLOSE_BUTTON_MIN_TAB_WIDTH);
+
+function shouldShowCloseButton(tab: PanelTabStripItem) {
+  if (!tab.closeable || tab.disabled) return false;
+  if (tab.key === props.activeKey) return true;
+  return !compactInactiveClose.value;
+}
+
+function shouldReserveCloseSpace(tab: PanelTabStripItem) {
+  return shouldShowCloseButton(tab);
+}
 
 function tabBorderClass(tabKey: string, tabIndex: number) {
   if (tabIndex <= 0) return "";
@@ -177,6 +203,26 @@ function clearLongPress() {
     longPressTimer = null;
   }
   longPressStart = null;
+}
+
+function syncHostWidth() {
+  hostWidth.value = tabListHostRef.value?.clientWidth ?? 0;
+}
+
+function observeTabListHost() {
+  hostResizeObserver?.disconnect();
+  hostResizeObserver = null;
+  const host = tabListHostRef.value;
+  if (!host) {
+    hostWidth.value = 0;
+    return;
+  }
+  syncHostWidth();
+  if (typeof ResizeObserver === "undefined") return;
+  hostResizeObserver = new ResizeObserver(() => {
+    syncHostWidth();
+  });
+  hostResizeObserver.observe(host);
 }
 
 function menuPosition(x: number, y: number) {
@@ -298,13 +344,23 @@ function handleWindowKeydown(event: KeyboardEvent) {
   if (event.key === "Escape") closeFloatingMenu();
 }
 
+watch(
+  () => props.tabs.length,
+  () => {
+    void nextTick(syncHostWidth);
+  },
+);
+
 onMounted(() => {
   window.addEventListener("pointerdown", closeFloatingMenu);
   window.addEventListener("keydown", handleWindowKeydown);
+  void nextTick(observeTabListHost);
 });
 
 onBeforeUnmount(() => {
   clearLongPress();
+  hostResizeObserver?.disconnect();
+  hostResizeObserver = null;
   window.removeEventListener("pointerdown", closeFloatingMenu);
   window.removeEventListener("keydown", handleWindowKeydown);
 });
