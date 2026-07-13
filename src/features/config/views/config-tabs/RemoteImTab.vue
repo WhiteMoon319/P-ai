@@ -857,6 +857,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { AppConfig, DepartmentConfig, PersonaProfile, RemoteImChannelConfig, RemoteImContact, RemoteImPlatform, ShellWorkspace } from "../../../../types/app";
 import DepartmentPersonaSelect from "../../../shared/components/DepartmentPersonaSelect.vue";
 import type { ChannelConnectionStatus, ChannelLogEntry, WeixinLoginStatus } from "./remote-im/types";
+import { buildContactLogDisplayItem, type ContactLogDisplayItem } from "./remote-im/contact-log-display";
 import {
   contactCommunicationToggleClass,
   contactCommunicationToggleEnabled,
@@ -1158,14 +1159,6 @@ type ContactEditDraft = {
   allowSendFiles: boolean;
   shellWorkspaces: ShellWorkspace[];
 };
-type ContactLogDisplayItem = {
-  timestamp: string;
-  level: string;
-  kind: string;
-  title: string;
-  summary: string;
-  detail?: string;
-};
 const contactDraft = ref<ContactEditDraft | null>(null);
 const contactDraftSnapshot = ref("");
 const contactDraftDirty = computed(() =>
@@ -1198,7 +1191,7 @@ const contactDraftResponseStrategyHint = computed(() => {
 });
 const contactLogDisplayItems = computed<ContactLogDisplayItem[]>(() =>
   contactLogs.value
-    .map((log) => buildContactLogDisplayItem(log))
+    .map((log) => buildContactLogDisplayItem(log, t))
     .filter((item): item is ContactLogDisplayItem => item !== null),
 );
 const contactLogDisplayLines = computed(() =>
@@ -2365,200 +2358,6 @@ function contactSecondaryText(item: RemoteImContact): string {
     return item.remoteContactType === "group" ? t('config.remoteIm.weixinGroupContact') : t('config.remoteIm.weixinPrivateContact');
   }
   return item.remoteContactId;
-}
-
-function contactLogField(message: string, key: string): string {
-  const match = message.match(new RegExp(`${key}=([\\s\\S]*?)(?=, [a-z_]+=|$)`));
-  return String(match?.[1] || "").trim();
-}
-
-function contactLogTransitionLabel(value: string): string {
-  const normalized = String(value || "").trim();
-  if (!normalized) return "";
-  const [fromRaw, toRaw] = normalized.split("->").map((item) => item.trim());
-  if (!toRaw) return normalized;
-  if (!fromRaw || fromRaw === toRaw) return toRaw;
-  return `${fromRaw} -> ${toRaw}`;
-}
-
-function contactLogCurrentStateLabel(value: string): string {
-  const normalized = String(value || "").trim();
-  if (!normalized) return "";
-  const parts = normalized.split("->").map((item) => item.trim()).filter(Boolean);
-  return parts[parts.length - 1] || "";
-}
-
-function contactLogHumanName(value: string): string {
-  return String(value || "")
-    .trim()
-    .replace(/\(\d+\)\s*$/, "")
-    .trim();
-}
-
-function contactLogHumanId(value: string): string {
-  const match = String(value || "").trim().match(/\((\d+)\)\s*$/);
-  return String(match?.[1] || "").trim();
-}
-
-function contactLogBoolLabel(value: string): string {
-  return value === "是" || value.toLowerCase() === "true" ? t("common.yes") : t("common.no");
-}
-
-function contactLogModeLabel(value: string): string {
-  if (value === "direct") return t("config.remoteIm.logModeDirect");
-  if (value === "queued") return t("config.remoteIm.logModeQueued");
-  if (value === "duplicate") return t("config.remoteIm.logModeDuplicate");
-  return value || "-";
-}
-
-function contactLogDecisionLabel(value: string): string {
-  if (value === "reply" || value === "reply_async") return t("config.remoteIm.logDecisionReply");
-  if (value === "send") return t("config.remoteIm.logDecisionSend");
-  if (value === "send_files") return t("config.remoteIm.logDecisionSendFiles");
-  if (value === "no_reply") return t("config.remoteIm.logDecisionNoReply");
-  if (value === "send_async") return t("config.remoteIm.logDecisionSendAsync");
-  return value || t("common.done");
-}
-
-function contactLogStateSummary(message: string): string {
-  const presence = contactLogCurrentStateLabel(contactLogField(message, "presence"));
-  const work = contactLogCurrentStateLabel(contactLogField(message, "work"));
-  const activate = contactLogField(message, "activate");
-  const parts = [
-    presence,
-    work,
-    activate ? (contactLogBoolLabel(activate) === t("common.yes") ? t("config.remoteIm.logActivate") : t("config.remoteIm.logInactive")) : "",
-  ].filter(Boolean);
-  return parts.join("；");
-}
-
-function buildContactLogDisplayItem(log: ChannelLogEntry): ContactLogDisplayItem | null {
-  const message = String(log.message || "").trim();
-  if (message.startsWith("[联系人消息] 收到:")) {
-    const senderRaw = contactLogField(message, "sender");
-    const senderName = contactLogHumanName(senderRaw) || t('config.remoteIm.otherParty');
-    const senderId = contactLogHumanId(senderRaw);
-    const preview = contactLogField(message, "preview") || t('config.remoteIm.receivedMessage');
-    const imageCount = Number(contactLogField(message, "image_count") || 0);
-    const audioCount = Number(contactLogField(message, "audio_count") || 0);
-    const attachmentCount = Number(contactLogField(message, "attachment_count") || 0);
-    const extras = [
-      imageCount > 0 ? t('config.remoteIm.imageCount', { count: imageCount }) : "",
-      audioCount > 0 ? t('config.remoteIm.audioCount', { count: audioCount }) : "",
-      attachmentCount > 0 ? t('config.remoteIm.attachmentCount', { count: attachmentCount }) : "",
-    ].filter(Boolean);
-    return {
-      timestamp: log.timestamp,
-      level: log.level,
-      kind: t('config.remoteIm.logKindMessage'),
-      title: "",
-      summary: `${senderId ? `[${senderName}/${senderId}]` : `[${senderName}]`}${preview}`,
-      detail: extras.length > 0 ? extras.join("，") : undefined,
-    };
-  }
-  if (message.startsWith("[联系人消息] 去重跳过:")) {
-    return {
-      timestamp: log.timestamp,
-      level: log.level,
-      kind: t('config.remoteIm.logKindDedup'),
-      title: t('config.remoteIm.logDedupTitle'),
-      summary: contactLogField(message, "preview") || t('config.remoteIm.logDedupSummary'),
-    };
-  }
-  if (message.startsWith("[联系人消息] 入队:")) {
-    return log.level === "warn" || log.level === "error"
-      ? {
-          timestamp: log.timestamp,
-          level: log.level,
-          kind: t('config.remoteIm.logKindSystem'),
-          title: t('config.remoteIm.logEnqueueFailed'),
-          summary: contactLogField(message, "reason") || t('config.remoteIm.logEnqueueFailedSummary'),
-        }
-      : null;
-  }
-  if (message.startsWith("[联系人状态] 入站判定:")) {
-    const reason = contactLogField(message, "reason");
-    return {
-      timestamp: log.timestamp,
-      level: log.level,
-      kind: t('config.remoteIm.logKindStatus'),
-      title: contactLogStateSummary(message),
-      summary: reason ? t('config.remoteIm.logReason', { reason }) : "",
-    };
-  }
-  if (message.startsWith("[联系人状态] 历史落地:")) {
-    return log.level === "warn" || log.level === "error"
-      ? {
-          timestamp: log.timestamp,
-          level: log.level,
-          kind: t('config.remoteIm.logKindSystem'),
-          title: t('config.remoteIm.logHistoryWriteFailed'),
-          summary: contactLogField(message, "reason") || t('config.remoteIm.logHistoryWriteFailedSummary'),
-        }
-      : null;
-  }
-  if (message.startsWith("[联系人消息] 发出失败:")) {
-    return {
-      timestamp: log.timestamp,
-      level: log.level,
-      kind: t('config.remoteIm.logKindSend'),
-      title: t('config.remoteIm.logSendFailed'),
-      summary: contactLogField(message, "preview") || t('config.remoteIm.logSendContentOmitted'),
-      detail: contactLogField(message, "error") || undefined,
-    };
-  }
-  if (message.startsWith("[联系人消息] 发出跳过:")) {
-    return {
-      timestamp: log.timestamp,
-      level: log.level,
-      kind: t('config.remoteIm.logKindSend'),
-      title: t('config.remoteIm.logSendSkipped'),
-      summary: contactLogField(message, "reason") || t('config.remoteIm.logSendSkippedSummary'),
-    };
-  }
-  if (message.startsWith("[联系人消息] 发出:")) {
-    return {
-      timestamp: log.timestamp,
-      level: log.level,
-      kind: t('config.remoteIm.logKindSend'),
-      title: "",
-      summary: t('config.remoteIm.logSentMessage', { preview: contactLogField(message, "preview") || t('config.remoteIm.logSendContentOmitted') }),
-    };
-  }
-  if (message.startsWith("[联系人状态] 轮次结束:")) {
-    const decision = contactLogDecisionLabel(contactLogField(message, "decision"));
-    const followUp = contactLogBoolLabel(contactLogField(message, "follow_up"));
-    return {
-      timestamp: log.timestamp,
-      level: log.level,
-      kind: t('config.remoteIm.logKindStatus'),
-      title: contactLogStateSummary(message),
-      summary: contactLogStateSummary(message),
-      detail: t('config.remoteIm.logTurnDetail', { decision, followUp }),
-    };
-  }
-  if (message.startsWith("[联系人状态] 轮次收尾失败:")) {
-    return {
-      timestamp: log.timestamp,
-      level: log.level,
-      kind: t('config.remoteIm.logKindStatus'),
-      title: contactLogStateSummary(message),
-      summary: contactLogStateSummary(message),
-      detail: contactLogField(message, "error") || undefined,
-    };
-  }
-  if (message.startsWith("[联系人状态] 异步发送收尾:")) {
-    return null;
-  }
-  return log.level === "warn" || log.level === "error"
-    ? {
-        timestamp: log.timestamp,
-        level: log.level,
-        kind: t('config.remoteIm.logKindSystem'),
-        title: t('config.remoteIm.logAbnormalTitle'),
-        summary: t('config.remoteIm.logAbnormalSummary'),
-      }
-    : null;
 }
 
 async function deleteContact(item: RemoteImContact) {
