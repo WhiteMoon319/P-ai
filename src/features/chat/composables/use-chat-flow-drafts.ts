@@ -301,7 +301,9 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     const preStreamingStatusText = hasVisibleStreamContent
       ? ""
       : String(options.toolStatusText.value || "").trim();
-    const streamBlocks = normalizeAssistantStreamBlocks(rawBlocks || options.streamBlocks?.value || []);
+    const streamBlocks = rawBlocks === undefined
+      ? getMessageStreamBlocks(messageId)
+      : normalizeAssistantStreamBlocks(rawBlocks);
     const stableRenderId = stableRenderIdFromMessage(existingMessage) || messageId;
     const existingMeta = ((existingMessage?.providerMeta || {}) as Record<string, unknown>);
     const msg = messageWithStableRenderId({
@@ -384,26 +386,43 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     const draft = current[messageIdx];
     const stableRenderId = stableRenderIdFromMessage(draft) || messageId;
     const draftMeta = ((draft.providerMeta || {}) as Record<string, unknown>);
+    const finalMeta = ((finalMessage?.providerMeta || {}) as Record<string, unknown>);
     const speakerAgentId = resolveAssistantMessageSpeakerAgentId(draft);
+    const canonicalBlocks = getMessageStreamBlocks(messageId);
+    const hasCanonicalContent = canonicalBlocks.length > 0;
 
     // 完成态只收口流式状态，不整条替换气泡身份。
     // 保留原 messageId / _stableRenderId，避免 virtual list key 变化导致跳位。
-    const nextMeta: Record<string, unknown> = { ...draftMeta };
+    const nextMeta: Record<string, unknown> = { ...finalMeta, ...draftMeta };
     delete nextMeta._streaming;
     delete nextMeta._preStreamingStatusText;
     delete nextMeta._toolStatusText;
     delete nextMeta._toolStatusState;
 
+    const finalNonTextParts = Array.isArray(finalMessage?.parts)
+      ? finalMessage.parts.filter((part) => part?.type !== "text")
+      : [];
+    const draftTextParts = Array.isArray(draft.parts)
+      ? draft.parts.filter((part) => part?.type === "text")
+      : [];
+    const completedBase = !hasCanonicalContent && finalMessage
+      ? finalMessage
+      : draft;
+    const completedFields = hasCanonicalContent && finalMessage
+      ? { ...draft, ...finalMessage }
+      : completedBase;
     const normalized = messageWithStableRenderId({
-      ...draft,
+      ...completedFields,
       id: messageId,
-      role: draft.role,
-      createdAt: draft.createdAt,
+      role: completedBase.role,
+      createdAt: draft.createdAt || completedBase.createdAt,
       speakerAgentId,
-      parts: draft.parts,
-      toolCall: draft.toolCall,
-      activityItems: draft.activityItems,
-      extraTextBlocks: draft.extraTextBlocks,
+      parts: hasCanonicalContent
+        ? [...draftTextParts, ...finalNonTextParts]
+        : completedBase.parts,
+      contentBlocks: hasCanonicalContent ? canonicalBlocks : completedBase.contentBlocks,
+      toolCall: hasCanonicalContent ? draft.toolCall : completedBase.toolCall,
+      activityItems: hasCanonicalContent ? draft.activityItems : completedBase.activityItems,
       providerMeta: nextMeta,
     } satisfies ChatMessage, stableRenderId);
 

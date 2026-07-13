@@ -138,6 +138,9 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
       options.toolStatusState.value =
         parsed.toolStatus === "running" || parsed.toolStatus === "done" || parsed.toolStatus === "failed"
           ? parsed.toolStatus : "";
+      if (currentRound.phase === "streaming") {
+        options.updateMessageText(currentRound.messageId);
+      }
     }
 
     if (isActivityProjectionEvent) {
