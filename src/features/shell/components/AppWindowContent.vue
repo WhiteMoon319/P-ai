@@ -422,10 +422,8 @@ import type { DepartmentPersonaOption } from "../../shared/department-persona-op
 import type { ChatRightPanelMode } from "../../chat/composables/chat-ui-layout-storage";
 import {
   buildShareExportFileName,
-  buildShareHtmlDocument,
-  prepareShareEntries,
-  renderShareDocumentToPngDataUrl,
-} from "../../chat/utils/share-export";
+  generateShareFromMessageIds,
+} from "../../chat/utils/share-generator";
 import { invokeTauri } from "../../../services/tauri-api";
 
 type MemoryItem = {
@@ -441,6 +439,7 @@ type SelectionSharePayload = {
   count: number;
   messageIds: string[];
   blocks: ChatMessageBlock[];
+  conversationId?: string;
   exportFormat?: "html" | "png";
 };
 
@@ -861,9 +860,28 @@ function closeSelectionShareDialog() {
   selectionShareDialogOpen.value = false;
 }
 
+function resolveShareConversationId(payload: SelectionSharePayload): string {
+  return String(
+    payload.conversationId
+    || props.currentChatConversationId
+    || "",
+  ).trim();
+}
+
+function resolveShareMessageIds(payload: SelectionSharePayload): string[] {
+  const fromPayload = (payload.messageIds || []).map((id) => String(id || "").trim()).filter(Boolean);
+  if (fromPayload.length > 0) return fromPayload;
+  return (payload.blocks || [])
+    .map((block) => String(block.sourceMessageId || block.id || "").trim())
+    .filter(Boolean);
+}
+
 async function exportSelectionAsHtml() {
   const payload = selectionSharePayload.value;
-  if (!payload || payload.count <= 0 || payload.blocks.length === 0) return;
+  if (!payload || payload.count <= 0) return;
+  const conversationId = resolveShareConversationId(payload);
+  const messageIds = resolveShareMessageIds(payload);
+  if (!conversationId || messageIds.length === 0) return;
   selectionShareDialogLoading.value = true;
   try {
     const path = await save({
@@ -871,23 +889,25 @@ async function exportSelectionAsHtml() {
       defaultPath: buildShareExportFileName("html"),
     });
     if (!path) return;
-    const entries = await prepareShareEntries({
-      blocks: payload.blocks,
+    const generated = await generateShareFromMessageIds({
+      conversationId,
+      messageIds,
+      formats: ["html"],
+      title: props.t("chat.shareDocumentTitle"),
+      subtitle: props.t("chat.shareDocumentSubtitle", { count: messageIds.length }),
       userAlias: props.userAlias,
       userAvatarUrl: props.userAvatarUrl,
       personaNameMap: props.chatPersonaNameMap,
       personaAvatarUrlMap: props.chatPersonaAvatarUrlMap,
       trigger: "selection_share_html",
     });
-    const html = buildShareHtmlDocument({
-      title: props.t("chat.shareDocumentTitle"),
-      subtitle: props.t("chat.shareDocumentSubtitle", { count: payload.count }),
-      entries,
-    });
+    if (!generated.html) {
+      throw new Error(props.t("chat.shareExportFailed", { err: "empty html" }));
+    }
     await invokeTauri("write_utf8_text_file_to_path", {
       input: {
         path,
-        text: html,
+        text: generated.html,
       },
     });
     props.setStatus(props.t("chat.shareHtmlExported", { path }));
@@ -901,31 +921,60 @@ async function exportSelectionAsHtml() {
 
 async function exportSelectionAsImage() {
   const payload = selectionSharePayload.value;
-  if (!payload || payload.count <= 0 || payload.blocks.length === 0) return;
+  if (!payload || payload.count <= 0) {
+    console.warn("[分享导出] 图片导出跳过：未找到选择载荷");
+    return;
+  }
+  const conversationId = resolveShareConversationId(payload);
+  const messageIds = resolveShareMessageIds(payload);
+  if (!conversationId || messageIds.length === 0) {
+    console.warn("[分享导出] 图片导出跳过：会话或消息为空", {
+      conversationId,
+      messageIdCount: messageIds.length,
+    });
+    props.setStatus(props.t("chat.shareExportFailed", { err: "conversationId/messageIds empty" }));
+    return;
+  }
   selectionShareDialogLoading.value = true;
+  console.info("[分享导出] 图片导出开始", {
+    conversationId,
+    messageIdCount: messageIds.length,
+  });
   try {
     const path = await save({
       filters: [{ name: "PNG", extensions: ["png"] }],
       defaultPath: buildShareExportFileName("png"),
     });
-    if (!path) return;
-    const entries = await prepareShareEntries({
-      blocks: payload.blocks,
+    if (!path) {
+      console.info("[分享导出] 图片导出取消：未选择保存路径");
+      return;
+    }
+    props.setStatus("正在生成分享图片…");
+    console.info("[分享导出] 图片保存路径已选择", { path });
+    const generated = await generateShareFromMessageIds({
+      conversationId,
+      messageIds,
+      formats: ["png"],
+      title: props.t("chat.shareDocumentTitle"),
+      subtitle: props.t("chat.shareDocumentSubtitle", { count: messageIds.length }),
       userAlias: props.userAlias,
       userAvatarUrl: props.userAvatarUrl,
       personaNameMap: props.chatPersonaNameMap,
       personaAvatarUrlMap: props.chatPersonaAvatarUrlMap,
       trigger: "selection_share_image",
     });
-    const dataUrl = await renderShareDocumentToPngDataUrl({
-      title: props.t("chat.shareDocumentTitle"),
-      subtitle: props.t("chat.shareDocumentSubtitle", { count: payload.count }),
-      entries,
-    });
+    const dataUrl = String(generated.pngDataUrl || "");
     const bytesBase64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : "";
+    console.info("[分享导出] 图片数据已生成", {
+      dataUrlLength: dataUrl.length,
+      base64Length: bytesBase64.length,
+      usedCount: generated.usedMessageIds.length,
+      skippedCount: generated.skippedMessageIds.length,
+    });
     if (!bytesBase64) {
       throw new Error(props.t("chat.shareImageGenerationFailed"));
     }
+    props.setStatus("正在写入分享图片…");
     await invokeTauri("write_base64_file_to_path", {
       input: {
         path,
@@ -935,6 +984,7 @@ async function exportSelectionAsImage() {
     props.setStatus(props.t("chat.shareImageExported", { path }));
     selectionShareDialogOpen.value = false;
   } catch (error) {
+    console.error("[分享导出] 图片导出失败", error);
     props.setStatus(props.t("chat.shareExportFailed", { err: String(error) }));
   } finally {
     selectionShareDialogLoading.value = false;

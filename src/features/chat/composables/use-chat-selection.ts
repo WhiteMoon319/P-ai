@@ -8,14 +8,15 @@ export interface UseChatSelectionOptions {
   selectedMessageRenderIds: Ref<string[]>;
   personaNameMap: Record<string, string>;
   userAlias: string;
+  conversationId?: Ref<string> | string;
   t: (key: string, params?: Record<string, unknown>) => string;
   onEmit: {
-    selectionActionCopy: (payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[] }) => void;
-    selectionActionCopyError: (payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; error: string }) => void;
-    selectionActionBranch: (payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[] }) => void;
-    selectionActionForward: (payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; target: ConversationForwardTarget }) => void;
-    selectionActionDelegate: (payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; departmentId: string; agentId: string; presetId: string; why: string; goal: string; todo: string }) => void;
-    selectionActionShare: (payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; exportFormat?: "html" | "png" }) => void;
+    selectionActionCopy: (payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; conversationId?: string }) => void;
+    selectionActionCopyError: (payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; conversationId?: string; error: string }) => void;
+    selectionActionBranch: (payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; conversationId?: string }) => void;
+    selectionActionForward: (payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; conversationId?: string; target: ConversationForwardTarget }) => void;
+    selectionActionDelegate: (payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; conversationId?: string; departmentId: string; agentId: string; presetId: string; why: string; goal: string; todo: string }) => void;
+    selectionActionShare: (payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; conversationId?: string; exportFormat?: "html" | "png" }) => void;
   };
 }
 
@@ -35,6 +36,7 @@ export function useChatSelection(options: UseChatSelectionOptions) {
     selectedMessageRenderIds,
     personaNameMap,
     userAlias,
+    conversationId,
     t,
     onEmit,
   } = options;
@@ -82,10 +84,14 @@ export function useChatSelection(options: UseChatSelectionOptions) {
 
   function selectionPayload() {
     const blocks = selectedMessageBlocks.value.map((item) => item.block);
+    const cid = typeof conversationId === "string"
+      ? conversationId
+      : String(conversationId?.value || "").trim();
     return {
       count: blocks.length,
       messageIds: blocks.map((block) => String(block.sourceMessageId || block.id || "").trim()).filter(Boolean),
       blocks,
+      conversationId: cid || undefined,
     };
   }
 
