@@ -43,7 +43,7 @@ export const APP_THEMES = [
   "garden",
   "forest",
   "lofi",
-  "pastel",
+  "fantasy",
   "luxury",
   "dracula",
   "autumn",
@@ -118,6 +118,12 @@ function isValidTheme(value: unknown): value is AppTheme {
   return typeof value === "string" && THEME_SET.has(value);
 }
 
+function normalizePresetTheme(value: unknown): AppTheme | null {
+  const themeName = String(value || "").trim().toLowerCase();
+  if (themeName === "pastel") return "autumn";
+  return isValidTheme(themeName) ? themeName : null;
+}
+
 function ensureGeneratedThemeStyleElement(): HTMLStyleElement | null {
   if (typeof document === "undefined") return null;
   const existing = document.getElementById(GENERATED_THEME_STYLE_ID);
@@ -187,8 +193,9 @@ function resolveLegacyThemeMode(value: unknown): ThemeMode {
 
 function applyThemeState(nextState: AppThemeState | string | null | undefined): boolean {
   if (typeof nextState === "string") {
-    if (isValidTheme(nextState)) {
-      return applyPresetTheme(nextState);
+    const presetTheme = normalizePresetTheme(nextState);
+    if (presetTheme) {
+      return applyPresetTheme(presetTheme);
     }
     if (nextState === GENERATED_THEME_LIGHT_ID || nextState === GENERATED_THEME_DARK_ID) {
       const targetMode = nextState === GENERATED_THEME_LIGHT_ID ? "light" : "dark";
@@ -198,7 +205,8 @@ function applyThemeState(nextState: AppThemeState | string | null | undefined): 
   }
   if (!nextState) return false;
   if (nextState.kind === "preset") {
-    return isValidTheme(nextState.name) ? applyPresetTheme(nextState.name) : false;
+    const presetTheme = normalizePresetTheme(nextState.name);
+    return presetTheme ? applyPresetTheme(presetTheme) : false;
   }
   return applyGeneratedTheme(nextState.controls);
 }
@@ -232,12 +240,13 @@ function readStoredThemePreferences(): PersistedThemePreferences | null {
       };
     }
     const legacyThemeName = (activeState as { name?: unknown } | null)?.name;
-    if (isValidTheme(legacyThemeName)) {
+    const presetTheme = normalizePresetTheme(legacyThemeName);
+    if (presetTheme) {
       return {
         version: 2,
         activeState: {
           kind: "preset",
-          name: legacyThemeName,
+          name: presetTheme,
         },
         generatedControls: storedControls,
         generatedControlsByMode: storedControlsByMode,
