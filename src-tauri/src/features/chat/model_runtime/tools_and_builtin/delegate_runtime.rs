@@ -56,6 +56,7 @@ fn delegate_session_agent_id(session_id: &str) -> String {
     agent_id
 }
 
+#[cfg(test)]
 fn delegate_session_is_remote_reply_delegate(session_id: &str) -> bool {
     let normalized = session_id.trim();
     normalized

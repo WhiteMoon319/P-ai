@@ -2406,7 +2406,7 @@
     }
 
     #[test]
-    fn resolve_remote_im_auto_send_target_should_only_auto_send_single_source_without_no_reply() {
+    fn resolve_remote_im_auto_send_target_should_only_auto_send_single_source() {
         let single_source = RemoteImActivationSource {
             channel_id: "remote-im-a".to_string(),
             platform: RemoteImPlatform::OnebotV11,
@@ -2417,7 +2417,6 @@
         let single_target = resolve_remote_im_auto_send_target(
             "你好，这里是最终回复。",
             &[single_source.clone()],
-            None,
             true,
         )
         .expect("single target");
@@ -2426,7 +2425,6 @@
             resolve_remote_im_auto_send_target(
                 "你好，这里是最终回复。",
                 &[single_source.clone()],
-                None,
                 false,
             )
             .expect("non delegate target"),
@@ -2445,30 +2443,10 @@
                     remote_contact_name: "李四".to_string(),
                 },
             ],
-            None,
             true,
         )
         .expect("multiple sources should skip auto send");
         assert!(multiple_sources.is_none());
-
-        let no_reply_decision = RemoteImReplyDecisionSummary {
-            action: "no_reply".to_string(),
-            target: None,
-        };
-        let no_reply_target = resolve_remote_im_auto_send_target(
-            "你好，这里是最终回复。",
-            &[RemoteImActivationSource {
-                channel_id: "remote-im-a".to_string(),
-                platform: RemoteImPlatform::OnebotV11,
-                remote_contact_type: "private".to_string(),
-                remote_contact_id: "contact-a".to_string(),
-                remote_contact_name: "张三".to_string(),
-            }],
-            Some(&no_reply_decision),
-            true,
-        )
-        .expect("no_reply should suppress auto send");
-        assert!(no_reply_target.is_none());
     }
 
     #[test]
@@ -8291,16 +8269,97 @@
             usage_start: ConversationCumulativeUsage::default(),
             usage_end: None,
         });
-        let mut remote_contact = build_conversation_record(
+        let private_contact = RemoteImContact {
+            id: "contact-private".to_string(),
+            channel_id: "channel-a".to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            remote_contact_type: "private".to_string(),
+            remote_contact_id: "private-a".to_string(),
+            remote_contact_name: "私聊联系人".to_string(),
+            avatar_url: String::new(),
+            remark_name: String::new(),
+            allow_send: true,
+            allow_send_files: true,
+            allow_receive: true,
+            activation_mode: "always".to_string(),
+            activation_keywords: Vec::new(),
+            mute_keywords: default_remote_im_contact_mute_keywords(),
+            unmute_keywords: default_remote_im_contact_unmute_keywords(),
+            patience_seconds: default_remote_im_contact_patience_seconds(),
+            mute_duration_seconds: default_remote_im_contact_mute_duration_seconds(),
+            activation_cooldown_seconds: 0,
+            route_mode: "dedicated_contact_conversation".to_string(),
+            bound_department_id: Some("assistant-department".to_string()),
+            bound_agent_id: Some(agent.id.clone()),
+            bound_conversation_id: Some("conversation-remote-private".to_string()),
+            processing_mode: "continuous".to_string(),
+            response_strategy: default_remote_im_contact_response_strategy(),
+            response_guidance: default_remote_im_contact_response_guidance(),
+            last_activated_at: None,
+            last_message_at: None,
+            dingtalk_session_webhook: None,
+            dingtalk_session_webhook_expired_time: None,
+            onebot_group_members: Vec::new(),
+            shell_workspaces: Vec::new(),
+        };
+        let group_contact = RemoteImContact {
+            id: "contact-group".to_string(),
+            channel_id: "channel-a".to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            remote_contact_type: "group".to_string(),
+            remote_contact_id: "group-a".to_string(),
+            remote_contact_name: "群聊联系人".to_string(),
+            avatar_url: String::new(),
+            remark_name: String::new(),
+            allow_send: true,
+            allow_send_files: true,
+            allow_receive: true,
+            activation_mode: "always".to_string(),
+            activation_keywords: Vec::new(),
+            mute_keywords: default_remote_im_contact_mute_keywords(),
+            unmute_keywords: default_remote_im_contact_unmute_keywords(),
+            patience_seconds: default_remote_im_contact_patience_seconds(),
+            mute_duration_seconds: default_remote_im_contact_mute_duration_seconds(),
+            activation_cooldown_seconds: 0,
+            route_mode: "dedicated_contact_conversation".to_string(),
+            bound_department_id: Some("assistant-department".to_string()),
+            bound_agent_id: Some(agent.id.clone()),
+            bound_conversation_id: Some("conversation-remote-group".to_string()),
+            processing_mode: "continuous".to_string(),
+            response_strategy: default_remote_im_contact_response_strategy(),
+            response_guidance: default_remote_im_contact_response_guidance(),
+            last_activated_at: None,
+            last_message_at: None,
+            dingtalk_session_webhook: None,
+            dingtalk_session_webhook_expired_time: None,
+            onebot_group_members: Vec::new(),
+            shell_workspaces: Vec::new(),
+        };
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(private_contact.clone());
+        runtime.remote_im_contacts.push(group_contact.clone());
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime state");
+
+        let mut remote_private_contact = build_conversation_record(
             &selected_api.id,
             &agent.id,
             "assistant-department",
-            "联系人会话",
+            "私聊联系人会话",
             CONVERSATION_KIND_REMOTE_IM_CONTACT,
-            None,
+            Some(remote_im_contact_conversation_key(&private_contact)),
             None,
         );
-        remote_contact.id = "conversation-remote-contact".to_string();
+        remote_private_contact.id = "conversation-remote-private".to_string();
+        let mut remote_group_contact = build_conversation_record(
+            &selected_api.id,
+            &agent.id,
+            "assistant-department",
+            "群聊联系人会话",
+            CONVERSATION_KIND_REMOTE_IM_CONTACT,
+            Some(remote_im_contact_conversation_key(&group_contact)),
+            None,
+        );
+        remote_group_contact.id = "conversation-remote-group".to_string();
         let mut delegate_conversation = build_conversation_record(
             &selected_api.id,
             &agent.id,
@@ -8312,7 +8371,13 @@
         );
         delegate_conversation.id = "conversation-delegate".to_string();
 
-        for conversation in [&local_without_goal, &local_with_goal, &remote_contact, &delegate_conversation] {
+        for conversation in [
+            &local_without_goal,
+            &local_with_goal,
+            &remote_private_contact,
+            &remote_group_contact,
+            &delegate_conversation,
+        ] {
             state_schedule_conversation_persist(&state, conversation)
                 .expect("persist conversation");
         }
@@ -8355,6 +8420,7 @@
         assert!(!has_executor(&local_without_goal_assembly, "contact_reply"));
         assert!(!has_definition(&local_without_goal_assembly, "contact_reply"));
         assert!(!has_definition(&local_without_goal_assembly, "contact_no_reply"));
+        assert!(!has_definition(&local_without_goal_assembly, "contact_send_files"));
 
         let local_with_goal_assembly = assemble_for(&local_with_goal.id);
         assert!(has_attached_schema(&local_with_goal_assembly, "create_goal"));
@@ -8365,14 +8431,28 @@
         assert!(!has_executor(&local_with_goal_assembly, "contact_reply"));
         assert!(!has_definition(&local_with_goal_assembly, "contact_reply"));
         assert!(!has_definition(&local_with_goal_assembly, "contact_no_reply"));
+        assert!(!has_definition(&local_with_goal_assembly, "contact_send_files"));
 
-        let remote_contact_assembly = assemble_for(&remote_contact.id);
-        assert!(has_attached_schema(&remote_contact_assembly, "create_goal"));
-        assert!(has_executor(&remote_contact_assembly, "create_goal"));
-        assert!(has_attached_schema(&remote_contact_assembly, "contact_reply"));
-        assert!(has_executor(&remote_contact_assembly, "contact_reply"));
-        assert!(has_attached_schema(&remote_contact_assembly, "contact_send_files"));
-        assert!(has_attached_schema(&remote_contact_assembly, "contact_no_reply"));
+        let remote_private_contact_assembly = assemble_for(&remote_private_contact.id);
+        assert!(has_attached_schema(&remote_private_contact_assembly, "create_goal"));
+        assert!(has_executor(&remote_private_contact_assembly, "create_goal"));
+        assert!(!has_attached_schema(&remote_private_contact_assembly, "contact_reply"));
+        assert!(!has_executor(&remote_private_contact_assembly, "contact_reply"));
+        assert!(!has_definition(&remote_private_contact_assembly, "contact_reply"));
+        assert!(has_attached_schema(&remote_private_contact_assembly, "contact_send_files"));
+        assert!(has_executor(&remote_private_contact_assembly, "contact_send_files"));
+        assert!(!has_attached_schema(&remote_private_contact_assembly, "contact_no_reply"));
+        assert!(!has_executor(&remote_private_contact_assembly, "contact_no_reply"));
+        assert!(!has_definition(&remote_private_contact_assembly, "contact_no_reply"));
+
+        let remote_group_contact_assembly = assemble_for(&remote_group_contact.id);
+        assert!(!has_attached_schema(&remote_group_contact_assembly, "contact_reply"));
+        assert!(!has_executor(&remote_group_contact_assembly, "contact_reply"));
+        assert!(has_attached_schema(&remote_group_contact_assembly, "contact_send_files"));
+        assert!(has_executor(&remote_group_contact_assembly, "contact_send_files"));
+        assert!(!has_attached_schema(&remote_group_contact_assembly, "contact_no_reply"));
+        assert!(!has_executor(&remote_group_contact_assembly, "contact_no_reply"));
+        assert!(!has_definition(&remote_group_contact_assembly, "contact_no_reply"));
 
         let delegate_assembly = assemble_for(&delegate_conversation.id);
         assert!(!has_attached_schema(&delegate_assembly, "task"));

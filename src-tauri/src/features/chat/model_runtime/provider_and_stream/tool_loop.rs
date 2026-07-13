@@ -1483,9 +1483,7 @@ mod tool_loop_tests {
             test_tool("remember", false),
             test_tool("plan", false),
             test_tool("remote_im_send", false),
-            test_tool("contact_reply", false),
             test_tool("contact_send_files", false),
-            test_tool("contact_no_reply", false),
             test_tool("read", false),
             test_tool("fetch", false),
             test_tool("websearch", false),
@@ -1505,9 +1503,7 @@ mod tool_loop_tests {
         assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "remember"));
         assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "plan"));
         assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "remote_im_send"));
-        assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "contact_reply"));
         assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "contact_send_files"));
-        assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "contact_no_reply"));
         assert!(!runtime_tool_call_requires_serial_execution(&tools, &definitions, "read"));
         assert!(!runtime_tool_call_requires_serial_execution(&tools, &definitions, "fetch"));
         assert!(!runtime_tool_call_requires_serial_execution(&tools, &definitions, "websearch"));
@@ -1605,113 +1601,6 @@ mod tool_loop_tests {
         assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "workspace_edit"));
         assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "repo_lookup"));
         assert!(!runtime_tool_call_requires_serial_execution(&tools, &definitions, "profile_lookup"));
-    }
-
-    #[test]
-    fn contact_no_reply_should_stop_on_snake_case_stop_tool_loop() {
-        let tool_result = serde_json::json!({
-            "ok": true,
-            "action": "no_reply",
-            "stop_tool_loop": true
-        })
-        .to_string();
-
-        assert!(should_stop_after_contact_tool("contact_no_reply", &tool_result));
-    }
-
-    #[test]
-    fn reorder_turn_tool_calls_should_move_contact_no_reply_to_tail() {
-        let tool_calls = vec![
-            genai::chat::ToolCall {
-                call_id: "call-1".to_string(),
-                fn_name: "contact_no_reply".to_string(),
-                fn_arguments: serde_json::json!({
-                    "reason": "不需要回复"
-                }),
-                thought_signatures: None,
-            },
-            genai::chat::ToolCall {
-                call_id: "call-2".to_string(),
-                fn_name: "fetch".to_string(),
-                fn_arguments: serde_json::json!({
-                    "url": "https://example.com"
-                }),
-                thought_signatures: None,
-            },
-            genai::chat::ToolCall {
-                call_id: "call-3".to_string(),
-                fn_name: "contact_reply".to_string(),
-                fn_arguments: serde_json::json!({
-                    "text": "收到"
-                }),
-                thought_signatures: None,
-            },
-        ];
-
-        let reordered = reorder_turn_tool_calls_for_contact_tail(tool_calls);
-        let names = reordered
-            .iter()
-            .map(|item| format!("{}:{}", item.fn_name, item.call_id))
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            names,
-            vec![
-                "fetch:call-2".to_string(),
-                "contact_reply:call-3".to_string(),
-                "contact_no_reply:call-1".to_string(),
-            ]
-        );
-    }
-
-    fn assistant_contact_tool_event(tool_name: &str) -> Value {
-        serde_json::json!({
-            "role": "assistant",
-            "content": "先说明一下处理方式",
-            "tool_calls": [
-                {
-                    "id": "call-1",
-                    "type": "function",
-                    "function": {
-                        "name": tool_name,
-                        "arguments": "{}"
-                    }
-                }
-            ]
-        })
-    }
-
-    fn contact_tool_result_event(action: &str) -> Value {
-        serde_json::json!({
-            "role": "tool",
-            "tool_call_id": "call-1",
-            "content": serde_json::json!({
-                "ok": true,
-                "action": action
-            }).to_string()
-        })
-    }
-
-    #[test]
-    fn contact_reply_should_not_suppress_pre_tool_auto_send() {
-        let assistant_event = assistant_contact_tool_event("contact_reply");
-        let tool_result_event = contact_tool_result_event("reply");
-
-        assert!(!tool_loop_tool_group_suppresses_pre_tool_auto_send(
-            &assistant_event,
-            &tool_result_event,
-        ));
-    }
-
-    #[test]
-    fn contact_no_reply_should_suppress_pre_tool_auto_send() {
-        let assistant_event = assistant_contact_tool_event("contact_no_reply");
-        let tool_result_event = contact_tool_result_event("no_reply");
-
-        assert!(tool_loop_tool_group_suppresses_pre_tool_auto_send(
-            &assistant_event,
-            &tool_result_event,
-        ));
     }
 
     #[test]

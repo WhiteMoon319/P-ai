@@ -2435,7 +2435,6 @@ async fn send_chat_message_inner(
             .as_ref()
             .map(std::slice::from_ref)
             .unwrap_or(&[]),
-        remote_im_reply_decision.as_ref(),
         remote_im_auto_send_source.is_some(),
     )?;
     if let Some(target) = pending_remote_im_auto_send_target.as_ref() {

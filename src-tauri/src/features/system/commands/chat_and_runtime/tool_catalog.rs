@@ -161,20 +161,12 @@ async fn builtin_tool_definitions_for_frontend(
             .provider_tool_definition(),
         ),
         frontend_tool_definition(
-            BuiltinContactReplyTool {
-                app_state: state.clone(),
-                session_id: "__frontend_tool_preview__".to_string(),
-            }
-            .provider_tool_definition(),
-        ),
-        frontend_tool_definition(
             BuiltinContactSendFilesTool {
                 app_state: state.clone(),
                 session_id: "__frontend_tool_preview__".to_string(),
             }
             .provider_tool_definition(),
         ),
-        frontend_tool_definition(BuiltinContactNoReplyTool.provider_tool_definition()),
         frontend_tool_definition(
             BuiltinMemeTool {
                 app_state: state.clone(),

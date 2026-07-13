@@ -89,35 +89,19 @@ const REMOTE_CUSTOMER_SERVICE_DEPARTMENT_GUIDE: &str = r#"行为准则
 
 ---
 
-对外发送与工具
+对外发送
 
-- 默认方式：完成判断、检索和处理后，直接在本轮最终 assistant 回复中写出要给联系人的正式答复。只要未调用 `contact_no_reply`，系统会自动将这段最终回复发送给本轮绑定联系人；不要为了发送普通答复额外调用工具。
-- `contact_reply`：仅在正式答复前确有必要即时发送简短进度、确认或安抚时使用。参数：`text`（必填字符串）。它是中途动作，不会替代或取消最终回复；避免把正式答复重复发送一次。
-- `contact_send_files`：需要立即发送图片或附件时使用。参数：`file_paths`（必填字符串数组，支持本地路径和 HTTP(S) URL）。它同样不会取消最终回复；必要时仍应在最终回复中说明附件用途或后续处理结果。
-- `contact_no_reply`：确定本轮不应向联系人发任何消息时使用。参数：`reason`（可选字符串，用于内部记录）。调用后会抑制自动最终回复并结束对外回复流程；不要与 `contact_reply`、`contact_send_files` 或面向联系人的正文同时使用。
+- 完成判断、检索和处理后，直接在本轮最终 assistant 回复中写出要给联系人的正式答复。系统会自动将这段最终回复发送给本轮绑定联系人。
+- 不要为了发送普通文字答复额外做中途动作，避免重复外发。
 
 附件规则
-- 这三个工具都只作用于“本轮绑定联系人”，不能自行指定其他联系人、渠道或目标，因此不再需要 `action`、`channel_id`、`contact_id` 或 `status` 参数。
-- 要在文字中发送本地图片，可在 `contact_reply.text` 使用 `![说明](ABSOLUTE_IMAGE_PATH)`；`ABSOLUTE_IMAGE_PATH` 只是语法占位符，输出时必须替换为真实绝对路径，不得原样输出或使用相对路径。
-- 要发送图片、非图片附件或 HTTP(S) 网络文件，使用 `contact_send_files.file_paths`；非图片附件不要把本地路径或文件链接直接写进正文。
+- 联系人专用外发能力都只作用于“本轮绑定联系人”，不要自行指定其他联系人、渠道或目标。
+- 非图片附件不要把本地路径或文件链接直接写进正文。
 - 不要把工具调用描述、内部判断或“是否回复”的结论发给联系人。
-
-联系人专用工具可用：`contact_reply`、`contact_send_files`、`contact_no_reply`。"#;
-
-const CONTACT_REPLY_TOOL_DESCRIPTION: &str =
-    "联系人专用即时回复工具。立刻给本轮绑定联系人发一句话，适合复杂任务开始前先确认已收到、先安抚一句或同步处理中状态。它不会取消本轮结束后的自动最终回复。";
-
-const CONTACT_REPLY_TOOL_TEXT_DESCRIPTION: &str =
-    "要立刻发给本轮绑定联系人的文本内容；可用标准 Markdown 图片语法 `![说明](ABSOLUTE_IMAGE_PATH)` 内联发送本地图片。`ABSOLUTE_IMAGE_PATH` 必须替换为真实绝对路径，不得原样输出或使用相对路径。";
+"#;
 
 const CONTACT_SEND_FILES_TOOL_DESCRIPTION: &str =
     "联系人专用附件发送工具。立刻把本地文件或网络文件发给本轮绑定联系人；图片按图片发送，其他文件按附件发送。它不会取消本轮结束后的自动最终回复。";
 
 const CONTACT_SEND_FILES_TOOL_FILE_PATHS_DESCRIPTION: &str =
     "要发送给本轮绑定联系人的文件路径或 HTTP(S) URL 列表；图片 URL 会下载后按图片发送，其他 URL 会按附件发送。";
-
-const CONTACT_NO_REPLY_TOOL_DESCRIPTION: &str =
-    "联系人专用静默决策工具。声明本轮结束时不要自动向本轮绑定联系人发送最终回复，并可记录本轮不回复的原因供后续轮次参考。";
-
-const CONTACT_NO_REPLY_TOOL_REASON_DESCRIPTION: &str =
-    "本轮决定不回复的简短原因。只做内部记录，不会发给联系人。";

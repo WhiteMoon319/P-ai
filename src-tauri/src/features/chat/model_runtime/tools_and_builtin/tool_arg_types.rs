@@ -71,19 +71,8 @@ struct ReadMediaToolArgs {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-struct ContactReplyToolArgs {
-    text: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
 struct ContactSendFilesToolArgs {
     file_paths: Vec<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct ContactNoReplyToolArgs {
-    #[serde(default)]
-    reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]

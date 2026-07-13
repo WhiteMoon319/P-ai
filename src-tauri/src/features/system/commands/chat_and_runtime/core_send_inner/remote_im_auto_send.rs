@@ -1,42 +1,7 @@
-fn remote_im_extract_action_from_tool_arguments(raw: &Value) -> Option<String> {
-    match raw {
-        Value::String(text) => {
-            let trimmed = text.trim();
-            if trimmed.is_empty() {
-                return None;
-            }
-            serde_json::from_str::<Value>(trimmed)
-                .ok()
-                .and_then(|value| remote_im_extract_action_from_tool_arguments(&value))
-        }
-        Value::Object(map) => map
-            .get("action")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(|value| value.to_ascii_lowercase()),
-        _ => None,
-    }
-}
-
-fn remote_im_parse_tool_arguments(raw: &Value) -> Option<Value> {
-    match raw {
-        Value::String(text) => {
-            let trimmed = text.trim();
-            if trimmed.is_empty() {
-                return None;
-            }
-            serde_json::from_str::<Value>(trimmed).ok()
-        }
-        Value::Object(_) => Some(raw.clone()),
-        _ => None,
-    }
-}
-
 fn remote_im_is_reply_decision_action(action: &str) -> bool {
     matches!(
         action.trim().to_ascii_lowercase().as_str(),
-        "reply" | "send_files" | "reply_async" | "send" | "send_async" | "no_reply"
+        "reply_async" | "send_async"
     )
 }
 
@@ -47,64 +12,9 @@ struct RemoteImReplyDecisionSummary {
 }
 
 fn remote_im_extract_reply_decision_from_tool_history(
-    events: &[Value],
+    _events: &[Value],
 ) -> Option<RemoteImReplyDecisionSummary> {
-    let mut latest: Option<RemoteImReplyDecisionSummary> = None;
-    for event in events {
-        let Some(tool_calls) = event.get("tool_calls").and_then(Value::as_array) else {
-            continue;
-        };
-        for tool_call in tool_calls {
-            let Some(function) = tool_call.get("function") else {
-                continue;
-            };
-            let Some(name) = function.get("name").and_then(Value::as_str) else {
-                continue;
-            };
-            let action = match name.trim() {
-                "remote_im_send" => function
-                    .get("arguments")
-                    .and_then(remote_im_extract_action_from_tool_arguments),
-                "contact_reply" => Some("reply".to_string()),
-                "contact_send_files" => Some("send_files".to_string()),
-                "contact_no_reply" => Some("no_reply".to_string()),
-                _ => None,
-            };
-            let Some(action) = action else {
-                continue;
-            };
-            if remote_im_is_reply_decision_action(&action) {
-                let target = if name.trim() == "remote_im_send" {
-                    function
-                        .get("arguments")
-                        .and_then(remote_im_parse_tool_arguments)
-                        .and_then(|value| {
-                            let object = value.as_object()?;
-                            let channel_id = object
-                                .get("channel_id")
-                                .and_then(Value::as_str)
-                                .map(str::trim)
-                                .filter(|value| !value.is_empty())?
-                                .to_string();
-                            let contact_id = object
-                                .get("contact_id")
-                                .and_then(Value::as_str)
-                                .map(str::trim)
-                                .filter(|value| !value.is_empty())?
-                                .to_string();
-                            Some(RemoteImReplyTarget {
-                                channel_id,
-                                contact_id,
-                            })
-                        })
-                } else {
-                    None
-                };
-                latest = Some(RemoteImReplyDecisionSummary { action, target });
-            }
-        }
-    }
-    latest
+    None
 }
 
 fn remote_im_message_has_reply_decision(message: &ChatMessage) -> bool {
@@ -201,7 +111,7 @@ fn build_remote_im_activation_runtime_block(
         .join("\n");
     let block = match (ui_language.trim(), sources.len()) {
         ("en-US", 1) => format!(
-            "This round was activated by exactly one remote IM source, and this round is now bound to that current contact.\n{}\nIf you do not call `contact_no_reply`, the system may automatically send your final assistant reply to the bound current contact at the end of this round.\nUse `contact_reply` for an immediate short acknowledgement. To send an inline local image with text, use `![description](ABSOLUTE_IMAGE_PATH)` in `contact_reply.text`. `ABSOLUTE_IMAGE_PATH` is a syntax placeholder: replace it with the real absolute path, and never output the placeholder or a relative path. For non-image files, use `contact_send_files` with real local file paths.",
+            "This round was activated by exactly one remote IM source, and this round is now bound to that current contact.\n{}\nThe system may automatically send your final assistant reply to the bound current contact at the end of this round.",
             source_lines
         ),
         ("en-US", _) => format!(
@@ -209,7 +119,7 @@ fn build_remote_im_activation_runtime_block(
             source_lines
         ),
         ("zh-TW", 1) => format!(
-            "本輪由唯一一個遠端 IM 來源啟動，且本輪已綁定該目前聯絡人。\n{}\n若你未呼叫 `contact_no_reply`，系統可能會在本輪結束後自動將最終回覆發送給本輪綁定聯絡人。\n若你只是要先回一句、告知正在處理，請使用 `contact_reply`；若要把本機圖片和文字一起發出，請在 `contact_reply.text` 使用 `![說明](ABSOLUTE_IMAGE_PATH)`。`ABSOLUTE_IMAGE_PATH` 只是語法佔位符，輸出時必須替換為真實絕對路徑，不得原樣輸出或使用相對路徑；若要發非圖片檔案，請使用 `contact_send_files` 並傳真實本機檔案路徑。",
+            "本輪由唯一一個遠端 IM 來源啟動，且本輪已綁定該目前聯絡人。\n{}\n系統可能會在本輪結束後自動將最終回覆發送給本輪綁定聯絡人。",
             source_lines
         ),
         ("zh-TW", _) => format!(
@@ -217,7 +127,7 @@ fn build_remote_im_activation_runtime_block(
             source_lines
         ),
         (_, 1) => format!(
-            "本轮由唯一一个远程 IM 来源激活，且本轮已绑定该当前联系人。\n{}\n如果你没有调用 `contact_no_reply`，系统可能会在本轮结束后自动将最终回复发送给本轮绑定联系人。\n如果你只是要先回一句、告知正在处理，请使用 `contact_reply`；如果要把本地图片和文字一起发出，请在 `contact_reply.text` 使用 `![说明](ABSOLUTE_IMAGE_PATH)`。`ABSOLUTE_IMAGE_PATH` 只是语法占位符，输出时必须替换为真实绝对路径，不得原样输出或使用相对路径；如果要发非图片文件，请使用 `contact_send_files` 并传真实本地文件路径。",
+            "本轮由唯一一个远程 IM 来源激活，且本轮已绑定该当前联系人。\n{}\n系统可能会在本轮结束后自动将最终回复发送给本轮绑定联系人。",
             source_lines
         ),
         _ => format!(
@@ -231,19 +141,12 @@ fn build_remote_im_activation_runtime_block(
 fn resolve_remote_im_auto_send_target(
     assistant_text: &str,
     activation_sources: &[RemoteImActivationSource],
-    reply_decision: Option<&RemoteImReplyDecisionSummary>,
     is_remote_reply_delegate: bool,
 ) -> Result<Option<RemoteImActivationSource>, String> {
     if !is_remote_reply_delegate {
         return Ok(None);
     }
     if activation_sources.is_empty() {
-        return Ok(None);
-    }
-    if reply_decision
-        .map(|decision| decision.action.eq_ignore_ascii_case("no_reply"))
-        .unwrap_or(false)
-    {
         return Ok(None);
     }
     if activation_sources.len() >= 2 {
@@ -541,13 +444,13 @@ async fn remote_im_auto_send_assistant_reply_to_source(
     let send_result =
         remote_im_send_content_payload(state, &channel, &contact, content, false, "reply_async").await?;
     let tool_result = serde_json::to_string(&send_result)
-        .map_err(|err| format!("序列化自动 contact_reply 结果失败: {err}"))?;
+        .map_err(|err| format!("序列化自动远程联系人发送结果失败: {err}"))?;
     let args_value = serde_json::json!({
         "text": trimmed_text
     });
     Ok(Some((
         "reply_async".to_string(),
-        remote_im_contact_tool_history_events("contact_reply", args_value, &tool_result),
+        remote_im_contact_tool_history_events("remote_im_auto_send", args_value, &tool_result),
     )))
 }
 

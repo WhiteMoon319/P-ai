@@ -138,9 +138,7 @@ fn runtime_tool_call_requires_serial_execution(
             | "remember"
             | "plan"
             | "remote_im_send"
-            | "contact_reply"
             | "contact_send_files"
-            | "contact_no_reply"
     ) {
         return true;
     }
@@ -367,4 +365,3 @@ fn runtime_tool_result_followup_message(
         genai::chat::MessageContent::from_parts(parts),
     ))
 }
-

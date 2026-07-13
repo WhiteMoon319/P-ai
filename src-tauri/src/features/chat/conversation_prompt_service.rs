@@ -657,11 +657,10 @@ impl ConversationPromptService {
             tool_rule_blocks.push(prompt_xml_block(
                 "contact tools rule",
                 "联系人专用工具仅对本轮绑定联系人生效。\n\
-                 1. 若需要先回应一句“收到、我先看一下、稍后回复”，请使用 `contact_reply`。\n\
-                 2. 若需要发送图片或文件，请使用 `contact_send_files`。发送文件时，应把真实本地文件路径放进 `contact_send_files.file_paths`，不要把本地路径或文件链接直接写进正文。\n\
-                 3. 若判断本轮结束时不应自动向联系人发送最终回复，请使用 `contact_no_reply`，并在 `reason` 中简要记录原因。\n\
-                 4. `contact_reply` 与 `contact_send_files` 是中途动作，不会取消本轮结束后的自动最终回复。\n\
-                 5. 如果你没有调用 `contact_no_reply`，系统会在本轮结束后，自动把最终 assistant 回复发给本轮绑定联系人。",
+                 1. 普通文字答复直接写在本轮最终 assistant 回复中，系统会在本轮结束后自动发给本轮绑定联系人。\n\
+                 2. 若需要发送图片或文件，请使用 `contact_send_files`。发送文件时，应把真实本地文件路径或 HTTP(S) URL 放进 `contact_send_files.file_paths`，不要把本地路径或文件链接直接写进正文。\n\
+                 3. `contact_send_files` 是中途动作，不会取消本轮结束后的自动最终回复。\n\
+                 4. 不要把工具调用描述、内部判断或“是否回复”的结论发给联系人。",
             ));
         }
         let (tool_rule_extra_blocks, runtime_extra_blocks, im_extra_blocks) =

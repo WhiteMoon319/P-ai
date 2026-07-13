@@ -236,17 +236,11 @@ fn build_global_tool_schema_cache(state: &AppState) -> Vec<ProviderToolDefinitio
         }
         .provider_tool_definition(),
         BuiltinMemeTool { app_state: state.clone() }.provider_tool_definition(),
-        BuiltinContactReplyTool {
-            app_state: state.clone(),
-            session_id: preview_session_id.clone(),
-        }
-        .provider_tool_definition(),
         BuiltinContactSendFilesTool {
             app_state: state.clone(),
             session_id: preview_session_id,
         }
         .provider_tool_definition(),
-        BuiltinContactNoReplyTool.provider_tool_definition(),
     ];
 
     match load_workspace_mcp_servers(state) {
@@ -311,10 +305,9 @@ fn resolve_runtime_tool_current_department<'a>(
         .and_then(|department_id| department_by_id(app_config, department_id))
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct RuntimeToolPolicy {
     remote_im_contact_conversation: bool,
-    remote_im_reply_delegate: bool,
     delegate_conversation: bool,
 }
 
@@ -324,18 +317,17 @@ impl RuntimeToolPolicy {
             remote_im_contact_conversation: conversation
                 .map(conversation_is_remote_im_contact)
                 .unwrap_or(false),
-            remote_im_reply_delegate: false,
             delegate_conversation: conversation
                 .map(conversation_is_delegate)
                 .unwrap_or(false),
         }
     }
 
-    fn tool_allowed(self, tool_name: &str) -> bool {
+    fn tool_allowed(&self, tool_name: &str) -> bool {
         match tool_name.trim() {
-            "contact_reply" | "contact_send_files" | "contact_no_reply" => {
-                self.remote_im_contact_conversation && self.remote_im_reply_delegate
-            }
+            "contact_reply" => false,
+            "contact_send_files" => self.remote_im_contact_conversation,
+            "contact_no_reply" => false,
             "task" => !self.delegate_conversation,
             _ => true,
         }
@@ -352,12 +344,10 @@ fn runtime_tool_policy_from_session(
     let Ok(conversation_id) = goal_tool_conversation_id(tool_session_id) else {
         return RuntimeToolPolicy::from_conversation(None);
     };
-    let remote_im_reply_delegate = delegate_session_is_remote_reply_delegate(tool_session_id);
     if let Ok(conversation_meta) = conversation_service_v2().get_conversation_meta(state, &conversation_id) {
         return RuntimeToolPolicy {
             remote_im_contact_conversation: conversation_meta.conversation_kind.trim()
                 == CONVERSATION_KIND_REMOTE_IM_CONTACT,
-            remote_im_reply_delegate,
             delegate_conversation: conversation_meta.conversation_kind.trim()
                 == CONVERSATION_KIND_DELEGATE,
         };
@@ -544,16 +534,11 @@ fn push_runtime_tool_executors(
         }));
     }
     tools.push(Box::new(BuiltinMemeTool { app_state: state.clone() }));
-    if runtime_tool_policy.tool_allowed("contact_reply") {
-        tools.push(Box::new(BuiltinContactReplyTool {
-            app_state: state.clone(),
-            session_id: tool_session_id.to_string(),
-        }));
+    if runtime_tool_policy.tool_allowed("contact_send_files") {
         tools.push(Box::new(BuiltinContactSendFilesTool {
             app_state: state.clone(),
             session_id: tool_session_id.to_string(),
         }));
-        tools.push(Box::new(BuiltinContactNoReplyTool));
     }
     push_cached_mcp_runtime_tools(tools, &state, runtime_tool_policy);
     Ok(())

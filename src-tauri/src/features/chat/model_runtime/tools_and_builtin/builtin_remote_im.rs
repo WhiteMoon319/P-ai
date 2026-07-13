@@ -1,35 +1,10 @@
 #[derive(Debug, Clone)]
-struct BuiltinContactReplyTool {
-    app_state: AppState,
-    session_id: String,
-}
-
-#[derive(Debug, Clone)]
 struct BuiltinContactSendFilesTool {
     app_state: AppState,
     session_id: String,
 }
 
-#[derive(Debug, Clone)]
-struct BuiltinContactNoReplyTool;
-
 const REMOTE_IM_URL_ATTACHMENT_MAX_BYTES: u64 = 100 * 1024 * 1024;
-
-impl RuntimeToolMetadata for BuiltinContactReplyTool {
-    fn provider_tool_definition(&self) -> ProviderToolDefinition {
-        ProviderToolDefinition::new(
-            "contact_reply",
-            CONTACT_REPLY_TOOL_DESCRIPTION,
-            serde_json::json!({
-              "type": "object",
-              "properties": {
-                "text": { "type": "string", "description": CONTACT_REPLY_TOOL_TEXT_DESCRIPTION }
-              },
-              "required": ["text"]
-            }),
-        )
-    }
-}
 
 impl RuntimeToolMetadata for BuiltinContactSendFilesTool {
     fn provider_tool_definition(&self) -> ProviderToolDefinition {
@@ -48,49 +23,6 @@ impl RuntimeToolMetadata for BuiltinContactSendFilesTool {
               "required": ["file_paths"]
             }),
         )
-    }
-}
-
-impl RuntimeToolMetadata for BuiltinContactNoReplyTool {
-    fn provider_tool_definition(&self) -> ProviderToolDefinition {
-        ProviderToolDefinition::new(
-            "contact_no_reply",
-            CONTACT_NO_REPLY_TOOL_DESCRIPTION,
-            serde_json::json!({
-              "type": "object",
-              "properties": {
-                "reason": { "type": "string", "description": CONTACT_NO_REPLY_TOOL_REASON_DESCRIPTION }
-              }
-            }),
-        )
-    }
-}
-
-impl RuntimeJsonTool for BuiltinContactReplyTool {
-    const NAME: &'static str = "contact_reply";
-    type Args = ContactReplyToolArgs;
-    type Error = ToolInvokeError;
-
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
-        Box::pin(async move {
-            runtime_log_debug(format!(
-                "[工具调试] 内置工具执行开始 name=contact_reply args={}",
-                debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
-            ));
-            let result = builtin_contact_reply(&self.app_state, &self.session_id, args)
-                .await
-                .map_err(ToolInvokeError::from);
-            match &result {
-                Ok(v) => runtime_log_debug(format!(
-                    "[工具调试] 内置工具执行完成 name=contact_reply result={}",
-                    debug_value_snippet(v, 240)
-                )),
-                Err(err) => runtime_log_debug(format!(
-                    "[工具调试] 内置工具执行失败 name=contact_reply err={err}"
-                )),
-            }
-            result
-        })
     }
 }
 
@@ -115,32 +47,6 @@ impl RuntimeJsonTool for BuiltinContactSendFilesTool {
                 )),
                 Err(err) => runtime_log_debug(format!(
                     "[工具调试] 内置工具执行失败 name=contact_send_files err={err}"
-                )),
-            }
-            result
-        })
-    }
-}
-
-impl RuntimeJsonTool for BuiltinContactNoReplyTool {
-    const NAME: &'static str = "contact_no_reply";
-    type Args = ContactNoReplyToolArgs;
-    type Error = ToolInvokeError;
-
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
-        Box::pin(async move {
-            runtime_log_debug(format!(
-                "[工具调试] 内置工具执行开始 name=contact_no_reply args={}",
-                debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
-            ));
-            let result = builtin_contact_no_reply(args).map_err(ToolInvokeError::from);
-            match &result {
-                Ok(v) => runtime_log_debug(format!(
-                    "[工具调试] 内置工具执行完成 name=contact_no_reply result={}",
-                    debug_value_snippet(v, 240)
-                )),
-                Err(err) => runtime_log_debug(format!(
-                    "[工具调试] 内置工具执行失败 name=contact_no_reply err={err}"
                 )),
             }
             result
@@ -552,27 +458,6 @@ fn remote_im_bound_contact_context_from_runtime(
     Ok((channel, contact))
 }
 
-async fn builtin_contact_reply(
-    state: &AppState,
-    session_id: &str,
-    args: ContactReplyToolArgs,
-) -> Result<Value, String> {
-    let text = args.text.trim().to_string();
-    if text.is_empty() {
-        return Err("contact_reply.text 不能为空".to_string());
-    }
-    let (channel, contact) = remote_im_bound_contact_context_from_runtime(state, session_id)?;
-    if !contact.allow_send {
-        return Err("当前联系人不允许发送消息".to_string());
-    }
-    let seed_source = format!(
-        "contact_reply::{}::{}::{}",
-        contact.channel_id, contact.remote_contact_id, text
-    );
-    let content = remote_im_build_text_content_items(state, &text, &seed_source).await?;
-    remote_im_send_content_payload(state, &channel, &contact, content, false, "reply").await
-}
-
 async fn builtin_contact_send_files(
     state: &AppState,
     session_id: &str,
@@ -601,24 +486,6 @@ async fn builtin_contact_send_files(
         obj.insert("file_count".to_string(), serde_json::json!(file_paths.len()));
     }
     Ok(result)
-}
-
-fn builtin_contact_no_reply(args: ContactNoReplyToolArgs) -> Result<Value, String> {
-    let reason = args
-        .reason
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned);
-    Ok(serde_json::json!({
-        "ok": true,
-        "action": "no_reply",
-        "no_reply": true,
-        "done": true,
-        "continue": false,
-        "stop_tool_loop": true,
-        "reason": reason.unwrap_or_default()
-    }))
 }
 
 #[cfg(test)]
