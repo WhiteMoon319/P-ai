@@ -2,8 +2,8 @@
   <div class="space-y-5">
     <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div>
-        <div class="text-xl font-semibold">用量概览</div>
-        <div class="mt-1 text-sm opacity-70">综合总量按 输出 x 2 + 缓存写入 + 缓存命中 x 0.02 估算，仅供参考。</div>
+        <div class="text-xl font-semibold">{{ t("config.usage.pageTitle") }}</div>
+        <div class="mt-1 text-sm opacity-70">{{ t("config.usage.pageHint") }}</div>
       </div>
       <button class="btn btn-primary btn-sm shrink-0" :disabled="loading" @click="refreshOverview">
         <span v-if="loading" class="loading loading-spinner loading-xs"></span>
@@ -30,21 +30,21 @@
       <div class="grid gap-4 xl:grid-cols-2">
         <section class="card border border-base-300 bg-base-100 shadow-sm">
           <div class="card-body p-4">
-            <div class="card-title text-base">模型用量</div>
-            <div class="mt-1 text-xs opacity-60">新累计按供应商和模型细分；历史未细分残留会并入当前推断的供应商/模型。</div>
+            <div class="card-title text-base">{{ t("config.usage.modelTitle") }}</div>
+            <div class="mt-1 text-xs opacity-60">{{ t("config.usage.modelHint") }}</div>
             <div class="mt-2 overflow-x-auto">
               <table class="table table-sm">
                 <thead>
                   <tr>
-                    <th><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleProviderModelSort('providerLabel')">供应商{{ sortIndicator(providerModelSort, 'providerLabel') }}</button></th>
-                    <th><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleProviderModelSort('modelName')">模型{{ sortIndicator(providerModelSort, 'modelName') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleProviderModelSort('weightedTokens')">综合总量{{ sortIndicator(providerModelSort, 'weightedTokens') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleProviderModelSort('totalTokens')">总输入{{ sortIndicator(providerModelSort, 'totalTokens') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleProviderModelSort('cacheHitRate')">缓存命中率{{ sortIndicator(providerModelSort, 'cacheHitRate') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleProviderModelSort('outputTokens')">输出{{ sortIndicator(providerModelSort, 'outputTokens') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleProviderModelSort('cacheReadTokens')">缓存读{{ sortIndicator(providerModelSort, 'cacheReadTokens') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleProviderModelSort('cacheWrite')">缓存写入{{ sortIndicator(providerModelSort, 'cacheWrite') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleProviderModelSort('conversationCount')">会话{{ sortIndicator(providerModelSort, 'conversationCount') }}</button></th>
+                    <th><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleProviderModelSort('providerLabel')">{{ columnLabel("provider") }}{{ sortIndicator(providerModelSort, 'providerLabel') }}</button></th>
+                    <th><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleProviderModelSort('modelName')">{{ columnLabel("model") }}{{ sortIndicator(providerModelSort, 'modelName') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleProviderModelSort('weightedTokens')">{{ columnLabel("weightedTokens") }}{{ sortIndicator(providerModelSort, 'weightedTokens') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleProviderModelSort('totalTokens')">{{ columnLabel("totalTokens") }}{{ sortIndicator(providerModelSort, 'totalTokens') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleProviderModelSort('cacheHitRate')">{{ columnLabel("cacheHitRate") }}{{ sortIndicator(providerModelSort, 'cacheHitRate') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleProviderModelSort('outputTokens')">{{ columnLabel("outputTokens") }}{{ sortIndicator(providerModelSort, 'outputTokens') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleProviderModelSort('cacheReadTokens')">{{ columnLabel("cacheReadTokens") }}{{ sortIndicator(providerModelSort, 'cacheReadTokens') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleProviderModelSort('cacheWrite')">{{ columnLabel("cacheWrite") }}{{ sortIndicator(providerModelSort, 'cacheWrite') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleProviderModelSort('conversationCount')">{{ columnLabel("conversationCount") }}{{ sortIndicator(providerModelSort, 'conversationCount') }}</button></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -67,19 +67,19 @@
 
         <section class="card border border-base-300 bg-base-100 shadow-sm">
           <div class="card-body p-4">
-            <div class="card-title text-base">人格用量</div>
+            <div class="card-title text-base">{{ t("config.usage.agentTitle") }}</div>
             <div class="mt-2 overflow-x-auto">
               <table class="table table-sm">
                 <thead>
                   <tr>
-                    <th><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleAgentSort('label')">人格{{ sortIndicator(agentSort, 'label') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleAgentSort('weightedTokens')">综合总量{{ sortIndicator(agentSort, 'weightedTokens') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleAgentSort('totalTokens')">总输入{{ sortIndicator(agentSort, 'totalTokens') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleAgentSort('cacheHitRate')">缓存命中率{{ sortIndicator(agentSort, 'cacheHitRate') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleAgentSort('outputTokens')">输出{{ sortIndicator(agentSort, 'outputTokens') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleAgentSort('cacheReadTokens')">缓存读{{ sortIndicator(agentSort, 'cacheReadTokens') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleAgentSort('cacheWrite')">缓存写入{{ sortIndicator(agentSort, 'cacheWrite') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleAgentSort('conversationCount')">会话{{ sortIndicator(agentSort, 'conversationCount') }}</button></th>
+                    <th><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleAgentSort('label')">{{ columnLabel("agent") }}{{ sortIndicator(agentSort, 'label') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleAgentSort('weightedTokens')">{{ columnLabel("weightedTokens") }}{{ sortIndicator(agentSort, 'weightedTokens') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleAgentSort('totalTokens')">{{ columnLabel("totalTokens") }}{{ sortIndicator(agentSort, 'totalTokens') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleAgentSort('cacheHitRate')">{{ columnLabel("cacheHitRate") }}{{ sortIndicator(agentSort, 'cacheHitRate') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleAgentSort('outputTokens')">{{ columnLabel("outputTokens") }}{{ sortIndicator(agentSort, 'outputTokens') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleAgentSort('cacheReadTokens')">{{ columnLabel("cacheReadTokens") }}{{ sortIndicator(agentSort, 'cacheReadTokens') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleAgentSort('cacheWrite')">{{ columnLabel("cacheWrite") }}{{ sortIndicator(agentSort, 'cacheWrite') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleAgentSort('conversationCount')">{{ columnLabel("conversationCount") }}{{ sortIndicator(agentSort, 'conversationCount') }}</button></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -101,19 +101,19 @@
 
         <section class="card border border-base-300 bg-base-100 shadow-sm">
           <div class="card-body p-4">
-            <div class="card-title text-base">会话类型用量</div>
+            <div class="card-title text-base">{{ t("config.usage.kindTitle") }}</div>
             <div class="mt-2 overflow-x-auto">
               <table class="table table-sm">
                 <thead>
                   <tr>
-                    <th><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleKindSort('label')">类型{{ sortIndicator(kindSort, 'label') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleKindSort('weightedTokens')">综合总量{{ sortIndicator(kindSort, 'weightedTokens') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleKindSort('totalTokens')">总输入{{ sortIndicator(kindSort, 'totalTokens') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleKindSort('cacheHitRate')">缓存命中率{{ sortIndicator(kindSort, 'cacheHitRate') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleKindSort('outputTokens')">输出{{ sortIndicator(kindSort, 'outputTokens') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleKindSort('cacheReadTokens')">缓存读{{ sortIndicator(kindSort, 'cacheReadTokens') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleKindSort('cacheWrite')">缓存写入{{ sortIndicator(kindSort, 'cacheWrite') }}</button></th>
-                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleKindSort('conversationCount')">会话{{ sortIndicator(kindSort, 'conversationCount') }}</button></th>
+                    <th><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleKindSort('label')">{{ columnLabel("kind") }}{{ sortIndicator(kindSort, 'label') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleKindSort('weightedTokens')">{{ columnLabel("weightedTokens") }}{{ sortIndicator(kindSort, 'weightedTokens') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleKindSort('totalTokens')">{{ columnLabel("totalTokens") }}{{ sortIndicator(kindSort, 'totalTokens') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleKindSort('cacheHitRate')">{{ columnLabel("cacheHitRate") }}{{ sortIndicator(kindSort, 'cacheHitRate') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleKindSort('outputTokens')">{{ columnLabel("outputTokens") }}{{ sortIndicator(kindSort, 'outputTokens') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleKindSort('cacheReadTokens')">{{ columnLabel("cacheReadTokens") }}{{ sortIndicator(kindSort, 'cacheReadTokens') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleKindSort('cacheWrite')">{{ columnLabel("cacheWrite") }}{{ sortIndicator(kindSort, 'cacheWrite') }}</button></th>
+                    <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleKindSort('conversationCount')">{{ columnLabel("conversationCount") }}{{ sortIndicator(kindSort, 'conversationCount') }}</button></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -138,8 +138,8 @@
         <div class="card-body p-4">
           <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <div class="card-title text-base">会话用量</div>
-              <div class="text-xs opacity-60">按综合总量排序，方便直接定位最耗的会话。</div>
+              <div class="card-title text-base">{{ t("config.usage.conversationTitle") }}</div>
+              <div class="text-xs opacity-60">{{ t("config.usage.conversationHint") }}</div>
             </div>
             <div class="flex flex-col gap-2 md:items-end">
               <div class="join">
@@ -165,14 +165,14 @@
             <table class="table table-sm">
               <thead>
                 <tr>
-                  <th><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleConversationSort('activityAt')">会话{{ sortIndicator(conversationSort, 'activityAt') }}</button></th>
-                  <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleConversationSort('weightedTokens')">综合总量{{ sortIndicator(conversationSort, 'weightedTokens') }}</button></th>
-                  <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleConversationSort('totalTokens')">总输入{{ sortIndicator(conversationSort, 'totalTokens') }}</button></th>
-                  <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleConversationSort('cacheHitRate')">缓存命中率{{ sortIndicator(conversationSort, 'cacheHitRate') }}</button></th>
-                  <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleConversationSort('outputTokens')">输出{{ sortIndicator(conversationSort, 'outputTokens') }}</button></th>
-                  <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleConversationSort('cacheReadTokens')">缓存读{{ sortIndicator(conversationSort, 'cacheReadTokens') }}</button></th>
-                  <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleConversationSort('cacheWrite')">缓存写入{{ sortIndicator(conversationSort, 'cacheWrite') }}</button></th>
-                  <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleConversationSort('messageCount')">消息{{ sortIndicator(conversationSort, 'messageCount') }}</button></th>
+                  <th><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleConversationSort('activityAt')">{{ columnLabel("conversation") }}{{ sortIndicator(conversationSort, 'activityAt') }}</button></th>
+                  <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleConversationSort('weightedTokens')">{{ columnLabel("weightedTokens") }}{{ sortIndicator(conversationSort, 'weightedTokens') }}</button></th>
+                  <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleConversationSort('totalTokens')">{{ columnLabel("totalTokens") }}{{ sortIndicator(conversationSort, 'totalTokens') }}</button></th>
+                  <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleConversationSort('cacheHitRate')">{{ columnLabel("cacheHitRate") }}{{ sortIndicator(conversationSort, 'cacheHitRate') }}</button></th>
+                  <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleConversationSort('outputTokens')">{{ columnLabel("outputTokens") }}{{ sortIndicator(conversationSort, 'outputTokens') }}</button></th>
+                  <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleConversationSort('cacheReadTokens')">{{ columnLabel("cacheReadTokens") }}{{ sortIndicator(conversationSort, 'cacheReadTokens') }}</button></th>
+                  <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleConversationSort('cacheWrite')">{{ columnLabel("cacheWrite") }}{{ sortIndicator(conversationSort, 'cacheWrite') }}</button></th>
+                  <th class="text-right"><button class="btn btn-ghost btn-xs px-1 font-semibold" @click="toggleConversationSort('messageCount')">{{ columnLabel("messageCount") }}{{ sortIndicator(conversationSort, 'messageCount') }}</button></th>
                 </tr>
               </thead>
               <tbody>
@@ -210,9 +210,9 @@
           </div>
           <div class="mt-3 flex flex-col gap-2 text-sm md:flex-row md:items-center md:justify-between">
             <div class="opacity-70">
-              第 {{ conversationPage }} / {{ conversationPageCount }} 页
+              {{ t("config.usage.pageRange", { page: conversationPage, total: conversationPageCount }) }}
               <span class="mx-1">·</span>
-              显示 {{ conversationPageStart }}-{{ conversationPageEnd }}
+              {{ t("config.usage.showingRange", { start: conversationPageStart, end: conversationPageEnd }) }}
             </div>
             <div class="join">
               <button
@@ -221,7 +221,7 @@
                 :disabled="conversationPage <= 1"
                 @click="conversationPage -= 1"
               >
-                上一页
+                {{ t("config.usage.previousPage") }}
               </button>
               <button
                 class="btn btn-sm join-item"
@@ -229,7 +229,7 @@
                 :disabled="conversationPage >= conversationPageCount"
                 @click="conversationPage += 1"
               >
-                下一页
+                {{ t("config.usage.nextPage") }}
               </button>
             </div>
           </div>
@@ -238,7 +238,7 @@
     </template>
 
     <div v-else class="rounded-box border border-base-300 bg-base-100 p-4 text-sm opacity-70">
-      暂无用量数据。
+      {{ t("config.usage.empty") }}
     </div>
 
     <div v-if="errorText" class="alert alert-error">
@@ -262,7 +262,7 @@ import { useAvatarCache } from "../../../chat/composables/use-avatar-cache";
 import { resolveConversationDisplayTitle } from "../../../chat/utils/conversation-title";
 import { toErrorMessage } from "../../../../utils/error";
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const errorText = ref("");
 const overview = ref<UsageOverview | null>(null);
@@ -323,14 +323,14 @@ const loading = computed(() => overviewStatus.value?.computeState === "running")
 let overviewPollTimer: number | null = null;
 let usageTabUnmounted = false;
 
-const conversationFilterOptions = [
-  { value: "all" as const, label: "全部" },
-  { value: "normal" as const, label: "普通" },
-  { value: "delegate" as const, label: "委托" },
-  { value: "contact" as const, label: "远程" },
-  { value: "system" as const, label: "通知" },
-  { value: "archived" as const, label: "归档" },
-];
+const conversationFilterOptions = computed(() => [
+  { value: "all" as const, label: t("config.usage.filters.all") },
+  { value: "normal" as const, label: t("config.usage.filters.normal") },
+  { value: "delegate" as const, label: t("config.usage.filters.delegate") },
+  { value: "contact" as const, label: t("config.usage.filters.contact") },
+  { value: "system" as const, label: t("config.usage.filters.system") },
+  { value: "archived" as const, label: t("config.usage.filters.archived") },
+]);
 
 const summaryStats = computed(() => {
   if (!overview.value) return [];
@@ -338,34 +338,34 @@ const summaryStats = computed(() => {
   const overallCacheHitRate = cacheHitRate(totals);
   return [
     {
-      label: "综合总量",
+      label: t("config.usage.stats.weightedTokens"),
       value: formatTokens(totals.weightedTokens),
-      desc: "仅供参考",
+      desc: t("config.usage.stats.referenceOnly"),
     },
     {
-      label: "总输出",
+      label: t("config.usage.stats.outputTokens"),
       value: formatTokens(totals.outputTokens),
       desc: " ",
     },
     {
-      label: "思维链",
+      label: t("config.usage.stats.reasoningTokens"),
       value: formatTokens(totals.reasoningTokens),
       desc: " ",
     },
     {
-      label: "总缓存读取",
+      label: t("config.usage.stats.cacheReadTokens"),
       value: formatTokens(totals.cacheReadTokens),
       desc: " ",
     },
     {
-      label: "缓存写入",
+      label: t("config.usage.stats.cacheWrite"),
       value: formatTokens(cacheWriteAmount(totals)),
       desc: " ",
     },
     {
-      label: "平均缓存命中率",
+      label: t("config.usage.stats.averageCacheHitRate"),
       value: formatPercent(overallCacheHitRate),
-      desc: "未排除无法缓存的",
+      desc: t("config.usage.stats.cacheHitRateHint"),
     },
   ];
 });
@@ -424,7 +424,7 @@ function formatTokens(value: number): string {
       return `${scaled.toFixed(digits).replace(/\.0+$|(\.\d*[1-9])0+$/, "$1")}${unit.suffix}`;
     }
   }
-  return new Intl.NumberFormat("zh-CN").format(Math.round(numeric));
+  return new Intl.NumberFormat(currentLocale()).format(Math.round(numeric));
 }
 
 function totalInputTokens(item: { totalTokens: number }): number {
@@ -462,7 +462,15 @@ function timeValue(value?: string | null): number {
 }
 
 function compareText(left: string, right: string): number {
-  return left.localeCompare(right, "zh-CN");
+  return left.localeCompare(right, currentLocale());
+}
+
+function currentLocale(): string {
+  return String(locale.value || "zh-CN");
+}
+
+function columnLabel(key: string): string {
+  return t(`config.usage.columns.${key}`);
 }
 
 function compareNumber(left: number, right: number): number {
@@ -620,9 +628,9 @@ function setConversationFilter(value: "all" | "normal" | "delegate" | "contact" 
 
 function formatConversationMeta(item: UsageConversationItem): string {
   if (item.archivedAt) {
-    return `归档: ${formatDateTime(item.archivedAt)}`;
+    return t("config.usage.archivedAt", { time: formatDateTime(item.archivedAt) });
   }
-  return `更新: ${formatDateTime(item.updatedAt)}`;
+  return t("config.usage.updatedAt", { time: formatDateTime(item.updatedAt) });
 }
 
 function displayConversationTitle(item: UsageConversationItem): string {
@@ -638,8 +646,8 @@ function displayConversationTitle(item: UsageConversationItem): string {
       isSystemNotificationConversation: item.isSystemNotificationConversation,
     },
     {
-      locale: "zh-CN",
-      untitledLabel: "未命名会话",
+      locale: currentLocale(),
+      untitledLabel: t("chat.untitledConversation"),
     },
   );
 }
@@ -649,7 +657,8 @@ function conversationAvatarUrl(item: UsageConversationItem): string {
 }
 
 function conversationAvatarLabel(item: UsageConversationItem): string {
-  return String(item.agentName || displayConversationTitle(item) || "会话头像").trim() || "会话头像";
+  const fallback = t("config.usage.conversationAvatar");
+  return String(item.agentName || displayConversationTitle(item) || fallback).trim() || fallback;
 }
 
 function conversationAvatarInitial(item: UsageConversationItem): string {

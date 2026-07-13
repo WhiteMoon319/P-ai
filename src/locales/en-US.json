@@ -256,6 +256,57 @@
         "other": "Other"
       }
     },
+    "usage": {
+      "pageTitle": "Usage Overview",
+      "pageHint": "Weighted usage is estimated as output x 2 + cache writes + cache hits x 0.02. Use it as a rough guide.",
+      "modelTitle": "Model Usage",
+      "modelHint": "New totals are split by provider and model. Older unsplit residue is merged into the inferred provider/model.",
+      "agentTitle": "Persona Usage",
+      "kindTitle": "Conversation Type Usage",
+      "conversationTitle": "Conversation Usage",
+      "conversationHint": "Sorted by weighted usage so the most expensive conversations are easy to spot.",
+      "empty": "No usage data yet.",
+      "previousPage": "Previous",
+      "nextPage": "Next",
+      "pageRange": "Page {page} / {total}",
+      "showingRange": "Showing {start}-{end}",
+      "archivedAt": "Archived: {time}",
+      "updatedAt": "Updated: {time}",
+      "conversationAvatar": "Conversation avatar",
+      "columns": {
+        "provider": "Provider",
+        "model": "Model",
+        "weightedTokens": "Weighted",
+        "totalTokens": "Total Input",
+        "cacheHitRate": "Cache Hit Rate",
+        "outputTokens": "Output",
+        "cacheReadTokens": "Cache Read",
+        "cacheWrite": "Cache Write",
+        "conversationCount": "Conversations",
+        "agent": "Persona",
+        "kind": "Type",
+        "conversation": "Conversation",
+        "messageCount": "Messages"
+      },
+      "filters": {
+        "all": "All",
+        "normal": "Normal",
+        "delegate": "Delegate",
+        "contact": "Remote",
+        "system": "Notifications",
+        "archived": "Archived"
+      },
+      "stats": {
+        "weightedTokens": "Weighted",
+        "referenceOnly": "Reference only",
+        "outputTokens": "Total Output",
+        "reasoningTokens": "Reasoning",
+        "cacheReadTokens": "Total Cache Read",
+        "cacheWrite": "Cache Write",
+        "averageCacheHitRate": "Avg. Cache Hit Rate",
+        "cacheHitRateHint": "Includes non-cacheable requests"
+      }
+    },
     "migration": {
       "pageTitle": "Configuration Migration",
       "sectionHint": "Export or import an encrypted migration package for moving settings and assets between devices.",

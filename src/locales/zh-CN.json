@@ -256,6 +256,57 @@
         "other": "其他"
       }
     },
+    "usage": {
+      "pageTitle": "用量概览",
+      "pageHint": "综合总量按 输出 x 2 + 缓存写入 + 缓存命中 x 0.02 估算，仅供参考。",
+      "modelTitle": "模型用量",
+      "modelHint": "新累计按供应商和模型细分；历史未细分残留会并入当前推断的供应商/模型。",
+      "agentTitle": "人格用量",
+      "kindTitle": "会话类型用量",
+      "conversationTitle": "会话用量",
+      "conversationHint": "按综合总量排序，方便直接定位最耗的会话。",
+      "empty": "暂无用量数据。",
+      "previousPage": "上一页",
+      "nextPage": "下一页",
+      "pageRange": "第 {page} / {total} 页",
+      "showingRange": "显示 {start}-{end}",
+      "archivedAt": "归档：{time}",
+      "updatedAt": "更新：{time}",
+      "conversationAvatar": "会话头像",
+      "columns": {
+        "provider": "供应商",
+        "model": "模型",
+        "weightedTokens": "综合总量",
+        "totalTokens": "总输入",
+        "cacheHitRate": "缓存命中率",
+        "outputTokens": "输出",
+        "cacheReadTokens": "缓存读",
+        "cacheWrite": "缓存写入",
+        "conversationCount": "会话",
+        "agent": "人格",
+        "kind": "类型",
+        "conversation": "会话",
+        "messageCount": "消息"
+      },
+      "filters": {
+        "all": "全部",
+        "normal": "普通",
+        "delegate": "委托",
+        "contact": "远程",
+        "system": "通知",
+        "archived": "归档"
+      },
+      "stats": {
+        "weightedTokens": "综合总量",
+        "referenceOnly": "仅供参考",
+        "outputTokens": "总输出",
+        "reasoningTokens": "思维链",
+        "cacheReadTokens": "总缓存读取",
+        "cacheWrite": "缓存写入",
+        "averageCacheHitRate": "平均缓存命中率",
+        "cacheHitRateHint": "未排除无法缓存的"
+      }
+    },
     "migration": {
       "pageTitle": "配置迁移",
       "sectionHint": "导出或导入加密迁移包，用于在不同设备间迁移配置与资源。",

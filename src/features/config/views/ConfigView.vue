@@ -441,7 +441,7 @@ const CONFIG_NAV_ITEMS: ConfigNavItem[] = [
   { tab: "logs", icon: ScrollText, labelKey: "config.tabs.logs" },
   { tab: "appearance", icon: Palette, labelKey: "config.tabs.appearance" },
   { tab: "migration", icon: ArrowLeftRight, labelKey: "config.tabs.migration" },
-  { tab: "usage", icon: ScrollText, label: "用量" },
+  { tab: "usage", icon: ScrollText, labelKey: "config.tabs.usage" },
   { tab: "about", icon: Info, labelKey: "config.tabs.about" },
   { tab: "demo", icon: Beaker, labelKey: "config.tabs.demo", devOnly: true },
 ];

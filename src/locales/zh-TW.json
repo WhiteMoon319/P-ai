@@ -256,6 +256,57 @@
         "other": "其他"
       }
     },
+    "usage": {
+      "pageTitle": "用量概覽",
+      "pageHint": "綜合總量按 輸出 x 2 + 快取寫入 + 快取命中 x 0.02 估算，僅供參考。",
+      "modelTitle": "模型用量",
+      "modelHint": "新累計按供應商和模型細分；歷史未細分殘留會併入目前推斷的供應商/模型。",
+      "agentTitle": "人格用量",
+      "kindTitle": "會話類型用量",
+      "conversationTitle": "會話用量",
+      "conversationHint": "按綜合總量排序，方便直接定位最耗的會話。",
+      "empty": "暫無用量資料。",
+      "previousPage": "上一頁",
+      "nextPage": "下一頁",
+      "pageRange": "第 {page} / {total} 頁",
+      "showingRange": "顯示 {start}-{end}",
+      "archivedAt": "歸檔：{time}",
+      "updatedAt": "更新：{time}",
+      "conversationAvatar": "會話頭像",
+      "columns": {
+        "provider": "供應商",
+        "model": "模型",
+        "weightedTokens": "綜合總量",
+        "totalTokens": "總輸入",
+        "cacheHitRate": "快取命中率",
+        "outputTokens": "輸出",
+        "cacheReadTokens": "快取讀取",
+        "cacheWrite": "快取寫入",
+        "conversationCount": "會話",
+        "agent": "人格",
+        "kind": "類型",
+        "conversation": "會話",
+        "messageCount": "訊息"
+      },
+      "filters": {
+        "all": "全部",
+        "normal": "普通",
+        "delegate": "委託",
+        "contact": "遠端",
+        "system": "通知",
+        "archived": "歸檔"
+      },
+      "stats": {
+        "weightedTokens": "綜合總量",
+        "referenceOnly": "僅供參考",
+        "outputTokens": "總輸出",
+        "reasoningTokens": "思維鏈",
+        "cacheReadTokens": "總快取讀取",
+        "cacheWrite": "快取寫入",
+        "averageCacheHitRate": "平均快取命中率",
+        "cacheHitRateHint": "未排除無法快取的"
+      }
+    },
     "migration": {
       "pageTitle": "配置遷移",
       "sectionHint": "匯出或匯入加密遷移包，用於在不同設備間遷移配置與資源。",
