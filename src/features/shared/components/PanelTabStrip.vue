@@ -7,15 +7,16 @@
     <OverlayScrollArea class="min-w-0 flex-1" orientation="horizontal">
       <div
         role="tablist"
-        class="flex min-w-max items-center gap-1"
+        class="flex min-w-max items-center gap-0"
         :aria-label="ariaLabel"
       >
         <div
-          v-for="tab in tabs"
+          v-for="(tab, tabIndex) in tabs"
           :key="tab.key"
           class="group relative flex max-w-60 flex-none"
           :class="[
             tab.disabled ? 'pointer-events-none opacity-45' : 'cursor-pointer',
+            tabBorderClass(tab.key, tabIndex),
           ]"
           :title="tab.title || tab.label"
           @contextmenu="handleTabContextMenu(tab, $event)"
@@ -145,6 +146,14 @@ const closeMenu = ref<{ key: string; x: number; y: number } | null>(null);
 let longPressTimer: ReturnType<typeof setTimeout> | null = null;
 let longPressStart: { key: string; x: number; y: number } | null = null;
 let suppressNextSelectKey = "";
+
+function tabBorderClass(tabKey: string, tabIndex: number) {
+  if (tabIndex <= 0) return "";
+  const prevTab = props.tabs[tabIndex - 1];
+  if (!prevTab) return "";
+  if (tabKey === props.activeKey || prevTab.key === props.activeKey) return "";
+  return "border-l border-base-100";
+}
 
 function selectTab(tab: PanelTabStripItem) {
   if (tab.disabled) return;

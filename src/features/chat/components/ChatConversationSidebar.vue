@@ -296,7 +296,7 @@
         </div>
         <button
           type="button"
-          class="btn btn-neutral btn-xs min-h-8 rounded-xl px-3 text-sm font-medium shadow-sm"
+          class="btn btn-ghost btn-xs min-h-8 rounded-xl px-3 text-sm font-bold"
           @click="openBatchArchiveCard"
         >
           <span>{{ t("chat.batchArchive.entryAction") }}</span>
