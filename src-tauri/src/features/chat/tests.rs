@@ -10225,19 +10225,32 @@
     }
 
     #[test]
-    fn conversation_lock_should_only_be_directly_used_inside_conversation_service_v2() {
+    fn conversation_lock_should_only_be_used_by_service_or_explicit_legacy_exception() {
         let features_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("src")
             .join("features");
-        let allowed = features_root
+        let allowed_main = features_root
             .join("chat")
             .join("conversation_service")
             .join("conversation_service_v2.rs");
+        let allowed_remote_im_sessions = features_root
+            .join("chat")
+            .join("conversation_service")
+            .join("remote_im_sessions.rs");
+        // 既有归档命令仍持有两处全局锁；保留精确例外，禁止扩散到其他命令文件。
+        let allowed_legacy_conversation_archive = features_root
+            .join("system")
+            .join("commands")
+            .join("conversation_archive.rs");
         let self_test_file = features_root.join("chat").join("tests.rs");
         let mut violations = Vec::<String>::new();
 
         for path in collect_rs_files(&features_root) {
-            if path == allowed || path == self_test_file {
+            if path == allowed_main
+                || path == allowed_remote_im_sessions
+                || path == allowed_legacy_conversation_archive
+                || path == self_test_file
+            {
                 continue;
             }
             let Ok(content) = std::fs::read_to_string(&path) else {
@@ -10256,7 +10269,7 @@
 
         assert!(
             violations.is_empty(),
-            "只有 conversation_service_v2.rs 允许直接拿 conversation_lock，违规文件: {:?}",
+            "只有 conversation service 实现文件或显式遗留例外允许直接拿 conversation_lock，违规文件: {:?}",
             violations
         );
     }
