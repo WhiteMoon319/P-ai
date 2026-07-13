@@ -256,12 +256,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMessage, ChatTodoItem, ConversationGoalState, IdeContextWorkspaceGroup, ShellWorkspace } from "../../types/app";
 import { removeBinaryPlaceholders, messageText } from "../../utils/chat-message";
-import {
-  applyAssistantToolEventToStreamBlocks,
-  appendTextDeltaToStreamBlocks,
-  assistantTextFromStreamBlocks,
-  normalizeAssistantStreamBlocks,
-} from "../../utils/chat-message-semantics";
 import { formatConversationFallbackTitle } from "../chat/utils/conversation-title";
 import { messageWithStableRenderId, preserveStableRenderId, stableRenderIdFromMessage } from "../chat/utils/stable-render-id";
 import { useI18n } from "vue-i18n";
@@ -273,6 +267,7 @@ import CreateConversationDialog from "./views/CreateConversationDialog.vue";
 import WorkspaceDirectoryPickerDialog from "../shared/components/WorkspaceDirectoryPickerDialog.vue";
 import { useWsTransport, type SidebarBridgeConfig } from "./composables/use-ws-transport";
 import { useSidebarAttachments } from "./composables/use-sidebar-attachments";
+import { useSidebarAssistantStream } from "./composables/use-sidebar-assistant-stream";
 import { isTauriRuntimeAvailable } from "../../services/tauri-api";
 import { formatI18nError } from "../../utils/error";
 import ToolReviewTargetDialog from "../chat/components/ToolReviewTargetDialog.vue";
@@ -360,10 +355,22 @@ const vscodeIdeContextGroups = ref<IdeContextWorkspaceGroup[]>([]);
 const messages = ref<ChatMessage[]>([]);
 const sidebarTodos = ref<ChatTodoItem[]>([]);
 const inputText = ref("");
-const toolStatusText = ref("");
-const toolStatusState = ref<"running" | "done" | "failed" | "">("");
+const {
+  activeMessageBlocks,
+  activeMessageText,
+  streamingAssistantMessageId,
+  toolStatusState,
+  toolStatusText,
+  appendAssistantTextDelta,
+  applyAssistantToolEvent,
+  applyAssistantToolStatusEvent,
+  applyRuntimeStreamCache,
+  clearStreamingState,
+  finishStreamingMessage,
+  startStreamingMessage,
+  writeStreamCacheToMessage,
+} = useSidebarAssistantStream({ messages, activeAgentId });
 const chatErrorText = ref("");
-const streamingAssistantMessageId = ref("");
 const busy = ref(false);
 const sendSubmitting = ref(false);
 const compacting = ref(false);
@@ -887,11 +894,6 @@ function patchConversationOverviewItem(conversation?: ConversationSummary | null
   conversations.value = sortConversationSummaries(nextItems);
 }
 
-function normalizeToolStatusState(value: unknown): "running" | "done" | "failed" | "" {
-  const state = String(value || "").trim();
-  return state === "running" || state === "done" || state === "failed" ? state : "";
-}
-
 function isSidebarSystemConversation(item: ConversationSummary): boolean {
   if (!!item.isSystemNotificationConversation || !!item.isMainConversation) return true;
   const conversationId = String(item.conversationId || "").trim();
@@ -994,55 +996,6 @@ function normalizeConversationRuntimeState(value: unknown): ChatConversationOver
   return undefined;
 }
 
-function clearStreamingState() {
-  toolStatusText.value = "";
-  toolStatusState.value = "";
-  streamingAssistantMessageId.value = "";
-}
-
-function writeRuntimeStreamCacheToMessage(cache: NonNullable<SidebarConversationRuntimePayload["streamCache"]>) {
-  const messageId = String(cache.persistedAssistantMessageId || streamingAssistantMessageId.value || "").trim();
-  if (!messageId) return;
-  streamingAssistantMessageId.value = messageId;
-  const blocks = normalizeAssistantStreamBlocks(cache.streamBlocks);
-  const index = messages.value.findIndex((message) => String(message.id || "").trim() === messageId);
-  const previous = index >= 0 ? messages.value[index] : undefined;
-  const previousMeta = (previous?.providerMeta || {}) as Record<string, unknown>;
-  const message: ChatMessage = {
-    ...(previous || {
-      id: messageId,
-      role: "assistant",
-      createdAt: new Date().toISOString(),
-      speakerAgentId: activeAgentId.value || undefined,
-      parts: [{ type: "text", text: "" }],
-    }),
-    contentBlocks: blocks,
-    providerMeta: {
-      ...previousMeta,
-      _streaming: true,
-      _toolStatusText: String(cache.toolStatusText || ""),
-      _toolStatusState: normalizeToolStatusState(cache.toolStatusState),
-    },
-  };
-  messages.value = index >= 0
-    ? messages.value.map((item, itemIndex) => itemIndex === index ? message : item)
-    : [...messages.value, message];
-}
-
-function finishStreamingMessage(messageId: string) {
-  const normalizedId = String(messageId || "").trim();
-  if (!normalizedId) return;
-  messages.value = messages.value.map((message) => {
-    if (String(message.id || "").trim() !== normalizedId) return message;
-    const meta = { ...((message.providerMeta || {}) as Record<string, unknown>) };
-    delete meta._streaming;
-    delete meta._preStreamingStatusText;
-    delete meta._toolStatusText;
-    delete meta._toolStatusState;
-    return { ...message, providerMeta: meta };
-  });
-}
-
 function clearChatError() {
   chatErrorText.value = "";
 }
@@ -1055,20 +1008,6 @@ function resetActiveConversationTransientState(_reason: string) {
   busy.value = false;
   clearStreamingState();
   clearChatError();
-}
-
-function applyRuntimeStreamCache(runtime: SidebarConversationRuntimePayload | null | undefined) {
-  const cache = runtime?.streamCache;
-  if (!cache) return;
-  writeRuntimeStreamCacheToMessage(cache);
-  toolStatusText.value = String(cache.toolStatusText || "");
-  toolStatusState.value = normalizeToolStatusState(cache.toolStatusState);
-}
-
-function applyAssistantToolStatusEvent(event: NonNullable<SidebarAssistantDeltaPayload["event"]>) {
-  const toolStatus = String(event.toolStatus || "").trim();
-  toolStatusText.value = String(event.message || "");
-  toolStatusState.value = normalizeToolStatusState(toolStatus);
 }
 
 async function openConversation(conversationId: string) {
@@ -1878,7 +1817,7 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
       streamingAssistantMessageId.value = assistantMessageId;
       const queued = result?.queued || result?.accepted === false || String(result?.ingress || "").trim() === "queued";
       if (!queued) {
-        writeRuntimeStreamCacheToMessage({
+        writeStreamCacheToMessage({
           persistedAssistantMessageId: assistantMessageId,
           streamBlocks: [],
           toolStatusText: "",
@@ -1906,12 +1845,10 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
 
 async function stop() {
   if (!activeConversationId.value) return;
-  const activeMessage = messages.value.find((message) => String(message.id || "").trim() === streamingAssistantMessageId.value);
-  const blocks = normalizeAssistantStreamBlocks(activeMessage?.contentBlocks);
   await transport.request("chat.stop", {
     conversationId: activeConversationId.value,
-    partialAssistantText: assistantTextFromStreamBlocks(blocks),
-    partialStreamBlocks: blocks,
+    partialAssistantText: activeMessageText.value,
+    partialStreamBlocks: activeMessageBlocks.value,
   });
   busy.value = false;
 }
@@ -2595,15 +2532,8 @@ function registerNotifications() {
     const value = payload as { conversationId?: string; assistantMessageId?: string };
     if (value.conversationId === activeConversationId.value) {
       busy.value = true;
-      clearStreamingState();
       clearChatError();
-      streamingAssistantMessageId.value = String(value.assistantMessageId || "").trim();
-      writeRuntimeStreamCacheToMessage({
-        persistedAssistantMessageId: streamingAssistantMessageId.value,
-        streamBlocks: [],
-        toolStatusText: "",
-        toolStatusState: "",
-      });
+      startStreamingMessage(String(value.assistantMessageId || "").trim());
     }
   });
   transport.onNotification("chat.assistantDelta", (payload) => {
@@ -2621,14 +2551,7 @@ function registerNotifications() {
     }
     if (kind === "assistant_tool_event" && value.event) {
       if (hasStreamCache) return;
-      const activeMessage = messages.value.find((message) => String(message.id || "").trim() === streamingAssistantMessageId.value);
-      const blocks = applyAssistantToolEventToStreamBlocks(activeMessage?.contentBlocks, value.event.message || "");
-      writeRuntimeStreamCacheToMessage({
-        persistedAssistantMessageId: streamingAssistantMessageId.value,
-        streamBlocks: blocks,
-        toolStatusText: toolStatusText.value,
-        toolStatusState: toolStatusState.value,
-      });
+      applyAssistantToolEvent(value.event.message || "");
       return;
     }
     if (kind === "assistant_tool_result") return;
@@ -2636,14 +2559,7 @@ function registerNotifications() {
     if (kind === "activity_reasoning_delta") {
       return;
     } else if (!hasStreamCache) {
-      const activeMessage = messages.value.find((message) => String(message.id || "").trim() === streamingAssistantMessageId.value);
-      const blocks = appendTextDeltaToStreamBlocks(activeMessage?.contentBlocks, delta);
-      writeRuntimeStreamCacheToMessage({
-        persistedAssistantMessageId: streamingAssistantMessageId.value,
-        streamBlocks: blocks,
-        toolStatusText: toolStatusText.value,
-        toolStatusState: toolStatusState.value,
-      });
+      appendAssistantTextDelta(delta);
     } else {
       return;
     }
