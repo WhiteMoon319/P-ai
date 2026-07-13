@@ -10,6 +10,7 @@ include!("delegate_resolution.rs");
 include!("conversation_reads.rs");
 include!("context_reads.rs");
 include!("foreground_lifecycle.rs");
+include!("metadata_mutations.rs");
 include!("persistence.rs");
 include!("archive.rs");
 include!("session_notification_support.rs");
