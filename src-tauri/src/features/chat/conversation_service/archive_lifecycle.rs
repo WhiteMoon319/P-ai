@@ -1,9 +1,17 @@
-fn build_remote_im_wake_preserved_dialogue(messages: &[ChatMessage]) -> String {
+fn build_remote_im_wake_preserved_dialogue(
+    messages: &[ChatMessage],
+    assistant_name: &str,
+) -> String {
     messages
         .iter()
         .map(|message| {
             let speaker = if message.role.trim().eq_ignore_ascii_case("assistant") {
-                "助理".to_string()
+                let assistant = assistant_name.trim();
+                if assistant.is_empty() {
+                    "助手".to_string()
+                } else {
+                    assistant.to_string()
+                }
             } else {
                 remote_im_sender_display_name(message)
                     .unwrap_or_else(|| "远程联系人".to_string())
@@ -582,7 +590,14 @@ impl ConversationServiceV2 {
         } else {
             Vec::new()
         };
-        let preserved_dialogue = build_remote_im_wake_preserved_dialogue(&selected);
+        let assistant_name = state_read_agents_cached(state)?
+            .into_iter()
+            .find(|agent| agent.id.trim() == conversation_meta.agent_id.trim())
+            .map(|agent| agent.name.trim().to_string())
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| "助手".to_string());
+        let preserved_dialogue =
+            build_remote_im_wake_preserved_dialogue(&selected, &assistant_name);
         let summary = build_compaction_message(
             "",
             Some("远程唤醒上下文"),

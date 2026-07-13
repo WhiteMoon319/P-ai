@@ -310,12 +310,23 @@ fn slim_older_conversation_block_part(part: &MessagePart) -> Option<MessagePart>
 }
 
 fn slim_older_conversation_block_provider_meta(message: &ChatMessage) -> Option<Value> {
-    let kind = message_store_compaction_kind(message)?;
-    Some(serde_json::json!({
-        "message_meta": {
-            "kind": kind,
-        },
-    }))
+    let mut meta = serde_json::Map::new();
+    if let Some(kind) = message_store_compaction_kind(message) {
+        meta.insert(
+            "message_meta".to_string(),
+            serde_json::json!({
+                "kind": kind,
+            }),
+        );
+    }
+    if let Some(origin) = remote_im_origin_from_message(message) {
+        meta.insert("origin".to_string(), origin.clone());
+    }
+    if meta.is_empty() {
+        None
+    } else {
+        Some(Value::Object(meta))
+    }
 }
 
 fn write_jsonl_snapshot_atomic(path: &PathBuf, content: &str) -> Result<(), String> {
@@ -376,6 +387,49 @@ mod jsonl_snapshot_conversation_block_tests {
             }
             other => panic!("unexpected part: {:?}", other),
         }
+    }
+
+    #[test]
+    fn slim_older_conversation_block_message_should_keep_remote_origin_only() {
+        let mut message = text_message("remote-user", "user", "旧消息");
+        message.parts.push(MessagePart::Image {
+            mime: "image/png".to_string(),
+            bytes_base64: "iVBORw0KGgoAAA".to_string(),
+            name: Some("inline.png".to_string()),
+            compressed: false,
+        });
+        message.provider_meta = Some(serde_json::json!({
+            "origin": {
+                "kind": "remote_im",
+                "channel_id": "channel-a",
+                "contact_type": "group",
+                "contact_id": "group-1",
+                "contact_name": "测试群",
+                "sender_id": "member-001",
+                "sender_name": "群友甲"
+            },
+            "runtime": {
+                "temporary": true
+            }
+        }));
+        message.tool_call = Some(vec![serde_json::json!({"name": "heavy_tool"})]);
+        message.mcp_call = Some(vec![serde_json::json!({"name": "heavy_mcp"})]);
+
+        let slimmed = slim_older_conversation_block_message(&message);
+
+        assert_eq!(slimmed.parts.len(), 1);
+        assert!(slimmed.tool_call.is_none());
+        assert!(slimmed.mcp_call.is_none());
+        let meta = slimmed.provider_meta.expect("remote origin meta");
+        assert_eq!(
+            meta.pointer("/origin/sender_name").and_then(Value::as_str),
+            Some("群友甲")
+        );
+        assert_eq!(
+            meta.pointer("/origin/channel_id").and_then(Value::as_str),
+            Some("channel-a")
+        );
+        assert!(meta.get("runtime").is_none());
     }
 
     #[test]

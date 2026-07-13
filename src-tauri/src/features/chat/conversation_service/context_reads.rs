@@ -279,7 +279,12 @@ impl ConversationServiceV2 {
             reasoning_content: None,
         }];
         truncated.extra_text_blocks.clear();
-        truncated.provider_meta = None;
+        let remote_origin = remote_im_origin_from_message(&truncated).cloned();
+        truncated.provider_meta = remote_origin.map(|origin| {
+            serde_json::json!({
+                "origin": origin,
+            })
+        });
         PreservedConversationMessageSelection::Select {
             message: truncated,
             chars: max_chars.saturating_sub(selected_chars),
@@ -375,4 +380,3 @@ impl ConversationServiceV2 {
     }
 
 }
-

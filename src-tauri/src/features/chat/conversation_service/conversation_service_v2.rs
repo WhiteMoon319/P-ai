@@ -97,6 +97,51 @@ mod preserved_conversation_reader_tests {
     }
 
     #[test]
+    fn truncated_preserved_remote_message_should_keep_origin() {
+        let mut remote = message(
+            "remote-user",
+            "user",
+            "2026-07-10T11:56:00Z",
+            "这是一条需要被截断的远程消息",
+        );
+        remote.provider_meta = Some(serde_json::json!({
+            "origin": {
+                "kind": "remote_im",
+                "channel_id": "channel-a",
+                "contact_type": "group",
+                "contact_id": "group-1",
+                "contact_name": "测试群",
+                "sender_id": "member-001",
+                "sender_name": "群友甲"
+            },
+            "runtime": {
+                "temporary": true
+            }
+        }));
+
+        let selected = ConversationServiceV2::select_preserved_conversation_message(
+            remote,
+            parse_iso("2026-07-10T12:00:00Z").unwrap(),
+            None,
+            0,
+            0,
+            0,
+            8,
+        );
+
+        let PreservedConversationMessageSelection::Select { message, .. } = selected else {
+            panic!("remote message should be selected");
+        };
+        let meta = message.provider_meta.as_ref().expect("remote origin meta");
+        assert_eq!(
+            meta.pointer("/origin/sender_name").and_then(Value::as_str),
+            Some("群友甲")
+        );
+        assert!(meta.get("runtime").is_none());
+        assert_eq!(remote_im_sender_display_name(&message).as_deref(), Some("群友甲"));
+    }
+
+    #[test]
     fn dynamic_boundary_keeps_minimum_messages_before_applying_hour_and_char_limits() {
         let anchor_at = parse_iso("2026-07-10T12:00:00Z").unwrap();
         let mut messages = (0..7)
@@ -157,8 +202,21 @@ mod preserved_conversation_reader_tests {
             Some("群友甲")
         );
         assert_eq!(
-            build_remote_im_wake_preserved_dialogue(std::slice::from_ref(&remote_message)),
+            build_remote_im_wake_preserved_dialogue(std::slice::from_ref(&remote_message), "遥酱"),
             "群友甲：查看这个计划"
+        );
+        let assistant_message = message(
+            "remote-assistant",
+            "assistant",
+            "2026-07-10T11:57:00Z",
+            "我看看",
+        );
+        assert_eq!(
+            build_remote_im_wake_preserved_dialogue(
+                &[remote_message.clone(), assistant_message],
+                "遥酱",
+            ),
+            "群友甲：查看这个计划\n遥酱：我看看"
         );
         let mut sender_id_fallback = remote_message.clone();
         if let Some(origin) = sender_id_fallback
