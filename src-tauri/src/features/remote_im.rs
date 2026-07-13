@@ -403,6 +403,8 @@ include!("remote_im/reply_debounce.rs");
 
 include!("remote_im/reply_delegate.rs");
 
+include!("remote_im/presence_lifecycle.rs");
+
 fn remote_im_contact_runtime_state_mut<'a>(
     states: &'a mut std::collections::HashMap<String, RemoteImContactRuntimeState>,
     contact_id: &str,
