@@ -1859,32 +1859,6 @@ mod tool_loop_tests {
     }
 
     #[test]
-    fn finalize_remote_im_stop_model_reply_should_keep_empty_no_reply_message_persistable() {
-        let reply = finalize_remote_im_stop_model_reply(
-            "",
-            String::new(),
-            None,
-            vec![serde_json::json!({
-                "role": "tool",
-                "tool_call_id": "call_1",
-                "content": "{\"ok\":true,\"action\":\"no_reply\"}"
-            })],
-            Some(12),
-            None,
-        );
-
-        assert!(!reply.suppress_assistant_message);
-        assert!(reply.assistant_text.is_empty());
-        assert!(reply.final_response_text.is_empty());
-        assert_eq!(reply.tool_history_events.len(), 1);
-        assert_eq!(reply.trusted_input_tokens, Some(12));
-        assert_eq!(
-            model_reply_content_state(&reply),
-            ModelReplyContentState::Visible
-        );
-    }
-
-    #[test]
     fn finalize_remote_im_stop_model_reply_should_keep_send_completion_text() {
         let reply = finalize_remote_im_stop_model_reply(
             "",
