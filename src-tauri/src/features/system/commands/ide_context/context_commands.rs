@@ -69,6 +69,65 @@ fn upsert_ide_context_snapshot_internal(
     Ok((client_id, updated_at))
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IdeChatWorkspaceListInput { conversation_id: String }
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IdeChatWorkspaceDirectoryListInput { path: String }
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IdeChatFileReaderReadInput { path: String }
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IdeChatFileReaderReadBlockInput { path: String, start_line: usize, line_count: usize }
+
+fn ide_chat_workspace_list(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatWorkspaceListInput>(params)?;
+    let conversation_id = input.conversation_id.trim();
+    if conversation_id.is_empty() { return Err("conversationId is required".to_string()); }
+    let meta = conversation_service_v2().get_conversation_meta(state, conversation_id)?;
+    let conversation = ide_chat_conversation_from_meta_view(&meta);
+    let workspaces = terminal_allowed_workspaces_for_conversation_canonical(state, Some(&conversation))?;
+    let main = workspaces.iter().find(|ws| ws.level == SHELL_WORKSPACE_LEVEL_MAIN)
+        .or_else(|| workspaces.iter().find(|ws| ws.level == SHELL_WORKSPACE_LEVEL_SYSTEM));
+    let root_path = main.map(|ws| terminal_path_for_user(&ws.path)).unwrap_or_default();
+    let workspace_name = main.map(|ws| ws.name.clone()).unwrap_or_default();
+    let values = workspaces.iter().map(|ws| serde_json::json!({
+        "id": ws.id, "name": ws.name, "level": ws.level, "access": ws.access,
+        "builtIn": ws.built_in, "path": terminal_path_for_user(&ws.path),
+    })).collect::<Vec<_>>();
+    Ok(serde_json::json!({"workspaces": values, "rootPath": root_path,
+        "workspaceName": workspace_name, "autonomousMode": meta.shell_autonomous_mode}))
+}
+
+fn ide_chat_workspace_directory_list(params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatWorkspaceDirectoryListInput>(params)?;
+    let payload = list_file_reader_directory(input.path)?;
+    Ok(serde_json::json!({"path": payload.path, "name": payload.name,
+        "directories": payload.entries.into_iter().filter(|e| e.is_directory)
+            .map(|e| serde_json::json!({"path": e.path, "name": e.name})).collect::<Vec<_>>() }))
+}
+
+fn ide_chat_file_reader_directory_list(params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatWorkspaceDirectoryListInput>(params)?;
+    serde_json::to_value(list_file_reader_directory(input.path)?).map_err(|err| format!("serialize file reader directory failed: {err}"))
+}
+
+fn ide_chat_file_reader_read(params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatFileReaderReadInput>(params)?;
+    serde_json::to_value(read_file_reader_file_inner(input.path, None)?).map_err(|err| format!("serialize file reader payload failed: {err}"))
+}
+
+fn ide_chat_file_reader_read_block(params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatFileReaderReadBlockInput>(params)?;
+    serde_json::to_value(read_file_reader_file_block(input.path, input.start_line, input.line_count)?)
+        .map_err(|err| format!("serialize file reader block failed: {err}"))
+}
+
 #[tauri::command]
 fn upsert_ide_context_snapshot(
     input: UpsertIdeContextSnapshotInput,

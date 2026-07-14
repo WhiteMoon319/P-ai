@@ -5,12 +5,7 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
         method,
         "workspace.permission"
             | "workspace.permission.select"
-            | "workspace.list"
-            | "workspace.directory.list"
             | "workspace.layout.save"
-            | "fileReader.directory.list"
-            | "fileReader.readFile"
-            | "fileReader.readFileBlock"
             | "conversation.plan.readFile"
             | "conversation.rewindPreview"
             | "read_chat_image_data_url"
@@ -173,6 +168,11 @@ async fn ide_chat_handle_jsonrpc_request(
                 Ok(result)
             }),
         "conversation.createOptions" => ide_chat_create_conversation_options(state),
+        "workspace.list" => ide_chat_workspace_list(state, request.params),
+        "workspace.directory.list" => ide_chat_workspace_directory_list(request.params),
+        "fileReader.directory.list" => ide_chat_file_reader_directory_list(request.params),
+        "fileReader.readFile" => ide_chat_file_reader_read(request.params),
+        "fileReader.readFileBlock" => ide_chat_file_reader_read_block(request.params),
         "conversation.delete" => ide_chat_delete_conversation(state, request.params).await,
         "conversation.batchArchive" => ide_chat_batch_archive_conversations(state, request.params).await,
         "conversation.rebindRecipient" => ide_chat_rebind_conversation_recipient(state, request.params),
@@ -505,12 +505,10 @@ mod web_native_capability_tests {
     #[test]
     fn local_file_and_window_methods_should_be_explicitly_native_only() {
         for method in [
-            "fileReader.readFile",
             "read_file_reader_file",
             "read_local_chat_image_original",
             "conversation.plan.readFile",
             "conversation.rewindPreview",
-            "workspace.list",
             "open_storage_usage_item_directory",
             "mcp_open_workspace_dir",
             "migrate_shell_workspace_directory",
@@ -572,6 +570,11 @@ mod web_native_capability_tests {
     fn portable_business_methods_should_not_be_marked_native_only() {
         for method in [
             "conversation.list",
+            "workspace.list",
+            "workspace.directory.list",
+            "fileReader.directory.list",
+            "fileReader.readFile",
+            "fileReader.readFileBlock",
             "chat.send",
             "remote_im_list_contacts",
             "task.list",
