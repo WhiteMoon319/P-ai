@@ -1183,13 +1183,20 @@ async fn create_unarchived_conversation(
     input: CreateUnarchivedConversationInput,
     state: State<'_, AppState>,
 ) -> Result<CreateUnarchivedConversationOutput, String> {
-    let app_state = state.inner().clone();
+    create_unarchived_conversation_inner(input, state.inner()).await
+}
+
+async fn create_unarchived_conversation_inner(
+    input: CreateUnarchivedConversationInput,
+    state: &AppState,
+) -> Result<CreateUnarchivedConversationOutput, String> {
+    let app_state = state.clone();
     let (output, overview_payload) = tokio::task::spawn_blocking(move || {
         create_unarchived_conversation_blocking(input, &app_state)
     })
     .await
     .map_err(|err| format!("新建未归档会话任务异常：{err}"))??;
-    emit_unarchived_conversation_overview_updated_payload(state.inner(), &overview_payload);
+    emit_unarchived_conversation_overview_updated_payload(state, &overview_payload);
     Ok(output)
 }
 
@@ -2719,6 +2726,7 @@ struct DeleteUnarchivedConversationInput {
 struct DeleteUnarchivedConversationOutput {
     deleted_conversation_id: String,
     active_conversation_id: String,
+    unarchived_conversations: Vec<UnarchivedConversationSummary>,
 }
 
 #[tauri::command]
@@ -2726,13 +2734,20 @@ async fn delete_unarchived_conversation(
     input: DeleteUnarchivedConversationInput,
     state: State<'_, AppState>,
 ) -> Result<DeleteUnarchivedConversationOutput, String> {
-    let app_state = state.inner().clone();
+    delete_unarchived_conversation_inner(input, state.inner()).await
+}
+
+async fn delete_unarchived_conversation_inner(
+    input: DeleteUnarchivedConversationInput,
+    state: &AppState,
+) -> Result<DeleteUnarchivedConversationOutput, String> {
+    let app_state = state.clone();
     let (output, overview_payload) = tokio::task::spawn_blocking(move || {
         delete_unarchived_conversation_blocking(input, &app_state)
     })
     .await
     .map_err(|err| format!("删除未归档会话任务异常：{err}"))??;
-    emit_unarchived_conversation_overview_updated_payload(state.inner(), &overview_payload);
+    emit_unarchived_conversation_overview_updated_payload(state, &overview_payload);
     Ok(output)
 }
 
@@ -2794,6 +2809,7 @@ fn delete_unarchived_conversation_blocking(
         DeleteUnarchivedConversationOutput {
             deleted_conversation_id: result.deleted_conversation_id,
             active_conversation_id: result.active_conversation_id,
+            unarchived_conversations: overview_payload.unarchived_conversations.clone(),
         },
         overview_payload,
     ))

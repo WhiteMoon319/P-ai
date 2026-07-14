@@ -296,23 +296,6 @@ struct IdeChatConversationBlockPageInput {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatCreateConversationInput {
-    #[serde(default)]
-    department_id: Option<String>,
-    #[serde(default)]
-    agent_id: Option<String>,
-    #[serde(default)]
-    title: Option<String>,
-    #[serde(default)]
-    shell_workspaces: Option<Vec<ShellWorkspaceConfig>>,
-    #[serde(default)]
-    shell_autonomous_mode: Option<bool>,
-    #[serde(default)]
-    workspace_path: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct IdeChatQueueAttachmentInput {
     file_name: String,
     #[serde(default)]
@@ -1069,5 +1052,45 @@ mod ide_context_tests {
         );
         assert_eq!(accepted, Some(true));
         assert!(!ingress.is_empty(), "chat.send 应返回 ingress");
+    }
+
+    #[tokio::test]
+    async fn ide_chat_create_and_delete_should_use_canonical_conversation_contract() {
+        let state = ide_context_test_state();
+        let created = ide_chat_create_conversation(
+            &state,
+            serde_json::json!({
+                "apiConfigId": null,
+                "agentId": DEFAULT_AGENT_ID,
+                "departmentId": ASSISTANT_DEPARTMENT_ID,
+                "title": "Web canonical conversation",
+                "shellWorkspaces": null,
+                "shellAutonomousMode": false,
+            }),
+        )
+        .await
+        .expect("create conversation");
+        let conversation_id = created
+            .get("conversationId")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        assert!(!conversation_id.is_empty());
+        assert!(created.get("unarchivedConversations").is_some());
+        assert!(created.get("conversation").is_none());
+
+        let deleted = ide_chat_delete_conversation(
+            &state,
+            serde_json::json!({ "conversationId": conversation_id.clone() }),
+        )
+        .await
+        .expect("delete conversation");
+        assert_eq!(
+            deleted.get("deletedConversationId").and_then(Value::as_str),
+            Some(conversation_id.as_str())
+        );
+        assert!(deleted.get("activeConversationId").is_some());
+        assert!(deleted.get("unarchivedConversations").is_some());
+        assert!(deleted.get("preferredConversationId").is_none());
     }
 }

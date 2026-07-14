@@ -256,77 +256,14 @@ fn ide_chat_mark_conversation_read(state: &AppState, params: Value) -> Result<Va
         .map_err(|err| format!("Serialize mark conversation read result failed: {err}"))
 }
 
-fn ide_chat_create_conversation(state: &AppState, params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatCreateConversationInput>(params)?;
-    let normalized_shell_workspaces = input
-        .shell_workspaces
-        .as_ref()
-        .map(|workspaces| normalize_conversation_shell_workspaces(state, workspaces))
-        .filter(|workspaces| !workspaces.is_empty());
-    let fallback_workspace_path = input
-        .workspace_path
-        .as_deref()
-        .map(str::trim)
-        .unwrap_or_default()
-        .to_string();
-    let shell_workspaces = if let Some(workspaces) = normalized_shell_workspaces {
-        Some(workspaces)
-    } else if !fallback_workspace_path.is_empty() {
-        let name = std::path::Path::new(&fallback_workspace_path)
-            .file_name()
-            .map(|value| value.to_string_lossy().to_string())
-            .unwrap_or_else(|| fallback_workspace_path.clone());
-        let fallback_workspaces = normalize_conversation_shell_workspaces(
-            state,
-            &[ShellWorkspaceConfig {
-                id: "vscode-sidebar-main-workspace".to_string(),
-                name,
-                path: fallback_workspace_path.clone(),
-                level: SHELL_WORKSPACE_LEVEL_MAIN.to_string(),
-                access: SHELL_WORKSPACE_ACCESS_APPROVAL.to_string(),
-                built_in: false,
-            }],
-        );
-        (!fallback_workspaces.is_empty()).then_some(fallback_workspaces)
-    } else {
-        None
-    };
-    let result = conversation_service_v2().create_conversation(
-        state,
-        &CreateUnarchivedConversationInput {
-            api_config_id: None,
-            agent_id: input.agent_id,
-            department_id: input.department_id,
-            title: input.title,
-            copy_source_conversation_id: None,
-            shell_workspaces,
-            shell_autonomous_mode: input.shell_autonomous_mode,
-        },
-    )?;
-    emit_unarchived_conversation_overview_updated_payload(state, &result.overview_payload);
-    let conversation = ide_chat_conversation_open_result(state, &result.conversation_id)?;
-    Ok(serde_json::json!({
-        "conversationId": result.conversation_id,
-        "unarchivedConversations": result.overview_payload.unarchived_conversations,
-        "conversation": conversation,
-    }))
+async fn ide_chat_create_conversation(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<CreateUnarchivedConversationInput>(params)?;
+    ide_chat_serialize(create_unarchived_conversation_inner(input, state).await?)
 }
 
-fn ide_chat_delete_conversation(state: &AppState, params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatConversationInput>(params)?;
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId is required".to_string());
-    }
-    let result = conversation_service_v2().delete_conversation(state, conversation_id)?;
-    let _ = delegate_runtime_thread_conversation_delete_by_root(state, conversation_id);
-    let overview_payload = conversation_service_v2().refresh_unarchived_conversation_overview(state)?;
-    emit_unarchived_conversation_overview_updated_payload(state, &overview_payload);
-    Ok(serde_json::json!({
-        "deletedConversationId": result.deleted_conversation_id,
-        "preferredConversationId": overview_payload.preferred_conversation_id,
-        "unarchivedConversations": overview_payload.unarchived_conversations,
-    }))
+async fn ide_chat_delete_conversation(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<DeleteUnarchivedConversationInput>(params)?;
+    ide_chat_serialize(delete_unarchived_conversation_inner(input, state).await?)
 }
 
 async fn ide_chat_batch_archive_conversations(

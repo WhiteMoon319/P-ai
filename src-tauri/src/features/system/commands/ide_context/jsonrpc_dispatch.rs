@@ -115,25 +115,26 @@ async fn ide_chat_handle_jsonrpc_request(
         "conversation.runtimeSnapshot" => ide_chat_conversation_runtime_snapshot(state, request.params),
         "conversation.freshnessSnapshot" => ide_chat_conversation_freshness_snapshot(state, request.params).await,
         "conversation.markRead" => ide_chat_mark_conversation_read(state, request.params),
-        "conversation.create" => (|| {
-            let result = ide_chat_create_conversation(state, request.params)?;
-            if let Some(conversation_id) = result
-                .get("conversationId")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-            {
-                ide_chat_register_sidebar_conversation(
-                    state,
-                    conversation_id,
-                    &sidebar_label,
-                    opened_conversation_id,
-                )?;
-            }
-            Ok(result)
-        })(),
+        "conversation.create" => ide_chat_create_conversation(state, request.params)
+            .await
+            .and_then(|result| {
+                if let Some(conversation_id) = result
+                    .get("conversationId")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                {
+                    ide_chat_register_sidebar_conversation(
+                        state,
+                        conversation_id,
+                        &sidebar_label,
+                        opened_conversation_id,
+                    )?;
+                }
+                Ok(result)
+            }),
         "conversation.createOptions" => ide_chat_create_conversation_options(state),
-        "conversation.delete" => ide_chat_delete_conversation(state, request.params),
+        "conversation.delete" => ide_chat_delete_conversation(state, request.params).await,
         "conversation.batchArchive" => ide_chat_batch_archive_conversations(state, request.params).await,
         "conversation.rebindRecipient" => ide_chat_rebind_conversation_recipient(state, request.params),
         "conversation.rewindPreview" => ide_chat_rewind_preview(state, request.params).await,

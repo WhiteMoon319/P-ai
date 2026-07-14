@@ -1409,13 +1409,11 @@ async function createConversation(input: {
         access: workspaceAccess.value || "approval",
       }]
       : null);
-  const workspacePath = String(shellWorkspaces?.[0]?.path || "").trim();
   creatingConversation.value = true;
   createConversationErrorText.value = "";
   try {
     const result = await transport.request<{
       conversationId: string;
-      conversation?: OpenConversationResult;
       unarchivedConversations?: ConversationSummary[];
     }>("conversation.create", {
       title: input.title,
@@ -1423,17 +1421,12 @@ async function createConversation(input: {
       agentId,
       shellWorkspaces,
       shellAutonomousMode: Boolean(input.shellAutonomousMode),
-      workspacePath: workspacePath || undefined,
     });
     if (Array.isArray(result.unarchivedConversations)) {
       conversations.value = result.unarchivedConversations;
       syncConversationTabForRemoteContacts();
     }
-    if (result.conversation && String(result.conversation.conversationId || "").trim()) {
-      await applyOpenConversationResult(result.conversation);
-    } else {
-      await openConversation(result.conversationId);
-    }
+    await openConversation(result.conversationId);
     createConversationDialogOpen.value = false;
   } catch (error) {
     createConversationErrorText.value = String(error || t('sidebar.createConversationFailed'));
@@ -1448,7 +1441,7 @@ async function deleteConversation(conversationId: string) {
   try {
     const result = await transport.request<{
       deletedConversationId?: string;
-      preferredConversationId?: string | null;
+      activeConversationId?: string | null;
       unarchivedConversations?: ConversationSummary[];
     }>("conversation.delete", {
       conversationId: normalizedConversationId,
@@ -1462,9 +1455,9 @@ async function deleteConversation(conversationId: string) {
     if (String(activeConversationId.value || "").trim() !== normalizedConversationId) {
       return;
     }
-    const preferredConversationId = String(result.preferredConversationId || "").trim();
-    if (preferredConversationId) {
-      await openConversation(preferredConversationId);
+    const nextActiveConversationId = String(result.activeConversationId || "").trim();
+    if (nextActiveConversationId) {
+      await openConversation(nextActiveConversationId);
       return;
     }
     const fallbackConversationId = conversations.value
