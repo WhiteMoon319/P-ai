@@ -1145,4 +1145,26 @@ mod ide_context_tests {
             .expect("clear round logs");
         assert_eq!(cleared, serde_json::json!(true));
     }
+
+    #[test]
+    fn ide_chat_mcp_validation_should_match_canonical_command_output() {
+        let definition_json = serde_json::json!({
+            "name": "test-http-server",
+            "transport": {
+                "type": "http",
+                "url": "https://example.com/mcp"
+            }
+        })
+        .to_string();
+        let canonical = mcp_validate_definition_inner(McpDefinitionValidateInput {
+            definition_json: definition_json.clone(),
+        })
+        .expect("canonical validation");
+        let web = ide_chat_mcp_validate_definition_for_web_settings(serde_json::json!({
+            "input": { "definitionJson": definition_json }
+        }))
+        .expect("web validation");
+
+        assert_eq!(web, serde_json::to_value(canonical).expect("serialize canonical"));
+    }
 }

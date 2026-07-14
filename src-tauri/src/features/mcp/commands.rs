@@ -296,7 +296,11 @@ async fn mcp_probe_server_tools_background(
 
 #[tauri::command]
 fn mcp_list_servers(state: State<'_, AppState>) -> Result<Vec<McpServerConfig>, String> {
-    let mut out = load_workspace_mcp_servers(&state)?;
+    mcp_list_servers_inner(state.inner())
+}
+
+fn mcp_list_servers_inner(state: &AppState) -> Result<Vec<McpServerConfig>, String> {
+    let mut out = load_workspace_mcp_servers(state)?;
     for item in &mut out {
         *item = overlay_runtime_state_on_server(item.clone());
     }
@@ -305,6 +309,12 @@ fn mcp_list_servers(state: State<'_, AppState>) -> Result<Vec<McpServerConfig>, 
 
 #[tauri::command]
 fn mcp_validate_definition(
+    input: McpDefinitionValidateInput,
+) -> Result<McpDefinitionValidateResult, String> {
+    mcp_validate_definition_inner(input)
+}
+
+fn mcp_validate_definition_inner(
     input: McpDefinitionValidateInput,
 ) -> Result<McpDefinitionValidateResult, String> {
     let _schema = mcp_definition_json_schema();
@@ -344,9 +354,16 @@ fn mcp_save_server(
     input: McpServerInput,
     state: State<'_, AppState>,
 ) -> Result<McpServerConfig, String> {
+    mcp_save_server_inner(input, state.inner())
+}
+
+fn mcp_save_server_inner(
+    input: McpServerInput,
+    state: &AppState,
+) -> Result<McpServerConfig, String> {
     let next = normalize_mcp_server_input(input)?;
-    save_workspace_mcp_server(&state, &next)?;
-    let mut saved = load_server_by_id(&state, &next.id)?;
+    save_workspace_mcp_server(state, &next)?;
+    let mut saved = load_server_by_id(state, &next.id)?;
     saved = overlay_runtime_state_on_server(saved);
 
     Ok(saved)
@@ -357,11 +374,18 @@ async fn mcp_remove_server(
     input: McpServerIdInput,
     state: State<'_, AppState>,
 ) -> Result<bool, String> {
+    mcp_remove_server_inner(input, state.inner()).await
+}
+
+async fn mcp_remove_server_inner(
+    input: McpServerIdInput,
+    state: &AppState,
+) -> Result<bool, String> {
     let server_id = input.server_id.trim();
     if server_id.is_empty() {
         return Err("serverId is required".to_string());
     }
-    let removed = remove_workspace_mcp_server(&state, server_id)?;
+    let removed = remove_workspace_mcp_server(state, server_id)?;
     if removed {
         mcp_disconnect_cached_client(server_id).await;
         mcp_runtime_state_remove(server_id);
@@ -374,13 +398,20 @@ async fn mcp_list_server_tools(
     input: McpServerIdInput,
     state: State<'_, AppState>,
 ) -> Result<McpListServerToolsResult, String> {
+    mcp_list_server_tools_inner(input, state.inner()).await
+}
+
+async fn mcp_list_server_tools_inner(
+    input: McpServerIdInput,
+    state: &AppState,
+) -> Result<McpListServerToolsResult, String> {
     let server_id = input.server_id.trim();
     if server_id.is_empty() {
         return Err("serverId is required".to_string());
     }
 
     let server = {
-        let server = load_server_by_id(&state, server_id)?;
+        let server = load_server_by_id(state, server_id)?;
         server
     };
 
@@ -400,7 +431,7 @@ async fn mcp_list_server_tools(
         .map(|t| t.tool_name.clone())
         .collect::<Vec<_>>();
     let merged_policies =
-        merge_workspace_mcp_tool_policies_with_new_tools(&state, &server.id, &discovered_names)?;
+        merge_workspace_mcp_tool_policies_with_new_tools(state, &server.id, &discovered_names)?;
     let mut server_with_policies = server.clone();
     server_with_policies.tool_policies = merged_policies;
     let final_tools = tools
@@ -412,8 +443,8 @@ async fn mcp_list_server_tools(
         })
         .collect::<Vec<_>>();
     mcp_runtime_state_set(&server.id, true, "ready", "", final_tools.clone());
-    refresh_global_tool_schema_cache(&state);
-    mark_prompt_cache_rebuild_for_all_final_system_sources(&state);
+    refresh_global_tool_schema_cache(state);
+    mark_prompt_cache_rebuild_for_all_final_system_sources(state);
 
     Ok(McpListServerToolsResult {
         server_id: server.id,
@@ -427,13 +458,20 @@ fn mcp_list_server_tools_cached(
     input: McpServerIdInput,
     state: State<'_, AppState>,
 ) -> Result<McpListServerToolsResult, String> {
+    mcp_list_server_tools_cached_inner(input, state.inner())
+}
+
+fn mcp_list_server_tools_cached_inner(
+    input: McpServerIdInput,
+    state: &AppState,
+) -> Result<McpListServerToolsResult, String> {
     let server_id = input.server_id.trim();
     if server_id.is_empty() {
         return Err("serverId is required".to_string());
     }
 
     let server = {
-        let server = load_server_by_id(&state, server_id)?;
+        let server = load_server_by_id(state, server_id)?;
         server
     };
 
@@ -452,20 +490,27 @@ async fn mcp_deploy_server(
     input: McpServerIdInput,
     state: State<'_, AppState>,
 ) -> Result<McpListServerToolsResult, String> {
+    mcp_deploy_server_inner(input, state.inner()).await
+}
+
+async fn mcp_deploy_server_inner(
+    input: McpServerIdInput,
+    state: &AppState,
+) -> Result<McpListServerToolsResult, String> {
     let server_id = input.server_id.trim();
     if server_id.is_empty() {
         return Err("serverId is required".to_string());
     }
 
     let server = {
-        let server = load_server_by_id(&state, server_id)?;
-        set_workspace_mcp_policy_enabled(&state, server_id, true)?;
+        let server = load_server_by_id(state, server_id)?;
+        set_workspace_mcp_policy_enabled(state, server_id, true)?;
         server
     };
 
     let started = std::time::Instant::now();
     mcp_runtime_state_mark_starting(&server);
-    mcp_start_supervisor_probe_for_server(state.inner().clone(), server.clone(), "manual_deploy");
+    mcp_start_supervisor_probe_for_server(state.clone(), server.clone(), "manual_deploy");
     let final_tools = list_tools_from_runtime_or_policy(&server);
     Ok(McpListServerToolsResult {
         server_id: server.id,
@@ -479,18 +524,25 @@ async fn mcp_undeploy_server(
     input: McpServerIdInput,
     state: State<'_, AppState>,
 ) -> Result<McpServerConfig, String> {
+    mcp_undeploy_server_inner(input, state.inner()).await
+}
+
+async fn mcp_undeploy_server_inner(
+    input: McpServerIdInput,
+    state: &AppState,
+) -> Result<McpServerConfig, String> {
     let server_id = input.server_id.trim();
     if server_id.is_empty() {
         return Err("serverId is required".to_string());
     }
     {
-        let _ = load_server_by_id(&state, server_id)?;
-        set_workspace_mcp_policy_enabled(&state, server_id, false)?;
+        let _ = load_server_by_id(state, server_id)?;
+        set_workspace_mcp_policy_enabled(state, server_id, false)?;
     }
     mcp_disconnect_cached_client(server_id).await;
     mcp_runtime_state_set(server_id, false, "stopped", "", Vec::new());
 
-    let mut out = load_server_by_id(&state, server_id)?;
+    let mut out = load_server_by_id(state, server_id)?;
     out = overlay_runtime_state_on_server(out);
     Ok(out)
 }
@@ -499,6 +551,13 @@ async fn mcp_undeploy_server(
 fn mcp_set_tool_enabled(
     input: McpSetToolEnabledInput,
     state: State<'_, AppState>,
+) -> Result<McpServerConfig, String> {
+    mcp_set_tool_enabled_inner(input, state.inner())
+}
+
+fn mcp_set_tool_enabled_inner(
+    input: McpSetToolEnabledInput,
+    state: &AppState,
 ) -> Result<McpServerConfig, String> {
     let server_id = input.server_id.trim();
     let tool_name = input.tool_name.trim();
@@ -510,8 +569,8 @@ fn mcp_set_tool_enabled(
     }
 
     let policies = {
-        let _ = load_server_by_id(&state, server_id)?;
-        let mut policies = load_workspace_mcp_tool_policies(&state, server_id)?;
+        let _ = load_server_by_id(state, server_id)?;
+        let mut policies = load_workspace_mcp_tool_policies(state, server_id)?;
         if let Some(policy) = policies.iter_mut().find(|p| p.tool_name == tool_name) {
             policy.enabled = input.enabled;
         } else {
@@ -520,13 +579,13 @@ fn mcp_set_tool_enabled(
                 enabled: input.enabled,
             });
         }
-        save_workspace_mcp_tool_policies(&state, server_id, &policies)?;
+        save_workspace_mcp_tool_policies(state, server_id, &policies)?;
         policies
     };
 
     mcp_runtime_state_set_tool_enabled(server_id, tool_name, input.enabled);
 
-    let mut server = load_server_by_id(&state, server_id)?;
+    let mut server = load_server_by_id(state, server_id)?;
     server.tool_policies = policies;
     server = overlay_runtime_state_on_server(server);
 

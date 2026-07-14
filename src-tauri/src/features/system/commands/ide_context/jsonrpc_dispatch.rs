@@ -299,7 +299,7 @@ async fn ide_chat_handle_jsonrpc_request(
         "mcp_remove_server" => ide_chat_mcp_remove_server_for_web_settings(state, request.params).await,
         "mcp_list_server_tools" => ide_chat_mcp_list_server_tools_for_web_settings(state, request.params).await,
         "mcp_list_server_tools_cached" => ide_chat_mcp_list_server_tools_cached_for_web_settings(state, request.params),
-        "mcp_deploy_server" => ide_chat_mcp_deploy_server_for_web_settings(state, request.params),
+        "mcp_deploy_server" => ide_chat_mcp_deploy_server_for_web_settings(state, request.params).await,
         "mcp_undeploy_server" => ide_chat_mcp_undeploy_server_for_web_settings(state, request.params).await,
         "mcp_set_tool_enabled" => ide_chat_mcp_set_tool_enabled_for_web_settings(state, request.params),
         "mcp_list_skills" => ide_chat_mcp_list_skills_for_web_settings(state),
