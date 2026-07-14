@@ -185,33 +185,12 @@ async fn ide_chat_handle_jsonrpc_request(
         "get_prompt_preview" => ide_chat_get_prompt_preview_for_web_settings(state, request.params).await,
         "get_system_prompt_preview" => ide_chat_get_system_prompt_preview_for_web_settings(state, request.params).await,
         "get_conversation_section_orders" => (|| -> Result<Value, String> {
-            let runtime = state_read_runtime_state_cached(state)?;
-            ide_chat_serialize(ConversationSectionOrdersOutput {
-                local: runtime.conversation_section_orders.local,
-                contact: runtime.conversation_section_orders.contact,
-            })
+            ide_chat_serialize(get_conversation_section_orders_inner(state)?)
         })(),
         "save_conversation_section_order" => (|| -> Result<Value, String> {
             let input =
                 ide_chat_parse_param_field::<SaveConversationSectionOrderInput>(request.params, "input")?;
-            let tab = normalize_conversation_section_order_tab(&input.tab)?;
-            let ordered_keys = normalize_conversation_section_order_keys(&input.ordered_keys);
-            let mut runtime = state_read_runtime_state_cached(state)?;
-            match tab {
-                "local" => runtime.conversation_section_orders.local = ordered_keys.clone(),
-                "contact" => runtime.conversation_section_orders.contact = ordered_keys.clone(),
-                _ => {}
-            }
-            state_write_runtime_state_cached(state, &runtime)?;
-            runtime_log_info(format!(
-                "[会话分组排序] 完成，任务=保存会话分组顺序，tab={}，group_count={}",
-                tab,
-                ordered_keys.len()
-            ));
-            ide_chat_serialize(SaveConversationSectionOrderOutput {
-                tab: tab.to_string(),
-                ordered_keys,
-            })
+            ide_chat_serialize(save_conversation_section_order_inner(input, state)?)
         })(),
         "delegate.statuses" => ide_chat_delegate_statuses(state, request.params),
         "delegate.abort" => ide_chat_delegate_abort(state, request.params),

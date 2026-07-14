@@ -1864,7 +1864,13 @@ fn toggle_unarchived_conversation_pin_inner(
 fn get_conversation_section_orders(
     state: State<'_, AppState>,
 ) -> Result<ConversationSectionOrdersOutput, String> {
-    let runtime = state_read_runtime_state_cached(state.inner())?;
+    get_conversation_section_orders_inner(state.inner())
+}
+
+fn get_conversation_section_orders_inner(
+    state: &AppState,
+) -> Result<ConversationSectionOrdersOutput, String> {
+    let runtime = state_read_runtime_state_cached(state)?;
     Ok(ConversationSectionOrdersOutput {
         local: runtime.conversation_section_orders.local,
         contact: runtime.conversation_section_orders.contact,
@@ -1876,15 +1882,22 @@ fn save_conversation_section_order(
     input: SaveConversationSectionOrderInput,
     state: State<'_, AppState>,
 ) -> Result<SaveConversationSectionOrderOutput, String> {
+    save_conversation_section_order_inner(input, state.inner())
+}
+
+fn save_conversation_section_order_inner(
+    input: SaveConversationSectionOrderInput,
+    state: &AppState,
+) -> Result<SaveConversationSectionOrderOutput, String> {
     let tab = normalize_conversation_section_order_tab(&input.tab)?;
     let ordered_keys = normalize_conversation_section_order_keys(&input.ordered_keys);
-    let mut runtime = state_read_runtime_state_cached(state.inner())?;
+    let mut runtime = state_read_runtime_state_cached(state)?;
     match tab {
         "local" => runtime.conversation_section_orders.local = ordered_keys.clone(),
         "contact" => runtime.conversation_section_orders.contact = ordered_keys.clone(),
         _ => {}
     }
-    state_write_runtime_state_cached(state.inner(), &runtime)?;
+    state_write_runtime_state_cached(state, &runtime)?;
     runtime_log_info(format!(
         "[会话分组排序] 完成，任务=保存会话分组顺序，tab={}，group_count={}",
         tab,
