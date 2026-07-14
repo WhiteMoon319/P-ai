@@ -20,12 +20,12 @@ impl RuntimeToolMetadata for BuiltinFetchTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinFetchTool {
+impl RuntimeValueTool for BuiltinFetchTool {
     const NAME: &'static str = "fetch";
     type Args = FetchToolArgs;
     type Error = ToolInvokeError;
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
         runtime_log_debug(format!(
             "[工具调试] 内置工具执行开始 name=fetch args={}",
@@ -67,12 +67,12 @@ impl RuntimeToolMetadata for BuiltinBingSearchTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinBingSearchTool {
+impl RuntimeValueTool for BuiltinBingSearchTool {
     const NAME: &'static str = "websearch";
     type Args = BingSearchToolArgs;
     type Error = ToolInvokeError;
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
         runtime_log_debug(format!(
             "[工具调试] 内置工具执行开始 name=websearch args={}",
@@ -151,7 +151,7 @@ impl RuntimeToolMetadata for BuiltinRememberTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinRememberTool {
+impl RuntimeValueTool for BuiltinRememberTool {
     const NAME: &'static str = "remember";
     type Args = MemorySaveToolArgs;
     type Error = ToolInvokeError;
@@ -160,7 +160,7 @@ impl RuntimeJsonTool for BuiltinRememberTool {
         Some(std::time::Duration::from_secs(3))
     }
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
         let args_json = serde_json::json!({
             "action": args.action,
@@ -212,12 +212,12 @@ impl RuntimeToolMetadata for BuiltinRecallTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinRecallTool {
+impl RuntimeValueTool for BuiltinRecallTool {
     const NAME: &'static str = "recall";
     type Args = RecallToolArgs;
     type Error = ToolInvokeError;
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
         let args_json = serde_json::to_value(&args).unwrap_or(Value::Null);
         runtime_log_debug(format!(
@@ -258,12 +258,12 @@ struct BuiltinOrganizeContextTool {
     agent_id: String,
 }
 
-impl RuntimeJsonTool for BuiltinReloadTool {
+impl RuntimeValueTool for BuiltinReloadTool {
     const NAME: &'static str = "reload";
     type Args = EmptyToolArgs;
     type Error = ToolInvokeError;
 
-    fn call_typed(&self, _args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, _args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
             runtime_log_debug("[工具调试] 内置工具执行开始 name=reload".to_string());
             let result = builtin_reload(&self.app_state)
@@ -298,12 +298,12 @@ impl RuntimeToolMetadata for BuiltinReloadTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinOrganizeContextTool {
+impl RuntimeValueTool for BuiltinOrganizeContextTool {
     const NAME: &'static str = "organize_context";
     type Args = EmptyToolArgs;
     type Error = ToolInvokeError;
 
-    fn call_typed(&self, _args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, _args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
             runtime_log_debug(
                 "[工具调试] 内置工具执行开始 name=organize_context".to_string(),
@@ -623,7 +623,7 @@ impl RuntimeToolMetadata for BuiltinConfigTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinConfigTool {
+impl RuntimeValueTool for BuiltinConfigTool {
     const NAME: &'static str = "config";
     type Args = ConfigToolArgs;
     type Error = ToolInvokeError;
@@ -632,7 +632,7 @@ impl RuntimeJsonTool for BuiltinConfigTool {
         Some(std::time::Duration::from_secs(30))
     }
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
             let args_value = serde_json::to_value(&args).unwrap_or(Value::Null);
             runtime_log_debug(format!(
@@ -692,7 +692,7 @@ impl RuntimeJsonTool for BuiltinConfigTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinTerminalExecTool {
+impl RuntimeValueTool for BuiltinTerminalExecTool {
     const NAME: &'static str = "exec";
     type Args = TerminalExecToolArgs;
     type Error = ToolInvokeError;
@@ -705,7 +705,7 @@ impl RuntimeJsonTool for BuiltinTerminalExecTool {
         None
     }
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
         let args_json = serde_json::to_value(&args).unwrap_or(Value::Null);
         runtime_log_debug(format!(
@@ -794,12 +794,12 @@ impl RuntimeToolMetadata for BuiltinWriteFileTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinWriteFileTool {
+impl RuntimeValueTool for BuiltinWriteFileTool {
     const NAME: &'static str = "write";
     type Args = WriteFileToolArgs;
     type Error = ToolInvokeError;
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
         runtime_log_debug(format!(
             "[工具调试] 内置工具执行开始 name=write args={}",
@@ -837,12 +837,12 @@ impl RuntimeToolMetadata for BuiltinDeleteFileTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinDeleteFileTool {
+impl RuntimeValueTool for BuiltinDeleteFileTool {
     const NAME: &'static str = "delete";
     type Args = DeleteFileToolArgs;
     type Error = ToolInvokeError;
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
         runtime_log_debug(format!(
             "[工具调试] 内置工具执行开始 name=delete args={}",
@@ -883,12 +883,12 @@ impl RuntimeToolMetadata for BuiltinUpdateFileTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinUpdateFileTool {
+impl RuntimeValueTool for BuiltinUpdateFileTool {
     const NAME: &'static str = "update";
     type Args = UpdateFileToolArgs;
     type Error = ToolInvokeError;
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
         runtime_log_debug(format!(
             "[工具调试] 内置工具执行开始 name=update args={}",
@@ -927,12 +927,12 @@ impl RuntimeToolMetadata for BuiltinMoveFileTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinMoveFileTool {
+impl RuntimeValueTool for BuiltinMoveFileTool {
     const NAME: &'static str = "move";
     type Args = MoveFileToolArgs;
     type Error = ToolInvokeError;
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
         runtime_log_debug(format!(
             "[工具调试] 内置工具执行开始 name=move args={}",
@@ -1025,7 +1025,7 @@ impl RuntimeToolDyn for BuiltinTodoTool {
             match &result {
                 Ok(v) => runtime_log_debug(format!(
                     "[工具调试] 内置工具执行完成 name=todo result={}",
-                    debug_text_snippet(&v.display_text, 240)
+                    debug_text_snippet(&v.output, 240)
                 )),
                 Err(err) => runtime_log_error(format!("[工具执行] 内置工具 todo 执行失败: 错误={err}")),
             }
@@ -1059,12 +1059,12 @@ impl RuntimeToolMetadata for BuiltinPlanTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinPlanTool {
+impl RuntimeValueTool for BuiltinPlanTool {
     const NAME: &'static str = "plan";
     type Args = PlanToolArgs;
     type Error = ToolInvokeError;
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
         runtime_log_debug(format!(
             "[工具调试] 内置工具执行开始 name=plan args={}",
@@ -1132,12 +1132,12 @@ impl RuntimeToolMetadata for BuiltinCreateGoalTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinCreateGoalTool {
+impl RuntimeValueTool for BuiltinCreateGoalTool {
     const NAME: &'static str = "create_goal";
     type Args = CreateGoalToolArgs;
     type Error = ToolInvokeError;
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
             runtime_log_debug(format!(
                 "[工具调试] 内置工具执行开始 name=create_goal args={}",
@@ -1176,12 +1176,12 @@ impl RuntimeToolMetadata for BuiltinUpdateGoalTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinUpdateGoalTool {
+impl RuntimeValueTool for BuiltinUpdateGoalTool {
     const NAME: &'static str = "update_goal";
     type Args = UpdateGoalToolArgs;
     type Error = ToolInvokeError;
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
             runtime_log_debug(format!(
                 "[工具调试] 内置工具执行开始 name=update_goal args={}",
@@ -1218,12 +1218,12 @@ impl RuntimeToolMetadata for BuiltinGetSessionTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinGetSessionTool {
+impl RuntimeValueTool for BuiltinGetSessionTool {
     const NAME: &'static str = "get_session";
     type Args = GetSessionToolArgs;
     type Error = ToolInvokeError;
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
             runtime_log_debug(format!(
                 "[工具调试] 内置工具执行开始 name=get_session args={}",
@@ -1261,12 +1261,12 @@ impl RuntimeToolMetadata for BuiltinInformSessionTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinInformSessionTool {
+impl RuntimeValueTool for BuiltinInformSessionTool {
     const NAME: &'static str = "inform_session";
     type Args = InformSessionToolArgs;
     type Error = ToolInvokeError;
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
             runtime_log_debug(format!(
                 "[工具调试] 内置工具执行开始 name=inform_session args={}",
@@ -1286,12 +1286,12 @@ impl RuntimeJsonTool for BuiltinInformSessionTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinTaskTool {
+impl RuntimeValueTool for BuiltinTaskTool {
     const NAME: &'static str = "task";
     type Args = TaskToolArgsWire;
     type Error = ToolInvokeError;
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
         runtime_log_debug(format!(
             "[工具调试] 内置工具执行开始 name=task args={}",
@@ -1347,12 +1347,12 @@ impl RuntimeToolMetadata for BuiltinDelegateTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinDelegateTool {
+impl RuntimeValueTool for BuiltinDelegateTool {
     const NAME: &'static str = "delegate";
     type Args = DelegateToolArgs;
     type Error = ToolInvokeError;
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
         runtime_log_debug(format!(
             "[工具调试] 内置工具执行开始 name=delegate args={}",

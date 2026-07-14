@@ -28,7 +28,7 @@ trait RuntimeToolMetadata {
 type RuntimeToolCallFuture<'a> = std::pin::Pin<
     Box<dyn std::future::Future<Output = Result<ProviderToolResult, String>> + Send + 'a>,
 >;
-type RuntimeJsonValueFuture<'a, E> = std::pin::Pin<
+type RuntimeToolValueFuture<'a, E> = std::pin::Pin<
     Box<dyn std::future::Future<Output = Result<Value, E>> + Send + 'a>,
 >;
 
@@ -43,7 +43,7 @@ trait RuntimeToolDyn: Send + Sync {
     fn call_json(&self, args_json: String) -> RuntimeToolCallFuture<'_>;
 }
 
-trait RuntimeJsonTool: RuntimeToolMetadata + Send + Sync {
+trait RuntimeValueTool: RuntimeToolMetadata + Send + Sync {
     const NAME: &'static str;
     type Args: for<'de> Deserialize<'de> + Send;
     type Error: std::fmt::Display + Send;
@@ -52,17 +52,210 @@ trait RuntimeJsonTool: RuntimeToolMetadata + Send + Sync {
         None
     }
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error>;
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error>;
 }
 
-fn provider_tool_result_from_json_value(value: Value) -> Result<ProviderToolResult, String> {
-    let text = serde_json::to_string(&value)
-        .map_err(|err| format!("Serialize tool output failed: {err}"))?;
-    Ok(ProviderToolResult {
-        display_text: text.clone(),
-        parts: vec![ProviderToolResultPart::Text { text }],
+fn tool_value_scalar_text(value: &Value) -> String {
+    match value {
+        Value::Null => "null".to_string(),
+        Value::Bool(value) => value.to_string(),
+        Value::Number(value) => value.to_string(),
+        Value::String(value) => value.clone(),
+        Value::Array(_) | Value::Object(_) => String::new(),
+    }
+}
+
+fn push_tool_value_lines(value: &Value, indent: usize, lines: &mut Vec<String>) {
+    let prefix = "  ".repeat(indent);
+    match value {
+        Value::Array(items) => {
+            if items.is_empty() {
+                lines.push(format!("{prefix}(empty)"));
+                return;
+            }
+            for item in items {
+                if matches!(item, Value::Array(_) | Value::Object(_)) {
+                    lines.push(format!("{prefix}-"));
+                    push_tool_value_lines(item, indent + 1, lines);
+                } else {
+                    lines.push(format!("{prefix}- {}", tool_value_scalar_text(item)));
+                }
+            }
+        }
+        Value::Object(map) => {
+            if map.is_empty() {
+                lines.push(format!("{prefix}(empty)"));
+                return;
+            }
+            for (key, item) in map {
+                if item.is_null() || item.as_str().is_some_and(|text| text.is_empty()) {
+                    continue;
+                }
+                if matches!(item, Value::Array(_) | Value::Object(_)) {
+                    lines.push(format!("{prefix}{key}:"));
+                    push_tool_value_lines(item, indent + 1, lines);
+                } else {
+                    let text = tool_value_scalar_text(item);
+                    if text.contains('\n') {
+                        lines.push(format!("{prefix}{key}:"));
+                        lines.extend(text.lines().map(|line| format!("{}{}", "  ".repeat(indent + 1), line)));
+                    } else {
+                        lines.push(format!("{prefix}{key}: {text}"));
+                    }
+                }
+            }
+        }
+        _ => lines.push(format!("{prefix}{}", tool_value_scalar_text(value))),
+    }
+}
+
+fn tool_value_readable_text(value: &Value) -> String {
+    if let Value::String(text) = value {
+        return text.clone();
+    }
+    let mut lines = Vec::new();
+    push_tool_value_lines(value, 0, &mut lines);
+    lines.join("\n")
+}
+
+fn value_string(value: &Value, key: &str) -> Option<String> {
+    value.get(key).and_then(Value::as_str).map(str::trim).filter(|text| !text.is_empty()).map(ToOwned::to_owned)
+}
+
+fn provider_tool_metadata_from_value(tool_name: &str, value: &Value) -> ProviderToolMetadata {
+    let mut metadata = ProviderToolMetadata {
+        backup_record_id: value_string(value, "backupRecordId"),
+        ..ProviderToolMetadata::default()
+    };
+    match tool_name {
+        "exec" => {
+            metadata.exit_code = value.get("exitCode").and_then(Value::as_i64);
+            metadata.wall_time_ms = value.get("durationMs").and_then(Value::as_u64);
+            metadata.truncated = value.get("truncated").and_then(Value::as_bool).unwrap_or(false);
+            metadata.output_paths.extend(
+                ["stdoutOutputPath", "stderrOutputPath"]
+                    .into_iter()
+                    .filter_map(|key| value_string(value, key)),
+            );
+        }
+        "organize_context" => {
+            metadata.control = ProviderToolControl::OrganizeContext {
+                applied: value.get("ok").and_then(Value::as_bool).unwrap_or(false)
+                    && value.get("applied").and_then(Value::as_bool).unwrap_or(false),
+            };
+        }
+        "contact_send_files" => {
+            let status = value_string(value, "status").unwrap_or_default();
+            let stop = status.eq_ignore_ascii_case("done")
+                || value.get("stop_tool_loop").and_then(Value::as_bool)
+                    .or_else(|| value.get("done").and_then(Value::as_bool))
+                    .unwrap_or(false);
+            metadata.control = ProviderToolControl::Contact { stop };
+        }
+        "plan" => {
+            metadata.control = ProviderToolControl::Plan {
+                action: value_string(value, "action").unwrap_or_default(),
+                path: value_string(value, "path").unwrap_or_default(),
+                stop: value.get("should_stop_tool_loop").and_then(Value::as_bool)
+                    .or_else(|| value.get("stop_tool_loop").and_then(Value::as_bool))
+                    .unwrap_or(false),
+            };
+        }
+        "task" => {
+            metadata.control = ProviderToolControl::Task {
+                completion_state: value_string(value, "completionState")
+                    .or_else(|| value_string(value, "completion_state")),
+                completion_conclusion: value_string(value, "completionConclusion")
+                    .or_else(|| value_string(value, "completion_conclusion")),
+            };
+        }
+        _ => {}
+    }
+    metadata
+}
+
+fn provider_tool_output_from_value(tool_name: &str, value: &Value) -> String {
+    match tool_name {
+        "exec" => {
+            let stdout = value.get("stdout").and_then(Value::as_str).unwrap_or_default();
+            let stderr = value.get("stderr").and_then(Value::as_str).unwrap_or_default();
+            match (stdout.is_empty(), stderr.is_empty()) {
+                (false, true) => stdout.to_string(),
+                (true, false) => stderr.to_string(),
+                (false, false) => format!("{stdout}\n{stderr}"),
+                (true, true) => value.get("message").and_then(Value::as_str)
+                    .or_else(|| value.get("blockedReason").and_then(Value::as_str))
+                    .unwrap_or("(no output)")
+                    .to_string(),
+            }
+        }
+        "fetch" => value.get("content").and_then(Value::as_str).filter(|text| !text.is_empty())
+            .or_else(|| value.get("message").and_then(Value::as_str))
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| tool_value_readable_text(value)),
+        "config" => value.get("result")
+            .map(tool_value_readable_text)
+            .filter(|text| !text.trim().is_empty())
+            .unwrap_or_else(|| tool_value_readable_text(value)),
+        "read" | "read_media" => value.get("content").and_then(Value::as_str)
+            .or_else(|| value.get("text").and_then(Value::as_str))
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| tool_value_readable_text(value)),
+        _ => tool_value_readable_text(value),
+    }
+}
+
+fn provider_tool_result_from_value(tool_name: &str, mut value: Value) -> ProviderToolResult {
+    let metadata = provider_tool_metadata_from_value(tool_name, &value);
+    let images = if tool_name == "operate" {
+        let payload = value.get("data").unwrap_or(&value);
+        extract_forward_images_from_value(payload)
+    } else {
+        Vec::new()
+    };
+    if !images.is_empty() {
+        remove_inline_media_from_tool_value(&mut value);
+    }
+    remove_top_level_internal_tool_fields(&mut value);
+    let output = provider_tool_output_from_value(tool_name, &value);
+    let mut parts = vec![ProviderToolResultPart::Text { text: output.clone() }];
+    parts.extend(images.into_iter().map(|image| ProviderToolResultPart::Image {
+        mime: image.mime,
+        data_base64: image.base64,
+        width: image.width,
+        height: image.height,
+    }));
+    ProviderToolResult {
+        output,
+        metadata,
+        parts,
         is_error: false,
-    })
+    }
+}
+
+fn remove_top_level_internal_tool_fields(value: &mut Value) {
+    let Value::Object(map) = value else {
+        return;
+    };
+    const INTERNAL_FIELDS: &[&str] = &[
+        "ok",
+        "approved",
+        "durationMs",
+        "elapsed_ms",
+        "timedOut",
+        "truncated",
+        "stdoutTruncated",
+        "stderrTruncated",
+        "stdoutOutputPath",
+        "stderrOutputPath",
+        "backupRecordId",
+        "stop_tool_loop",
+        "should_stop_tool_loop",
+        "done",
+    ];
+    for key in INTERNAL_FIELDS {
+        map.remove(*key);
+    }
 }
 
 fn parse_runtime_tool_args<T>(args_json: &str) -> Result<T, String>
@@ -79,7 +272,7 @@ where
 
 impl<T> RuntimeToolDyn for T
 where
-    T: RuntimeJsonTool,
+    T: RuntimeValueTool,
 {
     fn name(&self) -> String {
         T::NAME.to_string()
@@ -97,7 +290,7 @@ where
         Box::pin(async move {
             let args = parse_runtime_tool_args::<T::Args>(&args_json)?;
             let output_value = self.call_typed(args).await.map_err(|err| err.to_string())?;
-            provider_tool_result_from_json_value(output_value)
+            Ok(provider_tool_result_from_value(T::NAME, output_value))
         })
     }
 }
@@ -120,6 +313,8 @@ enum ProviderToolResultPart {
     Image {
         mime: String,
         data_base64: String,
+        width: u32,
+        height: u32,
     },
     Resource {
         mime: Option<String>,
@@ -135,9 +330,46 @@ enum ProviderToolResultPart {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct ProviderToolResult {
-    display_text: String,
+    output: String,
+    metadata: ProviderToolMetadata,
     parts: Vec<ProviderToolResultPart>,
     is_error: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+struct ProviderToolMetadata {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exit_code: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    wall_time_ms: Option<u64>,
+    #[serde(skip_serializing_if = "bool_is_false")]
+    truncated: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    output_paths: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    total_output_lines: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    backup_record_id: Option<String>,
+    #[serde(skip_serializing_if = "provider_tool_control_is_none")]
+    control: ProviderToolControl,
+}
+
+fn bool_is_false(value: &bool) -> bool {
+    !*value
+}
+
+fn provider_tool_control_is_none(control: &ProviderToolControl) -> bool {
+    matches!(control, ProviderToolControl::None)
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+enum ProviderToolControl {
+    #[default]
+    None,
+    OrganizeContext { applied: bool },
+    Contact { stop: bool },
+    Plan { action: String, path: String, stop: bool },
+    Task { completion_state: Option<String>, completion_conclusion: Option<String> },
 }
 
 #[allow(dead_code)]
@@ -145,7 +377,8 @@ impl ProviderToolResult {
     fn text(text: impl Into<String>) -> Self {
         let text = text.into();
         Self {
-            display_text: text.clone(),
+            output: text.clone(),
+            metadata: ProviderToolMetadata::default(),
             parts: vec![ProviderToolResultPart::Text { text }],
             is_error: false,
         }
@@ -154,9 +387,55 @@ impl ProviderToolResult {
     fn error(text: impl Into<String>) -> Self {
         let text = text.into();
         Self {
-            display_text: text.clone(),
+            output: text.clone(),
+            metadata: ProviderToolMetadata::default(),
             parts: vec![ProviderToolResultPart::Text { text }],
             is_error: true,
         }
+    }
+}
+
+#[cfg(test)]
+mod runtime_tool_result_tests {
+    use super::*;
+
+    #[test]
+    fn structured_tool_result_is_readable_text_not_json() {
+        let result = provider_tool_result_from_value(
+            "task",
+            serde_json::json!({
+                "ok": true,
+                "taskId": "task-1",
+                "completionState": "completed",
+                "items": [{"title": "第一项", "done": true}]
+            }),
+        );
+        assert!(result.output.contains("taskId: task-1"));
+        assert!(result.output.contains("completionState: completed"));
+        assert!(!result.output.contains("{\""));
+        assert!(!result.output.contains("ok:"));
+        assert!(result.output.contains("done: true"));
+        assert!(matches!(
+            result.metadata.control,
+            ProviderToolControl::Task { .. }
+        ));
+    }
+
+    #[test]
+    fn exec_result_keeps_raw_output_and_external_metadata() {
+        let result = provider_tool_result_from_value(
+            "exec",
+            serde_json::json!({
+                "ok": true,
+                "exitCode": 0,
+                "stdout": "first\nsecond \"quoted\"",
+                "stderr": "",
+                "durationMs": 420,
+                "timedOut": false
+            }),
+        );
+        assert_eq!(result.output, "first\nsecond \"quoted\"");
+        assert_eq!(result.metadata.exit_code, Some(0));
+        assert_eq!(result.metadata.wall_time_ms, Some(420));
     }
 }

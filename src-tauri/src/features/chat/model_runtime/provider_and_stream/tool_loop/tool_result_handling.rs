@@ -8,11 +8,6 @@ fn json_string_field(value: &Value, keys: &[&str]) -> Option<String> {
     })
 }
 
-fn json_bool_field(value: &Value, keys: &[&str]) -> Option<bool> {
-    keys.iter()
-        .find_map(|key| value.get(*key).and_then(Value::as_bool))
-}
-
 #[derive(Debug, Clone)]
 struct TerminalToolResultMessage {
     assistant_text: String,
@@ -37,24 +32,21 @@ fn terminal_task_complete_result(tool_name: &str, tool_args: &str, tool_result: 
         return None;
     }
 
-    let result_value = serde_json::from_str::<Value>(&tool_result.display_text).ok();
     let completion_conclusion = json_string_field(
         &args_value,
         &["completion_conclusion", "completionConclusion"],
     )
-    .or_else(|| {
-        result_value.as_ref().and_then(|value| {
-            json_string_field(value, &["completionConclusion", "completion_conclusion"])
-        })
+    .or_else(|| match &tool_result.metadata.control {
+        ProviderToolControl::Task { completion_conclusion, .. } => completion_conclusion.clone(),
+        _ => None,
     });
     let completion_state = json_string_field(
         &args_value,
         &["completion_state", "completionState"],
     )
-    .or_else(|| {
-        result_value
-            .as_ref()
-            .and_then(|value| json_string_field(value, &["completionState", "completion_state"]))
+    .or_else(|| match &tool_result.metadata.control {
+        ProviderToolControl::Task { completion_state, .. } => completion_state.clone(),
+        _ => None,
     })
     .unwrap_or_default();
 
@@ -79,19 +71,21 @@ fn plan_tool_result_state(
     }
 
     let args_value = serde_json::from_str::<Value>(tool_args).ok();
-    let result_value = serde_json::from_str::<Value>(&tool_result.display_text).ok();
+    let result_control = match &tool_result.metadata.control {
+        ProviderToolControl::Plan { action, path, stop } => Some((action, path, *stop)),
+        _ => None,
+    };
     let action = args_value
         .as_ref()
         .and_then(|value| json_string_field(value, &["action"]))
-        .or_else(|| result_value.as_ref().and_then(|value| json_string_field(value, &["action"])))?;
+        .or_else(|| result_control.map(|value| value.0.clone()))?;
     let normalized_action = action.to_ascii_lowercase();
     let path = args_value
         .as_ref()
         .and_then(|value| json_string_field(value, &["path"]))
-        .or_else(|| result_value.as_ref().and_then(|value| json_string_field(value, &["path"])))?;
-    let stop_tool_loop = result_value
-        .as_ref()
-        .and_then(|value| json_bool_field(value, &["should_stop_tool_loop", "stop_tool_loop"]))
+        .or_else(|| result_control.map(|value| value.1.clone()))?;
+    let stop_tool_loop = result_control
+        .map(|value| value.2)
         .unwrap_or(normalized_action == "present");
 
     Some(PlanToolResultState {
@@ -223,10 +217,11 @@ fn persist_completed_tool_group_result(
         .unwrap_or("unknown")
         .to_string();
     let backup_record_id = tool_result_event
-        .get("content")
+        .get("metadata")
+        .and_then(|metadata| metadata.get("backup_record_id"))
         .and_then(Value::as_str)
-        .and_then(|content| serde_json::from_str::<Value>(content).ok())
-        .and_then(|value| value.get("backupRecordId").and_then(Value::as_str).map(str::trim).map(str::to_string))
+        .map(str::trim)
+        .map(str::to_string)
         .filter(|value| !value.is_empty());
     let has_backup_record_id = backup_record_id.is_some();
     runtime_log_info(format!(
@@ -345,4 +340,3 @@ fn tool_result_provider_meta_patch(
         "contextUsagePercent": context_usage_percent
     }))
 }
-

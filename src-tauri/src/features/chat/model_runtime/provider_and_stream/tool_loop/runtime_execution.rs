@@ -39,7 +39,7 @@ async fn call_runtime_tool_by_name(
                     if tool.is_mcp_tool() { "mcp" } else { "builtin" },
                     timeout.as_millis()
                 ));
-                Ok(ProviderToolResult::error(tool_failure_result_json(
+                Ok(ProviderToolResult::error(tool_failure_result_text(
                     tool_name,
                     &format!("工具执行超时，timeout_ms={}", timeout.as_millis()),
                 )))
@@ -235,7 +235,7 @@ async fn execute_prepared_tool_call(
                 Some(call.tool_call_id.as_str()),
                 &format!("工具调用失败：{} ({})", call.tool_name, err_text),
             );
-            ProviderToolResult::error(tool_failure_result_json(&call.tool_name, &err_text))
+            ProviderToolResult::error(tool_failure_result_text(&call.tool_name, &err_text))
         }
     };
     Ok(ExecutedToolCall {
@@ -313,13 +313,17 @@ async fn execute_prepared_tool_call_group(
 fn runtime_tool_result_followup_message(
     tool_name: &str,
     tool_result: &ProviderToolResult,
+    include_images: bool,
 ) -> Option<genai::chat::ChatMessage> {
     let mut forwarded_parts = Vec::<genai::chat::ContentPart>::new();
 
     for part in &tool_result.parts {
         match part {
             ProviderToolResultPart::Text { .. } => {}
-            ProviderToolResultPart::Image { mime, data_base64 } => {
+            ProviderToolResultPart::Image { mime, data_base64, .. } => {
+                if !include_images {
+                    continue;
+                }
                 forwarded_parts.push(genai::chat::ContentPart::from_binary_base64(
                     mime.clone(),
                     data_base64.clone(),

@@ -606,7 +606,7 @@ impl RuntimeToolMetadata for BuiltinOperateTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinOperateTool {
+impl RuntimeValueTool for BuiltinOperateTool {
     const NAME: &'static str = MCP_OPERATE_TOOL_NAME;
     type Args = OperateRequest;
     type Error = ToolInvokeError;
@@ -615,7 +615,7 @@ impl RuntimeJsonTool for BuiltinOperateTool {
         Some(operate_tool_timeout_override(args_json))
     }
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         let model_supports_image = self.model_supports_image;
         Box::pin(async move {
             // 如果模型不支持图片，检查脚本中是否包含 screenshot 动作
@@ -654,7 +654,7 @@ impl RuntimeToolMetadata for BuiltinReadFileTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinReadFileTool {
+impl RuntimeValueTool for BuiltinReadFileTool {
     const NAME: &'static str = READ_TOOL_NAME;
     type Args = ReadFileRequest;
     type Error = ToolInvokeError;
@@ -663,7 +663,7 @@ impl RuntimeJsonTool for BuiltinReadFileTool {
         Some(std::time::Duration::from_secs(300))
     }
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
             let args_value = serde_json::to_value(&args).unwrap_or(Value::Null);
             runtime_log_debug(format!(
@@ -696,7 +696,7 @@ impl RuntimeToolMetadata for BuiltinReadMediaTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinReadMediaTool {
+impl RuntimeValueTool for BuiltinReadMediaTool {
     const NAME: &'static str = READ_MEDIA_TOOL_NAME;
     type Args = ReadMediaToolArgs;
     type Error = ToolInvokeError;
@@ -705,7 +705,7 @@ impl RuntimeJsonTool for BuiltinReadMediaTool {
         Some(std::time::Duration::from_secs(60 * 60))
     }
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
             let args_value = serde_json::to_value(&args).unwrap_or(Value::Null);
             runtime_log_debug(format!(

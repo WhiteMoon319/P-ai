@@ -365,7 +365,8 @@ describe("chat-message semantics", () => {
           {
             role: "tool",
             tool_call_id: "patch_1",
-            content: "{\"ok\":true}",
+            content: "Patch applied.",
+            metadata: { backup_record_id: "record-1" },
           },
         ],
       },

@@ -12,19 +12,9 @@ fn collect_backup_record_ids_from_messages(messages: &[ChatMessage]) -> Vec<Stri
             if role != "tool" {
                 continue;
             }
-            let content = event
-                .get("content")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .unwrap_or_default();
-            if content.is_empty() {
-                continue;
-            }
-            let Ok(value) = serde_json::from_str::<Value>(content) else {
-                continue;
-            };
-            if let Some(id) = value
-                .get("backupRecordId")
+            if let Some(id) = event
+                .get("metadata")
+                .and_then(|metadata| metadata.get("backup_record_id"))
                 .and_then(Value::as_str)
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
@@ -38,13 +28,12 @@ fn collect_backup_record_ids_from_messages(messages: &[ChatMessage]) -> Vec<Stri
 
 fn collect_tool_result_diagnostics_from_messages(
     messages: &[ChatMessage],
-) -> (usize, usize, usize, usize, usize, Vec<String>) {
+) -> (usize, usize, usize, usize, usize) {
     let mut message_count_with_tool_call = 0usize;
     let mut tool_event_count = 0usize;
     let mut parseable_tool_event_count = 0usize;
     let mut tool_event_with_backup_id_count = 0usize;
     let mut empty_content_tool_event_count = 0usize;
-    let mut tool_names = Vec::<String>::new();
     for message in messages {
         let Some(events) = message.tool_call.as_ref() else {
             continue;
@@ -65,22 +54,12 @@ fn collect_tool_result_diagnostics_from_messages(
                 empty_content_tool_event_count = empty_content_tool_event_count.saturating_add(1);
                 continue;
             }
-            let Ok(value) = serde_json::from_str::<Value>(content) else {
+            let Some(metadata) = event.get("metadata").and_then(Value::as_object) else {
                 continue;
             };
             parseable_tool_event_count = parseable_tool_event_count.saturating_add(1);
-            if let Some(tool_name) = value
-                .get("tool")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-            {
-                if !tool_names.iter().any(|item| item == tool_name) {
-                    tool_names.push(tool_name.to_string());
-                }
-            }
-            if value
-                .get("backupRecordId")
+            if metadata
+                .get("backup_record_id")
                 .and_then(Value::as_str)
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
@@ -96,7 +75,6 @@ fn collect_tool_result_diagnostics_from_messages(
         parseable_tool_event_count,
         tool_event_with_backup_id_count,
         empty_content_tool_event_count,
-        tool_names,
     )
 }
 
@@ -113,22 +91,16 @@ fn try_undo_apply_patch_from_removed_messages(
         parseable_tool_event_count,
         tool_event_with_backup_id_count,
         empty_content_tool_event_count,
-        tool_names,
     ) = collect_tool_result_diagnostics_from_messages(removed_messages);
     runtime_log_debug(format!(
-        "[会话撤回] 工具备份诊断，任务=try_undo_apply_patch_from_removed_messages，removed_messages={}，messages_with_tool_call={}，tool_events={}，parseable_tool_events={}，tool_events_with_backup_id={}，empty_content_tool_events={}，backup_record_ids={}，tool_names={}",
+        "[会话撤回] 工具备份诊断，任务=try_undo_apply_patch_from_removed_messages，removed_messages={}，messages_with_tool_call={}，tool_events={}，metadata_tool_events={}，tool_events_with_backup_id={}，empty_content_tool_events={}，backup_record_ids={}",
         removed_messages.len(),
         message_count_with_tool_call,
         tool_event_count,
         parseable_tool_event_count,
         tool_event_with_backup_id_count,
         empty_content_tool_event_count,
-        ids.len(),
-        if tool_names.is_empty() {
-            "(none)".to_string()
-        } else {
-            tool_names.join(",")
-        }
+        ids.len()
     ));
     if ids.is_empty() {
         return Ok((0, Vec::new()));
@@ -257,12 +229,14 @@ mod rewind_apply_patch_tests {
             json!({
                 "role": "tool",
                 "tool_call_id": "call_1",
-                "content": json!({"ok": true, "approved": true, "backupRecordId": "rec-001"}).to_string()
+                "content": "Patch applied.",
+                "metadata": {"backup_record_id": "rec-001"}
             }),
             json!({
                 "role": "tool",
                 "tool_call_id": "call_2",
-                "content": json!({"ok": true, "approved": true, "backupRecordId": "rec-002"}).to_string()
+                "content": "Patch applied.",
+                "metadata": {"backup_record_id": "rec-002"}
             }),
         ];
         let messages = vec![make_message_with_tool_events(events)];
@@ -276,17 +250,19 @@ mod rewind_apply_patch_tests {
             json!({
                 "role": "tool",
                 "tool_call_id": "call_1",
-                "content": json!({"ok": true, "approved": true}).to_string()
+                "content": "Patch applied."
             }),
             json!({
                 "role": "tool",
                 "tool_call_id": "call_2",
-                "content": json!({"ok": true, "approved": true, "backupRecordId": ""}).to_string()
+                "content": "Patch applied.",
+                "metadata": {"backup_record_id": ""}
             }),
             json!({
                 "role": "tool",
                 "tool_call_id": "call_3",
-                "content": json!({"ok": true, "approved": true, "backupRecordId": "rec-003"}).to_string()
+                "content": "Patch applied.",
+                "metadata": {"backup_record_id": "rec-003"}
             }),
         ];
         let messages = vec![make_message_with_tool_events(events)];

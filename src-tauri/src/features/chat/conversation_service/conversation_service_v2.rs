@@ -558,7 +558,7 @@ const FRONTEND_MESSAGE_DISPLAY_TOOL_RESULT_PLACEHOLDER_TEXT: &str = "工具已�
 
 // 前端消息展示专用：这里会把 tool result 正文替换成占位文案。
 // 禁止任何写路径、撤回路径、持久化路径复用本函数或其返回值，
-// 否则会把原始 tool metadata（如 backupRecordId）污染掉。
+// 否则会把原始 tool metadata（如 backup_record_id）污染掉。
 fn project_tool_history_event_for_frontend_message_display_only(event: &Value) -> Value {
     let Some(object) = event.as_object() else {
         return event.clone();

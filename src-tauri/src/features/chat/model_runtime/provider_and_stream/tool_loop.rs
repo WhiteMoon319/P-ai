@@ -31,6 +31,26 @@ struct PreparedToolCallBatch {
     calls: Vec<PreparedToolCall>,
 }
 
+fn tool_result_history_event(
+    tool_call_id: &str,
+    content: String,
+    metadata: &ProviderToolMetadata,
+) -> Value {
+    let mut event = serde_json::json!({
+        "role": "tool",
+        "tool_call_id": tool_call_id,
+        "content": content,
+    });
+    if let Ok(value) = serde_json::to_value(metadata) {
+        if value.as_object().is_some_and(|object| !object.is_empty()) {
+            if let Some(object) = event.as_object_mut() {
+                object.insert("metadata".to_string(), value);
+            }
+        }
+    }
+    event
+}
+
 include!("tool_loop/repeat_guard.rs");
 include!("tool_loop/tool_output_store.rs");
 
@@ -197,8 +217,7 @@ fn deferred_tool_loop_outcome_from_result(
     tool_args: &str,
     tool_result: &ProviderToolResult,
 ) -> Option<DeferredToolLoopOutcome> {
-    let tool_result_text = tool_result.display_text.as_str();
-    if organize_context_succeeded(tool_name, tool_result_text) {
+    if organize_context_succeeded(tool_name, tool_result) {
         return Some(DeferredToolLoopOutcome::OrganizeContext);
     }
     if let Some(final_text) = terminal_task_complete_result(tool_name, tool_args, tool_result) {
@@ -305,21 +324,14 @@ fn build_tool_loop_prepared_for_continuation(
     Ok(Some((conversation, prepared)))
 }
 
-fn organize_context_succeeded(tool_name: &str, tool_result: &str) -> bool {
+fn organize_context_succeeded(tool_name: &str, tool_result: &ProviderToolResult) -> bool {
     if tool_name != "organize_context" {
         return false;
     }
-    let Ok(value) = serde_json::from_str::<Value>(tool_result) else {
-        return false;
-    };
-    value
-        .get("ok")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-        && value
-            .get("applied")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
+    matches!(
+        tool_result.metadata.control,
+        ProviderToolControl::OrganizeContext { applied: true }
+    )
 }
 
 include!("tool_loop/remote_im_tools.rs");
@@ -669,14 +681,12 @@ async fn run_genai_tool_loop(
                 tool_args,
                 tool_result,
             } = executed_tool_call;
-            let tool_result = bound_provider_tool_result(tool_abort_state, tool_result);
-            let tool_result_text = tool_result.display_text.as_str();
-            let history_content = sanitize_tool_result_for_history(&tool_name, &tool_result_text);
-            let tool_result_event = serde_json::json!({
-                "role": "tool",
-                "tool_call_id": tool_call_id,
-                "content": history_content
-            });
+            let projection = project_provider_tool_result(tool_abort_state, &tool_name, &tool_result);
+            let tool_result_event = tool_result_history_event(
+                &tool_call_id,
+                projection.text.clone(),
+                &projection.metadata,
+            );
             send_assistant_tool_result_event(on_delta, &tool_result_event);
             insert_before_trailing_user_history_events(
                 &mut tool_history_events,
@@ -721,19 +731,23 @@ async fn run_genai_tool_loop(
                     }));
                 }
             }
-            if should_stop_after_contact_tool(&tool_name, &tool_result_text) {
+            if should_stop_after_contact_tool(&tool_name, &tool_result) {
                 stop_after_remote_im_done_in_turn = true;
             }
 
             let (tool_result_for_model, screenshot_forward) =
-                enrich_screenshot_tool_result_with_cache(&tool_name, &tool_result_text);
+                enrich_screenshot_tool_result_with_cache(&tool_name, &tool_result, &projection.text);
             insert_before_trailing_user_messages(
                 &mut messages,
                 genai::chat::ChatMessage::from(
                     genai::chat::ToolResponse::new(tool_call_id, tool_result_for_model),
                 ),
             );
-            if let Some(message) = runtime_tool_result_followup_message(&tool_name, &tool_result) {
+            if let Some(message) = runtime_tool_result_followup_message(
+                &tool_name,
+                &tool_result,
+                screenshot_forward.is_none(),
+            ) {
                 messages.push(message);
             }
             if let Some((payload, artifact_id)) = screenshot_forward {
@@ -793,8 +807,7 @@ async fn run_genai_tool_loop(
                     Some(call.tool_call_id.as_str()),
                     &err_text,
                 );
-                let history_content =
-                    sanitize_tool_result_for_history(&call.tool_name, &err_text);
+                let history_content = err_text.clone();
                 let tool_result_event = serde_json::json!({
                     "role": "tool",
                     "tool_call_id": call.tool_call_id,
@@ -1192,14 +1205,12 @@ async fn run_genai_tool_loop_non_stream(
                 tool_args,
                 tool_result,
             } = executed_tool_call;
-            let tool_result = bound_provider_tool_result(tool_abort_state, tool_result);
-            let tool_result_text = tool_result.display_text.as_str();
-            let history_content = sanitize_tool_result_for_history(&tool_name, &tool_result_text);
-            let tool_result_event = serde_json::json!({
-                "role": "tool",
-                "tool_call_id": tool_call_id,
-                "content": history_content
-            });
+            let projection = project_provider_tool_result(tool_abort_state, &tool_name, &tool_result);
+            let tool_result_event = tool_result_history_event(
+                &tool_call_id,
+                projection.text.clone(),
+                &projection.metadata,
+            );
             send_assistant_tool_result_event(on_delta, &tool_result_event);
             insert_before_trailing_user_history_events(
                 &mut tool_history_events,
@@ -1244,19 +1255,23 @@ async fn run_genai_tool_loop_non_stream(
                     }));
                 }
             }
-            if should_stop_after_contact_tool(&tool_name, &tool_result_text) {
+            if should_stop_after_contact_tool(&tool_name, &tool_result) {
                 stop_after_remote_im_done_in_turn = true;
             }
 
             let (tool_result_for_model, screenshot_forward) =
-                enrich_screenshot_tool_result_with_cache(&tool_name, &tool_result_text);
+                enrich_screenshot_tool_result_with_cache(&tool_name, &tool_result, &projection.text);
             insert_before_trailing_user_messages(
                 &mut messages,
                 genai::chat::ChatMessage::from(
                     genai::chat::ToolResponse::new(tool_call_id, tool_result_for_model),
                 ),
             );
-            if let Some(message) = runtime_tool_result_followup_message(&tool_name, &tool_result) {
+            if let Some(message) = runtime_tool_result_followup_message(
+                &tool_name,
+                &tool_result,
+                screenshot_forward.is_none(),
+            ) {
                 messages.push(message);
             }
             if let Some((payload, artifact_id)) = screenshot_forward {
@@ -1316,8 +1331,7 @@ async fn run_genai_tool_loop_non_stream(
                     Some(call.tool_call_id.as_str()),
                     &err_text,
                 );
-                let history_content =
-                    sanitize_tool_result_for_history(&call.tool_name, &err_text);
+                let history_content = err_text.clone();
                 let tool_result_event = serde_json::json!({
                     "role": "tool",
                     "tool_call_id": call.tool_call_id,
@@ -1431,7 +1445,7 @@ mod tool_loop_tests {
         }
 
         fn call_json(&self, _args_json: String) -> RuntimeToolCallFuture<'_> {
-            Box::pin(async { Ok(ProviderToolResult::text("{}".to_string())) })
+            Box::pin(async { Ok(ProviderToolResult::text("ok")) })
         }
     }
 
@@ -1608,14 +1622,11 @@ mod tool_loop_tests {
 
     #[test]
     fn terminal_task_complete_result_prefers_completion_conclusion_from_args() {
-        let tool_result = ProviderToolResult::text(
-            serde_json::json!({
+        let tool_result = provider_tool_result_from_value("task", serde_json::json!({
                 "taskId": "task-1",
                 "completionState": "completed",
                 "completionConclusion": "工具结果里的结论"
-            })
-            .to_string(),
-        );
+            }));
 
         let final_text = terminal_task_complete_result(
             "task",
@@ -1678,15 +1689,12 @@ mod tool_loop_tests {
     }
 
     #[test]
-    fn terminal_task_complete_result_can_fall_back_to_tool_result_json() {
-        let tool_result = ProviderToolResult::text(
-            serde_json::json!({
+    fn terminal_task_complete_result_reads_typed_metadata() {
+        let tool_result = provider_tool_result_from_value("task", serde_json::json!({
                 "taskId": "task-1",
                 "completionState": "failed_completed",
                 "completionConclusion": "因为缺少权限，任务已按失败结束"
-            })
-            .to_string(),
-        );
+            }));
 
         let final_text = terminal_task_complete_result(
             "task",
@@ -1702,14 +1710,11 @@ mod tool_loop_tests {
 
     #[test]
     fn terminal_task_complete_result_ignores_non_complete_actions() {
-        let tool_result = ProviderToolResult::text(
-            serde_json::json!({
+        let tool_result = provider_tool_result_from_value("task", serde_json::json!({
                 "taskId": "task-1",
                 "completionState": "completed",
                 "completionConclusion": "不会被使用"
-            })
-            .to_string(),
-        );
+            }));
 
         let final_text = terminal_task_complete_result(
             "task",
@@ -1724,14 +1729,11 @@ mod tool_loop_tests {
     fn deferred_tool_loop_outcome_should_keep_first_terminal_signal_in_batch() {
         let mut deferred = None::<DeferredToolLoopOutcome>;
 
-        let task_result = ProviderToolResult::text(
-            serde_json::json!({
+        let task_result = provider_tool_result_from_value("task", serde_json::json!({
                 "taskId": "task-1",
                 "completionState": "completed",
                 "completionConclusion": "先完成任务"
-            })
-            .to_string(),
-        );
+            }));
         if deferred.is_none() {
             deferred = deferred_tool_loop_outcome_from_result(
                 "task",
@@ -1740,13 +1742,10 @@ mod tool_loop_tests {
             );
         }
 
-        let plan_result = ProviderToolResult::text(
-            serde_json::json!({
+        let plan_result = provider_tool_result_from_value("plan", serde_json::json!({
                 "action": "present",
-                "path": "E:\\\\demo\\\\.pai\\\\plan\\\\plan.md"
-            })
-            .to_string(),
-        );
+                "path": "E:\\demo\\.pai\\plan\\plan.md"
+            }));
         if deferred.is_none() {
             deferred = deferred_tool_loop_outcome_from_result(
                 "plan",
@@ -1765,15 +1764,12 @@ mod tool_loop_tests {
 
     #[test]
     fn plan_complete_should_not_become_terminal_outcome() {
-        let tool_result = ProviderToolResult::text(
-            serde_json::json!({
+        let tool_result = provider_tool_result_from_value("plan", serde_json::json!({
                 "action": "complete",
-                "path": "E:\\\\demo\\\\.pai\\\\plan\\\\plan.md",
+                "path": "E:\\demo\\.pai\\plan\\plan.md",
                 "should_stop_tool_loop": false,
                 "active_plan_completed": true
-            })
-            .to_string(),
-        );
+            }));
 
         let deferred = deferred_tool_loop_outcome_from_result(
             "plan",
@@ -1786,15 +1782,12 @@ mod tool_loop_tests {
 
     #[test]
     fn auto_approved_plan_present_should_not_become_terminal_outcome() {
-        let tool_result = ProviderToolResult::text(
-            serde_json::json!({
+        let tool_result = provider_tool_result_from_value("plan", serde_json::json!({
                 "action": "present",
-                "path": "E:\\\\demo\\\\.pai\\\\plan\\\\plan.md",
+                "path": "E:\\demo\\.pai\\plan\\plan.md",
                 "should_stop_tool_loop": false,
                 "auto_approved": true
-            })
-            .to_string(),
-        );
+            }));
 
         let deferred = deferred_tool_loop_outcome_from_result(
             "plan",
@@ -1807,15 +1800,12 @@ mod tool_loop_tests {
 
     #[test]
     fn rejected_exec_result_should_remain_a_tool_result_instead_of_ending_the_round() {
-        let tool_result = ProviderToolResult::text(
-            serde_json::json!({
+        let tool_result = provider_tool_result_from_value("exec", serde_json::json!({
                 "ok": false,
                 "approved": false,
                 "blockedReason": "absolute_path_not_granted",
                 "message": "写入类命令只能作用于已配置工作目录；未纳管绝对路径仅允许读取。"
-            })
-            .to_string(),
-        );
+            }));
 
         assert_eq!(
             terminal_task_complete_result(
@@ -1832,7 +1822,7 @@ mod tool_loop_tests {
         )
         .is_none());
 
-        let history_content = sanitize_tool_result_for_history("exec", &tool_result.display_text);
+        let history_content = project_provider_tool_result(None, "exec", &tool_result).text;
         assert!(history_content.contains("\"approved\":false"));
         assert!(history_content.contains("absolute_path_not_granted"));
         assert!(history_content.contains("已配置工作目录"));

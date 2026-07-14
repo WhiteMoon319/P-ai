@@ -1,24 +1,11 @@
-fn should_stop_after_contact_tool(tool_name: &str, tool_result: &str) -> bool {
+fn should_stop_after_contact_tool(tool_name: &str, tool_result: &ProviderToolResult) -> bool {
     if tool_name != "contact_send_files" {
         return false;
     }
-    let Ok(value) = serde_json::from_str::<Value>(tool_result) else {
-        return false;
-    };
-    if let Some(status) = value.get("status").and_then(Value::as_str) {
-        let normalized = status.trim().to_ascii_lowercase();
-        if normalized == "done" {
-            return true;
-        }
-        if normalized == "continue" {
-            return false;
-        }
-    }
-    value
-        .get("stop_tool_loop")
-        .and_then(Value::as_bool)
-        .or_else(|| value.get("done").and_then(Value::as_bool))
-        .unwrap_or(false)
+    matches!(
+        tool_result.metadata.control,
+        ProviderToolControl::Contact { stop: true }
+    )
 }
 
 fn contact_tool_should_run_last(tool_name: &str, tool_args: &str) -> bool {

@@ -172,18 +172,6 @@ fn truncate_terminal_output(bytes: &[u8]) -> (String, bool) {
     )
 }
 
-static TERMINAL_OUTPUT_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-
-fn terminal_store_full_output(state: &AppState, label: &str, bytes: &[u8]) -> Option<String> {
-    if bytes.len() <= TERMINAL_MAX_OUTPUT_BYTES { return None; }
-    let directory = tool_output_directory_from_workspace(&state.llm_workspace_path);
-    if std::fs::create_dir_all(&directory).is_err() { return None; }
-    let sequence = TERMINAL_OUTPUT_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let path = directory.join(format!("tool_{}_{}_{}.txt", chrono::Utc::now().timestamp_millis(), sequence, label));
-    std::fs::write(&path, bytes).ok()?;
-    Some(terminal_path_for_user(&path))
-}
-
 fn terminal_is_timeout_error(err: &str) -> bool {
     err.to_ascii_lowercase().contains("timed out after")
 }

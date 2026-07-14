@@ -364,7 +364,7 @@ fn remote_im_contact_tool_history_events(
         serde_json::json!({
             "role": "tool",
             "tool_call_id": tool_call_id,
-            "content": sanitize_tool_result_for_history(tool_name, tool_result)
+            "content": tool_result
         }),
     ]
 }
@@ -443,8 +443,9 @@ async fn remote_im_auto_send_assistant_reply_to_source(
     };
     let send_result =
         remote_im_send_content_payload(state, &channel, &contact, content, false, "reply_async").await?;
-    let tool_result = serde_json::to_string(&send_result)
-        .map_err(|err| format!("序列化自动远程联系人发送结果失败: {err}"))?;
+    let tool_result = serde_json::to_value(&send_result)
+        .map(|value| tool_value_readable_text(&value))
+        .map_err(|err| format!("整理自动远程联系人发送结果失败: {err}"))?;
     let args_value = serde_json::json!({
         "text": trimmed_text
     });

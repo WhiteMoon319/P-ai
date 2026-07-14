@@ -559,6 +559,7 @@ export type ToolCallMessage = {
   reasoning_content?: string;
   tool_call_id?: string;
   tool_calls?: ToolCallItem[];
+  metadata?: Record<string, unknown>;
 };
 
 export type TaskTriggerMessageCard = {
@@ -649,6 +650,7 @@ export type AssistantStreamToolBlock = {
   name: string;
   argsText: string;
   resultText?: string;
+  resultMetadata?: Record<string, unknown>;
   status?: "doing" | "done";
 };
 

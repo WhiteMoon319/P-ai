@@ -34,6 +34,7 @@ export type NormalizedToolHistoryEvent = {
   reasoningContent?: string;
   toolCalls: NormalizedToolCall[];
   toolCallId?: string;
+  metadata?: Record<string, unknown>;
 };
 
 function textPartReasoning(part: ChatMessage["parts"][number]): string {
@@ -249,6 +250,9 @@ export function normalizeMessageToolHistoryEvents(
         text: typeof event.content === "string" ? event.content : "",
         toolCalls: [],
         toolCallId: String(event.tool_call_id || "").trim() || undefined,
+        metadata: event.metadata && typeof event.metadata === "object"
+          ? event.metadata as Record<string, unknown>
+          : undefined,
       });
     }
   }
@@ -510,6 +514,11 @@ function normalizeAssistantStreamToolBlocks(rawTools: unknown): AssistantStreamT
         : typeof item?.result_text === "string"
           ? item.result_text
           : undefined,
+      resultMetadata: item?.resultMetadata && typeof item.resultMetadata === "object"
+        ? item.resultMetadata as Record<string, unknown>
+        : item?.result_metadata && typeof item.result_metadata === "object"
+          ? item.result_metadata as Record<string, unknown>
+          : undefined,
       status: status === "doing" || status === "running" ? "doing" : "done",
     });
   }
@@ -572,6 +581,7 @@ export function assistantStreamBlocksFromMessageForDisplay(
         name: call.toolName,
         argsText: call.argumentsText || "{}",
         resultText: result ? result.text : undefined,
+        resultMetadata: result?.metadata,
         status: "done" as const,
       };
     }).filter((tool) => !!tool.toolCallId && !!tool.name);
@@ -954,11 +964,15 @@ export function applyAssistantToolResultToStreamBlocks(
   const toolCallId = String(event.tool_call_id || "").trim();
   if (!toolCallId) return normalizeAssistantStreamBlocks(blocks);
   const resultText = typeof event.content === "string" ? event.content : String(event.content || "");
+  const resultMetadata = event.metadata && typeof event.metadata === "object"
+    ? event.metadata as Record<string, unknown>
+    : undefined;
   for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
     const block = blocks[blockIndex];
     const tool = (block.tools || []).find((item) => String(item.toolCallId || "").trim() === toolCallId);
     if (!tool) continue;
     tool.resultText = resultText;
+    tool.resultMetadata = resultMetadata;
     tool.status = "done";
     attachInlineToolMarkerToStreamBlock(blocks, blockIndex, toolCallId);
     return normalizeAssistantStreamBlocks(blocks);
@@ -993,6 +1007,7 @@ export function streamBlocksToToolHistoryEvents(rawBlocks: unknown): ChatMessage
         role: "tool",
         tool_call_id: tool.toolCallId,
         content: String(tool.resultText || ""),
+        metadata: tool.resultMetadata,
       });
     }
   }
@@ -1310,17 +1325,10 @@ export function projectMessageForDisplay(
   };
 }
 
-function defaultToolResultSuccess(rawContent: unknown): boolean {
-  const text = String(rawContent || "").trim();
-  if (!text) return false;
-  try {
-    const parsed = JSON.parse(text) as { ok?: unknown; approved?: unknown; backupRecordId?: unknown };
-    // 有 backupRecordId 就说明有备份可恢复
-    if (typeof parsed.backupRecordId === "string" && parsed.backupRecordId.trim()) return true;
-    return parsed.ok === true && parsed.approved !== false;
-  } catch {
-    return false;
-  }
+function defaultToolResultSuccess(rawMetadata: unknown): boolean {
+  if (!rawMetadata || typeof rawMetadata !== "object") return false;
+  const metadata = rawMetadata as Record<string, unknown>;
+  return typeof metadata.backup_record_id === "string" && metadata.backup_record_id.trim().length > 0;
 }
 
 export function inspectUndoablePatchCalls(
@@ -1328,7 +1336,7 @@ export function inspectUndoablePatchCalls(
   turnId: string,
   options?: {
     isApplyPatchArgsUndoable?: (rawArgs: string) => boolean;
-    isToolResultSuccess?: (rawContent: unknown) => boolean;
+    isToolResultSuccess?: (rawMetadata: unknown) => boolean;
   },
 ): { canUndo: boolean; hint: string } {
   const targetId = String(turnId || "").trim();
@@ -1377,7 +1385,7 @@ export function inspectUndoablePatchCalls(
         continue;
       }
       if (event.role === "tool" && event.toolCallId && pendingApplyPatchCalls.has(event.toolCallId)) {
-        if (isToolResultSuccess(event.text)) {
+        if (isToolResultSuccess(event.metadata)) {
           return { canUndo: true, hint: "" };
         }
         pendingApplyPatchCalls.delete(event.toolCallId);

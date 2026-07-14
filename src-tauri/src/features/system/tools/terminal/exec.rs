@@ -1558,18 +1558,13 @@ async fn builtin_shell_exec(
                 "stdout": "",
                 "stderr": err,
                 "durationMs": timeout_ms,
-                "timedOut": true,
-                "truncated": false,
-                "stdoutTruncated": false,
-                "stderrTruncated": false
+                "timedOut": true
             }));
         }
         Err(err) => return Err(err),
     };
-    let (stdout, stdout_truncated) = truncate_terminal_output(&execution.stdout);
-    let (stderr, stderr_truncated) = truncate_terminal_output(&execution.stderr);
-    let stdout_output_path = terminal_store_full_output(state, "stdout", &execution.stdout);
-    let stderr_output_path = terminal_store_full_output(state, "stderr", &execution.stderr);
+    let stdout = terminal_decode_output_bytes(&execution.stdout);
+    let stderr = terminal_decode_output_bytes(&execution.stderr);
 
     Ok(serde_json::json!({
         "ok": execution.ok,
@@ -1577,12 +1572,7 @@ async fn builtin_shell_exec(
         "stdout": stdout,
         "stderr": stderr,
         "durationMs": execution.duration_ms,
-        "timedOut": false,
-        "truncated": stdout_truncated || stderr_truncated,
-        "stdoutTruncated": stdout_truncated,
-        "stderrTruncated": stderr_truncated,
-        "stdoutOutputPath": stdout_output_path,
-        "stderrOutputPath": stderr_output_path
+        "timedOut": false
     }))
 }
 

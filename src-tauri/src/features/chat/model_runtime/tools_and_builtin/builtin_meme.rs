@@ -1034,12 +1034,12 @@ impl RuntimeToolMetadata for BuiltinMemeTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinMemeTool {
+impl RuntimeValueTool for BuiltinMemeTool {
     const NAME: &'static str = "meme";
     type Args = MemeToolArgs;
     type Error = ToolInvokeError;
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
             let emotion = ensure_valid_meme_name(&args.emotion).map_err(ToolInvokeError::from)?;
             let source_path =

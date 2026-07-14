@@ -98,24 +98,62 @@ fn provider_tool_result_from_mcp_call(
 ) -> ProviderToolResult {
     let mut parts = Vec::<ProviderToolResultPart>::new();
     let mut display_lines = Vec::<String>::new();
+    let mut metadata = ProviderToolMetadata::default();
 
     if let Some(structured) = result.structured_content.as_ref() {
-        display_lines.push(structured.to_string());
+        let mut structured = structured.clone();
+        if metadata.backup_record_id.is_none() {
+            metadata.backup_record_id = value_string(&structured, "backupRecordId");
+        }
+        let payload = structured.get("data").unwrap_or(&structured);
+        for image in extract_forward_images_from_value(payload) {
+            parts.push(ProviderToolResultPart::Image {
+                mime: image.mime,
+                data_base64: image.base64,
+                width: image.width,
+                height: image.height,
+            });
+        }
+        remove_inline_media_from_tool_value(&mut structured);
+        display_lines.push(tool_value_readable_text(&structured));
     }
 
     for content in result.content {
         match content {
             rmcp::model::ContentBlock::Text(raw) => {
-                if !raw.text.trim().is_empty() {
-                    display_lines.push(raw.text.clone());
+                if let Ok(mut value) = serde_json::from_str::<Value>(&raw.text) {
+                    if metadata.backup_record_id.is_none() {
+                        metadata.backup_record_id = value_string(&value, "backupRecordId");
+                    }
+                    let payload = value.get("data").unwrap_or(&value);
+                    for image in extract_forward_images_from_value(payload) {
+                        parts.push(ProviderToolResultPart::Image {
+                            mime: image.mime,
+                            data_base64: image.base64,
+                            width: image.width,
+                            height: image.height,
+                        });
+                    }
+                    remove_inline_media_from_tool_value(&mut value);
+                    let text = tool_value_readable_text(&value);
+                    if !text.trim().is_empty() {
+                        display_lines.push(text.clone());
+                        parts.push(ProviderToolResultPart::Text { text });
+                    }
+                } else {
+                    if !raw.text.trim().is_empty() {
+                        display_lines.push(raw.text.clone());
+                    }
+                    parts.push(ProviderToolResultPart::Text { text: raw.text });
                 }
-                parts.push(ProviderToolResultPart::Text { text: raw.text });
             }
             rmcp::model::ContentBlock::Image(raw) => {
                 display_lines.push(format!("[image:{}]", raw.mime_type));
                 parts.push(ProviderToolResultPart::Image {
                     mime: raw.mime_type,
                     data_base64: raw.data,
+                    width: 0,
+                    height: 0,
                 });
             }
             rmcp::model::ContentBlock::Audio(raw) => {
@@ -181,16 +219,38 @@ fn provider_tool_result_from_mcp_call(
         }
     }
 
-    let display_text = if display_lines.is_empty() {
+    let output = if display_lines.is_empty() {
         format!("工具 `{tool_name}` 返回空结果。")
     } else {
         display_lines.join("\n")
     };
 
     ProviderToolResult {
-        display_text,
+        output,
+        metadata,
         parts,
         is_error: result.is_error.unwrap_or(false),
+    }
+}
+
+fn remove_inline_media_from_tool_value(value: &mut Value) {
+    match value {
+        Value::Array(items) => {
+            for item in items {
+                remove_inline_media_from_tool_value(item);
+            }
+        }
+        Value::Object(map) => {
+            map.remove("imageBase64");
+            map.remove("image_base64");
+            if map.get("type").and_then(Value::as_str).is_some_and(|kind| kind.eq_ignore_ascii_case("image")) {
+                map.remove("data");
+            }
+            for item in map.values_mut() {
+                remove_inline_media_from_tool_value(item);
+            }
+        }
+        _ => {}
     }
 }
 

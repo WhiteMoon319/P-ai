@@ -26,12 +26,12 @@ impl RuntimeToolMetadata for BuiltinContactSendFilesTool {
     }
 }
 
-impl RuntimeJsonTool for BuiltinContactSendFilesTool {
+impl RuntimeValueTool for BuiltinContactSendFilesTool {
     const NAME: &'static str = "contact_send_files";
     type Args = ContactSendFilesToolArgs;
     type Error = ToolInvokeError;
 
-    fn call_typed(&self, args: Self::Args) -> RuntimeJsonValueFuture<'_, Self::Error> {
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         Box::pin(async move {
             runtime_log_debug(format!(
                 "[工具调试] 内置工具执行开始 name=contact_send_files args={}",

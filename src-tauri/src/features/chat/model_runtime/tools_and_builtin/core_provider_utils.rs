@@ -72,16 +72,10 @@ fn send_stream_rebind_required_event(
     });
 }
 
-fn tool_failure_result_json(tool_name: &str, err_text: &str) -> String {
+fn tool_failure_result_text(tool_name: &str, err_text: &str) -> String {
     let tool_name = tool_name.trim();
     let err_text = err_text.trim();
-    serde_json::json!({
-        "ok": false,
-        "tool": tool_name,
-        "error": err_text,
-        "message": format!("工具 `{}` 调用失败：{}", tool_name, err_text)
-    })
-    .to_string()
+    format!("Tool failed: {tool_name}\nError: {err_text}")
 }
 
 fn tool_enabled(
@@ -176,25 +170,10 @@ mod core_provider_utils_tests {
     use super::*;
 
     #[test]
-    fn tool_failure_result_json_marks_failure_explicitly() {
-        let raw = tool_failure_result_json("contact_send_files", "远程IM渠道未开启文件发送");
-        let value: Value = serde_json::from_str(&raw).expect("tool failure json");
-        assert_eq!(value.get("ok").and_then(Value::as_bool), Some(false));
-        assert_eq!(
-            value.get("tool").and_then(Value::as_str),
-            Some("contact_send_files")
-        );
-        assert_eq!(
-            value.get("error").and_then(Value::as_str),
-            Some("远程IM渠道未开启文件发送")
-        );
-        assert!(
-            value
-                .get("message")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .contains("工具 `contact_send_files` 调用失败")
-        );
+    fn tool_failure_result_text_is_plain_and_explicit() {
+        let raw = tool_failure_result_text("contact_send_files", "远程IM渠道未开启文件发送");
+        assert_eq!(raw, "Tool failed: contact_send_files\nError: 远程IM渠道未开启文件发送");
+        assert!(serde_json::from_str::<Value>(&raw).is_err());
     }
 
     #[test]

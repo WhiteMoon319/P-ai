@@ -29,15 +29,20 @@ fn tool_output_take_suffix(text: &str, max_bytes: usize) -> String {
     text[start..].to_string()
 }
 
-fn tool_output_preview(text: &str, marker: &str) -> String {
+fn tool_output_preview_with_limits(
+    text: &str,
+    marker: &str,
+    max_lines: usize,
+    max_bytes: usize,
+) -> String {
     let marker_bytes = marker.len();
-    let text_budget = TOOL_OUTPUT_MAX_BYTES.saturating_sub(marker_bytes.saturating_add(4));
+    let text_budget = max_bytes.saturating_sub(marker_bytes.saturating_add(4));
     let head_bytes = text_budget.div_ceil(2);
     let tail_bytes = text_budget / 2;
     let lines = text.lines().collect::<Vec<_>>();
-    let (head_source, tail_source) = if lines.len() > TOOL_OUTPUT_MAX_LINES {
-        let head_lines = TOOL_OUTPUT_MAX_LINES.div_ceil(2).saturating_sub(2);
-        let tail_lines = (TOOL_OUTPUT_MAX_LINES / 2).saturating_sub(2);
+    let (head_source, tail_source) = if lines.len() > max_lines {
+        let head_lines = max_lines.div_ceil(2).saturating_sub(2);
+        let tail_lines = (max_lines / 2).saturating_sub(2);
         (
             lines[..head_lines].join("\n"),
             lines[lines.len().saturating_sub(tail_lines)..].join("\n"),
@@ -46,6 +51,10 @@ fn tool_output_preview(text: &str, marker: &str) -> String {
         (text.to_string(), text.to_string())
     };
     format!("{}\n\n{}\n\n{}", tool_output_take_prefix(&head_source, head_bytes), marker, tool_output_take_suffix(&tail_source, tail_bytes))
+}
+
+fn tool_output_preview(text: &str, marker: &str) -> String {
+    tool_output_preview_with_limits(text, marker, TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_BYTES)
 }
 
 fn tool_output_directory_from_workspace(llm_workspace_path: &std::path::Path) -> std::path::PathBuf {
@@ -82,38 +91,76 @@ fn store_full_tool_output(state: &AppState, text: &str) -> Result<std::path::Pat
     store_full_tool_output_at(&tool_output_directory(state), text)
 }
 
-fn bound_provider_tool_result(state: Option<&AppState>, result: ProviderToolResult) -> ProviderToolResult {
-    let mut contextual = result.display_text.clone();
-    for part in &result.parts {
-        let extra = match part {
-            ProviderToolResultPart::Text { text } => text,
-            ProviderToolResultPart::Resource { text, .. } => text,
-            ProviderToolResultPart::Image { .. } | ProviderToolResultPart::Audio { .. } => continue,
-        };
-        if !extra.is_empty() && !contextual.contains(extra) {
-            if !contextual.is_empty() { contextual.push('\n'); }
-            contextual.push_str(extra);
+#[derive(Debug, Clone)]
+struct ProviderToolProjection {
+    text: String,
+    metadata: ProviderToolMetadata,
+}
+
+fn format_exec_projection(output: &str, metadata: &ProviderToolMetadata) -> String {
+    let mut lines = Vec::<String>::new();
+    if let Some(exit_code) = metadata.exit_code {
+        lines.push(format!("Exit code: {exit_code}"));
+    }
+    if let Some(wall_time_ms) = metadata.wall_time_ms {
+        lines.push(format!("Wall time: {:.1} seconds", wall_time_ms as f64 / 1000.0));
+    }
+    if metadata.truncated {
+        if let Some(total_output_lines) = metadata.total_output_lines {
+            lines.push(format!("Total output lines: {total_output_lines}"));
+        }
+        for path in &metadata.output_paths {
+            lines.push(format!("Full output: {path}"));
         }
     }
-    let text = contextual.as_str();
-    if tool_output_line_count(text) <= TOOL_OUTPUT_MAX_LINES && text.len() <= TOOL_OUTPUT_MAX_BYTES {
-        return result;
-    }
-    let is_error = result.is_error;
-    let mut media_parts = result.parts.into_iter().filter(|part| matches!(part, ProviderToolResultPart::Image { .. } | ProviderToolResultPart::Audio { .. })).collect::<Vec<_>>();
-    let Some(state) = state else {
-        let marker = "... 工具输出已截断；当前运行缺少状态，无法保存完整结果 ...";
-        let preview = tool_output_preview(text, marker);
-        media_parts.insert(0, ProviderToolResultPart::Text { text: preview.clone() });
-        return ProviderToolResult { display_text: preview, parts: media_parts, is_error };
+    lines.push("Output:".to_string());
+    lines.push(output.to_string());
+    lines.join("\n")
+}
+
+fn project_provider_tool_result(
+    state: Option<&AppState>,
+    tool_name: &str,
+    result: &ProviderToolResult,
+) -> ProviderToolProjection {
+    let text = result.output.as_str();
+    let oversized = tool_output_line_count(text) > TOOL_OUTPUT_MAX_LINES
+        || text.len() > TOOL_OUTPUT_MAX_BYTES;
+    let mut metadata = result.metadata.clone();
+    let projected_output = if oversized {
+        let full_path = state.and_then(|state| store_full_tool_output(state, text).ok());
+        metadata.truncated = true;
+        metadata.total_output_lines = Some(tool_output_line_count(text));
+        if let Some(path) = full_path.as_ref() {
+            metadata.output_paths.push(terminal_path_for_user(path));
+        }
+        let marker = match (tool_name, full_path.as_ref()) {
+            ("exec", _) => "... output truncated ...".to_string(),
+            (_, Some(path)) => format!(
+                "... output truncated ...\n\nFull output saved to: {}\nUse search or ranged reads; do not read the whole file.",
+                terminal_path_for_user(path)
+            ),
+            (_, None) => "... output truncated; full output could not be saved ...".to_string(),
+        };
+        if tool_name == "exec" {
+            tool_output_preview_with_limits(
+                text,
+                &marker,
+                TOOL_OUTPUT_MAX_LINES.saturating_sub(10),
+                TOOL_OUTPUT_MAX_BYTES.saturating_sub(4 * 1024),
+            )
+        } else {
+            tool_output_preview(text, &marker)
+        }
+    } else {
+        text.to_string()
     };
-    let marker = match store_full_tool_output(state, text) {
-        Ok(path) => format!("... 工具输出已截断；完整内容保存于 {}。请使用搜索或按范围读取，禁止整文件读取 ...", terminal_path_for_user(&path)),
-        Err(err) => format!("... 工具输出已截断；保存完整结果失败：{err} ..."),
+    let text = if tool_name == "exec" {
+        format_exec_projection(&projected_output, &metadata)
+    } else {
+        projected_output
     };
-    let preview = tool_output_preview(text, &marker);
-    media_parts.insert(0, ProviderToolResultPart::Text { text: preview.clone() });
-    ProviderToolResult { display_text: preview, parts: media_parts, is_error }
+    ProviderToolProjection { text, metadata }
 }
 
 #[cfg(test)]
@@ -141,23 +188,42 @@ mod tool_output_store_tests {
     #[test]
     fn small_output_should_not_be_bounded() {
         let result = ProviderToolResult::text("small");
-        assert_eq!(bound_provider_tool_result(None, result.clone()), result);
+        assert_eq!(project_provider_tool_result(None, "read", &result).text, "small");
     }
 
     #[test]
     fn large_mcp_resource_should_be_bounded_and_keep_media() {
         let result = ProviderToolResult {
-            display_text: "resource".to_string(),
+            output: "x".repeat(TOOL_OUTPUT_MAX_BYTES + 1),
+            metadata: ProviderToolMetadata::default(),
             parts: vec![
                 ProviderToolResultPart::Resource { mime: Some("text/plain".to_string()), uri: Some("mcp://large".to_string()), text: "x".repeat(TOOL_OUTPUT_MAX_BYTES + 1) },
-                ProviderToolResultPart::Image { mime: "image/png".to_string(), data_base64: "abc".to_string() },
+                ProviderToolResultPart::Image { mime: "image/png".to_string(), data_base64: "abc".to_string(), width: 1, height: 1 },
             ],
             is_error: false,
         };
-        let bounded = bound_provider_tool_result(None, result);
-        assert!(bounded.display_text.contains("工具输出已截断"));
-        assert!(bounded.parts.iter().any(|part| matches!(part, ProviderToolResultPart::Image { .. })));
-        assert!(!bounded.parts.iter().any(|part| matches!(part, ProviderToolResultPart::Resource { .. })));
+        let projected = project_provider_tool_result(None, "mcp", &result);
+        assert!(projected.text.contains("output truncated"));
+        assert!(result.parts.iter().any(|part| matches!(part, ProviderToolResultPart::Image { .. })));
+    }
+
+    #[test]
+    fn exec_projection_should_include_header_within_limits() {
+        let result = ProviderToolResult {
+            output: (0..3_000).map(|index| format!("line-{index}")).collect::<Vec<_>>().join("\n"),
+            metadata: ProviderToolMetadata {
+                exit_code: Some(0),
+                wall_time_ms: Some(420),
+                ..ProviderToolMetadata::default()
+            },
+            parts: Vec::new(),
+            is_error: false,
+        };
+        let projection = project_provider_tool_result(None, "exec", &result);
+        assert!(projection.text.starts_with("Exit code: 0\nWall time: 0.4 seconds"));
+        assert!(projection.text.len() <= TOOL_OUTPUT_MAX_BYTES);
+        assert!(projection.text.lines().count() <= TOOL_OUTPUT_MAX_LINES);
+        assert_eq!(result.output.lines().count(), 3_000);
     }
 
     #[test]
