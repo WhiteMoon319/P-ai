@@ -1232,7 +1232,7 @@ function handleChatInputKeydown(event: KeyboardEvent) {
     return;
   }
   if (event.key === "Enter" && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
-    if (props.frozen || props.busy) return;
+    if (props.frozen) return;
     event.preventDefault();
     handleSendChat();
     return;
