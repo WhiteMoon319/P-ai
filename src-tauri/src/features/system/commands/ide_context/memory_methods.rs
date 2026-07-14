@@ -1,5 +1,5 @@
 fn ide_chat_list_memories_for_web_settings(state: &AppState) -> Result<Value, String> {
-    ide_chat_serialize(memory_store_list_memories(&state.data_path)?)
+    ide_chat_serialize(list_memories_inner(state)?)
 }
 
 fn ide_chat_delete_memory_for_web_settings(
@@ -7,19 +7,11 @@ fn ide_chat_delete_memory_for_web_settings(
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<DeleteMemoryInput>(params, "input")?;
-    memory_store_delete_memory(&state.data_path, &input.memory_id)?;
-    ide_chat_serialize(DeleteMemoryResult {
-        status: "deleted".to_string(),
-    })
+    ide_chat_serialize(delete_memory_inner(state, input)?)
 }
 
 fn ide_chat_preview_export_memories_for_web_settings(state: &AppState) -> Result<Value, String> {
-    let owner_scope_by_agent = load_importable_agent_scope_labels(state)?;
-    let scopes = build_export_scope_items(&state.data_path, &owner_scope_by_agent)?;
-    ide_chat_serialize(PreviewExportMemoriesResult {
-        total_count: scopes.iter().map(|item| item.count).sum(),
-        scopes,
-    })
+    ide_chat_serialize(preview_export_memories_inner(state)?)
 }
 
 fn ide_chat_export_memories_for_web_settings(
@@ -39,46 +31,10 @@ fn ide_chat_export_memories_for_web_settings(
                             .map(|item| item.as_str().unwrap_or_default().to_string())
                             .collect::<Vec<_>>()
                     })
-            })
-            .map(|scopes| normalize_selected_export_scopes(&scopes))
-            .transpose()?,
+            }),
         _ => None,
     };
-    let owner_scope_by_agent = load_importable_agent_scope_labels(state)?;
-    ide_chat_serialize(build_memory_exchange_payload(
-        &state.data_path,
-        &owner_scope_by_agent,
-        selected_scopes.as_ref(),
-    )?)
-}
-
-fn ide_chat_export_memories_to_path_for_web_settings(
-    state: &AppState,
-    params: Value,
-) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<ExportMemoriesToPathInput>(params, "input")?;
-    let target = PathBuf::from(input.path.trim());
-    if input.path.trim().is_empty() {
-        return Err("导出路径不能为空".to_string());
-    }
-    let parent = target
-        .parent()
-        .ok_or_else(|| "导出路径缺少父目录".to_string())?;
-    fs::create_dir_all(parent).map_err(|err| format!("创建导出目录失败: {err}"))?;
-    let selected_scopes = normalize_selected_export_scopes(&input.scopes)?;
-    let owner_scope_by_agent = load_importable_agent_scope_labels(state)?;
-    let payload = build_memory_exchange_payload(
-        &state.data_path,
-        &owner_scope_by_agent,
-        Some(&selected_scopes),
-    )?;
-    let body = serde_json::to_string_pretty(&payload)
-        .map_err(|err| format!("序列化导出记忆备份失败: {err}"))?;
-    fs::write(&target, body).map_err(|err| format!("写入导出记忆备份失败: {err}"))?;
-    ide_chat_serialize(ExportMemoriesFileResult {
-        path: target.to_string_lossy().to_string(),
-        count: payload.records.len(),
-    })
+    ide_chat_serialize(export_memories_inner(state, selected_scopes)?)
 }
 
 fn ide_chat_import_memories_for_web_settings(
@@ -86,23 +42,12 @@ fn ide_chat_import_memories_for_web_settings(
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<ImportMemoriesInput>(params, "input")?;
-    let stats = memory_store_import_memories(&state.data_path, &input.memories)?;
-    ide_chat_serialize(ImportMemoriesResult {
-        imported_count: stats.imported_count,
-        created_count: stats.created_count,
-        merged_count: stats.merged_count,
-        total_count: stats.total_count,
-    })
+    ide_chat_serialize(import_memories_inner(state, input)?)
 }
 
 fn ide_chat_preview_import_angel_memories_for_web_settings(params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<PreviewImportAngelMemoriesInput>(params, "input")?;
-    let parsed = parse_angel_memory_payload(&input.payload)?;
-    ide_chat_serialize(PreviewImportAngelMemoriesResult {
-        total_count: parsed.len(),
-        scopes: build_preview_scope_items(&parsed),
-        samples: sampled_angel_memory_preview_items(&parsed, 10),
-    })
+    ide_chat_serialize(preview_import_angel_memories_inner(input)?)
 }
 
 fn ide_chat_import_angel_memories_for_web_settings(
@@ -110,15 +55,7 @@ fn ide_chat_import_angel_memories_for_web_settings(
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<ImportAngelMemoriesInput>(params, "input")?;
-    let parsed = parse_angel_memory_payload(&input.payload)?;
-    let scope_targets = resolve_import_scope_targets(state, &parsed, &input.scope_agent_mappings)?;
-    let stats = import_angel_memories_by_scope(&state.data_path, &parsed, &scope_targets)?;
-    ide_chat_serialize(ImportMemoriesResult {
-        imported_count: stats.imported_count,
-        created_count: stats.created_count,
-        merged_count: stats.merged_count,
-        total_count: stats.total_count,
-    })
+    ide_chat_serialize(import_angel_memories_inner(state, input)?)
 }
 
 fn ide_chat_search_memories_mixed_for_web_settings(
@@ -126,61 +63,7 @@ fn ide_chat_search_memories_mixed_for_web_settings(
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<SearchMemoriesMixedInput>(params, "input")?;
-    let started = std::time::Instant::now();
-    let query = input.query.trim();
-    if query.is_empty() {
-        return ide_chat_serialize(SearchMemoriesMixedResult {
-            memories: memory_store_list_memories(&state.data_path)?
-                .into_iter()
-                .map(|memory| SearchMemoriesMixedHit {
-                    memory,
-                    bm25_score: 0.0,
-                    bm25_raw_score: 0.0,
-                    vector_score: 0.0,
-                    rerank_score: 0.0,
-                    final_score: 0.0,
-                })
-                .collect::<Vec<_>>(),
-            elapsed_ms: started.elapsed().as_millis(),
-        });
-    }
-
-    let memories = memory_store_list_memories(&state.data_path)?;
-    let ranked = memory_mixed_ranked_items(
-        &state.data_path,
-        &memories,
-        query,
-        MEMORY_MATCH_MAX_ITEMS * MEMORY_CANDIDATE_MULTIPLIER,
-        0.0,
-    );
-    if ranked.is_empty() {
-        return ide_chat_serialize(SearchMemoriesMixedResult {
-            memories: Vec::new(),
-            elapsed_ms: started.elapsed().as_millis(),
-        });
-    }
-
-    let memory_map = memories
-        .into_iter()
-        .map(|memory| (memory.id.clone(), memory))
-        .collect::<std::collections::HashMap<_, _>>();
-    let mut out = Vec::<SearchMemoriesMixedHit>::new();
-    for item in ranked {
-        if let Some(memory) = memory_map.get(&item.memory_id) {
-            out.push(SearchMemoriesMixedHit {
-                memory: memory.clone(),
-                bm25_score: item.bm25_score,
-                bm25_raw_score: item.bm25_raw_score,
-                vector_score: item.vector_score,
-                rerank_score: item.rerank_score,
-                final_score: item.final_score,
-            });
-        }
-    }
-    ide_chat_serialize(SearchMemoriesMixedResult {
-        memories: out,
-        elapsed_ms: started.elapsed().as_millis(),
-    })
+    ide_chat_serialize(search_memories_mixed_inner(state, input)?)
 }
 
 fn ide_chat_search_chat_history_slices_for_web_settings(

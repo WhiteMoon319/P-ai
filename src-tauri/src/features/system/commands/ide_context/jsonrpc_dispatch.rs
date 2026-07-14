@@ -31,6 +31,7 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "copy_local_chat_image_to_clipboard"
             | "save_local_chat_image_as"
             | "export_archive_to_file"
+            | "export_memories_to_path"
             | "write_base64_file_to_path"
             | "write_utf8_text_file_to_path"
             | "queue_local_file_attachment"
@@ -293,7 +294,6 @@ async fn ide_chat_handle_jsonrpc_request(
         "disable_agent_private_memory" => ide_chat_disable_agent_private_memory_for_web_settings(state, request.params),
         "export_memories" => ide_chat_export_memories_for_web_settings(state, request.params),
         "preview_export_memories" => ide_chat_preview_export_memories_for_web_settings(state),
-        "export_memories_to_path" => ide_chat_export_memories_to_path_for_web_settings(state, request.params),
         "import_memories" => ide_chat_import_memories_for_web_settings(state, request.params),
         "preview_import_angel_memories" => ide_chat_preview_import_angel_memories_for_web_settings(request.params),
         "import_angel_memories" => ide_chat_import_angel_memories_for_web_settings(state, request.params),
@@ -551,6 +551,7 @@ mod web_native_capability_tests {
             "refresh_storage_usage_overview",
             "cleanup_storage_legacy_items",
             "export_config_migration_package",
+            "export_memories_to_path",
             "preview_import_config_migration_package",
             "apply_import_config_migration_package",
             "codex_get_auth_status",

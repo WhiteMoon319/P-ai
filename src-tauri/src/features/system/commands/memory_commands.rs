@@ -1,5 +1,9 @@
 #[tauri::command]
 fn list_memories(state: State<'_, AppState>) -> Result<Vec<MemoryEntry>, String> {
+    list_memories_inner(state.inner())
+}
+
+fn list_memories_inner(state: &AppState) -> Result<Vec<MemoryEntry>, String> {
     memory_store_list_memories(&state.data_path)
 }
 
@@ -884,10 +888,7 @@ fn delete_memory(
     input: DeleteMemoryInput,
     state: State<'_, AppState>,
 ) -> Result<DeleteMemoryResult, String> {
-    memory_store_delete_memory(&state.data_path, &input.memory_id)?;
-    Ok(DeleteMemoryResult {
-        status: "deleted".to_string(),
-    })
+    delete_memory_inner(state.inner(), input)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -944,20 +945,143 @@ struct ExportMemoriesToPathInput {
     scopes: Vec<String>,
 }
 
-#[tauri::command]
-fn export_memories(state: State<'_, AppState>) -> Result<AngelMemoryExportPayload, String> {
-    let owner_scope_by_agent = load_importable_agent_scope_labels(state.inner())?;
-    build_memory_exchange_payload(&state.data_path, &owner_scope_by_agent, None)
+fn delete_memory_inner(
+    state: &AppState,
+    input: DeleteMemoryInput,
+) -> Result<DeleteMemoryResult, String> {
+    memory_store_delete_memory(&state.data_path, &input.memory_id)?;
+    Ok(DeleteMemoryResult {
+        status: "deleted".to_string(),
+    })
 }
 
-#[tauri::command]
-fn preview_export_memories(state: State<'_, AppState>) -> Result<PreviewExportMemoriesResult, String> {
-    let owner_scope_by_agent = load_importable_agent_scope_labels(state.inner())?;
+fn export_memories_inner(
+    state: &AppState,
+    selected_scopes: Option<Vec<String>>,
+) -> Result<AngelMemoryExportPayload, String> {
+    let selected_scopes = selected_scopes
+        .as_ref()
+        .map(|scopes| normalize_selected_export_scopes(scopes))
+        .transpose()?;
+    let owner_scope_by_agent = load_importable_agent_scope_labels(state)?;
+    build_memory_exchange_payload(
+        &state.data_path,
+        &owner_scope_by_agent,
+        selected_scopes.as_ref(),
+    )
+}
+
+fn preview_export_memories_inner(state: &AppState) -> Result<PreviewExportMemoriesResult, String> {
+    let owner_scope_by_agent = load_importable_agent_scope_labels(state)?;
     let scopes = build_export_scope_items(&state.data_path, &owner_scope_by_agent)?;
     Ok(PreviewExportMemoriesResult {
         total_count: scopes.iter().map(|item| item.count).sum(),
         scopes,
     })
+}
+
+fn import_memories_inner(
+    state: &AppState,
+    input: ImportMemoriesInput,
+) -> Result<ImportMemoriesResult, String> {
+    let stats = memory_store_import_memories(&state.data_path, &input.memories)?;
+    Ok(ImportMemoriesResult {
+        imported_count: stats.imported_count,
+        created_count: stats.created_count,
+        merged_count: stats.merged_count,
+        total_count: stats.total_count,
+    })
+}
+
+fn preview_import_angel_memories_inner(
+    input: PreviewImportAngelMemoriesInput,
+) -> Result<PreviewImportAngelMemoriesResult, String> {
+    let parsed = parse_angel_memory_payload(&input.payload)?;
+    Ok(PreviewImportAngelMemoriesResult {
+        total_count: parsed.len(),
+        scopes: build_preview_scope_items(&parsed),
+        samples: sampled_angel_memory_preview_items(&parsed, 10),
+    })
+}
+
+fn import_angel_memories_inner(
+    state: &AppState,
+    input: ImportAngelMemoriesInput,
+) -> Result<ImportMemoriesResult, String> {
+    let parsed = parse_angel_memory_payload(&input.payload)?;
+    let scope_targets =
+        resolve_import_scope_targets(state, &parsed, &input.scope_agent_mappings)?;
+    let stats = import_angel_memories_by_scope(&state.data_path, &parsed, &scope_targets)?;
+    Ok(ImportMemoriesResult {
+        imported_count: stats.imported_count,
+        created_count: stats.created_count,
+        merged_count: stats.merged_count,
+        total_count: stats.total_count,
+    })
+}
+
+fn search_memories_mixed_inner(
+    state: &AppState,
+    input: SearchMemoriesMixedInput,
+) -> Result<SearchMemoriesMixedResult, String> {
+    let started = std::time::Instant::now();
+    let query = input.query.trim();
+    if query.is_empty() {
+        return Ok(SearchMemoriesMixedResult {
+            memories: memory_store_list_memories(&state.data_path)?
+                .into_iter()
+                .map(|memory| SearchMemoriesMixedHit {
+                    memory,
+                    bm25_score: 0.0,
+                    bm25_raw_score: 0.0,
+                    vector_score: 0.0,
+                    rerank_score: 0.0,
+                    final_score: 0.0,
+                })
+                .collect::<Vec<_>>(),
+            elapsed_ms: started.elapsed().as_millis(),
+        });
+    }
+
+    let memories = memory_store_list_memories(&state.data_path)?;
+    let ranked = memory_mixed_ranked_items(
+        &state.data_path,
+        &memories,
+        query,
+        MEMORY_MATCH_MAX_ITEMS * MEMORY_CANDIDATE_MULTIPLIER,
+        0.0,
+    );
+    let memory_map = memories
+        .into_iter()
+        .map(|memory| (memory.id.clone(), memory))
+        .collect::<std::collections::HashMap<_, _>>();
+    let memories = ranked
+        .into_iter()
+        .filter_map(|item| {
+            memory_map.get(&item.memory_id).map(|memory| SearchMemoriesMixedHit {
+                memory: memory.clone(),
+                bm25_score: item.bm25_score,
+                bm25_raw_score: item.bm25_raw_score,
+                vector_score: item.vector_score,
+                rerank_score: item.rerank_score,
+                final_score: item.final_score,
+            })
+        })
+        .collect();
+    Ok(SearchMemoriesMixedResult {
+        memories,
+        elapsed_ms: started.elapsed().as_millis(),
+    })
+}
+
+#[tauri::command]
+fn export_memories(state: State<'_, AppState>) -> Result<AngelMemoryExportPayload, String> {
+    export_memories_inner(state.inner(), None)
+}
+
+#[tauri::command]
+fn preview_export_memories(state: State<'_, AppState>) -> Result<PreviewExportMemoriesResult, String> {
+    preview_export_memories_inner(state.inner())
 }
 
 #[tauri::command]
@@ -1027,25 +1151,14 @@ fn import_memories(
     input: ImportMemoriesInput,
     state: State<'_, AppState>,
 ) -> Result<ImportMemoriesResult, String> {
-    let stats = memory_store_import_memories(&state.data_path, &input.memories)?;
-    Ok(ImportMemoriesResult {
-        imported_count: stats.imported_count,
-        created_count: stats.created_count,
-        merged_count: stats.merged_count,
-        total_count: stats.total_count,
-    })
+    import_memories_inner(state.inner(), input)
 }
 
 #[tauri::command]
 fn preview_import_angel_memories(
     input: PreviewImportAngelMemoriesInput,
 ) -> Result<PreviewImportAngelMemoriesResult, String> {
-    let parsed = parse_angel_memory_payload(&input.payload)?;
-    Ok(PreviewImportAngelMemoriesResult {
-        total_count: parsed.len(),
-        scopes: build_preview_scope_items(&parsed),
-        samples: sampled_angel_memory_preview_items(&parsed, 10),
-    })
+    preview_import_angel_memories_inner(input)
 }
 
 #[tauri::command]
@@ -1053,16 +1166,7 @@ fn import_angel_memories(
     input: ImportAngelMemoriesInput,
     state: State<'_, AppState>,
 ) -> Result<ImportMemoriesResult, String> {
-    let parsed = parse_angel_memory_payload(&input.payload)?;
-    let scope_targets =
-        resolve_import_scope_targets(state.inner(), &parsed, &input.scope_agent_mappings)?;
-    let stats = import_angel_memories_by_scope(&state.data_path, &parsed, &scope_targets)?;
-    Ok(ImportMemoriesResult {
-        imported_count: stats.imported_count,
-        created_count: stats.created_count,
-        merged_count: stats.merged_count,
-        total_count: stats.total_count,
-    })
+    import_angel_memories_inner(state.inner(), input)
 }
 
 #[tauri::command]
@@ -1070,63 +1174,7 @@ fn search_memories_mixed(
     input: SearchMemoriesMixedInput,
     state: State<'_, AppState>,
 ) -> Result<SearchMemoriesMixedResult, String> {
-    let started = std::time::Instant::now();
-    let query = input.query.trim();
-    if query.is_empty() {
-        // Empty query is intentionally used by the frontend as "browse all memories" mode.
-        // Real mixed retrieval always provides non-empty query text.
-        return Ok(SearchMemoriesMixedResult {
-            memories: memory_store_list_memories(&state.data_path)?
-                .into_iter()
-                .map(|memory| SearchMemoriesMixedHit {
-                    memory,
-                    bm25_score: 0.0,
-                    bm25_raw_score: 0.0,
-                    vector_score: 0.0,
-                    rerank_score: 0.0,
-                    final_score: 0.0,
-                })
-                .collect::<Vec<_>>(),
-            elapsed_ms: started.elapsed().as_millis(),
-        });
-    }
-
-    let memories = memory_store_list_memories(&state.data_path)?;
-    let ranked = memory_mixed_ranked_items(
-        &state.data_path,
-        &memories,
-        query,
-        MEMORY_MATCH_MAX_ITEMS * MEMORY_CANDIDATE_MULTIPLIER,
-        0.0,
-    );
-    if ranked.is_empty() {
-        return Ok(SearchMemoriesMixedResult {
-            memories: Vec::new(),
-            elapsed_ms: started.elapsed().as_millis(),
-        });
-    }
-
-    let memory_map = memories
-        .into_iter()
-        .map(|m| (m.id.clone(), m))
-        .collect::<std::collections::HashMap<_, _>>();
-    let mut out = Vec::<SearchMemoriesMixedHit>::new();
-    for item in ranked {
-        if let Some(memory) = memory_map.get(&item.memory_id) {
-            out.push(SearchMemoriesMixedHit {
-                memory: memory.clone(),
-                bm25_score: item.bm25_score,
-                bm25_raw_score: item.bm25_raw_score,
-                vector_score: item.vector_score,
-                rerank_score: item.rerank_score,
-                final_score: item.final_score,
-            });
-        }
-    }
-    Ok(SearchMemoriesMixedResult {
-        memories: out,
-        elapsed_ms: started.elapsed().as_millis(),
-    })
+    search_memories_mixed_inner(state.inner(), input)
 }
 
 // ==================== 召回诊断（工具召回 / RAG 召换双模式） ====================
