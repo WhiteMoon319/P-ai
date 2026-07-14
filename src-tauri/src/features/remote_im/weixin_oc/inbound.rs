@@ -435,18 +435,17 @@ async fn remote_im_weixin_oc_logout(
     Ok(true)
 }
 
-#[tauri::command]
-async fn remote_im_weixin_oc_sync_contacts(
+fn remote_im_weixin_oc_sync_contacts_inner(
+    state: &AppState,
     input: WeixinOcLoginStatusInput,
-    state: State<'_, AppState>,
 ) -> Result<WeixinOcSyncContactsResult, String> {
-    let config = state_read_config_cached(state.inner())?;
+    let config = state_read_config_cached(state)?;
     let channel = remote_im_channel_by_id(&config, &input.channel_id)
         .ok_or_else(|| format!("渠道不存在: {}", input.channel_id))?;
     if channel.platform != RemoteImPlatform::WeixinOc {
         return Err("该渠道不是个人微信渠道".to_string());
     }
-    let credentials = remote_im_effective_credentials(state.inner(), channel)?;
+    let credentials = remote_im_effective_credentials(state, channel)?;
     let creds = WeixinOcCredentials::from_value(&credentials);
     if creds.account_id.trim().is_empty() || creds.token.trim().is_empty() {
         return Ok(WeixinOcSyncContactsResult {
@@ -456,7 +455,7 @@ async fn remote_im_weixin_oc_sync_contacts(
         });
     }
     let user_id = creds.user_id.trim().to_string();
-    let (_, created) = sync_weixin_oc_contact_from_user_id(state.inner(), channel, &user_id)?;
+    let (_, created) = sync_weixin_oc_contact_from_user_id(state, channel, &user_id)?;
     Ok(WeixinOcSyncContactsResult {
         channel_id: input.channel_id,
         synced_count: 1,
@@ -466,4 +465,12 @@ async fn remote_im_weixin_oc_sync_contacts(
             format!("联系人已存在，无需重复同步：{}", user_id)
         },
     })
+}
+
+#[tauri::command]
+async fn remote_im_weixin_oc_sync_contacts(
+    input: WeixinOcLoginStatusInput,
+    state: State<'_, AppState>,
+) -> Result<WeixinOcSyncContactsResult, String> {
+    remote_im_weixin_oc_sync_contacts_inner(state.inner(), input)
 }

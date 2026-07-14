@@ -1785,6 +1785,62 @@
     }
 
     #[test]
+    fn remote_im_contact_activation_inner_should_preserve_private_response_strategy() {
+        let state = remote_im_test_state();
+        let contact = remote_im_test_contact("contact-private", "conversation-private");
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact);
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime state");
+
+        let updated = remote_im_update_contact_activation_inner(
+            &state,
+            RemoteImContactActivationUpdateInput {
+                contact_id: "contact-private".to_string(),
+                activation_mode: "always".to_string(),
+                activation_keywords: Vec::new(),
+                mute_keywords: default_remote_im_contact_mute_keywords(),
+                unmute_keywords: default_remote_im_contact_unmute_keywords(),
+                patience_seconds: default_remote_im_contact_patience_seconds(),
+                mute_duration_seconds: default_remote_im_contact_mute_duration_seconds(),
+                activation_cooldown_seconds: 0,
+                response_strategy: "smart_judge".to_string(),
+                response_guidance: "测试指引".to_string(),
+            },
+        )
+        .expect("update activation");
+
+        assert_eq!(updated.activation_mode, "always");
+        assert_eq!(updated.response_strategy, "always_reply");
+        assert_eq!(updated.response_guidance, "测试指引");
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn remote_im_list_contacts_inner_should_keep_canonical_sort_order() {
+        let state = remote_im_test_state();
+        let mut first = remote_im_test_contact("contact-b", "conversation-b");
+        first.channel_id = "channel-b".to_string();
+        first.last_message_at = Some("2026-07-14T08:00:00Z".to_string());
+        let mut second = remote_im_test_contact("contact-c", "conversation-c");
+        second.channel_id = "channel-a".to_string();
+        second.last_message_at = Some("2026-07-14T08:00:00Z".to_string());
+        let mut third = remote_im_test_contact("contact-a", "conversation-a");
+        third.channel_id = "channel-a".to_string();
+        third.last_message_at = Some("2026-07-14T09:00:00Z".to_string());
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts = vec![first, second, third];
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime state");
+
+        let contacts = remote_im_list_contacts_inner(&state).expect("list contacts");
+
+        assert_eq!(
+            contacts.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(),
+            vec!["contact-a", "contact-c", "contact-b"]
+        );
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
     fn build_remote_im_secretary_prepared_prompt_should_include_boundary_and_latest_marker() {
         let mut contact = remote_im_test_contact("contact-a", "conversation-a");
         contact.remote_contact_type = "group".to_string();

@@ -143,34 +143,7 @@ async fn remote_im_get_channel_status(
     channel_id: String,
     state: State<'_, AppState>,
 ) -> Result<ChannelConnectionStatus, String> {
-    let config = state_read_config_cached(&state).map_err(|e| format!("{e:?}"))?;
-    if let Some(channel) = config
-        .remote_im_channels
-        .iter()
-        .find(|ch| ch.id == channel_id)
-    {
-        return match channel.platform {
-            RemoteImPlatform::OnebotV11 => get_channel_connection_status(channel_id).await,
-            RemoteImPlatform::Dingtalk => Ok(dingtalk_stream_manager()
-                .get_channel_status(&channel.id)
-                .await),
-            RemoteImPlatform::Feishu => Ok(ChannelConnectionStatus {
-                channel_id: channel.id.clone(),
-                connected: false,
-                peer_addr: None,
-                connected_at: None,
-                listen_addr: String::new(),
-                status_text: None,
-                last_error: None,
-                account_id: None,
-                base_url: None,
-                login_session_key: None,
-                qrcode_url: None,
-            }),
-            RemoteImPlatform::WeixinOc => Ok(weixin_oc_manager().build_status(&channel.id).await),
-        };
-    }
-    get_channel_connection_status(channel_id).await
+    remote_im_get_channel_status_inner(state.inner(), channel_id).await
 }
 
 #[tauri::command]
@@ -186,10 +159,7 @@ async fn remote_im_get_contact_logs(
     input: RemoteImContactLogsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<ChannelLogEntry>, String> {
-    let (channel_id, contact_marker) =
-        remote_im_resolve_contact_log_query(state.inner(), &input.contact_id)?;
-    let logs = get_remote_im_channel_logs(state.inner(), channel_id).await?;
-    Ok(remote_im_filter_channel_logs_for_contact(logs, &contact_marker))
+    remote_im_get_contact_logs_inner(state.inner(), input).await
 }
 
 #[tauri::command]

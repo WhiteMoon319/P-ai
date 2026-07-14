@@ -1,12 +1,15 @@
-#[tauri::command]
-fn remote_im_list_channels(state: State<'_, AppState>) -> Result<Vec<RemoteImChannelConfig>, String> {
-    let config = state_read_config_cached(&state)?;
+fn remote_im_list_channels_inner(state: &AppState) -> Result<Vec<RemoteImChannelConfig>, String> {
+    let config = state_read_config_cached(state)?;
     Ok(config.remote_im_channels)
 }
 
 #[tauri::command]
-fn remote_im_list_contacts(state: State<'_, AppState>) -> Result<Vec<RemoteImContact>, String> {
-    let runtime = state_read_runtime_state_cached(&state)?;
+fn remote_im_list_channels(state: State<'_, AppState>) -> Result<Vec<RemoteImChannelConfig>, String> {
+    remote_im_list_channels_inner(state.inner())
+}
+
+fn remote_im_list_contacts_inner(state: &AppState) -> Result<Vec<RemoteImContact>, String> {
+    let runtime = state_read_runtime_state_cached(state)?;
     let mut contacts = runtime.remote_im_contacts;
     contacts.sort_by(|a, b| {
         a.channel_id
@@ -18,11 +21,15 @@ fn remote_im_list_contacts(state: State<'_, AppState>) -> Result<Vec<RemoteImCon
 }
 
 #[tauri::command]
-fn remote_im_update_contact_allow_send(
+fn remote_im_list_contacts(state: State<'_, AppState>) -> Result<Vec<RemoteImContact>, String> {
+    remote_im_list_contacts_inner(state.inner())
+}
+
+fn remote_im_update_contact_allow_send_inner(
+    state: &AppState,
     input: RemoteImContactAllowSendUpdateInput,
-    state: State<'_, AppState>,
 ) -> Result<RemoteImContact, String> {
-    let mut runtime = state_read_runtime_state_cached(&state)?;
+    let mut runtime = state_read_runtime_state_cached(state)?;
     let contact = runtime
         .remote_im_contacts
         .iter_mut()
@@ -31,7 +38,31 @@ fn remote_im_update_contact_allow_send(
     contact.allow_send = input.allow_send;
     contact.allow_receive = input.allow_send;
     let output = contact.clone();
-    state_write_runtime_state_cached(&state, &runtime)?;
+    state_write_runtime_state_cached(state, &runtime)?;
+    Ok(output)
+}
+
+#[tauri::command]
+fn remote_im_update_contact_allow_send(
+    input: RemoteImContactAllowSendUpdateInput,
+    state: State<'_, AppState>,
+) -> Result<RemoteImContact, String> {
+    remote_im_update_contact_allow_send_inner(state.inner(), input)
+}
+
+fn remote_im_update_contact_allow_send_files_inner(
+    state: &AppState,
+    input: RemoteImContactAllowSendFilesUpdateInput,
+) -> Result<RemoteImContact, String> {
+    let mut runtime = state_read_runtime_state_cached(state)?;
+    let contact = runtime
+        .remote_im_contacts
+        .iter_mut()
+        .find(|item| item.id == input.contact_id)
+        .ok_or_else(|| format!("未找到远程联系人：{}", input.contact_id))?;
+    contact.allow_send_files = input.allow_send_files;
+    let output = contact.clone();
+    state_write_runtime_state_cached(state, &runtime)?;
     Ok(output)
 }
 
@@ -40,16 +71,7 @@ fn remote_im_update_contact_allow_send_files(
     input: RemoteImContactAllowSendFilesUpdateInput,
     state: State<'_, AppState>,
 ) -> Result<RemoteImContact, String> {
-    let mut runtime = state_read_runtime_state_cached(&state)?;
-    let contact = runtime
-        .remote_im_contacts
-        .iter_mut()
-        .find(|item| item.id == input.contact_id)
-        .ok_or_else(|| format!("未找到远程联系人：{}", input.contact_id))?;
-    contact.allow_send_files = input.allow_send_files;
-    let output = contact.clone();
-    state_write_runtime_state_cached(&state, &runtime)?;
-    Ok(output)
+    remote_im_update_contact_allow_send_files_inner(state.inner(), input)
 }
 
 #[tauri::command]
@@ -70,12 +92,11 @@ fn remote_im_update_contact_allow_receive(
     Ok(output)
 }
 
-#[tauri::command]
-fn remote_im_update_contact_activation(
+fn remote_im_update_contact_activation_inner(
+    state: &AppState,
     input: RemoteImContactActivationUpdateInput,
-    state: State<'_, AppState>,
 ) -> Result<RemoteImContact, String> {
-    let mut runtime = state_read_runtime_state_cached(&state)?;
+    let mut runtime = state_read_runtime_state_cached(state)?;
     let contact = runtime
         .remote_im_contacts
         .iter_mut()
@@ -93,8 +114,16 @@ fn remote_im_update_contact_activation(
     }
     contact.response_guidance = normalize_contact_response_guidance(&input.response_guidance);
     let output = contact.clone();
-    state_write_runtime_state_cached(&state, &runtime)?;
+    state_write_runtime_state_cached(state, &runtime)?;
     Ok(output)
+}
+
+#[tauri::command]
+fn remote_im_update_contact_activation(
+    input: RemoteImContactActivationUpdateInput,
+    state: State<'_, AppState>,
+) -> Result<RemoteImContact, String> {
+    remote_im_update_contact_activation_inner(state.inner(), input)
 }
 
 #[tauri::command]
@@ -140,13 +169,12 @@ fn remote_im_update_contact_route_mode(
     Ok(output)
 }
 
-#[tauri::command]
-fn remote_im_update_contact_department_binding(
+fn remote_im_update_contact_department_binding_inner(
+    state: &AppState,
     input: RemoteImContactDepartmentBindingUpdateInput,
-    state: State<'_, AppState>,
 ) -> Result<RemoteImContact, String> {
-    let runtime_snapshot = load_runtime_organization_snapshot(state.inner())?;
-    let mut runtime = state_read_runtime_state_cached(&state)?;
+    let runtime_snapshot = load_runtime_organization_snapshot(state)?;
+    let mut runtime = state_read_runtime_state_cached(state)?;
     let contact = runtime
         .remote_im_contacts
         .iter_mut()
@@ -190,9 +218,9 @@ fn remote_im_update_contact_department_binding(
     contact.bound_agent_id = next_pair.as_ref().map(|(_, agent_id)| agent_id.clone());
     contact.route_mode =
         remote_im_resolve_effective_route_mode(&runtime_snapshot.config, contact);
-    let conversation_id = ensure_remote_im_contact_conversation_id(state.inner(), contact)?;
+    let conversation_id = ensure_remote_im_contact_conversation_id(state, contact)?;
     let output = contact.clone();
-    state_write_runtime_state_cached(&state, &runtime)?;
+    state_write_runtime_state_cached(state, &runtime)?;
     runtime_log_info(format!(
         "[远程IM] 完成，任务=更新联系人处理部门，contact_id={}，conversation_id={}，department_id={}，agent_id={}",
         output.id,
@@ -204,10 +232,34 @@ fn remote_im_update_contact_department_binding(
             .filter(|value| !value.is_empty())
             .unwrap_or(""),
         conversation_service_v2()
-            .get_conversation_meta(state.inner(), &conversation_id)
+            .get_conversation_meta(state, &conversation_id)
             .map(|conversation| conversation.agent_id)
             .unwrap_or_default()
     ));
+    Ok(output)
+}
+
+#[tauri::command]
+fn remote_im_update_contact_department_binding(
+    input: RemoteImContactDepartmentBindingUpdateInput,
+    state: State<'_, AppState>,
+) -> Result<RemoteImContact, String> {
+    remote_im_update_contact_department_binding_inner(state.inner(), input)
+}
+
+fn remote_im_update_contact_processing_mode_inner(
+    state: &AppState,
+    input: RemoteImContactProcessingModeUpdateInput,
+) -> Result<RemoteImContact, String> {
+    let mut runtime = state_read_runtime_state_cached(state)?;
+    let contact = runtime
+        .remote_im_contacts
+        .iter_mut()
+        .find(|item| item.id == input.contact_id)
+        .ok_or_else(|| format!("未找到远程联系人：{}", input.contact_id))?;
+    contact.processing_mode = normalize_contact_processing_mode(&input.processing_mode);
+    let output = contact.clone();
+    state_write_runtime_state_cached(state, &runtime)?;
     Ok(output)
 }
 
@@ -216,15 +268,30 @@ fn remote_im_update_contact_processing_mode(
     input: RemoteImContactProcessingModeUpdateInput,
     state: State<'_, AppState>,
 ) -> Result<RemoteImContact, String> {
-    let mut runtime = state_read_runtime_state_cached(&state)?;
+    remote_im_update_contact_processing_mode_inner(state.inner(), input)
+}
+
+fn remote_im_update_contact_workspace_inner(
+    state: &AppState,
+    input: RemoteImContactWorkspaceUpdateInput,
+) -> Result<RemoteImContact, String> {
+    let mut runtime = state_read_runtime_state_cached(state)?;
     let contact = runtime
         .remote_im_contacts
         .iter_mut()
         .find(|item| item.id == input.contact_id)
         .ok_or_else(|| format!("未找到远程联系人：{}", input.contact_id))?;
-    contact.processing_mode = normalize_contact_processing_mode(&input.processing_mode);
+    contact.shell_workspaces = input.shell_workspaces;
     let output = contact.clone();
-    state_write_runtime_state_cached(&state, &runtime)?;
+    state_write_runtime_state_cached(state, &runtime)?;
+    if let Some(conversation_id) = output
+        .bound_conversation_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        mark_prompt_cache_rebuild_for_system_environment_by_conversation(state, conversation_id);
+    }
     Ok(output)
 }
 
@@ -233,24 +300,7 @@ fn remote_im_update_contact_workspace(
     input: RemoteImContactWorkspaceUpdateInput,
     state: State<'_, AppState>,
 ) -> Result<RemoteImContact, String> {
-    let mut runtime = state_read_runtime_state_cached(&state)?;
-    let contact = runtime
-        .remote_im_contacts
-        .iter_mut()
-        .find(|item| item.id == input.contact_id)
-        .ok_or_else(|| format!("未找到远程联系人：{}", input.contact_id))?;
-    contact.shell_workspaces = input.shell_workspaces;
-    let output = contact.clone();
-    state_write_runtime_state_cached(&state, &runtime)?;
-    if let Some(conversation_id) = output
-        .bound_conversation_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        mark_prompt_cache_rebuild_for_system_environment_by_conversation(&state, conversation_id);
-    }
-    Ok(output)
+    remote_im_update_contact_workspace_inner(state.inner(), input)
 }
 
 #[tauri::command]
@@ -373,24 +423,31 @@ fn remote_im_get_contact_conversation_block_page(
     })
 }
 
-#[tauri::command]
-fn remote_im_delete_contact(
+fn remote_im_delete_contact_inner(
+    state: &AppState,
     input: RemoteImContactDeleteInput,
-    state: State<'_, AppState>,
 ) -> Result<bool, String> {
     let contact_id = input.contact_id.trim();
     if contact_id.is_empty() {
         return Err("contact_id 为必填项。".to_string());
     }
-    let mut runtime = state_read_runtime_state_cached(&state)?;
+    let mut runtime = state_read_runtime_state_cached(state)?;
     let before_contacts = runtime.remote_im_contacts.len();
     runtime.remote_im_contacts
         .retain(|item| item.id != contact_id);
     let removed = runtime.remote_im_contacts.len() != before_contacts;
     if removed {
-        state_write_runtime_state_cached(&state, &runtime)?;
+        state_write_runtime_state_cached(state, &runtime)?;
     }
     Ok(removed)
+}
+
+#[tauri::command]
+fn remote_im_delete_contact(
+    input: RemoteImContactDeleteInput,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    remote_im_delete_contact_inner(state.inner(), input)
 }
 
 #[tauri::command]
