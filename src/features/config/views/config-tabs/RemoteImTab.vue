@@ -856,9 +856,8 @@ import { invokeTauri } from "../../../../services/tauri-api";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { AppConfig, DepartmentConfig, PersonaProfile, RemoteImChannelConfig, RemoteImContact, RemoteImPlatform, ShellWorkspace } from "../../../../types/app";
 import DepartmentPersonaSelect from "../../../shared/components/DepartmentPersonaSelect.vue";
-import type { ChannelConnectionStatus, ChannelLogEntry } from "./remote-im/types";
+import type { ChannelConnectionStatus, ChannelLogEntry, WeixinLoginStatus } from "./remote-im/types";
 import { buildContactLogDisplayItem, type ContactLogDisplayItem } from "./remote-im/contact-log-display";
-import { useWeixinLogin } from "./remote-im/use-weixin-login";
 import {
   contactCommunicationToggleClass,
   contactCommunicationToggleEnabled,
@@ -935,12 +934,96 @@ const contactPillMenu = ref<ContactPillMenuState | null>(null);
 const contactSaving = ref(false);
 const contactDeleting = ref(false);
 const channelRuntimeStates = ref<Record<string, ChannelConnectionStatus | null>>({});
+const weixinLoginStates = ref<Record<string, WeixinLoginStatus | null>>({});
+const weixinLoginBusy = ref(false);
+let weixinLoginPollTimer: ReturnType<typeof setInterval> | null = null;
 let channelStatusTimer: ReturnType<typeof setInterval> | null = null;
 
 const selectedChannel = computed(() =>
   channels.value.find((ch) => ch.id === selectedChannelId.value) ?? null,
 );
 
+const weixinLoginState = computed(() => {
+  const channelId = selectedChannel.value?.id || "";
+  return weixinLoginStates.value[channelId] || {
+    channelId,
+    connected: false,
+    status: "",
+    message: "",
+    sessionKey: "",
+    qrcode: "",
+    qrcodeImgContent: "",
+    accountId: "",
+    userId: "",
+    baseUrl: "",
+    lastError: "",
+  };
+});
+
+function looksLikeBase64(value: string): boolean {
+  if (!value || value.length < 64) return false;
+  return /^[A-Za-z0-9+/=]+$/.test(value);
+}
+
+const weixinQrImageSrc = computed(() => {
+  const raw = String(weixinLoginState.value.qrcodeImgContent || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("data:image/")) return raw;
+  if (/^https?:\/\//i.test(raw)) {
+    return `https://api.qrserver.com/v1/create-qr-code/?size=384x384&margin=0&data=${encodeURIComponent(raw)}`;
+  }
+  if (looksLikeBase64(raw)) {
+    return `data:image/png;base64,${raw}`;
+  }
+  return raw;
+});
+const persistedWeixinCredentials = computed(() => {
+  const creds = selectedChannel.value?.credentials;
+  if (!creds || typeof creds !== "object") {
+    return { token: "", accountId: "", userId: "" };
+  }
+  const record = creds as Record<string, unknown>;
+  return {
+    token: String(record.token || "").trim(),
+    accountId: String(record.accountId || "").trim(),
+    userId: String(record.userId || "").trim(),
+  };
+});
+const weixinRuntimeStatus = computed(() =>
+  selectedChannel.value ? channelRuntimeStates.value[selectedChannel.value.id] ?? null : null,
+);
+const weixinStatusText = computed(() => {
+  if (weixinRuntimeStatus.value?.connected) return t('config.remoteIm.weixinConnected');
+  if (isWeixinLoggedIn.value) return t('config.remoteIm.weixinLoggedIn');
+  const status = String(weixinLoginState.value.status || "").trim().toLowerCase();
+  if (status === "wait" || status === "scanned" || status === "scaned") return t('config.remoteIm.waitingScanConfirm');
+  if (status === "need_login" || status === "idle") return t('config.remoteIm.waitingScan');
+  if (status === "confirmed" || status === "logged_in") return t('config.remoteIm.weixinLoggedIn');
+  return t('config.remoteIm.waitingScan');
+});
+const weixinStatusMessage = computed(() => {
+  if (weixinRuntimeStatus.value?.connected) {
+    return t('config.remoteIm.credentialsSaved');
+  }
+  if (isWeixinLoggedIn.value) {
+    return t('config.remoteIm.credentialsSaved');
+  }
+  const status = String(weixinLoginState.value.status || "").trim().toLowerCase();
+  if (status === "wait" || status === "scanned" || status === "scaned") {
+    return t('config.remoteIm.confirmLoginInWeixin');
+  }
+  const errorMessage = String(weixinLoginState.value.lastError || "").trim();
+  return errorMessage || "";
+});
+const isWeixinLoggedIn = computed(() => {
+  const status = String(weixinLoginState.value.status || "").trim().toLowerCase();
+  if (weixinLoginState.value.connected) return true;
+  if (weixinRuntimeStatus.value?.connected) return true;
+  if (status === "confirmed" || status === "logged_in") return true;
+  if (!!String(weixinLoginState.value.accountId || "").trim()) return true;
+  if (!!persistedWeixinCredentials.value.token) return true;
+  return !!persistedWeixinCredentials.value.accountId;
+});
 const channelPlatformOptions = computed<Array<{ platform: RemoteImPlatform; label: string }>>(() => [
   { platform: "onebot_v11", label: t("config.remoteIm.platformOptions.onebotV11") },
   { platform: "feishu", label: t("config.remoteIm.platformOptions.feishu") },
@@ -966,25 +1049,6 @@ const channelSnapshot = computed(() => {
 });
 const lastSavedChannelSnapshot = ref(channelSnapshot.value);
 const channelDirty = computed(() => channelSnapshot.value !== lastSavedChannelSnapshot.value);
-const {
-  isWeixinLoggedIn,
-  onWeixinLoginButtonClick,
-  syncWeixinContacts,
-  weixinLoginBusy,
-  weixinLoginState,
-  weixinQrImageSrc,
-  weixinStatusMessage,
-  weixinStatusText,
-} = useWeixinLogin({
-  selectedChannel,
-  channelRuntimeStates,
-  channelDirty,
-  saveChannels,
-  refreshChannelStatus,
-  refreshContacts,
-  setStatus: props.setStatusAction,
-  t,
-});
 
 function isChannelOperationBusy(channelId: string): boolean {
   return !!channelOperationIds.value[channelId];
@@ -2093,6 +2157,148 @@ async function saveContactDraft() {
   }
 }
 
+async function startWeixinLogin() {
+  if (!selectedChannel.value || selectedChannel.value.platform !== "weixin_oc") return;
+  weixinLoginBusy.value = true;
+  try {
+    const result = await invokeTauri<WeixinLoginStatus | {
+      channelId: string;
+      sessionKey: string;
+      qrcode: string;
+      qrcodeImgContent: string;
+      status: string;
+      message: string;
+    }>("remote_im_weixin_oc_start_login", {
+      input: {
+        channelId: selectedChannel.value.id,
+        forceRefresh: true,
+      },
+    });
+    weixinLoginStates.value = {
+      ...weixinLoginStates.value,
+      [selectedChannel.value.id]: {
+        channelId: result.channelId,
+        connected: false,
+        status: result.status,
+        message: result.message,
+        sessionKey: result.sessionKey,
+        qrcode: result.qrcode,
+        qrcodeImgContent: result.qrcodeImgContent,
+        accountId: "",
+        userId: "",
+        baseUrl: "",
+        lastError: "",
+      },
+    };
+    if (weixinLoginPollTimer) clearInterval(weixinLoginPollTimer);
+    weixinLoginPollTimer = setInterval(() => {
+      void pollWeixinLoginStatus();
+    }, 2500);
+  } catch (error) {
+    props.setStatusAction(t('config.remoteIm.weixinScanLoginFailed', { error: String(error) }));
+  } finally {
+    weixinLoginBusy.value = false;
+  }
+}
+
+async function onWeixinLoginButtonClick() {
+  if (weixinLoginBusy.value) return;
+  if (channelDirty.value) {
+    props.setStatusAction(t('config.remoteIm.savingWeixinConfig'));
+    const saved = await saveChannels();
+    if (!saved) {
+      props.setStatusAction(t('config.remoteIm.saveWeixinFirst'));
+      return;
+    }
+  }
+  if (isWeixinLoggedIn.value) {
+    await logoutWeixin();
+  }
+  await startWeixinLogin();
+}
+
+async function pollWeixinLoginStatus() {
+  if (!selectedChannel.value || selectedChannel.value.platform !== "weixin_oc") return;
+  const channelId = selectedChannel.value.id;
+  try {
+    const result = await invokeTauri<WeixinLoginStatus>("remote_im_weixin_oc_get_login_status", {
+      input: { channelId },
+    });
+    weixinLoginStates.value = {
+      ...weixinLoginStates.value,
+      [channelId]: result,
+    };
+    if (result.connected || result.status === "expired") {
+      if (weixinLoginPollTimer) {
+        clearInterval(weixinLoginPollTimer);
+        weixinLoginPollTimer = null;
+      }
+      if (result.connected) {
+        await refreshChannelStatus();
+        await refreshContacts();
+      }
+    }
+  } catch (error) {
+    const errMsg = t('config.remoteIm.weixinStatusQueryFailed', { error: String(error) });
+    weixinLoginStates.value = {
+      ...weixinLoginStates.value,
+      [channelId]: {
+        ...(weixinLoginStates.value[channelId] || {
+          channelId,
+          connected: false,
+          status: "wait",
+          message: "",
+          sessionKey: "",
+          qrcode: "",
+          qrcodeImgContent: "",
+          accountId: "",
+          userId: "",
+          baseUrl: "",
+          lastError: "",
+        }),
+        message: errMsg,
+        lastError: errMsg,
+      },
+    };
+    props.setStatusAction(errMsg);
+  }
+}
+
+async function syncWeixinContacts() {
+  if (!selectedChannel.value || selectedChannel.value.platform !== "weixin_oc") return;
+  try {
+    const result = await invokeTauri<{ message: string }>("remote_im_weixin_oc_sync_contacts", {
+      input: { channelId: selectedChannel.value.id },
+    });
+    props.setStatusAction(result.message);
+    await refreshContacts();
+  } catch (error) {
+    props.setStatusAction(t('config.remoteIm.weixinContactSyncFailed', { error: String(error) }));
+  }
+}
+
+async function logoutWeixin() {
+  if (!selectedChannel.value || selectedChannel.value.platform !== "weixin_oc") return;
+  try {
+    await invokeTauri<boolean>("remote_im_weixin_oc_logout", {
+      input: { channelId: selectedChannel.value.id },
+    });
+    weixinLoginStates.value = {
+      ...weixinLoginStates.value,
+      [selectedChannel.value.id]: {
+        channelId: selectedChannel.value.id,
+        connected: false,
+        status: "logged_out",
+        message: t('config.remoteIm.loggedOut'),
+      },
+    };
+    await refreshChannelStatus();
+    props.setStatusAction(t('config.remoteIm.weixinLoggedOut'));
+  } catch (error) {
+    props.setStatusAction(t('config.remoteIm.weixinLogoutFailed', { error: String(error) }));
+  }
+}
+
 async function refreshContacts() {
   contactsLoading.value = true;
   contactsError.value = "";
@@ -2616,6 +2822,10 @@ onUnmounted(() => {
   if (channelStatusTimer) {
     clearInterval(channelStatusTimer);
     channelStatusTimer = null;
+  }
+  if (weixinLoginPollTimer) {
+    clearInterval(weixinLoginPollTimer);
+    weixinLoginPollTimer = null;
   }
 });
 </script>
