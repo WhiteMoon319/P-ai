@@ -81,6 +81,9 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "clear_agent_avatar"
             | "check_tools_status"
             | "list_terminal_shell_candidates"
+            | "bind_active_chat_view_stream"
+            | "probe_active_chat_view_stream"
+            | "unbind_active_chat_view_stream"
     )
 }
 
@@ -334,6 +337,13 @@ async fn ide_chat_handle_jsonrpc_request(
         "chat.sessionStateSnapshot" => ide_chat_session_state_snapshot(state),
         "chat.queueRecall" => ide_chat_recall_queue_event(state, request.params),
         "chat.queueMarkGuided" => ide_chat_mark_queue_event_guided(state, request.params),
+        "queue_inline_file_attachment" => ide_chat_queue_inline_attachment(state, request.params),
+        "submit_chat_message" => ide_chat_submit_message_command(state, request.params).await,
+        "stop_chat_message" => ide_chat_stop_message_command(state, request.params),
+        "get_chat_queue_snapshot" => ide_chat_queue_snapshot(state),
+        "get_main_session_state_snapshot" => ide_chat_session_state_snapshot(state),
+        "recall_chat_queue_event" => ide_chat_recall_queue_event(state, request.params),
+        "mark_chat_queue_event_guided" => ide_chat_mark_queue_event_guided(state, request.params),
         "toolReview.reports.list" => ide_chat_tool_review_reports(state, request.params),
         "toolReview.report.delete" => ide_chat_tool_review_delete_report(state, request.params),
         "toolReview.commitOptions.list" => ide_chat_tool_review_commit_options(state, request.params).await,
@@ -392,6 +402,9 @@ mod web_native_capability_tests {
             "clear_agent_avatar",
             "check_tools_status",
             "list_terminal_shell_candidates",
+            "bind_active_chat_view_stream",
+            "probe_active_chat_view_stream",
+            "unbind_active_chat_view_stream",
         ] {
             assert!(
                 ide_chat_web_native_only_method(method),
@@ -418,6 +431,13 @@ mod web_native_capability_tests {
             "list_recent_llm_round_logs",
             "get_usage_overview",
             "refresh_usage_overview",
+            "queue_inline_file_attachment",
+            "submit_chat_message",
+            "stop_chat_message",
+            "get_chat_queue_snapshot",
+            "get_main_session_state_snapshot",
+            "recall_chat_queue_event",
+            "mark_chat_queue_event_guided",
         ] {
             assert!(
                 !ide_chat_web_native_only_method(method),

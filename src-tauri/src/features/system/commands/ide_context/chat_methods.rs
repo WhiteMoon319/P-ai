@@ -281,20 +281,23 @@ fn ide_chat_rebind_conversation_recipient(state: &AppState, params: Value) -> Re
 }
 
 fn ide_chat_queue_attachment(state: &AppState, params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatQueueAttachmentInput>(params)?;
-    if input.bytes_base64.trim().is_empty() {
-        return Err("Attachment payload is empty.".to_string());
-    }
-    let raw = B64
-        .decode(input.bytes_base64.trim())
-        .map_err(|err| format!("Decode attachment base64 failed: {err}"))?;
-    let queued = queue_attachment_from_raw(
-        state,
-        input.file_name.trim(),
-        input.mime.trim(),
-        &raw,
-    )?;
-    serde_json::to_value(queued).map_err(|err| format!("serialize queued attachment failed: {err}"))
+    let input = ide_chat_parse_params::<QueueInlineFileAttachmentInput>(params)?;
+    ide_chat_serialize(queue_inline_file_attachment_inner(input, state)?)
+}
+
+fn ide_chat_queue_inline_attachment(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<QueueInlineFileAttachmentInput>(params, "input")?;
+    ide_chat_serialize(queue_inline_file_attachment_inner(input, state)?)
+}
+
+async fn ide_chat_submit_message_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<SendChatRequest>(params, "input")?;
+    ide_chat_serialize(submit_chat_message_inner(input, state).await?)
+}
+
+fn ide_chat_stop_message_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<StopChatRequest>(params, "input")?;
+    ide_chat_serialize(stop_chat_message_inner(input, state)?)
 }
 
 async fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, String> {

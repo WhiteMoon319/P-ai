@@ -522,6 +522,13 @@ fn queue_inline_file_attachment(
     input: QueueInlineFileAttachmentInput,
     state: State<'_, AppState>,
 ) -> Result<QueueLocalFileAttachmentOutput, String> {
+    queue_inline_file_attachment_inner(input, state.inner())
+}
+
+fn queue_inline_file_attachment_inner(
+    input: QueueInlineFileAttachmentInput,
+    state: &AppState,
+) -> Result<QueueLocalFileAttachmentOutput, String> {
     if input.bytes_base64.trim().is_empty() {
         return Err("Attachment payload is empty.".to_string());
     }
@@ -529,7 +536,7 @@ fn queue_inline_file_attachment(
         .decode(input.bytes_base64.trim())
         .map_err(|err| format!("Decode attachment base64 failed: {err}"))?;
     queue_attachment_from_raw(
-        state.inner(),
+        state,
         input.file_name.trim(),
         input.mime.trim(),
         &raw,

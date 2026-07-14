@@ -296,15 +296,6 @@ struct IdeChatConversationBlockPageInput {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatQueueAttachmentInput {
-    file_name: String,
-    #[serde(default)]
-    mime: String,
-    bytes_base64: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct IdeChatSelectModelInput {
     conversation_id: String,
     #[serde(default)]
