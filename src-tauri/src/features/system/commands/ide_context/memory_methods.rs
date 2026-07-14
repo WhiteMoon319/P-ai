@@ -77,35 +77,13 @@ fn ide_chat_search_chat_history_slices_for_web_settings(
 fn ide_chat_get_memory_provider_bindings_for_web_settings(
     state: &AppState,
 ) -> Result<Value, String> {
-    let conn = memory_store_open(&state.data_path)?;
-    ide_chat_serialize(MemoryProviderBindings {
-        embedding_api_config_id: memory_store_get_runtime_state(
-            &conn,
-            KB_STATE_EMBEDDING_API_CONFIG_ID,
-        )?,
-        rerank_api_config_id: memory_store_get_runtime_state(
-            &conn,
-            KB_STATE_RERANK_API_CONFIG_ID,
-        )?,
-    })
+    ide_chat_serialize(get_memory_provider_bindings_inner(state)?)
 }
 
 fn ide_chat_get_memory_embedding_sync_progress_for_web_settings(
     state: &AppState,
 ) -> Result<Value, String> {
-    let conn = memory_store_open(&state.data_path)?;
-    ide_chat_serialize(MemoryEmbeddingSyncProgress {
-        status: memory_store_get_runtime_state(&conn, KB_STATE_REBUILD_STATUS)?
-            .unwrap_or_else(|| "idle".to_string()),
-        done_batches: memory_store_get_runtime_state(&conn, KB_STATE_REBUILD_DONE_BATCHES)?
-            .and_then(|value| value.parse::<usize>().ok())
-            .unwrap_or(0),
-        total_batches: memory_store_get_runtime_state(&conn, KB_STATE_REBUILD_TOTAL_BATCHES)?
-            .and_then(|value| value.parse::<usize>().ok())
-            .unwrap_or(0),
-        trace_id: memory_store_get_runtime_state(&conn, KB_STATE_REBUILD_TRACE_ID)?,
-        error: memory_store_get_runtime_state(&conn, KB_STATE_REBUILD_ERROR)?,
-    })
+    ide_chat_serialize(get_memory_embedding_sync_progress_inner(state)?)
 }
 
 fn ide_chat_test_memory_embedding_provider_for_web_settings(
@@ -113,47 +91,7 @@ fn ide_chat_test_memory_embedding_provider_for_web_settings(
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<TestMemoryEmbeddingProviderInput>(params, "input")?;
-    let started = std::time::Instant::now();
-    let provider_id = input.provider_id.as_deref().unwrap_or("openai_embedding");
-    let provider_kind = memory_provider_kind_from_id(provider_id);
-    if matches!(provider_kind, MemoryProviderKind::VllmRerank) {
-        return Err("rerank provider cannot be used as embedding provider.".to_string());
-    }
-    let app_config = read_config(&state.config_path)?;
-    let provider_cfg = memory_resolve_provider_api_config(
-        &app_config,
-        provider_kind,
-        input.api_config_id.as_deref(),
-        provider_id,
-    )
-    .ok_or_else(|| "No matching API config for embedding test.".to_string())?;
-    let model_name = input
-        .model_name
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    let provider = memory_create_embedding_provider(provider_kind, &provider_cfg, model_name)?;
-    let text = input
-        .text
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("memory embedding connectivity test")
-        .to_string();
-    let vectors = provider.embed_batch(&vec![text])?;
-    let first = vectors
-        .first()
-        .ok_or_else(|| "embedding test returned empty vectors".to_string())?;
-    let dim = first.len();
-    if dim == 0 {
-        return Err("embedding test returned zero-dim vector".to_string());
-    }
-    ide_chat_serialize(TestMemoryEmbeddingProviderResult {
-        provider_kind: format!("{provider_kind:?}"),
-        model_name: model_name.unwrap_or(provider_cfg.model.trim()).to_string(),
-        vector_dim: dim,
-        elapsed_ms: started.elapsed().as_millis(),
-    })
+    ide_chat_serialize(test_memory_embedding_provider_inner(input, state)?)
 }
 
 fn ide_chat_test_memory_rerank_provider_for_web_settings(
@@ -161,50 +99,7 @@ fn ide_chat_test_memory_rerank_provider_for_web_settings(
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<TestMemoryRerankProviderInput>(params, "input")?;
-    let started = std::time::Instant::now();
-    let app_config = read_config(&state.config_path)?;
-    let provider_kind = MemoryProviderKind::VllmRerank;
-    let provider_cfg = memory_resolve_provider_api_config(
-        &app_config,
-        provider_kind,
-        input.api_config_id.as_deref(),
-        "vllm_rerank",
-    )
-    .ok_or_else(|| "No matching API config for rerank test.".to_string())?;
-    let model_name = input
-        .model_name
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    let provider = memory_create_rerank_provider(provider_kind, &provider_cfg, model_name)?;
-    let query = input
-        .query
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("用户偏好什么风格？")
-        .to_string();
-    let documents = input.documents.unwrap_or_else(|| {
-        vec![
-            "用户偏好简洁回答，尽量直接结论。".to_string(),
-            "用户喜欢复杂铺垫和长篇解释。".to_string(),
-            "今天主要讨论了记忆系统检索。".to_string(),
-        ]
-    });
-    let results = provider.rerank(&query, &documents, Some(3))?;
-    let top = results.iter().max_by(|a, b| {
-        a.relevance_score
-            .partial_cmp(&b.relevance_score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    ide_chat_serialize(TestMemoryRerankProviderResult {
-        provider_kind: format!("{provider_kind:?}"),
-        model_name: model_name.unwrap_or(provider_cfg.model.trim()).to_string(),
-        elapsed_ms: started.elapsed().as_millis(),
-        result_count: results.len(),
-        top_index: top.map(|item| item.index),
-        top_score: top.map(|item| item.relevance_score),
-    })
+    ide_chat_serialize(test_memory_rerank_provider_inner(input, state)?)
 }
 
 fn ide_chat_save_memory_embedding_binding_for_web_settings(
@@ -212,69 +107,7 @@ fn ide_chat_save_memory_embedding_binding_for_web_settings(
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<SaveMemoryEmbeddingBindingInput>(params, "input")?;
-    let api_id = input.api_config_id.trim();
-    if api_id.is_empty() {
-        let conn = memory_store_open(&state.data_path)?;
-        let old_provider_id =
-            memory_store_get_runtime_state(&conn, KB_STATE_ACTIVE_INDEX_PROVIDER_ID)?;
-        memory_store_set_runtime_state(&conn, KB_STATE_EMBEDDING_API_CONFIG_ID, "")?;
-        memory_store_set_runtime_state(&conn, KB_STATE_ACTIVE_INDEX_PROVIDER_ID, "")?;
-        return ide_chat_serialize(MemoryStoreProviderSyncReport {
-            status: "disabled".to_string(),
-            old_provider_id,
-            new_provider_id: String::new(),
-            deleted: 0,
-            added: 0,
-            batch_count: 0,
-        });
-    }
-
-    let app_config = read_config(&state.config_path)?;
-    let api = app_config
-        .api_configs
-        .iter()
-        .find(|item| item.id == api_id)
-        .cloned()
-        .ok_or_else(|| "Selected embedding API config not found.".to_string())?;
-    let provider_kind = match api.request_format {
-        RequestFormat::OpenAIEmbedding => MemoryProviderKind::OpenAIEmbedding,
-        RequestFormat::GeminiEmbedding => MemoryProviderKind::GeminiEmbedding,
-        _ => {
-            return Err(format!(
-                "request_format '{}' is not embedding protocol.",
-                api.request_format
-            ))
-        }
-    };
-    let model_name = input
-        .model_name
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(api.model.trim());
-    if model_name.is_empty() {
-        return Err("Embedding model is empty.".to_string());
-    }
-    let provider_cfg = MemoryProviderApiConfig {
-        base_url: api.base_url.clone(),
-        api_key: api.api_key.clone(),
-        model: api.model.clone(),
-    };
-    let provider = memory_create_embedding_provider(provider_kind, &provider_cfg, Some(model_name))?;
-    let provider_id = memory_binding_provider_id(&api.id, api.request_format.as_str(), model_name);
-    let batch_size = input.batch_size.unwrap_or(64).max(1);
-    let report = memory_store_sync_provider_index(
-        &state.data_path,
-        &provider_id,
-        model_name,
-        batch_size,
-        false,
-        |texts| provider.embed_batch(texts),
-    )?;
-
-    let conn = memory_store_open(&state.data_path)?;
-    memory_store_set_runtime_state(&conn, KB_STATE_EMBEDDING_API_CONFIG_ID, &api.id)?;
-    ide_chat_serialize(report)
+    ide_chat_serialize(save_memory_embedding_binding_inner(input, state)?)
 }
 
 fn ide_chat_save_memory_rerank_binding_for_web_settings(
@@ -282,46 +115,7 @@ fn ide_chat_save_memory_rerank_binding_for_web_settings(
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<SaveMemoryRerankBindingInput>(params, "input")?;
-    let api_id = input.api_config_id.trim();
-    if api_id.is_empty() {
-        let conn = memory_store_open(&state.data_path)?;
-        memory_store_set_runtime_state(&conn, KB_STATE_RERANK_API_CONFIG_ID, "")?;
-        return ide_chat_serialize(SaveMemoryRerankBindingResult {
-            status: "disabled".to_string(),
-            rerank_api_config_id: None,
-            model_name: String::new(),
-        });
-    }
-    let app_config = read_config(&state.config_path)?;
-    let api = app_config
-        .api_configs
-        .iter()
-        .find(|item| item.id == api_id)
-        .cloned()
-        .ok_or_else(|| "Selected rerank API config not found.".to_string())?;
-    if !matches!(api.request_format, RequestFormat::OpenAIRerank) {
-        return Err(format!(
-            "request_format '{}' is not rerank protocol.",
-            api.request_format
-        ));
-    }
-    let model_name = input
-        .model_name
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(api.model.trim());
-    if model_name.is_empty() {
-        return Err("Rerank model is empty.".to_string());
-    }
-
-    let conn = memory_store_open(&state.data_path)?;
-    memory_store_set_runtime_state(&conn, KB_STATE_RERANK_API_CONFIG_ID, &api.id)?;
-    ide_chat_serialize(SaveMemoryRerankBindingResult {
-        status: "saved".to_string(),
-        rerank_api_config_id: Some(api.id),
-        model_name: model_name.to_string(),
-    })
+    ide_chat_serialize(save_memory_rerank_binding_inner(input, state)?)
 }
 
 fn ide_chat_get_agent_private_memory_count_for_web_settings(

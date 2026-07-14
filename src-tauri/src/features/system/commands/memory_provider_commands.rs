@@ -210,10 +210,9 @@ fn sync_memory_embedding_provider(
     )
 }
 
-#[tauri::command]
-fn test_memory_embedding_provider(
+fn test_memory_embedding_provider_inner(
     input: TestMemoryEmbeddingProviderInput,
-    state: State<'_, AppState>,
+    state: &AppState,
 ) -> Result<TestMemoryEmbeddingProviderResult, String> {
     let started = std::time::Instant::now();
     let provider_id = input.provider_id.as_deref().unwrap_or("openai_embedding");
@@ -258,10 +257,9 @@ fn test_memory_embedding_provider(
     })
 }
 
-#[tauri::command]
-fn test_memory_rerank_provider(
+fn test_memory_rerank_provider_inner(
     input: TestMemoryRerankProviderInput,
-    state: State<'_, AppState>,
+    state: &AppState,
 ) -> Result<TestMemoryRerankProviderResult, String> {
     let started = std::time::Instant::now();
     let app_config = read_config(&state.config_path)?;
@@ -334,8 +332,7 @@ fn memory_binding_provider_id(api_id: &str, request_format: &str, model: &str) -
     format!("{id}_{fmt}_{mdl}")
 }
 
-#[tauri::command]
-fn get_memory_provider_bindings(state: State<'_, AppState>) -> Result<MemoryProviderBindings, String> {
+fn get_memory_provider_bindings_inner(state: &AppState) -> Result<MemoryProviderBindings, String> {
     let conn = memory_store_open(&state.data_path)?;
     Ok(MemoryProviderBindings {
         embedding_api_config_id: memory_store_get_runtime_state(&conn, KB_STATE_EMBEDDING_API_CONFIG_ID)?,
@@ -343,8 +340,9 @@ fn get_memory_provider_bindings(state: State<'_, AppState>) -> Result<MemoryProv
     })
 }
 
-#[tauri::command]
-fn get_memory_embedding_sync_progress(state: State<'_, AppState>) -> Result<MemoryEmbeddingSyncProgress, String> {
+fn get_memory_embedding_sync_progress_inner(
+    state: &AppState,
+) -> Result<MemoryEmbeddingSyncProgress, String> {
     let conn = memory_store_open(&state.data_path)?;
     let status = memory_store_get_runtime_state(&conn, KB_STATE_REBUILD_STATUS)?
         .unwrap_or_else(|| "idle".to_string());
@@ -365,10 +363,9 @@ fn get_memory_embedding_sync_progress(state: State<'_, AppState>) -> Result<Memo
     })
 }
 
-#[tauri::command]
-fn save_memory_embedding_binding(
+fn save_memory_embedding_binding_inner(
     input: SaveMemoryEmbeddingBindingInput,
-    state: State<'_, AppState>,
+    state: &AppState,
 ) -> Result<MemoryStoreProviderSyncReport, String> {
     let api_id = input.api_config_id.trim();
     if api_id.is_empty() {
@@ -435,10 +432,9 @@ fn save_memory_embedding_binding(
     Ok(report)
 }
 
-#[tauri::command]
-fn save_memory_rerank_binding(
+fn save_memory_rerank_binding_inner(
     input: SaveMemoryRerankBindingInput,
-    state: State<'_, AppState>,
+    state: &AppState,
 ) -> Result<SaveMemoryRerankBindingResult, String> {
     let api_id = input.api_config_id.trim();
     if api_id.is_empty() {
@@ -480,6 +476,52 @@ fn save_memory_rerank_binding(
         rerank_api_config_id: Some(api.id),
         model_name: model_name.to_string(),
     })
+}
+
+#[tauri::command]
+fn test_memory_embedding_provider(
+    input: TestMemoryEmbeddingProviderInput,
+    state: State<'_, AppState>,
+) -> Result<TestMemoryEmbeddingProviderResult, String> {
+    test_memory_embedding_provider_inner(input, state.inner())
+}
+
+#[tauri::command]
+fn test_memory_rerank_provider(
+    input: TestMemoryRerankProviderInput,
+    state: State<'_, AppState>,
+) -> Result<TestMemoryRerankProviderResult, String> {
+    test_memory_rerank_provider_inner(input, state.inner())
+}
+
+#[tauri::command]
+fn get_memory_provider_bindings(
+    state: State<'_, AppState>,
+) -> Result<MemoryProviderBindings, String> {
+    get_memory_provider_bindings_inner(state.inner())
+}
+
+#[tauri::command]
+fn get_memory_embedding_sync_progress(
+    state: State<'_, AppState>,
+) -> Result<MemoryEmbeddingSyncProgress, String> {
+    get_memory_embedding_sync_progress_inner(state.inner())
+}
+
+#[tauri::command]
+fn save_memory_embedding_binding(
+    input: SaveMemoryEmbeddingBindingInput,
+    state: State<'_, AppState>,
+) -> Result<MemoryStoreProviderSyncReport, String> {
+    save_memory_embedding_binding_inner(input, state.inner())
+}
+
+#[tauri::command]
+fn save_memory_rerank_binding(
+    input: SaveMemoryRerankBindingInput,
+    state: State<'_, AppState>,
+) -> Result<SaveMemoryRerankBindingResult, String> {
+    save_memory_rerank_binding_inner(input, state.inner())
 }
 
 #[tauri::command]
