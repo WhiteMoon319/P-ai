@@ -3231,6 +3231,13 @@ async fn preview_rewind_conversation_from_message(
     input: RewindConversationInput,
     state: State<'_, AppState>,
 ) -> Result<RewindConversationPreviewResultPayload, String> {
+    preview_rewind_conversation_from_message_inner(input, state.inner()).await
+}
+
+async fn preview_rewind_conversation_from_message_inner(
+    input: RewindConversationInput,
+    state: &AppState,
+) -> Result<RewindConversationPreviewResultPayload, String> {
     let started_at = std::time::Instant::now();
     let message_id = validate_rewind_input(&input, &started_at)?;
     runtime_log_info(format!(
@@ -3238,7 +3245,7 @@ async fn preview_rewind_conversation_from_message(
         message_id
     ));
     let result = conversation_service_v2().preview_rewind_conversation(
-        state.inner(),
+        state,
         &input,
         &message_id,
     )?;
@@ -3260,6 +3267,13 @@ async fn rewind_conversation_from_message(
     input: RewindConversationInput,
     state: State<'_, AppState>,
 ) -> Result<RewindConversationResult, String> {
+    rewind_conversation_from_message_inner(input, state.inner()).await
+}
+
+async fn rewind_conversation_from_message_inner(
+    input: RewindConversationInput,
+    state: &AppState,
+) -> Result<RewindConversationResult, String> {
     let started_at = std::time::Instant::now();
     let message_id = validate_rewind_input(&input, &started_at)?;
     runtime_log_info(format!(
@@ -3268,7 +3282,7 @@ async fn rewind_conversation_from_message(
     ));
 
     let result = conversation_service_v2().rewind_conversation(
-        state.inner(),
+        state,
         &input,
         &message_id,
         &started_at,
@@ -3283,7 +3297,7 @@ async fn rewind_conversation_from_message(
 
     if removed_count > 0 {
         emit_conversation_todos_updated_payload(
-            state.inner(),
+            state,
             &ConversationTodosUpdatedPayload {
                 conversation_id: conversation_id.clone(),
                 current_todo,

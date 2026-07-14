@@ -2039,7 +2039,12 @@ async function recallTurn(payload: { turnId: string }) {
     const mode = await requestRecallMode(targetMessageId);
     if (mode === "cancel") return;
     const result = await transport.request<RewindConversationResult>("conversation.rewind", {
-      conversationId: activeConversationId.value,
+      session: {
+        conversationId: activeConversationId.value,
+        departmentId: activeDepartmentId.value,
+        agentId: activeAgentId.value,
+        apiConfigId: preferredChatModelId.value || null,
+      },
       messageId: targetMessageId,
       undoApplyPatch: mode === "with_patch",
     });
@@ -2048,17 +2053,7 @@ async function recallTurn(payload: { turnId: string }) {
     if (targetRole === "user" && recalled) {
       inputText.value = removeBinaryPlaceholders(messageText(recalled));
     }
-    if (result.conversation) {
-      activeConversationId.value = result.conversation.conversationId;
-      messages.value = normalizeSidebarMessages(
-        Array.isArray(result.conversation.messages) ? result.conversation.messages : messages.value.slice(0, directIndex),
-        messages.value,
-      );
-      persona.value = result.conversation.persona || persona.value;
-      applyModelPayload(result.conversation.model || {});
-    } else {
-      messages.value = normalizeSidebarMessages(messages.value.slice(0, directIndex), messages.value);
-    }
+    await openConversation(activeConversationId.value);
     selectedBlockId.value = null;
     hasPrevBlock.value = true;
     await refreshList();
@@ -2165,8 +2160,14 @@ async function getRewindPreview(targetUserMessageId: string): Promise<RewindConv
     return { conversationId, canUndoPatch: false, hint: "缺少撤回预览所需的会话上下文。" };
   }
   return await transport.request<RewindConversationPreviewResult>("conversation.rewindPreview", {
-    conversationId,
+    session: {
+      conversationId,
+      departmentId: activeDepartmentId.value,
+      agentId: activeAgentId.value,
+      apiConfigId: preferredChatModelId.value || null,
+    },
     messageId,
+    undoApplyPatch: false,
   });
 }
 

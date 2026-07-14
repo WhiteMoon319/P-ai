@@ -110,11 +110,9 @@ export type SidebarAttachmentPayload = {
 };
 
 export type RewindConversationResult = {
-  conversationId: string;
   removedCount: number;
   remainingCount: number;
   recalledUserMessage?: ChatMessage;
-  conversation?: OpenConversationResult;
 };
 
 export type RewindConversationPreviewResult = {

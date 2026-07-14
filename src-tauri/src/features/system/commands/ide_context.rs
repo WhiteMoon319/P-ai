@@ -324,17 +324,6 @@ struct IdeChatTerminalApprovalRequestIdInput {
     request_id: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IdeChatRewindInput {
-    conversation_id: String,
-    message_id: String,
-    #[serde(default, rename = "agentId")]
-    _agent_id: Option<String>,
-    #[serde(default)]
-    undo_apply_patch: bool,
-}
-
 fn ide_chat_avatar_data_url(state: &AppState, path: Option<&str>) -> String {
     let Some(path) = path.map(str::trim).filter(|value| !value.is_empty()) else {
         return String::new();
@@ -1092,5 +1081,26 @@ mod ide_context_tests {
         assert!(deleted.get("activeConversationId").is_some());
         assert!(deleted.get("unarchivedConversations").is_some());
         assert!(deleted.get("preferredConversationId").is_none());
+    }
+
+    #[tokio::test]
+    async fn ide_chat_rewind_should_reject_local_patch_restore_on_web() {
+        let state = ide_context_test_state();
+        let error = ide_chat_rewind_conversation(
+            &state,
+            serde_json::json!({
+                "session": {
+                    "apiConfigId": null,
+                    "departmentId": ASSISTANT_DEPARTMENT_ID,
+                    "agentId": DEFAULT_AGENT_ID,
+                    "conversationId": "conversation-1"
+                },
+                "messageId": "message-1",
+                "undoApplyPatch": true
+            }),
+        )
+        .await
+        .expect_err("web must reject local patch restore");
+        assert!(error.starts_with("WEB_NATIVE_CAPABILITY_UNAVAILABLE:"));
     }
 }

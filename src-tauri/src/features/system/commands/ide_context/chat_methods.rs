@@ -389,93 +389,17 @@ fn ide_chat_session_for_conversation(state: &AppState, conversation_id: &str) ->
 }
 
 async fn ide_chat_rewind_conversation(state: &AppState, params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatRewindInput>(params)?;
-    let conversation_id = input.conversation_id.trim().to_string();
-    let message_id = input.message_id.trim().to_string();
-    if conversation_id.is_empty() {
-        return Err("conversationId is required".to_string());
+    let input = ide_chat_parse_params::<RewindConversationInput>(params)?;
+    if input.undo_apply_patch {
+        return Err(ide_chat_web_native_only_error(
+            "conversation.rewind.undoApplyPatch",
+        ));
     }
-    if message_id.is_empty() {
-        return Err("messageId is required".to_string());
-    }
-
-    let started_at = std::time::Instant::now();
-    let session = ide_chat_session_for_conversation(state, &conversation_id)?;
-    let request = RewindConversationInput {
-        session,
-        message_id: message_id.clone(),
-        undo_apply_patch: input.undo_apply_patch,
-    };
-    let result = conversation_service_v2().rewind_conversation(
-        state,
-        &request,
-        &message_id,
-        &started_at,
-    )?;
+    let result = rewind_conversation_from_message_inner(input, state).await?;
     if result.removed_count > 0 {
-        emit_conversation_todos_updated_payload(
-            state,
-            &ConversationTodosUpdatedPayload {
-                conversation_id: result.conversation_id.clone(),
-                current_todo: result.current_todo.clone(),
-                current_todos: result.current_todos.clone(),
-            },
-        );
         ide_chat_emit_overview_updated(state)?;
     }
-    let mut recalled_user_message = result.recalled_user_message;
-    if let Some(message) = recalled_user_message.as_mut() {
-        materialize_message_parts_from_media_refs(&mut message.parts, &state.data_path);
-    }
-    let conversation = ide_chat_conversation_open_result(state, &conversation_id)?;
-    Ok(serde_json::json!({
-        "conversationId": conversation_id,
-        "removedCount": result.removed_count,
-        "remainingCount": result.remaining_count,
-        "recalledUserMessage": recalled_user_message,
-        "conversation": conversation,
-    }))
-}
-
-async fn ide_chat_rewind_preview(state: &AppState, params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatRewindInput>(params)?;
-    let conversation_id = input.conversation_id.trim().to_string();
-    let message_id = input.message_id.trim().to_string();
-    if conversation_id.is_empty() {
-        return Err("conversationId is required".to_string());
-    }
-    if message_id.is_empty() {
-        return Err("messageId is required".to_string());
-    }
-
-    let started_at = std::time::Instant::now();
-    runtime_log_info(format!(
-        "[会话撤回] 开始，任务=ide_chat_rewind_preview，conversation_id={}，message_id={}",
-        conversation_id,
-        message_id
-    ));
-    let session = ide_chat_session_for_conversation(state, &conversation_id)?;
-    let request = RewindConversationInput {
-        session,
-        message_id: message_id.clone(),
-        undo_apply_patch: false,
-    };
-    let result = conversation_service_v2().preview_rewind_conversation(
-        state,
-        &request,
-        &message_id,
-    )?;
-    runtime_log_info(format!(
-        "[会话撤回] 完成，任务=ide_chat_rewind_preview，conversation_id={}，can_undo_patch={}，duration_ms={}",
-        result.conversation_id,
-        result.can_undo_patch,
-        started_at.elapsed().as_millis()
-    ));
-    Ok(serde_json::json!({
-        "conversationId": result.conversation_id,
-        "canUndoPatch": result.can_undo_patch,
-        "hint": result.hint,
-    }))
+    ide_chat_serialize(result)
 }
 
 fn ide_chat_compact_preview(state: &AppState, params: Value) -> Result<Value, String> {

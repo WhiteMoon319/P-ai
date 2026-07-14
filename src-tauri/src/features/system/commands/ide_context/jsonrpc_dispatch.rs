@@ -12,6 +12,7 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "fileReader.readFile"
             | "fileReader.readFileBlock"
             | "conversation.plan.readFile"
+            | "conversation.rewindPreview"
             | "read_chat_image_data_url"
             | "read_local_chat_image_thumbnail"
             | "read_local_chat_image_original"
@@ -137,7 +138,6 @@ async fn ide_chat_handle_jsonrpc_request(
         "conversation.delete" => ide_chat_delete_conversation(state, request.params).await,
         "conversation.batchArchive" => ide_chat_batch_archive_conversations(state, request.params).await,
         "conversation.rebindRecipient" => ide_chat_rebind_conversation_recipient(state, request.params),
-        "conversation.rewindPreview" => ide_chat_rewind_preview(state, request.params).await,
         "conversation.rewind" => ide_chat_rewind_conversation(state, request.params).await,
         "conversation.branchFromMessage" => ide_chat_branch_conversation_from_message(state, request.params).await,
         "conversation.branchFromSelection" => ide_chat_branch_conversation(state, request.params).await,
@@ -364,6 +364,7 @@ mod web_native_capability_tests {
             "read_file_reader_file",
             "read_local_chat_image_original",
             "conversation.plan.readFile",
+            "conversation.rewindPreview",
             "workspace.list",
             "open_storage_usage_item_directory",
             "mcp_open_workspace_dir",
@@ -401,7 +402,7 @@ mod web_native_capability_tests {
     }
 
     #[test]
-    fn chat_send_and_stop_should_use_canonical_tauri_request_shapes() {
+    fn chat_send_stop_and_rewind_should_use_canonical_tauri_request_shapes() {
         let send = serde_json::json!({
             "payload": {
                 "text": "hello",
@@ -426,12 +427,28 @@ mod web_native_capability_tests {
             "partialAssistantText": "visible text",
             "partialStreamBlocks": []
         });
+        let rewind = serde_json::json!({
+            "session": {
+                "apiConfigId": null,
+                "departmentId": "department-1",
+                "agentId": "agent-1",
+                "conversationId": "conversation-1"
+            },
+            "messageId": "message-1",
+            "undoApplyPatch": true
+        });
 
         assert!(serde_json::from_value::<SendChatRequest>(send).is_ok());
         assert!(serde_json::from_value::<StopChatRequest>(stop).is_ok());
+        assert!(serde_json::from_value::<RewindConversationInput>(rewind).is_ok());
         assert!(serde_json::from_value::<SendChatRequest>(serde_json::json!({
             "conversationId": "conversation-1",
             "text": "legacy"
+        }))
+        .is_err());
+        assert!(serde_json::from_value::<RewindConversationInput>(serde_json::json!({
+            "conversationId": "conversation-1",
+            "messageId": "message-1"
         }))
         .is_err());
     }
