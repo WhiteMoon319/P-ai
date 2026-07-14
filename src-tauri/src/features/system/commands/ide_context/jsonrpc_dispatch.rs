@@ -71,6 +71,11 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "export_config_migration_package"
             | "preview_import_config_migration_package"
             | "apply_import_config_migration_package"
+            | "codex_get_auth_status"
+            | "codex_start_oauth_login"
+            | "codex_get_rate_limits"
+            | "codex_consume_rate_limit_reset_credit"
+            | "codex_logout"
     )
 }
 
@@ -261,11 +266,6 @@ async fn ide_chat_handle_jsonrpc_request(
         "set_skipped_github_update_version" => {
             ide_chat_set_skipped_github_update_version_for_web_settings(state, app, request.params)
         },
-        "codex_get_auth_status" => ide_chat_codex_get_auth_status_for_web_settings(request.params).await,
-        "codex_start_oauth_login" => ide_chat_codex_start_oauth_login_for_web_settings(request.params).await,
-        "codex_get_rate_limits" => ide_chat_codex_get_rate_limits_for_web_settings(request.params).await,
-        "codex_consume_rate_limit_reset_credit" => ide_chat_codex_consume_rate_limit_reset_credit_for_web_settings(request.params).await,
-        "codex_logout" => ide_chat_codex_logout_for_web_settings(request.params),
         "list_memories" => ide_chat_list_memories_for_web_settings(state),
         "delete_memory" => ide_chat_delete_memory_for_web_settings(state, request.params),
         "search_memories_mixed" => ide_chat_search_memories_mixed_for_web_settings(state, request.params),
@@ -382,6 +382,11 @@ mod web_native_capability_tests {
             "export_config_migration_package",
             "preview_import_config_migration_package",
             "apply_import_config_migration_package",
+            "codex_get_auth_status",
+            "codex_start_oauth_login",
+            "codex_get_rate_limits",
+            "codex_consume_rate_limit_reset_credit",
+            "codex_logout",
         ] {
             assert!(
                 ide_chat_web_native_only_method(method),

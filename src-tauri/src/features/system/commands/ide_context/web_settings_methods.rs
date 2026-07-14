@@ -386,31 +386,4 @@ fn ide_chat_set_skipped_github_update_version_for_web_settings(
     ide_chat_serialize(set_skipped_github_update_version_inner(version, app, state)?)
 }
 
-async fn ide_chat_codex_get_auth_status_for_web_settings(params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<CodexAuthStatusInput>(params, "input")?;
-    ide_chat_serialize(codex_get_auth_status(input).await?)
-}
-
-async fn ide_chat_codex_start_oauth_login_for_web_settings(params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<CodexStartOAuthLoginInput>(params, "input")?;
-    ide_chat_serialize(codex_start_oauth_login(input).await?)
-}
-
-async fn ide_chat_codex_get_rate_limits_for_web_settings(params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<CodexGetRateLimitsInput>(params, "input")?;
-    ide_chat_serialize(codex_get_rate_limits(input).await?)
-}
-
-async fn ide_chat_codex_consume_rate_limit_reset_credit_for_web_settings(
-    params: Value,
-) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<CodexGetRateLimitsInput>(params, "input")?;
-    ide_chat_serialize(codex_consume_rate_limit_reset_credit(input).await?)
-}
-
-fn ide_chat_codex_logout_for_web_settings(params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<CodexLogoutInput>(params, "input")?;
-    ide_chat_serialize(codex_logout(input)?)
-}
-
 include!("remote_im_methods.rs");
