@@ -1655,7 +1655,8 @@ fn chat_metadata_store_collect_v2_conversation_paths(
 
 fn chat_metadata_store_cleanup_v2_metadata_files(
     paths: &[MessageStorePaths],
-) -> Result<(), String> {
+) -> usize {
+    let mut failed_count = 0usize;
     for paths in paths {
         for file in [
             &paths.manifest_file,
@@ -1664,17 +1665,18 @@ fn chat_metadata_store_cleanup_v2_metadata_files(
             &paths.active_plans_file,
         ] {
             if file.exists() {
-                fs::remove_file(file).map_err(|err| {
-                    format!(
-                        "删除已迁移 v2 元数据文件失败，conversation_id={}，path={}，error={err}",
+                if let Err(err) = fs::remove_file(file) {
+                    failed_count += 1;
+                    runtime_log_warn(format!(
+                        "[聊天存储迁移] 跳过，任务=清理已迁移v2元数据，conversation_id={}，path={}，异常={err}",
                         paths.conversation_id,
                         file.display()
-                    )
-                })?;
+                    ));
+                }
             }
         }
     }
-    Ok(())
+    failed_count
 }
 
 pub(super) fn chat_metadata_store_run_v3_migration(data_path: &PathBuf) -> Result<(), String> {
@@ -1732,7 +1734,14 @@ pub(super) fn chat_metadata_store_run_v3_migration(data_path: &PathBuf) -> Resul
         ));
     }
     chat_metadata_store_mark_migration_completed(data_path, CHAT_STORAGE_MIGRATION_KEY)?;
-    chat_metadata_store_cleanup_v2_metadata_files(&migrated_paths)
+    let cleanup_failed_count = chat_metadata_store_cleanup_v2_metadata_files(&migrated_paths);
+    if cleanup_failed_count > 0 {
+        runtime_log_warn(format!(
+            "[聊天存储迁移] 完成，任务=清理已迁移v2元数据，失败文件数={}",
+            cleanup_failed_count
+        ));
+    }
+    Ok(())
 }
 
 fn chat_metadata_store_compaction_segment(
@@ -1971,6 +1980,20 @@ fn chat_metadata_store_write_snapshot_unlocked(
     })
 }
 
+fn chat_metadata_store_drop_recover_operation(
+    conn: &rusqlite::Connection,
+    operation_id: &str,
+    reason: &str,
+) -> Result<(), String> {
+    runtime_log_warn(format!(
+        "[聊天存储恢复] 放弃，任务=恢复v3未完成操作，operation_id={}，reason={}",
+        operation_id, reason
+    ));
+    conn.execute("DELETE FROM storage_operations WHERE operation_id=?1", [operation_id])
+        .map_err(|err| format!("清理 v3 异常恢复操作记录失败: {err}"))?;
+    Ok(())
+}
+
 fn chat_metadata_store_recover_operations(data_path: &PathBuf) -> Result<(), String> {
     let conn = chat_metadata_store_open(data_path)?;
     let mut statement = conn.prepare(
@@ -1989,12 +2012,35 @@ fn chat_metadata_store_recover_operations(data_path: &PathBuf) -> Result<(), Str
     }
     drop(statement);
     for (operation_id, conversation_id, _before_revision, _after_revision, state, detail_json) in operations {
-        let detail: ChatStorageOperationDetail = serde_json::from_str(&detail_json)
-            .map_err(|err| format!("解析 v3 存储操作详情失败，operation_id={operation_id}，error={err}"))?;
+        let detail: ChatStorageOperationDetail = match serde_json::from_str(&detail_json) {
+            Ok(detail) => detail,
+            Err(err) => {
+                chat_metadata_store_drop_recover_operation(
+                    &conn,
+                    &operation_id,
+                    &format!("解析操作详情失败：{err}"),
+                )?;
+                continue;
+            }
+        };
         if detail.conversation_id != conversation_id {
-            return Err(format!("v3 存储操作会话 ID 不一致，operation_id={operation_id}"));
+            chat_metadata_store_drop_recover_operation(
+                &conn,
+                &operation_id,
+                &format!(
+                    "操作会话ID不一致：record={}，detail={}",
+                    conversation_id, detail.conversation_id
+                ),
+            )?;
+            continue;
         }
-        let paths = message_store_paths(data_path, &conversation_id)?;
+        let paths = match message_store_paths(data_path, &conversation_id) {
+            Ok(paths) => paths,
+            Err(err) => {
+                chat_metadata_store_drop_recover_operation(&conn, &operation_id, &err)?;
+                continue;
+            }
+        };
         let publication_gate = chat_metadata_store_publication_gate(&paths);
         let _publication_guard = publication_gate.write().unwrap_or_else(|poison| poison.into_inner());
         let operation_root = chat_metadata_operation_root(&paths, &operation_id);
@@ -2025,7 +2071,15 @@ fn chat_metadata_store_recover_operations(data_path: &PathBuf) -> Result<(), Str
             }
         }
         if operation_root.exists() {
-            fs::remove_dir_all(&operation_root).map_err(|err| format!("清理 v3 恢复操作目录失败，path={}，error={err}", operation_root.display()))?;
+            if let Err(err) = fs::remove_dir_all(&operation_root) {
+                runtime_log_warn(format!(
+                    "[聊天存储恢复] 跳过，任务=清理v3恢复操作目录，operation_id={}，path={}，异常={}，retry=保留操作记录",
+                    operation_id,
+                    operation_root.display(),
+                    err
+                ));
+                continue;
+            }
         }
         conn.execute("DELETE FROM storage_operations WHERE operation_id=?1", [&operation_id])
             .map_err(|err| format!("清理 v3 恢复操作记录失败: {err}"))?;
@@ -2157,6 +2211,76 @@ fn v3_chat_metadata_migration_should_import_v2_metadata_and_remove_v2_files() {
     chat_metadata_store_recover_operations(&data_path).expect("recover committed cleanup operation");
     assert_eq!(fs::read_to_string(&block_path).expect("keep committed block"), original_block);
     assert!(!stale_block.exists());
+    let _ = fs::remove_dir_all(root);
+}
+
+#[cfg(test)]
+#[test]
+fn v3_chat_metadata_recover_operations_should_drop_bad_operation_detail() {
+    let root = std::env::temp_dir().join(format!("eca-chat-v3-bad-operation-{}", Uuid::new_v4()));
+    let data_path = root.join("app_data.json");
+    chat_metadata_store_run_v3_migration(&data_path).expect("initialize v3 storage");
+    let conn = chat_metadata_store_open(&data_path).expect("open SQLite metadata");
+    let operation_id = Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO storage_operations(operation_id, conversation_id, before_revision, after_revision, state, detail_json, created_at)
+         VALUES(?1, ?2, 0, 1, 'pending', ?3, ?4)",
+        rusqlite::params![operation_id, "bad-operation-conversation", "{broken", now_iso()],
+    ).expect("record bad operation");
+
+    chat_metadata_store_recover_operations(&data_path).expect("drop bad operation detail");
+    let remaining: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM storage_operations WHERE operation_id=?1",
+        [&operation_id],
+        |row| row.get(0),
+    ).expect("count bad operation");
+
+    assert_eq!(remaining, 0);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[cfg(test)]
+#[test]
+fn v3_chat_metadata_recover_operations_should_keep_record_when_cleanup_fails() {
+    let root = std::env::temp_dir().join(format!("eca-chat-v3-cleanup-retry-{}", Uuid::new_v4()));
+    let data_path = root.join("app_data.json");
+    chat_metadata_store_run_v3_migration(&data_path).expect("initialize v3 storage");
+    let conn = chat_metadata_store_open(&data_path).expect("open SQLite metadata");
+    let conversation_id = "cleanup-retry-conversation";
+    let paths = message_store_paths(&data_path, conversation_id).expect("paths");
+    let operation_id = Uuid::new_v4().to_string();
+    let operation_root = chat_metadata_operation_root(&paths, &operation_id);
+    if let Some(parent) = operation_root.parent() {
+        fs::create_dir_all(parent).expect("create operation parent");
+    }
+    fs::write(&operation_root, "not a directory").expect("block cleanup with file");
+    let detail = ChatStorageOperationDetail {
+        conversation_id: conversation_id.to_string(),
+        expected_block_files: Vec::new(),
+        replaced_block_files: Vec::new(),
+        retired_block_files: Vec::new(),
+        new_block_files: Vec::new(),
+    };
+    conn.execute(
+        "INSERT INTO storage_operations(operation_id, conversation_id, before_revision, after_revision, state, detail_json, created_at)
+         VALUES(?1, ?2, 0, 1, 'pending', ?3, ?4)",
+        rusqlite::params![
+            operation_id,
+            conversation_id,
+            serde_json::to_string(&detail).expect("serialize operation"),
+            now_iso()
+        ],
+    ).expect("record cleanup retry operation");
+
+    chat_metadata_store_recover_operations(&data_path).expect("recover should keep retry record");
+    let remaining: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM storage_operations WHERE operation_id=?1",
+        [&operation_id],
+        |row| row.get(0),
+    ).expect("count retained operation");
+
+    assert_eq!(remaining, 1);
+    let _ = fs::remove_file(operation_root);
     let _ = fs::remove_dir_all(root);
 }
 
