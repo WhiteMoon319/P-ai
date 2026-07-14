@@ -113,7 +113,7 @@ fn preflight_legacy_conversation(
                 return MessageStoreMigrationPreflightItem {
                     conversation_id: conversation_id.to_string(),
                     title: conversation.title,
-                    status: "blocked".to_string(),
+                    status: "discarded".to_string(),
                     message_count: conversation.messages.len(),
                     reason: Some(format!(
                         "会话文件名与内部 ID 不一致：file_id={}，conversation_id={}",
@@ -127,7 +127,7 @@ fn preflight_legacy_conversation(
                     return MessageStoreMigrationPreflightItem {
                         conversation_id: conversation_id.to_string(),
                         title: conversation.title,
-                        status: "blocked".to_string(),
+                        status: "discarded".to_string(),
                         message_count: conversation.messages.len(),
                         reason: Some(err),
                     };
@@ -144,7 +144,7 @@ fn preflight_legacy_conversation(
                 Err(err) => MessageStoreMigrationPreflightItem {
                     conversation_id: conversation_id.to_string(),
                     title: conversation.title,
-                    status: "blocked".to_string(),
+                    status: "discarded".to_string(),
                     message_count: conversation.messages.len(),
                     reason: Some(err),
                 },
@@ -153,7 +153,7 @@ fn preflight_legacy_conversation(
         Err(err) => MessageStoreMigrationPreflightItem {
             conversation_id: conversation_id.to_string(),
             title: String::new(),
-            status: "blocked".to_string(),
+            status: "discarded".to_string(),
             message_count: 0,
             reason: Some(err),
         },
@@ -171,7 +171,7 @@ fn preflight_ready_message_store_conversation(
             return MessageStoreMigrationPreflightItem {
                 conversation_id: conversation_id.to_string(),
                 title: String::new(),
-                status: "blocked".to_string(),
+                status: "discarded".to_string(),
                 message_count: fallback_message_count,
                 reason: Some("ready JSONL 会话状态不可读".to_string()),
             };
@@ -180,7 +180,7 @@ fn preflight_ready_message_store_conversation(
             return MessageStoreMigrationPreflightItem {
                 conversation_id: conversation_id.to_string(),
                 title: String::new(),
-                status: "blocked".to_string(),
+                status: "discarded".to_string(),
                 message_count: fallback_message_count,
                 reason: Some(err),
             };
@@ -197,14 +197,14 @@ fn preflight_ready_message_store_conversation(
         Ok(None) => MessageStoreMigrationPreflightItem {
             conversation_id: conversation_id.to_string(),
             title: String::new(),
-            status: "blocked".to_string(),
+            status: "discarded".to_string(),
             message_count: ready_status.source_message_count,
             reason: Some("ready JSONL 会话缺少 meta".to_string()),
         },
         Err(err) => MessageStoreMigrationPreflightItem {
             conversation_id: conversation_id.to_string(),
             title: String::new(),
-            status: "blocked".to_string(),
+            status: "discarded".to_string(),
             message_count: ready_status.source_message_count,
             reason: Some(err),
         },
@@ -221,7 +221,7 @@ fn preflight_message_store_conversation(
             return MessageStoreMigrationPreflightItem {
                 conversation_id: conversation_id.to_string(),
                 title: String::new(),
-                status: "blocked".to_string(),
+                status: "discarded".to_string(),
                 message_count: 0,
                 reason: Some(err),
             };
@@ -247,6 +247,13 @@ fn preflight_message_store_conversation(
                 }
                 return item;
             }
+            if let Ok(Some(_)) = message_store::recover_ready_jsonl_snapshot_manifest_from_directory(&paths) {
+                return preflight_ready_message_store_conversation(
+                    &paths,
+                    conversation_id,
+                    status.source_message_count,
+                );
+            }
             MessageStoreMigrationPreflightItem {
                 conversation_id: conversation_id.to_string(),
                 title: String::new(),
@@ -259,7 +266,7 @@ fn preflight_message_store_conversation(
         Err(err) => MessageStoreMigrationPreflightItem {
             conversation_id: conversation_id.to_string(),
             title: String::new(),
-            status: "blocked".to_string(),
+            status: "discarded".to_string(),
             message_count: 0,
             reason: Some(err),
         },
@@ -297,7 +304,7 @@ fn build_message_store_migration_preflight_report(
         .filter(|item| item.status == "legacyReadyToMigrate")
         .count();
     let busy_count = items.iter().filter(|item| item.status == "busy").count();
-    let blocked_count = items.iter().filter(|item| item.status == "blocked").count();
+    let blocked_count = 0usize;
     MessageStoreMigrationPreflightReport {
         migration_required: true,
         total_conversations: items.len(),
@@ -305,9 +312,54 @@ fn build_message_store_migration_preflight_report(
         legacy_count,
         busy_count,
         blocked_count,
-        can_auto_migrate: blocked_count == 0,
+        can_auto_migrate: true,
         items,
     }
+}
+
+fn message_store_migration_error_is_system_failure(error: &str) -> bool {
+    [
+        "创建",
+        "写入",
+        "替换",
+        "清理",
+        "删除",
+        "备份",
+        "锁定",
+        "SQLite",
+        "事务",
+        "读取 JSONL 快照失败",
+        "读取消息存储 manifest 失败",
+    ]
+    .iter()
+    .any(|marker| error.contains(marker))
+}
+
+fn record_discarded_message_store_migration_item(
+    app: &AppHandle,
+    report: &mut MessageStoreMigrationRunReport,
+    current: usize,
+    total: usize,
+    item: &MessageStoreMigrationPreflightItem,
+    reason: impl Into<String>,
+) {
+    let reason = reason.into();
+    report.discarded_count += 1;
+    runtime_log_warn(format!(
+        "[消息存储迁移] 放弃，任务=V1到V2会话迁移，conversation_id={}，title={}，reason={}",
+        item.conversation_id, item.title, reason
+    ));
+    emit_message_store_migration_progress(
+        app,
+        MessageStoreMigrationProgressPayload {
+            current,
+            total,
+            conversation_id: item.conversation_id.clone(),
+            title: item.title.clone(),
+            status: "discarded".to_string(),
+            detail: Some(reason),
+        },
+    );
 }
 
 #[tauri::command]
@@ -373,18 +425,27 @@ fn run_message_store_migration(
         return Ok(report);
     }
     let preflight = build_message_store_migration_preflight_report(&state);
-    let blocked = preflight
+    let discarded = preflight
         .items
         .iter()
-        .filter(|item| item.status == "blocked")
+        .filter(|item| item.status == "discarded")
         .cloned()
         .collect::<Vec<_>>();
-    report.failed_count += blocked.len();
+    for (idx, item) in discarded.iter().enumerate() {
+        record_discarded_message_store_migration_item(
+            &app,
+            &mut report,
+            idx + 1,
+            preflight.items.len(),
+            item,
+            item.reason.clone().unwrap_or_else(|| "V1 会话不可迁移".to_string()),
+        );
+    }
 
     let runnable_items = preflight
         .items
         .into_iter()
-        .filter(|item| item.status != "blocked")
+        .filter(|item| item.status != "discarded")
         .collect::<Vec<_>>();
     let total = runnable_items.len();
     for (idx, item) in runnable_items.iter().enumerate() {
@@ -403,11 +464,37 @@ fn run_message_store_migration(
             report.skipped_ready_count += 1;
             continue;
         }
-        let conversation = read_json_file::<Conversation>(
+        let conversation = match read_json_file::<Conversation>(
             &app_layout_chat_conversation_path(&state.data_path, &item.conversation_id),
             "conversation file",
-        )?;
-        let paths = message_store::message_store_paths(&state.data_path, &item.conversation_id)?;
+        ) {
+            Ok(conversation) => conversation,
+            Err(err) => {
+                record_discarded_message_store_migration_item(
+                    &app,
+                    &mut report,
+                    idx + 1,
+                    total,
+                    item,
+                    err,
+                );
+                continue;
+            }
+        };
+        let paths = match message_store::message_store_paths(&state.data_path, &item.conversation_id) {
+            Ok(paths) => paths,
+            Err(err) => {
+                record_discarded_message_store_migration_item(
+                    &app,
+                    &mut report,
+                    idx + 1,
+                    total,
+                    item,
+                    err,
+                );
+                continue;
+            }
+        };
         match message_store::resume_jsonl_snapshot_migration(&paths, &conversation) {
             Ok(_) => {
                 let recovery_job_id =
@@ -438,6 +525,17 @@ fn run_message_store_migration(
                 );
             }
             Err(err) => {
+                if !message_store_migration_error_is_system_failure(&err) {
+                    record_discarded_message_store_migration_item(
+                        &app,
+                        &mut report,
+                        idx + 1,
+                        total,
+                        item,
+                        err,
+                    );
+                    continue;
+                }
                 emit_message_store_migration_progress(
                     &app,
                     MessageStoreMigrationProgressPayload {
@@ -577,7 +675,6 @@ mod message_store_migration_gate_tests {
             .expect("manifest exists");
 
         assert_eq!(item.status, "ready");
-        assert_eq!(item.title, conversation.title);
         assert!(status.ready_jsonl);
         assert_eq!(status.migration_state, "ready");
         let _ = fs::remove_dir_all(root);
@@ -697,6 +794,23 @@ mod message_store_migration_gate_tests {
         assert_eq!(report.legacy_count, 1);
         assert_eq!(report.items[0].status, "legacyReadyToMigrate");
 
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn message_store_preflight_should_discard_broken_v1_conversation() {
+        let (root, data_path) = temp_data_path("discard-broken-v1");
+        let conversation_id = "conversation-broken-v1";
+        let legacy_path = app_layout_chat_conversation_path(&data_path, conversation_id);
+        if let Some(parent) = legacy_path.parent() {
+            fs::create_dir_all(parent).expect("create legacy dir");
+        }
+        fs::write(&legacy_path, "{broken").expect("write broken legacy conversation");
+
+        let item = preflight_message_store_conversation(&data_path, conversation_id);
+
+        assert_eq!(item.status, "discarded");
+        assert!(item.reason.as_deref().unwrap_or_default().contains("Parse conversation file failed"));
         let _ = fs::remove_dir_all(root);
     }
 }

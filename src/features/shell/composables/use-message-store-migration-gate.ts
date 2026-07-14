@@ -18,7 +18,8 @@ type MessageStoreMigrationPreflightReport = {
   readyCount: number;
   legacyCount: number;
   busyCount?: number;
-  blockedCount: number;
+  discardedCount?: number;
+  blockedCount?: number;
   canAutoMigrate: boolean;
   items: MessageStoreMigrationPreflightItem[];
 };
@@ -53,8 +54,6 @@ export function useMessageStoreMigrationGate(bindings: MessageStoreMigrationGate
     blockedItems: [],
   });
 
-  let messageStoreMigrationResolve: (() => void) | null = null;
-  let messageStoreMigrationReject: ((error: Error) => void) | null = null;
   let messageStoreMigrationProgressUnlisten: UnlistenFn | null = null;
 
   function resetMessageStoreMigrationGate() {
@@ -83,15 +82,13 @@ export function useMessageStoreMigrationGate(bindings: MessageStoreMigrationGate
     );
   }
 
-  async function runMessageStoreMigrationFromGate(discardInvalid: boolean) {
+  async function runMessageStoreMigrationFromGate() {
     await ensureMessageStoreMigrationProgressListener();
     messageStoreMigration.visible = true;
     messageStoreMigration.mode = "migrating";
-    messageStoreMigration.message = discardInvalid
-      ? "正在备份异常会话并继续迁移..."
-      : "正在迁移会话消息仓库...";
+    messageStoreMigration.message = "正在迁移会话消息仓库...";
     await invokeTauri("run_message_store_migration", {
-      input: { discardInvalid },
+      input: {},
     });
     resetMessageStoreMigrationGate();
   }
@@ -105,48 +102,28 @@ export function useMessageStoreMigrationGate(bindings: MessageStoreMigrationGate
       messageStoreMigration.visible = true;
       messageStoreMigration.mode = "checking";
       messageStoreMigration.message = "正在迁移会话消息仓库...";
-      await runMessageStoreMigrationFromGate(false);
+      await runMessageStoreMigrationFromGate();
       return;
-    }
-    if (report.blockedCount > 0) {
-      messageStoreMigration.visible = true;
-      messageStoreMigration.mode = "blocked";
-      messageStoreMigration.blockedItems = report.items.filter((item) => item.status === "blocked");
-      messageStoreMigration.message = `发现 ${report.blockedCount} 个异常会话。需要确认是否抛弃异常会话并继续迁移。`;
-      return await new Promise<void>((resolve, reject) => {
-        messageStoreMigrationResolve = resolve;
-        messageStoreMigrationReject = reject;
-      });
     }
     if (report.legacyCount > 0) {
       messageStoreMigration.visible = true;
       messageStoreMigration.mode = "checking";
       messageStoreMigration.message = `发现 ${report.legacyCount} 个旧会话，正在迁移...`;
-      await runMessageStoreMigrationFromGate(false);
+      await runMessageStoreMigrationFromGate();
       return;
     }
   }
 
   function cancelMessageStoreMigration() {
-    const error = new Error("用户取消会话消息仓库迁移，启动已暂停。");
-    messageStoreMigration.mode = "error";
-    messageStoreMigration.message = error.message;
-    messageStoreMigrationReject?.(error);
-    messageStoreMigrationResolve = null;
-    messageStoreMigrationReject = null;
+    resetMessageStoreMigrationGate();
   }
 
   async function continueMessageStoreMigrationWithDiscard() {
     try {
-      await runMessageStoreMigrationFromGate(true);
-      messageStoreMigrationResolve?.();
+      await runMessageStoreMigrationFromGate();
     } catch (error) {
       messageStoreMigration.mode = "error";
       messageStoreMigration.message = bindings.formatRequestFailed(error);
-      messageStoreMigrationReject?.(error instanceof Error ? error : new Error(String(error)));
-    } finally {
-      messageStoreMigrationResolve = null;
-      messageStoreMigrationReject = null;
     }
   }
 
