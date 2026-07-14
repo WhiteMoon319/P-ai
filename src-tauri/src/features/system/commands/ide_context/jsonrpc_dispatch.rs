@@ -3,9 +3,6 @@ const WEB_NATIVE_CAPABILITY_UNAVAILABLE: &str = "WEB_NATIVE_CAPABILITY_UNAVAILAB
 fn ide_chat_web_native_only_method(method: &str) -> bool {
     matches!(
         method,
-        "workspace.permission"
-            | "workspace.permission.select"
-            | "workspace.layout.save"
             | "conversation.plan.readFile"
             | "conversation.rewindPreview"
             | "read_chat_image_data_url"
@@ -168,6 +165,9 @@ async fn ide_chat_handle_jsonrpc_request(
                 Ok(result)
             }),
         "conversation.createOptions" => ide_chat_create_conversation_options(state),
+        "workspace.permission" => ide_chat_workspace_permission(state, request.params),
+        "workspace.permission.select" => ide_chat_select_workspace_permission(state, request.params),
+        "workspace.layout.save" => ide_chat_workspace_layout_save(state, request.params),
         "workspace.list" => ide_chat_workspace_list(state, request.params),
         "workspace.directory.list" => ide_chat_workspace_directory_list(request.params),
         "fileReader.directory.list" => ide_chat_file_reader_directory_list(request.params),

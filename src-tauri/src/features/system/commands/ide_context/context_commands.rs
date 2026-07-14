@@ -75,6 +75,70 @@ struct IdeChatWorkspaceListInput { conversation_id: String }
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct IdeChatWorkspacePermissionInput {
+    conversation_id: String,
+    access: String,
+    workspace_path: Option<String>,
+    workspace_name: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IdeChatWorkspaceLayoutSaveInput {
+    conversation_id: String,
+    #[serde(default)] workspaces: Vec<ShellWorkspaceConfig>,
+    #[serde(default)] autonomous_mode: Option<bool>,
+}
+
+fn ide_chat_workspace_permission_payload(state: &AppState, conversation: &Conversation) -> Result<Value, String> {
+    let workspaces = terminal_allowed_workspaces_for_conversation_canonical(state, Some(conversation))?;
+    let main = workspaces.iter().find(|w| w.level == SHELL_WORKSPACE_LEVEL_MAIN)
+        .or_else(|| workspaces.iter().find(|w| w.level == SHELL_WORKSPACE_LEVEL_SYSTEM));
+    Ok(serde_json::json!({
+        "access": main.map(|w| w.access.trim()).filter(|v| !v.is_empty()).unwrap_or(SHELL_WORKSPACE_ACCESS_APPROVAL),
+        "workspaceName": main.map(|w| w.name.clone()).unwrap_or_default(),
+        "rootPath": main.map(|w| w.path.to_string_lossy().to_string()).unwrap_or_default(),
+    }))
+}
+
+fn ide_chat_workspace_permission(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatConversationInput>(params)?;
+    let meta = conversation_service_v2().get_conversation_meta(state, input.conversation_id.trim())?;
+    ide_chat_workspace_permission_payload(state, &ide_chat_conversation_from_meta_view(&meta))
+}
+
+fn ide_chat_select_workspace_permission(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatWorkspacePermissionInput>(params)?;
+    let conversation_id = input.conversation_id.trim();
+    if conversation_id.is_empty() { return Err("conversationId is required".to_string()); }
+    let access = match input.access.trim() {
+        SHELL_WORKSPACE_ACCESS_READ_ONLY | SHELL_WORKSPACE_ACCESS_APPROVAL | SHELL_WORKSPACE_ACCESS_FULL_ACCESS => input.access.trim().to_string(),
+        _ => return Err("Unsupported workspace access".to_string()),
+    };
+    let meta = conversation_service_v2().get_conversation_meta(state, conversation_id)?;
+    let mut workspaces = meta.shell_workspaces.clone();
+    let mut changed = false;
+    for workspace in &mut workspaces { if normalize_shell_workspace_level_text(&workspace.level) == SHELL_WORKSPACE_LEVEL_MAIN { workspace.access = access.clone(); changed = true; } }
+    if !changed {
+        let path = input.workspace_path.as_deref().map(str::trim).unwrap_or_default();
+        if path.is_empty() { return Err("当前会话没有主工作目录，无法设置权限。".to_string()); }
+        let fallback = path.replace('\\', "/").trim_end_matches('/').rsplit('/').next().unwrap_or("VS Code").to_string();
+        workspaces.push(ShellWorkspaceConfig { id: "vscode-sidebar-main-workspace".to_string(), name: input.workspace_name.as_deref().map(str::trim).filter(|v| !v.is_empty()).unwrap_or(fallback.as_str()).to_string(), path: path.to_string(), level: SHELL_WORKSPACE_LEVEL_MAIN.to_string(), access: access.clone(), built_in: false });
+    }
+    let updated = apply_conversation_chat_workspace_changes(state, conversation_id, Some(None), Some(normalize_conversation_shell_workspaces(state, &workspaces)), None)?;
+    ide_chat_workspace_permission_payload(state, &updated)
+}
+
+fn ide_chat_workspace_layout_save(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatWorkspaceLayoutSaveInput>(params)?;
+    let conversation_id = input.conversation_id.trim();
+    if conversation_id.is_empty() { return Err("conversationId is required".to_string()); }
+    let updated = apply_conversation_chat_workspace_changes(state, conversation_id, Some(None), Some(normalize_conversation_shell_workspaces(state, &input.workspaces)), input.autonomous_mode)?;
+    ide_chat_workspace_permission_payload(state, &updated)
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct IdeChatWorkspaceDirectoryListInput { path: String }
 
 #[derive(Debug, Clone, serde::Deserialize)]
