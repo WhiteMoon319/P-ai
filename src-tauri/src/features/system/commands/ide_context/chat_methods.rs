@@ -220,6 +220,109 @@ fn ide_chat_conversation_fast_request_turns(state: &AppState, params: Value) -> 
     .map_err(|err| format!("Serialize fast request turns failed: {err}"))
 }
 
+fn ide_chat_conversation_fast_request_turns_command(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<GetConversationFastRequestTurnsInput>(params, "input")?;
+    ide_chat_serialize(
+        conversation_service_v2().get_conversation_fast_request_turns(state, &input.conversation_id)?,
+    )
+}
+
+fn ide_chat_conversation_block_page_command(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<GetConversationBlockPageInput>(params, "input")?;
+    ide_chat_conversation_block_page(state, ide_chat_serialize(input)?)
+}
+
+fn ide_chat_mark_conversation_read_command(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<MarkConversationReadInput>(params, "input")?;
+    ide_chat_mark_conversation_read(state, ide_chat_serialize(input)?)
+}
+
+fn ide_chat_conversation_message_by_id_command(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<GetUnarchivedConversationMessageByIdInput>(params, "input")?;
+    ide_chat_serialize(conversation_service_v2().get_message_by_id_for_frontend_display_only(
+        state,
+        input.conversation_id.trim(),
+        input.message_id.trim(),
+    )?)
+}
+
+fn ide_chat_conversation_messages_before_command(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<GetActiveConversationMessagesBeforeInput>(params, "input")?;
+    let before_message_id = input.before_message_id.trim();
+    if before_message_id.is_empty() {
+        return Err("beforeMessageId is required.".to_string());
+    }
+    let conversation_id = input
+        .conversation_id
+        .as_deref()
+        .or_else(|| input.session.as_ref().and_then(|session| session.conversation_id.as_deref()))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "conversationId is required.".to_string())?;
+    let page = conversation_service_v2().get_messages_before(
+        state,
+        conversation_id,
+        before_message_id,
+        input.limit.clamp(1, 100),
+    )?;
+    ide_chat_serialize(GetActiveConversationMessagesBeforeOutput {
+        messages: page.messages,
+        has_more: page.has_more,
+    })
+}
+
+async fn ide_chat_conversation_light_snapshot_command(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ForegroundConversationLightSnapshotInput>(params, "input")?;
+    let app_state = state.clone();
+    let output = tokio::task::spawn_blocking(move || {
+        get_foreground_conversation_light_snapshot_blocking(input, &app_state)
+    })
+    .await
+    .map_err(|err| format!("读取前台轻量快照任务异常：{err}"))??;
+    ide_chat_serialize(output)
+}
+
+async fn ide_chat_conversation_freshness_snapshot_command(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ForegroundConversationFreshnessInput>(params, "input")?;
+    let app_state = state.clone();
+    let output = tokio::task::spawn_blocking(move || {
+        get_foreground_conversation_freshness_snapshot_blocking(input, &app_state)
+    })
+    .await
+    .map_err(|err| format!("读取前台 freshness 快照任务异常：{err}"))??;
+    ide_chat_serialize(output)
+}
+
+fn ide_chat_set_active_conversation_command(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<SetActiveUnarchivedConversationInput>(params, "input")?;
+    let conversation_id = conversation_service_v2().set_active_conversation(state, &input)?;
+    ide_chat_serialize(SetActiveUnarchivedConversationOutput { conversation_id })
+}
+
 fn ide_chat_conversation_runtime_snapshot(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatConversationInput>(params)?;
     let conversation_id = input.conversation_id.trim();

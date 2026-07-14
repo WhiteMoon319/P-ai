@@ -84,6 +84,8 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "bind_active_chat_view_stream"
             | "probe_active_chat_view_stream"
             | "unbind_active_chat_view_stream"
+            | "request_conversation_messages_after_async"
+            | "set_chat_window_active"
     )
 }
 
@@ -344,6 +346,15 @@ async fn ide_chat_handle_jsonrpc_request(
         "get_main_session_state_snapshot" => ide_chat_session_state_snapshot(state),
         "recall_chat_queue_event" => ide_chat_recall_queue_event(state, request.params),
         "mark_chat_queue_event_guided" => ide_chat_mark_queue_event_guided(state, request.params),
+        "get_conversation_fast_request_turns" => ide_chat_conversation_fast_request_turns_command(state, request.params),
+        "get_conversation_runtime_snapshot" => ide_chat_conversation_runtime_snapshot(state, request.params),
+        "get_foreground_conversation_light_snapshot" => ide_chat_conversation_light_snapshot_command(state, request.params).await,
+        "get_foreground_conversation_freshness_snapshot" => ide_chat_conversation_freshness_snapshot_command(state, request.params).await,
+        "get_unarchived_conversation_block_page" => ide_chat_conversation_block_page_command(state, request.params),
+        "get_unarchived_conversation_message_by_id" => ide_chat_conversation_message_by_id_command(state, request.params),
+        "get_active_conversation_messages_before" => ide_chat_conversation_messages_before_command(state, request.params),
+        "mark_conversation_read" => ide_chat_mark_conversation_read_command(state, request.params),
+        "set_active_unarchived_conversation" => ide_chat_set_active_conversation_command(state, request.params),
         "toolReview.reports.list" => ide_chat_tool_review_reports(state, request.params),
         "toolReview.report.delete" => ide_chat_tool_review_delete_report(state, request.params),
         "toolReview.commitOptions.list" => ide_chat_tool_review_commit_options(state, request.params).await,
@@ -405,6 +416,8 @@ mod web_native_capability_tests {
             "bind_active_chat_view_stream",
             "probe_active_chat_view_stream",
             "unbind_active_chat_view_stream",
+            "request_conversation_messages_after_async",
+            "set_chat_window_active",
         ] {
             assert!(
                 ide_chat_web_native_only_method(method),
@@ -438,6 +451,15 @@ mod web_native_capability_tests {
             "get_main_session_state_snapshot",
             "recall_chat_queue_event",
             "mark_chat_queue_event_guided",
+            "get_conversation_fast_request_turns",
+            "get_conversation_runtime_snapshot",
+            "get_foreground_conversation_light_snapshot",
+            "get_foreground_conversation_freshness_snapshot",
+            "get_unarchived_conversation_block_page",
+            "get_unarchived_conversation_message_by_id",
+            "get_active_conversation_messages_before",
+            "mark_conversation_read",
+            "set_active_unarchived_conversation",
         ] {
             assert!(
                 !ide_chat_web_native_only_method(method),
