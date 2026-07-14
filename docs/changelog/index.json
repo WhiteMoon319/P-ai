@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-13T04:28:24.906Z",
-  "latestVersion": "v0.30.0",
+  "generatedAt": "2026-07-14T00:32:53.147Z",
+  "latestVersion": "v0.31.0",
   "releases": [
+    {
+      "version": "v0.31.0",
+      "path": "docs/changelog/releases/v0.31.0.md",
+      "summary": "修复 0.30 升级后部分会话可能损坏、迁移卡住或启动受阻的问题；坏旧会话会被自动放弃，已可用会话继续保留并完成升级。"
+    },
     {
       "version": "v0.30.0",
       "path": "docs/changelog/releases/v0.30.0.md",
