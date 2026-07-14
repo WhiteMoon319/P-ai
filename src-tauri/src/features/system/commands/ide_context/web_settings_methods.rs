@@ -246,7 +246,7 @@ async fn ide_chat_web_access_info_for_web_settings(
 include!("memory_methods.rs");
 
 fn ide_chat_task_list_tasks_for_web_settings(state: &AppState) -> Result<Value, String> {
-    ide_chat_serialize(task_store_list_tasks(&state.data_path)?)
+    ide_chat_serialize(task_list_tasks_inner(state)?)
 }
 
 fn ide_chat_task_get_task_for_web_settings(
@@ -254,7 +254,7 @@ fn ide_chat_task_get_task_for_web_settings(
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<TaskGetInput>(params, "input")?;
-    ide_chat_serialize(task_store_get_task(&state.data_path, input.task_id.trim())?)
+    ide_chat_serialize(task_get_task_inner(input, state)?)
 }
 
 fn ide_chat_task_create_task_for_web_settings(
@@ -262,10 +262,7 @@ fn ide_chat_task_create_task_for_web_settings(
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<TaskCreateInput>(params, "input")?;
-    let input = task_create_input_for_write(state, &input)?;
-    let task = task_store_create_task(&state.data_path, &input)?;
-    task_scheduler_notify_changed(state);
-    ide_chat_serialize(task)
+    ide_chat_serialize(task_create_task_inner(input, state)?)
 }
 
 fn ide_chat_task_update_task_for_web_settings(
@@ -273,10 +270,7 @@ fn ide_chat_task_update_task_for_web_settings(
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<TaskUpdateInput>(params, "input")?;
-    let input = task_update_input_for_write(state, &input)?;
-    let task = task_store_update_task(&state.data_path, &input)?;
-    task_scheduler_notify_changed(state);
-    ide_chat_serialize(task)
+    ide_chat_serialize(task_update_task_inner(input, state)?)
 }
 
 fn ide_chat_task_complete_task_for_web_settings(
@@ -284,9 +278,7 @@ fn ide_chat_task_complete_task_for_web_settings(
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<TaskCompleteInput>(params, "input")?;
-    let task = task_store_complete_task(&state.data_path, &input)?;
-    task_scheduler_notify_changed(state);
-    ide_chat_serialize(task)
+    ide_chat_serialize(task_complete_task_inner(input, state)?)
 }
 
 fn ide_chat_task_delete_task_for_web_settings(
@@ -294,9 +286,7 @@ fn ide_chat_task_delete_task_for_web_settings(
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<TaskDeleteInput>(params, "input")?;
-    task_store_delete_task(&state.data_path, input.task_id.trim())?;
-    task_scheduler_notify_changed(state);
-    Ok(serde_json::json!(null))
+    ide_chat_serialize(task_delete_task_inner(input, state)?)
 }
 
 fn ide_chat_task_list_run_logs_for_web_settings(
@@ -304,11 +294,7 @@ fn ide_chat_task_list_run_logs_for_web_settings(
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<TaskRunLogListInput>(params, "input")?;
-    ide_chat_serialize(task_store_list_run_logs(
-        &state.data_path,
-        input.task_id.as_deref(),
-        input.limit.unwrap_or(50),
-    )?)
+    ide_chat_serialize(task_list_run_logs_inner(Some(input), state)?)
 }
 
 async fn ide_chat_task_optimize_draft_for_web_settings(

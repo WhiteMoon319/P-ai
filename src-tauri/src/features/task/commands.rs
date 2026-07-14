@@ -1,5 +1,9 @@
 #[tauri::command]
 fn task_list_tasks(state: State<'_, AppState>) -> Result<Vec<TaskEntry>, String> {
+    task_list_tasks_inner(state.inner())
+}
+
+fn task_list_tasks_inner(state: &AppState) -> Result<Vec<TaskEntry>, String> {
     task_store_list_tasks(&state.data_path)
 }
 
@@ -492,6 +496,10 @@ fn task_optimize_end_at(value: Option<&str>, fallback: &str, run_at: &str) -> St
 
 #[tauri::command]
 fn task_get_task(input: TaskGetInput, state: State<'_, AppState>) -> Result<TaskEntry, String> {
+    task_get_task_inner(input, state.inner())
+}
+
+fn task_get_task_inner(input: TaskGetInput, state: &AppState) -> Result<TaskEntry, String> {
     task_store_get_task(&state.data_path, input.task_id.trim())
 }
 
@@ -603,42 +611,65 @@ async fn task_optimize_draft_internal(
 
 #[tauri::command]
 fn task_create_task(input: TaskCreateInput, state: State<'_, AppState>) -> Result<TaskEntry, String> {
-    let input = task_create_input_for_write(state.inner(), &input)?;
+    task_create_task_inner(input, state.inner())
+}
+
+fn task_create_task_inner(input: TaskCreateInput, state: &AppState) -> Result<TaskEntry, String> {
+    let input = task_create_input_for_write(state, &input)?;
     let task = task_store_create_task(&state.data_path, &input)?;
-    task_scheduler_notify_changed(state.inner());
+    task_scheduler_notify_changed(state);
     Ok(task)
 }
 
 #[tauri::command]
 async fn task_dispatch_task_now(input: TaskDispatchNowInput, state: State<'_, AppState>) -> Result<bool, String> {
+    task_dispatch_task_now_inner(input, state.inner()).await
+}
+
+async fn task_dispatch_task_now_inner(
+    input: TaskDispatchNowInput,
+    state: &AppState,
+) -> Result<bool, String> {
     let task = task_store_get_task_record(&state.data_path, input.task_id.trim())?;
-    let Some(session) = task_resolve_dispatch_session(&state, &task)? else {
-        task_fail_missing_bound_conversation(state.inner(), &task)?;
+    let Some(session) = task_resolve_dispatch_session(state, &task)? else {
+        task_fail_missing_bound_conversation(state, &task)?;
         return Ok(false);
     };
-    task_dispatch_due_task(&state, &task, &session).await?;
+    task_dispatch_due_task(state, &task, &session).await?;
     Ok(true)
 }
 
 #[tauri::command]
 fn task_update_task(input: TaskUpdateInput, state: State<'_, AppState>) -> Result<TaskEntry, String> {
-    let input = task_update_input_for_write(state.inner(), &input)?;
+    task_update_task_inner(input, state.inner())
+}
+
+fn task_update_task_inner(input: TaskUpdateInput, state: &AppState) -> Result<TaskEntry, String> {
+    let input = task_update_input_for_write(state, &input)?;
     let task = task_store_update_task(&state.data_path, &input)?;
-    task_scheduler_notify_changed(state.inner());
+    task_scheduler_notify_changed(state);
     Ok(task)
 }
 
 #[tauri::command]
 fn task_complete_task(input: TaskCompleteInput, state: State<'_, AppState>) -> Result<TaskEntry, String> {
+    task_complete_task_inner(input, state.inner())
+}
+
+fn task_complete_task_inner(input: TaskCompleteInput, state: &AppState) -> Result<TaskEntry, String> {
     let task = task_store_complete_task(&state.data_path, &input)?;
-    task_scheduler_notify_changed(state.inner());
+    task_scheduler_notify_changed(state);
     Ok(task)
 }
 
 #[tauri::command]
 fn task_delete_task(input: TaskDeleteInput, state: State<'_, AppState>) -> Result<(), String> {
+    task_delete_task_inner(input, state.inner())
+}
+
+fn task_delete_task_inner(input: TaskDeleteInput, state: &AppState) -> Result<(), String> {
     task_store_delete_task(&state.data_path, input.task_id.trim())?;
-    task_scheduler_notify_changed(state.inner());
+    task_scheduler_notify_changed(state);
     Ok(())
 }
 
@@ -646,6 +677,13 @@ fn task_delete_task(input: TaskDeleteInput, state: State<'_, AppState>) -> Resul
 fn task_list_run_logs(
     input: Option<TaskRunLogListInput>,
     state: State<'_, AppState>,
+) -> Result<Vec<TaskRunLogEntry>, String> {
+    task_list_run_logs_inner(input, state.inner())
+}
+
+fn task_list_run_logs_inner(
+    input: Option<TaskRunLogListInput>,
+    state: &AppState,
 ) -> Result<Vec<TaskRunLogEntry>, String> {
     let payload = input.unwrap_or(TaskRunLogListInput {
         task_id: None,

@@ -648,49 +648,31 @@ async fn ide_chat_submit_delegate(state: &AppState, params: Value) -> Result<Val
 
 fn ide_chat_task_create(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<TaskCreateInput>(params)?;
-    let input = task_create_input_for_write(state, &input)?;
-    let task = task_store_create_task(&state.data_path, &input)?;
-    task_scheduler_notify_changed(state);
-    serde_json::to_value(task)
-        .map_err(|err| format!("Serialize task create result failed: {err}"))
+    ide_chat_serialize(task_create_task_inner(input, state)?)
 }
 
 fn ide_chat_task_update(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<TaskUpdateInput>(params)?;
-    let input = task_update_input_for_write(state, &input)?;
-    let task = task_store_update_task(&state.data_path, &input)?;
-    task_scheduler_notify_changed(state);
-    serde_json::to_value(task)
-        .map_err(|err| format!("Serialize task update result failed: {err}"))
+    ide_chat_serialize(task_update_task_inner(input, state)?)
 }
 
 fn ide_chat_task_delete(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<TaskDeleteInput>(params)?;
-    task_store_delete_task(&state.data_path, input.task_id.trim())?;
-    task_scheduler_notify_changed(state);
-    Ok(serde_json::json!(true))
+    ide_chat_serialize(task_delete_task_inner(input, state)?)
 }
 
 fn ide_chat_task_list(state: &AppState) -> Result<Value, String> {
-    serde_json::to_value(task_store_list_tasks(&state.data_path)?)
-        .map_err(|err| format!("Serialize task list result failed: {err}"))
+    ide_chat_serialize(task_list_tasks_inner(state)?)
 }
 
 async fn ide_chat_task_optimize_draft(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<TaskOptimizeDraftInput>(params)?;
-    serde_json::to_value(task_optimize_draft_internal(input, state).await?)
-        .map_err(|err| format!("Serialize task optimize result failed: {err}"))
+    ide_chat_serialize(task_optimize_draft_internal(input, state).await?)
 }
 
 async fn ide_chat_task_dispatch_now(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<TaskDispatchNowInput>(params)?;
-    let task = task_store_get_task_record(&state.data_path, input.task_id.trim())?;
-    let Some(session) = task_resolve_dispatch_session(state, &task)? else {
-        task_fail_missing_bound_conversation(state, &task)?;
-        return Ok(serde_json::json!(false));
-    };
-    task_dispatch_due_task(state, &task, &session).await?;
-    Ok(serde_json::json!(true))
+    ide_chat_serialize(task_dispatch_task_now_inner(input, state).await?)
 }
 
 fn ide_chat_goal_current(state: &AppState, params: Value) -> Result<Value, String> {
