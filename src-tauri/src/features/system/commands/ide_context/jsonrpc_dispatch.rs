@@ -32,6 +32,8 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "save_local_chat_image_as"
             | "export_archive_to_file"
             | "export_memories_to_path"
+            | "export_agent_private_memories"
+            | "set_agent_private_memory_enabled"
             | "write_base64_file_to_path"
             | "write_utf8_text_file_to_path"
             | "queue_local_file_attachment"
@@ -289,8 +291,6 @@ async fn ide_chat_handle_jsonrpc_request(
         "save_memory_rerank_binding" => ide_chat_save_memory_rerank_binding_for_web_settings(state, request.params),
         "get_agent_private_memory_count" => ide_chat_get_agent_private_memory_count_for_web_settings(state, request.params),
         "set_agent_memory_recall_mode" => ide_chat_set_agent_memory_recall_mode_for_web_settings(state, request.params),
-        "set_agent_private_memory_enabled" => ide_chat_set_agent_private_memory_enabled_for_web_settings(state, request.params),
-        "export_agent_private_memories" => ide_chat_export_agent_private_memories_for_web_settings(state, request.params),
         "disable_agent_private_memory" => ide_chat_disable_agent_private_memory_for_web_settings(state, request.params),
         "export_memories" => ide_chat_export_memories_for_web_settings(state, request.params),
         "preview_export_memories" => ide_chat_preview_export_memories_for_web_settings(state),
@@ -552,6 +552,8 @@ mod web_native_capability_tests {
             "cleanup_storage_legacy_items",
             "export_config_migration_package",
             "export_memories_to_path",
+            "export_agent_private_memories",
+            "set_agent_private_memory_enabled",
             "preview_import_config_migration_package",
             "apply_import_config_migration_package",
             "codex_get_auth_status",

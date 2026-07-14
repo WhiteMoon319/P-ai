@@ -357,10 +357,9 @@ struct DisableAgentPrivateMemoryResult {
     deleted_count: usize,
 }
 
-#[tauri::command]
-fn get_agent_private_memory_count(
+fn get_agent_private_memory_count_inner(
     input: AgentPrivateMemoryCountInput,
-    state: State<'_, AppState>,
+    state: &AppState,
 ) -> Result<AgentPrivateMemoryCountResult, String> {
     let agent_id = input.agent_id.trim();
     if agent_id.is_empty() {
@@ -378,10 +377,9 @@ fn get_agent_private_memory_count(
     })
 }
 
-#[tauri::command]
-fn set_agent_memory_recall_mode(
+fn set_agent_memory_recall_mode_inner(
     input: SetAgentMemoryRecallModeInput,
-    state: State<'_, AppState>,
+    state: &AppState,
 ) -> Result<SetAgentMemoryRecallModeResult, String> {
     let agent_id = input.agent_id.trim();
     if agent_id.is_empty() {
@@ -420,10 +418,9 @@ fn set_agent_memory_recall_mode(
     })
 }
 
-#[tauri::command]
-fn set_agent_private_memory_enabled(
+fn set_agent_private_memory_enabled_inner(
     input: SetAgentPrivateMemoryEnabledInput,
-    state: State<'_, AppState>,
+    state: &AppState,
 ) -> Result<SetAgentPrivateMemoryEnabledResult, String> {
     let agent_id = input.agent_id.trim();
     if agent_id.is_empty() {
@@ -480,10 +477,9 @@ fn set_agent_private_memory_enabled(
     })
 }
 
-#[tauri::command]
-fn export_agent_private_memories(
+fn export_agent_private_memories_inner(
     input: ExportAgentPrivateMemoriesInput,
-    state: State<'_, AppState>,
+    state: &AppState,
 ) -> Result<ExportAgentPrivateMemoriesResult, String> {
     let agent_id = input.agent_id.trim();
     if agent_id.is_empty() {
@@ -503,10 +499,9 @@ fn export_agent_private_memories(
     })
 }
 
-#[tauri::command]
-fn disable_agent_private_memory(
+fn disable_agent_private_memory_inner(
     input: DisableAgentPrivateMemoryInput,
-    state: State<'_, AppState>,
+    state: &AppState,
 ) -> Result<DisableAgentPrivateMemoryResult, String> {
     let agent_id = input.agent_id.trim();
     if agent_id.is_empty() {
@@ -543,6 +538,46 @@ fn disable_agent_private_memory(
         enabled: false,
         deleted_count: deleted,
     })
+}
+
+#[tauri::command]
+fn get_agent_private_memory_count(
+    input: AgentPrivateMemoryCountInput,
+    state: State<'_, AppState>,
+) -> Result<AgentPrivateMemoryCountResult, String> {
+    get_agent_private_memory_count_inner(input, state.inner())
+}
+
+#[tauri::command]
+fn set_agent_memory_recall_mode(
+    input: SetAgentMemoryRecallModeInput,
+    state: State<'_, AppState>,
+) -> Result<SetAgentMemoryRecallModeResult, String> {
+    set_agent_memory_recall_mode_inner(input, state.inner())
+}
+
+#[tauri::command]
+fn set_agent_private_memory_enabled(
+    input: SetAgentPrivateMemoryEnabledInput,
+    state: State<'_, AppState>,
+) -> Result<SetAgentPrivateMemoryEnabledResult, String> {
+    set_agent_private_memory_enabled_inner(input, state.inner())
+}
+
+#[tauri::command]
+fn export_agent_private_memories(
+    input: ExportAgentPrivateMemoriesInput,
+    state: State<'_, AppState>,
+) -> Result<ExportAgentPrivateMemoriesResult, String> {
+    export_agent_private_memories_inner(input, state.inner())
+}
+
+#[tauri::command]
+fn disable_agent_private_memory(
+    input: DisableAgentPrivateMemoryInput,
+    state: State<'_, AppState>,
+) -> Result<DisableAgentPrivateMemoryResult, String> {
+    disable_agent_private_memory_inner(input, state.inner())
 }
 
 #[tauri::command]
