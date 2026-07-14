@@ -383,6 +383,85 @@ fn ide_chat_query_ide_context_command(
     ide_chat_serialize(query_ide_context_references_internal(input, ide_context_runtime)?)
 }
 
+fn ide_chat_list_archives_command(state: &AppState) -> Result<Value, String> {
+    ide_chat_serialize(list_archives_inner(state)?)
+}
+
+fn ide_chat_archive_block_page_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<GetArchiveBlockPageInput>(params, "input")?;
+    ide_chat_serialize(get_archive_block_page_inner(input, state)?)
+}
+
+fn ide_chat_archive_summary_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let archive_id = ide_chat_parse_param_field::<String>(params, "archiveId")?;
+    ide_chat_serialize(get_archive_summary_inner(state, &archive_id)?)
+}
+
+fn ide_chat_delete_archive_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let archive_id = ide_chat_parse_param_field::<String>(params, "archiveId")?;
+    delete_archive_inner(state, &archive_id)?;
+    ide_chat_serialize(())
+}
+
+fn ide_chat_unarchive_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let archive_id = ide_chat_parse_param_field::<String>(params, "archiveId")?;
+    unarchive_archive_inner(state, &archive_id)?;
+    ide_chat_serialize(())
+}
+
+async fn ide_chat_archive_conversation_command(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ConversationIdOnlyInput>(params, "input")?;
+    ide_chat_serialize(archive_conversation_inner(input, state).await?)
+}
+
+async fn ide_chat_batch_archive_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<BatchArchiveConversationsInput>(params, "input")?;
+    ide_chat_serialize(batch_archive_conversations_inner(state, input).await?)
+}
+
+fn ide_chat_delegate_statuses_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ListConversationDelegateStatusesInput>(params, "input")?;
+    ide_chat_serialize(list_conversation_delegate_statuses_inner(input, state)?)
+}
+
+fn ide_chat_delegate_abort_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<AbortDelegateConversationInput>(params, "input")?;
+    ide_chat_serialize(abort_delegate_conversation_inner(input, state)?)
+}
+
+fn ide_chat_delegate_block_page_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<GetConversationBlockPageInput>(params, "input")?;
+    ide_chat_serialize(get_delegate_conversation_block_page_inner(input, state)?)
+}
+
+fn ide_chat_delete_delegate_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<DeleteDelegateConversationInput>(params, "input")?;
+    ide_chat_serialize(delete_delegate_conversation_inner(input, state)?)
+}
+
+async fn ide_chat_branch_selection_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<BranchUnarchivedConversationFromSelectionInput>(params, "input")?;
+    ide_chat_serialize(branch_unarchived_conversation_from_selection_internal(input, state).await?)
+}
+
+async fn ide_chat_branch_message_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<CreateConversationBranchFromMessageInput>(params, "input")?;
+    ide_chat_serialize(create_conversation_branch_from_message_internal(input, state).await?)
+}
+
+async fn ide_chat_submit_delegate_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<SubmitUserAsyncDelegateInput>(params, "input")?;
+    ide_chat_serialize(submit_user_async_delegate_internal(input, state).await?)
+}
+
+async fn ide_chat_delete_unarchived_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<DeleteUnarchivedConversationInput>(params, "input")?;
+    ide_chat_serialize(delete_unarchived_conversation_inner(input, state).await?)
+}
+
 fn ide_chat_conversation_runtime_snapshot(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatConversationInput>(params)?;
     let conversation_id = input.conversation_id.trim();

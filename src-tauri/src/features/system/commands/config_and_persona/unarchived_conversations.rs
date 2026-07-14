@@ -2714,11 +2714,18 @@ fn delete_delegate_conversation(
     input: DeleteDelegateConversationInput,
     state: State<'_, AppState>,
 ) -> Result<DeleteDelegateConversationOutput, String> {
+    delete_delegate_conversation_inner(input, state.inner())
+}
+
+fn delete_delegate_conversation_inner(
+    input: DeleteDelegateConversationInput,
+    state: &AppState,
+) -> Result<DeleteDelegateConversationOutput, String> {
     let conversation_id = input.conversation_id.trim();
     if conversation_id.is_empty() {
         return Err("conversationId is required.".to_string());
     }
-    let deleted = delegate_runtime_thread_conversation_delete(state.inner(), conversation_id)?;
+    let deleted = delegate_runtime_thread_conversation_delete(state, conversation_id)?;
     runtime_log_info(format!(
         "[委托会话] 完成，任务=删除委托会话，conversation_id={}，deleted={}",
         conversation_id, deleted

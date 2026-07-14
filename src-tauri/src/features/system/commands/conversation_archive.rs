@@ -40,6 +40,13 @@ async fn archive_conversation(
     input: ConversationIdOnlyInput,
     state: State<'_, AppState>,
 ) -> Result<ConversationCommandStatus, String> {
+    archive_conversation_inner(input, state.inner()).await
+}
+
+async fn archive_conversation_inner(
+    input: ConversationIdOnlyInput,
+    state: &AppState,
+) -> Result<ConversationCommandStatus, String> {
     let requested_conversation_id = input.conversation_id.trim();
     if requested_conversation_id.is_empty() {
         return Err("conversationId is required".to_string());
@@ -49,12 +56,12 @@ async fn archive_conversation(
         requested_conversation_id
     ));
     let (selected_api, resolved_api, source, effective_agent_id) =
-        match resolve_archive_request_conversation_by_id(state.inner(), requested_conversation_id) {
+        match resolve_archive_request_conversation_by_id(state, requested_conversation_id) {
             Ok(resolved) => resolved,
             Err(err) => return Err(log_manual_archive_failure(requested_conversation_id, err)),
         };
     let already_archived = conversation_is_archived(&source);
-    let runtime = state_read_runtime_state_cached(state.inner())
+    let runtime = state_read_runtime_state_cached(state)
         .map_err(|err| log_manual_archive_failure(&source.id, err))?;
     let main_conversation_id = runtime
         .main_conversation_id
@@ -67,7 +74,7 @@ async fn archive_conversation(
             "系统通知会话暂不支持归档。".to_string(),
         ));
     }
-    let conversation_runtime_state = get_conversation_runtime_state(state.inner(), &source.id)
+    let conversation_runtime_state = get_conversation_runtime_state(state, &source.id)
         .map_err(|err| log_manual_archive_failure(&source.id, err))?;
     if !already_archived {
         let disabled_reason = match conversation_runtime_state {
@@ -79,19 +86,19 @@ async fn archive_conversation(
             return Err(log_manual_archive_failure(&source.id, reason.to_string()));
         }
     }
-    let archive_result = instant_archive_conversation(state.inner(), &selected_api, &source)
+    let archive_result = instant_archive_conversation(state, &selected_api, &source)
         .map_err(|err| log_manual_archive_failure(&source.id, err))?;
-    flush_pending_persists_blocking(state.inner()).map_err(|err| {
+    flush_pending_persists_blocking(state).map_err(|err| {
         log_manual_archive_failure(&source.id, format!("归档状态写入失败：{}", err))
     })?;
     emit_unarchived_conversation_overview_updated_payload(
-        state.inner(),
+        state,
         &archive_result.overview_payload,
     );
     let active_conversation_id = archive_result.active_conversation_id.clone();
 
     if !archive_result.already_archived {
-        let state_cloned = state.inner().clone();
+        let state_cloned = state.clone();
         let selected_api_cloned = selected_api.clone();
         let resolved_api_cloned = resolved_api.clone();
         let source_conversation_id = source.id.clone();

@@ -327,7 +327,11 @@ fn archive_to_conversation(archive: ConversationArchive) -> Conversation {
 
 #[tauri::command]
 fn list_archives(state: State<'_, AppState>) -> Result<Vec<ArchiveSummary>, String> {
-    conversation_service_v2().list_archives(state.inner())
+    list_archives_inner(state.inner())
+}
+
+fn list_archives_inner(state: &AppState) -> Result<Vec<ArchiveSummary>, String> {
+    conversation_service_v2().list_archives(state)
 }
 
 #[tauri::command]
@@ -375,12 +379,19 @@ fn get_archive_block_page(
     input: GetArchiveBlockPageInput,
     state: State<'_, AppState>,
 ) -> Result<ArchiveBlockPageOutput, String> {
+    get_archive_block_page_inner(input, state.inner())
+}
+
+fn get_archive_block_page_inner(
+    input: GetArchiveBlockPageInput,
+    state: &AppState,
+) -> Result<ArchiveBlockPageOutput, String> {
     let archive_id = input.archive_id.trim();
     if archive_id.is_empty() {
         return Err("archiveId 是必填项".to_string());
     }
     let page = conversation_service_v2().get_archive_block_page(
-        state.inner(),
+        state,
         archive_id,
         input.block_id,
     )?;
@@ -407,19 +418,31 @@ fn get_archive_block_page(
 
 #[tauri::command]
 fn get_archive_summary(archive_id: String, state: State<'_, AppState>) -> Result<String, String> {
-    conversation_service_v2().get_archive_summary(state.inner(), &archive_id)
+    get_archive_summary_inner(state.inner(), &archive_id)
+}
+
+fn get_archive_summary_inner(state: &AppState, archive_id: &str) -> Result<String, String> {
+    conversation_service_v2().get_archive_summary(state, archive_id)
 }
 
 #[tauri::command]
 fn delete_archive(archive_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    conversation_service_v2().delete_archive(state.inner(), &archive_id)
+    delete_archive_inner(state.inner(), &archive_id)
+}
+
+fn delete_archive_inner(state: &AppState, archive_id: &str) -> Result<(), String> {
+    conversation_service_v2().delete_archive(state, archive_id)
 }
 
 #[tauri::command]
 fn unarchive_archive(archive_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    conversation_service_v2().unarchive_archive(state.inner(), &archive_id)?;
-    flush_pending_persists_blocking(state.inner())?;
-    if let Err(err) = emit_unarchived_conversation_overview_updated_from_state(state.inner()) {
+    unarchive_archive_inner(state.inner(), &archive_id)
+}
+
+fn unarchive_archive_inner(state: &AppState, archive_id: &str) -> Result<(), String> {
+    conversation_service_v2().unarchive_archive(state, archive_id)?;
+    flush_pending_persists_blocking(state)?;
+    if let Err(err) = emit_unarchived_conversation_overview_updated_from_state(state) {
         runtime_log_warn(format!(
             "[归档] 失败，任务=取消归档后刷新会话概览，archive_id={}，error={}",
             archive_id, err
