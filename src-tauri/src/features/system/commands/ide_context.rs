@@ -1068,6 +1068,29 @@ mod ide_context_tests {
         assert!(created.get("unarchivedConversations").is_some());
         assert!(created.get("conversation").is_none());
 
+        let rebound = ide_chat_rebind_conversation_recipient(
+            &state,
+            serde_json::json!({
+                "conversationId": conversation_id.clone(),
+                "departmentId": ASSISTANT_DEPARTMENT_ID,
+                "agentId": DEFAULT_AGENT_ID,
+            }),
+        )
+        .expect("rebind conversation");
+        assert_eq!(
+            rebound.get("conversationId").and_then(Value::as_str),
+            Some(conversation_id.as_str())
+        );
+        assert!(rebound.get("preferredApiConfigId").is_some());
+        assert!(rebound.get("unarchivedConversations").is_none());
+
+        let compaction_preview_error = ide_chat_compact_preview(
+            &state,
+            serde_json::json!({ "conversationId": conversation_id.clone() }),
+        )
+        .expect_err("test config should fail canonical model validation");
+        assert!(compaction_preview_error.contains("API key is empty"));
+
         let deleted = ide_chat_delete_conversation(
             &state,
             serde_json::json!({ "conversationId": conversation_id.clone() }),

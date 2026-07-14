@@ -3,23 +3,46 @@ async fn compact_conversation(
     input: ConversationIdOnlyInput,
     state: State<'_, AppState>,
 ) -> Result<ConversationCommandStatus, String> {
+    compact_conversation_inner(input, state.inner()).await
+}
+
+fn compact_conversation_preview_inner(
+    input: &ConversationIdOnlyInput,
+    state: &AppState,
+) -> Result<TrimCompactionPreviewResult, String> {
+    let requested_conversation_id = input.conversation_id.trim();
+    if requested_conversation_id.is_empty() {
+        return Err("conversationId is required".to_string());
+    }
+    let (selected_api, _resolved_api, source, _effective_agent_id) =
+        resolve_archive_request_conversation_by_id(state, requested_conversation_id)?;
+    if conversation_is_archived(&source) {
+        return Err("当前没有可压缩的活动对话。".to_string());
+    }
+    build_trim_compaction_preview_result(state, &selected_api, &source)
+}
+
+async fn compact_conversation_inner(
+    input: ConversationIdOnlyInput,
+    state: &AppState,
+) -> Result<ConversationCommandStatus, String> {
     let requested_conversation_id = input.conversation_id.trim();
     if requested_conversation_id.is_empty() {
         return Err("conversationId is required".to_string());
     }
     let (selected_api, resolved_api, source, effective_agent_id) =
-        resolve_archive_request_conversation_by_id(state.inner(), requested_conversation_id)?;
+        resolve_archive_request_conversation_by_id(state, requested_conversation_id)?;
     if conversation_is_archived(&source) {
         return Err("当前没有可压缩的活动对话。".to_string());
     }
-    let preview = build_trim_compaction_preview_result(state.inner(), &selected_api, &source)?;
+    let preview = build_trim_compaction_preview_result(state, &selected_api, &source)?;
     if !preview.can_compact {
         return Err(preview
             .compaction_disabled_reason
             .unwrap_or_else(|| "当前会话暂时不能压缩。".to_string()));
     }
     run_context_compaction_pipeline(
-        state.inner(),
+        state,
         &selected_api,
         &resolved_api,
         &source,
@@ -30,7 +53,7 @@ async fn compact_conversation(
         false,
     )
     .await?;
-    trigger_chat_queue_processing(state.inner());
+    trigger_chat_queue_processing(state);
     Ok(ConversationCommandStatus { success: true })
 }
 

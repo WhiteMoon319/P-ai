@@ -1492,18 +1492,12 @@ async function rebindConversationRecipient(payload: { conversationId: string; de
       departmentId?: string;
       agentId?: string;
       preferredApiConfigId?: string | null;
-      unarchivedConversations?: ConversationSummary[];
     }>("conversation.rebindRecipient", {
       conversationId,
       departmentId,
       agentId,
     });
-    if (Array.isArray(result.unarchivedConversations)) {
-      conversations.value = result.unarchivedConversations;
-      syncConversationTabForRemoteContacts();
-    } else {
-      await refreshList();
-    }
+    await refreshList();
     if (String(activeConversationId.value || "").trim() === conversationId) {
       activeAgentId.value = agentId;
       const preferredApiConfigId = String(result.preferredApiConfigId || "").trim();

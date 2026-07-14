@@ -386,13 +386,6 @@ fn archive_body_token_count(source: &Conversation) -> f64 {
         .sum()
 }
 
-fn resolve_archive_target_conversation(
-    state: &AppState,
-    input: &SessionSelector,
-) -> Result<(ApiConfig, ResolvedApiConfig, Conversation, String), String> {
-    conversation_service_v2().resolve_archive_target_conversation(state, input)
-}
-
 fn resolve_archive_request_conversation_by_id(
     state: &AppState,
     conversation_id: &str,

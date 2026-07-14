@@ -277,15 +277,7 @@ async fn ide_chat_batch_archive_conversations(
 
 fn ide_chat_rebind_conversation_recipient(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<RebindUnarchivedConversationRecipientInput>(params)?;
-    let output = rebind_unarchived_conversation_recipient_inner(input, state)?;
-    let overview_payload = conversation_service_v2().refresh_unarchived_conversation_overview(state)?;
-    Ok(serde_json::json!({
-        "conversationId": output.conversation_id,
-        "departmentId": output.department_id,
-        "agentId": output.agent_id,
-        "preferredApiConfigId": output.preferred_api_config_id,
-        "unarchivedConversations": overview_payload.unarchived_conversations,
-    }))
+    ide_chat_serialize(rebind_unarchived_conversation_recipient_inner(input, state)?)
 }
 
 fn ide_chat_queue_attachment(state: &AppState, params: Value) -> Result<Value, String> {
@@ -369,25 +361,6 @@ fn ide_chat_stop_conversation(state: &AppState, params: Value) -> Result<Value, 
     }))
 }
 
-fn ide_chat_session_for_conversation(state: &AppState, conversation_id: &str) -> Result<SessionSelector, String> {
-    let conversation_id = conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId is required".to_string());
-    }
-    let conversation_meta = conversation_service_v2().get_conversation_meta(state, conversation_id)?;
-    let agent_id = conversation_meta.agent_id.trim().to_string();
-    if agent_id.is_empty() {
-        return Err("会话信息不完整".to_string());
-    }
-    let department_id = conversation_meta.department_id.trim().to_string();
-    Ok(SessionSelector {
-        api_config_id: None,
-        department_id: (!department_id.is_empty()).then_some(department_id),
-        agent_id,
-        conversation_id: Some(conversation_id.to_string()),
-    })
-}
-
 async fn ide_chat_rewind_conversation(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<RewindConversationInput>(params)?;
     if input.undo_apply_patch {
@@ -403,50 +376,13 @@ async fn ide_chat_rewind_conversation(state: &AppState, params: Value) -> Result
 }
 
 fn ide_chat_compact_preview(state: &AppState, params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatConversationInput>(params)?;
-    let session = ide_chat_session_for_conversation(state, &input.conversation_id)?;
-    let (selected_api, _resolved_api, source, _effective_agent_id) =
-        resolve_archive_target_conversation(state, &session)?;
-    let preview = build_trim_compaction_preview_result(state, &selected_api, &source)?;
-    Ok(serde_json::to_value(preview).map_err(|err| format!("serialize compact preview failed: {err}"))?)
+    let input = ide_chat_parse_params::<ConversationIdOnlyInput>(params)?;
+    ide_chat_serialize(compact_conversation_preview_inner(&input, state)?)
 }
 
 async fn ide_chat_compact_conversation(state: &AppState, params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatConversationInput>(params)?;
-    let session = ide_chat_session_for_conversation(state, &input.conversation_id)?;
-    let (selected_api, resolved_api, source, effective_agent_id) =
-        resolve_archive_target_conversation(state, &session)?;
-    let preview = build_trim_compaction_preview_result(state, &selected_api, &source)?;
-    if !preview.can_compact {
-        return Err(preview
-            .compaction_disabled_reason
-            .unwrap_or_else(|| "当前会话暂时不能压缩。".to_string()));
-    }
-    let result = run_context_compaction_pipeline(
-        state,
-        &selected_api,
-        &resolved_api,
-        &source,
-        &effective_agent_id,
-        "manual_trim_compaction",
-        "COMPACTION-FORCE",
-        &[],
-        false,
-    )
-    .await?;
-    trigger_chat_queue_processing(state);
-    let overview_payload = conversation_service_v2().refresh_unarchived_conversation_overview(state)?;
-    emit_unarchived_conversation_overview_updated_payload(state, &overview_payload);
-    if let Some(compaction_message) = result.compaction_message.clone() {
-        ide_chat_broadcast_notification(
-            "conversation.messageAppended",
-            serde_json::json!({
-                "conversationId": source.id,
-                "message": compaction_message,
-            }),
-        );
-    }
-    Ok(serde_json::to_value(result).map_err(|err| format!("serialize compact result failed: {err}"))?)
+    let input = ide_chat_parse_params::<ConversationIdOnlyInput>(params)?;
+    ide_chat_serialize(compact_conversation_inner(input, state).await?)
 }
 
 fn ide_chat_model_list(state: &AppState, params: Value) -> Result<Value, String> {
