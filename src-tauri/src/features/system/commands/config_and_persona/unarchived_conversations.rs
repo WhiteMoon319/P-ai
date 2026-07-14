@@ -493,13 +493,20 @@ fn set_conversation_plan_mode(
     input: SetConversationPlanModeInput,
     state: State<'_, AppState>,
 ) -> Result<SetConversationPlanModeOutput, String> {
+    set_conversation_plan_mode_inner(input, state.inner())
+}
+
+fn set_conversation_plan_mode_inner(
+    input: SetConversationPlanModeInput,
+    state: &AppState,
+) -> Result<SetConversationPlanModeOutput, String> {
     let conversation_id = input.conversation_id.trim();
     if conversation_id.is_empty() {
         return Err("conversationId 不能为空".to_string());
     }
 
     let current_enabled =
-        get_conversation_plan_mode_enabled(state.inner(), conversation_id).unwrap_or(false);
+        get_conversation_plan_mode_enabled(state, conversation_id).unwrap_or(false);
     if current_enabled == input.plan_mode_enabled {
         return Ok(SetConversationPlanModeOutput {
             conversation_id: conversation_id.to_string(),
@@ -507,8 +514,8 @@ fn set_conversation_plan_mode(
         });
     }
 
-    set_conversation_plan_mode_enabled(state.inner(), conversation_id, input.plan_mode_enabled)?;
-    emit_unarchived_conversation_overview_item_updated_from_state(state.inner(), conversation_id)?;
+    set_conversation_plan_mode_enabled(state, conversation_id, input.plan_mode_enabled)?;
+    emit_unarchived_conversation_overview_item_updated_from_state(state, conversation_id)?;
     runtime_log_info(format!(
         "[计划模式] 完成，任务=切换会话运行时计划模式，会话ID={}，状态={}",
         conversation_id,
@@ -525,6 +532,13 @@ fn set_conversation_plan_mode(
 fn set_conversation_preferred_model(
     input: SetConversationPreferredModelInput,
     state: State<'_, AppState>,
+) -> Result<SetConversationPreferredModelOutput, String> {
+    set_conversation_preferred_model_inner(input, state.inner())
+}
+
+fn set_conversation_preferred_model_inner(
+    input: SetConversationPreferredModelInput,
+    state: &AppState,
 ) -> Result<SetConversationPreferredModelOutput, String> {
     let conversation_id = input.conversation_id.trim();
     if conversation_id.is_empty() {
@@ -544,7 +558,7 @@ fn set_conversation_preferred_model(
     ));
 
     let resolved_preferred_api_config_id = if let Some(api_config_id) = preferred_api_config_id.as_deref() {
-        let config = state_read_config_cached(state.inner())?;
+        let config = state_read_config_cached(state)?;
         let resolved_api_config_id = resolve_model_role_api_config_id(&config, api_config_id)
             .ok_or_else(|| format!("会话首选模型角色未配置：api_config_id={api_config_id}"))?;
         let Some(api_config) = config
@@ -567,7 +581,7 @@ fn set_conversation_preferred_model(
     };
 
     conversation_service_v2().set_preferred_api_config_id(
-        state.inner(),
+        state,
         conversation_id,
         resolved_preferred_api_config_id.clone(),
     )?;

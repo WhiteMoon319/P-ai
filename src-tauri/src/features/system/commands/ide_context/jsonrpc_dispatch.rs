@@ -86,6 +86,7 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "unbind_active_chat_view_stream"
             | "request_conversation_messages_after_async"
             | "set_chat_window_active"
+            | "preview_rewind_conversation_from_message"
     )
 }
 
@@ -355,6 +356,16 @@ async fn ide_chat_handle_jsonrpc_request(
         "get_active_conversation_messages_before" => ide_chat_conversation_messages_before_command(state, request.params),
         "mark_conversation_read" => ide_chat_mark_conversation_read_command(state, request.params),
         "set_active_unarchived_conversation" => ide_chat_set_active_conversation_command(state, request.params),
+        "rebind_unarchived_conversation_recipient" => ide_chat_rebind_conversation_command(state, request.params),
+        "rewind_conversation_from_message" => ide_chat_rewind_conversation_command(state, request.params).await,
+        "set_conversation_plan_mode" => ide_chat_set_plan_mode_command(state, request.params),
+        "set_conversation_preferred_model" => ide_chat_set_preferred_model_command(state, request.params),
+        "confirm_plan_and_continue" => ide_chat_confirm_plan_command(state, request.params).await,
+        "resolve_terminal_approval" => ide_chat_resolve_terminal_approval_command(state, request.params),
+        "goal_get_current" => ide_chat_goal_current_command(state, request.params),
+        "goal_create_goal" => ide_chat_goal_create_command(state, request.params),
+        "goal_cancel_goal" => ide_chat_goal_cancel_command(state, request.params),
+        "query_ide_context_references" => ide_chat_query_ide_context_command(request.params, ide_context_runtime),
         "toolReview.reports.list" => ide_chat_tool_review_reports(state, request.params),
         "toolReview.report.delete" => ide_chat_tool_review_delete_report(state, request.params),
         "toolReview.commitOptions.list" => ide_chat_tool_review_commit_options(state, request.params).await,
@@ -418,6 +429,7 @@ mod web_native_capability_tests {
             "unbind_active_chat_view_stream",
             "request_conversation_messages_after_async",
             "set_chat_window_active",
+            "preview_rewind_conversation_from_message",
         ] {
             assert!(
                 ide_chat_web_native_only_method(method),
@@ -460,6 +472,16 @@ mod web_native_capability_tests {
             "get_active_conversation_messages_before",
             "mark_conversation_read",
             "set_active_unarchived_conversation",
+            "rebind_unarchived_conversation_recipient",
+            "rewind_conversation_from_message",
+            "set_conversation_plan_mode",
+            "set_conversation_preferred_model",
+            "confirm_plan_and_continue",
+            "resolve_terminal_approval",
+            "goal_get_current",
+            "goal_create_goal",
+            "goal_cancel_goal",
+            "query_ide_context_references",
         ] {
             assert!(
                 !ide_chat_web_native_only_method(method),

@@ -323,6 +323,66 @@ fn ide_chat_set_active_conversation_command(
     ide_chat_serialize(SetActiveUnarchivedConversationOutput { conversation_id })
 }
 
+fn ide_chat_rebind_conversation_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<RebindUnarchivedConversationRecipientInput>(params, "input")?;
+    ide_chat_serialize(rebind_unarchived_conversation_recipient_inner(input, state)?)
+}
+
+async fn ide_chat_rewind_conversation_command(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<RewindConversationInput>(params, "input")?;
+    ide_chat_rewind_conversation(state, ide_chat_serialize(input)?).await
+}
+
+fn ide_chat_set_plan_mode_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<SetConversationPlanModeInput>(params, "input")?;
+    ide_chat_serialize(set_conversation_plan_mode_inner(input, state)?)
+}
+
+fn ide_chat_set_preferred_model_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<SetConversationPreferredModelInput>(params, "input")?;
+    ide_chat_serialize(set_conversation_preferred_model_inner(input, state)?)
+}
+
+async fn ide_chat_confirm_plan_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ConfirmPlanAndContinueInput>(params, "input")?;
+    ide_chat_serialize(confirm_plan_and_continue_inner(state, &input).await?)
+}
+
+fn ide_chat_resolve_terminal_approval_command(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ResolveTerminalApprovalInput>(params, "input")?;
+    let _ = resolve_terminal_approval_request(state, &input.request_id, input.approved)?;
+    ide_chat_serialize(())
+}
+
+fn ide_chat_goal_current_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let conversation_id = ide_chat_parse_param_field::<String>(params, "conversationId")?;
+    ide_chat_serialize(goal_get_current_inner(state, &conversation_id)?)
+}
+
+fn ide_chat_goal_create_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<GoalCreateInput>(params, "input")?;
+    ide_chat_serialize(goal_create_goal_inner(state, &input.conversation_id, &input.objective)?)
+}
+
+fn ide_chat_goal_cancel_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<GoalCancelInput>(params, "input")?;
+    ide_chat_serialize(goal_cancel_goal_inner(state, &input.conversation_id)?)
+}
+
+fn ide_chat_query_ide_context_command(
+    params: Value,
+    ide_context_runtime: &IdeContextRuntime,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<IdeContextWorkspaceQueryInput>(params, "input")?;
+    ide_chat_serialize(query_ide_context_references_internal(input, ide_context_runtime)?)
+}
+
 fn ide_chat_conversation_runtime_snapshot(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatConversationInput>(params)?;
     let conversation_id = input.conversation_id.trim();
@@ -501,47 +561,17 @@ fn ide_chat_model_list(state: &AppState, params: Value) -> Result<Value, String>
 
 fn ide_chat_select_model(state: &AppState, _app: &AppHandle, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatSelectModelInput>(params)?;
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId is required".to_string());
-    }
-    let api_config_id = input.api_config_id.trim();
-    runtime_log_info(format!(
-        "[会话模型] 开始，任务=切换会话首选模型，入口=vscode_sidebar，会话ID={}，api_config_id={}",
-        conversation_id,
-        if api_config_id.is_empty() { "部门模型" } else { api_config_id }
-    ));
-    let preferred_api_config_id = if api_config_id.is_empty() {
-        None
-    } else {
-        let config = state_read_config_cached(state)?;
-        let resolved_api_config_id = resolve_model_role_api_config_id(&config, api_config_id)
-            .ok_or_else(|| format!("Model role '{api_config_id}' is not configured."))?;
-        let selected_api = config
-            .api_configs
-            .iter()
-            .find(|item| item.id.trim() == resolved_api_config_id)
-            .ok_or_else(|| format!("API config '{api_config_id}' not found."))?;
-        if !is_text_chat_api(selected_api) {
-            return Err(format!("API config '{api_config_id}' does not support chat text."));
-        }
-        Some(resolved_api_config_id)
-    };
-    let updated_conversation = conversation_service_v2().set_preferred_api_config_id(
+    let conversation_id = input.conversation_id.trim().to_string();
+    set_conversation_preferred_model_inner(
+        SetConversationPreferredModelInput {
+            conversation_id: conversation_id.clone(),
+            preferred_api_config_id: (!input.api_config_id.trim().is_empty())
+                .then(|| input.api_config_id.trim().to_string()),
+        },
         state,
-        conversation_id,
-        preferred_api_config_id,
     )?;
-    runtime_log_info(format!(
-        "[会话模型] 完成，任务=切换会话首选模型，入口=vscode_sidebar，会话ID={}，api_config_id={}",
-        conversation_id,
-        updated_conversation
-            .preferred_api_config_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or("部门模型")
-    ));
+    let updated_conversation = conversation_service_v2().get_conversation_meta(state, &conversation_id)?;
+    let updated_conversation = ide_chat_conversation_from_meta_view(&updated_conversation);
     ide_chat_model_payload_for_conversation(state, &updated_conversation)
 }
 
@@ -576,24 +606,7 @@ fn ide_chat_approve_terminal_approval_for_workspace(
 
 fn ide_chat_set_conversation_plan_mode(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<SetConversationPlanModeInput>(params)?;
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId 不能为空".to_string());
-    }
-    let current_enabled =
-        get_conversation_plan_mode_enabled(state, conversation_id).unwrap_or(false);
-    if current_enabled != input.plan_mode_enabled {
-        set_conversation_plan_mode_enabled(state, conversation_id, input.plan_mode_enabled)?;
-        runtime_log_info(format!(
-            "[计划模式] 完成，任务=VSCode边栏切换会话运行时计划模式，会话ID={}，状态={}",
-            conversation_id,
-            if input.plan_mode_enabled { "开启" } else { "关闭" }
-        ));
-    }
-    Ok(serde_json::json!({
-        "conversationId": conversation_id,
-        "planModeEnabled": input.plan_mode_enabled,
-    }))
+    ide_chat_serialize(set_conversation_plan_mode_inner(input, state)?)
 }
 
 async fn ide_chat_confirm_plan(state: &AppState, params: Value) -> Result<Value, String> {
