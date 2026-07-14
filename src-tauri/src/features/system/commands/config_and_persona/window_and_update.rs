@@ -552,16 +552,24 @@ fn set_ui_language(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AppConfig, String> {
+    set_ui_language_inner(ui_language, &app, state.inner())
+}
+
+fn set_ui_language_inner(
+    ui_language: String,
+    app: &AppHandle,
+    state: &AppState,
+) -> Result<AppConfig, String> {
     let normalized = normalize_ui_language(&ui_language);
-    let mut config = state_read_config_cached(&state)?;
+    let mut config = state_read_config_cached(state)?;
     normalize_app_config(&mut config);
     if config.ui_language != normalized {
         config.ui_language = normalized.clone();
-        state_write_config_cached(&state, &config)?;
+        state_write_config_cached(state, &config)?;
         runtime_log_info(format!("[配置] 界面语言已保存：ui_language={normalized}"));
     }
-    let data = state_read_agents_runtime_snapshot(&state)?;
-    let runtime_config = runtime_config_with_private_organization(&state, &config, &data)?;
+    let data = state_read_agents_runtime_snapshot(state)?;
+    let runtime_config = runtime_config_with_private_organization(state, &config, &data)?;
     let _ = app.emit("easy-call:config-updated", &runtime_config);
     Ok(runtime_config)
 }

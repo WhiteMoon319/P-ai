@@ -462,6 +462,107 @@ async fn ide_chat_delete_unarchived_command(state: &AppState, params: Value) -> 
     ide_chat_serialize(delete_unarchived_conversation_inner(input, state).await?)
 }
 
+fn ide_chat_export_conversation_share_command(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ExportConversationShareInput>(params, "input")?;
+    ide_chat_serialize(export_conversation_share_json_inner(input, state)?)
+}
+
+fn ide_chat_import_archives_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ImportArchivesFromJsonInput>(params, "input")?;
+    ide_chat_serialize(import_archives_from_json_inner(input, state)?)
+}
+
+fn ide_chat_import_agent_memories_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ImportAgentMemoriesInput>(params, "input")?;
+    ide_chat_serialize(import_agent_memories_inner(input, state)?)
+}
+
+fn ide_chat_remote_im_block_page_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<RemoteImContactConversationBlockPageInput>(params, "input")?;
+    ide_chat_serialize(remote_im_get_contact_conversation_block_page_inner(input, state)?)
+}
+
+fn ide_chat_remote_im_clear_conversation_command(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<RemoteImContactDeleteInput>(params, "input")?;
+    ide_chat_serialize(remote_im_clear_contact_conversation_inner(input, state)?)
+}
+
+async fn ide_chat_frontend_ready_remote_im_command(app: &AppHandle) -> Result<Value, String> {
+    ide_chat_serialize(frontend_ready_start_remote_im_services(app.clone()).await?)
+}
+
+fn ide_chat_forward_selection_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ForwardUnarchivedConversationSelectionInput>(params, "input")?;
+    ide_chat_serialize(forward_unarchived_conversation_selection_inner(input, state)?)
+}
+
+fn ide_chat_forward_remote_contact_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ForwardSelectionToRemoteImContactInput>(params, "input")?;
+    ide_chat_serialize(forward_selection_to_remote_im_contact_inner(input, state)?)
+}
+
+fn ide_chat_rename_conversation_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<RenameUnarchivedConversationInput>(params, "input")?;
+    ide_chat_serialize(rename_unarchived_conversation_inner(input, state)?)
+}
+
+fn ide_chat_toggle_pin_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ToggleUnarchivedConversationPinInput>(params, "input")?;
+    ide_chat_serialize(toggle_unarchived_conversation_pin_inner(input, state)?)
+}
+
+fn ide_chat_set_auto_push_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<SetConversationAutoPushRemoteContactInput>(params, "input")?;
+    ide_chat_serialize(set_conversation_auto_push_remote_contact_inner(input, state)?)
+}
+
+fn ide_chat_set_department_primary_api_command(
+    state: &AppState,
+    app: &AppHandle,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<SetDepartmentPrimaryApiConfigInput>(params, "input")?;
+    ide_chat_serialize(set_department_primary_api_config_inner(input, app, state)?)
+}
+
+fn ide_chat_set_ui_language_command(
+    state: &AppState,
+    app: &AppHandle,
+    params: Value,
+) -> Result<Value, String> {
+    let ui_language = ide_chat_parse_param_field::<String>(params, "uiLanguage")?;
+    ide_chat_serialize(set_ui_language_inner(ui_language, app, state)?)
+}
+
+fn ide_chat_dump_memory_cache_stats_command(state: &AppState) -> Result<Value, String> {
+    ide_chat_serialize(dump_memory_cache_stats_inner(state)?)
+}
+
+async fn ide_chat_conversation_changed_since_command(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ListUnarchivedConversationsChangedSinceInput>(params, "input")?;
+    let app_state = state.clone();
+    let output = tokio::task::spawn_blocking(move || {
+        list_unarchived_conversations_changed_since_blocking(&app_state, &input)
+    })
+    .await
+    .map_err(|err| format!("读取未归档会话列表差量任务异常：{err}"))??;
+    ide_chat_serialize(output)
+}
+
+fn ide_chat_search_memories_recall_command(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<SearchMemoriesRecallInput>(params, "input")?;
+    ide_chat_serialize(search_memories_recall_inner(input, state)?)
+}
+
 fn ide_chat_conversation_runtime_snapshot(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatConversationInput>(params)?;
     let conversation_id = input.conversation_id.trim();

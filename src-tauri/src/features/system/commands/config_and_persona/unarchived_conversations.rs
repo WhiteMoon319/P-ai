@@ -603,6 +603,13 @@ fn set_conversation_auto_push_remote_contact(
     input: SetConversationAutoPushRemoteContactInput,
     state: State<'_, AppState>,
 ) -> Result<SetConversationAutoPushRemoteContactOutput, String> {
+    set_conversation_auto_push_remote_contact_inner(input, state.inner())
+}
+
+fn set_conversation_auto_push_remote_contact_inner(
+    input: SetConversationAutoPushRemoteContactInput,
+    state: &AppState,
+) -> Result<SetConversationAutoPushRemoteContactOutput, String> {
     let conversation_id = input.conversation_id.trim();
     if conversation_id.is_empty() {
         return Err("conversationId 不能为空".to_string());
@@ -615,7 +622,7 @@ fn set_conversation_auto_push_remote_contact(
         .map(ToOwned::to_owned);
 
     let conversation_meta = conversation_service_v2()
-        .get_conversation_meta(state.inner(), conversation_id)
+        .get_conversation_meta(state, conversation_id)
         .map_err(|_| "会话不存在".to_string())?;
     if conversation_meta.conversation_kind.trim() != CONVERSATION_KIND_CHAT
         || matches!(
@@ -635,7 +642,7 @@ fn set_conversation_auto_push_remote_contact(
 
     if let Some(target_contact_id) = remote_contact_id.as_deref() {
         let has_target = conversation_service_v2()
-            .list_remote_im_contact_conversations(state.inner())?
+            .list_remote_im_contact_conversations(state)?
             .iter()
             .any(|item| item.contact_id.trim() == target_contact_id);
         if !has_target {
@@ -644,11 +651,11 @@ fn set_conversation_auto_push_remote_contact(
     }
 
     conversation_service_v2().set_auto_push_remote_contact_id(
-        state.inner(),
+        state,
         conversation_id,
         remote_contact_id.clone(),
     )?;
-    emit_unarchived_conversation_overview_item_updated_from_state(state.inner(), conversation_id)?;
+    emit_unarchived_conversation_overview_item_updated_from_state(state, conversation_id)?;
 
     runtime_log_info(format!(
         "[自动推送] 完成，任务=更新会话自动推送目标，会话ID={}，remote_contact_id={}",
@@ -1264,12 +1271,19 @@ fn export_conversation_share_json(
     input: ExportConversationShareInput,
     state: State<'_, AppState>,
 ) -> Result<ExportConversationShareOutput, String> {
+    export_conversation_share_json_inner(input, state.inner())
+}
+
+fn export_conversation_share_json_inner(
+    input: ExportConversationShareInput,
+    state: &AppState,
+) -> Result<ExportConversationShareOutput, String> {
     let conversation_id = input.conversation_id.trim();
     if conversation_id.is_empty() {
         return Err("conversationId 不能为空".to_string());
     }
     let conversation = conversation_service_v2()
-        .get_conversation_snapshot(state.inner(), conversation_id)
+        .get_conversation_snapshot(state, conversation_id)
         .map_err(|_| "会话不存在或已归档".to_string())?;
     if conversation_is_archived(&conversation)
         || !conversation_visible_in_foreground_lists(&conversation)
@@ -1584,6 +1598,13 @@ fn forward_unarchived_conversation_selection(
     input: ForwardUnarchivedConversationSelectionInput,
     state: State<'_, AppState>,
 ) -> Result<ForwardUnarchivedConversationSelectionOutput, String> {
+    forward_unarchived_conversation_selection_inner(input, state.inner())
+}
+
+fn forward_unarchived_conversation_selection_inner(
+    input: ForwardUnarchivedConversationSelectionInput,
+    state: &AppState,
+) -> Result<ForwardUnarchivedConversationSelectionOutput, String> {
     let source_conversation_id = input.source_conversation_id.trim();
     let target_conversation_id = input.target_conversation_id.trim();
     if source_conversation_id.is_empty() {
@@ -1607,12 +1628,12 @@ fn forward_unarchived_conversation_selection(
     }
 
     let result = conversation_service_v2().forward_conversation_selection(
-        state.inner(),
+        state,
         source_conversation_id,
         target_conversation_id,
         &normalized_selected_message_ids,
     )?;
-    emit_unarchived_conversation_overview_updated_payload(state.inner(), &result.overview_payload);
+    emit_unarchived_conversation_overview_updated_payload(state, &result.overview_payload);
     runtime_log_info(format!(
         "[转发到会话] 完成，任务=转发已选消息到目标会话，source_conversation_id={}，target_conversation_id={}，message_count={}",
         source_conversation_id,
@@ -1630,6 +1651,13 @@ fn forward_unarchived_conversation_selection(
 fn forward_selection_to_remote_im_contact(
     input: ForwardSelectionToRemoteImContactInput,
     state: State<'_, AppState>,
+) -> Result<ForwardSelectionToRemoteImContactOutput, String> {
+    forward_selection_to_remote_im_contact_inner(input, state.inner())
+}
+
+fn forward_selection_to_remote_im_contact_inner(
+    input: ForwardSelectionToRemoteImContactInput,
+    state: &AppState,
 ) -> Result<ForwardSelectionToRemoteImContactOutput, String> {
     let source_conversation_id = input.source_conversation_id.trim();
     let target_conversation_id = input.target_conversation_id.trim();
@@ -1658,13 +1686,13 @@ fn forward_selection_to_remote_im_contact(
     }
 
     let result = conversation_service_v2().forward_selection_to_remote_im_contact(
-        state.inner(),
+        state,
         source_conversation_id,
         target_conversation_id,
         remote_contact_id,
         &normalized_selected_message_ids,
     )?;
-    emit_unarchived_conversation_overview_updated_payload(state.inner(), &result.overview_payload);
+    emit_unarchived_conversation_overview_updated_payload(state, &result.overview_payload);
     runtime_log_info(format!(
         "[转发到远程联系人] 完成，任务=转发已选消息到远程联系人会话，source_conversation_id={}，target_conversation_id={}，remote_contact_id={}，message_count={}",
         source_conversation_id,
@@ -1685,13 +1713,20 @@ fn rename_unarchived_conversation(
     input: RenameUnarchivedConversationInput,
     state: State<'_, AppState>,
 ) -> Result<RenameUnarchivedConversationOutput, String> {
+    rename_unarchived_conversation_inner(input, state.inner())
+}
+
+fn rename_unarchived_conversation_inner(
+    input: RenameUnarchivedConversationInput,
+    state: &AppState,
+) -> Result<RenameUnarchivedConversationOutput, String> {
     let conversation_id = input.conversation_id.trim();
     if conversation_id.is_empty() {
         return Err("conversationId 不能为空".to_string());
     }
     let next_title = clean_text(input.title.trim());
     let next_title = conversation_service_v2().rename_conversation(
-        state.inner(),
+        state,
         conversation_id,
         &next_title,
     )?;
@@ -1700,7 +1735,7 @@ fn rename_unarchived_conversation(
         "[会话] 完成，任务=重命名会话，conversation_id={}，title={}",
         conversation_id, next_title
     ));
-    emit_unarchived_conversation_overview_item_updated_from_state(state.inner(), conversation_id)?;
+    emit_unarchived_conversation_overview_item_updated_from_state(state, conversation_id)?;
 
     Ok(RenameUnarchivedConversationOutput {
         conversation_id: conversation_id.to_string(),
@@ -1795,8 +1830,15 @@ fn toggle_unarchived_conversation_pin(
     input: ToggleUnarchivedConversationPinInput,
     state: State<'_, AppState>,
 ) -> Result<ToggleUnarchivedConversationPinOutput, String> {
+    toggle_unarchived_conversation_pin_inner(input, state.inner())
+}
+
+fn toggle_unarchived_conversation_pin_inner(
+    input: ToggleUnarchivedConversationPinInput,
+    state: &AppState,
+) -> Result<ToggleUnarchivedConversationPinOutput, String> {
     let result = conversation_service_v2().toggle_conversation_pin(
-        state.inner(),
+        state,
         &input.conversation_id,
     )?;
     runtime_log_info(format!(
@@ -1804,7 +1846,7 @@ fn toggle_unarchived_conversation_pin(
         result.conversation_id, result.is_pinned
     ));
     emit_conversation_pin_updated_payload(
-        state.inner(),
+        state,
         &ConversationPinUpdatedPayload {
             conversation_id: result.conversation_id.clone(),
             is_pinned: result.is_pinned,

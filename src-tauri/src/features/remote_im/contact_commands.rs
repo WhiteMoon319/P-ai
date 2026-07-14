@@ -378,6 +378,13 @@ fn remote_im_get_contact_conversation_block_page(
     input: RemoteImContactConversationBlockPageInput,
     state: State<'_, AppState>,
 ) -> Result<RemoteImContactConversationBlockPageOutput, String> {
+    remote_im_get_contact_conversation_block_page_inner(input, state.inner())
+}
+
+fn remote_im_get_contact_conversation_block_page_inner(
+    input: RemoteImContactConversationBlockPageInput,
+    state: &AppState,
+) -> Result<RemoteImContactConversationBlockPageOutput, String> {
     let contact_id = input.contact_id.trim();
     if contact_id.is_empty() {
         return Err("contact_id 为必填项。".to_string());
@@ -391,7 +398,7 @@ fn remote_im_get_contact_conversation_block_page(
             .unwrap_or_else(|| "latest".to_string())
     ));
     let page = conversation_service_v2().get_remote_im_contact_conversation_block_page(
-        state.inner(),
+        state,
         contact_id,
         input.block_id,
     )?;
@@ -455,6 +462,13 @@ fn remote_im_clear_contact_conversation(
     input: RemoteImContactDeleteInput,
     state: State<'_, AppState>,
 ) -> Result<bool, String> {
+    remote_im_clear_contact_conversation_inner(input, state.inner())
+}
+
+fn remote_im_clear_contact_conversation_inner(
+    input: RemoteImContactDeleteInput,
+    state: &AppState,
+) -> Result<bool, String> {
     let contact_id = input.contact_id.trim();
     if contact_id.is_empty() {
         return Err("contact_id 为必填项。".to_string());
@@ -465,7 +479,7 @@ fn remote_im_clear_contact_conversation(
         contact_id
     ));
     let cleared =
-        conversation_service_v2().clear_remote_im_contact_conversation(state.inner(), contact_id)?;
+        conversation_service_v2().clear_remote_im_contact_conversation(state, contact_id)?;
     runtime_log_info(format!(
         "[远程IM][联系人会话][清空] 完成: contact_id={}, elapsed_ms={}",
         contact_id,

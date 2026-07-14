@@ -1167,6 +1167,13 @@ fn search_memories_recall(
     input: SearchMemoriesRecallInput,
     state: State<'_, AppState>,
 ) -> Result<SearchMemoriesRecallResult, String> {
+    search_memories_recall_inner(input, state.inner())
+}
+
+fn search_memories_recall_inner(
+    input: SearchMemoriesRecallInput,
+    state: &AppState,
+) -> Result<SearchMemoriesRecallResult, String> {
     let started = std::time::Instant::now();
     let agent_id = input.agent_id.trim();
     if agent_id.is_empty() {

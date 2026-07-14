@@ -389,12 +389,19 @@ fn import_archives_from_json(
     input: ImportArchivesFromJsonInput,
     state: State<'_, AppState>,
 ) -> Result<ImportArchivesResult, String> {
+    import_archives_from_json_inner(input, state.inner())
+}
+
+fn import_archives_from_json_inner(
+    input: ImportArchivesFromJsonInput,
+    state: &AppState,
+) -> Result<ImportArchivesResult, String> {
     let mut incoming_archives = parse_archives_for_import(&input.payload_json)?;
     if incoming_archives.is_empty() {
         return Err("No archives found in payload.".to_string());
     }
 
-    let result = conversation_service_v2().import_archives(state.inner(), &mut incoming_archives)?;
+    let result = conversation_service_v2().import_archives(state, &mut incoming_archives)?;
     Ok(ImportArchivesResult {
         imported_count: result.imported_count,
         replaced_count: result.replaced_count,

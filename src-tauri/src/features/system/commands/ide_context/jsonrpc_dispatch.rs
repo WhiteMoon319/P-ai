@@ -87,6 +87,11 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "request_conversation_messages_after_async"
             | "set_chat_window_active"
             | "preview_rewind_conversation_from_message"
+            | "check_message_store_migration"
+            | "run_message_store_migration"
+            | "convert_private_agent_to_main"
+            | "get_chat_shell_workspace"
+            | "update_chat_shell_workspace_layout"
     )
 }
 
@@ -381,6 +386,22 @@ async fn ide_chat_handle_jsonrpc_request(
         "create_conversation_branch_from_message" => ide_chat_branch_message_command(state, request.params).await,
         "submit_user_async_delegate" => ide_chat_submit_delegate_command(state, request.params).await,
         "delete_unarchived_conversation" => ide_chat_delete_unarchived_command(state, request.params).await,
+        "export_conversation_share_json" => ide_chat_export_conversation_share_command(state, request.params),
+        "import_archives_from_json" => ide_chat_import_archives_command(state, request.params),
+        "import_agent_memories" => ide_chat_import_agent_memories_command(state, request.params),
+        "remote_im_get_contact_conversation_block_page" => ide_chat_remote_im_block_page_command(state, request.params),
+        "remote_im_clear_contact_conversation" => ide_chat_remote_im_clear_conversation_command(state, request.params),
+        "frontend_ready_start_remote_im_services" => ide_chat_frontend_ready_remote_im_command(app).await,
+        "forward_unarchived_conversation_selection" => ide_chat_forward_selection_command(state, request.params),
+        "forward_selection_to_remote_im_contact" => ide_chat_forward_remote_contact_command(state, request.params),
+        "rename_unarchived_conversation" => ide_chat_rename_conversation_command(state, request.params),
+        "toggle_unarchived_conversation_pin" => ide_chat_toggle_pin_command(state, request.params),
+        "set_conversation_auto_push_remote_contact" => ide_chat_set_auto_push_command(state, request.params),
+        "set_department_primary_api_config" => ide_chat_set_department_primary_api_command(state, app, request.params),
+        "set_ui_language" => ide_chat_set_ui_language_command(state, app, request.params),
+        "dump_memory_cache_stats" => ide_chat_dump_memory_cache_stats_command(state),
+        "list_unarchived_conversations_changed_since" => ide_chat_conversation_changed_since_command(state, request.params).await,
+        "search_memories_recall" => ide_chat_search_memories_recall_command(state, request.params),
         "toolReview.reports.list" => ide_chat_tool_review_reports(state, request.params),
         "toolReview.report.delete" => ide_chat_tool_review_delete_report(state, request.params),
         "toolReview.commitOptions.list" => ide_chat_tool_review_commit_options(state, request.params).await,
@@ -401,6 +422,109 @@ async fn ide_chat_handle_jsonrpc_request(
 #[cfg(test)]
 mod web_native_capability_tests {
     use super::*;
+
+    fn collect_frontend_source_files(root: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(root) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                collect_frontend_source_files(&path, out);
+            } else if matches!(path.extension().and_then(|value| value.to_str()), Some("ts" | "vue")) {
+                out.push(path);
+            }
+        }
+    }
+
+    fn quoted_value_at(source: &str, quote_index: usize) -> Option<(String, usize)> {
+        let quote = *source.as_bytes().get(quote_index)?;
+        if quote != b'\'' && quote != b'"' {
+            return None;
+        }
+        let bytes = source.as_bytes();
+        let mut index = quote_index + 1;
+        while index < bytes.len() {
+            if bytes[index] == b'\\' {
+                index = index.saturating_add(2);
+                continue;
+            }
+            if bytes[index] == quote {
+                return Some((source[quote_index + 1..index].to_string(), index + 1));
+            }
+            index += 1;
+        }
+        None
+    }
+
+    fn static_invoke_tauri_methods(source: &str) -> Vec<String> {
+        let mut methods = Vec::new();
+        let mut offset = 0usize;
+        while let Some(relative) = source[offset..].find("invokeTauri") {
+            let start = offset + relative + "invokeTauri".len();
+            let Some(open_relative) = source[start..].find('(') else {
+                break;
+            };
+            let mut index = start + open_relative + 1;
+            while source.as_bytes().get(index).is_some_and(u8::is_ascii_whitespace) {
+                index += 1;
+            }
+            if let Some((method, end)) = quoted_value_at(source, index) {
+                methods.push(method);
+                offset = end;
+            } else {
+                offset = index.saturating_add(1);
+            }
+        }
+        methods
+    }
+
+    fn web_covered_methods(source: &str) -> std::collections::HashSet<String> {
+        let production = source.split("#[cfg(test)]").next().unwrap_or(source);
+        let dispatch_start = production
+            .find("async fn ide_chat_handle_jsonrpc_request")
+            .unwrap_or(production.len());
+        let mut covered = std::collections::HashSet::new();
+        let mut index = 0usize;
+        while index < production.len() {
+            let Some(relative) = production[index..].find(['\'', '"']) else {
+                break;
+            };
+            let quote_index = index + relative;
+            let Some((value, end)) = quoted_value_at(production, quote_index) else {
+                break;
+            };
+            let is_native_declaration = quote_index < dispatch_start;
+            let is_dispatch_arm = production[end..].trim_start().starts_with("=>");
+            if is_native_declaration || is_dispatch_arm {
+                covered.insert(value);
+            }
+            index = end;
+        }
+        covered
+    }
+
+    #[test]
+    fn every_static_frontend_tauri_command_should_have_web_behavior() {
+        let frontend_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src");
+        let mut files = Vec::new();
+        collect_frontend_source_files(&frontend_root, &mut files);
+        let mut invoked = std::collections::BTreeSet::new();
+        for path in files {
+            let source = std::fs::read_to_string(&path)
+                .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
+            invoked.extend(static_invoke_tauri_methods(&source));
+        }
+        let covered = web_covered_methods(include_str!("jsonrpc_dispatch.rs"));
+        let missing = invoked
+            .into_iter()
+            .filter(|method| !covered.contains(method))
+            .collect::<Vec<_>>();
+        assert!(
+            missing.is_empty(),
+            "frontend invokeTauri commands must be handled or explicitly rejected on Web: {missing:?}"
+        );
+    }
 
     #[test]
     fn local_file_and_window_methods_should_be_explicitly_native_only() {
@@ -445,6 +569,11 @@ mod web_native_capability_tests {
             "request_conversation_messages_after_async",
             "set_chat_window_active",
             "preview_rewind_conversation_from_message",
+            "check_message_store_migration",
+            "run_message_store_migration",
+            "convert_private_agent_to_main",
+            "get_chat_shell_workspace",
+            "update_chat_shell_workspace_layout",
         ] {
             assert!(
                 ide_chat_web_native_only_method(method),

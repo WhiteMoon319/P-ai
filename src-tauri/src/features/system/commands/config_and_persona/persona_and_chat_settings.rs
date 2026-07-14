@@ -550,12 +550,19 @@ fn import_agent_memories(
     input: ImportAgentMemoriesInput,
     state: State<'_, AppState>,
 ) -> Result<ImportAgentMemoriesResult, String> {
+    import_agent_memories_inner(input, state.inner())
+}
+
+fn import_agent_memories_inner(
+    input: ImportAgentMemoriesInput,
+    state: &AppState,
+) -> Result<ImportAgentMemoriesResult, String> {
     let agent_id = input.agent_id.trim();
     if agent_id.is_empty() {
         return Err("agentId is required".to_string());
     }
 
-    let data = state_read_agents_runtime_snapshot(&state)?;
+    let data = state_read_agents_runtime_snapshot(state)?;
     let base_config = read_config(&state.config_path)?;
     let (private_agent_ids, _) =
         runtime_private_organization_ids(&state.data_path, &base_config, &data.agents)?;
@@ -1260,6 +1267,14 @@ fn set_department_primary_api_config(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AppConfig, String> {
+    set_department_primary_api_config_inner(input, &app, state.inner())
+}
+
+fn set_department_primary_api_config_inner(
+    input: SetDepartmentPrimaryApiConfigInput,
+    app: &AppHandle,
+    state: &AppState,
+) -> Result<AppConfig, String> {
     let department_id = input.department_id.trim();
     if department_id.is_empty() {
         return Err("Department ID is required.".to_string());
@@ -1269,7 +1284,7 @@ fn set_department_primary_api_config(
         return Err("API config ID is required.".to_string());
     }
 
-    let mut config = state_read_config_cached(&state)?;
+    let mut config = state_read_config_cached(state)?;
     let selected_api = config
         .api_configs
         .iter()
@@ -1317,9 +1332,9 @@ fn set_department_primary_api_config(
     }
     config.selected_api_config_id = api_config_id.to_string();
 
-    state_write_config_cached(&state, &config)?;
-    let data = state_read_agents_runtime_snapshot(&state)?;
-    let runtime_config = runtime_config_with_private_organization(&state, &config, &data)?;
+    state_write_config_cached(state, &config)?;
+    let data = state_read_agents_runtime_snapshot(state)?;
+    let runtime_config = runtime_config_with_private_organization(state, &config, &data)?;
 
     let _ = app.emit("easy-call:config-updated", &runtime_config);
     broadcast_sidebar_department_changed();

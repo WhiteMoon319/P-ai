@@ -1505,6 +1505,10 @@ where
 
 #[tauri::command]
 fn dump_memory_cache_stats(state: State<'_, AppState>) -> Result<MemoryCacheStats, String> {
+    dump_memory_cache_stats_inner(state.inner())
+}
+
+fn dump_memory_cache_stats_inner(state: &AppState) -> Result<MemoryCacheStats, String> {
     let cached_conversations_count = 0;
     let cached_conversations_message_count = 0;
     let cached_conversations_estimated_json_bytes = 0;
