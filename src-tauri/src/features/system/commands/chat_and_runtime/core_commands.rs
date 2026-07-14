@@ -1411,6 +1411,20 @@ fn spawn_user_mention_after_message_flushed(
 
 const ACCEPTED_SUBMIT_TRACE_ID_LIMIT: usize = 5000;
 
+fn normalize_send_extra_text_blocks(payload: &ChatInputPayload) -> Vec<String> {
+    payload
+        .extra_text_blocks
+        .as_ref()
+        .map(|items| {
+            items
+                .iter()
+                .map(|item| item.trim().to_string())
+                .filter(|item| !item.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn claim_submit_trace_id(state: &AppState, trace_id: &str) -> Result<bool, String> {
     let trace_id = trace_id.trim();
     if trace_id.is_empty() {
@@ -1458,8 +1472,13 @@ async fn submit_chat_message_inner(
         .as_ref()
         .map(|v| v.as_slice())
         .unwrap_or(&[]);
+    let extra_text_blocks = normalize_send_extra_text_blocks(&input.payload);
 
-    if text.is_empty() && images.is_empty() && attachments.is_empty() {
+    if text.is_empty()
+        && images.is_empty()
+        && attachments.is_empty()
+        && extra_text_blocks.is_empty()
+    {
         return Err("消息内容为空".to_string());
     }
 
@@ -1515,7 +1534,7 @@ async fn submit_chat_message_inner(
         created_at: now_iso(),
         speaker_agent_id: None,
         parts: message_parts,
-        extra_text_blocks: input.payload.extra_text_blocks.clone().unwrap_or_default(),
+        extra_text_blocks,
         provider_meta: {
             let attachment_entries = collect_payload_attachment_meta_entries(&input.payload);
             build_user_message_provider_meta(
@@ -2346,6 +2365,13 @@ async fn stop_chat_message(
     input: StopChatRequest,
     state: State<'_, AppState>,
 ) -> Result<StopChatResult, String> {
+    stop_chat_message_inner(input, state.inner())
+}
+
+fn stop_chat_message_inner(
+    input: StopChatRequest,
+    state: &AppState,
+) -> Result<StopChatResult, String> {
     let requested_conversation_id = input
         .session
         .conversation_id
@@ -2361,7 +2387,7 @@ async fn stop_chat_message(
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned);
     let (department_id, _agent_id) = resolve_runtime_control_department_and_agent(
-        state.inner(),
+        state,
         requested_department_id.as_deref(),
         Some(input.session.agent_id.as_str()),
         requested_conversation_id.as_deref(),
@@ -2383,10 +2409,10 @@ async fn stop_chat_message(
             false
         }
     };
-    let aborted_tool = abort_inflight_tool_abort_handle(state.inner(), &chat_key)?;
+    let aborted_tool = abort_inflight_tool_abort_handle(state, &chat_key)?;
     let aborted_delegate_children =
         abort_delegate_runtime_descendants_by_parent_context(
-            state.inner(),
+            state,
             &chat_key,
             requested_conversation_id.as_deref(),
         )?;
@@ -2394,7 +2420,7 @@ async fn stop_chat_message(
     if aborted {
         if let Some(conversation_id) = requested_conversation_id.as_deref() {
             mark_goal_continue_suppressed_by_user_interrupt(
-                state.inner(),
+                state,
                 conversation_id,
                 "stop_chat_message",
             )?;
@@ -2444,7 +2470,14 @@ async fn recall_chat_queue_event(
     event_id: String,
     state: State<'_, AppState>,
 ) -> Result<ChatQueueRecallResult, String> {
-    let removed = recall_queue_event(state.inner(), &event_id)?;
+    recall_chat_queue_event_inner(&event_id, state.inner())
+}
+
+fn recall_chat_queue_event_inner(
+    event_id: &str,
+    state: &AppState,
+) -> Result<ChatQueueRecallResult, String> {
+    let removed = recall_queue_event(state, event_id)?;
     let message_text = removed
         .as_ref()
         .and_then(|event| {
@@ -2467,9 +2500,13 @@ async fn mark_chat_queue_event_guided(
     event_id: String,
     state: State<'_, AppState>,
 ) -> Result<bool, String> {
-    let conversation_id = mark_queue_event_guided(state.inner(), &event_id)?;
+    mark_chat_queue_event_guided_inner(&event_id, state.inner())
+}
+
+fn mark_chat_queue_event_guided_inner(event_id: &str, state: &AppState) -> Result<bool, String> {
+    let conversation_id = mark_queue_event_guided(state, event_id)?;
     if let Some(conversation_id) = conversation_id {
-        trigger_guided_queue_processing(state.inner(), &conversation_id);
+        trigger_guided_queue_processing(state, &conversation_id);
         return Ok(true);
     }
     Ok(false)
@@ -2588,6 +2625,27 @@ fn reasoning_text_from_stream_blocks(blocks: &[AssistantStreamBlock]) -> String 
 #[cfg(test)]
 mod stop_stream_block_tool_history_tests {
     use super::*;
+
+    #[test]
+    fn canonical_submit_should_accept_and_normalize_extra_text_only_payload() {
+        let request: SendChatRequest = serde_json::from_value(serde_json::json!({
+            "payload": {
+                "text": null,
+                "images": [],
+                "attachments": [],
+                "extraTextBlocks": ["  context  ", "  "]
+            },
+            "session": {
+                "apiConfigId": null,
+                "departmentId": "department-1",
+                "agentId": "agent-1",
+                "conversationId": "conversation-1"
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(normalize_send_extra_text_blocks(&request.payload), vec!["context"]);
+    }
 
     #[test]
     fn build_attachment_only_display_text_should_describe_images_when_text_missing() {

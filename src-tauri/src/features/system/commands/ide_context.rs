@@ -313,39 +313,11 @@ struct IdeChatCreateConversationInput {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatSendInput {
-    conversation_id: String,
-    text: String,
-    #[serde(default)]
-    extra_text_blocks: Vec<String>,
-    #[serde(default)]
-    images: Vec<IdeChatImageInput>,
-    #[serde(default)]
-    attachments: Vec<AttachmentMetaInput>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IdeChatImageInput {
-    mime: String,
-    bytes_base64: String,
-    #[serde(default)]
-    name: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct IdeChatQueueAttachmentInput {
     file_name: String,
     #[serde(default)]
     mime: String,
     bytes_base64: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IdeChatStopInput {
-    conversation_id: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1030,8 +1002,8 @@ mod ide_context_tests {
         assert!(auth.valid_tokens.contains_key(&refreshed));
     }
 
-    #[test]
-    fn ide_chat_send_message_should_return_formal_assistant_message_id_immediately() {
+    #[tokio::test]
+    async fn ide_chat_send_message_should_return_formal_assistant_message_id_immediately() {
         let state = ide_context_test_state();
         let created = conversation_service_v2()
             .create_conversation(
@@ -1051,10 +1023,18 @@ mod ide_context_tests {
         let result = ide_chat_send_message(
             &state,
             serde_json::json!({
-                "conversationId": created.conversation_id,
-                "text": "你好",
+                "payload": {
+                    "text": "你好",
+                },
+                "session": {
+                    "apiConfigId": null,
+                    "agentId": DEFAULT_AGENT_ID,
+                    "departmentId": ASSISTANT_DEPARTMENT_ID,
+                    "conversationId": created.conversation_id,
+                },
             }),
         )
+        .await
         .expect("send message");
 
         let assistant_message_id = result

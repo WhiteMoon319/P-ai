@@ -329,7 +329,7 @@ async fn ide_chat_handle_jsonrpc_request(
         "remote_im_weixin_oc_sync_contacts" => ide_chat_remote_im_weixin_oc_sync_contacts_for_web_settings(state, request.params).await,
         "remote_im_weixin_oc_logout" => ide_chat_remote_im_weixin_oc_logout_for_web_settings(state, request.params).await,
         "chat.queueAttachment" => ide_chat_queue_attachment(state, request.params),
-        "chat.send" => ide_chat_send_message(state, request.params),
+        "chat.send" => ide_chat_send_message(state, request.params).await,
         "chat.stop" => ide_chat_stop_conversation(state, request.params),
         "chat.queueSnapshot" => ide_chat_queue_snapshot(state),
         "chat.sessionStateSnapshot" => ide_chat_session_state_snapshot(state),
@@ -397,5 +397,41 @@ mod web_native_capability_tests {
                 "portable method should remain available: {method}"
             );
         }
+    }
+
+    #[test]
+    fn chat_send_and_stop_should_use_canonical_tauri_request_shapes() {
+        let send = serde_json::json!({
+            "payload": {
+                "text": "hello",
+                "images": [],
+                "attachments": [],
+                "extraTextBlocks": ["context"]
+            },
+            "session": {
+                "apiConfigId": null,
+                "departmentId": "department-1",
+                "agentId": "agent-1",
+                "conversationId": "conversation-1"
+            }
+        });
+        let stop = serde_json::json!({
+            "session": {
+                "apiConfigId": null,
+                "departmentId": "department-1",
+                "agentId": "agent-1",
+                "conversationId": "conversation-1"
+            },
+            "partialAssistantText": "visible text",
+            "partialStreamBlocks": []
+        });
+
+        assert!(serde_json::from_value::<SendChatRequest>(send).is_ok());
+        assert!(serde_json::from_value::<StopChatRequest>(stop).is_ok());
+        assert!(serde_json::from_value::<SendChatRequest>(serde_json::json!({
+            "conversationId": "conversation-1",
+            "text": "legacy"
+        }))
+        .is_err());
     }
 }

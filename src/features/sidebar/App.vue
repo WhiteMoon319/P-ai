@@ -1950,12 +1950,23 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
   sendSubmitting.value = true;
   if (!hadForegroundRound) busy.value = true;
   try {
-    const result = await transport.request<{ queued?: boolean; userMessageId?: string; assistantMessageId?: string; accepted?: boolean; ingress?: string }>("chat.send", {
-      conversationId: activeConversationId.value,
-      text,
-      images,
-      attachments,
-      extraTextBlocks,
+    const result = await transport.request<{ userMessageId?: string; assistantMessageId?: string; accepted?: boolean; duplicate?: boolean; ingress?: string }>("chat.send", {
+      payload: {
+        text,
+        images: images.map((image) => ({
+          mime: image.mime,
+          bytesBase64: image.bytesBase64,
+        })),
+        attachments,
+        extraTextBlocks,
+        providerMeta: { source: "vscode_sidebar" },
+      },
+      session: {
+        conversationId: activeConversationId.value,
+        departmentId: activeDepartmentId.value,
+        agentId: activeAgentId.value,
+        apiConfigId: preferredChatModelId.value || null,
+      },
     });
     const userMessageId = String(result?.userMessageId || "").trim();
     const assistantMessageId = String(result?.assistantMessageId || "").trim();
@@ -1964,7 +1975,7 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
     }
     if (assistantMessageId) {
       streamingAssistantMessageId.value = assistantMessageId;
-      const queued = result?.queued || result?.accepted === false || String(result?.ingress || "").trim() === "queued";
+      const queued = result?.accepted === false || String(result?.ingress || "").trim() === "queued";
       if (!queued) {
         writeStreamCacheToMessage({
           persistedAssistantMessageId: assistantMessageId,
@@ -1974,7 +1985,7 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
         });
       }
     }
-    if ((result?.queued || result?.accepted === false || String(result?.ingress || "").trim() === "queued") && !hadForegroundRound) {
+    if ((result?.accepted === false || String(result?.ingress || "").trim() === "queued") && !hadForegroundRound) {
       busy.value = false;
     }
   } catch (error) {
@@ -1995,7 +2006,12 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
 async function stop() {
   if (!activeConversationId.value) return;
   await transport.request("chat.stop", {
-    conversationId: activeConversationId.value,
+    session: {
+      conversationId: activeConversationId.value,
+      departmentId: activeDepartmentId.value,
+      agentId: activeAgentId.value,
+      apiConfigId: preferredChatModelId.value || null,
+    },
     partialAssistantText: activeMessageText.value,
     partialStreamBlocks: activeMessageBlocks.value,
   });

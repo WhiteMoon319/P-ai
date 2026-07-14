@@ -368,134 +368,10 @@ fn ide_chat_queue_attachment(state: &AppState, params: Value) -> Result<Value, S
     serde_json::to_value(queued).map_err(|err| format!("serialize queued attachment failed: {err}"))
 }
 
-fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatSendInput>(params)?;
-    let conversation_id = input.conversation_id.trim().to_string();
-    let text = input.text.trim().to_string();
-    let attachment_entries = normalize_payload_attachments(Some(&input.attachments));
-    if conversation_id.is_empty() {
-        return Err("conversationId is required".to_string());
-    }
-    if text.is_empty()
-        && input.extra_text_blocks.iter().all(|item| item.trim().is_empty())
-        && input
-            .images
-            .iter()
-            .all(|item| item.bytes_base64.trim().is_empty())
-        && attachment_entries.is_empty()
-    {
-        return Err("消息内容为空".to_string());
-    }
-    let conversation_meta = conversation_service_v2().get_conversation_meta(state, &conversation_id)?;
-    let agent_id = conversation_meta.agent_id.trim().to_string();
-    if agent_id.is_empty() {
-        return Err("会话信息不完整".to_string());
-    }
-    let department_id = conversation_meta.department_id.trim().to_string();
-    if department_id.is_empty() {
-        return Err("会话部门为空，无法从侧边栏发送。".to_string());
-    }
-    let request_id = runtime_context_request_id_or_new(None, None, "vscode-sidebar");
-    let mut parts = if text.is_empty() {
-        Vec::new()
-    } else {
-        vec![MessagePart::Text { text: text.clone(),
-                reasoning_content: None,
-            }]
-    };
-    for image in input.images {
-        let mime = image.mime.trim().to_ascii_lowercase();
-        let bytes_base64 = image.bytes_base64.trim().to_string();
-        if !mime.starts_with("image/") || bytes_base64.is_empty() {
-            continue;
-        }
-        parts.push(MessagePart::Image {
-            mime,
-            bytes_base64,
-            name: image.name.and_then(|value| {
-                let trimmed = value.trim().to_string();
-                if trimmed.is_empty() { None } else { Some(trimmed) }
-            }),
-            compressed: false,
-        });
-    }
-    if parts.is_empty()
-        && input.extra_text_blocks.iter().all(|item| item.trim().is_empty())
-        && attachment_entries.is_empty()
-    {
-        return Err("消息内容为空".to_string());
-    }
-    let provider_meta = merge_provider_meta_with_attachments(
-        Some(serde_json::json!({
-            "requestId": request_id,
-            "source": "vscode_sidebar",
-        })),
-        &attachment_entries,
-    );
-    let user_message_id = Uuid::new_v4().to_string();
-    let user_message = ChatMessage {
-        id: user_message_id.clone(),
-        role: "user".to_string(),
-        created_at: now_iso(),
-        speaker_agent_id: None,
-        parts,
-        extra_text_blocks: input
-            .extra_text_blocks
-            .into_iter()
-            .map(|item| item.trim().to_string())
-            .filter(|item| !item.is_empty())
-            .collect(),
-        provider_meta,
-        tool_call: None,
-        mcp_call: None,
-        meme_annotations: None,
-    };
-    let event_id = Uuid::new_v4().to_string();
-    let mut runtime_context = runtime_context_new("user_message", "user_send");
-    runtime_context.request_id = Some(request_id.clone());
-    runtime_context.dispatch_id = Some(event_id.clone());
-    runtime_context.origin_conversation_id = Some(conversation_id.clone());
-    runtime_context.target_conversation_id = Some(conversation_id.clone());
-    runtime_context.root_conversation_id = Some(conversation_id.clone());
-    runtime_context.executor_agent_id = Some(agent_id.clone());
-    runtime_context.executor_department_id = Some(department_id.clone());
-    let assistant_message_id = Uuid::new_v4().to_string();
-    let event = ChatPendingEvent {
-        id: event_id.clone(),
-        conversation_id: conversation_id.clone(),
-        created_at: now_iso(),
-        source: ChatEventSource::User,
-        queue_mode: ChatQueueMode::Normal,
-        messages: vec![user_message],
-        activate_assistant: true,
-        assistant_message_id: Some(assistant_message_id.clone()),
-        session_info: ChatSessionInfo {
-            department_id,
-            agent_id,
-        },
-        runtime_context: Some(runtime_context),
-        sender_info: None,
-    };
-    let ingress = ingress_chat_event(state, event)?;
-    let (accepted, duplicate, ingress_label) = match &ingress {
-        ChatEventIngress::Direct(_) => (true, false, "direct"),
-        ChatEventIngress::Queued { .. } => (true, false, "queued"),
-        ChatEventIngress::Duplicate { .. } => (false, true, "duplicate"),
-    };
-    let queued = ingress_label == "queued";
-    trigger_chat_event_after_ingress(state, ingress);
-    Ok(serde_json::json!({
-        "accepted": accepted,
-        "duplicate": duplicate,
-        "conversationId": conversation_id,
-        "eventId": event_id,
-        "traceId": request_id,
-        "requestId": request_id,
-        "ingress": ingress_label,
-        "queued": queued,
-        "userMessageId": user_message_id,
-        "assistantMessageId": assistant_message_id,
-    }))
+async fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<SendChatRequest>(params)?;
+    let output = submit_chat_message_inner(input, state).await?;
+    ide_chat_serialize(output)
 }
 
 #[derive(Debug, Deserialize)]
@@ -520,23 +396,7 @@ fn ide_chat_recall_queue_event(state: &AppState, params: Value) -> Result<Value,
     if event_id.is_empty() {
         return Err("eventId is required".to_string());
     }
-    let removed = recall_queue_event(state, event_id)?;
-    let message_text = removed
-        .as_ref()
-        .and_then(|event| {
-            event.messages.first().and_then(|msg| {
-                msg.parts.iter().find_map(|part| match part {
-                    MessagePart::Text { text, .. } => Some(text.clone()),
-                    _ => None,
-                })
-            })
-        })
-        .unwrap_or_default();
-    serde_json::to_value(ChatQueueRecallResult {
-        removed: removed.is_some(),
-        message_text,
-    })
-    .map_err(|err| format!("serialize queue recall failed: {err}"))
+    ide_chat_serialize(recall_chat_queue_event_inner(event_id, state)?)
 }
 
 fn ide_chat_mark_queue_event_guided(state: &AppState, params: Value) -> Result<Value, String> {
@@ -545,64 +405,13 @@ fn ide_chat_mark_queue_event_guided(state: &AppState, params: Value) -> Result<V
     if event_id.is_empty() {
         return Err("eventId is required".to_string());
     }
-    let conversation_id = mark_queue_event_guided(state, event_id)?;
-    if let Some(conversation_id) = conversation_id {
-        trigger_guided_queue_processing(state, &conversation_id);
-        return serde_json::to_value(true)
-            .map_err(|err| format!("serialize queue guided result failed: {err}"));
-    }
-    serde_json::to_value(false).map_err(|err| format!("serialize queue guided result failed: {err}"))
+    ide_chat_serialize(mark_chat_queue_event_guided_inner(event_id, state)?)
 }
 
 fn ide_chat_stop_conversation(state: &AppState, params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatStopInput>(params)?;
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId is required".to_string());
-    }
-    let conversation_meta = conversation_service_v2().get_conversation_meta(state, conversation_id)?;
-    let (department_id, _agent_id) = resolve_runtime_control_department_and_agent(
-        state,
-        Some(conversation_meta.department_id.as_str()),
-        Some(conversation_meta.agent_id.as_str()),
-        Some(conversation_id),
-    )?;
-    let chat_key = inflight_chat_key(&department_id, Some(conversation_id));
-    let aborted_chat = {
-        let mut inflight = state
-            .inflight_chat_abort_handles
-            .lock()
-            .map_err(|_| "Failed to lock inflight chat abort handles".to_string())?;
-        inflight.remove(&chat_key).map(|handle| {
-            handle.abort();
-            true
-        }).unwrap_or(false)
-    };
-    let aborted_tool = abort_inflight_tool_abort_handle(state, &chat_key)?;
-    let aborted_delegate_children =
-        abort_delegate_runtime_descendants_by_parent_context(state, &chat_key, Some(conversation_id))?;
-    let cleared_queue_count = clear_conversation_queue(
-        state,
-        conversation_id,
-        "消息已因 VS Code 侧边栏中断被清出队列",
-    )?;
-    let _ = release_conversation_processing_claim(state, conversation_id);
-    let _ = set_conversation_runtime_state_and_emit(state, conversation_id, MainSessionState::Idle);
-    let _ = set_conversation_remote_im_activation_sources(state, conversation_id, Vec::new());
-    runtime_log_info(format!(
-        "[聊天流式块][侧边栏停止] 停止请求完成 session={} conversation_id={} aborted={} persisted=false cleared_queue_count={}",
-        chat_key,
-        conversation_id,
-        aborted_chat || aborted_tool || aborted_delegate_children > 0,
-        cleared_queue_count,
-    ));
-    let stop_result = StopChatResult {
-        aborted: aborted_chat || aborted_tool || aborted_delegate_children > 0,
-        persisted: false,
-        conversation_id: Some(conversation_id.to_string()),
-        assistant_text: String::new(),
-        assistant_message: None,
-    };
+    let input = ide_chat_parse_params::<StopChatRequest>(params)?;
+    let stop_result = stop_chat_message_inner(input, state)?;
+    let conversation_id = stop_result.conversation_id.clone().unwrap_or_default();
     ide_chat_broadcast_notification(
         "chat.roundFinished",
         serde_json::json!({
@@ -618,7 +427,6 @@ fn ide_chat_stop_conversation(state: &AppState, params: Value) -> Result<Value, 
         "status": "stopped",
         "aborted": stop_result.aborted,
         "persisted": stop_result.persisted,
-        "clearedQueueCount": cleared_queue_count,
         "assistantText": stop_result.assistant_text,
         "assistantMessage": stop_result.assistant_message,
     }))
