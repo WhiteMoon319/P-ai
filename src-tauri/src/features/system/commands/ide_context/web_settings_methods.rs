@@ -128,31 +128,6 @@ fn ide_chat_save_conversation_api_settings_for_web_settings(
     ide_chat_serialize(patch_conversation_api_settings_inner(patch, app, state)?)
 }
 
-fn ide_chat_avatar_data_url_for_web_settings(
-    state: &AppState,
-    params: Value,
-) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<AvatarDataPathInput>(params, "input")?;
-    ide_chat_serialize(read_avatar_data_url_inner(input, state)?)
-}
-
-fn ide_chat_save_agent_avatar_for_web_settings(
-    state: &AppState,
-    params: Value,
-) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<SaveAgentAvatarInput>(params, "input")?;
-    ide_chat_serialize(save_agent_avatar_inner(input, state)?)
-}
-
-fn ide_chat_clear_agent_avatar_for_web_settings(
-    state: &AppState,
-    params: Value,
-) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<ClearAgentAvatarInput>(params, "input")?;
-    clear_agent_avatar_inner(input, state)?;
-    Ok(serde_json::json!(null))
-}
-
 async fn ide_chat_refresh_models_for_web_settings(
     state: &AppState,
     params: Value,
@@ -202,14 +177,6 @@ fn ide_chat_resolve_model_adapter_kind_for_web_settings(params: Value) -> Result
         _ => String::new(),
     };
     ide_chat_serialize(resolve_model_adapter_kind_label(&model_name))
-}
-
-fn ide_chat_check_tools_status_for_web_settings(
-    state: &AppState,
-    params: Value,
-) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<CheckToolsStatusInput>(params, "input")?;
-    ide_chat_serialize(check_tools_status_inner(input, state)?)
 }
 
 fn ide_chat_get_image_text_cache_stats_for_web_settings(state: &AppState) -> Result<Value, String> {
@@ -341,18 +308,6 @@ fn ide_chat_clear_recent_llm_round_logs_for_web_settings(
     state: &AppState,
 ) -> Result<Value, String> {
     ide_chat_serialize(clear_recent_llm_round_logs_inner(state)?)
-}
-
-fn ide_chat_list_terminal_shell_candidates_for_web_settings(
-    state: &AppState,
-) -> Result<Value, String> {
-    let (preferred_kind, current, options) = terminal_shell_candidates_for_ui(state);
-    Ok(serde_json::json!({
-        "preferredKind": preferred_kind,
-        "currentKind": current.kind,
-        "currentPath": current.path,
-        "options": options,
-    }))
 }
 
 fn ide_chat_set_github_update_method_for_web_settings(

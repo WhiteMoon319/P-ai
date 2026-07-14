@@ -76,6 +76,11 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "codex_get_rate_limits"
             | "codex_consume_rate_limit_reset_credit"
             | "codex_logout"
+            | "read_avatar_data_url"
+            | "save_agent_avatar"
+            | "clear_agent_avatar"
+            | "check_tools_status"
+            | "list_terminal_shell_candidates"
     )
 }
 
@@ -234,9 +239,6 @@ async fn ide_chat_handle_jsonrpc_request(
         "patch_chat_settings" => ide_chat_patch_chat_settings_for_web_settings(state, app, request.params),
         "save_conversation_api_settings" => ide_chat_save_conversation_api_settings_for_web_settings(state, app, request.params),
         "patch_conversation_api_settings" => ide_chat_patch_conversation_api_settings_for_web_settings(state, app, request.params),
-        "read_avatar_data_url" => ide_chat_avatar_data_url_for_web_settings(state, request.params),
-        "save_agent_avatar" => ide_chat_save_agent_avatar_for_web_settings(state, request.params),
-        "clear_agent_avatar" => ide_chat_clear_agent_avatar_for_web_settings(state, request.params),
         "refresh_models" => ide_chat_refresh_models_for_web_settings(state, request.params).await,
         "quick_genai_chat" => ide_chat_quick_genai_chat_for_web_settings(state, request.params).await,
         "fetch_model_metadata" => ide_chat_fetch_model_metadata_for_web_settings(state, request.params).await,
@@ -246,7 +248,6 @@ async fn ide_chat_handle_jsonrpc_request(
         "test_voice_connection" => ide_chat_test_voice_connection_for_web_settings(request.params).await,
         "test_memory_embedding_provider" => ide_chat_test_memory_embedding_provider_for_web_settings(state, request.params),
         "test_memory_rerank_provider" => ide_chat_test_memory_rerank_provider_for_web_settings(state, request.params),
-        "check_tools_status" => ide_chat_check_tools_status_for_web_settings(state, request.params),
         "get_image_text_cache_stats" => ide_chat_get_image_text_cache_stats_for_web_settings(state),
         "clear_image_text_cache" => ide_chat_clear_image_text_cache_for_web_settings(state),
         "list_tool_catalog" => ide_chat_list_tool_catalog_for_web_settings(state).await,
@@ -309,7 +310,6 @@ async fn ide_chat_handle_jsonrpc_request(
         "list_recent_llm_round_logs" => ide_chat_list_recent_llm_round_logs_for_web_settings(state),
         "get_recent_llm_round_log_section" => ide_chat_get_recent_llm_round_log_section_for_web_settings(state, request.params),
         "clear_recent_llm_round_logs" => ide_chat_clear_recent_llm_round_logs_for_web_settings(state),
-        "list_terminal_shell_candidates" => ide_chat_list_terminal_shell_candidates_for_web_settings(state),
         "remote_im_get_channel_status" => ide_chat_remote_im_get_channel_status_for_web_settings(state, request.params).await,
         "remote_im_restart_channel" => ide_chat_remote_im_restart_channel_for_web_settings(state, request.params).await,
         "remote_im_get_channel_logs" => ide_chat_remote_im_get_channel_logs_for_web_settings(state, request.params).await,
@@ -387,6 +387,11 @@ mod web_native_capability_tests {
             "codex_get_rate_limits",
             "codex_consume_rate_limit_reset_credit",
             "codex_logout",
+            "read_avatar_data_url",
+            "save_agent_avatar",
+            "clear_agent_avatar",
+            "check_tools_status",
+            "list_terminal_shell_candidates",
         ] {
             assert!(
                 ide_chat_web_native_only_method(method),
