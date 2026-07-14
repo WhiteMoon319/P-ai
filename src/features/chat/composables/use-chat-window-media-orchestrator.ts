@@ -19,7 +19,7 @@ export function useChatWindowMediaOrchestrator(bindings: Record<string, any>) {
     blobToWavBase64,
   } = useSpeechRecording({
     t: bindings.tr,
-    canStart: () => !bindings.chatting.value && !bindings.trimming.value,
+    canStart: () => true,
     getLanguage: () => bindings.normalizeLocale(bindings.config.uiLanguage),
     getMinRecordSeconds: () => bindings.config.minRecordSeconds,
     getMaxRecordSeconds: () => bindings.config.maxRecordSeconds,
