@@ -65,6 +65,12 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "start_github_update"
             | "cancel_github_update"
             | "apply_prepared_github_update"
+            | "get_storage_usage_overview"
+            | "refresh_storage_usage_overview"
+            | "cleanup_storage_legacy_items"
+            | "export_config_migration_package"
+            | "preview_import_config_migration_package"
+            | "apply_import_config_migration_package"
     )
 }
 
@@ -298,16 +304,8 @@ async fn ide_chat_handle_jsonrpc_request(
         "mcp_set_tool_enabled" => ide_chat_mcp_set_tool_enabled_for_web_settings(state, request.params),
         "mcp_list_skills" => ide_chat_mcp_list_skills_for_web_settings(state),
         "mcp_refresh_mcp_and_skills" => ide_chat_mcp_refresh_mcp_and_skills_for_web_settings(state).await,
-        "get_storage_usage_overview" => ide_chat_get_storage_usage_overview_for_web_settings(state).await,
-        "refresh_storage_usage_overview" => {
-            ide_chat_refresh_storage_usage_overview_for_web_settings(state).await
-        }
         "get_usage_overview" => ide_chat_get_usage_overview_for_web_settings(state).await,
         "refresh_usage_overview" => ide_chat_refresh_usage_overview_for_web_settings(state).await,
-        "cleanup_storage_legacy_items" => ide_chat_cleanup_storage_legacy_items_for_web_settings(state, request.params),
-        "export_config_migration_package" => ide_chat_export_config_migration_package_for_web_settings(state, request.params),
-        "preview_import_config_migration_package" => ide_chat_preview_import_config_migration_package_for_web_settings(state, request.params),
-        "apply_import_config_migration_package" => ide_chat_apply_import_config_migration_package_for_web_settings(state, app, request.params),
         "list_recent_llm_round_logs" => ide_chat_list_recent_llm_round_logs_for_web_settings(state),
         "get_recent_llm_round_log_section" => ide_chat_get_recent_llm_round_log_section_for_web_settings(state, request.params),
         "clear_recent_llm_round_logs" => ide_chat_clear_recent_llm_round_logs_for_web_settings(state),
@@ -378,6 +376,12 @@ mod web_native_capability_tests {
             "start_github_update",
             "cancel_github_update",
             "apply_prepared_github_update",
+            "get_storage_usage_overview",
+            "refresh_storage_usage_overview",
+            "cleanup_storage_legacy_items",
+            "export_config_migration_package",
+            "preview_import_config_migration_package",
+            "apply_import_config_migration_package",
         ] {
             assert!(
                 ide_chat_web_native_only_method(method),
@@ -402,6 +406,8 @@ mod web_native_capability_tests {
             "set_github_update_method",
             "set_skipped_github_update_version",
             "list_recent_llm_round_logs",
+            "get_usage_overview",
+            "refresh_usage_overview",
         ] {
             assert!(
                 !ide_chat_web_native_only_method(method),
