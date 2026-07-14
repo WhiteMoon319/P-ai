@@ -40,6 +40,8 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "update_file_reader_watch_targets"
             | "migrate_shell_workspace_directory"
             | "desktop_screenshot"
+            | "demo_send_native_notification"
+            | "demo_restart_app"
             | "xcap"
             | "start_current_window_drag"
             | "toggle_current_window_maximize"
@@ -251,11 +253,6 @@ async fn ide_chat_handle_jsonrpc_request(
         "get_web_access_info" => ide_chat_web_access_info_for_web_settings(app, state, ide_context_runtime).await,
         "list_recent_runtime_logs" => list_recent_runtime_logs().and_then(ide_chat_serialize),
         "clear_recent_runtime_logs" => clear_recent_runtime_logs().and_then(ide_chat_serialize),
-        "demo_send_native_notification" => demo_send_native_notification(app.clone()).and_then(ide_chat_serialize),
-        "demo_restart_app" => (|| {
-            demo_restart_app(app.clone())?;
-            Ok(serde_json::json!(null))
-        })(),
         "set_github_update_method" => ide_chat_set_github_update_method_for_web_settings(state, app, request.params),
         "set_skipped_github_update_version" => {
             ide_chat_set_skipped_github_update_version_for_web_settings(state, app, request.params)
@@ -518,6 +515,8 @@ mod web_native_capability_tests {
             "mcp_open_workspace_dir",
             "migrate_shell_workspace_directory",
             "desktop_screenshot",
+            "demo_send_native_notification",
+            "demo_restart_app",
             "show_main_window",
             "set_webview_zoom_percent",
             "sync_tray_icon",
