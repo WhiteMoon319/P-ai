@@ -1,3 +1,73 @@
+const WEB_NATIVE_CAPABILITY_UNAVAILABLE: &str = "WEB_NATIVE_CAPABILITY_UNAVAILABLE";
+
+fn ide_chat_web_native_only_method(method: &str) -> bool {
+    matches!(
+        method,
+        "workspace.permission"
+            | "workspace.permission.select"
+            | "workspace.list"
+            | "workspace.directory.list"
+            | "workspace.layout.save"
+            | "fileReader.directory.list"
+            | "fileReader.readFile"
+            | "fileReader.readFileBlock"
+            | "conversation.plan.readFile"
+            | "read_chat_image_data_url"
+            | "read_local_chat_image_thumbnail"
+            | "read_local_chat_image_original"
+            | "list_file_reader_directory"
+            | "read_file_reader_file"
+            | "read_file_reader_file_block"
+            | "read_plan_file_content"
+            | "open_file_reader_directory_shell"
+            | "open_file_with_default_program"
+            | "open_local_file_directory"
+            | "open_workspace_file"
+            | "open_storage_usage_item_directory"
+            | "open_chat_shell_workspace_dir"
+            | "mcp_open_workspace_dir"
+            | "skill_open_workspace_dir"
+            | "copy_local_chat_image_to_clipboard"
+            | "save_local_chat_image_as"
+            | "export_archive_to_file"
+            | "write_base64_file_to_path"
+            | "write_utf8_text_file_to_path"
+            | "queue_local_file_attachment"
+            | "update_file_reader_watch_targets"
+            | "migrate_shell_workspace_directory"
+            | "desktop_screenshot"
+            | "xcap"
+            | "start_current_window_drag"
+            | "toggle_current_window_maximize"
+            | "hide_current_window"
+            | "detach_current_conversation_to_window"
+            | "get_detached_chat_window_info"
+            | "update_record_hotkey"
+            | "update_record_background_wake"
+            | "stt_transcribe"
+            | "install_host_runtime_prerequisite"
+            | "get_host_runtime_prerequisites"
+            | "reset_chat_shell_workspace"
+            | "get_default_chat_shell_workspace_path"
+            | "settings.open"
+            | "open_external_url"
+            | "show_main_window"
+            | "show_chat_window"
+            | "show_archives_window"
+            | "show_quick_setup_window"
+            | "complete_quick_setup_and_open_chat"
+            | "open_runtime_logs_window"
+            | "set_webview_zoom_percent"
+    )
+}
+
+fn ide_chat_web_native_only_error(method: &str) -> String {
+    format!(
+        "{}: Web 端不支持本机能力：{}",
+        WEB_NATIVE_CAPABILITY_UNAVAILABLE, method
+    )
+}
+
 async fn ide_chat_handle_jsonrpc_request(
     request: IdeChatJsonRpcRequest,
     state: &AppState,
@@ -8,6 +78,13 @@ async fn ide_chat_handle_jsonrpc_request(
 ) -> Value {
     if request.jsonrpc.trim() != "2.0" {
         return ide_chat_jsonrpc_error(request.id, -32600, "jsonrpc must be 2.0");
+    }
+    if ide_chat_web_native_only_method(&request.method) {
+        return ide_chat_jsonrpc_error(
+            request.id,
+            -32010,
+            &ide_chat_web_native_only_error(&request.method),
+        );
     }
     let sidebar_label = ide_chat_sidebar_window_label(client_id);
     let sidebar_viewer_id = chat_viewer_id_for_window_label(&sidebar_label)
@@ -116,37 +193,9 @@ async fn ide_chat_handle_jsonrpc_request(
         "conversation.compact" => ide_chat_compact_conversation(state, request.params).await,
         "model.list" => ide_chat_model_list(state, request.params),
         "model.select" => ide_chat_select_model(state, app, request.params),
-        "workspace.permission" => ide_chat_workspace_permission(state, request.params),
-        "workspace.permission.select" => ide_chat_select_workspace_permission(state, request.params),
-        "workspace.list" => ide_chat_workspace_list(state, request.params),
-        "workspace.directory.list" => ide_chat_workspace_directory_list(request.params),
-        "fileReader.directory.list" => ide_chat_file_reader_directory_list(request.params),
-        "fileReader.readFile" => ide_chat_file_reader_read(request.params),
-        "fileReader.readFileBlock" => ide_chat_file_reader_read_block(request.params),
-        "read_chat_image_data_url" => (|| {
-            let input = ide_chat_parse_param_field::<ChatImageDataUrlInput>(request.params, "input")?;
-            let media_ref = input.media_ref.trim();
-            if media_ref.is_empty() {
-                return ide_chat_serialize(ChatImageDataUrlOutput {
-                    data_url: String::new(),
-                });
-            }
-            if stored_binary_ref_from_marker(media_ref).is_none() {
-                return Err("Chat image mediaRef is invalid.".to_string());
-            }
-            let mime = input.mime.trim().to_ascii_lowercase();
-            if !mime.starts_with("image/") {
-                return Err("Chat image mime is invalid.".to_string());
-            }
-            let base64 = resolve_stored_binary_base64(&state.data_path, media_ref)?;
-            ide_chat_serialize(ChatImageDataUrlOutput {
-                data_url: format!("data:{mime};base64,{base64}"),
-            })
-        })(),
         "ideContext.query" => ide_chat_parse_params::<IdeContextWorkspaceQueryInput>(request.params)
             .and_then(|input| serde_json::to_value(query_ide_context_references_internal(input, ide_context_runtime)?)
                 .map_err(|err| format!("serialize IDE context query result failed: {err}"))),
-        "workspace.layout.save" => ide_chat_workspace_layout_save(state, request.params),
         "terminalApproval.resolve" => ide_chat_resolve_terminal_approval(state, request.params),
         "terminalApproval.approveForSession" => {
             ide_chat_approve_terminal_approval_for_session(state, request.params)
@@ -156,8 +205,6 @@ async fn ide_chat_handle_jsonrpc_request(
         }
         "conversation.planMode.set" => ide_chat_set_conversation_plan_mode(state, request.params),
         "conversation.plan.confirm" => ide_chat_confirm_plan(state, request.params).await,
-        "conversation.plan.readFile" => ide_chat_read_plan_file(state, request.params),
-        "settings.open" => ide_chat_open_settings(app),
         "is_backend_ready" => Ok(serde_json::json!(state.backend_ready.load(std::sync::atomic::Ordering::Acquire))),
         "load_config" => ide_chat_load_config_for_web_settings(state),
         "load_app_bootstrap_snapshot" => ide_chat_load_app_bootstrap_snapshot_for_web_settings(state),
@@ -191,18 +238,6 @@ async fn ide_chat_handle_jsonrpc_request(
         "get_project_repository_url" => Ok(serde_json::json!(GITHUB_REPO_PAGE.to_string())),
         "fetch_project_changelog_markdown" => fetch_project_changelog_markdown().await.and_then(ide_chat_serialize),
         "get_web_access_info" => ide_chat_web_access_info_for_web_settings(app, state, ide_context_runtime).await,
-        "open_external_url" => ide_chat_open_external_url_for_web_settings(request.params),
-        "read_local_chat_image_thumbnail" => ide_chat_read_local_chat_image_thumbnail_for_web_settings(request.params),
-        "read_local_chat_image_original" => ide_chat_read_local_chat_image_original_for_web_settings(request.params),
-        "show_main_window" => ide_chat_show_window_for_web_settings(app, "main"),
-        "show_chat_window" => ide_chat_show_window_for_web_settings(app, "chat"),
-        "show_archives_window" => ide_chat_show_window_for_web_settings(app, "archives"),
-        "show_quick_setup_window" => ide_chat_show_window_for_web_settings(app, "quick-setup"),
-        "complete_quick_setup_and_open_chat" => (|| {
-            complete_quick_setup_and_open_chat(app.clone())?;
-            Ok(serde_json::json!(null))
-        })(),
-        "open_runtime_logs_window" => ide_chat_open_runtime_logs_window_for_web_settings(app),
         "list_recent_runtime_logs" => list_recent_runtime_logs().and_then(ide_chat_serialize),
         "clear_recent_runtime_logs" => clear_recent_runtime_logs().and_then(ide_chat_serialize),
         "demo_send_native_notification" => demo_send_native_notification(app.clone()).and_then(ide_chat_serialize),
@@ -210,7 +245,6 @@ async fn ide_chat_handle_jsonrpc_request(
             demo_restart_app(app.clone())?;
             Ok(serde_json::json!(null))
         })(),
-        "set_webview_zoom_percent" => ide_chat_set_webview_zoom_percent_for_web_settings(app, request.params),
         "set_github_update_method" => ide_chat_set_github_update_method_for_web_settings(state, app, request.params),
         "set_skipped_github_update_version" => {
             ide_chat_set_skipped_github_update_version_for_web_settings(state, app, request.params)
@@ -261,17 +295,14 @@ async fn ide_chat_handle_jsonrpc_request(
         "mcp_deploy_server" => ide_chat_mcp_deploy_server_for_web_settings(state, request.params),
         "mcp_undeploy_server" => ide_chat_mcp_undeploy_server_for_web_settings(state, request.params).await,
         "mcp_set_tool_enabled" => ide_chat_mcp_set_tool_enabled_for_web_settings(state, request.params),
-        "mcp_open_workspace_dir" => ide_chat_mcp_open_workspace_dir_for_web_settings(state),
         "mcp_list_skills" => ide_chat_mcp_list_skills_for_web_settings(state),
         "mcp_refresh_mcp_and_skills" => ide_chat_mcp_refresh_mcp_and_skills_for_web_settings(state).await,
-        "skill_open_workspace_dir" => ide_chat_skill_open_workspace_dir_for_web_settings(state),
         "get_storage_usage_overview" => ide_chat_get_storage_usage_overview_for_web_settings(state).await,
         "refresh_storage_usage_overview" => {
             ide_chat_refresh_storage_usage_overview_for_web_settings(state).await
         }
         "get_usage_overview" => ide_chat_get_usage_overview_for_web_settings(state).await,
         "refresh_usage_overview" => ide_chat_refresh_usage_overview_for_web_settings(state).await,
-        "open_storage_usage_item_directory" => ide_chat_open_storage_usage_item_directory_for_web_settings(state, request.params),
         "cleanup_storage_legacy_items" => ide_chat_cleanup_storage_legacy_items_for_web_settings(state, request.params),
         "export_config_migration_package" => ide_chat_export_config_migration_package_for_web_settings(state, request.params),
         "preview_import_config_migration_package" => ide_chat_preview_import_config_migration_package_for_web_settings(state, request.params),
@@ -280,12 +311,6 @@ async fn ide_chat_handle_jsonrpc_request(
         "get_recent_llm_round_log_section" => ide_chat_get_recent_llm_round_log_section_for_web_settings(state, request.params),
         "clear_recent_llm_round_logs" => ide_chat_clear_recent_llm_round_logs_for_web_settings(state),
         "list_terminal_shell_candidates" => ide_chat_list_terminal_shell_candidates_for_web_settings(state),
-        "open_chat_shell_workspace_dir" => ide_chat_open_chat_shell_workspace_dir_for_web_settings(state, request.params),
-        "reset_chat_shell_workspace" => ide_chat_reset_chat_shell_workspace_for_web_settings(state, request.params),
-        "get_default_chat_shell_workspace_path" => ide_chat_get_default_chat_shell_workspace_path_for_web_settings(state),
-        "migrate_shell_workspace_directory" => ide_chat_migrate_shell_workspace_directory_for_web_settings(app, request.params).await,
-        "get_host_runtime_prerequisites" => ide_chat_get_host_runtime_prerequisites_for_web_settings(),
-        "install_host_runtime_prerequisite" => ide_chat_install_host_runtime_prerequisite_for_web_settings(request.params).await,
         "remote_im_get_channel_status" => ide_chat_remote_im_get_channel_status_for_web_settings(state, request.params).await,
         "remote_im_restart_channel" => ide_chat_remote_im_restart_channel_for_web_settings(state, request.params).await,
         "remote_im_get_channel_logs" => ide_chat_remote_im_get_channel_logs_for_web_settings(state, request.params).await,
@@ -324,5 +349,53 @@ async fn ide_chat_handle_jsonrpc_request(
     match result {
         Ok(value) => ide_chat_jsonrpc_success(request.id, value),
         Err(err) => ide_chat_jsonrpc_error(request.id, -32000, err),
+    }
+}
+
+#[cfg(test)]
+mod web_native_capability_tests {
+    use super::*;
+
+    #[test]
+    fn local_file_and_window_methods_should_be_explicitly_native_only() {
+        for method in [
+            "fileReader.readFile",
+            "read_file_reader_file",
+            "read_local_chat_image_original",
+            "conversation.plan.readFile",
+            "workspace.list",
+            "open_storage_usage_item_directory",
+            "mcp_open_workspace_dir",
+            "migrate_shell_workspace_directory",
+            "desktop_screenshot",
+            "show_main_window",
+            "set_webview_zoom_percent",
+        ] {
+            assert!(
+                ide_chat_web_native_only_method(method),
+                "method should be native-only: {method}"
+            );
+            assert!(
+                ide_chat_web_native_only_error(method)
+                    .starts_with("WEB_NATIVE_CAPABILITY_UNAVAILABLE:"),
+                "method should use stable error code: {method}"
+            );
+        }
+    }
+
+    #[test]
+    fn portable_business_methods_should_not_be_marked_native_only() {
+        for method in [
+            "conversation.list",
+            "chat.send",
+            "remote_im_list_contacts",
+            "task.list",
+            "mcp_list_servers",
+        ] {
+            assert!(
+                !ide_chat_web_native_only_method(method),
+                "portable method should remain available: {method}"
+            );
+        }
     }
 }

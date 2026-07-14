@@ -371,17 +371,6 @@ struct IdeChatTerminalApprovalRequestIdInput {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatWorkspacePermissionInput {
-    conversation_id: String,
-    access: String,
-    #[serde(default)]
-    workspace_path: Option<String>,
-    #[serde(default)]
-    workspace_name: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct IdeChatRewindInput {
     conversation_id: String,
     message_id: String,
@@ -519,26 +508,6 @@ fn ide_chat_model_payload_for_conversation(state: &AppState, conversation: &Conv
     }))
 }
 
-fn ide_chat_workspace_permission_payload(
-    state: &AppState,
-    conversation: &Conversation,
-) -> Result<Value, String> {
-    let workspaces = terminal_allowed_workspaces_for_conversation_canonical(state, Some(conversation))?;
-    let main = workspaces
-        .iter()
-        .find(|workspace| workspace.level == SHELL_WORKSPACE_LEVEL_MAIN)
-        .or_else(|| workspaces.iter().find(|workspace| workspace.level == SHELL_WORKSPACE_LEVEL_SYSTEM));
-    let access = main
-        .map(|workspace| workspace.access.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| SHELL_WORKSPACE_ACCESS_APPROVAL.to_string());
-    Ok(serde_json::json!({
-        "access": access,
-        "workspaceName": main.map(|workspace| workspace.name.clone()).unwrap_or_default(),
-        "rootPath": main.map(|workspace| workspace.path.to_string_lossy().to_string()).unwrap_or_default(),
-    }))
-}
-
 fn ide_chat_conversation_from_meta_view(conversation_meta: &ConversationMetaView) -> Conversation {
     Conversation {
         id: conversation_meta.id.clone(),
@@ -576,191 +545,6 @@ fn ide_chat_conversation_from_meta_view(conversation_meta: &ConversationMetaView
     }
 }
 
-fn ide_chat_workspace_permission(state: &AppState, params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatConversationInput>(params)?;
-    let conversation_meta =
-        conversation_service_v2().get_conversation_meta(state, input.conversation_id.trim())?;
-    let conversation = ide_chat_conversation_from_meta_view(&conversation_meta);
-    ide_chat_workspace_permission_payload(state, &conversation)
-}
-
-fn ide_chat_select_workspace_permission(state: &AppState, params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatWorkspacePermissionInput>(params)?;
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId is required".to_string());
-    }
-    let access = match input.access.trim() {
-        SHELL_WORKSPACE_ACCESS_READ_ONLY => SHELL_WORKSPACE_ACCESS_READ_ONLY.to_string(),
-        SHELL_WORKSPACE_ACCESS_APPROVAL => SHELL_WORKSPACE_ACCESS_APPROVAL.to_string(),
-        SHELL_WORKSPACE_ACCESS_FULL_ACCESS => SHELL_WORKSPACE_ACCESS_FULL_ACCESS.to_string(),
-        _ => return Err("Unsupported workspace access".to_string()),
-    };
-    let conversation_meta = conversation_service_v2().get_conversation_meta(state, conversation_id)?;
-    let mut workspaces = conversation_meta.shell_workspaces.clone();
-    let mut changed = false;
-    for workspace in workspaces.iter_mut() {
-        if normalize_shell_workspace_level_text(&workspace.level) == SHELL_WORKSPACE_LEVEL_MAIN {
-            workspace.access = access.clone();
-            changed = true;
-        }
-    }
-    if !changed {
-        let workspace_path = input.workspace_path.as_deref().map(str::trim).unwrap_or_default();
-        if workspace_path.is_empty() {
-            return Err("当前会话没有主工作目录，无法设置权限。".to_string());
-        }
-        let fallback_name = workspace_path
-            .replace('\\', "/")
-            .trim_end_matches('/')
-            .rsplit('/')
-            .next()
-            .unwrap_or("VS Code")
-            .to_string();
-        let name = input
-            .workspace_name
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or(fallback_name.as_str())
-            .to_string();
-        workspaces.push(ShellWorkspaceConfig {
-            id: "vscode-sidebar-main-workspace".to_string(),
-            name,
-            path: workspace_path.to_string(),
-            level: SHELL_WORKSPACE_LEVEL_MAIN.to_string(),
-            access: access.clone(),
-            built_in: false,
-        });
-    }
-    let normalized_workspaces = normalize_conversation_shell_workspaces(state, &workspaces);
-    let updated = apply_conversation_chat_workspace_changes(
-        state,
-        conversation_id,
-        Some(None),
-        Some(normalized_workspaces),
-        None,
-    )?;
-    ide_chat_workspace_permission_payload(state, &updated)
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IdeChatWorkspaceListInput {
-    conversation_id: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IdeChatWorkspaceDirectoryListInput {
-    path: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IdeChatFileReaderReadInput {
-    path: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IdeChatFileReaderReadBlockInput {
-    path: String,
-    start_line: usize,
-    line_count: usize,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IdeChatReadPlanFileInput {
-    conversation_id: String,
-    path: String,
-}
-
-fn ide_chat_workspace_list(state: &AppState, params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatWorkspaceListInput>(params)?;
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId is required".to_string());
-    }
-    let conversation_meta = conversation_service_v2().get_conversation_meta(state, conversation_id)?;
-    let conversation = ide_chat_conversation_from_meta_view(&conversation_meta);
-    let workspaces = terminal_allowed_workspaces_for_conversation_canonical(state, Some(&conversation))?;
-    let main = workspaces
-        .iter()
-        .find(|ws| ws.level == SHELL_WORKSPACE_LEVEL_MAIN)
-        .or_else(|| workspaces.iter().find(|ws| ws.level == SHELL_WORKSPACE_LEVEL_SYSTEM));
-    let root_path = main
-        .map(|ws| terminal_path_for_user(&ws.path))
-        .unwrap_or_default();
-    let workspace_name = main
-        .map(|ws| ws.name.clone())
-        .unwrap_or_default();
-    let autonomous_mode = conversation_meta.shell_autonomous_mode;
-    let workspace_values: Vec<Value> = workspaces
-        .iter()
-        .map(|ws| {
-            serde_json::json!({
-                "id": ws.id,
-                "name": ws.name,
-                "level": ws.level,
-                "access": ws.access,
-                "builtIn": ws.built_in,
-                "path": terminal_path_for_user(&ws.path),
-            })
-        })
-        .collect();
-    Ok(serde_json::json!({
-        "workspaces": workspace_values,
-        "rootPath": root_path,
-        "workspaceName": workspace_name,
-        "autonomousMode": autonomous_mode,
-    }))
-}
-
-fn ide_chat_workspace_directory_list(params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatWorkspaceDirectoryListInput>(params)?;
-    let payload = list_file_reader_directory(input.path)?;
-    let directories: Vec<Value> = payload
-        .entries
-        .into_iter()
-        .filter(|entry| entry.is_directory)
-        .map(|entry| {
-            serde_json::json!({
-                "path": entry.path,
-                "name": entry.name,
-            })
-        })
-        .collect();
-    Ok(serde_json::json!({
-        "path": payload.path,
-        "name": payload.name,
-        "directories": directories,
-    }))
-}
-
-fn ide_chat_file_reader_directory_list(params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatWorkspaceDirectoryListInput>(params)?;
-    serde_json::to_value(list_file_reader_directory(input.path)?)
-        .map_err(|err| format!("serialize file reader directory failed: {err}"))
-}
-
-fn ide_chat_file_reader_read(params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatFileReaderReadInput>(params)?;
-    serde_json::to_value(read_file_reader_file_inner(input.path, None)?)
-        .map_err(|err| format!("serialize file reader payload failed: {err}"))
-}
-
-fn ide_chat_file_reader_read_block(params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatFileReaderReadBlockInput>(params)?;
-    serde_json::to_value(read_file_reader_file_block(
-        input.path,
-        input.start_line,
-        input.line_count,
-    )?)
-    .map_err(|err| format!("serialize file reader block failed: {err}"))
-}
-
 fn ide_chat_delegate_statuses(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<ListConversationDelegateStatusesInput>(params)?;
     serde_json::to_value(list_conversation_delegate_statuses_inner(input, state)?)
@@ -777,33 +561,6 @@ fn ide_chat_delegate_block_page(state: &AppState, params: Value) -> Result<Value
     let input = ide_chat_parse_params::<GetConversationBlockPageInput>(params)?;
     serde_json::to_value(get_delegate_conversation_block_page_inner(input, state)?)
         .map_err(|err| format!("Serialize delegate block page failed: {err}"))
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IdeChatWorkspaceLayoutSaveInput {
-    conversation_id: String,
-    #[serde(default)]
-    workspaces: Vec<ShellWorkspaceConfig>,
-    #[serde(default)]
-    autonomous_mode: Option<bool>,
-}
-
-fn ide_chat_workspace_layout_save(state: &AppState, params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatWorkspaceLayoutSaveInput>(params)?;
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId is required".to_string());
-    }
-    let normalized_workspaces = normalize_conversation_shell_workspaces(state, &input.workspaces);
-    let updated = apply_conversation_chat_workspace_changes(
-        state,
-        conversation_id,
-        Some(None),
-        Some(normalized_workspaces),
-        input.autonomous_mode,
-    )?;
-    ide_chat_workspace_permission_payload(state, &updated)
 }
 
 fn ide_chat_create_conversation_options(state: &AppState) -> Result<Value, String> {

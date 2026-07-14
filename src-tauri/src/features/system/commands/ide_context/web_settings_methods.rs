@@ -235,32 +235,6 @@ async fn ide_chat_list_department_permission_catalog_for_web_settings(
     ide_chat_serialize(list_department_permission_catalog_inner(state).await?)
 }
 
-fn ide_chat_open_external_url_for_web_settings(params: Value) -> Result<Value, String> {
-    let url = match params {
-        Value::Object(mut map) => map
-            .remove("url")
-            .and_then(|value| value.as_str().map(ToOwned::to_owned))
-            .unwrap_or_default(),
-        _ => String::new(),
-    };
-    open_external_url(url)?;
-    Ok(serde_json::json!(null))
-}
-
-fn ide_chat_read_local_chat_image_thumbnail_for_web_settings(
-    params: Value,
-) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<ReadLocalChatImageThumbnailInput>(params, "input")?;
-    ide_chat_serialize(read_local_chat_image_thumbnail(input)?)
-}
-
-fn ide_chat_read_local_chat_image_original_for_web_settings(
-    params: Value,
-) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<ReadLocalChatImageThumbnailInput>(params, "input")?;
-    ide_chat_serialize(read_local_chat_image_original(input)?)
-}
-
 async fn ide_chat_web_access_info_for_web_settings(
     app: &AppHandle,
     state: &AppState,
@@ -361,28 +335,6 @@ async fn ide_chat_get_usage_overview_for_web_settings(state: &AppState) -> Resul
 
 async fn ide_chat_refresh_usage_overview_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(start_usage_overview_refresh_if_needed(state.clone(), true).await)
-}
-
-fn ide_chat_open_storage_usage_item_directory_for_web_settings(
-    state: &AppState,
-    params: Value,
-) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<OpenStorageUsageItemDirectoryInput>(params, "input")?;
-    let item_id = input.item_id.trim();
-    let target = storage_usage_target_path(state, item_id)
-        .ok_or_else(|| format!("未知存储分类：{item_id}"))?;
-    let app_root = app_root_from_data_path(&state.data_path);
-    let open_dir = storage_existing_directory_for_open(&target)?;
-    let canonical_root = app_root.canonicalize().unwrap_or(app_root);
-    let canonical_open_dir = open_dir.canonicalize().unwrap_or(open_dir.clone());
-    if !canonical_open_dir.starts_with(&canonical_root) {
-        return Err(format!(
-            "拒绝打开应用私有目录之外的路径，path={}",
-            canonical_open_dir.display()
-        ));
-    }
-    open_shell_path_in_file_manager(&canonical_open_dir)?;
-    Ok(serde_json::json!(null))
 }
 
 fn ide_chat_cleanup_storage_legacy_items_for_web_settings(
@@ -702,94 +654,6 @@ fn ide_chat_list_terminal_shell_candidates_for_web_settings(
         "currentPath": current.path,
         "options": options,
     }))
-}
-
-fn ide_chat_open_chat_shell_workspace_dir_for_web_settings(
-    state: &AppState,
-    params: Value,
-) -> Result<Value, String> {
-    let input = ide_chat_parse_optional_param_field::<ShellWorkspacePathInput>(params, "input")?;
-    let root = resolve_requested_shell_workspace_root(
-        state,
-        input.as_ref().and_then(|value| value.workspace_path.as_deref()),
-        true,
-    )?;
-    open_shell_path_in_file_manager(&root)?;
-    ide_chat_serialize(shell_workspace_display_path(&root))
-}
-
-fn ide_chat_reset_chat_shell_workspace_for_web_settings(
-    state: &AppState,
-    params: Value,
-) -> Result<Value, String> {
-    let input = ide_chat_parse_optional_param_field::<ShellWorkspacePathInput>(params, "input")?;
-    let root = resolve_requested_shell_workspace_root(
-        state,
-        input.as_ref().and_then(|value| value.workspace_path.as_deref()),
-        true,
-    )?;
-    ensure_workspace_mcp_layout_at_root(&root)?;
-    ensure_workspace_skills_layout_at_root(&root)?;
-    ensure_workspace_private_organization_layout_at_root(&root)?;
-    ide_chat_serialize(shell_workspace_display_path(&root))
-}
-
-fn ide_chat_get_default_chat_shell_workspace_path_for_web_settings(
-    state: &AppState,
-) -> Result<Value, String> {
-    let root = terminal_default_session_root_canonical(state)?;
-    ide_chat_serialize(shell_workspace_display_path(&root))
-}
-
-async fn ide_chat_migrate_shell_workspace_directory_for_web_settings(
-    app: &AppHandle,
-    params: Value,
-) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<MigrateWorkspaceDirectoryInput>(params, "input")?;
-    ide_chat_serialize(migrate_shell_workspace_directory(input, app.clone()).await?)
-}
-
-async fn ide_chat_install_host_runtime_prerequisite_for_web_settings(
-    params: Value,
-) -> Result<Value, String> {
-    let kind = match params {
-        Value::Object(mut map) => map
-            .remove("kind")
-            .and_then(|value| value.as_str().map(ToOwned::to_owned))
-            .unwrap_or_default(),
-        _ => String::new(),
-    };
-    ide_chat_serialize(install_host_runtime_prerequisite(kind).await?)
-}
-
-fn ide_chat_get_host_runtime_prerequisites_for_web_settings() -> Result<Value, String> {
-    ide_chat_serialize(get_host_runtime_prerequisites())
-}
-
-fn ide_chat_show_window_for_web_settings(app: &AppHandle, label: &str) -> Result<Value, String> {
-    show_window(app, label)?;
-    Ok(serde_json::json!(null))
-}
-
-fn ide_chat_open_runtime_logs_window_for_web_settings(app: &AppHandle) -> Result<Value, String> {
-    show_runtime_logs_window(app)?;
-    Ok(serde_json::json!(null))
-}
-
-fn ide_chat_set_webview_zoom_percent_for_web_settings(
-    app: &AppHandle,
-    params: Value,
-) -> Result<Value, String> {
-    let percent = match params {
-        Value::Object(mut map) => map
-            .remove("percent")
-            .and_then(|value| value.as_u64())
-            .unwrap_or(100),
-        _ => 100,
-    };
-    let normalized = apply_webview_zoom_percent(app, percent as u32)?;
-    emit_webview_zoom_percent_updated(app, normalized);
-    ide_chat_serialize(normalized)
 }
 
 fn ide_chat_set_github_update_method_for_web_settings(

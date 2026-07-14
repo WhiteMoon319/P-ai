@@ -214,10 +214,6 @@ fn ide_chat_mcp_set_tool_enabled_for_web_settings(
     ide_chat_serialize(server)
 }
 
-fn ide_chat_mcp_open_workspace_dir_for_web_settings(state: &AppState) -> Result<Value, String> {
-    ide_chat_serialize(open_mcp_workspace_dir(state)?)
-}
-
 async fn ide_chat_mcp_refresh_mcp_and_skills_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(reload_workspace(state).await?)
 }
@@ -226,8 +222,4 @@ fn ide_chat_mcp_list_skills_for_web_settings(state: &AppState) -> Result<Value, 
     let (skills, errors) = load_workspace_skill_summaries_with_errors(state)?;
     let _ = update_hidden_skill_snapshot_cache(state, &skills, None);
     ide_chat_serialize(SkillListResult { skills, errors })
-}
-
-fn ide_chat_skill_open_workspace_dir_for_web_settings(state: &AppState) -> Result<Value, String> {
-    ide_chat_serialize(open_skills_workspace_dir(state)?)
 }

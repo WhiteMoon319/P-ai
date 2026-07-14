@@ -834,11 +834,6 @@ fn ide_chat_select_model(state: &AppState, _app: &AppHandle, params: Value) -> R
     ide_chat_model_payload_for_conversation(state, &updated_conversation)
 }
 
-fn ide_chat_open_settings(app: &AppHandle) -> Result<Value, String> {
-    show_window(app, "main")?;
-    Ok(serde_json::json!({ "opened": true }))
-}
-
 fn ide_chat_resolve_terminal_approval(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatResolveTerminalApprovalInput>(params)?;
     let resolved = resolve_terminal_approval_request(
@@ -894,17 +889,6 @@ async fn ide_chat_confirm_plan(state: &AppState, params: Value) -> Result<Value,
     let input = ide_chat_parse_params::<ConfirmPlanAndContinueInput>(params)?;
     let continued = confirm_plan_and_continue_inner(state, &input).await?;
     Ok(serde_json::json!({ "continued": continued }))
-}
-
-fn ide_chat_read_plan_file(state: &AppState, params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatReadPlanFileInput>(params)?;
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId is required.".to_string());
-    }
-    let resolved = resolve_plan_file_for_conversation_id(state, conversation_id, input.path.trim())?;
-    let content = read_plan_markdown_file(&resolved.canonical_path)?;
-    Ok(serde_json::json!({ "content": content }))
 }
 
 fn ide_chat_tool_review_reports(state: &AppState, params: Value) -> Result<Value, String> {
