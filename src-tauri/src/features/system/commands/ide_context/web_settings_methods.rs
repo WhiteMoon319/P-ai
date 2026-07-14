@@ -153,11 +153,6 @@ fn ide_chat_clear_agent_avatar_for_web_settings(
     Ok(serde_json::json!(null))
 }
 
-fn ide_chat_sync_tray_icon_for_web_settings(app: &AppHandle) -> Result<Value, String> {
-    sync_default_tray_icon(app)?;
-    Ok(serde_json::json!(null))
-}
-
 async fn ide_chat_refresh_models_for_web_settings(
     state: &AppState,
     params: Value,
@@ -573,12 +568,7 @@ fn ide_chat_apply_import_config_migration_package_for_web_settings(
 fn ide_chat_list_recent_llm_round_logs_for_web_settings(
     state: &AppState,
 ) -> Result<Value, String> {
-    let capacity = llm_round_log_capacity_for_state(state);
-    let logs = state
-        .llm_round_logs
-        .lock()
-        .map_err(|_| "Failed to lock llm round logs".to_string())?;
-    ide_chat_serialize(recent_llm_round_logs_for_ui(&logs, capacity))
+    ide_chat_serialize(list_recent_llm_round_logs_inner(state)?)
 }
 
 fn ide_chat_get_recent_llm_round_log_section_for_web_settings(
@@ -599,35 +589,13 @@ fn ide_chat_get_recent_llm_round_log_section_for_web_settings(
         }
         _ => (String::new(), String::new()),
     };
-    let id = id.trim().to_string();
-    if id.is_empty() {
-        return Ok(serde_json::json!(null));
-    }
-    let logs = state
-        .llm_round_logs
-        .lock()
-        .map_err(|_| "Failed to lock llm round logs".to_string())?;
-    ide_chat_serialize(logs.pipeline_logs.iter().rev().chain(logs.other_logs.iter().rev()).find_map(|entry| {
-        find_llm_round_log_entry_by_id(entry, &id)
-            .and_then(|entry| llm_round_log_section_value(entry, &section))
-    }))
+    ide_chat_serialize(get_recent_llm_round_log_section_inner(state, id, section)?)
 }
 
 fn ide_chat_clear_recent_llm_round_logs_for_web_settings(
     state: &AppState,
 ) -> Result<Value, String> {
-    let mut logs = state
-        .llm_round_logs
-        .lock()
-        .map_err(|_| "Failed to lock llm round logs".to_string())?;
-    logs.pipeline_logs.clear();
-    logs.other_logs.clear();
-    pending_chat_round_buffer()
-        .lock()
-        .map_err(|_| "Failed to lock pending chat round logs".to_string())?
-        .rounds_by_chat_session
-        .clear();
-    ide_chat_serialize(true)
+    ide_chat_serialize(clear_recent_llm_round_logs_inner(state)?)
 }
 
 fn ide_chat_list_terminal_shell_candidates_for_web_settings(
@@ -655,18 +623,7 @@ fn ide_chat_set_github_update_method_for_web_settings(
             .unwrap_or_default(),
         _ => String::new(),
     };
-    let normalized = normalize_github_update_method(&update_method);
-    let mut config = state_read_config_cached(state)?;
-    normalize_app_config(&mut config);
-    if config.github_update_method != normalized {
-        config.github_update_method = normalized.clone();
-        state_write_config_cached(state, &config)?;
-        runtime_log_info(format!("[自动更新] 更新方式偏好已保存：method={normalized}"));
-    }
-    let data = state_read_agents_runtime_snapshot(state)?;
-    let runtime_config = runtime_config_with_private_organization(state, &config, &data)?;
-    let _ = app.emit("easy-call:config-updated", &runtime_config);
-    ide_chat_serialize(runtime_config)
+    ide_chat_serialize(set_github_update_method_inner(update_method, app, state)?)
 }
 
 fn ide_chat_set_skipped_github_update_version_for_web_settings(
@@ -681,80 +638,7 @@ fn ide_chat_set_skipped_github_update_version_for_web_settings(
             .unwrap_or_default(),
         _ => String::new(),
     };
-    let normalized = normalize_skipped_github_update_version(&version);
-    let mut config = state_read_config_cached(state)?;
-    normalize_app_config(&mut config);
-    if config.skipped_github_update_version != normalized {
-        config.skipped_github_update_version = normalized.clone();
-        state_write_config_cached(state, &config)?;
-        runtime_log_warn(format!("[自动更新] 已保存跳过版本：version={normalized}"));
-    }
-    sync_update_state_from_skip_version(app, &normalized);
-    let data = state_read_agents_runtime_snapshot(state)?;
-    let runtime_config = runtime_config_with_private_organization(state, &config, &data)?;
-    let _ = app.emit("easy-call:config-updated", &runtime_config);
-    ide_chat_serialize(runtime_config)
-}
-
-fn ide_chat_get_github_update_state_for_web_settings(app: &AppHandle) -> Result<Value, String> {
-    ide_chat_serialize(get_github_update_state(app.clone())?)
-}
-
-async fn ide_chat_check_github_update_for_web_settings(
-    app: &AppHandle,
-    params: Value,
-) -> Result<Value, String> {
-    let (update_method, respect_cooldown) = match params {
-        Value::Object(mut map) => {
-            let update_method = map
-                .remove("updateMethod")
-                .or_else(|| map.remove("update_method"))
-                .and_then(|value| value.as_str().map(ToOwned::to_owned));
-            let respect_cooldown = map
-                .remove("respectCooldown")
-                .or_else(|| map.remove("respect_cooldown"))
-                .or_else(|| map.remove("useCachedResult"))
-                .or_else(|| map.remove("use_cached_result"))
-                .and_then(|value| value.as_bool());
-            (update_method, respect_cooldown)
-        }
-        _ => (None, None),
-    };
-    ide_chat_serialize(check_github_update(app.clone(), update_method, respect_cooldown).await?)
-}
-
-async fn ide_chat_start_github_update_for_web_settings(
-    app: &AppHandle,
-    params: Value,
-) -> Result<Value, String> {
-    let (force, update_method) = match params {
-        Value::Object(mut map) => {
-            let force = map
-                .remove("force")
-                .and_then(|value| value.as_bool())
-                .unwrap_or(false);
-            let update_method = map
-                .remove("updateMethod")
-                .or_else(|| map.remove("update_method"))
-                .and_then(|value| value.as_str().map(ToOwned::to_owned));
-            (force, update_method)
-        }
-        _ => (false, None),
-    };
-    start_github_update(app.clone(), force, update_method).await?;
-    Ok(serde_json::json!(null))
-}
-
-async fn ide_chat_cancel_github_update_for_web_settings() -> Result<Value, String> {
-    cancel_github_update().await?;
-    Ok(serde_json::json!(null))
-}
-
-async fn ide_chat_apply_prepared_github_update_for_web_settings(
-    app: &AppHandle,
-) -> Result<Value, String> {
-    apply_prepared_github_update(app.clone()).await?;
-    Ok(serde_json::json!(null))
+    ide_chat_serialize(set_skipped_github_update_version_inner(version, app, state)?)
 }
 
 async fn ide_chat_codex_get_auth_status_for_web_settings(params: Value) -> Result<Value, String> {

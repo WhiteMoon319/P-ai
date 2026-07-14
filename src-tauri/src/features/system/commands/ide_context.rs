@@ -1126,4 +1126,23 @@ mod ide_context_tests {
         .expect_err("web must reject local patch restore");
         assert!(error.starts_with("WEB_NATIVE_CAPABILITY_UNAVAILABLE:"));
     }
+
+    #[test]
+    fn ide_chat_llm_round_logs_should_use_canonical_log_contract() {
+        let state = ide_context_test_state();
+        let listed = ide_chat_list_recent_llm_round_logs_for_web_settings(&state)
+            .expect("list round logs");
+        assert!(listed.is_array());
+
+        let section = ide_chat_get_recent_llm_round_log_section_for_web_settings(
+            &state,
+            serde_json::json!({ "id": "", "section": "answer" }),
+        )
+        .expect("get empty log section");
+        assert!(section.is_null());
+
+        let cleared = ide_chat_clear_recent_llm_round_logs_for_web_settings(&state)
+            .expect("clear round logs");
+        assert_eq!(cleared, serde_json::json!(true));
+    }
 }

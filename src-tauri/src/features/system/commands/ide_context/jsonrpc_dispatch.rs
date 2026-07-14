@@ -59,6 +59,12 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "complete_quick_setup_and_open_chat"
             | "open_runtime_logs_window"
             | "set_webview_zoom_percent"
+            | "sync_tray_icon"
+            | "get_github_update_state"
+            | "check_github_update"
+            | "start_github_update"
+            | "cancel_github_update"
+            | "apply_prepared_github_update"
     )
 }
 
@@ -220,7 +226,6 @@ async fn ide_chat_handle_jsonrpc_request(
         "read_avatar_data_url" => ide_chat_avatar_data_url_for_web_settings(state, request.params),
         "save_agent_avatar" => ide_chat_save_agent_avatar_for_web_settings(state, request.params),
         "clear_agent_avatar" => ide_chat_clear_agent_avatar_for_web_settings(state, request.params),
-        "sync_tray_icon" => ide_chat_sync_tray_icon_for_web_settings(app),
         "refresh_models" => ide_chat_refresh_models_for_web_settings(state, request.params).await,
         "quick_genai_chat" => ide_chat_quick_genai_chat_for_web_settings(state, request.params).await,
         "fetch_model_metadata" => ide_chat_fetch_model_metadata_for_web_settings(state, request.params).await,
@@ -250,11 +255,6 @@ async fn ide_chat_handle_jsonrpc_request(
         "set_skipped_github_update_version" => {
             ide_chat_set_skipped_github_update_version_for_web_settings(state, app, request.params)
         },
-        "get_github_update_state" => ide_chat_get_github_update_state_for_web_settings(app),
-        "check_github_update" => ide_chat_check_github_update_for_web_settings(app, request.params).await,
-        "start_github_update" => ide_chat_start_github_update_for_web_settings(app, request.params).await,
-        "cancel_github_update" => ide_chat_cancel_github_update_for_web_settings().await,
-        "apply_prepared_github_update" => ide_chat_apply_prepared_github_update_for_web_settings(app).await,
         "codex_get_auth_status" => ide_chat_codex_get_auth_status_for_web_settings(request.params).await,
         "codex_start_oauth_login" => ide_chat_codex_start_oauth_login_for_web_settings(request.params).await,
         "codex_get_rate_limits" => ide_chat_codex_get_rate_limits_for_web_settings(request.params).await,
@@ -372,6 +372,12 @@ mod web_native_capability_tests {
             "desktop_screenshot",
             "show_main_window",
             "set_webview_zoom_percent",
+            "sync_tray_icon",
+            "get_github_update_state",
+            "check_github_update",
+            "start_github_update",
+            "cancel_github_update",
+            "apply_prepared_github_update",
         ] {
             assert!(
                 ide_chat_web_native_only_method(method),
@@ -393,6 +399,9 @@ mod web_native_capability_tests {
             "remote_im_list_contacts",
             "task.list",
             "mcp_list_servers",
+            "set_github_update_method",
+            "set_skipped_github_update_version",
+            "list_recent_llm_round_logs",
         ] {
             assert!(
                 !ide_chat_web_native_only_method(method),

@@ -1242,7 +1242,11 @@ fn latest_chat_round_headers_and_tools(
 
 #[tauri::command]
 fn list_recent_llm_round_logs(state: State<'_, AppState>) -> Result<Vec<LlmRoundLogEntry>, String> {
-    let capacity = llm_round_log_capacity_for_state(&state);
+    list_recent_llm_round_logs_inner(state.inner())
+}
+
+fn list_recent_llm_round_logs_inner(state: &AppState) -> Result<Vec<LlmRoundLogEntry>, String> {
+    let capacity = llm_round_log_capacity_for_state(state);
     let logs = state
         .llm_round_logs
         .lock()
@@ -1354,6 +1358,14 @@ fn get_recent_llm_round_log_section(
     id: String,
     section: String,
 ) -> Result<Option<Value>, String> {
+    get_recent_llm_round_log_section_inner(state.inner(), id, section)
+}
+
+fn get_recent_llm_round_log_section_inner(
+    state: &AppState,
+    id: String,
+    section: String,
+) -> Result<Option<Value>, String> {
     let id = id.trim().to_string();
     if id.is_empty() {
         return Ok(None);
@@ -1375,6 +1387,10 @@ fn get_recent_llm_round_log_section(
 
 #[tauri::command]
 fn clear_recent_llm_round_logs(state: State<'_, AppState>) -> Result<bool, String> {
+    clear_recent_llm_round_logs_inner(state.inner())
+}
+
+fn clear_recent_llm_round_logs_inner(state: &AppState) -> Result<bool, String> {
     let mut logs = state
         .llm_round_logs
         .lock()

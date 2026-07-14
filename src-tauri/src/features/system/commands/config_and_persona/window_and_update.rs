@@ -487,16 +487,24 @@ fn set_github_update_method(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AppConfig, String> {
+    set_github_update_method_inner(update_method, &app, state.inner())
+}
+
+fn set_github_update_method_inner(
+    update_method: String,
+    app: &AppHandle,
+    state: &AppState,
+) -> Result<AppConfig, String> {
     let normalized = normalize_github_update_method(&update_method);
-    let mut config = state_read_config_cached(&state)?;
+    let mut config = state_read_config_cached(state)?;
     normalize_app_config(&mut config);
     if config.github_update_method != normalized {
         config.github_update_method = normalized.clone();
-        state_write_config_cached(&state, &config)?;
+        state_write_config_cached(state, &config)?;
         runtime_log_info(format!("[自动更新] 更新方式偏好已保存：method={normalized}"));
     }
-    let data = state_read_agents_runtime_snapshot(&state)?;
-    let runtime_config = runtime_config_with_private_organization(&state, &config, &data)?;
+    let data = state_read_agents_runtime_snapshot(state)?;
+    let runtime_config = runtime_config_with_private_organization(state, &config, &data)?;
     let _ = app.emit("easy-call:config-updated", &runtime_config);
     Ok(runtime_config)
 }
@@ -507,17 +515,25 @@ fn set_skipped_github_update_version(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AppConfig, String> {
+    set_skipped_github_update_version_inner(version, &app, state.inner())
+}
+
+fn set_skipped_github_update_version_inner(
+    version: String,
+    app: &AppHandle,
+    state: &AppState,
+) -> Result<AppConfig, String> {
     let normalized = normalize_skipped_github_update_version(&version);
-    let mut config = state_read_config_cached(&state)?;
+    let mut config = state_read_config_cached(state)?;
     normalize_app_config(&mut config);
     if config.skipped_github_update_version != normalized {
         config.skipped_github_update_version = normalized.clone();
-        state_write_config_cached(&state, &config)?;
+        state_write_config_cached(state, &config)?;
         runtime_log_warn(format!("[自动更新] 已保存跳过版本：version={normalized}"));
     }
-    sync_update_state_from_skip_version(&app, &normalized);
-    let data = state_read_agents_runtime_snapshot(&state)?;
-    let runtime_config = runtime_config_with_private_organization(&state, &config, &data)?;
+    sync_update_state_from_skip_version(app, &normalized);
+    let data = state_read_agents_runtime_snapshot(state)?;
+    let runtime_config = runtime_config_with_private_organization(state, &config, &data)?;
     let _ = app.emit("easy-call:config-updated", &runtime_config);
     Ok(runtime_config)
 }
