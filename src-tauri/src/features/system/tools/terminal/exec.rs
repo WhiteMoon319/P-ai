@@ -1568,6 +1568,8 @@ async fn builtin_shell_exec(
     };
     let (stdout, stdout_truncated) = truncate_terminal_output(&execution.stdout);
     let (stderr, stderr_truncated) = truncate_terminal_output(&execution.stderr);
+    let stdout_output_path = terminal_store_full_output(state, "stdout", &execution.stdout);
+    let stderr_output_path = terminal_store_full_output(state, "stderr", &execution.stderr);
 
     Ok(serde_json::json!({
         "ok": execution.ok,
@@ -1578,7 +1580,9 @@ async fn builtin_shell_exec(
         "timedOut": false,
         "truncated": stdout_truncated || stderr_truncated,
         "stdoutTruncated": stdout_truncated,
-        "stderrTruncated": stderr_truncated
+        "stderrTruncated": stderr_truncated,
+        "stdoutOutputPath": stdout_output_path,
+        "stderrOutputPath": stderr_output_path
     }))
 }
 

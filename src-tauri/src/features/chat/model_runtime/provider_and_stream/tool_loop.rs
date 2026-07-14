@@ -32,6 +32,7 @@ struct PreparedToolCallBatch {
 }
 
 include!("tool_loop/repeat_guard.rs");
+include!("tool_loop/tool_output_store.rs");
 
 fn tool_loop_round_tool_calls_json(tool_calls: &[genai::chat::ToolCall]) -> Vec<Value> {
     tool_calls
@@ -668,6 +669,7 @@ async fn run_genai_tool_loop(
                 tool_args,
                 tool_result,
             } = executed_tool_call;
+            let tool_result = bound_provider_tool_result(tool_abort_state, tool_result);
             let tool_result_text = tool_result.display_text.as_str();
             let history_content = sanitize_tool_result_for_history(&tool_name, &tool_result_text);
             let tool_result_event = serde_json::json!({
@@ -1190,6 +1192,7 @@ async fn run_genai_tool_loop_non_stream(
                 tool_args,
                 tool_result,
             } = executed_tool_call;
+            let tool_result = bound_provider_tool_result(tool_abort_state, tool_result);
             let tool_result_text = tool_result.display_text.as_str();
             let history_content = sanitize_tool_result_for_history(&tool_name, &tool_result_text);
             let tool_result_event = serde_json::json!({
