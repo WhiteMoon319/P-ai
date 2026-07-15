@@ -251,37 +251,39 @@ impl ConversationServiceV2 {
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned)
             .unwrap_or_else(now_iso);
-        // 调度开始持有的 assistant_message_id 是唯一真相：
-        // 有压缩保留消息时，bootstrap 直接写成完整消息；没有则写空壳。
-        let mut message = if let Some(preserved) = input.compaction_preserved_messages.as_ref() {
-            build_stop_chat_partial_assistant_message_for_id(
-                assistant_message_id,
-                speaker_agent_id,
-                &created_at,
-                Some(speaker_agent_id.to_string()),
-                None,
-                None,
-                &preserved.assistant_text,
-                &preserved.activity_reasoning_text,
-                &preserved.tool_history_events,
-            )
-        } else {
-            ChatMessage {
-                id: assistant_message_id.to_string(),
-                role: "assistant".to_string(),
-                created_at,
-                speaker_agent_id: Some(speaker_agent_id.to_string()),
-                parts: vec![MessagePart::Text {
-                    text: String::new(),
-                    reasoning_content: None,
-                }],
-                extra_text_blocks: Vec::new(),
-                provider_meta: None,
-                tool_call: None,
-                mcp_call: None,
-                meme_annotations: None,
-            }
+        // 调度开始持有的 assistant_message_id 是唯一真相：先创建本轮空壳，
+        // 再把压缩续调继承的工具组挂回 tool_call，保持等价于工具结果返回后的下一次模型调用。
+        let mut message = ChatMessage {
+            id: assistant_message_id.to_string(),
+            role: "assistant".to_string(),
+            created_at,
+            speaker_agent_id: Some(speaker_agent_id.to_string()),
+            parts: vec![MessagePart::Text {
+                text: String::new(),
+                reasoning_content: None,
+            }],
+            extra_text_blocks: Vec::new(),
+            provider_meta: None,
+            tool_call: None,
+            mcp_call: None,
+            meme_annotations: None,
         };
+        if let Some(preserved) = input.compaction_preserved_messages.as_ref() {
+            if !preserved.tool_history_events.is_empty() {
+                let mut inherited_message = message.clone();
+                inherited_message.tool_call = Some(preserved.tool_history_events.clone());
+                if assistant_message_tool_append_closed(&inherited_message) {
+                    runtime_log_error(format!(
+                        "[聊天调度] 失败，任务=继承压缩保留工具组，原因=继承后 assistant message 已带 final 正文，conversation_id={}，assistant_message_id={}，preserved_events={}",
+                        conversation_id,
+                        assistant_message_id,
+                        preserved.tool_history_events.len()
+                    ));
+                } else {
+                    message = inherited_message;
+                }
+            }
+        }
         merge_provider_meta_patch_v2(&mut message.provider_meta, input.provider_meta_patch.clone());
 
         // 委托线程的 conversation_id 固定等于 delegate_id（delegate-<UUID>），

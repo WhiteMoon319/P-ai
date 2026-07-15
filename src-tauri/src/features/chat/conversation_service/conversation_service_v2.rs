@@ -441,7 +441,7 @@ struct AssistantMessageBootstrapInput {
     speaker_agent_id: String,
     created_at: Option<String>,
     provider_meta_patch: Option<Value>,
-    /// 调度启动时若携带压缩保留消息，bootstrap 直接写成完整 assistant，不先建空壳。
+    /// 调度启动时若携带压缩保留消息，bootstrap 只恢复工具历史；final 正文保持空。
     #[serde(skip)]
     compaction_preserved_messages: Option<CompactionPreservedMessages>,
 }

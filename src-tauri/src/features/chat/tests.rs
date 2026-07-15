@@ -5064,6 +5064,147 @@
     }
 
     #[test]
+    fn conversation_service_v2_should_bootstrap_compaction_preserved_tools_without_final_text() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let conversation =
+            test_chat_conversation("conversation-v2-bootstrap-preserved-tools", "active", &now);
+        state_schedule_conversation_persist(&state, &conversation).expect("persist conversation");
+        let preserved_assistant_text = "我先读取仓库状态，再根据结果继续。";
+        let preserved_reasoning_text = "需要先调用 exec 获取 git status。";
+        let preserved_events = vec![
+            serde_json::json!({
+                "role": "assistant",
+                "content": preserved_assistant_text,
+                "reasoning_content": preserved_reasoning_text,
+                "tool_calls": [{
+                    "id": "call-v2-preserved",
+                    "type": "function",
+                    "function": {
+                        "name": "exec",
+                        "arguments": "{\"command\":\"git status --short\"}"
+                    }
+                }]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call-v2-preserved",
+                "content": " M src-tauri/src/features/chat/tests.rs"
+            }),
+        ];
+
+        let bootstrap = conversation_service_v2()
+            .bootstrap_streaming_assistant_message(
+                &state,
+                &AssistantMessageBootstrapInput {
+                    conversation_id: conversation.id.clone(),
+                    assistant_message_id: "assistant-bootstrap-preserved".to_string(),
+                    speaker_agent_id: DEFAULT_AGENT_ID.to_string(),
+                    created_at: Some(now.clone()),
+                    provider_meta_patch: None,
+                    compaction_preserved_messages: Some(CompactionPreservedMessages::new(
+                        preserved_assistant_text,
+                        preserved_reasoning_text,
+                        preserved_events.clone(),
+                    )),
+                },
+            )
+            .expect("bootstrap preserved assistant should succeed");
+
+        assert!(bootstrap.created);
+        let stored_before_final = conversation_service_v2()
+            .read_message_by_id(&state, &conversation.id, "assistant-bootstrap-preserved")
+            .expect("read preserved bootstrapped assistant before final");
+        let stored_before_tool_events = stored_before_final
+            .tool_call
+            .as_ref()
+            .expect("preserved tool history should exist");
+        assert_eq!(stored_before_tool_events.len(), 2);
+        assert_eq!(
+            stored_before_tool_events[0].get("content").and_then(Value::as_str),
+            Some(preserved_assistant_text)
+        );
+        assert_eq!(
+            stored_before_tool_events[0]
+                .get("reasoning_content")
+                .and_then(Value::as_str),
+            Some(preserved_reasoning_text)
+        );
+        assert_eq!(
+            stored_before_tool_events[0]
+                .get("tool_calls")
+                .and_then(Value::as_array)
+                .map(Vec::len),
+            Some(1)
+        );
+        assert_eq!(
+            stored_before_tool_events[1]
+                .get("tool_call_id")
+                .and_then(Value::as_str),
+            Some("call-v2-preserved")
+        );
+        assert_eq!(
+            stored_before_tool_events[1].get("role").and_then(Value::as_str),
+            Some("tool")
+        );
+        assert!(stored_before_final.extra_text_blocks.is_empty());
+        match &stored_before_final.parts[0] {
+            MessagePart::Text {
+                text,
+                reasoning_content,
+            } => {
+                assert!(text.is_empty());
+                assert_eq!(reasoning_content.as_deref(), None);
+            }
+            _ => panic!("expected text part"),
+        }
+
+        let final_append = conversation_service_v2()
+            .append_final_text_to_assistant_message(
+                &state,
+                &AssistantMessageFinalTextAppendInput {
+                    conversation_id: conversation.id.clone(),
+                    assistant_message_id: "assistant-bootstrap-preserved".to_string(),
+                    final_text: "压缩续调后的最终正文".to_string(),
+                    reasoning_text: Some("压缩续调后的最终思考".to_string()),
+                    provider_meta_patch: None,
+                    meme_annotations: None,
+                },
+            )
+            .expect("final append after preserved bootstrap should succeed");
+        assert!(final_append.final_text_committed);
+
+        let stored_after_final = conversation_service_v2()
+            .read_message_by_id(&state, &conversation.id, "assistant-bootstrap-preserved")
+            .expect("read preserved bootstrapped assistant after final");
+        let stored_after_tool_events = stored_after_final
+            .tool_call
+            .as_ref()
+            .expect("preserved tool history should remain after final");
+        assert_eq!(stored_after_tool_events.len(), 2);
+        assert_eq!(
+            stored_after_tool_events[0].get("content").and_then(Value::as_str),
+            Some(preserved_assistant_text)
+        );
+        assert_eq!(
+            stored_after_tool_events[0]
+                .get("reasoning_content")
+                .and_then(Value::as_str),
+            Some(preserved_reasoning_text)
+        );
+        match &stored_after_final.parts[0] {
+            MessagePart::Text {
+                text,
+                reasoning_content,
+            } => {
+                assert_eq!(text, "压缩续调后的最终正文");
+                assert_eq!(reasoning_content.as_deref(), Some("压缩续调后的最终思考"));
+            }
+            _ => panic!("expected text part"),
+        }
+    }
+
+    #[test]
     fn conversation_service_v2_should_bootstrap_delegate_in_delegate_store() {
         let state = test_chat_runtime_state();
         let now = now_iso();
