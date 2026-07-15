@@ -242,7 +242,6 @@ fn codex_builtin_models() -> Vec<String> {
         "gpt-5.4".to_string(),
         "gpt-5.4-mini".to_string(),
         "gpt-5.3-codex".to_string(),
-        "gpt-5.2".to_string(),
     ]
 }
 
@@ -1007,6 +1006,23 @@ mod model_metadata_selection_tests {
             enable_tools: true,
             enable_audio,
             enable_video,
+        }
+    }
+
+    #[test]
+    fn codex_builtin_models_should_keep_gpt_55_and_gpt_56_models() {
+        let models = codex_builtin_models();
+
+        for model in [
+            "gpt-5.6-sol",
+            "gpt-5.6-terra",
+            "gpt-5.6-luna",
+            "gpt-5.5",
+            "gpt-5.4",
+            "gpt-5.4-mini",
+            "gpt-5.3-codex",
+        ] {
+            assert!(models.iter().any(|item| item == model), "missing model: {model}");
         }
     }
 

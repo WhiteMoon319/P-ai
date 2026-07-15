@@ -882,15 +882,19 @@ fn default_context_window_tokens() -> u32 {
 }
 
 fn default_codex_context_window_tokens() -> u32 {
-    272_000
+    262_144
 }
 
 fn codex_context_window_tokens_for_model(model_id: &str) -> u32 {
     match model_id.trim().to_ascii_lowercase().as_str() {
-        "gpt-5.6-sol" | "gpt-5.6-terra" | "gpt-5.6-luna" => 372_000,
-        "gpt-5.5" => 265_000,
-        "gpt-5.4" | "gpt-5.4-mini" | "gpt-5.3-codex" | "gpt-5.2" => 272_000,
-        "gpt-5.3-codex-spark" => 125_000,
+        "gpt-5.6-sol"
+        | "gpt-5.6-terra"
+        | "gpt-5.6-luna"
+        | "gpt-5.5"
+        | "gpt-5.4"
+        | "gpt-5.4-mini"
+        | "gpt-5.3-codex" => 262_144,
+        "gpt-5.3-codex-spark" => 131_072,
         _ => default_codex_context_window_tokens(),
     }
 }
@@ -1117,4 +1121,30 @@ struct DebugApiConfig {
     model: String,
     temperature: Option<f64>,
     enabled: Option<bool>,
+}
+
+#[cfg(test)]
+mod codex_context_window_tests {
+    use super::*;
+
+    #[test]
+    fn codex_context_window_should_use_256k_except_for_128k_spark() {
+        for model in [
+            "gpt-5.6-sol",
+            "gpt-5.6-terra",
+            "gpt-5.6-luna",
+            "gpt-5.5",
+            "gpt-5.4",
+            "gpt-5.4-mini",
+            "gpt-5.3-codex",
+            "gpt-5.3-codex-spark",
+        ] {
+            let expected = if model == "gpt-5.3-codex-spark" {
+                131_072
+            } else {
+                262_144
+            };
+            assert_eq!(codex_context_window_tokens_for_model(model), expected, "model: {model}");
+        }
+    }
 }
