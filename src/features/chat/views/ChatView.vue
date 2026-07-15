@@ -468,6 +468,7 @@
           :legacy-session-key="legacyChatFileReaderSessionKey"
           :enable-global-drop="false"
           :show-pick-file-button="false"
+          :show-tab-desktop-actions="true"
           :markdown-is-dark="markdownIsDark"
           custom-markstream-id="chat-file-reader-markstream"
           @capture-context-reference="handleCaptureFileReaderContextReference"

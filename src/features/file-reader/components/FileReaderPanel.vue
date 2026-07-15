@@ -9,6 +9,7 @@
       :close-left-title="t('fileReader.closeLeft')"
       :close-right-title="t('fileReader.closeRight')"
       :close-others-title="t('fileReader.closeOthers')"
+      :context-menu-items="fileTabContextMenuItems"
       @select-tab="setActiveTab"
       @close-tab="closeTab"
       @close-tabs-to-left="closeTabsToLeftOf"
@@ -614,6 +615,7 @@ const props = withDefaults(defineProps<{
   bridgeRequest?: <T = unknown>(method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<T>;
   showTabs?: boolean;
   showPickFileButton?: boolean;
+  showTabDesktopActions?: boolean;
   directoryOnly?: boolean;
   enableGlobalDrop?: boolean;
   markdownIsDark?: boolean;
@@ -623,6 +625,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   showTabs: true,
   showPickFileButton: true,
+  showTabDesktopActions: false,
   directoryOnly: false,
   enableGlobalDrop: true,
   markdownIsDark: false,
@@ -791,6 +794,15 @@ const fileReaderPanelTabs = computed(() =>
     closeable: true,
   })),
 );
+
+const fileTabContextMenuItems = computed(() => {
+  if (!props.showTabDesktopActions || !tauriRuntimeAvailable) return [];
+  return [
+    { label: t('fileReader.openInDocumentBrowser'), onClick: openInDocumentBrowser },
+    { label: t('fileReader.openContainingFolder'), onClick: openDirectoryInFileManager },
+    { label: t('fileReader.openWithDefault'), onClick: openPathWithDefaultProgram },
+  ];
+});
 
 function resolveTreeEntryIcon(entry: FileReaderDirectoryEntry) {
   return resolveFileTreeIcon(entry.path, entry.isDirectory, entry.isDirectory && isTreeDirectoryExpanded(entry.path));
@@ -1820,10 +1832,26 @@ function refreshActiveTab() {
 async function openWithDefaultProgram() {
   const tab = activeTab.value;
   if (!tab) return;
+  await openPathWithDefaultProgram(tab.path);
+}
+
+async function openInDocumentBrowser(path: string) {
+  const normalizedPath = normalizePath(path);
+  if (!normalizedPath) return;
   try {
-    await invokeTauri("open_file_with_default_program", { path: tab.path });
+    await invokeTauri("open_file_reader_window_command", { path: normalizedPath });
   } catch (error) {
-    reportFileReaderActionFailure(t('fileReader.actionOpenDefault'), tab.path, error);
+    reportFileReaderActionFailure(t('fileReader.actionOpenDocumentBrowser'), normalizedPath, error);
+  }
+}
+
+async function openPathWithDefaultProgram(path: string) {
+  const normalizedPath = normalizePath(path);
+  if (!normalizedPath) return;
+  try {
+    await invokeTauri("open_file_with_default_program", { path: normalizedPath });
+  } catch (error) {
+    reportFileReaderActionFailure(t('fileReader.actionOpenDefault'), normalizedPath, error);
   }
 }
 

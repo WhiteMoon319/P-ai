@@ -2336,6 +2336,7 @@
     "collapseDirectory": "Collapse directory",
     "expandDirectory": "Expand directory",
     "previewDirectory": "Preview directory: {path}",
+    "openInDocumentBrowser": "Open in PAI document browser",
     "openWithDefault": "Open with default program",
     "openContainingFolder": "Open containing folder",
     "refresh": "Refresh",
@@ -2358,6 +2359,7 @@
     "referenceFile": "User referenced file segment: {location}",
     "actionFailed": "{action} failed: {path}; {detail}",
     "actionCopy": "Copy",
+    "actionOpenDocumentBrowser": "Open in PAI document browser",
     "actionOpenDefault": "Open with default program",
     "actionOpenShell": "Open Shell",
     "actionOpenDirectory": "Open directory"

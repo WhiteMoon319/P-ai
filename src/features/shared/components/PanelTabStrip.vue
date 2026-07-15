@@ -71,6 +71,19 @@
       @pointerdown.stop
       @contextmenu.prevent.stop
     >
+      <template v-if="contextMenuItems.length > 0">
+        <button
+          v-for="item in contextMenuItems"
+          :key="item.label"
+          type="button"
+          class="btn btn-ghost btn-sm justify-start"
+          @click.stop="runContextMenuItem(item)"
+        >
+          <span aria-hidden="true" class="inline-block size-4 shrink-0"></span>
+          <span>{{ item.label }}</span>
+        </button>
+        <div v-if="currentCloseMenuTab?.closeable" class="my-1 border-t border-base-300"></div>
+      </template>
       <button type="button" class="btn btn-ghost btn-sm justify-start" @click.stop="closeMenuTab">
         <X class="size-4" />
         <span>{{ closeTitle }}</span>
@@ -119,6 +132,11 @@ type PanelTabStripItem = {
   disabled?: boolean;
 };
 
+type PanelTabStripContextMenuItem = {
+  label: string;
+  onClick: (key: string) => void;
+};
+
 const CLOSE_BUTTON_MIN_TAB_WIDTH = 72;
 
 const props = withDefaults(defineProps<{
@@ -129,6 +147,7 @@ const props = withDefaults(defineProps<{
   closeLeftTitle?: string;
   closeRightTitle?: string;
   closeOthersTitle?: string;
+  contextMenuItems?: PanelTabStripContextMenuItem[];
 }>(), {
   activeKey: "",
   ariaLabel: "",
@@ -136,6 +155,7 @@ const props = withDefaults(defineProps<{
   closeLeftTitle: "",
   closeRightTitle: "",
   closeOthersTitle: "",
+  contextMenuItems: () => [],
 });
 
 const emit = defineEmits<{
@@ -197,6 +217,13 @@ function closeTab(tab: PanelTabStripItem) {
   emit("closeTab", tab.key);
 }
 
+function runContextMenuItem(item: PanelTabStripContextMenuItem) {
+  const tab = currentCloseMenuTab.value;
+  closeMenu.value = null;
+  if (!tab) return;
+  item.onClick(tab.key);
+}
+
 function clearLongPress() {
   if (longPressTimer) {
     clearTimeout(longPressTimer);
@@ -226,8 +253,13 @@ function observeTabListHost() {
 }
 
 function menuPosition(x: number, y: number) {
-  const menuWidth = 132;
-  const menuHeight = 164;
+  const menuWidth = 208;
+  const menuItemCount = props.contextMenuItems.length
+    + (currentCloseMenuTab.value?.closeable ? 1 : 0)
+    + Number(closeMenuCanCloseLeft.value)
+    + Number(closeMenuCanCloseRight.value)
+    + Number(closeMenuCanCloseOthers.value);
+  const menuHeight = 16 + menuItemCount * 40 + (props.contextMenuItems.length > 0 && currentCloseMenuTab.value?.closeable ? 9 : 0);
   const padding = 8;
   return {
     x: Math.min(Math.max(padding, x), Math.max(padding, window.innerWidth - menuWidth - padding)),
