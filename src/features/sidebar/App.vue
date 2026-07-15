@@ -1033,8 +1033,15 @@ function latestConversation(items: ConversationSummary[]): ConversationSummary |
   )[0];
 }
 
+function readInitialConversationIdFromUrl(): string {
+  if (typeof window === "undefined") return "";
+  return String(new URLSearchParams(window.location.search).get("conversationId") || "").trim();
+}
+
 function pickInitialSidebarConversationId(items: ConversationSummary[]): string {
   const candidates = items.filter((item) => !!String(item.conversationId || "").trim());
+  const urlConversationId = readInitialConversationIdFromUrl();
+  if (urlConversationId) return urlConversationId;
   const openableCandidates = candidates.filter(isSidebarConversationOpenable);
   const workspaceCandidates = sidebarHasWorkspaceContext()
     ? currentSidebarWorkspaceCandidates(openableCandidates)

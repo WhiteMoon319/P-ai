@@ -1449,7 +1449,8 @@
       "branchConversation": "选择消息创建会话分支",
       "forwardConversation": "会话转发",
       "shareConversation": "分享会话",
-      "setWorkspace": "设置会话工作目录"
+      "setWorkspace": "设置会话工作目录",
+      "openInBrowser": "在浏览器打开"
     },
     "mentionMutedBadge": "禁",
     "defaultDepartment": "默认",

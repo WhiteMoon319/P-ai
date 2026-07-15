@@ -1448,7 +1448,8 @@
       "autoPush": "自動推送",
       "forwardConversation": "會話轉發",
       "shareConversation": "分享會話",
-      "setWorkspace": "設定會話工作目錄"
+      "setWorkspace": "設定會話工作目錄",
+      "openInBrowser": "在瀏覽器開啟"
     },
     "autoPush": {
       "title": "自動推送",

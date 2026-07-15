@@ -1330,7 +1330,8 @@
       "autoPush": "Auto Push",
       "forwardConversation": "Forward Conversation",
       "shareConversation": "Share Conversation",
-      "setWorkspace": "Set session working directory"
+      "setWorkspace": "Set session working directory",
+      "openInBrowser": "Open in Browser"
     },
     "autoPush": {
       "title": "Auto Push",

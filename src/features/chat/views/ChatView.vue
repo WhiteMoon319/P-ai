@@ -165,6 +165,8 @@
               :show-auto-push-menu-item="!sidebarMode && !activeConversationIsRemoteContact && !activeConversationIsSystemNotification"
               :show-share-menu-item="!sidebarMode"
               :show-workspace-menu-item="true"
+              :show-open-in-browser-button="!bridgeMode && !activeConversationIsSystemNotification"
+              :open-in-browser-disabled="!activeConversationId || activeConversationIsSystemNotification"
               :show-code-review-menu-item="true"
               :mention-entries="mentionEntries" :selected-mention-keys="selectedMentionKeys"
               :delegate-statuses="delegateStatuses"
@@ -173,6 +175,7 @@
               @open-delegate-selection="openDelegateSelectionMenu" @open-forward-selection="openForwardSelectionMenu"
               @open-auto-push="openAutoPushCard"
               @open-share-selection="openShareSelectionMenu"
+              @open-conversation-in-browser="openActiveConversationInBrowser"
               @open-delegate-summary="openDelegateSummaryPanel"
               @open-code-review="openCodeReviewDialog"
               @mention-entry="(entry) => {
@@ -729,6 +732,12 @@ const autoPushSelectedContactId = ref("");
 const autoPushContactOptions = computed(() =>
   props.remoteImContactConversations.filter((item) => item.channelEnabled !== false),
 );
+
+type WebAccessInfo = {
+  running: boolean;
+  enabled: boolean;
+  localUrl: string;
+};
 
 const codeReviewDialogOpen = ref(false);
 const codeReviewErrorText = ref("");
@@ -1614,6 +1623,25 @@ function openDelegateSummaryPanel() {
   emit("toolReviewPanelOpenChange", true);
 }
 
+async function openActiveConversationInBrowser() {
+  const conversationId = String(props.activeConversationId || "").trim();
+  if (!conversationId || props.systemNotificationMode) return;
+  try {
+    const info = await invokeTauri<WebAccessInfo>("get_web_access_info", {
+      input: { forceRefresh: false },
+    });
+    const localUrl = String(info?.localUrl || "").trim();
+    if (!info?.enabled || !localUrl) {
+      throw new Error(t("status.openLinkUnsupportedInWeb"));
+    }
+    const url = new URL(localUrl);
+    url.searchParams.set("conversationId", conversationId);
+    await invokeTauri("open_external_url", { url: url.toString() });
+    linkOpenErrorText.value = "";
+  } catch (error) {
+    linkOpenErrorText.value = t("status.openLinkFailed", { err: String(error) });
+  }
+}
 
 function handleSendChat() {
   const extraTextBlocks = attachedIdeContextReferences.value.map((item) => String(item.textBlock || "").trim()).filter(Boolean);

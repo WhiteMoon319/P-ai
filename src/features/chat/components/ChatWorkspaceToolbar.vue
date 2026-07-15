@@ -69,6 +69,17 @@
               <span class="leading-5">{{ t("chat.conversationMenu.setWorkspace") }}</span>
             </button>
           </li>
+          <li v-if="showOpenInBrowserButton && !busy && !openInBrowserDisabled">
+            <button
+              type="button"
+              class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left"
+              :disabled="busy || openInBrowserDisabled"
+              @click="emit('openConversationInBrowser')"
+            >
+              <ExternalLink class="h-4 w-4 shrink-0" />
+              <span class="leading-5">{{ t("chat.conversationMenu.openInBrowser") }}</span>
+            </button>
+          </li>
         </ul>
       </div>
       <SessionControlPanel
@@ -254,6 +265,8 @@ const props = withDefaults(defineProps<{
   showAutoPushMenuItem?: boolean;
   showShareMenuItem?: boolean;
   showWorkspaceMenuItem?: boolean;
+  showOpenInBrowserButton?: boolean;
+  openInBrowserDisabled?: boolean;
   delegateStatuses?: ConversationDelegateStatusSummary[];
 }>(), {
   showTaskCreateMenuItem: true,
@@ -264,6 +277,7 @@ const props = withDefaults(defineProps<{
   showAutoPushMenuItem: true,
   showShareMenuItem: true,
   showWorkspaceMenuItem: true,
+  showOpenInBrowserButton: false,
 });
 
 const emit = defineEmits<{
@@ -276,6 +290,7 @@ const emit = defineEmits<{
   (e: "openForwardSelection"): void;
   (e: "openAutoPush"): void;
   (e: "openShareSelection"): void;
+  (e: "openConversationInBrowser"): void;
   (e: "mentionEntry", entry: ChatMentionEntry): void;
 }>();
 
