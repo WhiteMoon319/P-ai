@@ -134,17 +134,7 @@ fn add_provider_usage_delta_to_conversation(
     };
 
     match result {
-        Ok(true) => {
-            if let Err(err) = emit_unarchived_conversation_overview_item_updated_from_state(
-                app_state,
-                conversation_id,
-            ) {
-                runtime_log_warn(format!(
-                    "[聊天用量] 跳过，任务=推送累计使用量更新，conversation_id={}，error={}",
-                    conversation_id, err
-                ));
-            }
-        }
+        Ok(true) => {}
         Ok(false) => {}
         Err(err) => runtime_log_warn(format!(
             "[聊天用量] 失败，任务=累加供应商用量，conversation_id={}，error={}",

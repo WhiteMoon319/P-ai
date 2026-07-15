@@ -1049,21 +1049,6 @@ impl ConversationServiceV2 {
 
         self.append_message(state, normalized_target_session_id, message)?;
         emit_conversation_message_appended_event(state, normalized_target_session_id, message);
-        match self.collect_unarchived_conversation_summaries_cached(state, &app_config) {
-            Ok(unarchived_conversations) => {
-                emit_unarchived_conversation_overview_updated_payload(
-                    state,
-                    &UnarchivedConversationOverviewUpdatedPayload {
-                        preferred_conversation_id: Some(normalized_target_session_id.to_string()),
-                        unarchived_conversations,
-                    },
-                );
-            }
-            Err(err) => runtime_log_warn(format!(
-                "[会话通知] 警告，任务=刷新会话概览，target_conversation_id={}，error={}",
-                normalized_target_session_id, err
-            )),
-        }
         Ok(())
     }
 

@@ -836,7 +836,7 @@ fn overview_remember_full_list_at(summaries: &[UnarchivedConversationSummary], s
     }
 }
 
-fn overview_register_item_broadcast(conversation_id: &str) -> String {
+fn overview_register_item_watermark(conversation_id: &str) -> String {
     let cid = conversation_id.trim();
     if cid.is_empty() {
         return overview_reserve_server_time();
@@ -859,6 +859,45 @@ fn overview_register_item_broadcast(conversation_id: &str) -> String {
             ));
             now_iso()
         }
+    }
+}
+
+fn overview_register_item_broadcast(
+    state: &AppState,
+    payload: &UnarchivedConversationOverviewItemUpdatedPayload,
+) {
+    let conversation_id = payload.conversation.conversation_id.trim();
+    let server_time = overview_register_item_watermark(conversation_id);
+    let emitted_payload = UnarchivedConversationOverviewItemUpdatedPayload {
+        conversation: payload.conversation.clone(),
+        server_time,
+    };
+    ide_chat_broadcast_notification(
+        "conversation.overviewItemUpdated",
+        serde_json::json!(&emitted_payload),
+    );
+    let app_handle = match state.app_handle.lock() {
+        Ok(guard) => guard.as_ref().cloned(),
+        Err(err) => {
+            runtime_log_error(format!(
+                "[会话概览] 失败，任务=推送单会话概览，阶段=获取app_handle，conversation_id={}，error={:?}",
+                conversation_id, err
+            ));
+            None
+        }
+    };
+    let Some(app_handle) = app_handle else {
+        runtime_log_warn(format!(
+            "[会话概览] 跳过，任务=推送单会话概览，conversation_id={}，原因=app_handle_missing",
+            conversation_id
+        ));
+        return;
+    };
+    if let Err(err) = app_handle.emit("easy-call:conversation-overview-item-updated", &emitted_payload) {
+        runtime_log_error(format!(
+            "[会话概览] 失败，任务=推送单会话概览，conversation_id={}，error={}",
+            conversation_id, err
+        ));
     }
 }
 
@@ -1321,39 +1360,7 @@ fn emit_unarchived_conversation_overview_item_updated_payload(
     state: &AppState,
     payload: &UnarchivedConversationOverviewItemUpdatedPayload,
 ) {
-    let conversation_id = payload.conversation.conversation_id.trim();
-    let server_time = overview_register_item_broadcast(conversation_id);
-    let emitted_payload = UnarchivedConversationOverviewItemUpdatedPayload {
-        conversation: payload.conversation.clone(),
-        server_time,
-    };
-    ide_chat_broadcast_notification(
-        "conversation.overviewItemUpdated",
-        serde_json::json!(&emitted_payload),
-    );
-    let app_handle = match state.app_handle.lock() {
-        Ok(guard) => guard.as_ref().cloned(),
-        Err(err) => {
-            runtime_log_error(format!(
-                "[会话概览] 失败，任务=推送单会话概览，阶段=获取app_handle，conversation_id={}，error={:?}",
-                conversation_id, err
-            ));
-            None
-        }
-    };
-    let Some(app_handle) = app_handle else {
-        runtime_log_warn(format!(
-            "[会话概览] 跳过，任务=推送单会话概览，conversation_id={}，原因=app_handle_missing",
-            conversation_id
-        ));
-        return;
-    };
-    if let Err(err) = app_handle.emit("easy-call:conversation-overview-item-updated", &emitted_payload) {
-        runtime_log_error(format!(
-            "[会话概览] 失败，任务=推送单会话概览，conversation_id={}，error={}",
-            conversation_id, err
-        ));
-    }
+    overview_register_item_broadcast(state, payload);
 }
 
 fn emit_unarchived_conversation_overview_item_updated_from_state(
