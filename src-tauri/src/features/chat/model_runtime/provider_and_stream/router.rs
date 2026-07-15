@@ -806,5 +806,11 @@ async fn call_model_openai_style(
             timeline: round_timeline,
         },
     };
-    ModelCallExecutionResult { result, log_parts }
+    ModelCallExecutionResult {
+        result,
+        log_parts,
+        compaction_preserved_messages: auto_compaction_context
+            .and_then(|context| context.compaction_preserved_messages.lock().ok())
+            .and_then(|mut guard| guard.take()),
+    }
 }

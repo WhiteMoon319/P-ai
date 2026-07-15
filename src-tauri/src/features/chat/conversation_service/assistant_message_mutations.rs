@@ -251,20 +251,36 @@ impl ConversationServiceV2 {
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned)
             .unwrap_or_else(now_iso);
-        let mut message = ChatMessage {
-            id: assistant_message_id.to_string(),
-            role: "assistant".to_string(),
-            created_at,
-            speaker_agent_id: Some(speaker_agent_id.to_string()),
-            parts: vec![MessagePart::Text {
-                text: String::new(),
-                reasoning_content: None,
-            }],
-            extra_text_blocks: Vec::new(),
-            provider_meta: None,
-            tool_call: None,
-            mcp_call: None,
-            meme_annotations: None,
+        // 调度开始持有的 assistant_message_id 是唯一真相：
+        // 有压缩保留消息时，bootstrap 直接写成完整消息；没有则写空壳。
+        let mut message = if let Some(preserved) = input.compaction_preserved_messages.as_ref() {
+            build_stop_chat_partial_assistant_message_for_id(
+                assistant_message_id,
+                speaker_agent_id,
+                &created_at,
+                Some(speaker_agent_id.to_string()),
+                None,
+                None,
+                &preserved.assistant_text,
+                &preserved.activity_reasoning_text,
+                &preserved.tool_history_events,
+            )
+        } else {
+            ChatMessage {
+                id: assistant_message_id.to_string(),
+                role: "assistant".to_string(),
+                created_at,
+                speaker_agent_id: Some(speaker_agent_id.to_string()),
+                parts: vec![MessagePart::Text {
+                    text: String::new(),
+                    reasoning_content: None,
+                }],
+                extra_text_blocks: Vec::new(),
+                provider_meta: None,
+                tool_call: None,
+                mcp_call: None,
+                meme_annotations: None,
+            }
         };
         merge_provider_meta_patch_v2(&mut message.provider_meta, input.provider_meta_patch.clone());
 

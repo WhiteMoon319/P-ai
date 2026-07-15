@@ -4996,6 +4996,7 @@
                     speaker_agent_id: DEFAULT_AGENT_ID.to_string(),
                     created_at: Some(now.clone()),
                     provider_meta_patch: None,
+                    compaction_preserved_messages: None,
                 },
             )
             .expect("bootstrap assistant should succeed");
@@ -5086,6 +5087,7 @@
                     speaker_agent_id: DEFAULT_AGENT_ID.to_string(),
                     created_at: Some(now),
                     provider_meta_patch: None,
+                    compaction_preserved_messages: None,
                 },
             )
             .expect("bootstrap delegate assistant should succeed");
@@ -5131,6 +5133,7 @@
                     speaker_agent_id: DEFAULT_AGENT_ID.to_string(),
                     created_at: Some(now.clone()),
                     provider_meta_patch: None,
+                    compaction_preserved_messages: None,
                 },
             )
             .expect("bootstrap assistant should succeed");
@@ -5188,6 +5191,7 @@
                     speaker_agent_id: DEFAULT_AGENT_ID.to_string(),
                     created_at: Some(now.clone()),
                     provider_meta_patch: None,
+                    compaction_preserved_messages: None,
                 },
             )
             .expect("bootstrap assistant should succeed");
@@ -5265,6 +5269,7 @@
                     speaker_agent_id: DEFAULT_AGENT_ID.to_string(),
                     created_at: Some(now.clone()),
                     provider_meta_patch: None,
+                    compaction_preserved_messages: None,
                 },
             )
             .expect("bootstrap assistant should succeed");

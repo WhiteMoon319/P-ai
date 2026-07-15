@@ -146,6 +146,9 @@ struct ToolLoopAutoCompactionContext {
     chat_overrides: Option<ChatPromptOverrides>,
     enable_pdf_images: bool,
     trusted_prompt_usage: std::sync::Arc<std::sync::Mutex<Option<TrustedPromptUsage>>>,
+    /// 写入前闸门命中压缩时，把压缩保留消息交回外层调度。
+    compaction_preserved_messages:
+        std::sync::Arc<std::sync::Mutex<Option<CompactionPreservedMessages>>>,
 }
 
 fn tool_loop_transient_tool_history_message(events: &[Value]) -> Option<ChatMessage> {
@@ -633,6 +636,7 @@ async fn run_genai_tool_loop(
             .into_iter()
             .map(prepared_tool_call_from_genai)
             .collect::<Vec<_>>();
+        let mut round_completed_tool_result_events = Vec::<Value>::new();
         for batch in split_prepared_tool_calls_into_execution_batches(
             &tool_assembly.tools,
             &tool_assembly.tool_definitions,
@@ -692,20 +696,8 @@ async fn run_genai_tool_loop(
                 &mut tool_history_events,
                 tool_result_event.clone(),
             );
-            sync_completed_tool_history_cache(
-                tool_abort_state,
-                chat_session_key,
-                &tool_history_events,
-            );
-            persist_completed_tool_group_result(
-                tool_abort_state,
-                auto_compaction_context,
-                selected_api,
-                trusted_input_tokens,
-                chat_session_key,
-                assistant_tool_group_history_event.clone(),
-                tool_result_event,
-            )?;
+            // 判定前不写临时账本；仅内存累积本轮事件。
+            round_completed_tool_result_events.push(tool_result_event);
 
             if tool_loop_should_close_for_guided_queue(tool_abort_state, auto_compaction_context) {
                 runtime_log_info(format!(
@@ -777,11 +769,7 @@ async fn run_genai_tool_loop(
                     "screenshotArtifactMaxRetained": SCREENSHOT_ARTIFACT_MAX_ITEMS,
                     "screenshotImageCount": cached.images.len()
                 }));
-                sync_completed_tool_history_cache(
-                    tool_abort_state,
-                    chat_session_key,
-                    &tool_history_events,
-                );
+                // 判定前不写临时账本。
             }
             }
 
@@ -831,6 +819,43 @@ async fn run_genai_tool_loop(
                 ));
             }
         }
+
+        // 工具整轮执行完毕瞬间判定：判定前未写正式历史/临时账本。
+        let round_history_start = tool_history_events
+            .iter()
+            .rposition(|event| {
+                event
+                    .get("tool_calls")
+                    .and_then(Value::as_array)
+                    .is_some_and(|calls| !calls.is_empty())
+            })
+            .unwrap_or(0);
+        let round_history_events = tool_history_events[round_history_start..].to_vec();
+        if apply_compaction_preserved_gate_after_tool_round(
+            tool_abort_state,
+            auto_compaction_context,
+            selected_api,
+            resolved_api,
+            on_delta,
+            chat_session_key,
+            &mut pending_tool_group_result_persists,
+            trusted_input_tokens,
+            &turn_text,
+            &turn_reasoning,
+            &assistant_tool_group_history_event,
+            &round_history_events,
+            &round_completed_tool_result_events,
+        )
+        .await?
+        {
+            return Err(CHAT_DISPATCH_RESTART_AFTER_COMPACTION.to_string());
+        }
+        // 判定为直写后，才同步临时账本（与旧语义一致）。
+        sync_completed_tool_history_cache(
+            tool_abort_state,
+            chat_session_key,
+            &tool_history_events,
+        );
 
         if guided_close_requested {
             return Ok(tool_loop_guided_close_reply(
@@ -1157,6 +1182,7 @@ async fn run_genai_tool_loop_non_stream(
             .into_iter()
             .map(prepared_tool_call_from_genai)
             .collect::<Vec<_>>();
+        let mut round_completed_tool_result_events = Vec::<Value>::new();
         for batch in split_prepared_tool_calls_into_execution_batches(
             &tool_assembly.tools,
             &tool_assembly.tool_definitions,
@@ -1216,20 +1242,8 @@ async fn run_genai_tool_loop_non_stream(
                 &mut tool_history_events,
                 tool_result_event.clone(),
             );
-            sync_completed_tool_history_cache(
-                tool_abort_state,
-                chat_session_key,
-                &tool_history_events,
-            );
-            persist_completed_tool_group_result(
-                tool_abort_state,
-                auto_compaction_context,
-                selected_api,
-                trusted_input_tokens,
-                chat_session_key,
-                assistant_tool_group_history_event.clone(),
-                tool_result_event,
-            )?;
+            // 判定前不写临时账本；仅内存累积本轮事件。
+            round_completed_tool_result_events.push(tool_result_event);
 
             if tool_loop_should_close_for_guided_queue(tool_abort_state, auto_compaction_context) {
                 runtime_log_info(format!(
@@ -1301,11 +1315,7 @@ async fn run_genai_tool_loop_non_stream(
                     "screenshotArtifactMaxRetained": SCREENSHOT_ARTIFACT_MAX_ITEMS,
                     "screenshotImageCount": cached.images.len()
                 }));
-                sync_completed_tool_history_cache(
-                    tool_abort_state,
-                    chat_session_key,
-                    &tool_history_events,
-                );
+                // 判定前不写临时账本。
             }
             }
 
@@ -1355,6 +1365,43 @@ async fn run_genai_tool_loop_non_stream(
                 ));
             }
         }
+
+        // 工具整轮执行完毕瞬间判定：判定前未写正式历史/临时账本。
+        let round_history_start = tool_history_events
+            .iter()
+            .rposition(|event| {
+                event
+                    .get("tool_calls")
+                    .and_then(Value::as_array)
+                    .is_some_and(|calls| !calls.is_empty())
+            })
+            .unwrap_or(0);
+        let round_history_events = tool_history_events[round_history_start..].to_vec();
+        if apply_compaction_preserved_gate_after_tool_round(
+            tool_abort_state,
+            auto_compaction_context,
+            selected_api,
+            resolved_api,
+            on_delta,
+            chat_session_key,
+            &mut pending_tool_group_result_persists,
+            trusted_input_tokens,
+            &turn_text,
+            &turn_reasoning,
+            &assistant_tool_group_history_event,
+            &round_history_events,
+            &round_completed_tool_result_events,
+        )
+        .await?
+        {
+            return Err(CHAT_DISPATCH_RESTART_AFTER_COMPACTION.to_string());
+        }
+        // 判定为直写后，才同步临时账本（与旧语义一致）。
+        sync_completed_tool_history_cache(
+            tool_abort_state,
+            chat_session_key,
+            &tool_history_events,
+        );
 
         if guided_close_requested {
             return Ok(tool_loop_guided_close_reply(

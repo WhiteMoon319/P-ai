@@ -21,6 +21,144 @@ struct PlanToolResultState {
     stop_tool_loop: bool,
 }
 
+fn current_prompt_tokens_for_preserved_gate(
+    context: Option<&ToolLoopAutoCompactionContext>,
+    trusted_input_tokens: Option<u64>,
+) -> u64 {
+    if let Some(tokens) = trusted_input_tokens.filter(|value| *value > 0) {
+        return tokens;
+    }
+    let Some(context) = context else {
+        return 0;
+    };
+    context
+        .trusted_prompt_usage
+        .lock()
+        .ok()
+        .and_then(|guard| guard.as_ref().map(|usage| usage.effective_prompt_tokens))
+        .unwrap_or(0)
+}
+
+/// 工具整轮执行完立刻判定。判定前不得写正式历史，也不得写临时账本。
+async fn apply_compaction_preserved_gate_after_tool_round(
+    state: Option<&AppState>,
+    context: Option<&ToolLoopAutoCompactionContext>,
+    selected_api: &ApiConfig,
+    resolved_api: &ResolvedApiConfig,
+    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    chat_session_key: &str,
+    pending_tool_group_result_persists: &mut Vec<tauri::async_runtime::JoinHandle<Result<(), String>>>,
+    trusted_input_tokens: Option<u64>,
+    turn_text: &str,
+    turn_reasoning: &str,
+    assistant_tool_group_history_event: &Value,
+    round_history_events: &[Value],
+    completed_tool_result_events: &[Value],
+) -> Result<bool, String> {
+    // 返回 true = 应走原压缩重启路径。
+    if completed_tool_result_events.is_empty() {
+        return Ok(false);
+    }
+    // 本轮完整事件切片：assistant tool_calls、tool results、以及本轮旁路注入事件。
+    let preserved = CompactionPreservedMessages::new(
+        turn_text,
+        turn_reasoning,
+        round_history_events.to_vec(),
+    );
+    let current_tokens = current_prompt_tokens_for_preserved_gate(context, trusted_input_tokens);
+    let group_tokens = preserved.token_usage();
+    let context_window = selected_api.context_window_tokens.max(1);
+    let should_compact =
+        (current_tokens as f64 + group_tokens as f64) / f64::from(context_window) >= 0.82;
+    runtime_log_info(format!(
+        "[聊天] 工具执行完即时闸门 session={} should_compact={} current_tokens={} group_tokens={} context_window={}",
+        chat_session_key,
+        should_compact,
+        current_tokens,
+        group_tokens,
+        selected_api.context_window_tokens
+    ));
+
+    if !should_compact {
+        // 只有判定可写，才写正式历史，并同步临时账本。
+        for tool_result_event in completed_tool_result_events {
+            persist_completed_tool_group_result(
+                state,
+                context,
+                selected_api,
+                trusted_input_tokens,
+                chat_session_key,
+                assistant_tool_group_history_event.clone(),
+                tool_result_event.clone(),
+            )?;
+        }
+        // 正式写入后，临时账本与旧语义一致：记录“已正式接住”的完整工具历史。
+        // 这里由调用方在拿到完整 tool_history_events 后 sync；本函数只负责正式写入。
+        return Ok(false);
+    }
+
+    // 超限：不写正式历史，不写临时账本；只把本轮工具组交给压缩后的新调度。
+    let state = state.ok_or_else(|| "缺少应用状态，无法整理上下文。".to_string())?;
+    let context = context.ok_or_else(|| "缺少当前调度上下文，无法整理上下文。".to_string())?;
+    if context.remote_im_reply_delegate_id.is_some() {
+        return Err("远程应答委托冻结快照期间不允许自动压缩重启。".to_string());
+    }
+    if let Ok(mut guard) = context.compaction_preserved_messages.lock() {
+        *guard = Some(preserved);
+    }
+    let reason = "preserve_tool_group_before_persist";
+    await_pending_tool_group_result_persists(
+        pending_tool_group_result_persists,
+        chat_session_key,
+        reason,
+    )
+    .await?;
+    let checkpoint = persist_tool_loop_compaction_checkpoint(
+        state,
+        context,
+        on_delta,
+        &[],
+        "",
+        "",
+        chat_session_key,
+        reason,
+    )?;
+    let archive_res = run_context_compaction_pipeline(
+        state,
+        selected_api,
+        resolved_api,
+        &checkpoint.refreshed_source,
+        &context.agent.id,
+        reason,
+        "COMPACTION-BEFORE-TOOL-CONTINUE",
+        &checkpoint.boundary_messages,
+        false,
+    )
+    .await;
+    match archive_res {
+        Ok(result) => {
+            if let Some(warning) = result
+                .warning
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                runtime_log_warn(format!(
+                    "[聊天] 工具写入前上下文整理 完成 conversation_id={} warning={}",
+                    context.conversation_id, warning
+                ));
+            } else {
+                runtime_log_info(format!(
+                    "[聊天] 工具写入前上下文整理 完成 conversation_id={} reason={}",
+                    context.conversation_id, reason
+                ));
+            }
+            Ok(true)
+        }
+        Err(err) => Err(format!("自动整理失败：{err}")),
+    }
+}
+
 fn terminal_task_complete_result(tool_name: &str, tool_args: &str, tool_result: &ProviderToolResult) -> Option<String> {
     if tool_name != "task" || tool_result.is_error {
         return None;

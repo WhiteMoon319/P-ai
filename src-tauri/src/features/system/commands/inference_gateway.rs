@@ -24,6 +24,8 @@ struct ModelCallLogParts {
 struct ModelCallExecutionResult {
     result: Result<ModelReply, String>,
     log_parts: ModelCallLogParts,
+    /// 压缩重启时交给外层调度上下文的压缩保留消息；仅重启路径使用。
+    compaction_preserved_messages: Option<CompactionPreservedMessages>,
 }
 
 struct ProviderConcurrencyGuard {
@@ -686,7 +688,11 @@ async fn invoke_model_with_policy(
             timeline: None,
         },
     };
-    ModelCallExecutionResult { result, log_parts }
+    ModelCallExecutionResult {
+        result,
+        log_parts,
+        compaction_preserved_messages: None,
+    }
 }
 
 fn quick_json_prepared_prompt(prompt: &str) -> PreparedPrompt {

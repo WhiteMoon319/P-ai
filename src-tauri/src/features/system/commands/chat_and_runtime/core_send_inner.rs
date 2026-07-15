@@ -262,6 +262,12 @@ fn restart_dispatch_round_after_context_compaction(
     let stream_started_at = now_iso();
     let stream_started_at_ms = now_unix_ms();
     let assistant_message_id = Uuid::new_v4().to_string();
+    let preserved = if runtime_context.compaction_preserved_messages_ready {
+        runtime_context.compaction_preserved_messages_ready = false;
+        runtime_context.compaction_preserved_messages.take()
+    } else {
+        None
+    };
     conversation_service_v2().bootstrap_streaming_assistant_message(
         state,
         &AssistantMessageBootstrapInput {
@@ -270,6 +276,7 @@ fn restart_dispatch_round_after_context_compaction(
             speaker_agent_id: agent_id.to_string(),
             created_at: Some(stream_started_at.clone()),
             provider_meta_patch: None,
+            compaction_preserved_messages: preserved,
         },
     )?;
     reset_conversation_stream_runtime_cache(
@@ -387,6 +394,7 @@ async fn send_chat_message_inner(
                             speaker_agent_id: early_agent_id.to_string(),
                             created_at: Some(stream_started_at.clone()),
                             provider_meta_patch: None,
+                            compaction_preserved_messages: None,
                         },
                     )?;
                 }
@@ -453,6 +461,7 @@ async fn send_chat_message_inner(
                             speaker_agent_id: speaker_agent_id.to_string(),
                             created_at: Some(now_iso()),
                             provider_meta_patch: None,
+                            compaction_preserved_messages: None,
                         },
                     )?;
                 }
@@ -1855,6 +1864,7 @@ async fn send_chat_message_inner(
                 chat_overrides: chat_overrides.clone(),
                 enable_pdf_images: snapshot.enable_pdf_images,
                 trusted_prompt_usage: std::sync::Arc::new(std::sync::Mutex::new(None)),
+                compaction_preserved_messages: std::sync::Arc::new(std::sync::Mutex::new(None)),
             })
         };
 
@@ -2280,6 +2290,10 @@ async fn send_chat_message_inner(
                     "[聊天调度] 续调整理命中，当前调度闭口并准备重开: conversation_id={}",
                     conversation_id
                 ));
+                runtime_context.compaction_preserved_messages =
+                    chat_round_execution.compaction_preserved_messages.clone();
+                runtime_context.compaction_preserved_messages_ready =
+                    runtime_context.compaction_preserved_messages.is_some();
                 dispatch_assistant_message_id = restart_dispatch_round_after_context_compaction(
                     &state,
                     &mut runtime_context,
@@ -2627,6 +2641,7 @@ async fn send_chat_message_inner(
                             speaker_agent_id: current_agent.id.clone(),
                             created_at: Some(now_iso()),
                             provider_meta_patch: Some(provider_meta_patch.clone()),
+                            compaction_preserved_messages: None,
                         },
                     )?;
                     conversation_service_v2().append_final_text_to_assistant_message(

@@ -1401,6 +1401,7 @@ async fn activate_main_assistant(
             speaker_agent_id: executor_agent_id.clone(),
             created_at: Some(stream_started_at.clone()),
             provider_meta_patch: None,
+            compaction_preserved_messages: None,
         },
     )?;
     reset_conversation_stream_runtime_cache(

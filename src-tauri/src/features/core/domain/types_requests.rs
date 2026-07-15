@@ -188,8 +188,76 @@ struct RuntimeContext {
     /// 仅在进程内传递，不能序列化进任务或持久化状态。
     #[serde(skip)]
     remote_im_reply_prompt_snapshot_messages: Option<Vec<ChatMessage>>,
+    /// 压缩保留消息：仅进程内传递；压缩完成后置为 ready，新调度 bootstrap 才能消费。
+    #[serde(skip)]
+    compaction_preserved_messages: Option<CompactionPreservedMessages>,
+    #[serde(skip)]
+    compaction_preserved_messages_ready: bool,
     #[serde(default)]
     remote_im_dynamic_boundary: bool,
+}
+
+/// 压缩保留消息：一轮已完成但未写入旧段的 assistant 正文/思维链/工具事件。
+#[derive(Debug, Clone, PartialEq)]
+struct CompactionPreservedMessages {
+    assistant_text: String,
+    activity_reasoning_text: String,
+    tool_history_events: Vec<Value>,
+}
+
+impl CompactionPreservedMessages {
+    fn new(
+        assistant_text: impl Into<String>,
+        activity_reasoning_text: impl Into<String>,
+        tool_history_events: Vec<Value>,
+    ) -> Self {
+        Self {
+            assistant_text: assistant_text.into(),
+            activity_reasoning_text: activity_reasoning_text.into(),
+            tool_history_events,
+        }
+    }
+
+    /// 复用现有 `estimated_tokens_for_text`，只估本组消息本身。
+    fn token_usage(&self) -> u64 {
+        let mut total = 0.0f64;
+        total += estimated_tokens_for_text(self.assistant_text.trim());
+        // 与 prepare 估算一致：reasoning 不计入 prompt 输入。
+        for event in &self.tool_history_events {
+            let role = event
+                .get("role")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .unwrap_or_default();
+            if role.eq_ignore_ascii_case("assistant") {
+                if let Some(content) = event.get("content").and_then(Value::as_str) {
+                    total += estimated_tokens_for_text(content);
+                }
+                if let Some(calls) = event.get("tool_calls").and_then(Value::as_array) {
+                    for call in calls {
+                        if let Some(function) = call.get("function") {
+                            if let Some(name) = function.get("name").and_then(Value::as_str) {
+                                total += estimated_tokens_for_text(name);
+                            }
+                            if let Some(arguments) =
+                                function.get("arguments").and_then(Value::as_str)
+                            {
+                                total += estimated_tokens_for_text(arguments);
+                            }
+                        }
+                    }
+                }
+            } else if role.eq_ignore_ascii_case("tool") {
+                if let Some(content) = event.get("content").and_then(Value::as_str) {
+                    total += estimated_tokens_for_text(content);
+                }
+            } else if let Some(content) = event.get("content").and_then(Value::as_str) {
+                total += estimated_tokens_for_text(content);
+            }
+            total += 4.0;
+        }
+        total.ceil().max(0.0).min(u64::MAX as f64) as u64
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -518,3 +586,29 @@ struct ConversationListActivityMark {
     failed_message: Option<String>,
     completed_at: Option<String>,
 }
+
+#[cfg(test)]
+mod compaction_preserved_messages_tests {
+    use super::*;
+
+    #[test]
+    fn compaction_preserved_messages_token_usage_should_be_stable() {
+        let group = CompactionPreservedMessages::new(
+            "hello",
+            "think",
+            vec![
+                serde_json::json!({
+                    "role":"assistant",
+                    "content": null,
+                    "tool_calls":[{"id":"c1","type":"function","function":{"name":"read_file","arguments":"{\"path\":\"a\"}"}}]
+                }),
+                serde_json::json!({"role":"tool","tool_call_id":"c1","content":"body"}),
+            ],
+        );
+        let a = group.token_usage();
+        let b = group.token_usage();
+        assert_eq!(a, b);
+        assert!(a > 0);
+    }
+}
+
