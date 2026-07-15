@@ -609,6 +609,26 @@ const strokeDashoffset = computed(() => {
 
 const windowWidth = ref(typeof window === "undefined" ? 0 : window.innerWidth);
 
+const TITLEBAR_DRAG_START_DISTANCE = 4;
+
+let pendingTitlebarDrag: { x: number; y: number } | null = null;
+
+function clearPendingTitlebarDrag() {
+  pendingTitlebarDrag = null;
+}
+
+function handleWindowMouseMove(event: MouseEvent) {
+  const start = pendingTitlebarDrag;
+  if (!start) return;
+  if ((event.buttons & 1) === 0) {
+    clearPendingTitlebarDrag();
+    return;
+  }
+  if (Math.hypot(event.clientX - start.x, event.clientY - start.y) < TITLEBAR_DRAG_START_DISTANCE) return;
+  clearPendingTitlebarDrag();
+  emit("startDrag");
+}
+
 function updateWindowWidth() {
   windowWidth.value = typeof window === "undefined" ? 0 : window.innerWidth;
 }
@@ -632,11 +652,12 @@ function handleTitlebarMouseDown(event: MouseEvent) {
   if (event.button !== 0) return;
   if (isInteractiveTitlebarTarget(event.target)) return;
   if (event.detail >= 2) {
+    clearPendingTitlebarDrag();
     event.preventDefault();
     event.stopPropagation();
     return;
   }
-  emit("startDrag");
+  pendingTitlebarDrag = { x: event.clientX, y: event.clientY };
 }
 
 function headerPaneWidth(side: "left" | "right"): number {
@@ -1299,6 +1320,9 @@ function handleCreateConversationDialogKeydown(event: KeyboardEvent) {
 onMounted(() => {
   loadRecentConversationTopics();
   document.addEventListener("pointerdown", handleDocumentPointerDown);
+  window.addEventListener("mousemove", handleWindowMouseMove);
+  window.addEventListener("mouseup", clearPendingTitlebarDrag);
+  window.addEventListener("blur", clearPendingTitlebarDrag);
   window.addEventListener("keydown", handleWindowKeydown);
   window.addEventListener("easy-call:open-create-conversation-dialog", handleOpenCreateConversationDialogEvent);
   updateWindowWidth();
@@ -1307,6 +1331,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", handleDocumentPointerDown);
+  window.removeEventListener("mousemove", handleWindowMouseMove);
+  window.removeEventListener("mouseup", clearPendingTitlebarDrag);
+  window.removeEventListener("blur", clearPendingTitlebarDrag);
   window.removeEventListener("keydown", handleWindowKeydown);
   window.removeEventListener("easy-call:open-create-conversation-dialog", handleOpenCreateConversationDialogEvent);
   window.removeEventListener("resize", updateWindowWidth);
