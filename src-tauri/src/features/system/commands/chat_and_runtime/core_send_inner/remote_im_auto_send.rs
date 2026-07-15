@@ -428,6 +428,12 @@ async fn remote_im_auto_send_assistant_reply_to_source(
             source.channel_id, source.remote_contact_id
         ));
     }
+    if remote_im_contact_is_muted(state, &contact.id)? {
+        return Err(format!(
+            "联系人处于闭嘴状态，已拦截外发: channel_id={}, contact_id={}",
+            source.channel_id, source.remote_contact_id
+        ));
+    }
     let content = if let Some(segments) = persisted_segments.as_ref() {
         inline_segments_to_remote_im_content_items(state, segments).await?
     } else {
@@ -458,7 +464,12 @@ async fn remote_im_auto_send_assistant_reply_to_source(
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum RemoteImAutoSendExecutionOutcome {
     SkippedEmptyReply,
+    SkippedMuted,
     Sent { action: String },
+}
+
+fn remote_im_auto_send_error_is_muted_gate(error: &str) -> bool {
+    error.contains("联系人处于闭嘴状态")
 }
 
 async fn remote_im_auto_send_and_record_decision(
@@ -489,6 +500,19 @@ async fn remote_im_auto_send_and_record_decision(
             Ok(RemoteImAutoSendExecutionOutcome::Sent { action })
         }
         Ok(None) => Ok(RemoteImAutoSendExecutionOutcome::SkippedEmptyReply),
+        Err(err) if remote_im_auto_send_error_is_muted_gate(&err) => {
+            update_remote_im_reply_decision_for_message(
+                state,
+                conversation_id,
+                assistant_message_id,
+                "muted_blocked",
+                Some(err.as_str()),
+            )
+            .map_err(|update_err| {
+                format!("远程IM因闭嘴拦截发送，但回写拦截状态失败: {update_err}")
+            })?;
+            Ok(RemoteImAutoSendExecutionOutcome::SkippedMuted)
+        }
         Err(err) => {
             if let Err(update_err) = update_remote_im_reply_decision_for_message(
                 state,
@@ -574,6 +598,24 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
                     "info",
                     format!(
                         "[联系人消息] 发出跳过: contact={}, action=reply_async, conversation_id={}, reason=empty_reply",
+                        remote_im_activation_source_log_label(&activation_source),
+                        conversation_id
+                    ),
+                );
+            }
+            Ok(RemoteImAutoSendExecutionOutcome::SkippedMuted) => {
+                runtime_log_warn(format!(
+                    "[远程IM][自动发送] 跳过: conversation_id={}, channel_id={}, contact_id={}, reason=muted, elapsed_ms={}",
+                    conversation_id,
+                    activation_source.channel_id,
+                    activation_source.remote_contact_id,
+                    started.elapsed().as_millis()
+                ));
+                remote_im_append_channel_log(
+                    &activation_source.channel_id,
+                    "info",
+                    format!(
+                        "[联系人消息] 发出跳过: contact={}, action=reply_async, conversation_id={}, reason=muted",
                         remote_im_activation_source_log_label(&activation_source),
                         conversation_id
                     ),

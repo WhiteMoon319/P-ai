@@ -1905,6 +1905,7 @@
     fn remote_im_prepare_enqueue_runtime_state_should_mute_and_block_when_mute_keyword_matched() {
         let state = remote_im_test_state();
         let mut contact = remote_im_test_contact("contact-a", "conversation-a");
+        contact.remote_contact_type = "group".to_string();
         contact.mute_keywords = vec!["闭嘴".to_string()];
         contact.unmute_keywords = vec!["张嘴".to_string()];
         contact.mute_duration_seconds = 600;
@@ -1920,6 +1921,66 @@
         let runtime = runtime_states.get("contact-a").expect("runtime exists");
         assert!(runtime.mute_until.is_some());
         assert_eq!(runtime.presence_state, RemoteImPresenceState::Away);
+    }
+
+    #[test]
+    fn mute_keyword_should_abort_active_reply_delegates_for_contact() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact("contact-a", "conversation-a");
+        contact.remote_contact_type = "group".to_string();
+        contact.mute_keywords = vec!["闭嘴".to_string()];
+        contact.mute_duration_seconds = 600;
+        lock_remote_im_reply_delegate_runtimes(&state)
+            .expect("lock delegate runtimes")
+            .insert(
+                "delegate-muted".to_string(),
+                RemoteImReplyDelegateRuntime {
+                    delegate_id: "delegate-muted".to_string(),
+                    contact_id: contact.id.clone(),
+                    conversation_id: "conversation-a".to_string(),
+                    trigger_message_id: "trigger-a".to_string(),
+                    started_at: now_iso(),
+                    prompt_snapshot_messages: vec![remote_im_test_group_user_message("user-a")],
+                    guidance_messages: std::collections::VecDeque::new(),
+                    consumed_guidance_messages: Vec::new(),
+                    cancelled: false,
+                    terminal: false,
+                    session_agent_id: "agent-a".to_string(),
+                },
+            );
+
+        let (activate_assistant, reason) =
+            remote_im_prepare_enqueue_runtime_state(&state, &contact, "现在闭嘴")
+                .expect("prepare runtime state");
+
+        assert!(!activate_assistant);
+        assert!(reason.contains("闭嘴词"));
+        assert!(!remote_im_reply_delegate_is_active(&state, "delegate-muted"));
+        assert!(
+            remote_im_reply_delegate_active_ids_for_contact(&state, &contact.id)
+                .expect("list active delegates")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn remote_im_contact_is_muted_should_expire_and_clear_mute_until() {
+        let state = remote_im_test_state();
+        let contact = remote_im_test_contact("contact-a", "conversation-a");
+        {
+            let mut states = lock_remote_im_contact_runtime_states(&state).expect("lock states");
+            remote_im_contact_runtime_state_mut(&mut states, &contact.id).mute_until =
+                Some(remote_im_resolve_mute_until(now_utc() - time::Duration::seconds(5), 1));
+        }
+
+        assert!(!remote_im_contact_is_muted(&state, &contact.id).expect("check mute"));
+        assert!(
+            lock_remote_im_contact_runtime_states(&state)
+                .expect("lock states")
+                .get(&contact.id)
+                .and_then(|runtime| runtime.mute_until.as_ref())
+                .is_none()
+        );
     }
 
     #[test]

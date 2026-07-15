@@ -400,6 +400,32 @@ fn remote_im_reply_delegate_active_ids_for_contact(
         .collect())
 }
 
+fn abort_remote_im_reply_delegates_for_contact(
+    state: &AppState,
+    contact_id: &str,
+    reason: &str,
+) -> Result<usize, String> {
+    let delegate_ids = remote_im_reply_delegate_active_ids_for_contact(state, contact_id)?;
+    let mut aborted = 0usize;
+    for delegate_id in delegate_ids {
+        match abort_remote_im_reply_delegate(state, &delegate_id, reason) {
+            Ok(true) => aborted += 1,
+            Ok(false) => {}
+            Err(err) => {
+                // runtime 可能已从活跃表移除，但归档/状态回写失败；不能因此中断其余委托的中止。
+                runtime_log_warn(format!(
+                    "[远程应答委托] 降级，任务=闭嘴中止，delegate_id={}，error={}",
+                    delegate_id, err
+                ));
+                if !remote_im_reply_delegate_is_active(state, &delegate_id) {
+                    aborted += 1;
+                }
+            }
+        }
+    }
+    Ok(aborted)
+}
+
 fn remote_im_reply_delegate_finish(
     state: &AppState,
     delegate_id: &str,

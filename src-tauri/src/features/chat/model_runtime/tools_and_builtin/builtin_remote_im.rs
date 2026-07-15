@@ -355,6 +355,22 @@ async fn remote_im_send_content_payload(
     if content.is_empty() {
         return Err("发送内容不能为空".to_string());
     }
+    if remote_im_contact_is_muted(state, &contact.id)? {
+        remote_im_append_channel_log_async(
+            &contact.channel_id,
+            "info",
+            format!(
+                "[联系人消息] 发出跳过: contact={}, action={}, reason=muted",
+                remote_im_contact_log_label(contact),
+                action.trim()
+            ),
+        )
+        .await;
+        return Err(format!(
+            "联系人处于闭嘴状态，已拦截外发: contact_id={}",
+            contact.id
+        ));
+    }
     let content_digest = remote_im_outbound_content_digest(&content);
     let payload = serde_json::json!({
         "channel_id": contact.channel_id,

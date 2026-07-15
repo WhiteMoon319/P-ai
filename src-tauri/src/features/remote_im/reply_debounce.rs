@@ -81,10 +81,18 @@ fn remote_im_event_hits_wake(contact: &RemoteImContact, event: &ChatPendingEvent
 }
 
 fn remote_im_contact_is_muted(state: &AppState, contact_id: &str) -> Result<bool, String> {
-    Ok(lock_remote_im_contact_runtime_states(state)?
-        .get(contact_id)
-        .and_then(|runtime| runtime.mute_until.as_deref())
-        .is_some())
+    let mut runtime_states = lock_remote_im_contact_runtime_states(state)?;
+    let Some(runtime) = runtime_states.get_mut(contact_id) else {
+        return Ok(false);
+    };
+    let Some(mute_until) = runtime.mute_until.clone() else {
+        return Ok(false);
+    };
+    if remote_im_is_mute_expired(&mute_until, now_utc()) {
+        runtime.mute_until = None;
+        return Ok(false);
+    }
+    Ok(true)
 }
 
 fn clear_remote_im_debounces_for_contact(
@@ -104,6 +112,20 @@ fn clear_remote_im_debounces_for_contact(
         .assistant_by_sender
         .retain(|key, _| !key.starts_with(&assistant_prefix));
     debounces.secretary_by_contact.remove(&secretary_key);
+    Ok(())
+}
+
+fn remote_im_enforce_mute_side_effects(
+    state: &AppState,
+    contact_id: &str,
+    reason: &str,
+) -> Result<(), String> {
+    clear_remote_im_debounces_for_contact(state, contact_id)?;
+    let aborted = abort_remote_im_reply_delegates_for_contact(state, contact_id, reason)?;
+    runtime_log_info(format!(
+        "[远程联系人状态机] 闭嘴善后 完成: contact_id={}, aborted_delegate_count={}, reason={}",
+        contact_id, aborted, reason
+    ));
     Ok(())
 }
 

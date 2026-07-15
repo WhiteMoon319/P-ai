@@ -547,38 +547,49 @@ fn remote_im_prepare_enqueue_runtime_state(
     }
     if supports_mute {
         if let Some(keyword) = remote_im_find_matched_keyword(message_text, &contact.mute_keywords) {
-        let mute_until = remote_im_resolve_mute_until(now, contact.mute_duration_seconds);
-        runtime.mute_until = Some(mute_until.clone());
-        let reason = format!(
-            "{}命中闭嘴词“{}”，进入闭嘴直到 {}，直接拦截后续判定",
-            mute_prefix, keyword, mute_until
-        );
-        runtime_log_info(format!(
-            "[远程联系人状态机] 入站判定 完成: contact_id={}, presence={:?}, work={:?}, pending={}, activate_assistant={}, reason={}",
-            contact.id,
-            runtime.presence_state,
-            runtime.work_state,
-            runtime.has_pending,
-            false,
-            reason
-        ));
-        remote_im_append_channel_log(
-            &contact.channel_id,
-            "info",
-            format!(
-                "[联系人状态] 入站判定: contact={}, presence={} -> {}, work={} -> {}, pending={} -> {}, activate={}, reason={}",
-                remote_im_contact_log_label(contact),
-                remote_im_presence_state_label(previous_presence),
-                remote_im_presence_state_label(runtime.presence_state),
-                remote_im_work_state_label(previous_work),
-                remote_im_work_state_label(runtime.work_state),
-                remote_im_yes_no(previous_pending),
-                remote_im_yes_no(runtime.has_pending),
-                remote_im_yes_no(false),
+            let mute_until = remote_im_resolve_mute_until(now, contact.mute_duration_seconds);
+            runtime.mute_until = Some(mute_until.clone());
+            let reason = format!(
+                "{}命中闭嘴词“{}”，进入闭嘴直到 {}，直接拦截后续判定",
+                mute_prefix, keyword, mute_until
+            );
+            runtime_log_info(format!(
+                "[远程联系人状态机] 入站判定 完成: contact_id={}, presence={:?}, work={:?}, pending={}, activate_assistant={}, reason={}",
+                contact.id,
+                runtime.presence_state,
+                runtime.work_state,
+                runtime.has_pending,
+                false,
                 reason
-            ),
-        );
-        return Ok((false, reason));
+            ));
+            remote_im_append_channel_log(
+                &contact.channel_id,
+                "info",
+                format!(
+                    "[联系人状态] 入站判定: contact={}, presence={} -> {}, work={} -> {}, pending={} -> {}, activate={}, reason={}",
+                    remote_im_contact_log_label(contact),
+                    remote_im_presence_state_label(previous_presence),
+                    remote_im_presence_state_label(runtime.presence_state),
+                    remote_im_work_state_label(previous_work),
+                    remote_im_work_state_label(runtime.work_state),
+                    remote_im_yes_no(previous_pending),
+                    remote_im_yes_no(runtime.has_pending),
+                    remote_im_yes_no(false),
+                    reason
+                ),
+            );
+            drop(runtime_states);
+            if let Err(err) = remote_im_enforce_mute_side_effects(
+                state,
+                &contact.id,
+                "命中闭嘴词，中止在途应答并拦截外发",
+            ) {
+                runtime_log_warn(format!(
+                    "[远程联系人状态机] 降级，任务=闭嘴善后，contact_id={}，error={}",
+                    contact.id, err
+                ));
+            }
+            return Ok((false, reason));
         }
     }
     if supports_mute && runtime.mute_until.is_some() {
@@ -616,6 +627,17 @@ fn remote_im_prepare_enqueue_runtime_state(
                     reason
                 ),
             );
+            drop(runtime_states);
+            if let Err(err) = remote_im_enforce_mute_side_effects(
+                state,
+                &contact.id,
+                "闭嘴期内重复拦截，继续中止在途应答",
+            ) {
+                runtime_log_warn(format!(
+                    "[远程联系人状态机] 降级，任务=闭嘴善后，contact_id={}，error={}",
+                    contact.id, err
+                ));
+            }
             return Ok((false, reason));
         }
     }
