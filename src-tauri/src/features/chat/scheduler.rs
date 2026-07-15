@@ -441,12 +441,6 @@ fn release_conversation_processing_claim(
     Ok(())
 }
 
-fn has_normal_user_queue_event(events: &std::collections::VecDeque<ChatPendingEvent>) -> bool {
-    events.iter().any(|event| {
-        event.queue_mode == ChatQueueMode::Normal && matches!(event.source, ChatEventSource::User)
-    })
-}
-
 fn claim_queued_conversation_batches(
     state: &AppState,
 ) -> Result<Vec<(String, Vec<ChatPendingEvent>)>, String> {
@@ -469,7 +463,7 @@ fn claim_queued_conversation_batches(
                 .any(|event| event.queue_mode == ChatQueueMode::Guided);
             if slot.state != MainSessionState::Idle
                 || slot.pending_queue.is_empty()
-                || (has_guided && !has_normal_user_queue_event(&slot.pending_queue))
+                || has_guided
                 || claims.contains(conversation_id)
             {
                 return None;
@@ -487,13 +481,12 @@ fn claim_queued_conversation_batches(
     let mut claimed_batches = Vec::<(String, Vec<ChatPendingEvent>)>::new();
     for (conversation_id, _) in eligible.into_iter().take(available_slots) {
         let slot = conversation_slot_mut(&mut slots, &conversation_id);
-        let batch = slot.pending_queue.drain(..).collect::<Vec<_>>();
-        if batch.is_empty() {
+        let Some(event) = slot.pending_queue.pop_front() else {
             continue;
-        }
+        };
         slot.last_activity_at = now_iso();
         claims.insert(conversation_id.clone());
-        claimed_batches.push((conversation_id, batch));
+        claimed_batches.push((conversation_id, vec![event]));
     }
     Ok(claimed_batches)
 }

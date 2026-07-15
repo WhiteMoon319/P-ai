@@ -6731,6 +6731,93 @@
     }
 
     #[test]
+    fn claim_queued_conversation_batches_should_only_take_one_normal_event_per_round() {
+        let state = test_chat_runtime_state();
+        set_conversation_runtime_state(&state, "conversation-a", MainSessionState::AssistantStreaming)
+            .expect("set streaming state");
+
+        let ingress_first =
+            ingress_chat_event(&state, test_pending_event("conversation-a")).expect("queue first");
+        let first_event_id = match ingress_first {
+            ChatEventIngress::Queued { event_id } => event_id,
+            _ => panic!("expected first event queued"),
+        };
+        let ingress_second =
+            ingress_chat_event(&state, test_pending_event("conversation-a")).expect("queue second");
+        let second_event_id = match ingress_second {
+            ChatEventIngress::Queued { event_id } => event_id,
+            _ => panic!("expected second event queued"),
+        };
+
+        set_conversation_runtime_state(&state, "conversation-a", MainSessionState::Idle)
+            .expect("restore idle");
+
+        let claimed_batches = claim_queued_conversation_batches(&state).expect("claim queued batches");
+        assert_eq!(claimed_batches.len(), 1);
+        assert_eq!(claimed_batches[0].0, "conversation-a");
+        assert_eq!(claimed_batches[0].1.len(), 1);
+        assert_eq!(claimed_batches[0].1[0].id, first_event_id);
+
+        let slots = state
+            .conversation_runtime_slots
+            .lock()
+            .expect("lock slots");
+        let slot = slots.get("conversation-a").expect("conversation slot");
+        assert_eq!(slot.pending_queue.len(), 1);
+        assert_eq!(slot.pending_queue[0].id, second_event_id);
+        drop(slots);
+
+        let claims = state
+            .conversation_processing_claims
+            .lock()
+            .expect("lock claims");
+        assert!(claims.contains("conversation-a"));
+    }
+
+    #[test]
+    fn claim_queued_conversation_batches_should_skip_conversation_when_guided_exists() {
+        let state = test_chat_runtime_state();
+        set_conversation_runtime_state(&state, "conversation-a", MainSessionState::AssistantStreaming)
+            .expect("set streaming state");
+
+        let guided_ingress =
+            ingress_chat_event(&state, test_pending_event("conversation-a")).expect("queue guided");
+        let guided_event_id = match guided_ingress {
+            ChatEventIngress::Queued { event_id } => event_id,
+            _ => panic!("expected guided event queued"),
+        };
+        let normal_ingress =
+            ingress_chat_event(&state, test_pending_event("conversation-a")).expect("queue normal");
+        let normal_event_id = match normal_ingress {
+            ChatEventIngress::Queued { event_id } => event_id,
+            _ => panic!("expected normal event queued"),
+        };
+
+        mark_queue_event_guided(&state, &guided_event_id).expect("mark guided");
+        set_conversation_runtime_state(&state, "conversation-a", MainSessionState::Idle)
+            .expect("restore idle");
+
+        let claimed_batches = claim_queued_conversation_batches(&state).expect("claim queued batches");
+        assert!(claimed_batches.is_empty());
+
+        let slots = state
+            .conversation_runtime_slots
+            .lock()
+            .expect("lock slots");
+        let slot = slots.get("conversation-a").expect("conversation slot");
+        assert_eq!(slot.pending_queue.len(), 2);
+        assert_eq!(slot.pending_queue[0].id, guided_event_id);
+        assert_eq!(slot.pending_queue[1].id, normal_event_id);
+        drop(slots);
+
+        let claims = state
+            .conversation_processing_claims
+            .lock()
+            .expect("lock claims");
+        assert!(!claims.contains("conversation-a"));
+    }
+
+    #[test]
     fn claim_guided_queue_events_for_conversation_should_remove_guided_and_keep_normal_events() {
         let state = test_chat_runtime_state();
         set_conversation_runtime_state(&state, "conversation-a", MainSessionState::AssistantStreaming)
