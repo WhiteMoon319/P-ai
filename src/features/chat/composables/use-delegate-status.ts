@@ -213,7 +213,7 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
   }
 
   function applyStatusEvent(payload: DelegateStatusUpdatedPayload | null | undefined) {
-    if (!enabled() || !panelOpen.value || !payloadMatchesActiveConversation(payload)) return;
+    if (!enabled() || !payloadMatchesActiveConversation(payload)) return;
     const delegateId = String(payload?.delegateId || "").trim();
     const status = String(payload?.status || "").trim();
     const rootConversationId = String(payload?.rootConversationId || payload?.conversationId || "").trim();
