@@ -1631,8 +1631,11 @@ async function openActiveConversationInBrowser() {
       input: { forceRefresh: false },
     });
     const localUrl = String(info?.localUrl || "").trim();
-    if (!info?.enabled || !localUrl) {
-      throw new Error(t("status.openLinkUnsupportedInWeb"));
+    if (!info?.enabled) {
+      throw new Error(t("config.networkAccess.disabled"));
+    }
+    if (!info?.running || !localUrl) {
+      throw new Error(t("config.networkAccess.statusUnavailable"));
     }
     const url = new URL(localUrl);
     url.searchParams.set("conversationId", conversationId);
