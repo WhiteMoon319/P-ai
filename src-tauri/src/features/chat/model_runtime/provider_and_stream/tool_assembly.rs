@@ -104,7 +104,7 @@ fn read_provider_tool_definition() -> ProviderToolDefinition {
 fn read_media_provider_tool_definition() -> ProviderToolDefinition {
     ProviderToolDefinition::new(
         READ_MEDIA_TOOL_NAME,
-        "解析本地图片、音频或视频。path 必须是绝对路径；description 用于告诉多模态分析模型重点关注什么。",
+        "解析本地图片、音频或视频；仅在当前看不到图片，或需要解析音频、视频时使用。",
         serde_json::json!({
             "type": "object",
             "properties": {
