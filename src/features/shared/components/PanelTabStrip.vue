@@ -31,6 +31,7 @@
             class="btn btn-ghost btn-sm min-w-0 w-full flex-nowrap overflow-hidden"
             :class="[
               tab.key === activeKey ? 'bg-base-100/60' : '',
+              tab.iconSrc || tab.icon ? 'gap-1.5' : '',
               shouldReserveCloseSpace(tab) ? 'justify-start pr-8' : 'justify-center',
             ]"
             :aria-selected="tab.key === activeKey"
@@ -41,6 +42,12 @@
               :src="tab.iconSrc"
               alt=""
               class="panel-tab-strip-icon size-4 shrink-0 object-contain"
+            />
+            <component
+              :is="tab.icon"
+              v-else-if="tab.icon"
+              class="size-4 shrink-0"
+              aria-hidden="true"
             />
             <span class="min-w-0 truncate font-medium">{{ tab.label }}</span>
           </button>
@@ -120,7 +127,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Component } from "vue";
 import { X } from "@lucide/vue";
 
 type PanelTabStripItem = {
@@ -128,6 +135,7 @@ type PanelTabStripItem = {
   label: string;
   title?: string;
   iconSrc?: string;
+  icon?: Component;
   closeable?: boolean;
   disabled?: boolean;
 };
@@ -148,6 +156,7 @@ const props = withDefaults(defineProps<{
   closeRightTitle?: string;
   closeOthersTitle?: string;
   contextMenuItems?: PanelTabStripContextMenuItem[];
+  showTabBorders?: boolean;
 }>(), {
   activeKey: "",
   ariaLabel: "",
@@ -156,6 +165,7 @@ const props = withDefaults(defineProps<{
   closeRightTitle: "",
   closeOthersTitle: "",
   contextMenuItems: () => [],
+  showTabBorders: true,
 });
 
 const emit = defineEmits<{
@@ -194,7 +204,7 @@ function shouldReserveCloseSpace(tab: PanelTabStripItem) {
 }
 
 function tabBorderClass(tabKey: string, tabIndex: number) {
-  if (tabIndex <= 0) return "";
+  if (!props.showTabBorders || tabIndex <= 0) return "";
   const prevTab = props.tabs[tabIndex - 1];
   if (!prevTab) return "";
   if (tabKey === props.activeKey || prevTab.key === props.activeKey) return "";

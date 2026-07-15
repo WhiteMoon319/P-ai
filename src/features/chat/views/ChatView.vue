@@ -492,6 +492,7 @@
           <PanelTabStrip
             :tabs="monitorPanelTabs"
             :active-key="chatRightPanelMode"
+            :show-tab-borders="false"
             :aria-label="t('chat.monitorPanelTab')"
             @select-tab="selectMonitorPanelTab"
           >
@@ -563,7 +564,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { isDarkAppTheme } from "../../shell/composables/use-app-theme";
-import { ArrowDownToLine, Check, ChevronsDown, ChevronsUp, History, Trash2, Undo2, X } from "@lucide/vue";
+import { ArrowDownToLine, Check, ChevronsDown, ChevronsUp, History, Inbox, ListTodo, Network, Trash2, Undo2, Wrench, X } from "@lucide/vue";
 import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ChatMessageBlock, ChatPersonaPresenceChip, ChatTodoItem, ConversationDelegateStatusSummary, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption, ShellWorkspace } from "../../../types/app";
 import ChatMessageItem from "../components/ChatMessageItem.vue";
@@ -753,11 +754,11 @@ type ToolReviewSidebarTab = "tools" | "delegates" | "tasks" | "fastRequests";
 
 const monitorRightPanelMode = ref<ChatMonitorPanelMode>("delegate");
 
-const monitorPanelTabs = computed<Array<{ key: ChatMonitorPanelMode; label: string; closeable: false }>>(() => [
-  { key: "delegate", label: t("chat.toolReview.delegatesTab"), closeable: false },
-  { key: "tasks", label: t("chat.toolReview.tasksTab"), closeable: false },
-  { key: "tools", label: t("chat.toolReview.toolsTab"), closeable: false },
-  { key: "fastRequests", label: t("chat.fastRequest.tab"), closeable: false },
+const monitorPanelTabs = computed<Array<{ key: ChatMonitorPanelMode; label: string; icon: typeof Network; closeable: false }>>(() => [
+  { key: "delegate", label: t("chat.toolReview.delegatesTab"), icon: Network, closeable: false },
+  { key: "tasks", label: t("chat.toolReview.tasksTab"), icon: ListTodo, closeable: false },
+  { key: "tools", label: t("chat.toolReview.toolsTab"), icon: Wrench, closeable: false },
+  { key: "fastRequests", label: t("chat.fastRequest.tab"), icon: Inbox, closeable: false },
 ]);
 
 const toolReviewSidebarActiveTab = computed<ToolReviewSidebarTab>(() => {
