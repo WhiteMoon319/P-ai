@@ -61,9 +61,6 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
   const chatWindowActiveSynced = ref<boolean | null>(null);
   const tauriWindowLabel = ref("unknown");
   const isChatTauriWindow = ref(false);
-  const detachedChatWindow = ref(false);
-  const detachedChatConversationId = ref("");
-  const detachedTemporaryApiConfigId = ref("");
   const chatWindowEventUnlisteners: Record<string, UnlistenFn | null> = {
     chatHistoryFlushed: null,
     chatRoundStarted: null,
@@ -156,9 +153,6 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
     chatWindowActiveSynced,
     tauriWindowLabel,
     isChatTauriWindow,
-    detachedChatWindow,
-    detachedChatConversationId,
-    detachedTemporaryApiConfigId,
     chatWindowEventUnlisteners,
     currentChatConversationId,
     currentChatPreferredApiConfigId,

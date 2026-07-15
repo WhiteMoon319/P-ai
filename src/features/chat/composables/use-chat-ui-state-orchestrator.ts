@@ -23,7 +23,6 @@ import {
 
 export type ChatUiStateBindings = {
   viewMode: Ref<"chat" | "archives" | "config">;
-  detachedChatWindow: Ref<boolean>;
   currentChatConversationId: Ref<string>;
   toolStatusState: Ref<"running" | "done" | "failed" | "">;
   clearConversationStatus: (conversationId: string, status?: ConversationPipelineStatus) => void;
@@ -175,7 +174,7 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     conversationListTab.value = nextMode;
     storeChatLeftPanelMode(nextMode);
     storeConversationListTab(nextMode);
-    if (!sideConversationListVisible.value && bindings.viewMode.value === "chat" && !bindings.detachedChatWindow.value) {
+    if (!sideConversationListVisible.value && bindings.viewMode.value === "chat") {
       sideConversationListVisible.value = true;
       storeChatSidePanelVisibility("left", true);
     }

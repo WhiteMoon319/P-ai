@@ -1,5 +1,4 @@
 import { nextTick } from "vue";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { i18n } from "../../../i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import { toErrorMessage } from "../../../utils/error";
@@ -446,10 +445,6 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
 
   async function refreshChatUnarchivedConversations() {
     if (bindings.conversationForegroundSyncing.value) return;
-    if (bindings.detachedChatWindow.value) {
-      await refreshRemoteImConversationOverview();
-      return;
-    }
     try {
       bindings.conversationForegroundSyncing.value = true;
       await refreshUnarchivedConversationOverview();
@@ -462,96 +457,9 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
     }
   }
 
-  async function initializeDetachedChatWindow() {
-    if (!bindings.detachedChatWindow.value) return;
-    try {
-      const info = await invokeTauri<any>("get_detached_chat_window_info");
-      const conversationId = String(info?.conversationId || "").trim();
-      if (!info?.detached || !conversationId) {
-        bindings.setStatus(t('chat.foregroundOrchestrator.missingBinding'));
-        try {
-          await getCurrentWindow().close();
-        } catch (closeError) {
-          console.error("[独立聊天窗口] 缺少绑定会话时关闭窗口失败", closeError);
-          bindings.setStatusError("status.requestFailed", closeError);
-        }
-        return;
-      }
-      bindings.detachedChatConversationId.value = conversationId;
-      bindings.currentChatConversationId.value = conversationId;
-      bindings.sideConversationListVisible.value = false;
-      await refreshRemoteImConversationOverview();
-      await nextTick();
-    } catch (error) {
-      bindings.setStatusError("status.loadMessagesFailed", error);
-    }
-  }
-
   async function handleCloseWindow() {
-    if (bindings.detachedChatWindow.value) {
-      await getCurrentWindow().close();
-      return;
-    }
     bindings.freezeForegroundConversation("close_window");
     await bindings.closeWindow();
-  }
-
-  async function detachCurrentConversationToWindow() {
-    console.info("[独立聊天窗口][前端链路] ChatWindowApp 进入 detachCurrentConversationToWindow", {
-      windowLabel: bindings.tauriWindowLabel.value,
-      detachedChatWindow: bindings.detachedChatWindow.value,
-      currentConversationId: String(bindings.currentChatConversationId.value || "").trim(),
-      chatting: bindings.chatting.value,
-      trimming: bindings.trimming.value,
-      compactingConversation: bindings.compactingConversation.value,
-      isSystemNotificationConversation: !!bindings.currentForegroundConversationSummary.value?.isSystemNotificationConversation,
-    });
-    bindings.setStatus(t('chat.foregroundOrchestrator.openingDetached'));
-    if (bindings.detachedChatWindow.value) {
-      console.warn("[独立聊天窗口][前端链路] 当前已经是独立窗口，忽略独立窗口请求");
-      return;
-    }
-    const conversationId = String(bindings.currentChatConversationId.value || "").trim();
-    if (!conversationId || bindings.chatting.value || bindings.trimming.value || bindings.compactingConversation.value) {
-      console.warn("[独立聊天窗口][前端链路] 当前状态不允许独立窗口", {
-        conversationId,
-        chatting: bindings.chatting.value,
-        trimming: bindings.trimming.value,
-        compactingConversation: bindings.compactingConversation.value,
-      });
-      return;
-    }
-    if (bindings.currentForegroundConversationSummary.value?.isSystemNotificationConversation) {
-      console.warn("[独立聊天窗口][前端链路] 系统通知会话不允许独立窗口", { conversationId });
-      bindings.setStatus(t('chat.foregroundOrchestrator.mainConversationNotAllowed'));
-      return;
-    }
-    try {
-      console.info("[独立聊天窗口][前端链路] 准备 invoke detach_current_conversation_to_window", {
-        conversationId,
-      });
-      void invokeTauri<{ conversationId: string; windowLabel: string; systemNotificationConversationId?: string | null }>("detach_current_conversation_to_window", {
-        input: { conversationId },
-      }).then((result) => {
-        console.info("[独立聊天窗口][前端链路] invoke detach_current_conversation_to_window 已返回", result);
-        void syncUnarchivedConversationOverviewChangedSinceWatermark("detach_current_conversation_done");
-      }).catch((error) => {
-        console.error("[独立聊天窗口][前端链路] 打开独立窗口失败", error);
-        bindings.setStatusError("status.loadMessagesFailed", error);
-        void syncUnarchivedConversationOverviewChangedSinceWatermark("detach_current_conversation_failed");
-      });
-      clearForegroundConversation("detach_current_conversation");
-      const systemNotificationConversationId = String(bindings.unarchivedConversations.value.find((item: any) => !!item.isSystemNotificationConversation)?.conversationId || "").trim();
-      if (systemNotificationConversationId) {
-        await switchUnarchivedConversation(systemNotificationConversationId);
-      } else {
-        await syncUnarchivedConversationOverviewChangedSinceWatermark("detach_current_conversation_missing_system");
-      }
-      bindings.setStatus(t('chat.foregroundOrchestrator.detachedRequestSent'));
-    } catch (error) {
-      console.error("[独立聊天窗口][前端链路] 打开独立窗口失败", error);
-      bindings.setStatusError("status.loadMessagesFailed", error);
-    }
   }
 
   async function sendChatFromCurrentWindow(overrides?: { extraTextBlocks?: string[] }) {
@@ -592,9 +500,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
     switchUnarchivedConversation,
     ensureLatestForegroundTailThenScrollToBottom,
     refreshChatUnarchivedConversations,
-    initializeDetachedChatWindow,
     handleCloseWindow,
-    detachCurrentConversationToWindow,
     sendChatFromCurrentWindow,
     freezeForegroundConversation,
     hasActiveForegroundConversation,

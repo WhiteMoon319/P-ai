@@ -2,7 +2,6 @@
   <div class="window-shell text-sm bg-base-200">
     <AppWindowHeader
       view-mode="config"
-      :detached-chat-window="false"
       :current-theme="currentTheme"
       :title-text="t('window.configTitle')"
       :chat-usage-percent="0"

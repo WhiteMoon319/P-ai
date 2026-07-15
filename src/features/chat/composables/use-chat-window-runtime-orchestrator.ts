@@ -113,8 +113,6 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
       currentChatTodos: bindings.currentChatTodos,
       currentForegroundAgentId: bindings.currentForegroundAgentId,
       currentForegroundApiConfigId: bindings.currentForegroundApiConfigId,
-      detachedChatConversationId: bindings.detachedChatConversationId,
-      detachedChatWindow: bindings.detachedChatWindow,
       tauriWindowLabel: bindings.tauriWindowLabel,
       unarchivedConversations: bindings.unarchivedConversations,
       lastOverviewSyncAt: bindings.lastOverviewSyncAt,
@@ -142,9 +140,6 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     config: bindings.config,
     tr: bindings.tr,
     tauriWindowLabel: bindings.tauriWindowLabel,
-    detachedChatWindow: bindings.detachedChatWindow,
-    detachedChatConversationId: bindings.detachedChatConversationId,
-    detachedTemporaryApiConfigId: bindings.detachedTemporaryApiConfigId,
     currentChatConversationId: bindings.currentChatConversationId,
     currentChatPreferredApiConfigId: bindings.currentChatPreferredApiConfigId,
     currentChatTodos: bindings.currentChatTodos,
@@ -189,7 +184,6 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     closeTrimActionDialog: shellDialogFlows.closeTrimActionDialog,
     archiveCurrentConversation: chatRuntime.trimNow,
     getChatFlow: () => bindings.getChatFlow(),
-    detachCurrentConversationToWindow: bindings.detachCurrentConversationToWindow,
     waitPendingConversationPreferredModelPersist: bindings.waitPendingConversationPreferredModelPersist,
     openPromptPreview: () => serviceAssemblies.chatDialogActions.openPromptPreview,
   });
@@ -201,7 +195,6 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     restoreForegroundConversationProjection: conversationOrchestrator.restoreForegroundConversationProjection,
     switchUnarchivedConversation: conversationOrchestrator.switchUnarchivedConversation,
     sendChatFromCurrentWindow: conversationOrchestrator.sendChatFromCurrentWindow,
-    detachCurrentConversationToWindow: conversationOrchestrator.detachCurrentConversationToWindow,
     deleteUnarchivedConversationFromArchives: conversationOrchestrator.deleteUnarchivedConversationFromArchives,
     applyConversationRuntimeStateUpdated: conversationOrchestrator.applyConversationRuntimeStateUpdated,
   });
@@ -230,18 +223,6 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
       const conversationId = String(result?.conversationId || "").trim();
       if (!conversationId) return;
       await conversationOrchestrator.refreshUnarchivedConversationOverview();
-      if (bindings.detachedChatWindow.value) {
-        try {
-          await invokeTauri<{ conversationId: string; windowLabel: string }>("detach_current_conversation_to_window", {
-            input: { conversationId },
-          });
-          bindings.setStatus(bindings.tr("status.conversationBranchOpened", { title: String(result?.title || "").trim() || conversationId }));
-        } catch (detachError) {
-          console.error("[独立聊天窗口] 从消息创建会话分支成功，但打开新独立窗口失败", detachError);
-          bindings.setStatus(bindings.tr("status.conversationBranchDetachFailed", { err: formatI18nError(bindings.tr, "status.requestFailed", detachError) }));
-        }
-        return;
-      }
       const snapshot = await conversationOrchestrator.requestConversationLightSnapshot(conversationId);
       conversationOrchestrator.applyConversationSnapshot(snapshot);
       bindings.setStatus(bindings.tr("status.conversationBranchCreated", { title: String(result?.title || "").trim() || conversationId }));

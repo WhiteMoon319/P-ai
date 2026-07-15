@@ -411,20 +411,6 @@ export function useChatConversationSync(bindings: Record<string, any>) {
   ) {
     const nextConversationId = String(snapshot.conversationId || "").trim();
     const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
-    const detachedConversationId = String(bindings.detachedChatConversationId.value || "").trim();
-    if (
-      bindings.detachedChatWindow.value
-      && detachedConversationId
-      && nextConversationId
-      && nextConversationId !== detachedConversationId
-    ) {
-      console.warn("[独立窗口] 跳过非绑定会话快照", {
-        windowLabel: bindings.tauriWindowLabel.value,
-        detachedConversationId,
-        snapshotConversationId: nextConversationId,
-      });
-      return;
-    }
     const preserveExistingHistory =
       !!options?.preserveExistingHistory
       && !!nextConversationId

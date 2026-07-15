@@ -92,22 +92,6 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
       if (!conversationId) return;
       await bindings.refreshUnarchivedConversationOverview();
       const warning = String(result?.warning || "").trim();
-      if (bindings.detachedChatWindow.value) {
-        try {
-          await invokeTauri<{ conversationId: string; windowLabel: string }>("detach_current_conversation_to_window", {
-            input: { conversationId },
-          });
-          if (warning) {
-            bindings.setStatus(bindings.tr("status.conversationBranchOpenedWithWarning", { warning }));
-          } else {
-            bindings.setStatus(bindings.tr("status.conversationBranchOpened", { title: String(result?.title || "").trim() || conversationId }));
-          }
-        } catch (detachError) {
-          console.error("[独立聊天窗口] 会话分支创建成功，但打开新独立窗口失败", detachError);
-          bindings.setStatus(bindings.tr("status.conversationBranchDetachFailed", { err: bindings.formatRequestFailed(detachError) }));
-        }
-        return;
-      }
       const snapshot = await bindings.requestConversationLightSnapshot(conversationId);
       bindings.applyConversationSnapshot(snapshot);
       if (warning) {
@@ -146,18 +130,6 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
       const conversationId = String(result?.conversationId || "").trim();
       if (!conversationId) return;
       await bindings.refreshUnarchivedConversationOverview();
-      if (bindings.detachedChatWindow.value) {
-        try {
-          await invokeTauri<{ conversationId: string; windowLabel: string }>("detach_current_conversation_to_window", {
-            input: { conversationId },
-          });
-          bindings.setStatus(bindings.tr("status.conversationBranchOpened", { title: String(result?.title || "").trim() || conversationId }));
-        } catch (detachError) {
-          console.error("[独立聊天窗口] 从消息创建会话分支成功，但打开新独立窗口失败", detachError);
-          bindings.setStatus(bindings.tr("status.conversationBranchDetachFailed", { err: bindings.formatRequestFailed(detachError) }));
-        }
-        return;
-      }
       const snapshot = await bindings.requestConversationLightSnapshot(conversationId);
       bindings.applyConversationSnapshot(snapshot);
       bindings.setStatus(bindings.tr("status.conversationBranchCreated", { title: String(result?.title || "").trim() || conversationId }));

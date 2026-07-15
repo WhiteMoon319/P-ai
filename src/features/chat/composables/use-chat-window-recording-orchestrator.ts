@@ -12,7 +12,6 @@ type UseChatWindowRecordingOrchestratorOptions = {
   recording: Ref<boolean>;
   tauriWindowLabel: Ref<string>;
   isChatTauriWindow: Ref<boolean>;
-  detachedChatWindow: Ref<boolean>;
   currentChatConversationId: Ref<string>;
   currentForegroundAgentId: Ref<string>;
   startupDataReady: Ref<boolean>;
@@ -127,7 +126,7 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
   });
 
   function isPrimaryChatWindow(): boolean {
-    return options.tauriWindowLabel.value === "chat" && !options.detachedChatWindow.value;
+    return options.tauriWindowLabel.value === "chat";
   }
 
   function clearRecordHotkeyProbeState() {

@@ -1,4 +1,3 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useViewRefresh } from "../../shell/composables/use-view-refresh";
 import { formatI18nError } from "../../../utils/error";
 import { useChatRuntimeWatchers } from "./use-chat-runtime-watchers";
@@ -81,7 +80,6 @@ export function useChatWindowLifecycleOrchestrator(bindings: Record<string, any>
   useChatWindowEvents({
     unlisteners: bindings.chatWindowEventUnlisteners,
     tauriWindowLabel: bindings.tauriWindowLabel,
-    detachedChatWindow: bindings.detachedChatWindow,
     isChatTauriWindow: bindings.isChatTauriWindow,
     sideConversationListVisible: bindings.sideConversationListVisible,
     toolReviewPanelOpenVisible: bindings.toolReviewPanelOpenVisible,
@@ -125,7 +123,6 @@ export function useChatWindowLifecycleOrchestrator(bindings: Record<string, any>
 
   useChatWindowWatchersGlue({
     viewMode: bindings.viewMode,
-    detachedChatWindow: bindings.detachedChatWindow,
     config: bindings.config,
     currentChatConversationId: bindings.currentChatConversationId,
     currentForegroundApiConfigId: bindings.currentForegroundApiConfigId,
@@ -170,8 +167,6 @@ export function useChatWindowLifecycleOrchestrator(bindings: Record<string, any>
     mediaDragActive: bindings.mediaDragActive,
     recordHotkey: bindings.recordHotkey,
     ensureMessageStoreMigrationGate: async () => {
-      const currentWindowLabel = String(getCurrentWindow().label || "").trim();
-      if (bindings.detachedChatWindow.value || currentWindowLabel.startsWith("chat-detached-")) return;
       await bindings.ensureMessageStoreMigrationGate();
     },
     refreshAllViewData,
@@ -190,7 +185,6 @@ export function useChatWindowLifecycleOrchestrator(bindings: Record<string, any>
     startupOverlayProgressTotal: bindings.startupOverlayProgressTotal,
     setStatus: bindings.setStatus,
     formatRequestFailed: (error: unknown) => formatI18nError(bindings.tr, "status.requestFailed", error),
-    initializeDetachedChatWindow: bindings.initializeDetachedChatWindow,
     refreshGithubUpdateState: bindings.refreshGithubUpdateState,
     config: bindings.config,
     configTab: bindings.configTab,

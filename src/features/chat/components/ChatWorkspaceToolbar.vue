@@ -69,18 +69,6 @@
               <span class="leading-5">{{ t("chat.conversationMenu.setWorkspace") }}</span>
             </button>
           </li>
-          <li v-if="showDetachButton && !busy && !detachDisabled">
-            <button
-              type="button"
-              class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left"
-              :disabled="busy || detachDisabled"
-              @mousedown="handleDetachConversationMouseDown"
-              @click="handleDetachConversationClick"
-            >
-              <ExternalLink class="h-4 w-4 shrink-0" />
-              <span class="leading-5">{{ t("chat.conversationMenu.openDetachedWindow") }}</span>
-            </button>
-          </li>
         </ul>
       </div>
       <SessionControlPanel
@@ -266,8 +254,6 @@ const props = withDefaults(defineProps<{
   showAutoPushMenuItem?: boolean;
   showShareMenuItem?: boolean;
   showWorkspaceMenuItem?: boolean;
-  showDetachButton?: boolean;
-  detachDisabled?: boolean;
   delegateStatuses?: ConversationDelegateStatusSummary[];
 }>(), {
   showTaskCreateMenuItem: true,
@@ -290,7 +276,6 @@ const emit = defineEmits<{
   (e: "openForwardSelection"): void;
   (e: "openAutoPush"): void;
   (e: "openShareSelection"): void;
-  (e: "detachConversation"): void;
   (e: "mentionEntry", entry: ChatMentionEntry): void;
 }>();
 
@@ -523,24 +508,6 @@ function updateMenuPlacement() {
   const rect = menuButtonRef.value?.getBoundingClientRect();
   if (!rect) return;
   menuPlacement.value = rect.top >= window.innerHeight / 2 ? "top" : "bottom";
-}
-
-function handleDetachConversationMouseDown() {
-  updateMenuPlacement();
-  console.info("[独立聊天窗口][前端入口] 工具栏按钮 mousedown", {
-    chatting: props.chatting,
-    frozen: props.frozen,
-    detachDisabled: !!props.detachDisabled,
-  });
-}
-
-function handleDetachConversationClick() {
-  console.info("[独立聊天窗口][前端入口] 工具栏按钮已点击，准备向上派发 detachConversation", {
-    chatting: props.chatting,
-    frozen: props.frozen,
-    detachDisabled: !!props.detachDisabled,
-  });
-  emit("detachConversation");
 }
 
 function avatarInitial(name: string): string {

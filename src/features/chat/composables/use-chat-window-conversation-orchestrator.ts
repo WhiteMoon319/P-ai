@@ -57,9 +57,6 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
     BACKGROUND_CONVERSATION_CACHE_LIMIT: bindings.BACKGROUND_CONVERSATION_CACHE_LIMIT,
     config: bindings.config,
     tauriWindowLabel: bindings.tauriWindowLabel,
-    detachedChatWindow: bindings.detachedChatWindow,
-    detachedChatConversationId: bindings.detachedChatConversationId,
-    detachedTemporaryApiConfigId: bindings.detachedTemporaryApiConfigId,
     currentChatConversationId: bindings.currentChatConversationId,
     currentChatPreferredApiConfigId: bindings.currentChatPreferredApiConfigId,
     currentChatTodos: bindings.currentChatTodos,
@@ -160,7 +157,6 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
   const chatConversationActions = useChatConversationActionsOrchestrator({
     t: bindings.t,
     tr: bindings.tr,
-    detachedChatWindow: bindings.detachedChatWindow,
     currentChatConversationId: bindings.currentChatConversationId,
     currentForegroundAgentId: bindings.currentForegroundAgentId,
     createConversationDepartmentOptions: bindings.createConversationDepartmentOptions,
@@ -181,7 +177,6 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
   });
 
   const chatConversationDialogGlue = useChatConversationDialogGlue({
-    detachedChatWindow: bindings.detachedChatWindow,
     currentChatConversationId: bindings.currentChatConversationId,
     currentForegroundApiConfigId: bindings.currentForegroundApiConfigId,
     currentForegroundAgentId: bindings.currentForegroundAgentId,
@@ -274,9 +269,7 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
     sortUnarchivedConversationOverviewItems,
     pickForegroundConversationId: chatForeground.pickForegroundConversationId,
     clearForegroundConversation: chatForeground.clearForegroundConversation,
-    initializeDetachedChatWindow: chatForeground.initializeDetachedChatWindow,
     handleCloseWindow: chatForeground.handleCloseWindow,
-    detachCurrentConversationToWindow: chatForeground.detachCurrentConversationToWindow,
     hasActiveForegroundConversation: chatForeground.hasActiveForegroundConversation,
     requestConversationLightSnapshot: chatForeground.requestConversationLightSnapshot,
     refreshRemoteImConversationOverview: chatForeground.refreshRemoteImConversationOverview,
@@ -291,7 +284,6 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
     freezeForegroundConversation,
     restoreForegroundConversationProjection,
     switchRemoteImContactConversation: chatRemoteConversation.switchRemoteImContactConversation,
-    openConversationInDetachedWindowById: chatRemoteConversation.openConversationInDetachedWindowById,
     switchChatConversation: chatRemoteConversation.switchChatConversation,
     createUnarchivedConversation: chatConversationActions.createUnarchivedConversation,
     branchConversationFromSelection: chatConversationActions.branchConversationFromSelection,

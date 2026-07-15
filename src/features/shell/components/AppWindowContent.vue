@@ -190,7 +190,6 @@
         :ide-context-groups="[]"
         :attached-ide-context-references="[]"
         :current-theme="currentTheme"
-        :detached-chat-window="detachedChatWindow"
         :side-conversation-list-visible="sideConversationListVisible"
         :initial-tool-review-panel-open="initialToolReviewPanelOpen"
         :conversation-list-tab="conversationListTab"
@@ -236,7 +235,6 @@
         @lock-workspace="onLockChatWorkspace"
         @open-code-review="$emit('open-code-review')"
         @open-supervision-task="openSupervisionTaskDialog"
-        @detach-conversation="handleDetachConversation"
         @close-supervision-task="closeSupervisionTaskDialog"
         @save-supervision-task="saveSupervisionTask"
         @stop-supervision-task="stopSupervisionTask"
@@ -446,7 +444,6 @@ type SelectionSharePayload = {
 const props = defineProps<{
   t: (key: string, params?: Record<string, unknown>) => string;
   viewMode: "chat" | "archives" | "config";
-  detachedChatWindow?: boolean;
   sideConversationListVisible: boolean;
   initialToolReviewPanelOpen: boolean;
   conversationListTab: "local" | "contact" | "task";
@@ -709,7 +706,6 @@ const props = defineProps<{
   confirmPlan: (payload: { messageId: string }) => void;
   onLockChatWorkspace: () => void;
   openSupervisionTaskDialog: () => void;
-  onDetachConversation: () => void;
   closeSupervisionTaskDialog: () => void;
   saveSupervisionTask: (payload: { durationHours: number; goal: string; why: string; todo: string }) => void;
   stopSupervisionTask: () => void;
@@ -763,14 +759,6 @@ const chatViewRef = ref<{ exitMessageSelectionMode: () => void } | null>(null);
 
 function commitChatSidePanelWidths(value: { leftWidth: number; rightWidth: number }) {
   props.setChatSidePanelWidths(value, { commit: true });
-}
-
-function handleDetachConversation() {
-  console.info("[独立聊天窗口][前端链路] AppWindowContent 收到 detachConversation，调用顶层处理函数", {
-    viewMode: props.viewMode,
-    detachedChatWindow: !!props.detachedChatWindow,
-  });
-  props.onDetachConversation();
 }
 
 const selectionShareDialogOpen = ref(false);

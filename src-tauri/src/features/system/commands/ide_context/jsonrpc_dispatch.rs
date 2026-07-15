@@ -38,8 +38,6 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "start_current_window_drag"
             | "toggle_current_window_maximize"
             | "hide_current_window"
-            | "detach_current_conversation_to_window"
-            | "get_detached_chat_window_info"
             | "update_record_hotkey"
             | "update_record_background_wake"
             | "stt_transcribe"

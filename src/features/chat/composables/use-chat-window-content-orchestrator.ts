@@ -12,8 +12,6 @@ import type { Ref } from "vue";
 type ChatWindowContentOrchestratorBindings = Record<string, any> & {
   currentChatConversationId: Ref<string>;
   currentChatPreferredApiConfigId: Ref<string>;
-  detachedChatWindow: Ref<boolean>;
-  detachedTemporaryApiConfigId: Ref<string>;
   personaDirty: Ref<boolean>;
 };
 
@@ -36,8 +34,6 @@ export function useChatWindowContentOrchestrator(bindings: ChatWindowContentOrch
     currentChatPreferredApiConfigId: bindings.currentChatPreferredApiConfigId,
     chatConversationItems: conversationItems.chatConversationItems,
     unarchivedConversations: bindings.unarchivedConversations,
-    detachedChatWindow: bindings.detachedChatWindow,
-    detachedTemporaryApiConfigId: bindings.detachedTemporaryApiConfigId,
     departmentConversationApiConfigId: configDerived.departmentConversationApiConfigId,
     departmentOrderedApiConfigIds: configDerived.departmentOrderedApiConfigIds,
     isTextRequestFormat: configDerived.isTextRequestFormat,
@@ -77,7 +73,6 @@ export function useChatWindowContentOrchestrator(bindings: ChatWindowContentOrch
     config: bindings.config,
     currentChatConversationId: bindings.currentChatConversationId,
     currentChatPreferredApiConfigId: bindings.currentChatPreferredApiConfigId,
-    detachedTemporaryApiConfigId: bindings.detachedTemporaryApiConfigId,
     setStatus: bindings.setStatus,
     setStatusError: bindings.setStatusError,
     isTextRequestFormat: configDerived.isTextRequestFormat,
@@ -102,7 +97,6 @@ export function useChatWindowContentOrchestrator(bindings: ChatWindowContentOrch
     t: bindings.tr,
     viewMode: bindings.viewMode,
     maximized: bindings.maximized,
-    detachedChatWindow: bindings.detachedChatWindow,
     trimming: bindings.trimming,
     compactingConversation: bindings.compactingConversation,
     currentForegroundPersona: personaConversation.currentForegroundPersona,

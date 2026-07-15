@@ -3,7 +3,6 @@ use std::str::FromStr;
 const MAIN_TRAY_ID: &str = "easy-call-tray";
 const WINDOW_LAYOUTS_FILE_NAME: &str = "window_layouts.json";
 const WINDOW_DIAGNOSTIC_LOG_FILE_NAME: &str = "window_diagnostics.log";
-const DETACHED_CHAT_WINDOW_PREFIX: &str = "chat-detached-";
 const FILE_READER_WINDOW_LABEL: &str = "file-reader";
 const NEAR_FULLSCREEN_RESTORE_RATIO: f64 = 0.92;
 
@@ -118,10 +117,6 @@ fn detached_chat_windows() -> &'static Mutex<std::collections::HashMap<String, S
     DETACHED_CHAT_WINDOWS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
 }
 
-fn is_detached_chat_window_label(label: &str) -> bool {
-    label.trim().starts_with(DETACHED_CHAT_WINDOW_PREFIX)
-}
-
 fn detached_chat_window_for_conversation(conversation_id: &str) -> Option<String> {
     let cid = conversation_id.trim();
     if cid.is_empty() {
@@ -135,27 +130,6 @@ fn detached_chat_window_for_conversation(conversation_id: &str) -> Option<String
         poison.into_inner()
     });
     guard.get(cid).cloned()
-}
-
-fn detached_chat_conversation_for_window(label: &str) -> Option<String> {
-    let window_label = label.trim();
-    if window_label.is_empty() {
-        return None;
-    }
-    let guard = detached_chat_windows().lock().unwrap_or_else(|poison| {
-        runtime_log_info(format!(
-            "[独立聊天窗口] 窗口到会话映射锁已中毒，继续恢复读取：error={:?}",
-            poison
-        ));
-        poison.into_inner()
-    });
-    guard.iter().find_map(|(conversation_id, mapped_label)| {
-        if mapped_label == window_label {
-            Some(conversation_id.clone())
-        } else {
-            None
-        }
-    })
 }
 
 fn register_detached_chat_window(conversation_id: &str, label: &str) -> Result<(), String> {
@@ -188,47 +162,6 @@ fn unregister_detached_chat_window_by_label(label: &str) -> Option<String> {
         })?;
     guard.remove(&conversation_id);
     Some(conversation_id)
-}
-
-fn focus_detached_chat_window(app: &AppHandle, label: &str) -> Result<(), String> {
-    let window = app
-        .get_webview_window(label.trim())
-        .ok_or_else(|| format!("独立聊天窗口不存在：{}", label.trim()))?;
-    let _ = window.unminimize();
-    let _ = window.show();
-    ensure_window_visible_after_show(app, label.trim(), "focus_detached_chat_window");
-    window
-        .set_focus()
-        .map_err(|err| format!("聚焦独立聊天窗口失败：{err}"))
-}
-
-fn open_detached_chat_window(
-    app: &AppHandle,
-    conversation_id: &str,
-    title: Option<&str>,
-) -> Result<String, String> {
-    let cid = conversation_id.trim();
-    if cid.is_empty() {
-        return Err("conversationId 不能为空".to_string());
-    }
-
-    if let Some(existing_label) = detached_chat_window_for_conversation(cid) {
-        if app.get_webview_window(&existing_label).is_some() {
-            focus_detached_chat_window(app, &existing_label)?;
-            return Ok(existing_label);
-        }
-        let _ = unregister_detached_chat_window_by_label(&existing_label);
-    }
-
-    let label = format!("{}{}", DETACHED_CHAT_WINDOW_PREFIX, Uuid::new_v4());
-    let window_title = title
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|value| format!("PAI - {value}"))
-        .unwrap_or_else(|| "PAI - 独立聊天窗口".to_string());
-    register_detached_chat_window(cid, &label)?;
-    schedule_detached_chat_window_creation(app, cid.to_string(), label.clone(), window_title)?;
-    Ok(label)
 }
 
 fn focus_file_reader_window(app: &AppHandle) -> Result<(), String> {
@@ -341,132 +274,6 @@ fn schedule_file_reader_window_creation(app: &AppHandle, path: String) -> Result
         })
         .map(|_| ())
         .map_err(|err| format!("调度创建文件阅读窗口失败：{err}"))
-}
-
-fn schedule_detached_chat_window_creation(
-    app: &AppHandle,
-    conversation_id: String,
-    label: String,
-    window_title: String,
-) -> Result<(), String> {
-    let app_handle = app.clone();
-    let timeout_app_handle = app.clone();
-    let timeout_conversation_id = conversation_id.clone();
-    let timeout_window_label = label.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_secs(12));
-        let still_registered =
-            detached_chat_window_for_conversation(&timeout_conversation_id).as_deref()
-                == Some(timeout_window_label.as_str());
-        if still_registered && timeout_app_handle.get_webview_window(&timeout_window_label).is_none() {
-            let _ = unregister_detached_chat_window_by_label(&timeout_window_label);
-            let state = timeout_app_handle.state::<AppState>();
-            let _ = emit_unarchived_conversation_overview_updated_from_state(&state);
-            runtime_log_error(format!(
-                "[独立聊天窗口] 创建超时：conversation_id={}，window_label={}，timeout_ms=12000",
-                timeout_conversation_id,
-                timeout_window_label
-            ));
-        }
-    });
-
-    let window_app_handle = app_handle.clone();
-    let window_conversation_id = conversation_id.clone();
-    let window_label = label.clone();
-    std::thread::Builder::new()
-        .name("detached-chat-window-create".to_string())
-        .spawn(move || {
-        let started_at = std::time::Instant::now();
-        runtime_log_info(format!(
-            "[独立聊天窗口] 开始创建窗口：conversation_id={}，window_label={}",
-            window_conversation_id,
-            window_label
-        ));
-        let app_handle = window_app_handle;
-        if app_handle.get_webview_window(&window_label).is_some() {
-            let _ = focus_detached_chat_window(&app_handle, &window_label);
-            return;
-        }
-        let url = format!("chat.html?detachedConversationId={window_conversation_id}");
-        let window = match tauri::WebviewWindowBuilder::new(
-            &app_handle,
-            window_label.clone(),
-            tauri::WebviewUrl::App(url.into()),
-        )
-        .title(window_title)
-        .inner_size(618.0, 1000.0)
-        .min_inner_size(520.0, 520.0)
-        .resizable(true)
-        .decorations(false)
-        .shadow(true)
-        .visible(false)
-        .build()
-        {
-            Ok(window) => window,
-            Err(err) => {
-                let _ = unregister_detached_chat_window_by_label(&window_label);
-                let state = app_handle.state::<AppState>();
-                let _ = emit_unarchived_conversation_overview_updated_from_state(&state);
-                runtime_log_error(format!(
-                    "[独立聊天窗口] 创建失败：conversation_id={}，window_label={}，error={}",
-                    window_conversation_id,
-                    window_label,
-                    err
-                ));
-                return;
-            }
-        };
-        runtime_log_info(format!(
-            "[独立聊天窗口] 窗口对象已创建：conversation_id={}，window_label={}，elapsed_ms={}",
-            window_conversation_id,
-            window_label,
-            started_at.elapsed().as_millis()
-        ));
-
-        let event_app_handle = app_handle.clone();
-        let event_window_label = window_label.clone();
-        let _ = window.on_window_event(move |event| match event {
-            tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed => {
-                if let Some(conversation_id) =
-                    unregister_detached_chat_window_by_label(&event_window_label)
-                {
-                    runtime_log_info(format!(
-                        "[独立聊天窗口] 释放会话占用：conversation_id={}，window_label={}",
-                        conversation_id,
-                        event_window_label
-                    ));
-                    let state = event_app_handle.state::<AppState>();
-                    if let Err(err) = emit_unarchived_conversation_overview_updated_from_state(&state) {
-                        runtime_log_error(format!("[独立聊天窗口] 刷新会话概览失败：error={}", err));
-                    }
-                }
-            }
-            _ => {}
-        });
-
-        if let Err(err) = apply_window_layout_before_show(&app_handle, &window_label) {
-            runtime_log_error(format!(
-                "[独立聊天窗口] 应用窗口布局失败：window_label={}，error={}",
-                window_label,
-                err
-            ));
-        }
-        let _ = window.unminimize();
-        let _ = window.show();
-        ensure_window_visible_after_show(&app_handle, &window_label, "show_detached_chat_window");
-        let _ = window.set_focus();
-        runtime_log_info(format!(
-            "[独立聊天窗口] 窗口已显示：conversation_id={}，window_label={}，elapsed_ms={}",
-            window_conversation_id,
-            window_label,
-            started_at.elapsed().as_millis()
-        ));
-    })
-    .map(|_| ())
-    .map_err(|err| {
-        let _ = unregister_detached_chat_window_by_label(&label);
-        format!("调度创建独立聊天窗口失败：{err}")
-    })
 }
 
 fn monitor_logical_size(monitor: &tauri::Monitor) -> tauri::LogicalSize<f64> {

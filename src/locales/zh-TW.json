@@ -1295,11 +1295,7 @@
       "durationSeconds": "{seconds}秒"
     },
     "foregroundOrchestrator": {
-      "defaultWorkspace": "默認會話目錄",
-      "missingBinding": "獨立聊天窗口缺少綁定會話，窗口即將關閉。",
-      "openingDetached": "正在打開獨立聊天窗口...",
-      "mainConversationNotAllowed": "系統通知會話不能獨立打開，請選擇一個普通會話。",
-      "detachedRequestSent": "已發送獨立聊天窗口請求"
+      "defaultWorkspace": "默認會話目錄"
     },
     "delegateStatus": {
       "elapsed": "用時 {elapsed}",
@@ -1452,8 +1448,7 @@
       "autoPush": "自動推送",
       "forwardConversation": "會話轉發",
       "shareConversation": "分享會話",
-      "setWorkspace": "設定會話工作目錄",
-      "openDetachedWindow": "在獨立視窗開啟"
+      "setWorkspace": "設定會話工作目錄"
     },
     "autoPush": {
       "title": "自動推送",

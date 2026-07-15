@@ -15,7 +15,6 @@ export function useChatWindowWatchersGlue(bindings: Record<string, any>) {
       bindings.handleSupervisionConversationChanged();
       const cid = String(conversationId || "").trim();
       if (!cid) return;
-      if (bindings.detachedChatWindow?.value) return;
       if (bindings.viewMode.value !== "chat") return;
       if (!bindings.unarchivedConversations.value.some((item: any) => String(item?.conversationId || "").trim() === cid)) return;
       writeLastActiveConversationId(cid);

@@ -4,7 +4,7 @@
     class="relative flex h-full min-h-0 flex-row overflow-hidden"
   >
     <div
-      v-if="showSideConversationList && !detachedChatWindow"
+      v-if="showSideConversationList"
       :class="leftPaneInLayout ? 'flex h-full min-h-0 shrink-0' : 'absolute bottom-0 left-0 top-0 z-50 flex h-full min-h-0 border-r border-base-300 bg-base-100 shadow-2xl'"
       :style="{ width: `${leftPaneVisibleWidth}px` }"
     >
@@ -168,8 +168,6 @@
               :show-code-review-menu-item="true"
               :mention-entries="mentionEntries" :selected-mention-keys="selectedMentionKeys"
               :delegate-statuses="delegateStatuses"
-              :show-detach-button="!bridgeMode && !detachedChatWindow && !activeConversationIsSystemNotification"
-              :detach-disabled="bridgeMode || !activeConversationId || activeConversationIsSystemNotification || chatting || frozen || conversationInteractionBusy"
               @lock-workspace="$emit('lockWorkspace')" @open-branch-selection="openBranchSelectionMenu"
               @open-task-create="openTaskCreateDialog"
               @open-delegate-selection="openDelegateSelectionMenu" @open-forward-selection="openForwardSelectionMenu"
@@ -185,7 +183,6 @@
                 if (selectedMentionKeys.includes(mentionKey)) { emit('removeMention', { agentId, departmentId }); return; }
                 emit('addMention', { agentId, agentName: String(entry?.agentName || '').trim() || agentId, departmentId, departmentName: String(entry?.departmentName || '').trim() || departmentId, avatarUrl: String(entry?.avatarUrl || '').trim() || undefined });
               }"
-              @detach-conversation="handleDetachConversationRequest"
             />
           </div>
         </div>
@@ -341,7 +338,7 @@
             :system-notification-mode="activeConversationIsSystemNotification"
             :remote-contact-mode="activeConversationIsRemoteContact"
             :selection-delegate-only="messageSelectionDelegateOnly"
-            :show-side-conversation-list="detachedChatWindow ? false : showSideConversationList"
+            :show-side-conversation-list="showSideConversationList"
             :active-conversation-id="activeConversationId" :unarchived-conversation-items="unarchivedConversationItems"
             :remote-im-contact-conversations="remoteImContactConversations"
             :user-alias="userAlias" :user-avatar-url="userAvatarUrl"
@@ -528,7 +525,7 @@
     </div>
 
     <div
-      v-if="showSideConversationList && !detachedChatWindow"
+      v-if="showSideConversationList"
       class="ecall-pane-splitter ecall-pane-splitter-left absolute bottom-0 top-0 z-60"
       :class="{ 'ecall-pane-splitter-active': activePaneResizeSide === 'left' }"
       :style="{ left: `${leftPaneVisibleWidth - 2}px` }"
@@ -645,7 +642,7 @@ const props = defineProps<{
   recipientOptionsReady?: boolean;
   defaultCreateConversationDepartmentId: string;
   ideContextGroups: IdeContextWorkspaceGroup[]; attachedIdeContextReferences: IdeContextReferenceItem[];
-  detachedChatWindow?: boolean; terminalApprovals?: TerminalApprovalConversationItem[];
+  terminalApprovals?: TerminalApprovalConversationItem[];
   terminalApprovalResolving?: boolean;
   sidebarMode?: boolean;
   bridgeMode?: boolean;
@@ -683,7 +680,7 @@ const emit = defineEmits<{
   (e: "regenerateTurn", payload: { turnId: string }): void;
   (e: "confirmPlan", payload: { messageId: string }): void;
   (e: "lockWorkspace"): void; (e: "openSupervisionTask"): void; (e: "openCodeReview"): void;
-  (e: "detachConversation"): void; (e: "closeSupervisionTask"): void;
+  (e: "closeSupervisionTask"): void;
   (e: "saveSupervisionTask", payload: { durationHours: number; goal: string; why: string; todo: string }): void;
   (e: "stopSupervisionTask"): void;
   (e: "taskCreated", task: TaskEntry): void;
@@ -732,6 +729,7 @@ const autoPushSelectedContactId = ref("");
 const autoPushContactOptions = computed(() =>
   props.remoteImContactConversations.filter((item) => item.channelEnabled !== false),
 );
+
 const codeReviewDialogOpen = ref(false);
 const codeReviewErrorText = ref("");
 const commitOptions = ref<ToolReviewCommitOption[]>([]);
@@ -1394,7 +1392,7 @@ const {
   startPaneResize, adjustPaneWidthByKeyboard,
 } = useChatPanes({
   chatLayoutRoot, toolReviewPanelOpen: effectiveToolReviewPanelOpen,
-  showSideConversationList, detachedChatWindow: !!props.detachedChatWindow,
+  showSideConversationList,
   syncViewportMetrics,
   onPaneWidthsChange: (left, right) => emit("sidePanelWidthsChange", { leftWidth: left, rightWidth: right }),
   onPaneWidthsCommit: (left, right) => emit("sidePanelWidthsCommit", { leftWidth: left, rightWidth: right }),
@@ -1565,7 +1563,6 @@ async function handleSaveLocalImage(path: string) {
 
 // ==================== conversation actions ====================
 
-function handleDetachConversationRequest() { emit("detachConversation"); }
 function openCodeReviewDialog() {
   clearNativeTextSelection();
   codeReviewErrorText.value = "";
@@ -1616,6 +1613,7 @@ function openDelegateSummaryPanel() {
   emit("update:chatRightPanelMode", "delegate");
   emit("toolReviewPanelOpenChange", true);
 }
+
 
 function handleSendChat() {
   const extraTextBlocks = attachedIdeContextReferences.value.map((item) => String(item.textBlock || "").trim()).filter(Boolean);

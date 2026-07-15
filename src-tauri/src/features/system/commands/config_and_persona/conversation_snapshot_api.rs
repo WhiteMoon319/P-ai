@@ -116,9 +116,6 @@ fn chat_viewer_id_for_window_label(label: &str) -> Option<String> {
     if window_label == "chat" || window_label == "main" {
         return Some(DESKTOP_CHAT_VIEWER_ID.to_string());
     }
-    if is_detached_chat_window_label(window_label) {
-        return Some(format!("desktop:detached:{window_label}"));
-    }
     if let Some(client_id) = window_label.strip_prefix(VSCODE_SIDEBAR_WINDOW_LABEL_PREFIX) {
         let client_id = client_id.trim();
         if !client_id.is_empty() {
@@ -138,8 +135,6 @@ fn opened_by_for_window_label(label: &str) -> String {
     let window_label = label.trim();
     if window_label == "chat" || window_label == "main" {
         "main".to_string()
-    } else if is_detached_chat_window_label(window_label) {
-        "detached".to_string()
     } else if window_label.starts_with(VSCODE_SIDEBAR_WINDOW_LABEL_PREFIX)
         || window_label.starts_with(LEGACY_IDE_CHAT_SIDEBAR_WINDOW_LABEL_PREFIX)
     {

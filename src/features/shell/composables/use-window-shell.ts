@@ -18,7 +18,7 @@ export function useWindowShell() {
     appWindow.value = win;
     windowReady.value = true;
     void syncWindowControlsState();
-    if (win.label === "chat" || win.label.startsWith("chat-detached-")) return "chat";
+    if (win.label === "chat") return "chat";
     if (win.label === "archives") return "archives";
     return "config";
   }

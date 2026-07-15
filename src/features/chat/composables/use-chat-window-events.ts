@@ -8,15 +8,9 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
     try {
       const label = String(getCurrentWindow().label || "").trim();
       bindings.tauriWindowLabel.value = label || "unknown";
-      bindings.detachedChatWindow.value = bindings.tauriWindowLabel.value.startsWith("chat-detached-");
-      bindings.isChatTauriWindow.value = bindings.tauriWindowLabel.value === "chat" || bindings.detachedChatWindow.value;
-      if (bindings.detachedChatWindow.value) {
-        bindings.sideConversationListVisible.value = false;
-        bindings.toolReviewPanelOpenVisible.value = false;
-      }
+      bindings.isChatTauriWindow.value = bindings.tauriWindowLabel.value === "chat";
     } catch {
       bindings.tauriWindowLabel.value = "unknown";
-      bindings.detachedChatWindow.value = false;
       bindings.isChatTauriWindow.value = false;
     }
     if (bindings.isChatTauriWindow.value) {

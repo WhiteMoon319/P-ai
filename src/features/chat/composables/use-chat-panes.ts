@@ -33,7 +33,6 @@ export interface UseChatPanesOptions {
   chatLayoutRoot: Ref<HTMLElement | null>;
   toolReviewPanelOpen: Ref<boolean>;
   showSideConversationList: Ref<boolean>;
-  detachedChatWindow: boolean;
   syncViewportMetrics: () => void;
   onPaneWidthsChange: (leftWidth: number, rightWidth: number) => void;
   onPaneWidthsCommit: (leftWidth: number, rightWidth: number) => void;
@@ -42,7 +41,7 @@ export interface UseChatPanesOptions {
 }
 
 export function useChatPanes(options: UseChatPanesOptions) {
-  const { chatLayoutRoot, toolReviewPanelOpen, showSideConversationList, detachedChatWindow, syncViewportMetrics, onPaneWidthsChange, onPaneWidthsCommit, onPaneCloseRequest, onBeforeUnmountCleanup } = options;
+  const { chatLayoutRoot, toolReviewPanelOpen, showSideConversationList, syncViewportMetrics, onPaneWidthsChange, onPaneWidthsCommit, onPaneCloseRequest, onBeforeUnmountCleanup } = options;
 
   const leftSidebarWidth = ref(loadStoredPaneWidth("left"));
   const rightSidebarWidth = ref(loadStoredPaneWidth("right"));
@@ -99,7 +98,7 @@ export function useChatPanes(options: UseChatPanesOptions) {
   // ========== layout mode computeds ==========
 
   const basePaneLayoutState = computed(() => {
-    const leftOpen = showSideConversationList.value && !detachedChatWindow;
+    const leftOpen = showSideConversationList.value;
     const rightOpen = toolReviewPanelOpen.value;
     const leftW = effectivePaneWidth("left");
     const rightW = effectivePaneWidth("right");
@@ -144,7 +143,7 @@ export function useChatPanes(options: UseChatPanesOptions) {
 
   /** Left pane is open but shown as overlay (not in layout) */
   const leftPaneOverlay = computed(() =>
-    showSideConversationList.value && !detachedChatWindow && !leftPaneInLayout.value,
+    showSideConversationList.value && !leftPaneInLayout.value,
   );
 
   /** Right pane is open but shown as overlay (not in layout) */

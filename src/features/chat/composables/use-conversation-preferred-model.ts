@@ -10,7 +10,6 @@ type ConversationPreferredModelBindings = {
   config: AppConfig;
   currentChatConversationId: Ref<string>;
   currentChatPreferredApiConfigId: Ref<string>;
-  detachedTemporaryApiConfigId: Ref<string>;
   setStatus: (value: string) => void;
   setStatusError: (key: string, error: unknown) => void;
   isTextRequestFormat?: (format: string) => boolean;
@@ -55,7 +54,6 @@ export function useConversationPreferredModel(bindings: ConversationPreferredMod
     const previousId = String(bindings.currentChatPreferredApiConfigId.value || "").trim();
     if (previousId === nextId) return;
     bindings.currentChatPreferredApiConfigId.value = nextId;
-    bindings.detachedTemporaryApiConfigId.value = "";
     let persist!: Promise<boolean>;
     persist = (async () => {
       try {

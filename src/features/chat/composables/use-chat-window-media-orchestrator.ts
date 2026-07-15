@@ -100,7 +100,6 @@ export function useChatWindowMediaOrchestrator(bindings: Record<string, any>) {
     recording,
     tauriWindowLabel: bindings.tauriWindowLabel,
     isChatTauriWindow: bindings.isChatTauriWindow,
-    detachedChatWindow: bindings.detachedChatWindow,
     currentChatConversationId: bindings.currentChatConversationId,
     currentForegroundAgentId: bindings.currentForegroundAgentId,
     startupDataReady: bindings.startupDataReady,

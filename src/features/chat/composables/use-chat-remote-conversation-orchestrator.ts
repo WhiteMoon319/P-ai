@@ -1,5 +1,3 @@
-import { invokeTauri } from "../../../services/tauri-api";
-
 export function useChatRemoteConversationOrchestrator(bindings: Record<string, any>) {
   async function switchRemoteImContactConversation(contactId: string) {
     const normalizedContactId = String(contactId || "").trim();
@@ -10,27 +8,6 @@ export function useChatRemoteConversationOrchestrator(bindings: Record<string, a
     const conversationId = String(targetOverview?.conversationId || "").trim();
     if (!conversationId) return;
     await bindings.switchUnarchivedConversation(conversationId);
-  }
-
-  async function openConversationInDetachedWindowById(conversationId: string) {
-    const cid = String(conversationId || "").trim();
-    if (!cid) return;
-    try {
-      await invokeTauri<{ conversationId: string; windowLabel: string; systemNotificationConversationId?: string | null }>("detach_current_conversation_to_window", {
-        input: { conversationId: cid },
-      });
-    } catch (error) {
-      console.warn("[独立聊天窗口] 打开独立会话窗口失败", {
-        conversationId: cid,
-        error,
-      });
-    }
-    if (typeof bindings.syncUnarchivedConversationOverviewChangedSinceWatermark === "function") {
-      await bindings.syncUnarchivedConversationOverviewChangedSinceWatermark("open_conversation_in_detached_window");
-    } else {
-      await bindings.refreshUnarchivedConversationOverview();
-    }
-    await bindings.refreshRemoteImConversationOverview();
   }
 
   async function switchChatConversation(payload: { kind?: string; conversationId: string; remoteContactId?: string }) {
@@ -49,7 +26,6 @@ export function useChatRemoteConversationOrchestrator(bindings: Record<string, a
 
   return {
     switchRemoteImContactConversation,
-    openConversationInDetachedWindowById,
     switchChatConversation,
   };
 }

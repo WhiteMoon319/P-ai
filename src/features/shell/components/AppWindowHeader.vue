@@ -20,7 +20,7 @@
       v-if="viewMode === 'chat'"
       class="relative z-30 flex h-full min-w-0 items-center gap-1 px-2"
     >
-      <div v-if="!detachedChatWindow && leftHeaderInLayout" class="indicator" @mousedown.stop>
+      <div v-if="leftHeaderInLayout" class="indicator" @mousedown.stop>
         <span
           v-if="conversationUnreadTotal > 0"
           class="indicator-item indicator-top indicator-start z-10 h-2.5 w-2.5 -translate-x-0.5 -translate-y-0.5 rounded-full bg-error"
@@ -43,7 +43,7 @@
       class="relative z-30 grid h-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 px-2"
     >
       <div class="relative z-40 flex min-w-0 items-center gap-1" @mousedown.stop>
-        <div v-if="!detachedChatWindow && !leftHeaderInLayout" class="indicator">
+        <div v-if="!leftHeaderInLayout" class="indicator">
           <span
             v-if="conversationUnreadTotal > 0"
             class="indicator-item indicator-top indicator-start z-10 h-2.5 w-2.5 -translate-x-0.5 -translate-y-0.5 rounded-full bg-error"
@@ -60,7 +60,6 @@
           </button>
         </div>
         <button
-          v-if="!detachedChatWindow"
           class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
           :title="t('chat.newConversation')"
           @click.stop="handleCreateConversation"
@@ -521,7 +520,6 @@ const markdownIsDark = computed(() => isDarkAppTheme(props.currentTheme));
 
 const props = withDefaults(defineProps<{
   viewMode: "chat" | "archives" | "config";
-  detachedChatWindow?: boolean;
   currentTheme: string;
   titleText: string;
   chatUsagePercent: number;
@@ -654,7 +652,7 @@ function headerCanFit(leftW: number, rightW: number): boolean {
 }
 
 const leftHeaderInLayout = computed(() => {
-  if (props.viewMode !== "chat" || !props.sideConversationListVisible || props.detachedChatWindow) return false;
+  if (props.viewMode !== "chat" || !props.sideConversationListVisible) return false;
   return headerCanFit(headerPaneWidth("left"), 0);
 });
 

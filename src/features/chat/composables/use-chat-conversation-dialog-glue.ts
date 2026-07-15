@@ -1,19 +1,9 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { invokeTauri } from "../../../services/tauri-api";
-
 export function useChatConversationDialogGlue(bindings: Record<string, any>) {
   async function deleteUnarchivedConversationFromArchives(conversationId: string) {
     const normalizedConversationId = String(conversationId || "").trim();
     if (!normalizedConversationId) return;
     const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
     const deletingCurrentConversation = currentConversationId === normalizedConversationId;
-    if (bindings.detachedChatWindow.value && deletingCurrentConversation) {
-      void bindings.deleteUnarchivedConversationFromArchivesRaw(normalizedConversationId).catch((error: unknown) => {
-        console.error("[独立聊天窗口] 后台删除会话失败", error);
-      });
-      await getCurrentWindow().close();
-      return;
-    }
     if (deletingCurrentConversation) {
       bindings.clearForegroundConversation("delete_unarchived_conversation_current");
     }
@@ -49,29 +39,7 @@ export function useChatConversationDialogGlue(bindings: Record<string, any>) {
   }
 
   async function handleConfirmTrimAction() {
-    if (!bindings.detachedChatWindow.value) {
-      await bindings.getConfirmTrimAction()();
-      return;
-    }
-    const conversationId = String(bindings.currentChatConversationId.value || "").trim();
-    if (!conversationId) {
-      bindings.setStatus("当前没有可归档的会话。");
-      bindings.getCloseTrimActionDialog()();
-      return;
-    }
-    bindings.getCloseTrimActionDialog()();
-    console.info("[会话归档] 点击归档会话", {
-      conversationId,
-      source: "detached_chat_window",
-    });
-    void invokeTauri("archive_conversation", {
-      input: {
-        conversationId,
-      },
-    }).catch((error) => {
-      console.error("[独立聊天窗口] 后台归档会话失败", error);
-    });
-    await getCurrentWindow().close();
+    await bindings.getConfirmTrimAction()();
   }
 
   return {

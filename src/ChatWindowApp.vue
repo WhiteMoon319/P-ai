@@ -3,7 +3,6 @@
   <div class="window-shell text-sm bg-base-200">
     <AppWindowHeader
       :view-mode="viewMode"
-      :detached-chat-window="detachedChatWindow"
       :current-theme="currentTheme"
       :title-text="titleText"
       :chat-usage-percent="chatUsagePercent"
@@ -61,7 +60,6 @@
     <AppWindowContent
       :t="tr"
       :view-mode="viewMode"
-      :detached-chat-window="detachedChatWindow"
       :side-conversation-list-visible="sideConversationListVisible"
       :initial-tool-review-panel-open="toolReviewPanelOpenVisible"
       :conversation-list-tab="conversationListTab"
@@ -305,7 +303,6 @@
       :on-jump-to-conversation-bottom="ensureLatestForegroundTailThenScrollToBottom"
       :on-create-conversation-branch-from-turn="handleCreateConversationBranchFromTurn"
       :open-supervision-task-dialog="openSupervisionTaskDialog"
-      :on-detach-conversation="detachCurrentConversationToWindow"
       :close-supervision-task-dialog="closeSupervisionTaskDialog"
       :save-supervision-task="saveSupervisionTask"
       :stop-supervision-task="stopSupervisionTask"

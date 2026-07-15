@@ -1330,8 +1330,7 @@
       "autoPush": "Auto Push",
       "forwardConversation": "Forward Conversation",
       "shareConversation": "Share Conversation",
-      "setWorkspace": "Set session working directory",
-      "openDetachedWindow": "Open in detached window"
+      "setWorkspace": "Set session working directory"
     },
     "autoPush": {
       "title": "Auto Push",
@@ -1396,11 +1395,7 @@
       "durationSeconds": "{seconds}s"
     },
     "foregroundOrchestrator": {
-      "defaultWorkspace": "Default session directory",
-      "missingBinding": "Detached chat window missing bound session, window will close.",
-      "openingDetached": "Opening detached chat window...",
-      "mainConversationNotAllowed": "System notification conversation cannot be detached, please select a regular conversation.",
-      "detachedRequestSent": "Detached chat window request sent"
+      "defaultWorkspace": "Default session directory"
     },
     "delegateStatus": {
       "elapsed": "Elapsed {elapsed}",

@@ -49,7 +49,6 @@ export function useChatWindowLifecycleSetup(bindings: Record<string, any>) {
         console.info("[启动] 迁移后会话准备完成，已通知后端启动后台服务", { started });
       },
       afterMountedReady: async () => {
-        await bindings.initializeDetachedChatWindow();
         void bindings.refreshGithubUpdateState();
       },
   });

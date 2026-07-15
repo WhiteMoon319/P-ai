@@ -38,7 +38,6 @@ type ConversationActionsBridge = {
   restoreForegroundConversationProjection: (conversationId: string, reason: string) => Promise<void>;
   switchUnarchivedConversation: (conversationId: string) => Promise<void>;
   sendChatFromCurrentWindow: (overrides?: { extraTextBlocks?: string[] }) => Promise<void>;
-  detachCurrentConversationToWindow: (conversationId?: string) => Promise<void>;
   deleteUnarchivedConversationFromArchives: (conversationId: string) => Promise<void>;
   applyConversationRuntimeStateUpdated: (payload: { conversationId: string; runtimeState: "idle" | "assistant_streaming" | "organizing_context" }) => void;
 };
@@ -83,9 +82,6 @@ export function useChatWindowApp() {
     chatWindowActiveSynced,
     tauriWindowLabel,
     isChatTauriWindow,
-    detachedChatWindow,
-    detachedChatConversationId,
-    detachedTemporaryApiConfigId,
     chatWindowEventUnlisteners,
     currentChatConversationId,
     currentChatPreferredApiConfigId,
@@ -162,7 +158,6 @@ export function useChatWindowApp() {
     restoreForegroundConversationProjection: async () => {},
     switchUnarchivedConversation: async () => {},
     sendChatFromCurrentWindow: async () => {},
-    detachCurrentConversationToWindow: async () => {},
     deleteUnarchivedConversationFromArchives: async () => {},
     applyConversationRuntimeStateUpdated: () => {},
   };
@@ -175,7 +170,6 @@ export function useChatWindowApp() {
   const switchUnarchivedConversation = (conversationId: string) =>
     conversationActions.switchUnarchivedConversation(conversationId);
   const sendChatFromCurrentWindow = (overrides?: { extraTextBlocks?: string[] }) => conversationActions.sendChatFromCurrentWindow(overrides);
-  const detachCurrentConversationToWindow = (conversationId?: string) => conversationActions.detachCurrentConversationToWindow(conversationId);
   const deleteUnarchivedConversationFromArchives = (conversationId: string) => conversationActions.deleteUnarchivedConversationFromArchives(conversationId);
   const applyConversationRuntimeStateUpdated: ConversationActionsBridge["applyConversationRuntimeStateUpdated"] =
     (payload) => conversationActions.applyConversationRuntimeStateUpdated(payload);
@@ -243,7 +237,6 @@ export function useChatWindowApp() {
   });
   const chatUiState = useChatUiStateOrchestrator({
     viewMode,
-    detachedChatWindow,
     currentChatConversationId,
     toolStatusState,
     clearConversationStatus: (conversationId, statusKind) => {
@@ -351,8 +344,6 @@ export function useChatWindowApp() {
     personaEditorId,
     currentChatConversationId,
     currentChatPreferredApiConfigId,
-    detachedChatWindow,
-    detachedTemporaryApiConfigId,
     personaDirty: configUi.personaDirty,
     unarchivedConversations,
     remoteImContactConversations,
@@ -402,7 +393,6 @@ export function useChatWindowApp() {
     shouldUseRemoteStt,
     tauriWindowLabel,
     isChatTauriWindow,
-    detachedChatWindow,
     currentChatConversationId,
     currentForegroundAgentId: contentOrchestrator.personaConversation.currentForegroundAgentId,
     startupDataReady,
@@ -621,9 +611,6 @@ export function useChatWindowApp() {
     conversationMessageCache,
     backgroundConversationBadgeMap,
     ensureConversationMessageIds,
-    detachedChatWindow,
-    detachedChatConversationId,
-    detachedTemporaryApiConfigId,
     isChatWindowActiveNow,
     closeWindow,
     freezeForegroundConversation,
@@ -637,7 +624,6 @@ export function useChatWindowApp() {
     forwardingConversationSelection,
     deleteUnarchivedConversationFromArchivesRaw,
     getChatFlow: () => chatFlow,
-    detachCurrentConversationToWindow,
     waitPendingConversationPreferredModelPersist,
     chatInput,
     selectedChatMentions,
@@ -706,7 +692,6 @@ export function useChatWindowApp() {
     applyUiFont,
     chatWindowEventUnlisteners,
     tauriWindowLabel,
-    detachedChatWindow,
     isChatTauriWindow,
     currentChatConversationId,
     currentChatPreferredApiConfigId,
@@ -816,7 +801,6 @@ export function useChatWindowApp() {
     updateGeneratedThemeControls,
     resetGeneratedTheme,
     config,
-    detachedChatWindow,
     currentChatConversationId,
     currentChatPreferredApiConfigId,
     personas,

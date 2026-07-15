@@ -968,8 +968,6 @@ fn main() {
             toggle_current_window_maximize,
             start_current_window_drag,
             complete_quick_setup_and_open_chat,
-            detach_current_conversation_to_window,
-            get_detached_chat_window_info,
             set_chat_window_active,
             get_github_update_state,
             check_github_update,

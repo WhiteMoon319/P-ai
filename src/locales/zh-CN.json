@@ -1295,11 +1295,7 @@
       "durationSeconds": "{seconds}秒"
     },
     "foregroundOrchestrator": {
-      "defaultWorkspace": "默认会话目录",
-      "missingBinding": "独立聊天窗口缺少绑定会话，窗口即将关闭。",
-      "openingDetached": "正在打开独立聊天窗口...",
-      "mainConversationNotAllowed": "系统通知会话不能独立打开，请选择一个普通会话。",
-      "detachedRequestSent": "已发送独立聊天窗口请求"
+      "defaultWorkspace": "默认会话目录"
     },
     "delegateStatus": {
       "elapsed": "用时 {elapsed}",
@@ -1453,8 +1449,7 @@
       "branchConversation": "选择消息创建会话分支",
       "forwardConversation": "会话转发",
       "shareConversation": "分享会话",
-      "setWorkspace": "设置会话工作目录",
-      "openDetachedWindow": "在独立窗口打开"
+      "setWorkspace": "设置会话工作目录"
     },
     "mentionMutedBadge": "禁",
     "defaultDepartment": "默认",
