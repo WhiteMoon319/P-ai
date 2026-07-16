@@ -200,13 +200,7 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     return !!options.chatting.value || phase === "queued" || phase === "streaming";
   }
 
-  async function recoverForegroundConversationAfterDeadChannel(
-    conversationId: string,
-    chatFlow: ReturnType<UseChatWindowRecordingOrchestratorOptions["getChatFlow"]>,
-  ) {
-    if (chatFlow?.bindActiveConversationStream) {
-      await chatFlow.bindActiveConversationStream(conversationId, true);
-    }
+  async function recoverForegroundConversationAfterDeadChannel(conversationId: string) {
     await recoverForegroundConversationBySwitch(conversationId);
   }
 
@@ -219,14 +213,14 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
 
     if (backendStreaming && frontendStreaming) {
       if (!chatFlow?.probeBoundChannel) {
-        await recoverForegroundConversationAfterDeadChannel(conversationId, chatFlow);
+        await recoverForegroundConversationAfterDeadChannel(conversationId);
         return;
       }
       const probeHealthy = await chatFlow.probeBoundChannel(conversationId);
       if (probeHealthy) {
         return;
       }
-      await recoverForegroundConversationAfterDeadChannel(conversationId, chatFlow);
+      await recoverForegroundConversationAfterDeadChannel(conversationId);
       return;
     }
 

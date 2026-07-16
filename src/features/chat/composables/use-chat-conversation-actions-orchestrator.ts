@@ -92,8 +92,7 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
       if (!conversationId) return;
       await bindings.refreshUnarchivedConversationOverview();
       const warning = String(result?.warning || "").trim();
-      const snapshot = await bindings.requestConversationLightSnapshot(conversationId);
-      bindings.applyConversationSnapshot(snapshot);
+      await bindings.switchUnarchivedConversation(conversationId);
       if (warning) {
         bindings.setStatus(bindings.tr("status.conversationBranchCreatedWithWarning", { warning }));
       } else {
@@ -130,8 +129,7 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
       const conversationId = String(result?.conversationId || "").trim();
       if (!conversationId) return;
       await bindings.refreshUnarchivedConversationOverview();
-      const snapshot = await bindings.requestConversationLightSnapshot(conversationId);
-      bindings.applyConversationSnapshot(snapshot);
+      await bindings.switchUnarchivedConversation(conversationId);
       bindings.setStatus(bindings.tr("status.conversationBranchCreated", { title: String(result?.title || "").trim() || conversationId }));
     } catch (error) {
       bindings.setStatusError("status.loadMessagesFailed", error);
@@ -210,8 +208,7 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
         } else {
           await bindings.refreshUnarchivedConversationOverview();
         }
-        const snapshot = await bindings.requestConversationLightSnapshot(effectiveTargetConversationId);
-        bindings.applyConversationSnapshot(snapshot);
+        await bindings.switchUnarchivedConversation(effectiveTargetConversationId);
         bindings.setStatus(bindings.tr("status.conversationSelectionForwarded", {
           count: Number(result?.forwardedCount || selectedMessageIds.length),
         }));

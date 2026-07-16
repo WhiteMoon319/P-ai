@@ -223,8 +223,7 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
       const conversationId = String(result?.conversationId || "").trim();
       if (!conversationId) return;
       await conversationOrchestrator.refreshUnarchivedConversationOverview();
-      const snapshot = await conversationOrchestrator.requestConversationLightSnapshot(conversationId);
-      conversationOrchestrator.applyConversationSnapshot(snapshot);
+      await conversationOrchestrator.switchUnarchivedConversation(conversationId);
       bindings.setStatus(bindings.tr("status.conversationBranchCreated", { title: String(result?.title || "").trim() || conversationId }));
     } catch (error) {
       bindings.setStatusError("status.loadMessagesFailed", error);

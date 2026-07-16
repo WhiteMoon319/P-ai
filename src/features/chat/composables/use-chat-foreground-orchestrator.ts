@@ -321,6 +321,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
     const previousConversationId = currentConversationId();
     const startedAt = bindings.perfNow();
     let stage = "准备切换";
+    let unbindPromise: Promise<void> = Promise.resolve();
     try {
       stage = "标记前台会话同步中";
       bindings.conversationForegroundSyncing.value = true;
@@ -335,6 +336,21 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
       bindings.clearPendingManualScrollToBottom();
       bindings.foregroundTailLatestReady.value = false;
       const trace = bindings.beginForegroundPaintTrace(cid);
+      stage = "取消原会话前台流绑定";
+      const logUnbindFailure = (error: unknown) => {
+        console.warn("[会话切换] 取消原会话前台流绑定失败", {
+          previousConversationId,
+          targetConversationId: cid,
+          error,
+        });
+      };
+      try {
+        unbindPromise = Promise.resolve(
+          bindings.getChatFlow()?.unbindActiveConversationStream?.(),
+        ).catch(logUnbindFailure);
+      } catch (error) {
+        logUnbindFailure(error);
+      }
       // 切会话恢复时，先让后端把“持久消息 + 当前运行中投影”合成为一份权威快照，
       // 前端一次性接管正文，再只负责接后续流式增量，避免先显示持久消息再二次补流式。
       stage = "请求前台轻量快照";
@@ -371,6 +387,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
           void showSwitchDiagnostic("需要绑定流式通道但绑定函数不存在", cid, previousConversationId, startedAt);
         } else {
           stage = "绑定前台流式通道";
+          await unbindPromise;
           await bindActiveConversationStream(cid, true);
         }
         if (currentConversationId() === cid) {
