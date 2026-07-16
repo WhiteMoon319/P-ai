@@ -578,6 +578,7 @@ const pendingDeleteProviderName = ref("");
 const showApiKeys = ref<Record<string, Record<number, boolean>>>({});
 const modelCapabilityById = ref<Record<string, ModelCapabilityLimits>>({});
 const resolvedAdapterByModelId = ref<Record<string, string>>({});
+const adapterResolveRequestSeq = ref(0);
 const codexAuthBusy = ref(false);
 const codexAuthStatusByProvider = ref<Record<string, CodexAuthStatus>>({});
 const codexAuthPollTimer = ref<number | null>(null);
@@ -910,6 +911,38 @@ function isOpenaiModelAdapter(adapter: string | undefined): boolean {
 
 function isDeepSeekModelAdapter(adapter: string | undefined): boolean {
   return String(adapter || "").trim().toLowerCase() === "deepseek";
+}
+
+function resolveAdapterLabelForModelName(modelName: string): Promise<string> {
+  return invokeTauri<string>("resolve_model_adapter_kind", {
+    modelName,
+  });
+}
+
+async function refreshResolvedAdaptersForSelectedProvider() {
+  const provider = selectedProvider.value;
+  if (!provider || selectedProtocol.value !== "auto") {
+    adapterResolveRequestSeq.value += 1;
+    return;
+  }
+  const requestSeq = ++adapterResolveRequestSeq.value;
+  const models = (provider.models || []).filter((model) => !isModelDeprecated(model));
+  const pairs = await Promise.all(models.map(async (model) => {
+    const modelName = String(model.model || "").trim();
+    if (!modelName) return [model.id, ""] as const;
+    try {
+      const adapter = await resolveAdapterLabelForModelName(modelName);
+      return [model.id, adapter] as const;
+    } catch (error) {
+      console.warn("[API] 匹配模型协议失败:", { modelId: model.id, modelName, error });
+      return [model.id, ""] as const;
+    }
+  }));
+  if (requestSeq !== adapterResolveRequestSeq.value || selectedProtocol.value !== "auto") return;
+  resolvedAdapterByModelId.value = {
+    ...resolvedAdapterByModelId.value,
+    ...Object.fromEntries(pairs),
+  };
 }
 
 function openaiReasoningEffortValue(modelCard: ApiModelConfigItem): string {
@@ -1951,6 +1984,22 @@ watch(
     if (!activeModels.some((m) => m.id === connectionTestModelId.value)) {
       connectionTestModelId.value = activeModels[0].id;
     }
+  },
+  { immediate: true },
+);
+
+watch(
+  () => {
+    const provider = selectedProvider.value;
+    const activeModels = (provider?.models || []).filter((model) => !isModelDeprecated(model));
+    return [
+      provider?.id || "",
+      selectedProtocol.value,
+      ...activeModels.map((model) => `${model.id}:${String(model.model || "").trim()}`),
+    ].join("\0");
+  },
+  () => {
+    void refreshResolvedAdaptersForSelectedProvider();
   },
   { immediate: true },
 );
