@@ -25,6 +25,7 @@ struct RemoteImSecretaryDebounce {
     start_message_id: String,
     end_message_id: String,
     must_reply: bool,
+    judging_token: Option<String>,
     event: ChatPendingEvent,
 }
 
@@ -36,6 +37,7 @@ struct RemoteImDebounceState {
 
 #[derive(Clone)]
 struct RemoteImReplyDebounceReady {
+    contact_id: String,
     start_message_id: String,
     end_message_id: String,
     must_reply: bool,
@@ -199,6 +201,7 @@ fn observe_remote_im_persisted_event(
                     start_message_id: message.id.clone(),
                     end_message_id: message.id.clone(),
                     must_reply: false,
+                    judging_token: None,
                     event: event.clone(),
                 };
                 debounces
@@ -220,7 +223,11 @@ fn observe_remote_im_persisted_event(
                 state.assistant_by_sender.remove(&assistant_key)
             });
             let Some(ready) = ready else { return; };
+            let contact_id = ready.contact_id.clone();
+            let sender_id = ready.sender_id.clone();
+            let log_contact_id = contact_id.clone();
             let payload = RemoteImReplyDebounceReady {
+                contact_id,
                 start_message_id: ready.start_message_id,
                 end_message_id: ready.end_message_id,
                 must_reply: true,
@@ -229,7 +236,7 @@ fn observe_remote_im_persisted_event(
             if let Err(err) = process_remote_im_reply_debounce(&state_clone, payload).await {
                 runtime_log_error(format!(
                     "[远程联系人助理防抖] 失败，contact_id={}，sender_id={}，error={}",
-                    ready.contact_id, ready.sender_id, err
+                    log_contact_id, sender_id, err
                 ));
             }
         });
@@ -237,31 +244,51 @@ fn observe_remote_im_persisted_event(
     if let Some(debounce) = schedule_secretary {
         let state_clone = state.clone();
         tauri::async_runtime::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_secs(if debounce.must_reply {
+            let debounce_delay = std::time::Duration::from_secs(if debounce.must_reply {
                 1
             } else {
                 7
-            }))
-            .await;
-            let ready = remote_im_debounce_state().lock().ok().and_then(|mut state| {
-                let current = state.secretary_by_contact.get(&secretary_key)?;
-                if current.token != debounce.token {
-                    return None;
-                }
-                state.secretary_by_contact.remove(&secretary_key)
             });
-            let Some(ready) = ready else { return; };
-            let payload = RemoteImReplyDebounceReady {
-                start_message_id: ready.start_message_id,
-                end_message_id: ready.end_message_id,
-                must_reply: ready.must_reply,
-                event: ready.event,
-            };
-            if let Err(err) = process_remote_im_reply_debounce(&state_clone, payload).await {
-                runtime_log_error(format!(
-                    "[远程联系人秘书防抖] 失败，contact_id={}，error={}",
-                    ready.contact_id, err
-                ));
+            loop {
+                tokio::time::sleep(debounce_delay).await;
+                let mut should_retry = false;
+                let ready = remote_im_debounce_state().lock().ok().and_then(|mut state| {
+                    let current = state.secretary_by_contact.get_mut(&secretary_key)?;
+                    if current.token != debounce.token {
+                        return None;
+                    }
+                    if current.judging_token.is_some() {
+                        should_retry = true;
+                        return None;
+                    }
+                    current.judging_token = Some(debounce.token.clone());
+                    Some(RemoteImReplyDebounceReady {
+                        contact_id: current.contact_id.clone(),
+                        start_message_id: current.start_message_id.clone(),
+                        end_message_id: current.end_message_id.clone(),
+                        must_reply: current.must_reply,
+                        event: current.event.clone(),
+                    })
+                });
+                if should_retry {
+                    continue;
+                }
+                let Some(ready) = ready else { return; };
+                let contact_id = ready.contact_id.clone();
+                if let Err(err) = process_remote_im_reply_debounce(&state_clone, ready).await {
+                    runtime_log_error(format!(
+                        "[远程联系人秘书防抖] 失败，contact_id={}，error={}",
+                        contact_id, err
+                    ));
+                }
+                if let Ok(mut state) = remote_im_debounce_state().lock() {
+                    if let Some(current) = state.secretary_by_contact.get_mut(&secretary_key) {
+                        if current.judging_token.as_deref() == Some(debounce.token.as_str()) {
+                            current.judging_token = None;
+                        }
+                    }
+                }
+                return;
             }
         });
     }

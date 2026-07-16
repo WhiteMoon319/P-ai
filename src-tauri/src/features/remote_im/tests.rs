@@ -2247,6 +2247,84 @@
     }
 
     #[tokio::test]
+    async fn secretary_debounce_should_reset_end_anchor_on_new_message() {
+        let state = remote_im_test_state();
+        {
+            let mut debounces = remote_im_debounce_state().lock().expect("lock debounce state");
+            debounces.assistant_by_sender.clear();
+            debounces.secretary_by_contact.clear();
+        }
+        let mut contact = remote_im_test_contact("contact-reset", "conversation-reset");
+        contact.activation_mode = "keyword".to_string();
+        contact.activation_keywords = vec!["@助理".to_string()];
+        {
+            let mut states = lock_remote_im_contact_runtime_states(&state).expect("lock states");
+            remote_im_contact_runtime_state_mut(&mut states, &contact.id).presence_state =
+                RemoteImPresenceState::Present;
+        }
+        let event = |id: &str, sender_id: &str, text: &str| {
+            let mut message = remote_im_test_group_user_message(sender_id);
+            message.id = format!("message-{id}");
+            message.parts = vec![MessagePart::Text {
+                text: text.to_string(),
+                reasoning_content: None,
+            }];
+            create_pending_event(
+                format!("event-{id}"),
+                "conversation-reset".to_string(),
+                vec![message],
+                true,
+                ChatSessionInfo {
+                    department_id: "department-a".to_string(),
+                    agent_id: "agent-a".to_string(),
+                },
+                RemoteImMessageSource {
+                    channel_id: "channel-a".to_string(),
+                    platform: RemoteImPlatform::OnebotV11,
+                    im_name: "QQ".to_string(),
+                    remote_contact_type: "group".to_string(),
+                    remote_contact_id: "group-reset".to_string(),
+                    remote_contact_name: "项目群".to_string(),
+                    sender_id: sender_id.to_string(),
+                    sender_name: sender_id.to_string(),
+                    sender_avatar_url: None,
+                    platform_message_id: None,
+                },
+            )
+        };
+
+        observe_remote_im_persisted_event(&state, &contact, &event("normal", "user-a", "普通消息"))
+            .expect("create secretary debounce");
+        let first_end_message_id = {
+            let debounces = remote_im_debounce_state().lock().expect("lock debounce state");
+            debounces
+                .secretary_by_contact
+                .get(&remote_im_secretary_debounce_key(&state, &contact.id))
+                .expect("secretary debounce exists")
+                .end_message_id
+                .clone()
+        };
+
+        observe_remote_im_persisted_event(&state, &contact, &event("normal-2", "user-b", "普通跟话"))
+            .expect("reset secretary debounce");
+        let debounces = remote_im_debounce_state().lock().expect("lock debounce state");
+        let secretary = debounces
+            .secretary_by_contact
+            .get(&remote_im_secretary_debounce_key(&state, &contact.id))
+            .expect("secretary debounce exists");
+        assert_ne!(secretary.end_message_id, first_end_message_id);
+        assert_eq!(secretary.end_message_id, "message-normal-2");
+        assert_eq!(
+            debounces
+                .secretary_by_contact
+                .keys()
+                .filter(|key| key.ends_with(&format!("::{}", contact.id)))
+                .count(),
+            1
+        );
+    }
+
+    #[tokio::test]
     async fn mute_should_clear_pending_remote_im_debounces() {
         let state = remote_im_test_state();
         let mut contact = remote_im_test_contact("contact-a", "conversation-a");
@@ -2300,3 +2378,5 @@
             .secretary_by_contact
             .contains_key(&remote_im_secretary_debounce_key(&state, &contact.id)));
     }
+
+
