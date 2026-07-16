@@ -573,6 +573,64 @@ fn ide_chat_conversation_runtime_snapshot(state: &AppState, params: Value) -> Re
         .map_err(|err| format!("Serialize conversation runtime snapshot failed: {err}"))
 }
 
+fn ide_chat_resume_sidebar_subscription(
+    state: &AppState,
+    params: Value,
+    client_id: &str,
+    opened_conversation_id: &mut Option<String>,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatConversationInput>(params)?;
+    let conversation_id = input.conversation_id.trim();
+    if conversation_id.is_empty() {
+        return Err("conversationId is required".to_string());
+    }
+    let sidebar_label = ide_chat_sidebar_window_label(client_id);
+    ide_chat_register_sidebar_conversation(
+        state,
+        conversation_id,
+        &sidebar_label,
+        opened_conversation_id,
+    )?;
+    let runtime = read_conversation_runtime_snapshot(state, conversation_id)?;
+    Ok(serde_json::json!({
+        "conversationId": conversation_id,
+        "runtime": runtime,
+    }))
+}
+
+fn ide_chat_stream_probe(
+    params: Value,
+    client_id: &str,
+    opened_conversation_id: &Option<String>,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatStreamProbeInput>(params)?;
+    let conversation_id = input.conversation_id.trim();
+    let probe_id = input.probe_id.trim();
+    if conversation_id.is_empty() || probe_id.is_empty() {
+        return Err("conversationId and probeId are required".to_string());
+    }
+    if opened_conversation_id.as_deref() != Some(conversation_id) {
+        return Ok(serde_json::json!({ "delivered": false }));
+    }
+    let client_registered = ide_context_chat_client_conversations()
+        .lock()
+        .ok()
+        .and_then(|conversations| conversations.get(client_id).cloned())
+        .is_some_and(|mapped_conversation_id| mapped_conversation_id.trim() == conversation_id);
+    if !client_registered {
+        return Ok(serde_json::json!({ "delivered": false }));
+    }
+    let delivered = ide_chat_emit_notification_to_sidebar_conversation(
+        conversation_id,
+        "chat.streamProbeAck",
+        serde_json::json!({
+            "conversationId": conversation_id,
+            "probeId": probe_id,
+        }),
+    ) > 0;
+    Ok(serde_json::json!({ "delivered": delivered }))
+}
+
 async fn ide_chat_conversation_freshness_snapshot(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<ForegroundConversationFreshnessInput>(params)?;
     let app_state = state.clone();

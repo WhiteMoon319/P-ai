@@ -277,6 +277,10 @@ import type { ChatWorkspaceChoice } from "../chat/composables/use-chat-workspace
 import type { ToolReviewCodeReviewScope, ToolReviewCommitOption, ToolReviewReportRecord } from "../chat/composables/use-chat-tool-review";
 import type { TerminalApprovalConversationItem, TerminalApprovalRequestPayload } from "../shell/composables/use-terminal-approval";
 import { readLastActiveConversationId, writeLastActiveConversationId } from "../chat/utils/last-active-conversation";
+import {
+  recoverSidebarForegroundStreaming,
+  type SidebarForegroundRuntimeSnapshot,
+} from "./composables/sidebar-foreground-recovery";
 import type {
   BlockPageResult,
   CompactionPreviewResult,
@@ -324,13 +328,22 @@ type ConversationChangedSinceResult = {
   deletedIds?: string[];
   serverTime?: string;
 };
-type ConversationRuntimeSnapshot = {
+type ConversationRuntimeSnapshot = SidebarForegroundRuntimeSnapshot & {
+  conversationId?: string;
   runtimeState?: string;
   isProcessing?: boolean;
   hasPendingQueue?: boolean;
   pendingQueueCount?: number;
   streamCache?: {
+    activationId?: string;
+    requestId?: string;
+    updatedAt?: string;
     hasVisibleProgress?: boolean;
+    persistedAssistantMessageId?: string;
+    streamBlocks?: unknown[];
+    assistantText?: string;
+    toolStatusText?: string;
+    toolStatusState?: string;
   } | null;
 };
 type ConversationFreshnessSnapshot = {
@@ -343,6 +356,7 @@ const { t } = useI18n();
 const conversations = ref<ConversationSummary[]>([]);
 const remoteImContactConversations = ref<RemoteImContactConversationSummary[]>([]);
 const sidebarViewerId = ref("");
+const pendingStreamProbeResolvers = new Map<string, (received: boolean) => void>();
 const lastOverviewSyncAt = ref("");
 const sidebarActiveSynced = ref<boolean | null>(null);
 let sidebarForegroundReconciling = false;
@@ -381,6 +395,9 @@ const {
   activeMessageBlocks,
   activeMessageText,
   streamingAssistantMessageId,
+  streamActivationId,
+  streamRequestId,
+  streamRevision,
   toolStatusState,
   toolStatusText,
   appendAssistantTextDelta,
@@ -1147,6 +1164,97 @@ async function requestConversationRuntimeSnapshot(conversationId: string): Promi
   });
 }
 
+function createProbeId(): string {
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+async function probeSidebarStream(conversationId: string, timeoutMs = 1500): Promise<boolean> {
+  const normalizedConversationId = String(conversationId || "").trim();
+  if (!normalizedConversationId) return false;
+  const probeId = createProbeId();
+  let timeoutId: number | null = null;
+  const received = new Promise<boolean>((resolve) => {
+    pendingStreamProbeResolvers.set(probeId, resolve);
+    timeoutId = window.setTimeout(() => {
+      if (!pendingStreamProbeResolvers.has(probeId)) return;
+      pendingStreamProbeResolvers.delete(probeId);
+      resolve(false);
+    }, timeoutMs);
+  });
+  try {
+    const result = await transport.request<{ delivered?: boolean }>("conversation.streamProbe", {
+      conversationId: normalizedConversationId,
+      probeId,
+    }, timeoutMs);
+    if (!result?.delivered) return false;
+    return await received;
+  } catch {
+    return false;
+  } finally {
+    pendingStreamProbeResolvers.delete(probeId);
+    if (timeoutId !== null) window.clearTimeout(timeoutId);
+  }
+}
+
+async function resumeSidebarSubscription(conversationId: string): Promise<ConversationRuntimeSnapshot | null> {
+  const normalizedConversationId = String(conversationId || "").trim();
+  if (!normalizedConversationId) return null;
+  const result = await transport.request<{
+    conversationId?: string;
+    runtime?: ConversationRuntimeSnapshot;
+  }>("conversation.resumeSubscription", {
+    conversationId: normalizedConversationId,
+  });
+  return result?.runtime || null;
+}
+
+async function refreshSidebarMessageById(conversationId: string, messageId: string): Promise<boolean> {
+  const normalizedConversationId = String(conversationId || "").trim();
+  const normalizedMessageId = String(messageId || "").trim();
+  if (!normalizedConversationId || !normalizedMessageId) return false;
+  try {
+    const message = await transport.request<ChatMessage>("get_unarchived_conversation_message_by_id", {
+      input: {
+        conversationId: normalizedConversationId,
+        messageId: normalizedMessageId,
+      },
+    });
+    if (!message?.id) return false;
+    const index = messages.value.findIndex((item) => String(item.id || "").trim() === normalizedMessageId);
+    const nextMessages = index >= 0
+      ? messages.value.map((item, itemIndex) => itemIndex === index ? message : item)
+      : [...messages.value, message];
+    messages.value = normalizeSidebarMessages(nextMessages);
+    return true;
+  } catch (error) {
+    console.warn("[Sidebar前台恢复] 单条 assistant 消息刷新失败", {
+      conversationId: normalizedConversationId,
+      messageId: normalizedMessageId,
+      error,
+    });
+    return false;
+  }
+}
+
+function applyRuntimeSnapshotWithoutReload(runtimeSnapshot: ConversationRuntimeSnapshot): string {
+  const streamCache = runtimeSnapshot.streamCache;
+  const messageId = String(streamCache?.persistedAssistantMessageId || streamingAssistantMessageId.value || "").trim();
+  if (runtimeSnapshot.runtimeState === "assistant_streaming") {
+    if (!messageId) return "";
+    if (streamingAssistantMessageId.value !== messageId) {
+      const previousMessageId = String(streamingAssistantMessageId.value || "").trim();
+      if (previousMessageId) finishStreamingMessage(previousMessageId);
+      startStreamingMessage(messageId);
+    }
+    if (streamCache) applyRuntimeStreamCache({ streamCache });
+    busy.value = true;
+    return messageId;
+  }
+  return messageId;
+}
+
 async function requestLatestFormalTailMessageId(conversationId: string): Promise<string> {
   const snapshot = await transport.request<ConversationFreshnessSnapshot>("conversation.freshnessSnapshot", {
     conversationId,
@@ -1169,22 +1277,40 @@ async function reconcileActiveConversationAfterWake(reason: string) {
   sidebarForegroundReconciling = true;
   try {
     const runtimeSnapshot = await requestConversationRuntimeSnapshot(conversationId);
-    const backendStreaming = String(runtimeSnapshot?.runtimeState || "").trim() === "assistant_streaming";
     const frontendStreaming = sidebarConversationIsStreaming();
-    if (backendStreaming || frontendStreaming) {
-      if (
-        backendStreaming !== frontendStreaming
-        || !String(streamingAssistantMessageId.value || "").trim()
-        || !!runtimeSnapshot?.streamCache?.hasVisibleProgress
-      ) {
-        await openConversation(conversationId);
-      }
+    const recoveryOutcome = await recoverSidebarForegroundStreaming({
+      conversationId,
+      runtimeSnapshot,
+      frontendStreaming,
+      frontendMessageId: streamingAssistantMessageId.value,
+      frontendActivationId: streamActivationId.value,
+      frontendRequestId: streamRequestId.value,
+      frontendRevision: streamRevision.value,
+    }, {
+      probeStream: probeSidebarStream,
+      resumeSubscription: resumeSidebarSubscription,
+      applyRuntimeSnapshot: (snapshot) => !!applyRuntimeSnapshotWithoutReload(snapshot as ConversationRuntimeSnapshot),
+      refreshMessageById: refreshSidebarMessageById,
+      finalizeMessage: (messageId) => {
+        finishStreamingMessage(messageId);
+        clearStreamingState();
+        busy.value = false;
+      },
+    });
+
+    if (recoveryOutcome === "handled") return;
+    if (recoveryOutcome === "reload_conversation") {
+      await openConversation(conversationId);
       return;
     }
 
     const currentTailId = currentFormalTailMessageId();
     const latestTailId = await requestLatestFormalTailMessageId(conversationId);
     if (latestTailId === currentTailId) {
+      await markConversationReadOnSidebarFocus(conversationId);
+      return;
+    }
+    if (latestTailId && await refreshSidebarMessageById(conversationId, latestTailId)) {
       await markConversationReadOnSidebarFocus(conversationId);
       return;
     }
@@ -1195,6 +1321,15 @@ async function reconcileActiveConversationAfterWake(reason: string) {
       conversationId,
       error,
     });
+    try {
+      await openConversation(conversationId);
+    } catch (fallbackError) {
+      console.warn("[Sidebar前台恢复] 全量会话兜底失败", {
+        reason,
+        conversationId,
+        error: fallbackError,
+      });
+    }
   } finally {
     sidebarForegroundReconciling = false;
   }
@@ -2575,6 +2710,12 @@ async function reconnectSidebarBridge(options?: { forceReloadActiveConversation?
       await initializeAfterBridgeAuthenticated();
       if (forceReloadActiveConversation) {
         await reloadActiveSidebarConversation(reason);
+      } else {
+        const currentConversationId = String(activeConversationId.value || "").trim();
+        if (currentConversationId) {
+          await resumeSidebarSubscription(currentConversationId);
+          await reconcileActiveConversationAfterWake(`${reason}_after_reconnect`);
+        }
       }
       return;
     }
@@ -2589,6 +2730,12 @@ async function reconnectSidebarBridge(options?: { forceReloadActiveConversation?
     await initializeAfterBridgeAuthenticated();
     if (forceReloadActiveConversation) {
       await reloadActiveSidebarConversation(reason);
+    } else {
+      const currentConversationId = String(activeConversationId.value || "").trim();
+      if (currentConversationId) {
+        await resumeSidebarSubscription(currentConversationId);
+        await reconcileActiveConversationAfterWake(`${reason}_after_reconnect`);
+      }
     }
   }
 }
@@ -2617,6 +2764,16 @@ async function submitRemoteAuth() {
 }
 
 function registerNotifications() {
+  transport.onNotification("chat.streamProbeAck", (payload) => {
+    const value = payload as { conversationId?: string; probeId?: string };
+    if (String(value?.conversationId || "").trim() !== activeConversationId.value) return;
+    const probeId = String(value?.probeId || "").trim();
+    if (!probeId) return;
+    const resolve = pendingStreamProbeResolvers.get(probeId);
+    if (!resolve) return;
+    pendingStreamProbeResolvers.delete(probeId);
+    resolve(true);
+  });
   transport.onNotification("bridge.ready", (payload) => {
     const value = payload as { authRequired?: boolean };
     if (value.authRequired && !transport.authenticated.value) {
@@ -2860,6 +3017,11 @@ function handleWindowBlur() {
   void syncSidebarActiveState("blur");
 }
 
+function handleWindowPageShow() {
+  sidebarActiveSynced.value = null;
+  void syncSidebarActiveState("pageshow");
+}
+
 onMounted(() => {
   registerNotifications();
   transport.onAuthRefreshNeeded(() => {
@@ -2869,6 +3031,7 @@ onMounted(() => {
   window.addEventListener("paste", handleWindowPaste);
   window.addEventListener("focus", handleWindowFocus);
   window.addEventListener("blur", handleWindowBlur);
+  window.addEventListener("pageshow", handleWindowPageShow);
   document.addEventListener("visibilitychange", handleDocumentVisibilityChange);
   if (isTauriRuntimeAvailable()) {
     void import("@tauri-apps/api/event")
@@ -2883,12 +3046,15 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  for (const resolve of pendingStreamProbeResolvers.values()) resolve(false);
+  pendingStreamProbeResolvers.clear();
   clearDiscoveryRefreshTimer();
   cancelPendingRewindConfirm();
   window.removeEventListener("message", handleWindowMessage);
   window.removeEventListener("paste", handleWindowPaste);
   window.removeEventListener("focus", handleWindowFocus);
   window.removeEventListener("blur", handleWindowBlur);
+  window.removeEventListener("pageshow", handleWindowPageShow);
   document.removeEventListener("visibilitychange", handleDocumentVisibilityChange);
   sidebarActiveSynced.value = null;
   if (unlistenCodeReviewFn) unlistenCodeReviewFn();

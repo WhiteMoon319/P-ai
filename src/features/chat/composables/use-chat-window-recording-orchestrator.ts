@@ -2,6 +2,7 @@ import { ref, watch, type Ref } from "vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { AppConfig, ChatMessage } from "../../../types/app";
 import { formalizeMessages } from "./use-chat-flow-utils";
+import { decideForegroundRecovery } from "./foreground-recovery-decision";
 import { useRecordHotkey } from "./use-record-hotkey";
 
 type RecordingActivationSource = "foreground" | "background";
@@ -32,6 +33,12 @@ type UseChatWindowRecordingOrchestratorOptions = {
       reason?: string;
     }) => number;
     frontendRoundPhase?: Ref<"idle" | "queued" | "waiting" | "streaming">;
+    readConversationStreamCache?: (conversationId?: string | null) => {
+      activationId?: string;
+      requestId?: string;
+      updatedAt?: string;
+      persistedAssistantMessageId?: string;
+    } | null;
   } | null | undefined;
   applyConversationRuntimeStateUpdated: (payload: {
     conversationId: string;
@@ -53,8 +60,12 @@ type ConversationRuntimeSnapshot = {
   hasPendingQueue?: boolean;
   pendingQueueCount?: number;
   streamCache?: {
+    activationId?: string;
+    requestId?: string;
+    updatedAt?: string;
     hasVisibleProgress?: boolean;
     toolStatusState?: string;
+    persistedAssistantMessageId?: string;
   } | null;
 };
 
@@ -210,21 +221,47 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     const runtimeState = String(runtimeSnapshot?.runtimeState || "").trim();
     const backendStreaming = runtimeState === "assistant_streaming";
     const frontendStreaming = frontendConversationIsStreaming();
+    const frontendStreamCache = chatFlow?.readConversationStreamCache?.(conversationId);
 
-    if (backendStreaming && frontendStreaming) {
+    let recoveryAction = decideForegroundRecovery({
+      backendStreaming,
+      frontendStreaming,
+      backendMessageId: runtimeSnapshot.streamCache?.persistedAssistantMessageId,
+      frontendMessageId: frontendStreamCache?.persistedAssistantMessageId,
+      backendActivationId: runtimeSnapshot.streamCache?.activationId,
+      frontendActivationId: frontendStreamCache?.activationId,
+      backendRequestId: runtimeSnapshot.streamCache?.requestId,
+      frontendRequestId: frontendStreamCache?.requestId,
+      backendRevision: runtimeSnapshot.streamCache?.updatedAt,
+      frontendRevision: frontendStreamCache?.updatedAt,
+      probeState: "unknown",
+    });
+
+    if (recoveryAction === "probe_stream") {
       if (!chatFlow?.probeBoundChannel) {
         await recoverForegroundConversationAfterDeadChannel(conversationId);
         return;
       }
       const probeHealthy = await chatFlow.probeBoundChannel(conversationId);
-      if (probeHealthy) {
+      recoveryAction = decideForegroundRecovery({
+        backendStreaming,
+        frontendStreaming,
+        backendMessageId: runtimeSnapshot.streamCache?.persistedAssistantMessageId,
+        frontendMessageId: frontendStreamCache?.persistedAssistantMessageId,
+        backendActivationId: runtimeSnapshot.streamCache?.activationId,
+        frontendActivationId: frontendStreamCache?.activationId,
+        backendRequestId: runtimeSnapshot.streamCache?.requestId,
+        frontendRequestId: frontendStreamCache?.requestId,
+        backendRevision: runtimeSnapshot.streamCache?.updatedAt,
+        frontendRevision: frontendStreamCache?.updatedAt,
+        probeState: probeHealthy ? "healthy" : "unhealthy",
+      });
+      if (recoveryAction === "keep") {
         return;
       }
-      await recoverForegroundConversationAfterDeadChannel(conversationId);
-      return;
     }
 
-    if (backendStreaming !== frontendStreaming) {
+    if (recoveryAction !== "keep") {
       await recoverForegroundConversationBySwitch(conversationId);
       return;
     }

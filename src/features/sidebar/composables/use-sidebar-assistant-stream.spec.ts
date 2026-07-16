@@ -41,6 +41,32 @@ describe("useSidebarAssistantStream", () => {
     expect(runtime.activeMessageText.value).toBe("第一段第二段");
   });
 
+  it("tracks the latest backend stream revision for foreground recovery", () => {
+    const { runtime } = createRuntime();
+    runtime.startStreamingMessage("assistant-1");
+    runtime.writeStreamCacheToMessage({
+      persistedAssistantMessageId: "assistant-1",
+      updatedAt: "2026-07-17T00:00:01Z",
+      streamBlocks: [],
+    });
+
+    expect(runtime.streamRevision.value).toBe("2026-07-17T00:00:01Z");
+  });
+
+  it("tracks backend activation and request identity", () => {
+    const { runtime } = createRuntime();
+    runtime.startStreamingMessage("assistant-1");
+    runtime.writeStreamCacheToMessage({
+      persistedAssistantMessageId: "assistant-1",
+      activationId: "activation-1",
+      requestId: "request-1",
+      streamBlocks: [],
+    });
+
+    expect(runtime.streamActivationId.value).toBe("activation-1");
+    expect(runtime.streamRequestId.value).toBe("request-1");
+  });
+
   it("finishes by clearing streaming metadata while preserving blocks", () => {
     const { messages, runtime } = createRuntime();
     runtime.startStreamingMessage("assistant-1");

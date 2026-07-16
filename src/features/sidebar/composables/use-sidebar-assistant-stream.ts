@@ -26,6 +26,9 @@ export function useSidebarAssistantStream(options: UseSidebarAssistantStreamOpti
   const toolStatusText = ref("");
   const toolStatusState = ref<"running" | "done" | "failed" | "">("");
   const streamingAssistantMessageId = ref("");
+  const streamActivationId = ref("");
+  const streamRequestId = ref("");
+  const streamRevision = ref("");
 
   const activeMessage = computed(() => options.messages.value.find((message) =>
     String(message.id || "").trim() === streamingAssistantMessageId.value
@@ -37,12 +40,24 @@ export function useSidebarAssistantStream(options: UseSidebarAssistantStreamOpti
     toolStatusText.value = "";
     toolStatusState.value = "";
     streamingAssistantMessageId.value = "";
+    streamActivationId.value = "";
+    streamRequestId.value = "";
+    streamRevision.value = "";
   }
 
   function writeStreamCacheToMessage(cache: SidebarStreamCachePayload) {
     const messageId = String(cache.persistedAssistantMessageId || streamingAssistantMessageId.value || "").trim();
     if (!messageId) return;
     streamingAssistantMessageId.value = messageId;
+    if (String(cache.activationId || "").trim()) {
+      streamActivationId.value = String(cache.activationId || "").trim();
+    }
+    if (String(cache.requestId || "").trim()) {
+      streamRequestId.value = String(cache.requestId || "").trim();
+    }
+    if (String(cache.updatedAt || "").trim()) {
+      streamRevision.value = String(cache.updatedAt || "").trim();
+    }
     const blocks = normalizeAssistantStreamBlocks(cache.streamBlocks);
     const index = options.messages.value.findIndex((message) => String(message.id || "").trim() === messageId);
     const previous = index >= 0 ? options.messages.value[index] : undefined;
@@ -130,6 +145,9 @@ export function useSidebarAssistantStream(options: UseSidebarAssistantStreamOpti
     activeMessageBlocks,
     activeMessageText,
     streamingAssistantMessageId,
+    streamActivationId,
+    streamRequestId,
+    streamRevision,
     toolStatusState,
     toolStatusText,
     appendAssistantTextDelta,

@@ -288,6 +288,13 @@ struct IdeChatConversationInput {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct IdeChatStreamProbeInput {
+    conversation_id: String,
+    probe_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct IdeChatConversationBlockPageInput {
     conversation_id: String,
     #[serde(default)]

@@ -155,10 +155,14 @@ export type SidebarModelPayload = {
 };
 
 export type SidebarStreamCachePayload = {
+  activationId?: string;
+  requestId?: string;
   assistantText?: string;
   toolStatusText?: string;
   toolStatusState?: string;
   streamBlocks?: unknown[];
+  updatedAt?: string;
+  hasVisibleProgress?: boolean;
   persistedAssistantMessageId?: string;
 };
 

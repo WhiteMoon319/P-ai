@@ -144,6 +144,13 @@ async fn ide_chat_handle_jsonrpc_request(
         "conversation.blockPage" => ide_chat_conversation_block_page(state, request.params),
         "conversation.fastRequestTurns" => ide_chat_conversation_fast_request_turns(state, request.params),
         "conversation.runtimeSnapshot" => ide_chat_conversation_runtime_snapshot(state, request.params),
+        "conversation.resumeSubscription" => ide_chat_resume_sidebar_subscription(
+            state,
+            request.params,
+            client_id,
+            opened_conversation_id,
+        ),
+        "conversation.streamProbe" => ide_chat_stream_probe(request.params, client_id, opened_conversation_id),
         "conversation.freshnessSnapshot" => ide_chat_conversation_freshness_snapshot(state, request.params).await,
         "conversation.markRead" => ide_chat_mark_conversation_read(state, request.params),
         "conversation.create" => ide_chat_create_conversation(state, request.params)
@@ -570,6 +577,8 @@ mod web_native_capability_tests {
     fn portable_business_methods_should_not_be_marked_native_only() {
         for method in [
             "conversation.list",
+            "conversation.resumeSubscription",
+            "conversation.streamProbe",
             "workspace.list",
             "workspace.directory.list",
             "fileReader.directory.list",

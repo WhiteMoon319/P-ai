@@ -23,6 +23,7 @@ export type ConversationStreamCache = {
   speakerAgentId?: string;
   startedAt?: string;
   startedAtMs?: number;
+  updatedAt?: string;
   frontendDispatchStartedAtMs?: number;
   frontendDispatchElapsedMs?: number;
   assistantText: string;
@@ -40,6 +41,7 @@ export type ConversationRuntimeStreamCacheSnapshot = {
   speakerAgentId?: string;
   startedAt?: string;
   startedAtMs?: number;
+  updatedAt?: string;
   frontendDispatchStartedAtMs?: number;
   frontendDispatchElapsedMs?: number;
   assistantText?: string;
@@ -89,6 +91,7 @@ function emptyConversationStreamCache(): ConversationStreamCache {
     speakerAgentId: "",
     startedAt: "",
     startedAtMs: 0,
+    updatedAt: "",
     frontendDispatchStartedAtMs: 0,
     frontendDispatchElapsedMs: 0,
     assistantText: "",
@@ -114,6 +117,7 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
       speakerAgentId: String(cache.speakerAgentId || "").trim(),
       startedAt: String(cache.startedAt || "").trim(),
       startedAtMs: positiveRoundedNumber(cache.startedAtMs),
+      updatedAt: String(cache.updatedAt || "").trim(),
       frontendDispatchStartedAtMs: positiveRoundedNumber(cache.frontendDispatchStartedAtMs),
       frontendDispatchElapsedMs: positiveRoundedNumber(cache.frontendDispatchElapsedMs),
       assistantText: cache.assistantText,
@@ -139,6 +143,7 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
       speakerAgentId: String(next.speakerAgentId || "").trim(),
       startedAt: String(next.startedAt || "").trim(),
       startedAtMs: positiveRoundedNumber(next.startedAtMs),
+      updatedAt: String(next.updatedAt || "").trim(),
       frontendDispatchStartedAtMs: positiveRoundedNumber(next.frontendDispatchStartedAtMs),
       frontendDispatchElapsedMs: positiveRoundedNumber(next.frontendDispatchElapsedMs),
       streamBlocks: normalizeAssistantStreamBlocks(next.streamBlocks),
@@ -164,6 +169,7 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
       speakerAgentId: current.speakerAgentId,
       startedAt: current.startedAt,
       startedAtMs: current.startedAtMs,
+      updatedAt: current.updatedAt,
       frontendDispatchStartedAtMs: options.getFrontendDispatchStartedAtMs(),
       frontendDispatchElapsedMs: options.currentFrontendDispatchElapsedMs(),
       toolStatusText: String(options.toolStatusText.value || ""),
@@ -220,6 +226,7 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
       speakerAgentId: String(snapshotSpeakerAgentId || current.speakerAgentId || "").trim(),
       startedAt: String(snapshot.startedAt || current.startedAt || "").trim(),
       startedAtMs: positiveRoundedNumber(snapshot.startedAtMs || current.startedAtMs),
+      updatedAt: String(snapshot.updatedAt || current.updatedAt || "").trim(),
       frontendDispatchStartedAtMs: positiveRoundedNumber(snapshot.startedAtMs || snapshot.frontendDispatchStartedAtMs || current.frontendDispatchStartedAtMs),
       frontendDispatchElapsedMs: positiveRoundedNumber(snapshot.frontendDispatchElapsedMs || current.frontendDispatchElapsedMs),
       assistantText: String(snapshot.assistantText || ""),
@@ -260,6 +267,7 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
         speakerAgentId: String(eventSpeakerAgentId || current.speakerAgentId || "").trim(),
         startedAt: current.startedAt,
         startedAtMs: current.startedAtMs,
+        updatedAt: String(eventStreamCache?.updatedAt || current.updatedAt || "").trim(),
         frontendDispatchStartedAtMs: options.getFrontendDispatchStartedAtMs(),
         frontendDispatchElapsedMs: options.currentFrontendDispatchElapsedMs(),
         streamBlocks: normalizeAssistantStreamBlocks(current.streamBlocks),
