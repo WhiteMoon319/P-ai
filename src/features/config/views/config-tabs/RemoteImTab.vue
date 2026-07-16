@@ -164,7 +164,7 @@
                     <span class="badge badge-sm shrink-0" :class="item.remoteContactType === 'group' ? 'badge-secondary' : 'badge-primary'">
                       {{ item.remoteContactType === "group" ? t("config.remoteIm.group") : t("config.remoteIm.private") }}
                     </span>
-                    <div v-if="!isPrivateContact(item)">
+                    <div>
                       <button
                         type="button"
                         class="badge badge-sm shrink-0 gap-1.5 transition-colors"
@@ -178,7 +178,7 @@
                       </button>
                     </div>
                     <span
-                      v-if="!isPrivateContact(item) && contactKeywordModeMissingKeywords(item)"
+                      v-if="contactKeywordModeMissingKeywords(item)"
                       class="badge badge-sm badge-warning shrink-0 gap-1.5"
                       :title="t('config.remoteIm.keywordMissingHint')"
                     >
@@ -601,23 +601,24 @@
                 </div>
               </li>
 
-              <li
-                v-if="selectedContact && !isPrivateContact(selectedContact)"
-                class="list-row flex items-start justify-between gap-3"
-              >
+              <li v-if="selectedContact" class="list-row flex items-start justify-between gap-3">
                 <div class="font-medium">{{ t("config.remoteIm.activateMode") }}</div>
                 <div class="flex w-64 flex-col gap-2">
                   <select
                     class="select select-bordered select-sm w-full"
                     v-model="contactDraft.activationMode"
                   >
-                    <option value="always">{{ t("config.remoteIm.activateModeAlways") }}</option>
-                    <option value="never">{{ t("config.remoteIm.activateModeNever") }}</option>
-                    <option value="keyword">{{ t("config.remoteIm.activateModeKeyword") }}</option>
+                    <option
+                      v-for="option in contactActivationModeOptions(selectedContact)"
+                      :key="option.value"
+                      :value="option.value"
+                    >
+                      {{ option.label }}
+                    </option>
                   </select>
                   <span class="text-[11px] opacity-60">{{ contactDraftActivationHint }}</span>
                   <input
-                    v-if="contactDraft.activationMode === 'keyword'"
+                    v-if="!isPrivateContact(selectedContact) && contactDraft.activationMode === 'keyword'"
                     type="text"
                     class="input input-bordered input-sm w-full"
                     :placeholder="t('config.remoteIm.activateKeywordsPlaceholder')"
@@ -1120,7 +1121,7 @@ const groupedContacts = computed<ContactGroup[]>(() => {
     { mode: "never", label: t("config.remoteIm.activateModeNever"), items: [] },
   ];
   for (const c of all) {
-    const mode = normalizeActivationMode(c.activationMode);
+    const mode = isPrivateContact(c) ? "always" : normalizeActivationMode(c.activationMode);
     const target = groups.find((g) => g.mode === mode);
     (target ?? groups[2]).items.push(c);
   }
@@ -1214,7 +1215,7 @@ function buildContactDraftFromContact(item: RemoteImContact): ContactEditDraft {
     boundDepartmentId: String(item.boundDepartmentId || ""),
     boundAgentId: String(item.boundAgentId || ""),
     processingMode: normalizeProcessingMode(item.processingMode),
-    activationMode: normalizeActivationMode(item.activationMode || "never"),
+    activationMode: isPrivateContact(item) ? "always" : normalizeActivationMode(item.activationMode || "never"),
     activationKeywordsText: item.activationKeywords.join(", "),
     muteKeywordsText: (Array.isArray(item.muteKeywords) ? item.muteKeywords : [t("config.remoteIm.defaultMuteKeyword")]).join(", "),
     unmuteKeywordsText: (Array.isArray(item.unmuteKeywords) ? item.unmuteKeywords : [t("config.remoteIm.defaultUnmuteKeyword")]).join(", "),
@@ -1698,7 +1699,12 @@ function onContactActivationModeChange(item: RemoteImContact, modeRaw: string) {
   void saveContactActivation(item, { activationMode: mode });
 }
 
-function contactActivationModeOptions(): Array<{ value: RemoteImContact["activationMode"]; label: string }> {
+function contactActivationModeOptions(
+  item: Pick<RemoteImContact, "remoteContactType">,
+): Array<{ value: RemoteImContact["activationMode"]; label: string }> {
+  if (isPrivateContact(item)) {
+    return [{ value: "always", label: t("config.remoteIm.activateModeAlways") }];
+  }
   return [
     { value: "always", label: t("config.remoteIm.activateModeAlways") },
     { value: "keyword", label: t("config.remoteIm.activateModeKeyword") },
@@ -1731,8 +1737,8 @@ function contactPillMenuOptions(
   kind: ContactPillMenuKind,
 ): ContactPillMenuOption[] {
   if (kind === "activation") {
-    const current = normalizeActivationMode(item.activationMode || "never");
-    return contactActivationModeOptions().map((option) => ({
+    const current = isPrivateContact(item) ? "always" : normalizeActivationMode(item.activationMode || "never");
+    return contactActivationModeOptions(item).map((option) => ({
       key: option.value,
       label: option.label,
       active: current === option.value,
@@ -2440,6 +2446,7 @@ function processingModeHintText(item: RemoteImContact): string {
 }
 
 function contactActivationModeLabel(item: RemoteImContact): string {
+  if (isPrivateContact(item)) return t("config.remoteIm.activateModeAlways");
   const mode = normalizeActivationMode(item.activationMode || "never");
   if (mode === "always") return t("config.remoteIm.activateModeAlways");
   if (mode === "keyword") return t("config.remoteIm.activateModeKeyword");
@@ -2447,6 +2454,7 @@ function contactActivationModeLabel(item: RemoteImContact): string {
 }
 
 function contactActivationBadgeClass(item: RemoteImContact): string {
+  if (isPrivateContact(item)) return "badge-success";
   const mode = normalizeActivationMode(item.activationMode || "never");
   if (mode === "always") return "badge-success";
   if (mode === "keyword") return "badge-primary";
@@ -2454,12 +2462,14 @@ function contactActivationBadgeClass(item: RemoteImContact): string {
 }
 
 function contactKeywordModeMissingKeywords(item: RemoteImContact): boolean {
+  if (isPrivateContact(item)) return false;
   if (normalizeActivationMode(item.activationMode || "never") !== "keyword") return false;
   return !Array.isArray(item.activationKeywords)
     || item.activationKeywords.every((keyword) => !String(keyword || "").trim());
 }
 
 function contactActivationHintText(item: RemoteImContact): string {
+  if (isPrivateContact(item)) return t("config.remoteIm.activateModeAlwaysHint");
   const mode = normalizeActivationMode(item.activationMode);
   if (mode === "always") return t("config.remoteIm.activateModeAlwaysHint");
   if (mode === "keyword") return t("config.remoteIm.activateModeKeywordHint");
