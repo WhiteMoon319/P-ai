@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-15T06:36:29.109Z",
-  "latestVersion": "v0.32.0",
+  "generatedAt": "2026-07-16T00:14:02.994Z",
+  "latestVersion": "v0.32.1",
   "releases": [
+    {
+      "version": "v0.32.1",
+      "path": "docs/changelog/releases/v0.32.1.md",
+      "summary": "修复压缩后继续调用工具时，工具历史没有正确继承的问题。"
+    },
     {
       "version": "v0.32.0",
       "path": "docs/changelog/releases/v0.32.0.md",
