@@ -122,6 +122,7 @@ pub(crate) struct ChatPendingEvent {
 #[derive(Clone)]
 struct QueuedChatActivation {
     event_id: String,
+    delta_channel: Option<tauri::ipc::Channel<AssistantDeltaEvent>>,
 }
 
 #[derive(Debug, Clone)]
@@ -1334,6 +1335,9 @@ async fn activate_main_assistant(
     let activation_trace_id = activation
         .as_ref()
         .map(|item| format!("queue-{}", item.event_id));
+    let activation_delta_channel = activation
+        .as_ref()
+        .and_then(|item| item.delta_channel.clone());
     let trace_id = runtime_context_request_id_or_new(
         Some(&runtime_context),
         activation_trace_id.as_deref(),
@@ -1516,6 +1520,7 @@ async fn activate_main_assistant(
     // 使用 emit 作为远程激活轮次的流式主通道，避免前端窗口重绑定造成 channel 失联。
     let state_for_delta = state.clone();
     let conversation_id_for_emit = conversation_id.to_string();
+    let activation_delta_channel_for_emit = activation_delta_channel.clone();
     let stream_start_rebind_emitted = std::sync::Arc::new(std::sync::Mutex::new(false));
     let stream_start_rebind_emitted_for_channel = stream_start_rebind_emitted.clone();
     let active_channel: tauri::ipc::Channel<AssistantDeltaEvent> = tauri::ipc::Channel::new(
@@ -1568,11 +1573,40 @@ async fn activate_main_assistant(
                         event.reason.as_deref().unwrap_or("tool_start"),
                     );
                 } else {
-                    dispatch_assistant_delta_to_active_view(
-                        &state_for_delta,
-                        &conversation_id_for_emit,
-                        &event,
-                    );
+                    let delivered_to_activation = if let Some(channel) =
+                        activation_delta_channel_for_emit.as_ref()
+                    {
+                        match channel.send(event.clone()) {
+                            Ok(_) => true,
+                            Err(err) => {
+                                runtime_log_warn(format!(
+                                    "[聊天流式订阅] 降级，任务=投递本次发送通道，conversation_id={}，kind={}，error={}",
+                                    conversation_id_for_emit.trim(),
+                                    event.kind.as_deref().unwrap_or("delta"),
+                                    err
+                                ));
+                                false
+                            }
+                        }
+                    } else {
+                        false
+                    };
+                    if delivered_to_activation {
+                        if should_emit_assistant_delta_via_app_event_only(&event) {
+                            let broadcast_event = assistant_delta_broadcast_event(&event);
+                            emit_assistant_delta_app_event(
+                                &state_for_delta,
+                                &conversation_id_for_emit,
+                                &broadcast_event,
+                            );
+                        }
+                    } else {
+                        dispatch_assistant_delta_to_active_view(
+                            &state_for_delta,
+                            &conversation_id_for_emit,
+                            &event,
+                        );
+                    }
                 }
             }
             Ok(())
@@ -1697,6 +1731,7 @@ fn collect_active_chat_view_activations(
             }
             Some(QueuedChatActivation {
                 event_id: format!("active-view:{window_label}"),
+                delta_channel: None,
             })
         })
         .collect::<Vec<_>>();
@@ -1727,9 +1762,10 @@ fn take_queued_chat_activations(
         .map_err(|_| "Failed to lock pending chat delta channels".to_string())?;
     let mut activations = Vec::<QueuedChatActivation>::new();
     for event_id in event_ids {
-        if channels.remove(event_id).is_some() {
+        if let Some(delta_channel) = channels.remove(event_id) {
             activations.push(QueuedChatActivation {
                 event_id: event_id.clone(),
+                delta_channel: Some(delta_channel),
             });
         }
     }

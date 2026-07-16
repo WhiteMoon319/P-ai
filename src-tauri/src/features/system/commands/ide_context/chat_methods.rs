@@ -635,7 +635,7 @@ fn ide_chat_queue_inline_attachment(state: &AppState, params: Value) -> Result<V
 
 async fn ide_chat_submit_message_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<SendChatRequest>(params, "input")?;
-    ide_chat_serialize(submit_chat_message_inner(input, state).await?)
+    ide_chat_serialize(submit_chat_message_inner(input, state, None).await?)
 }
 
 fn ide_chat_stop_message_command(state: &AppState, params: Value) -> Result<Value, String> {
@@ -645,7 +645,7 @@ fn ide_chat_stop_message_command(state: &AppState, params: Value) -> Result<Valu
 
 async fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<SendChatRequest>(params)?;
-    let output = submit_chat_message_inner(input, state).await?;
+    let output = submit_chat_message_inner(input, state, None).await?;
     ide_chat_serialize(output)
 }
 

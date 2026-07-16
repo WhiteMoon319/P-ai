@@ -43,6 +43,7 @@ type UseChatFlowSendControllerOptions = {
   t: (key: string, params?: Record<string, unknown>) => string;
   getRound: () => RoundState;
   setRound: (next: RoundState) => void;
+  setBoundDisplayGeneration?: (gen: number) => void;
   nextGeneration: () => number;
   setSendChatActiveGen: (gen: number) => void;
   setActiveActivationId: (value: string) => void;
@@ -113,6 +114,7 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
     options.applyPreparedSendInput(prepared);
 
     const gen = options.nextGeneration();
+    options.setBoundDisplayGeneration?.(gen);
     options.setSendChatActiveGen(gen);
     options.setActiveRoundAgentId(sendSession.agentId);
     options.sendStartedAtMsByGen.set(gen, Date.now());
@@ -164,16 +166,18 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
       if (!hasForegroundRoundInFlight && accepted && ingress !== "queued") {
         if (userMessageId) {
           options.insertUserDraft(userMessageId, gen, plainText, sentImages, attachments, selectedMentions);
-          options.onOwnUserDraftInserted?.({
-            conversationId: String(submitResult.conversationId || sendConversationId || "").trim(),
-            messageId: userMessageId,
-          });
         }
         if (selectedMentions.length === 0 && assistantMessageId) {
           queuedAssistantMessageId = assistantMessageId;
           options.setRound({ phase: "queued", gen, messageId: queuedAssistantMessageId });
           options.updateQueuedAssistantMessageStatus(queuedAssistantMessageId, options.t("chat.statusPreparingMessage"));
           options.onAssistantDraftInserted?.();
+        }
+        if (userMessageId) {
+          options.onOwnUserDraftInserted?.({
+            conversationId: String(submitResult.conversationId || sendConversationId || "").trim(),
+            messageId: userMessageId,
+          });
         }
       }
       if (!hasForegroundRoundInFlight && (ingress === "queued" || !accepted)) {

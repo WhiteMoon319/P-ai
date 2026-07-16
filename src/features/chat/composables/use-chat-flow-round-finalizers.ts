@@ -3,6 +3,42 @@ import { DRAFT_USER_ID_PREFIX, summarizeToolCallsText as formatToolCallsText } f
 import { messageHasVisibleContent } from "./use-chat-flow-utils";
 
 export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
+  function assistantMessageHasCanonicalContent(message?: ChatMessage): boolean {
+    if (!message) return false;
+    const providerMeta = { ...((message.providerMeta || {}) as Record<string, unknown>) };
+    delete providerMeta._preStreamingStatusText;
+    delete providerMeta._toolStatusText;
+    delete providerMeta._toolStatusState;
+    return messageHasVisibleContent({ ...message, providerMeta });
+  }
+
+  async function resolveCanonicalAssistantMessage(
+    messageId: string,
+    resultMessage?: ChatMessage,
+  ): Promise<ChatMessage | undefined> {
+    if (assistantMessageHasCanonicalContent(resultMessage)) {
+      return resultMessage;
+    }
+    const conversationId = String(
+      bindings.getConversationId ? bindings.getConversationId() : "",
+    ).trim();
+    if (conversationId && bindings.refreshMessageById) {
+      try {
+        await bindings.refreshMessageById({ conversationId, messageId });
+      } catch (error) {
+        console.warn("[聊天] 完成态按消息 ID 回读失败", {
+          conversationId,
+          messageId,
+          message: String((error as { message?: string })?.message ?? error ?? ""),
+        });
+      }
+    }
+    const refreshedMessage = Array.isArray(bindings.allMessages?.value)
+      ? bindings.allMessages.value.find((message: ChatMessage) => message.id === messageId)
+      : undefined;
+    return assistantMessageHasCanonicalContent(refreshedMessage) ? refreshedMessage : undefined;
+  }
+
   function finalizeDeferredRoundCompletion() {
     const deferredRoundCompletion = bindings.getDeferredRoundCompletion();
     const round = bindings.getRound();
@@ -45,7 +81,21 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
     bindings.sendStartedAtMsByGen.delete(gen);
     const round = bindings.getRound();
     if (round.phase !== "queued" || round.gen !== gen) return;
-    bindings.finalizeMessage(round.messageId, result.assistantMessage);
+    const canonicalAssistantMessage = await resolveCanonicalAssistantMessage(
+      round.messageId,
+      result.assistantMessage,
+    );
+    const latestRound = bindings.getRound();
+    if (latestRound.phase !== "queued" || latestRound.gen !== gen) return;
+    if (canonicalAssistantMessage) {
+      bindings.finalizeMessage(round.messageId, canonicalAssistantMessage);
+    } else {
+      console.warn("[聊天] 完成态缺少可见的正式消息内容，保留当前投影", {
+        conversationId: String(bindings.getConversationId ? bindings.getConversationId() : "").trim(),
+        messageId: round.messageId,
+        gen,
+      });
+    }
     bindings.setPendingTerminalEvent(null);
     bindings.setDeferredRoundCompletion(null);
     bindings.setQueuedStreamingState(null);

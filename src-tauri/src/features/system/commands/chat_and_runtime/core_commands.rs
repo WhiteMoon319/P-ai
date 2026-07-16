@@ -1459,6 +1459,7 @@ fn release_submit_trace_id(state: &AppState, trace_id: &str) {
 async fn submit_chat_message_inner(
     input: SendChatRequest,
     state: &AppState,
+    on_delta: Option<tauri::ipc::Channel<AssistantDeltaEvent>>,
 ) -> Result<SubmitChatResult, String> {
     if input.trigger_only {
         return Err("submit_chat_message 不支持 trigger_only".to_string());
@@ -1681,9 +1682,17 @@ async fn submit_chat_message_inner(
         None
     };
 
+    if let Some(on_delta) = on_delta {
+        register_chat_event_delta_channel(state, &event_id, on_delta)?;
+    }
+
     let ingress = match ingress_chat_event(state, event) {
         Ok(value) => value,
         Err(err) => {
+            let _ = state
+                .pending_chat_delta_channels
+                .lock()
+                .map(|mut map| map.remove(&event_id));
             let _ = state
                 .pending_chat_result_senders
                 .lock()
@@ -1729,8 +1738,9 @@ async fn submit_chat_message_inner(
 async fn submit_chat_message(
     input: SendChatRequest,
     state: State<'_, AppState>,
+    on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
 ) -> Result<SubmitChatResult, String> {
-    submit_chat_message_inner(input, state.inner()).await
+    submit_chat_message_inner(input, state.inner(), Some(on_delta)).await
 }
 
 #[tauri::command]

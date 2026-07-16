@@ -167,6 +167,9 @@ export function useChatFlow(options: UseChatFlowOptions) {
   const roundFinalizers = useChatFlowRoundFinalizers({
     getRound: () => round,
     setRound,
+    getConversationId: options.getConversationId,
+    allMessages: options.allMessages,
+    refreshMessageById: options.refreshMessageById,
     getDeferredRoundCompletion: () => deferredRoundCompletion,
     setDeferredRoundCompletion: (value: DeferredRoundCompletion | null) => {
       deferredRoundCompletion = value;
@@ -474,6 +477,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     t: options.t,
     getRound: () => round,
     setRound,
+    setBoundDisplayGeneration: channelBinding.setBoundDisplayGeneration,
     nextGeneration: () => ++generation,
     setSendChatActiveGen: (gen) => {
       sendChatActiveGen = gen;
