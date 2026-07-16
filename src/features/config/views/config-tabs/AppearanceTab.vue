@@ -35,6 +35,41 @@
 
     <div class="card bg-base-100 border border-base-300">
       <div class="card-body gap-3 p-4">
+        <h3 class="card-title text-base">{{ t("appearance.chatBubble") }}</h3>
+        <div class="grid gap-3">
+          <label class="flex cursor-pointer items-center justify-between gap-3 rounded-box bg-base-200/40 px-3 py-2">
+            <span class="text-sm font-medium">{{ t("appearance.chatBubbleBackground") }}</span>
+            <input
+              :checked="assistantBubbleBackgroundEnabled"
+              type="checkbox"
+              class="toggle toggle-sm"
+              @change="setAssistantBubbleBackgroundEnabled(($event.target as HTMLInputElement).checked)"
+            />
+          </label>
+          <label class="flex cursor-pointer items-center justify-between gap-3 rounded-box bg-base-200/40 px-3 py-2">
+            <span class="text-sm font-medium">{{ t("appearance.chatBubbleSegmentedMarkdown") }}</span>
+            <input
+              :checked="segmentedMarkdownEnabled"
+              type="checkbox"
+              class="toggle toggle-sm"
+              @change="setSegmentedMarkdownEnabled(($event.target as HTMLInputElement).checked)"
+            />
+          </label>
+          <label class="flex cursor-pointer items-center justify-between gap-3 rounded-box bg-base-200/40 px-3 py-2">
+            <span class="text-sm font-medium">{{ t("appearance.chatBubbleFullTime") }}</span>
+            <input
+              :checked="chatTimeDisplayMode === 'absolute'"
+              type="checkbox"
+              class="toggle toggle-sm"
+              @change="setChatTimeDisplayMode(($event.target as HTMLInputElement).checked ? 'absolute' : 'relative')"
+            />
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card bg-base-100 border border-base-300">
+      <div class="card-body gap-3 p-4">
         <div class="flex items-center justify-between gap-3">
           <div>
             <h3 class="card-title text-base">{{ t("appearance.webviewZoom") }}</h3>
@@ -118,6 +153,7 @@ import {
 import {
   useMarkdownAppearance,
 } from "../../../shell/composables/use-markdown-appearance";
+import { useChatMessageAppearance } from "../../../shell/composables/use-chat-message-appearance";
 
 const props = defineProps<{
   uiLanguage: "zh-CN" | "en-US" | "zh-TW";
@@ -161,6 +197,14 @@ const {
   markdownFontScale,
   setMarkdownFontScale,
 } = useMarkdownAppearance();
+const {
+  assistantBubbleBackgroundEnabled,
+  segmentedMarkdownEnabled,
+  chatTimeDisplayMode,
+  setAssistantBubbleBackgroundEnabled,
+  setSegmentedMarkdownEnabled,
+  setChatTimeDisplayMode,
+} = useChatMessageAppearance();
 
 function isGeneratedTheme(theme: string) {
   return theme === GENERATED_THEME_LIGHT_ID || theme === GENERATED_THEME_DARK_ID;

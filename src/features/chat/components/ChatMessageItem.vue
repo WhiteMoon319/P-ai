@@ -395,24 +395,6 @@
           <span>{{ t('common.copy') }}</span>
         </button>
       </li>
-      <li>
-        <button type="button" @click="handleContextMenuAction('toggleBubbleBackground')">
-          <MessageCircleDashed class="h-4 w-4" />
-          <span>{{ assistantBubbleBackgroundEnabled ? t('chat.messageItem.hideBubbleBackground') : t('chat.messageItem.showBubbleBackground') }}</span>
-        </button>
-      </li>
-      <li v-if="assistantBubbleBackgroundEnabled">
-        <button type="button" @click="handleContextMenuAction('toggleSegmentedMarkdown')">
-          <TableRowsSplit class="h-4 w-4" />
-          <span>{{ segmentedMarkdownEnabled ? t('chat.messageItem.disableSegmentedMarkdown') : t('chat.messageItem.enableSegmentedMarkdown') }}</span>
-        </button>
-      </li>
-      <li>
-        <button type="button" @click="handleContextMenuAction('toggleTimeDisplayMode')">
-          <Eclipse class="h-4 w-4" />
-          <span>{{ chatTimeDisplayMode === 'absolute' ? t('chat.messageItem.showRelativeTime') : t('chat.messageItem.showAbsoluteTime') }}</span>
-        </button>
-      </li>
       <li v-if="mathContextCopyText">
         <button type="button" @click="handleContextMenuAction('copyMath')">
           <Copy class="h-4 w-4" />
@@ -435,62 +417,10 @@
   </Teleport>
 </template>
 
-<script lang="ts">
-import { ref as moduleRef } from "vue";
-
-const CHAT_BUBBLE_BACKGROUND_STORAGE_KEY = "easy-call.chat.bubble-background.v1";
-const CHAT_TIME_DISPLAY_MODE_STORAGE_KEY = "easy-call.chat.time-display-mode.v1";
-const CHAT_SEGMENTED_MARKDOWN_STORAGE_KEY = "easy-call.chat.segmented-markdown.v1";
-
-type ChatTimeDisplayMode = "relative" | "absolute";
-
-function readChatBubbleBackgroundPreference(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(CHAT_BUBBLE_BACKGROUND_STORAGE_KEY) === "1";
-}
-
-const chatBubbleBackgroundPreference = moduleRef(readChatBubbleBackgroundPreference());
-
-function readChatTimeDisplayModePreference(): ChatTimeDisplayMode {
-  if (typeof window === "undefined") return "relative";
-  return window.localStorage.getItem(CHAT_TIME_DISPLAY_MODE_STORAGE_KEY) === "absolute" ? "absolute" : "relative";
-}
-
-const chatTimeDisplayModePreference = moduleRef<ChatTimeDisplayMode>(readChatTimeDisplayModePreference());
-
-function readSegmentedMarkdownPreference(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(CHAT_SEGMENTED_MARKDOWN_STORAGE_KEY) === "1";
-}
-
-const segmentedMarkdownPreference = moduleRef(readSegmentedMarkdownPreference());
-
-function writeChatBubbleBackgroundPreference(enabled: boolean) {
-  chatBubbleBackgroundPreference.value = enabled;
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(CHAT_BUBBLE_BACKGROUND_STORAGE_KEY, enabled ? "1" : "0");
-  }
-}
-
-function writeChatTimeDisplayModePreference(mode: ChatTimeDisplayMode) {
-  chatTimeDisplayModePreference.value = mode;
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(CHAT_TIME_DISPLAY_MODE_STORAGE_KEY, mode);
-  }
-}
-
-function writeSegmentedMarkdownPreference(enabled: boolean) {
-  segmentedMarkdownPreference.value = enabled;
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(CHAT_SEGMENTED_MARKDOWN_STORAGE_KEY, enabled ? "1" : "0");
-  }
-}
-</script>
-
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect, watchPostEffect } from "vue";
 import { useI18n } from "vue-i18n";
-import { Copy, Eclipse, FileText, ListCheck, MessageCircleDashed, Pause, Play, Split, TableRowsSplit, Undo2 } from "@lucide/vue";
+import { Copy, FileText, ListCheck, Pause, Play, Split, Undo2 } from "@lucide/vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ChatActivityItem, ChatMessageBlock } from "../../../types/app";
 import {
@@ -499,6 +429,7 @@ import {
   streamBlocksToActivityItems,
 } from "../../../utils/chat-message-semantics";
 import { formatIsoToLocalDateTime } from "../../../utils/time";
+import { useChatMessageAppearance } from "../../shell/composables/use-chat-message-appearance";
 import { AppMarkdownRenderer, groupMarkdownSegments, initKatex, parseMarkdownBlocks, type MarkdownBlock, type MarkdownSegment } from "../markdown";
 import { normalizeLocalLinkHref } from "../utils/local-link";
 import { textContentSignature } from "../utils/text-signature";
@@ -562,6 +493,11 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const {
+  assistantBubbleBackgroundEnabled,
+  segmentedMarkdownEnabled,
+  chatTimeDisplayMode,
+} = useChatMessageAppearance();
+const {
   compactText,
   joinNonEmpty,
   normalizeToolCallArgs,
@@ -583,7 +519,6 @@ const planMarkdownError = ref("");
 const planMarkdownLoading = ref(false);
 const forcePlainMarkdownRender = computed(() => !!props.disableMarkdownRender || debugPlainMarkdownRender);
 const assistantRenderedText = computed(() => formatAssistantStreamingText(props.block));
-const segmentedMarkdownEnabled = segmentedMarkdownPreference;
 const segmentedMarkdownActive = computed(() => segmentedMarkdownEnabled.value && assistantBubbleBackgroundEnabled.value);
 const assistantMarkdownBlocks = computed<MarkdownBlock[]>(() => {
   if (forcePlainMarkdownRender.value || !segmentedMarkdownActive.value) return [];
@@ -611,8 +546,6 @@ const contextMenuX = ref(0);
 const contextMenuY = ref(0);
 const mathContextCopyText = ref("");
 const relativeTimeNowTick = ref(Date.now());
-const assistantBubbleBackgroundEnabled = chatBubbleBackgroundPreference;
-const chatTimeDisplayMode = chatTimeDisplayModePreference;
 let relativeTimeNowTimer = 0;
 
 watch(
@@ -1322,14 +1255,6 @@ function handleContextMenuAction(action: string) {
     emit("copyMessage", props.block);
   } else if (action === "copyMath") {
     void copyTextToClipboard(mathCopyText);
-  } else if (action === "toggleBubbleBackground") {
-    assistantBubbleBackgroundEnabled.value = !assistantBubbleBackgroundEnabled.value;
-    writeChatBubbleBackgroundPreference(assistantBubbleBackgroundEnabled.value);
-  } else if (action === "toggleSegmentedMarkdown") {
-    segmentedMarkdownEnabled.value = !segmentedMarkdownEnabled.value;
-    writeSegmentedMarkdownPreference(segmentedMarkdownEnabled.value);
-  } else if (action === "toggleTimeDisplayMode") {
-    writeChatTimeDisplayModePreference(chatTimeDisplayMode.value === "absolute" ? "relative" : "absolute");
   } else if (action === "branchFromMessage") {
     const turnId = recallTurnId(props.block);
     if (!turnId) return;
