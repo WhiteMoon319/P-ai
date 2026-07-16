@@ -1706,6 +1706,42 @@
     }
 
     #[test]
+    fn remote_reply_delegate_second_round_should_prepend_reminder_before_metadata() {
+        let mut trigger_message = ChatMessage {
+            id: "message-weather".to_string(),
+            role: "user".to_string(),
+            created_at: now_iso(),
+            speaker_agent_id: None,
+            parts: vec![MessagePart::Text {
+                text: "今天天气怎么样？".to_string(),
+                reasoning_content: None,
+            }],
+            extra_text_blocks: vec!["[用户甲] 2026-07-17T10:01".to_string()],
+            provider_meta: None,
+            tool_call: None,
+            mcp_call: None,
+            meme_annotations: None,
+        };
+
+        remote_im_reply_delegate_prepend_system_reminder(
+            &mut trigger_message,
+            "[以下消息已经在委托处理中，请不要重复处理]".to_string(),
+        );
+
+        assert_eq!(
+            trigger_message.extra_text_blocks,
+            vec![
+                "[以下消息已经在委托处理中，请不要重复处理]".to_string(),
+                "[用户甲] 2026-07-17T10:01".to_string(),
+            ]
+        );
+        assert_eq!(
+            render_message_content_for_model(&trigger_message),
+            "今天天气怎么样？"
+        );
+    }
+
+    #[test]
     fn departure_reflection_delegate_should_bind_contact_conversation_and_owner() {
         let mut contact = remote_im_test_contact("contact-a", "conversation-a");
         contact.remote_contact_type = "group".to_string();
@@ -2424,4 +2460,3 @@
             .secretary_by_contact
             .contains_key(&remote_im_secretary_debounce_key(&state, &contact.id)));
     }
-

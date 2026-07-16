@@ -97,9 +97,7 @@ fn remote_im_reply_delegate_register(
         .iter_mut()
         .find(|message| message.id == trigger_message_id)
         .ok_or_else(|| "远程应答委托无法注入系统提醒：冻结上文缺少触发消息".to_string())?;
-    snapshot_trigger_message
-        .extra_text_blocks
-        .insert(0, system_reminder);
+    remote_im_reply_delegate_prepend_system_reminder(snapshot_trigger_message, system_reminder);
     let runtime = RemoteImReplyDelegateRuntime {
         delegate_id: delegate_id.clone(),
         contact_id: contact_id.to_string(),
@@ -129,6 +127,13 @@ fn remote_im_reply_delegate_register(
         return Err(err);
     }
     Ok(delegate_id)
+}
+
+fn remote_im_reply_delegate_prepend_system_reminder(
+    trigger_message: &mut ChatMessage,
+    system_reminder: String,
+) {
+    trigger_message.extra_text_blocks.insert(0, system_reminder);
 }
 
 fn build_remote_im_reply_delegate_system_reminder(
