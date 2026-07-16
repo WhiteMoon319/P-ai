@@ -240,13 +240,13 @@ async fn process_persisted_remote_im_events_individually_now(
                 }
                 Err(err) => {
                     runtime_log_warn(format!(
-                        "[远程联系人秘书] 失败，任务=单事件判断降级，conversation_id={}，contact_id={}，event_id={}，error={}",
+                        "[远程联系人秘书] 失败，任务=单事件判断降级为不回复，conversation_id={}，contact_id={}，event_id={}，error={}",
                         conversation_id, contact.id, event.id, err
                     ));
                     RemoteImSecretaryDecision {
-                        should_reply: true,
+                        should_reply: false,
                         target_delegate_id: None,
-                        reason: format!("秘书判断失败，已降级为始终回复：{err}"),
+                        reason: format!("秘书判断失败，已降级为不回复：{err}"),
                         model_name: String::new(),
                         emit_log: true,
                     }

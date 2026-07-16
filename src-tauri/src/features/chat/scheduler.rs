@@ -846,23 +846,23 @@ async fn process_conversation_batch(
                     Ok(result) => result,
                     Err(err) => {
                         runtime_log_warn(format!(
-                            "[远程联系人秘书] 判断失败，降级为始终回复: conversation_id={}, contact_id={}, error={}",
+                            "[远程联系人秘书] 判断失败，降级为不回复: conversation_id={}, contact_id={}, error={}",
                             conversation_id, contact.id, err
                         ));
                         remote_im_append_channel_log(
                             &contact.channel_id,
                             "warn",
                             format!(
-                                "[联系人秘书] 智能判断失败: contact={}, conversation_id={}, strategy=smart_judge, fallback=always_reply, error={}",
+                                "[联系人秘书] 智能判断失败: contact={}, conversation_id={}, strategy=smart_judge, fallback=no_reply, error={}",
                                 remote_im_contact_log_label(&contact),
                                 conversation_id,
                                 err
                             ),
                         );
                         RemoteImSecretaryDecision {
-                            should_reply: true,
+                            should_reply: false,
                             target_delegate_id: None,
-                            reason: format!("秘书判断失败，已降级为始终回复：{err}"),
+                            reason: format!("秘书判断失败，已降级为不回复：{err}"),
                             model_name: String::new(),
                             emit_log: true,
                         }

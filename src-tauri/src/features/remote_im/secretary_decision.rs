@@ -475,7 +475,7 @@ async fn run_remote_im_secretary_decision(
         prepared,
         CallPolicy {
             scene: "Remote IM secretary review",
-            timeout_secs: Some(12),
+            timeout_secs: Some(60),
             json_only: true,
         },
         Some(state),
