@@ -45,14 +45,13 @@
     <div ref="fileReaderLayoutRoot" class="relative flex min-h-0 flex-1" :class="directoryOnly ? '' : 'flex-row-reverse'">
       <aside
         v-if="directoryTreeRoot"
-        class="flex shrink-0 flex-col border-base-300 bg-base-200/35"
-        :class="directoryOnly ? 'w-full border-r-0' : 'border-l'"
+        class="flex shrink-0 flex-col bg-base-200/35"
+        :class="directoryOnly ? 'w-full' : ''"
         :style="directoryOnly ? undefined : { width: `${effectiveDirectoryTreeWidth}px` }"
       >
-        <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-base-300 px-3 text-sm">
+        <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-base-300 bg-base-200/35 px-3 text-sm">
           <button
             v-if="tauriRuntimeAvailable"
-            type="button"
             class="btn btn-ghost btn-xs min-w-0 flex-1 justify-start gap-1.5 overflow-hidden font-medium"
             :title="directoryTreeRoot.path"
             @click="openDirectoryInFileManager(directoryTreeRoot.path)"
@@ -67,33 +66,76 @@
             :title="directoryTreeRoot.path"
             @contextmenu.prevent.stop="openPathOnlyContextMenu(directoryTreeRoot.path, $event)"
           >{{ directoryTreeRoot.name }}</span>
-          <button
-            v-if="tauriRuntimeAvailable"
-            class="btn btn-ghost btn-xs h-7 min-h-7 w-7 shrink-0 px-0"
-            type="button"
-            :disabled="directoryTreeRoot.loading"
-            :title="t('fileReader.openShellHere')"
-            @click="openShellAtDirectoryTreeRoot"
-          >
-            <SquareTerminal class="h-4 w-4" />
-          </button>
-          <button
-            class="btn btn-ghost btn-xs h-7 min-h-7 w-7 shrink-0 px-0"
-            type="button"
-            :class="directoryTreeSearchVisible ? 'text-primary' : ''"
-            :title="t('fileReader.toggleSearch')"
-            @click="toggleDirectoryTreeSearch"
-          >
-            <Search class="h-4 w-4" />
-          </button>
+          <div v-if="tauriRuntimeAvailable" class="join shrink-0">
+            <button
+              class="btn btn-xs h-7 min-h-7 w-7 join-item border-0 bg-base-100 px-0 shadow-none hover:bg-base-100"
+              type="button"
+              :disabled="directoryTreeRoot.loading"
+              :title="selectedDirectoryOpenTargetTitle"
+              @click="openDirectoryAtTreeRoot()"
+            >
+              <img
+                v-if="currentDirectoryOpenTarget.iconDataUrl"
+                :src="currentDirectoryOpenTarget.iconDataUrl"
+                alt=""
+                class="h-4 w-4 shrink-0 object-contain"
+              />
+              <SquareTerminal v-else-if="currentDirectoryOpenTarget.type === 'shell'" class="h-4 w-4" />
+              <Code2 v-else-if="currentDirectoryOpenTarget.type === 'vscode'" class="h-4 w-4" />
+              <Folders v-else class="h-4 w-4" />
+            </button>
+            <div ref="directoryOpenTargetDropdownRef" class="dropdown dropdown-end">
+              <button
+                class="btn btn-xs h-7 min-h-7 w-7 join-item border-0 bg-base-100 px-0 shadow-none hover:bg-base-100"
+                type="button"
+                :disabled="directoryTreeRoot.loading || directoryOpenTargetsLoading"
+                title="切换打开目标"
+                @click.stop="toggleDirectoryOpenTargetDropdown"
+              >
+                <ChevronDown class="h-4 w-4" />
+              </button>
+              <ul v-if="directoryOpenTargetDropdownOpen" tabindex="0" class="dropdown-content menu z-50 mt-2 w-72 rounded-box border border-base-300 bg-base-100 p-1.5 text-sm shadow-xl" @click.stop>
+                <li class="menu-title px-2 py-1 text-xs uppercase tracking-wide opacity-60">
+                  <span>打开当前目录</span>
+                </li>
+                <li v-for="item in directoryOpenTargets" :key="item.kind">
+                  <button
+                    type="button"
+                    class="flex min-h-9 items-center justify-between gap-3 rounded-btn px-3 py-2 text-left"
+                    :class="selectedDirectoryOpenTargetKind === item.kind ? 'active' : ''"
+                    :disabled="directoryTreeRoot.loading"
+                    :title="item.label"
+                    @click="selectDirectoryOpenTarget(item.kind)"
+                  >
+                    <span class="flex min-w-0 items-center gap-2">
+                      <img
+                        v-if="item.iconDataUrl"
+                        :src="item.iconDataUrl"
+                        alt=""
+                        class="h-4 w-4 shrink-0 object-contain"
+                      />
+                      <SquareTerminal v-else-if="item.type === 'shell'" class="h-4 w-4 shrink-0" />
+                      <Code2 v-else-if="item.type === 'vscode'" class="h-4 w-4 shrink-0" />
+                      <Folders v-else class="h-4 w-4 shrink-0" />
+                      <span class="min-w-0 truncate">{{ item.label }}</span>
+                    </span>
+                    <Check v-if="selectedDirectoryOpenTargetKind === item.kind" class="h-4 w-4 shrink-0" />
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
-        <div v-if="directoryTreeSearchVisible" class="border-b border-base-300 p-2">
-          <input
-            v-model="directoryTreeFilter"
-            class="input input-bordered input-xs w-full"
-            type="search"
-            :placeholder="t('fileReader.filterFiles')"
-          />
+        <div class="px-2 pt-2">
+          <label class="input input-bordered input-sm flex items-center gap-2">
+            <Search class="h-4 w-4 shrink-0 opacity-60" />
+            <input
+              v-model="directoryTreeFilter"
+              class="min-w-0 flex-1"
+              type="search"
+              :placeholder="t('fileReader.filterFiles')"
+            />
+          </label>
         </div>
         <div class="relative min-h-0 flex-1" @mouseenter="directoryScrollbarRef?.reveal()" @mouseleave="directoryScrollbarRef?.hide()">
         <div ref="directoryScroller" class="file-reader-scroll-container min-h-0 h-full overflow-auto py-1 text-sm">
@@ -556,7 +598,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { ChevronDown, ChevronRight, Code2, Eye, ExternalLink, FilePlus, Folders, RefreshCw, Search, SquareTerminal } from "@lucide/vue";
+import { ChevronDown, ChevronRight, Check, Code2, Eye, ExternalLink, FilePlus, Folders, RefreshCw, Search, SquareTerminal } from "@lucide/vue";
 import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
 import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
 import { isAbsoluteLocalPath, normalizeLocalLinkHref, parseLocalFileReference } from "../../chat/utils/local-link";
@@ -660,6 +702,19 @@ const FILE_READER_DIRECTORY_TREE_RESIZE_MOVE_THRESHOLD = 4;
 
 // ==================== State ====================
 
+type DirectoryOpenTargetOption = {
+  kind: string;
+  label: string;
+  type: "shell" | "vscode" | "explorer";
+  iconDataUrl?: string;
+};
+
+type DirectoryOpenTargetsResult = {
+  options?: DirectoryOpenTargetOption[];
+};
+
+const FILE_READER_OPEN_TARGET_STORAGE_KEY = "easy-call.file-reader.directory-open-target.v1";
+
 const tabs = ref<FileTab[]>([]);
 const activePath = ref("");
 const actionErrorMessage = ref("");
@@ -668,7 +723,11 @@ const contextMenuPosition = ref({ x: 0, y: 0 });
 const contextMenuTarget = ref<FileReaderContextMenuTarget | null>(null);
 const directoryRootPath = ref("");
 const directoryTreeFilter = ref("");
-const directoryTreeSearchVisible = ref(false);
+const directoryOpenTargetsLoading = ref(false);
+const directoryOpenTargetOptions = ref<DirectoryOpenTargetOption[]>([]);
+const selectedDirectoryOpenTargetKind = ref("explorer");
+const directoryOpenTargetDropdownOpen = ref(false);
+const directoryOpenTargetDropdownRef = ref<HTMLElement | null>(null);
 const directoryNodes = ref<Record<string, DirectoryNode>>({});
 const fileDragActive = ref(false);
 const fileReaderLayoutRoot = ref<HTMLElement | null>(null);
@@ -1242,7 +1301,7 @@ function copyContextMenuLineReference() {
 function openContextMenuShell() {
   const target = contextMenuTarget.value;
   closeContextMenu();
-  void openShellAtDirectory(target?.path || "");
+  void openDirectoryWithTarget(target?.path || "");
 }
 
 function openContextMenuDirectory() {
@@ -1429,7 +1488,6 @@ async function restoreFileReaderSession(key = props.sessionKey, fallbackRootPath
     directoryRootPath.value = "";
     directoryTreeWidth.value = FILE_READER_DIRECTORY_TREE_DEFAULT_WIDTH;
     directoryTreeFilter.value = "";
-    directoryTreeSearchVisible.value = false;
     directoryNodes.value = {};
 
     const initialRoot = normalizePath(fallbackRootPath || "");
@@ -1977,7 +2035,6 @@ async function revealPathInDirectoryTree(path: string) {
 function closeDirectoryTree() {
   directoryRootPath.value = "";
   directoryTreeFilter.value = "";
-  directoryTreeSearchVisible.value = false;
 }
 
 // ==================== Hover Directory Tree ====================
@@ -2151,28 +2208,134 @@ async function toggleDirectoryTree() {
   }
 }
 
-function toggleDirectoryTreeSearch() {
-  directoryTreeSearchVisible.value = !directoryTreeSearchVisible.value;
-  if (!directoryTreeSearchVisible.value) {
-    directoryTreeFilter.value = "";
+function readStoredDirectoryOpenTargetKind() {
+  if (typeof window === "undefined") return "";
+  try {
+    return String(window.localStorage.getItem(FILE_READER_OPEN_TARGET_STORAGE_KEY) || "").trim();
+  } catch {
+    return "";
   }
 }
 
-async function openShellAtDirectoryTreeRoot() {
+function storeDirectoryOpenTargetKind(kind: string) {
+  if (typeof window === "undefined") return;
+  const normalized = String(kind || "").trim();
+  try {
+    if (normalized) {
+      window.localStorage.setItem(FILE_READER_OPEN_TARGET_STORAGE_KEY, normalized);
+    } else {
+      window.localStorage.removeItem(FILE_READER_OPEN_TARGET_STORAGE_KEY);
+    }
+  } catch {
+    // 忽略本地存储失败
+  }
+}
+
+const DEFAULT_DIRECTORY_OPEN_TARGETS: DirectoryOpenTargetOption[] = [
+  { kind: "explorer", label: "资源管理器", type: "explorer" },
+  { kind: "vscode", label: "VS Code", type: "vscode" },
+];
+
+function normalizeDirectoryOpenTargetLabel(item: DirectoryOpenTargetOption): string {
+  const raw = String(item.label || "").trim();
+  if (!raw) return "打开目标";
+  if (item.type !== "shell") return raw;
+  return raw.replace(/\s*\([^()]*\)\s*$/, "").trim() || raw;
+}
+
+function normalizeDirectoryOpenTargetOptions(options: DirectoryOpenTargetOption[]): DirectoryOpenTargetOption[] {
+  const seen = new Set<string>();
+  return options
+    .filter((item) => {
+      const kind = String(item.kind || "").trim();
+      if (!kind || kind === "auto" || seen.has(kind)) return false;
+      seen.add(kind);
+      return true;
+    })
+    .map((item): DirectoryOpenTargetOption => ({
+      kind: String(item.kind || "").trim(),
+      label: normalizeDirectoryOpenTargetLabel(item),
+      type: item.type === "vscode" || item.type === "explorer" ? item.type : "shell",
+      iconDataUrl: String(item.iconDataUrl || "").trim() || undefined,
+    }));
+}
+
+const directoryOpenTargets = computed<DirectoryOpenTargetOption[]>(() => {
+  const normalized = normalizeDirectoryOpenTargetOptions(directoryOpenTargetOptions.value);
+  return normalized.length ? normalized : DEFAULT_DIRECTORY_OPEN_TARGETS;
+});
+
+function normalizeDirectoryOpenTargetKind(kind: string, options = directoryOpenTargets.value) {
+  const normalized = String(kind || "").trim();
+  if (normalized && options.some((item) => item.kind === normalized)) return normalized;
+  return options[0]?.kind || "explorer";
+}
+
+function currentDirectoryOpenTargetKind() {
+  return normalizeDirectoryOpenTargetKind(selectedDirectoryOpenTargetKind.value);
+}
+
+const currentDirectoryOpenTarget = computed<DirectoryOpenTargetOption>(() => {
+  const currentKind = currentDirectoryOpenTargetKind();
+  return directoryOpenTargets.value.find((item) => item.kind === currentKind)
+    || directoryOpenTargets.value[0]
+    || DEFAULT_DIRECTORY_OPEN_TARGETS[0];
+});
+
+const selectedDirectoryOpenTargetTitle = computed(() => `用 ${currentDirectoryOpenTarget.value.label} 打开当前目录`);
+
+async function loadDirectoryOpenTargets() {
+  if (!tauriRuntimeAvailable) return;
+  directoryOpenTargetsLoading.value = true;
+  try {
+    const payload = await invokeTauri<DirectoryOpenTargetsResult>("list_file_reader_directory_open_targets");
+    directoryOpenTargetOptions.value = normalizeDirectoryOpenTargetOptions(Array.isArray(payload.options) ? payload.options : []);
+  } catch {
+    directoryOpenTargetOptions.value = [];
+  } finally {
+    const stored = readStoredDirectoryOpenTargetKind();
+    const fallbackKind = directoryOpenTargets.value[0]?.kind || "explorer";
+    const nextKind = normalizeDirectoryOpenTargetKind(stored || fallbackKind);
+    selectedDirectoryOpenTargetKind.value = nextKind;
+    if (!stored || stored !== nextKind) {
+      storeDirectoryOpenTargetKind(nextKind);
+    }
+    directoryOpenTargetsLoading.value = false;
+  }
+}
+
+async function selectDirectoryOpenTarget(kind: string) {
+  const nextKind = normalizeDirectoryOpenTargetKind(kind);
+  selectedDirectoryOpenTargetKind.value = nextKind;
+  storeDirectoryOpenTargetKind(nextKind);
+  directoryOpenTargetDropdownOpen.value = false;
+  await openDirectoryAtTreeRoot(nextKind);
+}
+
+function toggleDirectoryOpenTargetDropdown() {
+  directoryOpenTargetDropdownOpen.value = !directoryOpenTargetDropdownOpen.value;
+}
+
+function closeDirectoryOpenTargetDropdown() {
+  directoryOpenTargetDropdownOpen.value = false;
+}
+
+async function openDirectoryAtTreeRoot(kind = currentDirectoryOpenTargetKind()) {
+  closeDirectoryOpenTargetDropdown();
   if (!tauriRuntimeAvailable) return;
   const root = directoryTreeRoot.value;
   if (!root) return;
-  await openShellAtDirectory(root.path);
+  await openDirectoryWithTarget(root.path, kind);
 }
 
-async function openShellAtDirectory(path: string) {
+async function openDirectoryWithTarget(path: string, targetKind = currentDirectoryOpenTargetKind()) {
   if (!tauriRuntimeAvailable) return;
   const normalizedPath = normalizePath(path);
   if (!normalizedPath) return;
   try {
-    await invokeTauri("open_file_reader_directory_shell", { path: normalizedPath });
+    await invokeTauri("open_file_reader_directory_target", { input: { path: normalizedPath, targetKind } });
   } catch (error) {
-    reportFileReaderActionFailure(t('fileReader.actionOpenShell'), normalizedPath, error);
+    reportFileReaderActionFailure("打开当前目录", normalizedPath, error);
   }
 }
 
@@ -2281,12 +2444,16 @@ function flattenDirectoryEntriesFromNodes(entries: FileReaderDirectoryEntry[], r
   return rows;
 }
 
-function handleGlobalPointerDown() {
+function handleGlobalPointerDown(event: PointerEvent) {
+  const target = event.target instanceof Node ? event.target : null;
+  if (target && directoryOpenTargetDropdownRef.value?.contains(target)) return;
+  closeDirectoryOpenTargetDropdown();
   closeContextMenu();
 }
 
 function handleGlobalEscape(event: KeyboardEvent) {
   if (event.key === "Escape") {
+    closeDirectoryOpenTargetDropdown();
     closeContextMenu();
   }
 }
@@ -2305,6 +2472,7 @@ onMounted(async () => {
     });
     fileReaderLayoutResizeObserver.observe(fileReaderLayoutRoot.value);
   }
+  void loadDirectoryOpenTargets();
   void startFileReaderWatchListener();
   scheduleFileReaderWatchTargetUpdate();
   if (props.enableGlobalDrop === false || !isTauriRuntimeAvailable()) return;

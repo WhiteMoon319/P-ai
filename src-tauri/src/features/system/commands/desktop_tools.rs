@@ -599,6 +599,117 @@ fn list_terminal_shell_candidates(state: State<'_, AppState>) -> Result<Value, S
     }))
 }
 
+#[tauri::command]
+fn list_file_reader_directory_open_targets(state: State<'_, AppState>) -> Result<Value, String> {
+    let options = file_reader_directory_open_targets_for_ui(&state);
+    Ok(serde_json::json!({
+        "options": options,
+    }))
+}
+
+#[cfg(target_os = "windows")]
+fn file_reader_target_icon_data_url(path: &str) -> Option<String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    windows_extract_executable_icon_data_url(&PathBuf::from(trimmed)).ok()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn file_reader_target_icon_data_url(_path: &str) -> Option<String> {
+    None
+}
+
+fn file_reader_directory_open_targets_for_ui(state: &AppState) -> Vec<Value> {
+    let (_, _, shell_options) = terminal_shell_candidates_for_ui(state);
+    let mut items = Vec::<Value>::new();
+    for item in shell_options {
+        let kind = item.get("kind").and_then(Value::as_str).unwrap_or("").trim().to_string();
+        if kind == "auto" || kind.is_empty() {
+            continue;
+        }
+        let path = item.get("path").and_then(Value::as_str).unwrap_or("").trim().to_string();
+        items.push(serde_json::json!({
+            "kind": format!("shell:{kind}"),
+            "label": item.get("label").and_then(Value::as_str).unwrap_or("Shell"),
+            "type": "shell",
+            "iconDataUrl": file_reader_target_icon_data_url(&path),
+        }));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(wsl_exe) = first_existing_wsl_exe() {
+            items.push(serde_json::json!({
+                "kind": "shell:wsl",
+                "label": "WSL",
+                "type": "shell",
+                "iconDataUrl": file_reader_target_icon_data_url(&wsl_exe.to_string_lossy()),
+            }));
+        }
+
+        if let Some(vscode_exe) = first_existing_vscode_exe() {
+            items.push(serde_json::json!({
+                "kind": "vscode",
+                "label": "VS Code",
+                "type": "vscode",
+                "iconDataUrl": file_reader_target_icon_data_url(&vscode_exe.to_string_lossy()),
+            }));
+        } else {
+            items.push(serde_json::json!({
+                "kind": "vscode",
+                "label": "VS Code",
+                "type": "vscode",
+                "iconDataUrl": serde_json::Value::Null,
+            }));
+        }
+
+        if let Some(explorer_exe) = first_existing_windows_explorer_exe() {
+            items.push(serde_json::json!({
+                "kind": "explorer",
+                "label": "资源管理器",
+                "type": "explorer",
+                "iconDataUrl": file_reader_target_icon_data_url(&explorer_exe.to_string_lossy()),
+            }));
+        } else {
+            items.push(serde_json::json!({
+                "kind": "explorer",
+                "label": "资源管理器",
+                "type": "explorer",
+                "iconDataUrl": serde_json::Value::Null,
+            }));
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        items.push(serde_json::json!({
+            "kind": "vscode",
+            "label": "VS Code",
+            "type": "vscode",
+            "iconDataUrl": serde_json::Value::Null,
+        }));
+        items.push(serde_json::json!({
+            "kind": "explorer",
+            "label": "资源管理器",
+            "type": "explorer",
+            "iconDataUrl": serde_json::Value::Null,
+        }));
+    }
+
+    let mut deduped = Vec::<Value>::new();
+    let mut seen = std::collections::BTreeSet::<String>::new();
+    for item in items {
+        let kind = item.get("kind").and_then(Value::as_str).unwrap_or("").trim().to_string();
+        if kind.is_empty() || !seen.insert(kind) {
+            continue;
+        }
+        deduped.push(item);
+    }
+    deduped
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ResolveTerminalApprovalInput {
@@ -637,6 +748,21 @@ struct SaveChatShellWorkspacesInput {
 struct ShellWorkspacePathInput {
     #[serde(default)]
     workspace_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenFileReaderDirectoryTargetInput {
+    path: String,
+    target_kind: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenFileReaderDirectoryShellInput {
+    path: String,
+    #[serde(default)]
+    preferred_kind: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -877,14 +1003,285 @@ fn open_shell_path_in_file_manager(path: &Path) -> Result<(), String> {
     Err("Open in file manager is not supported on this platform".to_string())
 }
 
-fn open_shell_terminal_at_path(state: &AppState, path: &Path) -> Result<(), String> {
+#[cfg(target_os = "windows")]
+fn first_existing_vscode_exe() -> Option<PathBuf> {
+    let mut candidates = Vec::<PathBuf>::new();
+    if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
+        candidates.push(PathBuf::from(local_app_data).join("Programs").join("Microsoft VS Code").join("Code.exe"));
+    }
+    if let Some(program_files) = std::env::var_os("ProgramFiles") {
+        candidates.push(PathBuf::from(program_files).join("Microsoft VS Code").join("Code.exe"));
+    }
+    if let Some(program_files_x86) = std::env::var_os("ProgramFiles(x86)") {
+        candidates.push(PathBuf::from(program_files_x86).join("Microsoft VS Code").join("Code.exe"));
+    }
+    if let Some(path_value) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path_value) {
+            candidates.push(dir.join("Code.exe"));
+            candidates.push(dir.join("..").join("Code.exe"));
+        }
+    }
+    candidates.into_iter().find(|candidate| candidate.is_file())
+}
+
+#[cfg(target_os = "windows")]
+fn first_existing_wsl_exe() -> Option<PathBuf> {
+    let mut candidates = Vec::<PathBuf>::new();
+    if let Ok(windir) = std::env::var("WINDIR") {
+        candidates.push(PathBuf::from(&windir).join("System32").join("wsl.exe"));
+        candidates.push(PathBuf::from(&windir).join("Sysnative").join("wsl.exe"));
+    }
+    if let Some(path_value) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path_value) {
+            candidates.push(dir.join("wsl.exe"));
+        }
+    }
+    candidates.into_iter().find(|candidate| candidate.is_file())
+}
+
+#[cfg(target_os = "windows")]
+fn first_existing_windows_explorer_exe() -> Option<PathBuf> {
+    if let Ok(windir) = std::env::var("WINDIR") {
+        let candidate = PathBuf::from(windir).join("explorer.exe");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn windows_path_to_wsl_directory(path: &Path) -> Option<String> {
+    let normalized = terminal_strip_windows_verbatim_prefix(&path.to_string_lossy()).replace('\\', "/");
+    if normalized.starts_with("//") {
+        return None;
+    }
+    let bytes = normalized.as_bytes();
+    if bytes.len() < 2 || bytes[1] != b':' {
+        return None;
+    }
+    let drive = normalized[..1].to_ascii_lowercase();
+    let tail = normalized[2..].trim_start_matches('/');
+    if tail.is_empty() {
+        return Some(format!("/mnt/{drive}"));
+    }
+    Some(format!("/mnt/{drive}/{tail}"))
+}
+
+#[cfg(target_os = "windows")]
+fn windows_os_str_to_wide_null(path: &Path) -> Vec<u16> {
+    use std::os::windows::ffi::OsStrExt;
+
+    path.as_os_str().encode_wide().chain(std::iter::once(0)).collect()
+}
+
+#[cfg(target_os = "windows")]
+fn windows_extract_executable_icon_data_url(path: &Path) -> Result<String, String> {
+    use windows_sys::Win32::Graphics::Gdi::{
+        BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleDC, DIB_RGB_COLORS,
+        DeleteDC, DeleteObject, GetDC, GetDIBits, GetObjectW, ReleaseDC,
+    };
+    use windows_sys::Win32::UI::Shell::ExtractIconExW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, ICONINFO};
+
+    let wide_path = windows_os_str_to_wide_null(path);
+    let mut large_icon = [std::ptr::null_mut(); 1];
+    let mut icon_info = ICONINFO {
+        fIcon: 0,
+        xHotspot: 0,
+        yHotspot: 0,
+        hbmMask: std::ptr::null_mut(),
+        hbmColor: std::ptr::null_mut(),
+    };
+    let mut screen_dc = std::ptr::null_mut();
+    let mut memory_dc = std::ptr::null_mut();
+
+    let result = unsafe {
+        let extracted = ExtractIconExW(wide_path.as_ptr(), 0, large_icon.as_mut_ptr(), std::ptr::null_mut(), 1);
+        if extracted == 0 || large_icon[0].is_null() {
+            return Err(format!("提取图标失败：{}", path.display()));
+        }
+        let icon = large_icon[0];
+        let inner = (|| -> Result<String, String> {
+            if GetIconInfo(icon, &mut icon_info) == 0 {
+                return Err(format!("读取图标信息失败：{}", path.display()));
+            }
+            let bitmap_handle = if !icon_info.hbmColor.is_null() { icon_info.hbmColor } else { icon_info.hbmMask };
+            if bitmap_handle.is_null() {
+                return Err(format!("图标位图不存在：{}", path.display()));
+            }
+
+            let mut bitmap = std::mem::zeroed::<BITMAP>();
+            if GetObjectW(
+                bitmap_handle,
+                std::mem::size_of::<BITMAP>() as i32,
+                &mut bitmap as *mut _ as *mut std::ffi::c_void,
+            ) == 0
+            {
+                return Err(format!("读取图标位图失败：{}", path.display()));
+            }
+
+            let width = bitmap.bmWidth.unsigned_abs();
+            let mut height = bitmap.bmHeight.unsigned_abs();
+            if icon_info.hbmColor.is_null() && height > 1 {
+                height /= 2;
+            }
+            if width == 0 || height == 0 {
+                return Err(format!("图标尺寸无效：{}", path.display()));
+            }
+
+            screen_dc = GetDC(std::ptr::null_mut());
+            if screen_dc.is_null() {
+                return Err("获取屏幕设备上下文失败。".to_string());
+            }
+            memory_dc = CreateCompatibleDC(screen_dc);
+            if memory_dc.is_null() {
+                return Err("创建内存设备上下文失败。".to_string());
+            }
+
+            let mut bitmap_info = BITMAPINFO {
+                bmiHeader: BITMAPINFOHEADER {
+                    biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                    biWidth: width as i32,
+                    biHeight: -(height as i32),
+                    biPlanes: 1,
+                    biBitCount: 32,
+                    biCompression: BI_RGB,
+                    biSizeImage: 0,
+                    biXPelsPerMeter: 0,
+                    biYPelsPerMeter: 0,
+                    biClrUsed: 0,
+                    biClrImportant: 0,
+                },
+                bmiColors: [std::mem::zeroed()],
+            };
+            let mut pixels = vec![0u8; width as usize * height as usize * 4];
+            let copied = GetDIBits(
+                memory_dc,
+                bitmap_handle,
+                0,
+                height,
+                pixels.as_mut_ptr() as *mut std::ffi::c_void,
+                &mut bitmap_info,
+                DIB_RGB_COLORS,
+            );
+            if copied == 0 {
+                return Err(format!("读取图标像素失败：{}", path.display()));
+            }
+
+            for pixel in pixels.chunks_exact_mut(4) {
+                pixel.swap(0, 2);
+                if icon_info.hbmColor.is_null() {
+                    pixel[3] = 255;
+                }
+            }
+
+            let image = image::RgbaImage::from_raw(width, height, pixels)
+                .ok_or_else(|| format!("组装图标像素失败：{}", path.display()))?;
+            let mut encoded = Vec::<u8>::new();
+            image::DynamicImage::ImageRgba8(image)
+                .write_to(&mut Cursor::new(&mut encoded), ImageFormat::Png)
+                .map_err(|err| format!("编码图标 PNG 失败：{err}"))?;
+            Ok(format!("data:image/png;base64,{}", B64.encode(encoded)))
+        })();
+
+        if !memory_dc.is_null() {
+            DeleteDC(memory_dc);
+        }
+        if !screen_dc.is_null() {
+            ReleaseDC(std::ptr::null_mut(), screen_dc);
+        }
+        if !icon_info.hbmColor.is_null() {
+            DeleteObject(icon_info.hbmColor);
+        }
+        if !icon_info.hbmMask.is_null() {
+            DeleteObject(icon_info.hbmMask);
+        }
+        DestroyIcon(icon);
+        inner
+    };
+
+    result
+}
+
+fn open_directory_in_vscode(path: &Path) -> Result<(), String> {
     let canonical = path
         .canonicalize()
         .map_err(|err| format!("解析目录失败 ({}): {err}", path.display()))?;
     if !canonical.is_dir() {
         return Err(format!("不是目录：{}", canonical.display()));
     }
-    let shell = terminal_shell_for_state(state);
+
+    #[cfg(target_os = "windows")]
+    {
+        let target = terminal_strip_windows_verbatim_prefix(&canonical.to_string_lossy());
+        let vscode_exe = first_existing_vscode_exe()
+            .ok_or_else(|| "未检测到 VS Code 可执行文件。".to_string())?;
+        std::process::Command::new(vscode_exe)
+            .arg(target.as_str())
+            .spawn()
+            .map_err(|err| format!("打开 VS Code 失败：{err}"))?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(["-a", "Visual Studio Code"])
+            .arg(&canonical)
+            .spawn()
+            .map_err(|err| format!("打开 VS Code 失败：{err}"))?;
+        return Ok(());
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("code")
+            .arg(&canonical)
+            .spawn()
+            .map_err(|err| format!("打开 VS Code 失败：{err}"))?;
+        return Ok(());
+    }
+
+    #[allow(unreachable_code)]
+    Err("当前平台不支持打开 VS Code。".to_string())
+}
+
+fn open_shell_terminal_at_path(state: &AppState, path: &Path, preferred_kind: Option<&str>) -> Result<(), String> {
+    let canonical = path
+        .canonicalize()
+        .map_err(|err| format!("解析目录失败 ({}): {err}", path.display()))?;
+    if !canonical.is_dir() {
+        return Err(format!("不是目录：{}", canonical.display()));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if matches!(preferred_kind.map(str::trim), Some("wsl")) {
+            let wsl_exe = first_existing_wsl_exe()
+                .ok_or_else(|| "未检测到 WSL 可执行文件。".to_string())?;
+            let wsl_cwd = windows_path_to_wsl_directory(&canonical)
+                .ok_or_else(|| format!("当前目录无法转换为 WSL 路径：{}", canonical.display()))?;
+            let wsl_path = terminal_powershell_escape_literal(&wsl_exe.to_string_lossy());
+            let wsl_cwd_text = terminal_powershell_escape_literal(&wsl_cwd);
+            let script = format!(
+                "Start-Process -FilePath '{wsl_path}' -ArgumentList @('--cd','{wsl_cwd_text}') -Verb Open -PassThru | Out-Null"
+            );
+            let mut command = std::process::Command::new("powershell");
+            command.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script]);
+            terminal_apply_windows_utf8_env(&mut command);
+            command
+                .spawn()
+                .map_err(|err| format!("打开 WSL 失败：{err}"))?;
+            return Ok(());
+        }
+    }
+
+    let shell = preferred_kind
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| terminal_shell_from_candidates(&state.terminal_shell_candidates, value))
+        .unwrap_or_else(|| terminal_shell_for_state(state));
     if shell.kind == "missing-terminal-shell" || shell.path.trim().is_empty() {
         return Err("未检测到可用 Shell，请先在设置中配置终端 Shell。".to_string());
     }
@@ -1942,12 +2339,30 @@ fn list_file_reader_directory(path: String) -> Result<FileReaderDirectoryPayload
 }
 
 #[tauri::command]
-fn open_file_reader_directory_shell(path: String, state: State<'_, AppState>) -> Result<(), String> {
-    let raw_path = path.trim();
+fn open_file_reader_directory_target(input: OpenFileReaderDirectoryTargetInput, state: State<'_, AppState>) -> Result<(), String> {
+    let raw_path = input.path.trim();
     if raw_path.is_empty() {
         return Err("path is required".to_string());
     }
-    open_shell_terminal_at_path(&state, &PathBuf::from(raw_path))
+    let target_kind = input.target_kind.trim();
+    let path = PathBuf::from(raw_path);
+    if let Some(shell_kind) = target_kind.strip_prefix("shell:") {
+        return open_shell_terminal_at_path(&state, &path, Some(shell_kind));
+    }
+    match target_kind {
+        "vscode" => open_directory_in_vscode(&path),
+        "explorer" | "file-manager" => open_local_file_directory(raw_path.to_string()),
+        _ => Err(format!("Unsupported open target: {target_kind}")),
+    }
+}
+
+#[tauri::command]
+fn open_file_reader_directory_shell(input: OpenFileReaderDirectoryShellInput, state: State<'_, AppState>) -> Result<(), String> {
+    let raw_path = input.path.trim();
+    if raw_path.is_empty() {
+        return Err("path is required".to_string());
+    }
+    open_shell_terminal_at_path(&state, &PathBuf::from(raw_path), input.preferred_kind.as_deref())
 }
 
 #[tauri::command]
