@@ -1660,6 +1660,52 @@
     }
 
     #[test]
+    fn remote_reply_delegate_should_not_inject_busy_reminder_without_processing_messages() {
+        let reminder = build_remote_im_reply_delegate_processing_reminder(&[]);
+
+        assert!(reminder.is_none());
+    }
+
+    #[test]
+    fn remote_reply_delegate_busy_reminder_should_keep_original_sender_name() {
+        let message = ChatMessage {
+            id: "message-route".to_string(),
+            role: "user".to_string(),
+            created_at: now_iso(),
+            speaker_agent_id: None,
+            parts: vec![MessagePart::Text {
+                text: "帮我规划从上海到杭州的路线".to_string(),
+                reasoning_content: None,
+            }],
+            extra_text_blocks: Vec::new(),
+            provider_meta: Some(serde_json::json!({
+                "origin": {
+                    "kind": "remote_im",
+                    "contact_type": "group",
+                    "contact_id": "group-42",
+                    "contact_name": "项目群",
+                    "sender_id": "user-7",
+                    "sender_name": "用户甲"
+                }
+            })),
+            tool_call: None,
+            mcp_call: None,
+            meme_annotations: None,
+        };
+        let speaker = remote_im_reply_delegate_processing_message_speaker(&message, "contact-a");
+        let line = format!(
+            "- [{speaker}]：{}",
+            remote_im_secretary_truncate_text(&render_message_content_for_model(&message), 100)
+        );
+        let reminder = build_remote_im_reply_delegate_processing_reminder(&[line])
+            .expect("processing reminder should exist");
+
+        assert!(reminder.contains("- [用户甲]：帮我规划从上海到杭州的路线"));
+        assert!(!reminder.contains("- [contact-a]"));
+        assert!(reminder.contains("请你假装你正在忙于工作，忙里偷闲回答，而不是暴露内部机制"));
+    }
+
+    #[test]
     fn departure_reflection_delegate_should_bind_contact_conversation_and_owner() {
         let mut contact = remote_im_test_contact("contact-a", "conversation-a");
         contact.remote_contact_type = "group".to_string();
@@ -2378,5 +2424,4 @@
             .secretary_by_contact
             .contains_key(&remote_im_secretary_debounce_key(&state, &contact.id)));
     }
-
 

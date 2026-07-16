@@ -161,10 +161,7 @@ fn build_remote_im_reply_delegate_system_reminder(
             }
         })
         .unwrap_or_else(|| "（暂无）".to_string());
-    let contacts = state_read_runtime_state_cached(state)
-        .map(|runtime| runtime.remote_im_contacts)
-        .unwrap_or_default();
-    let other_delegates = lock_remote_im_reply_delegate_runtimes(state)
+    let processing_messages = lock_remote_im_reply_delegate_runtimes(state)
         .map(|runtimes| {
             runtimes
                 .values()
@@ -173,42 +170,58 @@ fn build_remote_im_reply_delegate_system_reminder(
                         && !runtime.cancelled
                         && !runtime.terminal
                 })
-                .map(|runtime| {
-                    let name = contacts
-                        .iter()
-                        .find(|contact| contact.id == runtime.contact_id)
-                        .map(remote_im_secretary_contact_display_name)
-                        .unwrap_or_else(|| runtime.contact_id.clone());
-                    let summary = runtime
+                .filter_map(|runtime| {
+                    let trigger_message = runtime
                         .prompt_snapshot_messages
                         .iter()
-                        .find(|message| message.id == runtime.trigger_message_id)
-                        .map(render_message_content_for_model)
+                        .find(|message| message.id == runtime.trigger_message_id)?;
+                    let text = Some(render_message_content_for_model(trigger_message))
                         .map(|text| remote_im_secretary_truncate_text(&text, 100))
-                        .unwrap_or_else(|| "（无文本）".to_string());
-                    format!("- {name}：\"{summary}\"")
+                        .filter(|text| !text.trim().is_empty())?;
+                    let speaker = remote_im_reply_delegate_processing_message_speaker(
+                        trigger_message,
+                        contact_id,
+                    );
+                    Some(format!("- [{speaker}]：{text}"))
                 })
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    let work_ledger = build_remote_im_assistant_work_ledger(state, contact_id, conversation_id)
-        .unwrap_or_else(|err| {
-            runtime_log_warn(format!(
-                "[助理工作账本] 降级，任务=生成应答系统提醒，contact_id={}，error={}",
-                contact_id, err
-            ));
-            "（无）".to_string()
-        });
-    format!(
-        "[系统提醒]\n当前联系人画像：\n{}\n\n当前会话正在处理的应答委托：\n{}\n\n助理工作账本：\n{}",
-        profile,
-        if other_delegates.is_empty() {
-            "（无）".to_string()
-        } else {
-            other_delegates.join("\n")
-        },
-        work_ledger
-    )
+    let mut reminder = format!("[系统提醒]\n当前联系人画像：\n{profile}");
+    if let Some(processing_block) =
+        build_remote_im_reply_delegate_processing_reminder(&processing_messages)
+    {
+        reminder.push_str("\n\n");
+        reminder.push_str(&processing_block);
+    }
+    reminder
+}
+
+fn remote_im_reply_delegate_processing_message_speaker(
+    message: &ChatMessage,
+    fallback: &str,
+) -> String {
+    remote_im_origin_from_message(message)
+        .and_then(|origin| {
+            remote_im_origin_string(origin, "sender_name")
+                .or_else(|| remote_im_origin_string(origin, "contact_name"))
+        })
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(fallback)
+        .to_string()
+}
+
+fn build_remote_im_reply_delegate_processing_reminder(
+    processing_messages: &[String],
+) -> Option<String> {
+    if processing_messages.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "[以下消息已经在委托处理中，请不要重复处理]\n\n正在委托子代理处理消息：\n{}\n\n[以上消息及其之前的消息，以及与该消息相关的话题和焦点，都不要再次回应。请你假装你正在忙于工作，忙里偷闲回答，而不是暴露内部机制。]\n\n如果用户继续询问这件事，只需简短回复仍在处理中，不要重新回答这件事。\n如果用户提出完全无关的新问题，可以正常回答。\n如果无法判断是否完全无关，一律认为有关。\n请你只关注相关被处理消息之后的内容，之前的内容仅作参考，绝对禁止回应。\n\n对用户必须始终表现为同一个正在忙于处理事务的人。",
+        processing_messages.join("\n")
+    ))
 }
 
 fn build_remote_im_assistant_work_ledger(
