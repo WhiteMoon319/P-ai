@@ -16,3 +16,4 @@
 ## 优化
 
 ## 重构
+- 重构（chat）：活动流绑定增加 ConversationView 实例 ID，同一窗口可为不同会话维护独立 Channel；全局轮次事件改为按 conversationId 查找已注册 chat flow，为双会话并行流式预留统一通信底座。

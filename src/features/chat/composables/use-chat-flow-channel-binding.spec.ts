@@ -48,4 +48,44 @@ describe("useChatFlowChannelBinding", () => {
     finishUnbind();
     await unbinding;
   });
+
+  it("同一窗口中的两个 flow 使用不同 bindingId 建立各自通道", async () => {
+    const firstBind = vi.fn(async () => {});
+    const secondBind = vi.fn(async () => {});
+    const first = useChatFlowChannelBinding({
+      getConversationId: () => "conversation-a",
+      invokeBindActiveChatViewStream: firstBind,
+      getRoundActiveGen: () => 1,
+      getCurrentGeneration: () => 1,
+      markHistoryFlushedReceived: vi.fn(),
+      handleHistoryFlushed: vi.fn(async () => {}),
+      handleStreamingEvent: vi.fn(),
+      formatRequestFailed: String,
+      setChatErrorText: vi.fn(),
+    });
+    const second = useChatFlowChannelBinding({
+      getConversationId: () => "conversation-b",
+      invokeBindActiveChatViewStream: secondBind,
+      getRoundActiveGen: () => 1,
+      getCurrentGeneration: () => 1,
+      markHistoryFlushedReceived: vi.fn(),
+      handleHistoryFlushed: vi.fn(async () => {}),
+      handleStreamingEvent: vi.fn(),
+      formatRequestFailed: String,
+      setChatErrorText: vi.fn(),
+    });
+
+    await first.bindActiveConversationStream("conversation-a");
+    await second.bindActiveConversationStream("conversation-b");
+
+    expect(first.bindingId).not.toBe(second.bindingId);
+    expect(firstBind).toHaveBeenCalledWith(expect.objectContaining({
+      bindingId: first.bindingId,
+      conversationId: "conversation-a",
+    }));
+    expect(secondBind).toHaveBeenCalledWith(expect.objectContaining({
+      bindingId: second.bindingId,
+      conversationId: "conversation-b",
+    }));
+  });
 });

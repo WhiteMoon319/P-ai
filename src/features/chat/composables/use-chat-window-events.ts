@@ -2,8 +2,20 @@ import { onBeforeUnmount, onMounted } from "vue";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invokeTauri } from "../../../services/tauri-api";
+import { chatFlowRuntimesForConversation } from "./chat-flow-runtime-registry";
 
 export function useChatWindowEvents(bindings: Record<string, any>) {
+  function flowsForConversation(conversationId: string) {
+    const normalizedConversationId = String(conversationId || "").trim();
+    const registered = chatFlowRuntimesForConversation(normalizedConversationId);
+    if (registered.length > 0) return registered;
+    if (!normalizedConversationId || bindings.matchesForegroundConversation(normalizedConversationId)) {
+      const fallback = bindings.getChatFlow?.();
+      return fallback ? [fallback] : [];
+    }
+    return [];
+  }
+
   onMounted(() => {
     try {
       const label = String(getCurrentWindow().label || "").trim();
@@ -16,8 +28,9 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
     if (bindings.isChatTauriWindow.value) {
       void listen<any>("easy-call:history-flushed", (event) => {
         const payloadConversationId = bindings.readConversationIdFromPayload(event.payload);
-        if (bindings.matchesForegroundConversation(payloadConversationId)) {
-          void bindings.getChatFlow().handleExternalHistoryFlushed(event.payload);
+        const targetFlows = flowsForConversation(payloadConversationId);
+        if (targetFlows.length > 0) {
+          for (const flow of targetFlows) void flow.handleExternalHistoryFlushed(event.payload);
         } else if (payloadConversationId) {
           bindings.mergeIncomingMessagesIntoCache(payloadConversationId, bindings.readMessagesFromPayload(event.payload));
         }
@@ -34,7 +47,8 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
           ? event.payload
           : null;
         const assistantMessage = payloadObject?.assistantMessage || null;
-        if (payloadConversationId && payloadConversationId !== currentConversationId) {
+        const targetFlows = flowsForConversation(payloadConversationId);
+        if (targetFlows.length === 0 && payloadConversationId && payloadConversationId !== currentConversationId) {
           const assistantMessageId = String(assistantMessage?.id || "").trim();
           const cachedMessages = bindings.formalizeConversationMessages(bindings.conversationMessageCache.value[payloadConversationId] || []);
           const messageAlreadyCached = !!assistantMessageId && cachedMessages.some((message: any) => String(message?.id || "").trim() === assistantMessageId);
@@ -44,11 +58,16 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
           void bindings.getChatFlow().handleExternalRoundCompleted(event.payload);
           return;
         }
-        if (!bindings.matchesForegroundConversation(payloadConversationId)) return;
-        bindings.clearConversationBadge(payloadConversationId);
-        bindings.toolReviewRefreshTick.value += 1;
-        void bindings.getChatFlow().handleExternalRoundCompleted(event.payload).finally(() => {
-          void bindings.refreshActiveSupervisionTask({ silent: true });
+        if (payloadConversationId === currentConversationId) {
+          bindings.clearConversationBadge(payloadConversationId);
+          bindings.toolReviewRefreshTick.value += 1;
+        }
+        void Promise.allSettled(
+          targetFlows.map((flow) => Promise.resolve(flow.handleExternalRoundCompleted(event.payload))),
+        ).then(() => {
+          if (payloadConversationId === currentConversationId) {
+            void bindings.refreshActiveSupervisionTask({ silent: true });
+          }
         });
       }).then((unlisten) => {
         bindings.unlisteners.chatRoundCompleted = unlisten;
@@ -58,8 +77,9 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
 
       void listen<any>("easy-call:round-started", (event) => {
         const payloadConversationId = bindings.readConversationIdFromPayload(event.payload);
-        if (!bindings.matchesForegroundConversation(payloadConversationId)) return;
-        void bindings.getChatFlow().handleExternalRoundStarted(event.payload);
+        for (const flow of flowsForConversation(payloadConversationId)) {
+          void flow.handleExternalRoundStarted(event.payload);
+        }
       }).then((unlisten) => {
         bindings.unlisteners.chatRoundStarted = unlisten;
       }).catch((error) => {
@@ -69,14 +89,16 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
       void listen<any>("easy-call:round-failed", (event) => {
         const payloadConversationId = bindings.readConversationIdFromPayload(event.payload);
         const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
-        if (payloadConversationId && payloadConversationId !== currentConversationId) {
+        const targetFlows = flowsForConversation(payloadConversationId);
+        if (targetFlows.length === 0 && payloadConversationId && payloadConversationId !== currentConversationId) {
           bindings.setConversationBadge(payloadConversationId, "failed");
           void bindings.getChatFlow().handleExternalRoundFailed(event.payload);
           return;
         }
-        if (!bindings.matchesForegroundConversation(payloadConversationId)) return;
-        bindings.clearConversationBadge(payloadConversationId);
-        void bindings.getChatFlow().handleExternalRoundFailed(event.payload);
+        if (payloadConversationId === currentConversationId) {
+          bindings.clearConversationBadge(payloadConversationId);
+        }
+        for (const flow of targetFlows) void flow.handleExternalRoundFailed(event.payload);
       }).then((unlisten) => {
         bindings.unlisteners.chatRoundFailed = unlisten;
       }).catch((error) => {
@@ -139,7 +161,9 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
             currentConversationId: String(bindings.currentChatConversationId.value || "").trim(),
           });
         }
-        void bindings.getChatFlow().handleExternalAssistantDelta(event.payload);
+        for (const flow of flowsForConversation(conversationId)) {
+          void flow.handleExternalAssistantDelta(event.payload);
+        }
       }).then((unlisten) => {
         bindings.unlisteners.chatAssistantDelta = unlisten;
       }).catch((error) => {
@@ -155,7 +179,9 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
             payload: event.payload,
           });
         }
-        void bindings.getChatFlow().handleExternalStreamRebindRequired(event.payload);
+        for (const flow of flowsForConversation(conversationId)) {
+          void flow.handleExternalStreamRebindRequired(event.payload);
+        }
       }).then((unlisten) => {
         bindings.unlisteners.chatStreamRebindRequired = unlisten;
       }).catch((error) => {

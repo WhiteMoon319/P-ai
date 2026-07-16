@@ -171,11 +171,12 @@
 - `unbind_active_chat_view_stream`；
 - `probe_active_chat_view_stream`；
 
-维护“窗口 label → 当前会话 ID → Channel”的绑定。
+每个 `useChatFlow` 实例生成独立 `bindingId`，后端维护“窗口 label + bindingId → 当前会话 ID → Channel”的绑定。同一 Tauri 窗口因此可以同时挂载多个 ConversationView，每个 view 绑定不同会话和不同 Channel；后端投递时仍以事件的 `conversationId` 匹配所有目标绑定。
 
 绑定层使用以下防护：
 
 - `boundChannelSeq`：新绑定会使旧绑定失效；
+- `bindingId`：区分同一窗口中的不同 ConversationView runtime；
 - 会话 ID 检查：事件必须属于当前会话；
 - generation 检查：旧轮次事件不能覆盖新轮次；
 - 发送失败后移除失效 binding。
@@ -836,7 +837,9 @@ Web 使用 `sidebarForegroundReconciling` 串行门闩；APP 的活动状态同�
 - `src/features/chat/composables/use-chat-flow.ts`
   - chat flow 聚合入口。
 - `src/features/chat/composables/use-chat-flow-channel-binding.ts`
-  - Tauri Channel 绑定、解绑、probe、generation 过滤。
+  - Tauri Channel 绑定、解绑、probe、view binding ID和 generation 过滤。
+- `src/features/chat/composables/chat-flow-runtime-registry.ts`
+  - 按 `conversationId` 查找已注册 ConversationView runtime，将全局轮次事件交给对应 flow。
 - `src/features/chat/composables/use-chat-flow-foreground-rounds.ts`
   - APP 前台 round 和 stream cache 投影恢复。
 - `src/features/chat/composables/use-chat-window-recording-orchestrator.ts`

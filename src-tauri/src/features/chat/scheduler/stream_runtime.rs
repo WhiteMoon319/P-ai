@@ -29,6 +29,7 @@ pub(crate) fn register_chat_event_runtime(
 pub(crate) fn set_active_chat_view_stream_binding(
     state: &AppState,
     window_label: &str,
+    binding_id: &str,
     conversation_id: Option<&str>,
     on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
 ) -> Result<(), String> {
@@ -40,22 +41,43 @@ pub(crate) fn set_active_chat_view_stream_binding(
     if trimmed_window_label.is_empty() {
         return Err("Missing window label when binding active chat stream".to_string());
     }
+    let normalized_binding_id = normalize_active_chat_view_binding_id(binding_id);
+    let binding_key = active_chat_view_binding_key(trimmed_window_label, &normalized_binding_id);
     let trimmed_conversation_id = conversation_id
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned);
     if let Some(conversation_id) = trimmed_conversation_id {
         bindings.insert(
-            trimmed_window_label.to_string(),
+            binding_key,
             ActiveChatViewBinding {
+                window_label: trimmed_window_label.to_string(),
+                binding_id: normalized_binding_id,
                 conversation_id,
                 delta_channel: on_delta,
             },
         );
     } else {
-        bindings.remove(trimmed_window_label);
+        bindings.remove(&binding_key);
     }
     Ok(())
+}
+
+fn normalize_active_chat_view_binding_id(binding_id: &str) -> String {
+    let normalized = binding_id.trim();
+    if normalized.is_empty() {
+        "default".to_string()
+    } else {
+        normalized.to_string()
+    }
+}
+
+fn active_chat_view_binding_key(window_label: &str, binding_id: &str) -> String {
+    format!(
+        "{}::{}",
+        window_label.trim(),
+        normalize_active_chat_view_binding_id(binding_id),
+    )
 }
 
 fn collect_active_chat_view_delta_channels(
@@ -79,13 +101,13 @@ fn collect_active_chat_view_delta_channels(
         .collect::<Vec<_>>())
 }
 
-fn prune_failed_active_chat_view_bindings(state: &AppState, window_labels: &[String]) {
-    if window_labels.is_empty() {
+fn prune_failed_active_chat_view_bindings(state: &AppState, binding_keys: &[String]) {
+    if binding_keys.is_empty() {
         return;
     }
     if let Ok(mut bindings) = state.active_chat_view_bindings.lock() {
-        for window_label in window_labels {
-            bindings.remove(window_label);
+        for binding_key in binding_keys {
+            bindings.remove(binding_key);
         }
     }
 }
@@ -100,12 +122,12 @@ fn conversation_has_focused_chat_view(state: &AppState, conversation_id: &str) -
     };
     let focused_window_labels = match state.active_chat_view_bindings.lock() {
         Ok(bindings) => bindings
-            .iter()
-            .filter_map(|(window_label, binding)| {
+            .values()
+            .filter_map(|binding| {
                 if binding.conversation_id.trim() != conversation_id.trim() {
                     return None;
                 }
-                Some(window_label.clone())
+                Some(binding.window_label.clone())
             })
             .collect::<Vec<_>>(),
         Err(_) => return false,
@@ -431,6 +453,17 @@ fn apply_assistant_tool_event_to_stream_blocks(
 #[cfg(test)]
 mod scheduler_stream_block_tests {
     use super::*;
+
+    #[test]
+    fn active_chat_view_binding_key_should_distinguish_views_in_same_window() {
+        let main_key = active_chat_view_binding_key("chat", "view-main");
+        let side_key = active_chat_view_binding_key("chat", "view-side");
+
+        assert_ne!(main_key, side_key);
+        assert_eq!(main_key, "chat::view-main");
+        assert_eq!(side_key, "chat::view-side");
+        assert_eq!(active_chat_view_binding_key("chat", ""), "chat::default");
+    }
 
     fn assistant_delta_event_for_test(kind: Option<&str>, delta: &str) -> AssistantDeltaEvent {
         AssistantDeltaEvent {
@@ -973,12 +1006,12 @@ fn emit_stream_rebind_required_event(
 pub(crate) fn clear_active_chat_view_stream_binding(
     state: &AppState,
     window_label: &str,
+    binding_id: &str,
 ) -> Result<(), String> {
     let mut bindings = state
         .active_chat_view_bindings
         .lock()
         .map_err(|_| "Failed to lock active chat view bindings".to_string())?;
-    bindings.remove(window_label.trim());
+    bindings.remove(&active_chat_view_binding_key(window_label, binding_id));
     Ok(())
 }
-

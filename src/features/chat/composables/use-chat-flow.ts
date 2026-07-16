@@ -741,6 +741,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
   }
 
   return {
+    bindingId: channelBinding.bindingId,
     sendChat,
     stopChat,
     clearForegroundRoundState,

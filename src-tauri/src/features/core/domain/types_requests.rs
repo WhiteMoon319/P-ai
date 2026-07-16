@@ -576,6 +576,8 @@ fn round_completed_delta_event(
 
 #[derive(Clone)]
 struct ActiveChatViewBinding {
+    window_label: String,
+    binding_id: String,
     conversation_id: String,
     delta_channel: tauri::ipc::Channel<AssistantDeltaEvent>,
 }
@@ -611,4 +613,3 @@ mod compaction_preserved_messages_tests {
         assert!(a > 0);
     }
 }
-

@@ -1,4 +1,6 @@
+import { onScopeDispose } from "vue";
 import { invokeTauri } from "../../../services/tauri-api";
+import { registerChatFlowRuntime } from "./chat-flow-runtime-registry";
 import { useChatFlow } from "./use-chat-flow";
 import { useChatRewindActions } from "./use-chat-rewind-actions";
 import { useConfirmPlan } from "./use-confirm-plan";
@@ -124,18 +126,22 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
         const afterMessage = bindings.allMessages.value.find((message: any) => String(message?.id || "").trim() === normalizedMessageId);
         return !!afterMessage && afterMessage !== beforeMessage;
       },
-      invokeBindActiveChatViewStream: ({ conversationId, onDelta }) =>
+      invokeBindActiveChatViewStream: ({ bindingId, conversationId, onDelta }) =>
         invokeTauri("bind_active_chat_view_stream", {
           input: {
+            bindingId,
             conversationId: conversationId || null,
           },
           onDelta,
         }),
-      invokeUnbindActiveChatViewStream: () =>
-        invokeTauri("unbind_active_chat_view_stream"),
-      invokeProbeActiveChatViewStream: ({ conversationId, probeId }) =>
+      invokeUnbindActiveChatViewStream: ({ bindingId }) =>
+        invokeTauri("unbind_active_chat_view_stream", {
+          input: { bindingId },
+        }),
+      invokeProbeActiveChatViewStream: ({ bindingId, conversationId, probeId }) =>
         invokeTauri<boolean>("probe_active_chat_view_stream", {
           input: {
+            bindingId,
             conversationId: conversationId || null,
             probeId,
           },
@@ -283,6 +289,15 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
   });
 
   chatFlowRef = chatFlow;
+  const unregisterChatFlowRuntime = registerChatFlowRuntime({
+    bindingId: chatFlow.bindingId,
+    getConversationId: () => String(bindings.currentChatConversationId.value || "").trim(),
+    flow: chatFlow,
+  });
+  onScopeDispose(() => {
+    unregisterChatFlowRuntime();
+    void chatFlow.unbindActiveConversationStream?.().catch(() => {});
+  });
 
   return {
     chatFlow,

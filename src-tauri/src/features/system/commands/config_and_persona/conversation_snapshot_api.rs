@@ -430,11 +430,14 @@ fn conversation_list_open_state(
         .lock()
         .ok()
         .and_then(|bindings| {
-            bindings.iter().find_map(|(label, binding)| {
+            bindings.values().find_map(|binding| {
                 if binding.conversation_id.trim() != cid {
                     return None;
                 }
-                Some((opened_by_for_window_label(label), chat_viewer_id_for_window_label(label)))
+                Some((
+                    opened_by_for_window_label(&binding.window_label),
+                    chat_viewer_id_for_window_label(&binding.window_label),
+                ))
             })
         });
     if let Some((opened_by, open_viewer_id)) = opened {

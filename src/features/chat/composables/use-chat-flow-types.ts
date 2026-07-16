@@ -68,11 +68,13 @@ export type UseChatFlowOptions = {
     messageId: string;
   }) => Promise<boolean | void>;
   invokeBindActiveChatViewStream?: (input: {
+    bindingId: string;
     conversationId?: string;
     onDelta: Channel<AssistantDeltaEvent>;
   }) => Promise<void>;
-  invokeUnbindActiveChatViewStream?: () => Promise<void>;
+  invokeUnbindActiveChatViewStream?: (input: { bindingId: string }) => Promise<void>;
   invokeProbeActiveChatViewStream?: (input: {
+    bindingId: string;
     conversationId?: string;
     probeId: string;
   }) => Promise<boolean>;

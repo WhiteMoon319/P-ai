@@ -2256,12 +2256,23 @@ async fn submit_user_async_delegate_internal(
 #[serde(rename_all = "camelCase")]
 struct BindActiveChatViewStreamInput {
     #[serde(default)]
+    binding_id: String,
+    #[serde(default)]
     conversation_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct UnbindActiveChatViewStreamInput {
+    #[serde(default)]
+    binding_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ProbeActiveChatViewStreamInput {
+    #[serde(default)]
+    binding_id: String,
     #[serde(default)]
     conversation_id: Option<String>,
     probe_id: String,
@@ -2284,18 +2295,28 @@ async fn bind_active_chat_view_stream(
         set_active_chat_view_stream_binding(
             state.inner(),
             &window_label,
+            &input.binding_id,
             Some(conversation_id),
             on_delta.clone(),
         )?;
         runtime_log_debug(format!(
-            "[聊天] 已绑定活动聊天流: window={}, conversation_id={}",
-            window_label, conversation_id
+            "[聊天] 已绑定活动聊天流: window={}, binding_id={}, conversation_id={}",
+            window_label,
+            normalize_active_chat_view_binding_id(&input.binding_id),
+            conversation_id,
         ));
     } else {
-        set_active_chat_view_stream_binding(state.inner(), &window_label, None, on_delta)?;
+        set_active_chat_view_stream_binding(
+            state.inner(),
+            &window_label,
+            &input.binding_id,
+            None,
+            on_delta,
+        )?;
         runtime_log_debug(format!(
-            "[聊天] 已取消活动聊天流绑定: window={}",
-            window_label
+            "[聊天] 已取消活动聊天流绑定: window={}, binding_id={}",
+            window_label,
+            normalize_active_chat_view_binding_id(&input.binding_id),
         ));
     }
     Ok(())
@@ -2303,14 +2324,17 @@ async fn bind_active_chat_view_stream(
 
 #[tauri::command]
 async fn unbind_active_chat_view_stream(
+    input: Option<UnbindActiveChatViewStreamInput>,
     state: State<'_, AppState>,
     window: tauri::Window,
 ) -> Result<(), String> {
     let window_label = window.label().to_string();
-    clear_active_chat_view_stream_binding(state.inner(), &window_label)?;
+    let binding_id = input.unwrap_or_default().binding_id;
+    clear_active_chat_view_stream_binding(state.inner(), &window_label, &binding_id)?;
     runtime_log_debug(format!(
-        "[聊天] 已取消活动聊天流订阅: window={}",
-        window_label
+        "[聊天] 已取消活动聊天流订阅: window={}, binding_id={}",
+        window_label,
+        normalize_active_chat_view_binding_id(&binding_id),
     ));
     Ok(())
 }
@@ -2332,11 +2356,12 @@ async fn probe_active_chat_view_stream(
     if conversation_id.is_empty() || probe_id.is_empty() {
         return Ok(false);
     }
+    let binding_key = active_chat_view_binding_key(&window_label, &input.binding_id);
     let binding = state
         .active_chat_view_bindings
         .lock()
         .map_err(|_| "Failed to lock active chat view bindings".to_string())?
-        .get(&window_label)
+        .get(&binding_key)
         .cloned();
     let Some(binding) = binding else {
         return Ok(false);
@@ -2364,7 +2389,7 @@ async fn probe_active_chat_view_stream(
             let _ = state
                 .active_chat_view_bindings
                 .lock()
-                .map(|mut bindings| bindings.remove(&window_label));
+                .map(|mut bindings| bindings.remove(&binding_key));
             Ok(false)
         }
     }

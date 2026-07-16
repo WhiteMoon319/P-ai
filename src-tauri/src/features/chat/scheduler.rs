@@ -1716,8 +1716,13 @@ fn collect_active_chat_view_activations(
         .map_err(|_| "Failed to lock active chat view bindings".to_string())?;
     let conversation_id = conversation_id.trim();
     let binding_snapshot = bindings
-        .iter()
-        .map(|(window_label, binding)| format!("{}=>{}", window_label, binding.conversation_id))
+        .values()
+        .map(|binding| {
+            format!(
+                "{}#{}=>{}",
+                binding.window_label, binding.binding_id, binding.conversation_id,
+            )
+        })
         .collect::<Vec<_>>();
     runtime_log_debug(format!(
         "[聊天调度] 绑定快照: conversation_id={}, bindings={:?}",

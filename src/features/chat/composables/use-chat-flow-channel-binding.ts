@@ -9,13 +9,16 @@ export type ChatFlowDeltaSource = "sendChat" | "bound";
 
 type UseChatFlowChannelBindingOptions = {
   debug?: boolean;
+  bindingId?: string;
   getConversationId?: () => string;
   invokeBindActiveChatViewStream?: (input: {
+    bindingId: string;
     conversationId?: string;
     onDelta: Channel<AssistantDeltaEvent>;
   }) => Promise<void>;
-  invokeUnbindActiveChatViewStream?: () => Promise<void>;
+  invokeUnbindActiveChatViewStream?: (input: { bindingId: string }) => Promise<void>;
   invokeProbeActiveChatViewStream?: (input: {
+    bindingId: string;
     conversationId?: string;
     probeId: string;
   }) => Promise<boolean>;
@@ -32,7 +35,18 @@ type UseChatFlowChannelBindingOptions = {
   setChatErrorText: (text: string) => void;
 };
 
+let chatViewBindingSequence = 0;
+
+function createChatViewBindingId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `chat-view:${crypto.randomUUID()}`;
+  }
+  chatViewBindingSequence += 1;
+  return `chat-view:${Date.now()}:${chatViewBindingSequence}`;
+}
+
 export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOptions) {
+  const bindingId = String(options.bindingId || "").trim() || createChatViewBindingId();
   let boundConversationId = "";
   let boundConversationInitialized = false;
   let boundDisplayGeneration = 0;
@@ -144,6 +158,7 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
     boundConversationInitialized = true;
     try {
       await options.invokeBindActiveChatViewStream({
+        bindingId,
         conversationId: id || undefined,
         onDelta: channel,
       });
@@ -174,7 +189,7 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
     }
     pendingProbeResolvers.clear();
     if (hadBinding && options.invokeUnbindActiveChatViewStream) {
-      await options.invokeUnbindActiveChatViewStream();
+      await options.invokeUnbindActiveChatViewStream({ bindingId });
     }
     if (options.debug) {
       console.debug("[聊天] 已取消前台流式通道绑定");
@@ -211,6 +226,7 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
     });
     try {
       const dispatched = await options.invokeProbeActiveChatViewStream({
+        bindingId,
         conversationId: id,
         probeId,
       });
@@ -227,6 +243,7 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
   }
 
   return {
+    bindingId,
     attachDeltaHandler,
     bindActiveConversationStream,
     createSendChatDeltaChannel,
