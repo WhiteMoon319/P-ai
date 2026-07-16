@@ -158,6 +158,22 @@
                       >
                         <Settings class="h-4 w-4" />
                       </button>
+                      <button
+                        class="btn btn-ghost btn-square btn-sm hover:bg-base-300"
+                        :title="t('common.copy')"
+                        :disabled="contactsDisabled || isContactOperationBusy(item.id)"
+                        @click.stop="copyContactSettings(item)"
+                      >
+                        <Copy class="h-4 w-4" />
+                      </button>
+                      <button
+                        class="btn btn-ghost btn-square btn-sm hover:bg-base-300"
+                        :title="t('common.paste')"
+                        :disabled="contactsDisabled || isContactOperationBusy(item.id) || !contactSettingsClipboard"
+                        @click.stop="pasteContactSettings(item)"
+                      >
+                        <ClipboardPaste class="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
                   <div class="mt-1.5 flex flex-wrap gap-1.5 overflow-visible whitespace-nowrap text-xs">
@@ -852,7 +868,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { AlertTriangle, ChevronUp, Plus, RefreshCw, RotateCcw, Save, ScrollText, Settings, SquareTerminal, Trash2 } from "@lucide/vue";
+import { AlertTriangle, ChevronUp, ClipboardPaste, Copy, Plus, RefreshCw, RotateCcw, Save, ScrollText, Settings, SquareTerminal, Trash2 } from "@lucide/vue";
 import { invokeTauri } from "../../../../services/tauri-api";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { AppConfig, DepartmentConfig, PersonaProfile, RemoteImChannelConfig, RemoteImContact, RemoteImPlatform, ShellWorkspace } from "../../../../types/app";
@@ -898,6 +914,22 @@ type ContactPillMenuState = {
   widthClass: string;
   options: ContactPillMenuOption[];
 };
+type ContactSettingsClipboard = {
+  boundDepartmentId: string;
+  boundAgentId: string;
+  processingMode: "qa" | "continuous";
+  activationMode: RemoteImContact["activationMode"];
+  activationKeywordsText: string;
+  muteKeywordsText: string;
+  unmuteKeywordsText: string;
+  responseStrategy: NonNullable<RemoteImContact["responseStrategy"]>;
+  responseGuidance: string;
+  patienceSeconds: number;
+  muteDurationSeconds: number;
+  allowReceive: boolean;
+  allowSend: boolean;
+  allowSendFiles: boolean;
+};
 const saving = ref(false);
 const contactsLoading = ref(false);
 const contactsError = ref("");
@@ -932,6 +964,7 @@ const channelConfigModalOpen = ref(false);
 const contactConfigModalOpen = ref(false);
 const selectedContactId = ref<string>("");
 const contactPillMenu = ref<ContactPillMenuState | null>(null);
+const contactSettingsClipboard = ref<ContactSettingsClipboard | null>(null);
 const contactSaving = ref(false);
 const contactDeleting = ref(false);
 const channelRuntimeStates = ref<Record<string, ChannelConnectionStatus | null>>({});
@@ -1235,6 +1268,30 @@ function buildContactDraftFromContact(item: RemoteImContact): ContactEditDraft {
           access: ws.access || "full_access",
         }))
       : [],
+  };
+}
+
+function buildContactSettingsClipboard(item: RemoteImContact): ContactSettingsClipboard {
+  const isPrivate = isPrivateContact(item);
+  return {
+    boundDepartmentId: String(item.boundDepartmentId || ""),
+    boundAgentId: String(item.boundAgentId || ""),
+    processingMode: normalizeProcessingMode(item.processingMode),
+    activationMode: isPrivate ? "always" : normalizeActivationMode(item.activationMode || "never"),
+    activationKeywordsText: isPrivate ? "" : (Array.isArray(item.activationKeywords) ? item.activationKeywords.join(", ") : ""),
+    muteKeywordsText: isPrivate
+      ? t("config.remoteIm.defaultMuteKeyword")
+      : (Array.isArray(item.muteKeywords) ? item.muteKeywords : [t("config.remoteIm.defaultMuteKeyword")]).join(", "),
+    unmuteKeywordsText: isPrivate
+      ? t("config.remoteIm.defaultUnmuteKeyword")
+      : (Array.isArray(item.unmuteKeywords) ? item.unmuteKeywords : [t("config.remoteIm.defaultUnmuteKeyword")]).join(", "),
+    responseStrategy: isPrivate ? "always_reply" : normalizeResponseStrategy(item.responseStrategy),
+    responseGuidance: isPrivate ? "" : String(item.responseGuidance || "").trim(),
+    patienceSeconds: isPrivate ? 0 : Math.max(0, Number(item.patienceSeconds || 60)),
+    muteDurationSeconds: isPrivate ? 0 : Math.max(0, Number(item.muteDurationSeconds || 600)),
+    allowReceive: !!item.allowReceive,
+    allowSend: !!item.allowSend,
+    allowSendFiles: !!item.allowSendFiles,
   };
 }
 
@@ -1692,6 +1749,94 @@ async function saveContactActivation(
     item.responseGuidance = oldResponseGuidance;
     props.setStatusAction(t("status.saveConfigFailed", { err: String(error) }));
   }
+}
+
+async function copyContactSettings(item: RemoteImContact) {
+  contactSettingsClipboard.value = buildContactSettingsClipboard(item);
+  props.setStatusAction(t("config.remoteIm.contactSettingsCopied"));
+}
+
+function buildContactClipboardPatch(
+  clipboard: ContactSettingsClipboard,
+  target: RemoteImContact,
+) {
+  const isPrivate = isPrivateContact(target);
+  return {
+    boundDepartmentId: clipboard.boundDepartmentId,
+    boundAgentId: clipboard.boundAgentId,
+    processingMode: clipboard.processingMode,
+    activationMode: isPrivate ? "always" : clipboard.activationMode,
+    activationKeywords: isPrivate ? [] : parseActivationKeywords(clipboard.activationKeywordsText),
+    muteKeywords: isPrivate ? [] : parseKeywordList(clipboard.muteKeywordsText),
+    unmuteKeywords: isPrivate ? [] : parseKeywordList(clipboard.unmuteKeywordsText),
+    patienceSeconds: isPrivate ? 0 : clipboard.patienceSeconds,
+    muteDurationSeconds: isPrivate ? 0 : clipboard.muteDurationSeconds,
+    responseStrategy: isPrivate ? "always_reply" : clipboard.responseStrategy,
+    responseGuidance: isPrivate ? "" : clipboard.responseGuidance,
+    allowReceive: clipboard.allowReceive,
+    allowSend: clipboard.allowSend,
+    allowSendFiles: clipboard.allowSendFiles,
+  } as const;
+}
+
+async function pasteContactSettings(item: RemoteImContact) {
+  const clipboard = contactSettingsClipboard.value;
+  if (!clipboard) return;
+  if (contactsDisabled.value || isContactOperationBusy(item.id)) return;
+  const patch = buildContactClipboardPatch(clipboard, item);
+  await withContactOperation(item.id, async () => {
+    if (patch.boundDepartmentId !== String(item.boundDepartmentId || "")
+      || patch.boundAgentId !== String(item.boundAgentId || "")) {
+      await onContactDepartmentChange(item, patch.boundDepartmentId, patch.boundAgentId);
+    }
+
+    if (patch.processingMode !== normalizeProcessingMode(item.processingMode)) {
+      await onContactProcessingModeChange(item, patch.processingMode);
+    }
+
+    const currentKeywords = Array.isArray(item.activationKeywords) ? item.activationKeywords : [];
+    const currentMuteKeywords = Array.isArray(item.muteKeywords) ? item.muteKeywords : [t("config.remoteIm.defaultMuteKeyword")];
+    const currentUnmuteKeywords = Array.isArray(item.unmuteKeywords) ? item.unmuteKeywords : [t("config.remoteIm.defaultUnmuteKeyword")];
+    const nextKeywords = patch.activationKeywords;
+    const nextMuteKeywords = patch.muteKeywords;
+    const nextUnmuteKeywords = patch.unmuteKeywords;
+    const activationModeChanged = normalizeActivationMode(item.activationMode || "never") !== patch.activationMode;
+    const groupSpecificChanged = !isPrivateContact(item) && (
+      JSON.stringify(nextKeywords) !== JSON.stringify(currentKeywords)
+        || JSON.stringify(nextMuteKeywords) !== JSON.stringify(currentMuteKeywords)
+        || JSON.stringify(nextUnmuteKeywords) !== JSON.stringify(currentUnmuteKeywords)
+        || patch.patienceSeconds !== Math.max(0, Math.floor(Number(item.patienceSeconds || 60)))
+        || patch.muteDurationSeconds !== Math.max(0, Math.floor(Number(item.muteDurationSeconds || 600)))
+        || patch.responseStrategy !== normalizeResponseStrategy(item.responseStrategy)
+        || patch.responseGuidance !== String(item.responseGuidance || "").trim()
+        || activationModeChanged
+    );
+
+    if (groupSpecificChanged) {
+      await saveContactActivation(item, {
+        activationMode: patch.activationMode,
+        activationKeywords: nextKeywords,
+        muteKeywords: nextMuteKeywords,
+        unmuteKeywords: nextUnmuteKeywords,
+        patienceSeconds: patch.patienceSeconds,
+        muteDurationSeconds: patch.muteDurationSeconds,
+        responseStrategy: patch.responseStrategy,
+        responseGuidance: patch.responseGuidance,
+      });
+    } else if (isPrivateContact(item) && activationModeChanged) {
+      await saveContactActivation(item, { activationMode: "always" });
+    }
+
+    if (!!item.allowReceive !== patch.allowReceive || !!item.allowSend !== patch.allowSend) {
+      await toggleContactCommunication(item, patch.allowReceive || patch.allowSend);
+    }
+    if (!!item.allowSendFiles !== patch.allowSendFiles) {
+      await toggleContactAllowSendFiles(item, patch.allowSendFiles);
+    }
+
+    await refreshContacts();
+    props.setStatusAction(t("config.remoteIm.contactSettingsPasted"));
+  });
 }
 
 function onContactActivationModeChange(item: RemoteImContact, modeRaw: string) {
