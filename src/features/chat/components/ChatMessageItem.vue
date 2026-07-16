@@ -357,6 +357,15 @@
           <Copy class="h-3.5 w-3.5" />
         </button>
         <button
+          type="button"
+          class="ecall-message-footer-action inline-flex h-6 w-6 items-center justify-center rounded text-base-content/55 hover:text-base-content"
+          :title="t('chat.selection.copyImageAsImage')"
+          :disabled="selectionModeEnabled || copyMessageImageBusy"
+          @click="copyCurrentMessageAsImage"
+        >
+          <ImageIcon class="h-3.5 w-3.5" />
+        </button>
+        <button
           v-if="canRecallBlock(block)"
           type="button"
           class="ecall-message-footer-action inline-flex h-6 w-6 items-center justify-center rounded text-base-content/55 hover:text-base-content"
@@ -395,6 +404,12 @@
           <span>{{ t('common.copy') }}</span>
         </button>
       </li>
+      <li>
+        <button type="button" @click="handleContextMenuAction('copyAsImage')">
+          <ImageIcon class="h-4 w-4" />
+          <span>{{ t('chat.selection.copyImageAsImage') }}</span>
+        </button>
+      </li>
       <li v-if="mathContextCopyText">
         <button type="button" @click="handleContextMenuAction('copyMath')">
           <Copy class="h-4 w-4" />
@@ -420,7 +435,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect, watchPostEffect } from "vue";
 import { useI18n } from "vue-i18n";
-import { Copy, FileText, ListCheck, Pause, Play, Split, Undo2 } from "@lucide/vue";
+import { Copy, FileText, ImageIcon, ListCheck, Pause, Play, Split, Undo2 } from "@lucide/vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ChatActivityItem, ChatMessageBlock } from "../../../types/app";
 import {
@@ -435,6 +450,7 @@ import { normalizeLocalLinkHref } from "../utils/local-link";
 import { textContentSignature } from "../utils/text-signature";
 import { createToolCallPresentation } from "../utils/tool-call-presentation";
 import { buildToolcallPreviewMap } from "../utils/toolcall-preview";
+import { generateShareFromMessageIds } from "../utils/share-generator";
 import ChatBubbleShell from "./ChatBubbleShell.vue";
 import SidebarLightMarkdown from "./SidebarLightMarkdown.vue";
 
@@ -486,6 +502,8 @@ const emit = defineEmits<{
   (e: "regenerateTurn", payload: { turnId: string }): void;
   (e: "confirmPlan", payload: { messageId: string }): void;
   (e: "copyMessage", block: ChatMessageBlock): void;
+  (e: "copyMessageImageDone"): void;
+  (e: "copyMessageImageFailed"): void;
   (e: "openImagePreview", image: { mime: string; bytesBase64?: string; dataUrl?: string; localPath?: string }): void;
   (e: "toggleAudioPlayback", payload: { id: string; audio: { mime: string; bytesBase64: string } }): void;
   (e: "assistantLinkClick", event: MouseEvent): void;
@@ -514,6 +532,7 @@ const markdownContainerRef = ref<HTMLElement | null>(null);
 const activityDetailsRef = ref<HTMLDetailsElement | null>(null);
 const activityExpanded = ref(false);
 const expandedActivityItemKeys = ref<Set<string>>(new Set());
+const copyMessageImageBusy = ref(false);
 const planMarkdownText = ref("");
 const planMarkdownError = ref("");
 const planMarkdownLoading = ref(false);
@@ -1255,6 +1274,8 @@ function handleContextMenuAction(action: string) {
     emit("copyMessage", props.block);
   } else if (action === "copyMath") {
     void copyTextToClipboard(mathCopyText);
+  } else if (action === "copyAsImage") {
+    void copyCurrentMessageAsImage();
   } else if (action === "branchFromMessage") {
     const turnId = recallTurnId(props.block);
     if (!turnId) return;
@@ -1263,6 +1284,54 @@ function handleContextMenuAction(action: string) {
     const turnId = recallTurnId(props.block);
     if (!turnId) return;
     emit("recallTurn", { turnId });
+  }
+}
+
+function currentMessageShareBlock(): ChatMessageBlock | null {
+  const sourceId = String(props.block.sourceMessageId || props.block.id || "").trim();
+  if (!sourceId) return null;
+  return props.block;
+}
+
+async function copyCurrentMessageAsImage() {
+  if (copyMessageImageBusy.value || props.selectionModeEnabled) return;
+  const messageBlock = currentMessageShareBlock();
+  if (!messageBlock) return;
+  copyMessageImageBusy.value = true;
+  try {
+    if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+      emit("copyMessageImageFailed");
+      return;
+    }
+    const generated = await generateShareFromMessageIds({
+      conversationId: String(props.activeConversationId || "").trim(),
+      messageIds: [String(messageBlock.sourceMessageId || messageBlock.id || "").trim()].filter(Boolean),
+      formats: ["png"],
+      title: String(t("chat.shareDocumentTitle")),
+      subtitle: String(t("chat.shareDocumentSubtitle", { count: 1 })),
+      userAlias: props.userAlias,
+      userAvatarUrl: props.userAvatarUrl,
+      personaNameMap: props.personaNameMap,
+      personaAvatarUrlMap: props.personaAvatarUrlMap,
+      trigger: "single_message_copy_image",
+    });
+    const dataUrl = String(generated.pngDataUrl || "");
+    if (!dataUrl) {
+      emit("copyMessageImageFailed");
+      return;
+    }
+    const blob = await (await fetch(dataUrl)).blob();
+    if (blob.type !== "image/png") {
+      emit("copyMessageImageFailed");
+      return;
+    }
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    emit("copyMessageImageDone");
+  } catch (error) {
+    console.warn("[消息复制图片] 失败", error);
+    emit("copyMessageImageFailed");
+  } finally {
+    copyMessageImageBusy.value = false;
   }
 }
 

@@ -457,7 +457,7 @@ const emit = defineEmits<{
   (e: "selectionActionForward", target: ConversationForwardTarget): void;
   (e: "selectionActionDelegate", payload: { departmentId: string; agentId: string; presetId: string; why: string; goal: string; todo: string }): void;
   (e: "selectionActionCopy"): void;
-  (e: "selectionActionShare", format: "html" | "png"): void;
+  (e: "selectionActionShare", format: "html" | "png" | "copyPng"): void;
   (e: "update:chatInput", value: string): void;
   (e: "addMention", value: ChatMentionTarget): void;
   (e: "removeMention", value: string | { agentId: string; departmentId?: string }): void;

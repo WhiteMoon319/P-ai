@@ -116,7 +116,10 @@
                       @create-conversation-branch-from-turn="$emit('createConversationBranchFromTurn', $event)"
                       @recall-turn="$emit('recallTurn', $event)" @regenerate-turn="$emit('regenerateTurn', $event)"
                       @confirm-plan="$emit('confirmPlan', $event)" @enter-selection-mode="handleEnterMessageSelectionMode"
-                      @toggle-message-selected="toggleMessageSelected" @copy-message="copyMessage"
+                      @toggle-message-selected="toggleMessageSelected"
+                      @copy-message="handleCopyMessage"
+                      @copy-message-image-done="handleCopyMessageImageDone"
+                      @copy-message-image-failed="handleCopyMessageImageFailed"
                       @open-image-preview="openImagePreview"
                       @toggle-audio-playback="toggleAudioPlayback($event.id, $event.audio)"
                       @assistant-link-click="handleAssistantLinkClick"
@@ -245,29 +248,40 @@
         </Transition>
 
         <div ref="composerContainer" class="relative shrink-0 border-t border-base-300 bg-base-100 px-2 pt-2 pb-1.5">
-          <div v-if="chatStatusBanner" class="pointer-events-none absolute inset-x-0 top-0 z-30 flex -translate-y-full justify-center px-2 pb-2 pt-0">
+          <Transition name="chat-status-banner">
             <div
-              class="pointer-events-auto max-h-36 w-fit max-w-full overflow-hidden rounded-box border px-4 py-2 text-[12px] shadow-sm backdrop-blur-md"
-              :class="chatStatusBanner.tone === 'error' ? 'border-error/30 bg-error/12 text-error' : chatStatusBanner.text === t('chat.statusCompactingContext') ? 'border-info/25 bg-info/10 text-info' : 'border-base-300/70 bg-base-200/85 text-base-content'"
+              v-if="chatStatusBanner"
+              class="pointer-events-none absolute inset-x-0 top-0 z-30 flex -translate-y-full justify-center px-2 pb-2 pt-0"
             >
-              <div class="flex items-center gap-2 sm:gap-3">
-                <span
-                  class="min-w-0 whitespace-pre-wrap break-words text-center leading-5"
-                  :class="chatStatusBanner.tone === 'error' ? '' : 'text-base-content/80 ecall-shimmer-text ecall-reasoning-shimmer'"
-                  :data-shimmer-text="chatStatusBanner.tone === 'error' ? '' : chatStatusBanner.text"
-                >{{ chatStatusBanner.text }}</span>
-              <button
-                v-if="chatStatusBanner.tone === 'error'"
-                type="button"
-                class="btn btn-circle btn-ghost btn-sm h-8 min-h-8 w-8 shrink-0 p-0 text-error hover:bg-error/15"
-                :title="t('common.close')"
-                @click="$emit('clearChatError')"
+              <div
+                class="pointer-events-auto max-h-36 w-fit max-w-full overflow-hidden rounded-box border px-4 py-2 text-[12px] shadow-sm backdrop-blur-md"
+                :class="chatStatusBanner.tone === 'error'
+                  ? 'border-error/30 bg-error/12 text-error'
+                  : chatStatusBanner.tone === 'info' || chatStatusBanner.text === t('chat.statusCompactingContext')
+                    ? 'border-info/25 bg-info/10 text-info'
+                    : 'border-base-300/70 bg-base-200/85 text-base-content'"
               >
-                <X class="h-4 w-4" />
-              </button>
+                <div class="flex items-center gap-2 sm:gap-3">
+                  <span
+                    class="min-w-0 whitespace-pre-wrap break-words text-center leading-5"
+                    :class="chatStatusBanner.tone === 'error' || chatStatusBanner.tone === 'info'
+                      ? ''
+                      : 'text-base-content/80 ecall-shimmer-text ecall-reasoning-shimmer'"
+                    :data-shimmer-text="chatStatusBanner.tone === 'error' || chatStatusBanner.tone === 'info' ? '' : chatStatusBanner.text"
+                  >{{ chatStatusBanner.text }}</span>
+                  <button
+                    v-if="chatStatusBanner.tone === 'error'"
+                    type="button"
+                    class="btn btn-circle btn-ghost btn-sm h-8 min-h-8 w-8 shrink-0 p-0 text-error hover:bg-error/15"
+                    :title="t('common.close')"
+                    @click="$emit('clearChatError')"
+                  >
+                    <X class="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          </Transition>
           <ChatApprovalPanel
             v-if="activeConversationTerminalApprovals.length > 0"
             :approvals="activeConversationTerminalApprovals" :resolving="terminalApprovalResolving"
@@ -706,7 +720,7 @@ const emit = defineEmits<{
   (e: "selectionActionBranch", payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; conversationId?: string }): void;
   (e: "selectionActionForward", payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; conversationId?: string; target: ConversationForwardTarget }): void;
   (e: "selectionActionDelegate", payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; conversationId?: string; departmentId: string; agentId: string; presetId: string; why: string; goal: string; todo: string }): void;
-  (e: "selectionActionShare", payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; conversationId?: string; exportFormat?: "html" | "png" }): void;
+  (e: "selectionActionShare", payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; conversationId?: string; exportFormat?: "html" | "png" | "copyPng" }): void;
   (e: "approveTerminalApproval", requestId: string): void;
   (e: "denyTerminalApproval", requestId: string): void;
   (e: "approveTerminalApprovalForSession", requestId: string): void;
@@ -777,15 +791,61 @@ watch(
   },
   { immediate: true },
 );
+// ==================== messages / audio ====================
+
+const { playingAudioId, copyMessage, stopAudioPlayback, toggleAudioPlayback } = useChatMessageActions();
+const transientNotice = ref<null | { text: string; tone: "default" | "error" | "info" }>(null);
+let transientNoticeTimer = 0;
+
+function showTransientNotice(text: string, tone: "default" | "error" | "info" = "info") {
+  const next = String(text || "").trim();
+  if (!next) return;
+  transientNotice.value = { text: next, tone };
+  if (transientNoticeTimer) window.clearTimeout(transientNoticeTimer);
+  transientNoticeTimer = window.setTimeout(() => {
+    transientNotice.value = null;
+    transientNoticeTimer = 0;
+  }, 2200);
+}
+
+async function handleCopyMessage(block: ChatMessageBlock) {
+  const ok = await copyMessage(block);
+  if (ok) {
+    showTransientNotice(t("chat.copyDone"), "info");
+    return;
+  }
+  showTransientNotice(t("chat.copyFailed"), "error");
+}
+
+function handleCopyMessageImageDone() {
+  showTransientNotice(t("chat.copyImageDone"), "info");
+}
+
+function handleCopyMessageImageFailed() {
+  showTransientNotice(t("chat.copyFailed"), "error");
+}
+
+function handleSelectionCopyDone(count: number) {
+  showTransientNotice(t("chat.selection.copied", { count }), "info");
+}
+
+function handleSelectionCopyFailed() {
+  showTransientNotice(t("chat.copyFailed"), "error");
+}
+
 // ==================== context computed ====================
 
 const {
   markdownIsDark, normalizedConversationTodos,
   activeConversationSummary, isCurrentConversationCompacting,
   activeConversationTerminalApprovals, supervisionButtonTitle,
-  isOrganizingContextBusy, chatStatusBanner, selectedMentionKeys,
+  isOrganizingContextBusy, chatStatusBanner: baseChatStatusBanner, selectedMentionKeys,
   latestPendingPlanMessageId,
 } = useChatConversationCtx(props, isDarkAppTheme, t);
+const chatStatusBanner = computed(() => {
+  if (transientNotice.value) return transientNotice.value;
+  return baseChatStatusBanner.value;
+});
 const conversationInteractionBusy = computed(() =>
   props.conversationBusy || isOrganizingContextBusy.value,
 );
@@ -904,7 +964,6 @@ const legacyChatFileReaderSessionKey = computed(() => {
 
 // ==================== messages / audio ====================
 
-const { playingAudioId, copyMessage, stopAudioPlayback, toggleAudioPlayback } = useChatMessageActions();
 const showSideConversationList = computed(() => !!props.sideConversationListVisible);
 const sidebarMode = computed(() => !!props.sidebarMode);
 const bridgeMode = computed(() => !!props.bridgeMode);
@@ -1147,8 +1206,14 @@ const {
   conversationId: toRef(props, "activeConversationId"),
   t,
   onEmit: {
-    selectionActionCopy: (payload) => emit("selectionActionCopy", payload),
-    selectionActionCopyError: (payload) => emit("selectionActionCopyError", payload),
+    selectionActionCopy: (payload) => {
+      handleSelectionCopyDone(payload.count);
+      emit("selectionActionCopy", payload);
+    },
+    selectionActionCopyError: (payload) => {
+      handleSelectionCopyFailed();
+      emit("selectionActionCopyError", payload);
+    },
     selectionActionBranch: (payload) => emit("selectionActionBranch", payload),
     selectionActionForward: (payload) => emit("selectionActionForward", payload),
     selectionActionDelegate: (payload) => emit("selectionActionDelegate", payload),
@@ -1166,7 +1231,10 @@ function handleExitMessageSelectionMode() {
   resetMessageSelectionMode();
 }
 
-defineExpose({ exitMessageSelectionMode: handleExitMessageSelectionMode });
+defineExpose({
+  exitMessageSelectionMode: handleExitMessageSelectionMode,
+  showTransientNotice,
+});
 
 // ==================== scroll layout ====================
 
@@ -1797,6 +1865,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", closeCompactionSummaryContextMenu);
   document.removeEventListener("keydown", handleCompactionSummaryContextMenuKeydown);
+  if (transientNoticeTimer) window.clearTimeout(transientNoticeTimer);
   panesCleanupFns.forEach((fn) => fn());
   stopAudioPlayback();
 });
@@ -1816,5 +1885,16 @@ onBeforeUnmount(() => {
 .chat-jump-action-leave-to {
   opacity: 0;
   transform: translateY(4px) scale(0.98);
+}
+
+.chat-status-banner-enter-active,
+.chat-status-banner-leave-active {
+  transition: opacity 160ms ease-out, transform 160ms ease-out;
+}
+
+.chat-status-banner-enter-from,
+.chat-status-banner-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
 }
 </style>

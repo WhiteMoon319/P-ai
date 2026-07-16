@@ -225,8 +225,8 @@
         @trim-conversation="openTrimActionDialog"
         @open-conversation-list="openConversationList"
         @open-settings="openSettingsWindow"
-        @selection-action-copy="setStatus(props.t('chat.selection.copied', { count: $event.count }))"
-        @selection-action-copy-error="setStatus(props.t('chat.copyFailed'))"
+        @selection-action-copy="() => {}"
+        @selection-action-copy-error="() => {}"
         @selection-action-branch="onBranchConversationFromSelection($event)"
         @selection-action-forward="onForwardConversationFromSelection($event)"
         @selection-action-delegate="handleUserAsyncDelegateFromSelection"
@@ -438,7 +438,7 @@ type SelectionSharePayload = {
   messageIds: string[];
   blocks: ChatMessageBlock[];
   conversationId?: string;
-  exportFormat?: "html" | "png";
+  exportFormat?: "html" | "png" | "copyPng";
 };
 
 const props = defineProps<{
@@ -755,7 +755,14 @@ const promptPreviewDialogVNodeRef: VNodeRef = (el) => {
   props.setPromptPreviewDialogRef((el as Element | null) ?? null);
 };
 
-const chatViewRef = ref<{ exitMessageSelectionMode: () => void } | null>(null);
+const chatViewRef = ref<{
+  exitMessageSelectionMode: () => void;
+  showTransientNotice: (text: string, tone?: "default" | "error" | "info") => void;
+} | null>(null);
+
+function showChatNotice(text: string, tone: "default" | "error" | "info" = "info") {
+  chatViewRef.value?.showTransientNotice?.(text, tone);
+}
 
 function commitChatSidePanelWidths(value: { leftWidth: number; rightWidth: number }) {
   props.setChatSidePanelWidths(value, { commit: true });
@@ -783,9 +790,9 @@ async function exportConversationShare(conversationId: string) {
         text: String(result?.payloadJson || ""),
       },
     });
-    props.setStatus(props.t("chat.conversationShareExported", { path }));
+    showChatNotice(props.t("chat.conversationShareExported", { path }), "info");
   } catch (error) {
-    props.setStatus(props.t("chat.conversationShareExportFailed", { err: String(error) }));
+    showChatNotice(props.t("chat.conversationShareExportFailed", { err: String(error) }), "error");
   }
 }
 
@@ -838,6 +845,10 @@ function handleSelectionShareAction(payload: SelectionSharePayload) {
   }
   if (payload.exportFormat === "png") {
     void exportSelectionAsImage();
+    return;
+  }
+  if (payload.exportFormat === "copyPng") {
+    void copySelectionAsImage();
     return;
   }
   selectionShareDialogOpen.value = true;
@@ -898,10 +909,81 @@ async function exportSelectionAsHtml() {
         text: generated.html,
       },
     });
-    props.setStatus(props.t("chat.shareHtmlExported", { path }));
+    showChatNotice(props.t("chat.shareHtmlExported", { path }), "info");
     selectionShareDialogOpen.value = false;
   } catch (error) {
-    props.setStatus(props.t("chat.shareExportFailed", { err: String(error) }));
+    showChatNotice(props.t("chat.shareExportFailed", { err: String(error) }), "error");
+  } finally {
+    selectionShareDialogLoading.value = false;
+  }
+}
+
+async function generateSelectionSharePng(payload: SelectionSharePayload, trigger: string) {
+  const conversationId = resolveShareConversationId(payload);
+  const messageIds = resolveShareMessageIds(payload);
+  if (!conversationId || messageIds.length === 0) {
+    console.warn("[分享导出] 图片生成跳过：会话或消息为空", {
+      conversationId,
+      messageIdCount: messageIds.length,
+    });
+    throw new Error("conversationId/messageIds empty");
+  }
+  const generated = await generateShareFromMessageIds({
+    conversationId,
+    messageIds,
+    formats: ["png"],
+    title: props.t("chat.shareDocumentTitle"),
+    subtitle: props.t("chat.shareDocumentSubtitle", { count: messageIds.length }),
+    userAlias: props.userAlias,
+    userAvatarUrl: props.userAvatarUrl,
+    personaNameMap: props.chatPersonaNameMap,
+    personaAvatarUrlMap: props.chatPersonaAvatarUrlMap,
+    trigger,
+  });
+  const dataUrl = String(generated.pngDataUrl || "");
+  const bytesBase64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : "";
+  console.info("[分享导出] 图片数据已生成", {
+    trigger,
+    dataUrlLength: dataUrl.length,
+    base64Length: bytesBase64.length,
+    usedCount: generated.usedMessageIds.length,
+    skippedCount: generated.skippedMessageIds.length,
+  });
+  if (!dataUrl || !bytesBase64) {
+    throw new Error(props.t("chat.shareImageGenerationFailed"));
+  }
+  return { dataUrl, bytesBase64 };
+}
+
+async function copySelectionAsImage() {
+  const payload = selectionSharePayload.value;
+  if (!payload || payload.count <= 0) {
+    console.warn("[分享导出] 图片复制跳过：未找到选择载荷");
+    return;
+  }
+  selectionShareDialogLoading.value = true;
+  console.info("[分享导出] 图片复制开始", {
+    messageIdCount: resolveShareMessageIds(payload).length,
+  });
+  try {
+    if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+      throw new Error(props.t("chat.copyFailed"));
+    }
+    showChatNotice(props.t("chat.shareImageGenerating"), "info");
+    const { dataUrl } = await generateSelectionSharePng(payload, "selection_share_copy_image");
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+    if (blob.type !== "image/png") {
+      throw new Error(`unsupported clipboard image type: ${blob.type || "unknown"}`);
+    }
+    await navigator.clipboard.write([
+      new ClipboardItem({ "image/png": blob }),
+    ]);
+    showChatNotice(props.t("chat.shareImageCopied"), "info");
+    selectionShareDialogOpen.value = false;
+  } catch (error) {
+    console.error("[分享导出] 图片复制失败", error);
+    showChatNotice(props.t("chat.shareExportFailed", { err: String(error) }), "error");
   } finally {
     selectionShareDialogLoading.value = false;
   }
@@ -920,7 +1002,7 @@ async function exportSelectionAsImage() {
       conversationId,
       messageIdCount: messageIds.length,
     });
-    props.setStatus(props.t("chat.shareExportFailed", { err: "conversationId/messageIds empty" }));
+    showChatNotice(props.t("chat.shareExportFailed", { err: "conversationId/messageIds empty" }), "error");
     return;
   }
   selectionShareDialogLoading.value = true;
@@ -937,43 +1019,21 @@ async function exportSelectionAsImage() {
       console.info("[分享导出] 图片导出取消：未选择保存路径");
       return;
     }
-    props.setStatus("正在生成分享图片…");
+    showChatNotice(props.t("chat.shareImageGenerating"), "info");
     console.info("[分享导出] 图片保存路径已选择", { path });
-    const generated = await generateShareFromMessageIds({
-      conversationId,
-      messageIds,
-      formats: ["png"],
-      title: props.t("chat.shareDocumentTitle"),
-      subtitle: props.t("chat.shareDocumentSubtitle", { count: messageIds.length }),
-      userAlias: props.userAlias,
-      userAvatarUrl: props.userAvatarUrl,
-      personaNameMap: props.chatPersonaNameMap,
-      personaAvatarUrlMap: props.chatPersonaAvatarUrlMap,
-      trigger: "selection_share_image",
-    });
-    const dataUrl = String(generated.pngDataUrl || "");
-    const bytesBase64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : "";
-    console.info("[分享导出] 图片数据已生成", {
-      dataUrlLength: dataUrl.length,
-      base64Length: bytesBase64.length,
-      usedCount: generated.usedMessageIds.length,
-      skippedCount: generated.skippedMessageIds.length,
-    });
-    if (!bytesBase64) {
-      throw new Error(props.t("chat.shareImageGenerationFailed"));
-    }
-    props.setStatus("正在写入分享图片…");
+    const { bytesBase64 } = await generateSelectionSharePng(payload, "selection_share_image");
+    showChatNotice(props.t("chat.shareImageWriting"), "info");
     await invokeTauri("write_base64_file_to_path", {
       input: {
         path,
         bytesBase64,
       },
     });
-    props.setStatus(props.t("chat.shareImageExported", { path }));
+    showChatNotice(props.t("chat.shareImageExported", { path }), "info");
     selectionShareDialogOpen.value = false;
   } catch (error) {
     console.error("[分享导出] 图片导出失败", error);
-    props.setStatus(props.t("chat.shareExportFailed", { err: String(error) }));
+    showChatNotice(props.t("chat.shareExportFailed", { err: String(error) }), "error");
   } finally {
     selectionShareDialogLoading.value = false;
   }

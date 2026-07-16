@@ -6,13 +6,15 @@ export function useChatMessageActions() {
   const playingAudioId = ref("");
   let activeAudio: HTMLAudioElement | null = null;
 
-  async function copyMessage(block: ChatMessageBlock) {
+  async function copyMessage(block: ChatMessageBlock): Promise<boolean> {
     const copyText = stripToolcallMarkers(block.text || "");
-    if (!copyText) return;
+    if (!copyText) return false;
     try {
       await navigator.clipboard.writeText(copyText);
+      return true;
     } catch {
       // Ignore clipboard failures to avoid interrupting chat flow.
+      return false;
     }
   }
 

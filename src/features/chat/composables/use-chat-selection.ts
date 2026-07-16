@@ -16,7 +16,7 @@ export interface UseChatSelectionOptions {
     selectionActionBranch: (payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; conversationId?: string }) => void;
     selectionActionForward: (payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; conversationId?: string; target: ConversationForwardTarget }) => void;
     selectionActionDelegate: (payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; conversationId?: string; departmentId: string; agentId: string; presetId: string; why: string; goal: string; todo: string }) => void;
-    selectionActionShare: (payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; conversationId?: string; exportFormat?: "html" | "png" }) => void;
+    selectionActionShare: (payload: { count: number; messageIds: string[]; blocks: ChatMessageBlock[]; conversationId?: string; exportFormat?: "html" | "png" | "copyPng" }) => void;
   };
 }
 
@@ -134,7 +134,7 @@ export function useChatSelection(options: UseChatSelectionOptions) {
 
   function emitSelectionAction(
     kind: "branch" | "share" | "forward" | "delegate",
-    actionPayload: ConversationForwardTarget | DelegateActionPayload | "" | "html" | "png" = "",
+    actionPayload: ConversationForwardTarget | DelegateActionPayload | "" | "html" | "png" | "copyPng" = "",
   ) {
     const payload = selectionPayload();
     if (kind === "branch") {
@@ -169,7 +169,7 @@ export function useChatSelection(options: UseChatSelectionOptions) {
       return;
     }
     if (payload.count === 0) return;
-    const exportFormat = actionPayload === "html" || actionPayload === "png" ? actionPayload : undefined;
+    const exportFormat = actionPayload === "html" || actionPayload === "png" || actionPayload === "copyPng" ? actionPayload : undefined;
     onEmit.selectionActionShare({ ...payload, exportFormat });
   }
 

@@ -27,15 +27,14 @@
       <button v-if="!delegateOnly" type="button" class="btn btn-sm" :disabled="selectedMessageCount === 0" @click="emit('selectionActionCopy')">
         {{ t("common.copy") }}
       </button>
-      <button
-        v-if="!delegateOnly && !sidebarMode"
-        type="button"
-        class="btn btn-sm"
-        :class="{ 'btn-primary': selectionShareCardOpen }"
-        :disabled="selectedMessageCount === 0"
-        @click="openSelectionShareCard"
-      >
-        {{ t("chat.selection.share") }}
+      <button v-if="!delegateOnly && !sidebarMode" type="button" class="btn btn-sm" :disabled="selectedMessageCount === 0" @click="emit('selectionActionShare', 'copyPng')">
+        {{ t("chat.selection.copyImageAsImage") }}
+      </button>
+      <button v-if="!delegateOnly && !sidebarMode" type="button" class="btn btn-sm" :disabled="selectedMessageCount === 0" @click="emit('selectionActionShare', 'png')">
+        {{ t("chat.selection.saveAsImage") }}
+      </button>
+      <button v-if="!delegateOnly && !sidebarMode" type="button" class="btn btn-sm" :disabled="selectedMessageCount === 0" @click="emit('selectionActionShare', 'html')">
+        {{ t("chat.selection.saveAsHtml") }}
       </button>
       <button type="button" class="btn btn-sm btn-ghost ml-auto" @click="handleExitSelectionMode">
         {{ t("common.cancel") }}
@@ -117,15 +116,6 @@
       </div>
     </div>
 
-    <div v-if="!delegateOnly && !sidebarMode && selectionShareCardOpen" class="mt-3 rounded-box border border-base-300 bg-base-200/50 px-3 py-3">
-      <div class="text-sm font-medium">{{ t("chat.selection.share") }}</div>
-      <div class="mt-1 text-xs opacity-70">{{ t("chat.selection.shareHint") }}</div>
-      <div class="mt-3 flex flex-wrap items-center gap-2">
-        <button type="button" class="btn btn-sm btn-primary" @click="confirmSelectionShare('png')">{{ t("chat.selection.exportImage") }}</button>
-        <button type="button" class="btn btn-sm" @click="confirmSelectionShare('html')">{{ t("chat.selection.exportHtml") }}</button>
-        <button type="button" class="btn btn-sm btn-ghost ml-auto" @click="closeSelectionShareCard">{{ t("common.cancel") }}</button>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -167,7 +157,7 @@ const emit = defineEmits<{
   selectionActionForward: [target: ConversationForwardTarget];
   selectionActionDelegate: [payload: { departmentId: string; agentId: string; presetId: string; why: string; goal: string; todo: string }];
   selectionActionCopy: [];
-  selectionActionShare: [format: "html" | "png"];
+  selectionActionShare: [format: "html" | "png" | "copyPng"];
 }>();
 
 const { t, locale } = useI18n();
@@ -179,7 +169,6 @@ const USER_ASYNC_DELEGATE_RECENT_LIMIT = 3;
 const selectionDeliverCardOpen = ref(false);
 const selectionDeliverTargetKey = ref("");
 const selectionDelegateCardOpen = ref(false);
-const selectionShareCardOpen = ref(false);
 const selectionDelegateDepartmentId = ref("");
 const selectionDelegateAgentId = ref("");
 const selectionDelegatePresetId = ref("review");
@@ -282,7 +271,6 @@ function openSelectionDeliverCard() {
   if (delegateOnly.value) return;
   if (selectionDeliverTargetOptions.value.length === 0) return;
   closeSelectionDelegateCard();
-  closeSelectionShareCard();
   const currentTargetKey = String(selectionDeliverTargetKey.value || "").trim();
   const hasValidTarget = selectionDeliverTargetOptions.value.some((item) => item.targetKey === currentTargetKey);
   if (!currentTargetKey || !hasValidTarget) {
@@ -386,7 +374,6 @@ function applyRecentDelegateRequest(item: RecentDelegateRequest) {
 
 function openSelectionDelegateCard() {
   closeSelectionDeliverCard();
-  closeSelectionShareCard();
   const preferredOption = delegateDepartmentOptions.value.find((option) => option.id === preferredDelegateDepartmentId.value)
     || delegateDepartmentOptions.value[0];
   if (preferredOption) {
@@ -406,23 +393,6 @@ function cancelSelectionDelegate() {
     return;
   }
   closeSelectionDelegateCard();
-}
-
-function openSelectionShareCard() {
-  if (delegateOnly.value) return;
-  if (props.selectedMessageCount <= 0) return;
-  closeSelectionDeliverCard();
-  closeSelectionDelegateCard();
-  selectionShareCardOpen.value = true;
-}
-
-function closeSelectionShareCard() {
-  selectionShareCardOpen.value = false;
-}
-
-function confirmSelectionShare(format: "html" | "png") {
-  closeSelectionShareCard();
-  emit("selectionActionShare", format);
 }
 
 function confirmSelectionDelegate() {
@@ -453,7 +423,6 @@ function confirmSelectionDelegate() {
 function handleExitSelectionMode() {
   closeSelectionDeliverCard();
   closeSelectionDelegateCard();
-  closeSelectionShareCard();
   emit("exitSelectionMode");
 }
 
