@@ -4956,6 +4956,112 @@
     }
 
     #[test]
+    fn conversation_service_v2_should_keep_completed_tool_round_when_compaction_message_is_appended()
+    {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let mut conversation =
+            test_chat_conversation("conversation-v2-compaction-keeps-tool-round", "active", &now);
+        let mut user = test_text_message("user", "连续检查两个目标", &now);
+        user.id = "user-before-tool-rounds".to_string();
+        let mut assistant = test_text_message("assistant", "", &now);
+        assistant.id = "assistant-tool-rounds".to_string();
+        assistant.speaker_agent_id = Some(DEFAULT_AGENT_ID.to_string());
+        conversation.messages = vec![user, assistant];
+        state_schedule_conversation_persist(&state, &conversation).expect("persist conversation");
+        let store_paths =
+            message_store::message_store_paths(&state.data_path, &conversation.id)
+                .expect("message store paths");
+        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
+            .expect("write message store");
+        state_mark_conversation_direct_persisted(&state, &conversation)
+            .expect("mark direct persisted");
+
+        // 第一轮未超限，已经正式写入聚合 assistant 消息。
+        let (first_assistant_event, first_tool_result) =
+            test_v2_single_tool_group_result("call-round-1", "read_file");
+        conversation_service_v2()
+            .append_tool_event_to_assistant_message(
+                &state,
+                &AssistantMessageToolAppendInput {
+                    conversation_id: conversation.id.clone(),
+                    assistant_message_id: "assistant-tool-rounds".to_string(),
+                    assistant_tool_event: first_assistant_event,
+                    tool_result_event: first_tool_result,
+                    provider_meta_patch: None,
+                },
+            )
+            .expect("persist first completed tool round");
+
+        // 第二轮命中写入前压缩闸门；此时压缩读取必须先看到已持久化的第一轮。
+        let before_compaction = conversation_service_v2()
+            .get_conversation_prompt_context(&state, &conversation.id)
+            .expect("read prompt context before compaction");
+        let before_assistant = before_compaction
+            .messages
+            .iter()
+            .find(|message| message.id == "assistant-tool-rounds")
+            .expect("completed tool round should be visible before compaction");
+        let before_events = before_assistant
+            .tool_call
+            .as_ref()
+            .expect("completed tool history before compaction");
+        assert_eq!(before_events.len(), 2);
+        assert_eq!(
+            before_events[0]
+                .get("tool_calls")
+                .and_then(Value::as_array)
+                .and_then(|calls| calls.first())
+                .and_then(|call| call.get("id"))
+                .and_then(Value::as_str),
+            Some("call-round-1")
+        );
+        assert_eq!(
+            before_events[1].get("tool_call_id").and_then(Value::as_str),
+            Some("call-round-1")
+        );
+        assert_eq!(
+            before_events[1].get("content").and_then(Value::as_str),
+            Some("tool result")
+        );
+
+        let compression_message = build_compaction_message(
+            "第一轮工具检查已经完成。",
+            Some("工具调度压缩"),
+            "force_context_usage_82",
+            Some("用户：连续检查两个目标\n助手：第一轮工具检查已经完成。"),
+        );
+        conversation_service_v2()
+            .persist_compaction_message(&state, &conversation, &compression_message, None)
+            .expect("append compaction message");
+
+        let stored_assistant = conversation_service_v2()
+            .get_raw_message_by_id(&state, &conversation.id, "assistant-tool-rounds")
+            .expect("completed tool round should remain after compaction append");
+        let stored_events = stored_assistant
+            .tool_call
+            .as_ref()
+            .expect("completed tool history after compaction append");
+        assert_eq!(stored_events, before_events);
+
+        let snapshot = conversation_service_v2()
+            .get_conversation_snapshot(&state, &conversation.id)
+            .expect("read conversation after compaction append");
+        assert_eq!(
+            snapshot
+                .messages
+                .iter()
+                .map(|message| message.id.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "user-before-tool-rounds",
+                "assistant-tool-rounds",
+                compression_message.id.as_str(),
+            ]
+        );
+    }
+
+    #[test]
     fn conversation_service_v2_should_preserve_final_text_verbatim() {
         let state = test_chat_runtime_state();
         let now = now_iso();
