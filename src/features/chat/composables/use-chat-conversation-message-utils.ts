@@ -3,7 +3,7 @@ import {
   preserveStableRenderId,
   providerMetaWithoutStableRenderId,
 } from "../utils/stable-render-id";
-import { messageHasVisibleContent } from "./use-chat-flow-utils";
+import { reconcileAuthoritativeConversationMessage } from "./chat-message-reconciliation";
 
 type ConversationMessageUtilsOptions = {
   draftAssistantIdPrefix: string;
@@ -19,14 +19,6 @@ const TRANSIENT_PROVIDER_META_KEYS = [
   "_frontendDispatchStartedAtMs",
   "_frontendDispatchElapsedMs",
   "_stableRenderId",
-];
-
-const AUTHORITATIVE_USAGE_PROVIDER_META_KEYS = [
-  "contextUsagePercent",
-  "contextUsageRatio",
-  "effectivePromptTokens",
-  "providerPromptTokens",
-  "contextWindowTokens",
 ];
 
 export function useChatConversationMessageUtils(options: ConversationMessageUtilsOptions) {
@@ -51,21 +43,6 @@ export function useChatConversationMessageUtils(options: ConversationMessageUtil
         delete providerMeta[key];
         changed = true;
       }
-    }
-    return changed ? { ...message, providerMeta } : message;
-  }
-
-  function mergeAuthoritativeUsageProviderMeta(message: any, incomingMessage: any): any {
-    const incomingProviderMeta = incomingMessage?.providerMeta;
-    if (!incomingProviderMeta || typeof incomingProviderMeta !== "object") return message;
-    const providerMeta = { ...(message?.providerMeta || {}) } as Record<string, unknown>;
-    let changed = false;
-    for (const key of AUTHORITATIVE_USAGE_PROVIDER_META_KEYS) {
-      if (!Object.prototype.hasOwnProperty.call(incomingProviderMeta, key)) continue;
-      const nextValue = (incomingProviderMeta as Record<string, unknown>)[key];
-      if (Object.is(providerMeta[key], nextValue)) continue;
-      providerMeta[key] = nextValue;
-      changed = true;
     }
     return changed ? { ...message, providerMeta } : message;
   }
@@ -123,12 +100,9 @@ export function useChatConversationMessageUtils(options: ConversationMessageUtil
             return [];
           }
           replaced = true;
-          // 本地已有可见内容时冻结正文，仅接收后端权威用量元数据。
+          // 流式投影允许正式消息收口；已经冻结的正式正文只接收后端权威用量元数据。
           // 典型场景：stop 后 partial 落盘变长/变空，前台不应 1 秒后突然改画面。
-          if (messageHasVisibleContent(message)) {
-            return [mergeAuthoritativeUsageProviderMeta(message, incomingMessage)];
-          }
-          return [incomingMessage];
+          return [reconcileAuthoritativeConversationMessage(message, incomingMessage)];
         });
         continue;
       }
@@ -208,17 +182,11 @@ export function useChatConversationMessageUtils(options: ConversationMessageUtil
       if (String(message?.id || "").trim() !== targetMessageId) {
         return message;
       }
-      // 本地已有可见内容时冻结正文，仅接收后端权威用量元数据。
+      // 流式投影允许正式消息收口；已经冻结的正式正文只接收后端权威用量元数据。
       // 包含：空消息抹掉、以及 stop 后 partial 变长导致画面突增。
-      if (messageHasVisibleContent(message)) {
-        const mergedMessage = mergeAuthoritativeUsageProviderMeta(message, nextMessage);
-        if (mergedMessage !== message) {
-          changed = true;
-        }
-        return mergedMessage;
-      }
-      changed = true;
-      return nextMessage;
+      const reconciledMessage = reconcileAuthoritativeConversationMessage(message, nextMessage);
+      if (reconciledMessage !== message) changed = true;
+      return reconciledMessage;
     });
     return changed ? reuseStableMessageReferences(nextMessages, messages) : messages;
   }

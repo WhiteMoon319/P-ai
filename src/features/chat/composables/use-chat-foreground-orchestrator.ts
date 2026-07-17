@@ -3,6 +3,7 @@ import { i18n } from "../../../i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import { toErrorMessage } from "../../../utils/error";
 import { readLastActiveConversationId } from "../utils/last-active-conversation";
+import { createLatestTaskRunner, runForegroundSnapshotBindingTransaction } from "./chat-foreground-coordinator";
 
 const t = i18n.global.t;
 
@@ -315,13 +316,14 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
     }
   }
 
-  async function switchUnarchivedConversation(conversationId: string) {
+  async function performSwitchUnarchivedConversation(conversationId: string) {
     const cid = String(conversationId || "").trim();
     if (!cid) return;
     const previousConversationId = currentConversationId();
     const startedAt = bindings.perfNow();
     let stage = "准备切换";
-    let unbindPromise: Promise<void> = Promise.resolve();
+    let snapshot: any = null;
+    let snapshotApplied = false;
     try {
       stage = "标记前台会话同步中";
       bindings.conversationForegroundSyncing.value = true;
@@ -331,83 +333,78 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
         bindings.clearConversationBadge(previousConversationId);
         bindings.markConversationReadPersisted(previousConversationId);
       }
-      stage = "清理前台运行态";
-      bindings.getChatFlow().clearForegroundRuntimeState();
-      bindings.clearPendingManualScrollToBottom();
-      bindings.foregroundTailLatestReady.value = false;
       const trace = bindings.beginForegroundPaintTrace(cid);
-      stage = "取消原会话前台流绑定";
-      const logUnbindFailure = (error: unknown) => {
-        console.warn("[会话切换] 取消原会话前台流绑定失败", {
-          previousConversationId,
-          targetConversationId: cid,
-          error,
-        });
-      };
-      try {
-        unbindPromise = Promise.resolve(
-          bindings.getChatFlow()?.unbindActiveConversationStream?.(),
-        ).catch(logUnbindFailure);
-      } catch (error) {
-        logUnbindFailure(error);
-      }
-      // 切会话恢复时，先让后端把“持久消息 + 当前运行中投影”合成为一份权威快照，
-      // 前端一次性接管正文，再只负责接后续流式增量，避免先显示持久消息再二次补流式。
-      stage = "请求前台轻量快照";
-      const snapshot = await requestConversationLightSnapshot(cid, {
-        resumeProjection: true,
-      });
-      const snapshotConversationId = String(snapshot?.conversationId || "").trim();
-      if (!snapshotConversationId) {
-        void showSwitchDiagnostic("后端快照没有返回会话 id", cid, previousConversationId, startedAt, snapshot);
-      } else if (snapshotConversationId !== cid) {
-        void showSwitchDiagnostic(
-          "后端快照返回了其他会话",
-          cid,
-          previousConversationId,
-          startedAt,
-          `snapshotConversationId=${snapshotConversationId}`,
-        );
-      }
-      stage = "应用前台轻量快照";
-      bindings.applyConversationSnapshot(snapshot);
-      const appliedConversationId = currentConversationId();
-      if (appliedConversationId !== cid) {
-        void showSwitchDiagnostic(
-          "快照已应用但当前会话不是目标会话",
-          cid,
-          previousConversationId,
-          startedAt,
-          `appliedConversationId=${appliedConversationId || "空"}`,
-        );
-      }
-      if (currentConversationId() === cid && snapshot?.shouldBindStream) {
-        const bindActiveConversationStream = bindings.getChatFlow()?.bindActiveConversationStream;
-        if (typeof bindActiveConversationStream !== "function") {
-          void showSwitchDiagnostic("需要绑定流式通道但绑定函数不存在", cid, previousConversationId, startedAt);
-        } else {
-          stage = "绑定前台流式通道";
-          await unbindPromise;
+      snapshot = await runForegroundSnapshotBindingTransaction({
+        conversationId: cid,
+        isCurrent: () => !snapshotApplied || currentConversationId() === cid,
+        clearRuntime: () => {
+          bindings.getChatFlow().clearForegroundRuntimeState();
+          bindings.clearPendingManualScrollToBottom();
+          bindings.foregroundTailLatestReady.value = false;
+        },
+        unbind: () => Promise.resolve(bindings.getChatFlow()?.unbindActiveConversationStream?.()),
+        requestSnapshot: () => requestConversationLightSnapshot(cid, { resumeProjection: true }),
+        applySnapshot: (nextSnapshot) => {
+          const snapshotConversationId = String(nextSnapshot?.conversationId || "").trim();
+          if (!snapshotConversationId) {
+            void showSwitchDiagnostic("后端快照没有返回会话 id", cid, previousConversationId, startedAt, nextSnapshot);
+          } else if (snapshotConversationId !== cid) {
+            void showSwitchDiagnostic(
+              "后端快照返回了其他会话",
+              cid,
+              previousConversationId,
+              startedAt,
+              `snapshotConversationId=${snapshotConversationId}`,
+            );
+          }
+          bindings.applyConversationSnapshot(nextSnapshot);
+          snapshotApplied = true;
+          const appliedConversationId = currentConversationId();
+          if (appliedConversationId !== cid) {
+            void showSwitchDiagnostic(
+              "快照已应用但当前会话不是目标会话",
+              cid,
+              previousConversationId,
+              startedAt,
+              `appliedConversationId=${appliedConversationId || "空"}`,
+            );
+          }
+        },
+        bind: async () => {
+          const bindActiveConversationStream = bindings.getChatFlow()?.bindActiveConversationStream;
+          if (typeof bindActiveConversationStream !== "function") {
+            void showSwitchDiagnostic("需要绑定流式通道但绑定函数不存在", cid, previousConversationId, startedAt);
+            return;
+          }
           await bindActiveConversationStream(cid, true);
-        }
-        if (currentConversationId() === cid) {
-          stage = "恢复前台运行态";
+        },
+        resume: (nextSnapshot) => {
           bindings.getChatFlow()?.resumeForegroundRuntimeRound?.({
             conversationId: cid,
-            streamCache: snapshot?.streamCache || null,
+            streamCache: nextSnapshot?.streamCache || null,
             statusText: t('chat.statusWaitingReply'),
             reason: "switch_conversation_snapshot_ready",
           });
-        } else {
-          void showSwitchDiagnostic(
-            "流式通道绑定后当前会话被改走",
-            cid,
+        },
+        onStage: (nextStage) => {
+          stage = ({
+            clear_runtime: "清理前台运行态",
+            unbind: "取消原会话前台流绑定",
+            request_snapshot: "请求前台轻量快照",
+            apply_snapshot: "应用前台轻量快照",
+            bind: "绑定前台流式通道",
+            resume: "恢复前台运行态",
+          } as const)[nextStage];
+        },
+        onUnbindError: (error) => {
+          console.warn("[会话切换] 取消原会话前台流绑定失败", {
             previousConversationId,
-            startedAt,
-            `currentConversationId=${currentConversationId() || "空"}`,
-          );
-        }
-      }
+            targetConversationId: cid,
+            error,
+          });
+        },
+      });
+      if (!snapshot) return;
       stage = "完成会话切换收尾";
       bindings.clearConversationBadge(cid);
       bindings.markConversationReadPersisted(cid);
@@ -426,6 +423,14 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
     } finally {
       bindings.conversationForegroundSyncing.value = false;
     }
+  }
+
+  const foregroundSwitchRunner = createLatestTaskRunner<string>(performSwitchUnarchivedConversation);
+
+  function switchUnarchivedConversation(conversationId: string) {
+    const normalizedConversationId = String(conversationId || "").trim();
+    if (!normalizedConversationId) return Promise.resolve();
+    return foregroundSwitchRunner.run(normalizedConversationId);
   }
 
   async function ensureLatestForegroundTailThenScrollToBottom() {

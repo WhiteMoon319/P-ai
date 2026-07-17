@@ -4,8 +4,13 @@ import type { AssistantStreamBlock, ChatMentionTarget, ChatMessage, ChatTodoItem
 import { ensureConversationMessageIds } from "../utils/message-id";
 import { preserveStableRenderId } from "../utils/stable-render-id";
 import { registerChatFlowRuntime } from "./chat-flow-runtime-registry";
-import { decideForegroundRecovery } from "./foreground-recovery-decision";
 import type { ExclusiveChatViewSubscriptionSlot } from "./exclusive-chat-view-subscription-slot";
+import { reconcileAuthoritativeConversationMessage } from "./chat-message-reconciliation";
+import {
+  createLatestTaskRunner,
+  reconcileForegroundConversation as reconcileChatForegroundConversation,
+  runForegroundSnapshotBindingTransaction,
+} from "./chat-foreground-coordinator";
 import { useChatFlow } from "./use-chat-flow";
 import { DRAFT_ASSISTANT_ID_PREFIX, DRAFT_USER_ID_PREFIX } from "./use-chat-flow-drafts";
 import type { ConversationRuntimeStreamCacheSnapshot } from "./use-chat-flow-stream-cache";
@@ -73,8 +78,6 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     || runtimeState.value === "organizing_context"
   );
   let snapshotRequestSequence = 0;
-  let foregroundRecoveryPromise: Promise<void> | null = null;
-  let foregroundRecoveryRerunRequested = false;
   let disposed = false;
 
   function currentConversationId() {
@@ -108,7 +111,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
         ? next.findIndex((message) => String(message.id || "").trim() === messageId)
         : -1;
       if (existingIndex >= 0) {
-        const replacement = preserveStableRenderId(incoming, next[existingIndex]);
+        const replacement = reconcileAuthoritativeConversationMessage(next[existingIndex], incoming);
         next = next.map((message, index) => index === existingIndex ? replacement : message);
       } else {
         next = insertMessageIntoTimeline(next, incoming);
@@ -148,7 +151,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     runtimeState.value = snapshot?.runtimeState || (snapshot?.shouldBindStream ? "assistant_streaming" : "idle");
   }
 
-  async function requestSnapshot(conversationId: string, preserveExistingHistory = true) {
+  async function requestSnapshot(conversationId: string) {
     const requestSequence = ++snapshotRequestSequence;
     if (!conversationId) {
       allMessages.value = [];
@@ -166,7 +169,6 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
       || conversationId !== currentConversationId()
       || snapshotConversationId !== conversationId
     ) return null;
-    applySnapshot(snapshot, preserveExistingHistory);
     return snapshot;
   }
 
@@ -183,30 +185,31 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     const task = foregroundSyncQueue.then(async () => {
       if (disposed || !conversationId || conversationId !== currentConversationId()) return;
       foregroundSyncing.value = true;
-      const unbindPromise = flow.unbindActiveConversationStream().catch((error) => {
-        console.warn("[追问会话] 取消流式通道绑定失败", { conversationId, error });
-      });
-      if (syncOptions.clearRuntime) {
-        flow.clearForegroundRuntimeState();
-      }
       try {
-        const snapshot = await requestSnapshot(conversationId, syncOptions.preserveExistingHistory);
-        if (disposed || !snapshot || conversationId !== currentConversationId() || syncSequence !== foregroundSyncSequence) {
-          await unbindPromise;
-          return;
-        }
-        await unbindPromise;
-        if (disposed || conversationId !== currentConversationId() || syncSequence !== foregroundSyncSequence) return;
-        if (snapshot.shouldBindStream) {
-          await flow.bindActiveConversationStream(conversationId, true);
-          if (disposed || conversationId !== currentConversationId() || syncSequence !== foregroundSyncSequence) return;
-          flow.resumeForegroundRuntimeRound({
-            conversationId,
-            streamCache: snapshot.streamCache || null,
-            statusText: options.t("chat.statusWaitingReply"),
-            reason: "conversation_view_snapshot_ready",
-          });
-        }
+        await runForegroundSnapshotBindingTransaction({
+          conversationId,
+          isCurrent: () => !disposed
+            && conversationId === currentConversationId()
+            && syncSequence === foregroundSyncSequence,
+          clearRuntime: () => {
+            if (syncOptions.clearRuntime) flow.clearForegroundRuntimeState();
+          },
+          unbind: flow.unbindActiveConversationStream,
+          requestSnapshot: () => requestSnapshot(conversationId),
+          applySnapshot: (snapshot) => applySnapshot(snapshot, syncOptions.preserveExistingHistory),
+          bind: () => flow.bindActiveConversationStream(conversationId, true),
+          resume: (snapshot) => {
+            flow.resumeForegroundRuntimeRound({
+              conversationId,
+              streamCache: snapshot.streamCache || null,
+              statusText: options.t("chat.statusWaitingReply"),
+              reason: "conversation_view_snapshot_ready",
+            });
+          },
+          onUnbindError: (error) => {
+            console.warn("[追问会话] 取消流式通道绑定失败", { conversationId, error });
+          },
+        });
       } finally {
         if (syncSequence === foregroundSyncSequence) {
           foregroundSyncing.value = false;
@@ -267,7 +270,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     const index = allMessages.value.findIndex((item) => item.id === message.id);
     if (index < 0) return false;
     const next = [...allMessages.value];
-    next[index] = preserveStableRenderId(message, next[index]);
+    next[index] = reconcileAuthoritativeConversationMessage(next[index], message, { forceReplace: true });
     allMessages.value = next;
     return true;
   }
@@ -362,7 +365,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
         const messageMeta = (providerMeta.message_meta || providerMeta.messageMeta || {}) as Record<string, unknown>;
         const existingIndex = next.findIndex((item) => item.id === message.id);
         if (existingIndex >= 0) {
-          next[existingIndex] = preserveStableRenderId(message, next[existingIndex]);
+          next[existingIndex] = reconcileAuthoritativeConversationMessage(next[existingIndex], message);
           continue;
         }
         if (String(messageMeta.kind || "").trim() === "summary_context_seed") {
@@ -396,7 +399,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
         allMessages.value = insertMessageIntoTimeline(allMessages.value, assistantMessage);
       } else {
         const next = [...allMessages.value];
-        next[index] = preserveStableRenderId(assistantMessage, next[index]);
+        next[index] = reconcileAuthoritativeConversationMessage(next[index], assistantMessage);
         allMessages.value = next;
       }
     },
@@ -418,80 +421,42 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
   async function reconcileForegroundConversation() {
     const conversationId = currentConversationId();
     if (!conversationId || foregroundSyncing.value) return;
-    const snapshot = await requestRuntimeSnapshot(conversationId);
-    if (conversationId !== currentConversationId()) return;
-    runtimeState.value = snapshot.runtimeState || "idle";
-    const backendStreaming = snapshot.runtimeState === "assistant_streaming"
-      || !!snapshot.isProcessing
-      || !!snapshot.hasPendingQueue
-      || Math.max(0, Number(snapshot.pendingQueueCount || 0)) > 0;
-    const frontendStreaming = frontendConversationIsStreaming();
-    const frontendStreamCache = flow.readConversationStreamCache?.(conversationId);
-    const decisionInput = {
-      backendStreaming,
-      frontendStreaming,
-      backendMessageId: snapshot.streamCache?.persistedAssistantMessageId,
-      frontendMessageId: frontendStreamCache?.persistedAssistantMessageId,
-      backendActivationId: snapshot.streamCache?.activationId,
-      frontendActivationId: frontendStreamCache?.activationId,
-      backendRequestId: snapshot.streamCache?.requestId,
-      frontendRequestId: frontendStreamCache?.requestId,
-      backendRevision: snapshot.streamCache?.updatedAt,
-      frontendRevision: frontendStreamCache?.updatedAt,
-    };
-    let recoveryAction = decideForegroundRecovery({ ...decisionInput, probeState: "unknown" });
-    if (recoveryAction === "probe_stream") {
-      const healthy = await flow.probeBoundChannel(conversationId);
-      if (conversationId !== currentConversationId()) return;
-      recoveryAction = decideForegroundRecovery({
-        ...decisionInput,
-        probeState: healthy ? "healthy" : "unhealthy",
-      });
-    }
-    if (recoveryAction === "keep") {
-      if (backendStreaming) return;
-      const latestTailMessageId = await requestLatestFormalTailMessageId(conversationId);
-      if (conversationId !== currentConversationId() || latestTailMessageId === currentFormalTailMessageId()) return;
-      recoveryAction = "reload_conversation";
-    }
-    if (recoveryAction === "refresh_target_message") {
-      const messageId = String(
-        snapshot.streamCache?.persistedAssistantMessageId
-        || frontendStreamCache?.persistedAssistantMessageId
-        || "",
-      ).trim();
-      if (messageId && await refreshMessageById(conversationId, messageId)) {
+    await reconcileChatForegroundConversation({
+      conversationId,
+      isCurrent: () => !disposed && conversationId === currentConversationId(),
+      requestRuntimeSnapshot: () => requestRuntimeSnapshot(conversationId),
+      applyRuntimeState: (snapshot) => {
+        runtimeState.value = (snapshot.runtimeState as ConversationRuntimeState) || "idle";
+      },
+      frontendStreaming: frontendConversationIsStreaming,
+      readFrontendStreamCache: () => flow.readConversationStreamCache?.(conversationId),
+      probeStream: () => flow.probeBoundChannel(conversationId),
+      readCurrentFormalTailMessageId: currentFormalTailMessageId,
+      requestLatestFormalTailMessageId: () => requestLatestFormalTailMessageId(conversationId),
+      refreshTargetMessage: (messageId) => refreshMessageById(conversationId, messageId),
+      finalizeTargetRefresh: async () => {
         flow.clearForegroundRuntimeState();
         await flow.unbindActiveConversationStream().catch(() => {});
         runtimeState.value = "idle";
-        return;
-      }
-    }
-    await synchronizeConversation(conversationId, {
-      clearRuntime: true,
-      preserveExistingHistory: true,
+      },
+      reloadConversation: () => synchronizeConversation(conversationId, {
+        clearRuntime: true,
+        preserveExistingHistory: true,
+      }),
     });
   }
 
+  const foregroundRecoveryRunner = createLatestTaskRunner(async () => {
+    await reconcileForegroundConversation();
+  });
+
   function scheduleForegroundRecovery() {
-    foregroundRecoveryRerunRequested = true;
-    if (foregroundRecoveryPromise) return foregroundRecoveryPromise;
-    foregroundRecoveryPromise = (async () => {
-      while (foregroundRecoveryRerunRequested && !disposed) {
-        foregroundRecoveryRerunRequested = false;
-        await reconcileForegroundConversation();
-      }
-    })()
-      .catch((error) => {
+    return foregroundRecoveryRunner.run(undefined).catch((error) => {
         console.error("[追问会话] 前台恢复失败", {
           conversationId: currentConversationId(),
           error,
         });
-      })
-      .finally(() => {
-        foregroundRecoveryPromise = null;
       });
-    return foregroundRecoveryPromise;
   }
 
   const handleExternalRoundStarted = flow.handleExternalRoundStarted.bind(flow);
@@ -587,7 +552,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
 
   onScopeDispose(() => {
     disposed = true;
-    foregroundRecoveryRerunRequested = false;
+    foregroundRecoveryRunner.cancel();
     ++foregroundSyncSequence;
     ++snapshotRequestSequence;
     window.removeEventListener("focus", handleForegroundWake);

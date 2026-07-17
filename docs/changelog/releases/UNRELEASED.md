@@ -18,4 +18,5 @@
 ## 优化
 
 ## 重构
+- 重构（chat）：主会话与当前追问会话共用同一套权威快照绑定事务、前台 runtime/probe/freshness 恢复协调和正式消息归约规则，并为连续切换与前台触发统一 latest-wins 执行。
 - 重构（chat）：活动流绑定增加 ConversationView 实例 ID，同一窗口可为不同会话维护独立 Channel；全局轮次事件改为按 conversationId 查找已注册 chat flow，为双会话并行流式预留统一通信底座。

@@ -2,7 +2,11 @@ import { ref, watch, type Ref } from "vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { AppConfig, ChatMessage } from "../../../types/app";
 import { formalizeMessages } from "./use-chat-flow-utils";
-import { decideForegroundRecovery } from "./foreground-recovery-decision";
+import { reconcileAuthoritativeConversationMessage } from "./chat-message-reconciliation";
+import {
+  createLatestTaskRunner,
+  reconcileForegroundConversation as reconcileChatForegroundConversation,
+} from "./chat-foreground-coordinator";
 import { useRecordHotkey } from "./use-record-hotkey";
 
 type RecordingActivationSource = "foreground" | "background";
@@ -26,6 +30,8 @@ type UseChatWindowRecordingOrchestratorOptions = {
   getChatFlow: () => {
     probeBoundChannel?: (conversationId?: string | null, timeoutMs?: number) => Promise<boolean>;
     bindActiveConversationStream?: (conversationId: string, force?: boolean) => Promise<void>;
+    unbindActiveConversationStream?: () => Promise<void>;
+    clearForegroundRuntimeState?: () => void;
     resumeForegroundRuntimeRound?: (input?: {
       conversationId?: string | null;
       streamCache?: unknown;
@@ -199,6 +205,19 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     });
   }
 
+  async function refreshForegroundTargetMessage(conversationId: string, messageId: string): Promise<boolean> {
+    const message = await invokeTauri<ChatMessage | null>("get_unarchived_conversation_message_by_id", {
+      input: { conversationId, messageId },
+    });
+    if (!message || String(options.currentChatConversationId.value || "").trim() !== conversationId) return false;
+    const index = options.allMessages.value.findIndex((item) => String(item.id || "").trim() === messageId);
+    if (index < 0) return false;
+    const nextMessages = [...options.allMessages.value];
+    nextMessages[index] = reconcileAuthoritativeConversationMessage(nextMessages[index], message, { forceReplace: true });
+    options.allMessages.value = nextMessages;
+    return true;
+  }
+
   async function recoverForegroundConversationBySwitch(conversationId: string) {
     // focus 只负责判断前台是否过时；一旦确认过时，统一走“切到当前会话”的唯一恢复路径，
     // 禁止在 focus 分支里各自补正文/补运行态，否则一定会出现恢复分叉。
@@ -208,86 +227,55 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
   function frontendConversationIsStreaming(): boolean {
     const chatFlow = options.getChatFlow();
     const phase = String(chatFlow?.frontendRoundPhase?.value || "").trim();
-    return !!options.chatting.value || phase === "queued" || phase === "streaming";
-  }
-
-  async function recoverForegroundConversationAfterDeadChannel(conversationId: string) {
-    await recoverForegroundConversationBySwitch(conversationId);
+    return !!options.chatting.value || phase === "queued" || phase === "waiting" || phase === "streaming";
   }
 
   async function reconcileForegroundConversationAfterFreeze(conversationId: string, _reason: string) {
     const chatFlow = options.getChatFlow();
-    const runtimeSnapshot = await requestConversationRuntimeSnapshot(conversationId);
-    const runtimeState = String(runtimeSnapshot?.runtimeState || "").trim();
-    const backendStreaming = runtimeState === "assistant_streaming";
-    const frontendStreaming = frontendConversationIsStreaming();
-    const frontendStreamCache = chatFlow?.readConversationStreamCache?.(conversationId);
-
-    let recoveryAction = decideForegroundRecovery({
-      backendStreaming,
-      frontendStreaming,
-      backendMessageId: runtimeSnapshot.streamCache?.persistedAssistantMessageId,
-      frontendMessageId: frontendStreamCache?.persistedAssistantMessageId,
-      backendActivationId: runtimeSnapshot.streamCache?.activationId,
-      frontendActivationId: frontendStreamCache?.activationId,
-      backendRequestId: runtimeSnapshot.streamCache?.requestId,
-      frontendRequestId: frontendStreamCache?.requestId,
-      backendRevision: runtimeSnapshot.streamCache?.updatedAt,
-      frontendRevision: frontendStreamCache?.updatedAt,
-      probeState: "unknown",
+    await reconcileChatForegroundConversation({
+      conversationId,
+      isCurrent: () => String(options.currentChatConversationId.value || "").trim() === conversationId,
+      requestRuntimeSnapshot: () => requestConversationRuntimeSnapshot(conversationId),
+      applyRuntimeState: (snapshot) => {
+        const runtimeState = String(snapshot.runtimeState || "").trim();
+        if (runtimeState === "idle" || runtimeState === "assistant_streaming" || runtimeState === "organizing_context") {
+          options.applyConversationRuntimeStateUpdated({ conversationId, runtimeState });
+        }
+      },
+      frontendStreaming: frontendConversationIsStreaming,
+      readFrontendStreamCache: () => chatFlow?.readConversationStreamCache?.(conversationId),
+      probeStream: () => chatFlow?.probeBoundChannel?.(conversationId) ?? Promise.resolve(false),
+      readCurrentFormalTailMessageId: currentFormalTailMessageId,
+      requestLatestFormalTailMessageId: () => requestLatestFormalTailMessageId(conversationId),
+      refreshTargetMessage: (messageId) => refreshForegroundTargetMessage(conversationId, messageId),
+      finalizeTargetRefresh: async () => {
+        chatFlow?.clearForegroundRuntimeState?.();
+        await Promise.resolve(chatFlow?.unbindActiveConversationStream?.()).catch(() => {});
+        options.applyConversationRuntimeStateUpdated({ conversationId, runtimeState: "idle" });
+      },
+      reloadConversation: () => recoverForegroundConversationBySwitch(conversationId),
     });
-
-    if (recoveryAction === "probe_stream") {
-      if (!chatFlow?.probeBoundChannel) {
-        await recoverForegroundConversationAfterDeadChannel(conversationId);
-        return;
-      }
-      const probeHealthy = await chatFlow.probeBoundChannel(conversationId);
-      recoveryAction = decideForegroundRecovery({
-        backendStreaming,
-        frontendStreaming,
-        backendMessageId: runtimeSnapshot.streamCache?.persistedAssistantMessageId,
-        frontendMessageId: frontendStreamCache?.persistedAssistantMessageId,
-        backendActivationId: runtimeSnapshot.streamCache?.activationId,
-        frontendActivationId: frontendStreamCache?.activationId,
-        backendRequestId: runtimeSnapshot.streamCache?.requestId,
-        frontendRequestId: frontendStreamCache?.requestId,
-        backendRevision: runtimeSnapshot.streamCache?.updatedAt,
-        frontendRevision: frontendStreamCache?.updatedAt,
-        probeState: probeHealthy ? "healthy" : "unhealthy",
-      });
-      if (recoveryAction === "keep") {
-        return;
-      }
+    if (String(options.currentChatConversationId.value || "").trim() !== conversationId) return;
+    try {
+      await markConversationReadOnForegroundFocus(conversationId);
     }
-
-    if (recoveryAction !== "keep") {
-      await recoverForegroundConversationBySwitch(conversationId);
-      return;
+    catch (error) {
+      console.warn("[聊天前台恢复] focus 已读同步失败:", error);
     }
-
-    // 后端没有明确流式态时，再检查正式消息是否已是最新。
-    const currentTailId = currentFormalTailMessageId();
-    const latestTailId = await requestLatestFormalTailMessageId(conversationId);
-    if (latestTailId === currentTailId) {
-      try {
-        await markConversationReadOnForegroundFocus(conversationId);
-      }
-      catch (error) {
-        console.warn("[聊天前台恢复] focus 已读同步失败:", error);
-      }
-      return;
-    }
-
-    await recoverForegroundConversationBySwitch(conversationId);
   }
 
-  async function recoverChatAfterForegroundWake(reason: string) {
+  async function recoverChatAfterForegroundWakeOnce(reason: string) {
     const activeConversationId = String(options.currentChatConversationId.value || "").trim();
     if (activeConversationId) {
       await reconcileForegroundConversationAfterFreeze(activeConversationId, reason);
     }
     await options.syncUnarchivedConversationOverviewChangedSinceWatermark(reason);
+  }
+
+  const foregroundRecoveryRunner = createLatestTaskRunner(recoverChatAfterForegroundWakeOnce);
+
+  function recoverChatAfterForegroundWake(reason: string) {
+    return foregroundRecoveryRunner.run(reason);
   }
 
   async function syncChatWindowActiveState(reason = "unknown") {

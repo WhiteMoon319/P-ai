@@ -185,7 +185,7 @@ describe("useConversationViewRuntime", () => {
     await reload;
 
     expect(maxActiveRequests).toBe(1);
-    expect(runtime.allMessages.value.map((item) => item.id)).toEqual(["assistant-old", "assistant-new"]);
+    expect(runtime.allMessages.value.map((item) => item.id)).toEqual(["assistant-new"]);
     scope.stop();
   });
 
