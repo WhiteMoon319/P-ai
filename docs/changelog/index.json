@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-16T00:14:02.994Z",
-  "latestVersion": "v0.32.1",
+  "generatedAt": "2026-07-17T14:22:51.558Z",
+  "latestVersion": "v0.35.0",
   "releases": [
+    {
+      "version": "v0.35.0",
+      "path": "docs/changelog/releases/v0.35.0.md",
+      "summary": "修复后台处理、切回前台、切换会话时流式回复偶尔丢失、重复或最后一条没有及时刷新的问题；桌面端、侧边栏和移动端都会优先续接当前回复，而非整页刷新。"
+    },
     {
       "version": "v0.32.1",
       "path": "docs/changelog/releases/v0.32.1.md",
@@ -716,11 +721,6 @@
       "version": "v0.9.37",
       "path": "docs/changelog/releases/v0.9.37.md",
       "summary": "优化（chat-virtual-list-scroll-stability-and-render-keys）：聊天虚拟滚动收口为稳定 item key 渲染，去掉基于渲染区间的整段 subtree 重建；无 id 消息补稳定前端 renderId，向上滚动时仅对完全位于视口上方的高度修正做滚动补偿，并为加载更早历史补充锚点恢复，减少长会话中的闪烁、跳动与滚动抢夺"
-    },
-    {
-      "version": "v0.9.36",
-      "path": "docs/changelog/releases/v0.9.36.md",
-      "summary": "修复（chat-send-ingress-and-dispatch-stack-overflow）：发送链路从收到前端 `send_chat_message` 到调度结束这段，去掉了目标会话解析阶段的前置快速持久化与整份 `Conversation/agents` 按值返回；发送入口与用户@委托发送改为先完成 ingress 再触发后台调度，mention 计划直接基于当前 `AppData` 借用构造，不再额外背整份会话快照；调度层同步移除 `agents.clone()` 与 flush 后整会话 `clone()`，降低发送前准备与调度边界上的主线程/运行态栈压力，修复 release 新会话首发即闪退的问题"
     },
     {
       "version": "v0.9.35",

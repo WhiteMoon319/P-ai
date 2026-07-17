@@ -5,6 +5,7 @@
 
 ## 最近版本
 
+- [v0.35.0](docs/changelog/releases/v0.35.0.md) - 修复后台处理、切回前台、切换会话时流式回复偶尔丢失、重复或最后一条没有及时刷新的问题；桌面端、侧边栏和移动端都会优先续接当前回复，而非整页刷新。
 - [v0.32.1](docs/changelog/releases/v0.32.1.md) - 修复压缩后继续调用工具时，工具历史没有正确继承的问题。
 - [v0.32.0](docs/changelog/releases/v0.32.0.md) - 文件阅读页新增文件标签右键菜单，可以在 PAI 文档窗口中打开文件、打开文件所在文件夹，或使用系统默认程序打开文件。
 - [v0.31.0](docs/changelog/releases/v0.31.0.md) - 修复 0.30 升级后部分会话可能损坏、迁移卡住或启动受阻的问题；坏旧会话会被自动放弃，已可用会话继续保留并完成升级。
@@ -148,7 +149,6 @@
 - [v0.9.39](docs/changelog/releases/v0.9.39.md) - 优化（chat-virtual-scroll-windowing-and-snapshot-throttle）：聊天窗口虚拟滚动切回更贴近现有成熟实现的 `@tanstack/vue-virtual` 结构，去掉 active turn 自动对齐与相关高频观察器，补齐稳定 `getItemKey`、只针对当前虚拟窗口取首个可见锚点、折叠态思维链/工具卡懒渲染、代码块与布局观察器延后一帧更新，并将首次切屏与向上补历史的消息页大小都收敛到 2 条，显著降低长消息会话中的滚动抖动、连续补历史和上滚卡顿
 - [v0.9.38](docs/changelog/releases/v0.9.38.md) - 优化（chat-dynamic-scroller-migration）：聊天虚拟滚动底座切换到 `vue-virtual-scroller` 默认 `DynamicScroller / DynamicScrollerItem` 方案，移除自研虚拟列表 composable 与 TanStack 虚拟滚动依赖，统一由库接管动态高度测量、item 池化与滚动区渲染；同时将会话切换与“滚到底”锚定收口到 scroller 自身暴露的方法，修正 `ChatView` 模板层级，避免 `0.9.37` 中出现的长会话滚动异常
 - [v0.9.37](docs/changelog/releases/v0.9.37.md) - 优化（chat-virtual-list-scroll-stability-and-render-keys）：聊天虚拟滚动收口为稳定 item key 渲染，去掉基于渲染区间的整段 subtree 重建；无 id 消息补稳定前端 renderId，向上滚动时仅对完全位于视口上方的高度修正做滚动补偿，并为加载更早历史补充锚点恢复，减少长会话中的闪烁、跳动与滚动抢夺
-- [v0.9.36](docs/changelog/releases/v0.9.36.md) - 修复（chat-send-ingress-and-dispatch-stack-overflow）：发送链路从收到前端 `send_chat_message` 到调度结束这段，去掉了目标会话解析阶段的前置快速持久化与整份 `Conversation/agents` 按值返回；发送入口与用户@委托发送改为先完成 ingress 再触发后台调度，mention 计划直接基于当前 `AppData` 借用构造，不再额外背整份会话快照；调度层同步移除 `agents.clone()` 与 flush 后整会话 `clone()`，降低发送前准备与调度边界上的主线程/运行态栈压力，修复 release 新会话首发即闪退的问题
 - [v0.9.35](docs/changelog/releases/v0.9.35.md) - 功能（parameterized-theme-generator-and-mode-presets）：主题系统新增“预设 / 自定义”双入口，支持以少量参数即时合成并预览自定义主题；自定义浅色与自定义深色各自独立缓存参数，切换明暗不会互相覆盖，并恢复与预设主题并存的切换能力；同时聊天消息、工具审查、标题栏与外观页样式联动改为跟随新的主题 token，补齐中英繁文案、运行时动态注入与相关前端测试
 - [v0.9.30](docs/changelog/releases/v0.9.30.md) - 优化（chat-selection-branch-action-copywriting）：聊天窗口多选操作栏中的“会话分支”按钮文案调整为“创造会话分支”，让当前动作语义更直接
 - [v0.9.21](docs/changelog/releases/v0.9.21.md) - 优化（chat-message-action-layout-tighten）：聊天消息最外层行间距与上下内边距进一步收紧，减少相邻消息之间的空白；同时把用户消息的撤回按钮移到气泡下方右侧，并去掉操作区额外顶部间距，让消息气泡与操作按钮整体更紧凑
