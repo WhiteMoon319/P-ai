@@ -123,9 +123,15 @@
             @mousedown.prevent
             @click="toggleIdeContextReference(item)"
           >
-            <Minus v-if="isIdeContextAttached(item.id)" class="h-3.5 w-3.5" />
-            <Plus v-else class="h-3.5 w-3.5" />
-            <span class="max-w-72 truncate text-[11px]">{{ item.displayLabel }}</span>
+            <Minus v-if="isIdeContextAttached(item.id)" class="h-3.5 w-3.5 shrink-0" />
+            <Plus v-else class="h-3.5 w-3.5 shrink-0" />
+            <span class="flex min-w-0 max-w-72 items-center text-[11px]">
+              <span class="min-w-0 truncate">{{ ideContextReferenceDisplayParts(item).fileName }}</span>
+              <span
+                v-if="ideContextReferenceDisplayParts(item).lineSuffix"
+                class="shrink-0 whitespace-nowrap"
+              >{{ ideContextReferenceDisplayParts(item).lineSuffix }}</span>
+            </span>
           </button>
         </div>
       </div>
@@ -384,6 +390,7 @@ import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import { useChatQueue } from "../composables/use-chat-queue";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
 import { formatApiConfigOptionLabel } from "../../config/utils/api-config-display";
+import { ideContextReferenceDisplayParts } from "../utils/ide-context-reference-display";
 
 type BinaryAttachment = { mime: string; bytesBase64: string };
 type QueuedAttachmentNotice = { id: string; fileName: string; relativePath: string; mime: string };
