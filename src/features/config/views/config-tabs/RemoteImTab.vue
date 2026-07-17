@@ -617,6 +617,21 @@
                 </div>
               </li>
 
+              <li class="list-row flex items-start justify-between gap-3">
+                <div class="font-medium">{{ t("config.remoteIm.blockedMessagePrefixes") }}</div>
+                <div class="flex w-64 flex-col gap-2">
+                  <input
+                    type="text"
+                    class="input input-bordered input-sm w-full"
+                    :placeholder="t('config.remoteIm.blockedMessagePrefixesPlaceholder')"
+                    v-model="contactDraft.blockedMessagePrefixesText"
+                  />
+                  <span class="text-[11px] opacity-60">
+                    {{ t("config.remoteIm.blockedMessagePrefixesHint") }}
+                  </span>
+                </div>
+              </li>
+
               <li v-if="selectedContact" class="list-row flex items-start justify-between gap-3">
                 <div class="font-medium">{{ t("config.remoteIm.activateMode") }}</div>
                 <div class="flex w-64 flex-col gap-2">
@@ -883,6 +898,7 @@ import {
   normalizeProcessingMode,
   normalizeResponseStrategy,
   parseActivationKeywords,
+  parseBlockedMessagePrefixes,
   parseKeywordList,
 } from "./remote-im/helpers";
 
@@ -918,6 +934,7 @@ type ContactSettingsClipboard = {
   boundDepartmentId: string;
   boundAgentId: string;
   processingMode: "qa" | "continuous";
+  blockedMessagePrefixesText: string;
   activationMode: RemoteImContact["activationMode"];
   activationKeywordsText: string;
   muteKeywordsText: string;
@@ -1143,6 +1160,7 @@ const contactsDisabledReason = computed(() => {
   return "";
 });
 const contactsDisabled = computed(() => !!contactsDisabledReason.value);
+const DEFAULT_BLOCKED_MESSAGE_PREFIXES = ["#", "/", "%"];
 const contactActivationModeOrder: RemoteImContact["activationMode"][] = ["always", "keyword", "never"];
 
 type ContactGroup = { mode: "always" | "keyword" | "never"; label: string; items: typeof currentChannelContacts.value };
@@ -1180,6 +1198,7 @@ type ContactEditDraft = {
   boundDepartmentId: string;
   boundAgentId: string;
   processingMode: "qa" | "continuous";
+  blockedMessagePrefixesText: string;
   activationMode: RemoteImContact["activationMode"];
   activationKeywordsText: string;
   muteKeywordsText: string;
@@ -1248,6 +1267,9 @@ function buildContactDraftFromContact(item: RemoteImContact): ContactEditDraft {
     boundDepartmentId: String(item.boundDepartmentId || ""),
     boundAgentId: String(item.boundAgentId || ""),
     processingMode: normalizeProcessingMode(item.processingMode),
+    blockedMessagePrefixesText: (Array.isArray(item.blockedMessagePrefixes)
+      ? item.blockedMessagePrefixes
+      : DEFAULT_BLOCKED_MESSAGE_PREFIXES).join(" "),
     activationMode: isPrivateContact(item) ? "always" : normalizeActivationMode(item.activationMode || "never"),
     activationKeywordsText: item.activationKeywords.join(", "),
     muteKeywordsText: (Array.isArray(item.muteKeywords) ? item.muteKeywords : [t("config.remoteIm.defaultMuteKeyword")]).join(", "),
@@ -1277,6 +1299,9 @@ function buildContactSettingsClipboard(item: RemoteImContact): ContactSettingsCl
     boundDepartmentId: String(item.boundDepartmentId || ""),
     boundAgentId: String(item.boundAgentId || ""),
     processingMode: normalizeProcessingMode(item.processingMode),
+    blockedMessagePrefixesText: (Array.isArray(item.blockedMessagePrefixes)
+      ? item.blockedMessagePrefixes
+      : DEFAULT_BLOCKED_MESSAGE_PREFIXES).join(" "),
     activationMode: isPrivate ? "always" : normalizeActivationMode(item.activationMode || "never"),
     activationKeywordsText: isPrivate ? "" : (Array.isArray(item.activationKeywords) ? item.activationKeywords.join(", ") : ""),
     muteKeywordsText: isPrivate
@@ -1765,6 +1790,7 @@ function buildContactClipboardPatch(
     boundDepartmentId: clipboard.boundDepartmentId,
     boundAgentId: clipboard.boundAgentId,
     processingMode: clipboard.processingMode,
+    blockedMessagePrefixes: parseBlockedMessagePrefixes(clipboard.blockedMessagePrefixesText),
     activationMode: isPrivate ? "always" : clipboard.activationMode,
     activationKeywords: isPrivate ? [] : parseActivationKeywords(clipboard.activationKeywordsText),
     muteKeywords: isPrivate ? [] : parseKeywordList(clipboard.muteKeywordsText),
@@ -1792,6 +1818,15 @@ async function pasteContactSettings(item: RemoteImContact) {
 
     if (patch.processingMode !== normalizeProcessingMode(item.processingMode)) {
       await onContactProcessingModeChange(item, patch.processingMode);
+    }
+
+    const currentBlockedMessagePrefixes = Array.isArray(item.blockedMessagePrefixes)
+      ? item.blockedMessagePrefixes
+      : DEFAULT_BLOCKED_MESSAGE_PREFIXES;
+    if (JSON.stringify(patch.blockedMessagePrefixes) !== JSON.stringify(currentBlockedMessagePrefixes)) {
+      await invokeTauri<RemoteImContact>("remote_im_update_contact_blocked_message_prefixes", {
+        input: { contactId: item.id, blockedMessagePrefixes: patch.blockedMessagePrefixes },
+      });
     }
 
     const currentKeywords = Array.isArray(item.activationKeywords) ? item.activationKeywords : [];
@@ -2227,6 +2262,16 @@ async function saveContactDraft() {
     const nextProcessingMode = normalizeProcessingMode(draft.processingMode);
     if (nextProcessingMode !== normalizeProcessingMode(item.processingMode)) {
       await onContactProcessingModeChange(item, nextProcessingMode);
+    }
+
+    const nextBlockedMessagePrefixes = parseBlockedMessagePrefixes(draft.blockedMessagePrefixesText);
+    const currentBlockedMessagePrefixes = Array.isArray(item.blockedMessagePrefixes)
+      ? item.blockedMessagePrefixes
+      : DEFAULT_BLOCKED_MESSAGE_PREFIXES;
+    if (JSON.stringify(nextBlockedMessagePrefixes) !== JSON.stringify(currentBlockedMessagePrefixes)) {
+      await invokeTauri<RemoteImContact>("remote_im_update_contact_blocked_message_prefixes", {
+        input: { contactId: item.id, blockedMessagePrefixes: nextBlockedMessagePrefixes },
+      });
     }
 
     const nextKeywords = parseActivationKeywords(draft.activationKeywordsText);

@@ -168,8 +168,10 @@ async fn parse_and_enqueue_onebot_event(
         attachments,
     );
     let result = remote_im_enqueue_message_internal(input, state)?;
-    let group_members = group_member_cache.into_values().collect::<Vec<_>>();
-    onebot_persist_group_member_cache(state, &result.contact_id, group_members)?;
+    if !result.conversation_id.trim().is_empty() {
+        let group_members = group_member_cache.into_values().collect::<Vec<_>>();
+        onebot_persist_group_member_cache(state, &result.contact_id, group_members)?;
+    }
     Ok(result)
 }
 

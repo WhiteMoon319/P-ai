@@ -1167,6 +1167,7 @@ fn main() {
             remote_im_update_contact_allow_send,
             remote_im_update_contact_allow_send_files,
             remote_im_update_contact_allow_receive,
+            remote_im_update_contact_blocked_message_prefixes,
             remote_im_update_contact_activation,
             remote_im_update_contact_remark,
             remote_im_update_contact_route_mode,

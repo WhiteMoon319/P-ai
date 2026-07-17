@@ -312,6 +312,7 @@ async fn ide_chat_handle_jsonrpc_request(
         "remote_im_list_contacts" => ide_chat_remote_im_list_contacts_for_web_settings(state),
         "remote_im_update_contact_allow_send" => ide_chat_remote_im_update_contact_allow_send_for_web_settings(state, request.params),
         "remote_im_update_contact_allow_send_files" => ide_chat_remote_im_update_contact_allow_send_files_for_web_settings(state, request.params),
+        "remote_im_update_contact_blocked_message_prefixes" => ide_chat_remote_im_update_contact_blocked_message_prefixes_for_web_settings(state, request.params),
         "remote_im_update_contact_activation" => ide_chat_remote_im_update_contact_activation_for_web_settings(state, request.params),
         "remote_im_update_contact_department_binding" => ide_chat_remote_im_update_contact_department_binding_for_web_settings(state, request.params),
         "remote_im_update_contact_processing_mode" => ide_chat_remote_im_update_contact_processing_mode_for_web_settings(state, request.params),

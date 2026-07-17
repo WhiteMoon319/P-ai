@@ -395,6 +395,7 @@
             processing_mode: "continuous".to_string(),
             response_strategy: default_remote_im_contact_response_strategy(),
             response_guidance: default_remote_im_contact_response_guidance(),
+            blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
             last_activated_at: None,
             last_message_at: None,
             dingtalk_session_webhook: None,
@@ -550,6 +551,7 @@
             processing_mode: "continuous".to_string(),
             response_strategy: default_remote_im_contact_response_strategy(),
             response_guidance: default_remote_im_contact_response_guidance(),
+            blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
             last_activated_at: None,
             last_message_at: None,
             dingtalk_session_webhook: None,
@@ -1316,6 +1318,7 @@
             processing_mode: "continuous".to_string(),
             response_strategy: default_remote_im_contact_response_strategy(),
             response_guidance: default_remote_im_contact_response_guidance(),
+            blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
             last_activated_at: None,
             last_message_at: None,
             dingtalk_session_webhook: None,
@@ -1873,6 +1876,148 @@
         assert_eq!(updated.response_strategy, "always_reply");
         assert_eq!(updated.response_guidance, "测试指引");
         let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn remote_im_blocked_message_prefixes_should_default_and_match_after_whitespace() {
+        let defaults = default_remote_im_contact_blocked_message_prefixes();
+        assert_eq!(defaults, vec!["#", "/", "%"]);
+        assert_eq!(
+            remote_im_blocked_inbound_message_prefix(" \n\t# Markdown 标题", &defaults),
+            Some("#".to_string())
+        );
+        assert_eq!(
+            remote_im_blocked_inbound_message_prefix("/help", &defaults),
+            Some("/".to_string())
+        );
+        assert_eq!(remote_im_blocked_inbound_message_prefix("正文含 # 标记", &defaults), None);
+        assert_eq!(
+            remote_im_blocked_inbound_message_prefix("!quiet", &["!".to_string()]),
+            Some("!".to_string())
+        );
+    }
+
+    #[test]
+    fn remote_im_enqueue_should_discard_default_blocked_prefix_without_creating_contact() {
+        let state = remote_im_test_state();
+        let channel = RemoteImChannelConfig {
+            id: "channel-a".to_string(),
+            name: "QQ".to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            enabled: true,
+            credentials: serde_json::json!({}),
+            activate_assistant: true,
+            receive_files: true,
+            streaming_send: false,
+            show_tool_calls: false,
+            filter_markdown: false,
+            allow_send_files: false,
+        };
+        let config = AppConfig {
+            remote_im_channels: vec![channel],
+            ..AppConfig::default()
+        };
+        write_config(&state.config_path, &config).expect("write config");
+        state_write_runtime_state_cached(&state, &RuntimeStateFile::default())
+            .expect("write empty runtime");
+        let input = RemoteImEnqueueInput {
+            channel_id: "channel-a".to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            im_name: "qq".to_string(),
+            remote_contact_type: "private".to_string(),
+            remote_contact_id: "user-a".to_string(),
+            remote_contact_name: Some("张三".to_string()),
+            sender_id: "user-a".to_string(),
+            sender_name: "张三".to_string(),
+            sender_avatar_url: None,
+            platform_message_id: Some("message-a".to_string()),
+            dingtalk_session_webhook: None,
+            dingtalk_session_webhook_expired_time: None,
+            activate_assistant: Some(true),
+            session: SessionSelector {
+                api_config_id: None,
+                department_id: None,
+                agent_id: String::new(),
+                conversation_id: None,
+            },
+            payload: ChatInputPayload {
+                text: Some("  # 不接收的 Markdown 标题".to_string()),
+                display_text: None,
+                images: None,
+                audios: None,
+                attachments: None,
+                model: None,
+                extra_text_blocks: None,
+                mentions: None,
+                provider_meta: None,
+            },
+        };
+
+        let result = remote_im_enqueue_message_internal(input, &state).expect("enqueue result");
+        assert!(result.event_id.is_empty());
+        assert!(result.conversation_id.is_empty());
+        assert!(result.contact_id.is_empty());
+        assert!(
+            state_read_runtime_state_cached(&state)
+                .expect("read runtime")
+                .remote_im_contacts
+                .is_empty()
+        );
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn remote_im_blocked_message_prefixes_update_should_persist_custom_or_empty_list() {
+        let state = remote_im_test_state();
+        let contact = remote_im_test_contact("contact-prefixes", "conversation-prefixes");
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact);
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
+
+        let updated = remote_im_update_contact_blocked_message_prefixes_inner(
+            &state,
+            RemoteImContactBlockedMessagePrefixesUpdateInput {
+                contact_id: "contact-prefixes".to_string(),
+                blocked_message_prefixes: vec!["! @".to_string(), " ! ".to_string(), "".to_string()],
+            },
+        )
+        .expect("update prefixes");
+        assert_eq!(updated.blocked_message_prefixes, vec!["!", "@"]);
+
+        let restored = state_read_runtime_state_cached(&state)
+            .expect("read runtime")
+            .remote_im_contacts
+            .into_iter()
+            .find(|item| item.id == "contact-prefixes")
+            .expect("contact exists");
+        assert_eq!(restored.blocked_message_prefixes, vec!["!", "@"]);
+
+        let cleared = remote_im_update_contact_blocked_message_prefixes_inner(
+            &state,
+            RemoteImContactBlockedMessagePrefixesUpdateInput {
+                contact_id: "contact-prefixes".to_string(),
+                blocked_message_prefixes: Vec::new(),
+            },
+        )
+        .expect("clear prefixes");
+        assert!(cleared.blocked_message_prefixes.is_empty());
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn remote_im_contact_without_blocked_message_prefixes_should_use_defaults() {
+        let contact = remote_im_test_contact("contact-legacy", "conversation-legacy");
+        let mut value = serde_json::to_value(contact).expect("serialize contact");
+        value
+            .as_object_mut()
+            .expect("contact json object")
+            .remove("blockedMessagePrefixes");
+
+        let restored: RemoteImContact = serde_json::from_value(value).expect("deserialize contact");
+        assert_eq!(
+            restored.blocked_message_prefixes,
+            default_remote_im_contact_blocked_message_prefixes()
+        );
     }
 
     #[test]

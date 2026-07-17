@@ -105,6 +105,14 @@ struct RemoteImContactAllowReceiveUpdateInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct RemoteImContactBlockedMessagePrefixesUpdateInput {
+    contact_id: String,
+    #[serde(default)]
+    blocked_message_prefixes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RemoteImContactActivationUpdateInput {
     contact_id: String,
     activation_mode: String,
@@ -297,6 +305,7 @@ fn remote_im_upsert_contact_for_inbound(
             input.remote_contact_type.as_str(),
         ),
         response_guidance: default_remote_im_contact_response_guidance(),
+        blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
         last_activated_at: None,
         last_message_at: Some(now.to_string()),
         dingtalk_session_webhook: if matches!(input.platform, RemoteImPlatform::Dingtalk) {
@@ -344,6 +353,53 @@ fn normalize_contact_keyword_list(values: &[String]) -> Vec<String> {
 
 fn normalize_contact_activation_keywords(values: &[String]) -> Vec<String> {
     normalize_contact_keyword_list(values)
+}
+
+fn normalize_contact_blocked_message_prefixes(values: &[String]) -> Vec<String> {
+    let mut out = Vec::<String>::new();
+    let mut seen = std::collections::HashSet::<String>::new();
+    for value in values {
+        for segment in value.split(|ch: char| ch.is_whitespace()) {
+            let trimmed = segment.trim();
+            if trimmed.is_empty() || !seen.insert(trimmed.to_string()) {
+                continue;
+            }
+            out.push(trimmed.to_string());
+        }
+    }
+    out
+}
+
+fn remote_im_contact_matches_inbound(
+    contact: &RemoteImContact,
+    input: &RemoteImEnqueueInput,
+) -> bool {
+    contact.channel_id == input.channel_id
+        && contact.remote_contact_type == input.remote_contact_type.trim()
+        && contact.remote_contact_id == input.remote_contact_id
+}
+
+fn remote_im_find_contact_for_inbound<'a>(
+    runtime: &'a RuntimeStateFile,
+    input: &RemoteImEnqueueInput,
+) -> Option<&'a RemoteImContact> {
+    runtime
+        .remote_im_contacts
+        .iter()
+        .find(|contact| remote_im_contact_matches_inbound(contact, input))
+}
+
+fn remote_im_blocked_inbound_message_prefix(
+    text: &str,
+    blocked_prefixes: &[String],
+) -> Option<String> {
+    let trimmed = text.trim_start();
+    blocked_prefixes
+        .iter()
+        .map(|item| item.trim())
+        .filter(|item| !item.is_empty())
+        .find(|prefix| trimmed.starts_with(*prefix))
+        .map(ToOwned::to_owned)
 }
 
 fn normalize_contact_route_mode(value: &str) -> String {

@@ -787,6 +787,7 @@ mod prompt_assembly_tests {
             processing_mode: default_remote_im_contact_processing_mode(),
             response_strategy: default_remote_im_contact_response_strategy(),
             response_guidance: default_remote_im_contact_response_guidance(),
+            blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
             last_activated_at: None,
             last_message_at: None,
             dingtalk_session_webhook: None,

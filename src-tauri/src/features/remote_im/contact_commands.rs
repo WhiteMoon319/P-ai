@@ -74,6 +74,31 @@ fn remote_im_update_contact_allow_send_files(
     remote_im_update_contact_allow_send_files_inner(state.inner(), input)
 }
 
+fn remote_im_update_contact_blocked_message_prefixes_inner(
+    state: &AppState,
+    input: RemoteImContactBlockedMessagePrefixesUpdateInput,
+) -> Result<RemoteImContact, String> {
+    let mut runtime = state_read_runtime_state_cached(state)?;
+    let contact = runtime
+        .remote_im_contacts
+        .iter_mut()
+        .find(|item| item.id == input.contact_id)
+        .ok_or_else(|| format!("未找到远程联系人：{}", input.contact_id))?;
+    contact.blocked_message_prefixes =
+        normalize_contact_blocked_message_prefixes(&input.blocked_message_prefixes);
+    let output = contact.clone();
+    state_write_runtime_state_cached(state, &runtime)?;
+    Ok(output)
+}
+
+#[tauri::command]
+fn remote_im_update_contact_blocked_message_prefixes(
+    input: RemoteImContactBlockedMessagePrefixesUpdateInput,
+    state: State<'_, AppState>,
+) -> Result<RemoteImContact, String> {
+    remote_im_update_contact_blocked_message_prefixes_inner(state.inner(), input)
+}
+
 #[tauri::command]
 fn remote_im_update_contact_allow_receive(
     input: RemoteImContactAllowReceiveUpdateInput,
@@ -509,6 +534,49 @@ pub(crate) fn remote_im_enqueue_message_internal(
     let images = validated.images;
     let audios = validated.audios;
     let attachments = validated.attachments;
+
+    let existing_contact = remote_im_find_contact_for_inbound(&runtime, &input);
+    let blocked_prefixes = existing_contact
+        .map(|contact| contact.blocked_message_prefixes.clone())
+        .unwrap_or_else(default_remote_im_contact_blocked_message_prefixes);
+    if let Some(prefix) = remote_im_blocked_inbound_message_prefix(&text, &blocked_prefixes) {
+        let contact_id = existing_contact
+            .map(|contact| contact.id.clone())
+            .unwrap_or_default();
+        let contact_label = existing_contact
+            .map(remote_im_contact_log_label)
+            .unwrap_or_else(|| {
+                format!(
+                    "{}[{}:{}]",
+                    input.remote_contact_name.as_deref().unwrap_or_default().trim(),
+                    input.remote_contact_type.trim(),
+                    input.remote_contact_id.trim()
+                )
+            });
+        runtime_log_info(format!(
+            "[远程IM] 入站消息跳过: contact_id={}, channel_id={}, 原因=命中消息头过滤, 过滤前缀={}, 文本长度={}",
+            contact_id,
+            input.channel_id.trim(),
+            prefix,
+            text.chars().count()
+        ));
+        remote_im_append_channel_log(
+            input.channel_id.trim(),
+            "info",
+            format!(
+                "[联系人消息] 过滤跳过: contact={}, prefix={}, text_len={}",
+                contact_label,
+                prefix,
+                text.chars().count()
+            ),
+        );
+        return Ok(RemoteImEnqueueResult {
+            event_id: String::new(),
+            conversation_id: String::new(),
+            activate_assistant: false,
+            contact_id,
+        });
+    }
 
     let now = now_iso();
     let contact_id = remote_im_upsert_contact_for_inbound(&mut runtime, &channel, &input, &now);

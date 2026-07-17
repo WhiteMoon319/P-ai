@@ -73,6 +73,18 @@ export function parseKeywordList(raw: string): string[] {
   return out;
 }
 
+export function parseBlockedMessagePrefixes(raw: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of String(raw || "").split(/\s+/)) {
+    const prefix = item.trim();
+    if (!prefix || seen.has(prefix)) continue;
+    seen.add(prefix);
+    out.push(prefix);
+  }
+  return out;
+}
+
 export function parseActivationKeywords(raw: string): string[] {
   return parseKeywordList(raw);
 }

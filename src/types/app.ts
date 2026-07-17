@@ -354,6 +354,7 @@ export type RemoteImContact = {
   activationCooldownSeconds: number;
   responseStrategy?: "always_reply" | "smart_judge";
   responseGuidance?: string;
+  blockedMessagePrefixes: string[];
   routeMode?: "main_session" | "dedicated_contact_conversation";
   boundDepartmentId?: string;
   boundAgentId?: string;

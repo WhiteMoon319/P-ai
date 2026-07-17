@@ -81,6 +81,18 @@ export function buildContactLogDisplayItem(log: ChannelLogEntry, t: TranslateFn)
   if (message.startsWith("[联系人消息] 去重跳过:")) {
     return { timestamp: log.timestamp, level: log.level, kind: t("config.remoteIm.logKindDedup"), title: t("config.remoteIm.logDedupTitle"), summary: logField(message, "preview") || t("config.remoteIm.logDedupSummary") };
   }
+  if (message.startsWith("[联系人消息] 过滤跳过:")) {
+    const prefix = logField(message, "prefix");
+    return {
+      timestamp: log.timestamp,
+      level: log.level,
+      kind: t("config.remoteIm.logKindFilter"),
+      title: t("config.remoteIm.logFilterTitle"),
+      summary: prefix
+        ? t("config.remoteIm.logFilterPrefix", { prefix })
+        : t("config.remoteIm.logFilterSummary"),
+    };
+  }
   if (message.startsWith("[联系人消息] 入队:")) {
     return log.level === "warn" || log.level === "error"
       ? { timestamp: log.timestamp, level: log.level, kind: t("config.remoteIm.logKindSystem"), title: t("config.remoteIm.logEnqueueFailed"), summary: logField(message, "reason") || t("config.remoteIm.logEnqueueFailedSummary") }

@@ -23,6 +23,17 @@ describe("buildContactLogDisplayItem", () => {
     expect(item).toBeNull();
   });
 
+  it("展示按消息头过滤的消息，但不暴露原文", () => {
+    const item = buildContactLogDisplayItem({
+      timestamp: "now",
+      level: "info",
+      message: "[联系人消息] 过滤跳过: contact=小明[private:123], prefix=#, text_len=20",
+    }, t);
+
+    expect(item?.kind).toBe("config.remoteIm.logKindFilter");
+    expect(item?.summary).toContain("#");
+  });
+
   it("保留未知异常日志的通用展示", () => {
     const item = buildContactLogDisplayItem({ timestamp: "now", level: "error", message: "未知错误" }, t);
     expect(item?.kind).toBe("config.remoteIm.logKindSystem");
