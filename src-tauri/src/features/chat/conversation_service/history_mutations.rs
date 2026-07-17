@@ -31,6 +31,10 @@ impl ConversationServiceV2 {
             return Err("系统通知会话暂不支持删除".to_string());
         }
         let conversation = self.get_conversation_meta(state, normalized_conversation_id).ok();
+        let child_conversation_ids = conversation
+            .as_ref()
+            .map(|item| item.child_conversation_ids.clone())
+            .unwrap_or_default();
         if conversation
             .as_ref()
             .map(|conversation| self.conversation_meta_is_system_notification_meta_view(conversation))
@@ -110,6 +114,39 @@ impl ConversationServiceV2 {
             }
         }
         state_schedule_conversation_delete(state, normalized_conversation_id)?;
+        for child_conversation_id in child_conversation_ids {
+            if child_conversation_id.trim().is_empty() {
+                continue;
+            }
+            if let Err(err) = state_schedule_conversation_delete(state, &child_conversation_id) {
+                runtime_log_warn(format!(
+                    "[会话删除] 跳过，任务=级联删除追问会话，parent_conversation_id={}，conversation_id={}，error={}",
+                    normalized_conversation_id, child_conversation_id, err
+                ));
+            }
+            clear_conversation_list_activity_mark(state, &child_conversation_id);
+        }
+        if let Some(parent_conversation_id) = conversation
+            .as_ref()
+            .and_then(|item| item.parent_conversation_id.clone())
+            .filter(|id| !id.trim().is_empty())
+        {
+            if let Err(err) = state_update_conversation_metadata_cached(
+                state,
+                &parent_conversation_id,
+                |parent| {
+                    parent
+                        .child_conversation_ids
+                        .retain(|id| id != normalized_conversation_id);
+                    Ok(())
+                },
+            ) {
+                runtime_log_warn(format!(
+                    "[会话删除] 跳过，任务=移除父会话子关系，conversation_id={}，parent_conversation_id={}，error={}",
+                    normalized_conversation_id, parent_conversation_id, err
+                ));
+            }
+        }
         clear_conversation_list_activity_mark(state, normalized_conversation_id);
         let unarchived_conversations =
             self.collect_unarchived_conversation_summaries_cached(state, &app_config)?;
@@ -152,7 +189,8 @@ impl ConversationServiceV2 {
             .map_err(|_| "Target message not found in active conversation.".to_string())?;
         let conversation_id = if self.conversation_meta_is_unarchived_meta_view(&conversation_meta)
             && (conversation_meta.visible_in_foreground_lists
-                || conversation_meta.is_remote_im_contact)
+                || conversation_meta.is_remote_im_contact
+                || conversation_meta.conversation_kind.trim() == CONVERSATION_KIND_SIDE_CHAT)
         {
             conversation_meta.id.to_string()
         } else {
@@ -371,7 +409,7 @@ impl ConversationServiceV2 {
             .get_conversation_meta(state, source_conversation_id)
             .ok()
             .filter(|conversation_meta| {
-                self.conversation_meta_is_local_normal_chat_meta_view(conversation_meta)
+                self.conversation_meta_is_local_conversation_runtime_meta_view(conversation_meta)
             })
             .ok_or_else(|| "源会话不存在或已归档".to_string())?;
         let selection =
@@ -455,7 +493,7 @@ impl ConversationServiceV2 {
             .get_conversation_meta(state, source_conversation_id)
             .ok()
             .filter(|conversation_meta| {
-                self.conversation_meta_is_local_normal_chat_meta_view(conversation_meta)
+                self.conversation_meta_is_local_conversation_runtime_meta_view(conversation_meta)
             })
             .ok_or_else(|| "源会话不存在或已归档".to_string())?;
         let selection =
@@ -469,7 +507,7 @@ impl ConversationServiceV2 {
             .get_conversation_meta(state, target_conversation_id)
             .ok()
             .filter(|conversation_meta| {
-                self.conversation_meta_is_local_normal_chat_meta_view(conversation_meta)
+                self.conversation_meta_is_local_conversation_runtime_meta_view(conversation_meta)
             })
             .ok_or_else(|| "目标会话不存在或已归档".to_string())?;
         drop(guard);
@@ -513,7 +551,7 @@ impl ConversationServiceV2 {
             .get_conversation_meta(state, source_conversation_id)
             .ok()
             .filter(|conversation_meta| {
-                self.conversation_meta_is_local_normal_chat_meta_view(conversation_meta)
+                self.conversation_meta_is_local_conversation_runtime_meta_view(conversation_meta)
             })
             .ok_or_else(|| "源会话不存在或已归档".to_string())?;
         let selection =
@@ -586,4 +624,3 @@ impl ConversationServiceV2 {
     }
 
 }
-

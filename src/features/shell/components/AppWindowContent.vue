@@ -195,6 +195,8 @@
         :conversation-list-tab="conversationListTab"
         :chat-left-panel-mode="chatLeftPanelMode"
         :chat-right-panel-mode="chatRightPanelMode"
+        :chat-monitor-panel-mode="chatMonitorPanelMode"
+        :side-chat-panel-enabled="true"
         @update:chat-input="updateChatInput"
         @add-mention="addChatMention"
         @remove-mention="removeChatMention"
@@ -205,6 +207,7 @@
         @update:conversation-list-tab="updateConversationListTab"
         @update:chat-left-panel-mode="updateChatLeftPanelMode"
         @update:chat-right-panel-mode="updateChatRightPanelMode"
+        @update:chat-monitor-panel-mode="updateChatMonitorPanelMode"
         @remove-clipboard-image="removeClipboardImage"
         @remove-queued-attachment-notice="removeQueuedAttachmentNotice"
         @pick-attachments="pickAttachments"
@@ -253,7 +256,73 @@
         @deny-terminal-approval="denyTerminalApproval"
         @approve-terminal-approval-for-session="approveTerminalApprovalForSession"
         @approve-terminal-approval-for-workspace="approveTerminalApprovalForWorkspace"
-      />
+      >
+        <template #side-chat-panel>
+          <div class="flex h-full min-h-0 w-full flex-col">
+            <PanelTabStrip
+              :tabs="sideChatTabs"
+              :active-key="sideConversationId"
+              :aria-label="t('chat.sideChat.title')"
+              :close-title="t('chat.sideChat.close')"
+              :close-left-title="t('fileReader.closeLeft')"
+              :close-right-title="t('fileReader.closeRight')"
+              :close-others-title="t('fileReader.closeOthers')"
+              @select-tab="selectSideChatConversation?.($event)"
+              @close-tab="closeSideChatTab"
+              @close-tabs-to-left="closeSideChatTabsToLeft"
+              @close-tabs-to-right="closeSideChatTabsToRight"
+              @close-other-tabs="closeOtherSideChatTabs"
+            >
+              <template #leading>
+                <ChatRightPanelSwitcher
+                  :model-value="chatRightPanelMode"
+                  :side-chat-enabled="true"
+                  @update:model-value="updateChatRightPanelMode"
+                />
+              </template>
+              <template #tabTrailing>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm btn-circle"
+                  :title="t('chat.sideChat.create')"
+                  @click="createSideChatConversation?.()"
+                >
+                  <Plus class="size-4" />
+                </button>
+              </template>
+            </PanelTabStrip>
+            <ConversationView
+              v-if="sideConversationId"
+              class="min-h-0 flex-1"
+              :conversation-id="sideConversationId"
+              :api-config-id="conversationCallPrimaryApiConfigId"
+              :agent-id="currentChatAgentId"
+              :department-id="currentChatDepartmentId"
+              :persona-name="selectedPersonaName"
+              :user-alias="userAlias"
+              :user-avatar-url="userAvatarUrl"
+              :assistant-avatar-url="selectedPersonaAvatarUrl"
+              :persona-name-map="chatPersonaNameMap"
+              :persona-avatar-url-map="chatPersonaAvatarUrlMap"
+              :chat-model-options="textCapableApiConfigs"
+              :instruction-presets="instructionPresets"
+              :workspace-name="currentChatWorkspaceDisplayName"
+              :workspace-root-path="currentChatWorkspaceRootPath"
+              :workspaces="currentChatWorkspaces"
+              :workspace-access="currentChatWorkspaces.find((item) => item.level === 'main')?.access || 'read_only'"
+              :current-theme="currentTheme"
+              :trim-tip="trimTip"
+              :chat-input-placeholder="chatInputPlaceholder"
+              :terminal-approvals="terminalApprovals"
+              :terminal-approval-resolving="terminalApprovalResolving"
+              :approve-terminal-approval="(requestId) => approveTerminalApproval(requestId)"
+              :deny-terminal-approval="(requestId) => denyTerminalApproval(requestId)"
+              :approve-terminal-approval-for-session="(requestId) => approveTerminalApprovalForSession(requestId)"
+              :approve-terminal-approval-for-workspace="(requestId) => approveTerminalApprovalForWorkspace(requestId)"
+            />
+          </div>
+        </template>
+      </ChatView>
       <div
         v-if="chatBusyOverlay"
         class="absolute inset-0 z-20 flex items-center justify-center bg-base-100/60 backdrop-blur-[1px]"
@@ -389,6 +458,10 @@
 <script setup lang="ts">
 import ConfigView from "../../config/views/ConfigView.vue";
 import ChatView from "../../chat/views/ChatView.vue";
+import ConversationView from "../../chat/views/ConversationView.vue";
+import ChatRightPanelSwitcher from "../../chat/components/ChatRightPanelSwitcher.vue";
+import PanelTabStrip from "../../shared/components/PanelTabStrip.vue";
+import { MessageSquareMore, Plus } from "@lucide/vue";
 import type { TerminalApprovalConversationItem } from "../composables/use-terminal-approval";
 import ArchivesView from "../../archive/views/ArchivesView.vue";
 import MemoryDialog from "../../memory/components/dialogs/MemoryDialog.vue";
@@ -406,6 +479,7 @@ import type {
   ChatMessage,
   ChatMessageBlock,
   ChatTodoItem,
+  ChildConversationSummary,
   DelegateConversationSummary,
   RemoteImContactConversationSummary,
   PersonaProfile,
@@ -417,7 +491,7 @@ import type {
 } from "../../../types/app";
 import type { GeneratedThemeControls, GeneratedThemeTokens } from "../../shell/theme/theme-types";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
-import type { ChatRightPanelMode } from "../../chat/composables/chat-ui-layout-storage";
+import type { ChatMonitorPanelMode, ChatRightPanelMode } from "../../chat/composables/chat-ui-layout-storage";
 import {
   buildShareExportFileName,
   generateShareFromMessageIds,
@@ -449,6 +523,7 @@ const props = defineProps<{
   conversationListTab: "local" | "contact" | "task";
   chatLeftPanelMode: "local" | "contact" | "task";
   chatRightPanelMode: ChatRightPanelMode;
+  chatMonitorPanelMode: ChatMonitorPanelMode;
   config: AppConfig;
   configTab: "welcome" | "hotkey" | "api" | "tools" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "networkAccess" | "remoteIm" | "usage" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
   localeOptions: Array<{ value: "zh-CN" | "en-US" | "zh-TW"; label: string }>;
@@ -556,6 +631,11 @@ const props = defineProps<{
   currentChatDepartmentId: string;
   currentChatAgentId: string;
   currentChatConversationId: string;
+  sideConversations?: ChildConversationSummary[];
+  sideConversationId?: string;
+  createSideChatConversation?: () => Promise<string> | string;
+  selectSideChatConversation?: (conversationId: string) => void;
+  closeSideChatConversations?: (conversationIds: string[]) => Promise<void> | void;
   currentChatTodos: ChatTodoItem[];
   chatSupervisionActive: boolean;
   chatSupervisionTitle: string;
@@ -689,6 +769,7 @@ const props = defineProps<{
   updateConversationListTab: (value: "local" | "contact" | "task") => void;
   updateChatLeftPanelMode: (value: "local" | "contact" | "task") => void;
   updateChatRightPanelMode: (value: ChatRightPanelMode) => void;
+  updateChatMonitorPanelMode: (value: ChatMonitorPanelMode) => void;
   removeClipboardImage: (index: number) => void;
   removeQueuedAttachmentNotice: (index: number) => void;
   pickAttachments: () => void;
@@ -759,6 +840,35 @@ const chatViewRef = ref<{
   exitMessageSelectionMode: () => void;
   showTransientNotice: (text: string, tone?: "default" | "error" | "info") => void;
 } | null>(null);
+
+const sideChatTabs = computed(() => (props.sideConversations || []).map((conversation) => ({
+  key: String(conversation.conversationId || "").trim(),
+  label: String(conversation.title || "").trim() || props.t("chat.sideChat.title"),
+  icon: MessageSquareMore,
+  closeable: true,
+})));
+
+function closeSideChatTab(conversationId: string) {
+  return props.closeSideChatConversations?.([conversationId]);
+}
+
+function closeSideChatTabsToLeft(conversationId: string) {
+  const index = sideChatTabs.value.findIndex((tab) => tab.key === conversationId);
+  if (index <= 0) return;
+  return props.closeSideChatConversations?.(sideChatTabs.value.slice(0, index).map((tab) => tab.key));
+}
+
+function closeSideChatTabsToRight(conversationId: string) {
+  const index = sideChatTabs.value.findIndex((tab) => tab.key === conversationId);
+  if (index < 0 || index >= sideChatTabs.value.length - 1) return;
+  return props.closeSideChatConversations?.(sideChatTabs.value.slice(index + 1).map((tab) => tab.key));
+}
+
+function closeOtherSideChatTabs(conversationId: string) {
+  return props.closeSideChatConversations?.(
+    sideChatTabs.value.filter((tab) => tab.key !== conversationId).map((tab) => tab.key),
+  );
+}
 
 function showChatNotice(text: string, tone: "default" | "error" | "info" = "info") {
   chatViewRef.value?.showTransientNotice?.(text, tone);

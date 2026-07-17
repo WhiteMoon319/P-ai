@@ -50,6 +50,12 @@ struct UnarchivedConversationSummary {
     agent_id: String,
     department_id: String,
     department_name: String,
+    #[serde(default)]
+    conversation_kind: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    child_conversation_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    child_conversations: Vec<ChildConversationSummary>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parent_conversation_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -80,6 +86,17 @@ struct UnarchivedConversationSummary {
     state: ConversationListItemState,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     preview_messages: Vec<ConversationPreviewMessage>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ChildConversationSummary {
+    conversation_id: String,
+    title: String,
+    status: String,
+    conversation_kind: String,
+    parent_conversation_id: Option<String>,
+    updated_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -557,6 +574,23 @@ fn build_unarchived_conversation_summary_from_meta_view(
     );
     let (workspace_label, workspace_root_path) =
         conversation_default_workspace_summary_from_meta_view(state, conversation_meta);
+    let child_conversations = conversation_meta
+        .child_conversation_ids
+        .iter()
+        .filter_map(|child_id| conversation_service_v2().get_conversation_meta(state, child_id).ok())
+        .filter(|child| {
+            child.conversation_kind.trim() == CONVERSATION_KIND_SIDE_CHAT
+                && child.status.trim() != "archived"
+        })
+        .map(|child| ChildConversationSummary {
+            conversation_id: child.id,
+            title: child.title,
+            status: child.status,
+            conversation_kind: child.conversation_kind,
+            parent_conversation_id: child.parent_conversation_id,
+            updated_at: child.updated_at,
+        })
+        .collect::<Vec<_>>();
     UnarchivedConversationSummary {
         conversation_id: conversation_meta.id.clone(),
         title: conversation_meta.title.clone(),
@@ -571,6 +605,9 @@ fn build_unarchived_conversation_summary_from_meta_view(
         agent_id: conversation_meta.agent_id.clone(),
         department_id,
         department_name,
+        conversation_kind: conversation_meta.conversation_kind.clone(),
+        child_conversation_ids: conversation_meta.child_conversation_ids.clone(),
+        child_conversations,
         parent_conversation_id: conversation_meta
             .parent_conversation_id
             .as_deref()
@@ -1583,6 +1620,9 @@ mod conversation_snapshot_api_tests {
             agent_id: "agent-a".to_string(),
             department_id: "dept-a".to_string(),
             department_name: "部门A".to_string(),
+            conversation_kind: CONVERSATION_KIND_CHAT.to_string(),
+            child_conversation_ids: Vec::new(),
+            child_conversations: Vec::new(),
             parent_conversation_id: parent_conversation_id.map(ToOwned::to_owned),
             fork_message_cursor: None,
             workspace_label: "默认会话目录".to_string(),

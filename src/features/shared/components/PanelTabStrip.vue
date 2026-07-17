@@ -1,5 +1,5 @@
 <template>
-  <div class="flex shrink-0 items-center gap-2 overflow-hidden border-b border-base-300 bg-base-200 p-1">
+  <div class="flex shrink-0 items-center gap-2 border-b border-base-300 bg-base-200 p-1">
     <div v-if="$slots.leading" class="flex shrink-0 items-center">
       <slot name="leading" />
     </div>
@@ -63,6 +63,9 @@
           >
             <X class="size-3.5" />
           </button>
+        </div>
+        <div v-if="$slots.tabTrailing" class="flex shrink-0 items-center pl-1">
+          <slot name="tabTrailing" />
         </div>
       </div>
     </div>

@@ -29,6 +29,7 @@ const DELEGATE_TOOL_KIND_DELEGATE: &str = "delegate";
 const DELEGATE_TOOL_KIND_USER_MENTION: &str = "user_async_delegate";
 const SYSTEM_NOTIFICATION_CONVERSATION_ID: &str = "system-notification-conversation";
 const CONVERSATION_KIND_CHAT: &str = "chat";
+const CONVERSATION_KIND_SIDE_CHAT: &str = "side_chat";
 const CONVERSATION_KIND_SYSTEM_NOTIFICATION: &str = "system_notification";
 const CONVERSATION_KIND_DELEGATE: &str = "delegate";
 const CONVERSATION_KIND_REMOTE_IM_CONTACT: &str = "remote_im_contact";

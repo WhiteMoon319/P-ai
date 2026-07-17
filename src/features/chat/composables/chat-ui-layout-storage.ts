@@ -1,5 +1,6 @@
 export type ChatLeftPanelMode = "local" | "contact" | "task";
-export type ChatRightPanelMode = "reader" | "delegate" | "tools" | "fastRequests" | "tasks";
+export type ChatRightPanelMode = "reader" | "monitor" | "sideChat";
+export type ChatMonitorPanelMode = "delegate" | "tools" | "fastRequests" | "tasks";
 export type ChatSidePanelSide = "left" | "right";
 export type ChatSidePanelWidths = { leftWidth: number; rightWidth: number };
 
@@ -7,6 +8,8 @@ const CHAT_CONVERSATION_LIST_TAB_STORAGE_KEY = "easy_call.chat_conversation_list
 const CHAT_LEFT_PANEL_MODE_STORAGE_KEY = "easy_call.chat_left_panel_mode.v1";
 const CHAT_RIGHT_PANEL_MODE_STORAGE_KEY = "easy_call.chat_right_panel_mode.v1";
 const CHAT_RIGHT_PANEL_MODE_BY_CONVERSATION_STORAGE_PREFIX = "easy_call.chat_right_panel_mode.conversation.v1.";
+const CHAT_MONITOR_PANEL_MODE_STORAGE_KEY = "easy_call.chat_monitor_panel_mode.v1";
+const CHAT_MONITOR_PANEL_MODE_BY_CONVERSATION_STORAGE_PREFIX = "easy_call.chat_monitor_panel_mode.conversation.v1.";
 const LEGACY_CHAT_LEFT_PANEL_MODE_STORAGE_KEY = "easy-call.chat.left-panel-mode";
 const LEGACY_CHAT_RIGHT_PANEL_MODE_STORAGE_KEY = "easy-call.chat.right-panel-mode";
 const CHAT_SIDE_PANEL_VISIBILITY_STORAGE_KEYS = {
@@ -32,7 +35,13 @@ export function normalizeChatLeftPanelMode(value: string): ChatLeftPanelMode {
 }
 
 export function normalizeChatRightPanelMode(value: string, fallback: ChatRightPanelMode = "reader"): ChatRightPanelMode {
-  if (value === "reader" || value === "delegate" || value === "tools" || value === "fastRequests" || value === "tasks") return value;
+  if (value === "reader" || value === "monitor" || value === "sideChat") return value;
+  if (value === "delegate" || value === "tools" || value === "fastRequests" || value === "tasks" || value === "review") return "monitor";
+  return fallback;
+}
+
+export function normalizeChatMonitorPanelMode(value: string, fallback: ChatMonitorPanelMode = "delegate"): ChatMonitorPanelMode {
+  if (value === "delegate" || value === "tools" || value === "fastRequests" || value === "tasks") return value;
   if (value === "review") return "tools";
   return fallback;
 }
@@ -77,6 +86,11 @@ function chatRightPanelModeConversationStorageKey(conversationId: string) {
   return normalizedId ? `${CHAT_RIGHT_PANEL_MODE_BY_CONVERSATION_STORAGE_PREFIX}${normalizedId}` : "";
 }
 
+function chatMonitorPanelModeConversationStorageKey(conversationId: string) {
+  const normalizedId = String(conversationId || "").trim();
+  return normalizedId ? `${CHAT_MONITOR_PANEL_MODE_BY_CONVERSATION_STORAGE_PREFIX}${normalizedId}` : "";
+}
+
 export function loadStoredChatRightPanelMode(fallback: ChatRightPanelMode = "reader", conversationId = ""): ChatRightPanelMode {
   if (typeof window === "undefined") return fallback;
   const conversationKey = chatRightPanelModeConversationStorageKey(conversationId);
@@ -101,6 +115,38 @@ export function storeChatRightPanelMode(value: ChatRightPanelMode, conversationI
     return;
   }
   window.localStorage.setItem(CHAT_RIGHT_PANEL_MODE_STORAGE_KEY, normalized);
+}
+
+export function loadStoredChatMonitorPanelMode(fallback: ChatMonitorPanelMode = "delegate", conversationId = ""): ChatMonitorPanelMode {
+  if (typeof window === "undefined") return fallback;
+  const monitorConversationKey = chatMonitorPanelModeConversationStorageKey(conversationId);
+  const legacyConversationKey = chatRightPanelModeConversationStorageKey(conversationId);
+  if (monitorConversationKey) {
+    const storedForConversation = String(
+      window.localStorage.getItem(monitorConversationKey)
+      || window.localStorage.getItem(legacyConversationKey)
+      || "",
+    ).trim();
+    return normalizeChatMonitorPanelMode(storedForConversation, fallback);
+  }
+  const stored = String(
+    window.localStorage.getItem(CHAT_MONITOR_PANEL_MODE_STORAGE_KEY)
+    || window.localStorage.getItem(CHAT_RIGHT_PANEL_MODE_STORAGE_KEY)
+    || window.localStorage.getItem(LEGACY_CHAT_RIGHT_PANEL_MODE_STORAGE_KEY)
+    || "",
+  ).trim();
+  return normalizeChatMonitorPanelMode(stored, fallback);
+}
+
+export function storeChatMonitorPanelMode(value: ChatMonitorPanelMode, conversationId = "") {
+  if (typeof window === "undefined") return;
+  const normalized = normalizeChatMonitorPanelMode(value);
+  const conversationKey = chatMonitorPanelModeConversationStorageKey(conversationId);
+  if (conversationKey) {
+    window.localStorage.setItem(conversationKey, normalized);
+    return;
+  }
+  window.localStorage.setItem(CHAT_MONITOR_PANEL_MODE_STORAGE_KEY, normalized);
 }
 
 export function loadStoredChatSidePanelVisibility(side: ChatSidePanelSide): boolean {

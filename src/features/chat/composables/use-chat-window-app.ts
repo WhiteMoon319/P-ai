@@ -1,4 +1,4 @@
-import { computed, nextTick } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { emit } from "@tauri-apps/api/event";
@@ -25,11 +25,12 @@ import { useChatUiStateOrchestrator } from "./use-chat-ui-state-orchestrator";
 import { useChatComposerDrafts } from "./use-chat-composer-drafts";
 import { extractMessageAttachmentFiles, extractMessageImages, messageText } from "../../../utils/chat-message";
 import { formatI18nError } from "../../../utils/error";
-import type { AppConfig } from "../../../types/app";
+import type { AppConfig, ChildConversationSummary } from "../../../types/app";
 import { normalizeLocale } from "../../../i18n";
 import { resolveConversationDisplayTitle } from "../utils/conversation-title";
 import { ensureConversationMessageIds } from "../utils/message-id";
 import { useChatWindowConfigOrchestrator } from "./use-chat-window-config-orchestrator";
+import { resolveSideChatSelectionAfterClose } from "./side-chat-tabs";
 
 type ConversationActionsBridge = {
   refreshChatUnarchivedConversations: () => Promise<void>;
@@ -254,6 +255,7 @@ export function useChatWindowApp() {
     conversationListTab,
     chatLeftPanelMode,
     chatRightPanelMode,
+    chatMonitorPanelMode,
     sideConversationListVisible,
     toolReviewPanelOpenVisible,
     chatSidePanelWidths,
@@ -268,6 +270,7 @@ export function useChatWindowApp() {
     updateConversationListTab,
     updateChatLeftPanelMode,
     updateChatRightPanelMode,
+    updateChatMonitorPanelMode,
     handleChatSidePanelWidthsChange,
     toggleSideConversationList,
     toggleToolReviewPanel,
@@ -665,6 +668,112 @@ export function useChatWindowApp() {
     handleRegenerateTurn,
   } = runtimeOrchestrator;
   chatFlow = runtimeOrchestrator.chatFlow;
+  const sideConversationId = ref("");
+  const closingSideConversationIds = ref<string[]>([]);
+  // 只记住每个父会话当前选中的标签；真实标签集合始终以后端父摘要为准。
+  const activeSideConversationByParent = new Map<string, string>();
+  const sideConversations = computed<ChildConversationSummary[]>(() => {
+    const parentId = String(currentChatConversationId.value || "").trim();
+    const parent = unarchivedConversations.value
+      .find((item) => String(item?.conversationId || "").trim() === parentId);
+    const closingIds = new Set(closingSideConversationIds.value);
+    return (Array.isArray(parent?.childConversations) ? parent.childConversations : [])
+      .filter((item) => {
+        const conversationId = String(item?.conversationId || "").trim();
+        return conversationId && !closingIds.has(conversationId);
+      });
+  });
+  let observedSideConversationParentId = "";
+  watch(
+    [currentChatConversationId, sideConversations],
+    ([parentConversationId, children]) => {
+      const parentId = String(parentConversationId || "").trim();
+      const parentChanged = parentId !== observedSideConversationParentId;
+      observedSideConversationParentId = parentId;
+      if (!parentId) {
+        sideConversationId.value = "";
+        return;
+      }
+      const childIds = children.map((item) => String(item?.conversationId || "").trim()).filter(Boolean);
+      const currentId = String(sideConversationId.value || "").trim();
+      if (!parentChanged && childIds.includes(currentId)) return;
+      const rememberedId = String(activeSideConversationByParent.get(parentId) || "").trim();
+      const nextId = childIds.includes(rememberedId) ? rememberedId : childIds[0] || "";
+      sideConversationId.value = nextId;
+      if (nextId) activeSideConversationByParent.set(parentId, nextId);
+    },
+    { immediate: true },
+  );
+  const selectSideChatConversation = (conversationId: string) => {
+    const normalizedId = String(conversationId || "").trim();
+    if (!sideConversations.value.some((item) => String(item.conversationId || "").trim() === normalizedId)) return;
+    sideConversationId.value = normalizedId;
+    const parentId = String(currentChatConversationId.value || "").trim();
+    if (parentId) activeSideConversationByParent.set(parentId, normalizedId);
+  };
+  const createSideChatConversation = async () => {
+    const conversationId = await conversationOrchestrator.createSideChatConversation();
+    if (conversationId) {
+      sideConversationId.value = conversationId;
+      const parentId = String(currentChatConversationId.value || "").trim();
+      if (parentId) activeSideConversationByParent.set(parentId, conversationId);
+      chatUiState.updateChatRightPanelMode("sideChat");
+      toolReviewPanelOpenVisible.value = true;
+      await refreshChatUnarchivedConversations().catch((error) => {
+        setStatusError("status.requestFailed", error);
+      });
+    }
+    return conversationId;
+  };
+  const closeSideChatConversations = async (conversationIds: string[]) => {
+    const orderedIds = sideConversations.value.map((item) => String(item.conversationId || "").trim()).filter(Boolean);
+    const requestedIds = new Set((conversationIds || []).map((item) => String(item || "").trim()).filter(Boolean));
+    const idsToClose = orderedIds.filter((conversationId) => requestedIds.has(conversationId));
+    if (idsToClose.length === 0) return;
+    const closingSet = new Set(idsToClose);
+    const activeId = String(sideConversationId.value || "").trim();
+    if (closingSet.has(activeId)) {
+      const nextId = resolveSideChatSelectionAfterClose(orderedIds, activeId, closingSet);
+      sideConversationId.value = nextId;
+      const parentId = String(currentChatConversationId.value || "").trim();
+      if (parentId) {
+        if (nextId) activeSideConversationByParent.set(parentId, nextId);
+        else activeSideConversationByParent.delete(parentId);
+      }
+    }
+    closingSideConversationIds.value = Array.from(new Set([
+      ...closingSideConversationIds.value,
+      ...idsToClose,
+    ]));
+    await nextTick();
+    try {
+      for (const conversationId of idsToClose) {
+        await invokeTauri("stop_chat_message", {
+          input: {
+            session: {
+              apiConfigId: String(currentForegroundApiConfigId.value || "").trim(),
+              agentId: String(currentForegroundAgentId.value || "").trim(),
+              departmentId: String(currentForegroundDepartmentId.value || "").trim() || null,
+              conversationId,
+            },
+            partialAssistantText: "",
+            partialStreamBlocks: [],
+          },
+        }).catch(() => {});
+        await invokeTauri("delete_unarchived_conversation", {
+          input: { conversationId },
+        }).catch((error) => {
+          setStatusError("status.requestFailed", error);
+        });
+      }
+      await refreshChatUnarchivedConversations().catch((error) => {
+        setStatusError("status.requestFailed", error);
+      });
+    } finally {
+      closingSideConversationIds.value = closingSideConversationIds.value
+        .filter((conversationId) => !closingSet.has(conversationId));
+    }
+  };
   refreshToolsStatus = configRuntime.refreshToolsStatus;
   const {
     setMemoryDialogRef,
@@ -882,6 +991,11 @@ export function useChatWindowApp() {
     ...shellDialogFlows,
     ...chatDialogActions,
     ...conversationOrchestrator,
+    sideConversations,
+    sideConversationId,
+    selectSideChatConversation,
+    createSideChatConversation,
+    closeSideChatConversations,
     openSettingsWindow,
     summonChatWindowFromConfig,
     minimizeWindowAndClearForeground,

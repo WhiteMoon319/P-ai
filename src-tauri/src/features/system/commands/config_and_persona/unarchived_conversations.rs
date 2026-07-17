@@ -697,6 +697,122 @@ struct CreateUnarchivedConversationOutput {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct CreateSideChatConversationInput {
+    parent_conversation_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateSideChatConversationOutput {
+    conversation_id: String,
+    parent_conversation_id: String,
+    conversation_kind: String,
+    title: String,
+}
+
+#[tauri::command]
+async fn create_side_chat_conversation(
+    input: CreateSideChatConversationInput,
+    state: State<'_, AppState>,
+) -> Result<CreateSideChatConversationOutput, String> {
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        create_side_chat_conversation_blocking(input, &app_state)
+    })
+    .await
+    .map_err(|err| format!("创建追问会话任务异常：{err}"))?
+}
+
+fn create_side_chat_conversation_blocking(
+    input: CreateSideChatConversationInput,
+    state: &AppState,
+) -> Result<CreateSideChatConversationOutput, String> {
+    let parent_id = input.parent_conversation_id.trim();
+    if parent_id.is_empty() {
+        return Err("parentConversationId 不能为空".to_string());
+    }
+    let parent = conversation_service_v2()
+        .get_conversation_meta(state, parent_id)
+        .map_err(|_| "父会话不存在或已归档".to_string())?;
+    if parent.status.trim() == "archived"
+        || parent.conversation_kind.trim() != CONVERSATION_KIND_CHAT
+    {
+        return Err("只能从普通会话创建追问会话".to_string());
+    }
+
+    let store_paths = message_store::message_store_paths(&state.data_path, parent_id)?;
+    ensure_ready_message_store_from_legacy_conversation(state, parent_id, &store_paths)?;
+    let latest_block = message_store::read_ready_message_store_block_page(&store_paths, None)?
+        .ok_or_else(|| "父会话消息尚未就绪".to_string())?;
+    let copied_messages = latest_block
+        .messages
+        .iter()
+        .map(clone_chat_message_for_copied_conversation)
+        .collect::<Vec<_>>();
+    let title = parent
+        .latest_summary_title
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| parent.title.clone());
+    let mut side_chat = build_conversation_record(
+        parent.preferred_api_config_id.as_deref().unwrap_or_default(),
+        &parent.agent_id,
+        &parent.department_id,
+        &title,
+        CONVERSATION_KIND_SIDE_CHAT,
+        parent.root_conversation_id.clone(),
+        None,
+    );
+    side_chat.parent_conversation_id = Some(parent_id.to_string());
+    side_chat.shell_workspace_path = parent.shell_workspace_path.clone();
+    side_chat.shell_workspaces = parent.shell_workspaces.clone();
+    side_chat.shell_autonomous_mode = parent.shell_autonomous_mode;
+    side_chat.current_todos = parent.current_todos.clone();
+    side_chat.plan_mode_enabled = parent.plan_mode_enabled;
+    side_chat.user_profile_snapshot = parent.user_profile_snapshot.clone();
+    side_chat.preferred_api_config_id = parent.preferred_api_config_id.clone();
+    side_chat.messages = copied_messages;
+    if let Some(last_message) = side_chat.messages.last() {
+        side_chat.updated_at = last_message.created_at.clone();
+        side_chat.last_user_at = side_chat
+            .messages
+            .iter()
+            .rev()
+            .find(|message| message.role.trim().eq_ignore_ascii_case("user"))
+            .map(|message| message.created_at.clone());
+        side_chat.last_assistant_at = side_chat
+            .messages
+            .iter()
+            .rev()
+            .find(|message| message.role.trim().eq_ignore_ascii_case("assistant"))
+            .map(|message| message.created_at.clone());
+        side_chat.fork_message_cursor = Some(last_message.id.clone());
+    }
+    let side_chat_id = side_chat.id.clone();
+    state_schedule_conversation_persist(state, &side_chat)?;
+    state_update_conversation_metadata_cached(state, parent_id, |conversation| {
+        if !conversation.child_conversation_ids.iter().any(|id| id == &side_chat_id) {
+            conversation.child_conversation_ids.push(side_chat_id.clone());
+        }
+        Ok(())
+    })?;
+    let _ = emit_unarchived_conversation_overview_item_updated_from_state(state, parent_id);
+    runtime_log_info(format!(
+        "[追问会话] 完成，任务=创建真实会话，parent_conversation_id={}，conversation_id={}，message_count={}",
+        parent_id,
+        side_chat_id,
+        side_chat.messages.len()
+    ));
+    Ok(CreateSideChatConversationOutput {
+        conversation_id: side_chat_id,
+        parent_conversation_id: parent_id.to_string(),
+        conversation_kind: CONVERSATION_KIND_SIDE_CHAT.to_string(),
+        title,
+    })
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ExportConversationShareInput {
     conversation_id: String,
 }

@@ -55,7 +55,6 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
           if (assistantMessage && assistantMessageId && !messageAlreadyCached) {
             bindings.cacheConversationMessages(payloadConversationId, [...cachedMessages, assistantMessage]);
           }
-          void bindings.getChatFlow().handleExternalRoundCompleted(event.payload);
           return;
         }
         if (payloadConversationId === currentConversationId) {
@@ -92,7 +91,6 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
         const targetFlows = flowsForConversation(payloadConversationId);
         if (targetFlows.length === 0 && payloadConversationId && payloadConversationId !== currentConversationId) {
           bindings.setConversationBadge(payloadConversationId, "failed");
-          void bindings.getChatFlow().handleExternalRoundFailed(event.payload);
           return;
         }
         if (payloadConversationId === currentConversationId) {
@@ -106,6 +104,10 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
       });
 
       void listen<any>("easy-call:conversation-todos-updated", (event) => {
+        const conversationId = bindings.readConversationIdFromPayload(event.payload);
+        for (const flow of flowsForConversation(conversationId)) {
+          void flow.handleExternalTodosUpdated?.(event.payload);
+        }
         bindings.applyConversationTodosUpdated(event.payload);
       }).then((unlisten) => {
         bindings.unlisteners.chatConversationTodosUpdated = unlisten;

@@ -1407,6 +1407,11 @@
     "filePanelTab": "檔案",
     "monitorPanelTab": "監控",
     "rightPanelSwitcherTitle": "切換右側面板",
+    "sideChat": {
+      "title": "追問",
+      "create": "新增追問",
+      "close": "關閉追問"
+    },
     "rightSidebarToggle": "右側欄",
     "conversationSearchPlaceholder": "搜尋會話標題或最近兩條訊息",
     "conversationSearchEmpty": "沒有符合的會話",

@@ -881,10 +881,25 @@ async fn send_chat_message_inner(
                 effective_agent_id,
             );
         }
-        let requested_conversation = conversation_service_v2()
+        let mut requested_conversation = conversation_service_v2()
             .get_conversation_prompt_context(state, requested_conversation_id)?;
         if conversation_is_archived(&requested_conversation) {
             return Ok(None);
+        }
+        if requested_conversation.conversation_kind.trim() == CONVERSATION_KIND_SIDE_CHAT {
+            if let Some(parent_conversation_id) = requested_conversation
+                .parent_conversation_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                let parent = conversation_service_v2()
+                    .get_conversation_metadata_record(state, parent_conversation_id)?;
+                // side_chat 的模型固化在自身元数据；目录与权限属于父会话能力，发送时实时读取。
+                requested_conversation.shell_workspace_path = parent.shell_workspace_path;
+                requested_conversation.shell_workspaces = parent.shell_workspaces;
+                requested_conversation.shell_autonomous_mode = parent.shell_autonomous_mode;
+            }
         }
         let runtime_state = state_read_runtime_state_cached(state)?;
         let chat_index = state_read_chat_index_cached(state)?;

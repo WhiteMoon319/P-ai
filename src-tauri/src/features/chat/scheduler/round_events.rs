@@ -338,7 +338,10 @@ fn local_chat_notification_text(
 fn conversation_meta_is_local_normal_chat_for_notification(
     conversation_meta: &ConversationMetaView,
 ) -> bool {
-    conversation_meta.conversation_kind.trim() == CONVERSATION_KIND_CHAT
+    matches!(
+        conversation_meta.conversation_kind.trim(),
+        CONVERSATION_KIND_CHAT | CONVERSATION_KIND_SIDE_CHAT
+    )
         && conversation_meta.conversation_kind.trim() != CONVERSATION_KIND_SYSTEM_NOTIFICATION
         && conversation_meta.conversation_kind.trim() != CONVERSATION_KIND_DELEGATE
         && conversation_meta.conversation_kind.trim() != CONVERSATION_KIND_REMOTE_IM_CONTACT

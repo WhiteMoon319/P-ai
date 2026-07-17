@@ -810,6 +810,9 @@ export type UnarchivedConversationSummary = {
   agentId: string;
   departmentId: string;
   departmentName: string;
+  conversationKind?: string;
+  childConversationIds?: string[];
+  childConversations?: ChildConversationSummary[];
   parentConversationId?: string;
   forkMessageCursor?: string;
   apiConfigId?: string;
@@ -830,6 +833,15 @@ export type UnarchivedConversationSummary = {
   detachedWindowLabel?: string;
   previewMessages?: ConversationPreviewMessage[];
   state?: ConversationListItemState;
+};
+
+export type ChildConversationSummary = {
+  conversationId: string;
+  title: string;
+  status: string;
+  conversationKind: string;
+  parentConversationId?: string;
+  updatedAt: string;
 };
 
 export type ConversationListItemState = {
@@ -862,6 +874,8 @@ export type ChatConversationOverviewItem = {
   title: string;
   summaryTitle?: string;
   kind?: "local_unarchived" | "remote_im_contact";
+  conversationKind?: "chat" | "side_chat" | string;
+  childConversationIds?: string[];
   remoteContactId?: string;
   remoteContactDisplayName?: string;
   channelId?: string;

@@ -232,6 +232,10 @@ fn conversation_is_remote_im_contact(conversation: &Conversation) -> bool {
     conversation.conversation_kind.trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT
 }
 
+fn conversation_is_side_chat(conversation: &Conversation) -> bool {
+    conversation.conversation_kind.trim() == CONVERSATION_KIND_SIDE_CHAT
+}
+
 fn increment_conversation_unread_count(conversation: &mut Conversation, count: usize) {
     if count == 0 || conversation_is_remote_im_contact(conversation) {
         return;
@@ -248,8 +252,10 @@ fn clear_conversation_unread_count(conversation: &mut Conversation) -> bool {
 }
 
 fn conversation_visible_in_foreground_lists(conversation: &Conversation) -> bool {
+    // side_chat 仍由普通 Conversation runtime 处理，但只挂在父会话的追问视图中。
     !conversation_is_delegate(conversation)
         && !conversation_is_remote_im_contact(conversation)
+        && !conversation_is_side_chat(conversation)
 }
 
 fn conversation_is_unarchived(conversation: &Conversation) -> bool {
@@ -273,7 +279,10 @@ const SUMMARY_CONTEXT_TITLE_MAX_CHARS: usize = 20;
 const SUMMARY_CONTEXT_TITLE_SOURCE_BRANCH: &str = "branch_source";
 
 fn conversation_is_local_normal_chat(conversation: &Conversation) -> bool {
-    conversation.conversation_kind.trim() == CONVERSATION_KIND_CHAT
+    matches!(
+        conversation.conversation_kind.trim(),
+        CONVERSATION_KIND_CHAT | CONVERSATION_KIND_SIDE_CHAT
+    )
         && !conversation_is_system_notification(conversation)
         && !conversation_is_delegate(conversation)
         && !conversation_is_remote_im_contact(conversation)
@@ -689,6 +698,15 @@ mod summary_context_title_tests {
             active_goal: None,
             cumulative_usage: ConversationCumulativeUsage::default(),
         }
+    }
+
+    #[test]
+    fn side_chat_uses_normal_runtime_rules_but_stays_out_of_foreground_lists() {
+        let mut conversation = test_conversation(Vec::new());
+        conversation.conversation_kind = CONVERSATION_KIND_SIDE_CHAT.to_string();
+
+        assert!(conversation_is_local_normal_chat(&conversation));
+        assert!(!conversation_visible_in_foreground_lists(&conversation));
     }
 
     #[test]

@@ -84,7 +84,9 @@ impl ConversationServiceV2 {
                     .ok()
                     .filter(|conversation_meta| {
                         self.conversation_meta_is_unarchived_meta_view(conversation_meta)
-                            && conversation_meta.visible_in_foreground_lists
+                            && (conversation_meta.visible_in_foreground_lists
+                                || conversation_meta.conversation_kind.trim()
+                                    == CONVERSATION_KIND_SIDE_CHAT)
                     })
                     .ok_or_else(|| {
                         format!("Requested conversation not found: {conversation_id}")
@@ -199,7 +201,8 @@ impl ConversationServiceV2 {
             let conversation_meta = self.get_conversation_meta(state, conversation_id)?;
             if self.conversation_meta_is_unarchived_meta_view(&conversation_meta)
                 && (conversation_meta.visible_in_foreground_lists
-                    || conversation_meta.is_remote_im_contact)
+                    || conversation_meta.is_remote_im_contact
+                    || conversation_meta.conversation_kind.trim() == CONVERSATION_KIND_SIDE_CHAT)
             {
                 return Ok(Some(conversation_meta));
             }

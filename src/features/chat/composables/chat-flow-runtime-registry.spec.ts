@@ -39,6 +39,9 @@ describe("chatFlowRuntimeRegistry", () => {
     expect(chatFlowRuntimesForConversation("conversation-a")).toEqual([]);
     expect(chatFlowRuntimesForConversation("conversation-c")).toEqual([firstFlow]);
 
+    firstConversationId = "";
+    expect(chatFlowRuntimesForConversation("conversation-c")).toEqual([]);
+
     unregisterFirst();
     unregisterSecond();
   });

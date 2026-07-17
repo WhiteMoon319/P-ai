@@ -384,6 +384,10 @@ impl ConversationShardMeta {
         self.parent_conversation_id.as_deref()
     }
 
+    pub(super) fn child_conversation_ids(&self) -> &[String] {
+        self.child_conversation_ids.as_slice()
+    }
+
     pub(super) fn fork_message_cursor(&self) -> Option<&str> {
         self.fork_message_cursor.as_deref()
     }
@@ -532,6 +536,7 @@ impl ConversationShardMeta {
         self.agent_id = source.agent_id.clone();
         self.department_id = source.department_id.clone();
         self.parent_conversation_id = source.parent_conversation_id.clone();
+        self.child_conversation_ids = source.child_conversation_ids.clone();
         self.fork_message_cursor = source.fork_message_cursor.clone();
         self.unread_count = source.unread_count;
         self.conversation_kind = source.conversation_kind.clone();
@@ -1112,6 +1117,7 @@ mod message_store_meta_tests {
         assert_eq!(persist_meta, ConversationPersistMeta::from_conversation(&conversation));
         assert_eq!(restored.messages.len(), 2);
         assert_eq!(restored.id, conversation.id);
+        assert_eq!(restored.child_conversation_ids, conversation.child_conversation_ids);
         assert_eq!(restored.preferred_api_config_id, conversation.preferred_api_config_id);
         assert_eq!(
             restored.auto_push_remote_contact_id,

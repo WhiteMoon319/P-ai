@@ -5,19 +5,23 @@ import type { ConversationPipelineStatus } from "../../shell/composables/use-pip
 import type { searchConfigTabs } from "../../config/search/config-search";
 import {
   loadStoredChatLeftPanelMode,
+  loadStoredChatMonitorPanelMode,
   loadStoredChatRightPanelMode,
   loadStoredChatSidePanelVisibility,
   loadStoredChatSidePanelWidths,
   loadStoredConversationListTab,
   normalizeChatLeftPanelMode,
+  normalizeChatMonitorPanelMode,
   normalizeChatRightPanelMode,
   normalizeChatSidePanelWidths,
   storeChatLeftPanelMode,
+  storeChatMonitorPanelMode,
   storeChatRightPanelMode,
   storeChatSidePanelVisibility,
   storeChatSidePanelWidths,
   storeConversationListTab,
   type ChatLeftPanelMode,
+  type ChatMonitorPanelMode,
   type ChatRightPanelMode,
 } from "./chat-ui-layout-storage";
 
@@ -39,6 +43,7 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
   const conversationListTab = ref<ChatLeftPanelMode>(loadStoredConversationListTab());
   const chatLeftPanelMode = ref<ChatLeftPanelMode>(loadStoredChatLeftPanelMode());
   const chatRightPanelMode = ref<ChatRightPanelMode>("reader");
+  const chatMonitorPanelMode = ref<ChatMonitorPanelMode>("delegate");
   const sideConversationListVisible = ref(loadStoredChatSidePanelVisibility("left"));
   const toolReviewPanelOpenVisible = ref(loadStoredChatSidePanelVisibility("right"));
   const chatSidePanelWidths = ref(loadStoredChatSidePanelWidths());
@@ -193,6 +198,15 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     }
   }
 
+  function updateChatMonitorPanelMode(value: ChatMonitorPanelMode) {
+    const nextMode = normalizeChatMonitorPanelMode(value, "delegate");
+    chatMonitorPanelMode.value = nextMode;
+    const conversationId = String(bindings.currentChatConversationId.value || "").trim();
+    if (conversationId) {
+      storeChatMonitorPanelMode(nextMode, conversationId);
+    }
+  }
+
   function handleChatSidePanelWidthsChange(value: { leftWidth: number; rightWidth: number }, options?: { commit?: boolean; syncWindow?: boolean }) {
     chatSidePanelWidths.value = normalizeChatSidePanelWidths(value);
     if (options?.commit) {
@@ -224,6 +238,11 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
       chatRightPanelMode.value = conversationId
         ? loadStoredChatRightPanelMode("reader", conversationId)
         : "reader";
+      const storedMonitorPanelMode = conversationId
+        ? loadStoredChatMonitorPanelMode("delegate", conversationId)
+        : "delegate";
+      chatMonitorPanelMode.value = storedMonitorPanelMode;
+      if (conversationId) storeChatMonitorPanelMode(storedMonitorPanelMode, conversationId);
     },
     { immediate: true },
   );
@@ -237,6 +256,7 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     conversationListTab,
     chatLeftPanelMode,
     chatRightPanelMode,
+    chatMonitorPanelMode,
     sideConversationListVisible,
     toolReviewPanelOpenVisible,
     chatSidePanelWidths,
@@ -251,6 +271,7 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     updateConversationListTab,
     updateChatLeftPanelMode,
     updateChatRightPanelMode,
+    updateChatMonitorPanelMode,
     handleChatSidePanelWidthsChange,
     toggleSideConversationList,
     toggleToolReviewPanel,

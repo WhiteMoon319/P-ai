@@ -446,9 +446,10 @@ impl ConversationServiceV2 {
                     return Ok(None);
                 }
             };
-        if !visible_ids.contains(normalized_conversation_id)
+        let is_side_chat = conversation_meta.conversation_kind.trim() == CONVERSATION_KIND_SIDE_CHAT;
+        if (!visible_ids.contains(normalized_conversation_id) && !is_side_chat)
             || !self.conversation_meta_is_unarchived_meta_view(&conversation_meta)
-            || !conversation_meta.visible_in_foreground_lists
+            || (!conversation_meta.visible_in_foreground_lists && !is_side_chat)
         {
             drop(guard);
             return Ok(None);
@@ -597,4 +598,3 @@ impl ConversationServiceV2 {
     }
 
 }
-

@@ -5,6 +5,7 @@ export type ChatFlowRuntimeEventHandlers = {
   handleExternalRoundFailed: (payload: unknown) => Promise<void> | void;
   handleExternalRoundStarted: (payload: unknown) => Promise<void> | void;
   handleExternalStreamRebindRequired: (payload: unknown) => Promise<void> | void;
+  handleExternalTodosUpdated?: (payload: unknown) => Promise<void> | void;
 };
 
 type RegisteredChatFlowRuntime = {

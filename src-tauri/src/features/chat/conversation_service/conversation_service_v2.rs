@@ -353,6 +353,7 @@ struct ConversationMetaView {
     has_context_compaction_message: bool,
     last_message_at: Option<String>,
     parent_conversation_id: Option<String>,
+    child_conversation_ids: Vec<String>,
     fork_message_cursor: Option<String>,
     user_profile_snapshot: String,
     preferred_api_config_id: Option<String>,
@@ -539,6 +540,7 @@ impl ConversationMetaView {
             has_context_compaction_message: meta.has_context_compaction_message(),
             last_message_at: meta.last_message_at().map(ToOwned::to_owned),
             parent_conversation_id: meta.parent_conversation_id().map(ToOwned::to_owned),
+            child_conversation_ids: meta.child_conversation_ids().to_vec(),
             fork_message_cursor: meta.fork_message_cursor().map(ToOwned::to_owned),
             user_profile_snapshot: meta.user_profile_snapshot().to_string(),
             preferred_api_config_id: meta.preferred_api_config_id().map(ToOwned::to_owned),
@@ -1434,6 +1436,7 @@ impl ConversationServiceV2 {
     ) -> bool {
         !self.conversation_meta_is_delegate(conversation_meta)
             && !self.conversation_meta_is_remote_im_contact(conversation_meta)
+            && conversation_meta.conversation_kind().trim() != CONVERSATION_KIND_SIDE_CHAT
     }
 
     fn conversation_meta_is_remote_im_contact(
@@ -1452,6 +1455,18 @@ impl ConversationServiceV2 {
             && conversation_meta.conversation_kind.trim() == CONVERSATION_KIND_CHAT
             && conversation_meta.conversation_kind.trim()
                 != CONVERSATION_KIND_SYSTEM_NOTIFICATION
+    }
+
+    fn conversation_meta_is_local_conversation_runtime_meta_view(
+        &self,
+        conversation_meta: &ConversationMetaView,
+    ) -> bool {
+        // 这是运行时能力判断，不等于“是否出现在主会话列表”；side_chat 必须走普通消息操作。
+        self.conversation_meta_is_unarchived_meta_view(conversation_meta)
+            && matches!(
+                conversation_meta.conversation_kind.trim(),
+                CONVERSATION_KIND_CHAT | CONVERSATION_KIND_SIDE_CHAT
+            )
     }
 
     fn build_conversation_snapshot_from_meta(
@@ -1476,6 +1491,8 @@ impl ConversationServiceV2 {
         conversation.agent_id = conversation_meta.agent_id.clone();
         conversation.department_id = conversation_meta.department_id.clone();
         conversation.unread_count = conversation_meta.unread_count;
+        conversation.parent_conversation_id = conversation_meta.parent_conversation_id.clone();
+        conversation.child_conversation_ids = conversation_meta.child_conversation_ids.clone();
         conversation.conversation_kind = conversation_meta.conversation_kind.clone();
         conversation.root_conversation_id = conversation_meta.root_conversation_id.clone();
         conversation.delegate_id = conversation_meta.delegate_id.clone();

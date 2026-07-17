@@ -1284,6 +1284,11 @@
     "filePanelTab": "Files",
     "monitorPanelTab": "Monitor",
     "rightPanelSwitcherTitle": "Switch right panel",
+    "sideChat": {
+      "title": "Follow-up",
+      "create": "New follow-up",
+      "close": "Close follow-up"
+    },
     "rightSidebarToggle": "Right Sidebar",
     "conversationSearchPlaceholder": "Search title or last two messages",
     "conversationSearchEmpty": "No matching conversations",

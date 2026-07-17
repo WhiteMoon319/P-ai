@@ -1408,6 +1408,11 @@
     "filePanelTab": "文件",
     "monitorPanelTab": "监控",
     "rightPanelSwitcherTitle": "切换右侧面板",
+    "sideChat": {
+      "title": "追问",
+      "create": "新建追问",
+      "close": "关闭追问"
+    },
     "rightSidebarToggle": "右侧栏",
     "conversationSearchPlaceholder": "搜索会话标题或最近两条消息",
     "conversationSearchEmpty": "没有匹配的会话",

@@ -67,6 +67,25 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
     }
   }
 
+  async function createSideChatConversation(parentConversationId?: string) {
+    const parentId = String(parentConversationId || bindings.currentChatConversationId.value || "").trim();
+    if (!parentId) return "";
+    try {
+      const result = await invokeTauri<{
+        conversationId: string;
+        parentConversationId: string;
+        conversationKind: string;
+        title: string;
+      }>("create_side_chat_conversation", {
+        input: { parentConversationId: parentId },
+      });
+      return String(result?.conversationId || "").trim();
+    } catch (error) {
+      bindings.setStatusError("status.requestFailed", error);
+      return "";
+    }
+  }
+
   async function branchConversationFromSelection(payload: { count: number; messageIds: string[] }) {
     const sourceConversationId = String(bindings.currentChatConversationId.value || "").trim();
     const selectedMessageIds = normalizeSelectedMessageIds(payload?.messageIds);
@@ -320,6 +339,7 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
 
   return {
     createUnarchivedConversation,
+    createSideChatConversation,
     branchConversationFromSelection,
     createConversationBranchFromMessage,
     forwardConversationFromSelection,

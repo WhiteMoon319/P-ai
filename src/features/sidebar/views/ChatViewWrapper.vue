@@ -85,6 +85,7 @@
     :conversation-list-tab="conversationListTab"
     :chat-left-panel-mode="chatLeftPanelMode"
     :chat-right-panel-mode="chatRightPanelMode"
+    :chat-monitor-panel-mode="chatMonitorPanelMode"
     @update:chat-input="$emit('update:input', $event)"
     @send-chat="$emit('send', $event)"
     @stop-chat="$emit('stop')"
@@ -101,6 +102,7 @@
     @update:conversation-list-tab="$emit('updateConversationListTab', $event)"
     @update:chat-left-panel-mode="$emit('updateChatLeftPanelMode', $event)"
     @update:chat-right-panel-mode="$emit('updateChatRightPanelMode', $event)"
+    @update:chat-monitor-panel-mode="$emit('updateChatMonitorPanelMode', $event)"
     @remove-clipboard-image="$emit('removeClipboardImage', $event)"
     @remove-queued-attachment-notice="$emit('removeQueuedAttachmentNotice', $event)"
     @start-recording="noop"
@@ -149,7 +151,7 @@ import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, Cha
 import { stableRenderIdFromMessage } from "../../chat/utils/stable-render-id";
 import ChatView from "../../chat/views/ChatView.vue";
 import { useChatMessageBlocks } from "../../chat/composables/use-chat-turns";
-import type { ChatRightPanelMode } from "../../chat/composables/chat-ui-layout-storage";
+import type { ChatMonitorPanelMode, ChatRightPanelMode } from "../../chat/composables/chat-ui-layout-storage";
 import type { TerminalApprovalConversationItem } from "../../shell/composables/use-terminal-approval";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
 import { useAppTheme } from "../../shell/composables/use-app-theme";
@@ -219,6 +221,7 @@ const props = defineProps<{
   conversationListTab: "local" | "contact" | "task";
   chatLeftPanelMode: "local" | "contact" | "task";
   chatRightPanelMode: ChatRightPanelMode;
+  chatMonitorPanelMode: ChatMonitorPanelMode;
   supervisionActive?: boolean;
   supervisionTitle?: string;
 }>();
@@ -258,6 +261,7 @@ defineEmits<{
   updateConversationListTab: [value: "local" | "contact" | "task"];
   updateChatLeftPanelMode: [value: "local" | "contact" | "task"];
   updateChatRightPanelMode: [value: ChatRightPanelMode];
+  updateChatMonitorPanelMode: [value: ChatMonitorPanelMode];
 }>();
 
 const allMessages = shallowRef<ChatMessage[]>([]);

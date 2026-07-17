@@ -112,7 +112,7 @@
                       :current-workspace-root-path="currentWorkspaceRootPath"
                       :current-theme="currentTheme"
                       :disable-recall-and-branch-actions="activeConversationIsSystemNotification"
-                      :disable-markdown-render="sidebarMode"
+                      :disable-markdown-render="disableMarkdownRender"
                       @create-conversation-branch-from-turn="$emit('createConversationBranchFromTurn', $event)"
                       @recall-turn="$emit('recallTurn', $event)" @regenerate-turn="$emit('regenerateTurn', $event)"
                       @confirm-plan="$emit('confirmPlan', $event)" @enter-selection-mode="handleEnterMessageSelectionMode"
@@ -491,7 +491,7 @@
           <template #tabLeadingActions>
             <ChatRightPanelSwitcher
               :model-value="chatRightPanelMode"
-              :monitor-value="monitorRightPanelMode"
+              :side-chat-enabled="sideChatPanelEnabled"
               @update:model-value="selectChatRightPanelMode"
             />
           </template>
@@ -502,10 +502,13 @@
             </div>
           </template>
         </FileReaderPanel>
-        <div v-else class="flex h-full min-h-0 w-full flex-col bg-base-200">
+        <div v-else-if="chatRightPanelMode === 'sideChat'" class="flex h-full min-h-0 w-full flex-col bg-base-200">
+          <slot name="side-chat-panel" />
+        </div>
+        <div v-else-if="chatRightPanelMode === 'monitor'" class="flex h-full min-h-0 w-full flex-col bg-base-200">
           <PanelTabStrip
             :tabs="monitorPanelTabs"
-            :active-key="chatRightPanelMode"
+            :active-key="chatMonitorPanelMode"
             :show-tab-borders="false"
             :aria-label="t('chat.monitorPanelTab')"
             @select-tab="selectMonitorPanelTab"
@@ -513,7 +516,7 @@
             <template #leading>
               <ChatRightPanelSwitcher
                 :model-value="chatRightPanelMode"
-                :monitor-value="monitorRightPanelMode"
+                :side-chat-enabled="sideChatPanelEnabled"
                 @update:model-value="selectChatRightPanelMode"
               />
             </template>
@@ -615,7 +618,7 @@ import { useChatConversationCtx } from "../composables/use-chat-conversation-ctx
 import { useChatScrollOrchestration } from "../composables/use-chat-scroll-orchestration";
 import { useChatToolReviewHandlers } from "../composables/use-chat-tool-review-handlers";
 import type { ToolReviewCodeReviewScope, ToolReviewCommitOption } from "../composables/use-chat-tool-review";
-import type { ChatRightPanelMode } from "../composables/chat-ui-layout-storage";
+import type { ChatMonitorPanelMode, ChatRightPanelMode } from "../composables/chat-ui-layout-storage";
 import { useChatBlockTracking } from "../composables/use-chat-block-tracking";
 import type { TaskEntry } from "../../config/views/config-tabs/task-editor";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
@@ -657,6 +660,8 @@ const props = defineProps<{
   conversationListTab: "local" | "contact" | "task";
   chatLeftPanelMode: "local" | "contact" | "task";
   chatRightPanelMode: ChatRightPanelMode;
+  chatMonitorPanelMode: ChatMonitorPanelMode;
+  sideChatPanelEnabled?: boolean;
   createConversationDepartmentOptions: DepartmentPersonaOption[];
   recipientOptionsReady?: boolean;
   defaultCreateConversationDepartmentId: string;
@@ -664,6 +669,8 @@ const props = defineProps<{
   terminalApprovals?: TerminalApprovalConversationItem[];
   terminalApprovalResolving?: boolean;
   sidebarMode?: boolean;
+  disableMarkdownRender?: boolean;
+  hideConversationControlPanel?: boolean;
   bridgeMode?: boolean;
   openLocalFilesInHost?: boolean;
   bridgeRequest?: <T = unknown>(method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<T>;
@@ -685,6 +692,7 @@ const emit = defineEmits<{
   (e: "update:conversation-list-tab", value: "local" | "contact" | "task"): void;
   (e: "update:chatLeftPanelMode", value: "local" | "contact" | "task"): void;
   (e: "update:chatRightPanelMode", value: ChatRightPanelMode): void;
+  (e: "update:chatMonitorPanelMode", value: ChatMonitorPanelMode): void;
   (e: "removeClipboardImage", index: number): void;
   (e: "removeQueuedAttachmentNotice", index: number): void;
   (e: "startRecording"): void; (e: "stopRecording"): void; (e: "pickAttachments"): void;
@@ -763,10 +771,7 @@ const commitTotal = ref(0);
 const commitPage = ref(1);
 const commitPageSize = ref(5);
 
-type ChatMonitorPanelMode = Exclude<ChatRightPanelMode, "reader">;
 type ToolReviewSidebarTab = "tools" | "delegates" | "tasks" | "fastRequests";
-
-const monitorRightPanelMode = ref<ChatMonitorPanelMode>("delegate");
 
 const monitorPanelTabs = computed<Array<{ key: ChatMonitorPanelMode; label: string; icon: typeof Network; closeable: false }>>(() => [
   { key: "delegate", label: t("chat.toolReview.delegatesTab"), icon: Network, closeable: false },
@@ -776,21 +781,11 @@ const monitorPanelTabs = computed<Array<{ key: ChatMonitorPanelMode; label: stri
 ]);
 
 const toolReviewSidebarActiveTab = computed<ToolReviewSidebarTab>(() => {
-  if (props.chatRightPanelMode === "tools") return "tools";
-  if (props.chatRightPanelMode === "fastRequests") return "fastRequests";
-  if (props.chatRightPanelMode === "tasks") return "tasks";
+  if (props.chatMonitorPanelMode === "tools") return "tools";
+  if (props.chatMonitorPanelMode === "fastRequests") return "fastRequests";
+  if (props.chatMonitorPanelMode === "tasks") return "tasks";
   return "delegates";
 });
-
-watch(
-  () => props.chatRightPanelMode,
-  (mode) => {
-    if (mode !== "reader") {
-      monitorRightPanelMode.value = mode;
-    }
-  },
-  { immediate: true },
-);
 // ==================== messages / audio ====================
 
 const { playingAudioId, copyMessage, stopAudioPlayback, toggleAudioPlayback } = useChatMessageActions();
@@ -966,6 +961,7 @@ const legacyChatFileReaderSessionKey = computed(() => {
 
 const showSideConversationList = computed(() => !!props.sideConversationListVisible);
 const sidebarMode = computed(() => !!props.sidebarMode);
+const disableMarkdownRender = computed(() => props.disableMarkdownRender ?? sidebarMode.value);
 const bridgeMode = computed(() => !!props.bridgeMode);
 const openLocalFilesInHost = computed(() => !!props.openLocalFilesInHost);
 const tauriRuntimeAvailable = isTauriRuntimeAvailable();
@@ -1292,7 +1288,9 @@ const currentWorkspacePermissionKind = computed<"read_only" | "approval" | "full
 });
 
 const supportsFloatingSessionToolbar = computed(() =>
-  !activeConversationIsSystemNotification.value && !activeConversationIsRemoteContact.value,
+  !props.hideConversationControlPanel
+  && !activeConversationIsSystemNotification.value
+  && !activeConversationIsRemoteContact.value,
 );
 
 const showFloatingSessionToolbar = computed(() => {
@@ -1446,7 +1444,7 @@ watch(
 
 function selectMonitorPanelTab(key: string) {
   if (key !== "delegate" && key !== "tasks" && key !== "tools" && key !== "fastRequests") return;
-  selectChatRightPanelMode(key);
+  emit("update:chatMonitorPanelMode", key);
 }
 
 // ==================== delegate status ====================
@@ -1456,7 +1454,10 @@ const {
   openDelegateArchiveDetail, abortDelegate,
 } = useDelegateStatus({
   activeConversationId: toRef(props, "activeConversationId"),
-  panelOpen: computed(() => !sidebarMode.value && effectiveToolReviewPanelOpen.value && props.chatRightPanelMode === "delegate"),
+  panelOpen: computed(() => !sidebarMode.value
+    && effectiveToolReviewPanelOpen.value
+    && props.chatRightPanelMode === "monitor"
+    && props.chatMonitorPanelMode === "delegate"),
   enabled: computed(() => !sidebarMode.value),
   bridgeRequest: toRef(props, "bridgeRequest"),
 });
@@ -1689,7 +1690,8 @@ async function handleSubmitCodeReview(input: { scope: ToolReviewCodeReviewScope;
   codeReviewDialogOpen.value = false;
 }
 function openDelegateSummaryPanel() {
-  emit("update:chatRightPanelMode", "delegate");
+  emit("update:chatMonitorPanelMode", "delegate");
+  emit("update:chatRightPanelMode", "monitor");
   emit("toolReviewPanelOpenChange", true);
 }
 

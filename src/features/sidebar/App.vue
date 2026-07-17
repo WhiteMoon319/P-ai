@@ -74,6 +74,7 @@
       :conversation-list-tab="conversationListTab"
       :chat-left-panel-mode="chatLeftPanelMode"
       :chat-right-panel-mode="chatRightPanelMode"
+      :chat-monitor-panel-mode="chatMonitorPanelMode"
       :supervision-active="sidebarSupervisionActive"
       :supervision-title="sidebarSupervisionTitle"
       @send="send"
@@ -92,6 +93,7 @@
       @update-conversation-list-tab="updateConversationListTab"
       @update-chat-left-panel-mode="updateChatLeftPanelMode"
       @update-chat-right-panel-mode="updateChatRightPanelMode"
+      @update-chat-monitor-panel-mode="updateChatMonitorPanelMode"
       @create-conversation-branch-from-turn="createConversationBranchFromTurn"
       @recall-turn="recallTurn"
       @confirm-plan="confirmPlan"
@@ -303,19 +305,23 @@ import type {
 } from "./sidebar-app-types";
 import {
   loadStoredChatLeftPanelMode,
+  loadStoredChatMonitorPanelMode,
   loadStoredChatRightPanelMode,
   loadStoredChatSidePanelVisibility,
   loadStoredChatSidePanelWidths,
   loadStoredConversationListTab,
   normalizeChatLeftPanelMode,
+  normalizeChatMonitorPanelMode,
   normalizeChatRightPanelMode,
   normalizeChatSidePanelWidths,
   storeChatLeftPanelMode,
+  storeChatMonitorPanelMode,
   storeChatRightPanelMode,
   storeChatSidePanelVisibility,
   storeChatSidePanelWidths,
   storeConversationListTab,
   type ChatLeftPanelMode,
+  type ChatMonitorPanelMode,
   type ChatRightPanelMode,
 } from "../chat/composables/chat-ui-layout-storage";
 
@@ -496,6 +502,7 @@ const toolReviewPanelOpenVisible = ref(loadStoredChatSidePanelVisibility("right"
 const conversationListTab = ref<SidebarConversationTab>(loadStoredConversationListTab());
 const chatLeftPanelMode = ref<SidebarConversationTab>(loadStoredChatLeftPanelMode());
 const chatRightPanelMode = ref<ChatRightPanelMode>("reader");
+const chatMonitorPanelMode = ref<ChatMonitorPanelMode>("delegate");
 const chatSidePanelWidths = ref(loadStoredChatSidePanelWidths());
 let discoveryRefreshTimer: number | null = null;
 
@@ -675,9 +682,15 @@ watch(
 watch(
   () => String(activeConversationId.value || "").trim(),
   (conversationId) => {
-    chatRightPanelMode.value = conversationId
+    const storedRightPanelMode = conversationId
       ? loadStoredChatRightPanelMode("reader", conversationId)
       : "reader";
+    chatRightPanelMode.value = storedRightPanelMode === "sideChat" ? "reader" : storedRightPanelMode;
+    const storedMonitorPanelMode = conversationId
+      ? loadStoredChatMonitorPanelMode("delegate", conversationId)
+      : "delegate";
+    chatMonitorPanelMode.value = storedMonitorPanelMode;
+    if (conversationId) storeChatMonitorPanelMode(storedMonitorPanelMode, conversationId);
   },
   { immediate: true },
 );
@@ -703,6 +716,15 @@ function updateChatRightPanelMode(value: ChatRightPanelMode) {
   }
   view.value = "chat";
   handleToolReviewPanelOpenChange(true);
+}
+
+function updateChatMonitorPanelMode(value: ChatMonitorPanelMode) {
+  const next = normalizeChatMonitorPanelMode(value, "delegate");
+  chatMonitorPanelMode.value = next;
+  const conversationId = String(activeConversationId.value || "").trim();
+  if (conversationId) {
+    storeChatMonitorPanelMode(next, conversationId);
+  }
 }
 
 function handleSideConversationListVisibleChange(value: boolean) {
