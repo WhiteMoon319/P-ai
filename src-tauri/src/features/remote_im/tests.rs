@@ -69,45 +69,13 @@
     }
 
     #[test]
-    fn assistant_work_ledger_should_project_completed_remote_reply_delegate() {
+    fn assistant_work_ledger_should_only_project_active_remote_reply_delegates() {
         let state = remote_im_test_state();
-        let mut root_conversation = build_conversation_record(
-            "",
-            "agent-a",
-            "department-a",
-            "远程联系人会话",
-            CONVERSATION_KIND_REMOTE_IM_CONTACT,
-            None,
-            None,
-        );
-        root_conversation.id = "conversation-a".to_string();
-        state_write_conversation_cached(&state, &root_conversation).expect("write root conversation");
-        let delegate = delegate_store_create_delegate(
-            &state.data_path,
-            &DelegateCreateInput {
-                kind: "remote_im_reply".to_string(),
-                conversation_id: "conversation-a".to_string(),
-                parent_delegate_id: None,
-                source_department_id: "department-a".to_string(),
-                target_department_id: "department-a".to_string(),
-                source_agent_id: "agent-a".to_string(),
-                target_agent_id: "agent-a".to_string(),
-                title: "远程应答 · contact-a".to_string(),
-                why: "远程联系人消息触发应答".to_string(),
-                goal: "处理报价问题".to_string(),
-                todo: "生成并发送远程应答".to_string(),
-                notify_assistant_when_done: false,
-                call_stack: Vec::new(),
-            },
-        )
-        .expect("create delegate");
-        delegate_runtime_thread_create(&state, &delegate, "", None, None)
-            .expect("create delegate thread");
-        let message = |role: &str, text: &str| ChatMessage {
-            id: Uuid::new_v4().to_string(),
-            role: role.to_string(),
+        let message = |id: &str, text: &str| ChatMessage {
+            id: id.to_string(),
+            role: "user".to_string(),
             created_at: now_iso(),
-            speaker_agent_id: (role == "assistant").then(|| "agent-a".to_string()),
+            speaker_agent_id: None,
             parts: vec![MessagePart::Text {
                 text: text.to_string(),
                 reasoning_content: None,
@@ -118,26 +86,34 @@
             mcp_call: None,
             meme_annotations: None,
         };
-        remote_im_reply_delegate_mirror_message(
-            &state,
-            &delegate.delegate_id,
-            message("user", "报价是多少"),
-            None,
-        )
-        .expect("mirror user");
-        remote_im_reply_delegate_mirror_message(
-            &state,
-            &delegate.delegate_id,
-            message("assistant", "报价是一百元"),
-            None,
-        )
-        .expect("mirror assistant");
-        delegate_store_update_status(
-            &state.data_path,
-            &delegate.delegate_id,
-            DELEGATE_STATUS_COMPLETED,
-        )
-        .expect("complete delegate");
+        let active_trigger = message("trigger-active", "查看当前图片内容");
+        let completed_trigger = message("trigger-completed", "历史报价是多少");
+        let other_contact_trigger = message("trigger-other", "其他联系人任务");
+        let mut runtimes = lock_remote_im_reply_delegate_runtimes(&state)
+            .expect("lock delegate runtimes");
+        for (delegate_id, contact_id, trigger, terminal) in [
+            ("delegate-active", "contact-a", active_trigger, false),
+            ("delegate-completed", "contact-a", completed_trigger, true),
+            ("delegate-other", "contact-b", other_contact_trigger, false),
+        ] {
+            runtimes.insert(
+                delegate_id.to_string(),
+                RemoteImReplyDelegateRuntime {
+                    delegate_id: delegate_id.to_string(),
+                    contact_id: contact_id.to_string(),
+                    conversation_id: "conversation-a".to_string(),
+                    trigger_message_id: trigger.id.clone(),
+                    started_at: now_iso(),
+                    prompt_snapshot_messages: vec![trigger],
+                    guidance_messages: std::collections::VecDeque::new(),
+                    consumed_guidance_messages: Vec::new(),
+                    cancelled: false,
+                    terminal,
+                    session_agent_id: "agent-a".to_string(),
+                },
+            );
+        }
+        drop(runtimes);
 
         let ledger = build_remote_im_assistant_work_ledger(
             &state,
@@ -145,10 +121,12 @@
             "conversation-a",
         )
         .expect("build ledger");
-        assert!(ledger.contains("[已完成]"));
-        assert!(ledger.contains(&delegate.delegate_id));
-        assert!(ledger.contains("报价是多少"));
-        assert!(ledger.contains("报价是一百元"));
+        assert!(ledger.contains("[运行中]"));
+        assert!(ledger.contains("delegate-active"));
+        assert!(ledger.contains("查看当前图片内容"));
+        assert!(!ledger.contains("delegate-completed"));
+        assert!(!ledger.contains("历史报价是多少"));
+        assert!(!ledger.contains("delegate-other"));
     }
 
     #[test]

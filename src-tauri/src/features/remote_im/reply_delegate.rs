@@ -234,69 +234,34 @@ fn build_remote_im_assistant_work_ledger(
     contact_id: &str,
     conversation_id: &str,
 ) -> Result<String, String> {
-    const LEDGER_LIMIT: usize = 12;
-    let expected_title = format!("远程应答 · {}", contact_id.trim());
-    let mut snapshots = delegate_persisted_snapshot_list_by_root(state, conversation_id)?
-        .into_iter()
-        .filter(|item| item.kind == "remote_im_reply" && item.title == expected_title)
+    let mut runtimes = lock_remote_im_reply_delegate_runtimes(state)?
+        .values()
+        .filter(|runtime| {
+            runtime.contact_id == contact_id
+                && runtime.conversation_id == conversation_id
+                && !runtime.cancelled
+                && !runtime.terminal
+        })
+        .cloned()
         .collect::<Vec<_>>();
-    snapshots.sort_by(|left, right| right.created_at.cmp(&left.created_at));
-    snapshots.truncate(LEDGER_LIMIT);
-    let mut lines = Vec::new();
-    for snapshot in snapshots {
-        let thread = delegate_runtime_thread_get_any(state, &snapshot.delegate_id)?;
-        let messages = thread
-            .as_ref()
-            .map(|item| item.conversation.messages.as_slice())
-            .unwrap_or_default();
-        let task = messages
-            .iter()
-            .find(|message| message.role == "user")
-            .map(render_message_content_for_model)
-            .map(|text| remote_im_secretary_truncate_text(&text, 100))
-            .filter(|text| !text.trim().is_empty())
-            .unwrap_or_else(|| snapshot.goal.clone());
-        let terminal_reason = messages.iter().rev().find_map(|message| {
-            message
-                .provider_meta
-                .as_ref()?
-                .get("remote_im_work_ledger_terminal_reason")?
-                .as_str()
-                .map(ToOwned::to_owned)
-        });
-        let result = messages
-            .iter()
-            .rev()
-            .find(|message| {
-                message.role == "assistant"
-                    && message
-                        .provider_meta
-                        .as_ref()
-                        .and_then(|meta| meta.get("remote_im_work_ledger_terminal_reason"))
-                        .is_none()
-            })
-            .map(render_message_content_for_model)
-            .map(|text| remote_im_secretary_truncate_text(&text, 100))
-            .filter(|text| !text.trim().is_empty());
-        let status = match snapshot.status.as_str() {
-            DELEGATE_STATUS_COMPLETED => "已完成",
-            DELEGATE_STATUS_FAILED => "失败",
-            _ => "运行中",
-        };
-        let outcome = if snapshot.status == DELEGATE_STATUS_COMPLETED {
-            result.map(|text| format!("；结果：\"{text}\"")).unwrap_or_default()
-        } else if snapshot.status == DELEGATE_STATUS_FAILED {
-            terminal_reason
-                .map(|text| format!("；原因：{}", remote_im_secretary_truncate_text(&text, 100)))
-                .unwrap_or_default()
-        } else {
-            String::new()
-        };
-        lines.push(format!(
-            "- [{status}] 委托 ID：{}；任务：\"{}\"；开始：{}{}",
-            snapshot.delegate_id, task, snapshot.created_at, outcome
-        ));
-    }
+    runtimes.sort_by(|left, right| right.started_at.cmp(&left.started_at));
+    let lines = runtimes
+        .into_iter()
+        .map(|runtime| {
+            let task = runtime
+                .prompt_snapshot_messages
+                .iter()
+                .find(|message| message.id == runtime.trigger_message_id)
+                .map(render_message_content_for_model)
+                .map(|text| remote_im_secretary_truncate_text(&text, 100))
+                .filter(|text| !text.trim().is_empty())
+                .unwrap_or_else(|| "远程联系人消息触发应答".to_string());
+            format!(
+                "- [运行中] 委托 ID：{}；任务：\"{}\"；开始：{}",
+                runtime.delegate_id, task, runtime.started_at
+            )
+        })
+        .collect::<Vec<_>>();
     Ok(if lines.is_empty() {
         "（无）".to_string()
     } else {
