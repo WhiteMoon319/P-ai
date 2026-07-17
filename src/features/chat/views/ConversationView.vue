@@ -104,9 +104,11 @@ import { useChatMessageBlocks } from "../composables/use-chat-turns";
 import { useConversationViewRuntime } from "../composables/use-conversation-view-runtime";
 import { useI18n } from "vue-i18n";
 import type { TerminalApprovalConversationItem } from "../../shell/composables/use-terminal-approval";
+import type { ExclusiveChatViewSubscriptionSlot } from "../composables/exclusive-chat-view-subscription-slot";
 
 const props = defineProps<{
   conversationId: string;
+  subscriptionSlot?: ExclusiveChatViewSubscriptionSlot;
   apiConfigId: string;
   agentId: string;
   departmentId: string;
@@ -143,6 +145,7 @@ const runtime = useConversationViewRuntime({
   apiConfigId,
   agentId,
   departmentId,
+  subscriptionSlot: props.subscriptionSlot,
   t,
 });
 const activeApiConfig = computed(() =>

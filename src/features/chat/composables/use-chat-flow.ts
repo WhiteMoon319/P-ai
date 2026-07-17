@@ -249,6 +249,21 @@ export function useChatFlow(options: UseChatFlowOptions) {
     formatRequestFailed: options.formatRequestFailed,
     setChatErrorText,
   });
+  const bindActiveConversationStream = (conversationId: string, force = false) => {
+    const bind = () => channelBinding.bindActiveConversationStream(conversationId, force);
+    if (!options.coordinateActiveConversationStreamBind) return bind();
+    return options.coordinateActiveConversationStreamBind({
+      bindingId: channelBinding.bindingId,
+      conversationId,
+      force,
+      bind,
+      unbind: channelBinding.unbindActiveConversationStream,
+    });
+  };
+  const coordinatedChannelBinding = {
+    ...channelBinding,
+    bindActiveConversationStream,
+  };
   foregroundRounds = useChatFlowForegroundRounds({
     getRound: () => round,
     setRound,
@@ -289,7 +304,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     chatting: options.chatting,
     t: options.t,
     sendStartedAtMsByGen,
-    channelBinding,
+    channelBinding: coordinatedChannelBinding,
     clearConversationStreamCache,
     removeLegacyAssistantDrafts,
     resetDisplayState,
@@ -318,7 +333,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     getRound: () => round,
     getSendChatActiveGen: () => sendChatActiveGen,
     nextGeneration: () => ++generation,
-    channelBinding,
+    channelBinding: coordinatedChannelBinding,
     handleHistoryFlushed,
     beginAssistantActivationFromEvent,
     markRoundStarted,
@@ -751,7 +766,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     resumeForegroundStreamingRound: ensureForegroundStreamingRound,
     resumeForegroundRuntimeRound,
     resumeForegroundStreamCacheProjection,
-    bindActiveConversationStream: channelBinding.bindActiveConversationStream,
+    bindActiveConversationStream,
     unbindActiveConversationStream: channelBinding.unbindActiveConversationStream,
     hasActiveBoundDeltaChannel: channelBinding.hasActiveBoundDeltaChannel,
     probeBoundChannel: channelBinding.probeBoundChannel,

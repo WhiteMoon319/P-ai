@@ -78,6 +78,13 @@ export type UseChatFlowOptions = {
     conversationId?: string;
     probeId: string;
   }) => Promise<boolean>;
+  coordinateActiveConversationStreamBind?: (input: {
+    bindingId: string;
+    conversationId: string;
+    force: boolean;
+    bind: () => Promise<void>;
+    unbind: () => Promise<void>;
+  }) => Promise<void>;
   onReloadMessages: () => Promise<void>;
   onHistoryFlushed?: (input: {
     conversationId: string;

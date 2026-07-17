@@ -5,6 +5,7 @@ import { ensureConversationMessageIds } from "../utils/message-id";
 import { preserveStableRenderId } from "../utils/stable-render-id";
 import { registerChatFlowRuntime } from "./chat-flow-runtime-registry";
 import { decideForegroundRecovery } from "./foreground-recovery-decision";
+import type { ExclusiveChatViewSubscriptionSlot } from "./exclusive-chat-view-subscription-slot";
 import { useChatFlow } from "./use-chat-flow";
 import { DRAFT_ASSISTANT_ID_PREFIX, DRAFT_USER_ID_PREFIX } from "./use-chat-flow-drafts";
 import type { ConversationRuntimeStreamCacheSnapshot } from "./use-chat-flow-stream-cache";
@@ -14,6 +15,7 @@ type ConversationViewRuntimeOptions = {
   apiConfigId: Ref<string>;
   agentId: Ref<string>;
   departmentId: Ref<string>;
+  subscriptionSlot?: ExclusiveChatViewSubscriptionSlot;
   t: (key: string, params?: Record<string, unknown>) => string;
 };
 
@@ -72,6 +74,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
   );
   let snapshotRequestSequence = 0;
   let foregroundRecoveryPromise: Promise<void> | null = null;
+  let foregroundRecoveryRerunRequested = false;
   let disposed = false;
 
   function currentConversationId() {
@@ -341,6 +344,15 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
       invokeTauri<boolean>("probe_active_chat_view_stream", {
         input: { bindingId, conversationId: conversationId || null, probeId },
       }),
+    coordinateActiveConversationStreamBind: ({ bindingId, conversationId, bind, unbind }) => {
+      if (!options.subscriptionSlot) return bind();
+      return options.subscriptionSlot.acquire({
+        ownerId: bindingId,
+        conversationId,
+        bind,
+        unbind,
+      });
+    },
     onReloadMessages: loadSnapshot,
     onHistoryFlushed: async ({ conversationId, pendingMessages }) => {
       if (conversationId !== currentConversationId()) return;
@@ -462,8 +474,14 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
   }
 
   function scheduleForegroundRecovery() {
+    foregroundRecoveryRerunRequested = true;
     if (foregroundRecoveryPromise) return foregroundRecoveryPromise;
-    foregroundRecoveryPromise = reconcileForegroundConversation()
+    foregroundRecoveryPromise = (async () => {
+      while (foregroundRecoveryRerunRequested && !disposed) {
+        foregroundRecoveryRerunRequested = false;
+        await reconcileForegroundConversation();
+      }
+    })()
       .catch((error) => {
         console.error("[追问会话] 前台恢复失败", {
           conversationId: currentConversationId(),
@@ -569,12 +587,18 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
 
   onScopeDispose(() => {
     disposed = true;
+    foregroundRecoveryRerunRequested = false;
     ++foregroundSyncSequence;
     ++snapshotRequestSequence;
     window.removeEventListener("focus", handleForegroundWake);
     document.removeEventListener("visibilitychange", handleForegroundWake);
     unregister();
-    void flow.unbindActiveConversationStream().catch(() => {});
+    const unbindPromise = flow.unbindActiveConversationStream().catch(() => {});
+    if (options.subscriptionSlot) {
+      void options.subscriptionSlot.release(flow.bindingId, unbindPromise).catch(() => {});
+    } else {
+      void unbindPromise;
+    }
   });
 
   return {

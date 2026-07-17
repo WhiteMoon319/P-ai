@@ -2,6 +2,7 @@ import { effectScope, nextTick, ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const invokeTauriMock = vi.hoisted(() => vi.fn());
+const useChatFlowOptionsHolder = vi.hoisted(() => ({ value: null as any }));
 const flowMock = vi.hoisted(() => ({
   bindingId: "side-view-test",
   frontendRoundPhase: { value: "idle" as "idle" | "queued" | "waiting" | "streaming" },
@@ -27,7 +28,10 @@ vi.mock("../../../services/tauri-api", () => ({
 }));
 
 vi.mock("./use-chat-flow", () => ({
-  useChatFlow: () => flowMock,
+  useChatFlow: (options: unknown) => {
+    useChatFlowOptionsHolder.value = options;
+    return flowMock;
+  },
 }));
 
 import { useConversationViewRuntime } from "./use-conversation-view-runtime";
@@ -50,7 +54,7 @@ function createEventTarget() {
   };
 }
 
-async function createRuntime(conversationId = "conversation-a") {
+async function createRuntime(conversationId = "conversation-a", subscriptionSlot?: any) {
   const windowTarget = createEventTarget();
   const documentTarget = Object.assign(createEventTarget(), { visibilityState: "visible" });
   vi.stubGlobal("window", windowTarget);
@@ -62,6 +66,7 @@ async function createRuntime(conversationId = "conversation-a") {
     apiConfigId: ref("api-a"),
     agentId: ref("agent-a"),
     departmentId: ref("department-a"),
+    subscriptionSlot,
     t: (key) => key,
   }));
   await nextTick();
@@ -82,6 +87,7 @@ describe("useConversationViewRuntime", () => {
     flowMock.handleExternalRoundStarted.mockReset().mockResolvedValue(undefined);
     flowMock.handleExternalRoundCompleted.mockReset().mockResolvedValue(undefined);
     flowMock.handleExternalRoundFailed.mockReset().mockResolvedValue(undefined);
+    useChatFlowOptionsHolder.value = null;
   });
 
   afterEach(() => {
@@ -224,6 +230,60 @@ describe("useConversationViewRuntime", () => {
     scope.stop();
   });
 
+  it("恢复进行中再次收到前台触发时，完成后会再执行一次最新对账", async () => {
+    const streamCache = {
+      activationId: "activation-a",
+      requestId: "request-a",
+      updatedAt: "2026-07-17T00:00:10Z",
+      persistedAssistantMessageId: "assistant-1",
+      assistantText: "partial",
+      hasVisibleProgress: true,
+    };
+    let runtimeSnapshotCalls = 0;
+    let resolveFirstRuntimeSnapshot: ((value: unknown) => void) | undefined;
+    invokeTauriMock.mockImplementation((command: string) => {
+      if (command === "get_foreground_conversation_light_snapshot") {
+        return Promise.resolve({
+          conversationId: "conversation-a",
+          messages: [message("assistant-1", "partial")],
+          runtimeState: "assistant_streaming",
+          shouldBindStream: true,
+          streamCache,
+        });
+      }
+      if (command === "get_conversation_runtime_snapshot") {
+        runtimeSnapshotCalls += 1;
+        if (runtimeSnapshotCalls === 1) {
+          return new Promise((resolve) => {
+            resolveFirstRuntimeSnapshot = resolve;
+          });
+        }
+        return Promise.resolve({
+          conversationId: "conversation-a",
+          runtimeState: "assistant_streaming",
+          streamCache,
+        });
+      }
+      return Promise.resolve({});
+    });
+    flowMock.readConversationStreamCache.mockReturnValue(streamCache);
+
+    const { scope, windowTarget } = await createRuntime();
+    await vi.waitFor(() => expect(flowMock.bindActiveConversationStream).toHaveBeenCalledTimes(1));
+    flowMock.frontendRoundPhase.value = "streaming";
+    windowTarget.dispatchEvent(new Event("focus"));
+    await vi.waitFor(() => expect(resolveFirstRuntimeSnapshot).toBeTypeOf("function"));
+    windowTarget.dispatchEvent(new Event("focus"));
+    resolveFirstRuntimeSnapshot?.({
+      conversationId: "conversation-a",
+      runtimeState: "assistant_streaming",
+      streamCache,
+    });
+
+    await vi.waitFor(() => expect(runtimeSnapshotCalls).toBe(2));
+    scope.stop();
+  });
+
   it("后端已完成但追问仍在流式时只刷新目标消息并收口", async () => {
     const streamCache = {
       activationId: "activation-a",
@@ -295,5 +355,39 @@ describe("useConversationViewRuntime", () => {
     await Promise.resolve();
 
     expect(flowMock.bindActiveConversationStream).not.toHaveBeenCalled();
+  });
+
+  it("追问的所有绑定入口都交给独占订阅槽协调", async () => {
+    const subscriptionSlot = {
+      acquire: vi.fn(async (lease: any) => lease.bind()),
+      release: vi.fn(async () => {}),
+    };
+    invokeTauriMock.mockResolvedValueOnce({
+      conversationId: "conversation-a",
+      messages: [],
+      runtimeState: "idle",
+      shouldBindStream: false,
+    });
+
+    const { scope } = await createRuntime("conversation-a", subscriptionSlot);
+    await vi.waitFor(() => expect(useChatFlowOptionsHolder.value).toBeTruthy());
+    const bind = vi.fn(async () => {});
+    const unbind = vi.fn(async () => {});
+    await useChatFlowOptionsHolder.value.coordinateActiveConversationStreamBind({
+      bindingId: "side-view-test",
+      conversationId: "conversation-a",
+      force: true,
+      bind,
+      unbind,
+    });
+
+    expect(subscriptionSlot.acquire).toHaveBeenCalledWith({
+      ownerId: "side-view-test",
+      conversationId: "conversation-a",
+      bind,
+      unbind,
+    });
+    scope.stop();
+    await vi.waitFor(() => expect(subscriptionSlot.release).toHaveBeenCalled());
   });
 });

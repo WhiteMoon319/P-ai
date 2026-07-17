@@ -295,6 +295,7 @@
               v-if="sideConversationId"
               :key="sideConversationId"
               class="min-h-0 flex-1"
+              :subscription-slot="sideChatSubscriptionSlot"
               :conversation-id="sideConversationId"
               :api-config-id="conversationCallPrimaryApiConfigId"
               :agent-id="currentChatAgentId"
@@ -493,6 +494,7 @@ import type {
 import type { GeneratedThemeControls, GeneratedThemeTokens } from "../../shell/theme/theme-types";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
 import type { ChatMonitorPanelMode, ChatRightPanelMode } from "../../chat/composables/chat-ui-layout-storage";
+import { createExclusiveChatViewSubscriptionSlot } from "../../chat/composables/exclusive-chat-view-subscription-slot";
 import {
   buildShareExportFileName,
   generateShareFromMessageIds,
@@ -828,6 +830,7 @@ const props = defineProps<{
   checkUpdate: () => void;
   openGithub: () => void;
 }>();
+const sideChatSubscriptionSlot = createExclusiveChatViewSubscriptionSlot();
 
 const memoryDialogVNodeRef: VNodeRef = (el) => {
   props.setMemoryDialogRef((el as Element | null) ?? null);
