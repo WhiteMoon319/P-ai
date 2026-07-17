@@ -1,7 +1,9 @@
 const READ_FILE_TEXT_LIMIT_CHARS: usize = 30_000;
 const READ_TOOL_NAME: &str = "read";
 const READ_MEDIA_TOOL_NAME: &str = "read_media";
-const READ_MEDIA_AUDIO_VIDEO_HTTP_TIMEOUT_SECS: u64 = 60 * 60;
+const READ_MEDIA_IMAGE_HTTP_TIMEOUT_SECS: u64 = 60;
+const READ_MEDIA_AUDIO_HTTP_TIMEOUT_SECS: u64 = 3 * 60;
+const READ_MEDIA_VIDEO_HTTP_TIMEOUT_SECS: u64 = 8 * 60;
 const GEMINI_INLINE_AUDIO_LIMIT_BYTES: usize = 20 * 1024 * 1024;
 const GEMINI_INLINE_VIDEO_LIMIT_BYTES: usize = 100 * 1024 * 1024;
 const OPENAI_FAMILY_VIDEO_DATA_URL_LIMIT_BYTES: usize = 50 * 1024 * 1024;
@@ -636,12 +638,36 @@ fn apply_extra_headers(
     request_builder
 }
 
-fn apply_read_media_audio_video_timeout(
+fn read_media_http_timeout(media_type: ReadMediaDetectedType) -> std::time::Duration {
+    let timeout_secs = match media_type {
+        ReadMediaDetectedType::Image => READ_MEDIA_IMAGE_HTTP_TIMEOUT_SECS,
+        ReadMediaDetectedType::Audio => READ_MEDIA_AUDIO_HTTP_TIMEOUT_SECS,
+        ReadMediaDetectedType::Video => READ_MEDIA_VIDEO_HTTP_TIMEOUT_SECS,
+    };
+    std::time::Duration::from_secs(timeout_secs)
+}
+
+fn apply_read_media_timeout(
     request_builder: reqwest::RequestBuilder,
+    media_type: ReadMediaDetectedType,
 ) -> reqwest::RequestBuilder {
-    request_builder.timeout(std::time::Duration::from_secs(
-        READ_MEDIA_AUDIO_VIDEO_HTTP_TIMEOUT_SECS,
-    ))
+    request_builder.timeout(read_media_http_timeout(media_type))
+}
+
+fn read_media_request_error(context: &str, err: &reqwest::Error) -> String {
+    if err.is_timeout() {
+        "解析超时".to_string()
+    } else {
+        format!("{context}: {}", format_reqwest_error_diagnostics(err))
+    }
+}
+
+fn read_media_response_error(context: &str, err: &reqwest::Error) -> String {
+    if err.is_timeout() {
+        "解析超时".to_string()
+    } else {
+        format!("{context}: {err}")
+    }
 }
 
 fn extract_text_from_json_value(value: &serde_json::Value) -> String {
@@ -833,14 +859,14 @@ async fn describe_openai_family_media_with_multimodal_api(
     } else {
         request_builder = request_builder.bearer_auth(api_key.trim());
     }
-    let response = apply_read_media_audio_video_timeout(apply_extra_headers(
-        request_builder,
-        &request_api.extra_headers,
-    ))
+    let response = apply_read_media_timeout(
+        apply_extra_headers(request_builder, &request_api.extra_headers),
+        media_type,
+    )
         .json(&body)
         .send()
         .await
-        .map_err(|err| format!("请求 OpenAI 兼容多媒体接口失败: {}", format_reqwest_error_diagnostics(&err)))?;
+        .map_err(|err| read_media_request_error("请求 OpenAI 兼容多媒体接口失败", &err))?;
     if !response.status().is_success() {
         let status = response.status();
         let raw = response.text().await.unwrap_or_default();
@@ -854,7 +880,7 @@ async fn describe_openai_family_media_with_multimodal_api(
     let payload = response
         .json::<serde_json::Value>()
         .await
-        .map_err(|err| format!("解析 OpenAI 兼容多媒体响应失败: {err}"))?;
+        .map_err(|err| read_media_response_error("解析 OpenAI 兼容多媒体响应失败", &err))?;
     let text = extract_openai_family_message_text(&payload);
     if text.is_empty() {
         return Err(format!("OpenAI 兼容多媒体响应为空：{payload}"));
@@ -921,14 +947,14 @@ async fn describe_gemini_media_with_multimodal_api(
         .post(&url)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .header("x-goog-api-key", api_key_header);
-    let response = apply_read_media_audio_video_timeout(apply_extra_headers(
-        request_builder,
-        &request_api.extra_headers,
-    ))
+    let response = apply_read_media_timeout(
+        apply_extra_headers(request_builder, &request_api.extra_headers),
+        media_type,
+    )
         .json(&body)
         .send()
         .await
-        .map_err(|err| format!("请求 Gemini 多媒体接口失败: {}", format_reqwest_error_diagnostics(&err)))?;
+        .map_err(|err| read_media_request_error("请求 Gemini 多媒体接口失败", &err))?;
     if !response.status().is_success() {
         let status = response.status();
         let raw = response.text().await.unwrap_or_default();
@@ -938,7 +964,7 @@ async fn describe_gemini_media_with_multimodal_api(
     let payload = response
         .json::<serde_json::Value>()
         .await
-        .map_err(|err| format!("解析 Gemini 多媒体响应失败: {err}"))?;
+        .map_err(|err| read_media_response_error("解析 Gemini 多媒体响应失败", &err))?;
     let text = extract_gemini_text(&payload);
     if text.is_empty() {
         return Err(format!("Gemini 多媒体响应为空：{payload}"));
@@ -998,14 +1024,14 @@ async fn describe_minimax_video_with_multimodal_api(
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .header("x-api-key", api_key_header)
         .header("anthropic-version", "2023-06-01");
-    let response = apply_read_media_audio_video_timeout(apply_extra_headers(
-        request_builder,
-        &request_api.extra_headers,
-    ))
+    let response = apply_read_media_timeout(
+        apply_extra_headers(request_builder, &request_api.extra_headers),
+        ReadMediaDetectedType::Video,
+    )
         .json(&body)
         .send()
         .await
-        .map_err(|err| format!("请求 MiniMax 视频理解接口失败: {}", format_reqwest_error_diagnostics(&err)))?;
+        .map_err(|err| read_media_request_error("请求 MiniMax 视频理解接口失败", &err))?;
     if !response.status().is_success() {
         let status = response.status();
         let raw = response.text().await.unwrap_or_default();
@@ -1015,7 +1041,7 @@ async fn describe_minimax_video_with_multimodal_api(
     let payload = response
         .json::<serde_json::Value>()
         .await
-        .map_err(|err| format!("解析 MiniMax 视频理解响应失败: {err}"))?;
+        .map_err(|err| read_media_response_error("解析 MiniMax 视频理解响应失败", &err))?;
     let text = extract_anthropic_text(&payload);
     if text.is_empty() {
         return Err(format!("MiniMax 视频理解响应为空：{payload}"));
@@ -1084,11 +1110,11 @@ async fn describe_mimo_video_with_multimodal_api(
     for (key, value) in &request_api.extra_headers {
         request_builder = request_builder.header(key, value);
     }
-    let response = apply_read_media_audio_video_timeout(request_builder)
+    let response = apply_read_media_timeout(request_builder, ReadMediaDetectedType::Video)
         .json(&body)
         .send()
         .await
-        .map_err(|err| format!("请求 Mimo 视频理解接口失败: {}", format_reqwest_error_diagnostics(&err)))?;
+        .map_err(|err| read_media_request_error("请求 Mimo 视频理解接口失败", &err))?;
     if !response.status().is_success() {
         let status = response.status();
         let raw = response.text().await.unwrap_or_default();
@@ -1102,7 +1128,7 @@ async fn describe_mimo_video_with_multimodal_api(
     let payload = response
         .json::<serde_json::Value>()
         .await
-        .map_err(|err| format!("解析 Mimo 视频理解响应失败: {err}"))?;
+        .map_err(|err| read_media_response_error("解析 Mimo 视频理解响应失败", &err))?;
     let text = payload
         .get("choices")
         .and_then(serde_json::Value::as_array)
@@ -1821,6 +1847,23 @@ fn detect_read_media_type_should_classify_common_formats() {
             Some(ReadMediaDetectedType::Video)
         );
         assert_eq!(detect_read_media_type(std::path::Path::new("a.txt")), None);
+}
+
+#[cfg(test)]
+#[test]
+fn read_media_timeout_should_follow_detected_type() {
+        assert_eq!(
+            read_media_http_timeout(ReadMediaDetectedType::Image),
+            std::time::Duration::from_secs(READ_MEDIA_IMAGE_HTTP_TIMEOUT_SECS)
+        );
+        assert_eq!(
+            read_media_http_timeout(ReadMediaDetectedType::Audio),
+            std::time::Duration::from_secs(READ_MEDIA_AUDIO_HTTP_TIMEOUT_SECS)
+        );
+        assert_eq!(
+            read_media_http_timeout(ReadMediaDetectedType::Video),
+            std::time::Duration::from_secs(READ_MEDIA_VIDEO_HTTP_TIMEOUT_SECS)
+        );
 }
 
 #[cfg(test)]

@@ -1500,6 +1500,84 @@ mod tool_loop_tests {
         Box::new(TestRuntimeTool { name, mcp })
     }
 
+    struct TimeoutReadMediaTool;
+
+    impl RuntimeToolDyn for TimeoutReadMediaTool {
+        fn name(&self) -> String {
+            READ_MEDIA_TOOL_NAME.to_string()
+        }
+
+        fn is_mcp_tool(&self) -> bool {
+            false
+        }
+
+        fn timeout_override(&self, _args_json: &str) -> Option<std::time::Duration> {
+            Some(std::time::Duration::from_millis(1))
+        }
+
+        fn call_json(&self, _args_json: String) -> RuntimeToolCallFuture<'_> {
+            Box::pin(std::future::pending())
+        }
+    }
+
+    struct InnerTimeoutReadMediaTool;
+
+    impl RuntimeToolDyn for InnerTimeoutReadMediaTool {
+        fn name(&self) -> String {
+            READ_MEDIA_TOOL_NAME.to_string()
+        }
+
+        fn is_mcp_tool(&self) -> bool {
+            false
+        }
+
+        fn timeout_override(&self, _args_json: &str) -> Option<std::time::Duration> {
+            Some(std::time::Duration::from_secs(1))
+        }
+
+        fn call_json(&self, _args_json: String) -> RuntimeToolCallFuture<'_> {
+            Box::pin(async { Err("解析超时".to_string()) })
+        }
+    }
+
+    #[tokio::test]
+    async fn read_media_timeout_should_return_normal_tool_result() {
+        let tools: Vec<Box<dyn RuntimeToolDyn>> = vec![Box::new(TimeoutReadMediaTool)];
+        let result = call_runtime_tool_by_name(&tools, READ_MEDIA_TOOL_NAME, "{}")
+            .await
+            .expect("read_media timeout should be a tool result");
+
+        assert_eq!(result.output, "解析超时");
+        assert!(!result.is_error);
+    }
+
+    #[tokio::test]
+    async fn read_media_inner_timeout_should_return_normal_tool_result() {
+        let tools: Vec<Box<dyn RuntimeToolDyn>> = vec![Box::new(InnerTimeoutReadMediaTool)];
+        let result = call_runtime_tool_by_name(&tools, READ_MEDIA_TOOL_NAME, "{}")
+            .await
+            .expect("read_media inner timeout should be a tool result");
+
+        assert_eq!(result.output, "解析超时");
+        assert!(!result.is_error);
+    }
+
+    #[test]
+    fn read_media_timeout_should_follow_media_type() {
+        assert_eq!(
+            read_media_tool_timeout_override(r#"{"path":"C:\\tmp\\image.png"}"#),
+            std::time::Duration::from_secs(READ_MEDIA_IMAGE_TOOL_TIMEOUT_SECS)
+        );
+        assert_eq!(
+            read_media_tool_timeout_override(r#"{"path":"C:\\tmp\\audio.mp3"}"#),
+            std::time::Duration::from_secs(READ_MEDIA_AUDIO_TOOL_TIMEOUT_SECS)
+        );
+        assert_eq!(
+            read_media_tool_timeout_override(r#"{"path":"C:\\tmp\\video.mp4"}"#),
+            std::time::Duration::from_secs(READ_MEDIA_VIDEO_TOOL_TIMEOUT_SECS)
+        );
+    }
+
     fn estimate_latest_tool_result_content_tokens(events: &[Value]) -> u64 {
         let latest_tool_call_ids = events
             .iter()

@@ -123,6 +123,9 @@ fn read_media_provider_tool_definition() -> ProviderToolDefinition {
 }
 
 const OPERATE_TOOL_DEFAULT_TIMEOUT_MS: u64 = 300_000;
+const READ_MEDIA_IMAGE_TOOL_TIMEOUT_SECS: u64 = 90;
+const READ_MEDIA_AUDIO_TOOL_TIMEOUT_SECS: u64 = 4 * 60;
+const READ_MEDIA_VIDEO_TOOL_TIMEOUT_SECS: u64 = 10 * 60;
 
 fn operate_tool_timeout_override(args_json: &str) -> std::time::Duration {
     let timeout_ms = parse_runtime_tool_args::<OperateRequest>(args_json)
@@ -131,6 +134,18 @@ fn operate_tool_timeout_override(args_json: &str) -> std::time::Duration {
         .unwrap_or(OPERATE_TOOL_DEFAULT_TIMEOUT_MS)
         .max(1);
     std::time::Duration::from_millis(timeout_ms)
+}
+
+fn read_media_tool_timeout_override(args_json: &str) -> std::time::Duration {
+    let media_type = parse_runtime_tool_args::<ReadMediaToolArgs>(args_json)
+        .ok()
+        .and_then(|args| detect_read_media_type(std::path::Path::new(args.path.trim())));
+    let timeout_secs = match media_type {
+        Some(ReadMediaDetectedType::Audio) => READ_MEDIA_AUDIO_TOOL_TIMEOUT_SECS,
+        Some(ReadMediaDetectedType::Video) => READ_MEDIA_VIDEO_TOOL_TIMEOUT_SECS,
+        Some(ReadMediaDetectedType::Image) | None => READ_MEDIA_IMAGE_TOOL_TIMEOUT_SECS,
+    };
+    std::time::Duration::from_secs(timeout_secs)
 }
 
 fn build_global_tool_schema_cache(state: &AppState) -> Vec<ProviderToolDefinition> {
@@ -701,8 +716,8 @@ impl RuntimeValueTool for BuiltinReadMediaTool {
     type Args = ReadMediaToolArgs;
     type Error = ToolInvokeError;
 
-    fn timeout_override(_args_json: &str) -> Option<std::time::Duration> {
-        Some(std::time::Duration::from_secs(60 * 60))
+    fn timeout_override(args_json: &str) -> Option<std::time::Duration> {
+        Some(read_media_tool_timeout_override(args_json))
     }
 
     fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {

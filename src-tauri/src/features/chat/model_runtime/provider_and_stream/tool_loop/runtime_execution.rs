@@ -31,6 +31,9 @@ async fn call_runtime_tool_by_name(
     };
     if let Some(timeout) = tool.timeout_override(tool_args) {
         match tokio::time::timeout(timeout, tool.call_json(tool_args.to_string())).await {
+            Ok(Err(err)) if tool_name == READ_MEDIA_TOOL_NAME && err.trim() == "解析超时" => {
+                Ok(ProviderToolResult::text("解析超时"))
+            }
             Ok(result) => result,
             Err(_) => {
                 runtime_log_warn(format!(
@@ -39,6 +42,9 @@ async fn call_runtime_tool_by_name(
                     if tool.is_mcp_tool() { "mcp" } else { "builtin" },
                     timeout.as_millis()
                 ));
+                if tool_name == READ_MEDIA_TOOL_NAME {
+                    return Ok(ProviderToolResult::text("解析超时"));
+                }
                 Ok(ProviderToolResult::error(tool_failure_result_text(
                     tool_name,
                     &format!("工具执行超时，timeout_ms={}", timeout.as_millis()),
