@@ -554,7 +554,6 @@ impl ConversationServiceV2 {
             } else {
                 "remote_im_wake_empty_fallback"
             },
-            None,
             (!preserved_dialogue.trim().is_empty()).then_some(preserved_dialogue.as_str()),
         );
         let mut persisted_conversation = self.build_conversation_record_from_meta_view(&conversation_meta);

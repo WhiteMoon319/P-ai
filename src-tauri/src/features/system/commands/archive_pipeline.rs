@@ -1057,15 +1057,10 @@ fn build_compaction_message(
     summary: &str,
     title: Option<&str>,
     compaction_reason: &str,
-    current_todos: Option<&[ConversationTodoItem]>,
     preserved_dialogue: Option<&str>,
 ) -> ChatMessage {
     let now = now_iso();
     let reason = compaction_reason.trim();
-    let todo_snapshot = current_todos
-        .and_then(todo_markdown_block)
-        .map(|value| normalize_markdown_block(&value))
-        .unwrap_or_default();
     let summary_note = if reason.is_empty() {
         "- 以下内容为当前会话中较早历史对话的整理结果。\n\
          - 为保证连续性，后文保留了最近的原始对话，不包含在本段摘要中。\n\
@@ -1085,14 +1080,11 @@ fn build_compaction_message(
         .filter(|value| !value.is_empty())
         .map(normalize_multiline_block)
         .unwrap_or_else(|| "（暂无保留对话）".to_string());
-    let mut sections = vec![
+    let sections = vec![
         format!("## 摘要说明\n\n{}", normalize_markdown_block(&summary_note)),
         format!("## 摘要正文\n\n{}", clean_compaction_summary_text(summary)),
         format!("## 保留对话\n\n{}", preserved_dialogue_text),
     ];
-    if !todo_snapshot.is_empty() {
-        sections.push(todo_snapshot);
-    }
     let text = sections.join("\n\n");
     let normalized_title = title.and_then(normalize_summary_context_title);
     ChatMessage {
@@ -2007,7 +1999,6 @@ mod archive_pipeline_tests {
             "## 当前进展\n\n- 已完成摘要格式优化",
             Some("摘要格式"),
             "",
-            None,
             None,
         );
         let text = render_message_content_for_model(&message);

@@ -263,7 +263,6 @@ async fn run_context_compaction_pipeline_inner(
         &summary_with_pending_plan,
         Some(summary_draft.title.as_str()),
         compaction_reason,
-        Some(&source.current_todos),
         Some(&build_compaction_preserved_dialogue_block(
             &compaction_source,
             &user_alias,
