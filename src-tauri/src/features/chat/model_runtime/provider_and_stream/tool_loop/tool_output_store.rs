@@ -97,32 +97,33 @@ struct ProviderToolProjection {
     metadata: ProviderToolMetadata,
 }
 
-fn format_exec_projection(output: &str, metadata: &ProviderToolMetadata) -> String {
-    let mut lines = Vec::<String>::new();
-    if let Some(exit_code) = metadata.exit_code {
-        lines.push(format!("Exit code: {exit_code}"));
-    }
-    if let Some(wall_time_ms) = metadata.wall_time_ms {
-        lines.push(format!("Wall time: {:.1} seconds", wall_time_ms as f64 / 1000.0));
-    }
-    if metadata.truncated {
-        if let Some(total_output_lines) = metadata.total_output_lines {
-            lines.push(format!("Total output lines: {total_output_lines}"));
-        }
-        for path in &metadata.output_paths {
-            lines.push(format!("Full output: {path}"));
-        }
-    }
-    lines.push("Output:".to_string());
-    lines.push(output.to_string());
-    lines.join("\n")
-}
-
 fn project_provider_tool_result(
     state: Option<&AppState>,
     tool_name: &str,
     result: &ProviderToolResult,
 ) -> ProviderToolProjection {
+    if tool_name == "exec" {
+        let exit_code = result
+            .metadata
+            .exit_code
+            .and_then(|value| i32::try_from(value).ok())
+            .unwrap_or(-1);
+        let duration = std::time::Duration::from_millis(
+            result.metadata.wall_time_ms.unwrap_or_default(),
+        );
+        let text = format_exec_output_for_model(
+            exit_code,
+            duration,
+            result.metadata.timed_out,
+            &result.output,
+            default_exec_model_truncation_policy(),
+        );
+        return ProviderToolProjection {
+            text,
+            metadata: result.metadata.clone(),
+        };
+    }
+
     let text = result.output.as_str();
     let oversized = tool_output_line_count(text) > TOOL_OUTPUT_MAX_LINES
         || text.len() > TOOL_OUTPUT_MAX_BYTES;
@@ -155,12 +156,10 @@ fn project_provider_tool_result(
     } else {
         text.to_string()
     };
-    let text = if tool_name == "exec" {
-        format_exec_projection(&projected_output, &metadata)
-    } else {
-        projected_output
-    };
-    ProviderToolProjection { text, metadata }
+    ProviderToolProjection {
+        text: projected_output,
+        metadata,
+    }
 }
 
 #[cfg(test)]
@@ -208,9 +207,12 @@ mod tool_output_store_tests {
     }
 
     #[test]
-    fn exec_projection_should_include_header_within_limits() {
+    fn exec_projection_should_use_codex_wrapper_and_middle_truncation() {
         let result = ProviderToolResult {
-            output: (0..3_000).map(|index| format!("line-{index}")).collect::<Vec<_>>().join("\n"),
+            output: (0..10_000)
+                .map(|index| format!("line-{index}"))
+                .collect::<Vec<_>>()
+                .join("\n"),
             metadata: ProviderToolMetadata {
                 exit_code: Some(0),
                 wall_time_ms: Some(420),
@@ -221,9 +223,30 @@ mod tool_output_store_tests {
         };
         let projection = project_provider_tool_result(None, "exec", &result);
         assert!(projection.text.starts_with("Exit code: 0\nWall time: 0.4 seconds"));
-        assert!(projection.text.len() <= TOOL_OUTPUT_MAX_BYTES);
-        assert!(projection.text.lines().count() <= TOOL_OUTPUT_MAX_LINES);
-        assert_eq!(result.output.lines().count(), 3_000);
+        assert!(projection.text.contains("Total output lines: 10000"));
+        assert!(projection.text.contains("tokens truncated"));
+        assert!(projection.text.contains("line-0"));
+        assert!(projection.text.contains("line-9999"));
+        assert!(!projection.text.contains("... output truncated ..."));
+    }
+
+    #[test]
+    fn exec_projection_should_prefix_timeout_content() {
+        let result = ProviderToolResult {
+            output: "partial".to_string(),
+            metadata: ProviderToolMetadata {
+                exit_code: Some(-1),
+                wall_time_ms: Some(1_500),
+                timed_out: true,
+                ..ProviderToolMetadata::default()
+            },
+            parts: Vec::new(),
+            is_error: true,
+        };
+        let projection = project_provider_tool_result(None, "exec", &result);
+
+        assert!(projection.text.starts_with("Exit code: -1\nWall time: 1.5 seconds\nOutput:\n"));
+        assert!(projection.text.contains("command timed out after 1500 milliseconds\npartial"));
     }
 
     #[test]

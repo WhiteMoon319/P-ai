@@ -5,6 +5,8 @@ const TERMINAL_DEFAULT_TIMEOUT_MS: u64 = 300_000;
 
 include!("terminal/runtime.rs");
 
+include!("terminal/output.rs");
+
 include!("terminal/workspace.rs");
 
 include!("terminal/matcher.rs");

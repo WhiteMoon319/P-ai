@@ -1552,27 +1552,57 @@ async fn builtin_shell_exec(
     let execution = match execution_result {
         Ok(execution) => execution,
         Err(err) if terminal_is_timeout_error(&err) => {
+            let stderr_truncated = err.len() > DEFAULT_OUTPUT_BYTES_CAP;
+            let stderr_bytes = prefix_cap(err.into_bytes(), Some(DEFAULT_OUTPUT_BYTES_CAP));
             return Ok(serde_json::json!({
                 "ok": false,
                 "exitCode": -1,
                 "stdout": "",
-                "stderr": err,
+                "stderr": terminal_decode_output_bytes(&stderr_bytes),
+                "aggregatedOutput": "",
                 "durationMs": timeout_ms,
-                "timedOut": true
+                "timedOut": true,
+                "truncated": stderr_truncated,
+                "stdoutTruncated": false,
+                "stderrTruncated": stderr_truncated
             }));
         }
         Err(err) => return Err(err),
     };
-    let stdout = terminal_decode_output_bytes(&execution.stdout);
-    let stderr = terminal_decode_output_bytes(&execution.stderr);
+    let SandboxExecutionResult {
+        ok,
+        exit_code,
+        stdout: raw_stdout,
+        stderr: raw_stderr,
+        duration_ms,
+        ..
+    } = execution;
+    let stdout_truncated = raw_stdout.len() > DEFAULT_OUTPUT_BYTES_CAP;
+    let stderr_truncated = raw_stderr.len() > DEFAULT_OUTPUT_BYTES_CAP;
+    let stdout_bytes = prefix_cap(raw_stdout, Some(DEFAULT_OUTPUT_BYTES_CAP));
+    let stderr_bytes = prefix_cap(raw_stderr, Some(DEFAULT_OUTPUT_BYTES_CAP));
+    let aggregate_truncated = stdout_bytes.len().saturating_add(stderr_bytes.len())
+        > DEFAULT_OUTPUT_BYTES_CAP;
+    let aggregated_bytes = aggregate_output(
+        &stdout_bytes,
+        &stderr_bytes,
+        Some(DEFAULT_OUTPUT_BYTES_CAP),
+    );
+    let stdout = terminal_decode_output_bytes(&stdout_bytes);
+    let stderr = terminal_decode_output_bytes(&stderr_bytes);
+    let aggregated_output = String::from_utf8_lossy(&aggregated_bytes).into_owned();
 
     Ok(serde_json::json!({
-        "ok": execution.ok,
-        "exitCode": execution.exit_code,
+        "ok": ok,
+        "exitCode": exit_code,
         "stdout": stdout,
         "stderr": stderr,
-        "durationMs": execution.duration_ms,
-        "timedOut": false
+        "aggregatedOutput": aggregated_output,
+        "durationMs": duration_ms,
+        "timedOut": false,
+        "truncated": stdout_truncated || stderr_truncated || aggregate_truncated,
+        "stdoutTruncated": stdout_truncated,
+        "stderrTruncated": stderr_truncated
     }))
 }
 
@@ -2444,6 +2474,13 @@ mod terminal_exec_tests {
 
         let run_result = builtin_shell_exec(&state, "no-session-id", "run", "echo ok", Some(8_000)).await?;
         assert!(run_result.get("sessionId").is_none(), "run result leaked sessionId: {run_result}");
+        assert_eq!(
+            run_result
+                .get("aggregatedOutput")
+                .and_then(Value::as_str)
+                .map(str::trim),
+            Some("ok")
+        );
 
         let list_result = builtin_shell_exec(&state, "no-session-id", "list", "", Some(8_000)).await?;
         assert!(list_result.get("sessionId").is_none(), "list result leaked sessionId: {list_result}");

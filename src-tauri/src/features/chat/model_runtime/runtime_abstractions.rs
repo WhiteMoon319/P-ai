@@ -131,6 +131,7 @@ fn provider_tool_metadata_from_value(tool_name: &str, value: &Value) -> Provider
         "exec" => {
             metadata.exit_code = value.get("exitCode").and_then(Value::as_i64);
             metadata.wall_time_ms = value.get("durationMs").and_then(Value::as_u64);
+            metadata.timed_out = value.get("timedOut").and_then(Value::as_bool).unwrap_or(false);
             metadata.truncated = value.get("truncated").and_then(Value::as_bool).unwrap_or(false);
             metadata.output_paths.extend(
                 ["stdoutOutputPath", "stderrOutputPath"]
@@ -177,6 +178,12 @@ fn provider_tool_metadata_from_value(tool_name: &str, value: &Value) -> Provider
 fn provider_tool_output_from_value(tool_name: &str, value: &Value) -> String {
     match tool_name {
         "exec" => {
+            if let Some(aggregated_output) = value
+                .get("aggregatedOutput")
+                .and_then(Value::as_str)
+            {
+                return aggregated_output.to_string();
+            }
             let stdout = value.get("stdout").and_then(Value::as_str).unwrap_or_default();
             let stderr = value.get("stderr").and_then(Value::as_str).unwrap_or_default();
             match (stdout.is_empty(), stderr.is_empty()) {
@@ -343,6 +350,8 @@ struct ProviderToolMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     wall_time_ms: Option<u64>,
     #[serde(skip_serializing_if = "bool_is_false")]
+    timed_out: bool,
+    #[serde(skip_serializing_if = "bool_is_false")]
     truncated: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     output_paths: Vec<String>,
@@ -429,13 +438,15 @@ mod runtime_tool_result_tests {
                 "ok": true,
                 "exitCode": 0,
                 "stdout": "first\nsecond \"quoted\"",
-                "stderr": "",
+                "stderr": "stderr",
+                "aggregatedOutput": "first\nsecond \"quoted\"stderr",
                 "durationMs": 420,
                 "timedOut": false
             }),
         );
-        assert_eq!(result.output, "first\nsecond \"quoted\"");
+        assert_eq!(result.output, "first\nsecond \"quoted\"stderr");
         assert_eq!(result.metadata.exit_code, Some(0));
         assert_eq!(result.metadata.wall_time_ms, Some(420));
+        assert!(!result.metadata.timed_out);
     }
 }
