@@ -356,7 +356,7 @@ fn build_remote_im_secretary_prepared_prompt(
 你会收到两段内容：最近 7 条已处理历史消息，以及本次未处理新消息。每条消息以 [发言人/ID](本地差异时间标签) 开头，助理消息可能没有 ID；正文只保留了前 100 个字，信息不足时不要过度推断。\n\
 “未处理边界”之后的消息按时间从旧到新排列，最后一条就是最新消息，应优先围绕它判断是否需要回应。\n\
 请优先遵守“什么时候应该回答”这段规则；如果规则不够，再按常识判断。\n\
-如果无法确定，倾向于 shouldReply=true。\n\
+如果无法确定，倾向于 shouldReply=false。\n\
 只返回一个 JSON 对象，不要输出 Markdown、代码块或额外解释。\n\
 JSON 只能包含字段：shouldReply, targetDelegateId, reason。"
         ),

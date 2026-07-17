@@ -314,11 +314,14 @@ fn default_remote_im_contact_processing_mode() -> String {
 }
 
 fn default_remote_im_contact_response_strategy() -> String {
-    "always_reply".to_string()
+    "smart_judge".to_string()
 }
 
+const DEFAULT_REMOTE_IM_GROUP_RESPONSE_GUIDANCE: &str =
+    include_str!("../../../../resources/prompts/remote_im_group_response_guidance.md");
+
 fn default_remote_im_contact_response_guidance() -> String {
-    "当对方在直接提问、请求帮助、请求执行操作、要求确认、追问上一轮未完成事项、明确点名需要你回应、或消息明显期待继续互动时，应该回答。\n当消息只是简单通知、同步信息、表情或寒暄、重复内容、无需你继续推进的收尾回复，或对方明显不期待你介入时，可以不回答。\n如果无法确定，倾向于回答。".to_string()
+    DEFAULT_REMOTE_IM_GROUP_RESPONSE_GUIDANCE.trim().to_string()
 }
 
 fn default_remote_im_contact_blocked_message_prefixes() -> Vec<String> {

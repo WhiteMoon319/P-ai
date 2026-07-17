@@ -803,6 +803,7 @@
       "responseStrategySmartHint": "智能判断：先用快速模型检查这批消息是否真的需要回复。",
       "quickModelMissingHint": "智能判断需要先配置快速模型。",
       "responseGuidance": "什么时候应该回答",
+      "restoreResponseGuidance": "恢复默认",
       "responseGuidancePlaceholder": "例如：当对方直接提问、请求帮助、需要确认，或明显期待继续互动时回答。",
       "responseGuidanceHint": "仅在“智能判断”时生效。秘书会把最近 7 条消息和本批新消息交给快速模型，并参考这里的规则判断是否需要回复。",
       "patienceExit": "耐心离场",

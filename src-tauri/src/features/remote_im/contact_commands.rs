@@ -25,6 +25,11 @@ fn remote_im_list_contacts(state: State<'_, AppState>) -> Result<Vec<RemoteImCon
     remote_im_list_contacts_inner(state.inner())
 }
 
+#[tauri::command]
+fn remote_im_get_default_group_response_guidance() -> String {
+    default_remote_im_contact_response_guidance()
+}
+
 fn remote_im_update_contact_allow_send_inner(
     state: &AppState,
     input: RemoteImContactAllowSendUpdateInput,

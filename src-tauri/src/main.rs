@@ -1164,6 +1164,7 @@ fn main() {
             dump_memory_cache_stats,
             remote_im_list_channels,
             remote_im_list_contacts,
+            remote_im_get_default_group_response_guidance,
             remote_im_update_contact_allow_send,
             remote_im_update_contact_allow_send_files,
             remote_im_update_contact_allow_receive,

@@ -17,7 +17,7 @@ export function normalizeActivationMode(value: string): RemoteImContact["activat
 export function normalizeResponseStrategy(
   value?: string,
 ): NonNullable<RemoteImContact["responseStrategy"]> {
-  return value === "smart_judge" ? "smart_judge" : "always_reply";
+  return value === "always_reply" ? "always_reply" : "smart_judge";
 }
 
 export function normalizeProcessingMode(value?: string): "qa" | "continuous" {

@@ -69,6 +69,23 @@
     }
 
     #[test]
+    fn default_group_response_guidance_should_prefer_silence_and_direct_relation() {
+        assert_eq!(default_remote_im_contact_response_strategy(), "smart_judge");
+
+        let guidance = default_remote_im_contact_response_guidance();
+        assert!(guidance.contains("默认保持沉默"));
+        assert!(guidance.contains("默认应为 `false`"));
+        assert!(guidance.contains("不让群友觉得助理话很多"));
+        assert!(guidance.contains("新的必要价值"));
+        assert!(guidance.contains("明确叫到助理的昵称"));
+        assert!(guidance.contains("追问助理刚才的回答"));
+        assert!(guidance.contains("不论首次还是后续，一律不回答"));
+        assert!(guidance.contains("实质相近的问题"));
+        assert!(!guidance.contains("有人首次点评、质疑、纠正、评价或反馈"));
+        assert!(guidance.contains("除此以外一律不回答"));
+    }
+
+    #[test]
     fn assistant_work_ledger_should_only_project_active_remote_reply_delegates() {
         let state = remote_im_test_state();
         let message = |id: &str, text: &str| ChatMessage {

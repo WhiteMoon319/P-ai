@@ -731,7 +731,17 @@
                 v-if="selectedContact && !isPrivateContact(selectedContact)"
                 class="list-row flex items-start justify-between gap-3"
               >
-                <div class="font-medium">{{ t("config.remoteIm.responseGuidance") }}</div>
+                <div class="flex items-center gap-2">
+                  <div class="font-medium">{{ t("config.remoteIm.responseGuidance") }}</div>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs"
+                    :disabled="!contactDraft"
+                    @click="restoreDefaultGroupResponseGuidance"
+                  >
+                    {{ t("config.remoteIm.restoreResponseGuidance") }}
+                  </button>
+                </div>
                 <div class="flex w-64 flex-col gap-2">
                   <textarea
                     class="textarea textarea-bordered textarea-sm min-h-28 w-full"
@@ -1291,6 +1301,17 @@ function buildContactDraftFromContact(item: RemoteImContact): ContactEditDraft {
         }))
       : [],
   };
+}
+
+async function restoreDefaultGroupResponseGuidance() {
+  if (!contactDraft.value || !selectedContact.value || isPrivateContact(selectedContact.value)) return;
+  try {
+    contactDraft.value.responseGuidance = await invokeTauri<string>(
+      "remote_im_get_default_group_response_guidance",
+    );
+  } catch (error) {
+    props.setStatusAction(t("status.saveConfigFailed", { err: String(error) }));
+  }
 }
 
 function buildContactSettingsClipboard(item: RemoteImContact): ContactSettingsClipboard {

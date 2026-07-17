@@ -803,6 +803,7 @@
       "responseStrategySmartHint": "Smart judge: first use a fast model to check whether this batch really needs a reply.",
       "quickModelMissingHint": "Smart judge requires a quick model first.",
       "responseGuidance": "When Should It Reply",
+      "restoreResponseGuidance": "Restore Default",
       "responseGuidancePlaceholder": "Example: reply when the other person asks directly, requests help, needs confirmation, or clearly expects interaction.",
       "responseGuidanceHint": "Only applies to Smart Judge. The secretary sends the latest 7 messages and this batch to the fast model, then uses these rules to decide whether to reply.",
       "patienceExit": "Patient Exit",
