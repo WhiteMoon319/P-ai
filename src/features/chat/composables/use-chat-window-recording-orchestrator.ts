@@ -230,7 +230,7 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     return !!options.chatting.value || phase === "queued" || phase === "waiting" || phase === "streaming";
   }
 
-  async function reconcileForegroundConversationAfterFreeze(conversationId: string, _reason: string) {
+  async function reconcileForegroundConversationAfterFreeze(conversationId: string, reason: string) {
     const chatFlow = options.getChatFlow();
     await reconcileChatForegroundConversation({
       conversationId,
@@ -248,6 +248,17 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
       readCurrentFormalTailMessageId: currentFormalTailMessageId,
       requestLatestFormalTailMessageId: () => requestLatestFormalTailMessageId(conversationId),
       refreshTargetMessage: (messageId) => refreshForegroundTargetMessage(conversationId, messageId),
+      resumeStream: async (snapshot) => {
+        if (!chatFlow?.bindActiveConversationStream || !chatFlow?.resumeForegroundRuntimeRound) {
+          return false;
+        }
+        await chatFlow.bindActiveConversationStream(conversationId, true);
+        return chatFlow.resumeForegroundRuntimeRound({
+          conversationId,
+          streamCache: snapshot.streamCache || null,
+          reason: `foreground_${reason}`,
+        }) > 0;
+      },
       finalizeTargetRefresh: async () => {
         chatFlow?.clearForegroundRuntimeState?.();
         await Promise.resolve(chatFlow?.unbindActiveConversationStream?.()).catch(() => {});

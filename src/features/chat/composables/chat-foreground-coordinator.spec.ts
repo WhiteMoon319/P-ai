@@ -88,6 +88,33 @@ describe("chatForegroundCoordinator", () => {
     expect(reloadConversation).not.toHaveBeenCalled();
   });
 
+  it("需要恢复流式时只重绑当前轮次而不重载会话", async () => {
+    const resumeStream = vi.fn(async () => true);
+    const reloadConversation = vi.fn(async () => {});
+    const action = await reconcileForegroundConversation({
+      conversationId: "conversation-a",
+      isCurrent: () => true,
+      requestRuntimeSnapshot: async () => ({
+        runtimeState: "assistant_streaming",
+        streamCache: { persistedAssistantMessageId: "assistant-1" },
+      }),
+      applyRuntimeState: () => {},
+      frontendStreaming: () => false,
+      readFrontendStreamCache: () => null,
+      probeStream: async () => false,
+      readCurrentFormalTailMessageId: () => "assistant-1",
+      requestLatestFormalTailMessageId: async () => "assistant-1",
+      refreshTargetMessage: async () => false,
+      resumeStream,
+      finalizeTargetRefresh: () => {},
+      reloadConversation,
+    });
+
+    expect(action).toBe("resume_stream");
+    expect(resumeStream).toHaveBeenCalledTimes(1);
+    expect(reloadConversation).not.toHaveBeenCalled();
+  });
+
   it("latest runner 在运行期间收到新输入后会再执行最新任务", async () => {
     const values: string[] = [];
     let finishFirst: (() => void) | undefined;

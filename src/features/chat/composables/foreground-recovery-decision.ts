@@ -58,7 +58,7 @@ export function decideForegroundRecovery(input: ForegroundRecoveryInput): Foregr
   if (!input.backendStreaming && input.frontendStreaming) {
     return frontendMessageId ? "refresh_target_message" : "reload_conversation";
   }
-  if (streamingTargetMissing || !messageIdentityMatches || !activationIdentityMatches || !requestIdentityMatches || !revisionMatches) {
+  if (streamingTargetMissing || !messageIdentityMatches || !activationIdentityMatches || !requestIdentityMatches) {
     return backendMessageId ? "resume_stream" : "reload_conversation";
   }
   if (probeState === "unknown") return "probe_stream";

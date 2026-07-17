@@ -1573,39 +1573,25 @@ async fn activate_main_assistant(
                         event.reason.as_deref().unwrap_or("tool_start"),
                     );
                 } else {
-                    let delivered_to_activation = if let Some(channel) =
-                        activation_delta_channel_for_emit.as_ref()
-                    {
-                        match channel.send(event.clone()) {
-                            Ok(_) => true,
-                            Err(err) => {
+                    let active_view_delivered = dispatch_assistant_delta_to_active_view(
+                        &state_for_delta,
+                        &conversation_id_for_emit,
+                        &event,
+                    );
+                    if should_use_activation_delta_fallback(
+                        active_view_delivered,
+                        activation_delta_channel_for_emit.is_some(),
+                    ) {
+                        if let Some(channel) = activation_delta_channel_for_emit.as_ref() {
+                            if let Err(err) = channel.send(event.clone()) {
                                 runtime_log_warn(format!(
                                     "[聊天流式订阅] 降级，任务=投递本次发送通道，conversation_id={}，kind={}，error={}",
                                     conversation_id_for_emit.trim(),
                                     event.kind.as_deref().unwrap_or("delta"),
                                     err
                                 ));
-                                false
                             }
                         }
-                    } else {
-                        false
-                    };
-                    if delivered_to_activation {
-                        if should_emit_assistant_delta_via_app_event_only(&event) {
-                            let broadcast_event = assistant_delta_broadcast_event(&event);
-                            emit_assistant_delta_app_event(
-                                &state_for_delta,
-                                &conversation_id_for_emit,
-                                &broadcast_event,
-                            );
-                        }
-                    } else {
-                        dispatch_assistant_delta_to_active_view(
-                            &state_for_delta,
-                            &conversation_id_for_emit,
-                            &event,
-                        );
                     }
                 }
             }

@@ -541,6 +541,13 @@ mod scheduler_stream_block_tests {
     }
 
     #[test]
+    fn activation_channel_should_only_be_fallback_when_active_view_did_not_receive_event() {
+        assert!(!should_use_activation_delta_fallback(true, true));
+        assert!(should_use_activation_delta_fallback(false, true));
+        assert!(!should_use_activation_delta_fallback(false, false));
+    }
+
+    #[test]
     fn assistant_tool_event_should_project_reasoning_and_tool_into_stream_block() {
         let mut cache = ConversationStreamRuntimeCache::default();
         apply_assistant_tool_event_to_stream_blocks(
@@ -908,15 +915,17 @@ fn dispatch_assistant_delta_to_active_view(
     state: &AppState,
     conversation_id: &str,
     event: &AssistantDeltaEvent,
-) {
+) -> bool {
     if should_emit_assistant_delta_via_app_event_only(event) {
         let broadcast_event = assistant_delta_broadcast_event(event);
         emit_assistant_delta_app_event(state, conversation_id, &broadcast_event);
-        return;
+        // App event / IDE 广播不能证明本次发送请求的临时 Channel 已收到事件。
+        // 返回 false，让调用方在存在 activation Channel 时继续做请求级兜底。
+        return false;
     }
 
     if !is_assistant_delta_stream_channel_event(event) {
-        return;
+        return false;
     }
 
     let targets =
@@ -936,7 +945,7 @@ fn dispatch_assistant_delta_to_active_view(
                 event.kind.as_deref().unwrap_or("delta"),
             ));
         }
-        return;
+        return false;
     }
     let target_count = targets.len();
     let mut delivered = false;
@@ -977,6 +986,16 @@ fn dispatch_assistant_delta_to_active_view(
             tool_count,
         ));
     }
+    // IDE 侧边栏与桌面对话视图是独立消费者。侧边栏投递成功不能阻止
+    // activation Channel 为尚未建立长期绑定的桌面视图兜底。
+    delivered
+}
+
+fn should_use_activation_delta_fallback(
+    active_view_delivered: bool,
+    has_activation_channel: bool,
+) -> bool {
+    !active_view_delivered && has_activation_channel
 }
 
 fn emit_stream_rebind_required_event(

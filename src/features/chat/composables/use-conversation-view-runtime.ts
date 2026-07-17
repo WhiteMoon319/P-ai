@@ -418,7 +418,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     return String(snapshot?.lastMessageId || "").trim();
   }
 
-  async function reconcileForegroundConversation() {
+  async function reconcileForegroundConversation(reason: string) {
     const conversationId = currentConversationId();
     if (!conversationId || foregroundSyncing.value) return;
     await reconcileChatForegroundConversation({
@@ -434,6 +434,14 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
       readCurrentFormalTailMessageId: currentFormalTailMessageId,
       requestLatestFormalTailMessageId: () => requestLatestFormalTailMessageId(conversationId),
       refreshTargetMessage: (messageId) => refreshMessageById(conversationId, messageId),
+      resumeStream: async (snapshot) => {
+        await flow.bindActiveConversationStream(conversationId, true);
+        return flow.resumeForegroundRuntimeRound({
+          conversationId,
+          streamCache: snapshot.streamCache || null,
+          reason: `foreground_${reason}`,
+        }) > 0;
+      },
       finalizeTargetRefresh: async () => {
         flow.clearForegroundRuntimeState();
         await flow.unbindActiveConversationStream().catch(() => {});
@@ -446,12 +454,12 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     });
   }
 
-  const foregroundRecoveryRunner = createLatestTaskRunner(async () => {
-    await reconcileForegroundConversation();
+  const foregroundRecoveryRunner = createLatestTaskRunner(async (reason: string) => {
+    await reconcileForegroundConversation(reason);
   });
 
-  function scheduleForegroundRecovery() {
-    return foregroundRecoveryRunner.run(undefined).catch((error) => {
+  function scheduleForegroundRecovery(reason = "unknown") {
+    return foregroundRecoveryRunner.run(reason).catch((error) => {
         console.error("[追问会话] 前台恢复失败", {
           conversationId: currentConversationId(),
           error,
@@ -542,9 +550,9 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     });
   }, { immediate: true });
 
-  function handleForegroundWake() {
+  function handleForegroundWake(event: Event) {
     if (document.visibilityState === "hidden") return;
-    void scheduleForegroundRecovery();
+    void scheduleForegroundRecovery(event.type);
   }
 
   window.addEventListener("focus", handleForegroundWake);

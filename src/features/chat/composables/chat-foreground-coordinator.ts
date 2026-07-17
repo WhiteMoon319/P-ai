@@ -74,6 +74,7 @@ export async function reconcileForegroundConversation(input: {
   readCurrentFormalTailMessageId: () => string;
   requestLatestFormalTailMessageId: () => Promise<string>;
   refreshTargetMessage: (messageId: string) => Promise<boolean>;
+  resumeStream?: (snapshot: ForegroundRuntimeSnapshot) => Promise<boolean>;
   finalizeTargetRefresh: () => Promise<void> | void;
   reloadConversation: () => Promise<void>;
 }): Promise<ForegroundRecoveryAction> {
@@ -111,13 +112,19 @@ export async function reconcileForegroundConversation(input: {
     if (backendStreaming) return action;
     const latestTailMessageId = await input.requestLatestFormalTailMessageId();
     if (!input.isCurrent()) return "keep";
-    if (latestTailMessageId === input.readCurrentFormalTailMessageId()) {
+    const frontendTailMessageId = input.readCurrentFormalTailMessageId();
+    if (latestTailMessageId === frontendTailMessageId) {
       if (!latestTailMessageId) return action;
       return await input.refreshTargetMessage(latestTailMessageId)
         ? "refresh_target_message"
         : action;
     }
     action = "reload_conversation";
+  }
+  if (action === "resume_stream" && input.resumeStream) {
+    const resumed = await input.resumeStream(snapshot);
+    if (!input.isCurrent()) return "keep";
+    if (resumed) return action;
   }
   if (action === "refresh_target_message") {
     const messageId = String(

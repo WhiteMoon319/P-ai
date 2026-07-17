@@ -21,6 +21,37 @@ describe("decideForegroundRecovery", () => {
     })).toBe("keep");
   });
 
+  it("流式身份一致但缓存时间戳不同时仍先探针", () => {
+    expect(decideForegroundRecovery({
+      backendStreaming: true,
+      frontendStreaming: true,
+      backendMessageId: "assistant-1",
+      frontendMessageId: "assistant-1",
+      backendActivationId: "activation-1",
+      frontendActivationId: "activation-1",
+      backendRequestId: "request-1",
+      frontendRequestId: "request-1",
+      backendRevision: "2026-07-17T12:00:02Z",
+      frontendRevision: "2026-07-17T12:00:01Z",
+    })).toBe("probe_stream");
+  });
+
+  it("流式身份一致且探针健康时不因缓存时间戳不同替换消息", () => {
+    expect(decideForegroundRecovery({
+      backendStreaming: true,
+      frontendStreaming: true,
+      backendMessageId: "assistant-1",
+      frontendMessageId: "assistant-1",
+      backendActivationId: "activation-1",
+      frontendActivationId: "activation-1",
+      backendRequestId: "request-1",
+      frontendRequestId: "request-1",
+      backendRevision: "2026-07-17T12:00:02Z",
+      frontendRevision: "2026-07-17T12:00:01Z",
+      probeState: "healthy",
+    })).toBe("keep");
+  });
+
   it("后端完成而前端仍流式时只刷新目标消息", () => {
     expect(decideForegroundRecovery({
       backendStreaming: false,
