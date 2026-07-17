@@ -1,6 +1,7 @@
 const DEFAULT_OUTPUT_BYTES_CAP: usize = 1024 * 1024;
 const APPROX_BYTES_PER_TOKEN: usize = 4;
-const DEFAULT_EXEC_MODEL_OUTPUT_TOKENS: usize = 10_000;
+const DEFAULT_TOOL_OUTPUT_TOKENS: usize = 10_000;
+const NON_SHELL_TOOL_OUTPUT_POLICY_MULTIPLIER: f64 = 1.2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
@@ -18,8 +19,23 @@ impl TruncationPolicy {
     }
 }
 
-fn default_exec_model_truncation_policy() -> TruncationPolicy {
-    TruncationPolicy::Tokens(DEFAULT_EXEC_MODEL_OUTPUT_TOKENS)
+impl std::ops::Mul<f64> for TruncationPolicy {
+    type Output = Self;
+
+    fn mul(self, multiplier: f64) -> Self::Output {
+        match self {
+            Self::Bytes(bytes) => Self::Bytes((bytes as f64 * multiplier).ceil() as usize),
+            Self::Tokens(tokens) => Self::Tokens((tokens as f64 * multiplier).ceil() as usize),
+        }
+    }
+}
+
+fn default_tool_output_truncation_policy() -> TruncationPolicy {
+    TruncationPolicy::Tokens(DEFAULT_TOOL_OUTPUT_TOKENS)
+}
+
+fn default_non_shell_tool_output_truncation_policy() -> TruncationPolicy {
+    default_tool_output_truncation_policy() * NON_SHELL_TOOL_OUTPUT_POLICY_MULTIPLIER
 }
 
 fn prefix_cap(mut buffer: Vec<u8>, max_bytes: Option<usize>) -> Vec<u8> {
@@ -329,6 +345,22 @@ mod exec_output_tests {
         assert_eq!(
             truncate_text("small", TruncationPolicy::Tokens(10)),
             "small"
+        );
+    }
+
+    #[test]
+    fn non_shell_policy_should_scale_default_budget_by_one_point_two() {
+        assert_eq!(
+            default_tool_output_truncation_policy(),
+            TruncationPolicy::Tokens(10_000)
+        );
+        assert_eq!(
+            default_non_shell_tool_output_truncation_policy(),
+            TruncationPolicy::Tokens(12_000)
+        );
+        assert_eq!(
+            TruncationPolicy::Bytes(10_001) * 1.2,
+            TruncationPolicy::Bytes(12_002)
         );
     }
 }
