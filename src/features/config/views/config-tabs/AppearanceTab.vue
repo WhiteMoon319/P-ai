@@ -70,6 +70,32 @@
 
     <div class="card bg-base-100 border border-base-300">
       <div class="card-body gap-3 p-4">
+        <h3 class="card-title text-base">{{ t("appearance.inputPanel") }}</h3>
+        <div class="grid gap-3">
+          <label class="flex cursor-pointer items-center justify-between gap-3 rounded-box bg-base-200/40 px-3 py-2">
+            <span class="text-sm font-medium">{{ t("appearance.inputPanelSideFileTags") }}</span>
+            <input
+              :checked="sideFileTagsEnabled"
+              type="checkbox"
+              class="toggle toggle-sm"
+              @change="setSideFileTagsEnabled(($event.target as HTMLInputElement).checked)"
+            />
+          </label>
+          <label class="flex cursor-pointer items-center justify-between gap-3 rounded-box bg-base-200/40 px-3 py-2">
+            <span class="text-sm font-medium">{{ t("appearance.inputPanelIdeBridgeFileTags") }}</span>
+            <input
+              :checked="ideBridgeFileTagsEnabled"
+              type="checkbox"
+              class="toggle toggle-sm"
+              @change="setIdeBridgeFileTagsEnabled(($event.target as HTMLInputElement).checked)"
+            />
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="card bg-base-100 border border-base-300">
+      <div class="card-body gap-3 p-4">
         <div class="flex items-center justify-between gap-3">
           <div>
             <h3 class="card-title text-base">{{ t("appearance.webviewZoom") }}</h3>
@@ -154,6 +180,7 @@ import {
   useMarkdownAppearance,
 } from "../../../shell/composables/use-markdown-appearance";
 import { useChatMessageAppearance } from "../../../shell/composables/use-chat-message-appearance";
+import { useChatComposerAppearance } from "../../../shell/composables/use-chat-composer-appearance";
 
 const props = defineProps<{
   uiLanguage: "zh-CN" | "en-US" | "zh-TW";
@@ -205,6 +232,12 @@ const {
   setSegmentedMarkdownEnabled,
   setChatTimeDisplayMode,
 } = useChatMessageAppearance();
+const {
+  sideFileTagsEnabled,
+  ideBridgeFileTagsEnabled,
+  setSideFileTagsEnabled,
+  setIdeBridgeFileTagsEnabled,
+} = useChatComposerAppearance();
 
 function isGeneratedTheme(theme: string) {
   return theme === GENERATED_THEME_LIGHT_ID || theme === GENERATED_THEME_DARK_ID;

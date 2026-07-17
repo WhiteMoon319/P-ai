@@ -391,6 +391,7 @@ import { useChatQueue } from "../composables/use-chat-queue";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
 import { formatApiConfigOptionLabel } from "../../config/utils/api-config-display";
 import { ideContextReferenceDisplayParts } from "../utils/ide-context-reference-display";
+import { mergeComposerIdeContextGroups } from "../utils/ide-context-reference-groups";
 
 type BinaryAttachment = { mime: string; bytesBase64: string };
 type QueuedAttachmentNotice = { id: string; fileName: string; relativePath: string; mime: string };
@@ -646,75 +647,10 @@ const selectedModelName = computed(() => {
 const compactModelButton = computed(() => composerWidth.value > 0 && composerWidth.value < 420);
 const showIdeWorkspaceGroupLabel = computed(() => false);
 const attachedIdeContextReferenceIds = computed(() => new Set((props.attachedIdeContextReferences || []).map((item) => item.id)));
-const mergedIdeContextGroups = computed<IdeContextWorkspaceGroup[]>(() => {
-  const referencesByIdentity = new Map<string, IdeContextReferenceItem>();
-  const attachedMap = new Map((props.attachedIdeContextReferences || []).map((item) => [item.id, item]));
-  const attachedReferences = Array.isArray(props.attachedIdeContextReferences) ? props.attachedIdeContextReferences : [];
-  const fileOnlyAdded = new Set<string>();
-  for (const group of props.ideContextGroups || []) {
-    for (const item of group.references || []) {
-      const identity = ideContextReferenceIdentityKey(item);
-      if (!identity) continue;
-
-      const pathKey = ideContextReferencePathKey(item);
-      const hasLineRange = Number(item.startLine || 0) > 0 || Number(item.endLine || 0) > 0;
-      if (hasLineRange && !fileOnlyAdded.has(pathKey)) {
-        const fileOnlyItem: IdeContextReferenceItem = {
-          ...item,
-          id: item.id + "-file-only",
-          startLine: 0,
-          endLine: 0,
-          displayLabel: item.fileName || item.relativePath || item.filePath,
-          textBlock: "",
-          content: "",
-        };
-        const fileOnlyIdentity = ideContextReferenceIdentityKey(fileOnlyItem);
-        if (fileOnlyIdentity && !referencesByIdentity.has(fileOnlyIdentity) && !attachedReferences.some((attached) => ideContextSameRange(attached, fileOnlyItem))) {
-          referencesByIdentity.set(fileOnlyIdentity, fileOnlyItem);
-          fileOnlyAdded.add(pathKey);
-        }
-      }
-
-      if (attachedReferences.some((attached) => ideContextSameRange(attached, item))) continue;
-      referencesByIdentity.set(identity, item);
-    }
-  }
-  for (const item of props.attachedIdeContextReferences || []) {
-    const identity = ideContextReferenceIdentityKey(item);
-    if (!identity) continue;
-    referencesByIdentity.set(identity, item);
-  }
-  const references = Array.from(referencesByIdentity.values()).sort((left, right) => {
-    const leftHasLineRange = Number(left.startLine || 0) > 0 || Number(left.endLine || 0) > 0;
-    const rightHasLineRange = Number(right.startLine || 0) > 0 || Number(right.endLine || 0) > 0;
-    if (leftHasLineRange !== rightHasLineRange) return Number(rightHasLineRange) - Number(leftHasLineRange);
-    const leftAttached = attachedMap.has(left.id) ? 1 : 0;
-    const rightAttached = attachedMap.has(right.id) ? 1 : 0;
-    if (leftAttached !== rightAttached) return rightAttached - leftAttached;
-    return String(left.displayLabel || "").localeCompare(String(right.displayLabel || ""));
-  });
-  return references.length > 0 ? [{ workspacePath: "", workspaceName: "", references }] : [];
-});
-
-function ideContextReferencePathKey(item: IdeContextReferenceItem): string {
-  return String(item.filePath || item.relativePath || item.displayLabel || item.id || "").trim().replace(/\\/g, "/").toLowerCase();
-}
-
-function ideContextReferenceIdentityKey(item: IdeContextReferenceItem): string {
-  const path = ideContextReferencePathKey(item);
-  if (!path) return "";
-  return [
-    path,
-    Number(item.startLine || 0),
-    Number(item.endLine || 0),
-  ].join(":");
-}
-
-function ideContextSameRange(left: IdeContextReferenceItem, right: IdeContextReferenceItem): boolean {
-  return ideContextReferencePathKey(left) === ideContextReferencePathKey(right)
-    && Number(left.startLine || 0) === Number(right.startLine || 0)
-    && Number(left.endLine || 0) === Number(right.endLine || 0);
-}
+const mergedIdeContextGroups = computed<IdeContextWorkspaceGroup[]>(() => mergeComposerIdeContextGroups(
+  props.ideContextGroups || [],
+  props.attachedIdeContextReferences || [],
+));
 
 function isIdeContextAttached(referenceId: string): boolean {
   return attachedIdeContextReferenceIds.value.has(referenceId);

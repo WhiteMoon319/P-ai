@@ -2015,6 +2015,9 @@
     "chatBubbleBackground": "背景",
     "chatBubbleSegmentedMarkdown": "分段",
     "chatBubbleFullTime": "完整時間",
+    "inputPanel": "輸入面板外觀",
+    "inputPanelSideFileTags": "顯示側邊檔案標籤",
+    "inputPanelIdeBridgeFileTags": "顯示 IDE 橋接檔案標籤",
     "webviewZoom": "介面縮放",
     "webviewZoomHint": "調整整個 WebView 的真實縮放比例。",
     "themeTabs": {

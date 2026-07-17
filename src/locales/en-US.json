@@ -2015,6 +2015,9 @@
     "chatBubbleBackground": "Background",
     "chatBubbleSegmentedMarkdown": "Segmented",
     "chatBubbleFullTime": "Full time",
+    "inputPanel": "Input Panel Appearance",
+    "inputPanelSideFileTags": "Show side file tags",
+    "inputPanelIdeBridgeFileTags": "Show IDE bridge file tags",
     "webviewZoom": "Interface Zoom",
     "webviewZoomHint": "Adjust the real WebView zoom level.",
     "themeTabs": {

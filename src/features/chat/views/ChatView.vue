@@ -581,6 +581,10 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { isDarkAppTheme } from "../../shell/composables/use-app-theme";
+import {
+  useChatComposerAppearance,
+  visibleChatComposerContextGroups,
+} from "../../shell/composables/use-chat-composer-appearance";
 import { ArrowDownToLine, Check, ChevronsDown, ChevronsUp, History, Inbox, ListTodo, Network, Trash2, Undo2, Wrench, X } from "@lucide/vue";
 import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ChatMessageBlock, ChatPersonaPresenceChip, ChatTodoItem, ConversationDelegateStatusSummary, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption, ShellWorkspace } from "../../../types/app";
@@ -1122,18 +1126,21 @@ const fileReaderContextReferences = computed<IdeContextReferenceItem[]>(() => {
   const selectionFilePath = String(selection.filePath || "").trim();
   return visibleFilePath && visibleFilePath === selectionFilePath ? [selection] : [visible];
 });
+const {
+  sideFileTagsEnabled,
+  ideBridgeFileTagsEnabled,
+} = useChatComposerAppearance();
 const mergedVisibleIdeContextGroups = computed<IdeContextWorkspaceGroup[]>(() => {
   const propGroups = Array.isArray(props.ideContextGroups) ? props.ideContextGroups : [];
   const baseGroups = propGroups.length > 0 ? propGroups : visibleIdeContextGroups.value;
-  if (fileReaderContextReferences.value.length === 0) return baseGroups;
-  return [
-    {
-      workspacePath: String(props.currentWorkspaceRootPath || "").trim(),
-      workspaceName: String(props.currentWorkspaceName || "").trim() || t("chat.allowedWorkspaceButton"),
-      references: fileReaderContextReferences.value,
-    },
-    ...baseGroups,
-  ];
+  return visibleChatComposerContextGroups({
+    sideReferences: fileReaderContextReferences.value,
+    sideWorkspacePath: props.currentWorkspaceRootPath,
+    sideWorkspaceName: String(props.currentWorkspaceName || "").trim() || t("chat.allowedWorkspaceButton"),
+    ideBridgeGroups: baseGroups,
+    sideFileTagsEnabled: sideFileTagsEnabled.value,
+    ideBridgeFileTagsEnabled: ideBridgeFileTagsEnabled.value,
+  });
 });
 
 function handleCaptureFileReaderContextReference(reference: IdeContextReferenceItem) {
