@@ -28,17 +28,38 @@ impl ConversationServiceV2 {
         &self,
         state: &AppState,
     ) -> Result<Vec<ArchiveSummary>, String> {
-        let guard = state.conversation_lock.lock().map_err(|err| {
-            named_lock_error("conversation_lock", file!(), line!(), module_path!(), &err)
-        })?;
+        self.list_archives_with_resolvers(
+            state,
+            |archive_id| self.get_conversation_meta(state, archive_id),
+            |archive_id| {
+                let store_paths =
+                    message_store::message_store_paths(&state.data_path, archive_id).ok()?;
+                message_store::read_ready_message_store_index_summary(&store_paths)
+                    .ok()
+                    .flatten()
+                    .and_then(|summary| summary.first_user_text_preview)
+                    .filter(|value| !value.trim().is_empty())
+            },
+        )
+    }
 
-        let runtime_snapshot = load_runtime_organization_snapshot(state)?;
-        let chat_index = state_read_chat_index_cached(state)?;
-        let mut summaries = chat_index
+    fn list_archives_with_resolvers<LoadMeta, ResolveTitle>(
+        &self,
+        state: &AppState,
+        load_meta: LoadMeta,
+        resolve_title: ResolveTitle,
+    ) -> Result<Vec<ArchiveSummary>, String>
+    where
+        LoadMeta: Fn(&str) -> Result<ConversationMetaView, String>,
+        ResolveTitle: Fn(&str) -> Option<String>,
+    {
+        // 元数据缓存校验和标题兜底都可能触发磁盘访问，不能包在全局会话锁内。
+        let candidate_index = state_read_chat_index_cached(state)?;
+        let archive_metas = candidate_index
             .conversations
             .iter()
             .filter(|item| chat_index_item_is_archived(item))
-            .filter_map(|item| match self.get_conversation_meta(state, item.id.as_str()) {
+            .filter_map(|item| match load_meta(item.id.as_str()) {
                 Ok(conversation_meta) => Some(conversation_meta),
                 Err(err) => {
                     runtime_log_error(format!(
@@ -48,6 +69,28 @@ impl ConversationServiceV2 {
                     None
                 }
             })
+            .collect::<Vec<_>>();
+
+        let runtime_snapshot = load_runtime_organization_snapshot(state)?;
+        // 锁外预读可能与并发归档交错；锁内只复核当前仍归档的 ID，避免返回已取消归档项。
+        let current_archived_ids = {
+            let guard = state.conversation_lock.lock().map_err(|err| {
+                named_lock_error("conversation_lock", file!(), line!(), module_path!(), &err)
+            })?;
+            let current_index = state_read_chat_index_cached(state)?;
+            let archived_ids = current_index
+                .conversations
+                .iter()
+                .filter(|item| chat_index_item_is_archived(item))
+                .map(|item| item.id.trim().to_string())
+                .filter(|item| !item.is_empty())
+                .collect::<std::collections::HashSet<_>>();
+            drop(guard);
+            archived_ids
+        };
+        let mut summaries = archive_metas
+            .into_iter()
+            .filter(|archive_meta| current_archived_ids.contains(archive_meta.id.trim()))
             .filter(|archive_meta| archive_meta.status.trim() == "archived")
             .map(|archive_meta| {
                 let api_config_id = runtime_department_by_id(
@@ -59,21 +102,7 @@ impl ConversationServiceV2 {
                 })
                 .map(department_primary_api_config_id)
                 .unwrap_or_default();
-                let title = if archive_meta.title.trim().is_empty() {
-                    let store_paths =
-                        message_store::message_store_paths(&state.data_path, &archive_meta.id).ok();
-                    store_paths
-                        .and_then(|paths| {
-                            message_store::read_ready_message_store_index_summary(&paths)
-                                .ok()
-                                .flatten()
-                        })
-                        .and_then(|summary| summary.first_user_text_preview)
-                        .filter(|value| !value.trim().is_empty())
-                        .unwrap_or_else(|| "无内容".to_string())
-                } else {
-                    archive_meta.title.trim().to_string()
-                };
+                let title = archive_meta.title.trim().to_string();
                 ArchiveSummary {
                     archive_id: archive_meta.id.to_string(),
                     archived_at: archive_meta
@@ -87,8 +116,13 @@ impl ConversationServiceV2 {
                 }
             })
             .collect::<Vec<_>>();
+        for summary in &mut summaries {
+            if summary.title.is_empty() {
+                summary.title = resolve_title(&summary.archive_id)
+                    .unwrap_or_else(|| "无内容".to_string());
+            }
+        }
         summaries.sort_by(|a, b| b.archived_at.cmp(&a.archived_at));
-        drop(guard);
         Ok(summaries)
     }
 

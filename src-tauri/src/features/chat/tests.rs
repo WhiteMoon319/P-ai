@@ -3515,6 +3515,61 @@
         }
     }
 
+    #[test]
+    fn list_archives_should_release_conversation_lock_before_slow_io() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let mut archive = test_chat_conversation("archive-lock-performance", "archived", &now);
+        archive.title.clear();
+        archive.archived_at = Some(now);
+        write_conversation_shard(&state.data_path, &archive).expect("write archived conversation");
+        state_read_chat_index_cached(&state).expect("warm chat index");
+
+        let worker_state = state.clone();
+        let metadata_state = worker_state.clone();
+        let (stage_tx, stage_rx) = std::sync::mpsc::channel::<&'static str>();
+        let metadata_stage_tx = stage_tx.clone();
+        let title_stage_tx = stage_tx;
+        let worker = std::thread::spawn(move || {
+            conversation_service_v2().list_archives_with_resolvers(
+                &worker_state,
+                move |archive_id| {
+                    metadata_stage_tx.send("metadata").expect("send metadata stage");
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                    conversation_service_v2().get_conversation_meta(&metadata_state, archive_id)
+                },
+                move |_| {
+                    title_stage_tx.send("title").expect("send title stage");
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                    Some("归档标题".to_string())
+                },
+            )
+        });
+
+        for expected_stage in ["metadata", "title"] {
+            let stage = stage_rx
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .expect("wait slow io stage");
+            assert_eq!(stage, expected_stage);
+            let lock_started_at = std::time::Instant::now();
+            let guard = state
+                .conversation_lock
+                .lock_named("list_archives_performance_probe")
+                .expect("acquire conversation lock during archive io");
+            let waited = lock_started_at.elapsed();
+            drop(guard);
+            assert!(
+                waited < std::time::Duration::from_millis(120),
+                "stage={stage}, lock_wait_ms={}",
+                waited.as_millis()
+            );
+        }
+
+        let summaries = worker.join().expect("join archive list worker").expect("list archives");
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].title, "归档标题");
+    }
+
     fn test_user_switched_to_sub_conversation_data() -> AppData {
         let now = now_iso();
         let later = (now_utc() + time::Duration::minutes(1))

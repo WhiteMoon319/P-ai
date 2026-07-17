@@ -326,8 +326,11 @@ fn archive_to_conversation(archive: ConversationArchive) -> Conversation {
 }
 
 #[tauri::command]
-fn list_archives(state: State<'_, AppState>) -> Result<Vec<ArchiveSummary>, String> {
-    list_archives_inner(state.inner())
+async fn list_archives(state: State<'_, AppState>) -> Result<Vec<ArchiveSummary>, String> {
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || list_archives_inner(&app_state))
+        .await
+        .map_err(|err| format!("读取归档列表任务异常：{err}"))?
 }
 
 fn list_archives_inner(state: &AppState) -> Result<Vec<ArchiveSummary>, String> {
