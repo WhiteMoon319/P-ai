@@ -674,6 +674,26 @@ fn build_summary_context_json_contract_block(scene: SummaryContextScene) -> Stri
 
 fn archive_pipeline_message_plain_text(message: &ChatMessage) -> String {
     let mut blocks = Vec::<String>::new();
+    if message.role.trim().eq_ignore_ascii_case("assistant") {
+        for event in message.tool_call.iter().flatten() {
+            let is_assistant = event
+                .get("role")
+                .and_then(Value::as_str)
+                .is_some_and(|role| role.trim().eq_ignore_ascii_case("assistant"));
+            if !is_assistant {
+                continue;
+            }
+            let cleaned = event
+                .get("content")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .map(clean_text)
+                .unwrap_or_default();
+            if !cleaned.is_empty() {
+                blocks.push(cleaned);
+            }
+        }
+    }
     for part in &message.parts {
         if let MessagePart::Text { text, .. } = part {
             let cleaned = clean_text(text.trim());

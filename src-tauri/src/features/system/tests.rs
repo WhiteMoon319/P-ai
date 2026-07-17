@@ -625,6 +625,73 @@
     }
 
     #[test]
+    fn compaction_message_plain_text_should_keep_assistant_tool_round_text_before_final_text() {
+        let now = now_iso();
+        let message = ChatMessage {
+            id: "assistant-with-tool-round-text".to_string(),
+            role: "assistant".to_string(),
+            created_at: now,
+            speaker_agent_id: Some(DEFAULT_AGENT_ID.to_string()),
+            parts: vec![MessagePart::Text {
+                text: "问题出在默认配置没有同步更新。".to_string(),
+                reasoning_content: Some("这是最终答复思维内容，不应进入保留对话。".to_string()),
+            }],
+            extra_text_blocks: Vec::new(),
+            provider_meta: None,
+            tool_call: Some(vec![
+                serde_json::json!({
+                    "role": "assistant",
+                    "content": "我先读取配置文件。",
+                    "reasoning_content": "先检查配置文件。",
+                    "tool_calls": [{
+                        "id": "call-1",
+                        "type": "function",
+                        "function": {
+                            "name": "read_file",
+                            "arguments": "{\"path\":\"config.toml\"}"
+                        }
+                    }]
+                }),
+                serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": "call-1",
+                    "content": "不应保留的配置文件工具结果"
+                }),
+                serde_json::json!({
+                    "role": "assistant",
+                    "content": "接着检查默认值。",
+                    "reasoning_content": "继续搜索默认实现。",
+                    "tool_calls": [{
+                        "id": "call-2",
+                        "type": "function",
+                        "function": {
+                            "name": "search",
+                            "arguments": "{\"query\":\"Default\"}"
+                        }
+                    }]
+                }),
+                serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": "call-2",
+                    "content": "不应保留的搜索工具结果"
+                }),
+            ]),
+            mcp_call: None,
+            meme_annotations: None,
+        };
+
+        let text = archive_pipeline_message_plain_text(&message);
+
+        assert_eq!(
+            text,
+            "我先读取配置文件。 接着检查默认值。 问题出在默认配置没有同步更新。"
+        );
+        assert!(!text.contains("工具结果"));
+        assert!(!text.contains("思维内容"));
+        assert!(!text.contains("read_file"));
+    }
+
+    #[test]
     fn native_notification_text_excerpt_should_trim_blank_lines_and_limit_length() {
         let text = "\n  第一行  \n\n 第二行 \n";
         assert_eq!(native_notification_text_excerpt(text, 80), "第一行\n第二行");
