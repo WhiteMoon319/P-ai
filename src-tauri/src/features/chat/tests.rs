@@ -2785,6 +2785,23 @@
     }
 
     #[test]
+    fn contact_send_files_should_fall_back_to_persisted_contact_binding() {
+        let (state, _source, conversation_id, _assistant_message_id, _assistant_text) =
+            seed_remote_im_auto_send_test_state(serde_json::json!({ "mockSend": true }));
+        let activation_sources =
+            get_conversation_remote_im_activation_sources(&state, &conversation_id)
+                .expect("read activation sources");
+        assert!(activation_sources.is_empty());
+
+        let session_id = format!("agent-a::{conversation_id}::remote_reply_delegate:delegate-a");
+        let (_channel, contact) = remote_im_bound_contact_context_from_runtime(&state, &session_id)
+            .expect("persisted contact binding should resolve contact file target");
+
+        assert_eq!(contact.id, "contact-record-a");
+        assert_eq!(contact.remote_contact_id, "contact-a");
+    }
+
+    #[test]
     fn remote_im_auto_send_and_record_decision_should_update_message_after_mock_send() {
         let (state, activation_source, conversation_id, assistant_message_id, assistant_text) =
             seed_remote_im_auto_send_test_state(serde_json::json!({

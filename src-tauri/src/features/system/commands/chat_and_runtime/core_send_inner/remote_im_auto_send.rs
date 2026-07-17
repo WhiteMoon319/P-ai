@@ -435,7 +435,7 @@ async fn remote_im_auto_send_assistant_reply_to_source(
         ));
     }
     let content = if let Some(segments) = persisted_segments.as_ref() {
-        inline_segments_to_remote_im_content_items(state, segments).await?
+        inline_segments_to_remote_im_content_items(segments).await?
     } else {
         remote_im_build_text_content_items(
             state,

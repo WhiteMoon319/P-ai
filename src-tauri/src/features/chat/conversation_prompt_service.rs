@@ -658,8 +658,8 @@ impl ConversationPromptService {
                 "contact tools rule",
                 "联系人专用工具仅对本轮绑定联系人生效。\n\
                  1. 普通文字答复直接写在本轮最终 assistant 回复中，系统会在本轮结束后自动发给本轮绑定联系人。\n\
-                 2. 若需要发送图片或文件，请使用 `contact_send_files`。发送文件时，应把真实本地文件路径或 HTTP(S) URL 放进 `contact_send_files.file_paths`，不要把本地路径或文件链接直接写进正文。\n\
-                 3. `contact_send_files` 是中途动作，不会取消本轮结束后的自动最终回复。\n\
+                 2. 若需要发送本地图片，可以在最终正文使用 `![简述](绝对路径)`；系统会识别并发送实际图片。若需要发送非图片文件，使用 `contact_send_files`，并把真实本地文件路径或 HTTP(S) URL 放进 `contact_send_files.file_paths`。\n\
+                 3. 图片 Markdown 之外，不要把本地路径或文件链接直接写进正文；不要向联系人解释发送工具或本地路径。\n\
                  4. 不要把工具调用描述、内部判断或“是否回复”的结论发给联系人。",
             ));
         }

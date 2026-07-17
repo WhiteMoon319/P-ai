@@ -274,17 +274,30 @@ fn remote_im_local_image_send_name(file_name: &str, mime: &str) -> String {
     }
 }
 
+fn remote_im_is_generated_image_source_text(text: &str) -> bool {
+    let trimmed = text.trim();
+    let file_name = ["来源：", "来源:"]
+        .iter()
+        .find_map(|prefix| trimmed.strip_prefix(prefix))
+        .map(str::trim)
+        .unwrap_or_default();
+    file_name.len() >= 3 && file_name.starts_with('`') && file_name.ends_with('`')
+}
+
 async fn inline_segments_to_remote_im_content_items(
-    _state: &AppState,
     segments: &[PersistedInlineMessageSegment],
 ) -> Result<Vec<Value>, String> {
     let mut out = Vec::<Value>::new();
+    let mut previous_was_image = false;
     for segment in segments {
         match segment {
             PersistedInlineMessageSegment::Text { text } => {
-                if !text.is_empty() {
+                if !text.is_empty()
+                    && !(previous_was_image && remote_im_is_generated_image_source_text(text))
+                {
                     out.push(serde_json::json!({ "type": "text", "text": text }));
                 }
+                previous_was_image = false;
             }
             PersistedInlineMessageSegment::Meme {
                 name,
@@ -300,6 +313,7 @@ async fn inline_segments_to_remote_im_content_items(
                     "name": file_name,
                     "bytesBase64": bytes_base64,
                 }));
+                previous_was_image = true;
             }
             PersistedInlineMessageSegment::LocalImage {
                 path,
@@ -318,6 +332,7 @@ async fn inline_segments_to_remote_im_content_items(
                     "name": send_name,
                     "bytesBase64": B64.encode(&render.bytes),
                 }));
+                previous_was_image = true;
             }
         }
     }
@@ -330,7 +345,7 @@ async fn remote_im_build_text_content_items(
     seed_source: &str,
 ) -> Result<Vec<Value>, String> {
     if let Some(segments) = resolve_text_to_persisted_inline_segments(state, text, seed_source)? {
-        let items = inline_segments_to_remote_im_content_items(state, &segments).await?;
+        let items = inline_segments_to_remote_im_content_items(&segments).await?;
         if !items.is_empty() {
             return Ok(items);
         }
@@ -444,8 +459,17 @@ fn remote_im_bound_contact_context_from_runtime(
 ) -> Result<(RemoteImChannelConfig, RemoteImContact), String> {
     let conversation_id = contact_tool_target_conversation_id(session_id)?;
     let activation_sources = get_conversation_remote_im_activation_sources(state, &conversation_id)?;
-    let bound_source = resolve_bound_remote_im_activation_source(&activation_sources)
-        .ok_or_else(|| "当前轮次未绑定联系人，无法调用联系人专用工具".to_string())?;
+    let bound_source = if let Some(source) = resolve_bound_remote_im_activation_source(&activation_sources) {
+        source
+    } else {
+        let source = remote_im_auto_send_source_for_contact_conversation(state, &conversation_id)?
+            .ok_or_else(|| "当前轮次未绑定联系人，无法调用联系人专用工具".to_string())?;
+        runtime_log_debug(format!(
+            "[联系人文件发送] 使用会话绑定联系人，conversation_id={}, contact_id={}",
+            conversation_id, source.remote_contact_id
+        ));
+        source
+    };
     let config = state_read_config_cached(state)?;
     let runtime = state_read_runtime_state_cached(state)?;
     let contact = runtime
@@ -566,5 +590,44 @@ mod remote_im_local_image_tests {
             .get("bytesBase64")
             .and_then(Value::as_str)
             .is_some_and(|value| !value.trim().is_empty()));
+    }
+
+    #[test]
+    fn remote_im_generated_image_source_text_should_only_match_source_line() {
+        assert!(remote_im_is_generated_image_source_text(
+            "\n来源：`我觉得这就是一种自信.png`\n"
+        ));
+        assert!(remote_im_is_generated_image_source_text("来源:`image.webp`"));
+        assert!(!remote_im_is_generated_image_source_text("来源：图片来自群友"));
+        assert!(!remote_im_is_generated_image_source_text(
+            "这里是图片的来源：`image.webp`"
+        ));
+    }
+
+    #[test]
+    fn remote_im_inline_image_should_omit_generated_source_text() {
+        let segments = vec![
+            PersistedInlineMessageSegment::Meme {
+                name: "image.webp".to_string(),
+                category: "test".to_string(),
+                mime: "image/webp".to_string(),
+                relative_path: "memes/image.webp".to_string(),
+                bytes_base64: "aGVsbG8=".to_string(),
+            },
+            PersistedInlineMessageSegment::Text {
+                text: "\n来源：`image.webp`\n".to_string(),
+            },
+        ];
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("create test runtime");
+        let items = runtime
+            .block_on(inline_segments_to_remote_im_content_items(&segments))
+            .expect("build remote image payload");
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].get("type").and_then(Value::as_str), Some("image"));
     }
 }
