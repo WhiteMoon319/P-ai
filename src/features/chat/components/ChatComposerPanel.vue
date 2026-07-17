@@ -101,7 +101,6 @@
         <button
           type="button"
           class="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-base-content transition hover:bg-error hover:text-error-content"
-          :disabled="chatting || frozen"
           @click.stop="removeSelectedMention(item)"
         >
           <X class="h-3 w-3" />
@@ -118,7 +117,6 @@
             type="button"
             class="gap-1 py-3 max-w-full"
             :class="isIdeContextAttached(item.id) ? 'badge badge-primary' : 'badge badge-ghost'"
-            :disabled="chatting || frozen"
             :title="ideContextReferenceTitle(item)"
             @mousedown.prevent
             @click="toggleIdeContextReference(item)"
@@ -191,7 +189,6 @@
             v-model="localChatInput"
             class="ecall-chat-composer-input w-full resize-none overflow-y-auto chat-input-no-focus min-h-0"
             rows="1"
-            :disabled="frozen"
             :placeholder="chatInputPlaceholder"
             @input="handleChatInputInput"
             @keydown="handleChatInputKeydown"
@@ -284,7 +281,6 @@
           <button
             v-if="!sidebarMode"
             class="btn btn-sm btn-circle btn-ghost shrink-0"
-            :disabled="frozen"
             :title="t('chat.attach')"
             @click="emit('pickAttachments')"
           >
@@ -294,7 +290,7 @@
             v-if="!sidebarMode"
             class="btn btn-sm btn-circle shrink-0"
             :class="recording ? 'btn-error' : 'btn-ghost'"
-            :disabled="!canRecord || frozen"
+            :disabled="!canRecord"
             :title="recording ? t('chat.recording', { seconds: Math.max(1, Math.round(recordingMs / 1000)) }) : t('chat.holdRecord', { hotkey: recordHotkey })"
             @mousedown.prevent="emit('startRecording')"
             @mouseup.prevent="emit('stopRecording')"
@@ -311,7 +307,7 @@
               :class="compactModelButton
                 ? 'btn btn-sm btn-square h-8 min-h-8 w-8 shrink-0 border-0 shadow-none bg-base-100 text-base-content hover:bg-base-200'
                 : 'btn btn-sm h-8 min-h-8 w-44 max-w-44 justify-between border-0 shadow-none bg-base-100 text-base-content hover:bg-base-200'"
-              :disabled="frozen || normalizedChatModelOptions.length === 0"
+              :disabled="normalizedChatModelOptions.length === 0"
               :title="selectedModelName"
               @click="modelDropdownOpen = !modelDropdownOpen"
             >
@@ -1307,7 +1303,7 @@ watch(
 watch(
   () => props.chatting,
   (isChatting, wasChatting) => {
-    if (wasChatting && !isChatting && !props.frozen) {
+    if (wasChatting && !isChatting) {
       nextTick(() => focusInput({ preventScroll: true }));
     }
   },
