@@ -111,7 +111,12 @@ export async function reconcileForegroundConversation(input: {
     if (backendStreaming) return action;
     const latestTailMessageId = await input.requestLatestFormalTailMessageId();
     if (!input.isCurrent()) return "keep";
-    if (latestTailMessageId === input.readCurrentFormalTailMessageId()) return action;
+    if (latestTailMessageId === input.readCurrentFormalTailMessageId()) {
+      if (!latestTailMessageId) return action;
+      return await input.refreshTargetMessage(latestTailMessageId)
+        ? "refresh_target_message"
+        : action;
+    }
     action = "reload_conversation";
   }
   if (action === "refresh_target_message") {

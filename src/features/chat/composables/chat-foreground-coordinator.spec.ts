@@ -62,6 +62,32 @@ describe("chatForegroundCoordinator", () => {
     expect(reloadConversation).not.toHaveBeenCalled();
   });
 
+  it("前后端均已完成时只回读并刷新最后一条正式消息", async () => {
+    const refreshTargetMessage = vi.fn(async () => true);
+    const finalizeTargetRefresh = vi.fn();
+    const reloadConversation = vi.fn(async () => {});
+    const action = await reconcileForegroundConversation({
+      conversationId: "conversation-a",
+      isCurrent: () => true,
+      requestRuntimeSnapshot: async () => ({ runtimeState: "idle" }),
+      applyRuntimeState: () => {},
+      frontendStreaming: () => false,
+      readFrontendStreamCache: () => null,
+      probeStream: async () => true,
+      readCurrentFormalTailMessageId: () => "assistant-1",
+      requestLatestFormalTailMessageId: async () => "assistant-1",
+      refreshTargetMessage,
+      finalizeTargetRefresh,
+      reloadConversation,
+    });
+
+    expect(action).toBe("refresh_target_message");
+    expect(refreshTargetMessage).toHaveBeenCalledTimes(1);
+    expect(refreshTargetMessage).toHaveBeenCalledWith("assistant-1");
+    expect(finalizeTargetRefresh).not.toHaveBeenCalled();
+    expect(reloadConversation).not.toHaveBeenCalled();
+  });
+
   it("latest runner 在运行期间收到新输入后会再执行最新任务", async () => {
     const values: string[] = [];
     let finishFirst: (() => void) | undefined;
