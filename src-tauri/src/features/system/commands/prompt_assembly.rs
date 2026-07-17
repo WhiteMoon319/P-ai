@@ -265,16 +265,58 @@ fn conversation_user_main_workspace_root(conversation: &Conversation, state: &Ap
 }
 
 const WORKSPACE_AGENTS_MD_MAX_BYTES: u64 = 32 * 1024;
-const INTERFACE_REMOTE_CONTACT_PROMPT_MD: &str =
-    include_str!("../../../../resources/prompts/interface_remote_contact.md");
+const INTERFACE_REMOTE_PRIVATE_CONTACT_PROMPT_MD: &str =
+    include_str!("../../../../resources/prompts/interface_remote_private_contact.md");
+const INTERFACE_REMOTE_GROUP_CONTACT_PROMPT_MD: &str =
+    include_str!("../../../../resources/prompts/interface_remote_group_contact.md");
 const INTERFACE_LOCAL_CONVERSATION_PROMPT_MD: &str =
     include_str!("../../../../resources/prompts/interface_local_conversation.md");
 
-fn build_human_interface_environment_block(remote_contact_mode: bool) -> String {
-    let body = if remote_contact_mode {
-        INTERFACE_REMOTE_CONTACT_PROMPT_MD
-    } else {
-        INTERFACE_LOCAL_CONVERSATION_PROMPT_MD
+fn resolve_human_interface_remote_contact_type(
+    state: Option<&AppState>,
+    conversation: &Conversation,
+    activation_sources: &[RemoteImActivationSource],
+) -> Option<String> {
+    if conversation_is_remote_im_contact(conversation) {
+        let remote_contact_type = state.and_then(|state| {
+            let runtime = state_read_runtime_state_cached(state).ok()?;
+            let conversation_id = conversation.id.trim();
+            let root_key = conversation
+                .root_conversation_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty());
+            runtime
+                .remote_im_contacts
+                .iter()
+                .find(|contact| {
+                    root_key
+                        .map(|key| remote_im_contact_conversation_key(contact) == key)
+                        .unwrap_or(false)
+                        || contact
+                            .bound_conversation_id
+                            .as_deref()
+                            .map(str::trim)
+                            .filter(|value| !value.is_empty())
+                            == Some(conversation_id)
+                })
+                .map(|contact| contact.remote_contact_type.trim().to_string())
+                .filter(|value| !value.is_empty())
+        });
+        return Some(remote_contact_type.unwrap_or_else(|| "private".to_string()));
+    }
+    resolve_bound_remote_im_activation_source(activation_sources)
+        .map(|source| source.remote_contact_type.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn build_human_interface_environment_block(remote_contact_type: Option<&str>) -> String {
+    let body = match remote_contact_type {
+        Some(contact_type) if contact_type.trim().eq_ignore_ascii_case("group") => {
+            INTERFACE_REMOTE_GROUP_CONTACT_PROMPT_MD
+        }
+        Some(_) => INTERFACE_REMOTE_PRIVATE_CONTACT_PROMPT_MD,
+        None => INTERFACE_LOCAL_CONVERSATION_PROMPT_MD,
     };
     prompt_xml_block("interface", body.trim())
 }
@@ -608,6 +650,38 @@ mod prompt_assembly_tests {
             active_goal: None,
             cumulative_usage: ConversationCumulativeUsage::default(),
         }
+    }
+
+    #[test]
+    fn human_interface_environment_block_should_follow_output_environment() {
+        let local = build_human_interface_environment_block(None);
+        let private = build_human_interface_environment_block(Some("private"));
+        let group = build_human_interface_environment_block(Some("group"));
+
+        assert!(local.contains("桌面应用的本地 WebUI"));
+        assert!(local.contains("调用工具、读取文件"));
+        assert!(private.contains("Todo 发生实质变化"));
+        assert!(private.contains("不要为每次工具调用"));
+        assert!(group.contains("群友和正在解决的问题永远是重点"));
+        assert!(group.contains("不得再发送中间进度"));
+        assert!(!group.contains("Todo 发生实质变化"));
+    }
+
+    #[test]
+    fn human_interface_remote_contact_type_should_use_bound_activation_source() {
+        let conversation = build_test_conversation(Vec::new());
+        let sources = vec![RemoteImActivationSource {
+            channel_id: "channel-a".to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            remote_contact_type: "group".to_string(),
+            remote_contact_id: "group-a".to_string(),
+            remote_contact_name: "测试群".to_string(),
+        }];
+
+        assert_eq!(
+            resolve_human_interface_remote_contact_type(None, &conversation, &sources),
+            Some("group".to_string())
+        );
     }
 
     fn build_test_message(role: &str, text: &str) -> ChatMessage {
