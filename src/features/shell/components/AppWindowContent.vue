@@ -293,6 +293,7 @@
             </PanelTabStrip>
             <ConversationView
               v-if="sideConversationId"
+              :key="sideConversationId"
               class="min-h-0 flex-1"
               :conversation-id="sideConversationId"
               :api-config-id="conversationCallPrimaryApiConfigId"

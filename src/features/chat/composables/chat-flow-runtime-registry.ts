@@ -1,9 +1,12 @@
 export type ChatFlowRuntimeEventHandlers = {
   handleExternalAssistantDelta: (payload: unknown) => Promise<void> | void;
   handleExternalHistoryFlushed: (payload: unknown) => Promise<void> | void;
+  handleExternalMessageAppended?: (payload: unknown) => Promise<void> | void;
+  handleExternalMessagesAfterSynced?: (payload: unknown) => Promise<void> | void;
   handleExternalRoundCompleted: (payload: unknown) => Promise<void> | void;
   handleExternalRoundFailed: (payload: unknown) => Promise<void> | void;
   handleExternalRoundStarted: (payload: unknown) => Promise<void> | void;
+  handleExternalRuntimeStateUpdated?: (payload: unknown) => Promise<void> | void;
   handleExternalStreamRebindRequired: (payload: unknown) => Promise<void> | void;
   handleExternalTodosUpdated?: (payload: unknown) => Promise<void> | void;
 };

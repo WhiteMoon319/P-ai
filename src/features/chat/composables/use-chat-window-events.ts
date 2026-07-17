@@ -132,6 +132,10 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
       });
 
       void listen<any>("easy-call:conversation-runtime-state-updated", (event) => {
+        const conversationId = bindings.readConversationIdFromPayload(event.payload);
+        for (const flow of flowsForConversation(conversationId)) {
+          void flow.handleExternalRuntimeStateUpdated?.(event.payload);
+        }
         bindings.applyConversationRuntimeStateUpdated(event.payload);
       }).then((unlisten) => {
         bindings.unlisteners.chatConversationRuntimeStateUpdated = unlisten;
@@ -191,6 +195,10 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
       });
 
       void listen<any>("easy-call:conversation-messages-after-synced", (event) => {
+        const conversationId = bindings.readConversationIdFromPayload(event.payload);
+        for (const flow of flowsForConversation(conversationId)) {
+          void flow.handleExternalMessagesAfterSynced?.(event.payload);
+        }
         void bindings.applyConversationMessagesAfterSynced(event.payload);
       }).then((unlisten) => {
         bindings.unlisteners.chatConversationMessagesAfterSynced = unlisten;
@@ -199,6 +207,10 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
       });
 
       void listen<any>("easy-call:conversation-message-appended", (event) => {
+        const conversationId = bindings.readConversationIdFromPayload(event.payload);
+        for (const flow of flowsForConversation(conversationId)) {
+          void flow.handleExternalMessageAppended?.(event.payload);
+        }
         bindings.applyConversationMessageAppended(event.payload);
       }).then((unlisten) => {
         bindings.unlisteners.chatConversationMessageAppended = unlisten;

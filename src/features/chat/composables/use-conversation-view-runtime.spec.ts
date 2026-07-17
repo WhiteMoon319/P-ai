@@ -1,0 +1,299 @@
+import { effectScope, nextTick, ref } from "vue";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const invokeTauriMock = vi.hoisted(() => vi.fn());
+const flowMock = vi.hoisted(() => ({
+  bindingId: "side-view-test",
+  frontendRoundPhase: { value: "idle" as "idle" | "queued" | "waiting" | "streaming" },
+  unbindActiveConversationStream: vi.fn(async () => {}),
+  bindActiveConversationStream: vi.fn(async () => {}),
+  clearForegroundRuntimeState: vi.fn(),
+  resumeForegroundRuntimeRound: vi.fn(),
+  probeBoundChannel: vi.fn(async () => true),
+  hasActiveBoundDeltaChannel: vi.fn(() => false),
+  readConversationStreamCache: vi.fn<(conversationId?: string) => any>(() => null),
+  handleExternalAssistantDelta: vi.fn(),
+  handleExternalHistoryFlushed: vi.fn(),
+  handleExternalRoundStarted: vi.fn(async () => {}),
+  handleExternalRoundCompleted: vi.fn(async () => {}),
+  handleExternalRoundFailed: vi.fn(async () => {}),
+  handleExternalStreamRebindRequired: vi.fn(async () => {}),
+  sendChat: vi.fn(),
+  stopChat: vi.fn(),
+}));
+
+vi.mock("../../../services/tauri-api", () => ({
+  invokeTauri: invokeTauriMock,
+}));
+
+vi.mock("./use-chat-flow", () => ({
+  useChatFlow: () => flowMock,
+}));
+
+import { useConversationViewRuntime } from "./use-conversation-view-runtime";
+
+function message(id: string, text: string, role: "user" | "assistant" = "assistant") {
+  return {
+    id,
+    role,
+    createdAt: `2026-07-17T00:00:0${id.length}Z`,
+    parts: [{ type: "text", text }],
+  } as any;
+}
+
+function createEventTarget() {
+  const target = new EventTarget();
+  return {
+    addEventListener: target.addEventListener.bind(target),
+    removeEventListener: target.removeEventListener.bind(target),
+    dispatchEvent: target.dispatchEvent.bind(target),
+  };
+}
+
+async function createRuntime(conversationId = "conversation-a") {
+  const windowTarget = createEventTarget();
+  const documentTarget = Object.assign(createEventTarget(), { visibilityState: "visible" });
+  vi.stubGlobal("window", windowTarget);
+  vi.stubGlobal("document", documentTarget);
+  const scope = effectScope();
+  const id = ref(conversationId);
+  const runtime = scope.run(() => useConversationViewRuntime({
+    conversationId: id,
+    apiConfigId: ref("api-a"),
+    agentId: ref("agent-a"),
+    departmentId: ref("department-a"),
+    t: (key) => key,
+  }));
+  await nextTick();
+  return { runtime: runtime!, scope, id, windowTarget, documentTarget };
+}
+
+describe("useConversationViewRuntime", () => {
+  beforeEach(() => {
+    invokeTauriMock.mockReset();
+    flowMock.frontendRoundPhase.value = "idle";
+    flowMock.unbindActiveConversationStream.mockReset().mockResolvedValue(undefined);
+    flowMock.bindActiveConversationStream.mockReset().mockResolvedValue(undefined);
+    flowMock.clearForegroundRuntimeState.mockReset();
+    flowMock.resumeForegroundRuntimeRound.mockReset();
+    flowMock.probeBoundChannel.mockReset().mockResolvedValue(true);
+    flowMock.hasActiveBoundDeltaChannel.mockReset().mockReturnValue(false);
+    flowMock.readConversationStreamCache.mockReset().mockReturnValue(null);
+    flowMock.handleExternalRoundStarted.mockReset().mockResolvedValue(undefined);
+    flowMock.handleExternalRoundCompleted.mockReset().mockResolvedValue(undefined);
+    flowMock.handleExternalRoundFailed.mockReset().mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("先应用权威快照，等待旧解绑完成后强制绑定并恢复轮次", async () => {
+    let finishUnbind: (() => void) | undefined;
+    flowMock.unbindActiveConversationStream.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      finishUnbind = resolve;
+    }));
+    invokeTauriMock.mockResolvedValueOnce({
+      conversationId: "conversation-a",
+      messages: [message("assistant-1", "partial")],
+      runtimeState: "assistant_streaming",
+      shouldBindStream: true,
+      streamCache: { persistedAssistantMessageId: "assistant-1", assistantText: "partial", hasVisibleProgress: true },
+    });
+
+    const { runtime, scope } = await createRuntime();
+    await vi.waitFor(() => expect(runtime.allMessages.value).toHaveLength(1));
+    expect(flowMock.bindActiveConversationStream).not.toHaveBeenCalled();
+
+    finishUnbind?.();
+    await vi.waitFor(() => expect(flowMock.bindActiveConversationStream).toHaveBeenCalledWith("conversation-a", true));
+    expect(flowMock.resumeForegroundRuntimeRound).toHaveBeenCalledWith(expect.objectContaining({
+      conversationId: "conversation-a",
+    }));
+    scope.stop();
+  });
+
+  it("按会话事件更新权威忙碌态并合并后台追加消息", async () => {
+    invokeTauriMock.mockResolvedValueOnce({
+      conversationId: "conversation-a",
+      messages: [message("user-1", "question", "user")],
+      runtimeState: "idle",
+      shouldBindStream: false,
+    });
+    flowMock.frontendRoundPhase.value = "streaming";
+    flowMock.hasActiveBoundDeltaChannel.mockReturnValue(true);
+
+    const { runtime, scope } = await createRuntime();
+    await vi.waitFor(() => expect(runtime.allMessages.value).toHaveLength(1));
+    const handlers = runtime.flow as any;
+    handlers.handleExternalRuntimeStateUpdated({
+      conversationId: "conversation-a",
+      runtimeState: "assistant_streaming",
+    });
+    handlers.handleExternalMessageAppended({
+      conversationId: "conversation-a",
+      message: message("assistant-1", "answer"),
+    });
+
+    expect(runtime.runtimeState.value).toBe("assistant_streaming");
+    expect(runtime.conversationBusy.value).toBe(true);
+    expect(runtime.allMessages.value.map((item) => item.id)).toEqual(["user-1", "assistant-1"]);
+    scope.stop();
+  });
+
+  it("串行化同一视图的重复快照恢复，后发恢复不会被旧请求反向覆盖", async () => {
+    let resolveFirst: ((value: unknown) => void) | undefined;
+    let activeRequests = 0;
+    let maxActiveRequests = 0;
+    invokeTauriMock.mockImplementation((command: string) => {
+      if (command !== "get_foreground_conversation_light_snapshot") {
+        return Promise.resolve({});
+      }
+      activeRequests += 1;
+      maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+      if (!resolveFirst) {
+        return new Promise((resolve) => {
+          resolveFirst = (value) => {
+            activeRequests -= 1;
+            resolve(value);
+          };
+        });
+      }
+      activeRequests -= 1;
+      return Promise.resolve({
+        conversationId: "conversation-a",
+        messages: [message("assistant-new", "new")],
+        runtimeState: "idle",
+        shouldBindStream: false,
+      });
+    });
+
+    const { runtime, scope } = await createRuntime();
+    const reload = runtime.loadSnapshot();
+    resolveFirst?.({
+      conversationId: "conversation-a",
+      messages: [message("assistant-old", "old")],
+      runtimeState: "idle",
+      shouldBindStream: false,
+    });
+    await reload;
+
+    expect(maxActiveRequests).toBe(1);
+    expect(runtime.allMessages.value.map((item) => item.id)).toEqual(["assistant-old", "assistant-new"]);
+    scope.stop();
+  });
+
+  it("切回前台且 Channel 探针健康时保留当前流，不重新加载消息", async () => {
+    const streamCache = {
+      activationId: "activation-a",
+      requestId: "request-a",
+      updatedAt: "2026-07-17T00:00:10Z",
+      persistedAssistantMessageId: "assistant-1",
+      assistantText: "partial",
+      hasVisibleProgress: true,
+    };
+    invokeTauriMock.mockImplementation((command: string) => {
+      if (command === "get_foreground_conversation_light_snapshot") {
+        return Promise.resolve({
+          conversationId: "conversation-a",
+          messages: [message("assistant-1", "partial")],
+          runtimeState: "assistant_streaming",
+          shouldBindStream: true,
+          streamCache,
+        });
+      }
+      if (command === "get_conversation_runtime_snapshot") {
+        return Promise.resolve({
+          conversationId: "conversation-a",
+          runtimeState: "assistant_streaming",
+          streamCache,
+        });
+      }
+      return Promise.resolve({});
+    });
+    flowMock.readConversationStreamCache.mockReturnValue(streamCache);
+
+    const { scope, windowTarget } = await createRuntime();
+    await vi.waitFor(() => expect(flowMock.bindActiveConversationStream).toHaveBeenCalledTimes(1));
+    flowMock.frontendRoundPhase.value = "streaming";
+    windowTarget.dispatchEvent(new Event("focus"));
+
+    await vi.waitFor(() => expect(flowMock.probeBoundChannel).toHaveBeenCalledWith("conversation-a"));
+    expect(flowMock.bindActiveConversationStream).toHaveBeenCalledTimes(1);
+    expect(invokeTauriMock.mock.calls.filter(([command]) => command === "get_foreground_conversation_light_snapshot")).toHaveLength(1);
+    scope.stop();
+  });
+
+  it("后端已完成但追问仍在流式时只刷新目标消息并收口", async () => {
+    const streamCache = {
+      activationId: "activation-a",
+      requestId: "request-a",
+      updatedAt: "2026-07-17T00:00:10Z",
+      persistedAssistantMessageId: "assistant-1",
+      assistantText: "partial",
+      hasVisibleProgress: true,
+    };
+    invokeTauriMock.mockImplementation((command: string) => {
+      if (command === "get_foreground_conversation_light_snapshot") {
+        return Promise.resolve({
+          conversationId: "conversation-a",
+          messages: [message("assistant-1", "partial")],
+          runtimeState: "assistant_streaming",
+          shouldBindStream: true,
+          streamCache,
+        });
+      }
+      if (command === "get_conversation_runtime_snapshot") {
+        return Promise.resolve({
+          conversationId: "conversation-a",
+          runtimeState: "idle",
+          streamCache,
+        });
+      }
+      if (command === "get_unarchived_conversation_message_by_id") {
+        return Promise.resolve(message("assistant-1", "final"));
+      }
+      return Promise.resolve({});
+    });
+    flowMock.readConversationStreamCache.mockReturnValue(streamCache);
+
+    const { runtime, scope, windowTarget } = await createRuntime();
+    await vi.waitFor(() => expect(flowMock.bindActiveConversationStream).toHaveBeenCalledTimes(1));
+    flowMock.frontendRoundPhase.value = "streaming";
+    windowTarget.dispatchEvent(new Event("focus"));
+
+    await vi.waitFor(() => {
+      expect((runtime.allMessages.value[0]?.parts?.[0] as any)?.text).toBe("final");
+    });
+    expect(invokeTauriMock.mock.calls.filter(([command]) => command === "get_foreground_conversation_light_snapshot")).toHaveLength(1);
+    expect(runtime.runtimeState.value).toBe("idle");
+    scope.stop();
+  });
+
+  it("视图因主会话切换被卸载后，旧快照不得重新绑定僵尸 Channel", async () => {
+    let resolveSnapshot: ((value: unknown) => void) | undefined;
+    invokeTauriMock.mockImplementation((command: string) => {
+      if (command !== "get_foreground_conversation_light_snapshot") {
+        return Promise.resolve({});
+      }
+      return new Promise((resolve) => {
+        resolveSnapshot = resolve;
+      });
+    });
+
+    const { scope } = await createRuntime();
+    await vi.waitFor(() => expect(resolveSnapshot).toBeTypeOf("function"));
+    scope.stop();
+    resolveSnapshot?.({
+      conversationId: "conversation-a",
+      messages: [message("assistant-1", "partial")],
+      runtimeState: "assistant_streaming",
+      shouldBindStream: true,
+      streamCache: { persistedAssistantMessageId: "assistant-1", assistantText: "partial" },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(flowMock.bindActiveConversationStream).not.toHaveBeenCalled();
+  });
+});
