@@ -2378,6 +2378,7 @@
     "copyFilePath": "复制文件路径",
     "copySelectedText": "复制选中文字",
     "copySelectedLineReference": "复制选中的文件行号",
+    "addToChat": "添加到聊天",
     "referenceTruncated": "（引用内容共 {count} 字符，超过 2000 字符，未附加正文）",
     "referenceFile": "用户引用了文件片段：{location}",
     "actionFailed": "{action}失败：{path}；{detail}",

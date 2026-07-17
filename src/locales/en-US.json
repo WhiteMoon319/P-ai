@@ -2378,6 +2378,7 @@
     "copyFilePath": "Copy file path",
     "copySelectedText": "Copy selected text",
     "copySelectedLineReference": "Copy selected file line",
+    "addToChat": "Add to chat",
     "referenceTruncated": "(Reference content is {count} characters, exceeding 2000; body not attached)",
     "referenceFile": "User referenced file segment: {location}",
     "actionFailed": "{action} failed: {path}; {detail}",

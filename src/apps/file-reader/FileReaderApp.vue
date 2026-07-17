@@ -89,6 +89,7 @@
       :show-pick-file-button="false"
       :markdown-is-dark="markdownIsDark"
       custom-markstream-id="file-reader-markstream"
+      @add-context-reference="addContextReferenceToChat"
     />
 
     <Win10ResizeHandles :enabled="!maximized" />
@@ -97,7 +98,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { emitTo, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { FilePlus, FileText, Minus, Square, X } from "@lucide/vue";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -106,6 +107,9 @@ import FileReaderPanel from "../../features/file-reader/components/FileReaderPan
 import type { AppThemeState } from "../../features/shell/theme/theme-types";
 import { isDarkAppTheme, useAppTheme } from "../../features/shell/composables/use-app-theme";
 import Win10ResizeHandles from "../../features/shell/components/Win10ResizeHandles.vue";
+import { invokeTauri } from "../../services/tauri-api";
+import type { IdeContextReferenceItem } from "../../types/app";
+import { FILE_READER_ADD_TO_CHAT_EVENT } from "../../features/file-reader/file-reader-context";
 
 const FILE_READER_SESSION_STORAGE_KEY = "easy_call.file_reader_session.v1";
 const LEGACY_FILE_READER_SESSION_STORAGE_KEY = "easy-call:file-reader-session:v1";
@@ -126,6 +130,15 @@ const tabMenu = ref<{ path: string; x: number; y: number } | null>(null);
 
 let unlistenOpenPath: UnlistenFn | null = null;
 let unlistenThemeChanged: UnlistenFn | null = null;
+
+async function addContextReferenceToChat(reference: IdeContextReferenceItem) {
+  try {
+    await invokeTauri("show_chat_window");
+    await emitTo("chat", FILE_READER_ADD_TO_CHAT_EVENT, reference);
+  } catch (error) {
+    console.error("[文件阅读器] 添加选区到聊天失败", error);
+  }
+}
 
 const currentTabMenuIndex = computed(() => {
   const path = tabMenu.value?.path || "";

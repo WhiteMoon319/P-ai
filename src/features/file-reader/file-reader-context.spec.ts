@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { FileTab } from "./types";
-import { buildFileReaderContextReference, fileReaderLineReference } from "./file-reader-context";
+import {
+  buildFileReaderContextReference,
+  buildFileReaderSelectionContextReference,
+  fileReaderLineReference,
+  resolveFileReaderSelectionActionPosition,
+  resolveFileReaderSelectedLineRange,
+} from "./file-reader-context";
 
 const tab: FileTab = {
   path: "E:/repo/src/app.ts",
@@ -43,5 +49,56 @@ describe("file-reader-context", () => {
   it("文件行号引用继续复用标准后缀规则", () => {
     expect(fileReaderLineReference("E:\\repo\\src\\app.ts", { startLine: 8, endLine: 8 }))
       .toBe("E:/repo/src/app.ts:8");
+  });
+
+  it("添加到聊天时生成选区行号文件标签", () => {
+    const reference = buildFileReaderSelectionContextReference({
+      tab,
+      initialRootPath: "E:/repo",
+      lineRange: { startLine: 12, endLine: 15 },
+      selectedText: "const value = 1;",
+      capturedAt: "2026-07-17T00:00:00Z",
+      t,
+    });
+
+    expect(reference.displayLabel).toBe("src/app.ts:12-15");
+    expect(reference.startLine).toBe(12);
+    expect(reference.endLine).toBe(15);
+    expect(reference.source).toBe("selection");
+  });
+
+  it("渲染态 Markdown 优先按源文定位选区行号", () => {
+    const markdownTab: FileTab = {
+      ...tab,
+      path: "E:/repo/README.md",
+      title: "README.md",
+      extension: "md",
+      kind: "markdown",
+      content: "# 标题\n第一段\n需要添加到聊天的内容\n最后一段",
+      rawMode: false,
+      totalLines: 4,
+    };
+    const scroller = {
+      scrollHeight: 1000,
+      clientHeight: 100,
+      scrollTop: 0,
+    } as HTMLElement;
+
+    expect(resolveFileReaderSelectedLineRange(
+      markdownTab,
+      scroller,
+      "需要添加到聊天的内容",
+    )).toEqual({ startLine: 3, endLine: 3 });
+  });
+
+  it("选区操作浮层始终限制在正文区域内", () => {
+    expect(resolveFileReaderSelectionActionPosition({
+      anchorX: 790,
+      anchorY: 180,
+      containerRect: { left: 100, right: 700, top: 40, bottom: 600 },
+    })).toEqual({
+      x: 460,
+      y: 188,
+    });
   });
 });

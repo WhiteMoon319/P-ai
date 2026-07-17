@@ -486,6 +486,7 @@
           :markdown-is-dark="markdownIsDark"
           custom-markstream-id="chat-file-reader-markstream"
           @capture-context-reference="handleCaptureFileReaderContextReference"
+          @add-context-reference="handleAddFileReaderContextReference"
           @clear-selection-context-reference="handleClearFileReaderSelectionContextReference"
         >
           <template #tabLeadingActions>
@@ -580,6 +581,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { isDarkAppTheme } from "../../shell/composables/use-app-theme";
 import {
   useChatComposerAppearance,
@@ -627,6 +629,7 @@ import { useChatBlockTracking } from "../composables/use-chat-block-tracking";
 import type { TaskEntry } from "../../config/views/config-tabs/task-editor";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
 import { clearNativeTextSelection } from "../../../utils/native-selection";
+import { FILE_READER_ADD_TO_CHAT_EVENT } from "../../file-reader/file-reader-context";
 
 // ==================== props / emits ====================
 
@@ -1150,6 +1153,12 @@ function handleCaptureFileReaderContextReference(reference: IdeContextReferenceI
   } else {
     fileReaderSelectionContextReference.value = { ...reference };
   }
+}
+
+function handleAddFileReaderContextReference(reference: IdeContextReferenceItem) {
+  handleAttachIdeContextReference(reference);
+  fileReaderSelectionContextReference.value = null;
+  void nextTick(() => composerPanelRef.value?.focusInput?.({ preventScroll: true }));
 }
 
 function handleClearFileReaderSelectionContextReference() {
@@ -1865,15 +1874,28 @@ async function openLocalFileInChatReader(path: string, line?: number) {
 
 // ==================== lifecycle ====================
 
+let unlistenFileReaderAddToChat: UnlistenFn | null = null;
+
 onMounted(() => {
   void nextTick(() => chatScrollbarRef.value?.updateThumb());
   document.addEventListener("pointerdown", closeCompactionSummaryContextMenu);
   document.addEventListener("keydown", handleCompactionSummaryContextMenuKeydown);
+  if (isTauriRuntimeAvailable()) {
+    void listen<IdeContextReferenceItem>(FILE_READER_ADD_TO_CHAT_EVENT, (event) => {
+      handleAddFileReaderContextReference(event.payload);
+    }).then((unlisten) => {
+      unlistenFileReaderAddToChat = unlisten;
+    }).catch((error) => {
+      console.warn("[文件阅读器] 监听添加选区到聊天失败", error);
+    });
+  }
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", closeCompactionSummaryContextMenu);
   document.removeEventListener("keydown", handleCompactionSummaryContextMenuKeydown);
+  unlistenFileReaderAddToChat?.();
+  unlistenFileReaderAddToChat = null;
   if (transientNoticeTimer) window.clearTimeout(transientNoticeTimer);
   panesCleanupFns.forEach((fn) => fn());
   stopAudioPlayback();

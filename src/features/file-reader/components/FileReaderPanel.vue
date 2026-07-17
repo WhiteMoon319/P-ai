@@ -338,7 +338,7 @@
               v-else-if="activeTab.kind === 'markdown' && !isTabRawMode(activeTab)"
               ref="markdownScroller"
               class="file-reader-content file-reader-markdown-scroller mx-auto h-full w-full max-w-300 overflow-auto px-4 py-4"
-              @scroll="captureVisibleRangeContext"
+              @scroll="handleContentScroll"
               @click="openMarkdownFileLink"
               @mouseup="captureCurrentTextSelection"
               @keyup="captureCurrentTextSelection"
@@ -362,7 +362,7 @@
                 ref="virtualCodeScroller"
                 class="file-reader-code-virtual-scroller h-full min-h-0 overflow-auto"
                 :class="isTabRawMode(activeTab) ? 'file-reader-code-virtual-scroller-raw' : 'file-reader-code-virtual-scroller-shiki'"
-                @scroll="captureVisibleRangeContext"
+                @scroll="handleContentScroll"
                 @mouseup="captureCurrentTextSelection"
                 @keyup="captureCurrentTextSelection"
                 @contextmenu.prevent="openActiveFileContextMenu"
@@ -422,6 +422,17 @@
                 orientation="horizontal"
               />
             </div>
+            <div
+              v-else
+              ref="plainTextScroller"
+              class="file-reader-content h-full overflow-auto"
+              @scroll="handleContentScroll"
+              @mouseup="captureCurrentTextSelection"
+              @keyup="captureCurrentTextSelection"
+              @contextmenu.prevent="openActiveFileContextMenu"
+            >
+              <pre class="file-reader-raw-pre min-h-full p-4">{{ activeTab.content }}</pre>
+            </div>
           </div>
         </div>
       </main>
@@ -463,6 +474,32 @@
     </div>
 
     <Teleport to="body">
+      <div
+        v-if="selectionAction"
+        class="fixed z-1290 flex items-center gap-1 rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
+        :style="{ left: `${selectionAction.x}px`, top: `${selectionAction.y}px` }"
+        @pointerdown.stop
+        @contextmenu.prevent.stop
+      >
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs h-7 min-h-7 px-2"
+          @mousedown.prevent
+          @click.stop="copySelectionActionText"
+        >
+          <Copy class="h-3.5 w-3.5" />
+          {{ t('common.copy') }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary btn-xs h-7 min-h-7 px-2"
+          @mousedown.prevent
+          @click.stop="addSelectionActionToChat"
+        >
+          <MessageSquarePlus class="h-3.5 w-3.5" />
+          {{ t('fileReader.addToChat') }}
+        </button>
+      </div>
       <template v-if="hoverDirectoryTreeVisible">
         <div
           class="fixed z-1199"
@@ -598,7 +635,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { ChevronDown, ChevronRight, Check, Code2, Eye, ExternalLink, FilePlus, Folders, RefreshCw, Search, SquareTerminal } from "@lucide/vue";
+import { ChevronDown, ChevronRight, Check, Code2, Copy, Eye, ExternalLink, FilePlus, Folders, MessageSquarePlus, RefreshCw, Search, SquareTerminal } from "@lucide/vue";
 import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
 import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
 import { isAbsoluteLocalPath, normalizeLocalLinkHref, parseLocalFileReference } from "../../chat/utils/local-link";
@@ -609,7 +646,9 @@ import type { IdeContextReferenceItem } from "../../../types/app";
 import {
   buildFileReaderContextMeta,
   buildFileReaderContextReference,
+  buildFileReaderSelectionContextReference,
   fileReaderLineReference,
+  resolveFileReaderSelectionActionPosition,
   resolveFileReaderSelectedLineRange,
 } from "../file-reader-context";
 import { useFileReaderVirtualCode } from "../composables/use-file-reader-virtual-code";
@@ -680,6 +719,7 @@ const emit = defineEmits<{
   (e: "openPath", path: string): void;
   (e: "selectPath", path: string): void;
   (e: "captureContextReference", reference: IdeContextReferenceItem): void;
+  (e: "addContextReference", reference: IdeContextReferenceItem): void;
   (e: "clearSelectionContextReference"): void;
 }>();
 
@@ -688,6 +728,13 @@ type FileReaderContextMenuTarget = {
   path: string;
   selectedText: string;
   lineReference: string;
+};
+
+type FileReaderSelectionAction = {
+  selectedText: string;
+  reference: IdeContextReferenceItem;
+  x: number;
+  y: number;
 };
 
 // ==================== Constants ====================
@@ -721,6 +768,7 @@ const actionErrorMessage = ref("");
 const contextMenuOpen = ref(false);
 const contextMenuPosition = ref({ x: 0, y: 0 });
 const contextMenuTarget = ref<FileReaderContextMenuTarget | null>(null);
+const selectionAction = ref<FileReaderSelectionAction | null>(null);
 const directoryRootPath = ref("");
 const directoryTreeFilter = ref("");
 const directoryOpenTargetsLoading = ref(false);
@@ -735,6 +783,7 @@ const addressScroller = ref<HTMLElement | null>(null);
 const contentScroller = ref<HTMLElement | null>(null);
 const markdownScroller = ref<HTMLElement | null>(null);
 const virtualCodeScroller = ref<HTMLElement | null>(null);
+const plainTextScroller = ref<HTMLElement | null>(null);
 const directoryScroller = ref<HTMLElement | null>(null);
 const directoryScrollbarRef = ref<InstanceType<typeof FloatingScrollbar> | null>(null);
 const virtualCodeScrollbarRef = ref<InstanceType<typeof FloatingScrollbar> | null>(null);
@@ -1270,6 +1319,16 @@ function readCurrentFileSelection(): { selectedText: string; lineRange: { startL
   };
 }
 
+function selectionActionAnchor(range: Range) {
+  const rects = Array.from(range.getClientRects()).filter((rect) => rect.width > 0 || rect.height > 0);
+  const rect = rects[rects.length - 1] || range.getBoundingClientRect();
+  return { x: rect.right, y: rect.bottom };
+}
+
+function closeSelectionAction() {
+  selectionAction.value = null;
+}
+
 async function copyTextToClipboard(text: string) {
   const value = String(text || "");
   if (!value) return;
@@ -1298,6 +1357,22 @@ function copyContextMenuLineReference() {
   void copyTextToClipboard(target?.lineReference || "");
 }
 
+function copySelectionActionText() {
+  const target = selectionAction.value;
+  closeSelectionAction();
+  void copyTextToClipboard(target?.selectedText || "");
+}
+
+function addSelectionActionToChat() {
+  const target = selectionAction.value;
+  closeSelectionAction();
+  if (!target) return;
+  emit("addContextReference", target.reference);
+  emit("clearSelectionContextReference");
+  lastCapturedSelectionKey = "";
+  window.getSelection()?.removeAllRanges();
+}
+
 function openContextMenuShell() {
   const target = contextMenuTarget.value;
   closeContextMenu();
@@ -1318,23 +1393,46 @@ function captureCurrentTextSelection() {
   if (!tab || !isTextFileKind(tab.kind) || !scroller || tab.loading || tab.error) return;
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+    closeSelectionAction();
     lastCapturedSelectionKey = "";
     emit("clearSelectionContextReference");
     return;
   }
   const range = selection.getRangeAt(0);
   if (!scroller.contains(range.commonAncestorContainer)) {
+    closeSelectionAction();
     lastCapturedSelectionKey = "";
     emit("clearSelectionContextReference");
     return;
   }
 
   const selectedText = normalizeSelectedText(selection.toString());
-  if (!selectedText) return;
+  if (!selectedText) {
+    closeSelectionAction();
+    return;
+  }
 
   const lineRange = resolveFileReaderSelectedLineRange(tab, scroller, selectedText, range);
   const meta = buildFileReaderContextMeta(tab, props.initialRootPath || "");
   const capturedAt = new Date().toISOString();
+  const reference = buildFileReaderSelectionContextReference({
+    tab,
+    initialRootPath: props.initialRootPath || "",
+    lineRange,
+    selectedText,
+    capturedAt,
+    t: (key, params) => String(t(key, params ?? {})),
+  });
+  const actionAnchor = selectionActionAnchor(range);
+  selectionAction.value = {
+    selectedText,
+    reference,
+    ...resolveFileReaderSelectionActionPosition({
+      anchorX: actionAnchor.x,
+      anchorY: actionAnchor.y,
+      containerRect: scroller.getBoundingClientRect(),
+    }),
+  };
   const selectionKey = [
     meta.filePath,
     lineRange.startLine || "",
@@ -1343,16 +1441,12 @@ function captureCurrentTextSelection() {
   ].join("\n");
   if (selectionKey === lastCapturedSelectionKey) return;
   lastCapturedSelectionKey = selectionKey;
+  emit("captureContextReference", reference);
+}
 
-  const displayLineSuffix = formatLineSuffix(lineRange.startLine, lineRange.endLine);
-  emitContextReference({
-    tab,
-    source: "selection",
-    lineRange,
-    content: selectedText,
-    displayLabel: `${meta.relativePath || tab.title}${displayLineSuffix}`,
-    capturedAt,
-  });
+function handleContentScroll() {
+  closeSelectionAction();
+  captureVisibleRangeContext();
 }
 
 function captureVisibleRangeContext() {
@@ -1408,7 +1502,8 @@ function activeContentScroller() {
   const tab = activeTab.value;
   if (!tab) return contentScroller.value;
   if (tab.virtualized) return virtualCodeScroller.value;
-  if (tab.kind === "markdown") return markdownScroller.value;
+  if (tab.kind === "markdown" && !tab.rawMode) return markdownScroller.value;
+  if (isTextFileKind(tab.kind)) return plainTextScroller.value;
   return contentScroller.value;
 }
 
@@ -1426,6 +1521,7 @@ function handleMediaLoadError(tab: FileTab) {
 }
 
 async function resetActiveContentScrollToTop() {
+  closeSelectionAction();
   lastCapturedSelectionKey = "";
   lastCapturedVisibleRangeKey = "";
   await nextTick();
@@ -2449,12 +2545,14 @@ function handleGlobalPointerDown(event: PointerEvent) {
   if (target && directoryOpenTargetDropdownRef.value?.contains(target)) return;
   closeDirectoryOpenTargetDropdown();
   closeContextMenu();
+  closeSelectionAction();
 }
 
 function handleGlobalEscape(event: KeyboardEvent) {
   if (event.key === "Escape") {
     closeDirectoryOpenTargetDropdown();
     closeContextMenu();
+    closeSelectionAction();
   }
 }
 

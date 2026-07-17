@@ -16,6 +16,30 @@ import {
 
 type TranslateFn = (key: string, params?: Record<string, unknown>) => string;
 type LineRange = { startLine?: number; endLine?: number };
+type RectBounds = { left: number; right: number; top: number; bottom: number };
+
+export const FILE_READER_ADD_TO_CHAT_EVENT = "easy-call:file-reader-add-to-chat";
+
+export function resolveFileReaderSelectionActionPosition(input: {
+  anchorX: number;
+  anchorY: number;
+  containerRect: RectBounds;
+  toolbarWidth?: number;
+  toolbarHeight?: number;
+  gap?: number;
+}) {
+  const width = input.toolbarWidth || 232;
+  const height = input.toolbarHeight || 38;
+  const gap = input.gap || 8;
+  const minX = input.containerRect.left + gap;
+  const maxX = Math.max(minX, input.containerRect.right - width - gap);
+  const minY = input.containerRect.top + gap;
+  const maxY = Math.max(minY, input.containerRect.bottom - height - gap);
+  return {
+    x: Math.max(minX, Math.min(input.anchorX + gap, maxX)),
+    y: Math.max(minY, Math.min(input.anchorY + gap, maxY)),
+  };
+}
 
 export function fileReaderLineReference(path: string, lineRange: LineRange): string {
   return `${normalizePath(path)}${formatLineSuffix(lineRange.startLine, lineRange.endLine)}`;
@@ -44,7 +68,8 @@ export function resolveFileReaderSelectedLineRange(
     return resolveVisibleLineRange(scroller, Math.max(1, tab.totalLines));
   }
   if (tab.kind === "markdown" && !tab.rawMode) {
-    return resolveVisibleLineRange(scroller, Math.max(1, splitContentLines(tab.content).length));
+    return resolveRawSelectedLineRange(tab.content, selectedText)
+      || resolveVisibleLineRange(scroller, Math.max(1, splitContentLines(tab.content).length));
   }
   return resolveRawSelectedLineRange(tab.content, selectedText)
     || resolveVisibleLineRange(scroller, Math.max(1, splitContentLines(tab.content).length));
@@ -88,6 +113,27 @@ export function buildFileReaderContextReference(input: {
       t: input.t,
     }),
   };
+}
+
+export function buildFileReaderSelectionContextReference(input: {
+  tab: FileTab;
+  initialRootPath: string;
+  lineRange: LineRange;
+  selectedText: string;
+  capturedAt: string;
+  t: TranslateFn;
+}): IdeContextReferenceItem {
+  const meta = buildFileReaderContextMeta(input.tab, input.initialRootPath);
+  return buildFileReaderContextReference({
+    tab: input.tab,
+    initialRootPath: input.initialRootPath,
+    source: "selection",
+    lineRange: input.lineRange,
+    content: input.selectedText,
+    displayLabel: `${meta.relativePath || input.tab.title}${formatLineSuffix(input.lineRange.startLine, input.lineRange.endLine)}`,
+    capturedAt: input.capturedAt,
+    t: input.t,
+  });
 }
 
 function resolveVirtualizedSelectedLineRange(range: Range): { startLine: number; endLine: number } | null {
