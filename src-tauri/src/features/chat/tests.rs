@@ -8639,6 +8639,13 @@
         child.is_built_in_assistant = false;
         child.agent_ids = vec![shared_agent.id.clone()];
         child.child_department_ids = Vec::new();
+        child.permission_control = DepartmentPermissionControl {
+            enabled: true,
+            mode: "whitelist".to_string(),
+            builtin_tool_names: vec!["fetch".to_string()],
+            skill_names: Vec::new(),
+            mcp_tool_names: Vec::new(),
+        };
 
         let config = AppConfig {
             departments: vec![parent, child],
@@ -8672,8 +8679,7 @@
                 Some(&state),
                 &session_id,
                 Some("dept-child"),
-            ))
-            .expect("assemble runtime tools");
+            ));
 
         assert!(assembly.tool_manifest.iter().any(|item| {
             item.get("source").and_then(Value::as_str) == Some("runtime_policy")
@@ -8683,6 +8689,10 @@
                     == Some("当前部门没有直接下级，无法使用委托")
         }));
         assert!(!assembly.tools.iter().any(|tool| tool.name() == "delegate"));
+        assert!(assembly.tool_definitions.iter().any(|tool| tool.name == "fetch"));
+        assert!(assembly.tools.iter().any(|tool| tool.name() == "fetch"));
+        assert!(!assembly.tool_definitions.iter().any(|tool| tool.name == "config"));
+        assert!(!assembly.tools.iter().any(|tool| tool.name() == "config"));
     }
 
     #[test]
@@ -8706,12 +8716,25 @@
         department.is_built_in_assistant = true;
         department.agent_ids = vec![agent.id.clone()];
 
-        let config = AppConfig {
+        let mut config = AppConfig {
             departments: vec![department],
             api_configs: vec![selected_api.clone()],
             api_providers: Vec::new(),
             ..AppConfig::default()
         };
+        config.remote_im_channels.push(RemoteImChannelConfig {
+            id: "channel-a".to_string(),
+            name: "测试渠道".to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            enabled: true,
+            credentials: serde_json::json!({ "mockSend": true }),
+            activate_assistant: true,
+            receive_files: true,
+            streaming_send: false,
+            show_tool_calls: false,
+            filter_markdown: false,
+            allow_send_files: true,
+        });
         write_config(&state.config_path, &config).expect("write config");
         state_write_agents_cached(&state, &[agent.clone(), default_user_persona()])
             .expect("write agents");
@@ -8847,6 +8870,16 @@
             Some("delegate-runtime".to_string()),
         );
         delegate_conversation.id = "conversation-delegate".to_string();
+        let mut system_conversation = build_conversation_record(
+            &selected_api.id,
+            &agent.id,
+            "assistant-department",
+            "系统通知会话",
+            CONVERSATION_KIND_SYSTEM_NOTIFICATION,
+            None,
+            None,
+        );
+        system_conversation.id = "conversation-system-notification".to_string();
 
         for conversation in [
             &local_without_goal,
@@ -8854,6 +8887,7 @@
             &remote_private_contact,
             &remote_group_contact,
             &delegate_conversation,
+            &system_conversation,
         ] {
             state_schedule_conversation_persist(&state, conversation)
                 .expect("persist conversation");
@@ -8871,7 +8905,6 @@
                     &session_id,
                     Some("assistant-department"),
                 ))
-                .expect("assemble runtime tools")
         };
         let has_attached_schema = |assembly: &RuntimeToolAssembly, name: &str| {
             assembly.tool_manifest.iter().any(|item| {
@@ -8886,6 +8919,32 @@
         let has_definition = |assembly: &RuntimeToolAssembly, name: &str| {
             assembly.tool_definitions.iter().any(|def| def.name == name)
         };
+        let assert_attached_sets_equal = |assembly: &RuntimeToolAssembly| {
+            let mut definition_names = assembly
+                .tool_definitions
+                .iter()
+                .map(|definition| definition.name.clone())
+                .collect::<Vec<_>>();
+            let mut executor_names = assembly
+                .tools
+                .iter()
+                .map(|tool| tool.name())
+                .collect::<Vec<_>>();
+            let mut manifest_names = assembly
+                .tool_manifest
+                .iter()
+                .filter(|item| {
+                    item.get("enabled").and_then(Value::as_bool) == Some(true)
+                        && item.get("attached").and_then(Value::as_bool) == Some(true)
+                })
+                .filter_map(|item| item.get("name").and_then(Value::as_str).map(str::to_string))
+                .collect::<Vec<_>>();
+            definition_names.sort();
+            executor_names.sort();
+            manifest_names.sort();
+            assert_eq!(definition_names, executor_names);
+            assert_eq!(definition_names, manifest_names);
+        };
 
         let local_without_goal_assembly = assemble_for(&local_without_goal.id);
         assert!(has_attached_schema(&local_without_goal_assembly, "create_goal"));
@@ -8898,6 +8957,7 @@
         assert!(!has_definition(&local_without_goal_assembly, "contact_reply"));
         assert!(!has_definition(&local_without_goal_assembly, "contact_no_reply"));
         assert!(!has_definition(&local_without_goal_assembly, "contact_send_files"));
+        assert_attached_sets_equal(&local_without_goal_assembly);
 
         let local_with_goal_assembly = assemble_for(&local_with_goal.id);
         assert!(has_attached_schema(&local_with_goal_assembly, "create_goal"));
@@ -8909,6 +8969,7 @@
         assert!(!has_definition(&local_with_goal_assembly, "contact_reply"));
         assert!(!has_definition(&local_with_goal_assembly, "contact_no_reply"));
         assert!(!has_definition(&local_with_goal_assembly, "contact_send_files"));
+        assert_attached_sets_equal(&local_with_goal_assembly);
 
         let remote_private_contact_assembly = assemble_for(&remote_private_contact.id);
         assert!(has_attached_schema(&remote_private_contact_assembly, "create_goal"));
@@ -8921,6 +8982,7 @@
         assert!(!has_attached_schema(&remote_private_contact_assembly, "contact_no_reply"));
         assert!(!has_executor(&remote_private_contact_assembly, "contact_no_reply"));
         assert!(!has_definition(&remote_private_contact_assembly, "contact_no_reply"));
+        assert_attached_sets_equal(&remote_private_contact_assembly);
 
         let remote_group_contact_assembly = assemble_for(&remote_group_contact.id);
         assert!(!has_attached_schema(&remote_group_contact_assembly, "contact_reply"));
@@ -8930,11 +8992,22 @@
         assert!(!has_attached_schema(&remote_group_contact_assembly, "contact_no_reply"));
         assert!(!has_executor(&remote_group_contact_assembly, "contact_no_reply"));
         assert!(!has_definition(&remote_group_contact_assembly, "contact_no_reply"));
+        assert_attached_sets_equal(&remote_group_contact_assembly);
 
         let delegate_assembly = assemble_for(&delegate_conversation.id);
         assert!(!has_attached_schema(&delegate_assembly, "task"));
         assert!(!has_executor(&delegate_assembly, "task"));
         assert!(!has_definition(&delegate_assembly, "task"));
+        assert!(!has_attached_schema(&delegate_assembly, "plan"));
+        assert!(!has_executor(&delegate_assembly, "plan"));
+        assert!(!has_definition(&delegate_assembly, "plan"));
+        assert_attached_sets_equal(&delegate_assembly);
+
+        let system_assembly = assemble_for(&system_conversation.id);
+        assert!(!has_attached_schema(&system_assembly, "plan"));
+        assert!(!has_executor(&system_assembly, "plan"));
+        assert!(!has_definition(&system_assembly, "plan"));
+        assert_attached_sets_equal(&system_assembly);
     }
 
     #[test]

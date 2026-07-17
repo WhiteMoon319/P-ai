@@ -429,6 +429,7 @@ fn department_for_agent_id<'a>(
 enum DepartmentPermissionCategory {
     BuiltinTool,
     Skill,
+    McpTool,
 }
 
 fn builtin_tool_is_fixed_system(tool_id: &str) -> bool {
@@ -516,6 +517,7 @@ fn deputy_department_restricted_reason(
                 None
             }
         }
+        DepartmentPermissionCategory::McpTool => None,
     }
 }
 
@@ -565,6 +567,7 @@ fn department_permission_candidates<'a>(
     let list = match category {
         DepartmentPermissionCategory::BuiltinTool => &control.builtin_tool_names,
         DepartmentPermissionCategory::Skill => &control.skill_names,
+        DepartmentPermissionCategory::McpTool => &control.mcp_tool_names,
     };
     Some((control, list.as_slice()))
 }
@@ -588,6 +591,7 @@ fn department_permission_allows_any_name(
                         return false;
                     }
                 }
+                DepartmentPermissionCategory::McpTool => {}
             }
         }
     }
@@ -632,6 +636,7 @@ fn department_permission_restricted_reason(
     let category_label = match category {
         DepartmentPermissionCategory::BuiltinTool => "工具",
         DepartmentPermissionCategory::Skill => "Skill",
+        DepartmentPermissionCategory::McpTool => "MCP 工具",
     };
     Some(format!(
         "因为当前部门权限卡采用{}机制，{} `{}` 未被允许",
@@ -773,6 +778,16 @@ mod types_storage_tests {
             DepartmentPermissionCategory::Skill,
             &["mcp-setup"],
         ));
+        assert!(department_permission_allows_any_name(
+            Some(&whitelist),
+            DepartmentPermissionCategory::McpTool,
+            &["server-a::search", "server-id::search", "search"],
+        ));
+        assert!(!department_permission_allows_any_name(
+            Some(&whitelist),
+            DepartmentPermissionCategory::McpTool,
+            &["server-b::other", "other"],
+        ));
 
         let blacklist = build_department_with_permission_control(
             "blacklist",
@@ -789,6 +804,16 @@ mod types_storage_tests {
             Some(&blacklist),
             DepartmentPermissionCategory::BuiltinTool,
             &["websearch"],
+        ));
+        assert!(!department_permission_allows_any_name(
+            Some(&blacklist),
+            DepartmentPermissionCategory::McpTool,
+            &["server-a::search", "search"],
+        ));
+        assert!(department_permission_allows_any_name(
+            Some(&blacklist),
+            DepartmentPermissionCategory::McpTool,
+            &["server-b::other", "other"],
         ));
     }
 

@@ -278,7 +278,7 @@ async fn prepare_openai_style_tool_assembly(
         chat_session_key,
         executor_department_id,
     )
-    .await?;
+    .await;
     append_unavailable_tool_notices_to_prepared(
         prepared,
         &tool_assembly.unavailable_tool_notices,
@@ -491,7 +491,7 @@ async fn call_model_openai_style(
                 chat_session_key,
                 executor_department_id,
             )
-            .await?;
+            .await;
             append_unavailable_tool_notices_to_prepared(
                 &mut prepared,
                 &tool_assembly.unavailable_tool_notices,
@@ -545,7 +545,7 @@ async fn call_model_openai_style(
                 chat_session_key,
                 executor_department_id,
             )
-            .await?;
+            .await;
             append_unavailable_tool_notices_to_prepared(
                 &mut prepared,
                 &tool_assembly.unavailable_tool_notices,

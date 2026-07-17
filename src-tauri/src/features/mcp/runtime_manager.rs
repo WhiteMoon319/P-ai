@@ -88,7 +88,9 @@ struct McpRuntimeTool {
 
 #[derive(Clone)]
 struct CachedMcpRuntimeTool {
-    server: McpServerConfig,
+    app_state: AppState,
+    server_id: String,
+    executor_department_id: String,
     definition: rmcp::model::Tool,
 }
 
@@ -301,15 +303,77 @@ impl RuntimeToolDyn for CachedMcpRuntimeTool {
     }
 
     fn call_json(&self, args_json: String) -> RuntimeToolCallFuture<'_> {
-        let server = self.server.clone();
+        let app_state = self.app_state.clone();
+        let server_id = self.server_id.clone();
+        let executor_department_id = self.executor_department_id.clone();
         let definition = self.definition.clone();
         Box::pin(async move {
-            let peer = mcp_get_or_connect_peer_for_tool(&server, definition.name.as_ref()).await?;
+            let server = match load_server_by_id(&app_state, &server_id) {
+                Ok(server) if server.enabled => server,
+                Ok(_) => {
+                    return Ok(ProviderToolResult::error(format!(
+                        "MCP 工具 `{}` 当前不可用：服务器已停用",
+                        definition.name.as_ref()
+                    )))
+                }
+                Err(err) => {
+                    return Ok(ProviderToolResult::error(format!(
+                        "MCP 工具 `{}` 当前不可用：{err}",
+                        definition.name.as_ref()
+                    )))
+                }
+            };
+            let tool_name = definition.name.to_string();
+            let current_tool_enabled = list_tools_from_runtime(&server)
+                .into_iter()
+                .any(|tool| tool.tool_name == tool_name && tool.enabled);
+            if !current_tool_enabled {
+                return Ok(ProviderToolResult::error(format!(
+                    "MCP 工具 `{tool_name}` 当前不可用：工具已停用或运行态已失效"
+                )));
+            }
+            let app_config = match state_read_config_cached(&app_state) {
+                Ok(config) => config,
+                Err(err) => {
+                    return Ok(ProviderToolResult::error(format!(
+                        "MCP 工具 `{tool_name}` 当前不可用：读取最新部门权限失败，已安全跳过：{err}"
+                    )))
+                }
+            };
+            let Some(department) = department_by_id(&app_config, &executor_department_id) else {
+                return Ok(ProviderToolResult::error(format!(
+                    "MCP 工具 `{tool_name}` 当前不可用：执行部门已不存在"
+                )));
+            };
+            let qualified_by_name = format!("{}::{tool_name}", server.name);
+            let qualified_by_id = format!("{}::{tool_name}", server.id);
+            if !department_permission_allows_any_name(
+                Some(department),
+                DepartmentPermissionCategory::McpTool,
+                &[qualified_by_name.as_str(), qualified_by_id.as_str(), tool_name.as_str()],
+            ) {
+                return Ok(ProviderToolResult::error(format!(
+                    "MCP 工具 `{qualified_by_name}` 当前不可用：部门权限已撤销"
+                )));
+            }
+            let peer = match mcp_get_or_connect_peer_for_tool(&server, definition.name.as_ref()).await {
+                Ok(peer) => peer,
+                Err(err) => {
+                    return Ok(ProviderToolResult::error(format!(
+                        "MCP 工具 `{tool_name}` 暂时不可用，已跳过本次调用：{err}"
+                    )))
+                }
+            };
             let tool = McpRuntimeTool {
                 definition,
                 client: peer,
             };
-            tool.call_json(args_json).await
+            match tool.call_json(args_json).await {
+                Ok(result) => Ok(result),
+                Err(err) => Ok(ProviderToolResult::error(format!(
+                    "MCP 工具 `{tool_name}` 执行失败，聊天将继续：{err}"
+                ))),
+            }
         })
     }
 }
