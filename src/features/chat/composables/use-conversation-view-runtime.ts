@@ -53,7 +53,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
   const chatInput = ref("");
   const selectedMentions = ref<ChatMentionTarget[]>([]);
   const clipboardImages = ref<Array<{ mime: string; bytesBase64: string }>>([]);
-  const queuedAttachmentNotices = ref<Array<{ id: string; fileName: string; relativePath: string; mime: string }>>([]);
+  const queuedAttachmentNotices = ref<Array<{ id: string; fileName: string; path: string; mime: string }>>([]);
   const latestUserText = ref("");
   const latestUserImages = ref<Array<{ mime: string; bytesBase64: string }>>([]);
   const latestAssistantText = ref("");
@@ -302,14 +302,13 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     t: options.t,
     formatRequestFailed: (error) => String(error instanceof Error ? error.message : error || ""),
     removeBinaryPlaceholders: (text) => text,
-    invokeSendChatMessage: ({ text, displayText, images, attachments, mentions, session, traceId, onDelta }) =>
+    invokeSendChatMessage: ({ text, displayText, parts, mentions, session, traceId, onDelta }) =>
       invokeTauri("submit_chat_message", {
         input: {
           payload: {
             text,
             displayText,
-            images,
-            attachments: attachments && attachments.length > 0 ? attachments : undefined,
+            parts,
             mentions,
           },
           session: {

@@ -58,6 +58,7 @@ struct PreparedBinaryPayload {
     mime: String,
     content: String,
     saved_path: Option<String>,
+    label: String,
 }
 
 #[derive(Debug, Clone)]

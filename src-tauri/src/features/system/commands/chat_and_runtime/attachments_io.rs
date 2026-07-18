@@ -69,6 +69,15 @@ fn media_mime_from_path(path: &std::path::Path) -> Option<&'static str> {
         "heic" => Some("image/heic"),
         "heif" => Some("image/heif"),
         "svg" => Some("image/svg+xml"),
+        "wav" | "wave" => Some("audio/wav"),
+        "mp3" => Some("audio/mpeg"),
+        "m4a" => Some("audio/mp4"),
+        "aac" => Some("audio/aac"),
+        "aiff" | "aif" => Some("audio/aiff"),
+        "ogg" | "oga" => Some("audio/ogg"),
+        "opus" => Some("audio/opus"),
+        "flac" => Some("audio/flac"),
+        "webm" => Some("audio/webm"),
         _ => None,
     }
 }
@@ -207,7 +216,27 @@ fn persist_raw_attachment_to_downloads(
     mime: &str,
     raw: &[u8],
 ) -> Result<PathBuf, String> {
-    let dir = workspace_downloads_dir(state);
+    persist_raw_attachment_to_downloads_subdir(state, None, suggested_name, mime, raw)
+}
+
+fn persist_raw_attachment_to_downloads_subdir(
+    state: &AppState,
+    subdir: Option<&str>,
+    suggested_name: &str,
+    mime: &str,
+    raw: &[u8],
+) -> Result<PathBuf, String> {
+    if raw.is_empty() {
+        return Err("Attachment payload is empty".to_string());
+    }
+    let dir = if let Some(subdir) = subdir
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        workspace_downloads_dir(state).join(sanitize_storage_subdir(subdir)?)
+    } else {
+        workspace_downloads_dir(state)
+    };
     fs::create_dir_all(&dir).map_err(|err| format!("Create downloads dir failed: {err}"))?;
 
     let file_name = apply_download_extension_policy(suggested_name, mime);
@@ -318,7 +347,7 @@ fn queue_attachment_from_raw(
 
     // 入队即落盘：附件进入队列后立刻可在 downloads 查看与复查。
     let saved_path = persist_raw_attachment_to_downloads(state, &file_name, &mime, raw)?;
-    let final_saved_path = workspace_relative_path(state, &saved_path);
+    let final_saved_path = message_attachment_display_path(&saved_path.to_string_lossy());
     let final_file_name = saved_path
         .file_name()
         .and_then(|v| v.to_str())
@@ -332,7 +361,12 @@ fn queue_attachment_from_raw(
     } else {
         None
     };
-    let text_notice = build_attachment_notice_text(0, &final_saved_path);
+    let label = if mime.starts_with("image/") {
+        "图片#1"
+    } else {
+        "附件#1"
+    };
+    let text_notice = message_attachment_notice_text(label, &final_saved_path);
     Ok(QueueLocalFileAttachmentOutput {
         mime,
         file_name: final_file_name,
@@ -353,7 +387,7 @@ fn normalize_payload_attachments(
     let mut seen = std::collections::HashSet::<String>::new();
     for item in items {
         let file_name = String::from(item.file_name.trim());
-        let relative_path = String::from(item.relative_path.trim()).replace('\\', "/");
+        let relative_path = String::from(item.path.trim()).replace('\\', "/");
         let mime = String::from(item.mime.trim());
         if file_name.is_empty() || relative_path.is_empty() {
             continue;
@@ -375,25 +409,15 @@ fn normalize_payload_attachments(
     out
 }
 
-fn merge_provider_meta_with_attachments(
-    provider_meta: Option<Value>,
-    attachments: &[Value],
-) -> Option<Value> {
-    let mut merged = provider_meta.unwrap_or_else(|| serde_json::json!({}));
-    if !merged.is_object() {
-        merged = serde_json::json!({});
+fn provider_meta_without_legacy_attachments(provider_meta: Option<Value>) -> Option<Value> {
+    let mut meta = provider_meta?;
+    if let Some(object) = meta.as_object_mut() {
+        object.remove("attachments");
+        if object.is_empty() {
+            return None;
+        }
     }
-    if attachments.is_empty() {
-        return if merged.as_object().map(|v| v.is_empty()).unwrap_or(true) {
-            None
-        } else {
-            Some(merged)
-        };
-    }
-    if let Some(obj) = merged.as_object_mut() {
-        obj.insert("attachments".to_string(), Value::Array(attachments.to_vec()));
-    }
-    Some(merged)
+    Some(meta)
 }
 
 fn provider_meta_attachment_relative_paths(meta: &Value) -> Vec<String> {
@@ -428,43 +452,6 @@ fn provider_meta_attachment_relative_paths(meta: &Value) -> Vec<String> {
         out.push(relative_path);
     }
     out
-}
-
-fn persist_payload_images_to_workspace_downloads(
-    state: &AppState,
-    images: &[BinaryPart],
-) -> Vec<String> {
-    let mut notices = Vec::<String>::new();
-    for (idx, image) in images.iter().enumerate() {
-        if let Some(saved_path) = image
-            .saved_path
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            notices.push(build_attachment_notice_text(idx, saved_path));
-            continue;
-        }
-        let mime = image.mime.trim();
-        if mime.is_empty() {
-            continue;
-        }
-        let Ok(raw) = B64.decode(image.bytes_base64.trim()) else {
-            runtime_log_warn(format!("[CHAT] skip persist image to downloads: invalid base64, index={idx}"));
-            continue;
-        };
-        let suggested = format!("queued-image-{}", idx + 1);
-        match persist_raw_attachment_to_downloads(state, &suggested, mime, &raw) {
-            Ok(saved_path) => {
-                let relative = workspace_relative_path(state, &saved_path);
-                notices.push(build_attachment_notice_text(idx, &relative));
-            }
-            Err(err) => {
-                runtime_log_error(format!("[CHAT] persist queued image to downloads failed: index={}, err={}", idx, err));
-            }
-        }
-    }
-    notices
 }
 
 #[tauri::command]

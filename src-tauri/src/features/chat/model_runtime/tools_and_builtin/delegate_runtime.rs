@@ -255,6 +255,7 @@ async fn delegate_execute_agent_prompt(
         payload: ChatInputPayload {
             text: Some(prompt_text),
             display_text,
+            parts: None,
             images: None,
             audios: None,
             attachments: None,

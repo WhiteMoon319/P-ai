@@ -230,6 +230,18 @@ fn build_abstract_message_projection(
                     attachment_refs.push(name.to_string());
                 }
             }
+            MessagePart::Attachment { path, mime, name } => {
+                if message_attachment_kind(mime) == "image" {
+                    image_part_count += 1;
+                } else if message_attachment_kind(mime) == "audio" {
+                    audio_part_count += 1;
+                }
+                attachment_refs.push(if name.trim().is_empty() {
+                    path.clone()
+                } else {
+                    name.clone()
+                });
+            }
         }
     }
     if let Some(meta) = message.provider_meta.as_ref() {
@@ -872,7 +884,7 @@ impl ConversationPromptService {
                             prompt_role_for_message(message, &agent.id).as_deref()
                                 == Some("user")
                         })
-                        .map(render_message_content_for_model)
+                        .map(render_prompt_user_text_only)
                         .unwrap_or_default()
                 } else {
                     submitted_user_text.clone()
@@ -1336,6 +1348,7 @@ impl ConversationPromptService {
                 },
                 content: image.bytes_base64.clone(),
                 saved_path: image.saved_path.clone(),
+                label: "图片#1".to_string(),
             }],
             latest_audios: Vec::new(),
         }

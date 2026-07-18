@@ -213,8 +213,8 @@
                   type="button"
                   class="link text-sm"
                   :class="m.role === 'user' ? 'link-secondary' : 'link-primary'"
-                  :title="file.relativePath"
-                  @click="openAttachment(file.relativePath)"
+                  :title="file.path"
+                  @click="openAttachment(file.path)"
                 >
                   {{ file.fileName }}
                 </button>
@@ -225,6 +225,16 @@
                   :key="`${img.mime}-${idx}`"
                   :src="resolvedArchiveImageSrc(m.id, img, idx)"
                   class="rounded max-h-44 object-contain bg-base-100/40 border border-base-300"
+                />
+              </div>
+              <div v-if="messageAudios(m).length > 0" class="mt-2 grid gap-1">
+                <audio
+                  v-for="(audio, idx) in messageAudios(m)"
+                  :key="`${m.id}-audio-${idx}`"
+                  :src="archiveAudioSrc(m.id, audio, idx)"
+                  controls
+                  preload="none"
+                  class="max-w-full"
                 />
               </div>
             </div>
@@ -254,9 +264,11 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from "vue";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { FileDown, FileJson2, Import, RefreshCw, Trash2, Undo2 } from "@lucide/vue";
 import { useI18n } from "vue-i18n";
-import { invokeTauri } from "../../../services/tauri-api";
+import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import { extractMessageAttachmentFiles, extractMessageAudios, extractMessageImages } from "../../../utils/chat-message";
 import { resolveConversationDisplayTitle } from "../../chat/utils/conversation-title";
 import type {
   ArchiveSummary,
@@ -329,6 +341,7 @@ const ARCHIVE_FOCUS_REQUEST_TTL_MS = 30_000;
 const archiveImageDataUrlCache = new Map<string, string>();
 const archiveImagePendingCache = new Map<string, Promise<string>>();
 const archiveResolvedImageMap = ref<Record<string, string>>({});
+const archiveResolvedAudioMap = ref<Record<string, string>>({});
 const messageScrollerRef = ref<HTMLElement | null>(null);
 const confirmDialog = ref<HTMLDialogElement | null>(null);
 const confirmDialogState = ref({
@@ -730,22 +743,15 @@ function speakerLabel(msg: ChatMessage): string {
   return String(msg.role || "").trim() || "-";
 }
 
-function messageAttachments(msg: ChatMessage): Array<{ fileName: string; relativePath: string; mime?: string }> {
-  const raw = Array.isArray(msg.providerMeta?.attachments) ? msg.providerMeta?.attachments : [];
-  return raw
-    .map((item) => {
-      const fileName = String(item?.fileName || "").trim();
-      const relativePath = String(item?.relativePath || "").trim().replace(/\\/g, "/");
-      const mime = typeof item?.mime === "string" ? item.mime.trim() : "";
-      if (!fileName || !relativePath) return undefined;
-      return { fileName, relativePath, mime: mime || undefined };
-    })
-    .filter((item): item is NonNullable<typeof item> => !!item);
+function messageAttachments(msg: ChatMessage): Array<{ fileName: string; path: string; mime?: string }> {
+  return extractMessageAttachmentFiles(msg);
 }
 
-function openAttachment(relativePath: string) {
-  if (!relativePath.trim()) return;
-  void invokeTauri("open_workspace_file", { relativePath });
+function openAttachment(path: string) {
+  if (!path.trim()) return;
+  void invokeTauri("open_workspace_file", { relativePath: path }).catch((error) => {
+    console.warn("[归档附件] 打开失败", { path, error });
+  });
 }
 
 function formatDate(value?: string): string {
@@ -765,26 +771,44 @@ function conversationDisplayTitle(
 }
 
 function messageImages(msg: ChatMessage): Array<{ mime: string; bytesBase64?: string; mediaRef?: string }> {
-  return msg.parts
-    .filter((p): p is Extract<MessagePart, { type: "image" }> => p.type === "image")
-    .map((p) => ({
-      mime: String(p.mime || "").trim(),
-      bytesBase64: (() => {
-        const raw = String((p as { bytesBase64?: unknown }).bytesBase64 ?? "").trim();
-        return raw && !raw.startsWith("@media:") ? raw : undefined;
-      })(),
-      mediaRef: (() => {
-        const raw = String((p as { bytesBase64?: unknown }).bytesBase64 ?? "").trim();
-        return raw.startsWith("@media:") ? raw : undefined;
-      })(),
-    }))
-    .filter((item) =>
-      item.mime.length > 0
-      && (
-        (!!item.bytesBase64 && item.bytesBase64 !== "undefined" && item.bytesBase64 !== "null")
-        || !!item.mediaRef
-      ),
-    );
+  return extractMessageImages(msg);
+}
+
+function messageAudios(msg: ChatMessage): Array<{ mime: string; bytesBase64?: string; mediaRef?: string }> {
+  return extractMessageAudios(msg);
+}
+
+function archiveAudioKey(messageId: string, index: number): string {
+  return `${String(messageId || "").trim()}::audio::${index}`;
+}
+
+function archiveAudioSrc(
+  messageId: string,
+  audio: { mime: string; bytesBase64?: string; mediaRef?: string },
+  index: number,
+): string {
+  const bytesBase64 = String(audio.bytesBase64 || "").trim();
+  if (bytesBase64) return `data:${audio.mime};base64,${bytesBase64}`;
+  return String(archiveResolvedAudioMap.value[archiveAudioKey(messageId, index)] || "").trim();
+}
+
+async function readArchiveAudioSource(audio: { mime: string; mediaRef?: string }): Promise<string> {
+  const mediaRef = String(audio.mediaRef || "").trim();
+  if (!mediaRef || mediaRef.startsWith("@")) return "";
+  try {
+    const result = await invokeTauri<{ mime?: string; bytesBase64?: string }>("read_local_binary_file", {
+      input: { path: mediaRef },
+    });
+    const bytesBase64 = String(result?.bytesBase64 || "").trim();
+    const mime = String(result?.mime || audio.mime || "audio/mpeg").trim();
+    if (bytesBase64) return `data:${mime};base64,${bytesBase64}`;
+  } catch (error) {
+    if (!isTauriRuntimeAvailable()) {
+      console.warn("[归档音频] 通过桥接读取失败", { path: mediaRef, error });
+      return "";
+    }
+  }
+  return convertFileSrc(mediaRef);
 }
 
 function archiveImageKey(messageId: string, index: number): string {
@@ -804,9 +828,14 @@ async function readArchiveImageDataUrl(
   if (cached) return cached;
   const pending = archiveImagePendingCache.get(cacheKey);
   if (pending) return pending;
-  const task = invokeTauri<{ dataUrl: string }>("read_chat_image_data_url", {
-    input: { mediaRef, mime },
-  })
+  const legacyMarker = mediaRef.startsWith("@media:") || mediaRef.startsWith("@download:");
+  const task = (legacyMarker
+    ? invokeTauri<{ dataUrl: string }>("read_chat_image_data_url", {
+      input: { mediaRef, mime },
+    })
+    : invokeTauri<{ dataUrl: string }>("read_local_chat_image_thumbnail", {
+      input: { path: mediaRef },
+    }))
     .then((result) => {
       const dataUrl = String(result?.dataUrl || "").trim();
       if (dataUrl) archiveImageDataUrlCache.set(cacheKey, dataUrl);
@@ -842,6 +871,18 @@ watchEffect(() => {
             error,
           });
         });
+    });
+    messageAudios(message).forEach((audio, index) => {
+      if (audio.bytesBase64 || !audio.mediaRef) return;
+      const key = archiveAudioKey(message.id, index);
+      if (archiveResolvedAudioMap.value[key]) return;
+      void readArchiveAudioSource(audio).then((src) => {
+        if (!src) return;
+        archiveResolvedAudioMap.value = {
+          ...archiveResolvedAudioMap.value,
+          [key]: src,
+        };
+      });
     });
   }
 });

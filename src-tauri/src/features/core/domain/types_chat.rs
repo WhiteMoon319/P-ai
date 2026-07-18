@@ -70,15 +70,24 @@ enum MessagePart {
     },
     Image {
         mime: String,
+        #[serde(alias = "bytesBase64")]
         bytes_base64: String,
         name: Option<String>,
+        #[serde(default)]
         compressed: bool,
     },
     Audio {
         mime: String,
+        #[serde(alias = "bytesBase64")]
         bytes_base64: String,
         name: Option<String>,
+        #[serde(default)]
         compressed: bool,
+    },
+    Attachment {
+        path: String,
+        mime: String,
+        name: String,
     },
 }
 

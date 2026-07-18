@@ -2241,12 +2241,14 @@ fn jsonl_snapshot_index_item_path(base_messages_file: &PathBuf, block_id: Option
 fn message_store_message_has_image(message: &ChatMessage) -> bool {
     message.parts.iter().any(|part| {
         matches!(part, MessagePart::Image { mime, .. } if !mime.trim().eq_ignore_ascii_case("application/pdf"))
+            || matches!(part, MessagePart::Attachment { mime, .. } if message_attachment_kind(mime) == "image")
     })
 }
 
 fn message_store_message_has_pdf(message: &ChatMessage) -> bool {
     message.parts.iter().any(|part| {
         matches!(part, MessagePart::Image { mime, .. } if mime.trim().eq_ignore_ascii_case("application/pdf"))
+            || matches!(part, MessagePart::Attachment { mime, .. } if message_attachment_kind(mime) == "pdf")
     })
 }
 
@@ -2254,7 +2256,10 @@ fn message_store_message_has_audio(message: &ChatMessage) -> bool {
     message
         .parts
         .iter()
-        .any(|part| matches!(part, MessagePart::Audio { .. }))
+        .any(|part| {
+            matches!(part, MessagePart::Audio { .. })
+                || matches!(part, MessagePart::Attachment { mime, .. } if message_attachment_kind(mime) == "audio")
+        })
 }
 
 fn read_messages_before_from_index(

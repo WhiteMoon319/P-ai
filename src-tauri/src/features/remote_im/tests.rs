@@ -37,6 +37,7 @@
             payload: ChatInputPayload {
                 text: Some("hello".to_string()),
                 display_text: None,
+                parts: None,
                 images: None,
                 audios: None,
                 attachments: None,
@@ -379,6 +380,7 @@
             payload: ChatInputPayload {
                 text: Some("hello".to_string()),
                 display_text: None,
+                parts: None,
                 images: None,
                 audios: None,
                 attachments: None,
@@ -536,6 +538,7 @@
             payload: ChatInputPayload {
                 text: Some("hello".to_string()),
                 display_text: None,
+                parts: None,
                 images: None,
                 audios: None,
                 attachments: None,
@@ -759,6 +762,7 @@
             payload: ChatInputPayload {
                 text: Some("hello".to_string()),
                 display_text: None,
+                parts: None,
                 images: None,
                 audios: None,
                 attachments: None,
@@ -829,6 +833,23 @@
         assert!(matches!(media_refs[0].kind, OnebotInboundMediaKind::Image));
         assert_eq!(media_refs[0].file_ref, "https://example.com/a.png");
         assert_eq!(media_refs[0].file_id.as_deref(), Some("img-1"));
+    }
+
+    #[test]
+    fn onebot_ordered_segments_should_keep_text_media_text_interleaving() {
+        let payload = serde_json::json!([
+            { "type": "text", "data": { "text": "文字A" } },
+            { "type": "image", "data": { "file": "base64://YWJj", "file_id": "img-1" } },
+            { "type": "text", "data": { "text": "文字B" } }
+        ]);
+
+        let parsed = parse_onebot_message_array_detail(payload.as_array().expect("array"));
+
+        assert_eq!(parsed.ordered_segments.len(), 3);
+        assert!(matches!(&parsed.ordered_segments[0], OnebotParsedSegment::Text(text) if text == "文字A"));
+        assert!(matches!(&parsed.ordered_segments[1], OnebotParsedSegment::Media(media)
+            if media.file_id.as_deref() == Some("img-1")));
+        assert!(matches!(&parsed.ordered_segments[2], OnebotParsedSegment::Text(text) if text == "文字B"));
     }
 
     #[test]
@@ -1355,62 +1376,134 @@
     }
 
     #[test]
-    fn dingtalk_push_normalized_image_or_attachment_should_fallback_to_attachment_on_oversized_image() {
+    fn remote_image_ingress_should_persist_original_bytes_as_one_canonical_absolute_path() {
         let state = remote_im_test_state();
-        let raw = remote_im_test_png(10_001, 8);
-        let mut images = Vec::<BinaryPart>::new();
-        let mut attachments = Vec::<AttachmentMetaInput>::new();
+        let raw = remote_im_test_png(16, 12);
+        let contact = remote_im_test_contact("contact-image", "conversation-image");
+        let input = RemoteImEnqueueInput {
+            channel_id: "channel-a".to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            im_name: "QQ".to_string(),
+            remote_contact_type: "private".to_string(),
+            remote_contact_id: "remote-a".to_string(),
+            remote_contact_name: Some("张三".to_string()),
+            sender_id: "remote-a".to_string(),
+            sender_name: "张三".to_string(),
+            sender_avatar_url: None,
+            platform_message_id: Some("message-image".to_string()),
+            dingtalk_session_webhook: None,
+            dingtalk_session_webhook_expired_time: None,
+            activate_assistant: Some(true),
+            session: SessionSelector {
+                api_config_id: None,
+                department_id: None,
+                agent_id: String::new(),
+                conversation_id: Some("conversation-image".to_string()),
+            },
+            payload: ChatInputPayload {
+                text: None,
+                display_text: None,
+                parts: None,
+                images: None,
+                audios: None,
+                attachments: None,
+                model: None,
+                extra_text_blocks: None,
+                mentions: None,
+                provider_meta: Some(serde_json::json!({
+                    "attachments": [{ "relativePath": "legacy/duplicate.png" }]
+                })),
+            },
+        };
+        let images = vec![BinaryPart {
+            mime: "image/png".to_string(),
+            bytes_base64: B64.encode(&raw),
+            saved_path: None,
+        }];
 
-        let notice = dingtalk_push_normalized_image_or_attachment(
+        let message = build_chat_message_from_input(
             &state,
-            &raw,
-            "image/png",
-            "dingtalk-oversized.png",
-            &mut images,
-            &mut attachments,
+            &input,
+            "conversation-image",
+            &contact,
+            &now_iso(),
             "",
+            &images,
+            &[],
+            &[],
         );
 
-        assert!(images.is_empty());
-        assert_eq!(attachments.len(), 1);
-        assert_eq!(attachments[0].mime, "image/png");
-        assert!(notice.unwrap_or_default().contains("[附件#1]\npath: {Assistant Space}/"));
-        assert!(
-            state
-                .llm_workspace_path
-                .join(&attachments[0].relative_path)
-                .exists()
-        );
+        let MessagePart::Attachment { path, mime, .. } = message.parts.first().expect("attachment") else {
+            panic!("expected canonical attachment");
+        };
+        assert_eq!(mime, "image/png");
+        assert!(std::path::Path::new(path).is_absolute());
+        assert_eq!(std::fs::read(path).expect("read persisted original"), raw);
+        assert!(message
+            .provider_meta
+            .as_ref()
+            .and_then(Value::as_object)
+            .is_some_and(|meta| !meta.contains_key("attachments")));
+        let wire = serde_json::to_string(&message).expect("serialize canonical remote message");
+        assert!(!wire.contains("bytesBase64"));
+        assert!(!wire.contains("bytes_base64"));
+        assert!(!wire.contains("@download:"));
+        assert!(!wire.contains("@media:"));
+        let prompt_text = render_prompt_user_text_only(&message);
+        assert!(prompt_text.contains("[图片#1]\npath: "));
+        assert_eq!(prompt_text.matches("path: ").count(), 1);
         let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
     }
 
-    #[test]
-    fn weixin_oc_push_normalized_image_and_attachment_should_fallback_to_attachment_on_oversized_image() {
-        let state = remote_im_test_state();
-        let raw = remote_im_test_png(10_001, 8);
-        let mut images = Vec::<BinaryPart>::new();
-        let mut attachments = Vec::<AttachmentMetaInput>::new();
+    #[tokio::test]
+    async fn weixin_collector_should_keep_order_and_continue_after_bad_media_item() {
+        let client = reqwest::Client::new();
+        let credentials = WeixinOcCredentials::from_value(&serde_json::json!({}));
+        let items = vec![
+            WeixinOcMessageItem {
+                item_type: Some(1),
+                text_item: Some(WeixinOcTextItem {
+                    text: Some("前文".to_string()),
+                }),
+                image_item: None,
+                voice_item: None,
+                file_item: None,
+                video_item: None,
+            },
+            WeixinOcMessageItem {
+                item_type: Some(2),
+                text_item: None,
+                image_item: None,
+                voice_item: None,
+                file_item: None,
+                video_item: None,
+            },
+            WeixinOcMessageItem {
+                item_type: Some(1),
+                text_item: Some(WeixinOcTextItem {
+                    text: Some("后文".to_string()),
+                }),
+                image_item: None,
+                voice_item: None,
+                file_item: None,
+                video_item: None,
+            },
+        ];
 
-        let notice = weixin_oc_push_normalized_image_and_attachment(
-            &state,
-            "weixin-oversized.png",
-            &raw,
-            "image/png",
-            &mut images,
-            &mut attachments,
-        );
+        let collected = weixin_oc_collect_media(&client, &credentials, &items).await;
+        let texts = collected
+            .parts
+            .iter()
+            .filter_map(|part| match part {
+                ChatIngressPart::Text { text } => Some(text.as_str()),
+                ChatIngressPart::Attachment { .. } => None,
+            })
+            .collect::<Vec<_>>();
 
-        assert!(images.is_empty());
-        assert_eq!(attachments.len(), 1);
-        assert_eq!(attachments[0].mime, "image/png");
-        assert!(notice.unwrap_or_default().contains("[附件#1]\npath: {Assistant Space}/"));
-        assert!(
-            state
-                .llm_workspace_path
-                .join(&attachments[0].relative_path)
-                .exists()
-        );
-        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+        assert_eq!(texts.len(), 3);
+        assert_eq!(texts[0], "前文");
+        assert!(texts[1].contains("图片元数据缺失"));
+        assert_eq!(texts[2], "后文");
     }
 
     fn remote_im_test_secretary_assistant_context() -> RemoteImConversationAssistantContext {
@@ -1969,6 +2062,7 @@
             payload: ChatInputPayload {
                 text: Some("  # 不接收的 Markdown 标题".to_string()),
                 display_text: None,
+                parts: None,
                 images: None,
                 audios: None,
                 attachments: None,
@@ -3129,6 +3223,7 @@
             payload: ChatInputPayload {
                 text: Some("配置暂时读不到也要接收".to_string()),
                 display_text: None,
+                parts: None,
                 images: None,
                 audios: None,
                 attachments: None,
@@ -3174,6 +3269,7 @@
             payload: ChatInputPayload {
                 text: Some("不应绕过渠道白名单".to_string()),
                 display_text: None,
+                parts: None,
                 images: None,
                 audios: None,
                 attachments: None,

@@ -223,14 +223,19 @@ impl ConversationShardMeta {
             text_preview: super::build_conversation_preview_text(message),
             has_image: message.parts.iter().any(|part| {
                 matches!(part, MessagePart::Image { mime, .. } if !mime.trim().eq_ignore_ascii_case("application/pdf"))
+                    || matches!(part, MessagePart::Attachment { mime, .. } if message_attachment_kind(mime) == "image")
             }),
             has_pdf: message.parts.iter().any(|part| {
                 matches!(part, MessagePart::Image { mime, .. } if mime.trim().eq_ignore_ascii_case("application/pdf"))
+                    || matches!(part, MessagePart::Attachment { mime, .. } if message_attachment_kind(mime) == "pdf")
             }),
             has_audio: message
                 .parts
                 .iter()
-                .any(|part| matches!(part, MessagePart::Audio { .. })),
+                .any(|part| {
+                    matches!(part, MessagePart::Audio { .. })
+                        || matches!(part, MessagePart::Attachment { mime, .. } if message_attachment_kind(mime) == "audio")
+                }),
             has_attachment: super::conversation_message_has_attachment(message),
         };
         if preview.text_preview.trim().is_empty()
@@ -843,14 +848,19 @@ impl ConversationShardMeta {
                     text_preview: super::build_conversation_preview_text(&message),
                     has_image: message.parts.iter().any(|part| {
                         matches!(part, MessagePart::Image { mime, .. } if !mime.trim().eq_ignore_ascii_case("application/pdf"))
+                            || matches!(part, MessagePart::Attachment { mime, .. } if message_attachment_kind(mime) == "image")
                     }),
                     has_pdf: message.parts.iter().any(|part| {
                         matches!(part, MessagePart::Image { mime, .. } if mime.trim().eq_ignore_ascii_case("application/pdf"))
+                            || matches!(part, MessagePart::Attachment { mime, .. } if message_attachment_kind(mime) == "pdf")
                     }),
                     has_audio: message
                         .parts
                         .iter()
-                        .any(|part| matches!(part, MessagePart::Audio { .. })),
+                        .any(|part| {
+                            matches!(part, MessagePart::Audio { .. })
+                                || matches!(part, MessagePart::Attachment { mime, .. } if message_attachment_kind(mime) == "audio")
+                        }),
                     has_attachment: super::conversation_message_has_attachment(&message),
                 })
                 .collect(),

@@ -390,7 +390,7 @@ import { ideContextReferenceDisplayParts } from "../utils/ide-context-reference-
 import { mergeComposerIdeContextGroups } from "../utils/ide-context-reference-groups";
 
 type BinaryAttachment = { mime: string; bytesBase64: string };
-type QueuedAttachmentNotice = { id: string; fileName: string; relativePath: string; mime: string };
+type QueuedAttachmentNotice = { id: string; fileName: string; path: string; mime: string };
 type ConversationDepartmentOption = DepartmentPersonaOption;
 type MentionOptionView = {
   agentId: string;

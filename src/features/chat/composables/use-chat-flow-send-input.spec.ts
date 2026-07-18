@@ -7,9 +7,9 @@ describe("useChatFlowSendInput", () => {
   it("keeps image attachment metadata single when the same file is also an image payload", () => {
     const queuedAttachmentNotices = ref([
       {
-        id: "downloads/source.png::image/png",
+        id: "C:/workspace/downloads/source.png::image/png",
         fileName: "source.png",
-        relativePath: "downloads/source.png",
+        path: "C:/workspace/downloads/source.png",
         mime: "image/png",
       },
     ]);
@@ -17,7 +17,7 @@ describe("useChatFlowSendInput", () => {
       {
         mime: "image/png",
         bytesBase64: "aW1n",
-        savedPath: "downloads/source.png",
+        savedPath: "C:/workspace/downloads/source.png",
       },
     ]);
     const payloads = useChatFlowSendPayloads({ queuedAttachmentNotices });
@@ -40,7 +40,7 @@ describe("useChatFlowSendInput", () => {
     expect(prepared?.attachments).toEqual([
       {
         fileName: "source.png",
-        relativePath: "downloads/source.png",
+        path: "C:/workspace/downloads/source.png",
         mime: "image/png",
       },
     ]);
@@ -48,12 +48,12 @@ describe("useChatFlowSendInput", () => {
   });
 
   it("adds an attachment metadata fallback for image payloads that only have savedPath", () => {
-    const queuedAttachmentNotices = ref<Array<{ id: string; fileName: string; relativePath: string; mime: string }>>([]);
+    const queuedAttachmentNotices = ref<Array<{ id: string; fileName: string; path: string; mime: string }>>([]);
     const clipboardImages = ref([
       {
         mime: "image/png",
         bytesBase64: "aW1n",
-        savedPath: "downloads/pasted.png",
+        savedPath: "C:/workspace/downloads/pasted.png",
       },
     ]);
     const payloads = useChatFlowSendPayloads({ queuedAttachmentNotices });
@@ -76,7 +76,7 @@ describe("useChatFlowSendInput", () => {
     expect(prepared?.attachments).toEqual([
       {
         fileName: "pasted.png",
-        relativePath: "downloads/pasted.png",
+        path: "C:/workspace/downloads/pasted.png",
         mime: "image/png",
       },
     ]);

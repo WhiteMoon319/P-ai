@@ -12,7 +12,7 @@ type RewindConversationResult = {
 };
 
 type RecallConfirmMode = "with_patch" | "message_only" | "cancel";
-type QueuedAttachmentNotice = { id: string; fileName: string; relativePath: string; mime: string };
+type QueuedAttachmentNotice = { id: string; fileName: string; path: string; mime: string };
 
 type UseChatRewindActionsOptions = {
   activeApiConfigId: Ref<string>;
@@ -34,7 +34,7 @@ type UseChatRewindActionsOptions = {
   removeBinaryPlaceholders: (text: string) => string;
   messageText: (message: ChatMessage) => string;
   extractMessageImages: (message: ChatMessage) => Array<{ mime: string; bytesBase64?: string; mediaRef?: string }>;
-  extractMessageAttachmentFiles: (message: ChatMessage) => Array<{ fileName: string; relativePath: string; mime?: string }>;
+  extractMessageAttachmentFiles: (message: ChatMessage) => Array<{ fileName: string; path: string; mime?: string }>;
   requestRecallMode: (payload: { turnId: string; targetUserMessageId: string }) => Promise<RecallConfirmMode>;
   requestCreateConversationBranchFromMessageConfirm: (payload: { turnId: string; targetUserMessageId: string }) => Promise<boolean>;
   createConversationBranchFromMessage: (payload: { turnId: string; targetUserMessageId: string }) => Promise<void>;
@@ -65,11 +65,16 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
     const mediaRef = String(image.mediaRef || "").trim();
     if (!mediaRef) return null;
     try {
-      const result = await invokeTauri<{ dataUrl: string }>("read_chat_image_data_url", {
-        input: { mediaRef, mime },
-      });
+      const isLegacyMarker = mediaRef.startsWith("@media:") || mediaRef.startsWith("@download:");
+      const result = isLegacyMarker
+        ? await invokeTauri<{ dataUrl: string }>("read_chat_image_data_url", {
+          input: { mediaRef, mime },
+        })
+        : await invokeTauri<{ dataUrl: string }>("read_local_chat_image_original", {
+          input: { path: mediaRef },
+        });
       const bytesBase64 = bytesBase64FromDataUrl(result?.dataUrl || "");
-      return bytesBase64 ? { mime, bytesBase64 } : null;
+      return bytesBase64 ? { mime, bytesBase64, savedPath: isLegacyMarker ? undefined : mediaRef } : null;
     } catch (error) {
       console.warn("[会话撤回] 图片回填失败：读取 mediaRef 失败", {
         mediaRef,
@@ -90,16 +95,16 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
     return options.extractMessageAttachmentFiles(message)
       .map((file) => {
         const fileName = String(file.fileName || "").trim();
-        const relativePath = String(file.relativePath || "").trim().replace(/\\/g, "/");
+        const path = String(file.path || "").trim().replace(/\\/g, "/");
         const mime = String(file.mime || "").trim();
-        if (!fileName || !relativePath) return null;
-        const id = `${relativePath || fileName}::${mime}`;
+        if (!fileName || !path) return null;
+        const id = `${path || fileName}::${mime}`;
         if (seen.has(id)) return null;
         seen.add(id);
         return {
           id,
           fileName,
-          relativePath,
+          path,
           mime,
         };
       })

@@ -91,7 +91,7 @@ export type SidebarClipboardImage = { mime: string; bytesBase64: string };
 export type SidebarQueuedAttachmentEntry = {
   id: string;
   fileName: string;
-  relativePath: string;
+  path: string;
   mime: string;
   imageBytesBase64?: string;
 };
@@ -99,13 +99,13 @@ export type SidebarQueuedAttachmentEntry = {
 export type SidebarQueuedAttachmentNotice = {
   id: string;
   fileName: string;
-  relativePath: string;
+  path: string;
   mime: string;
 };
 
 export type SidebarAttachmentPayload = {
   fileName: string;
-  relativePath: string;
+  path: string;
   mime: string;
 };
 

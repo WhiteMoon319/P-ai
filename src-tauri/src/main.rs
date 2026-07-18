@@ -57,6 +57,7 @@ mod pai_config_tool;
 // ==================== 对话核心 ====================
 include!("features/chat/message_semantics.rs");
 include!("features/chat/conversation.rs");
+include!("features/chat/message_attachment_projection.rs");
 include!("features/chat/prompt_manager.rs");
 include!("features/chat/conversation_prompt_service.rs");
 include!("features/chat/conversation_service/mod.rs");

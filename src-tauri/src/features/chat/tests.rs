@@ -11143,10 +11143,12 @@
     }
 
     #[test]
-    fn build_user_parts_should_downgrade_bad_image_to_text_notice() {
+    fn build_user_parts_should_prefer_saved_path_and_ignore_duplicate_bad_base64() {
+        let state = test_chat_runtime_state();
         let payload = ChatInputPayload {
             text: None,
             display_text: None,
+            parts: None,
             images: Some(vec![BinaryPart {
                 mime: "image/png".to_string(),
                 bytes_base64: "%%%bad-base64%%%".to_string(),
@@ -11164,16 +11166,56 @@
             enable_image: true,
             ..ApiConfig::default()
         };
-        let parts = build_user_parts(&payload, &api).expect("build parts");
+        let parts = build_user_parts(&state, &payload, &api).expect("build parts");
 
         assert_eq!(parts.len(), 1);
         match &parts[0] {
-            MessagePart::Text { text, .. } => {
-                assert!(text.contains("path: {Assistant Space}/"));
-                assert!(text.contains("downloads/bad-image.png"));
+            MessagePart::Attachment { path, mime, name } => {
+                assert!(std::path::Path::new(path).is_absolute());
+                assert!(path.replace('\\', "/").ends_with("downloads/bad-image.png"));
+                assert_eq!(mime, "image/png");
+                assert_eq!(name, "bad-image.png");
             }
-            other => panic!("expected text fallback, got {other:?}"),
+            other => panic!("expected canonical attachment, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn build_user_parts_should_keep_visible_notice_when_one_attachment_fails() {
+        let state = test_chat_runtime_state();
+        let payload = ChatInputPayload {
+            text: None,
+            display_text: None,
+            parts: Some(vec![
+                ChatIngressPart::Text {
+                    text: "正常文字".to_string(),
+                },
+                ChatIngressPart::Attachment {
+                    path: None,
+                    bytes_base64: Some("%%%bad-base64%%%".to_string()),
+                    mime: "image/png".to_string(),
+                    name: "broken.png".to_string(),
+                },
+            ]),
+            images: None,
+            audios: None,
+            attachments: None,
+            model: None,
+            extra_text_blocks: None,
+            mentions: None,
+            provider_meta: None,
+        };
+        let api = ApiConfig {
+            enable_image: true,
+            ..ApiConfig::default()
+        };
+
+        let parts = build_user_parts(&state, &payload, &api).expect("build parts");
+
+        assert_eq!(parts.len(), 2);
+        assert!(matches!(&parts[0], MessagePart::Text { text, .. } if text == "正常文字"));
+        assert!(matches!(&parts[1], MessagePart::Text { text, .. }
+            if text.contains("broken.png") && text.contains("已跳过该附件并继续")));
     }
 
     fn collect_rs_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {

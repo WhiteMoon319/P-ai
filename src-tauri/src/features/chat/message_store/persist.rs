@@ -71,54 +71,9 @@ fn normalize_conversation_media_refs_for_message_store(
     conversation: &Conversation,
 ) -> Conversation {
     let mut next = conversation.clone();
-    let downloads_subdir = conversation.id.trim().to_string();
     for message in &mut next.messages {
-        for part in &mut message.parts {
-            match part {
-                MessagePart::Image {
-                    mime,
-                    bytes_base64,
-                    ..
-                }
-                | MessagePart::Audio {
-                    mime,
-                    bytes_base64,
-                    ..
-                } => {
-                    let trimmed = bytes_base64.trim();
-                    if trimmed.is_empty()
-                        || stored_binary_ref_from_marker(trimmed).is_some()
-                        || trimmed.starts_with("http://")
-                        || trimmed.starts_with("https://")
-                    {
-                        continue;
-                    }
-                    match externalize_stored_binary_base64_in_downloads_subdir(
-                        &paths.data_path,
-                        &downloads_subdir,
-                        mime,
-                        bytes_base64,
-                    ) {
-                        Ok(next_ref) => {
-                            if next_ref != *bytes_base64 {
-                                *bytes_base64 = next_ref;
-                            }
-                        }
-                        Err(err) => {
-                            runtime_log_error(format!(
-                                "[消息存储] 媒体外置化失败，保留原始内容: conversation_id={}，message_id={}，mime={}，bytes_len={}，error={}",
-                                paths.conversation_id,
-                                message.id,
-                                mime,
-                                bytes_base64.len(),
-                                err
-                            ));
-                        }
-                    }
-                }
-                MessagePart::Text { .. } => {}
-            }
-        }
+        canonicalize_message_parts_for_persistence(&mut message.parts, &paths.data_path);
+        message.provider_meta = provider_meta_without_legacy_attachments(message.provider_meta.take());
     }
     next
 }

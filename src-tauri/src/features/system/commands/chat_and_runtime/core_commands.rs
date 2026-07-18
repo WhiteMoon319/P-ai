@@ -71,7 +71,8 @@ fn build_user_message_provider_meta(
     mentions: &[serde_json::Value],
     request_id: Option<&str>,
 ) -> Option<Value> {
-    let merged = merge_provider_meta_with_attachments(input_provider_meta, attachments);
+    let _ = attachments;
+    let merged = provider_meta_without_legacy_attachments(input_provider_meta);
     let mut root = match merged {
         Some(Value::Object(map)) => map,
         Some(other) => {
@@ -106,7 +107,7 @@ fn attachment_display_name(input: &AttachmentMetaInput) -> Option<String> {
     if !file_name.is_empty() {
         return Some(file_name.to_string());
     }
-    let relative_path = input.relative_path.trim();
+    let relative_path = input.path.trim();
     if relative_path.is_empty() {
         return None;
     }
@@ -1465,7 +1466,6 @@ async fn submit_chat_message_inner(
         return Err("submit_chat_message 不支持 trigger_only".to_string());
     }
 
-    let text = input.payload.text.as_deref().unwrap_or("").trim();
     let images = input.payload.images.as_ref().map(|v| v.as_slice()).unwrap_or(&[]);
     let attachments = input
         .payload
@@ -1475,11 +1475,7 @@ async fn submit_chat_message_inner(
         .unwrap_or(&[]);
     let extra_text_blocks = normalize_send_extra_text_blocks(&input.payload);
 
-    if text.is_empty()
-        && images.is_empty()
-        && attachments.is_empty()
-        && extra_text_blocks.is_empty()
-    {
+    if !chat_input_payload_has_content(&input.payload) && extra_text_blocks.is_empty() {
         return Err("消息内容为空".to_string());
     }
 
@@ -1492,19 +1488,10 @@ async fn submit_chat_message_inner(
     let normalized_mentions = normalize_payload_mentions(input.payload.mentions.as_ref());
     let has_user_mentions = !normalized_mentions.is_empty();
 
-    let mut message_parts = Vec::new();
-    if !text.is_empty() {
-        message_parts.push(MessagePart::Text { text: text.to_string(),
-                reasoning_content: None,
-            });
-    }
-    for img in images {
-        message_parts.push(MessagePart::Image {
-            mime: img.mime.clone(),
-            bytes_base64: img.bytes_base64.clone(),
-            name: None,
-            compressed: false,
-        });
+    let (message_parts, attachment_warnings) =
+        normalize_chat_input_payload_to_message_parts(state, &input.payload, None);
+    for warning in attachment_warnings {
+        runtime_log_warn(format!("[附件入站] 提交消息降级继续：{warning}"));
     }
 
     let request_id = runtime_context_request_id_or_new(None, input.trace_id.as_deref(), "chat");
@@ -1765,7 +1752,6 @@ async fn send_chat_message(
     }
 
     // 用户发言：构造消息并入队
-    let text = input.payload.text.as_deref().unwrap_or("").trim();
     let images = input.payload.images.as_ref().map(|v| v.as_slice()).unwrap_or(&[]);
     let attachments = input
         .payload
@@ -1774,7 +1760,7 @@ async fn send_chat_message(
         .map(|v| v.as_slice())
         .unwrap_or(&[]);
 
-    if text.is_empty() && images.is_empty() && attachments.is_empty() {
+    if !chat_input_payload_has_content(&input.payload) {
         return Err("消息内容为空".to_string());
     }
 
@@ -1786,19 +1772,10 @@ async fn send_chat_message(
     );
     let normalized_mentions = normalize_payload_mentions(input.payload.mentions.as_ref());
 
-    let mut message_parts = Vec::new();
-    if !text.is_empty() {
-        message_parts.push(MessagePart::Text { text: text.to_string(),
-                reasoning_content: None,
-            });
-    }
-    for img in images {
-        message_parts.push(MessagePart::Image {
-            mime: img.mime.clone(),
-            bytes_base64: img.bytes_base64.clone(),
-            name: None,
-            compressed: false,
-        });
+    let (message_parts, attachment_warnings) =
+        normalize_chat_input_payload_to_message_parts(state.inner(), &input.payload, None);
+    for warning in attachment_warnings {
+        runtime_log_warn(format!("[附件入站] 发送消息降级继续：{warning}"));
     }
     // 先确定 requestId，再写入用户消息 provider_meta，保证重复发送可按已落地消息幂等识别。
     let request_id = runtime_context_request_id_or_new(None, input.trace_id.as_deref(), "chat");
@@ -1999,7 +1976,6 @@ async fn send_user_mention_message_inner(
         return Err("缺少有效的@目标".to_string());
     }
 
-    let text = input.payload.text.as_deref().unwrap_or("").trim();
     let images = input.payload.images.as_ref().map(|v| v.as_slice()).unwrap_or(&[]);
     let attachments = input
         .payload
@@ -2008,7 +1984,7 @@ async fn send_user_mention_message_inner(
         .map(|v| v.as_slice())
         .unwrap_or(&[]);
 
-    if text.is_empty() && images.is_empty() && attachments.is_empty() {
+    if !chat_input_payload_has_content(&input.payload) {
         return Err("消息内容为空".to_string());
     }
 
@@ -2020,19 +1996,10 @@ async fn send_user_mention_message_inner(
     );
     let normalized_mentions = normalize_payload_mentions(input.payload.mentions.as_ref());
 
-    let mut message_parts = Vec::new();
-    if !text.is_empty() {
-        message_parts.push(MessagePart::Text { text: text.to_string(),
-                reasoning_content: None,
-            });
-    }
-    for img in images {
-        message_parts.push(MessagePart::Image {
-            mime: img.mime.clone(),
-            bytes_base64: img.bytes_base64.clone(),
-            name: None,
-            compressed: false,
-        });
+    let (message_parts, attachment_warnings) =
+        normalize_chat_input_payload_to_message_parts(state, &input.payload, None);
+    for warning in attachment_warnings {
+        runtime_log_warn(format!("[附件入站] @消息降级继续：{warning}"));
     }
     // 先确定 requestId，再写入用户消息 provider_meta，保证重复发送可按已落地消息幂等识别。
     let request_id = runtime_context_request_id_or_new(None, input.trace_id.as_deref(), "chat");
@@ -2706,7 +2673,7 @@ mod stop_stream_block_tool_history_tests {
             &[],
             &[AttachmentMetaInput {
                 file_name: "report.pdf".to_string(),
-                relative_path: "exports/report.pdf".to_string(),
+                path: "exports/report.pdf".to_string(),
                 mime: "application/pdf".to_string(),
             }],
         );

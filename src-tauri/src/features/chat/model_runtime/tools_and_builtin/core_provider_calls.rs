@@ -1234,6 +1234,7 @@ mod openai_responses_genai_request_tests {
             latest_user_extra_text: "[附件#1]\npath: {Assistant Space}/downloads/image.png".to_string(),
             latest_user_extra_blocks: vec!["[附件#1]\npath: {Assistant Space}/downloads/image.png".to_string()],
             latest_images: vec![PreparedBinaryPayload {
+                label: "图片#1".to_string(),
                 mime: "image/png".to_string(),
                 content: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO9Wl1QAAAAASUVORK5CYII=".to_string(),
                 saved_path: Some("downloads/image.png".to_string()),

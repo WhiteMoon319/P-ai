@@ -13,6 +13,8 @@ struct ChatInputPayload {
     text: Option<String>,
     #[serde(default)]
     display_text: Option<String>,
+    #[serde(default)]
+    parts: Option<Vec<ChatIngressPart>>,
     images: Option<Vec<BinaryPart>>,
     audios: Option<Vec<BinaryPart>>,
     #[serde(default)]
@@ -24,6 +26,28 @@ struct ChatInputPayload {
     mentions: Option<Vec<UserMentionTargetInput>>,
     #[serde(default)]
     provider_meta: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "type"
+)]
+enum ChatIngressPart {
+    Text {
+        text: String,
+    },
+    Attachment {
+        #[serde(default)]
+        path: Option<String>,
+        #[serde(default)]
+        bytes_base64: Option<String>,
+        #[serde(default)]
+        mime: String,
+        #[serde(default)]
+        name: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,7 +65,8 @@ struct UserMentionTargetInput {
 #[serde(rename_all = "camelCase")]
 struct AttachmentMetaInput {
     file_name: String,
-    relative_path: String,
+    #[serde(default, alias = "relativePath")]
+    path: String,
     #[serde(default)]
     mime: String,
 }

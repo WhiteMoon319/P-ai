@@ -1,12 +1,53 @@
 import type { Ref } from "vue";
 import type { Channel } from "@tauri-apps/api/core";
-import type { AssistantStreamBlock, ChatMentionTarget, ChatMessage } from "../../../types/app";
+import type { AssistantStreamBlock, ChatIngressPart, ChatMentionTarget, ChatMessage } from "../../../types/app";
 import type { PreparedChatSendInput } from "./use-chat-flow-send-input";
 import type { RoundState, SendChatOverrides } from "./use-chat-flow-types";
 import type { AssistantDeltaEvent } from "./use-chat-flow-events";
 import { isChatAbortedByUser } from "./use-chat-flow-utils";
 
 type StreamUserImageAttachment = { mime: string; bytesBase64: string; savedPath?: string };
+
+export function buildChatIngressParts(
+  text: string,
+  images: StreamUserImageAttachment[],
+  attachments: Array<{ fileName: string; path: string; mime: string }>,
+): ChatIngressPart[] {
+  const parts: ChatIngressPart[] = [];
+  const normalizedText = String(text || "");
+  if (normalizedText) parts.push({ type: "text", text: normalizedText });
+  const seenAttachmentPaths = new Set<string>();
+  for (const image of images) {
+    const path = String(image.savedPath || "").trim().replace(/\\/g, "/");
+    const mime = String(image.mime || "").trim();
+    if (!mime) continue;
+    if (path) {
+      seenAttachmentPaths.add(path.toLowerCase());
+      parts.push({
+        type: "attachment",
+        path,
+        mime,
+        name: path.split("/").pop() || "image",
+      });
+      continue;
+    }
+    const bytesBase64 = String(image.bytesBase64 || "").trim();
+    if (!bytesBase64) continue;
+    parts.push({ type: "attachment", bytesBase64, mime, name: "image" });
+  }
+  for (const attachment of attachments) {
+    const path = String(attachment.path || "").trim().replace(/\\/g, "/");
+    if (!path || seenAttachmentPaths.has(path.toLowerCase())) continue;
+    seenAttachmentPaths.add(path.toLowerCase());
+    parts.push({
+      type: "attachment",
+      path,
+      mime: String(attachment.mime || "").trim(),
+      name: String(attachment.fileName || "").trim() || path.split("/").pop() || "attachment",
+    });
+  }
+  return parts;
+}
 
 type UseChatFlowSendControllerOptions = {
   chatting: Ref<boolean>;
@@ -21,8 +62,7 @@ type UseChatFlowSendControllerOptions = {
   invokeSendChatMessage: (input: {
     text: string;
     displayText?: string;
-    images: StreamUserImageAttachment[];
-    attachments?: Array<{ fileName: string; relativePath: string; mime: string }>;
+    parts: ChatIngressPart[];
     extraTextBlocks?: string[];
     mentions?: ChatMentionTarget[];
     session: { apiConfigId: string; agentId: string; departmentId?: string; conversationId?: string };
@@ -61,7 +101,7 @@ type UseChatFlowSendControllerOptions = {
     gen: number,
     text: string,
     images: StreamUserImageAttachment[],
-    attachments: Array<{ fileName: string; relativePath: string; mime: string }>,
+    attachments: Array<{ fileName: string; path: string; mime: string }>,
     mentions: ChatMentionTarget[],
   ) => string;
   resetDisplayState: () => void;
@@ -142,11 +182,11 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
       if (shouldBlockStopUntilHistoryFlushed && options.submitPending) {
         options.submitPending.value = true;
       }
+      const ingressParts = buildChatIngressParts(plainText, sentImages, attachments);
       const submitResult = await options.invokeSendChatMessage({
         text: plainText,
         displayText,
-        images: sentImages,
-        attachments: attachments.length > 0 ? attachments : undefined,
+        parts: ingressParts,
         extraTextBlocks: extraTextBlocks.length > 0 ? extraTextBlocks : undefined,
         mentions: selectedMentions.length > 0 ? selectedMentions : undefined,
         session: {

@@ -2,6 +2,7 @@ import { i18n } from "../../../i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { AppConfig } from "../../../types/app";
 import type { Ref } from "vue";
+import { isAbsoluteLocalPath } from "../utils/local-link";
 
 const t = i18n.global.t;
 
@@ -193,17 +194,21 @@ export function useChatWindowLocalTools(bindings: ChatWindowLocalToolsBindings) 
         bindings.clipboardImages.value.push({
           mime,
           bytesBase64: String(queued.bytesBase64 || "").trim(),
+          savedPath: String(queued.savedPath || "").trim() || undefined,
         });
       } else {
         const savedPath = String(queued.savedPath || "").trim();
-        const relativePath = savedPath.replace(/\\/g, "/").replace(/^.*\/downloads\//, "downloads/");
-        const fileName = String(queued.fileName || "").trim() || relativePath.split("/").pop() || "attachment";
-        const id = `${relativePath || fileName}::${mime}`;
+        const path = savedPath.replace(/\\/g, "/");
+        if (!isAbsoluteLocalPath(path)) {
+          throw new Error("截图附件保存未返回绝对路径，已跳过本次截图附件。");
+        }
+        const fileName = String(queued.fileName || "").trim() || path.split("/").pop() || "attachment";
+        const id = `${path}::${mime}`;
         if (!bindings.queuedAttachmentNotices.value.some((item: any) => item.id === id)) {
           bindings.queuedAttachmentNotices.value.push({
             id,
             fileName,
-            relativePath: relativePath || savedPath || fileName,
+            path,
             mime,
           });
         }

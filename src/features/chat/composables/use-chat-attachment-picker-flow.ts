@@ -4,7 +4,7 @@ import type { Ref } from "vue";
 type QueuedAttachmentNotice = {
   id: string;
   fileName: string;
-  relativePath: string;
+  path: string;
   mime: string;
 };
 

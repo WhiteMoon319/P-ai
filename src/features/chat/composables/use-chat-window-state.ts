@@ -99,7 +99,7 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
   const streamBlocks = ref<AssistantStreamBlock[]>([]);
   const latestContextUsagePreview = ref<ContextUsageUpdatePayload | null>(null);
   const clipboardImages = ref<Array<{ mime: string; bytesBase64: string; savedPath?: string }>>([]);
-  const queuedAttachmentNotices = ref<Array<{ id: string; fileName: string; relativePath: string; mime: string }>>([]);
+  const queuedAttachmentNotices = ref<Array<{ id: string; fileName: string; path: string; mime: string }>>([]);
   const allMessages = shallowRef<ChatMessage[]>([]);
   const status = ref("Ready.");
   const terminalApprovalQueue = ref<TerminalApprovalRequestPayload[]>([]);

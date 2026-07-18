@@ -402,6 +402,12 @@ fn build_preview_messages_from_chat_messages(
                     MessagePart::Audio { .. } => {
                         has_audio = true;
                     }
+                    MessagePart::Attachment { mime, .. } => match message_attachment_kind(mime) {
+                        "image" => has_image = true,
+                        "audio" => has_audio = true,
+                        "pdf" => has_pdf = true,
+                        _ => {}
+                    },
                     MessagePart::Text { .. } => {}
                 }
             }

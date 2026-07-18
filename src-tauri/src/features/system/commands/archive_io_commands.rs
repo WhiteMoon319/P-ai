@@ -95,46 +95,6 @@ fn parse_archives_for_import(raw: &str) -> Result<Vec<ConversationArchive>, Stri
     Err("Invalid archive payload. Expected exported archive JSON.".to_string())
 }
 
-fn normalize_media_for_import(data_path: &PathBuf, mime: &str, stored: &str) -> String {
-    let trimmed = stored.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-    if stored_binary_ref_from_marker(trimmed).is_some() {
-        let decoded = match resolve_stored_binary_base64(data_path, trimmed) {
-            Ok(v) => v,
-            Err(err) => {
-                runtime_log_error(format!(
-                    "[归档导入] 解析已存储引用失败: marker={}, err={}",
-                    trimmed, err
-                ));
-                return trimmed.to_string();
-            }
-        };
-        return match externalize_stored_binary_base64(data_path, mime, &decoded) {
-            Ok(v) => v,
-            Err(err) => {
-                runtime_log_error(format!(
-                    "[归档导入] 外置已解析媒体失败: marker={}, err={}",
-                    trimmed, err
-                ));
-                trimmed.to_string()
-            }
-        };
-    }
-    match externalize_stored_binary_base64(data_path, mime, trimmed) {
-        Ok(v) => v,
-        Err(err) => {
-            runtime_log_error(format!(
-                "[归档导入] 外置媒体 base64 失败: value_prefix={}, err={}",
-                trimmed.chars().take(32).collect::<String>(),
-                err
-            ));
-            trimmed.to_string()
-        }
-    }
-}
-
 fn normalize_archive_for_import(archive: &mut ConversationArchive, data_path: &PathBuf) {
     if archive.archive_id.trim().is_empty() {
         archive.archive_id = Uuid::new_v4().to_string();
@@ -199,7 +159,7 @@ fn normalize_archive_for_import(archive: &mut ConversationArchive, data_path: &P
                     if mime.is_empty() {
                         *mime = "image/webp".to_string();
                     }
-                    *bytes_base64 = normalize_media_for_import(data_path, mime, bytes_base64);
+                    *bytes_base64 = bytes_base64.trim().to_string();
                     *name = name
                         .as_ref()
                         .map(|v| clean_text(v.trim()))
@@ -215,14 +175,32 @@ fn normalize_archive_for_import(archive: &mut ConversationArchive, data_path: &P
                     if mime.is_empty() {
                         *mime = "audio/webm".to_string();
                     }
-                    *bytes_base64 = normalize_media_for_import(data_path, mime, bytes_base64);
+                    *bytes_base64 = bytes_base64.trim().to_string();
                     *name = name
                         .as_ref()
                         .map(|v| clean_text(v.trim()))
                         .filter(|v| !v.is_empty());
                 }
+                MessagePart::Attachment { path, mime, name } => {
+                    *path = clean_text(path.trim());
+                    *mime = clean_text(mime.trim());
+                    if mime.is_empty() {
+                        *mime = "application/octet-stream".to_string();
+                    }
+                    *name = clean_text(name.trim());
+                    if name.is_empty() {
+                        *name = std::path::Path::new(path)
+                            .file_name()
+                            .and_then(|value| value.to_str())
+                            .unwrap_or("attachment")
+                            .to_string();
+                    }
+                }
             }
         }
+        canonicalize_message_parts_for_persistence(&mut message.parts, data_path);
+        message.provider_meta =
+            provider_meta_without_legacy_attachments(message.provider_meta.take());
         message
             .extra_text_blocks
             .iter_mut()
@@ -248,7 +226,10 @@ fn archive_message_image_count(message: &ChatMessage) -> usize {
     message
         .parts
         .iter()
-        .filter(|part| matches!(part, MessagePart::Image { .. }))
+        .filter(|part| {
+            matches!(part, MessagePart::Image { .. })
+                || matches!(part, MessagePart::Attachment { mime, .. } if matches!(message_attachment_kind(mime), "image" | "pdf"))
+        })
         .count()
 }
 
@@ -256,7 +237,10 @@ fn archive_message_audio_count(message: &ChatMessage) -> usize {
     message
         .parts
         .iter()
-        .filter(|part| matches!(part, MessagePart::Audio { .. }))
+        .filter(|part| {
+            matches!(part, MessagePart::Audio { .. })
+                || matches!(part, MessagePart::Attachment { mime, .. } if message_attachment_kind(mime) == "audio")
+        })
         .count()
 }
 

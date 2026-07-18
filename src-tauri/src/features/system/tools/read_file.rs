@@ -549,6 +549,7 @@ fn build_read_media_prepared_prompt(
         mime: mime.to_string(),
         content: content_base64.to_string(),
         saved_path,
+        label: "图片#1".to_string(),
     };
     PreparedPrompt {
         preamble: format!(

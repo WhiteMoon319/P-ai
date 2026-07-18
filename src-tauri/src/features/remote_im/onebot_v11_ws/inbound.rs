@@ -9,8 +9,7 @@ fn build_remote_im_enqueue_input(
     remote_contact_name: Option<String>,
     platform_message_id: Option<String>,
     final_text: String,
-    images: Vec<BinaryPart>,
-    attachments: Vec<AttachmentMetaInput>,
+    ordered_parts: Vec<ChatIngressPart>,
 ) -> RemoteImEnqueueInput {
     RemoteImEnqueueInput {
         channel_id: channel_id.to_string(),
@@ -35,9 +34,10 @@ fn build_remote_im_enqueue_input(
         payload: ChatInputPayload {
             text: Some(final_text),
             display_text: None,
-            images: if images.is_empty() { None } else { Some(images) },
+            parts: if ordered_parts.is_empty() { None } else { Some(ordered_parts) },
+            images: None,
             audios: None,
-            attachments: if attachments.is_empty() { None } else { Some(attachments) },
+            attachments: None,
             model: None,
             extra_text_blocks: None,
             mentions: None,
@@ -98,48 +98,94 @@ async fn parse_and_enqueue_onebot_event(
     }
     let message_field = event.get("message");
     let parsed = extract_message_content_detail(event);
-    let mut text = onebot_resolve_mentions_in_text(
-        manager,
-        channel_id,
-        group_id,
-        parsed.text,
-        &parsed.mention_refs,
-        &mut group_member_cache,
-    )
-    .await;
-    let mut media_refs = parsed.media_refs;
-    let embedded_refs = parsed.embedded_refs;
-    if !embedded_refs.is_empty() {
-        let (embedded_text, nested_media_refs) =
-            onebot_expand_embedded_content(
-                manager,
-                channel_id,
-                group_id,
-                &mut group_member_cache,
-                &embedded_refs,
-            )
-            .await;
-        if !embedded_text.is_empty() {
-            text = if text.trim().is_empty() {
-                embedded_text
-            } else {
-                format!("{}\n{}", text.trim(), embedded_text)
-            };
+    let mention_refs = parsed.mention_refs;
+    let mut ordered_segments = parsed.ordered_segments;
+    if ordered_segments.is_empty() {
+        if !parsed.text.is_empty() {
+            ordered_segments.push(OnebotParsedSegment::Text(parsed.text));
         }
-        media_refs.extend(nested_media_refs);
+        ordered_segments.extend(parsed.media_refs.into_iter().map(OnebotParsedSegment::Media));
+        ordered_segments.extend(
+            parsed
+                .embedded_refs
+                .into_iter()
+                .map(OnebotParsedSegment::Embedded),
+        );
     }
-    let (images, attachments, notices) =
-        onebot_resolve_inbound_media(manager, channel_id, group_id, Some(user_id_for_media), state, &media_refs)
-            .await;
-    if !notices.is_empty() {
-        let notice_text = notices.join("\n");
-        text = if text.trim().is_empty() {
-            notice_text
-        } else {
-            format!("{}\n{}", text.trim(), notice_text)
-        };
+    let mut ordered_parts = Vec::<ChatIngressPart>::new();
+    for segment in ordered_segments {
+        match segment {
+            OnebotParsedSegment::Text(text) => {
+                let text = onebot_resolve_mentions_in_text(
+                    manager,
+                    channel_id,
+                    group_id,
+                    text,
+                    &mention_refs,
+                    &mut group_member_cache,
+                )
+                .await;
+                if !text.trim().is_empty() {
+                    ordered_parts.push(ChatIngressPart::Text { text });
+                }
+            }
+            OnebotParsedSegment::Media(media_ref) => {
+                let (mut parts, notices) = onebot_resolve_inbound_media(
+                    manager,
+                    channel_id,
+                    group_id,
+                    Some(user_id_for_media),
+                    &[media_ref],
+                )
+                .await;
+                ordered_parts.append(&mut parts);
+                ordered_parts.extend(
+                    notices
+                        .into_iter()
+                        .map(|text| ChatIngressPart::Text { text }),
+                );
+            }
+            OnebotParsedSegment::Embedded(embedded_ref) => {
+                let (embedded_text, nested_media_refs) = onebot_expand_embedded_content(
+                    manager,
+                    channel_id,
+                    group_id,
+                    &mut group_member_cache,
+                    &[embedded_ref],
+                )
+                .await;
+                if !embedded_text.trim().is_empty() {
+                    ordered_parts.push(ChatIngressPart::Text {
+                        text: embedded_text,
+                    });
+                }
+                let (mut parts, notices) = onebot_resolve_inbound_media(
+                    manager,
+                    channel_id,
+                    group_id,
+                    Some(user_id_for_media),
+                    &nested_media_refs,
+                )
+                .await;
+                ordered_parts.append(&mut parts);
+                ordered_parts.extend(
+                    notices
+                        .into_iter()
+                        .map(|text| ChatIngressPart::Text { text }),
+                );
+            }
+        }
     }
-    if text.trim().is_empty() && images.is_empty() && attachments.is_empty() {
+    let text = ordered_parts
+        .iter()
+        .filter_map(|part| match part {
+            ChatIngressPart::Text { text } => Some(text.trim()),
+            ChatIngressPart::Attachment { .. } => None,
+        })
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+    if ordered_parts.is_empty() {
         return Err(format!(
             "消息内容为空，跳过 (message_type={}, user_id={}, message_field_type={})",
             event
@@ -164,8 +210,7 @@ async fn parse_and_enqueue_onebot_event(
         remote_contact_name,
         platform_message_id,
         text,
-        images,
-        attachments,
+        ordered_parts,
     );
     let result = remote_im_enqueue_message_internal(input, state)?;
     if !result.conversation_id.trim().is_empty() {

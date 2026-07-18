@@ -260,15 +260,17 @@
             v-if="block.attachmentFiles.length > 0"
             :class="block.taskTrigger || block.text || block.images.length > 0 || block.audios.length > 0 ? 'mt-2 flex flex-wrap gap-1' : 'flex flex-wrap gap-1'"
           >
-            <div
+            <button
               v-for="(file, idx) in block.attachmentFiles"
               :key="`${block.id}-file-${idx}`"
+              type="button"
               class="badge badge-ghost gap-1 py-3"
-              :title="file.relativePath"
+              :title="file.path"
+              @click.stop="openAttachmentPath(file.path)"
             >
               <FileText class="h-3.5 w-3.5" />
               <span class="text-[11px]">{{ file.fileName }}</span>
-            </div>
+            </button>
           </div>
         </div>
       </template>
@@ -333,15 +335,17 @@
             v-if="block.attachmentFiles.length > 0"
             :class="block.taskTrigger || block.text || block.images.length > 0 || block.audios.length > 0 ? 'mt-2 flex flex-wrap justify-end gap-1' : 'flex flex-wrap justify-end gap-1'"
           >
-            <div
+            <button
               v-for="(file, idx) in block.attachmentFiles"
               :key="`${block.id}-file-${idx}`"
+              type="button"
               class="badge badge-ghost gap-1 py-3"
-              :title="file.relativePath"
+              :title="file.path"
+              @click.stop="openAttachmentPath(file.path)"
             >
               <FileText class="h-3.5 w-3.5" />
               <span class="text-[11px]">{{ file.fileName }}</span>
-            </div>
+            </button>
           </div>
         </div>
       </template>
@@ -505,7 +509,7 @@ const emit = defineEmits<{
   (e: "copyMessageImageDone"): void;
   (e: "copyMessageImageFailed"): void;
   (e: "openImagePreview", image: { mime: string; bytesBase64?: string; dataUrl?: string; localPath?: string }): void;
-  (e: "toggleAudioPlayback", payload: { id: string; audio: { mime: string; bytesBase64: string } }): void;
+  (e: "toggleAudioPlayback", payload: { id: string; audio: { mime: string; bytesBase64?: string; mediaRef?: string } }): void;
   (e: "assistantLinkClick", event: MouseEvent): void;
 }>();
 
@@ -1550,12 +1554,14 @@ async function loadImageDataUrl(image: { mime: string; bytesBase64?: string; med
   if (cached) return cached;
   const pending = imageDataUrlPromiseCache.get(cacheKey);
   if (pending) return pending;
-  const task = invokeTauri<{ dataUrl: string }>("read_chat_image_data_url", {
-    input: {
-      mediaRef,
-      mime,
-    },
-  })
+  const legacyMarker = mediaRef.startsWith("@media:") || mediaRef.startsWith("@download:");
+  const task = (legacyMarker
+    ? invokeTauri<{ dataUrl: string }>("read_chat_image_data_url", {
+      input: { mediaRef, mime },
+    })
+    : invokeTauri<{ dataUrl: string }>("read_local_chat_image_thumbnail", {
+      input: { path: mediaRef },
+    }))
     .then((result) => {
       const dataUrl = String(result?.dataUrl || "").trim();
       if (dataUrl) imageDataUrlCache.set(cacheKey, dataUrl);
@@ -1648,6 +1654,15 @@ function openResolvedImagePreview(
   emit("openImagePreview", {
     mime: image.mime,
     dataUrl,
+    localPath: image.mediaRef && !image.mediaRef.startsWith("@") ? image.mediaRef : undefined,
+  });
+}
+
+function openAttachmentPath(path: string) {
+  const normalized = String(path || "").trim();
+  if (!normalized) return;
+  void invokeTauri("open_workspace_file", { relativePath: normalized }).catch((error) => {
+    console.warn("[聊天附件] 打开失败", { path: normalized, error });
   });
 }
 </script>

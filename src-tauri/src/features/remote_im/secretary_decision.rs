@@ -263,6 +263,12 @@ fn remote_im_secretary_message_digest(
             }
             MessagePart::Image { .. } => chunks.push("[图片]".to_string()),
             MessagePart::Audio { .. } => chunks.push("[音频]".to_string()),
+            MessagePart::Attachment { mime, .. } => chunks.push(match message_attachment_kind(mime) {
+                "image" => "[图片]".to_string(),
+                "audio" => "[音频]".to_string(),
+                "pdf" => "[PDF]".to_string(),
+                _ => "[附件]".to_string(),
+            }),
         }
     }
     for block in &message.extra_text_blocks {

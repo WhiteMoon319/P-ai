@@ -454,21 +454,36 @@ fn apply_aliyun_multimodal_cache_items_to_conversation(
         let mut matched_items = Vec::<AliyunMultimodalCacheItem>::new();
         let mut seen_keys = std::collections::HashSet::<String>::new();
         for part in &message.parts {
-            let (mime, bytes_base64) = match part {
+            let (mime, resolved_base64) = match part {
                 MessagePart::Image {
                     mime, bytes_base64, ..
-                } => (mime, bytes_base64),
+                } => {
+                    let Ok(resolved) =
+                        resolve_message_part_binary_base64_for_hash(data_path, bytes_base64)
+                    else {
+                        continue;
+                    };
+                    (mime.as_str(), resolved)
+                }
                 MessagePart::Audio {
                     mime, bytes_base64, ..
-                } => (mime, bytes_base64),
+                } => {
+                    let Ok(resolved) =
+                        resolve_message_part_binary_base64_for_hash(data_path, bytes_base64)
+                    else {
+                        continue;
+                    };
+                    (mime.as_str(), resolved)
+                }
+                MessagePart::Attachment { path, mime, .. } => {
+                    let Ok(raw) = std::fs::read(path) else {
+                        continue;
+                    };
+                    (mime.as_str(), B64.encode(raw))
+                }
                 MessagePart::Text { .. } => continue,
             };
             let Some(kind) = aliyun_multimodal_kind_for_mime(mime) else {
-                continue;
-            };
-            let Ok(resolved_base64) =
-                resolve_message_part_binary_base64_for_hash(data_path, bytes_base64)
-            else {
                 continue;
             };
             let Ok(content_hash) = media_hash_from_base64(&resolved_base64) else {

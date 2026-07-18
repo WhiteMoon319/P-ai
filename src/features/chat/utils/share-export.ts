@@ -495,12 +495,14 @@ async function resolveShareImageSrc(image: {
   const mediaRef = String(image.mediaRef || "").trim();
   if (!mediaRef) return "";
   try {
-    const result = await invokeTauri<{ dataUrl: string }>("read_chat_image_data_url", {
-      input: {
-        mediaRef,
-        mime,
-      },
-    });
+    const legacyMarker = mediaRef.startsWith("@media:") || mediaRef.startsWith("@download:");
+    const result = legacyMarker
+      ? await invokeTauri<{ dataUrl: string }>("read_chat_image_data_url", {
+        input: { mediaRef, mime },
+      })
+      : await invokeTauri<{ dataUrl: string }>("read_local_chat_image_original", {
+        input: { path: mediaRef },
+      });
     return String(result?.dataUrl || "").trim();
   } catch (error) {
     console.warn("[分享导出] 读取图片数据失败，已跳过", {

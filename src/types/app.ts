@@ -557,7 +557,18 @@ export type PersonaProfile = {
 export type MessagePart =
   | { type: "text"; text: string; reasoningContent?: string; reasoning_content?: string }
   | { type: "image"; mime: string; bytesBase64: string; name?: string; compressed?: boolean }
-  | { type: "audio"; mime: string; bytesBase64: string };
+  | { type: "audio"; mime: string; bytesBase64: string }
+  | { type: "attachment"; path: string; mime: string; name: string };
+
+export type ChatIngressPart =
+  | { type: "text"; text: string }
+  | {
+    type: "attachment";
+    path?: string;
+    bytesBase64?: string;
+    mime: string;
+    name: string;
+  };
 
 export type ChatRole = "user" | "assistant" | "tool" | "system";
 
@@ -630,6 +641,7 @@ export type ChatMessage = {
     dispatchElapsedMs?: number;
     messageKind?: string;
     hiddenPromptText?: string;
+    /** 旧消息只读兼容；新消息不再写入附件清单。 */
     attachments?: Array<{ fileName: string; relativePath: string; mime?: string }>;
     taskTrigger?: TaskTriggerMessageCard;
     planCard?: PlanMessageCard;
@@ -705,9 +717,9 @@ export type ChatMessageBlock = {
   contentBlocks?: AssistantStreamBlock[];
   mentions?: ChatMentionTarget[];
   text: string;
-  images: Array<{ mime: string; bytesBase64?: string; mediaRef?: string }>;
-  audios: Array<{ mime: string; bytesBase64: string }>;
-  attachmentFiles: Array<{ fileName: string; relativePath: string }>;
+  images: Array<{ mime: string; bytesBase64?: string; mediaRef?: string; name?: string }>;
+  audios: Array<{ mime: string; bytesBase64?: string; mediaRef?: string; name?: string }>;
+  attachmentFiles: Array<{ fileName: string; path: string }>;
   extraTextReferences?: Array<{ label: string; text: string }>;
   taskTrigger?: TaskTriggerMessageCard;
   planCard?: PlanMessageCard;

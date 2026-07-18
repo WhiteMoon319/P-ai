@@ -31,7 +31,6 @@ struct LlmRequestNormalizedImage {
     bytes: Vec<u8>,
     output_width: u32,
     output_height: u32,
-    reused_original: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -45,13 +44,6 @@ enum LlmRequestImageInputFormat {
 
 fn llm_request_image_normalize_options_default() -> LlmRequestImageNormalizeOptions {
     LlmRequestImageNormalizeOptions::default()
-}
-
-fn llm_request_image_supported_raster_mime(mime: &str) -> bool {
-    matches!(
-        mime.trim().to_ascii_lowercase().as_str(),
-        "image/jpeg" | "image/jpg" | "image/png" | "image/gif" | "image/webp" | "image/bmp"
-    )
 }
 
 fn llm_request_image_detect_format(
@@ -160,7 +152,6 @@ fn normalize_image_bytes_for_llm_request_with_options(
         bytes: (&*webp).to_vec(),
         output_width: normalized.width(),
         output_height: normalized.height(),
-        reused_original: false,
     })
 }
 
@@ -210,7 +201,6 @@ fn normalize_rgba_image_for_llm_request_with_options(
         bytes: (&*webp).to_vec(),
         output_width: normalized.width(),
         output_height: normalized.height(),
-        reused_original: false,
     })
 }
 
@@ -284,7 +274,6 @@ fn normalize_image_bytes_for_llm_request_should_encode_small_jpeg_as_webp() {
     let normalized =
         normalize_image_bytes_for_llm_request(&bytes, Some("image/jpeg")).expect("normalize jpeg");
     assert_eq!(normalized.mime, "image/webp");
-    assert!(!normalized.reused_original);
     assert_eq!(normalized.output_width, 512);
     assert_eq!(normalized.output_height, 512);
 }
@@ -296,7 +285,6 @@ fn normalize_image_bytes_for_llm_request_should_compress_large_jpeg_within_budge
     let normalized =
         normalize_image_bytes_for_llm_request(&bytes, Some("image/jpeg")).expect("normalize jpeg");
     assert_eq!(normalized.mime, "image/webp");
-    assert!(!normalized.reused_original);
 }
 
 #[cfg(test)]

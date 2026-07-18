@@ -256,7 +256,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import type { ApiConfigItem, ChatConversationOverviewItem, ChatMessage, ChatTodoItem, ConversationGoalState, IdeContextWorkspaceGroup, ShellWorkspace } from "../../types/app";
+import type { ApiConfigItem, ChatConversationOverviewItem, ChatIngressPart, ChatMessage, ChatTodoItem, ConversationGoalState, IdeContextWorkspaceGroup, ShellWorkspace } from "../../types/app";
 import { removeBinaryPlaceholders, messageText } from "../../utils/chat-message";
 import { formatConversationFallbackTitle } from "../chat/utils/conversation-title";
 import { formalizeMessages } from "../chat/composables/use-chat-flow-utils";
@@ -2084,14 +2084,14 @@ async function confirmCompaction() {
 
 async function send(payload?: { extraTextBlocks?: string[] }) {
   const text = inputText.value.trim();
-  const images = composerClipboardImages.value.map((item) => ({ ...item }));
+  const images = clipboardImages.value.map((item) => ({ ...item }));
   const attachments = buildQueuedAttachmentPayload();
   const extraTextBlocks = (Array.isArray(payload?.extraTextBlocks) ? payload.extraTextBlocks : [])
     .map((item) => String(item || "").trim())
     .filter(Boolean);
   if ((!text && images.length === 0 && attachments.length === 0 && extraTextBlocks.length === 0) || !activeConversationId.value || sendSubmitting.value) return;
   const hadForegroundRound = busy.value;
-  const optimisticDraftId = hadForegroundRound ? "" : insertOptimisticOwnUserDraft({ text, images, attachments, extraTextBlocks });
+  const optimisticDraftId = hadForegroundRound ? "" : insertOptimisticOwnUserDraft({ text, attachments, extraTextBlocks });
   const previousClipboardImages = clipboardImages.value.map((item) => ({ ...item }));
   const previousQueuedAttachmentEntries = queuedAttachmentEntries.value.map((item) => ({ ...item }));
   inputText.value = "";
@@ -2101,14 +2101,28 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
   sendSubmitting.value = true;
   if (!hadForegroundRound) busy.value = true;
   try {
+    const parts: ChatIngressPart[] = [];
+    if (text) parts.push({ type: "text", text });
+    for (const image of images) {
+      const mime = String(image.mime || "").trim();
+      const bytesBase64 = String(image.bytesBase64 || "").trim();
+      if (!mime || !bytesBase64) continue;
+      parts.push({ type: "attachment", mime, bytesBase64, name: "image" });
+    }
+    for (const attachment of attachments) {
+      const path = String(attachment.path || "").trim().replace(/\\/g, "/");
+      if (!path) continue;
+      parts.push({
+        type: "attachment",
+        path,
+        mime: String(attachment.mime || "").trim(),
+        name: String(attachment.fileName || "").trim() || path.split("/").pop() || "attachment",
+      });
+    }
     const result = await transport.request<{ userMessageId?: string; assistantMessageId?: string; accepted?: boolean; duplicate?: boolean; ingress?: string }>("chat.send", {
       payload: {
         text,
-        images: images.map((image) => ({
-          mime: image.mime,
-          bytesBase64: image.bytesBase64,
-        })),
-        attachments,
+        parts,
         extraTextBlocks,
         providerMeta: { source: "vscode_sidebar" },
       },
@@ -2535,7 +2549,6 @@ function isOptimisticOwnUserDraft(message?: ChatMessage | null): boolean {
 
 function insertOptimisticOwnUserDraft(input: {
   text: string;
-  images: Array<{ mime: string; bytesBase64: string }>;
   attachments: SidebarAttachmentPayload[];
   extraTextBlocks: string[];
 }): string {
@@ -2545,11 +2558,15 @@ function insertOptimisticOwnUserDraft(input: {
   if (normalizedText) {
     parts.push({ type: "text", text: normalizedText });
   }
-  for (const image of input.images) {
-    const mime = String(image.mime || "").trim();
-    const bytesBase64 = String(image.bytesBase64 || "").trim();
-    if (!mime || !bytesBase64) continue;
-    parts.push({ type: "image", mime, bytesBase64 });
+  for (const attachment of input.attachments) {
+    const path = String(attachment.path || "").trim().replace(/\\/g, "/");
+    if (!path) continue;
+    parts.push({
+      type: "attachment",
+      path,
+      mime: String(attachment.mime || "").trim(),
+      name: String(attachment.fileName || "").trim() || path.split("/").pop() || "attachment",
+    });
   }
   const message = messageWithStableRenderId({
     id: draftId,
@@ -2560,11 +2577,6 @@ function insertOptimisticOwnUserDraft(input: {
     extraTextBlocks: input.extraTextBlocks.length > 0 ? [...input.extraTextBlocks] : [],
     providerMeta: {
       _optimistic: true,
-      attachments: input.attachments.map((item) => ({
-        fileName: item.fileName,
-        relativePath: item.relativePath,
-        mime: item.mime,
-      })),
     },
   } satisfies ChatMessage, draftId);
   messages.value = [...messages.value, message];

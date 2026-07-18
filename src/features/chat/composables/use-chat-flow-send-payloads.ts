@@ -3,7 +3,7 @@ import type { Ref } from "vue";
 type QueuedAttachmentNotice = {
   id: string;
   fileName: string;
-  relativePath: string;
+  path: string;
   mime: string;
 };
 
@@ -15,7 +15,7 @@ type ImageAttachment = {
 
 export type AttachmentPayload = {
   fileName: string;
-  relativePath: string;
+  path: string;
   mime: string;
 };
 
@@ -25,7 +25,7 @@ type UseChatFlowSendPayloadsOptions = {
 
 export function useChatFlowSendPayloads(options: UseChatFlowSendPayloadsOptions) {
   function attachmentPayloadKey(item: AttachmentPayload): string {
-    return `${item.relativePath.replace(/\\/g, "/").toLowerCase()}::${item.mime.toLowerCase()}`;
+    return `${item.path.replace(/\\/g, "/").toLowerCase()}::${item.mime.toLowerCase()}`;
   }
 
   function mergeAttachmentPayloads(
@@ -35,10 +35,10 @@ export function useChatFlowSendPayloads(options: UseChatFlowSendPayloadsOptions)
     const merged = new Map<string, AttachmentPayload>();
     for (const item of [...primary, ...fallback]) {
       const fileName = String(item.fileName || "").trim();
-      const relativePath = String(item.relativePath || "").trim().replace(/\\/g, "/");
+      const path = String(item.path || "").trim().replace(/\\/g, "/");
       const mime = String(item.mime || "").trim();
-      if (!fileName || !relativePath) continue;
-      const normalized = { fileName, relativePath, mime };
+      if (!fileName || !path) continue;
+      const normalized = { fileName, path, mime };
       const key = attachmentPayloadKey(normalized);
       if (merged.has(key)) continue;
       merged.set(key, normalized);
@@ -52,10 +52,10 @@ export function useChatFlowSendPayloads(options: UseChatFlowSendPayloadsOptions)
     const payloads = list
       .map((item) => {
         const fileName = String(item.fileName || "").trim();
-        const relativePath = String(item.relativePath || "").trim().replace(/\\/g, "/");
+        const path = String(item.path || "").trim().replace(/\\/g, "/");
         const mime = String(item.mime || "").trim();
-        if (!fileName || !relativePath) return null;
-        return { fileName, relativePath, mime };
+        if (!fileName || !path) return null;
+        return { fileName, path, mime };
       })
       .filter((value): value is AttachmentPayload => !!value);
     return mergeAttachmentPayloads(payloads);
@@ -66,11 +66,11 @@ export function useChatFlowSendPayloads(options: UseChatFlowSendPayloadsOptions)
     for (const image of images) {
       const rawPath = String(image.savedPath || "").trim();
       if (!rawPath) continue;
-      const relativePath = rawPath.replace(/\\/g, "/");
-      if (!relativePath) continue;
-      const fileName = relativePath.split("/").pop() || "attachment";
+      const path = rawPath.replace(/\\/g, "/");
+      if (!path) continue;
+      const fileName = path.split("/").pop() || "attachment";
       const mime = String(image.mime || "").trim();
-      payloads.push({ fileName, relativePath, mime });
+      payloads.push({ fileName, path, mime });
     }
     return mergeAttachmentPayloads(payloads);
   }

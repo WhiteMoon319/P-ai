@@ -72,7 +72,7 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
       t: bindings.tr,
       formatRequestFailed: (error: unknown) => bindings.formatRequestFailed(error),
       removeBinaryPlaceholders: bindings.removeBinaryPlaceholders,
-      invokeSendChatMessage: ({ text, displayText, images, attachments, extraTextBlocks, mentions, session, traceId, onDelta }) =>
+      invokeSendChatMessage: ({ text, displayText, parts, extraTextBlocks, mentions, session, traceId, onDelta }) =>
         invokeTauri(
           "submit_chat_message",
           {
@@ -80,8 +80,7 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
               payload: {
                 text,
                 displayText,
-                images,
-                attachments: attachments && attachments.length > 0 ? attachments : undefined,
+                parts,
                 extraTextBlocks: extraTextBlocks && extraTextBlocks.length > 0 ? extraTextBlocks : undefined,
                 mentions: Array.isArray(mentions) && mentions.length > 0
                   ? mentions.map((item: any) => ({

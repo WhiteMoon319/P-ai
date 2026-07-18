@@ -1,4 +1,5 @@
 import { computed, ref, type Ref } from "vue";
+import { isAbsoluteLocalPath } from "../../chat/utils/local-link";
 import type {
   SidebarAttachmentPayload,
   SidebarClipboardImage,
@@ -52,7 +53,7 @@ function pastedImageFiles(event: ClipboardEvent): File[] {
 }
 
 function attachmentPayloadKey(item: SidebarAttachmentPayload): string {
-  return `${item.relativePath.replace(/\\/g, "/").toLowerCase()}::${item.mime.toLowerCase()}`;
+  return `${item.path.replace(/\\/g, "/").toLowerCase()}::${item.mime.toLowerCase()}`;
 }
 
 export function useSidebarAttachments(options: UseSidebarAttachmentsOptions) {
@@ -73,7 +74,7 @@ export function useSidebarAttachments(options: UseSidebarAttachmentsOptions) {
   const queuedAttachmentNotices = computed<SidebarQueuedAttachmentNotice[]>(() => queuedAttachmentEntries.value.map((item) => ({
     id: item.id,
     fileName: item.fileName,
-    relativePath: item.relativePath,
+    path: item.path,
     mime: item.mime,
   })));
 
@@ -82,8 +83,8 @@ export function useSidebarAttachments(options: UseSidebarAttachmentsOptions) {
     const files = pastedImageFiles(event);
     if (files.length === 0) return;
     event.preventDefault();
-    try {
-      for (const file of files) {
+    for (const file of files) {
+      try {
         const dataUrl = await readBlobAsDataUrl(file);
         const bytesBase64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : "";
         if (!bytesBase64) continue;
@@ -91,9 +92,14 @@ export function useSidebarAttachments(options: UseSidebarAttachmentsOptions) {
           mime: String(file.type || "image/png").trim() || "image/png",
           bytesBase64,
         });
+      } catch (error) {
+        console.warn("[侧边栏附件] 单张剪贴板图片读取失败，已跳过并继续", {
+          fileName: String(file.name || "clipboard-image"),
+          error: error instanceof Error ? error.message : String(error || "unknown"),
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+        options.errorText.value = String(error || options.t("sidebar.readClipboardImageFailed"));
       }
-    } catch (error) {
-      options.errorText.value = String(error || options.t("sidebar.readClipboardImageFailed"));
     }
   }
 
@@ -122,10 +128,10 @@ export function useSidebarAttachments(options: UseSidebarAttachmentsOptions) {
     const merged = new Map<string, SidebarAttachmentPayload>();
     for (const item of queuedAttachmentEntries.value) {
       const fileName = String(item.fileName || "").trim();
-      const relativePath = String(item.relativePath || "").trim().replace(/\\/g, "/");
+      const path = String(item.path || "").trim().replace(/\\/g, "/");
       const mime = String(item.mime || "").trim();
-      if (!fileName || !relativePath) continue;
-      const normalized = { fileName, relativePath, mime };
+      if (!fileName || !isAbsoluteLocalPath(path)) continue;
+      const normalized = { fileName, path, mime };
       const key = attachmentPayloadKey(normalized);
       if (merged.has(key)) continue;
       merged.set(key, normalized);
@@ -146,8 +152,8 @@ export function useSidebarAttachments(options: UseSidebarAttachmentsOptions) {
       return mime.startsWith("image/") || mime === "application/pdf";
     });
     if (supported.length === 0) return;
-    try {
-      for (const file of supported) {
+    for (const file of supported) {
+      try {
         const dataUrl = await readBlobAsDataUrl(file);
         const bytesBase64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : "";
         if (!bytesBase64) continue;
@@ -158,21 +164,29 @@ export function useSidebarAttachments(options: UseSidebarAttachmentsOptions) {
         });
         const mime = String(queued.mime || "").trim().toLowerCase();
         const savedPath = String(queued.savedPath || "").trim();
-        const relativePath = savedPath.replace(/\\/g, "/").replace(/^.*\/downloads\//, "downloads/");
-        const fileName = String(queued.fileName || "").trim() || relativePath.split("/").pop() || "attachment";
-        const id = `${relativePath || fileName}::${mime}`;
+        const path = savedPath.replace(/\\/g, "/");
+        if (!isAbsoluteLocalPath(path)) {
+          throw new Error(`附件未返回可用的绝对路径：${String(queued.fileName || file.name || "attachment")}`);
+        }
+        const fileName = String(queued.fileName || "").trim() || path.split("/").pop() || "attachment";
+        const id = `${path}::${mime}`;
         if (!queuedAttachmentEntries.value.some((item) => item.id === id)) {
           queuedAttachmentEntries.value.push({
             id,
             fileName,
-            relativePath: relativePath || savedPath || fileName,
+            path,
             mime,
             imageBytesBase64: mime.startsWith("image/") ? String(queued.bytesBase64 || "").trim() || undefined : undefined,
           });
         }
+      } catch (error) {
+        console.warn("[侧边栏附件] 单个附件处理失败，已跳过并继续", {
+          fileName: String(file.name || "attachment"),
+          error: error instanceof Error ? error.message : String(error || "unknown"),
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+        options.errorText.value = String(error || options.t("sidebar.readClipboardImageFailed"));
       }
-    } catch (error) {
-      options.errorText.value = String(error || options.t("sidebar.readClipboardImageFailed"));
     }
   }
 
@@ -188,6 +202,7 @@ export function useSidebarAttachments(options: UseSidebarAttachmentsOptions) {
     composerClipboardImages,
     queuedAttachmentEntries,
     queuedAttachmentNotices,
+    appendAttachmentFiles,
     appendClipboardImagesFromPaste,
     buildQueuedAttachmentPayload,
     handleAttachmentInputChange,

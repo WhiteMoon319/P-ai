@@ -526,6 +526,7 @@ fn resolve_contact_session_target(
 }
 
 fn build_chat_message_from_input(
+    state: &AppState,
     input: &RemoteImEnqueueInput,
     conversation_id: &str,
     contact: &RemoteImContact,
@@ -534,68 +535,119 @@ fn build_chat_message_from_input(
     images: &[BinaryPart],
     audios: &[BinaryPart],
     attachments: &[AttachmentMetaInput],
-    data_path: &PathBuf,
 ) -> ChatMessage {
     let mut parts = Vec::<MessagePart>::new();
+    let mut warnings = Vec::<String>::new();
     let contact_id = contact.id.trim();
     let downloads_subdir = remote_im_contact_downloads_subdir(contact);
-    if !text.is_empty() {
-        parts.push(MessagePart::Text {
-            text: text.to_string(),
+    if let Some(ordered_parts) = input
+        .payload
+        .parts
+        .as_ref()
+        .filter(|items| !items.is_empty())
+    {
+        for ingress_part in ordered_parts {
+            match ingress_part {
+                ChatIngressPart::Text { text } => {
+                    if !text.trim().is_empty() {
+                        parts.push(MessagePart::Text {
+                            text: text.trim().to_string(),
+                            reasoning_content: None,
+                        });
+                    }
+                }
+                ChatIngressPart::Attachment {
+                    path,
+                    bytes_base64,
+                    mime,
+                    name,
+                } => push_normalized_attachment_ingress(
+                    state,
+                    AttachmentIngressInput {
+                        path: path.clone(),
+                        bytes_base64: bytes_base64.clone(),
+                        mime: mime.clone(),
+                        name: name.clone(),
+                        storage_subdir: Some(downloads_subdir.clone()),
+                    },
+                    &mut parts,
+                    &mut warnings,
+                ),
+            }
+        }
+    } else {
+        if !text.is_empty() {
+            parts.push(MessagePart::Text {
+                text: text.to_string(),
                 reasoning_content: None,
             });
+        }
+        for image in images {
+            push_normalized_attachment_ingress(
+                state,
+                AttachmentIngressInput {
+                    path: image.saved_path.clone(),
+                    bytes_base64: Some(image.bytes_base64.clone()),
+                    mime: image.mime.clone(),
+                    name: image
+                        .saved_path
+                        .as_deref()
+                        .and_then(|path| std::path::Path::new(path).file_name())
+                        .and_then(|value| value.to_str())
+                        .unwrap_or("image")
+                        .to_string(),
+                    storage_subdir: Some(downloads_subdir.clone()),
+                },
+                &mut parts,
+                &mut warnings,
+            );
+        }
+        for audio in audios {
+            push_normalized_attachment_ingress(
+                state,
+                AttachmentIngressInput {
+                    path: audio.saved_path.clone(),
+                    bytes_base64: Some(audio.bytes_base64.clone()),
+                    mime: audio.mime.clone(),
+                    name: audio
+                        .saved_path
+                        .as_deref()
+                        .and_then(|path| std::path::Path::new(path).file_name())
+                        .and_then(|value| value.to_str())
+                        .unwrap_or("audio")
+                        .to_string(),
+                    storage_subdir: Some(downloads_subdir.clone()),
+                },
+                &mut parts,
+                &mut warnings,
+            );
+        }
+        for attachment in attachments {
+            push_normalized_attachment_ingress(
+                state,
+                AttachmentIngressInput {
+                    path: Some(attachment.path.clone()),
+                    bytes_base64: None,
+                    mime: attachment.mime.clone(),
+                    name: attachment.file_name.clone(),
+                    storage_subdir: Some(downloads_subdir.clone()),
+                },
+                &mut parts,
+                &mut warnings,
+            );
+        }
     }
-    for img in images {
-        let bytes_base64 =
-            externalize_stored_binary_base64_in_downloads_subdir(
-                data_path,
-                &downloads_subdir,
-                &img.mime,
-                &img.bytes_base64,
-            )
-                .unwrap_or_else(|err| {
-                    runtime_log_error(format!(
-                        "[远程IM] 入站图片外置化失败，保留原始内容: conversation_id={}，contact_id={}，mime={}，bytes_len={}，error={}",
-                        conversation_id,
-                        contact_id,
-                        img.mime,
-                        img.bytes_base64.len(),
-                        err
-                    ));
-                    img.bytes_base64.clone()
-                });
-        parts.push(MessagePart::Image {
-            mime: img.mime.clone(),
-            bytes_base64,
-            name: None,
-            compressed: false,
+    if parts.is_empty() {
+        parts.push(MessagePart::Text {
+            text: "[附件不可用：本次远程消息中的附件未能完成规范化]".to_string(),
+            reasoning_content: None,
         });
     }
-    for audio in audios {
-        let bytes_base64 =
-            externalize_stored_binary_base64_in_downloads_subdir(
-                data_path,
-                &downloads_subdir,
-                &audio.mime,
-                &audio.bytes_base64,
-            )
-                .unwrap_or_else(|err| {
-                    runtime_log_error(format!(
-                        "[远程IM] 入站音频外置化失败，保留原始内容: conversation_id={}，contact_id={}，mime={}，bytes_len={}，error={}",
-                        conversation_id,
-                        contact_id,
-                        audio.mime,
-                        audio.bytes_base64.len(),
-                        err
-                    ));
-                    audio.bytes_base64.clone()
-                });
-        parts.push(MessagePart::Audio {
-            mime: audio.mime.clone(),
-            bytes_base64,
-            name: None,
-            compressed: false,
-        });
+    for warning in warnings {
+        runtime_log_warn(format!(
+            "[远程IM] 附件入站降级继续，conversation_id={}，contact_id={}，warning={}",
+            conversation_id, contact_id, warning
+        ));
     }
 
     let origin_meta = remote_im_set_sender_origin_meta(input, conversation_id, contact_id);
@@ -609,8 +661,7 @@ fn build_chat_message_from_input(
     } else {
         base_meta = origin_meta;
     }
-    let attachment_meta = normalize_payload_attachments(Some(&attachments.to_vec()));
-    let merged_meta = merge_provider_meta_with_attachments(Some(base_meta), &attachment_meta);
+    let merged_meta = provider_meta_without_legacy_attachments(Some(base_meta));
 
     ChatMessage {
         id: Uuid::new_v4().to_string(),

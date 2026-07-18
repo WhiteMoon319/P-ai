@@ -6,9 +6,15 @@ async fn resolve_image_description_with_vision_fallback(
     image: &BinaryPart,
 ) -> Result<Option<String>, String> {
     let hash = compute_image_hash_hex(image)?;
-    let cached = {
-        let runtime = state_read_runtime_state_cached(state)?;
-        find_runtime_image_text_cache(&runtime, &hash, &vision_api.id)
+    let cached = match state_read_runtime_state_cached(state) {
+        Ok(runtime) => find_runtime_image_text_cache(&runtime, &hash, &vision_api.id),
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[图片转文] 缓存读取失败，跳过缓存继续转换，conversation_id={}，error={}",
+                conversation_id, err
+            ));
+            None
+        }
     };
     if let Some(text) = cached {
         let trimmed = text.trim().to_string();
@@ -62,10 +68,20 @@ async fn resolve_image_description_with_vision_fallback(
         return Ok(None);
     }
 
-    {
-        let mut runtime = state_read_runtime_state_cached(state)?;
-        upsert_runtime_image_text_cache(&mut runtime, &hash, &vision_api.id, &trimmed);
-        state_write_runtime_state_cached(state, &runtime)?;
+    match state_read_runtime_state_cached(state) {
+        Ok(mut runtime) => {
+            upsert_runtime_image_text_cache(&mut runtime, &hash, &vision_api.id, &trimmed);
+            if let Err(err) = state_write_runtime_state_cached(state, &runtime) {
+                runtime_log_warn(format!(
+                    "[图片转文] 缓存写入失败，保留本次描述继续，conversation_id={}，error={}",
+                    conversation_id, err
+                ));
+            }
+        }
+        Err(err) => runtime_log_warn(format!(
+            "[图片转文] 缓存更新前读取失败，保留本次描述继续，conversation_id={}，error={}",
+            conversation_id, err
+        )),
     }
 
     Ok(Some(trimmed))
@@ -154,6 +170,7 @@ fn collect_payload_attachment_relative_paths(payload: &ChatInputPayload) -> Vec<
         .collect()
 }
 
+#[cfg(test)]
 fn image_attachment_reference_label(
     payload: &ChatInputPayload,
     image: &BinaryPart,
@@ -185,6 +202,38 @@ fn image_description_block(label: &str, text: &str) -> String {
     format!("[{} 图片转文]\n{}", label.trim(), text.trim())
 }
 
+fn drop_all_prepared_images(prepared: &mut PreparedPrompt) -> bool {
+    let mut changed = !prepared.latest_images.is_empty();
+    prepared.latest_images.clear();
+    for message in &mut prepared.history_messages {
+        changed |= !message.images.is_empty();
+        message.images.clear();
+    }
+    changed
+}
+
+fn drop_unsupported_prepared_audios(
+    selected_api: &ApiConfig,
+    prepared: &mut PreparedPrompt,
+) -> bool {
+    if selected_api.enable_audio {
+        return false;
+    }
+    let mut changed = !prepared.latest_audios.is_empty();
+    prepared.latest_audios.clear();
+    for message in &mut prepared.history_messages {
+        changed |= !message.audios.is_empty();
+        message.audios.clear();
+    }
+    if changed {
+        runtime_log_warn(
+            "[附件投影] 当前模型未启用音频输入，已跳过音频二进制并保留路径提示继续"
+                .to_string(),
+        );
+    }
+    changed
+}
+
 async fn apply_prompt_image_fallbacks_to_prepared(
     state: &AppState,
     conversation_id: &str,
@@ -198,14 +247,30 @@ async fn apply_prompt_image_fallbacks_to_prepared(
 
     let vision_api = match resolve_vision_api_config(app_config) {
         Ok(api) => api,
-        Err(_) => return Ok(false),
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[图片转文] 跳过，原因=视觉模型不可用，conversation_id={}，error={}",
+                conversation_id, err
+            ));
+            return Ok(drop_all_prepared_images(prepared));
+        }
     };
-    let vision_resolved = resolve_api_config(app_config, Some(vision_api.id.as_str()))?;
+    let vision_resolved = match resolve_api_config(app_config, Some(vision_api.id.as_str())) {
+        Ok(resolved) => resolved,
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[图片转文] 跳过，原因=视觉模型配置解析失败，conversation_id={}，error={}",
+                conversation_id, err
+            ));
+            return Ok(drop_all_prepared_images(prepared));
+        }
+    };
     if !vision_resolved.request_format.is_chat_text() {
-        return Err(format!(
-            "多模态分析模型请求格式 '{}' 暂未接入图片回退链路。",
-            vision_resolved.request_format
+        runtime_log_warn(format!(
+            "[图片转文] 跳过，原因=视觉模型请求格式暂未接入，conversation_id={}，request_format={}",
+            conversation_id, vision_resolved.request_format
         ));
+        return Ok(drop_all_prepared_images(prepared));
     }
 
     let mut changed = false;
@@ -229,24 +294,37 @@ async fn apply_prompt_image_fallbacks_to_prepared(
         }
 
         for (index, image_payload) in original_images.into_iter().enumerate() {
+            let image_label = if image_payload.label.trim().is_empty() {
+                format!("图片#{}", index + 1)
+            } else {
+                image_payload.label.clone()
+            };
             let image = BinaryPart {
                 mime: image_payload.mime,
                 bytes_base64: image_payload.content,
                 saved_path: image_payload.saved_path,
             };
-            if let Some(text) = resolve_image_description_with_vision_fallback(
+            match resolve_image_description_with_vision_fallback(
                 state,
                 conversation_id,
                 &vision_api,
                 &vision_resolved,
                 &image,
             )
-            .await?
+            .await
             {
-                converted_blocks.push(image_description_block(
-                    &format!("图片#{}", index + 1),
+                Ok(Some(text)) => converted_blocks.push(image_description_block(
+                    &image_label,
                     &text,
-                ));
+                )),
+                Ok(None) => {}
+                Err(err) => runtime_log_warn(format!(
+                    "[图片转文] 单图转换失败，保留路径提示继续，conversation_id={}，label={}，path={}，error={}",
+                    conversation_id,
+                    image_label,
+                    image.saved_path.as_deref().unwrap_or("未提供"),
+                    err
+                )),
             }
         }
         if !converted_blocks.is_empty() {
@@ -260,24 +338,37 @@ async fn apply_prompt_image_fallbacks_to_prepared(
         let mut converted_blocks = Vec::<String>::new();
         if latest_user_in_window {
             for (index, image_payload) in original_images.into_iter().enumerate() {
+                let image_label = if image_payload.label.trim().is_empty() {
+                    format!("图片#{}", index + 1)
+                } else {
+                    image_payload.label.clone()
+                };
                 let image = BinaryPart {
                     mime: image_payload.mime,
                     bytes_base64: image_payload.content,
                     saved_path: image_payload.saved_path,
                 };
-                if let Some(text) = resolve_image_description_with_vision_fallback(
+                match resolve_image_description_with_vision_fallback(
                     state,
                     conversation_id,
                     &vision_api,
                     &vision_resolved,
                     &image,
                 )
-                .await?
+                .await
                 {
-                    converted_blocks.push(image_description_block(
-                        &format!("图片#{}", index + 1),
+                    Ok(Some(text)) => converted_blocks.push(image_description_block(
+                        &image_label,
                         &text,
-                    ));
+                    )),
+                    Ok(None) => {}
+                    Err(err) => runtime_log_warn(format!(
+                        "[图片转文] 单图转换失败，保留路径提示继续，conversation_id={}，label={}，path={}，error={}",
+                        conversation_id,
+                        image_label,
+                        image.saved_path.as_deref().unwrap_or("未提供"),
+                        err
+                    )),
                 }
             }
         }
@@ -289,4 +380,3 @@ async fn apply_prompt_image_fallbacks_to_prepared(
 
     Ok(changed)
 }
-

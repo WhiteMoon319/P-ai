@@ -111,7 +111,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     gen: number,
     text: string,
     images: Array<{ mime: string; bytesBase64: string; savedPath?: string }>,
-    attachments: Array<{ fileName: string; relativePath: string; mime: string }>,
+    attachments: Array<{ fileName: string; path: string; mime: string }>,
     mentions: ChatMentionTarget[],
   ): string {
     const messageId = String(rawMessageId || "").trim();
@@ -121,11 +121,24 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     if (normalizedText) {
       parts.push({ type: "text", text: normalizedText });
     }
+    const seenAttachmentPaths = new Set<string>();
     for (const image of images) {
       const mime = String(image.mime || "").trim();
-      const bytesBase64 = String(image.bytesBase64 || "").trim();
-      if (!mime || !bytesBase64) continue;
-      parts.push({ type: "image", mime, bytesBase64 });
+      const path = String(image.savedPath || "").trim().replace(/\\/g, "/");
+      if (!mime || !path) continue;
+      seenAttachmentPaths.add(path.toLowerCase());
+      parts.push({ type: "attachment", path, mime, name: path.split("/").pop() || "image" });
+    }
+    for (const attachment of attachments) {
+      const path = String(attachment.path || "").trim().replace(/\\/g, "/");
+      if (!path || seenAttachmentPaths.has(path.toLowerCase())) continue;
+      seenAttachmentPaths.add(path.toLowerCase());
+      parts.push({
+        type: "attachment",
+        path,
+        mime: String(attachment.mime || "").trim(),
+        name: String(attachment.fileName || "").trim() || path.split("/").pop() || "attachment",
+      });
     }
     const msg: ChatMessage = {
       id: messageId,
@@ -134,7 +147,6 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
       speakerAgentId: "user-persona",
       parts,
       providerMeta: {
-        attachments: attachments.length > 0 ? attachments : undefined,
         message_meta: mentions.length > 0
           ? {
               kind: "user_message",

@@ -238,10 +238,7 @@ struct WeixinOcVideoItem {
 
 #[derive(Debug, Clone)]
 struct WeixinOcCollectedMedia {
-    images: Vec<BinaryPart>,
-    audios: Vec<BinaryPart>,
-    attachments: Vec<AttachmentMetaInput>,
-    notices: Vec<String>,
+    parts: Vec<ChatIngressPart>,
 }
 
 #[derive(Debug, Clone)]

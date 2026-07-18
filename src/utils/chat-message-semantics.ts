@@ -60,8 +60,8 @@ export type ChatMessageDisplayProjection = {
   mentions: ChatMentionTarget[];
   text: string;
   images: Array<{ mime: string; bytesBase64?: string; mediaRef?: string }>;
-  audios: Array<{ mime: string; bytesBase64: string }>;
-  attachmentFiles: Array<{ fileName: string; relativePath: string }>;
+  audios: Array<{ mime: string; bytesBase64?: string; mediaRef?: string }>;
+  attachmentFiles: Array<{ fileName: string; path: string; mime?: string }>;
   taskTrigger?: TaskTriggerMessageCard;
   planCard?: PlanMessageCard;
   remoteImOrigin?: {

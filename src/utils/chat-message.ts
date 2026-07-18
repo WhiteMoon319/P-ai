@@ -46,7 +46,12 @@ export function renderMessage(msg: ChatMessage): string {
         const mime = String((p as { mime?: string }).mime || "").trim().toLowerCase();
         return mime === "application/pdf" ? "[pdf]" : "[image]";
       }
-      return "[audio]";
+      if (p.type === "audio") return "[audio]";
+      const mime = String(p.mime || "").trim().toLowerCase();
+      if (mime.startsWith("image/")) return "[image]";
+      if (mime.startsWith("audio/")) return "[audio]";
+      if (mime === "application/pdf") return "[pdf]";
+      return "[attachment]";
     })
     .join("\n");
   return stripHiddenExtraBlocks(merged);
@@ -72,11 +77,19 @@ export function removeBinaryPlaceholders(text: string): string {
 
 export function extractMessageImages(
   msg?: ChatMessage,
-): Array<{ mime: string; bytesBase64?: string; mediaRef?: string }> {
+): Array<{ mime: string; bytesBase64?: string; mediaRef?: string; name?: string }> {
   if (!msg) return [];
   return msg.parts
-    .filter((p) => p.type === "image")
+    .filter((p) => p.type === "image" || (p.type === "attachment" && p.mime.toLowerCase().startsWith("image/")))
     .map((p) => {
+      if (p.type === "attachment") {
+        const path = String(p.path || "").trim();
+        return {
+          mime: String(p.mime || "image/webp"),
+          mediaRef: path || undefined,
+          name: String(p.name || "").trim() || undefined,
+        };
+      }
       const anyPart = p as unknown as { mime?: string; bytesBase64?: string; bytes_base64?: string };
       const raw = String(anyPart.bytesBase64 || anyPart.bytes_base64 || "").trim();
       const storedRef = isStoredImageRef(raw);
@@ -89,27 +102,47 @@ export function extractMessageImages(
     .filter((p) => !!p.bytesBase64 || !!p.mediaRef);
 }
 
-export function extractMessageAudios(msg?: ChatMessage): Array<{ mime: string; bytesBase64: string }> {
+export function extractMessageAudios(
+  msg?: ChatMessage,
+): Array<{ mime: string; bytesBase64?: string; mediaRef?: string }> {
   if (!msg) return [];
   return msg.parts
-    .filter((p) => p.type === "audio")
+    .filter((p) => p.type === "audio" || (p.type === "attachment" && p.mime.toLowerCase().startsWith("audio/")))
     .map((p) => {
+      if (p.type === "attachment") {
+        return {
+          mime: p.mime || "audio/webm",
+          mediaRef: String(p.path || "").trim() || undefined,
+        };
+      }
       const anyPart = p as unknown as { mime?: string; bytesBase64?: string; bytes_base64?: string };
       return {
         mime: anyPart.mime || "audio/webm",
         bytesBase64: anyPart.bytesBase64 || anyPart.bytes_base64 || "",
       };
     })
-    .filter((p) => !!p.bytesBase64);
+    .filter((p) => !!p.bytesBase64 || !!p.mediaRef);
 }
 
 export function extractMessageAttachmentFiles(
   msg?: ChatMessage,
-): Array<{ fileName: string; relativePath: string; mime?: string }> {
+): Array<{ fileName: string; path: string; mime?: string }> {
   if (!msg) return [];
-  const out: Array<{ fileName: string; relativePath: string; mime?: string }> = [];
+  const out: Array<{ fileName: string; path: string; mime?: string }> = [];
   const seen = new Set<string>();
   const hasVisibleImages = extractMessageImages(msg).length > 0;
+  for (const part of msg.parts) {
+    if (part.type !== "attachment") continue;
+    const path = String(part.path || "").trim().replace(/\\/g, "/");
+    const mime = String(part.mime || "").trim();
+    const normalizedMime = mime.toLowerCase();
+    if (!path || normalizedMime.startsWith("image/") || normalizedMime.startsWith("audio/")) continue;
+    const fileName = String(part.name || "").trim() || path.split("/").pop() || "attachment";
+    const key = `${fileName}::${path}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ fileName, path, mime: mime || undefined });
+  }
   const metaAttachments = Array.isArray((msg.providerMeta as { attachments?: unknown } | undefined)?.attachments)
     ? ((msg.providerMeta as { attachments?: Array<{ fileName?: unknown; relativePath?: unknown; mime?: unknown }> }).attachments || [])
     : [];
@@ -122,7 +155,7 @@ export function extractMessageAttachmentFiles(
     const key = `${fileName}::${relativePath}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ fileName, relativePath, mime: mime || undefined });
+    out.push({ fileName, path: relativePath, mime: mime || undefined });
   }
   if (!Array.isArray(msg.extraTextBlocks)) return out;
   for (const raw of msg.extraTextBlocks) {
@@ -137,7 +170,7 @@ export function extractMessageAttachmentFiles(
     const key = `${fileName}::${relativePath}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ fileName, relativePath });
+    out.push({ fileName, path: relativePath });
   }
   return out;
 }
@@ -159,8 +192,8 @@ export function estimateConversationTokens(messages: ChatMessage[]): number {
     total += 12;
     for (const p of m.parts || []) {
       if (p.type === "text") total += estimateTextTokens((p as { text?: string }).text || "");
-      else if (p.type === "image") total += 280;
-      else if (p.type === "audio") total += 320;
+      else if (p.type === "image" || (p.type === "attachment" && p.mime.startsWith("image/"))) total += 280;
+      else if (p.type === "audio" || (p.type === "attachment" && p.mime.startsWith("audio/"))) total += 320;
     }
   }
   return Math.ceil(total);

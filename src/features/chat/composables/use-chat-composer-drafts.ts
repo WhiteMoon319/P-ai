@@ -2,7 +2,7 @@ import { watch, type Ref } from "vue";
 import type { ChatMentionTarget } from "../../../types/app";
 
 type ClipboardImageDraft = { mime: string; bytesBase64: string; savedPath?: string };
-type QueuedAttachmentDraft = { id: string; fileName: string; relativePath: string; mime: string };
+type QueuedAttachmentDraft = { id: string; fileName: string; path: string; mime: string };
 
 type ComposerDraft = {
   chatInput: string;
@@ -47,7 +47,7 @@ function cloneQueuedAttachment(item: QueuedAttachmentDraft): QueuedAttachmentDra
   return {
     id: String(item.id || "").trim(),
     fileName: String(item.fileName || "").trim(),
-    relativePath: String(item.relativePath || "").trim(),
+    path: String(item.path || "").trim(),
     mime: String(item.mime || "").trim(),
   };
 }
@@ -85,7 +85,7 @@ export function useChatComposerDrafts(options: UseChatComposerDraftsOptions) {
         .filter((item) => !!item.mime && !!item.bytesBase64),
       queuedAttachmentNotices: (Array.isArray(options.queuedAttachmentNotices.value) ? options.queuedAttachmentNotices.value : [])
         .map(cloneQueuedAttachment)
-        .filter((item) => !!item.id && !!item.relativePath),
+        .filter((item) => !!item.id && !!item.path),
     };
   }
 

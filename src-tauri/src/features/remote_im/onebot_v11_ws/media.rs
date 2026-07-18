@@ -339,11 +339,9 @@ async fn onebot_resolve_inbound_media(
     channel_id: &str,
     group_id: Option<u64>,
     user_id: Option<u64>,
-    state: &AppState,
     media_refs: &[OnebotInboundMediaRef],
-) -> (Vec<BinaryPart>, Vec<AttachmentMetaInput>, Vec<String>) {
-    let mut images = Vec::<BinaryPart>::new();
-    let mut attachments = Vec::<AttachmentMetaInput>::new();
+) -> (Vec<ChatIngressPart>, Vec<String>) {
+    let mut parts = Vec::<ChatIngressPart>::new();
     let mut notices = Vec::<String>::new();
     for (idx, item) in media_refs.iter().enumerate() {
         let fallback_name = match item.kind {
@@ -397,6 +395,10 @@ async fn onebot_resolve_inbound_media(
                 item.file_id.clone().unwrap_or_default(),
                 last_err
             ));
+            notices.push(format!(
+                "[附件不可用：{} 下载失败，已跳过该附件并继续处理消息]",
+                file_name
+            ));
             continue;
         };
         let hint = resolved_mime.as_deref().or(item.mime_hint.as_deref());
@@ -408,68 +410,12 @@ async fn onebot_resolve_inbound_media(
             mime_from_name_or_hint(&file_name, hint)
         };
 
-        match item.kind {
-            OnebotInboundMediaKind::Image => {
-                let normalized = match normalize_image_bytes_for_llm_request(&raw, Some(&mime)) {
-                    Ok(value) => value,
-                    Err(err) => {
-                        runtime_log_error(format!(
-                            "[远程IM][OneBot v11 事件] 图片规范化失败，改按附件入队，name={}，mime={}，err={}",
-                            file_name, mime, err
-                        ));
-                        match persist_raw_attachment_to_downloads(state, &file_name, &mime, &raw) {
-                            Ok(saved) => {
-                                let relative_path = workspace_relative_path(state, &saved);
-                                attachments.push(AttachmentMetaInput {
-                                    file_name: file_name.clone(),
-                                    relative_path: relative_path.clone(),
-                                    mime: mime.clone(),
-                                });
-                                notices.push(build_attachment_notice_text(
-                                    attachments.len().saturating_sub(1),
-                                    &relative_path,
-                                ));
-                            }
-                            Err(save_err) => {
-                                runtime_log_warn(format!(
-                                    "[远程IM][OneBot v11 事件] 图片降级附件落盘失败，改仅保留文字提示，name={}，err={}",
-                                    file_name, save_err
-                                ));
-                                notices.push(format!(
-                                    "[系统提示] 收到一张图片，但未能作为图片输入提供给模型，原因：{}。同时附件保存也失败：{}。",
-                                    err.trim(),
-                                    save_err.trim()
-                                ));
-                            }
-                        }
-                        continue;
-                    }
-                };
-                images.push(BinaryPart {
-                    mime: normalized.mime,
-                    bytes_base64: B64.encode(normalized.bytes),
-                    saved_path: None,
-                });
-            }
-            OnebotInboundMediaKind::File => {
-                match persist_raw_attachment_to_downloads(state, &file_name, &mime, &raw) {
-                    Ok(saved) => {
-                        let relative_path = workspace_relative_path(state, &saved);
-                        attachments.push(AttachmentMetaInput {
-                            file_name,
-                            relative_path,
-                            mime,
-                        });
-                    }
-                    Err(err) => {
-                        runtime_log_warn(format!(
-                            "[远程IM][OneBot v11 事件] 附件落盘失败，skip，name={}，err={}",
-                            file_name, err
-                        ));
-                    }
-                }
-            }
-        }
+        parts.push(ChatIngressPart::Attachment {
+            path: None,
+            bytes_base64: Some(B64.encode(raw)),
+            mime,
+            name: file_name,
+        });
     }
-    (images, attachments, notices)
+    (parts, notices)
 }

@@ -788,6 +788,7 @@ fn spawn_remote_im_reply_delegate(
                 payload: ChatInputPayload {
                     text: None,
                     display_text: None,
+                    parts: None,
                     images: None,
                     audios: None,
                     attachments: None,

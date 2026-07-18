@@ -1,6 +1,8 @@
 import { ref } from "vue";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import type { ChatMessageBlock } from "../../../types/app";
 import { stripToolcallMarkers } from "../../../utils/chat-message-semantics";
+import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
 
 export function useChatMessageActions() {
   const playingAudioId = ref("");
@@ -18,8 +20,25 @@ export function useChatMessageActions() {
     }
   }
 
-  function buildAudioDataUrl(audio: { mime: string; bytesBase64: string }): string {
-    return `data:${audio.mime};base64,${audio.bytesBase64}`;
+  async function buildAudioSource(audio: { mime: string; bytesBase64?: string; mediaRef?: string }): Promise<string> {
+    const bytesBase64 = String(audio.bytesBase64 || "").trim();
+    if (bytesBase64) return `data:${audio.mime};base64,${bytesBase64}`;
+    const mediaRef = String(audio.mediaRef || "").trim();
+    if (!mediaRef || mediaRef.startsWith("@media:") || mediaRef.startsWith("@download:")) return "";
+    try {
+      const result = await invokeTauri<{ mime?: string; bytesBase64?: string }>("read_local_binary_file", {
+        input: { path: mediaRef },
+      });
+      const encoded = String(result?.bytesBase64 || "").trim();
+      const mime = String(result?.mime || audio.mime || "audio/mpeg").trim();
+      if (encoded) return `data:${mime};base64,${encoded}`;
+    } catch (error) {
+      if (!isTauriRuntimeAvailable()) {
+        console.warn("[聊天音频] 通过桥接读取失败", { path: mediaRef, error });
+        return "";
+      }
+    }
+    return convertFileSrc(mediaRef);
   }
 
   function stopAudioPlayback() {
@@ -31,13 +50,15 @@ export function useChatMessageActions() {
     playingAudioId.value = "";
   }
 
-  function toggleAudioPlayback(id: string, audio: { mime: string; bytesBase64: string }) {
+  async function toggleAudioPlayback(id: string, audio: { mime: string; bytesBase64?: string; mediaRef?: string }) {
     if (playingAudioId.value === id && activeAudio) {
       stopAudioPlayback();
       return;
     }
     stopAudioPlayback();
-    const player = new Audio(buildAudioDataUrl(audio));
+    const source = await buildAudioSource(audio);
+    if (!source) return;
+    const player = new Audio(source);
     activeAudio = player;
     playingAudioId.value = id;
     player.onended = () => {

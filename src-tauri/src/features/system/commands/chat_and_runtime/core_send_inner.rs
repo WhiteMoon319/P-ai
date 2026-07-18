@@ -315,6 +315,32 @@ fn restart_dispatch_round_after_context_compaction(
     Ok(assistant_message_id)
 }
 
+fn latest_canonical_user_prompt_text(
+    conversation: &Conversation,
+    current_agent_id: &str,
+) -> Option<String> {
+    conversation
+        .messages
+        .iter()
+        .rev()
+        .find(|message| {
+            prompt_role_for_message(message, current_agent_id).as_deref() == Some("user")
+        })
+        .map(render_prompt_user_text_only)
+        .filter(|text| !text.trim().is_empty())
+}
+
+fn legacy_attachment_relative_paths_for_prompt(
+    payload: &ChatInputPayload,
+    used_canonical_latest_user_text: bool,
+) -> Vec<String> {
+    if used_canonical_latest_user_text {
+        Vec::new()
+    } else {
+        collect_payload_attachment_relative_paths(payload)
+    }
+}
+
 async fn send_chat_message_inner(
     input: SendChatRequest,
     state: &AppState,
@@ -1372,102 +1398,10 @@ async fn send_chat_message_inner(
         ));
     }
 
-    let mut effective_payload = input.payload.clone();
-    let audios = effective_payload.audios.clone().unwrap_or_default();
-    if !audios.is_empty() {
-        return Err("当前版本仅支持本地语音识别，发送消息不支持语音附件。".to_string());
-    }
-    if !trigger_only {
-        let images = effective_payload.images.clone().unwrap_or_default();
-        if !images.is_empty() {
-            let _ = persist_payload_images_to_workspace_downloads(&state, &images);
-        }
-    }
+    let effective_payload = input.payload.clone();
 
-    if !selected_api.enable_image {
-        let images = effective_payload.images.clone().unwrap_or_default();
-        if !images.is_empty() {
-            let vision_api = resolve_vision_api_config(&app_config).ok();
-            if let Some(vision_api) = vision_api {
-                let vision_resolved =
-                    resolve_api_config(&app_config, Some(vision_api.id.as_str()))?;
-                if !vision_resolved.request_format.is_chat_text() {
-                    return Err(format!(
-                        "Vision request format '{}' is not implemented in image conversion router yet.",
-                        vision_resolved.request_format
-                    ));
-                }
-
-                let mut converted_texts = Vec::<String>::new();
-                for (idx, image) in images.iter().enumerate() {
-                    let hash = compute_image_hash_hex(image)?;
-                    let image_label =
-                        image_attachment_reference_label(&input.payload, image, idx);
-                    let cached = {
-                        let runtime = state_read_runtime_state_cached(&state)?;
-                        find_runtime_image_text_cache(&runtime, &hash, &vision_api.id)
-                    };
-
-                    if let Some(text) = cached {
-                        let mapped = image_description_block(&image_label, &text);
-                        converted_texts.push(mapped);
-                        continue;
-                    }
-
-                    let prepared =
-                        conversation_prompt_service().build_vision_description_prepared_prompt(image);
-                    let converted =
-                        describe_image_with_vision_api(&state, &vision_resolved, &vision_api, prepared)
-                            .await?;
-                    let converted = converted.trim().to_string();
-                    if converted.is_empty() {
-                        continue;
-                    }
-
-                    let mut runtime = state_read_runtime_state_cached(&state)?;
-                    let mapped = if let Some(existing) =
-                        find_runtime_image_text_cache(&runtime, &hash, &vision_api.id)
-                    {
-                        image_description_block(&image_label, &existing)
-                    } else {
-                        upsert_runtime_image_text_cache(
-                            &mut runtime,
-                            &hash,
-                            &vision_api.id,
-                            &converted,
-                        );
-                        state_write_runtime_state_cached(&state, &runtime)?;
-                        image_description_block(&image_label, &converted)
-                    };
-                    converted_texts.push(mapped);
-                }
-
-                if !converted_texts.is_empty() {
-                    let converted_all = converted_texts.join("\n\n");
-                    let merged_text = effective_payload
-                        .text
-                        .as_deref()
-                        .map(str::trim)
-                        .filter(|v| !v.is_empty())
-                        .map(|text| format!("{text}\n\n{converted_all}"))
-                        .unwrap_or(converted_all);
-                    effective_payload.text = Some(merged_text);
-                }
-                effective_payload.images = None;
-            } else {
-                effective_payload.images = None;
-            }
-            if effective_payload
-                .text
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .is_none()
-            {
-                effective_payload.text = Some(" ".to_string());
-            }
-        }
-    }
+    // 图片能力转换统一在 PreparedPrompt 构建后执行，确保 Chat、Delegate 与远程冻结
+    // 消息都使用同一 canonical Attachment、同一标签和同一绝对路径提示。
     log_run_stage("attachments_processed");
 
     let mut archived_before_send_any = false;
@@ -1570,7 +1504,7 @@ async fn send_chat_message_inner(
             if let Some(display_text) = input.payload.display_text.as_deref() {
                 storage_payload.text = Some(display_text.trim().to_string());
             }
-            let mut user_parts = build_user_parts(&storage_payload, &storage_api)?;
+            let user_parts = build_user_parts(&state, &storage_payload, &storage_api)?;
             let storage_image_saved_paths = storage_payload
                 .images
                 .as_ref()
@@ -1598,12 +1532,8 @@ async fn send_chat_message_inner(
                     &storage_audio_saved_paths,
                 ),
             );
-            externalize_message_parts_to_media_refs(&mut user_parts, &state.data_path)?;
-            let attachment_meta = collect_payload_attachment_meta_entries(&input.payload);
-            let mut user_provider_meta = merge_provider_meta_with_attachments(
-                input.payload.provider_meta.clone(),
-                &attachment_meta,
-            );
+            let mut user_provider_meta =
+                provider_meta_without_legacy_attachments(input.payload.provider_meta.clone());
             if let Some(request_id) = runtime_context
                 .request_id
                 .as_deref()
@@ -1737,7 +1667,7 @@ async fn send_chat_message_inner(
         let mut conversation = trim_conversation_for_prompt_request(&storage_conversation);
         conversation.agent_id = effective_agent_id.clone();
         conversation.department_id = effective_department_id.clone();
-        let (latest_user_text, effective_images, effective_audios) = if trigger_only {
+        let (mut latest_user_text, effective_images, effective_audios) = if trigger_only {
             (
                 conversation
                     .messages
@@ -1747,7 +1677,7 @@ async fn send_chat_message_inner(
                         prompt_role_for_message(message, &current_agent.id).as_deref()
                             == Some("user")
                     })
-                    .map(render_message_content_for_model)
+                    .map(render_prompt_user_text_only)
                     .unwrap_or_default(),
                 Vec::new(),
                 Vec::new(),
@@ -1775,15 +1705,20 @@ async fn send_chat_message_inner(
                 &prepared_audios,
             )?
         };
+        let canonical_latest_user_text =
+            latest_canonical_user_prompt_text(&storage_conversation, &current_agent.id);
+        let used_canonical_latest_user_text = canonical_latest_user_text.is_some();
+        if let Some(canonical_latest_user_text) = canonical_latest_user_text {
+            latest_user_text = canonical_latest_user_text;
+        }
         let current_department = department_by_id(&app_config, &effective_department_id)
             .ok_or_else(|| format!("执行部门不存在：department_id={effective_department_id}"))?;
         let todo_enabled =
             tool_enabled(&selected_api, &current_agent, Some(current_department), "todo");
-        let attachment_relative_paths = if persist_user_message {
-            Vec::new()
-        } else {
-            collect_payload_attachment_relative_paths(&input.payload)
-        };
+        let attachment_relative_paths = legacy_attachment_relative_paths_for_prompt(
+            &input.payload,
+            used_canonical_latest_user_text,
+        );
         let chat_overrides = ChatPromptOverrides {
             executor_department_id: Some(effective_department_id.clone()),
             latest_user_intent: Some(LatestUserPayloadIntent::ChatRequest {
@@ -1922,7 +1857,7 @@ async fn send_chat_message_inner(
     let mut prepared_context = prepare_request_context(persist_user_message_on_next_prepare)?;
     let ignore_trailing_user_message_for_idle_compaction =
         persist_user_message_on_next_prepare && !trigger_only;
-    if apply_prompt_image_fallbacks_to_prepared(
+    let prompt_media_changed = apply_prompt_image_fallbacks_to_prepared(
         &state,
         &prepared_context.2,
         &app_config,
@@ -1930,8 +1865,8 @@ async fn send_chat_message_inner(
         &mut prepared_context.1,
     )
     .await?
-        && prepared_context.5.is_some()
-    {
+        | drop_unsupported_prepared_audios(&selected_api, &mut prepared_context.1);
+    if prompt_media_changed && prepared_context.5.is_some() {
         prepared_context.5 = Some(conversation_prompt_service().estimate_prepared_prompt_tokens(
             &prepared_context.1,
             &selected_api,
@@ -3283,6 +3218,7 @@ mod core_send_inner_tests {
                 extra_text_blocks: Vec::new(),
                 user_time_text: None,
                 images: vec![PreparedBinaryPayload {
+                    label: format!("图片#{}", idx + 1),
                     mime: "image/png".to_string(),
                     content: B64.encode(format!("image-{idx}").as_bytes()),
                     saved_path: Some(format!("downloads/image-{idx}.png")),
@@ -3304,6 +3240,7 @@ mod core_send_inner_tests {
                 Vec::new()
             } else {
                 vec![PreparedBinaryPayload {
+                    label: "图片#1".to_string(),
                     mime: "image/png".to_string(),
                     content: B64.encode(b"latest"),
                     saved_path: Some("downloads/latest.png".to_string()),
@@ -3311,6 +3248,127 @@ mod core_send_inner_tests {
             },
             latest_audios: Vec::new(),
         }
+    }
+
+    #[test]
+    fn unsupported_image_capability_should_drop_all_binary_images_without_dropping_text() {
+        let mut prepared = test_prepared_prompt_with_user_image_history(2, "latest text");
+
+        assert!(drop_all_prepared_images(&mut prepared));
+        assert_eq!(prepared.latest_user_text, "latest text");
+        assert!(prepared.latest_images.is_empty());
+        assert!(prepared
+            .history_messages
+            .iter()
+            .all(|message| message.images.is_empty()));
+    }
+
+    #[test]
+    fn unsupported_audio_capability_should_drop_binary_audio_and_continue() {
+        let mut prepared = test_prepared_prompt_with_user_image_history(1, "latest text");
+        prepared.latest_audios.push(PreparedBinaryPayload {
+            label: "附件#1".to_string(),
+            mime: "audio/webm".to_string(),
+            content: B64.encode(b"audio"),
+            saved_path: Some("C:/attachments/audio.webm".to_string()),
+        });
+        prepared.history_messages[0]
+            .audios
+            .push(PreparedBinaryPayload {
+                label: "附件#1".to_string(),
+                mime: "audio/webm".to_string(),
+                content: B64.encode(b"history-audio"),
+                saved_path: Some("C:/attachments/history.webm".to_string()),
+            });
+        let api = test_chat_api("text-only", false);
+
+        assert!(drop_unsupported_prepared_audios(&api, &mut prepared));
+        assert_eq!(prepared.latest_user_text, "latest text");
+        assert!(prepared.latest_audios.is_empty());
+        assert!(prepared
+            .history_messages
+            .iter()
+            .all(|message| message.audios.is_empty()));
+    }
+
+    #[test]
+    fn repeated_prepare_should_keep_canonical_path_notice_exactly_once() {
+        let message = ChatMessage {
+            id: "user-with-image".to_string(),
+            role: "user".to_string(),
+            created_at: now_iso(),
+            speaker_agent_id: None,
+            parts: vec![MessagePart::Attachment {
+                path: "C:/attachments/repeated.png".to_string(),
+                mime: "image/png".to_string(),
+                name: "repeated.png".to_string(),
+            }],
+            extra_text_blocks: Vec::new(),
+            provider_meta: None,
+            tool_call: None,
+            mcp_call: None,
+            meme_annotations: None,
+        };
+        let conversation = test_remote_im_conversation_with_messages(vec![message]);
+
+        let first = latest_canonical_user_prompt_text(&conversation, DEFAULT_AGENT_ID)
+            .expect("first prepare");
+        let second = latest_canonical_user_prompt_text(&conversation, DEFAULT_AGENT_ID)
+            .expect("second prepare");
+
+        assert_eq!(first, second);
+        assert!(second.contains("[图片#1]\npath: C:/attachments/repeated.png"));
+        assert_eq!(second.matches("path: ").count(), 1);
+    }
+
+    #[test]
+    fn repeated_prepare_should_not_append_legacy_attachment_path_after_canonical_projection() {
+        let message = ChatMessage {
+            id: "user-with-legacy-payload-image".to_string(),
+            role: "user".to_string(),
+            created_at: now_iso(),
+            speaker_agent_id: None,
+            parts: vec![MessagePart::Attachment {
+                path: "C:/attachments/legacy-repeated.png".to_string(),
+                mime: "image/png".to_string(),
+                name: "legacy-repeated.png".to_string(),
+            }],
+            extra_text_blocks: Vec::new(),
+            provider_meta: None,
+            tool_call: None,
+            mcp_call: None,
+            meme_annotations: None,
+        };
+        let conversation = test_remote_im_conversation_with_messages(vec![message]);
+        let canonical_text = latest_canonical_user_prompt_text(&conversation, DEFAULT_AGENT_ID)
+            .expect("canonical projection");
+        let legacy_payload = ChatInputPayload {
+            text: Some("test".to_string()),
+            display_text: None,
+            parts: None,
+            images: Some(vec![BinaryPart {
+                mime: "image/png".to_string(),
+                bytes_base64: B64.encode(b"legacy-image"),
+                saved_path: Some("downloads/legacy-repeated.png".to_string()),
+            }]),
+            audios: None,
+            attachments: None,
+            model: None,
+            extra_text_blocks: None,
+            mentions: None,
+            provider_meta: None,
+        };
+
+        let legacy_paths = legacy_attachment_relative_paths_for_prompt(
+            &legacy_payload,
+            !canonical_text.trim().is_empty(),
+        );
+
+        assert!(legacy_paths.is_empty());
+        assert!(canonical_text.contains(
+            "[图片#1]\npath: C:/attachments/legacy-repeated.png"
+        ));
+        assert_eq!(canonical_text.matches("path: ").count(), 1);
     }
 
     #[test]
@@ -4015,6 +4073,7 @@ mod core_send_inner_tests {
         let payload = ChatInputPayload {
             text: Some("看这张图".to_string()),
             display_text: None,
+            parts: None,
             images: Some(vec![BinaryPart {
                 mime: "image/png".to_string(),
                 bytes_base64: B64.encode(b"source-png"),
@@ -4028,6 +4087,7 @@ mod core_send_inner_tests {
             provider_meta: None,
         };
         let prepared_images = vec![PreparedBinaryPayload {
+            label: "图片#1".to_string(),
             mime: "image/webp".to_string(),
             content: B64.encode(b"normalized-webp"),
             saved_path: None,
@@ -4050,10 +4110,167 @@ mod core_send_inner_tests {
     }
 
     #[test]
+    fn ordered_parts_should_forward_all_prepared_media() {
+        let api = test_chat_api("vision-a", true);
+        let payload = ChatInputPayload {
+            text: None,
+            display_text: None,
+            parts: Some(vec![
+                ChatIngressPart::Text {
+                    text: "看图".to_string(),
+                },
+                ChatIngressPart::Attachment {
+                    path: Some("C:/attachments/image.png".to_string()),
+                    bytes_base64: None,
+                    mime: "image/png".to_string(),
+                    name: "image.png".to_string(),
+                },
+            ]),
+            images: None,
+            audios: None,
+            attachments: None,
+            model: None,
+            extra_text_blocks: None,
+            mentions: None,
+            provider_meta: None,
+        };
+        let prepared_images = vec![PreparedBinaryPayload {
+            label: "图片#1".to_string(),
+            mime: "image/webp".to_string(),
+            content: B64.encode(b"normalized-webp"),
+            saved_path: Some("C:/attachments/image.png".to_string()),
+        }];
+
+        let (text, images, audios) = build_effective_prompt_media_from_prepared(
+            &payload,
+            &api,
+            &prepared_images,
+            &[],
+        )
+        .expect("ordered parts media");
+
+        assert_eq!(text, "看图\n[image]");
+        assert_eq!(images.len(), 1);
+        assert!(audios.is_empty());
+    }
+
+    #[test]
+    fn ordered_attachment_only_should_never_fail_when_binary_is_unavailable() {
+        let api = test_chat_api("vision-a", true);
+        let payload = ChatInputPayload {
+            text: None,
+            display_text: None,
+            parts: Some(vec![ChatIngressPart::Attachment {
+                path: Some("C:/attachments/missing.png".to_string()),
+                bytes_base64: None,
+                mime: "image/png".to_string(),
+                name: "missing.png".to_string(),
+            }]),
+            images: None,
+            audios: None,
+            attachments: None,
+            model: None,
+            extra_text_blocks: None,
+            mentions: None,
+            provider_meta: None,
+        };
+
+        let (text, images, audios) =
+            build_effective_prompt_media_from_prepared(&payload, &api, &[], &[])
+                .expect("attachment-only should degrade");
+
+        assert_eq!(text, "[image]");
+        assert!(images.is_empty());
+        assert!(audios.is_empty());
+    }
+
+    #[test]
+    fn invalid_image_binary_should_be_skipped_instead_of_reaching_provider() {
+        let prepared = prepared_image_payload_for_llm_request(
+            "image/png".to_string(),
+            B64.encode(b"not-an-image"),
+            Some("C:/attachments/broken.png".to_string()),
+            Some("图片#1".to_string()),
+        );
+
+        assert!(prepared.is_none());
+    }
+
+    #[test]
+    fn pdf_binary_should_remain_available_without_image_normalization() {
+        let prepared = prepared_image_payload_for_llm_request(
+            "application/pdf".to_string(),
+            B64.encode(b"%PDF-1.7"),
+            Some("C:/attachments/document.pdf".to_string()),
+            Some("附件#1".to_string()),
+        )
+        .expect("pdf payload");
+
+        assert_eq!(prepared.mime, "application/pdf");
+        assert_eq!(prepared.label, "附件#1");
+    }
+
+    #[test]
+    fn prepared_binary_labels_should_follow_original_part_order_with_independent_counters() {
+        let root = std::env::temp_dir().join(format!("eca-prepared-labels-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create temp dir");
+        let pdf_path = root.join("document.pdf");
+        let image_path = root.join("image.png");
+        let text_path = root.join("notes.txt");
+        let audio_path = root.join("voice.webm");
+        std::fs::write(&pdf_path, b"%PDF-1.7").expect("write pdf");
+        let image = image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            1,
+            1,
+            image::Rgba([12, 34, 56, 255]),
+        ));
+        let mut image_cursor = std::io::Cursor::new(Vec::<u8>::new());
+        image
+            .write_to(&mut image_cursor, image::ImageFormat::Png)
+            .expect("encode png");
+        std::fs::write(&image_path, image_cursor.into_inner()).expect("write image");
+        std::fs::write(&text_path, b"notes").expect("write text");
+        std::fs::write(&audio_path, b"audio").expect("write audio");
+        let parts = vec![
+            MessagePart::Attachment {
+                path: pdf_path.to_string_lossy().to_string(),
+                mime: "application/pdf".to_string(),
+                name: "document.pdf".to_string(),
+            },
+            MessagePart::Attachment {
+                path: image_path.to_string_lossy().to_string(),
+                mime: "image/png".to_string(),
+                name: "image.png".to_string(),
+            },
+            MessagePart::Attachment {
+                path: text_path.to_string_lossy().to_string(),
+                mime: "text/plain".to_string(),
+                name: "notes.txt".to_string(),
+            },
+            MessagePart::Attachment {
+                path: audio_path.to_string_lossy().to_string(),
+                mime: "audio/webm".to_string(),
+                name: "voice.webm".to_string(),
+            },
+        ];
+
+        let (images, audios) =
+            build_prepared_binary_payloads_from_message_parts(&parts, &[], &[]);
+
+        assert_eq!(images.len(), 2);
+        assert_eq!(images[0].label, "附件#1");
+        assert_eq!(images[1].label, "图片#1");
+        assert_eq!(audios.len(), 1);
+        assert_eq!(audios[0].label, "附件#3");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn collect_payload_attachment_relative_paths_should_use_attachment_meta_as_authority() {
         let payload = ChatInputPayload {
             text: Some("test".to_string()),
             display_text: None,
+            parts: None,
             images: Some(vec![BinaryPart {
                 mime: "image/png".to_string(),
                 bytes_base64: B64.encode(b"img"),
@@ -4063,12 +4280,12 @@ mod core_send_inner_tests {
             attachments: Some(vec![
                 AttachmentMetaInput {
                     file_name: "report.pdf".to_string(),
-                    relative_path: "downloads/report.pdf".to_string(),
+                    path: "downloads/report.pdf".to_string(),
                     mime: "application/pdf".to_string(),
                 },
                 AttachmentMetaInput {
                     file_name: "source.png".to_string(),
-                    relative_path: "downloads/source.png".to_string(),
+                    path: "downloads/source.png".to_string(),
                     mime: "image/png".to_string(),
                 },
             ]),
@@ -4092,6 +4309,7 @@ mod core_send_inner_tests {
         let payload = ChatInputPayload {
             text: Some("test".to_string()),
             display_text: None,
+            parts: None,
             images: Some(vec![BinaryPart {
                 mime: "image/png".to_string(),
                 bytes_base64: B64.encode(b"img"),
@@ -4101,12 +4319,12 @@ mod core_send_inner_tests {
             attachments: Some(vec![
                 AttachmentMetaInput {
                     file_name: "source.png".to_string(),
-                    relative_path: "downloads/source.png".to_string(),
+                    path: "downloads/source.png".to_string(),
                     mime: "image/png".to_string(),
                 },
                 AttachmentMetaInput {
                     file_name: "source-copy.png".to_string(),
-                    relative_path: "downloads/source.png".to_string(),
+                    path: "downloads/source.png".to_string(),
                     mime: "image/png".to_string(),
                 },
             ]),
@@ -4158,17 +4376,18 @@ mod core_send_inner_tests {
         let payload = ChatInputPayload {
             text: Some("test".to_string()),
             display_text: None,
+            parts: None,
             images: Some(vec![image.clone()]),
             audios: None,
             attachments: Some(vec![
                 AttachmentMetaInput {
                     file_name: "report.pdf".to_string(),
-                    relative_path: "downloads/report.pdf".to_string(),
+                    path: "downloads/report.pdf".to_string(),
                     mime: "application/pdf".to_string(),
                 },
                 AttachmentMetaInput {
                     file_name: "source.png".to_string(),
-                    relative_path: "downloads/source.png".to_string(),
+                    path: "downloads/source.png".to_string(),
                     mime: "image/png".to_string(),
                 },
             ]),
@@ -4193,6 +4412,7 @@ mod core_send_inner_tests {
         let payload = ChatInputPayload {
             text: Some("test".to_string()),
             display_text: None,
+            parts: None,
             images: Some(vec![BinaryPart {
                 mime: "image/png".to_string(),
                 bytes_base64: B64.encode(b"img"),
@@ -4217,6 +4437,7 @@ mod core_send_inner_tests {
         let payload = ChatInputPayload {
             text: Some("test".to_string()),
             display_text: None,
+            parts: None,
             images: None,
             audios: Some(vec![BinaryPart {
                 mime: "audio/mp3".to_string(),

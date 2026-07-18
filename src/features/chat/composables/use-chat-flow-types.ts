@@ -1,6 +1,6 @@
 import type { Channel } from "@tauri-apps/api/core";
 import type { Ref } from "vue";
-import type { AssistantStreamBlock, ChatMentionTarget, ChatMessage } from "../../../types/app";
+import type { AssistantStreamBlock, ChatIngressPart, ChatMentionTarget, ChatMessage } from "../../../types/app";
 import type { AssistantDeltaEvent, ContextUsageUpdatePayload } from "./use-chat-flow-events";
 import type { ConversationRuntimeStreamCacheSnapshot } from "./use-chat-flow-stream-cache";
 
@@ -16,7 +16,7 @@ export type UseChatFlowOptions = {
   chatInput: Ref<string>;
   selectedMentions?: Ref<ChatMentionTarget[]>;
   clipboardImages: Ref<Array<{ mime: string; bytesBase64: string; savedPath?: string }>>;
-  queuedAttachmentNotices?: Ref<Array<{ id: string; fileName: string; relativePath: string; mime: string }>>;
+  queuedAttachmentNotices?: Ref<Array<{ id: string; fileName: string; path: string; mime: string }>>;
   latestUserText: Ref<string>;
   latestUserImages: Ref<Array<{ mime: string; bytesBase64: string }>>;
   latestAssistantText: Ref<string>;
@@ -35,8 +35,7 @@ export type UseChatFlowOptions = {
   invokeSendChatMessage: (input: {
     text: string;
     displayText?: string;
-    images: Array<{ mime: string; bytesBase64: string; savedPath?: string }>;
-    attachments?: Array<{ fileName: string; relativePath: string; mime: string }>;
+    parts: ChatIngressPart[];
     extraTextBlocks?: string[];
     mentions?: ChatMentionTarget[];
     session: { apiConfigId: string; agentId: string; departmentId?: string; conversationId?: string };

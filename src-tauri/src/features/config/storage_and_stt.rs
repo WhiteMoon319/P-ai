@@ -1429,10 +1429,12 @@ fn media_extension_from_mime(mime: &str) -> &'static str {
     }
 }
 
+#[cfg(test)]
 fn media_marker_from_id(media_id: &str) -> String {
     format!("{MEDIA_REF_PREFIX}{media_id}")
 }
 
+#[cfg(test)]
 fn download_marker_from_id(download_id: &str) -> String {
     format!("{DOWNLOAD_REF_PREFIX}{download_id}")
 }
@@ -1508,66 +1510,6 @@ fn resolve_stored_binary_base64(data_path: &PathBuf, stored: &str) -> Result<Str
     Ok(encoded)
 }
 
-fn externalize_stored_binary_base64(
-    data_path: &PathBuf,
-    mime: &str,
-    stored: &str,
-) -> Result<String, String> {
-    let trimmed = stored.trim();
-    if trimmed.is_empty() {
-        return Ok(String::new());
-    }
-    if stored_binary_ref_from_marker(trimmed).is_some() {
-        return Ok(trimmed.to_string());
-    }
-    let raw = B64
-        .decode(trimmed)
-        .map_err(|err| format!("Decode media base64 failed: {err}"))?;
-    let media_id = persist_media_bytes(data_path, mime, &raw)?;
-    Ok(media_marker_from_id(&media_id))
-}
-
-fn externalize_stored_binary_base64_in_downloads_subdir(
-    data_path: &PathBuf,
-    downloads_subdir: &str,
-    mime: &str,
-    stored: &str,
-) -> Result<String, String> {
-    let trimmed = stored.trim();
-    if trimmed.is_empty() {
-        return Ok(String::new());
-    }
-    if stored_binary_ref_from_marker(trimmed).is_some() {
-        return Ok(trimmed.to_string());
-    }
-    let subdir = sanitize_storage_subdir(downloads_subdir)?;
-    let raw = B64
-        .decode(trimmed)
-        .map_err(|err| format!("Decode media base64 failed: {err}"))?;
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(&raw);
-    let hash = bytes_to_lower_hex(hasher.finalize());
-    let download_id = format!("{subdir}/{hash}.{}", media_extension_from_mime(mime));
-    let dir = downloads_storage_dir_from_data_path(data_path)?.join(&subdir);
-    fs::create_dir_all(&dir).map_err(|err| {
-        format!(
-            "Create downloads subdir failed ({}): {err}",
-            dir.to_string_lossy()
-        )
-    })?;
-    let path = downloads_storage_dir_from_data_path(data_path)?.join(&download_id);
-    if !path.exists() {
-        fs::write(&path, raw).map_err(|err| {
-            format!(
-                "Write download file failed ({}): {err}",
-                path.to_string_lossy()
-            )
-        })?;
-    }
-    Ok(download_marker_from_id(&download_id))
-}
-
 fn sanitize_storage_subdir(value: &str) -> Result<String, String> {
     let normalized = value.trim().replace('\\', "/");
     if normalized.is_empty() {
@@ -1596,55 +1538,42 @@ fn externalize_message_parts_to_media_refs(
 ) -> Result<bool, String> {
     let mut changed = false;
     for part in parts {
-        match part {
+        let replacement = match part {
             MessagePart::Image {
                 mime,
                 bytes_base64,
+                name,
                 ..
             }
             | MessagePart::Audio {
                 mime,
                 bytes_base64,
+                name,
                 ..
             } => {
-                let next = externalize_stored_binary_base64(data_path, mime, bytes_base64)?;
-                if *bytes_base64 != next {
-                    *bytes_base64 = next;
-                    changed = true;
+                let (attachment, warning) = legacy_binary_message_part_to_attachment(
+                    data_path,
+                    mime,
+                    bytes_base64,
+                    name.as_deref(),
+                );
+                if let Some(warning) = warning {
+                    runtime_log_warn(format!("[附件迁移] 降级继续：{warning}"));
                 }
+                Some(attachment)
             }
-            MessagePart::Text { .. } => {}
+            MessagePart::Text { .. } | MessagePart::Attachment { .. } => None,
+        };
+        if let Some(replacement) = replacement {
+            *part = replacement;
+            changed = true;
         }
     }
     Ok(changed)
 }
 
 fn externalize_message_parts_to_media_refs_lossy(parts: &mut [MessagePart], data_path: &PathBuf) -> bool {
-    let mut changed = false;
-    for part in parts {
-        match part {
-            MessagePart::Image {
-                mime,
-                bytes_base64,
-                ..
-            }
-            | MessagePart::Audio {
-                mime,
-                bytes_base64,
-                ..
-            } => {
-                let Ok(next) = externalize_stored_binary_base64(data_path, mime, bytes_base64) else {
-                    continue;
-                };
-                if *bytes_base64 != next {
-                    *bytes_base64 = next;
-                    changed = true;
-                }
-            }
-            MessagePart::Text { .. } => {}
-        }
-    }
-    changed
+    externalize_message_parts_to_media_refs(parts, data_path).unwrap_or(false)
 }
 
 fn materialize_message_parts_from_media_refs(parts: &mut [MessagePart], data_path: &PathBuf) {
@@ -1663,7 +1592,9 @@ fn materialize_message_parts_from_media_refs(parts: &mut [MessagePart], data_pat
                     }
                 }
             }
-            MessagePart::Image { .. } | MessagePart::Text { .. } => {}
+            MessagePart::Image { .. }
+            | MessagePart::Text { .. }
+            | MessagePart::Attachment { .. } => {}
         }
     }
 }

@@ -33,12 +33,20 @@ struct OnebotMentionRef {
     placeholder: String,
 }
 
+#[derive(Debug, Clone)]
+enum OnebotParsedSegment {
+    Text(String),
+    Media(OnebotInboundMediaRef),
+    Embedded(OnebotEmbeddedRef),
+}
+
 #[derive(Debug, Clone, Default)]
 struct OnebotParsedMessage {
     text: String,
     media_refs: Vec<OnebotInboundMediaRef>,
     embedded_refs: Vec<OnebotEmbeddedRef>,
     mention_refs: Vec<OnebotMentionRef>,
+    ordered_segments: Vec<OnebotParsedSegment>,
 }
 
 impl OnebotParsedMessage {
@@ -50,7 +58,21 @@ impl OnebotParsedMessage {
     fn push_text(&mut self, text: &str) {
         if !text.is_empty() {
             self.text.push_str(text);
+            self.ordered_segments
+                .push(OnebotParsedSegment::Text(text.to_string()));
         }
+    }
+
+    fn push_media(&mut self, media_ref: OnebotInboundMediaRef) {
+        self.media_refs.push(media_ref.clone());
+        self.ordered_segments
+            .push(OnebotParsedSegment::Media(media_ref));
+    }
+
+    fn push_embedded(&mut self, embedded_ref: OnebotEmbeddedRef) {
+        self.embedded_refs.push(embedded_ref.clone());
+        self.ordered_segments
+            .push(OnebotParsedSegment::Embedded(embedded_ref));
     }
 
     fn push_block(&mut self, block: String) {
@@ -58,13 +80,15 @@ impl OnebotParsedMessage {
         if block.is_empty() {
             return;
         }
+        let mut rendered = String::new();
         if !self.text.is_empty() && !self.text.ends_with('\n') {
-            self.text.push('\n');
+            rendered.push('\n');
         }
-        self.text.push_str(block);
-        if !self.text.ends_with('\n') {
-            self.text.push('\n');
+        rendered.push_str(block);
+        if !rendered.ends_with('\n') {
+            rendered.push('\n');
         }
+        self.push_text(&rendered);
     }
 }
 
@@ -252,8 +276,13 @@ fn onebot_merge_nested_message(
             placeholder: new_placeholder,
         });
     }
-    parsed.media_refs.extend(nested.media_refs);
-    parsed.embedded_refs.extend(nested.embedded_refs);
+    for segment in nested.ordered_segments {
+        match segment {
+            OnebotParsedSegment::Media(media_ref) => parsed.push_media(media_ref),
+            OnebotParsedSegment::Embedded(embedded_ref) => parsed.push_embedded(embedded_ref),
+            OnebotParsedSegment::Text(_) => {}
+        }
+    }
     text
 }
 
@@ -370,7 +399,7 @@ fn parse_onebot_message_array_detail(segments: &[Value]) -> OnebotParsedMessage 
             }
             "image" | "file" | "record" | "video" => {
                 if let Some(media_ref) = onebot_media_ref_from_segment_data(seg_type, data) {
-                    parsed.media_refs.push(media_ref);
+                    parsed.push_media(media_ref);
                 } else {
                     let title = match seg_type {
                         "image" => "图片",
@@ -383,7 +412,7 @@ fn parse_onebot_message_array_detail(segments: &[Value]) -> OnebotParsedMessage 
             }
             "reply" => {
                 if let Some(id) = onebot_embedded_ref_id(data) {
-                    parsed.embedded_refs.push(OnebotEmbeddedRef {
+                    parsed.push_embedded(OnebotEmbeddedRef {
                         kind: OnebotEmbeddedRefKind::Reply,
                         id,
                     });
@@ -396,7 +425,7 @@ fn parse_onebot_message_array_detail(segments: &[Value]) -> OnebotParsedMessage 
             }
             "forward" => {
                 if let Some(id) = onebot_embedded_ref_id(data) {
-                    parsed.embedded_refs.push(OnebotEmbeddedRef {
+                    parsed.push_embedded(OnebotEmbeddedRef {
                         kind: OnebotEmbeddedRefKind::Forward,
                         id,
                     });
@@ -617,13 +646,13 @@ fn parse_onebot_cq_string_detail(raw: &str) -> OnebotParsedMessage {
             .map(|(left, right)| (left.trim(), right))
             .unwrap_or((cq_body.trim(), ""));
         if let Some(media_ref) = onebot_media_ref_from_cq(cq_type, params) {
-            parsed.media_refs.push(media_ref);
+            parsed.push_media(media_ref);
             continue;
         }
         match cq_type {
             "reply" => {
                 if let Some(id) = onebot_cq_param_value(params, "id") {
-                    parsed.embedded_refs.push(OnebotEmbeddedRef {
+                    parsed.push_embedded(OnebotEmbeddedRef {
                         kind: OnebotEmbeddedRefKind::Reply,
                         id,
                     });
@@ -636,7 +665,7 @@ fn parse_onebot_cq_string_detail(raw: &str) -> OnebotParsedMessage {
             }
             "forward" => {
                 if let Some(id) = onebot_cq_param_value(params, "id") {
-                    parsed.embedded_refs.push(OnebotEmbeddedRef {
+                    parsed.push_embedded(OnebotEmbeddedRef {
                         kind: OnebotEmbeddedRefKind::Forward,
                         id,
                     });

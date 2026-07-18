@@ -2,6 +2,7 @@ import { ref, type ComputedRef, type Ref } from "vue";
 import type { ApiConfigItem } from "../../../types/app";
 import { invokeTauri } from "../../../services/tauri-api";
 import { useHotkeyRecordTest } from "../../shell/composables/use-hotkey-record-test";
+import { isAbsoluteLocalPath } from "../utils/local-link";
 
 type TrFn = (key: string, params?: Record<string, unknown>) => string;
 
@@ -18,7 +19,7 @@ type UseChatMediaOptions = {
   hasVisionFallback: ComputedRef<boolean>;
   chatInput: Ref<string>;
   clipboardImages: Ref<Array<{ mime: string; bytesBase64: string; savedPath?: string }>>;
-  queuedAttachmentNotices: Ref<Array<{ id: string; fileName: string; relativePath: string; mime: string }>>;
+  queuedAttachmentNotices: Ref<Array<{ id: string; fileName: string; path: string; mime: string }>>;
 };
 
 type QueuedLocalFileResult = {
@@ -166,14 +167,18 @@ export function useChatMedia(options: UseChatMediaOptions) {
 
     if (!canAttachAsMedia) {
       const savedPath = String(queued.savedPath || "").trim();
-      const relativePath = savedPath.replace(/\\/g, "/").replace(/^.*\/downloads\//, "downloads/");
-      const fileName = String(queued.fileName || "").trim() || relativePath.split("/").pop() || "attachment";
-      const id = `${relativePath || fileName}::${mime}`;
+      const path = savedPath.replace(/\\/g, "/");
+      if (!isAbsoluteLocalPath(path)) {
+        options.setChatError("附件保存未返回绝对路径，已跳过该附件。其他消息内容仍可继续发送。");
+        return;
+      }
+      const fileName = String(queued.fileName || "").trim() || path.split("/").pop() || "attachment";
+      const id = `${path}::${mime}`;
       if (!options.queuedAttachmentNotices.value.some((item) => item.id === id)) {
         options.queuedAttachmentNotices.value.push({
           id,
           fileName,
-          relativePath: relativePath || savedPath || fileName,
+          path,
           mime,
         });
       }

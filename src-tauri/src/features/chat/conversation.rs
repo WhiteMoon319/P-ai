@@ -1392,6 +1392,7 @@ fn archive_conversation_now(
     Some(archive_id)
 }
 
+#[cfg(test)]
 fn normalize_image_for_chat_upload(bytes: &[u8]) -> Result<LlmRequestNormalizedImage, String> {
     normalize_image_bytes_for_llm_request(bytes, None)
 }
@@ -1411,167 +1412,60 @@ fn prepared_image_payload_for_llm_request(
     mime: String,
     bytes_base64: String,
     saved_path: Option<String>,
-) -> PreparedBinaryPayload {
+    label: Option<String>,
+) -> Option<PreparedBinaryPayload> {
+    if mime.trim().eq_ignore_ascii_case("application/pdf") {
+        return Some(PreparedBinaryPayload {
+            mime,
+            content: bytes_base64,
+            saved_path,
+            label: label.unwrap_or_default(),
+        });
+    }
     match normalize_image_base64_for_llm_request(&mime, &bytes_base64) {
-        Ok((normalized_mime, normalized_base64)) => PreparedBinaryPayload {
+        Ok((normalized_mime, normalized_base64)) => Some(PreparedBinaryPayload {
             mime: normalized_mime,
             content: normalized_base64,
             saved_path,
-        },
+            label: label.unwrap_or_default(),
+        }),
         Err(err) => {
             runtime_log_warn(format!(
-                "[图片规范化] 跳过请求压缩，原因={}，mime={}，base64_len={}，path={}",
+                "[图片规范化] 图片二进制不可用，已跳过该附件并继续文本请求，原因={}，mime={}，base64_len={}，path={}",
                 err,
                 mime,
                 bytes_base64.len(),
                 saved_path.as_deref().unwrap_or("未保存")
             ));
-            PreparedBinaryPayload {
-                mime,
-                content: bytes_base64,
-                saved_path,
-            }
+            None
         }
     }
-}
-
-fn is_supported_image_upload_mime(mime: &str) -> bool {
-    llm_request_image_supported_raster_mime(mime)
-}
-
-fn build_llm_image_input_fallback_notice(
-    label: &str,
-    reason: &str,
-    saved_path: Option<&str>,
-) -> String {
-    let trimmed_reason = reason.trim();
-    let trimmed_path = saved_path
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    if let Some(path) = trimmed_path {
-        let trimmed_label = label.trim();
-        if trimmed_label.is_empty() {
-            return build_attachment_notice_text(0, path);
-        }
-        return format!(
-            "[附件：{}]\npath: {}",
-            trimmed_label,
-            assistant_space_display_path(path)
-        );
-    }
-    format!(
-        "[系统提示] {label} 未能作为图片输入提供给模型，原因：{trimmed_reason}。\n请按普通附件处理该文件，必要时改用 shell 或 read 读取。"
-    )
 }
 
 fn build_user_parts(
+    state: &AppState,
     payload: &ChatInputPayload,
     api_config: &ApiConfig,
 ) -> Result<Vec<MessagePart>, String> {
-    let mut parts = Vec::<MessagePart>::new();
-    let mut total_binary = 0usize;
-
-    if let Some(text) = payload
-        .text
-        .as_deref()
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-    {
-        if !api_config.enable_text {
-            return Err("Current API config has text disabled.".to_string());
-        }
-        parts.push(MessagePart::Text {
-            text: text.to_string(),
-                reasoning_content: None,
-            });
-    }
-
-    if let Some(images) = &payload.images {
-        if !images.is_empty() && !api_config.enable_image {
-            return Err("Current API config has image disabled.".to_string());
-        }
-
-        for (index, image) in images.iter().enumerate() {
-            let mime = image.mime.trim().to_ascii_lowercase();
-            if !is_supported_image_upload_mime(&mime) {
-                parts.push(MessagePart::Text {
-                    text: build_llm_image_input_fallback_notice(
-                        &format!("第 {} 张图片", index + 1),
-                        &format!("不支持的图片 MIME：{}", image.mime.trim()),
-                        image.saved_path.as_deref(),
-                    ),
-                    reasoning_content: None,
-                });
-                continue;
-            }
-            let bytes_base64 = image.bytes_base64.trim();
-            let raw = match B64.decode(bytes_base64) {
-                Ok(value) => value,
-                Err(err) => {
-                    parts.push(MessagePart::Text {
-                        text: build_llm_image_input_fallback_notice(
-                            &format!("第 {} 张图片", index + 1),
-                            &format!("图片内容解码失败：{err}"),
-                            image.saved_path.as_deref(),
-                        ),
-                        reasoning_content: None,
-                    });
-                    continue;
-                }
-            };
-            let normalized = match normalize_image_for_chat_upload(&raw) {
-                Ok(value) => value,
-                Err(err) => {
-                    parts.push(MessagePart::Text {
-                        text: build_llm_image_input_fallback_notice(
-                            &format!("第 {} 张图片", index + 1),
-                            &err,
-                            image.saved_path.as_deref(),
-                        ),
-                        reasoning_content: None,
-                    });
-                    continue;
-                }
-            };
-            total_binary += normalized.bytes.len();
-            parts.push(MessagePart::Image {
-                mime: normalized.mime,
-                bytes_base64: B64.encode(normalized.bytes),
-                name: None,
-                compressed: !normalized.reused_original,
-            });
+    let (mut parts, mut warnings) =
+        normalize_chat_input_payload_to_message_parts(state, payload, None);
+    if !api_config.enable_text {
+        let before = parts.len();
+        parts.retain(|part| !matches!(part, MessagePart::Text { .. }));
+        if parts.len() != before {
+            warnings.push("当前模型未启用文本输入，已跳过文本内容".to_string());
         }
     }
 
-    if let Some(audios) = &payload.audios {
-        if !audios.is_empty() && !api_config.enable_audio {
-            return Err("Current API config has audio disabled.".to_string());
-        }
-
-        for audio in audios {
-            let bytes_base64 = audio.bytes_base64.trim();
-            let raw = B64
-                .decode(bytes_base64)
-                .map_err(|err| format!("Decode audio base64 failed: {err}"))?;
-            total_binary += raw.len();
-            parts.push(MessagePart::Audio {
-                mime: audio.mime.trim().to_string(),
-                bytes_base64: bytes_base64.to_string(),
-                name: None,
-                compressed: false,
-            });
-        }
-    }
-
-    if total_binary > MAX_MULTIMODAL_BYTES {
-        return Err(format!(
-            "Multimodal payload exceeds 10MB limit ({} bytes).",
-            total_binary
-        ));
+    for warning in warnings {
+        runtime_log_warn(format!("[附件入站] 降级继续：{warning}"));
     }
 
     if parts.is_empty() {
-        return Err("Request payload is empty. Provide text, image, or audio.".to_string());
+        parts.push(MessagePart::Text {
+            text: "[附件不可用：本次消息中的附件未能完成规范化]".to_string(),
+            reasoning_content: None,
+        });
     }
 
     Ok(parts)
@@ -1582,38 +1476,97 @@ fn build_prepared_binary_payloads_from_message_parts(
     image_saved_paths: &[Option<String>],
     audio_saved_paths: &[Option<String>],
 ) -> (Vec<PreparedBinaryPayload>, Vec<PreparedBinaryPayload>) {
-    let images = parts
-        .iter()
-        .filter_map(|part| match part {
+    let mut images = Vec::<PreparedBinaryPayload>::new();
+    let mut audios = Vec::<PreparedBinaryPayload>::new();
+    let mut image_number = 0usize;
+    let mut attachment_number = 0usize;
+    let mut image_source_index = 0usize;
+    let mut audio_source_index = 0usize;
+
+    for part in parts {
+        match part {
+            MessagePart::Text { .. } => {}
             MessagePart::Image {
                 mime, bytes_base64, ..
-            } => Some((mime.clone(), bytes_base64.clone())),
-            _ => None,
-        })
-        .enumerate()
-        .map(|(index, (mime, bytes_base64))| {
-            prepared_image_payload_for_llm_request(
-                mime,
-                bytes_base64,
-                image_saved_paths.get(index).cloned().flatten(),
-            )
-        })
-        .collect::<Vec<_>>();
-    let audios = parts
-        .iter()
-        .filter_map(|part| match part {
+            } => {
+                image_number += 1;
+                let saved_path = image_saved_paths
+                    .get(image_source_index)
+                    .cloned()
+                    .flatten();
+                image_source_index += 1;
+                if let Some(image) = prepared_image_payload_for_llm_request(
+                    mime.clone(),
+                    bytes_base64.clone(),
+                    saved_path,
+                    Some(format!("图片#{image_number}")),
+                ) {
+                    images.push(image);
+                }
+            }
             MessagePart::Audio {
                 mime, bytes_base64, ..
-            } => Some((mime.clone(), bytes_base64.clone())),
-            _ => None,
-        })
-        .enumerate()
-        .map(|(index, (mime, bytes_base64))| PreparedBinaryPayload {
-            mime,
-            content: bytes_base64,
-            saved_path: audio_saved_paths.get(index).cloned().flatten(),
-        })
-        .collect::<Vec<_>>();
+            } => {
+                attachment_number += 1;
+                let saved_path = audio_saved_paths
+                    .get(audio_source_index)
+                    .cloned()
+                    .flatten();
+                audio_source_index += 1;
+                audios.push(PreparedBinaryPayload {
+                    mime: mime.clone(),
+                    content: bytes_base64.clone(),
+                    saved_path,
+                    label: format!("附件#{attachment_number}"),
+                });
+            }
+            MessagePart::Attachment { path, mime, .. } => {
+                let kind = message_attachment_kind(mime);
+                let label = if kind == "image" {
+                    image_number += 1;
+                    format!("图片#{image_number}")
+                } else {
+                    attachment_number += 1;
+                    format!("附件#{attachment_number}")
+                };
+                match kind {
+                    "image" | "pdf" => {
+                        match std::fs::read(path) {
+                            Ok(raw) => {
+                                if let Some(image) = prepared_image_payload_for_llm_request(
+                                    mime.clone(),
+                                    B64.encode(raw),
+                                    Some(path.clone()),
+                                    Some(label),
+                                ) {
+                                    images.push(image);
+                                }
+                            }
+                            Err(err) => runtime_log_warn(format!(
+                                "[附件投影] 当前消息图片或 PDF 读取失败，跳过二进制但保留路径提示，path={}，error={}",
+                                path, err
+                            )),
+                        }
+                    }
+                    "audio" => {
+                        match std::fs::read(path) {
+                            Ok(raw) => audios.push(PreparedBinaryPayload {
+                                mime: mime.clone(),
+                                content: B64.encode(raw),
+                                saved_path: Some(path.clone()),
+                                label,
+                            }),
+                            Err(err) => runtime_log_warn(format!(
+                                "[附件投影] 当前消息音频读取失败，跳过二进制但保留路径提示，path={}，error={}",
+                                path, err
+                            )),
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
     (images, audios)
 }
 
@@ -1624,6 +1577,43 @@ fn build_effective_prompt_media_from_prepared(
     prepared_audios: &[PreparedBinaryPayload],
 ) -> Result<(String, Vec<PreparedBinaryPayload>, Vec<PreparedBinaryPayload>), String> {
     let mut chunks = Vec::<String>::new();
+
+    if let Some(ordered_parts) = payload.parts.as_ref().filter(|parts| !parts.is_empty()) {
+        for part in ordered_parts {
+            match part {
+                ChatIngressPart::Text { text } => {
+                    let text = text.trim();
+                    if text.is_empty() {
+                        continue;
+                    }
+                    if api_config.enable_text {
+                        chunks.push(text.to_string());
+                    } else {
+                        runtime_log_warn(
+                            "[附件投影] 当前模型未启用文本输入，已跳过 ordered parts 文本"
+                                .to_string(),
+                        );
+                    }
+                }
+                ChatIngressPart::Attachment { mime, .. } => {
+                    chunks.push(match message_attachment_kind(mime) {
+                        "image" => "[image]".to_string(),
+                        "pdf" => "[pdf]".to_string(),
+                        "audio" => "[audio]".to_string(),
+                        _ => "[attachment]".to_string(),
+                    });
+                }
+            }
+        }
+        if chunks.is_empty() {
+            chunks.push("[附件不可用：本次消息中的附件未能完成规范化]".to_string());
+        }
+        return Ok((
+            chunks.join("\n"),
+            prepared_images.to_vec(),
+            prepared_audios.to_vec(),
+        ));
+    }
 
     if let Some(text) = payload
         .text
@@ -1639,17 +1629,14 @@ fn build_effective_prompt_media_from_prepared(
 
     let mut images = Vec::<PreparedBinaryPayload>::new();
     if let Some(requested_images) = &payload.images {
-        if !requested_images.is_empty() && !api_config.enable_image {
-            return Err("Current API config has image disabled.".to_string());
-        }
-        if requested_images.len() > prepared_images.len() {
-            return Err("Prepared image payload count is smaller than effective payload.".to_string());
-        }
         for (index, requested) in requested_images.iter().enumerate() {
-            let mut prepared = prepared_images
-                .get(index)
-                .cloned()
-                .ok_or_else(|| "Prepared image payload is missing.".to_string())?;
+            let Some(mut prepared) = prepared_images.get(index).cloned() else {
+                runtime_log_warn(format!(
+                    "[附件投影] 当前图片无法物化，保留文本与路径提示继续，index={}",
+                    index
+                ));
+                continue;
+            };
             if prepared.saved_path.is_none() {
                 prepared.saved_path = requested.saved_path.clone();
             }
@@ -1664,17 +1651,14 @@ fn build_effective_prompt_media_from_prepared(
 
     let mut audios = Vec::<PreparedBinaryPayload>::new();
     if let Some(requested_audios) = &payload.audios {
-        if !requested_audios.is_empty() && !api_config.enable_audio {
-            return Err("Current API config has audio disabled.".to_string());
-        }
-        if requested_audios.len() > prepared_audios.len() {
-            return Err("Prepared audio payload count is smaller than effective payload.".to_string());
-        }
         for (index, requested) in requested_audios.iter().enumerate() {
-            let mut prepared = prepared_audios
-                .get(index)
-                .cloned()
-                .ok_or_else(|| "Prepared audio payload is missing.".to_string())?;
+            let Some(mut prepared) = prepared_audios.get(index).cloned() else {
+                runtime_log_warn(format!(
+                    "[附件投影] 当前音频无法物化，保留文本与路径提示继续，index={}",
+                    index
+                ));
+                continue;
+            };
             if prepared.saved_path.is_none() {
                 prepared.saved_path = requested.saved_path.clone();
             }
@@ -1703,6 +1687,15 @@ fn render_message_content_for_model(message: &ChatMessage) -> String {
                 }
             }
             MessagePart::Audio { .. } => chunks.push("[audio attached]".to_string()),
+            MessagePart::Attachment { mime, .. } => {
+                let kind = message_attachment_kind(mime);
+                chunks.push(match kind {
+                    "image" => "[image attached]".to_string(),
+                    "audio" => "[audio attached]".to_string(),
+                    "pdf" => "[pdf attached]".to_string(),
+                    _ => "[file attached]".to_string(),
+                });
+            }
         }
     }
     if let Some(meta) = &message.provider_meta {
@@ -2086,15 +2079,23 @@ fn render_prompt_message_reasoning(message: &ChatMessage) -> Option<String> {
 }
 
 fn render_prompt_user_text_only(message: &ChatMessage) -> String {
-    let mut chunks = Vec::<String>::new();
-    for part in &message.parts {
-        if let MessagePart::Text { text, .. } = part {
-            if !text.trim().is_empty() {
-                chunks.push(text.clone());
-            }
+    let outcome = project_message_attachments(
+        message,
+        &MessageProjectionContext {
+            current_department_id: String::new(),
+            current_agent_id: String::new(),
+        },
+    );
+    for warning in outcome.warnings {
+        if warning.detail.contains("旧媒体 part") {
+            continue;
         }
+        runtime_log_warn(format!(
+            "[附件投影] 降级继续，message_id={}，part_index={}，warning={}",
+            warning.message_id, warning.part_index, warning.detail
+        ));
     }
-    chunks.join("\n")
+    render_prompt_message_abstract_user_text(&outcome.message)
 }
 
 fn render_prompt_user_mention_prefix(message: &ChatMessage) -> String {
@@ -2425,6 +2426,58 @@ fn resolve_media_from_message(
 ) -> (Vec<PreparedBinaryPayload>, Vec<PreparedBinaryPayload>) {
     let mut images = Vec::<PreparedBinaryPayload>::new();
     let mut audios = Vec::<PreparedBinaryPayload>::new();
+    let projected = project_message_attachments(
+        message,
+        &MessageProjectionContext {
+            current_department_id: String::new(),
+            current_agent_id: String::new(),
+        },
+    );
+    for warning in projected.warnings {
+        if warning.detail.contains("旧媒体 part") {
+            continue;
+        }
+        runtime_log_warn(format!(
+            "{} 附件投影降级继续，message_id={}，part_index={}，warning={}",
+            log_prefix, warning.message_id, warning.part_index, warning.detail
+        ));
+    }
+    let materialized = materialize_prompt_message_attachments(&projected.message);
+    for part in materialized.parts {
+        let MaterializedPromptMessagePart::Attachment {
+            kind,
+            label,
+            path,
+            mime,
+            content_base64,
+            ..
+        } = part
+        else {
+            continue;
+        };
+        let Some(content_base64) = content_base64 else {
+            continue;
+        };
+        match kind.as_str() {
+            "image" | "pdf" => {
+                if let Some(image) = prepared_image_payload_for_llm_request(
+                    mime,
+                    content_base64,
+                    Some(path),
+                    Some(label),
+                ) {
+                    images.push(image);
+                }
+            }
+            "audio" => audios.push(PreparedBinaryPayload {
+                mime,
+                content: content_base64,
+                saved_path: Some(path),
+                label,
+            }),
+            _ => {}
+        }
+    }
     let mut image_paths = message_attachment_paths_by_mime(message, "image/");
     let mut audio_paths = message_attachment_paths_by_mime(message, "audio/");
     for part in &message.parts {
@@ -2456,11 +2509,14 @@ fn resolve_media_from_message(
                     bytes_base64.clone()
                 };
                 if !resolved.trim().is_empty() {
-                    images.push(prepared_image_payload_for_llm_request(
+                    if let Some(image) = prepared_image_payload_for_llm_request(
                         mime.clone(),
                         resolved,
                         expected_saved_path,
-                    ));
+                        None,
+                    ) {
+                        images.push(image);
+                    }
                 }
             }
             MessagePart::Audio {
@@ -2494,9 +2550,11 @@ fn resolve_media_from_message(
                         mime: mime.clone(),
                         content: resolved,
                         saved_path: expected_saved_path,
+                        label: String::new(),
                     });
                 }
             }
+            MessagePart::Attachment { .. } => {}
             MessagePart::Text { .. } => {}
         }
     }
@@ -3498,17 +3556,30 @@ fn build_prompt_with_mode(
                                 if enable_pdf_images {
                                     for page in result.pages {
                                         for (img_idx, img) in page.images.iter().enumerate() {
-                                            message.parts.push(MessagePart::Image {
-                                                mime: img.mime.clone(),
-                                                bytes_base64: img.bytes_base64.clone(),
-                                                name: Some(format!(
-                                                    "{}_p{}_img{}.webp",
-                                                    result.file_name,
-                                                    page.page_index + 1,
-                                                    img_idx + 1,
-                                                )),
-                                                compressed: false,
-                                            });
+                                            let outcome = normalize_attachment_ingress(
+                                                state,
+                                                AttachmentIngressInput {
+                                                    path: None,
+                                                    bytes_base64: Some(img.bytes_base64.clone()),
+                                                    mime: img.mime.clone(),
+                                                    name: format!(
+                                                        "{}_p{}_img{}.webp",
+                                                        result.file_name,
+                                                        page.page_index + 1,
+                                                        img_idx + 1,
+                                                    ),
+                                                    storage_subdir: Some(conversation.id.clone()),
+                                                },
+                                            );
+                                            for warning in outcome.warnings {
+                                                runtime_log_warn(format!(
+                                                    "[PDF提取] 图片附件降级继续，conversation_id={}，warning={}",
+                                                    conversation.id, warning
+                                                ));
+                                            }
+                                            if let Some(part) = outcome.part {
+                                                message.parts.push(part);
+                                            }
                                         }
                                     }
                                 } else {

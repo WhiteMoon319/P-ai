@@ -58,7 +58,9 @@ fn render_message_parts_text_for_recall(parts: &[MessagePart]) -> String {
                     Some(trimmed.to_string())
                 }
             }
-            MessagePart::Image { .. } | MessagePart::Audio { .. } => None,
+            MessagePart::Image { .. }
+            | MessagePart::Audio { .. }
+            | MessagePart::Attachment { .. } => None,
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -139,4 +141,3 @@ fn collect_recall_payload_for_user_message(
     let stored_ids = memory_board_ids_from_current_hits(&raw_ids, 7);
     Ok(UserMessageRecallPayload { stored_ids, raw_ids })
 }
-

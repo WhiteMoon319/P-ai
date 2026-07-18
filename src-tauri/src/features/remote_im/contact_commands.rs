@@ -1372,6 +1372,7 @@ pub(crate) fn remote_im_enqueue_message_internal(
         }
     }
     let message = build_chat_message_from_input(
+        state,
         &input,
         &conversation_id,
         &contact_for_log,
@@ -1380,7 +1381,6 @@ pub(crate) fn remote_im_enqueue_message_internal(
         &images,
         &audios,
         &attachments,
-        &state.data_path,
     );
     let (activate_assistant, state_reason) =
         match remote_im_prepare_enqueue_runtime_state(state, &contact_for_log, &text) {

@@ -1,24 +1,3 @@
-fn weixin_oc_message_text(item_list: &[WeixinOcMessageItem]) -> String {
-    let mut parts = Vec::<String>::new();
-    for item in item_list {
-        match item.item_type.unwrap_or(0) {
-            1 => {
-                let text = item
-                    .text_item
-                    .as_ref()
-                    .and_then(|value| value.text.as_deref())
-                    .map(str::trim)
-                    .unwrap_or("");
-                if !text.is_empty() {
-                    parts.push(text.to_string());
-                }
-            }
-            _ => {}
-        }
-    }
-    parts.join("\n").trim().to_string()
-}
-
 fn weixin_oc_contact_display_name(
     runtime: &RuntimeStateFile,
     channel: &RemoteImChannelConfig,
@@ -63,26 +42,50 @@ async fn handle_weixin_oc_inbound_message(
             .await;
     }
     let item_list = msg.item_list.unwrap_or_default();
-    let text = weixin_oc_message_text(&item_list);
     let creds = WeixinOcCredentials::from_value(&channel.credentials);
-    let client = build_weixin_oc_http_client(creds.normalized_api_timeout_ms())?;
-    let media = weixin_oc_collect_media(state, &client, &creds, &item_list).await?;
-    let final_text = {
-        let mut chunks = Vec::<String>::new();
-        if !text.trim().is_empty() {
-            chunks.push(text.trim().to_string());
+    let media = match build_weixin_oc_http_client(creds.normalized_api_timeout_ms()) {
+        Ok(client) => weixin_oc_collect_media(&client, &creds, &item_list).await,
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[远程IM][个人微信事件] 媒体客户端初始化失败，保留文本并跳过附件继续，error={err}"
+            ));
+            let mut parts = Vec::<ChatIngressPart>::new();
+            for item in &item_list {
+                if item.item_type.unwrap_or(0) == 1 {
+                    if let Some(text) = item
+                        .text_item
+                        .as_ref()
+                        .and_then(|value| value.text.as_deref())
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                    {
+                        parts.push(ChatIngressPart::Text {
+                            text: text.to_string(),
+                        });
+                    }
+                } else {
+                    parts.push(ChatIngressPart::Text {
+                        text: "[附件不可用：微信媒体处理暂不可用，已跳过附件并继续]".to_string(),
+                    });
+                }
+            }
+            WeixinOcCollectedMedia { parts }
         }
-        chunks.extend(
-            media
-                .notices
-                .iter()
-                .map(|item| item.trim().to_string())
-                .filter(|item| !item.is_empty()),
-        );
-        chunks.join("\n")
     };
-    let runtime = state_read_runtime_state_cached(state)?;
-    let display_name = weixin_oc_contact_display_name(&runtime, channel, from_user_id);
+    let final_text = media.parts.iter().filter_map(|part| match part {
+        ChatIngressPart::Text { text } => Some(text.trim()),
+        ChatIngressPart::Attachment { .. } => None,
+    }).filter(|text| !text.is_empty()).collect::<Vec<_>>().join("\n");
+    let display_name = match state_read_runtime_state_cached(state) {
+        Ok(runtime) => weixin_oc_contact_display_name(&runtime, channel, from_user_id),
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[远程IM][个人微信事件] 联系人显示名缓存读取失败，使用 sender_id 降级继续，sender_id={}，error={}",
+                from_user_id, err
+            ));
+            from_user_id.to_string()
+        }
+    };
     let message_id = msg
         .message_id
         .or(msg.msg_id)
@@ -120,21 +123,10 @@ async fn handle_weixin_oc_inbound_message(
                 } else {
                     Some(final_text)
                 },
-                images: if media.images.is_empty() {
-                    None
-                } else {
-                    Some(media.images)
-                },
-                audios: if media.audios.is_empty() {
-                    None
-                } else {
-                    Some(media.audios)
-                },
-                attachments: if media.attachments.is_empty() {
-                    None
-                } else {
-                    Some(media.attachments)
-                },
+                parts: if media.parts.is_empty() { None } else { Some(media.parts) },
+                images: None,
+                audios: None,
+                attachments: None,
                 model: None,
                 extra_text_blocks: None,
                 mentions: None,

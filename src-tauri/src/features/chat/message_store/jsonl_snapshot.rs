@@ -306,6 +306,11 @@ fn slim_older_conversation_block_part(part: &MessagePart) -> Option<MessagePart>
                 compressed: *compressed,
             })
         }
+        MessagePart::Attachment { path, mime, name } => Some(MessagePart::Attachment {
+            path: path.clone(),
+            mime: mime.clone(),
+            name: name.clone(),
+        }),
     }
 }
 
@@ -366,6 +371,107 @@ mod jsonl_snapshot_conversation_block_tests {
             },
         }));
         message
+    }
+
+    fn legacy_media_message_json(id: &str, part_type: &str, mime: &str, stored: &str) -> String {
+        serde_json::json!({
+            "kind": "message",
+            "message": {
+                "id": id,
+                "role": "user",
+                "createdAt": "2026-04-25T00:00:00Z",
+                "speakerAgentId": null,
+                "parts": [{
+                    "type": part_type,
+                    "mime": mime,
+                    "bytesBase64": stored,
+                    "name": "legacy.bin",
+                    "compressed": false
+                }],
+                "extraTextBlocks": [],
+                "providerMeta": null,
+                "toolCall": null,
+                "mcpCall": null,
+                "memeAnnotations": null
+            }
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn decode_jsonl_snapshot_message_should_accept_legacy_image_and_audio_wire() {
+        let image = decode_jsonl_snapshot_message(&legacy_media_message_json(
+            "legacy-image",
+            "image",
+            "image/png",
+            "@download:conversation-a/image.png",
+        ))
+        .expect("decode legacy image");
+        let audio = decode_jsonl_snapshot_message(&legacy_media_message_json(
+            "legacy-audio",
+            "audio",
+            "audio/webm",
+            "@media:audio.webm",
+        ))
+        .expect("decode legacy audio");
+
+        assert!(matches!(image.parts.first(), Some(MessagePart::Image { .. })));
+        assert!(matches!(audio.parts.first(), Some(MessagePart::Audio { .. })));
+    }
+
+    #[test]
+    fn repair_jsonl_snapshot_file_should_not_discard_legacy_media_lines() {
+        let root = std::env::temp_dir().join(format!("eca-legacy-jsonl-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create temp dir");
+        let path = root.join("000000.jsonl");
+        let content = format!(
+            "{}\n{}\n",
+            legacy_media_message_json(
+                "legacy-image",
+                "image",
+                "image/png",
+                "@download:conversation-a/image.png",
+            ),
+            legacy_media_message_json(
+                "legacy-audio",
+                "audio",
+                "audio/webm",
+                "@media:audio.webm",
+            )
+        );
+        std::fs::write(&path, content).expect("write legacy jsonl");
+
+        let (report, discarded, duplicate) = repair_jsonl_snapshot_file(
+            &path,
+            &mut std::collections::HashSet::new(),
+        )
+        .expect("repair legacy jsonl");
+
+        assert_eq!(discarded, 0);
+        assert_eq!(duplicate, 0);
+        assert_eq!(report.message_count, 2);
+        let repaired = std::fs::read_to_string(&path).expect("read repaired jsonl");
+        assert!(repaired.contains("legacy-image"));
+        assert!(repaired.contains("legacy-audio"));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn canonical_attachment_json_should_not_contain_legacy_binary_fields() {
+        let mut message = text_message("canonical-attachment", "user", "look");
+        message.parts.push(MessagePart::Attachment {
+            path: "C:/attachments/a.png".to_string(),
+            mime: "image/png".to_string(),
+            name: "a.png".to_string(),
+        });
+
+        let json = encode_jsonl_snapshot_message(&message).expect("encode canonical attachment");
+
+        assert!(json.contains("\"type\":\"attachment\""));
+        assert!(json.contains("C:/attachments/a.png"));
+        assert!(!json.contains("bytesBase64"));
+        assert!(!json.contains("@download:"));
+        assert!(!json.contains("@media:"));
     }
 
     #[test]

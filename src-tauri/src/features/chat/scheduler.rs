@@ -559,21 +559,20 @@ async fn process_conversation_batch(
                     mime,
                     bytes_base64,
                     name,
-                    compressed,
+                    ..
                 } => {
-                    let next_ref =
-                        externalize_stored_binary_base64(data_path, &mime, &bytes_base64)
-                            .unwrap_or(bytes_base64.clone());
-                    if next_ref != bytes_base64 {
-                        deferred_image_count += 1;
-                        deferred_base64_chars += bytes_base64.len();
+                    let (attachment, warning) = legacy_binary_message_part_to_attachment(
+                        data_path,
+                        &mime,
+                        &bytes_base64,
+                        name.as_deref(),
+                    );
+                    if let Some(warning) = warning {
+                        runtime_log_warn(format!("[附件迁移] 历史 flush 降级继续：{warning}"));
                     }
-                    next_parts.push(MessagePart::Image {
-                        mime,
-                        bytes_base64: next_ref,
-                        name,
-                        compressed,
-                    });
+                    deferred_image_count += 1;
+                    deferred_base64_chars += bytes_base64.len();
+                    next_parts.push(attachment);
                 }
                 other => next_parts.push(other),
             }
@@ -1511,6 +1510,7 @@ async fn activate_main_assistant(
         payload: ChatInputPayload {
             text: None,
             display_text: None,
+            parts: None,
             images: None,
             audios: None,
             attachments: None,

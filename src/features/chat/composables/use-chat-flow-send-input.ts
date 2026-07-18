@@ -3,7 +3,7 @@ import type { ChatMentionTarget } from "../../../types/app";
 import type { SendChatOverrides } from "./use-chat-flow-types";
 import { normalizeConversationId } from "./use-chat-flow-utils";
 
-type AttachmentNotice = { id: string; fileName: string; relativePath: string; mime: string };
+type AttachmentNotice = { id: string; fileName: string; path: string; mime: string };
 type ImageAttachment = { mime: string; bytesBase64: string; savedPath?: string };
 type Session = { apiConfigId: string; agentId: string; departmentId?: string; conversationId?: string };
 
@@ -16,14 +16,14 @@ type UseChatFlowSendInputOptions = {
   latestUserImages: Ref<Array<{ mime: string; bytesBase64: string }>>;
   getSession: () => Session | null;
   getConversationId?: () => string;
-  buildQueuedAttachmentPayload: () => Array<{ fileName: string; relativePath: string; mime: string }>;
+  buildQueuedAttachmentPayload: () => Array<{ fileName: string; path: string; mime: string }>;
   buildImageAttachmentPayload: (
     images: ImageAttachment[],
-  ) => Array<{ fileName: string; relativePath: string; mime: string }>;
+  ) => Array<{ fileName: string; path: string; mime: string }>;
   mergeAttachmentPayloads: (
-    primary: Array<{ fileName: string; relativePath: string; mime: string }>,
-    fallback?: Array<{ fileName: string; relativePath: string; mime: string }>,
-  ) => Array<{ fileName: string; relativePath: string; mime: string }>;
+    primary: Array<{ fileName: string; path: string; mime: string }>,
+    fallback?: Array<{ fileName: string; path: string; mime: string }>,
+  ) => Array<{ fileName: string; path: string; mime: string }>;
 };
 
 export type PreparedChatSendInput = {
@@ -33,7 +33,7 @@ export type PreparedChatSendInput = {
   selectedMentions: ChatMentionTarget[];
   extraTextBlocks: string[];
   sentImages: ImageAttachment[];
-  attachments: Array<{ fileName: string; relativePath: string; mime: string }>;
+  attachments: Array<{ fileName: string; path: string; mime: string }>;
   sendSession: Session;
   sendConversationId: string;
 };
@@ -56,12 +56,12 @@ export function useChatFlowSendInput(options: UseChatFlowSendInputOptions) {
   function buildDisplayText(
     plainText: string,
     sentImages: ImageAttachment[],
-    queuedAttachments: Array<{ fileName: string; relativePath: string; mime: string }>,
+    queuedAttachments: Array<{ fileName: string; path: string; mime: string }>,
   ): string {
     if (plainText) return plainText;
     const imageCount = sentImages.length;
     const attachmentNames = queuedAttachments
-      .map((item) => String(item.fileName || item.relativePath || "").trim())
+      .map((item) => String(item.fileName || item.path || "").trim())
       .filter((item, index, array) => !!item && array.indexOf(item) === index)
       .slice(0, 3);
     const attachmentCount = queuedAttachments.length;

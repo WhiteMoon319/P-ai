@@ -1,59 +1,3 @@
-fn dingtalk_push_normalized_image_or_attachment(
-    state: &AppState,
-    raw: &[u8],
-    mime: &str,
-    suggested_name: &str,
-    images: &mut Vec<BinaryPart>,
-    attachments: &mut Vec<AttachmentMetaInput>,
-    log_label: &str,
-) -> Option<String> {
-    match normalize_image_bytes_for_llm_request(raw, Some(mime)) {
-        Ok(normalized) => {
-            images.push(BinaryPart {
-                mime: normalized.mime,
-                bytes_base64: B64.encode(normalized.bytes),
-                saved_path: None,
-            });
-            None
-        }
-        Err(err) => {
-            runtime_log_error(format!(
-                "[远程IM][钉钉事件] {}图片规范化失败，改按附件入队，mime={}，err={}",
-                log_label, mime, err
-            ));
-            match persist_raw_attachment_to_downloads(state, suggested_name, mime, raw) {
-                Ok(saved) => {
-                    let relative_path = workspace_relative_path(state, &saved);
-                    let file_name = saved
-                        .file_name()
-                        .and_then(|value| value.to_str())
-                        .map(str::trim)
-                        .filter(|value| !value.is_empty())
-                        .unwrap_or(suggested_name)
-                        .to_string();
-                    attachments.push(AttachmentMetaInput {
-                        file_name,
-                        relative_path: relative_path.clone(),
-                        mime: mime.to_string(),
-                    });
-                    Some(build_attachment_notice_text(0, &relative_path))
-                }
-                Err(save_err) => {
-                    runtime_log_warn(format!(
-                        "[远程IM][钉钉事件] {}图片降级附件落盘失败，改仅保留文字提示，mime={}，err={}",
-                        log_label, mime, save_err
-                    ));
-                    Some(format!(
-                        "[系统提示] 收到一张图片，但未能作为图片输入提供给模型，原因：{}。同时附件保存也失败：{}。",
-                        err.trim(),
-                        save_err.trim()
-                    ))
-                }
-            }
-        }
-    }
-}
-
 async fn parse_and_enqueue_dingtalk_callback(
     channel: &RemoteImChannelConfig,
     callback_payload: &Value,
@@ -94,10 +38,7 @@ async fn parse_and_enqueue_dingtalk_callback(
         return Err("跳过: 缺少 msgtype".to_string());
     }
     let robot_code = dingtalk_robot_code(channel, callback_payload);
-    let mut text_chunks = Vec::<String>::new();
-    let mut images = Vec::<BinaryPart>::new();
-    let mut audios = Vec::<BinaryPart>::new();
-    let mut attachments = Vec::<AttachmentMetaInput>::new();
+    let mut parts = Vec::<ChatIngressPart>::new();
 
     if msg_type == "text" {
         let text = callback_payload
@@ -107,120 +48,111 @@ async fn parse_and_enqueue_dingtalk_callback(
             .map(str::trim)
             .unwrap_or("");
         if !text.is_empty() {
-            text_chunks.push(text.to_string());
+            parts.push(ChatIngressPart::Text { text: text.to_string() });
         } else {
             return Err("跳过: 文本消息内容为空".to_string());
         }
     } else if msg_type == "picture" {
-        let content = callback_payload
-            .get("content")
-            .ok_or_else(|| "跳过: picture 缺少 content".to_string())?;
         let download_code = callback_payload
             .get("content")
             .and_then(|v| v.get("downloadCode"))
             .and_then(Value::as_str)
             .map(str::trim)
             .unwrap_or("");
-        let _ = content;
-        if download_code.is_empty() {
-            return Err("跳过: picture 缺少 downloadCode".to_string());
-        }
-        if robot_code.is_empty() {
-            return Err("跳过: picture 缺少 robotCode".to_string());
-        }
-        let (raw, mime) = dingtalk_download_file_by_code(channel, download_code, &robot_code).await?;
-        let mime = normalize_dingtalk_image_mime(&raw, &mime);
-        if let Some(notice) = dingtalk_push_normalized_image_or_attachment(
-            state,
-            &raw,
-            &mime,
-            &format!("dingtalk-picture-{}", Uuid::new_v4()),
-            &mut images,
-            &mut attachments,
-            "",
-        ) {
-            text_chunks.push(notice);
+        if download_code.is_empty() || robot_code.is_empty() {
+            parts.push(ChatIngressPart::Text {
+                text: "[附件不可用：钉钉图片缺少下载参数，已跳过并继续]".to_string(),
+            });
+        } else {
+            match dingtalk_download_file_by_code(channel, download_code, &robot_code).await {
+                Ok((raw, mime)) => parts.push(ChatIngressPart::Attachment {
+                    path: None,
+                    bytes_base64: Some(B64.encode(&raw)),
+                    mime: normalize_dingtalk_image_mime(&raw, &mime),
+                    name: format!("dingtalk-picture-{}.png", Uuid::new_v4()),
+                }),
+                Err(err) => {
+                    runtime_log_warn(format!("[远程IM][钉钉事件] 图片下载失败，已跳过并继续，error={err}"));
+                    parts.push(ChatIngressPart::Text {
+                        text: "[附件不可用：钉钉图片下载失败，已跳过并继续]".to_string(),
+                    });
+                }
+            }
         }
     } else if msg_type == "richText" {
         let items = callback_payload
             .get("content")
             .and_then(|v| v.get("richText"))
-            .and_then(Value::as_array)
-            .ok_or_else(|| "跳过: richText 缺少 content.richText".to_string())?;
-        for item in items {
-            if let Some(text) = item.get("text").and_then(Value::as_str).map(str::trim) {
-                if !text.is_empty() {
-                    text_chunks.push(text.to_string());
+            .and_then(Value::as_array);
+        if let Some(items) = items {
+            for item in items {
+                if let Some(text) = item.get("text").and_then(Value::as_str).map(str::trim) {
+                    if !text.is_empty() {
+                        parts.push(ChatIngressPart::Text { text: text.to_string() });
+                    }
+                    continue;
                 }
-                continue;
+                if item.get("type").and_then(Value::as_str) == Some("picture") {
+                    let download_code = item
+                        .get("downloadCode")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .unwrap_or("");
+                    if download_code.is_empty() {
+                        parts.push(ChatIngressPart::Text { text: "[附件不可用：钉钉富文本图片缺少下载参数，已跳过并继续]".to_string() });
+                        continue;
+                    }
+                    if robot_code.is_empty() {
+                        parts.push(ChatIngressPart::Text { text: "[附件不可用：钉钉机器人标识缺失，图片已跳过并继续]".to_string() });
+                        continue;
+                    }
+                    match dingtalk_download_file_by_code(channel, download_code, &robot_code).await {
+                        Ok((raw, mime)) => parts.push(ChatIngressPart::Attachment {
+                            path: None,
+                            bytes_base64: Some(B64.encode(&raw)),
+                            mime: normalize_dingtalk_image_mime(&raw, &mime),
+                            name: format!("dingtalk-rich-picture-{}.png", Uuid::new_v4()),
+                        }),
+                        Err(err) => {
+                            runtime_log_warn(format!("[远程IM][钉钉事件] 富文本图片下载失败，已跳过并继续，error={err}"));
+                            parts.push(ChatIngressPart::Text { text: "[附件不可用：钉钉富文本图片下载失败，已跳过并继续]".to_string() });
+                        }
+                    }
+                }
             }
-            if item.get("type").and_then(Value::as_str) == Some("picture") {
-                let download_code = item
-                    .get("downloadCode")
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    .unwrap_or("");
-                if download_code.is_empty() {
-                    return Err("跳过: richText.picture 缺少 downloadCode".to_string());
-                }
-                if robot_code.is_empty() {
-                    return Err("跳过: richText.picture 缺少 robotCode".to_string());
-                }
-                let (raw, mime) =
-                    dingtalk_download_file_by_code(channel, download_code, &robot_code).await?;
-                let mime = normalize_dingtalk_image_mime(&raw, &mime);
-                if let Some(notice) = dingtalk_push_normalized_image_or_attachment(
-                    state,
-                    &raw,
-                    &mime,
-                    &format!("dingtalk-rich-picture-{}", Uuid::new_v4()),
-                    &mut images,
-                    &mut attachments,
-                    "richText ",
-                ) {
-                    text_chunks.push(notice);
-                }
-            }
+        } else {
+            parts.push(ChatIngressPart::Text {
+                text: "[附件不可用：钉钉富文本内容缺失，已跳过并继续]".to_string(),
+            });
         }
     } else if msg_type == "audio" || msg_type == "voice" {
-        let content = callback_payload
-            .get("content")
-            .cloned()
-            .ok_or_else(|| "跳过: audio 缺少 content".to_string())?;
+        let content = callback_payload.get("content").cloned().unwrap_or(Value::Null);
         let download_code = string_field(&content, "downloadCode");
-        if download_code.is_empty() {
-            return Err("跳过: audio 缺少 downloadCode".to_string());
-        }
-        if robot_code.is_empty() {
-            return Err("跳过: audio 缺少 robotCode".to_string());
-        }
-        let (raw, mut mime) =
-            dingtalk_download_file_by_code(channel, &download_code, &robot_code).await?;
-        if mime == "application/octet-stream" {
-            let ext = string_field(&content, "fileExtension");
-            if !ext.is_empty() {
-                mime = mime_from_name_fallback(&format!("voice.{ext}"));
+        if download_code.is_empty() || robot_code.is_empty() {
+            parts.push(ChatIngressPart::Text { text: "[附件不可用：钉钉语音缺少下载参数，已跳过并继续]".to_string() });
+        } else {
+            match dingtalk_download_file_by_code(channel, &download_code, &robot_code).await {
+                Ok((raw, mut mime)) => {
+                    let ext = string_field(&content, "fileExtension");
+                    if mime == "application/octet-stream" && !ext.is_empty() {
+                        mime = mime_from_name_fallback(&format!("voice.{ext}"));
+                    }
+                    parts.push(ChatIngressPart::Attachment {
+                        path: None,
+                        bytes_base64: Some(B64.encode(raw)),
+                        mime,
+                        name: if ext.is_empty() { "voice.audio".to_string() } else { format!("voice.{}", ext.trim_matches('.')) },
+                    });
+                }
+                Err(err) => {
+                    runtime_log_warn(format!("[远程IM][钉钉事件] 语音下载失败，已跳过并继续，error={err}"));
+                    parts.push(ChatIngressPart::Text { text: "[附件不可用：钉钉语音下载失败，已跳过并继续]".to_string() });
+                }
             }
         }
-        audios.push(BinaryPart {
-            mime,
-            bytes_base64: B64.encode(raw),
-            saved_path: None,
-        });
     } else if msg_type == "file" || msg_type == "video" {
-        let content = callback_payload
-            .get("content")
-            .cloned()
-            .ok_or_else(|| "跳过: file/video 缺少 content".to_string())?;
+        let content = callback_payload.get("content").cloned().unwrap_or(Value::Null);
         let download_code = string_field(&content, "downloadCode");
-        if download_code.is_empty() {
-            return Err("跳过: file/video 缺少 downloadCode".to_string());
-        }
-        if robot_code.is_empty() {
-            return Err("跳过: file/video 缺少 robotCode".to_string());
-        }
-        let (raw, mut mime) =
-            dingtalk_download_file_by_code(channel, &download_code, &robot_code).await?;
         let mut file_name = string_field(&content, "fileName");
         if file_name.is_empty() {
             let ext = string_field(&content, "fileExtension");
@@ -230,23 +162,37 @@ async fn parse_and_enqueue_dingtalk_callback(
                 format!("dingtalk-{msg_type}-{}.{}", Uuid::new_v4(), ext.trim_matches('.'))
             };
         }
-        if mime == "application/octet-stream" {
-            mime = mime_from_name_fallback(&file_name);
+        if download_code.is_empty() || robot_code.is_empty() {
+            parts.push(ChatIngressPart::Text { text: format!("[附件不可用：{} 缺少下载参数，已跳过并继续]", file_name) });
+        } else {
+            match dingtalk_download_file_by_code(channel, &download_code, &robot_code).await {
+                Ok((raw, mut mime)) => {
+                    if mime == "application/octet-stream" {
+                        mime = mime_from_name_fallback(&file_name);
+                    }
+                    parts.push(ChatIngressPart::Attachment {
+                        path: None,
+                        bytes_base64: Some(B64.encode(raw)),
+                        mime,
+                        name: file_name,
+                    });
+                }
+                Err(err) => {
+                    runtime_log_warn(format!("[远程IM][钉钉事件] 文件下载失败，已跳过并继续，file_name={}，error={}", file_name, err));
+                    parts.push(ChatIngressPart::Text { text: format!("[附件不可用：{} 下载失败，已跳过并继续]", file_name) });
+                }
+            }
         }
-        let saved = persist_raw_attachment_to_downloads(state, &file_name, &mime, &raw)?;
-        let relative_path = workspace_relative_path(state, &saved);
-        attachments.push(AttachmentMetaInput {
-            file_name,
-            relative_path,
-            mime,
-        });
     }
 
-    if text_chunks.is_empty() && images.is_empty() && audios.is_empty() && attachments.is_empty() {
+    if parts.is_empty() {
         return Err("跳过: 钉钉消息无可入队内容".to_string());
     }
 
-    let text = text_chunks.join("").trim().to_string();
+    let text = parts.iter().filter_map(|part| match part {
+        ChatIngressPart::Text { text } => Some(text.trim()),
+        ChatIngressPart::Attachment { .. } => None,
+    }).filter(|text| !text.is_empty()).collect::<Vec<_>>().join("");
     let mut provider_meta = serde_json::json!({
         "dingtalkRaw": callback_payload,
         "sessionWebhook": string_field(callback_payload, "sessionWebhook"),
@@ -291,13 +237,10 @@ async fn parse_and_enqueue_dingtalk_callback(
         payload: ChatInputPayload {
             text: if text.is_empty() { None } else { Some(text) },
             display_text: None,
-            images: if images.is_empty() { None } else { Some(images) },
-            audios: if audios.is_empty() { None } else { Some(audios) },
-            attachments: if attachments.is_empty() {
-                None
-            } else {
-                Some(attachments)
-            },
+            parts: Some(parts),
+            images: None,
+            audios: None,
+            attachments: None,
             model: None,
             extra_text_blocks: None,
             mentions: None,

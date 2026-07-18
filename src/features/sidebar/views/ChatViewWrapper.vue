@@ -194,7 +194,7 @@ const props = defineProps<{
   conversationItems: ChatConversationOverviewItem[];
   remoteImContactConversations: RemoteImContactConversationOption[];
   clipboardImages: Array<{ mime: string; bytesBase64: string }>;
-  queuedAttachmentNotices: Array<{ id: string; fileName: string; relativePath: string; mime: string }>;
+  queuedAttachmentNotices: Array<{ id: string; fileName: string; path: string; mime: string }>;
   toolStatusText: string;
   toolStatusState: "running" | "done" | "failed" | "";
   chatErrorText?: string;

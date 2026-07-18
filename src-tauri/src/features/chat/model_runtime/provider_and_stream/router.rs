@@ -50,6 +50,7 @@ mod router_multimodal_filter_tests {
                 extra_text_blocks: Vec::new(),
                 user_time_text: None,
                 images: vec![PreparedBinaryPayload {
+                    label: "图片#1".to_string(),
                     mime: "image/png".to_string(),
                     content: "history-base64".to_string(),
                     saved_path: Some("downloads/history.png".to_string()),
@@ -64,6 +65,7 @@ mod router_multimodal_filter_tests {
             latest_user_extra_text: String::new(),
             latest_user_extra_blocks: Vec::new(),
             latest_images: vec![PreparedBinaryPayload {
+                label: "图片#1".to_string(),
                 mime: "image/png".to_string(),
                 content: "latest-base64".to_string(),
                 saved_path: Some("downloads/latest.png".to_string()),
