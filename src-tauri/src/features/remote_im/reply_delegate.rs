@@ -827,15 +827,11 @@ fn spawn_remote_im_reply_delegate(
             };
             let send_result = match send_chat_message_inner(request, &state_clone, &channel).await {
                 Ok(result) => {
-                    let _ = remote_im_mark_contact_present(
-                        &state_clone,
-                        &contact_id_for_task,
-                        "远程应答委托已产生模型回答",
-                    );
-                    let _ = remote_im_schedule_presence_timeout(
+                    let _ = remote_im_mark_contact_present_and_schedule(
                         &state_clone,
                         &contact_id_for_task,
                         patience_seconds,
+                        "远程应答委托已产生模型回答",
                     );
                     runtime_log_info(format!(
                         "[远程应答委托] 完成一轮，delegate_id={}，conversation_id={}",

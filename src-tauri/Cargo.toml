@@ -69,6 +69,7 @@ litchi = { git = "https://github.com/DevExzh/litchi.git", rev = "5a931961d58bf71
 walkdir = "2.5.0"
 zip = { version = "8.5.1", default-features = false, features = ["deflate", "aes-crypto"] }
 ropey = "1.6.1"
+unicode-segmentation = "1.13.3"
 
 [features]
 default = ["custom-protocol"]

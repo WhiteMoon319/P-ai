@@ -1,5 +1,3 @@
-const REMOTE_IM_GROUP_MIN_REPLY_CHARS: u32 = 4;
-
 #[derive(Debug, Clone)]
 struct RemoteImGroupReplyGate {
     allowed: bool,
@@ -61,14 +59,14 @@ fn remote_im_group_energy_at(
         .and_then(|item| item.energy)
         .filter(|value| value.is_finite())
         .unwrap_or(pacing.maximum_energy)
-        .clamp(0.0, pacing.maximum_energy);
+        .clamp(-pacing.maximum_energy, pacing.maximum_energy);
     let elapsed = checkpoint
         .and_then(|item| item.energy_updated_at.as_deref())
         .and_then(parse_iso)
         .map(|updated_at| (now - updated_at).whole_seconds().max(0) as f64)
         .unwrap_or(0.0);
     (stored + pacing.energy_recovery_per_second * elapsed)
-        .clamp(0.0, pacing.maximum_energy)
+        .clamp(-pacing.maximum_energy, pacing.maximum_energy)
 }
 
 fn remote_im_bump_checkpoint_atomic_revision(checkpoint: &mut RemoteImContactCheckpoint) {
@@ -89,21 +87,8 @@ fn remote_im_reset_contact_checkpoint_atomic_in_list(
     };
 }
 
-fn remote_im_group_energy_max_chars(
-    energy: f64,
-    pacing: &RemoteImGroupReplyPacing,
-    configured_limit: u32,
-) -> u32 {
-    if energy < pacing.base_reply_energy_cost {
-        return 0;
-    }
-    if pacing.energy_cost_per_character <= f64::EPSILON {
-        return configured_limit;
-    }
-    let budget = ((energy - pacing.base_reply_energy_cost) / pacing.energy_cost_per_character)
-        .floor()
-        .max(0.0) as u32;
-    configured_limit.min(budget)
+fn remote_im_group_energy_can_reply(energy: f64) -> bool {
+    energy.is_finite() && energy > 0.0
 }
 
 fn remote_im_group_reply_gate(
@@ -169,23 +154,22 @@ fn remote_im_group_reply_gate(
             });
         }
     }
+    if !remote_im_group_energy_can_reply(energy) {
+        return Ok(RemoteImGroupReplyGate {
+            allowed: false,
+            max_chars: 0,
+            energy,
+            reason: "当前能量小于或等于 0".to_string(),
+        });
+    }
     let configured_limit = if focus {
         pacing.focus_reply_max_chars
     } else {
         pacing.normal_reply_max_chars
     };
-    let max_chars = remote_im_group_energy_max_chars(energy, &pacing, configured_limit);
-    if max_chars < REMOTE_IM_GROUP_MIN_REPLY_CHARS.min(configured_limit) {
-        return Ok(RemoteImGroupReplyGate {
-            allowed: false,
-            max_chars,
-            energy,
-            reason: "当前能量不足以支持完整短回复".to_string(),
-        });
-    }
     Ok(RemoteImGroupReplyGate {
         allowed: true,
-        max_chars,
+        max_chars: configured_limit,
         energy,
         reason: String::new(),
     })
@@ -238,7 +222,9 @@ fn remote_im_apply_group_energy_for_messages(
             &contact.id,
         );
         let before = remote_im_group_energy_at(Some(checkpoint), &pacing, now);
-        checkpoint.energy = Some((before + delta).clamp(0.0, pacing.maximum_energy));
+        checkpoint.energy = Some(
+            (before + delta).clamp(-pacing.maximum_energy, pacing.maximum_energy),
+        );
         checkpoint.energy_updated_at = Some(now_iso());
         remote_im_bump_checkpoint_atomic_revision(checkpoint);
         checkpoint.updated_at = Some(now_iso());
@@ -422,7 +408,8 @@ fn remote_im_persist_group_reply_settlement(
                 let char_count = effective_remote_im_group_reply_char_count(final_text) as f64;
                 let cost = pacing.base_reply_energy_cost
                     + char_count * pacing.energy_cost_per_character;
-                checkpoint.energy = Some((before - cost).max(0.0));
+                let after = (before - cost).max(-pacing.maximum_energy);
+                checkpoint.energy = Some(after);
                 checkpoint.energy_updated_at = Some(now_iso());
                 energy_applied = true;
                 runtime_log_info(format!(
@@ -430,7 +417,7 @@ fn remote_im_persist_group_reply_settlement(
                     contact.id,
                     before,
                     cost,
-                    (before - cost).max(0.0),
+                    after,
                     char_count as usize,
                     settlement_status
                 ));
@@ -596,7 +583,7 @@ mod remote_im_group_reply_energy_tests {
     use super::*;
 
     #[test]
-    fn group_energy_should_recover_and_clamp() {
+    fn group_energy_should_recover_with_symmetric_bounds() {
         let pacing = RemoteImGroupReplyPacing {
             maximum_energy: 100.0,
             energy_recovery_per_second: 2.0,
@@ -612,17 +599,53 @@ mod remote_im_group_reply_energy_tests {
             ),
             ..RemoteImContactCheckpoint::default()
         };
-        assert!((remote_im_group_energy_at(Some(&checkpoint), &pacing, now) - 80.0).abs() < 0.01);
+        assert!(
+            (remote_im_group_energy_at(Some(&checkpoint), &pacing, now) - 80.0).abs() < 0.01
+        );
+
+        let negative_checkpoint = RemoteImContactCheckpoint {
+            energy: Some(-50.0),
+            energy_updated_at: Some(
+                (now - time::Duration::seconds(20))
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default(),
+            ),
+            ..RemoteImContactCheckpoint::default()
+        };
+        assert!(
+            (remote_im_group_energy_at(Some(&negative_checkpoint), &pacing, now) + 10.0).abs()
+                < 0.01
+        );
+
+        let below_floor_checkpoint = RemoteImContactCheckpoint {
+            energy: Some(-150.0),
+            energy_updated_at: Some(now_iso()),
+            ..RemoteImContactCheckpoint::default()
+        };
+        assert_eq!(
+            remote_im_group_energy_at(Some(&below_floor_checkpoint), &pacing, now),
+            -100.0
+        );
+
+        let capped_checkpoint = RemoteImContactCheckpoint {
+            energy: Some(90.0),
+            energy_updated_at: Some(
+                (now - time::Duration::seconds(20))
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default(),
+            ),
+            ..RemoteImContactCheckpoint::default()
+        };
+        assert!(
+            (remote_im_group_energy_at(Some(&capped_checkpoint), &pacing, now) - 100.0).abs()
+                < 0.01
+        );
     }
 
     #[test]
-    fn group_energy_budget_should_never_overdraw() {
-        let pacing = RemoteImGroupReplyPacing {
-            base_reply_energy_cost: 10.0,
-            energy_cost_per_character: 2.0,
-            ..RemoteImGroupReplyPacing::default()
-        };
-        assert_eq!(remote_im_group_energy_max_chars(18.0, &pacing, 20), 4);
-        assert_eq!(remote_im_group_energy_max_chars(9.0, &pacing, 20), 0);
+    fn group_energy_reply_gate_should_require_only_positive_energy() {
+        assert!(!remote_im_group_energy_can_reply(-0.01));
+        assert!(!remote_im_group_energy_can_reply(0.0));
+        assert!(remote_im_group_energy_can_reply(0.01));
     }
 }

@@ -785,8 +785,20 @@ impl ConversationServiceV2 {
         if normalized_conversation_id.is_empty() {
             return Err("conversationId is required".to_string());
         }
-        let meta = state_read_conversation_metadata_cached(state, normalized_conversation_id)?;
-        Ok(meta.fast_request_turns().to_vec())
+        match state_read_conversation_metadata_cached(state, normalized_conversation_id) {
+            Ok(meta) => Ok(meta.fast_request_turns().to_vec()),
+            Err(root_error) => match delegate_runtime_thread_conversation_get_any(
+                state,
+                normalized_conversation_id,
+            ) {
+                Ok(Some(conversation)) => Ok(conversation.fast_request_turns),
+                Ok(None) => Err(root_error),
+                Err(delegate_error) => Err(format!(
+                    "读取会话杂务失败：root_error={}，delegate_error={}",
+                    root_error, delegate_error
+                )),
+            },
+        }
     }
 
     fn get_active_goal(

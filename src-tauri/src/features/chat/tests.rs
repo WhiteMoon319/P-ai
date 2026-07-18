@@ -4036,7 +4036,7 @@
         };
 
         let expected = vec![
-            "[系统提醒]\n请在 20 个字内进行回应。",
+            "[系统提醒]\n请在 20 个有效文本单位内进行回应。中文/日文/韩文按可见字形计 1，英语等按 Unicode 单词计 1，数字词和 Emoji 各计 1，标点与空白不计。",
             "[系统提醒]\n固定快照",
             "meta",
             "触发消息",
@@ -5942,6 +5942,66 @@
         assert!(conversation_service_v2()
             .get_conversation_meta(&state, &conversation.id)
             .is_err());
+    }
+
+    #[test]
+    fn delegate_fast_request_should_append_atomically_and_be_readable_as_misc_work() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let root_conversation =
+            test_chat_conversation("root-conversation", "active", &now);
+        state_schedule_conversation_persist(&state, &root_conversation)
+            .expect("persist root conversation");
+        let delegate = delegate_store_create_delegate(
+            &state.data_path,
+            &DelegateCreateInput {
+                kind: "remote_im_reply".to_string(),
+                conversation_id: root_conversation.id.clone(),
+                parent_delegate_id: None,
+                source_department_id: ASSISTANT_DEPARTMENT_ID.to_string(),
+                target_department_id: ASSISTANT_DEPARTMENT_ID.to_string(),
+                source_agent_id: DEFAULT_AGENT_ID.to_string(),
+                target_agent_id: DEFAULT_AGENT_ID.to_string(),
+                title: "远程应答".to_string(),
+                why: "验证应答委托杂务".to_string(),
+                goal: "记录回复改写".to_string(),
+                todo: "执行改写".to_string(),
+                notify_assistant_when_done: false,
+                call_stack: Vec::new(),
+            },
+        )
+        .expect("create delegate record");
+        delegate_runtime_thread_create(&state, &delegate, "", None, None)
+            .expect("create delegate runtime thread");
+        delegate_runtime_thread_conversation_append_if_absent(
+            &state,
+            &delegate.delegate_id,
+            test_text_message("user", "执行远程应答", &now),
+        )
+        .expect("append delegate message");
+        let turn = build_fast_request_turn(
+            FAST_REQUEST_KIND_REMOTE_IM_REPLY_REWRITE,
+            "压缩请求",
+            "压缩结果",
+            true,
+            None,
+            Some("quick-model".to_string()),
+            Some(25),
+        );
+
+        assert!(delegate_runtime_thread_append_fast_request(
+            &state,
+            &delegate.delegate_id,
+            turn,
+        )
+        .expect("append delegate fast request"));
+
+        let turns = conversation_service_v2()
+            .get_conversation_fast_request_turns(&state, &delegate.delegate_id)
+            .expect("read delegate fast requests");
+        assert_eq!(turns.len(), 1);
+        assert_eq!(turns[0].kind, FAST_REQUEST_KIND_REMOTE_IM_REPLY_REWRITE);
+        assert_eq!(turns[0].response_text, "压缩结果");
     }
 
     #[test]

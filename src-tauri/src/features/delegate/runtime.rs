@@ -714,6 +714,49 @@ fn delegate_runtime_thread_conversation_update(
     delegate_runtime_thread_conversation_update_unlocked(app_state, delegate_id, conversation)
 }
 
+fn delegate_runtime_thread_append_fast_request(
+    app_state: &AppState,
+    delegate_id: &str,
+    turn: FastRequestTurn,
+) -> Result<bool, String> {
+    let normalized_delegate_id = delegate_id.trim();
+    if normalized_delegate_id.is_empty() {
+        return Err("delegateId 不能为空".to_string());
+    }
+    let mutation_lock =
+        delegate_runtime_thread_conversation_mutation_lock(app_state, normalized_delegate_id);
+    let _guard = match mutation_lock.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            runtime_log_warn(format!(
+                "[委托会话] 杂务追加锁中毒，已恢复，delegate_id={}",
+                normalized_delegate_id
+            ));
+            poisoned.into_inner()
+        }
+    };
+    let Some(mut conversation) =
+        delegate_runtime_thread_conversation_get_any(app_state, normalized_delegate_id)?
+    else {
+        return Ok(false);
+    };
+    if conversation
+        .fast_request_turns
+        .iter()
+        .any(|existing| existing.id == turn.id)
+    {
+        return Ok(false);
+    }
+    conversation.fast_request_turns.push(turn);
+    conversation.updated_at = now_iso();
+    delegate_runtime_thread_conversation_update_unlocked(
+        app_state,
+        normalized_delegate_id,
+        conversation,
+    )?;
+    Ok(true)
+}
+
 fn delegate_runtime_thread_conversation_append_if_absent(
     app_state: &AppState,
     delegate_id: &str,

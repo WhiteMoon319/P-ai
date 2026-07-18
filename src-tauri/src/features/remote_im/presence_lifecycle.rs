@@ -15,6 +15,16 @@ fn remote_im_mark_contact_present(
     Ok(())
 }
 
+fn remote_im_mark_contact_present_and_schedule(
+    state: &AppState,
+    contact_id: &str,
+    patience_seconds: u64,
+    reason: &str,
+) -> Result<(), String> {
+    remote_im_mark_contact_present(state, contact_id, reason)?;
+    remote_im_schedule_presence_timeout(state, contact_id, patience_seconds)
+}
+
 fn remote_im_contact_is_away(state: &AppState, contact_id: &str) -> Result<bool, String> {
     Ok(lock_remote_im_contact_runtime_states(state)?
         .get(contact_id)
@@ -377,4 +387,3 @@ fn finalize_remote_im_departure_reflection_delegate(
     ));
     Ok(())
 }
-

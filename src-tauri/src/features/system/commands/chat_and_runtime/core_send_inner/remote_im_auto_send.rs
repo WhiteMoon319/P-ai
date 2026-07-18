@@ -373,23 +373,55 @@ fn remote_im_contact_tool_history_events(
 
 const IMAGE_FALLBACK_RECENT_USER_MESSAGE_LIMIT: usize = 7;
 
-async fn remote_im_group_reply_try_quick_rewrite(
+fn remote_im_record_reply_rewrite_fast_request(
     state: &AppState,
-    text: &str,
-    max_chars: u32,
-) -> Option<String> {
-    let api_config_id = match current_tool_review_api_config_id(state) {
-        Ok(Some(value)) => value,
-        Ok(None) => return None,
-        Err(err) => {
-            runtime_log_warn(format!("[群聊长度门] 快速模型配置读取失败，已使用本地兜底，error={err}"));
-            return None;
-        }
+    delegate_id: &str,
+    request_text: &str,
+    response_text: &str,
+    success: bool,
+    error: Option<String>,
+    model_name: Option<String>,
+    duration_ms: Option<u64>,
+) {
+    let turn = build_fast_request_turn(
+        FAST_REQUEST_KIND_REMOTE_IM_REPLY_REWRITE,
+        request_text,
+        response_text,
+        success,
+        error,
+        model_name,
+        duration_ms,
+    );
+    match delegate_runtime_thread_append_fast_request(state, delegate_id, turn) {
+        Ok(true) => {}
+        Ok(false) => runtime_log_warn(format!(
+            "[群聊长度门] 杂务记录跳过，delegate_id={}，reason=应答委托会话不存在",
+            delegate_id
+        )),
+        Err(err) => runtime_log_warn(format!(
+            "[群聊长度门] 杂务记录失败，delegate_id={}，error={}",
+            delegate_id, err
+        )),
+    }
+}
+
+fn remote_im_group_reply_rewrite_prompt(text: &str, max_units: u32) -> PreparedPrompt {
+    let count = count_remote_im_multilingual_text_units(text);
+    let preamble = if count.contains_japanese_kana {
+        format!(
+            "グループチャットの返信を短く書き直してください。最終本文だけを出力し、必要な情報と自然な文意を保ってください。日本語・中国語・韓国語は書記素単位、英語などは単語単位、絵文字は1個を1単位として、必ず {max_units} 単位以内にしてください。説明やMarkdownは不要です。"
+        )
+    } else if count.east_asian_graphemes > 0 {
+        format!(
+            "你负责压缩一条群聊回复。只输出最终正文，保留必要信息和完整自然的语义。中文、日文、韩文按可见字形计数，英文等按单词计数，Emoji 每个计 1 个单位；严格不超过 {max_units} 个有效文本单位。不要解释，不要使用 Markdown。"
+        )
+    } else {
+        format!(
+            "Rewrite this group-chat reply concisely. Output only the final reply and preserve the necessary meaning. Count Unicode words and emoji as one unit each, and count each CJK grapheme as one unit. Stay within {max_units} effective text units. Do not explain or use Markdown."
+        )
     };
-    let prepared = PreparedPrompt {
-        preamble: format!(
-            "你负责压缩一条群聊回复。只输出最终正文，保留必要信息，表达必须完整自然，严格不超过 {max_chars} 个字；不要解释，不要使用 Markdown。"
-        ),
+    PreparedPrompt {
+        preamble,
         history_messages: Vec::new(),
         latest_user_text: text.to_string(),
         latest_user_meta_text: String::new(),
@@ -397,7 +429,77 @@ async fn remote_im_group_reply_try_quick_rewrite(
         latest_user_extra_blocks: Vec::new(),
         latest_images: Vec::new(),
         latest_audios: Vec::new(),
+    }
+}
+
+async fn remote_im_reply_delegate_finalize_group_reply_draft(
+    state: &AppState,
+    delegate_id: &str,
+    text: &str,
+    max_units: u32,
+) -> String {
+    let draft = text.trim().to_string();
+    let original_units = remote_im_multilingual_text_units(&draft);
+    if draft.is_empty()
+        || !remote_im_multilingual_text_units_exceed_ratio(&draft, max_units, 2, 1)
+    {
+        return draft;
+    }
+    if !remote_im_reply_delegate_is_active(state, delegate_id) {
+        runtime_log_error(format!(
+            "[群聊长度门] 跳过，任务=应答委托杂务改写，delegate_id={}，reason=应答委托已结束",
+            delegate_id
+        ));
+        return draft;
+    }
+    let prepared = remote_im_group_reply_rewrite_prompt(&draft, max_units);
+    let request_text = prepared_prompt_to_fast_request_text(&prepared);
+    let api_config_id = match current_tool_review_api_config_id(state) {
+        Ok(Some(value)) => value,
+        Ok(None) => {
+            let error = "未配置快速模型".to_string();
+            remote_im_record_reply_rewrite_fast_request(
+                state,
+                delegate_id,
+                &request_text,
+                "",
+                false,
+                Some(error.clone()),
+                None,
+                None,
+            );
+            runtime_log_warn(format!(
+                "[群聊长度门] 失败，任务=应答委托杂务改写，delegate_id={}，original_units={}，max_units={}，error={}",
+                delegate_id, original_units, max_units, error
+            ));
+            return draft;
+        }
+        Err(err) => {
+            remote_im_record_reply_rewrite_fast_request(
+                state,
+                delegate_id,
+                &request_text,
+                "",
+                false,
+                Some(err.clone()),
+                None,
+                None,
+            );
+            runtime_log_warn(format!(
+                "[群聊长度门] 失败，任务=应答委托杂务改写，delegate_id={}，original_units={}，max_units={}，error={}",
+                delegate_id, original_units, max_units, err
+            ));
+            return draft;
+        }
     };
+    let model_name = state_read_config_cached(state)
+        .ok()
+        .and_then(|config| {
+            let selected = resolve_selected_api_config(&config, Some(&api_config_id))?;
+            let resolved = resolve_api_config(&config, Some(&api_config_id)).ok()?;
+            Some(resolved_model_name_for_quick_request(&selected, &resolved))
+        });
+    let started = std::time::Instant::now();
     match invoke_quick_model_reply_with_prepared_prompt(
         state,
         &api_config_id,
@@ -412,39 +514,70 @@ async fn remote_im_group_reply_try_quick_rewrite(
             } else {
                 reply.final_response_text
             };
-            let candidate = candidate.trim();
-            (effective_remote_im_group_reply_char_count(candidate) <= max_chars as usize)
-                .then(|| candidate.to_string())
+            let candidate = candidate.trim().to_string();
+            let duration_ms = elapsed_ms_u64(started);
+            let final_units = remote_im_multilingual_text_units(&candidate);
+            if !candidate.is_empty() && final_units <= max_units as usize {
+                remote_im_record_reply_rewrite_fast_request(
+                    state,
+                    delegate_id,
+                    &request_text,
+                    &candidate,
+                    true,
+                    None,
+                    model_name,
+                    Some(duration_ms),
+                );
+                runtime_log_info(format!(
+                    "[群聊长度门] 完成，任务=应答委托杂务改写，delegate_id={}，original_units={}，max_units={}，final_units={}，elapsed_ms={}",
+                    delegate_id, original_units, max_units, final_units, duration_ms
+                ));
+                candidate
+            } else {
+                let error = if candidate.is_empty() {
+                    "杂务改写返回空正文".to_string()
+                } else {
+                    format!(
+                        "杂务改写仍超出长度要求：final_units={}，max_units={}",
+                        final_units, max_units
+                    )
+                };
+                remote_im_record_reply_rewrite_fast_request(
+                    state,
+                    delegate_id,
+                    &request_text,
+                    &candidate,
+                    false,
+                    Some(error.clone()),
+                    model_name,
+                    Some(duration_ms),
+                );
+                runtime_log_warn(format!(
+                    "[群聊长度门] 失败，任务=应答委托杂务改写，delegate_id={}，original_units={}，max_units={}，error={}",
+                    delegate_id, original_units, max_units, error
+                ));
+                draft
+            }
         }
         Err(err) => {
-            runtime_log_warn(format!("[群聊长度门] 快速改写失败，已使用本地兜底，error={err}"));
-            None
+            let duration_ms = elapsed_ms_u64(started);
+            remote_im_record_reply_rewrite_fast_request(
+                state,
+                delegate_id,
+                &request_text,
+                "",
+                false,
+                Some(err.clone()),
+                model_name,
+                Some(duration_ms),
+            );
+            runtime_log_warn(format!(
+                "[群聊长度门] 失败，任务=应答委托杂务改写，delegate_id={}，original_units={}，max_units={}，error={}",
+                delegate_id, original_units, max_units, err
+            ));
+            draft
         }
     }
-}
-
-async fn remote_im_group_reply_apply_length_gate(
-    state: &AppState,
-    text: &str,
-    max_chars: u32,
-) -> Option<String> {
-    if effective_remote_im_group_reply_char_count(text) <= max_chars as usize {
-        return Some(text.trim().to_string());
-    }
-    let started = std::time::Instant::now();
-    let rewritten = remote_im_group_reply_try_quick_rewrite(state, text, max_chars).await;
-    let final_text = rewritten.or_else(|| enforce_remote_im_group_reply_length(text, max_chars));
-    runtime_log_warn(format!(
-        "[群聊长度门] 完成，original_chars={}，max_chars={}，final_chars={}，elapsed_ms={}",
-        effective_remote_im_group_reply_char_count(text),
-        max_chars,
-        final_text
-            .as_deref()
-            .map(effective_remote_im_group_reply_char_count)
-            .unwrap_or(0),
-        started.elapsed().as_millis()
-    ));
-    final_text
 }
 
 async fn remote_im_auto_send_assistant_reply_to_source(
@@ -494,18 +627,10 @@ async fn remote_im_auto_send_assistant_reply_to_source(
             remote_im_contact_log_label(&contact)
         ));
     }
-    let outbound_text = if contact.remote_contact_type.trim().eq_ignore_ascii_case("group") {
-        if let Some(policy) = group_policy {
-            remote_im_group_reply_apply_length_gate(state, message_text, policy.max_chars).await
-        } else {
-            Some(message_text.trim().to_string())
-        }
-    } else {
-        Some(message_text.trim().to_string())
-    };
-    let Some(outbound_text) = outbound_text.filter(|value| !value.trim().is_empty()) else {
+    let outbound_text = message_text.trim().to_string();
+    if outbound_text.is_empty() {
         return Ok(None);
-    };
+    }
     let original_segments = if let Some(message) = assistant_message {
         resolve_text_and_meme_annotations_to_inline_segments(
             state,

@@ -2546,6 +2546,17 @@
     #[test]
     fn group_reply_settlement_should_be_idempotent_after_partial_write_result() {
         let state = remote_im_test_state();
+        let mut behavior = RemoteImChannelBehaviorSettings::default();
+        behavior.group_reply_pacing.base_reply_energy_cost = 100.0;
+        behavior.group_reply_pacing.energy_cost_per_character = 1.0;
+        state_write_config_cached(
+            &state,
+            &AppConfig {
+                remote_im_channels: vec![remote_im_test_channel("channel-a", behavior)],
+                ..AppConfig::default()
+            },
+        )
+        .expect("write channel behavior config");
         let mut contact = remote_im_test_contact("contact-settlement", "conversation-settlement");
         contact.remote_contact_type = "group".to_string();
         let outbound_key = "group-reply::contact-settlement::7::message-9".to_string();
@@ -2553,7 +2564,7 @@
         runtime.remote_im_contacts.push(contact.clone());
         runtime.remote_im_contact_checkpoints.push(RemoteImContactCheckpoint {
             contact_id: contact.id.clone(),
-            energy: Some(100.0),
+            energy: Some(1.0),
             energy_updated_at: Some(now_iso()),
             group_reply_delivery: Some(RemoteImGroupReplyDeliveryMarker {
                 generation: 7,
@@ -2592,6 +2603,7 @@
             .into_iter()
             .find(|item| item.contact_id == contact.id)
             .expect("checkpoint");
+        assert_eq!(first.energy, Some(-100.0));
         assert_eq!(first.energy, second.energy);
         assert_eq!(second.last_boundary_covers_message_id.as_deref(), Some("message-9"));
         assert_eq!(
@@ -3887,7 +3899,7 @@
     }
 
     #[test]
-    fn remote_im_prepare_enqueue_runtime_state_should_not_schedule_unmentioned_message_when_present() {
+    fn remote_im_prepare_enqueue_runtime_state_should_schedule_unmentioned_message_when_present() {
         let state = remote_im_test_state();
         let mut contact = remote_im_test_contact("contact-a", "conversation-a");
         contact.remote_contact_type = "group".to_string();
@@ -3901,20 +3913,53 @@
             runtime.work_state = RemoteImWorkState::Idle;
             runtime.has_pending = false;
             runtime.last_success_reply_at = Some(now_iso());
+            runtime.last_presence_at = Some("2000-01-01T00:00:00Z".to_string());
         }
 
         let (activate_assistant, reason) =
             remote_im_prepare_enqueue_runtime_state(&state, &contact, "普通新消息")
                 .expect("prepare runtime state");
 
-        assert!(!activate_assistant);
-        assert!(reason.contains("未命中点名词"));
+        assert!(activate_assistant);
+        assert!(reason.contains("联系人仍在场"));
         let runtime_states =
             lock_remote_im_contact_runtime_states(&state).expect("lock runtime states");
         let runtime = runtime_states.get("contact-a").expect("runtime exists");
         assert_eq!(runtime.presence_state, RemoteImPresenceState::Present);
         assert_eq!(runtime.work_state, RemoteImWorkState::Idle);
         assert!(!runtime.has_pending);
+        assert_ne!(
+            runtime.last_presence_at.as_deref(),
+            Some("2000-01-01T00:00:00Z")
+        );
+    }
+
+    #[test]
+    fn remote_im_prepare_enqueue_runtime_state_should_only_require_keyword_while_away() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact("contact-entry", "conversation-entry");
+        contact.remote_contact_type = "group".to_string();
+        contact.activation_mode = "keyword".to_string();
+        contact.activation_keywords = vec!["fairy".to_string()];
+
+        let (ordinary_activates, ordinary_reason) =
+            remote_im_prepare_enqueue_runtime_state(&state, &contact, "普通新消息")
+                .expect("prepare ordinary message while away");
+        assert!(!ordinary_activates);
+        assert!(ordinary_reason.contains("未命中点名词"));
+
+        let (mention_activates, mention_reason) =
+            remote_im_prepare_enqueue_runtime_state(&state, &contact, "fairy 看一下")
+                .expect("prepare mentioned message while away");
+        assert!(mention_activates);
+        assert!(mention_reason.contains("命中点名词"));
+        let runtime_states =
+            lock_remote_im_contact_runtime_states(&state).expect("lock runtime states");
+        let runtime = runtime_states
+            .get(&contact.id)
+            .expect("entry runtime exists");
+        assert_eq!(runtime.presence_state, RemoteImPresenceState::Present);
+        assert!(runtime.last_presence_at.is_some());
     }
 
     #[test]
@@ -4382,6 +4427,44 @@
     }
 
     #[test]
+    fn group_reply_gate_should_not_estimate_reply_cost_before_generation() {
+        let state = remote_im_test_state();
+        let mut behavior = RemoteImChannelBehaviorSettings::default();
+        behavior.group_reply_pacing.base_reply_energy_cost = 100.0;
+        behavior.group_reply_pacing.energy_cost_per_character = 100.0;
+        state_write_config_cached(
+            &state,
+            &AppConfig {
+                remote_im_channels: vec![remote_im_test_channel("channel-a", behavior)],
+                ..AppConfig::default()
+            },
+        )
+        .expect("write channel behavior config");
+        let mut contact = remote_im_test_contact("contact-energy-gate", "conversation-energy-gate");
+        contact.remote_contact_type = "group".to_string();
+        state_write_runtime_state_cached(
+            &state,
+            &RuntimeStateFile {
+                remote_im_contacts: vec![contact.clone()],
+                remote_im_contact_checkpoints: vec![RemoteImContactCheckpoint {
+                    contact_id: contact.id.clone(),
+                    energy: Some(0.01),
+                    energy_updated_at: Some(now_iso()),
+                    ..RemoteImContactCheckpoint::default()
+                }],
+                ..RuntimeStateFile::default()
+            },
+        )
+        .expect("write contact energy");
+
+        let gate = remote_im_group_reply_gate(&state, &contact, false).expect("read reply gate");
+        assert!(gate.allowed);
+        assert_eq!(gate.max_chars, 20);
+        assert!((gate.energy - 0.01).abs() < 0.01);
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
     fn inspection_energy_should_count_same_positive_phrase_once_per_batch() {
         let state = remote_im_test_state();
         let mut behavior = RemoteImChannelBehaviorSettings::default();
@@ -4432,6 +4515,58 @@
             .find(|item| item.contact_id == contact.id)
             .expect("batch checkpoint");
         assert_eq!(checkpoint.energy, Some(6.0));
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn inspection_negative_energy_should_stop_at_negative_maximum() {
+        let state = remote_im_test_state();
+        let mut behavior = RemoteImChannelBehaviorSettings::default();
+        behavior.group_reply_pacing.negative_energy_phrases = vec!["烦".to_string()];
+        behavior.group_reply_pacing.negative_energy_delta = -15.0;
+        state_write_config_cached(
+            &state,
+            &AppConfig {
+                remote_im_channels: vec![remote_im_test_channel("channel-a", behavior)],
+                ..AppConfig::default()
+            },
+        )
+        .expect("write channel behavior config");
+        let mut contact = remote_im_test_contact(
+            "contact-negative-energy-batch",
+            "conversation-negative-energy-batch",
+        );
+        contact.remote_contact_type = "group".to_string();
+        state_write_runtime_state_cached(
+            &state,
+            &RuntimeStateFile {
+                remote_im_contacts: vec![contact.clone()],
+                remote_im_contact_checkpoints: vec![RemoteImContactCheckpoint {
+                    contact_id: contact.id.clone(),
+                    energy: Some(-95.0),
+                    energy_updated_at: Some(now_iso()),
+                    ..RemoteImContactCheckpoint::default()
+                }],
+                ..RuntimeStateFile::default()
+            },
+        )
+        .expect("write contact");
+        let mut message = remote_im_test_group_user_message("sender-a");
+        message.id = "negative-energy-batch-1".to_string();
+        message.parts = vec![MessagePart::Text {
+            text: "太烦了".to_string(),
+            reasoning_content: None,
+        }];
+
+        remote_im_apply_group_energy_for_messages(&state, &contact, &[message])
+            .expect("settle negative inspection energy");
+        let checkpoint = state_read_runtime_state_cached(&state)
+            .expect("read runtime ledger")
+            .remote_im_contact_checkpoints
+            .into_iter()
+            .find(|item| item.contact_id == contact.id)
+            .expect("negative checkpoint");
+        assert_eq!(checkpoint.energy, Some(-100.0));
         let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
     }
 

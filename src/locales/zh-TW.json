@@ -1759,6 +1759,7 @@
       "unknownKind": "輕量請求",
       "kindRemoteIm": "遠程 IM",
       "kindRemoteImReplyDecision": "回覆判斷",
+      "kindRemoteImReplyRewrite": "回覆改寫",
       "kindTitleGeneration": "標題生成",
       "kindTaskOptimization": "任務優化",
       "kindToolReview": "工具評估",

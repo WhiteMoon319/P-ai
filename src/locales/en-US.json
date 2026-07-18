@@ -1769,6 +1769,7 @@
       "unknownKind": "Fast request",
       "kindRemoteIm": "Remote IM",
       "kindRemoteImReplyDecision": "Reply decision",
+      "kindRemoteImReplyRewrite": "Reply rewrite",
       "kindTitleGeneration": "Title generation",
       "kindTaskOptimization": "Task optimization",
       "kindToolReview": "Tool assessment",

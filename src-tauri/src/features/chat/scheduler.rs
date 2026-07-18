@@ -999,16 +999,12 @@ async fn process_conversation_batch(
                             }
                         }
                     }
-                    remote_im_mark_contact_present(
-                        state,
-                        &contact.id,
-                        "秘书决定通知远程应答委托",
-                    )?;
-                    remote_im_schedule_presence_timeout(
+                    remote_im_mark_contact_present_and_schedule(
                         state,
                         &contact.id,
                         remote_im_channel_behavior_settings_for_contact(state, &contact)
                             .patience_seconds,
+                        "秘书决定通知远程应答委托",
                     )?;
                     let trigger_message = conversation_service_v2()
                         .get_message_by_id_for_frontend_display_only(

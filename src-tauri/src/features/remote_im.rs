@@ -23,6 +23,7 @@ struct RemoteImEnqueueInput {
 }
 
 const FAST_REQUEST_KIND_REMOTE_IM_REPLY_DECISION: &str = "remote_im_reply_decision";
+const FAST_REQUEST_KIND_REMOTE_IM_REPLY_REWRITE: &str = "remote_im_reply_rewrite";
 
 fn provider_meta_string(meta: &Option<Value>, key: &str) -> Option<String> {
     meta.as_ref()
@@ -570,6 +571,8 @@ fn effective_remote_im_channel_response_guidance(
 
 include!("remote_im/group_reply_focus.rs");
 
+include!("remote_im/multilingual_text_units.rs");
+
 include!("remote_im/group_reply_energy.rs");
 
 include!("remote_im/group_reply_state.rs");
@@ -811,14 +814,22 @@ fn remote_im_prepare_enqueue_runtime_state(
             return Ok((false, reason));
         }
     }
-    // 入场模式是新一轮巡检的唯一门槛，不能被“在场”状态绕过。
+    // 入场模式只决定 Away 状态如何重新进入群聊；Present 期间由耐心计时器
+    // 维持持续巡检，普通消息不应再次要求命中点名词。
     // 已经入场的批次只追加消息，后续消息也不再改变本批巡检等级。
     let (activate_assistant, entry_reason) =
         if remote_im_group_reply_has_active_batch(state, &contact.id) {
             (true, "当前批次已入场，追加消息且保持原巡检等级".to_string())
+        } else if runtime.presence_state == RemoteImPresenceState::Present {
+            (true, "联系人仍在场，进入下一轮巡检".to_string())
         } else {
             remote_im_should_enter_group_inspection(contact, message_text)
         };
+    if activate_assistant {
+        runtime.presence_state = RemoteImPresenceState::Present;
+        runtime.last_presence_at = Some(now_iso());
+        runtime.consecutive_no_reply_count = 0;
+    }
     let reason = format!("{mute_prefix}{entry_reason}");
     runtime_log_info(format!(
         "[远程联系人状态机] 入站判定完成：联系人={}，内容={}，在场={:?}，工作={:?}，待办={}，入场={}，原因={}",
@@ -847,6 +858,19 @@ fn remote_im_prepare_enqueue_runtime_state(
             reason
         ),
     );
+    drop(runtime_states);
+    if activate_assistant {
+        if let Err(err) = remote_im_schedule_presence_timeout(
+            state,
+            &contact.id,
+            behavior.patience_seconds,
+        ) {
+            runtime_log_warn(format!(
+                "[远程联系人在场] 计时刷新失败，contact_id={}，error={}",
+                contact.id, err
+            ));
+        }
+    }
     Ok((activate_assistant, reason))
 }
 

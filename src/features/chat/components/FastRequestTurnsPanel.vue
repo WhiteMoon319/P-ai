@@ -212,6 +212,7 @@ function kindLabel(kind: string) {
   const normalized = normalizeKind(kind);
   if (normalized === "remote_im") return t("chat.fastRequest.kindRemoteIm");
   if (normalized === "remote_im_reply_decision") return t("chat.fastRequest.kindRemoteImReplyDecision");
+  if (normalized === "remote_im_reply_rewrite") return t("chat.fastRequest.kindRemoteImReplyRewrite");
   if (normalized === "title_generation") return t("chat.fastRequest.kindTitleGeneration");
   if (normalized === "task_optimization") return t("chat.fastRequest.kindTaskOptimization");
   if (normalized === "tool_review") return t("chat.fastRequest.kindToolReview");
@@ -230,10 +231,11 @@ function fastRequestSectionKey(kind: string) {
 function fastRequestKindOrder(kind: string) {
   const normalized = normalizeKind(kind);
   if (normalized === "remote_im_reply_decision") return 0;
-  if (normalized === "remote_im") return 1;
-  if (normalized === "title_generation") return 2;
-  if (normalized === "task_optimization") return 3;
-  if (normalized === "tool_review") return 4;
+  if (normalized === "remote_im_reply_rewrite") return 1;
+  if (normalized === "remote_im") return 2;
+  if (normalized === "title_generation") return 3;
+  if (normalized === "task_optimization") return 4;
+  if (normalized === "tool_review") return 5;
   return 99;
 }
 

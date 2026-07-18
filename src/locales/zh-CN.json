@@ -1747,6 +1747,7 @@
       "unknownKind": "轻量请求",
       "kindRemoteIm": "远程 IM",
       "kindRemoteImReplyDecision": "回复判断",
+      "kindRemoteImReplyRewrite": "回复改写",
       "kindTitleGeneration": "标题生成",
       "kindTaskOptimization": "任务优化",
       "kindToolReview": "工具评估",

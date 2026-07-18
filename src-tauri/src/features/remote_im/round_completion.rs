@@ -166,6 +166,7 @@ fn remote_im_finalize_round_completion(
     let runtime = state_read_runtime_state_cached(state)?;
     let mut runtime_states = lock_remote_im_contact_runtime_states(state)?;
     let mut follow_up_sources = Vec::<RemoteImActivationSource>::new();
+    let mut presence_timeouts = std::collections::HashMap::<String, u64>::new();
     for source in activated_sources {
         let Some(contact) =
             remote_im_contact_by_activation_source_in_runtime(&runtime.remote_im_contacts, source)
@@ -255,6 +256,13 @@ fn remote_im_finalize_round_completion(
             runtime.presence_state = RemoteImPresenceState::Present;
             follow_up_sources.push(source.clone());
         }
+        if runtime.presence_state == RemoteImPresenceState::Present {
+            runtime.last_presence_at = Some(finished_at.to_string());
+            presence_timeouts.insert(
+                contact.id.clone(),
+                remote_im_channel_behavior_settings_for_contact(state, contact).patience_seconds,
+            );
+        }
         runtime_log_info(format!(
             "[远程联系人状态机] 轮次结束 完成: contact_id={}, decision={}, presence={:?}->{:?}, pending={}->{}, no_reply_count={}->{}, follow_up={}, last_success_reply_at={}",
             contact.id,
@@ -288,6 +296,10 @@ fn remote_im_finalize_round_completion(
             ),
         );
     }
+    drop(runtime_states);
+    for (contact_id, patience_seconds) in presence_timeouts {
+        remote_im_schedule_presence_timeout(state, &contact_id, patience_seconds)?;
+    }
     Ok(follow_up_sources)
 }
 
@@ -309,6 +321,7 @@ fn remote_im_finalize_async_send_result(
     let previous_presence = runtime.presence_state;
     let previous_no_reply_count = runtime.consecutive_no_reply_count;
     runtime.presence_state = RemoteImPresenceState::Present;
+    runtime.last_presence_at = Some(now.to_string());
     runtime.consecutive_no_reply_count = 0;
     if send_ok {
         runtime.last_success_reply_at = Some(now.to_string());
@@ -340,5 +353,11 @@ fn remote_im_finalize_async_send_result(
             error.unwrap_or("")
         ),
     );
+    drop(runtime_states);
+    remote_im_schedule_presence_timeout(
+        state,
+        &contact.id,
+        remote_im_channel_behavior_settings_for_contact(state, contact).patience_seconds,
+    )?;
     Ok(())
 }

@@ -364,17 +364,16 @@ async fn process_persisted_remote_im_events_individually_now(
                 }
             }
         }
-        if let Err(err) = remote_im_mark_contact_present(state, &contact.id, "巡检决定通知远程应答委托") {
-            runtime_log_warn(format!(
-                "[群聊巡检] 在场状态降级，contact_id={}，error={}",
-                contact.id, err
-            ));
-        }
         let patience_seconds = remote_im_channel_behavior_settings_for_contact(state, &contact)
             .patience_seconds;
-        if let Err(err) = remote_im_schedule_presence_timeout(state, &contact.id, patience_seconds) {
+        if let Err(err) = remote_im_mark_contact_present_and_schedule(
+            state,
+            &contact.id,
+            patience_seconds,
+            "巡检决定通知远程应答委托",
+        ) {
             runtime_log_warn(format!(
-                "[群聊巡检] 在场计时降级，contact_id={}，error={}",
+                "[群聊巡检] 在场状态或计时刷新降级，contact_id={}，error={}",
                 contact.id, err
             ));
         }
