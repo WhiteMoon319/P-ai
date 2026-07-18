@@ -378,55 +378,6 @@ fn ready_store_has_remote_im_platform_message(
     Ok(false)
 }
 
-fn pending_event_has_remote_im_platform_message(
-    event: &ChatPendingEvent,
-    channel_id: &str,
-    remote_contact_type: &str,
-    remote_contact_id: &str,
-    platform_message_id: &str,
-) -> bool {
-    event.sender_info.as_ref().is_some_and(|sender| {
-        sender.channel_id.trim() == channel_id
-            && sender.remote_contact_type.trim() == remote_contact_type
-            && sender.remote_contact_id.trim() == remote_contact_id
-            && sender.platform_message_id.as_deref().map(str::trim) == Some(platform_message_id)
-    })
-}
-
-fn remote_im_is_duplicate_platform_message(
-    state: &AppState,
-    conversation_id: &str,
-    channel_id: &str,
-    remote_contact_type: &str,
-    remote_contact_id: &str,
-    platform_message_id: &str,
-) -> Result<bool, String> {
-    if ready_store_has_remote_im_platform_message(
-        state,
-        conversation_id,
-        channel_id,
-        remote_contact_type,
-        remote_contact_id,
-        platform_message_id,
-    )? {
-        return Ok(true);
-    }
-
-    let slots = lock_conversation_runtime_slots(state)?;
-    Ok(slots.values().any(|slot| {
-        slot.pending_queue.iter().any(|event| {
-            event.conversation_id == conversation_id
-                && pending_event_has_remote_im_platform_message(
-                    event,
-                    channel_id,
-                    remote_contact_type,
-                    remote_contact_id,
-                    platform_message_id,
-                )
-        })
-    }))
-}
-
 struct ValidatedEnqueueInput {
     text: String,
     images: Vec<BinaryPart>,

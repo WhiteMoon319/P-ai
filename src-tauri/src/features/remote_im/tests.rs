@@ -1707,6 +1707,84 @@
     }
 
     #[test]
+    fn remote_im_direct_append_should_atomically_dedup_platform_message() {
+        let state = remote_im_test_state();
+        write_config(&state.config_path, &AppConfig::default()).expect("write config");
+        let mut contact = remote_im_test_contact("contact-direct-append", "");
+        contact.bound_conversation_id = None;
+        let conversation_id = ensure_remote_im_contact_conversation_id(&state, &mut contact)
+            .expect("ensure contact conversation");
+        let build_message = |id: &str| ChatMessage {
+            id: id.to_string(),
+            role: "user".to_string(),
+            created_at: "2026-07-18T01:02:03Z".to_string(),
+            speaker_agent_id: None,
+            parts: vec![MessagePart::Text {
+                text: "并发远程消息".to_string(),
+                reasoning_content: None,
+            }],
+            extra_text_blocks: Vec::new(),
+            provider_meta: Some(serde_json::json!({
+                "origin": {
+                    "kind": "remote_im",
+                    "channel_id": "channel-a",
+                    "contact_type": "private",
+                    "contact_id": "remote-a",
+                    "platform_message_id": "platform-atomic-1"
+                }
+            })),
+            tool_call: None,
+            mcp_call: None,
+            meme_annotations: None,
+        };
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let mut handles = Vec::new();
+        for index in 0..2 {
+            let state = state.clone();
+            let conversation_id = conversation_id.clone();
+            let barrier = barrier.clone();
+            let message = build_message(&format!("direct-append-{index}"));
+            handles.push(std::thread::spawn(move || {
+                barrier.wait();
+                conversation_service_v2().append_remote_im_user_message_if_new(
+                    &state,
+                    &conversation_id,
+                    &message,
+                    "channel-a",
+                    "private",
+                    "remote-a",
+                    Some("platform-atomic-1"),
+                    &[],
+                )
+            }));
+        }
+        let inserted = handles
+            .into_iter()
+            .map(|handle| handle.join().expect("join append").expect("append message"))
+            .filter(Option::is_some)
+            .count();
+        assert_eq!(inserted, 1);
+        let messages = conversation_service_v2()
+            .get_conversation_recent_messages(&state, &conversation_id, 10)
+            .expect("read appended messages");
+        let matched = messages
+            .iter()
+            .filter(|message| {
+                message_has_remote_im_platform_message(
+                    message,
+                    "channel-a",
+                    "private",
+                    "remote-a",
+                    "platform-atomic-1",
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(matched.len(), 1);
+        assert_eq!(matched[0].created_at, "2026-07-18T01:02:03Z");
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
     fn remote_im_collect_secretary_recent_messages_should_keep_last_seven_and_truncate_each_item() {
         let mut contact = remote_im_test_contact("contact-a", "conversation-a");
         contact.remote_contact_type = "private".to_string();
@@ -3492,11 +3570,10 @@
                 generation: 9,
                 phase: RemoteImGroupReplyPhase::AssistantDispatching,
                 start_message_id: "message-active".to_string(),
-                end_message_id: "message-active".to_string(),
                 decision_end_message_id: Some("message-active".to_string()),
-                pending_start_message_id: None,
                 focus: false,
-                pending_focus: false,
+                energy_settled: false,
+                next_round_mention: false,
                 event,
                 due_at: std::time::Instant::now(),
                 inspection_kind: RemoteImGroupReplyTimerKind::Mention,
@@ -4012,6 +4089,7 @@
             let entry = store.by_contact.get(&key).expect("non mention scheduled");
             assert_eq!(entry.phase, RemoteImGroupReplyPhase::NonMentionScheduled);
             assert_eq!(entry.start_message_id, "message-normal");
+            assert!(entry.event.messages.is_empty());
             (entry.generation, entry.due_at)
         };
         let (activate_assistant, reason) =
@@ -4025,22 +4103,27 @@
             let entry = store.by_contact.get(&key).expect("same inspection");
             assert_eq!(entry.generation, initial_generation);
             assert_eq!(entry.due_at, initial_due_at);
-            assert_eq!(entry.end_message_id, "message-normal-2");
+            assert!(entry.decision_end_message_id.is_none());
         }
         observe_remote_im_persisted_event(&state, &contact, &event("wake", "user-b", "@助理 看这里"));
         {
             let store = remote_im_group_reply_state_store().lock().expect("lock group state");
             let entry = store.by_contact.get(&key).expect("same inspection");
-            assert_eq!(entry.phase, RemoteImGroupReplyPhase::NonMentionScheduled);
-            assert_eq!(entry.generation, initial_generation);
-            assert_eq!(entry.due_at, initial_due_at);
+            assert_eq!(entry.phase, RemoteImGroupReplyPhase::MentionScheduled);
+            assert!(entry.generation > initial_generation);
+            assert_ne!(entry.due_at, initial_due_at);
             assert_eq!(entry.start_message_id, "message-normal");
-            assert_eq!(entry.end_message_id, "message-wake");
+            assert!(entry.decision_end_message_id.is_none());
         }
+        let current_generation = lock_remote_im_group_reply_state_store()
+            .by_contact
+            .get(&key)
+            .map(|entry| entry.generation)
+            .expect("current generation");
         assert!(remote_im_group_reply_generation_is_current(
             &state,
             &contact.id,
-            initial_generation,
+            current_generation,
         ));
     }
 
@@ -4082,11 +4165,10 @@
                 generation,
                 phase: RemoteImGroupReplyPhase::AssistantDispatching,
                 start_message_id: "message-retry-start".to_string(),
-                end_message_id: "message-retry-latest".to_string(),
                 decision_end_message_id: Some("message-retry-start".to_string()),
-                pending_start_message_id: Some("message-retry-pending".to_string()),
                 focus: false,
-                pending_focus: true,
+                energy_settled: false,
+                next_round_mention: false,
                 event,
                 due_at: std::time::Instant::now(),
                 inspection_kind: RemoteImGroupReplyTimerKind::Mention,
@@ -4117,11 +4199,6 @@
             retried.decision_end_message_id.as_deref(),
             Some("message-retry-start")
         );
-        assert_eq!(
-            retried.pending_start_message_id.as_deref(),
-            Some("message-retry-pending")
-        );
-        assert!(retried.pending_focus);
         store.by_contact.remove(&key);
     }
 
@@ -4272,6 +4349,60 @@
             .remote_im_contact_checkpoints
             .iter()
             .any(|item| item.contact_id == second.id));
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn inspection_energy_should_count_same_positive_phrase_once_per_batch() {
+        let state = remote_im_test_state();
+        let mut behavior = RemoteImChannelBehaviorSettings::default();
+        behavior.group_reply_pacing.positive_energy_phrases = vec!["谢谢".to_string()];
+        behavior.group_reply_pacing.positive_energy_delta = 6.0;
+        state_write_config_cached(
+            &state,
+            &AppConfig {
+                remote_im_channels: vec![remote_im_test_channel("channel-a", behavior)],
+                ..AppConfig::default()
+            },
+        )
+        .expect("write channel behavior config");
+        let mut contact = remote_im_test_contact("contact-energy-batch", "conversation-energy-batch");
+        contact.remote_contact_type = "group".to_string();
+        state_write_runtime_state_cached(
+            &state,
+            &RuntimeStateFile {
+                remote_im_contacts: vec![contact.clone()],
+                remote_im_contact_checkpoints: vec![RemoteImContactCheckpoint {
+                    contact_id: contact.id.clone(),
+                    energy: Some(0.0),
+                    energy_updated_at: Some(now_iso()),
+                    ..RemoteImContactCheckpoint::default()
+                }],
+                ..RuntimeStateFile::default()
+            },
+        )
+        .expect("write contact");
+        let mut first = remote_im_test_group_user_message("sender-a");
+        first.id = "energy-batch-1".to_string();
+        first.parts = vec![MessagePart::Text {
+            text: "谢谢，收到".to_string(),
+            reasoning_content: None,
+        }];
+        let mut second = remote_im_test_group_user_message("sender-b");
+        second.id = "energy-batch-2".to_string();
+        second.parts = vec![MessagePart::Text {
+            text: "再次谢谢".to_string(),
+            reasoning_content: None,
+        }];
+        remote_im_apply_group_energy_for_messages(&state, &contact, &[first, second])
+            .expect("settle inspection batch energy");
+        let runtime = state_read_runtime_state_cached(&state).expect("read runtime ledger");
+        let checkpoint = runtime
+            .remote_im_contact_checkpoints
+            .iter()
+            .find(|item| item.contact_id == contact.id)
+            .expect("batch checkpoint");
+        assert_eq!(checkpoint.energy, Some(6.0));
         let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
     }
 

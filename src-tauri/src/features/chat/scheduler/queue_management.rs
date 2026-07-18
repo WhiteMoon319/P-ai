@@ -120,7 +120,13 @@ pub(crate) fn get_queue_snapshot(state: &AppState) -> Result<Vec<ChatQueueEventS
                         _ => None,
                     })
                 })
-                .unwrap_or_default();
+                .unwrap_or_else(|| {
+                    if event.persisted_message_ids.is_empty() {
+                        String::new()
+                    } else {
+                        "（消息已保存，等待处理）".to_string()
+                    }
+                });
             let preview = if message_preview.chars().count() > 50 {
                 format!(
                     "{}...",
@@ -551,4 +557,3 @@ pub(crate) fn ingress_chat_event(
     claims.insert(event.conversation_id.clone());
     Ok(ChatEventIngress::Direct(event))
 }
-

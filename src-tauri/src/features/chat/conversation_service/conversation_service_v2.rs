@@ -1881,6 +1881,117 @@ impl ConversationServiceV2 {
         Ok(())
     }
 
+    /// 远程入站专用追加：平台消息去重与 ready-store 写入必须共享同一会话门。
+    /// 返回 `None` 表示平台消息已经存在；返回 `Some` 表示本次完成了正式追加。
+    fn append_remote_im_user_message_if_new(
+        &self,
+        state: &AppState,
+        conversation_id: &str,
+        message: &ChatMessage,
+        channel_id: &str,
+        remote_contact_type: &str,
+        remote_contact_id: &str,
+        platform_message_id: Option<&str>,
+        memory_recall_ids: &[String],
+    ) -> Result<Option<ChatMessage>, String> {
+        let conversation_id = conversation_id.trim();
+        if conversation_id.is_empty() {
+            return Err("远程入站追加缺少 conversation_id".to_string());
+        }
+        if message.role.trim() != "user" {
+            return Err("远程入站追加只允许 user message".to_string());
+        }
+        let mutation_gate = conversation_mutation_gate(&state.data_path, conversation_id)?;
+        let _guard = mutation_gate.lock().map_err(|err| {
+            named_lock_error(
+                "conversation_mutation_gate",
+                file!(),
+                line!(),
+                module_path!(),
+                &err,
+            )
+        })?;
+        let conversation_meta = self.get_conversation_meta(state, conversation_id)?;
+        if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
+            return Err(format!("远程入站目标会话不存在：{conversation_id}"));
+        }
+        let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
+        let platform_message_id = platform_message_id
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        if let Some(platform_message_id) = platform_message_id {
+            ensure_ready_message_store_from_legacy_conversation(
+                state,
+                conversation_id,
+                &store_paths,
+            )?;
+            if ready_store_has_remote_im_platform_message(
+                state,
+                conversation_id,
+                channel_id.trim(),
+                remote_contact_type.trim(),
+                remote_contact_id.trim(),
+                platform_message_id,
+            )? {
+                return Ok(None);
+            }
+        }
+        let updated_at = message.created_at.clone();
+        let unread_count = if self.conversation_has_active_chat_view(state, conversation_id)
+            || conversation_meta.conversation_kind.trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT
+        {
+            0
+        } else {
+            conversation_meta.unread_count.saturating_add(1)
+        };
+        let (updated_meta, (), _) = state_update_conversation_meta_cached_unlocked(
+            state,
+            conversation_id,
+            |cached| {
+                let mut metadata_conversation =
+                    self.build_conversation_snapshot_from_meta(cached, Vec::new());
+                metadata_conversation.unread_count = unread_count;
+                metadata_conversation.updated_at = updated_at.clone();
+                metadata_conversation.last_user_at = Some(updated_at.clone());
+                for memory_id in memory_recall_ids {
+                    if !metadata_conversation
+                        .memory_recall_table
+                        .iter()
+                        .any(|item| item == memory_id)
+                    {
+                        metadata_conversation.memory_recall_table.push(memory_id.clone());
+                    }
+                }
+                cached.apply_metadata_fields_from_conversation(&metadata_conversation);
+                cached.apply_appended_messages(std::slice::from_ref(message));
+                Ok(())
+            },
+        )?;
+        let metadata_conversation =
+            self.build_conversation_snapshot_from_meta(&updated_meta, Vec::new());
+        state_upsert_chat_index_conversation_cached(state, &metadata_conversation)?;
+        let mut ready_meta = self.ensure_appendable_ready_message_store(state, conversation_id)?;
+        ready_meta.apply_metadata_fields_from_meta(&updated_meta);
+        ready_meta.apply_appended_messages(std::slice::from_ref(message));
+        message_store::write_jsonl_snapshot_appended_messages_shard_from_meta(
+            &store_paths,
+            &ready_meta,
+            std::slice::from_ref(message),
+        )?;
+        self.mark_conversation_metadata_cached_persisted(state, conversation_id)?;
+        if let Err(err) = emit_unarchived_conversation_overview_item_updated_from_state(
+            state,
+            conversation_id,
+        ) {
+            runtime_log_warn(format!(
+                "[会话概览] 跳过，任务=远程入站直接写入后推送单会话，conversation_id={}，error={}",
+                conversation_id, err
+            ));
+        }
+        emit_conversation_message_appended_event(state, conversation_id, message);
+        Ok(Some(message.clone()))
+    }
+
     fn increment_unread_count_if_background(
         &self,
         state: &AppState,

@@ -16,13 +16,13 @@
 // 因此，这里实现的不是传统“用户发一句 -> 助理立刻回一句”的线性聊天，
 // 而是一个面向未来跨进程协作的“单主助理消息流”：
 //
-// 1. 新消息先进入调度层
-//    所有新消息，无论来自用户、任务、委托、系统，未来甚至来自其他进程，
-//    都必须先进入调度层，不能直接写进正式历史。
+// 1. 未持久化事件先进入调度层
+//    用户、任务、委托和系统事件由调度器在领取后写入历史；远程 IM 入站是明确例外，
+//    它先直接写入正式历史，私聊队列只保留消息 ID 引用，群聊直接交给巡检。
 //
 // 2. 正式历史是唯一生效层
-//    一条消息只有在批量写入 conversation.messages 之后，才算正式生效。
-//    因此消息的业务时间应以“刷入历史的时间”为准，而不是入队时间。
+//    未持久化事件只有在批量写入消息仓库后才算正式生效；远程 IM 消息在入站
+//    直接追加成功时已经生效，其 created_at 始终保留接收时间。
 //
 // 3. 主助理永远只有一个前台轮次
 //    当主助理正在流式，或者正在整理上下文时，普通队列消息不能插入当前轮次。
@@ -104,6 +104,10 @@ pub(crate) struct ChatPendingEvent {
     pub queue_mode: ChatQueueMode,
     /// 要写入的消息集合
     pub messages: Vec<ChatMessage>,
+    /// 已经写入正式消息仓库、只等待调度的消息 ID。
+    /// 远程入站使用该引用，调度器不得再次追加正文。
+    #[serde(default)]
+    pub persisted_message_ids: Vec<String>,
     /// 是否在本批消息写入历史后激活主助理
     pub activate_assistant: bool,
     /// 若本批消息会激活主助理，则预先分配真实 assistant message id
@@ -499,7 +503,7 @@ fn claim_queued_conversation_batches(
 /// 语义上，它是在做“下一轮候选输入结算”：
 /// 1. 把当前门口的所有消息先收进来；
 /// 2. 按会话分别批处理；
-/// 3. 每个会话先批量写正式历史；
+/// 3. 未持久化事件先批量写正式历史，远程私聊引用跳过重复写入；
 /// 4. 再决定该会话是否需要开启新的主助理轮次。
 pub(crate) async fn process_chat_queue(state: &AppState) -> Result<(), String> {
     let claimed_batches = claim_queued_conversation_batches(state)?;
@@ -522,9 +526,10 @@ pub(crate) async fn process_chat_queue(state: &AppState) -> Result<(), String> {
 
 /// 处理单个会话的批次
 ///
-/// 这里严格遵守“先历史，后激活”的顺序：
-/// 1. 不论是否需要激活主助理，先把整批消息写入正式历史；
-/// 2. 写入时统一刷新 created_at，确保消息生效时间以入历史为准；
+/// 普通未持久化事件严格遵守“先历史，后激活”的顺序；远程私聊引用在函数入口
+/// 转入专用分支，从 ready-store 读取上下文并直接等待下一轮：
+/// 1. 普通事件先把整批消息写入正式历史；
+/// 2. 普通事件写入时刷新 created_at；远程入站不进入这一步；
 /// 3. 然后再判断 should_activate：
 ///    - false：只更新历史，不开启流式；
 ///    - true：先通知前端历史已落地，再开启新的主助理轮次。
@@ -533,6 +538,13 @@ async fn process_conversation_batch(
     conversation_id: &str,
     events: Vec<ChatPendingEvent>,
 ) -> Result<(), String> {
+    if events.iter().all(|event| {
+        matches!(event.source, ChatEventSource::RemoteIm)
+            && !event.persisted_message_ids.is_empty()
+            && event.messages.is_empty()
+    }) {
+        return process_persisted_remote_im_private_batch(state, conversation_id, events).await;
+    }
     let event_ids = events
         .iter()
         .map(|event| event.id.clone())
@@ -1321,6 +1333,167 @@ async fn process_conversation_batch(
     }
 
     Ok(())
+}
+
+/// 私聊远程消息已经在入站阶段写入 ready-store；这里仅从正式历史取回引用消息，
+/// 绑定主助理下一轮，不再执行 scheduler history flush。
+async fn process_persisted_remote_im_private_batch(
+    state: &AppState,
+    conversation_id: &str,
+    events: Vec<ChatPendingEvent>,
+) -> Result<(), String> {
+    let event_ids = events.iter().map(|event| event.id.clone()).collect::<Vec<_>>();
+    let mut hydrated_events = Vec::<ChatPendingEvent>::with_capacity(events.len());
+    for mut event in events {
+        let mut messages = Vec::<ChatMessage>::with_capacity(event.persisted_message_ids.len());
+        for message_id in &event.persisted_message_ids {
+            let message = match conversation_service_v2()
+                .get_message_by_id_for_frontend_display_only(state, conversation_id, message_id)
+            {
+                Ok(message) => message,
+                Err(err) => {
+                    let error = format!(
+                        "读取已保存远程私聊消息失败，conversation_id={}，message_id={}，error={}",
+                        conversation_id, message_id, err
+                    );
+                    let _ = complete_pending_chat_events_with_error(state, &event_ids, &error);
+                    return Err(error);
+                }
+            };
+            messages.push(message);
+        }
+        if messages.is_empty() {
+            let error = format!(
+                "已保存远程私聊调度引用为空，conversation_id={}，event_id={}",
+                conversation_id, event_ids.first().map(String::as_str).unwrap_or_default()
+            );
+            let _ = complete_pending_chat_events_with_error(state, &event_ids, &error);
+            return Err(error);
+        }
+        event.messages = messages;
+        hydrated_events.push(event);
+    }
+    let sources = hydrated_events
+        .iter()
+        .filter_map(|event| event.sender_info.as_ref())
+        .map(remote_im_activation_source_from_sender)
+        .collect::<Vec<_>>();
+    let contact = match remote_im_resolve_secretary_contact(state, &sources) {
+        Ok(Some(contact)) => contact,
+        Ok(None) => {
+            complete_pending_chat_events_with_error(
+                state,
+                &event_ids,
+                "远程私聊联系人已不存在或不再可用",
+            )?;
+            return Ok(());
+        }
+        Err(err) => {
+            let error = format!("解析远程私聊联系人失败：{err}");
+            complete_pending_chat_events_with_error(state, &event_ids, &error)?;
+            return Err(error);
+        }
+    };
+    let assistant_context = match remote_im_resolve_contact_assistant_context(state, &contact) {
+        Ok(context) => context,
+        Err(err) => {
+            let error = format!("解析远程私聊助理上下文失败：{err}");
+            complete_pending_chat_events_with_error(state, &event_ids, &error)?;
+            return Err(error);
+        }
+    };
+    set_conversation_remote_im_assistant_context(
+        state,
+        conversation_id,
+        Some(assistant_context.clone()),
+    )?;
+    let session_info = ChatSessionInfo {
+        department_id: assistant_context.department_id.clone(),
+        agent_id: assistant_context.agent_id.clone(),
+    };
+    let activation = collect_active_chat_view_activations(state, conversation_id)?
+        .into_iter()
+        .last();
+    let assistant_message_id = hydrated_events
+        .iter()
+        .rev()
+        .find(|event| event.activate_assistant)
+        .and_then(|event| event.assistant_message_id.clone());
+    let runtime_context = hydrated_events
+        .iter()
+        .rev()
+        .find_map(|event| event.runtime_context.clone());
+    let guided_event_ids = hydrated_events
+        .iter()
+        .map(|event| event.id.clone())
+        .collect::<Vec<_>>();
+    let started_at = hydrated_events
+        .iter()
+        .flat_map(|event| event.messages.iter())
+        .map(|message| message.created_at.clone())
+        .find(|value| !value.trim().is_empty())
+        .unwrap_or_else(now_iso);
+    let activated_sources = sources.clone();
+    match activate_main_assistant(
+        state,
+        &session_info,
+        conversation_id,
+        activation,
+        assistant_message_id,
+        Some(guided_event_ids.as_slice()),
+        runtime_context,
+        activated_sources.clone(),
+        &started_at,
+    )
+    .await
+    {
+        Ok(activated) => {
+            let result = activated.result;
+            let follow_up_sources = remote_im_finalize_round_completion(
+                state,
+                &activated_sources,
+                result.remote_im_reply_decision.as_deref(),
+                result.remote_im_reply_target.as_ref(),
+                None,
+                &now_iso(),
+            )?;
+            emit_round_completed_event(
+                state,
+                conversation_id,
+                &result,
+                Some(activated.activation_id.as_str()),
+                Some(activated.request_id.as_str()),
+            );
+            complete_pending_chat_events_with_result(state, &event_ids, result)?;
+            if !follow_up_sources.is_empty() {
+                runtime_log_info(format!(
+                    "[远程联系人状态机] 私聊待办续跑，conversation_id={}，source_count={}",
+                    conversation_id,
+                    follow_up_sources.len()
+                ));
+            }
+            Ok(())
+        }
+        Err(err) => {
+            emit_round_failed_event(
+                state,
+                conversation_id,
+                &err,
+                None,
+                None,
+            );
+            complete_pending_chat_events_with_error(state, &event_ids, &err)?;
+            let _ = remote_im_finalize_round_completion(
+                state,
+                &activated_sources,
+                None,
+                None,
+                Some(&err),
+                &now_iso(),
+            );
+            Err(err)
+        }
+    }
 }
 
 /// 激活主助理

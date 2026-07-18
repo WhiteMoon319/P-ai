@@ -698,6 +698,7 @@ fn create_pending_event(
         source: ChatEventSource::RemoteIm,
         queue_mode,
         messages,
+        persisted_message_ids: Vec::new(),
         activate_assistant,
         assistant_message_id: None,
         session_info,

@@ -191,70 +191,44 @@ fn remote_im_group_reply_gate(
     })
 }
 
-fn remote_im_group_inbound_phrase_delta(
-    text: &str,
+fn remote_im_group_inbound_batch_delta(
+    messages: &[ChatMessage],
     pacing: &RemoteImGroupReplyPacing,
 ) -> f64 {
-    let normalized_text = text.to_lowercase();
-    let positive_hits = pacing
-        .positive_energy_phrases
-        .iter()
-        .filter(|phrase| normalized_text.contains(&phrase.to_lowercase()))
-        .count() as f64;
-    let negative_hits = pacing
-        .negative_energy_phrases
-        .iter()
-        .filter(|phrase| normalized_text.contains(&phrase.to_lowercase()))
-        .count() as f64;
-    let cap = pacing.maximum_energy * 0.2;
-    (positive_hits * pacing.positive_energy_delta).min(cap)
-        + (negative_hits * pacing.negative_energy_delta).max(-cap)
-}
-
-fn remote_im_group_energy_repeat_allowed(
-    state: &AppState,
-    contact_id: &str,
-    sender_id: &str,
-    text: &str,
-) -> bool {
-    static RECENT: std::sync::OnceLock<
-        std::sync::Mutex<std::collections::HashMap<String, std::time::Instant>>,
-    > = std::sync::OnceLock::new();
-    let store = RECENT.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
-    let key = format!(
-        "{}::{}::{}::{}",
-        state.data_path.to_string_lossy(),
-        contact_id,
-        sender_id,
-        text.trim().to_lowercase()
-    );
-    let now = std::time::Instant::now();
-    let Ok(mut recent) = store.lock() else {
-        return true;
-    };
-    recent.retain(|_, at| now.duration_since(*at) < std::time::Duration::from_secs(300));
-    if recent
-        .get(&key)
-        .is_some_and(|at| now.duration_since(*at) < std::time::Duration::from_secs(30))
-    {
-        return false;
+    let mut positive_phrases = std::collections::HashSet::<String>::new();
+    let mut negative_hits = 0usize;
+    for message in messages {
+        let text = render_message_content_for_model(message).to_lowercase();
+        for phrase in &pacing.positive_energy_phrases {
+            let phrase = phrase.trim().to_lowercase();
+            if !phrase.is_empty() && text.contains(&phrase) {
+                positive_phrases.insert(phrase);
+            }
+        }
+        negative_hits = negative_hits.saturating_add(
+            pacing
+                .negative_energy_phrases
+                .iter()
+                .filter(|phrase| {
+                    let phrase = phrase.trim().to_lowercase();
+                    !phrase.is_empty() && text.contains(&phrase)
+                })
+                .count(),
+        );
     }
-    recent.insert(key, now);
-    true
+    let cap = pacing.maximum_energy * 0.2;
+    (positive_phrases.len() as f64 * pacing.positive_energy_delta).min(cap)
+        + (negative_hits as f64 * pacing.negative_energy_delta).max(-cap)
 }
 
-fn remote_im_apply_inbound_group_energy(
+fn remote_im_apply_group_energy_for_messages(
     state: &AppState,
     contact: &RemoteImContact,
-    sender_id: &str,
-    text: &str,
+    messages: &[ChatMessage],
 ) -> Result<(), String> {
     let pacing = effective_remote_im_group_reply_pacing(state, contact);
-    let delta = remote_im_group_inbound_phrase_delta(text, &pacing);
+    let delta = remote_im_group_inbound_batch_delta(messages, &pacing);
     if delta.abs() <= f64::EPSILON {
-        return Ok(());
-    }
-    if !remote_im_group_energy_repeat_allowed(state, &contact.id, sender_id, text) {
         return Ok(());
     }
     let now = now_utc();
@@ -271,10 +245,35 @@ fn remote_im_apply_inbound_group_energy(
         Ok(before)
     })?;
     runtime_log_debug(format!(
-        "[群聊能量] 入站词库结算，contact_id={}，before={:.2}，delta={:.2}",
+        "[群聊能量] 巡检范围词库结算，contact_id={}，before={:.2}，delta={:.2}",
         contact.id, before, delta
     ));
     Ok(())
+}
+
+#[cfg(test)]
+fn remote_im_apply_inbound_group_energy(
+    state: &AppState,
+    contact: &RemoteImContact,
+    _sender_id: &str,
+    text: &str,
+) -> Result<(), String> {
+    let message = ChatMessage {
+        id: String::new(),
+        role: "user".to_string(),
+        created_at: now_iso(),
+        speaker_agent_id: None,
+        parts: vec![MessagePart::Text {
+            text: text.to_string(),
+            reasoning_content: None,
+        }],
+        extra_text_blocks: Vec::new(),
+        provider_meta: None,
+        tool_call: None,
+        mcp_call: None,
+        meme_annotations: None,
+    };
+    remote_im_apply_group_energy_for_messages(state, contact, std::slice::from_ref(&message))
 }
 
 fn remote_im_prepare_group_reply_delivery(
@@ -301,7 +300,12 @@ fn remote_im_prepare_group_reply_delivery(
         current
             .decision_end_message_id
             .clone()
-            .unwrap_or_else(|| current.end_message_id.clone())
+            .ok_or_else(|| {
+                format!(
+                    "群聊巡检尚未冻结边界：contact_id={}，generation={generation}",
+                    contact.id
+                )
+            })?
     };
     let outbound_key = format!(
         "group-reply::{}::{}::{}",

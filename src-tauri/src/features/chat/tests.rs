@@ -2642,6 +2642,7 @@
                 source: ChatEventSource::RemoteIm,
                 queue_mode: ChatQueueMode::Normal,
                 messages: vec![test_text_message("user", "来自张三的第一条消息", &created_at)],
+                persisted_message_ids: Vec::new(),
                 activate_assistant: true,
                 assistant_message_id: None,
                 session_info: ChatSessionInfo {
@@ -2658,6 +2659,7 @@
                 source: ChatEventSource::RemoteIm,
                 queue_mode: ChatQueueMode::Normal,
                 messages: vec![test_text_message("user", "来自张三的第二条消息", &created_at)],
+                persisted_message_ids: Vec::new(),
                 activate_assistant: true,
                 assistant_message_id: None,
                 session_info: ChatSessionInfo {
@@ -2674,6 +2676,7 @@
                 source: ChatEventSource::RemoteIm,
                 queue_mode: ChatQueueMode::Normal,
                 messages: vec![test_text_message("user", "来自李四的消息", &created_at)],
+                persisted_message_ids: Vec::new(),
                 activate_assistant: true,
                 assistant_message_id: None,
                 session_info: ChatSessionInfo {
@@ -2690,6 +2693,7 @@
                 source: ChatEventSource::User,
                 queue_mode: ChatQueueMode::Normal,
                 messages: vec![test_text_message("user", "普通用户消息", &now_iso())],
+                persisted_message_ids: Vec::new(),
                 activate_assistant: true,
                 assistant_message_id: None,
                 session_info: ChatSessionInfo {
@@ -2766,6 +2770,7 @@
             source: ChatEventSource::RemoteIm,
             queue_mode: ChatQueueMode::Normal,
             messages: vec![test_text_message("user", "忙碌期间来的新消息", &created_at)],
+            persisted_message_ids: Vec::new(),
             activate_assistant: true,
             assistant_message_id: None,
             session_info: ChatSessionInfo {
@@ -3103,11 +3108,10 @@
                 generation,
                 phase: RemoteImGroupReplyPhase::AssistantDispatching,
                 start_message_id: "group-trigger-a".to_string(),
-                end_message_id: "group-trigger-a".to_string(),
                 decision_end_message_id: Some("group-trigger-a".to_string()),
-                pending_start_message_id: None,
                 focus: false,
-                pending_focus: false,
+                energy_settled: false,
+                next_round_mention: false,
                 event,
                 due_at: std::time::Instant::now(),
                 inspection_kind: RemoteImGroupReplyTimerKind::Mention,
@@ -3197,11 +3201,10 @@
                     generation,
                     phase: RemoteImGroupReplyPhase::AssistantDispatching,
                     start_message_id: "group-preflight-a".to_string(),
-                    end_message_id: "group-preflight-a".to_string(),
                     decision_end_message_id: Some("group-preflight-a".to_string()),
-                    pending_start_message_id: None,
                     focus: false,
-                    pending_focus: false,
+                    energy_settled: false,
+                    next_round_mention: false,
                     event: create_pending_event(
                         "group-preflight-event".to_string(),
                         conversation_id.clone(),
@@ -3845,6 +3848,7 @@
             source: ChatEventSource::User,
             queue_mode: ChatQueueMode::Normal,
             messages: vec![test_text_message("user", "hello", &created_at)],
+            persisted_message_ids: Vec::new(),
             activate_assistant: true,
             assistant_message_id: None,
             session_info: ChatSessionInfo {

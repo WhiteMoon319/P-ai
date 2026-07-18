@@ -118,6 +118,7 @@ fn maybe_enqueue_goal_continue_after_idle(
         source: ChatEventSource::System,
         queue_mode: ChatQueueMode::Normal,
         messages: vec![message],
+        persisted_message_ids: Vec::new(),
         activate_assistant: true,
         assistant_message_id: None,
         session_info: ChatSessionInfo {
