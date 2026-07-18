@@ -165,7 +165,6 @@ function mapRemoteImChannel(item: unknown): RemoteImChannelConfig {
       && typeof (item as { credentials?: unknown }).credentials === "object"
         ? { ...((item as { credentials?: Record<string, unknown> }).credentials || {}) }
         : {},
-    activateAssistant: (item as { activateAssistant?: unknown })?.activateAssistant !== false,
     receiveFiles: (item as { receiveFiles?: unknown })?.receiveFiles !== false,
     streamingSend: !!(item as { streamingSend?: unknown })?.streamingSend,
     showToolCalls: !!(item as { showToolCalls?: unknown })?.showToolCalls,

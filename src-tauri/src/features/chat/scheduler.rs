@@ -781,13 +781,12 @@ async fn process_conversation_batch(
                         "[远程联系人入场] 当前助理上下文非法，跳过本轮激活: conversation_id={}, contact_id={}, error={}",
                         conversation_id, contact.id, err
                     ));
-                    remote_im_append_channel_log(
-                        &contact.channel_id,
+                    remote_im_append_contact_log(
+                        &contact,
                         "warn",
                         format!(
-                            "[联系人入场] 跳过: contact={}, conversation_id={}, reason={}",
+                            "[联系人入场] 跳过: contact={}, reason={}",
                             remote_im_contact_log_label(&contact),
-                            conversation_id,
                             err
                         ),
                     );
@@ -861,13 +860,12 @@ async fn process_conversation_batch(
                             "[远程联系人秘书] 判断失败，降级为不回复: conversation_id={}, contact_id={}, error={}",
                             conversation_id, contact.id, err
                         ));
-                        remote_im_append_channel_log(
-                            &contact.channel_id,
+                        remote_im_append_contact_log(
+                            &contact,
                             "warn",
                             format!(
-                                "[联系人秘书] 智能判断失败: contact={}, conversation_id={}, strategy=smart_judge, fallback=no_reply, error={}",
+                                "[联系人秘书] 智能判断失败: contact={}, strategy=smart_judge, fallback=no_reply, error={}",
                                 remote_im_contact_log_label(&contact),
-                                conversation_id,
                                 err
                             ),
                         );
@@ -893,13 +891,12 @@ async fn process_conversation_batch(
                         },
                         decision.reason
                     ));
-                    remote_im_append_channel_log(
-                        &contact.channel_id,
+                    remote_im_append_contact_log(
+                        &contact,
                         "info",
                         format!(
-                            "[联系人秘书] 智能判断: contact={}, conversation_id={}, result={}, model={}, history_count={}, new_count={}, reason={}",
+                            "[联系人秘书] 智能判断: contact={}, result={}, model={}, history_count={}, new_count={}, reason={}",
                             remote_im_contact_log_label(&contact),
-                            conversation_id,
                             if decision.should_reply { "回复" } else { "不回复" },
                             if decision.model_name.trim().is_empty() {
                                 "fallback"

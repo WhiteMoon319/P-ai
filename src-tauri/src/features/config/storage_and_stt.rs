@@ -878,7 +878,6 @@ fn normalize_remote_im_channels(config: &mut AppConfig) {
             platform: raw.platform.clone(),
             enabled: raw.enabled,
             credentials,
-            activate_assistant: raw.activate_assistant,
             receive_files: raw.receive_files,
             streaming_send: raw.streaming_send,
             show_tool_calls: raw.show_tool_calls,

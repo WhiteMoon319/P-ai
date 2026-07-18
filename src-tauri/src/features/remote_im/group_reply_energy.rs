@@ -245,8 +245,8 @@ fn remote_im_apply_group_energy_for_messages(
         Ok(before)
     })?;
     runtime_log_debug(format!(
-        "[群聊能量] 巡检范围词库结算，contact_id={}，before={:.2}，delta={:.2}",
-        contact.id, before, delta
+        "[群聊能量] 巡检范围词库结算：联系人={}，结算前={:.2}，变化={:.2}",
+        remote_im_contact_log_label(contact), before, delta
     ));
     Ok(())
 }

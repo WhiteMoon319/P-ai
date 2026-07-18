@@ -325,7 +325,6 @@ export type RemoteImChannelConfig = {
   platform: RemoteImPlatform;
   enabled: boolean;
   credentials: Record<string, unknown>;
-  activateAssistant: boolean;
   receiveFiles: boolean;
   streamingSend: boolean;
   showToolCalls: boolean;

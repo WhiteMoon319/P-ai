@@ -4,6 +4,9 @@ pub struct LocalPortServiceLogEntry {
     pub timestamp: DateTime<Utc>,
     pub level: String,
     pub message: String,
+    /// 仅用于联系人日志的内部筛选，不展示给用户。
+    #[serde(default, skip_serializing)]
+    pub contact_record_id: Option<String>,
 }
 
 pub type ChannelLogEntry = LocalPortServiceLogEntry;
@@ -117,10 +120,24 @@ impl LocalPortServiceCore {
     }
 
     pub async fn add_log(&self, service_id: &str, level: &str, message: &str) {
+        self.add_log_for_contact(service_id, level, message, None).await;
+    }
+
+    pub async fn add_log_for_contact(
+        &self,
+        service_id: &str,
+        level: &str,
+        message: &str,
+        contact_record_id: Option<&str>,
+    ) {
         let entry = LocalPortServiceLogEntry {
             timestamp: Utc::now(),
             level: level.to_string(),
             message: message.to_string(),
+            contact_record_id: contact_record_id
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned),
         };
         let mut logs = self.logs.write().await;
         let service_logs = logs

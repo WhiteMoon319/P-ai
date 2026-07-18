@@ -227,7 +227,6 @@ async fn parse_and_enqueue_dingtalk_callback(
             if value.is_empty() { None } else { Some(value) }
         },
         dingtalk_session_webhook_expired_time: int_field(callback_payload, "sessionWebhookExpiredTime"),
-        activate_assistant: Some(channel.activate_assistant),
         session: SessionSelector {
             api_config_id: None,
             department_id: None,

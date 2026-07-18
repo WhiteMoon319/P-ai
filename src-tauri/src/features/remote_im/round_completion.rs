@@ -48,13 +48,12 @@ fn remote_im_handle_persisted_event_after_history_flush_runtime(
         now,
     );
     if !event.activate_assistant {
-        remote_im_append_channel_log(
-            &contact.channel_id,
+        remote_im_append_contact_log(
+            &contact,
             "info",
             format!(
-                "[联系人状态] 历史落地: contact={}, conversation_id={}, activate=否, reason=event_gate_blocked",
-                remote_im_contact_log_label(&contact),
-                conversation.id
+                "[联系人状态] 历史落地: contact={}, activate=否, reason=event_gate_blocked",
+                remote_im_contact_log_label(&contact)
             ),
         );
         return Ok(false);
@@ -80,13 +79,12 @@ fn remote_im_handle_persisted_event_after_history_flush_runtime(
         }
     };
     if !should_activate {
-        remote_im_append_channel_log(
-            &contact.channel_id,
+        remote_im_append_contact_log(
+            &contact,
             "info",
             format!(
-                "[联系人状态] 历史落地: contact={}, conversation_id={}, activate=否, reason={}",
+                "[联系人状态] 历史落地: contact={}, activate=否, reason={}",
                 remote_im_contact_log_label(&contact),
-                conversation.id,
                 entry_reason
             ),
         );
@@ -135,13 +133,12 @@ fn remote_im_handle_persisted_event_after_history_flush_runtime(
             contact.id, conversation.id
         ));
     }
-    remote_im_append_channel_log(
-        &contact.channel_id,
+    remote_im_append_contact_log(
+        &contact,
         "info",
         format!(
-            "[联系人状态] 历史落地: contact={}, conversation_id={}, presence={} -> {}, work={} -> {}, pending={} -> {}, activate={}, reason={}",
+            "[联系人状态] 历史落地: contact={}, presence={} -> {}, work={} -> {}, pending={} -> {}, activate={}, reason={}",
             remote_im_contact_log_label(&contact),
-            conversation.id,
             remote_im_presence_state_label(previous_presence),
             remote_im_presence_state_label(current_presence),
             remote_im_work_state_label(previous_work),
@@ -194,8 +191,8 @@ fn remote_im_finalize_round_completion(
                 previous_pending,
                 error
             ));
-            remote_im_append_channel_log(
-                &contact.channel_id,
+            remote_im_append_contact_log(
+                contact,
                 "warn",
                 format!(
                     "[联系人状态] 轮次收尾失败: contact={}, decision={}, presence={} -> {}, work={} -> {}, pending={} -> {}, error={}",
@@ -271,8 +268,8 @@ fn remote_im_finalize_round_completion(
             should_follow_up_after_round,
             runtime.last_success_reply_at.as_deref().unwrap_or("")
         ));
-        remote_im_append_channel_log(
-            &contact.channel_id,
+        remote_im_append_contact_log(
+            contact,
             "info",
             format!(
                 "[联系人状态] 轮次结束: contact={}, decision={}, presence={} -> {}, work={} -> {}, pending={} -> {}, no_reply_count={} -> {}, follow_up={}, last_success_reply_at={}",
@@ -316,15 +313,20 @@ fn remote_im_finalize_async_send_result(
     if send_ok {
         runtime.last_success_reply_at = Some(now.to_string());
     }
-    runtime_log_error(format!(
-        "[远程联系人状态机] 异步发送{}: contact_id={}, last_success_reply_at={}, error={}",
+    let send_log = format!(
+        "[远程联系人状态机] 异步发送{}：联系人={}，最近成功回复时间={}，异常={}",
         if send_ok { "完成" } else { "失败" },
-        contact.id,
+        remote_im_contact_log_label(&contact),
         runtime.last_success_reply_at.as_deref().unwrap_or(""),
         error.unwrap_or("")
-    ));
-    remote_im_append_channel_log(
-        &contact.channel_id,
+    );
+    if send_ok {
+        runtime_log_info(send_log);
+    } else {
+        runtime_log_error(send_log);
+    }
+    remote_im_append_contact_log(
+        &contact,
         if send_ok { "info" } else { "warn" },
         format!(
             "[联系人状态] 异步发送收尾: contact={}, result={}, presence={} -> {}, no_reply_count={} -> {}, last_success_reply_at={}, error={}",

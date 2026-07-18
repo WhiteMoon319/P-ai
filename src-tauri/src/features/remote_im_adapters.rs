@@ -1595,7 +1595,6 @@ mod remote_im_adapter_tests {
             platform,
             enabled: true,
             credentials,
-            activate_assistant: true,
             receive_files: true,
             streaming_send: false,
             show_tool_calls: false,

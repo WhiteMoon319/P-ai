@@ -374,7 +374,6 @@ export function useConfigCore(options: UseConfigCoreOptions) {
         platform: normalizeRemoteImPlatform(item.platform),
         enabled: !!item.enabled,
         credentials: item.credentials && typeof item.credentials === "object" ? { ...item.credentials } : {},
-        activateAssistant: item.activateAssistant !== false,
         receiveFiles: item.receiveFiles !== false,
         streamingSend: !!item.streamingSend,
         showToolCalls: !!item.showToolCalls,

@@ -868,9 +868,21 @@ async fn remote_im_group_reply_handle_timer(
         );
         return;
     }
+    let batch_preview = range_messages
+        .iter()
+        .rev()
+        .find(|message| remote_im_group_reply_message_matches_contact(message, &contact))
+        .map(render_message_content_for_model)
+        .map(|text| remote_im_preview_text(&text, 100))
+        .unwrap_or_else(|| "（无文本）".to_string());
     runtime_log_info(format!(
-        "[群聊巡检] 到期，contact_id={}，generation={}，path={:?}，energy={:.2}，max_chars={}",
-        contact.id, action.generation, action.kind, gate.energy, gate.max_chars
+        "[群聊巡检] 开始：联系人={}，内容={}，轮次={}，路径={:?}，能量={:.2}，回复上限={}字",
+        remote_im_contact_log_label(&contact),
+        batch_preview,
+        action.generation,
+        action.kind,
+        gate.energy,
+        gate.max_chars
     ));
     let ready = RemoteImReplyDebounceReady {
         contact_id: contact.id.clone(),
@@ -1031,9 +1043,10 @@ fn observe_remote_im_persisted_event(
             }
     }
     if let Some(action) = action {
-        runtime_log_debug(format!(
-            "[群聊巡检] 安排，contact_id={}，generation={}，path={:?}，delay_ms={}",
-            contact.id,
+        runtime_log_info(format!(
+            "[群聊巡检] 已安排：联系人={}，内容={}，轮次={}，路径={:?}，等待毫秒={}",
+            remote_im_contact_log_label(contact),
+            remote_im_preview_text(&render_message_content_for_model(message), 100),
             action.generation,
             action.kind,
             action.delay.as_millis()

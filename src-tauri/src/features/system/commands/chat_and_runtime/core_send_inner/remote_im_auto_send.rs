@@ -468,10 +468,10 @@ async fn remote_im_auto_send_assistant_reply_to_source(
     };
     let config = state_read_config_cached(state)?;
     let channel = remote_im_channel_by_id(&config, &source.channel_id)
-        .ok_or_else(|| format!("远程IM渠道不存在: {}", source.channel_id))?
+        .ok_or_else(|| "自动发送目标渠道不存在或已删除".to_string())?
         .clone();
     if !channel.enabled {
-        return Err(format!("远程IM渠道未启用: {}", source.channel_id));
+        return Err("自动发送目标渠道未启用".to_string());
     }
     let runtime = state_read_runtime_state_cached(state)?;
     let contact = runtime
@@ -482,22 +482,16 @@ async fn remote_im_auto_send_assistant_reply_to_source(
                 && item.remote_contact_id == source.remote_contact_id
         })
         .ok_or_else(|| {
-            format!(
-                "未找到自动发送目标联系人: channel_id={}, contact_id={}",
-                source.channel_id, source.remote_contact_id
-            )
+            format!("未找到自动发送目标联系人：{}", remote_im_activation_source_log_label(source))
         })?
         .clone();
     if !contact.allow_send {
-        return Err(format!(
-            "用户已禁止向该联系人发送消息: channel_id={}, contact_id={}",
-            source.channel_id, source.remote_contact_id
-        ));
+        return Err(format!("联系人“{}”未开启发送", remote_im_contact_log_label(&contact)));
     }
     if remote_im_contact_is_muted(state, &contact.id)? {
         return Err(format!(
-            "联系人处于闭嘴状态，已拦截外发: channel_id={}, contact_id={}",
-            source.channel_id, source.remote_contact_id
+            "联系人“{}”处于闭嘴状态，已拦截外发",
+            remote_im_contact_log_label(&contact)
         ));
     }
     let outbound_text = if contact.remote_contact_type.trim().eq_ignore_ascii_case("group") {
@@ -755,6 +749,62 @@ async fn remote_im_auto_send_and_record_decision(
     }
 }
 
+fn remote_im_auto_send_log_labels(
+    state: &AppState,
+    source: &RemoteImActivationSource,
+) -> (String, String) {
+    let channel_label = state_read_config_cached(state)
+        .ok()
+        .and_then(|config| remote_im_channel_by_id(&config, &source.channel_id).cloned())
+        .map(|channel| {
+            let name = channel.name.trim();
+            if name.is_empty() {
+                "当前渠道".to_string()
+            } else {
+                name.to_string()
+            }
+        })
+        .unwrap_or_else(|| "当前渠道".to_string());
+    let contact_label = state_read_runtime_state_cached(state)
+        .ok()
+        .and_then(|runtime| {
+            runtime
+                .remote_im_contacts
+                .iter()
+                .find(|contact| {
+                    contact.channel_id == source.channel_id
+                        && contact.remote_contact_type == source.remote_contact_type
+                        && contact.remote_contact_id == source.remote_contact_id
+                })
+                .map(remote_im_contact_log_label)
+        })
+        .unwrap_or_else(|| remote_im_activation_source_log_label(source));
+    (channel_label, contact_label)
+}
+
+fn remote_im_append_contact_log_for_activation_source(
+    state: &AppState,
+    source: &RemoteImActivationSource,
+    level: &str,
+    message: String,
+) {
+    let contact = state_read_runtime_state_cached(state).ok().and_then(|runtime| {
+        runtime
+            .remote_im_contacts
+            .into_iter()
+            .find(|contact| {
+                contact.channel_id == source.channel_id
+                    && contact.remote_contact_type == source.remote_contact_type
+                    && contact.remote_contact_id == source.remote_contact_id
+            })
+    });
+    if let Some(contact) = contact {
+        remote_im_append_contact_log(&contact, level, message);
+    } else {
+        remote_im_append_channel_log(&source.channel_id, level, message);
+    }
+}
+
 fn spawn_remote_im_auto_send_contact_assistant_reply(
     state: AppState,
     activation_source: RemoteImActivationSource,
@@ -767,12 +817,11 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
     tauri::async_runtime::spawn(async move {
         let group_policy = group_dispatch.as_ref().map(|(_, policy)| *policy);
         let started = std::time::Instant::now();
+        let (channel_label, contact_label) = remote_im_auto_send_log_labels(&state, &activation_source);
+        let reply_preview = remote_im_preview_text(&assistant_text, 100);
         runtime_log_info(format!(
-            "[远程IM][自动发送] 开始: conversation_id={}, channel_id={}, contact_id={}, text_len={}",
-            conversation_id,
-            activation_source.channel_id,
-            activation_source.remote_contact_id,
-            assistant_text.chars().count()
+            "[远程IM][自动发送] 开始：渠道={}，联系人={}，内容={}",
+            channel_label, contact_label, reply_preview
         ));
         match remote_im_auto_send_and_record_decision(
             &state,
@@ -794,10 +843,10 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
                     None,
                 );
                 runtime_log_info(format!(
-                    "[远程IM][自动发送] 完成: conversation_id={}, channel_id={}, contact_id={}, action={}, elapsed_ms={}",
-                    conversation_id,
-                    activation_source.channel_id,
-                    activation_source.remote_contact_id,
+                    "[远程IM][自动发送] 完成：渠道={}，联系人={}，内容={}，动作={}，耗时毫秒={}",
+                    channel_label,
+                    contact_label,
+                    reply_preview,
                     action,
                     started.elapsed().as_millis()
                 ));
@@ -811,10 +860,10 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
                     Some(&error),
                 );
                 runtime_log_warn(format!(
-                    "[远程IM][自动发送] 结果不确定，已消费当前批次并禁止自动重发: conversation_id={}, channel_id={}, contact_id={}, error={}, elapsed_ms={}",
-                    conversation_id,
-                    activation_source.channel_id,
-                    activation_source.remote_contact_id,
+                    "[远程IM][自动发送] 结果不确定，已消费当前批次并禁止自动重发：渠道={}，联系人={}，内容={}，异常={}，耗时毫秒={}",
+                    channel_label,
+                    contact_label,
+                    reply_preview,
                     error,
                     started.elapsed().as_millis()
                 ));
@@ -828,29 +877,28 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
                     Some(&error),
                 );
                 runtime_log_warn(format!(
-                    "[远程IM][自动发送] 前置检查失败，正文未发送且批次已保留重排: conversation_id={}, channel_id={}, contact_id={}, error={}, elapsed_ms={}",
-                    conversation_id,
-                    activation_source.channel_id,
-                    activation_source.remote_contact_id,
+                    "[远程IM][自动发送] 前置检查失败，正文未发送且批次已保留重排：渠道={}，联系人={}，内容={}，异常={}，耗时毫秒={}",
+                    channel_label,
+                    contact_label,
+                    reply_preview,
                     error,
                     started.elapsed().as_millis()
                 ));
             }
             Ok(RemoteImAutoSendExecutionOutcome::SkippedEmptyReply) => {
                 runtime_log_warn(format!(
-                    "[远程IM][自动发送] 跳过: conversation_id={}, channel_id={}, contact_id={}, reason=empty_reply, elapsed_ms={}",
-                    conversation_id,
-                    activation_source.channel_id,
-                    activation_source.remote_contact_id,
+                    "[远程IM][自动发送] 跳过：渠道={}，联系人={}，原因=模型返回空回复，耗时毫秒={}",
+                    channel_label,
+                    contact_label,
                     started.elapsed().as_millis()
                 ));
-                remote_im_append_channel_log(
-                    &activation_source.channel_id,
+                remote_im_append_contact_log_for_activation_source(
+                    &state,
+                    &activation_source,
                     "info",
                     format!(
-                        "[联系人消息] 发出跳过: contact={}, action=reply_async, conversation_id={}, reason=empty_reply",
+                        "[联系人消息] 发出跳过: contact={}, action=reply_async, reason=empty_reply",
                         remote_im_activation_source_log_label(&activation_source),
-                        conversation_id
                     ),
                 );
                 if let Some((contact_id, policy)) = group_dispatch.as_ref() {
@@ -864,19 +912,18 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
             }
             Ok(RemoteImAutoSendExecutionOutcome::SkippedMuted) => {
                 runtime_log_warn(format!(
-                    "[远程IM][自动发送] 跳过: conversation_id={}, channel_id={}, contact_id={}, reason=muted, elapsed_ms={}",
-                    conversation_id,
-                    activation_source.channel_id,
-                    activation_source.remote_contact_id,
+                    "[远程IM][自动发送] 跳过：渠道={}，联系人={}，原因=联系人处于闭嘴状态，耗时毫秒={}",
+                    channel_label,
+                    contact_label,
                     started.elapsed().as_millis()
                 ));
-                remote_im_append_channel_log(
-                    &activation_source.channel_id,
+                remote_im_append_contact_log_for_activation_source(
+                    &state,
+                    &activation_source,
                     "info",
                     format!(
-                        "[联系人消息] 发出跳过: contact={}, action=reply_async, conversation_id={}, reason=muted",
+                        "[联系人消息] 发出跳过: contact={}, action=reply_async, reason=muted",
                         remote_im_activation_source_log_label(&activation_source),
-                        conversation_id
                     ),
                 );
                 if let Some((contact_id, policy)) = group_dispatch.as_ref() {
@@ -897,10 +944,10 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
                     Some(&err),
                 );
                 runtime_log_error(format!(
-                    "[远程IM][自动发送] 失败: conversation_id={}, channel_id={}, contact_id={}, error={}, elapsed_ms={}",
-                    conversation_id,
-                    activation_source.channel_id,
-                    activation_source.remote_contact_id,
+                    "[远程IM][自动发送] 失败：渠道={}，联系人={}，内容={}，异常={}，耗时毫秒={}",
+                    channel_label,
+                    contact_label,
+                    reply_preview,
                     err,
                     started.elapsed().as_millis()
                 ));

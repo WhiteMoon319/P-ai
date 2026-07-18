@@ -392,8 +392,8 @@ async fn remote_im_send_content_payload_with_stage(
         }
     })?;
     if muted {
-        remote_im_append_channel_log_async(
-            &contact.channel_id,
+        remote_im_append_contact_log_async(
+            contact,
             "info",
             format!(
                 "[联系人消息] 发出跳过: contact={}, action={}, reason=muted",
@@ -405,8 +405,8 @@ async fn remote_im_send_content_payload_with_stage(
         return Err(RemoteImSendContentError {
             stage: RemoteImSendContentErrorStage::Preflight,
             message: format!(
-                "联系人处于闭嘴状态，已拦截外发: contact_id={}",
-                contact.id
+                "联系人“{}”处于闭嘴状态，已拦截外发",
+                remote_im_contact_log_label(contact)
             ),
         });
     }
@@ -428,8 +428,8 @@ async fn remote_im_send_content_payload_with_stage(
     let platform_message_id = match remote_im_send_via_sdk(&send_channel, contact, &payload).await {
         Ok(value) => value,
         Err(err) => {
-            remote_im_append_channel_log_async(
-                &contact.channel_id,
+            remote_im_append_contact_log_async(
+                contact,
                 "warn",
                 format!(
                     "[联系人消息] 发出失败: contact={}, action={}, text_count={}, image_count={}, file_count={}, other_count={}, preview={}, error={}",
@@ -457,18 +457,17 @@ async fn remote_im_send_content_payload_with_stage(
             });
         }
     };
-    remote_im_append_channel_log_async(
-        &contact.channel_id,
+    remote_im_append_contact_log_async(
+        contact,
         "info",
         format!(
-            "[联系人消息] 发出: contact={}, action={}, text_count={}, image_count={}, file_count={}, other_count={}, platform_message_id={}, preview={}",
+            "[联系人消息] 发出: contact={}, action={}, text_count={}, image_count={}, file_count={}, other_count={}, preview={}",
             remote_im_contact_log_label(contact),
             action.trim(),
             content_digest.text_count,
             content_digest.image_count,
             content_digest.file_count,
             content_digest.other_count,
-            platform_message_id,
             content_digest.text_preview
         ),
     )

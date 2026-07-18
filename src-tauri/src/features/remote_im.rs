@@ -18,8 +18,6 @@ struct RemoteImEnqueueInput {
     dingtalk_session_webhook: Option<String>,
     #[serde(default)]
     dingtalk_session_webhook_expired_time: Option<i64>,
-    #[serde(default)]
-    activate_assistant: Option<bool>,
     session: SessionSelector,
     payload: ChatInputPayload,
 }
@@ -286,11 +284,10 @@ pub(crate) fn remote_im_channel_by_id<'a>(
 
 fn remote_im_upsert_contact_for_inbound(
     runtime: &mut RuntimeStateFile,
-    channel: &RemoteImChannelConfig,
     input: &RemoteImEnqueueInput,
     now: &str,
 ) -> String {
-    let default_allow_receive = remote_im_resolve_inbound_activate(channel, input.activate_assistant);
+    let default_allow_receive = false;
     if let Some(contact) = runtime.remote_im_contacts.iter_mut().find(|item| {
         item.channel_id == input.channel_id
             && item.remote_contact_type == input.remote_contact_type.trim()
@@ -733,20 +730,22 @@ fn remote_im_prepare_enqueue_runtime_state(
                 mute_prefix, keyword, mute_until
             );
             runtime_log_info(format!(
-                "[远程联系人状态机] 入站判定 完成: contact_id={}, presence={:?}, work={:?}, pending={}, activate_assistant={}, reason={}",
-                contact.id,
+                "[远程联系人状态机] 入站判定完成：联系人={}，内容={}，在场={:?}，工作={:?}，待办={}，入场={}，原因={}",
+                remote_im_contact_log_label(contact),
+                remote_im_preview_text(message_text, 100),
                 runtime.presence_state,
                 runtime.work_state,
                 runtime.has_pending,
                 false,
                 reason
             ));
-            remote_im_append_channel_log(
-                &contact.channel_id,
+            remote_im_append_contact_log(
+                contact,
                 "info",
                 format!(
-                    "[联系人状态] 入站判定: contact={}, presence={} -> {}, work={} -> {}, pending={} -> {}, activate={}, reason={}",
+                    "[联系人状态] 入站判定: contact={}, message={}, presence={} -> {}, work={} -> {}, pending={} -> {}, activate={}, reason={}",
                     remote_im_contact_log_label(contact),
+                    remote_im_preview_text(message_text, 100),
                     remote_im_presence_state_label(previous_presence),
                     remote_im_presence_state_label(runtime.presence_state),
                     remote_im_work_state_label(previous_work),
@@ -777,20 +776,22 @@ fn remote_im_prepare_enqueue_runtime_state(
                 mute_prefix, mute_until
             );
             runtime_log_info(format!(
-                "[远程联系人状态机] 入站判定 完成: contact_id={}, presence={:?}, work={:?}, pending={}, activate_assistant={}, reason={}",
-                contact.id,
+                "[远程联系人状态机] 入站判定完成：联系人={}，内容={}，在场={:?}，工作={:?}，待办={}，入场={}，原因={}",
+                remote_im_contact_log_label(contact),
+                remote_im_preview_text(message_text, 100),
                 runtime.presence_state,
                 runtime.work_state,
                 runtime.has_pending,
                 false,
                 reason
             ));
-            remote_im_append_channel_log(
-                &contact.channel_id,
+            remote_im_append_contact_log(
+                contact,
                 "info",
                 format!(
-                    "[联系人状态] 入站判定: contact={}, presence={} -> {}, work={} -> {}, pending={} -> {}, activate={}, reason={}",
+                    "[联系人状态] 入站判定: contact={}, message={}, presence={} -> {}, work={} -> {}, pending={} -> {}, activate={}, reason={}",
                     remote_im_contact_log_label(contact),
+                    remote_im_preview_text(message_text, 100),
                     remote_im_presence_state_label(previous_presence),
                     remote_im_presence_state_label(runtime.presence_state),
                     remote_im_work_state_label(previous_work),
@@ -820,20 +821,22 @@ fn remote_im_prepare_enqueue_runtime_state(
         };
     let reason = format!("{mute_prefix}{entry_reason}");
     runtime_log_info(format!(
-        "[远程联系人状态机] 入站判定 完成: contact_id={}, presence={:?}, work={:?}, pending={}, activate_assistant={}, reason={}",
-        contact.id,
+        "[远程联系人状态机] 入站判定完成：联系人={}，内容={}，在场={:?}，工作={:?}，待办={}，入场={}，原因={}",
+        remote_im_contact_log_label(contact),
+        remote_im_preview_text(message_text, 100),
         runtime.presence_state,
         runtime.work_state,
         runtime.has_pending,
         activate_assistant,
         reason
     ));
-    remote_im_append_channel_log(
-        &contact.channel_id,
+    remote_im_append_contact_log(
+        contact,
         "info",
         format!(
-            "[联系人状态] 入站判定: contact={}, presence={} -> {}, work={} -> {}, pending={} -> {}, activate={}, reason={}",
+            "[联系人状态] 入站判定: contact={}, message={}, presence={} -> {}, work={} -> {}, pending={} -> {}, activate={}, reason={}",
             remote_im_contact_log_label(contact),
+            remote_im_preview_text(message_text, 100),
             remote_im_presence_state_label(previous_presence),
             remote_im_presence_state_label(runtime.presence_state),
             remote_im_work_state_label(previous_work),

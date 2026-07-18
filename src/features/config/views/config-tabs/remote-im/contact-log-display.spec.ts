@@ -10,10 +10,10 @@ describe("buildContactLogDisplayItem", () => {
     const item = buildContactLogDisplayItem({
       timestamp: "2026-07-13T00:00:00Z",
       level: "info",
-      message: "[联系人消息] 收到: sender=小明(123), preview=你好, image_count=2, audio_count=0, attachment_count=1",
+      message: "[联系人消息] 收到: sender=小明, preview=你好, image_count=2, audio_count=0, attachment_count=1",
     }, t);
 
-    expect(item?.summary).toBe("[小明/123]你好");
+    expect(item?.summary).toBe("[小明]你好");
     expect(item?.detail).toContain("imageCount");
     expect(item?.detail).toContain("attachmentCount");
   });
@@ -27,7 +27,7 @@ describe("buildContactLogDisplayItem", () => {
     const item = buildContactLogDisplayItem({
       timestamp: "now",
       level: "info",
-      message: "[联系人消息] 过滤跳过: contact=小明[private:123], prefix=#, text_len=20",
+      message: "[联系人消息] 过滤跳过: contact=小明, prefix=#, text_len=20",
     }, t);
 
     expect(item?.kind).toBe("config.remoteIm.logKindFilter");

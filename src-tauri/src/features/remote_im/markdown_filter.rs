@@ -296,7 +296,6 @@ console.log(result);
             platform: RemoteImPlatform::Dingtalk,
             enabled: true,
             credentials: serde_json::json!({}),
-            activate_assistant: true,
             receive_files: true,
             streaming_send: false,
             show_tool_calls: false,

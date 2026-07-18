@@ -52,20 +52,11 @@ fn remote_im_preview_text(text: &str, max_chars: usize) -> String {
 }
 
 fn remote_im_contact_log_label(contact: &RemoteImContact) -> String {
-    format!(
-        "{}[{}:{}]",
-        remote_im_contact_display_name(contact),
-        contact.remote_contact_type.trim(),
-        contact.remote_contact_id.trim()
-    )
+    remote_im_contact_display_name(contact)
 }
 
 fn remote_im_contact_log_marker(contact: &RemoteImContact) -> String {
-    format!(
-        "[{}:{}]",
-        contact.remote_contact_type.trim(),
-        contact.remote_contact_id.trim()
-    )
+    contact.id.trim().to_string()
 }
 
 fn remote_im_contact_downloads_segment(value: &str, fallback: &str) -> String {
@@ -105,17 +96,11 @@ fn remote_im_contact_downloads_relative_dir(contact: &RemoteImContact) -> String
 
 fn remote_im_activation_source_log_label(source: &RemoteImActivationSource) -> String {
     let display_name = source.remote_contact_name.trim();
-    let name = if display_name.is_empty() {
-        source.remote_contact_id.trim()
+    if display_name.is_empty() {
+        "未知联系人".to_string()
     } else {
-        display_name
-    };
-    format!(
-        "{}[{}:{}]",
-        name,
-        source.remote_contact_type.trim(),
-        source.remote_contact_id.trim()
-    )
+        display_name.to_string()
+    }
 }
 
 fn remote_im_outbound_content_digest(content: &[Value]) -> RemoteImOutboundContentDigest {
@@ -205,21 +190,84 @@ fn remote_im_append_channel_log(channel_id: &str, level: &str, message: String) 
 }
 
 #[cfg(not(test))]
-async fn remote_im_append_channel_log_async(channel_id: &str, level: &str, message: String) {
-    let channel_id = channel_id.trim().to_string();
+fn remote_im_append_contact_log(contact: &RemoteImContact, level: &str, message: String) {
+    let channel_id = contact.channel_id.trim().to_string();
+    let contact_record_id = contact.id.trim().to_string();
     let level = level.trim().to_string();
     let message = message.trim().to_string();
-    if channel_id.is_empty() || level.is_empty() || message.is_empty() {
+    if channel_id.is_empty()
+        || contact_record_id.is_empty()
+        || level.is_empty()
+        || message.is_empty()
+    {
         return;
     }
-    onebot_v11_ws_manager()
-        .add_log(&channel_id, &level, &message)
-        .await;
+    let platform = contact.platform.clone();
+    tauri::async_runtime::spawn(async move {
+        match platform {
+            RemoteImPlatform::Dingtalk => {
+                dingtalk_stream_manager()
+                    .add_contact_log(&channel_id, &level, &message, &contact_record_id)
+                    .await;
+            }
+            RemoteImPlatform::WeixinOc => {
+                weixin_oc_manager()
+                    .add_contact_log(&channel_id, &level, &message, &contact_record_id)
+                    .await;
+            }
+            _ => {
+                onebot_v11_ws_manager()
+                    .add_contact_log(&channel_id, &level, &message, &contact_record_id)
+                    .await;
+            }
+        }
+    });
 }
 
 #[cfg(test)]
-async fn remote_im_append_channel_log_async(channel_id: &str, level: &str, message: String) {
-    let _ = (channel_id, level, message);
+fn remote_im_append_contact_log(contact: &RemoteImContact, level: &str, message: String) {
+    let _ = (contact, level, message);
+}
+
+#[cfg(not(test))]
+async fn remote_im_append_contact_log_async(
+    contact: &RemoteImContact,
+    level: &str,
+    message: String,
+) {
+    let channel_id = contact.channel_id.trim();
+    let contact_record_id = contact.id.trim();
+    let level = level.trim();
+    let message = message.trim();
+    if channel_id.is_empty() || contact_record_id.is_empty() || level.is_empty() || message.is_empty() {
+        return;
+    }
+    match &contact.platform {
+        RemoteImPlatform::Dingtalk => {
+            dingtalk_stream_manager()
+                .add_contact_log(channel_id, level, message, contact_record_id)
+                .await;
+        }
+        RemoteImPlatform::WeixinOc => {
+            weixin_oc_manager()
+                .add_contact_log(channel_id, level, message, contact_record_id)
+                .await;
+        }
+        _ => {
+            onebot_v11_ws_manager()
+                .add_contact_log(channel_id, level, message, contact_record_id)
+                .await;
+        }
+    }
+}
+
+#[cfg(test)]
+async fn remote_im_append_contact_log_async(
+    contact: &RemoteImContact,
+    level: &str,
+    message: String,
+) {
+    let _ = (contact, level, message);
 }
 
 fn remote_im_resolve_contact_log_query(
@@ -244,14 +292,16 @@ fn remote_im_resolve_contact_log_query(
 
 fn remote_im_filter_channel_logs_for_contact(
     logs: Vec<ChannelLogEntry>,
-    contact_marker: &str,
+    contact_record_id: &str,
 ) -> Vec<ChannelLogEntry> {
-    let normalized_marker = contact_marker.trim();
-    if normalized_marker.is_empty() {
+    let normalized_contact_record_id = contact_record_id.trim();
+    if normalized_contact_record_id.is_empty() {
         return Vec::new();
     }
     logs.into_iter()
-        .filter(|entry| entry.message.contains(normalized_marker))
+        .filter(|entry| {
+            entry.contact_record_id.as_deref() == Some(normalized_contact_record_id)
+        })
         .collect()
 }
 
@@ -309,13 +359,6 @@ fn remote_im_set_sender_origin_meta(
             "conversation_id": conversation_id
         }
     })
-}
-
-fn remote_im_resolve_inbound_activate(
-    channel: &RemoteImChannelConfig,
-    message_flag: Option<bool>,
-) -> bool {
-    message_flag.unwrap_or(channel.activate_assistant)
 }
 
 fn origin_value_string<'a>(origin: &'a Value, key: &str) -> Option<&'a str> {

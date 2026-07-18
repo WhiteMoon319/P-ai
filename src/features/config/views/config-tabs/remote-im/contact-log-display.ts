@@ -21,15 +21,6 @@ function currentStateLabel(value: string): string {
   return parts[parts.length - 1] || "";
 }
 
-function humanName(value: string): string {
-  return String(value || "").trim().replace(/\(\d+\)\s*$/, "").trim();
-}
-
-function humanId(value: string): string {
-  const match = String(value || "").trim().match(/\((\d+)\)\s*$/);
-  return String(match?.[1] || "").trim();
-}
-
 function boolLabel(value: string, t: TranslateFn): string {
   return value === "是" || value.toLowerCase() === "true" ? t("common.yes") : t("common.no");
 }
@@ -58,8 +49,7 @@ export function buildContactLogDisplayItem(log: ChannelLogEntry, t: TranslateFn)
   const message = String(log.message || "").trim();
   if (message.startsWith("[联系人消息] 收到:")) {
     const senderRaw = logField(message, "sender");
-    const senderName = humanName(senderRaw) || t("config.remoteIm.otherParty");
-    const senderId = humanId(senderRaw);
+    const senderName = senderRaw || t("config.remoteIm.otherParty");
     const preview = logField(message, "preview") || t("config.remoteIm.receivedMessage");
     const imageCount = Number(logField(message, "image_count") || 0);
     const audioCount = Number(logField(message, "audio_count") || 0);
@@ -74,7 +64,7 @@ export function buildContactLogDisplayItem(log: ChannelLogEntry, t: TranslateFn)
       level: log.level,
       kind: t("config.remoteIm.logKindMessage"),
       title: "",
-      summary: `${senderId ? `[${senderName}/${senderId}]` : `[${senderName}]`}${preview}`,
+      summary: `[${senderName}]${preview}`,
       detail: extras.length > 0 ? extras.join("，") : undefined,
     };
   }
@@ -100,7 +90,24 @@ export function buildContactLogDisplayItem(log: ChannelLogEntry, t: TranslateFn)
   }
   if (message.startsWith("[联系人状态] 入站判定:")) {
     const reason = logField(message, "reason");
-    return { timestamp: log.timestamp, level: log.level, kind: t("config.remoteIm.logKindStatus"), title: stateSummary(message, t), summary: reason ? t("config.remoteIm.logReason", { reason }) : "" };
+    return {
+      timestamp: log.timestamp,
+      level: log.level,
+      kind: t("config.remoteIm.logKindStatus"),
+      title: stateSummary(message, t),
+      summary: logField(message, "message") || (reason ? t("config.remoteIm.logReason", { reason }) : ""),
+      detail: reason ? t("config.remoteIm.logReason", { reason }) : undefined,
+    };
+  }
+  if (message.startsWith("[联系人状态] 已交接:")) {
+    return {
+      timestamp: log.timestamp,
+      level: log.level,
+      kind: t("config.remoteIm.logKindStatus"),
+      title: logField(message, "action"),
+      summary: logField(message, "message"),
+      detail: logField(message, "reason") || undefined,
+    };
   }
   if (message.startsWith("[联系人状态] 历史落地:")) {
     return log.level === "warn" || log.level === "error"

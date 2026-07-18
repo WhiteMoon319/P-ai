@@ -1,19 +1,5 @@
     #[test]
-    fn remote_im_upsert_contact_for_inbound_should_create_with_communication_follow_channel_activation() {
-        let channel = RemoteImChannelConfig {
-            id: "c1".to_string(),
-            name: "qq".to_string(),
-            platform: RemoteImPlatform::OnebotV11,
-            enabled: true,
-            credentials: serde_json::json!({}),
-            activate_assistant: true,
-            receive_files: true,
-            streaming_send: false,
-            show_tool_calls: false,
-            filter_markdown: false,
-            allow_send_files: false,
-            behavior_settings: RemoteImChannelBehaviorSettings::default(),
-        };
+    fn remote_im_upsert_contact_for_inbound_should_keep_new_contact_communication_disabled() {
         let mut runtime = RuntimeStateFile::default();
         let input = RemoteImEnqueueInput {
             channel_id: "c1".to_string(),
@@ -28,7 +14,6 @@
             platform_message_id: Some("m1".to_string()),
             dingtalk_session_webhook: None,
             dingtalk_session_webhook_expired_time: None,
-            activate_assistant: Some(true),
             session: SessionSelector {
                 api_config_id: None,
                 department_id: None,
@@ -49,15 +34,15 @@
             },
         };
         let now = now_iso();
-        let contact_id = remote_im_upsert_contact_for_inbound(&mut runtime, &channel, &input, &now);
+        let contact_id = remote_im_upsert_contact_for_inbound(&mut runtime, &input, &now);
         assert_eq!(runtime.remote_im_contacts.len(), 1);
         let contact = runtime
             .remote_im_contacts
             .iter()
             .find(|item| item.id == contact_id)
             .expect("contact exists");
-        assert!(contact.allow_send);
-        assert!(contact.allow_receive);
+        assert!(!contact.allow_send);
+        assert!(!contact.allow_receive);
         assert_eq!(contact.activation_mode, "never");
         assert!(contact.activation_keywords.is_empty());
         assert_eq!(contact.activation_cooldown_seconds, 0);
@@ -65,7 +50,7 @@
 
         // 第二次入队应复用同一联系人
         let now2 = now_iso();
-        let contact_id_2 = remote_im_upsert_contact_for_inbound(&mut runtime, &channel, &input, &now2);
+        let contact_id_2 = remote_im_upsert_contact_for_inbound(&mut runtime, &input, &now2);
         assert_eq!(contact_id, contact_id_2);
         assert_eq!(runtime.remote_im_contacts.len(), 1);
     }
@@ -201,27 +186,6 @@
     }
 
     #[test]
-    fn remote_im_resolve_inbound_activate_should_prefer_message_level_flag() {
-        let channel = RemoteImChannelConfig {
-            id: "c1".to_string(),
-            name: "qq".to_string(),
-            platform: RemoteImPlatform::OnebotV11,
-            enabled: true,
-            credentials: serde_json::json!({}),
-            activate_assistant: false,
-            receive_files: true,
-            streaming_send: false,
-            show_tool_calls: false,
-            filter_markdown: false,
-            allow_send_files: false,
-            behavior_settings: RemoteImChannelBehaviorSettings::default(),
-        };
-        assert!(!remote_im_resolve_inbound_activate(&channel, None));
-        assert!(remote_im_resolve_inbound_activate(&channel, Some(true)));
-        assert!(!remote_im_resolve_inbound_activate(&channel, Some(false)));
-    }
-
-    #[test]
     fn resolve_department_agent_pair_should_validate_explicit_pair_and_keep_legacy_department_fallback() {
         let mut api = ApiConfig::default();
         api.id = "api-a".to_string();
@@ -264,24 +228,27 @@
             ChannelLogEntry {
                 timestamp: chrono::Utc::now(),
                 level: "info".to_string(),
-                message: "[联系人消息] 收到: contact=甲[group:10001], preview=hello".to_string(),
+                message: "[联系人消息] 收到: contact=甲, preview=hello".to_string(),
+                contact_record_id: Some("contact-a".to_string()),
             },
             ChannelLogEntry {
                 timestamp: chrono::Utc::now(),
                 level: "info".to_string(),
-                message: "[联系人消息] 收到: contact=乙[group:10002], preview=world".to_string(),
+                message: "[联系人消息] 收到: contact=甲乙, preview=world".to_string(),
+                contact_record_id: Some("contact-b".to_string()),
             },
             ChannelLogEntry {
                 timestamp: chrono::Utc::now(),
                 level: "info".to_string(),
                 message: "事件消费器已启动".to_string(),
+                contact_record_id: None,
             },
         ];
 
-        let filtered = remote_im_filter_channel_logs_for_contact(logs, "[group:10001]");
+        let filtered = remote_im_filter_channel_logs_for_contact(logs, "contact-a");
 
         assert_eq!(filtered.len(), 1);
-        assert!(filtered[0].message.contains("[group:10001]"));
+        assert!(filtered[0].message.contains("contact=甲"));
     }
 
     #[test]
@@ -372,7 +339,6 @@
             platform_message_id: Some("m1".to_string()),
             dingtalk_session_webhook: None,
             dingtalk_session_webhook_expired_time: None,
-            activate_assistant: Some(true),
             session: SessionSelector {
                 api_config_id: None,
                 department_id: None,
@@ -530,7 +496,6 @@
             platform_message_id: Some("m1".to_string()),
             dingtalk_session_webhook: None,
             dingtalk_session_webhook_expired_time: None,
-            activate_assistant: Some(true),
             session: SessionSelector {
                 api_config_id: None,
                 department_id: None,
@@ -754,7 +719,6 @@
             platform_message_id: Some("msg-1".to_string()),
             dingtalk_session_webhook: None,
             dingtalk_session_webhook_expired_time: None,
-            activate_assistant: Some(true),
             session: SessionSelector {
                 api_config_id: None,
                 department_id: None,
@@ -1387,7 +1351,6 @@
             platform: RemoteImPlatform::OnebotV11,
             enabled: true,
             credentials: serde_json::json!({}),
-            activate_assistant: true,
             receive_files: true,
             streaming_send: false,
             show_tool_calls: false,
@@ -1415,7 +1378,6 @@
             platform_message_id: Some("message-image".to_string()),
             dingtalk_session_webhook: None,
             dingtalk_session_webhook_expired_time: None,
-            activate_assistant: Some(true),
             session: SessionSelector {
                 api_config_id: None,
                 department_id: None,
@@ -2126,7 +2088,6 @@
             platform: RemoteImPlatform::OnebotV11,
             enabled: true,
             credentials: serde_json::json!({}),
-            activate_assistant: true,
             receive_files: true,
             streaming_send: false,
             show_tool_calls: false,
@@ -2154,7 +2115,6 @@
             platform_message_id: Some("message-a".to_string()),
             dingtalk_session_webhook: None,
             dingtalk_session_webhook_expired_time: None,
-            activate_assistant: Some(true),
             session: SessionSelector {
                 api_config_id: None,
                 department_id: None,
@@ -2185,6 +2145,78 @@
                 .remote_im_contacts
                 .is_empty()
         );
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn remote_im_group_inbound_should_enter_contact_state_machine_after_persisting() {
+        let state = remote_im_test_state();
+        let config = AppConfig {
+            remote_im_channels: vec![remote_im_test_channel(
+                "channel-a",
+                RemoteImChannelBehaviorSettings::default(),
+            )],
+            ..AppConfig::default()
+        };
+        write_config(&state.config_path, &config).expect("write config");
+
+        let mut contact = remote_im_test_contact("contact-mention", "");
+        contact.remote_contact_type = "group".to_string();
+        contact.remote_contact_id = "group-mention".to_string();
+        contact.remote_contact_name = "点名测试群".to_string();
+        contact.activation_mode = "keyword".to_string();
+        contact.activation_keywords = vec!["fairy".to_string()];
+        contact.bound_conversation_id = None;
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact.clone());
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
+
+        let result = remote_im_enqueue_message_internal(
+            RemoteImEnqueueInput {
+                channel_id: "channel-a".to_string(),
+                platform: RemoteImPlatform::OnebotV11,
+                im_name: "QQ".to_string(),
+                remote_contact_type: "group".to_string(),
+                remote_contact_id: "group-mention".to_string(),
+                remote_contact_name: Some("点名测试群".to_string()),
+                sender_id: "member-a".to_string(),
+                sender_name: "群友".to_string(),
+                sender_avatar_url: None,
+                platform_message_id: Some("message-mention".to_string()),
+                dingtalk_session_webhook: None,
+                dingtalk_session_webhook_expired_time: None,
+                session: SessionSelector {
+                    api_config_id: None,
+                    department_id: None,
+                    agent_id: String::new(),
+                    conversation_id: None,
+                },
+                payload: ChatInputPayload {
+                    text: Some("fairy 在吗".to_string()),
+                    display_text: None,
+                    parts: None,
+                    images: None,
+                    audios: None,
+                    attachments: None,
+                    model: None,
+                    extra_text_blocks: None,
+                    mentions: None,
+                    provider_meta: None,
+                },
+            },
+            &state,
+        )
+        .expect("enqueue group mention");
+
+        assert!(result.activate_assistant);
+        let key = remote_im_group_reply_state_key(&state, &contact.id);
+        let batch = lock_remote_im_group_reply_state_store()
+            .by_contact
+            .get(&key)
+            .cloned()
+            .expect("group inspection scheduled");
+        assert_eq!(batch.phase, RemoteImGroupReplyPhase::MentionScheduled);
+        assert_eq!(batch.event.conversation_id, result.conversation_id);
         let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
     }
 
@@ -3300,7 +3332,6 @@
             platform: RemoteImPlatform::OnebotV11,
             enabled: true,
             credentials: serde_json::json!({}),
-            activate_assistant: true,
             receive_files: false,
             streaming_send: false,
             show_tool_calls: false,
@@ -3330,7 +3361,6 @@
             platform_message_id: Some("message-config-degraded".to_string()),
             dingtalk_session_webhook: None,
             dingtalk_session_webhook_expired_time: None,
-            activate_assistant: Some(true),
             session: SessionSelector {
                 api_config_id: None,
                 department_id: Some(REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID.to_string()),
@@ -3376,7 +3406,6 @@
             platform_message_id: None,
             dingtalk_session_webhook: None,
             dingtalk_session_webhook_expired_time: None,
-            activate_assistant: Some(true),
             session: SessionSelector {
                 api_config_id: None,
                 department_id: None,

@@ -972,10 +972,6 @@ impl<'de> serde::Deserialize<'de> for RemoteImPlatform {
     }
 }
 
-fn default_remote_im_channel_activate_assistant() -> bool {
-    true
-}
-
 fn default_remote_im_channel_receive_files() -> bool {
     true
 }
@@ -990,8 +986,6 @@ struct RemoteImChannelConfig {
     enabled: bool,
     #[serde(default)]
     credentials: Value,
-    #[serde(default = "default_remote_im_channel_activate_assistant")]
-    activate_assistant: bool,
     #[serde(default = "default_remote_im_channel_receive_files")]
     receive_files: bool,
     #[serde(default)]

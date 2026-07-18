@@ -3,7 +3,6 @@ fn build_remote_im_enqueue_input(
     sender_name: String,
     sender_id: String,
     im_name: String,
-    activate_assistant: Option<bool>,
     remote_contact_type: String,
     remote_contact_id: String,
     remote_contact_name: Option<String>,
@@ -24,7 +23,6 @@ fn build_remote_im_enqueue_input(
         platform_message_id,
         dingtalk_session_webhook: None,
         dingtalk_session_webhook_expired_time: None,
-        activate_assistant,
         session: SessionSelector {
             api_config_id: None,
             department_id: None,
@@ -198,13 +196,11 @@ async fn parse_and_enqueue_onebot_event(
     }
 
     let platform_message_id = onebot_read_id_as_string(event, "message_id");
-    let activate_assistant = channel_config.as_ref().map(|ch| ch.activate_assistant);
     let input = build_remote_im_enqueue_input(
         channel_id,
         sender_name,
         sender_id,
         im_name,
-        activate_assistant,
         remote_contact_type,
         remote_contact_id,
         remote_contact_name,
