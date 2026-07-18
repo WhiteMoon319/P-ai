@@ -507,7 +507,7 @@ fn effective_remote_im_contact_response_strategy(contact: &RemoteImContact) -> S
     }
 }
 
-fn normalize_contact_response_guidance(value: &str) -> String {
+fn normalize_remote_im_channel_response_guidance(value: &str) -> String {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         default_remote_im_contact_response_guidance()
@@ -524,6 +524,8 @@ fn normalize_remote_im_channel_behavior_settings(
         normalize_contact_blocked_message_prefixes(&normalized.blocked_message_prefixes);
     normalized.mute_keywords = normalize_contact_keyword_list(&normalized.mute_keywords);
     normalized.unmute_keywords = normalize_contact_keyword_list(&normalized.unmute_keywords);
+    normalized.response_guidance =
+        normalize_remote_im_channel_response_guidance(&normalized.response_guidance);
     normalized
 }
 
@@ -560,6 +562,13 @@ fn remote_im_channel_behavior_settings_for_contact(
             RemoteImChannelBehaviorSettings::default()
         }
     }
+}
+
+fn effective_remote_im_channel_response_guidance(
+    state: &AppState,
+    contact: &RemoteImContact,
+) -> String {
+    remote_im_channel_behavior_settings_for_contact(state, contact).response_guidance
 }
 
 include!("remote_im/group_reply_focus.rs");

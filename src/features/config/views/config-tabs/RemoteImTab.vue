@@ -667,33 +667,6 @@
                 </div>
               </li>
 
-              <li
-                v-if="selectedContact && !isPrivateContact(selectedContact)"
-                class="list-row flex items-start justify-between gap-3"
-              >
-                <div class="flex items-center gap-2">
-                  <div class="font-medium">{{ t("config.remoteIm.responseGuidance") }}</div>
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-xs"
-                    :disabled="!contactDraft"
-                    @click="restoreDefaultGroupResponseGuidance"
-                  >
-                    {{ t("config.remoteIm.restoreResponseGuidance") }}
-                  </button>
-                </div>
-                <div class="flex w-64 flex-col gap-2">
-                  <textarea
-                    class="textarea textarea-bordered textarea-sm min-h-28 w-full"
-                    v-model="contactDraft.responseGuidance"
-                    :placeholder="t('config.remoteIm.responseGuidancePlaceholder')"
-                  />
-                  <span class="text-[11px] opacity-60">
-                    {{ t("config.remoteIm.responseGuidanceHint") }}
-                  </span>
-                </div>
-              </li>
-
               <li class="list-row flex items-center justify-between gap-3">
                 <div class="font-medium">{{ t("config.remoteIm.allowSendFiles") }}</div>
                 <input
@@ -871,7 +844,6 @@ type ContactSettingsClipboard = {
   activationMode: RemoteImContact["activationMode"];
   activationKeywordsText: string;
   responseStrategy: NonNullable<RemoteImContact["responseStrategy"]>;
-  responseGuidance: string;
   allowReceive: boolean;
   allowSend: boolean;
   allowSendFiles: boolean;
@@ -1129,7 +1101,6 @@ type ContactEditDraft = {
   activationMode: RemoteImContact["activationMode"];
   activationKeywordsText: string;
   responseStrategy: NonNullable<RemoteImContact["responseStrategy"]>;
-  responseGuidance: string;
   allowReceive: boolean;
   allowSend: boolean;
   allowSendFiles: boolean;
@@ -1193,7 +1164,6 @@ function buildContactDraftFromContact(item: RemoteImContact): ContactEditDraft {
     activationMode: isPrivateContact(item) ? "always" : normalizeActivationMode(item.activationMode || "never"),
     activationKeywordsText: item.activationKeywords.join(", "),
     responseStrategy: normalizeResponseStrategy(item.responseStrategy),
-    responseGuidance: String(item.responseGuidance || "").trim(),
     allowReceive: !!item.allowReceive,
     allowSend: !!item.allowSend,
     allowSendFiles: !!item.allowSendFiles,
@@ -1209,17 +1179,6 @@ function buildContactDraftFromContact(item: RemoteImContact): ContactEditDraft {
   };
 }
 
-async function restoreDefaultGroupResponseGuidance() {
-  if (!contactDraft.value || !selectedContact.value || isPrivateContact(selectedContact.value)) return;
-  try {
-    contactDraft.value.responseGuidance = await invokeTauri<string>(
-      "remote_im_get_default_group_response_guidance",
-    );
-  } catch (error) {
-    props.setStatusAction(t("status.saveConfigFailed", { err: String(error) }));
-  }
-}
-
 function buildContactSettingsClipboard(item: RemoteImContact): ContactSettingsClipboard {
   const isPrivate = isPrivateContact(item);
   return {
@@ -1229,7 +1188,6 @@ function buildContactSettingsClipboard(item: RemoteImContact): ContactSettingsCl
     activationMode: isPrivate ? "always" : normalizeActivationMode(item.activationMode || "never"),
     activationKeywordsText: isPrivate ? "" : (Array.isArray(item.activationKeywords) ? item.activationKeywords.join(", ") : ""),
     responseStrategy: isPrivate ? "always_reply" : normalizeResponseStrategy(item.responseStrategy),
-    responseGuidance: isPrivate ? "" : String(item.responseGuidance || "").trim(),
     allowReceive: !!item.allowReceive,
     allowSend: !!item.allowSend,
     allowSendFiles: !!item.allowSendFiles,
@@ -1630,7 +1588,6 @@ async function saveContactActivation(
       | "activationMode"
       | "activationKeywords"
       | "responseStrategy"
-      | "responseGuidance"
     >
   >,
 ) {
@@ -1638,11 +1595,9 @@ async function saveContactActivation(
   const oldMode = item.activationMode;
   const oldKeywords = [...item.activationKeywords];
   const oldResponseStrategy = normalizeResponseStrategy(item.responseStrategy);
-  const oldResponseGuidance = String(item.responseGuidance || "");
   if (patch?.activationMode) item.activationMode = patch.activationMode;
   if (patch?.activationKeywords) item.activationKeywords = [...patch.activationKeywords];
   if (patch?.responseStrategy) item.responseStrategy = normalizeResponseStrategy(patch.responseStrategy);
-  if (typeof patch?.responseGuidance === "string") item.responseGuidance = patch.responseGuidance;
   try {
     await invokeTauri<RemoteImContact>("remote_im_update_contact_activation", {
       input: {
@@ -1650,7 +1605,6 @@ async function saveContactActivation(
         activationMode: item.activationMode,
         activationKeywords: item.activationKeywords,
         responseStrategy: normalizeResponseStrategy(item.responseStrategy),
-        responseGuidance: String(item.responseGuidance || ""),
       },
     });
     await refreshContacts();
@@ -1658,7 +1612,6 @@ async function saveContactActivation(
     item.activationMode = oldMode;
     item.activationKeywords = oldKeywords;
     item.responseStrategy = oldResponseStrategy;
-    item.responseGuidance = oldResponseGuidance;
     props.setStatusAction(t("status.saveConfigFailed", { err: String(error) }));
   }
 }
@@ -1680,7 +1633,6 @@ function buildContactClipboardPatch(
     activationMode: isPrivate ? "always" : clipboard.activationMode,
     activationKeywords: isPrivate ? [] : parseActivationKeywords(clipboard.activationKeywordsText),
     responseStrategy: isPrivate ? "always_reply" : clipboard.responseStrategy,
-    responseGuidance: isPrivate ? "" : clipboard.responseGuidance,
     allowReceive: clipboard.allowReceive,
     allowSend: clipboard.allowSend,
     allowSendFiles: clipboard.allowSendFiles,
@@ -1703,7 +1655,6 @@ async function pasteContactSettings(item: RemoteImContact) {
           activationMode: patch.activationMode,
           activationKeywords: patch.activationKeywords,
           responseStrategy: patch.responseStrategy,
-          responseGuidance: patch.responseGuidance,
           allowReceive: patch.allowReceive,
           allowSend: patch.allowSend,
           allowSendFiles: patch.allowSendFiles,
@@ -2000,12 +1951,6 @@ async function selectContactResponseStrategy(
   await withContactOperation(item.id, () => saveContactActivation(item, { responseStrategy: nextStrategy }));
 }
 
-async function cycleContactResponseStrategy(item: RemoteImContact) {
-  if (contactsDisabled.value || isPrivateContact(item)) return;
-  const current = normalizeResponseStrategy(item.responseStrategy);
-  const next = current === "smart_judge" ? "always_reply" : "smart_judge";
-  await withContactOperation(item.id, () => saveContactActivation(item, { responseStrategy: next }));
-}
 
 function contactSendFilesOptions(): Array<{ value: boolean; label: string }> {
   return [
@@ -2117,20 +2062,15 @@ async function saveContactDraft() {
     const nextResponseStrategy = normalizeResponseStrategy(draft.responseStrategy);
     const responseStrategyChanged =
       nextResponseStrategy !== normalizeResponseStrategy(item.responseStrategy);
-    const nextResponseGuidance = String(draft.responseGuidance || "").trim();
-    const currentResponseGuidance = String(item.responseGuidance || "").trim();
-    const responseGuidanceChanged = nextResponseGuidance !== currentResponseGuidance;
     if (
       modeChanged
       || keywordsChanged
       || responseStrategyChanged
-      || responseGuidanceChanged
     ) {
       await saveContactActivation(item, {
         activationMode: nextActivationMode,
         activationKeywords: nextKeywords,
         responseStrategy: nextResponseStrategy,
-        responseGuidance: nextResponseGuidance,
       });
     }
 
@@ -2319,7 +2259,6 @@ async function refreshContacts() {
       item.activationKeywords = Array.isArray(item.activationKeywords) ? item.activationKeywords : [];
       item.processingMode = normalizeProcessingMode(item.processingMode);
       item.responseStrategy = normalizeResponseStrategy(item.responseStrategy);
-      item.responseGuidance = String(item.responseGuidance || "").trim();
       item.allowSendFiles = !!item.allowSendFiles;
       contactKeywordDrafts.value[item.id] = item.activationKeywords.join(", ");
     }

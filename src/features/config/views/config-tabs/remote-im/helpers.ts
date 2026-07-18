@@ -13,16 +13,17 @@ export const DEFAULT_REMOTE_IM_GROUP_REPLY_PACING: RemoteImGroupReplyPacing = {
   baseReplyEnergyCost: 14,
   energyCostPerCharacter: 0.12,
   energyRecoveryPerSecond: 0.6,
-  positiveEnergyPhrases: [],
-  negativeEnergyPhrases: [],
+  positiveEnergyPhrases: ["厉害", "像人"],
+  negativeEnergyPhrases: ["够了", "烦", "串了"],
   positiveEnergyDelta: 6,
   negativeEnergyDelta: -15,
   normalReplyMaxChars: 20,
   focusReplyMaxChars: 200,
-  focusInstructions: [],
+  focusInstructions: ["分析", "总结", "好好想想", "为什么", "到底"],
 };
 
 export const DEFAULT_REMOTE_IM_CHANNEL_BEHAVIOR_SETTINGS: RemoteImChannelBehaviorSettings = {
+  responseGuidance: "",
   blockedMessagePrefixes: ["#", "/", "%"],
   muteKeywords: ["闭嘴"],
   unmuteKeywords: ["张嘴"],
@@ -56,13 +57,19 @@ export function normalizeGroupReplyPacing(
     baseReplyEnergyCost: Math.max(0, numberValue(value?.baseReplyEnergyCost, defaults.baseReplyEnergyCost)),
     energyCostPerCharacter: Math.max(0, numberValue(value?.energyCostPerCharacter, defaults.energyCostPerCharacter)),
     energyRecoveryPerSecond: Math.max(0, numberValue(value?.energyRecoveryPerSecond, defaults.energyRecoveryPerSecond)),
-    positiveEnergyPhrases: Array.isArray(value?.positiveEnergyPhrases) ? [...value.positiveEnergyPhrases] : [],
-    negativeEnergyPhrases: Array.isArray(value?.negativeEnergyPhrases) ? [...value.negativeEnergyPhrases] : [],
+    positiveEnergyPhrases: Array.isArray(value?.positiveEnergyPhrases)
+      ? [...value.positiveEnergyPhrases]
+      : [...defaults.positiveEnergyPhrases],
+    negativeEnergyPhrases: Array.isArray(value?.negativeEnergyPhrases)
+      ? [...value.negativeEnergyPhrases]
+      : [...defaults.negativeEnergyPhrases],
     positiveEnergyDelta: Math.max(0, numberValue(value?.positiveEnergyDelta, defaults.positiveEnergyDelta)),
     negativeEnergyDelta: Math.min(0, numberValue(value?.negativeEnergyDelta, defaults.negativeEnergyDelta)),
     normalReplyMaxChars: Math.max(1, Math.round(numberValue(value?.normalReplyMaxChars, defaults.normalReplyMaxChars))),
     focusReplyMaxChars: Math.max(1, Math.round(numberValue(value?.focusReplyMaxChars, defaults.focusReplyMaxChars))),
-    focusInstructions: Array.isArray(value?.focusInstructions) ? [...value.focusInstructions] : [],
+    focusInstructions: Array.isArray(value?.focusInstructions)
+      ? [...value.focusInstructions]
+      : [...defaults.focusInstructions],
   };
 }
 
@@ -79,6 +86,7 @@ export function normalizeChannelBehaviorSettings(
     return parseSpaceSeparatedList(values.map((item) => String(item || "")).join(" "));
   };
   return {
+    responseGuidance: String(value?.responseGuidance || "").trim(),
     blockedMessagePrefixes: normalizeList(value?.blockedMessagePrefixes, defaults.blockedMessagePrefixes),
     muteKeywords: normalizeList(value?.muteKeywords, defaults.muteKeywords),
     unmuteKeywords: normalizeList(value?.unmuteKeywords, defaults.unmuteKeywords),

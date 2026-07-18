@@ -353,6 +353,7 @@ export type RemoteImGroupReplyPacing = {
 };
 
 export type RemoteImChannelBehaviorSettings = {
+  responseGuidance: string;
   blockedMessagePrefixes: string[];
   muteKeywords: string[];
   unmuteKeywords: string[];
@@ -382,7 +383,6 @@ export type RemoteImContact = {
   muteDurationSeconds: number;
   activationCooldownSeconds: number;
   responseStrategy?: "always_reply" | "smart_judge";
-  responseGuidance?: string;
   blockedMessagePrefixes: string[];
   groupReplyPacing?: RemoteImGroupReplyPacing;
   routeMode?: "main_session" | "dedicated_contact_conversation";

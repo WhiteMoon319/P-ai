@@ -48,6 +48,14 @@ describe("remote IM group behavior helpers", () => {
     expect(normalized.focusReplyMaxChars).toBe(10);
   });
 
+  it("provides demonstrative default phrases for energy and focused replies", () => {
+    const defaults = normalizeGroupReplyPacing(undefined);
+
+    expect(defaults.positiveEnergyPhrases).toEqual(["厉害", "像人"]);
+    expect(defaults.negativeEnergyPhrases).toEqual(["够了", "烦", "串了"]);
+    expect(defaults.focusInstructions).toEqual(["分析", "总结", "好好想想", "为什么", "到底"]);
+  });
+
   it("parses space-separated phrases without copying runtime ledger state", () => {
     expect(parseSpaceSeparatedList("谢谢  谢谢\n继续")).toEqual(["谢谢", "继续"]);
   });

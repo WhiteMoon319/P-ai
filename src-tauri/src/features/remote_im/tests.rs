@@ -3666,6 +3666,7 @@
         let prompt = build_remote_im_secretary_prepared_prompt(
             "简体中文",
             &contact,
+            &default_remote_im_contact_response_guidance(),
             &current_assistant,
             &history_messages,
             &new_batch_messages,
@@ -4166,9 +4167,11 @@
     fn channel_behavior_should_be_shared_per_channel_and_ignore_legacy_contact_values() {
         let state = remote_im_test_state();
         let mut behavior_a = RemoteImChannelBehaviorSettings::default();
+        behavior_a.response_guidance = "渠道 A 规则".to_string();
         behavior_a.group_reply_pacing.assistant_debounce_seconds = 31;
         behavior_a.group_reply_pacing.maximum_energy = 73.0;
         let mut behavior_b = RemoteImChannelBehaviorSettings::default();
+        behavior_b.response_guidance = "渠道 B 规则".to_string();
         behavior_b.group_reply_pacing.assistant_debounce_seconds = 47;
         behavior_b.group_reply_pacing.maximum_energy = 29.0;
         state_write_config_cached(
@@ -4185,15 +4188,18 @@
 
         let mut first = remote_im_test_contact("contact-a-1", "conversation-a-1");
         first.remote_contact_type = "group".to_string();
+        first.response_guidance = "联系人旧规则 A".to_string();
         first.group_reply_pacing.assistant_debounce_seconds = 1;
         first.group_reply_pacing.maximum_energy = 1.0;
         let mut second = remote_im_test_contact("contact-a-2", "conversation-a-2");
         second.remote_contact_type = "group".to_string();
+        second.response_guidance = "联系人旧规则 B".to_string();
         second.group_reply_pacing.assistant_debounce_seconds = 2;
         second.group_reply_pacing.maximum_energy = 2.0;
         let mut other_channel = remote_im_test_contact("contact-b-1", "conversation-b-1");
         other_channel.channel_id = "channel-b".to_string();
         other_channel.remote_contact_type = "group".to_string();
+        other_channel.response_guidance = "联系人旧规则 C".to_string();
 
         let first_pacing = effective_remote_im_group_reply_pacing(&state, &first);
         let second_pacing = effective_remote_im_group_reply_pacing(&state, &second);
@@ -4203,6 +4209,18 @@
         assert_eq!(first_pacing.maximum_energy, 73.0);
         assert_eq!(other_pacing.assistant_debounce_seconds, 47);
         assert_eq!(other_pacing.maximum_energy, 29.0);
+        assert_eq!(
+            effective_remote_im_channel_response_guidance(&state, &first),
+            "渠道 A 规则"
+        );
+        assert_eq!(
+            effective_remote_im_channel_response_guidance(&state, &second),
+            "渠道 A 规则"
+        );
+        assert_eq!(
+            effective_remote_im_channel_response_guidance(&state, &other_channel),
+            "渠道 B 规则"
+        );
         let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
     }
 
@@ -4255,8 +4273,13 @@
         let mut contact = remote_im_test_contact("contact-fallback", "conversation-fallback");
         contact.remote_contact_type = "group".to_string();
         contact.group_reply_pacing.maximum_energy = 1.0;
+        contact.response_guidance = "联系人旧规则".to_string();
         let pacing = effective_remote_im_group_reply_pacing(&state, &contact);
         assert_eq!(pacing, RemoteImGroupReplyPacing::default());
+        assert_eq!(
+            effective_remote_im_channel_response_guidance(&state, &contact),
+            default_remote_im_contact_response_guidance()
+        );
         assert!(!remote_im_group_reply_focus_matches(&state, &contact, "任意文本"));
         let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
     }

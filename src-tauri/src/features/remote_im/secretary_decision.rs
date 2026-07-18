@@ -337,12 +337,13 @@ fn remote_im_secretary_messages_to_text(
 fn build_remote_im_secretary_prepared_prompt(
     language: &str,
     contact: &RemoteImContact,
+    response_guidance: &str,
     current_assistant: &RemoteImConversationAssistantContext,
     history_messages: &[RemoteImSecretaryMessageDigest],
     new_batch_messages: &[RemoteImSecretaryMessageDigest],
     work_ledger: &str,
 ) -> PreparedPrompt {
-    let guidance = normalize_contact_response_guidance(&contact.response_guidance);
+    let guidance = normalize_remote_im_channel_response_guidance(response_guidance);
     let contact_name = remote_im_secretary_contact_display_name(contact);
     let contact_type = remote_im_secretary_contact_type_label(&contact.remote_contact_type);
     let department_name = remote_im_secretary_context_display_name(
@@ -463,6 +464,7 @@ async fn run_remote_im_secretary_decision(
     let prepared = build_remote_im_secretary_prepared_prompt(
         language,
         contact,
+        &effective_remote_im_channel_response_guidance(state, contact),
         current_assistant,
         history_messages,
         new_batch_messages,

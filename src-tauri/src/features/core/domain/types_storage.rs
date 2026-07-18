@@ -249,7 +249,8 @@ struct RemoteImContact {
     processing_mode: String,
     #[serde(default = "default_remote_im_contact_response_strategy")]
     response_strategy: String,
-    #[serde(default = "default_remote_im_contact_response_guidance")]
+    #[allow(dead_code)]
+    #[serde(default = "default_remote_im_contact_response_guidance", skip_serializing)]
     response_guidance: String,
     #[serde(default = "default_remote_im_contact_blocked_message_prefixes")]
     blocked_message_prefixes: Vec<String>,
@@ -288,9 +289,9 @@ struct RemoteImGroupReplyPacing {
     energy_cost_per_character: f64,
     #[serde(default = "default_remote_im_energy_recovery_per_second")]
     energy_recovery_per_second: f64,
-    #[serde(default)]
+    #[serde(default = "default_remote_im_positive_energy_phrases")]
     positive_energy_phrases: Vec<String>,
-    #[serde(default)]
+    #[serde(default = "default_remote_im_negative_energy_phrases")]
     negative_energy_phrases: Vec<String>,
     #[serde(default = "default_remote_im_positive_energy_delta")]
     positive_energy_delta: f64,
@@ -300,7 +301,7 @@ struct RemoteImGroupReplyPacing {
     normal_reply_max_chars: u32,
     #[serde(default = "default_remote_im_focus_reply_max_chars")]
     focus_reply_max_chars: u32,
-    #[serde(default)]
+    #[serde(default = "default_remote_im_focus_instructions")]
     focus_instructions: Vec<String>,
 }
 
@@ -315,13 +316,13 @@ impl Default for RemoteImGroupReplyPacing {
             base_reply_energy_cost: default_remote_im_base_reply_energy_cost(),
             energy_cost_per_character: default_remote_im_energy_cost_per_character(),
             energy_recovery_per_second: default_remote_im_energy_recovery_per_second(),
-            positive_energy_phrases: Vec::new(),
-            negative_energy_phrases: Vec::new(),
+            positive_energy_phrases: default_remote_im_positive_energy_phrases(),
+            negative_energy_phrases: default_remote_im_negative_energy_phrases(),
             positive_energy_delta: default_remote_im_positive_energy_delta(),
             negative_energy_delta: default_remote_im_negative_energy_delta(),
             normal_reply_max_chars: default_remote_im_normal_reply_max_chars(),
             focus_reply_max_chars: default_remote_im_focus_reply_max_chars(),
-            focus_instructions: Vec::new(),
+            focus_instructions: default_remote_im_focus_instructions(),
         }
     }
 }
@@ -329,10 +330,12 @@ impl Default for RemoteImGroupReplyPacing {
 /// 渠道统一的静态行为参数。
 ///
 /// 联系人仅保留路由、应答策略和运行时账本；这里的值是该渠道全部联系人的
-/// 消息过滤、闭嘴、在场和群聊巡检策略的唯一真值。
+/// 消息过滤、闭嘴、什么时候应该回答、在场和群聊巡检策略的唯一真值。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RemoteImChannelBehaviorSettings {
+    #[serde(default = "default_remote_im_contact_response_guidance")]
+    response_guidance: String,
     #[serde(default = "default_remote_im_contact_blocked_message_prefixes")]
     blocked_message_prefixes: Vec<String>,
     #[serde(default = "default_remote_im_contact_mute_keywords")]
@@ -352,6 +355,7 @@ struct RemoteImChannelBehaviorSettings {
 impl Default for RemoteImChannelBehaviorSettings {
     fn default() -> Self {
         Self {
+            response_guidance: default_remote_im_contact_response_guidance(),
             blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
             mute_keywords: default_remote_im_contact_mute_keywords(),
             unmute_keywords: default_remote_im_contact_unmute_keywords(),
@@ -487,6 +491,14 @@ fn default_remote_im_energy_recovery_per_second() -> f64 {
     0.6
 }
 
+fn default_remote_im_positive_energy_phrases() -> Vec<String> {
+    vec!["厉害".to_string(), "像人".to_string()]
+}
+
+fn default_remote_im_negative_energy_phrases() -> Vec<String> {
+    vec!["够了".to_string(), "烦".to_string(), "串了".to_string()]
+}
+
 fn default_remote_im_positive_energy_delta() -> f64 {
     6.0
 }
@@ -501,6 +513,16 @@ fn default_remote_im_normal_reply_max_chars() -> u32 {
 
 fn default_remote_im_focus_reply_max_chars() -> u32 {
     200
+}
+
+fn default_remote_im_focus_instructions() -> Vec<String> {
+    vec![
+        "分析".to_string(),
+        "总结".to_string(),
+        "好好想想".to_string(),
+        "为什么".to_string(),
+        "到底".to_string(),
+    ]
 }
 
 fn default_user_alias() -> String {
@@ -895,6 +917,23 @@ fn user_persona_intro(data: &AppData) -> String {
 #[cfg(test)]
 mod types_storage_tests {
     use super::*;
+
+    #[test]
+    fn remote_im_group_reply_pacing_should_use_demonstrative_phrase_defaults() {
+        let defaults = RemoteImGroupReplyPacing::default();
+        assert_eq!(defaults.positive_energy_phrases, vec!["厉害", "像人"]);
+        assert_eq!(defaults.negative_energy_phrases, vec!["够了", "烦", "串了"]);
+        assert_eq!(
+            defaults.focus_instructions,
+            vec!["分析", "总结", "好好想想", "为什么", "到底"]
+        );
+
+        let legacy: RemoteImGroupReplyPacing = serde_json::from_value(serde_json::json!({}))
+            .expect("missing phrase fields should use the same defaults");
+        assert_eq!(legacy.positive_energy_phrases, defaults.positive_energy_phrases);
+        assert_eq!(legacy.negative_energy_phrases, defaults.negative_energy_phrases);
+        assert_eq!(legacy.focus_instructions, defaults.focus_instructions);
+    }
 
     fn build_department_with_permission_control(
         mode: &str,

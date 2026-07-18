@@ -20,82 +20,9 @@
           <button type="button" class="btn btn-circle btn-sm btn-ghost" :title="t('common.close')" @click="closeModal">×</button>
         </header>
 
-        <div class="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div class="min-h-0 flex-1 overflow-y-auto bg-base-200/50 px-5 py-4">
           <div v-if="error" class="alert alert-error mb-4 py-2 text-xs">{{ error }}</div>
-
-          <section class="space-y-3">
-            <h4 class="font-semibold">{{ t('config.remoteIm.channelBehaviorGeneralSection') }}</h4>
-            <div class="grid gap-3 md:grid-cols-2">
-              <label class="form-control md:col-span-2">
-                <span class="label-text text-xs">{{ t('config.remoteIm.blockedMessagePrefixes') }}</span>
-                <input v-model="draft.blockedMessagePrefixesText" class="input input-sm input-bordered" :placeholder="t('config.remoteIm.blockedMessagePrefixesPlaceholder')" />
-                <span class="label-text-alt text-xs opacity-60">{{ t('config.remoteIm.blockedMessagePrefixesHint') }}</span>
-              </label>
-              <label class="form-control">
-                <span class="label-text text-xs">{{ t('config.remoteIm.muteKeywords') }}</span>
-                <input v-model="draft.muteKeywordsText" class="input input-sm input-bordered" :placeholder="t('config.remoteIm.muteKeywordsPlaceholder')" />
-                <span class="label-text-alt text-xs opacity-60">{{ t('config.remoteIm.muteKeywordsHint') }}</span>
-              </label>
-              <label class="form-control">
-                <span class="label-text text-xs">{{ t('config.remoteIm.unmuteKeywords') }}</span>
-                <input v-model="draft.unmuteKeywordsText" class="input input-sm input-bordered" :placeholder="t('config.remoteIm.unmuteKeywordsPlaceholder')" />
-                <span class="label-text-alt text-xs opacity-60">{{ t('config.remoteIm.unmuteKeywordsHint') }}</span>
-              </label>
-              <NumberField v-model="draft.patienceSeconds" :label="t('config.remoteIm.patienceExit')" :min="0" />
-              <NumberField v-model="draft.muteDurationSeconds" :label="t('config.remoteIm.muteDuration')" :min="0" />
-              <NumberField v-model="draft.activationCooldownSeconds" :label="t('config.remoteIm.activationCooldownSeconds')" :min="0" />
-            </div>
-          </section>
-
-          <div class="divider my-6">{{ t('config.remoteIm.channelBehaviorGroupSection') }}</div>
-
-          <section class="space-y-5">
-            <div>
-              <h4 class="mb-3 font-semibold">{{ t('config.remoteIm.behaviorInspectionSection') }}</h4>
-              <div class="grid gap-3 md:grid-cols-2">
-                <NumberField v-model="draft.pacing.assistantDebounceSeconds" :label="t('config.remoteIm.assistantDebounceSeconds')" :min="1" />
-                <NumberField v-model="draft.pacing.secretaryInspectionSeconds" :label="t('config.remoteIm.secretaryInspectionSeconds')" :min="1" />
-                <NumberField v-model="draft.pacing.replyCooldownSeconds" :label="t('config.remoteIm.replyCooldownSeconds')" :min="0" />
-                <NumberField v-model="draft.pacing.inspectionJitterRatio" :label="t('config.remoteIm.inspectionJitterRatio')" :min="0" :max="1" :step="0.05" />
-              </div>
-            </div>
-
-            <div>
-              <h4 class="mb-3 font-semibold">{{ t('config.remoteIm.behaviorEnergySection') }}</h4>
-              <div class="grid gap-3 md:grid-cols-2">
-                <NumberField v-model="draft.pacing.maximumEnergy" :label="t('config.remoteIm.maximumEnergy')" :min="0.01" :step="1" />
-                <NumberField v-model="draft.pacing.baseReplyEnergyCost" :label="t('config.remoteIm.baseReplyEnergyCost')" :min="0" :step="0.1" />
-                <NumberField v-model="draft.pacing.energyCostPerCharacter" :label="t('config.remoteIm.energyCostPerCharacter')" :min="0" :step="0.01" />
-                <NumberField v-model="draft.pacing.energyRecoveryPerSecond" :label="t('config.remoteIm.energyRecoveryPerSecond')" :min="0" :step="0.01" />
-                <label class="form-control">
-                  <span class="label-text text-xs">{{ t('config.remoteIm.positiveEnergyPhrases') }}</span>
-                  <input v-model="draft.positiveEnergyPhrasesText" class="input input-sm input-bordered" />
-                </label>
-                <NumberField v-model="draft.pacing.positiveEnergyDelta" :label="t('config.remoteIm.positiveEnergyDelta')" :min="0" :step="0.1" />
-                <label class="form-control">
-                  <span class="label-text text-xs">{{ t('config.remoteIm.negativeEnergyPhrases') }}</span>
-                  <input v-model="draft.negativeEnergyPhrasesText" class="input input-sm input-bordered" />
-                </label>
-                <NumberField v-model="draft.pacing.negativeEnergyDelta" :label="t('config.remoteIm.negativeEnergyDelta')" :max="0" :step="0.1" />
-              </div>
-            </div>
-
-            <div>
-              <h4 class="mb-3 font-semibold">{{ t('config.remoteIm.behaviorFocusSection') }}</h4>
-              <div class="grid gap-3 md:grid-cols-2">
-                <label class="form-control md:col-span-2">
-                  <span class="label-text text-xs">{{ t('config.remoteIm.focusInstructions') }}</span>
-                  <input v-model="draft.focusInstructionsText" class="input input-sm input-bordered" />
-                </label>
-                <NumberField v-model="draft.pacing.normalReplyMaxChars" :label="t('config.remoteIm.normalReplyMaxChars')" :min="1" />
-                <NumberField v-model="draft.pacing.focusReplyMaxChars" :label="t('config.remoteIm.focusReplyMaxChars')" :min="1" />
-                <div class="rounded-box bg-base-200 p-3 text-xs md:col-span-2">
-                  <div>{{ t('config.remoteIm.normalReminderPreview', { count: draft.pacing.normalReplyMaxChars }) }}</div>
-                  <div>{{ t('config.remoteIm.focusReminderPreview', { count: draft.pacing.focusReplyMaxChars }) }}</div>
-                </div>
-              </div>
-            </div>
-          </section>
+          <ConfigTemplate v-model="templateDraft" :groups="templateGroups" />
         </div>
 
         <footer class="flex shrink-0 flex-wrap justify-end gap-2 border-t border-base-300 px-5 py-4">
@@ -112,11 +39,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, ref } from "vue";
+import { computed, ref } from "vue";
 import { Save, SlidersHorizontal } from "@lucide/vue";
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../../../services/tauri-api";
 import type { RemoteImChannelBehaviorSettings, RemoteImChannelConfig, RemoteImGroupReplyPacing } from "../../../../../types/app";
+import ConfigTemplate from "../../../components/ConfigTemplate.vue";
+import type { ConfigTemplateGroup } from "../../../components/config-template";
 import {
   cloneChannelBehaviorSettings,
   DEFAULT_REMOTE_IM_CHANNEL_BEHAVIOR_SETTINGS,
@@ -132,6 +61,7 @@ const props = defineProps<{
 const { t } = useI18n();
 
 type Draft = {
+  responseGuidance: string;
   blockedMessagePrefixesText: string;
   muteKeywordsText: string;
   unmuteKeywordsText: string;
@@ -144,29 +74,11 @@ type Draft = {
   pacing: RemoteImGroupReplyPacing;
 };
 
-const NumberField = defineComponent({
-  props: { modelValue: Number, label: String, min: Number, max: Number, step: Number },
-  emits: ["update:modelValue"],
-  setup(fieldProps, { emit }) {
-    return () => h("label", { class: "form-control" }, [
-      h("span", { class: "label-text text-xs" }, fieldProps.label || ""),
-      h("input", {
-        class: "input input-sm input-bordered",
-        type: "number",
-        value: fieldProps.modelValue,
-        min: fieldProps.min,
-        max: fieldProps.max,
-        step: fieldProps.step ?? 1,
-        onInput: (event: Event) => emit("update:modelValue", Number((event.target as HTMLInputElement).value)),
-      }),
-    ]);
-  },
-});
-
 function draftFromSettings(value?: Partial<RemoteImChannelBehaviorSettings> | null): Draft {
   const settings = cloneChannelBehaviorSettings(value);
   const pacing = normalizeGroupReplyPacing(settings.groupReplyPacing);
   return {
+    responseGuidance: settings.responseGuidance,
     blockedMessagePrefixesText: settings.blockedMessagePrefixes.join(" "),
     muteKeywordsText: settings.muteKeywords.join(" "),
     unmuteKeywordsText: settings.unmuteKeywords.join(" "),
@@ -182,6 +94,7 @@ function draftFromSettings(value?: Partial<RemoteImChannelBehaviorSettings> | nu
 
 function settingsFromDraft(value: Draft): RemoteImChannelBehaviorSettings {
   return {
+    responseGuidance: String(value.responseGuidance || "").trim(),
     blockedMessagePrefixes: parseSpaceSeparatedList(value.blockedMessagePrefixesText),
     muteKeywords: parseSpaceSeparatedList(value.muteKeywordsText),
     unmuteKeywords: parseSpaceSeparatedList(value.unmuteKeywordsText),
@@ -199,6 +112,178 @@ function settingsFromDraft(value: Draft): RemoteImChannelBehaviorSettings {
 
 const open = ref(false);
 const draft = ref<Draft>(draftFromSettings());
+const templateDraft = computed<Record<string, unknown>>({
+  get: () => ({
+    responseGuidance: draft.value.responseGuidance,
+    blockedMessagePrefixesText: draft.value.blockedMessagePrefixesText,
+    muteKeywordsText: draft.value.muteKeywordsText,
+    unmuteKeywordsText: draft.value.unmuteKeywordsText,
+    patienceSeconds: draft.value.patienceSeconds,
+    muteDurationSeconds: draft.value.muteDurationSeconds,
+    activationCooldownSeconds: draft.value.activationCooldownSeconds,
+    positiveEnergyPhrasesText: draft.value.positiveEnergyPhrasesText,
+    negativeEnergyPhrasesText: draft.value.negativeEnergyPhrasesText,
+    focusInstructionsText: draft.value.focusInstructionsText,
+    assistantDebounceSeconds: draft.value.pacing.assistantDebounceSeconds,
+    secretaryInspectionSeconds: draft.value.pacing.secretaryInspectionSeconds,
+    replyCooldownSeconds: draft.value.pacing.replyCooldownSeconds,
+    inspectionJitterRatio: draft.value.pacing.inspectionJitterRatio,
+    maximumEnergy: draft.value.pacing.maximumEnergy,
+    baseReplyEnergyCost: draft.value.pacing.baseReplyEnergyCost,
+    energyCostPerCharacter: draft.value.pacing.energyCostPerCharacter,
+    energyRecoveryPerSecond: draft.value.pacing.energyRecoveryPerSecond,
+    positiveEnergyDelta: draft.value.pacing.positiveEnergyDelta,
+    negativeEnergyDelta: draft.value.pacing.negativeEnergyDelta,
+    normalReplyMaxChars: draft.value.pacing.normalReplyMaxChars,
+    focusReplyMaxChars: draft.value.pacing.focusReplyMaxChars,
+  }),
+  set: (value) => {
+    const numberValue = (key: string, fallback: number) => {
+      const parsed = Number(value[key]);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
+    draft.value = {
+      ...draft.value,
+      responseGuidance: String(value.responseGuidance ?? draft.value.responseGuidance),
+      blockedMessagePrefixesText: String(value.blockedMessagePrefixesText ?? draft.value.blockedMessagePrefixesText),
+      muteKeywordsText: String(value.muteKeywordsText ?? draft.value.muteKeywordsText),
+      unmuteKeywordsText: String(value.unmuteKeywordsText ?? draft.value.unmuteKeywordsText),
+      patienceSeconds: numberValue("patienceSeconds", draft.value.patienceSeconds),
+      muteDurationSeconds: numberValue("muteDurationSeconds", draft.value.muteDurationSeconds),
+      activationCooldownSeconds: numberValue("activationCooldownSeconds", draft.value.activationCooldownSeconds),
+      positiveEnergyPhrasesText: String(value.positiveEnergyPhrasesText ?? draft.value.positiveEnergyPhrasesText),
+      negativeEnergyPhrasesText: String(value.negativeEnergyPhrasesText ?? draft.value.negativeEnergyPhrasesText),
+      focusInstructionsText: String(value.focusInstructionsText ?? draft.value.focusInstructionsText),
+      pacing: {
+        ...draft.value.pacing,
+        assistantDebounceSeconds: numberValue("assistantDebounceSeconds", draft.value.pacing.assistantDebounceSeconds),
+        secretaryInspectionSeconds: numberValue("secretaryInspectionSeconds", draft.value.pacing.secretaryInspectionSeconds),
+        replyCooldownSeconds: numberValue("replyCooldownSeconds", draft.value.pacing.replyCooldownSeconds),
+        inspectionJitterRatio: numberValue("inspectionJitterRatio", draft.value.pacing.inspectionJitterRatio),
+        maximumEnergy: numberValue("maximumEnergy", draft.value.pacing.maximumEnergy),
+        baseReplyEnergyCost: numberValue("baseReplyEnergyCost", draft.value.pacing.baseReplyEnergyCost),
+        energyCostPerCharacter: numberValue("energyCostPerCharacter", draft.value.pacing.energyCostPerCharacter),
+        energyRecoveryPerSecond: numberValue("energyRecoveryPerSecond", draft.value.pacing.energyRecoveryPerSecond),
+        positiveEnergyDelta: numberValue("positiveEnergyDelta", draft.value.pacing.positiveEnergyDelta),
+        negativeEnergyDelta: numberValue("negativeEnergyDelta", draft.value.pacing.negativeEnergyDelta),
+        normalReplyMaxChars: numberValue("normalReplyMaxChars", draft.value.pacing.normalReplyMaxChars),
+        focusReplyMaxChars: numberValue("focusReplyMaxChars", draft.value.pacing.focusReplyMaxChars),
+      },
+    };
+  },
+});
+const templateGroups = computed<ConfigTemplateGroup[]>(() => [
+  {
+    title: t("config.remoteIm.channelBehaviorMessagePolicySection"),
+    rows: [
+      {
+        items: [{
+          key: "responseGuidance",
+          label: t("config.remoteIm.responseGuidance"),
+          description: t("config.remoteIm.responseGuidanceHint"),
+          placeholder: t("config.remoteIm.responseGuidancePlaceholder"),
+          type: "textarea",
+        }],
+      },
+      {
+        items: [{
+          key: "blockedMessagePrefixesText",
+          label: t("config.remoteIm.blockedMessagePrefixes"),
+          description: t("config.remoteIm.blockedMessagePrefixesHint"),
+          placeholder: t("config.remoteIm.blockedMessagePrefixesPlaceholder"),
+          type: "text",
+        }],
+      },
+      {
+        items: [
+          { key: "muteKeywordsText", label: t("config.remoteIm.muteKeywords"), type: "text", placeholder: t("config.remoteIm.muteKeywordsPlaceholder") },
+          { key: "unmuteKeywordsText", label: t("config.remoteIm.unmuteKeywords"), type: "text", placeholder: t("config.remoteIm.unmuteKeywordsPlaceholder") },
+        ],
+      },
+    ],
+  },
+  {
+    title: t("config.remoteIm.channelBehaviorViewFrequencySection"),
+    rows: [
+      {
+        items: [
+          { key: "assistantDebounceSeconds", label: t("config.remoteIm.assistantDebounceSeconds"), type: "number", min: 1 },
+          { key: "secretaryInspectionSeconds", label: t("config.remoteIm.secretaryInspectionSeconds"), type: "number", min: 1 },
+        ],
+      },
+      {
+        items: [{ key: "inspectionJitterRatio", label: t("config.remoteIm.inspectionJitterRatio"), type: "number", min: 0, max: 1, step: 0.05 }],
+      },
+      {
+        items: [
+          { key: "patienceSeconds", label: t("config.remoteIm.patienceExit"), type: "number", min: 0 },
+          { key: "activationCooldownSeconds", label: t("config.remoteIm.activationCooldownSeconds"), type: "number", min: 0 },
+        ],
+      },
+    ],
+  },
+  {
+    title: t("config.remoteIm.channelBehaviorReplyEnthusiasmSection"),
+    rows: [
+      {
+        items: [
+          { key: "muteDurationSeconds", label: t("config.remoteIm.muteDuration"), type: "number", min: 0 },
+          { key: "replyCooldownSeconds", label: t("config.remoteIm.replyCooldownSeconds"), type: "number", min: 0 },
+        ],
+      },
+      {
+        items: [
+          { key: "maximumEnergy", label: t("config.remoteIm.maximumEnergy"), type: "number", min: 0.01, step: 1 },
+          { key: "baseReplyEnergyCost", label: t("config.remoteIm.baseReplyEnergyCost"), type: "number", min: 0, step: 0.1 },
+        ],
+      },
+      {
+        items: [
+          { key: "energyCostPerCharacter", label: t("config.remoteIm.energyCostPerCharacter"), type: "number", min: 0, step: 0.01 },
+          { key: "energyRecoveryPerSecond", label: t("config.remoteIm.energyRecoveryPerSecond"), type: "number", min: 0, step: 0.01 },
+        ],
+      },
+      {
+        items: [
+          { key: "positiveEnergyPhrasesText", label: t("config.remoteIm.positiveEnergyPhrases"), type: "text" },
+          { key: "positiveEnergyDelta", label: t("config.remoteIm.positiveEnergyDelta"), type: "number", min: 0, step: 0.1 },
+        ],
+      },
+      {
+        items: [
+          { key: "negativeEnergyPhrasesText", label: t("config.remoteIm.negativeEnergyPhrases"), type: "text" },
+          { key: "negativeEnergyDelta", label: t("config.remoteIm.negativeEnergyDelta"), type: "number", max: 0, step: 0.1 },
+        ],
+      },
+    ],
+  },
+  {
+    title: t("config.remoteIm.channelBehaviorReplyLengthSection"),
+    rows: [
+      {
+        items: [{ key: "focusInstructionsText", label: t("config.remoteIm.focusInstructions"), type: "text" }],
+      },
+      {
+        items: [
+          {
+            key: "normalReplyMaxChars",
+            label: t("config.remoteIm.normalReplyMaxChars"),
+            description: t("config.remoteIm.normalReminderPreview", { count: draft.value.pacing.normalReplyMaxChars }),
+            type: "number",
+            min: 1,
+          },
+          {
+            key: "focusReplyMaxChars",
+            label: t("config.remoteIm.focusReplyMaxChars"),
+            description: t("config.remoteIm.focusReminderPreview", { count: draft.value.pacing.focusReplyMaxChars }),
+            type: "number",
+            min: 1,
+          },
+        ],
+      },
+    ],
+  },
+]);
 const savedSnapshot = ref("");
 const editingChannelId = ref("");
 const saving = ref(false);
@@ -231,8 +316,14 @@ function closeModal() {
   if (!saving.value) open.value = false;
 }
 
-function restoreDefaults() {
-  draft.value = draftFromSettings(DEFAULT_REMOTE_IM_CHANNEL_BEHAVIOR_SETTINGS);
+async function restoreDefaults() {
+  const next = draftFromSettings(DEFAULT_REMOTE_IM_CHANNEL_BEHAVIOR_SETTINGS);
+  try {
+    next.responseGuidance = await invokeTauri<string>("remote_im_get_default_group_response_guidance");
+  } catch (restoreError) {
+    console.warn("[远程IM] 渠道默认应答规则读取失败，保留其他默认值:", restoreError);
+  }
+  draft.value = next;
   error.value = "";
 }
 

@@ -543,15 +543,12 @@ fn remote_im_patch_contact_settings_inner(
             contact.activation_mode = "always".to_string();
             contact.activation_keywords.clear();
             contact.response_strategy = "always_reply".to_string();
-            contact.response_guidance.clear();
         } else {
             contact.activation_mode = normalize_contact_activation_mode(&input.activation_mode);
             contact.activation_keywords =
                 normalize_contact_activation_keywords(&input.activation_keywords);
             contact.response_strategy =
                 normalize_contact_response_strategy(&input.response_strategy);
-            contact.response_guidance =
-                normalize_contact_response_guidance(&input.response_guidance);
         }
         let communication_enabled = input.allow_receive || input.allow_send;
         contact.allow_receive = communication_enabled;
@@ -639,7 +636,6 @@ fn remote_im_update_contact_activation_inner(
             contact.response_strategy =
                 normalize_contact_response_strategy(&input.response_strategy);
         }
-        contact.response_guidance = normalize_contact_response_guidance(&input.response_guidance);
         Ok(contact.clone())
     })
 }
