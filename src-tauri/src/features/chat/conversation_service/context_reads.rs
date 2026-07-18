@@ -1,3 +1,31 @@
+fn render_preserved_conversation_message_text(message: &ChatMessage) -> String {
+    let mut blocks = Vec::<String>::new();
+    if message.role.trim().eq_ignore_ascii_case("assistant") {
+        for event in message.tool_call.iter().flatten() {
+            let is_assistant = event
+                .get("role")
+                .and_then(Value::as_str)
+                .is_some_and(|role| role.trim().eq_ignore_ascii_case("assistant"));
+            if !is_assistant {
+                continue;
+            }
+            let content = event
+                .get("content")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty());
+            if let Some(content) = content {
+                blocks.push(content.to_string());
+            }
+        }
+    }
+    let rendered = render_prompt_message_text(message);
+    if !rendered.trim().is_empty() {
+        blocks.push(rendered);
+    }
+    blocks.join("\n")
+}
+
 impl ConversationServiceV2 {
     fn ensure_unarchived_conversation(
         &self,
@@ -69,7 +97,7 @@ impl ConversationServiceV2 {
         Ok(context)
     }
 
-    /// 从全局消息序列向前读取真实会话正文。读取不以 block 为边界：每页仅取四条，
+    /// 从全局消息序列向前读取可保留的对话正文。读取不以 block 为边界：每页仅取四条，
     /// 每条先过滤旧压缩消息、非 user/assistant 与空正文，随后才计算窗口。
     ///
     /// `end_message_id` 为可选上界；传空时使用全局最新消息。远程唤醒在并发下会
@@ -242,7 +270,7 @@ impl ConversationServiceV2 {
         {
             return PreservedConversationMessageSelection::Skip;
         }
-        let body = render_prompt_message_text(&message);
+        let body = render_preserved_conversation_message_text(&message);
         let message_chars = body.chars().count();
         if message_chars == 0 {
             return PreservedConversationMessageSelection::Skip;
@@ -279,6 +307,8 @@ impl ConversationServiceV2 {
             reasoning_content: None,
         }];
         truncated.extra_text_blocks.clear();
+        // 已将工具阶段正文投影进 parts，不能再保留 tool_call 让压缩流程二次拼接。
+        truncated.tool_call = None;
         let remote_origin = remote_im_origin_from_message(&truncated).cloned();
         truncated.provider_meta = remote_origin.map(|origin| {
             serde_json::json!({

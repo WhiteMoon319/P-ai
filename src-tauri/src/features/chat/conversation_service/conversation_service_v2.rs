@@ -142,6 +142,42 @@ mod preserved_conversation_reader_tests {
     }
 
     #[test]
+    fn remote_wake_preserved_dialogue_should_keep_assistant_tool_round_text() {
+        let mut assistant = message(
+            "assistant-tool-round",
+            "assistant",
+            "2026-07-10T11:57:00Z",
+            "",
+        );
+        assistant.tool_call = Some(vec![
+            serde_json::json!({
+                "role": "assistant",
+                "content": "我先核对群聊状态机。",
+                "tool_calls": [{ "id": "call-1" }]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call-1",
+                "content": "不应进入保留对话的工具结果"
+            }),
+        ]);
+
+        let selected = collect(
+            vec![assistant],
+            parse_iso("2026-07-10T12:00:00Z").unwrap(),
+            None,
+            0,
+            1_000,
+        );
+
+        assert_eq!(selected.len(), 1);
+        assert_eq!(
+            build_remote_im_wake_preserved_dialogue(&selected, "遥酱"),
+            "遥酱：我先核对群聊状态机。"
+        );
+    }
+
+    #[test]
     fn dynamic_boundary_keeps_minimum_messages_before_applying_hour_and_char_limits() {
         let anchor_at = parse_iso("2026-07-10T12:00:00Z").unwrap();
         let mut messages = (0..7)

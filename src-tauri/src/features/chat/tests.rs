@@ -5483,8 +5483,9 @@
             .expect("mark direct persisted");
 
         // 第一轮未超限，已经正式写入聚合 assistant 消息。
-        let (first_assistant_event, first_tool_result) =
+        let (mut first_assistant_event, first_tool_result) =
             test_v2_single_tool_group_result("call-round-1", "read_file");
+        first_assistant_event["content"] = serde_json::json!("第一轮工具检查已经完成。");
         conversation_service_v2()
             .append_tool_event_to_assistant_message(
                 &state,
@@ -5529,6 +5530,32 @@
             before_events[1].get("content").and_then(Value::as_str),
             Some("tool result")
         );
+
+        let compaction_source = conversation_service_v2()
+            .read_archive_pipeline_cross_message_context(&state, &conversation.id)
+            .expect("read compaction source after completed tool round");
+        let compaction_assistant = compaction_source
+            .messages
+            .iter()
+            .find(|message| message.id == "assistant-tool-rounds")
+            .expect("tool-stage assistant message should be retained for compaction");
+        assert_eq!(
+            compaction_assistant
+                .tool_call
+                .as_ref()
+                .and_then(|events| events.first())
+                .and_then(|event| event.get("content"))
+                .and_then(Value::as_str),
+            Some("第一轮工具检查已经完成。")
+        );
+        let preserved_dialogue = build_compaction_preserved_dialogue_block(
+            &compaction_source,
+            "用户",
+            "助手",
+            10_000,
+        );
+        assert!(preserved_dialogue.contains("助手：第一轮工具检查已经完成。"));
+        assert!(!preserved_dialogue.contains("tool result"));
 
         let compression_message = build_compaction_message(
             "第一轮工具检查已经完成。",

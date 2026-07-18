@@ -16,7 +16,10 @@ fn build_remote_im_wake_preserved_dialogue(
                 remote_im_sender_display_name(message)
                     .unwrap_or_else(|| "远程联系人".to_string())
             };
-            format!("{speaker}：{}", render_prompt_message_text(message).trim())
+            format!(
+                "{speaker}：{}",
+                render_preserved_conversation_message_text(message).trim()
+            )
         })
         .filter(|line| !line.trim().is_empty())
         .collect::<Vec<_>>()
