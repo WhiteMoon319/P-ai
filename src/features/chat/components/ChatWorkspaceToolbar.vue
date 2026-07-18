@@ -1,5 +1,9 @@
 <template>
-  <div v-bind="attrs" class="rounded-box bg-base-100/70 px-2 py-1.5 shadow backdrop-blur-md flex items-center justify-between gap-2 text-[11px]">
+  <div
+    v-bind="attrs"
+    class="rounded-box bg-base-100/70 px-2 py-1.5 shadow backdrop-blur-md flex items-center justify-between gap-2 text-[11px]"
+    @contextmenu.prevent.stop="openFileTagsContextMenu"
+  >
     <div class="flex min-w-0 flex-1 items-center gap-1.5">
       <div
         v-if="!hideMenuButton"
@@ -108,6 +112,38 @@
       </button>
     </div>
   </div>
+  <Teleport to="body">
+    <ul
+      v-if="fileTagsContextMenu"
+      ref="fileTagsContextMenuRef"
+      class="menu fixed z-[1200] w-64 rounded-box border border-base-300 bg-base-100 p-2 text-base-content shadow-xl"
+      :style="{ left: `${fileTagsContextMenu.x}px`, top: `${fileTagsContextMenu.y}px` }"
+      @contextmenu.prevent.stop
+    >
+      <li>
+        <label class="flex cursor-pointer items-center justify-between gap-3 px-2 py-2">
+          <span class="text-sm">{{ t("appearance.inputPanelIdeBridgeFileTags") }}</span>
+          <input
+            :checked="ideBridgeFileTagsEnabled"
+            type="checkbox"
+            class="toggle toggle-sm"
+            @change="setIdeBridgeFileTagsEnabled(($event.target as HTMLInputElement).checked)"
+          />
+        </label>
+      </li>
+      <li>
+        <label class="flex cursor-pointer items-center justify-between gap-3 px-2 py-2">
+          <span class="text-sm">{{ t("appearance.inputPanelSideFileTags") }}</span>
+          <input
+            :checked="sideFileTagsEnabled"
+            type="checkbox"
+            class="toggle toggle-sm"
+            @change="setSideFileTagsEnabled(($event.target as HTMLInputElement).checked)"
+          />
+        </label>
+      </li>
+    </ul>
+  </Teleport>
   <Teleport to="body">
     <div
       v-if="mentionListPopupOpen"
@@ -238,6 +274,7 @@ import { useI18n } from "vue-i18n";
 import { ClipboardCheck, ClipboardList, ExternalLink, Folder, Grip, ListTodo, Package, Send, Split } from "@lucide/vue";
 import type { ChatMentionEntry, ConversationDelegateStatusSummary } from "../../../types/app";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
+import { useChatComposerAppearance } from "../../shell/composables/use-chat-composer-appearance";
 import SessionControlPanel from "./SessionControlPanel.vue";
 
 defineOptions({
@@ -296,6 +333,12 @@ const emit = defineEmits<{
 
 const attrs = useAttrs();
 const { t } = useI18n();
+const {
+  sideFileTagsEnabled,
+  ideBridgeFileTagsEnabled,
+  setSideFileTagsEnabled,
+  setIdeBridgeFileTagsEnabled,
+} = useChatComposerAppearance();
 const busy = computed(() => props.chatting || props.frozen || !!props.conversationBusy);
 const showTaskCreateMenuItem = computed(() => props.showTaskCreateMenuItem);
 const showDelegateMenuItem = computed(() => props.showDelegateMenuItem);
@@ -309,6 +352,8 @@ const hasDelegateStatuses = computed(() => (props.delegateStatuses || []).length
 const showSessionControlPanel = computed(() => !props.hideWorkspaceButton || hasDelegateStatuses.value);
 const POPUP_OFFSET = 8;
 const POPUP_VIEWPORT_PADDING = 8;
+const fileTagsContextMenu = ref<{ x: number; y: number } | null>(null);
+const fileTagsContextMenuRef = ref<HTMLElement | null>(null);
 
 // ========== 头像栏去重 + 部门弹出 ==========
 
@@ -475,6 +520,23 @@ function closeMentionListPopup() {
   mentionListPopupOpen.value = false;
 }
 
+function openFileTagsContextMenu(event: MouseEvent) {
+  const menuWidth = 256;
+  const menuHeight = 108;
+  fileTagsContextMenu.value = {
+    x: Math.max(8, Math.min(event.clientX, window.innerWidth - menuWidth - 8)),
+    y: Math.max(8, Math.min(event.clientY, window.innerHeight - menuHeight - 8)),
+  };
+}
+
+function closeFileTagsContextMenu() {
+  fileTagsContextMenu.value = null;
+}
+
+function handleFileTagsContextMenuKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape") closeFileTagsContextMenu();
+}
+
 function toggleMentionListPopup() {
   if (busy.value) return;
   mentionListPopupOpen.value = !mentionListPopupOpen.value;
@@ -497,6 +559,12 @@ function handleAvatarClickOutside(event: MouseEvent) {
     && !mentionListPopupRef.value?.contains(target)
   ) {
     closeMentionListPopup();
+  }
+  if (
+    fileTagsContextMenu.value
+    && !fileTagsContextMenuRef.value?.contains(target)
+  ) {
+    closeFileTagsContextMenu();
   }
   if (
     avatarPopupTarget.value
@@ -544,6 +612,7 @@ onMounted(() => {
   window.addEventListener("resize", handleAvatarPopupViewportChange);
   window.addEventListener("scroll", handleAvatarPopupViewportChange, true);
   window.addEventListener("click", handleAvatarClickOutside, true);
+  window.addEventListener("keydown", handleFileTagsContextMenuKeydown);
 });
 
 onBeforeUnmount(() => {
@@ -554,6 +623,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("resize", handleAvatarPopupViewportChange);
   window.removeEventListener("scroll", handleAvatarPopupViewportChange, true);
   window.removeEventListener("click", handleAvatarClickOutside, true);
+  window.removeEventListener("keydown", handleFileTagsContextMenuKeydown);
 });
 </script>
 
