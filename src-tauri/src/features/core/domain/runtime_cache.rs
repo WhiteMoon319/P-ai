@@ -243,20 +243,33 @@ fn sanitize_runtime_cached_app_data(data: &mut AppData) {
     data.conversations.clear();
 }
 
-fn sync_cached_app_data_runtime(
-    state: &AppState,
-    runtime: &RuntimeStateFile,
-) -> Result<(), String> {
-    let mut cached = state
-        .cached_app_data
-        .lock()
-        .map_err(|err| format!("Failed to lock cached app data: {err}"))?;
+fn sync_cached_app_data_runtime_best_effort(state: &AppState, runtime: &RuntimeStateFile) {
+    let mut cached = match state.cached_app_data.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            runtime_log_warn(
+                "[应用数据写入] 聚合运行缓存锁已中毒，恢复缓存并继续".to_string(),
+            );
+            state.cached_app_data.clear_poison();
+            poisoned.into_inner()
+        }
+    };
     if let Some(data) = cached.as_mut() {
         sanitize_runtime_cached_app_data(data);
         apply_runtime_state_to_app_data(data, runtime);
     }
     drop(cached);
-    sync_cached_app_data_signature(state)
+    let mut signature = match state.cached_app_data_signature.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            runtime_log_warn(
+                "[应用数据写入] 聚合运行缓存签名锁已中毒，恢复签名并继续".to_string(),
+            );
+            state.cached_app_data_signature.clear_poison();
+            poisoned.into_inner()
+        }
+    };
+    *signature = Some(app_data_cache_signature(&state.data_path));
 }
 
 fn sync_cached_app_data_conversation(
@@ -319,6 +332,21 @@ fn sync_cached_conversation_metadata(
     Ok(())
 }
 
+fn lock_cached_conversation_field_metadata_ids(
+    state: &AppState,
+) -> std::sync::MutexGuard<'_, std::collections::HashSet<String>> {
+    match state.cached_conversation_field_metadata_ids.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            runtime_log_warn(
+                "[会话元数据] 字段权威标记锁已中毒，恢复锁并继续".to_string(),
+            );
+            state.cached_conversation_field_metadata_ids.clear_poison();
+            poisoned.into_inner()
+        }
+    }
+}
+
 fn conversation_meta_needs_message_derived_repair(
     meta: &message_store::ConversationShardMeta,
 ) -> bool {
@@ -345,8 +373,16 @@ fn repair_conversation_metadata_message_derived_fields_if_needed(
         return Ok(meta.clone());
     }
     let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
-    let Some(ready_meta) = message_store::read_ready_message_store_meta(&store_paths)? else {
-        return Ok(meta.clone());
+    let ready_meta = match message_store::read_ready_message_store_meta(&store_paths) {
+        Ok(Some(ready_meta)) => ready_meta,
+        Ok(None) => return Ok(meta.clone()),
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[会话元数据] 消息派生字段修复读取失败，保留现有元数据继续，conversation_id={}，error={}",
+                conversation_id, err
+            ));
+            return Ok(meta.clone());
+        }
     };
     let should_repair =
         (meta.message_count() == 0 && ready_meta.message_count() > 0)
@@ -385,6 +421,8 @@ fn remove_cached_conversation_metadata(
         .lock()
         .map_err(|_| "Failed to lock cached conversation metadata".to_string())?;
     metadata.remove(conversation_id);
+    drop(metadata);
+    lock_cached_conversation_field_metadata_ids(state).remove(conversation_id);
     Ok(())
 }
 
@@ -400,15 +438,6 @@ fn apply_cached_conversation_metadata(
         source.apply_to_conversation(conversation);
     }
     Ok(())
-}
-
-fn conversation_with_cached_metadata(
-    state: &AppState,
-    conversation: &Conversation,
-) -> Result<Conversation, String> {
-    let mut merged = conversation.clone();
-    apply_cached_conversation_metadata(state, &mut merged)?;
-    Ok(merged)
 }
 
 fn state_read_conversation_metadata_cached(
@@ -433,15 +462,17 @@ fn state_read_conversation_metadata_cached(
         .map(|dirty_ids| dirty_ids.contains(conversation_id))
         .unwrap_or(false);
     if dirty_fast_path {
-        let cached = state
+        let cached_meta = state
             .cached_conversation_metadata
             .lock()
-            .map_err(|_| "Failed to lock cached conversation metadata".to_string())?;
-        if let Some(meta) = cached.get(conversation_id) {
+            .map_err(|_| "Failed to lock cached conversation metadata".to_string())?
+            .get(conversation_id)
+            .cloned();
+        if let Some(meta) = cached_meta {
             return repair_conversation_metadata_message_derived_fields_if_needed(
                 state,
                 conversation_id,
-                meta,
+                &meta,
             );
         }
     }
@@ -476,7 +507,37 @@ fn state_read_conversation_metadata_cached(
             &meta,
         );
     }
-    let meta = read_conversation_meta_shard(&state.data_path, conversation_id)?;
+    let meta = match read_conversation_meta_shard(&state.data_path, conversation_id) {
+        Ok(meta) => meta,
+        Err(err) => {
+            let pending_meta = state
+                .conversation_persist_pending
+                .lock()
+                .map_err(|_| "Failed to lock pending conversation persist".to_string())?
+                .as_ref()
+                .and_then(|slot| slot.conversations.get(conversation_id))
+                .map(message_store::ConversationShardMeta::from_conversation);
+            let cached_meta = pending_meta.or_else(|| {
+                state
+                .cached_conversation_metadata
+                .lock()
+                    .ok()
+                    .and_then(|cached| cached.get(conversation_id).cloned())
+            });
+            let Some(cached_meta) = cached_meta else {
+                return Err(err);
+            };
+            runtime_log_warn(format!(
+                "[会话元数据] 磁盘读取失败，使用最后缓存快照继续，conversation_id={}，error={}",
+                conversation_id, err
+            ));
+            return repair_conversation_metadata_message_derived_fields_if_needed(
+                state,
+                conversation_id,
+                &cached_meta,
+            );
+        }
+    };
     {
         let mut cached = state
             .cached_conversation_metadata
@@ -611,14 +672,10 @@ fn state_mark_conversation_metadata_direct_persisted(
     Ok(meta)
 }
 
-fn state_mark_conversation_metadata_cached_persisted(
+fn state_mark_conversation_metadata_cached_persisted_unlocked(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<(), String> {
-    let mutation_gate = conversation_mutation_gate(&state.data_path, conversation_id)?;
-    let _guard = mutation_gate.lock().map_err(|err| {
-        named_lock_error("conversation_mutation_gate", file!(), line!(), module_path!(), &err)
-    })?;
     let disk_mtime = conversation_shard_modified_time(&state.data_path, conversation_id);
     {
         let mut cached_mtimes = state
@@ -677,6 +734,14 @@ fn state_update_conversation_metadata_cached<T>(
     let _guard = mutation_gate.lock().map_err(|err| {
         named_lock_error("conversation_mutation_gate", file!(), line!(), module_path!(), &err)
     })?;
+    state_update_conversation_metadata_cached_unlocked(state, normalized_conversation_id, updater)
+}
+
+fn state_update_conversation_metadata_cached_unlocked<T>(
+    state: &AppState,
+    normalized_conversation_id: &str,
+    updater: impl FnOnce(&mut Conversation) -> Result<T, String>,
+) -> Result<(Conversation, T, u64), String> {
     let conversation_meta =
         state_read_conversation_metadata_cached(state, normalized_conversation_id)?;
     let mut conversation = conversation_service_v2()
@@ -689,8 +754,9 @@ fn state_update_conversation_metadata_cached<T>(
             .cached_conversation_metadata
             .lock()
             .map_err(|_| "Failed to lock cached conversation metadata".to_string())?;
-        metadata.insert(conversation.id.clone(), updated_meta);
+        metadata.insert(conversation.id.clone(), updated_meta.clone());
     }
+    lock_cached_conversation_field_metadata_ids(state).insert(conversation.id.clone());
     let seq = state
         .conversation_persist_latest_seq
         .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
@@ -729,9 +795,8 @@ fn state_update_conversation_metadata_cached<T>(
             deleted_conversation_ids: std::collections::HashSet::new(),
         });
         slot.seq = seq;
-        if slot.conversations.contains_key(&conversation.id) {
-            slot.conversations
-                .insert(conversation.id.clone(), conversation.clone());
+        if let Some(pending_conversation) = slot.conversations.get_mut(&conversation.id) {
+            updated_meta.apply_to_conversation(pending_conversation);
         } else {
             slot.metadata_conversation_ids.insert(conversation.id.clone());
         }
@@ -744,19 +809,11 @@ fn state_update_conversation_metadata_cached<T>(
     Ok((conversation, result, seq))
 }
 
-fn state_update_conversation_meta_cached<T>(
+fn state_update_conversation_meta_cached_unlocked<T>(
     state: &AppState,
-    conversation_id: &str,
+    normalized_conversation_id: &str,
     updater: impl FnOnce(&mut message_store::ConversationShardMeta) -> Result<T, String>,
 ) -> Result<(message_store::ConversationShardMeta, T, u64), String> {
-    let normalized_conversation_id = conversation_id.trim();
-    if normalized_conversation_id.is_empty() {
-        return Err("Conversation id is empty".to_string());
-    }
-    let mutation_gate = conversation_mutation_gate(&state.data_path, normalized_conversation_id)?;
-    let _guard = mutation_gate.lock().map_err(|err| {
-        named_lock_error("conversation_mutation_gate", file!(), line!(), module_path!(), &err)
-    })?;
     let mut conversation_meta =
         state_read_conversation_metadata_cached(state, normalized_conversation_id)?;
     let result = updater(&mut conversation_meta)?;
@@ -772,6 +829,8 @@ fn state_update_conversation_meta_cached<T>(
             .map_err(|_| "Failed to lock cached conversation metadata".to_string())?;
         metadata.insert(normalized_conversation_id.to_string(), conversation_meta.clone());
     }
+    lock_cached_conversation_field_metadata_ids(state)
+        .insert(normalized_conversation_id.to_string());
     {
         let mut cached_mtimes = state
             .cached_conversation_mtimes
@@ -889,15 +948,16 @@ fn state_read_conversation_cached(
         .map(|dirty_ids| dirty_ids.contains(conversation_id))
         .unwrap_or(false);
     if dirty_fast_path {
-        let pending = state
+        let pending_conversation = state
             .conversation_persist_pending
             .lock()
-            .map_err(|_| "Failed to lock pending conversation persist".to_string())?;
-        if let Some(conversation) = pending
+            .map_err(|_| "Failed to lock pending conversation persist".to_string())?
             .as_ref()
             .and_then(|slot| slot.conversations.get(conversation_id))
-        {
-            return Ok(conversation.clone());
+            .cloned();
+        if let Some(conversation) = pending_conversation {
+            sync_cached_conversation_metadata(state, &conversation)?;
+            return Ok(conversation);
         }
     }
     let mut conversation = read_conversation_shard(&state.data_path, conversation_id)?;
@@ -1198,31 +1258,109 @@ fn state_write_runtime_state_cached(
         .app_data_persist_latest_seq
         .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
         + 1;
-    let _write_guard = state
-        .app_data_persist_write_lock
-        .lock()
-        .map_err(|_| "Failed to lock app data persist write lock".to_string())?;
-    let mut next_runtime = runtime.clone();
-    normalize_runtime_state_contact_communication(&mut next_runtime);
+    let _write_guard = match state.app_data_persist_write_lock.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            runtime_log_warn(
+                "[应用数据写入] 写锁已中毒，恢复锁并继续运行时状态写入".to_string(),
+            );
+            poisoned.into_inner()
+        }
+    };
+    state_commit_runtime_state_cached_locked(state, runtime.clone(), seq, true)
+}
+
+fn state_mutate_runtime_state_cached<T>(
+    state: &AppState,
+    mutate: impl FnOnce(&mut RuntimeStateFile) -> Result<T, String>,
+) -> Result<T, String> {
+    let seq = state
+        .app_data_persist_latest_seq
+        .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
+        + 1;
+    let _write_guard = match state.app_data_persist_write_lock.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            runtime_log_warn(
+                "[应用数据写入] 写锁已中毒，恢复锁并继续运行时状态原子修改".to_string(),
+            );
+            poisoned.into_inner()
+        }
+    };
+    let mut runtime = read_runtime_state_shard(&state.data_path)?;
+    let output = mutate(&mut runtime)?;
+    state_commit_runtime_state_cached_locked(state, runtime, seq, false)?;
+    Ok(output)
+}
+
+fn state_commit_runtime_state_cached_locked(
+    state: &AppState,
+    mut next_runtime: RuntimeStateFile,
+    seq: u64,
+    preserve_existing_atomic_fields: bool,
+) -> Result<(), String> {
     if let Ok(existing_runtime) = read_runtime_state_shard(&state.data_path) {
+        if preserve_existing_atomic_fields {
+            merge_atomic_remote_im_checkpoint_fields(&existing_runtime, &mut next_runtime);
+            if next_runtime.runtime_revision < existing_runtime.runtime_revision {
+                runtime_log_warn(format!(
+                    "[应用数据写入] 检测到旧运行状态快照，保留最新远程联系人配置，snapshot_revision={}，current_revision={}",
+                    next_runtime.runtime_revision, existing_runtime.runtime_revision
+                ));
+                next_runtime.remote_im_contacts = existing_runtime.remote_im_contacts.clone();
+                let latest_contact_ids = next_runtime
+                    .remote_im_contacts
+                    .iter()
+                    .map(|contact| contact.id.clone())
+                    .collect::<std::collections::HashSet<_>>();
+                next_runtime
+                    .remote_im_contact_checkpoints
+                    .retain(|checkpoint| latest_contact_ids.contains(&checkpoint.contact_id));
+            }
+        }
         next_runtime.data_migration_version = next_runtime
             .data_migration_version
             .max(existing_runtime.data_migration_version);
         next_runtime.message_store_migration_version = next_runtime
             .message_store_migration_version
             .max(existing_runtime.message_store_migration_version);
+        next_runtime.runtime_revision = existing_runtime
+            .runtime_revision
+            .max(next_runtime.runtime_revision)
+            .saturating_add(1);
+    } else {
+        next_runtime.runtime_revision = next_runtime.runtime_revision.saturating_add(1);
     }
+    normalize_runtime_state_contact_communication(&mut next_runtime);
     let _ = write_runtime_state_shard(&state.data_path, &next_runtime)?;
     let disk_mtime = path_modified_time(&app_layout_runtime_state_path(&state.data_path));
-    *state
-        .cached_runtime_state
-        .lock()
-        .map_err(|_| "Failed to lock cached runtime state".to_string())? = Some(next_runtime.clone());
-    *state
-        .cached_runtime_state_mtime
-        .lock()
-        .map_err(|_| "Failed to lock cached runtime state mtime".to_string())? = disk_mtime;
-    sync_cached_app_data_runtime(state, &next_runtime)?;
+    let mut cached_runtime = match state.cached_runtime_state.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            runtime_log_warn(
+                "[应用数据写入] 运行状态缓存锁已中毒，权威分片已写入，恢复缓存并继续"
+                    .to_string(),
+            );
+            state.cached_runtime_state.clear_poison();
+            poisoned.into_inner()
+        }
+    };
+    *cached_runtime = Some(next_runtime.clone());
+    drop(cached_runtime);
+    let mut cached_mtime = match state.cached_runtime_state_mtime.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            runtime_log_warn(
+                "[应用数据写入] 运行状态缓存时间锁已中毒，权威分片已写入，恢复缓存并继续"
+                    .to_string(),
+            );
+            state.cached_runtime_state_mtime.clear_poison();
+            poisoned.into_inner()
+        }
+    };
+    *cached_mtime = disk_mtime;
+    drop(cached_mtime);
+    sync_cached_app_data_runtime_best_effort(state, &next_runtime);
     if let Ok(mut pending) = state.app_data_persist_pending.lock() {
         if pending
             .as_ref()
@@ -1234,6 +1372,64 @@ fn state_write_runtime_state_cached(
     }
     refresh_cached_app_data_dirty(state);
     Ok(())
+}
+
+fn merge_atomic_remote_im_checkpoint_fields(
+    existing_runtime: &RuntimeStateFile,
+    next_runtime: &mut RuntimeStateFile,
+) {
+    let existing_by_contact = existing_runtime
+        .remote_im_contact_checkpoints
+        .iter()
+        .map(|checkpoint| (checkpoint.contact_id.as_str(), checkpoint))
+        .collect::<std::collections::HashMap<_, _>>();
+    for checkpoint in &mut next_runtime.remote_im_contact_checkpoints {
+        let Some(existing) = existing_by_contact.get(checkpoint.contact_id.as_str()) else {
+            continue;
+        };
+        let existing_has_atomic_state = existing.atomic_revision > 0
+            || existing.energy.is_some()
+            || existing.last_success_reply_at.is_some()
+            || existing.last_boundary_message_id.is_some()
+            || existing.last_boundary_covers_message_id.is_some()
+            || existing.group_reply_delivery.is_some();
+        if existing_has_atomic_state && existing.atomic_revision >= checkpoint.atomic_revision {
+            checkpoint.atomic_revision = existing.atomic_revision;
+            checkpoint.energy = existing.energy;
+            checkpoint.energy_updated_at = existing.energy_updated_at.clone();
+            checkpoint.last_success_reply_at = existing.last_success_reply_at.clone();
+            checkpoint.last_boundary_message_id = existing.last_boundary_message_id.clone();
+            checkpoint.last_boundary_covers_message_id =
+                existing.last_boundary_covers_message_id.clone();
+            checkpoint.group_reply_delivery = existing.group_reply_delivery.clone();
+        }
+    }
+    let next_checkpoint_ids = next_runtime
+        .remote_im_contact_checkpoints
+        .iter()
+        .map(|checkpoint| checkpoint.contact_id.clone())
+        .collect::<std::collections::HashSet<_>>();
+    let next_contact_ids = next_runtime
+        .remote_im_contacts
+        .iter()
+        .map(|contact| contact.id.clone())
+        .collect::<std::collections::HashSet<_>>();
+    let missing = existing_runtime
+        .remote_im_contact_checkpoints
+        .iter()
+        .filter(|checkpoint| {
+            !next_checkpoint_ids.contains(&checkpoint.contact_id)
+                && next_contact_ids.contains(&checkpoint.contact_id)
+                && (checkpoint.atomic_revision > 0
+                    || checkpoint.energy.is_some()
+                    || checkpoint.last_success_reply_at.is_some()
+                    || checkpoint.last_boundary_message_id.is_some()
+                    || checkpoint.last_boundary_covers_message_id.is_some()
+                    || checkpoint.group_reply_delivery.is_some())
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    next_runtime.remote_im_contact_checkpoints.extend(missing);
 }
 
 fn state_read_agents_runtime_snapshot(state: &AppState) -> Result<AppData, String> {
@@ -1507,14 +1703,25 @@ fn state_schedule_conversation_persist(
         .conversation_persist_latest_seq
         .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
         + 1;
-    let mut conversation_for_cache = conversation_with_cached_metadata(state, conversation)?;
-    if let Some(current) = state
-        .conversation_persist_pending
-        .lock()
-        .map_err(|_| "Failed to lock pending conversation persist".to_string())?
-        .as_ref()
-        .and_then(|slot| slot.conversations.get(&conversation.id).cloned())
-    {
+    let pending_conversation = {
+        let pending = state
+            .conversation_persist_pending
+            .lock()
+            .map_err(|_| "Failed to lock pending conversation persist".to_string())?;
+        pending
+            .as_ref()
+            .and_then(|slot| slot.conversations.get(&conversation.id).cloned())
+    };
+    let mut conversation_for_cache = conversation.clone();
+    let has_field_metadata_authority =
+        lock_cached_conversation_field_metadata_ids(state).contains(&conversation.id);
+    if has_field_metadata_authority {
+        // 字段级 metadata API 是部门、人格、路由、工作区、Todo 等字段的权威写入面。
+        // 标记独立于 pending 批次保存，避免 worker take/落盘后旧完整快照再次回滚这些字段。
+        // messages 仍来自传入快照；完整快照若要修改 metadata，应改走字段级 API。
+        apply_cached_conversation_metadata(state, &mut conversation_for_cache)?;
+    }
+    if let Some(current) = pending_conversation {
         conversation_for_cache
             .cumulative_usage
             .keep_at_least(&current.cumulative_usage);

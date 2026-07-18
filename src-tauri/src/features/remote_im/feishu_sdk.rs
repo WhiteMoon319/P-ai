@@ -118,7 +118,7 @@ impl FeishuSdk {
         receive_id: &str,
         msg_type: &str,
         content_obj: Value,
-    ) -> Result<String, String> {
+    ) -> Result<String, RemoteImSdkSendError> {
         let response = client
             .post(format!(
                 "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type={receive_id_type}"
@@ -132,13 +132,29 @@ impl FeishuSdk {
             }))
             .send()
             .await
-            .map_err(|err| format!("feishu send failed: {err}"))?;
+            .map_err(|err| {
+                RemoteImSdkSendError::uncertain(format!("feishu send failed: {err}"))
+            })?;
+        let status = response.status();
         let body = response
             .json::<Value>()
             .await
-            .map_err(|err| format!("parse feishu send response failed: {err}"))?;
+            .map_err(|err| {
+                RemoteImSdkSendError::uncertain(format!(
+                    "parse feishu send response failed: {err}"
+                ))
+            })?;
+        if !status.is_success() {
+            return Err(remote_im_http_rejection_error(
+                status,
+                format!("feishu send rejected http {}: {}", status.as_u16(), body),
+            ));
+        }
         if body.get("code").and_then(Value::as_i64).unwrap_or(-1) != 0 {
-            return Err(format!("feishu send rejected: {}", body));
+            return Err(RemoteImSdkSendError::definitely_not_sent(format!(
+                "feishu send rejected: {}",
+                body
+            )));
         }
         Ok(body
             .get("data")
@@ -249,14 +265,19 @@ impl RemoteImSdk for FeishuSdk {
         channel: &'a RemoteImChannelConfig,
         contact: &'a RemoteImContact,
         payload: &'a Value,
-    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<String, RemoteImSdkSendError>> + Send + 'a>> {
         Box::pin(async move {
             let started = std::time::Instant::now();
             let items = remote_im_payload_content_items(payload);
             if items.is_empty() {
-                return Err("feishu outbound content is empty".to_string());
+                return Err(RemoteImSdkSendError::definitely_not_sent(
+                    "feishu outbound content is empty",
+                ));
             }
-            let token = self.tenant_access_token(channel).await?;
+            let token = self
+                .tenant_access_token(channel)
+                .await
+                .map_err(RemoteImSdkSendError::definitely_not_sent)?;
             let receive_id_type = remote_im_credential_text(&channel.credentials, "receiveIdType");
             let receive_id_type = if receive_id_type.is_empty() {
                 if remote_im_is_group_contact(contact) {
@@ -295,8 +316,10 @@ impl RemoteImSdk for FeishuSdk {
                         }),
                     );
                     msg
-                })?;
+                })
+                .map_err(RemoteImSdkSendError::definitely_not_sent)?;
             let mut last_message_id = String::new();
+            let mut delivered_any = false;
             for item in &items {
                 let item_type = item.get("type").and_then(Value::as_str).unwrap_or("");
                 let message_id = match item_type {
@@ -313,12 +336,20 @@ impl RemoteImSdk for FeishuSdk {
                             "text",
                             serde_json::json!({ "text": text }),
                         )
-                        .await?
+                        .await
+                        .map_err(|err| err.after_confirmed_partial_delivery(delivered_any))?
                     }
                     "image" => {
-                        let raw = remote_im_content_item_bytes(item).await?;
+                        let raw = remote_im_content_item_bytes(item)
+                            .await
+                            .map_err(RemoteImSdkSendError::definitely_not_sent)
+                            .map_err(|err| err.after_confirmed_partial_delivery(delivered_any))?;
                         let image_name = remote_im_content_item_name(item, "image.png");
-                        let image_key = self.upload_image_key(&client, &token, &image_name, raw).await?;
+                        let image_key = self
+                            .upload_image_key(&client, &token, &image_name, raw)
+                            .await
+                            .map_err(RemoteImSdkSendError::definitely_not_sent)
+                            .map_err(|err| err.after_confirmed_partial_delivery(delivered_any))?;
                         self.send_message(
                             &client,
                             &token,
@@ -327,15 +358,21 @@ impl RemoteImSdk for FeishuSdk {
                             "image",
                             serde_json::json!({ "image_key": image_key }),
                         )
-                        .await?
+                        .await
+                        .map_err(|err| err.after_confirmed_partial_delivery(delivered_any))?
                     }
                     "file" => {
-                        let raw = remote_im_content_item_bytes(item).await?;
+                        let raw = remote_im_content_item_bytes(item)
+                            .await
+                            .map_err(RemoteImSdkSendError::definitely_not_sent)
+                            .map_err(|err| err.after_confirmed_partial_delivery(delivered_any))?;
                         let file_name = remote_im_content_item_name(item, "attachment.bin");
                         let file_mime = remote_im_content_item_mime(item, "application/octet-stream");
                         let file_key = self
                             .upload_file_key(&client, &token, &file_name, &file_mime, raw)
-                            .await?;
+                            .await
+                            .map_err(RemoteImSdkSendError::definitely_not_sent)
+                            .map_err(|err| err.after_confirmed_partial_delivery(delivered_any))?;
                         self.send_message(
                             &client,
                             &token,
@@ -344,16 +381,21 @@ impl RemoteImSdk for FeishuSdk {
                             "file",
                             serde_json::json!({ "file_key": file_key }),
                         )
-                        .await?
+                        .await
+                        .map_err(|err| err.after_confirmed_partial_delivery(delivered_any))?
                     }
                     _ => continue,
                 };
+                delivered_any = true;
                 if !message_id.trim().is_empty() {
                     last_message_id = message_id;
                 }
             }
             if last_message_id.trim().is_empty() {
-                return Err("feishu outbound content is empty".to_string());
+                return Err(RemoteImSdkSendError::definitely_not_sent(
+                    "feishu outbound content is empty",
+                )
+                .after_confirmed_partial_delivery(delivered_any));
             }
             remote_im_log(
                 "INFO",

@@ -1,5 +1,52 @@
 use std::{future::Future, pin::Pin};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RemoteImSdkSendErrorKind {
+    DefinitelyNotSent,
+    Uncertain,
+}
+
+#[derive(Debug, Clone)]
+struct RemoteImSdkSendError {
+    kind: RemoteImSdkSendErrorKind,
+    message: String,
+}
+
+impl RemoteImSdkSendError {
+    fn definitely_not_sent(message: impl Into<String>) -> Self {
+        Self {
+            kind: RemoteImSdkSendErrorKind::DefinitelyNotSent,
+            message: message.into(),
+        }
+    }
+
+    fn uncertain(message: impl Into<String>) -> Self {
+        Self {
+            kind: RemoteImSdkSendErrorKind::Uncertain,
+            message: message.into(),
+        }
+    }
+
+    fn after_confirmed_partial_delivery(mut self, delivered_any: bool) -> Self {
+        if delivered_any {
+            self.kind = RemoteImSdkSendErrorKind::Uncertain;
+        }
+        self
+    }
+}
+
+fn remote_im_http_rejection_error(
+    status: reqwest::StatusCode,
+    message: impl Into<String>,
+) -> RemoteImSdkSendError {
+    let message = message.into();
+    if status == reqwest::StatusCode::REQUEST_TIMEOUT || status.is_server_error() {
+        RemoteImSdkSendError::uncertain(message)
+    } else {
+        RemoteImSdkSendError::definitely_not_sent(message)
+    }
+}
+
 trait RemoteImSdk: Send + Sync {
     #[allow(dead_code)] // 在测试中使用
     fn platform(&self) -> RemoteImPlatform;
@@ -9,7 +56,7 @@ trait RemoteImSdk: Send + Sync {
         channel: &'a RemoteImChannelConfig,
         contact: &'a RemoteImContact,
         payload: &'a Value,
-    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = Result<String, RemoteImSdkSendError>> + Send + 'a>>;
 }
 
 fn remote_im_payload_text(payload: &Value) -> String {
@@ -515,7 +562,7 @@ impl DingtalkSdk {
         url: String,
         token: &str,
         body: &Value,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, RemoteImSdkSendError> {
         let response = client
             .post(url)
             .header("x-acs-dingtalk-access-token", token)
@@ -523,24 +570,34 @@ impl DingtalkSdk {
             .json(body)
             .send()
             .await
-            .map_err(|err| format!("dingtalk send failed: {err}"))?;
+            .map_err(|err| RemoteImSdkSendError::uncertain(format!("dingtalk send failed: {err}")))?;
         let status = response.status();
         let response_text = response
             .text()
             .await
-            .map_err(|err| format!("read dingtalk send response failed: {err}"))?;
+            .map_err(|err| {
+                RemoteImSdkSendError::uncertain(format!(
+                    "read dingtalk send response failed: {err}"
+                ))
+            })?;
         let parsed = remote_im_json_or_text(&response_text);
         if !status.is_success() {
-            return Err(format!(
+            return Err(remote_im_http_rejection_error(
+                status,
+                format!(
                 "dingtalk send rejected http {}: {}",
                 status.as_u16(),
                 parsed
+                ),
             ));
         }
         if parsed.get("errcode").and_then(Value::as_i64).unwrap_or(0) != 0
             || parsed.get("code").and_then(Value::as_i64).unwrap_or(0) != 0
         {
-            return Err(format!("dingtalk send rejected: {}", parsed));
+            return Err(RemoteImSdkSendError::definitely_not_sent(format!(
+                "dingtalk send rejected: {}",
+                parsed
+            )));
         }
         Ok(parsed)
     }
@@ -550,7 +607,7 @@ impl DingtalkSdk {
         client: &reqwest::Client,
         webhook: &str,
         text: &str,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, RemoteImSdkSendError> {
         let response = client
             .post(webhook)
             .header(CONTENT_TYPE, "application/json")
@@ -562,25 +619,39 @@ impl DingtalkSdk {
             }))
             .send()
             .await
-            .map_err(|err| format!("dingtalk sessionWebhook send failed: {err}"))?;
+            .map_err(|err| {
+                RemoteImSdkSendError::uncertain(format!(
+                    "dingtalk sessionWebhook send failed: {err}"
+                ))
+            })?;
 
         let status = response.status();
         let response_text = response
             .text()
             .await
-            .map_err(|err| format!("read dingtalk sessionWebhook response failed: {err}"))?;
+            .map_err(|err| {
+                RemoteImSdkSendError::uncertain(format!(
+                    "read dingtalk sessionWebhook response failed: {err}"
+                ))
+            })?;
         let parsed = remote_im_json_or_text(&response_text);
         if !status.is_success() {
-            return Err(format!(
+            return Err(remote_im_http_rejection_error(
+                status,
+                format!(
                 "dingtalk sessionWebhook rejected http {}: {}",
                 status.as_u16(),
                 parsed
+                ),
             ));
         }
         if parsed.get("errcode").and_then(Value::as_i64).unwrap_or(0) != 0
             || parsed.get("code").and_then(Value::as_i64).unwrap_or(0) != 0
         {
-            return Err(format!("dingtalk sessionWebhook rejected: {}", parsed));
+            return Err(RemoteImSdkSendError::definitely_not_sent(format!(
+                "dingtalk sessionWebhook rejected: {}",
+                parsed
+            )));
         }
         Ok(parsed)
     }
@@ -661,12 +732,14 @@ impl RemoteImSdk for DingtalkSdk {
         channel: &'a RemoteImChannelConfig,
         contact: &'a RemoteImContact,
         payload: &'a Value,
-    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<String, RemoteImSdkSendError>> + Send + 'a>> {
         Box::pin(async move {
             let started = std::time::Instant::now();
             let items = remote_im_payload_content_items(payload);
             if items.is_empty() {
-                return Err("dingtalk outbound content is empty".to_string());
+                return Err(RemoteImSdkSendError::definitely_not_sent(
+                    "dingtalk outbound content is empty",
+                ));
             }
             let content_count = items.len();
             let is_group = contact.remote_contact_type.trim().eq_ignore_ascii_case("group");
@@ -731,7 +804,7 @@ impl RemoteImSdk for DingtalkSdk {
                         Some(&message),
                         None,
                     );
-                    return Err(message);
+                    return Err(RemoteImSdkSendError::definitely_not_sent(message));
                 }
             };
 
@@ -754,7 +827,7 @@ impl RemoteImSdk for DingtalkSdk {
                             Some(&err),
                             Some("stream_session_webhook"),
                         );
-                        return Err(err);
+                        return Err(RemoteImSdkSendError::definitely_not_sent(err));
                     }
                     let text = match self.validate_and_get_text(payload) {
                         Ok(text) => text,
@@ -772,7 +845,7 @@ impl RemoteImSdk for DingtalkSdk {
                                 Some(&err),
                                 Some("stream_session_webhook"),
                             );
-                            return Err(err);
+                            return Err(RemoteImSdkSendError::definitely_not_sent(err));
                         }
                     };
                     let parsed = match self.send_via_session_webhook(&client, &webhook, &text).await {
@@ -788,7 +861,7 @@ impl RemoteImSdk for DingtalkSdk {
                                 started,
                                 "失败",
                                 None,
-                                Some(&err),
+                                Some(&err.message),
                                 Some("stream_session_webhook"),
                             );
                             return Err(err);
@@ -834,7 +907,7 @@ impl RemoteImSdk for DingtalkSdk {
                     Some(&err),
                     Some("none"),
                 );
-                return Err(err);
+                return Err(RemoteImSdkSendError::definitely_not_sent(err));
             };
             if let Err(err) = self.validate_target_is_private(contact) {
                 self.log_outcome(
@@ -850,7 +923,7 @@ impl RemoteImSdk for DingtalkSdk {
                     Some(&err),
                     Some("openapi_robot"),
                 );
-                return Err(err);
+                return Err(RemoteImSdkSendError::definitely_not_sent(err));
             }
             let token = match self.access_token_for_channel(channel).await {
                 Ok(token) => token,
@@ -868,10 +941,11 @@ impl RemoteImSdk for DingtalkSdk {
                         Some(&err),
                         Some("openapi_robot"),
                     );
-                    return Err(err);
+                    return Err(RemoteImSdkSendError::definitely_not_sent(err));
                 }
             };
             let mut process_query_key = String::new();
+            let mut delivered_any = false;
             for item in &items {
                 let item_type = item.get("type").and_then(Value::as_str).unwrap_or("");
                 let (msg_key, msg_param) = match item_type {
@@ -885,10 +959,15 @@ impl RemoteImSdk for DingtalkSdk {
                     "image" => {
                         let image_name = remote_im_content_item_name(item, "image.png");
                         let image_mime = remote_im_content_item_mime(item, "image/png");
-                        let image_raw = remote_im_content_item_bytes(item).await?;
+                        let image_raw = remote_im_content_item_bytes(item)
+                            .await
+                            .map_err(RemoteImSdkSendError::definitely_not_sent)
+                            .map_err(|err| err.after_confirmed_partial_delivery(delivered_any))?;
                         let media_id = self
                             .upload_media_id(&client, &token, "image", &image_name, &image_mime, image_raw)
-                            .await?;
+                            .await
+                            .map_err(RemoteImSdkSendError::definitely_not_sent)
+                            .map_err(|err| err.after_confirmed_partial_delivery(delivered_any))?;
                         (
                             "sampleImageMsg".to_string(),
                             serde_json::json!({ "photoURL": media_id }),
@@ -897,10 +976,15 @@ impl RemoteImSdk for DingtalkSdk {
                     "file" => {
                         let file_name = remote_im_content_item_name(item, "attachment.bin");
                         let file_mime = remote_im_content_item_mime(item, "application/octet-stream");
-                        let file_raw = remote_im_content_item_bytes(item).await?;
+                        let file_raw = remote_im_content_item_bytes(item)
+                            .await
+                            .map_err(RemoteImSdkSendError::definitely_not_sent)
+                            .map_err(|err| err.after_confirmed_partial_delivery(delivered_any))?;
                         let media_id = self
                             .upload_media_id(&client, &token, "file", &file_name, &file_mime, file_raw)
-                            .await?;
+                            .await
+                            .map_err(RemoteImSdkSendError::definitely_not_sent)
+                            .map_err(|err| err.after_confirmed_partial_delivery(delivered_any))?;
                         (
                             "sampleFile".to_string(),
                             serde_json::json!({
@@ -927,12 +1011,13 @@ impl RemoteImSdk for DingtalkSdk {
                             started,
                             "失败",
                             None,
-                            Some(&err),
+                            Some(&err.message),
                             Some("openapi_robot"),
                         );
-                        return Err(err);
+                        return Err(err.after_confirmed_partial_delivery(delivered_any));
                     }
                 };
+                delivered_any = true;
                 let current = self.process_query_key_from_response(&parsed);
                 if !current.trim().is_empty() {
                     process_query_key = current;
@@ -953,7 +1038,7 @@ impl RemoteImSdk for DingtalkSdk {
                     Some(&err),
                     Some("openapi_robot"),
                 );
-                return Err(err);
+                return Err(RemoteImSdkSendError::uncertain(err));
             }
 
             // ========== final logging ==========
@@ -999,16 +1084,21 @@ impl RemoteImSdk for OnebotV11Sdk {
         channel: &'a RemoteImChannelConfig,
         contact: &'a RemoteImContact,
         payload: &'a Value,
-    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<String, RemoteImSdkSendError>> + Send + 'a>> {
         Box::pin(async move {
             let segments = remote_im_onebot_message_segments(payload);
             if segments.is_empty() {
-                return Err("onebot v11 outbound content is empty".to_string());
+                return Err(RemoteImSdkSendError::definitely_not_sent(
+                    "onebot v11 outbound content is empty",
+                ));
             }
 
             let manager = onebot_v11_ws_manager();
             if !manager.is_connected(&channel.id).await {
-                return Err(format!("onebot v11 channel '{}' not connected", channel.id));
+                return Err(RemoteImSdkSendError::definitely_not_sent(format!(
+                    "onebot v11 channel '{}' not connected",
+                    channel.id
+                )));
             }
 
             let action = if remote_im_is_group_contact(contact) {
@@ -1041,7 +1131,10 @@ impl RemoteImSdk for OnebotV11Sdk {
                     "payload_summary": remote_im_payload_media_summary(payload)
                 }),
             );
-            let result = match manager.call_api(&channel.id, action, params, 10000).await {
+            let result = match manager
+                .call_api_classified(&channel.id, action, params, 10000)
+                .await
+            {
                 Ok(value) => value,
                 Err(err) => {
                     remote_im_log(
@@ -1052,7 +1145,7 @@ impl RemoteImSdk for OnebotV11Sdk {
                             "action": action,
                             "remote_contact_id": contact.remote_contact_id,
                             "status": "失败",
-                            "error": err,
+                            "error": err.message,
                             "duration_ms": started.elapsed().as_millis()
                         }),
                     );
@@ -1112,7 +1205,7 @@ impl RemoteImSdk for WeixinOcSdk {
         channel: &'a RemoteImChannelConfig,
         contact: &'a RemoteImContact,
         payload: &'a Value,
-    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<String, RemoteImSdkSendError>> + Send + 'a>> {
         Box::pin(async move {
             let started = std::time::Instant::now();
             let content_count = remote_im_payload_content_items(payload).len();
@@ -1131,13 +1224,20 @@ impl RemoteImSdk for WeixinOcSdk {
             );
             let send_result = async {
                 let credentials = WeixinOcCredentials::from_value(&channel.credentials);
+                let items = remote_im_payload_content_items(payload);
+                if items.is_empty() {
+                    return Err(RemoteImSdkSendError::definitely_not_sent(
+                        "个人微信渠道发送内容为空",
+                    ));
+                }
                 let context_token = weixin_oc_manager()
                     .get_context_token(&channel.id, &contact.remote_contact_id)
                     .await;
-                let client = build_weixin_oc_http_client(credentials.normalized_api_timeout_ms())?;
-                let items = remote_im_payload_content_items(payload);
+                let client = build_weixin_oc_http_client(credentials.normalized_api_timeout_ms())
+                    .map_err(RemoteImSdkSendError::definitely_not_sent)?;
                 let mut pending_text = String::new();
                 let mut last_message_id = String::new();
+                let mut delivered_any = false;
 
                 for item in &items {
                     match item.get("type").and_then(Value::as_str).unwrap_or("") {
@@ -1171,12 +1271,21 @@ impl RemoteImSdk for WeixinOcSdk {
                                     pending_text.as_str(),
                                     context_token.as_deref(),
                                 )
-                                .await?;
+                                .await
+                                .map_err(|err| {
+                                    err.after_confirmed_partial_delivery(delivered_any)
+                                })?;
+                                delivered_any = true;
                                 pending_text.clear();
                             }
                             let image_name = remote_im_content_item_name(item, "image.png");
                             let image_mime = remote_im_content_item_mime(item, "image/png");
-                            let image_raw = remote_im_content_item_bytes(item).await?;
+                            let image_raw = remote_im_content_item_bytes(item)
+                                .await
+                                .map_err(RemoteImSdkSendError::definitely_not_sent)
+                                .map_err(|err| {
+                                    err.after_confirmed_partial_delivery(delivered_any)
+                                })?;
                             let is_gif = image_mime.trim().eq_ignore_ascii_case("image/gif")
                                 || std::path::Path::new(image_name.as_str())
                                     .extension()
@@ -1212,14 +1321,22 @@ impl RemoteImSdk for WeixinOcSdk {
                                 &image_name,
                                 &image_raw,
                             )
-                            .await?;
+                            .await
+                            .map_err(RemoteImSdkSendError::definitely_not_sent)
+                            .map_err(|err| {
+                                err.after_confirmed_partial_delivery(delivered_any)
+                            })?;
                             last_message_id = weixin_oc_send_message_items(
                                 credentials.clone(),
                                 &contact.remote_contact_id,
                                 vec![media_item],
                                 context_token.as_deref(),
                             )
-                            .await?;
+                            .await
+                            .map_err(|err| {
+                                err.after_confirmed_partial_delivery(delivered_any)
+                            })?;
+                            delivered_any = true;
                         }
                         "file" => {
                             if !pending_text.trim().is_empty() {
@@ -1242,11 +1359,20 @@ impl RemoteImSdk for WeixinOcSdk {
                                     pending_text.as_str(),
                                     context_token.as_deref(),
                                 )
-                                .await?;
+                                .await
+                                .map_err(|err| {
+                                    err.after_confirmed_partial_delivery(delivered_any)
+                                })?;
+                                delivered_any = true;
                                 pending_text.clear();
                             }
                             let file_name = remote_im_content_item_name(item, "attachment.bin");
-                            let file_raw = remote_im_content_item_bytes(item).await?;
+                            let file_raw = remote_im_content_item_bytes(item)
+                                .await
+                                .map_err(RemoteImSdkSendError::definitely_not_sent)
+                                .map_err(|err| {
+                                    err.after_confirmed_partial_delivery(delivered_any)
+                                })?;
                             remote_im_log(
                                 "INFO",
                                 "weixin_oc.send_outbound.segment",
@@ -1270,14 +1396,22 @@ impl RemoteImSdk for WeixinOcSdk {
                                 &file_name,
                                 &file_raw,
                             )
-                            .await?;
+                            .await
+                            .map_err(RemoteImSdkSendError::definitely_not_sent)
+                            .map_err(|err| {
+                                err.after_confirmed_partial_delivery(delivered_any)
+                            })?;
                             last_message_id = weixin_oc_send_message_items(
                                 credentials.clone(),
                                 &contact.remote_contact_id,
                                 vec![media_item],
                                 context_token.as_deref(),
                             )
-                            .await?;
+                            .await
+                            .map_err(|err| {
+                                err.after_confirmed_partial_delivery(delivered_any)
+                            })?;
+                            delivered_any = true;
                         }
                         _ => {}
                     }
@@ -1303,11 +1437,16 @@ impl RemoteImSdk for WeixinOcSdk {
                         pending_text.as_str(),
                         context_token.as_deref(),
                     )
-                    .await?;
+                    .await
+                    .map_err(|err| err.after_confirmed_partial_delivery(delivered_any))?;
+                    delivered_any = true;
                 }
 
                 if last_message_id.trim().is_empty() {
-                    return Err("个人微信渠道发送内容为空".to_string());
+                    return Err(RemoteImSdkSendError::definitely_not_sent(
+                        "个人微信渠道发送内容为空",
+                    )
+                    .after_confirmed_partial_delivery(delivered_any));
                 }
                 Ok(last_message_id)
             }
@@ -1347,7 +1486,7 @@ impl RemoteImSdk for WeixinOcSdk {
                             "status": "失败",
                             "content_count": content_count,
                             "duration_ms": started.elapsed().as_millis(),
-                            "error": err,
+                            "error": &err.message,
                         }),
                     );
                     Err(err)
@@ -1387,7 +1526,7 @@ fn remote_im_mock_send_via_sdk(
     channel: &RemoteImChannelConfig,
     contact: &RemoteImContact,
     payload: &Value,
-) -> Option<Result<String, String>> {
+) -> Option<Result<String, RemoteImSdkSendError>> {
     let mock_error = channel
         .credentials
         .get("mockSendError")
@@ -1395,7 +1534,20 @@ fn remote_im_mock_send_via_sdk(
         .map(str::trim)
         .filter(|value| !value.is_empty());
     if let Some(err) = mock_error {
-        return Some(Err(err.to_string()));
+        let kind = if channel
+            .credentials
+            .get("mockSendErrorKind")
+            .and_then(Value::as_str)
+            == Some("uncertain")
+        {
+            RemoteImSdkSendErrorKind::Uncertain
+        } else {
+            RemoteImSdkSendErrorKind::DefinitelyNotSent
+        };
+        return Some(Err(RemoteImSdkSendError {
+            kind,
+            message: err.to_string(),
+        }));
     }
 
     let mock_send_enabled = channel
@@ -1418,7 +1570,7 @@ async fn remote_im_send_via_sdk(
     channel: &RemoteImChannelConfig,
     contact: &RemoteImContact,
     payload: &Value,
-) -> Result<String, String> {
+) -> Result<String, RemoteImSdkSendError> {
     let filtered_payload = remote_im_payload_with_channel_markdown_filtered(channel, payload);
 
     #[cfg(test)]
@@ -1427,7 +1579,8 @@ async fn remote_im_send_via_sdk(
     }
 
     let sdk = remote_im_sdk_for_platform(&channel.platform);
-    sdk.validate_channel(channel)?;
+    sdk.validate_channel(channel)
+        .map_err(RemoteImSdkSendError::definitely_not_sent)?;
     sdk.send_outbound(channel, contact, &filtered_payload).await
 }
 
@@ -1448,6 +1601,44 @@ mod remote_im_adapter_tests {
             show_tool_calls: false,
             filter_markdown: false,
             allow_send_files: false,
+        }
+    }
+
+    fn mock_contact(platform: RemoteImPlatform) -> RemoteImContact {
+        RemoteImContact {
+            id: "contact-test".to_string(),
+            channel_id: "ch".to_string(),
+            platform,
+            remote_contact_type: "group".to_string(),
+            remote_contact_id: "remote-test".to_string(),
+            remote_contact_name: "测试联系人".to_string(),
+            avatar_url: String::new(),
+            remark_name: String::new(),
+            allow_send: false,
+            allow_send_files: false,
+            allow_receive: false,
+            activation_mode: "never".to_string(),
+            activation_keywords: Vec::new(),
+            mute_keywords: default_remote_im_contact_mute_keywords(),
+            unmute_keywords: default_remote_im_contact_unmute_keywords(),
+            patience_seconds: default_remote_im_contact_patience_seconds(),
+            mute_duration_seconds: default_remote_im_contact_mute_duration_seconds(),
+            activation_cooldown_seconds: 0,
+            route_mode: "dedicated_contact_conversation".to_string(),
+            bound_department_id: None,
+            bound_agent_id: None,
+            bound_conversation_id: None,
+            processing_mode: "continuous".to_string(),
+            response_strategy: default_remote_im_contact_response_strategy(),
+            response_guidance: default_remote_im_contact_response_guidance(),
+            blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
+            group_reply_pacing: RemoteImGroupReplyPacing::default(),
+            last_activated_at: None,
+            last_message_at: None,
+            dingtalk_session_webhook: None,
+            dingtalk_session_webhook_expired_time: None,
+            onebot_group_members: Vec::new(),
+            shell_workspaces: Vec::new(),
         }
     }
 
@@ -1520,6 +1711,96 @@ mod remote_im_adapter_tests {
         );
     }
 
+    #[tokio::test]
+    async fn every_sdk_should_classify_empty_payload_as_definitely_not_sent() {
+        let payload = serde_json::json!({"content": []});
+        for platform in [
+            RemoteImPlatform::Feishu,
+            RemoteImPlatform::Dingtalk,
+            RemoteImPlatform::OnebotV11,
+            RemoteImPlatform::WeixinOc,
+        ] {
+            let channel = mock_channel(platform.clone(), serde_json::json!({}));
+            let contact = mock_contact(platform.clone());
+            let err = remote_im_sdk_for_platform(&platform)
+                .send_outbound(&channel, &contact, &payload)
+                .await
+                .expect_err("empty payload must fail before transport");
+            assert_eq!(
+                err.kind,
+                RemoteImSdkSendErrorKind::DefinitelyNotSent,
+                "platform={platform:?}, error={}",
+                err.message
+            );
+        }
+    }
+
+    #[test]
+    fn http_rejection_should_only_retry_when_no_delivery_is_confirmed() {
+        assert_eq!(
+            remote_im_http_rejection_error(reqwest::StatusCode::BAD_REQUEST, "bad request").kind,
+            RemoteImSdkSendErrorKind::DefinitelyNotSent
+        );
+        assert_eq!(
+            remote_im_http_rejection_error(reqwest::StatusCode::REQUEST_TIMEOUT, "timeout").kind,
+            RemoteImSdkSendErrorKind::Uncertain
+        );
+        assert_eq!(
+            remote_im_http_rejection_error(reqwest::StatusCode::BAD_GATEWAY, "gateway").kind,
+            RemoteImSdkSendErrorKind::Uncertain
+        );
+    }
+
+    #[tokio::test]
+    async fn weixin_unparseable_success_response_should_be_uncertain() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("reserve port");
+        let address = listener.local_addr().expect("local address");
+        listener
+            .set_nonblocking(true)
+            .expect("set listener nonblocking");
+        let server = std::thread::spawn(move || {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+            while std::time::Instant::now() < deadline {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        use std::io::Write;
+                        stream
+                            .write_all(
+                                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 8\r\nConnection: close\r\n\r\nnot-json",
+                            )
+                            .expect("write malformed response");
+                        return true;
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    Err(_) => return false,
+                }
+            }
+            false
+        });
+        let channel = mock_channel(
+            RemoteImPlatform::WeixinOc,
+            serde_json::json!({
+                "baseUrl": format!("http://localhost:{}", address.port()),
+                "token": "token-test",
+                "apiTimeoutMs": 1000
+            }),
+        );
+        let contact = mock_contact(RemoteImPlatform::WeixinOc);
+        let payload = serde_json::json!({
+            "content": [{"type": "text", "text": "hello"}]
+        });
+
+        let err = WeixinOcSdk
+            .send_outbound(&channel, &contact, &payload)
+            .await
+            .expect_err("malformed success response should be classified");
+
+        assert!(server.join().expect("join mock server"));
+        assert_eq!(err.kind, RemoteImSdkSendErrorKind::Uncertain);
+    }
+
     #[test]
     fn feishu_validate_should_require_app_credentials() {
         let sdk = FeishuSdk;
@@ -1574,40 +1855,7 @@ mod remote_im_adapter_tests {
 
     #[test]
     fn is_group_contact_should_match_remote_contact_type() {
-        let group = RemoteImContact {
-            id: "1".to_string(),
-            channel_id: "c".to_string(),
-            platform: RemoteImPlatform::Feishu,
-            remote_contact_type: "group".to_string(),
-            remote_contact_id: "gid".to_string(),
-            remote_contact_name: "g".to_string(),
-            avatar_url: String::new(),
-            remark_name: String::new(),
-            allow_send: false,
-            allow_send_files: false,
-            allow_receive: false,
-            activation_mode: "never".to_string(),
-            activation_keywords: Vec::new(),
-            mute_keywords: default_remote_im_contact_mute_keywords(),
-            unmute_keywords: default_remote_im_contact_unmute_keywords(),
-            patience_seconds: default_remote_im_contact_patience_seconds(),
-            mute_duration_seconds: default_remote_im_contact_mute_duration_seconds(),
-            activation_cooldown_seconds: 0,
-            route_mode: "dedicated_contact_conversation".to_string(),
-            bound_department_id: None,
-            bound_agent_id: None,
-            bound_conversation_id: None,
-            processing_mode: "continuous".to_string(),
-            response_strategy: default_remote_im_contact_response_strategy(),
-            response_guidance: default_remote_im_contact_response_guidance(),
-            blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
-            last_activated_at: None,
-            last_message_at: None,
-            dingtalk_session_webhook: None,
-            dingtalk_session_webhook_expired_time: None,
-            onebot_group_members: Vec::new(),
-            shell_workspaces: Vec::new(),
-        };
+        let group = mock_contact(RemoteImPlatform::Feishu);
         let private = RemoteImContact {
             remote_contact_type: "private".to_string(),
             ..group.clone()

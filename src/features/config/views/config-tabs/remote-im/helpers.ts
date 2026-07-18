@@ -1,4 +1,86 @@
-import type { RemoteImContact } from "../../../../../types/app";
+import type { RemoteImContact, RemoteImGroupReplyPacing } from "../../../../../types/app";
+
+export const DEFAULT_REMOTE_IM_GROUP_REPLY_PACING: RemoteImGroupReplyPacing = {
+  assistantDebounceSeconds: 1,
+  secretaryInspectionSeconds: 7,
+  replyCooldownSeconds: 10,
+  inspectionJitterRatio: 0.2,
+  maximumEnergy: 100,
+  baseReplyEnergyCost: 14,
+  energyCostPerCharacter: 0.12,
+  energyRecoveryPerSecond: 0.6,
+  positiveEnergyPhrases: [],
+  negativeEnergyPhrases: [],
+  positiveEnergyDelta: 6,
+  negativeEnergyDelta: -15,
+  normalReplyMaxChars: 20,
+  focusReplyMaxChars: 200,
+  focusInstructions: [],
+};
+
+export function normalizeGroupReplyPacing(
+  value?: Partial<RemoteImGroupReplyPacing> | null,
+): RemoteImGroupReplyPacing {
+  const defaults = DEFAULT_REMOTE_IM_GROUP_REPLY_PACING;
+  const numberValue = (candidate: unknown, fallback: number) => {
+    const parsed = Number(candidate);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  return {
+    assistantDebounceSeconds: Math.max(1, Math.round(numberValue(value?.assistantDebounceSeconds, defaults.assistantDebounceSeconds))),
+    secretaryInspectionSeconds: Math.max(1, Math.round(numberValue(value?.secretaryInspectionSeconds, defaults.secretaryInspectionSeconds))),
+    replyCooldownSeconds: Math.max(0, Math.round(numberValue(value?.replyCooldownSeconds, defaults.replyCooldownSeconds))),
+    inspectionJitterRatio: Math.min(1, Math.max(0, numberValue(value?.inspectionJitterRatio, defaults.inspectionJitterRatio))),
+    maximumEnergy: Math.max(0.01, numberValue(value?.maximumEnergy, defaults.maximumEnergy)),
+    baseReplyEnergyCost: Math.max(0, numberValue(value?.baseReplyEnergyCost, defaults.baseReplyEnergyCost)),
+    energyCostPerCharacter: Math.max(0, numberValue(value?.energyCostPerCharacter, defaults.energyCostPerCharacter)),
+    energyRecoveryPerSecond: Math.max(0, numberValue(value?.energyRecoveryPerSecond, defaults.energyRecoveryPerSecond)),
+    positiveEnergyPhrases: Array.isArray(value?.positiveEnergyPhrases) ? [...value.positiveEnergyPhrases] : [],
+    negativeEnergyPhrases: Array.isArray(value?.negativeEnergyPhrases) ? [...value.negativeEnergyPhrases] : [],
+    positiveEnergyDelta: Math.max(0, numberValue(value?.positiveEnergyDelta, defaults.positiveEnergyDelta)),
+    negativeEnergyDelta: Math.min(0, numberValue(value?.negativeEnergyDelta, defaults.negativeEnergyDelta)),
+    normalReplyMaxChars: Math.max(1, Math.round(numberValue(value?.normalReplyMaxChars, defaults.normalReplyMaxChars))),
+    focusReplyMaxChars: Math.max(1, Math.round(numberValue(value?.focusReplyMaxChars, defaults.focusReplyMaxChars))),
+    focusInstructions: Array.isArray(value?.focusInstructions) ? [...value.focusInstructions] : [],
+  };
+}
+
+export function parseSpaceSeparatedList(raw: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of String(raw || "").split(/\s+/)) {
+    const item = value.trim();
+    if (!item || seen.has(item)) continue;
+    seen.add(item);
+    out.push(item);
+  }
+  return out;
+}
+
+export function resolveBehaviorDraftSave<T>(
+  currentDraft: T,
+  previousSnapshot: string,
+  submittedSnapshot: string,
+  serverDraft: T | null,
+  saveError?: unknown,
+): { draft: T; savedSnapshot: string; error: string } {
+  if (saveError !== undefined) {
+    return {
+      draft: currentDraft,
+      savedSnapshot: previousSnapshot,
+      error: String(saveError),
+    };
+  }
+  if (!serverDraft) {
+    return { draft: currentDraft, savedSnapshot: previousSnapshot, error: "" };
+  }
+  const serverSnapshot = JSON.stringify(serverDraft);
+  return {
+    draft: JSON.stringify(currentDraft) === submittedSnapshot ? serverDraft : currentDraft,
+    savedSnapshot: serverSnapshot,
+    error: "",
+  };
+}
 
 export function platformLabelOf(platform: string): string {
   const value = String(platform || "").trim().toLowerCase();

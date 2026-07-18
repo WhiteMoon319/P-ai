@@ -249,6 +249,37 @@ async fn run_deferred_setup(app_handle: AppHandle) {
     if let Err(err) = start_conversation_persist_worker(app_state.inner()) {
         runtime_log_error(format!("[启动-延迟] 启动会话后台持久化服务失败: {err}"));
     }
+    let recovery_state = app_state.inner().clone();
+    tauri::async_runtime::spawn(async move {
+        for attempt in 0..6u8 {
+            match remote_im_recover_all_group_reply_delivery_markers(&recovery_state) {
+                Ok((recovered, 0)) => {
+                    if recovered > 0 {
+                        runtime_log_info(format!(
+                            "[群聊巡检] 启动恢复完成，recovered_count={}",
+                            recovered
+                        ));
+                    }
+                    break;
+                }
+                Ok((recovered, failed)) => runtime_log_warn(format!(
+                    "[群聊巡检] 启动恢复部分失败，attempt={}，recovered_count={}，failed_count={}",
+                    attempt.saturating_add(1),
+                    recovered,
+                    failed
+                )),
+                Err(err) => runtime_log_warn(format!(
+                    "[群聊巡检] 启动恢复读取失败，attempt={}，error={}",
+                    attempt.saturating_add(1),
+                    err
+                )),
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(
+                5u64.saturating_mul(1u64 << attempt.min(3)),
+            ))
+            .await;
+        }
+    });
     emit_progress("启动录音热键探针");
     if let Err(err) = start_record_hotkey_probe(
         app_handle.clone(),
@@ -1169,6 +1200,8 @@ fn main() {
             remote_im_update_contact_allow_send_files,
             remote_im_update_contact_allow_receive,
             remote_im_update_contact_blocked_message_prefixes,
+            remote_im_update_contact_behavior,
+            remote_im_patch_contact_settings,
             remote_im_update_contact_activation,
             remote_im_update_contact_remark,
             remote_im_update_contact_route_mode,

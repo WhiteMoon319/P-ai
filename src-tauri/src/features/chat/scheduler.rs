@@ -744,7 +744,7 @@ async fn process_conversation_batch(
             &persisted_batch_messages,
             &scheduler_agents,
         )
-        .await?;
+        .await;
         // 远程应答委托不参与主轮次收尾。
         if !secretary_remote_im_sources.is_empty() {
             secretary_remote_im_sources.clear();
@@ -927,17 +927,26 @@ async fn process_conversation_batch(
                         .find(|message| message.role.trim().eq_ignore_ascii_case("user"))
                         .cloned(),
                 ) {
-                    remote_im_reply_delegate_enqueue_guidance(
+                    match remote_im_reply_delegate_enqueue_guidance(
                         state,
                         target_delegate_id,
                         guidance_message,
-                    )?;
-                    should_activate = false;
-                    remote_im_skip_decision = Some("remote_reply_delegate_guidance".to_string());
-                    runtime_log_info(format!(
-                        "[远程应答委托] 完成，任务=投递引导，conversation_id={}，contact_id={}，delegate_id={}",
-                        conversation_id, contact.id, target_delegate_id
-                    ));
+                        None,
+                    ) {
+                        Ok(()) => {
+                            should_activate = false;
+                            remote_im_skip_decision =
+                                Some("remote_reply_delegate_guidance".to_string());
+                            runtime_log_info(format!(
+                                "[远程应答委托] 完成，任务=投递引导，conversation_id={}，contact_id={}，delegate_id={}",
+                                conversation_id, contact.id, target_delegate_id
+                            ));
+                        }
+                        Err(err) => runtime_log_warn(format!(
+                            "[远程应答委托] 引导投递竞态降级，保留当前批次走新委托，conversation_id={}，contact_id={}，delegate_id={}，error={}",
+                            conversation_id, contact.id, target_delegate_id, err
+                        )),
+                    }
                 } else if let (Some(source), Some(trigger_message_id)) = (
                     activated_remote_im_sources.first().cloned(),
                     persisted_batch_messages
@@ -1011,6 +1020,7 @@ async fn process_conversation_batch(
                         contact.patience_seconds,
                         effective_remote_im_contact_response_strategy(&contact) == "smart_judge",
                         false,
+                        None,
                     ) {
                         Ok(delegate_id) => {
                             should_activate = false;

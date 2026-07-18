@@ -125,7 +125,9 @@ async fn process_persisted_remote_im_events_individually_now(
     persisted_batch_messages: &[ChatMessage],
     scheduler_agents: &[AgentProfile],
     must_reply_override: bool,
-) -> Result<(), String> {
+    inspection: Option<&RemoteImReplyDebounceReady>,
+) -> Result<RemoteImReplyDispatchOutcome, String> {
+    let mut outcome = RemoteImReplyDispatchOutcome::NoReply;
     for (event, should_consult_secretary) in events.iter().zip(event_activate_flags.iter().copied()) {
         if !should_consult_secretary || !remote_im_event_requires_reply_delegate(event) {
             continue;
@@ -212,11 +214,11 @@ async fn process_persisted_remote_im_events_individually_now(
             });
         let active_delegate_ids =
             remote_im_reply_delegate_active_ids_for_contact(state, &contact.id)?;
-        let decision = if must_reply_override && active_delegate_ids.is_empty() {
+        let decision = if must_reply_override {
             RemoteImSecretaryDecision {
                 should_reply: true,
-                target_delegate_id: None,
-                reason: "明确喊到助理且当前没有运行应答委托".to_string(),
+                target_delegate_id: active_delegate_ids.first().cloned(),
+                reason: "明确点名助理，跳过秘书判断".to_string(),
                 model_name: String::new(),
                 emit_log: true,
             }
@@ -264,6 +266,19 @@ async fn process_persisted_remote_im_events_individually_now(
                 decision.reason
             ));
         }
+        if let Some(inspection) = inspection {
+            if !remote_im_group_reply_generation_is_current(
+                state,
+                &inspection.contact_id,
+                inspection.generation,
+            ) {
+                runtime_log_warn(format!(
+                    "[群聊巡检] 异步结果过期，contact_id={}，generation={}，stage=secretary_finished",
+                    inspection.contact_id, inspection.generation
+                ));
+                return Ok(RemoteImReplyDispatchOutcome::NoReply);
+            }
+        }
         if !decision.should_reply {
             continue;
         }
@@ -277,8 +292,19 @@ async fn process_persisted_remote_im_events_individually_now(
         }
 
         if let Some(target_delegate_id) = decision.target_delegate_id.as_deref() {
-            match remote_im_reply_delegate_enqueue_guidance(state, target_delegate_id, trigger_message.clone()) {
+            let policy = inspection.map(|entry| RemoteImGroupReplyDispatchPolicy {
+                generation: entry.generation,
+                focus: entry.focus,
+                max_chars: entry.max_chars,
+            });
+            match remote_im_reply_delegate_enqueue_guidance(
+                state,
+                target_delegate_id,
+                trigger_message.clone(),
+                policy,
+            ) {
                 Ok(()) => {
+                    outcome = RemoteImReplyDispatchOutcome::DispatchStarted;
                     runtime_log_info(format!(
                         "[远程应答委托] 完成，任务=投递单事件引导，conversation_id={}，contact_id={}，delegate_id={}，event_id={}",
                         conversation_id, contact.id, target_delegate_id, event.id
@@ -331,8 +357,23 @@ async fn process_persisted_remote_im_events_individually_now(
                 }
             }
         }
-        remote_im_mark_contact_present(state, &contact.id, "秘书决定通知远程应答委托")?;
-        remote_im_schedule_presence_timeout(state, &contact.id, contact.patience_seconds)?;
+        if let Err(err) = remote_im_mark_contact_present(state, &contact.id, "巡检决定通知远程应答委托") {
+            runtime_log_warn(format!(
+                "[群聊巡检] 在场状态降级，contact_id={}，error={}",
+                contact.id, err
+            ));
+        }
+        if let Err(err) = remote_im_schedule_presence_timeout(state, &contact.id, contact.patience_seconds) {
+            runtime_log_warn(format!(
+                "[群聊巡检] 在场计时降级，contact_id={}，error={}",
+                contact.id, err
+            ));
+        }
+        let dispatch_policy = inspection.map(|entry| RemoteImGroupReplyDispatchPolicy {
+            generation: entry.generation,
+            focus: entry.focus,
+            max_chars: entry.max_chars,
+        });
         match spawn_remote_im_reply_delegate(
             state,
             &contact.id,
@@ -346,18 +387,72 @@ async fn process_persisted_remote_im_events_individually_now(
             contact.patience_seconds,
             effective_remote_im_contact_response_strategy(&contact) == "smart_judge",
             force_memory_prompt_snapshot,
+            dispatch_policy,
         ) {
-            Ok(delegate_id) => runtime_log_info(format!(
-                "[远程应答委托] 开始，delegate_id={}，conversation_id={}，contact_id={}，trigger_message_id={}，event_id={}",
-                delegate_id, conversation_id, contact.id, trigger_message.id, event.id
-            )),
-            Err(err) => runtime_log_error(format!(
-                "[远程应答委托] 失败，任务=创建，conversation_id={}，contact_id={}，event_id={}，error={}",
+            Ok(delegate_id) => {
+                outcome = RemoteImReplyDispatchOutcome::DispatchStarted;
+                runtime_log_info(format!(
+                    "[远程应答委托] 开始，delegate_id={}，conversation_id={}，contact_id={}，trigger_message_id={}，event_id={}",
+                    delegate_id, conversation_id, contact.id, trigger_message.id, event.id
+                ));
+            }
+            Err(err) => return Err(format!(
+                "创建远程应答委托失败，conversation_id={}，contact_id={}，event_id={}，error={}",
                 conversation_id, contact.id, event.id, err
             )),
         }
     }
-    Ok(())
+    Ok(outcome)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RemoteImReplyDispatchOutcome {
+    NoReply,
+    DispatchStarted,
+}
+
+fn schedule_remote_im_persisted_event_observe_retry(
+    state: &AppState,
+    event: ChatPendingEvent,
+    attempt: u8,
+) {
+    const MAX_ATTEMPTS: u8 = 6;
+    if attempt >= MAX_ATTEMPTS {
+        runtime_log_warn(format!(
+            "[群聊巡检] 联系人解析连续失败，消息已正常落库并等待后续入站恢复，event_id={}，attempts={}",
+            event.id, attempt
+        ));
+        return;
+    }
+    let delay_seconds = 5u64.saturating_mul(1u64 << attempt.min(3));
+    let state = state.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(delay_seconds)).await;
+        let Some(sender) = event.sender_info.as_ref() else {
+            return;
+        };
+        let source = remote_im_activation_source_from_sender(sender);
+        match remote_im_resolve_secretary_contact(&state, std::slice::from_ref(&source)) {
+            Ok(Some(contact)) => observe_remote_im_persisted_event(&state, &contact, &event),
+            Ok(None) => runtime_log_warn(format!(
+                "[群聊巡检] 联系人已不存在或不再允许巡检，消息保留但停止重试，event_id={}",
+                event.id
+            )),
+            Err(err) => {
+                runtime_log_warn(format!(
+                    "[群聊巡检] 联系人解析重试失败，批次仍保留，event_id={}，attempt={}，error={}",
+                    event.id,
+                    attempt.saturating_add(1),
+                    err
+                ));
+                schedule_remote_im_persisted_event_observe_retry(
+                    &state,
+                    event,
+                    attempt.saturating_add(1),
+                );
+            }
+        }
+    });
 }
 
 async fn process_persisted_remote_im_events_individually(
@@ -368,7 +463,7 @@ async fn process_persisted_remote_im_events_individually(
     _persisted_recent_messages_before_flush: &[ChatMessage],
     _persisted_batch_messages: &[ChatMessage],
     _scheduler_agents: &[AgentProfile],
-) -> Result<(), String> {
+) {
     let _ = event_activate_flags;
     for event in events {
         if !remote_im_event_requires_reply_delegate(event) {
@@ -378,19 +473,26 @@ async fn process_persisted_remote_im_events_individually(
             continue;
         };
         let source = remote_im_activation_source_from_sender(sender);
-        let Some(contact) = remote_im_resolve_secretary_contact(state, std::slice::from_ref(&source))?
-        else {
-            continue;
+        let contact = match remote_im_resolve_secretary_contact(state, std::slice::from_ref(&source)) {
+            Ok(Some(contact)) => contact,
+            Ok(None) => continue,
+            Err(err) => {
+                runtime_log_warn(format!(
+                    "[群聊巡检] 入站降级，event_id={}，reason=联系人解析失败，error={}",
+                    event.id, err
+                ));
+                schedule_remote_im_persisted_event_observe_retry(state, event.clone(), 0);
+                continue;
+            }
         };
-        observe_remote_im_persisted_event(state, &contact, event)?;
+        observe_remote_im_persisted_event(state, &contact, event);
     }
-    Ok(())
 }
 
 async fn process_remote_im_reply_debounce(
     state: &AppState,
     entry: RemoteImReplyDebounceReady,
-) -> Result<(), String> {
+) -> Result<RemoteImReplyDispatchOutcome, String> {
     let sender = entry
         .event
         .sender_info
@@ -405,12 +507,14 @@ async fn process_remote_im_reply_debounce(
             "[远程联系人防抖] 跳过，任务=定时触发，contact_id={}，reason=联系人处于闭嘴状态",
             contact.id
         ));
-        return Ok(());
+        return Ok(RemoteImReplyDispatchOutcome::NoReply);
     }
     let conversation_id = entry.event.conversation_id.clone();
     let active_delegate_ids =
         remote_im_reply_delegate_active_ids_for_contact(state, &contact.id)?;
-    let (history, batch) = if entry.must_reply && active_delegate_ids.is_empty() {
+    let (history, batch) = if entry.path == RemoteImReplyInspectionPath::Mention
+        && active_delegate_ids.is_empty()
+    {
         let message = conversation_service_v2()
             .get_message_by_id_for_frontend_display_only(
                 state,
@@ -426,7 +530,7 @@ async fn process_remote_im_reply_debounce(
             &entry.end_message_id,
         )?
     };
-    let mut event = entry.event;
+    let mut event = entry.event.clone();
     event.messages = batch.clone();
     let agents = state_read_agents_cached(state).unwrap_or_default();
     process_persisted_remote_im_events_individually_now(
@@ -437,7 +541,8 @@ async fn process_remote_im_reply_debounce(
         &history,
         &batch,
         &agents,
-        entry.must_reply,
+        entry.path == RemoteImReplyInspectionPath::Mention,
+        Some(&entry),
     )
     .await
 }
@@ -573,4 +678,3 @@ fn filter_remote_im_follow_up_sources_for_pending_queue(
         })
         .collect()
 }
-

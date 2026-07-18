@@ -127,7 +127,13 @@ impl ConversationServiceV2 {
         let config = load_runtime_organization_snapshot(state)?.config;
         let mut resolved_pairs = Vec::<(RemoteImContact, String)>::new();
         let mut runtime_changed = false;
+        let mut binding_updates = Vec::<(
+            String,
+            RemoteImContactBindingSnapshot,
+            RemoteImContactBindingSnapshot,
+        )>::new();
         for contact in runtime.remote_im_contacts.iter_mut() {
+            let binding_baseline = remote_im_contact_binding_snapshot(contact);
             if remote_im_channel_by_id(&config, &contact.channel_id).is_none() {
                 if contact
                     .bound_conversation_id
@@ -138,6 +144,11 @@ impl ConversationServiceV2 {
                 {
                     contact.bound_conversation_id = None;
                     runtime_changed = true;
+                    binding_updates.push((
+                        contact.id.clone(),
+                        binding_baseline,
+                        remote_im_contact_binding_snapshot(contact),
+                    ));
                 }
                 continue;
             }
@@ -207,19 +218,15 @@ impl ConversationServiceV2 {
                 if previous_bound_conversation_id.is_some() {
                     contact.bound_conversation_id = None;
                     runtime_changed = true;
+                    binding_updates.push((
+                        contact.id.clone(),
+                        binding_baseline,
+                        remote_im_contact_binding_snapshot(contact),
+                    ));
                 }
                 continue;
             };
             contact.bound_conversation_id = Some(conversation_id.clone());
-            if let Some((department_id, agent_id)) = binding_pair.as_ref() {
-                sync_remote_im_contact_conversation_binding(
-                    state,
-                    contact,
-                    &conversation_id,
-                    department_id,
-                    agent_id,
-                )?;
-            }
             let binding_changed = previous_bound_conversation_id.as_deref() != Some(conversation_id.as_str())
                 || previous_bound_department_id.as_deref()
                     != contact.bound_department_id.as_deref().map(str::trim)
@@ -227,11 +234,63 @@ impl ConversationServiceV2 {
                     != contact.bound_agent_id.as_deref().map(str::trim);
             if binding_changed {
                 runtime_changed = true;
+                binding_updates.push((
+                    contact.id.clone(),
+                    binding_baseline,
+                    remote_im_contact_binding_snapshot(contact),
+                ));
             }
             resolved_pairs.push((contact.clone(), conversation_id));
         }
         if runtime_changed {
-            state_write_runtime_state_cached(state, &runtime)?;
+            state_mutate_runtime_state_cached(state, |latest_runtime| {
+                for (contact_id, baseline, resolved) in binding_updates {
+                    let Some(contact) = latest_runtime
+                        .remote_im_contacts
+                        .iter_mut()
+                        .find(|item| item.id == contact_id)
+                    else {
+                        continue;
+                    };
+                    if !remote_im_contact_binding_matches(contact, &baseline) {
+                        runtime_log_warn(format!(
+                            "[联系人会话] 跳过过期绑定修复，contact_id={}，原因=用户配置已变化",
+                            contact_id
+                        ));
+                        continue;
+                    }
+                    remote_im_apply_contact_binding_snapshot(contact, &resolved);
+                }
+                Ok(())
+            })?;
+        }
+        for (contact, conversation_id) in &resolved_pairs {
+            let binding_pair = match resolve_department_agent_pair(
+                contact.bound_department_id.as_deref(),
+                contact.bound_agent_id.as_deref(),
+                &config,
+            ) {
+                Ok(pair) => pair,
+                Err(err) => {
+                    runtime_log_warn(format!(
+                        "[联系人会话] 跳过会话路由同步，contact_id={}，conversation_id={}，error={}",
+                        contact.id, conversation_id, err
+                    ));
+                    continue;
+                }
+            };
+            if let Err(err) = sync_remote_im_contact_conversation_binding(
+                state,
+                contact,
+                conversation_id,
+                &binding_pair.0,
+                &binding_pair.1,
+            ) {
+                runtime_log_warn(format!(
+                    "[联系人会话] 会话列表继续返回，路由同步降级，contact_id={}，conversation_id={}，error={}",
+                    contact.id, conversation_id, err
+                ));
+            }
         }
         let mut items = Vec::<RemoteImContactConversationSummary>::new();
         for (contact, conversation_id) in resolved_pairs {
@@ -489,7 +548,7 @@ impl ConversationServiceV2 {
             .conversation_lock
             .lock()
             .map_err(|err| state_lock_error_with_panic(file!(), line!(), module_path!(), &err))?;
-        let mut runtime = state_read_runtime_state_cached(state)?;
+        let runtime = state_read_runtime_state_cached(state)?;
         let Some(contact_index) = runtime
             .remote_im_contacts
             .iter()
@@ -556,11 +615,21 @@ impl ConversationServiceV2 {
             }
         };
 
-        runtime.remote_im_contacts[contact_index].bound_conversation_id = None;
-        runtime
-            .remote_im_contact_checkpoints
-            .retain(|item| item.contact_id.trim() != normalized_contact_id);
-        state_write_runtime_state_cached(state, &runtime)?;
+        state_mutate_runtime_state_cached(state, |latest_runtime| {
+            let Some(latest_contact) = latest_runtime
+                .remote_im_contacts
+                .iter_mut()
+                .find(|item| item.id == normalized_contact_id)
+            else {
+                return Err(format!("未找到远程联系人：{normalized_contact_id}"));
+            };
+            latest_contact.bound_conversation_id = None;
+            remote_im_reset_contact_checkpoint_atomic_in_list(
+                &mut latest_runtime.remote_im_contact_checkpoints,
+                normalized_contact_id,
+            );
+            Ok(())
+        })?;
         state_schedule_conversation_delete(state, &conversation_meta.id)?;
         drop(guard);
         Ok(true)
@@ -648,7 +717,7 @@ impl ConversationServiceV2 {
         } else {
             Vec::new()
         };
-        let (updated_meta_conversation, (), _) = state_update_conversation_metadata_cached(
+        let (updated_meta_conversation, (), _) = state_update_conversation_metadata_cached_unlocked(
             state,
             normalized_conversation_id,
             |cached| {
@@ -700,7 +769,7 @@ impl ConversationServiceV2 {
         if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
             return Ok(false);
         }
-        state_update_conversation_meta_cached(state, normalized_conversation_id, |meta| {
+        state_update_conversation_meta_cached_unlocked(state, normalized_conversation_id, |meta| {
             meta.push_fast_request_turn(turn);
             Ok(())
         })?;
@@ -771,7 +840,7 @@ impl ConversationServiceV2 {
                     &err,
                 )
             })?;
-            let (conversation, result, _) = state_update_conversation_metadata_cached(
+            let (conversation, result, _) = state_update_conversation_metadata_cached_unlocked(
                 state,
                 normalized_conversation_id,
                 updater,
@@ -942,10 +1011,9 @@ impl ConversationServiceV2 {
         if normalized_remote_contact_id.is_empty() {
             return Err("remoteContactId 不能为空".to_string());
         }
-        let mut runtime = state_read_runtime_state_cached(state)?;
-        let contact = runtime
+        let contact = state_read_runtime_state_cached(state)?
             .remote_im_contacts
-            .iter_mut()
+            .into_iter()
             .find(|item| item.id.trim() == normalized_remote_contact_id)
             .ok_or_else(|| format!("未找到远程联系人：{normalized_remote_contact_id}"))?;
         let config = state_read_config_cached(state)?;
@@ -960,9 +1028,13 @@ impl ConversationServiceV2 {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned);
-        let conversation_id = ensure_remote_im_contact_conversation_id(state, contact)?;
+        let (_, _, conversation_id, _contact) =
+            remote_im_resolve_contact_session_target_atomic(
+                state,
+                normalized_remote_contact_id,
+                contact,
+            )?;
         if previous_bound_conversation_id.as_deref() != Some(conversation_id.as_str()) {
-            state_write_runtime_state_cached(state, &runtime)?;
             runtime_log_info(format!(
                 "[自动推送] 完成，任务=修复远程联系人绑定会话，remote_contact_id={}，conversation_id={}，previous_conversation_id={}",
                 normalized_remote_contact_id,
@@ -1053,4 +1125,3 @@ impl ConversationServiceV2 {
     }
 
 }
-

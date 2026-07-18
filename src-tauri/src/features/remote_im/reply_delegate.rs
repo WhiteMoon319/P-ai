@@ -4,10 +4,15 @@ fn lock_remote_im_reply_delegate_runtimes(
     std::sync::MutexGuard<'_, std::collections::HashMap<String, RemoteImReplyDelegateRuntime>>,
     String,
 > {
-    state
-        .remote_im_reply_delegate_runtimes
-        .lock()
-        .map_err(|_| "无法获取远程应答委托运行时状态的锁".to_string())
+    match state.remote_im_reply_delegate_runtimes.lock() {
+        Ok(runtimes) => Ok(runtimes),
+        Err(poisoned) => {
+            runtime_log_warn(
+                "[远程应答委托] 运行时锁中毒，已恢复并继续处理当前业务".to_string(),
+            );
+            Ok(poisoned.into_inner())
+        }
+    }
 }
 
 fn remote_im_reply_delegate_register(
@@ -17,6 +22,7 @@ fn remote_im_reply_delegate_register(
     trigger_message: &ChatMessage,
     session_info: &ChatSessionInfo,
     force_memory_prompt_snapshot: bool,
+    dispatch_policy: Option<RemoteImGroupReplyDispatchPolicy>,
 ) -> Result<String, String> {
     let trigger_message_id = trigger_message.id.trim();
     if trigger_message_id.is_empty() {
@@ -29,9 +35,13 @@ fn remote_im_reply_delegate_register(
         ));
         vec![trigger_message.clone()]
     } else { match conversation_service_v2()
-        .get_conversation_prompt_context(state, conversation_id)
+        .get_current_compaction_segment_messages_through(
+            state,
+            conversation_id,
+            trigger_message_id,
+        )
     {
-        Ok(conversation) => conversation.messages,
+        Ok(messages) => messages,
         Err(err) => {
             runtime_log_error(format!(
                 "[远程应答委托] 失败，任务=读取启动 block，改用触发消息内存快照，conversation_id={}，message_id={}，error={}",
@@ -98,6 +108,12 @@ fn remote_im_reply_delegate_register(
         .find(|message| message.id == trigger_message_id)
         .ok_or_else(|| "远程应答委托无法注入系统提醒：冻结上文缺少触发消息".to_string())?;
     remote_im_reply_delegate_prepend_system_reminder(snapshot_trigger_message, system_reminder);
+    if let Some(policy) = dispatch_policy {
+        remote_im_reply_delegate_prepend_system_reminder(
+            snapshot_trigger_message,
+            build_remote_im_group_reply_length_reminder(policy.focus, policy.max_chars),
+        );
+    }
     let runtime = RemoteImReplyDelegateRuntime {
         delegate_id: delegate_id.clone(),
         contact_id: contact_id.to_string(),
@@ -110,6 +126,9 @@ fn remote_im_reply_delegate_register(
         cancelled: false,
         terminal: false,
         session_agent_id: session_info.agent_id.clone(),
+        inspection_generation: dispatch_policy.map(|policy| policy.generation),
+        group_reply_focus: dispatch_policy.map(|policy| policy.focus).unwrap_or(false),
+        group_reply_max_chars: dispatch_policy.map(|policy| policy.max_chars),
     };
     lock_remote_im_reply_delegate_runtimes(state)?.insert(delegate_id.clone(), runtime);
     if let Err(err) = remote_im_reply_delegate_mirror_internal_messages(
@@ -118,15 +137,31 @@ fn remote_im_reply_delegate_register(
         "frozen_snapshot",
         &remote_im_reply_delegate_prompt_messages(state, &delegate_id)?,
     ) {
-        let _ = remote_im_reply_delegate_finish(
-            state,
-            &delegate_id,
-            DELEGATE_STATUS_FAILED,
-            "写入远程应答冻结快照失败",
-        );
-        return Err(err);
+        runtime_log_warn(format!(
+            "[远程应答委托] 镜像冻结快照失败，已降级继续，delegate_id={}，error={}",
+            delegate_id, err
+        ));
     }
     Ok(delegate_id)
+}
+
+fn remote_im_reply_delegate_group_policy(
+    state: &AppState,
+    delegate_id: &str,
+) -> Option<(String, RemoteImGroupReplyDispatchPolicy)> {
+    lock_remote_im_reply_delegate_runtimes(state)
+        .ok()
+        .and_then(|runtimes| {
+            let runtime = runtimes.get(delegate_id)?;
+            Some((
+                runtime.contact_id.clone(),
+                RemoteImGroupReplyDispatchPolicy {
+                    generation: runtime.inspection_generation?,
+                    focus: runtime.group_reply_focus,
+                    max_chars: runtime.group_reply_max_chars?,
+                },
+            ))
+        })
 }
 
 fn remote_im_reply_delegate_prepend_system_reminder(
@@ -296,8 +331,31 @@ fn remote_im_reply_delegate_is_active(state: &AppState, delegate_id: &str) -> bo
 fn remote_im_reply_delegate_enqueue_guidance(
     state: &AppState,
     delegate_id: &str,
-    message: ChatMessage,
+    mut message: ChatMessage,
+    policy: Option<RemoteImGroupReplyDispatchPolicy>,
 ) -> Result<(), String> {
+    let runtime_snapshot = {
+        let runtimes = lock_remote_im_reply_delegate_runtimes(state)?;
+        let runtime = runtimes
+            .get(delegate_id)
+            .ok_or_else(|| format!("远程应答委托不存在，delegate_id={delegate_id}"))?;
+        if runtime.cancelled || runtime.terminal {
+            return Err(format!("远程应答委托已结束，delegate_id={delegate_id}"));
+        }
+        (
+            runtime.contact_id.clone(),
+            runtime.conversation_id.clone(),
+            runtime.session_agent_id.clone(),
+        )
+    };
+    let system_reminder = build_remote_im_reply_delegate_system_reminder(
+        state,
+        &runtime_snapshot.0,
+        &runtime_snapshot.1,
+        &message,
+        &runtime_snapshot.2,
+    );
+    remote_im_reply_delegate_prepend_system_reminder(&mut message, system_reminder);
     {
         let mut runtimes = lock_remote_im_reply_delegate_runtimes(state)?;
         let runtime = runtimes
@@ -305,6 +363,20 @@ fn remote_im_reply_delegate_enqueue_guidance(
             .ok_or_else(|| format!("远程应答委托不存在，delegate_id={delegate_id}"))?;
         if runtime.cancelled || runtime.terminal {
             return Err(format!("远程应答委托已结束，delegate_id={delegate_id}"));
+        }
+        if let Some(policy) = policy {
+            runtime.inspection_generation = Some(policy.generation);
+            runtime.group_reply_focus = policy.focus;
+            runtime.group_reply_max_chars = Some(policy.max_chars);
+        }
+        if let Some(max_chars) = runtime.group_reply_max_chars {
+            remote_im_reply_delegate_prepend_system_reminder(
+                &mut message,
+                build_remote_im_group_reply_length_reminder(
+                    runtime.group_reply_focus,
+                    max_chars,
+                ),
+            );
         }
         runtime.guidance_messages.push_back(message.clone());
     }
@@ -388,7 +460,16 @@ fn abort_remote_im_reply_delegates_for_contact(
     contact_id: &str,
     reason: &str,
 ) -> Result<usize, String> {
-    let delegate_ids = remote_im_reply_delegate_active_ids_for_contact(state, contact_id)?;
+    let delegate_ids = match remote_im_reply_delegate_active_ids_for_contact(state, contact_id) {
+        Ok(delegate_ids) => delegate_ids,
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[远程应答委托] 闭嘴中止快照读取降级，contact_id={}，error={}",
+                contact_id, err
+            ));
+            return Ok(0);
+        }
+    };
     let mut aborted = 0usize;
     for delegate_id in delegate_ids {
         match abort_remote_im_reply_delegate(state, &delegate_id, reason) {
@@ -464,8 +545,18 @@ fn remote_im_reply_delegate_finalize(
             runtime.delegate_id, err
         ));
     }
-    delegate_runtime_thread_archive(state, &runtime.delegate_id, &archived_at)?;
-    delegate_store_update_status(&state.data_path, &runtime.delegate_id, status)?;
+    if let Err(err) = delegate_runtime_thread_archive(state, &runtime.delegate_id, &archived_at) {
+        runtime_log_warn(format!(
+            "[远程应答委托] 线程归档降级，delegate_id={}，error={}",
+            runtime.delegate_id, err
+        ));
+    }
+    if let Err(err) = delegate_store_update_status(&state.data_path, &runtime.delegate_id, status) {
+        runtime_log_warn(format!(
+            "[远程应答委托] 状态落盘降级，delegate_id={}，status={}，error={}",
+            runtime.delegate_id, status, err
+        ));
+    }
     if let Err(err) = emit_conversation_delegate_status_updated(
         state,
         &runtime.conversation_id,
@@ -529,24 +620,54 @@ fn abort_remote_im_reply_delegate(
         runtime
     };
     let chat_key = format!("remote-im-reply-delegate::{delegate_id}");
-    let aborted_chat = {
-        let mut inflight = state
-            .inflight_chat_abort_handles
-            .lock()
-            .map_err(|_| "无法获取远程应答聊天取消句柄".to_string())?;
-        if let Some(handle) = inflight.remove(&chat_key) {
-            handle.abort();
-            true
-        } else {
-            false
+    let aborted_chat = match state.inflight_chat_abort_handles.lock() {
+        Ok(mut inflight) => {
+            if let Some(handle) = inflight.remove(&chat_key) {
+                handle.abort();
+                true
+            } else {
+                false
+            }
+        }
+        Err(poisoned) => {
+            runtime_log_warn(format!(
+                "[远程应答委托] 聊天取消句柄锁中毒，已恢复，delegate_id={}",
+                delegate_id
+            ));
+            let mut inflight = poisoned.into_inner();
+            if let Some(handle) = inflight.remove(&chat_key) {
+                handle.abort();
+                true
+            } else {
+                false
+            }
         }
     };
     let tool_key = format!(
         "{}::{}::remote_reply_delegate:{}",
         runtime.session_agent_id, runtime.conversation_id, delegate_id
     );
-    let aborted_tool = abort_inflight_tool_abort_handle(state, &tool_key)?;
-    remote_im_reply_delegate_finalize(state, runtime, DELEGATE_STATUS_FAILED, reason)?;
+    let aborted_tool = match abort_inflight_tool_abort_handle(state, &tool_key) {
+        Ok(aborted) => aborted,
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[远程应答委托] 工具取消降级，delegate_id={}，error={}",
+                delegate_id, err
+            ));
+            false
+        }
+    };
+    if let Err(err) = remote_im_reply_delegate_finalize(
+        state,
+        runtime,
+        DELEGATE_STATUS_FAILED,
+        reason,
+    ) {
+        runtime_log_warn(format!(
+            "[远程应答委托] 终态归档降级，delegate_id={}，error={}",
+            delegate_id, err
+        ));
+    }
     runtime_log_info(format!(
         "[远程应答委托] 完成，任务=取消，delegate_id={}，aborted_chat={}，aborted_tool={}，reason={}",
         delegate_id, aborted_chat, aborted_tool, reason
@@ -560,12 +681,6 @@ fn remote_im_reply_delegate_mirror_message(
     mut message: ChatMessage,
     internal_kind: Option<&str>,
 ) -> Result<(), String> {
-    let Some(mut conversation) = delegate_runtime_thread_conversation_get_any(state, delegate_id)? else {
-        return Err(format!("远程应答委托会话不存在，delegate_id={delegate_id}"));
-    };
-    if conversation.messages.iter().any(|item| item.id == message.id) {
-        return Ok(());
-    }
     if let Some(kind) = internal_kind {
         let mut meta = message.provider_meta.take().unwrap_or_else(|| serde_json::json!({}));
         if !meta.is_object() {
@@ -577,9 +692,7 @@ fn remote_im_reply_delegate_mirror_message(
         }
         message.provider_meta = Some(meta);
     }
-    conversation.messages.push(message);
-    conversation.updated_at = now_iso();
-    delegate_runtime_thread_conversation_update(state, delegate_id, conversation)
+    delegate_runtime_thread_conversation_append_if_absent(state, delegate_id, message).map(|_| ())
 }
 
 fn remote_im_reply_delegate_mirror_internal_messages(
@@ -606,6 +719,7 @@ fn spawn_remote_im_reply_delegate(
     patience_seconds: u64,
     dynamic_boundary: bool,
     force_memory_prompt_snapshot: bool,
+    dispatch_policy: Option<RemoteImGroupReplyDispatchPolicy>,
 ) -> Result<String, String> {
     let delegate_id = remote_im_reply_delegate_register(
         state,
@@ -614,6 +728,7 @@ fn spawn_remote_im_reply_delegate(
         trigger_message,
         session_info,
         force_memory_prompt_snapshot,
+        dispatch_policy,
     )?;
     let state_clone = state.clone();
     let delegate_id_for_task = delegate_id.clone();
@@ -667,6 +782,8 @@ fn spawn_remote_im_reply_delegate(
                     break;
                 }
             };
+            let iteration_group_dispatch =
+                remote_im_reply_delegate_group_policy(&state_clone, &delegate_id_for_task);
             let request = SendChatRequest {
                 payload: ChatInputPayload {
                     text: None,
@@ -698,12 +815,13 @@ fn spawn_remote_im_reply_delegate(
                     remote_im_reply_trigger_message_id: Some(trigger_message_id.to_string()),
                     remote_im_reply_prompt_snapshot_messages: Some(prompt_snapshot_messages),
                     remote_im_dynamic_boundary: dynamic_boundary,
+                    remote_im_defer_auto_send: true,
                     ..RuntimeContext::default()
                 }),
                 trigger_only: true,
             };
-            match send_chat_message_inner(request, &state_clone, &channel).await {
-                Ok(_) => {
+            let send_result = match send_chat_message_inner(request, &state_clone, &channel).await {
+                Ok(result) => {
                     let _ = remote_im_mark_contact_present(
                         &state_clone,
                         &contact_id_for_task,
@@ -718,6 +836,7 @@ fn spawn_remote_im_reply_delegate(
                         "[远程应答委托] 完成一轮，delegate_id={}，conversation_id={}",
                         delegate_id_for_task, conversation_id
                     ));
+                    result
                 }
                 Err(err) => {
                     runtime_log_error(format!(
@@ -728,10 +847,23 @@ fn spawn_remote_im_reply_delegate(
                     terminal_reason = "远程应答模型执行失败";
                     break;
                 }
-            }
+            };
             match remote_im_reply_delegate_take_guidance_or_finish(&state_clone, &delegate_id_for_task) {
                 Ok(RemoteImReplyDelegateNext::Ended) => break,
                 Ok(RemoteImReplyDelegateNext::Completed(runtime)) => {
+                    let assistant_message_id = send_result
+                        .assistant_message
+                        .as_ref()
+                        .map(|message| message.id.clone());
+                    spawn_remote_im_auto_send_contact_assistant_reply(
+                        state_clone.clone(),
+                        source.clone(),
+                        conversation_id.clone(),
+                        send_result.final_response_text.clone(),
+                        send_result.assistant_message,
+                        assistant_message_id,
+                        iteration_group_dispatch,
+                    );
                     if let Err(err) = remote_im_reply_delegate_finalize(
                         &state_clone,
                         runtime,
@@ -772,6 +904,16 @@ fn spawn_remote_im_reply_delegate(
                 "[远程应答委托] 失败，任务=终结，delegate_id={}，error={}",
                 delegate_id_for_task, err
             ));
+        }
+        if terminal_status == DELEGATE_STATUS_FAILED {
+            if let Some(policy) = dispatch_policy {
+                remote_im_group_reply_retry_after_dispatch_failure(
+                    &state_clone,
+                    &contact_id_for_task,
+                    policy.generation,
+                    terminal_reason,
+                );
+            }
         }
     });
     Ok(delegate_id)

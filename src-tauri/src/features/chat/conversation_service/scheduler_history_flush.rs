@@ -67,7 +67,7 @@ impl ConversationServiceV2 {
                 history_flush_time,
             )?;
         conversation.updated_at = history_flush_time.to_string();
-        let (metadata_conversation, (), _) = state_update_conversation_meta_cached(
+        let (metadata_conversation, (), _) = state_update_conversation_meta_cached_unlocked(
             state,
             &conversation.id,
             |cached| {
@@ -179,7 +179,12 @@ impl ConversationServiceV2 {
                 _ => {}
             }
             conversation.messages.push(persisted);
-            self.increment_conversation_unread_count_if_background(state, conversation, 1);
+            self.increment_conversation_unread_count_if_background(
+                state,
+                conversation,
+                1,
+                true,
+            );
             persisted_batch_messages.push(persisted_for_event);
         }
     }
@@ -251,4 +256,3 @@ impl ConversationServiceV2 {
     }
 
 }
-

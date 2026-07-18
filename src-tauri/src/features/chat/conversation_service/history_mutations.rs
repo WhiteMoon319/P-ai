@@ -231,7 +231,7 @@ impl ConversationServiceV2 {
             started_at,
         )?;
         let updated_at = now_iso();
-        let (updated_meta, (), _) = state_update_conversation_meta_cached(
+        let (updated_meta, (), _) = state_update_conversation_meta_cached_unlocked(
             state,
             &conversation_id,
             |cached| {

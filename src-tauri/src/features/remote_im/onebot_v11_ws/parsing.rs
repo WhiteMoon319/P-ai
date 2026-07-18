@@ -1062,38 +1062,33 @@ fn onebot_persist_group_member_cache(
     if members.is_empty() {
         return Ok(());
     }
-    let mut runtime = state_read_runtime_state_cached(state)?;
-    let Some(contact) = runtime
-        .remote_im_contacts
-        .iter_mut()
-        .find(|item| item.id == contact_id)
-    else {
-        return Ok(());
-    };
-    let mut changed = false;
-    for member in members {
-        let user_id = member.user_id.trim();
-        if user_id.is_empty() {
-            continue;
-        }
-        if let Some(existing) = contact
-            .onebot_group_members
+    state_mutate_runtime_state_cached(state, |runtime| {
+        let Some(contact) = runtime
+            .remote_im_contacts
             .iter_mut()
-            .find(|item| item.user_id.trim() == user_id)
-        {
-            if existing != &member {
-                *existing = member;
-                changed = true;
+            .find(|item| item.id == contact_id)
+        else {
+            return Ok(());
+        };
+        for member in members {
+            let user_id = member.user_id.trim();
+            if user_id.is_empty() {
+                continue;
             }
-        } else {
-            contact.onebot_group_members.push(member);
-            changed = true;
+            if let Some(existing) = contact
+                .onebot_group_members
+                .iter_mut()
+                .find(|item| item.user_id.trim() == user_id)
+            {
+                if existing != &member {
+                    *existing = member;
+                }
+            } else {
+                contact.onebot_group_members.push(member);
+            }
         }
-    }
-    if changed {
-        state_write_runtime_state_cached(state, &runtime)?;
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 fn onebot_format_mention_quote(qq: &str, display_name: Option<&str>) -> String {

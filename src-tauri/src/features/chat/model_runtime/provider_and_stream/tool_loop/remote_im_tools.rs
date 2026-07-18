@@ -124,6 +124,13 @@ fn maybe_spawn_remote_im_tool_persist_auto_send(
     assistant_tool_call_event: &Value,
     tool_result_event: &Value,
 ) {
+    if context.remote_im_reply_delegate_id.is_some() {
+        runtime_log_debug(format!(
+            "[远程IM][工具持久化自动发送] 跳过，conversation_id={}，reason=group_reply_delegate_buffers_until_final",
+            context.conversation_id
+        ));
+        return;
+    }
     let Some(activation_source) = context.remote_im_auto_send_source.clone() else {
         return;
     };
@@ -153,6 +160,6 @@ fn maybe_spawn_remote_im_tool_persist_auto_send(
         assistant_text,
         None,
         Some(assistant_message_id.to_string()),
-        context.remote_im_reply_delegate_id.clone(),
+        None,
     );
 }

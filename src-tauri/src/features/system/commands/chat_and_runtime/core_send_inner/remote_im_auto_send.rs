@@ -373,33 +373,99 @@ fn remote_im_contact_tool_history_events(
 
 const IMAGE_FALLBACK_RECENT_USER_MESSAGE_LIMIT: usize = 7;
 
+async fn remote_im_group_reply_try_quick_rewrite(
+    state: &AppState,
+    text: &str,
+    max_chars: u32,
+) -> Option<String> {
+    let api_config_id = match current_tool_review_api_config_id(state) {
+        Ok(Some(value)) => value,
+        Ok(None) => return None,
+        Err(err) => {
+            runtime_log_warn(format!("[群聊长度门] 快速模型配置读取失败，已使用本地兜底，error={err}"));
+            return None;
+        }
+    };
+    let prepared = PreparedPrompt {
+        preamble: format!(
+            "你负责压缩一条群聊回复。只输出最终正文，保留必要信息，表达必须完整自然，严格不超过 {max_chars} 个字；不要解释，不要使用 Markdown。"
+        ),
+        history_messages: Vec::new(),
+        latest_user_text: text.to_string(),
+        latest_user_meta_text: String::new(),
+        latest_user_extra_text: String::new(),
+        latest_user_extra_blocks: Vec::new(),
+        latest_images: Vec::new(),
+        latest_audios: Vec::new(),
+    };
+    match invoke_quick_model_reply_with_prepared_prompt(
+        state,
+        &api_config_id,
+        prepared,
+        Some(30),
+    )
+    .await
+    {
+        Ok(reply) => {
+            let candidate = if reply.final_response_text.trim().is_empty() {
+                reply.assistant_text
+            } else {
+                reply.final_response_text
+            };
+            let candidate = candidate.trim();
+            (effective_remote_im_group_reply_char_count(candidate) <= max_chars as usize)
+                .then(|| candidate.to_string())
+        }
+        Err(err) => {
+            runtime_log_warn(format!("[群聊长度门] 快速改写失败，已使用本地兜底，error={err}"));
+            None
+        }
+    }
+}
+
+async fn remote_im_group_reply_apply_length_gate(
+    state: &AppState,
+    text: &str,
+    max_chars: u32,
+) -> Option<String> {
+    if effective_remote_im_group_reply_char_count(text) <= max_chars as usize {
+        return Some(text.trim().to_string());
+    }
+    let started = std::time::Instant::now();
+    let rewritten = remote_im_group_reply_try_quick_rewrite(state, text, max_chars).await;
+    let final_text = rewritten.or_else(|| enforce_remote_im_group_reply_length(text, max_chars));
+    runtime_log_warn(format!(
+        "[群聊长度门] 完成，original_chars={}，max_chars={}，final_chars={}，elapsed_ms={}",
+        effective_remote_im_group_reply_char_count(text),
+        max_chars,
+        final_text
+            .as_deref()
+            .map(effective_remote_im_group_reply_char_count)
+            .unwrap_or(0),
+        started.elapsed().as_millis()
+    ));
+    final_text
+}
+
 async fn remote_im_auto_send_assistant_reply_to_source(
     state: &AppState,
     source: &RemoteImActivationSource,
     assistant_text: &str,
     assistant_message: Option<&ChatMessage>,
+    group_policy: Option<RemoteImGroupReplyDispatchPolicy>,
 ) -> Result<Option<(String, Vec<Value>)>, String> {
-    let trimmed_text = assistant_text.trim();
-    let persisted_segments = if let Some(message) = assistant_message {
-        let message_text = message
+    let message_text = if let Some(message) = assistant_message {
+        message
             .parts
             .iter()
             .find_map(|part| match part {
                 MessagePart::Text { text, .. } => Some(text.as_str()),
                 _ => None,
             })
-            .unwrap_or(assistant_text);
-        resolve_text_and_meme_annotations_to_inline_segments(
-            state,
-            message_text,
-            message.meme_annotations.as_deref(),
-        )?
+            .unwrap_or(assistant_text)
     } else {
-        None
+        assistant_text
     };
-    if trimmed_text.is_empty() && persisted_segments.is_none() {
-        return Ok(None);
-    }
     let config = state_read_config_cached(state)?;
     let channel = remote_im_channel_by_id(&config, &source.channel_id)
         .ok_or_else(|| format!("远程IM渠道不存在: {}", source.channel_id))?
@@ -434,26 +500,137 @@ async fn remote_im_auto_send_assistant_reply_to_source(
             source.channel_id, source.remote_contact_id
         ));
     }
+    let outbound_text = if contact.remote_contact_type.trim().eq_ignore_ascii_case("group") {
+        if let Some(policy) = group_policy {
+            remote_im_group_reply_apply_length_gate(state, message_text, policy.max_chars).await
+        } else {
+            Some(message_text.trim().to_string())
+        }
+    } else {
+        Some(message_text.trim().to_string())
+    };
+    let Some(outbound_text) = outbound_text.filter(|value| !value.trim().is_empty()) else {
+        return Ok(None);
+    };
+    let original_segments = if let Some(message) = assistant_message {
+        resolve_text_and_meme_annotations_to_inline_segments(
+            state,
+            message_text,
+            message.meme_annotations.as_deref(),
+        )?
+    } else {
+        None
+    };
+    let persisted_segments = if outbound_text.trim() == message_text.trim() {
+        original_segments
+    } else {
+        original_segments.map(|segments| {
+            let mut rewritten = vec![PersistedInlineMessageSegment::Text {
+                text: outbound_text.clone(),
+            }];
+            rewritten.extend(
+                segments
+                    .into_iter()
+                    .filter(|segment| !matches!(segment, PersistedInlineMessageSegment::Text { .. })),
+            );
+            rewritten
+        })
+    };
     let content = if let Some(segments) = persisted_segments.as_ref() {
         inline_segments_to_remote_im_content_items(segments).await?
     } else {
         remote_im_build_text_content_items(
             state,
-            trimmed_text,
+            &outbound_text,
             &format!(
                 "remote_im_auto_send::{}::{}::{}",
-                source.channel_id, source.remote_contact_id, trimmed_text
+                source.channel_id, source.remote_contact_id, outbound_text
             ),
         )
         .await?
     };
-    let send_result =
-        remote_im_send_content_payload(state, &channel, &contact, content, false, "reply_async").await?;
-    let tool_result = serde_json::to_value(&send_result)
-        .map(|value| tool_value_readable_text(&value))
-        .map_err(|err| format!("整理自动远程联系人发送结果失败: {err}"))?;
+    let delivery_marker = match group_policy {
+        Some(policy) => Some(remote_im_prepare_group_reply_delivery(
+            state,
+            &contact,
+            policy.generation,
+            &outbound_text,
+        )?),
+        None => None,
+    };
+    let send_result = match remote_im_send_content_payload_with_stage(
+        state,
+        &channel,
+        &contact,
+        content,
+        false,
+        "reply_async",
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(send_error) => {
+            if let (Some(policy), Some(marker)) = (group_policy, delivery_marker) {
+                match send_error.stage {
+                    RemoteImSendContentErrorStage::Preflight => {
+                        if let Err(err) = remote_im_cancel_prepared_group_reply_delivery(
+                            state,
+                            &contact.id,
+                            &marker,
+                            &send_error.message,
+                        ) {
+                            runtime_log_warn(format!(
+                                "[群聊巡检] 外发前置失败标记落盘降级，当前批次仍在内存重排，contact_id={}，error={}",
+                                contact.id, err
+                            ));
+                        }
+                        remote_im_group_reply_retry_generation(
+                            state,
+                            &contact.id,
+                            policy.generation,
+                            &format!("外发前置检查失败：{}", send_error.message),
+                        );
+                        return Err(format!(
+                            "[GROUP_SEND_PREFLIGHT] {}",
+                            send_error.message
+                        ));
+                    }
+                    RemoteImSendContentErrorStage::DeliveryAttempted => {
+                        remote_im_group_reply_complete_after_send(
+                            state,
+                            &contact,
+                            policy.generation,
+                            marker,
+                            None,
+                            RemoteImGroupReplySettlementStatus::Uncertain,
+                        );
+                        return Err(format!(
+                            "[GROUP_DELIVERY_UNCERTAIN] {}",
+                            send_error.message
+                        ));
+                    }
+                }
+            }
+            return Err(send_error.message);
+        }
+    };
+    let platform_message_id = send_result
+        .get("platform_message_id")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    if let (Some(policy), Some(marker)) = (group_policy, delivery_marker) {
+        remote_im_group_reply_complete_after_send(
+            state,
+            &contact,
+            policy.generation,
+            marker,
+            platform_message_id,
+            RemoteImGroupReplySettlementStatus::Delivered,
+        );
+    }
+    let tool_result = tool_value_readable_text(&send_result);
     let args_value = serde_json::json!({
-        "text": trimmed_text
+        "text": outbound_text
     });
     Ok(Some((
         "reply_async".to_string(),
@@ -466,10 +643,24 @@ enum RemoteImAutoSendExecutionOutcome {
     SkippedEmptyReply,
     SkippedMuted,
     Sent { action: String },
+    DeliveryUncertain { error: String },
+    PreflightDeferred { error: String },
 }
 
 fn remote_im_auto_send_error_is_muted_gate(error: &str) -> bool {
     error.contains("联系人处于闭嘴状态")
+}
+
+fn remote_im_auto_send_error_is_delivery_uncertain(error: &str) -> bool {
+    error.starts_with("[GROUP_DELIVERY_UNCERTAIN]")
+}
+
+fn remote_im_auto_send_error_is_preflight_deferred(error: &str) -> bool {
+    error.starts_with("[GROUP_SEND_PREFLIGHT]")
+}
+
+fn remote_im_should_auto_send_after_core_round(runtime_context: &RuntimeContext) -> bool {
+    !runtime_context.remote_im_defer_auto_send
 }
 
 async fn remote_im_auto_send_and_record_decision(
@@ -479,38 +670,72 @@ async fn remote_im_auto_send_and_record_decision(
     assistant_text: &str,
     assistant_message: Option<&ChatMessage>,
     assistant_message_id: Option<&str>,
+    group_policy: Option<RemoteImGroupReplyDispatchPolicy>,
 ) -> Result<RemoteImAutoSendExecutionOutcome, String> {
     match remote_im_auto_send_assistant_reply_to_source(
         state,
         activation_source,
         assistant_text,
         assistant_message,
+        group_policy,
     )
     .await
     {
         Ok(Some((action, _))) => {
-            update_remote_im_reply_decision_for_message(
+            if let Err(err) = update_remote_im_reply_decision_for_message(
                 state,
                 conversation_id,
                 assistant_message_id,
                 &action,
                 None,
-            )
-            .map_err(|err| format!("远程IM自动发送成功，但回写回复决策失败: {err}"))?;
+            ) {
+                runtime_log_warn(format!(
+                    "[远程IM][自动发送] 发送已成功但决策回写失败，禁止重复发送，error={err}"
+                ));
+            }
             Ok(RemoteImAutoSendExecutionOutcome::Sent { action })
         }
         Ok(None) => Ok(RemoteImAutoSendExecutionOutcome::SkippedEmptyReply),
+        Err(err) if remote_im_auto_send_error_is_preflight_deferred(&err) => {
+            if let Err(update_err) = update_remote_im_reply_decision_for_message(
+                state,
+                conversation_id,
+                assistant_message_id,
+                "preflight_deferred",
+                Some(err.as_str()),
+            ) {
+                runtime_log_warn(format!(
+                    "[远程IM][自动发送] 前置失败状态回写降级，批次仍已保留重排，error={update_err}"
+                ));
+            }
+            Ok(RemoteImAutoSendExecutionOutcome::PreflightDeferred { error: err })
+        }
+        Err(err) if remote_im_auto_send_error_is_delivery_uncertain(&err) => {
+            if let Err(update_err) = update_remote_im_reply_decision_for_message(
+                state,
+                conversation_id,
+                assistant_message_id,
+                "delivery_uncertain",
+                Some(err.as_str()),
+            ) {
+                runtime_log_warn(format!(
+                    "[远程IM][自动发送] 不确定结果回写失败，已禁止重复发送，error={update_err}"
+                ));
+            }
+            Ok(RemoteImAutoSendExecutionOutcome::DeliveryUncertain { error: err })
+        }
         Err(err) if remote_im_auto_send_error_is_muted_gate(&err) => {
-            update_remote_im_reply_decision_for_message(
+            if let Err(update_err) = update_remote_im_reply_decision_for_message(
                 state,
                 conversation_id,
                 assistant_message_id,
                 "muted_blocked",
                 Some(err.as_str()),
-            )
-            .map_err(|update_err| {
-                format!("远程IM因闭嘴拦截发送，但回写拦截状态失败: {update_err}")
-            })?;
+            ) {
+                runtime_log_warn(format!(
+                    "[远程IM][自动发送] 闭嘴拦截状态回写失败，error={update_err}"
+                ));
+            }
             Ok(RemoteImAutoSendExecutionOutcome::SkippedMuted)
         }
         Err(err) => {
@@ -537,19 +762,10 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
     assistant_text: String,
     assistant_message: Option<ChatMessage>,
     assistant_message_id: Option<String>,
-    remote_delegate_id: Option<String>,
+    group_dispatch: Option<(String, RemoteImGroupReplyDispatchPolicy)>,
 ) {
     tauri::async_runtime::spawn(async move {
-        if remote_delegate_id
-            .as_deref()
-            .is_some_and(|delegate_id| !remote_im_reply_delegate_is_active(&state, delegate_id))
-        {
-            runtime_log_warn(format!(
-                "[远程IM][自动发送] 跳过: conversation_id={}，reason=remote_delegate_not_active",
-                conversation_id
-            ));
-            return;
-        }
+        let group_policy = group_dispatch.as_ref().map(|(_, policy)| *policy);
         let started = std::time::Instant::now();
         runtime_log_info(format!(
             "[远程IM][自动发送] 开始: conversation_id={}, channel_id={}, contact_id={}, text_len={}",
@@ -565,6 +781,7 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
             &assistant_text,
             assistant_message.as_ref(),
             assistant_message_id.as_deref(),
+            group_policy,
         )
         .await
         {
@@ -585,6 +802,40 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
                     started.elapsed().as_millis()
                 ));
             }
+            Ok(RemoteImAutoSendExecutionOutcome::DeliveryUncertain { error }) => {
+                let _ = remote_im_finalize_async_send_result(
+                    &state,
+                    &activation_source,
+                    false,
+                    &now_iso(),
+                    Some(&error),
+                );
+                runtime_log_warn(format!(
+                    "[远程IM][自动发送] 结果不确定，已消费当前批次并禁止自动重发: conversation_id={}, channel_id={}, contact_id={}, error={}, elapsed_ms={}",
+                    conversation_id,
+                    activation_source.channel_id,
+                    activation_source.remote_contact_id,
+                    error,
+                    started.elapsed().as_millis()
+                ));
+            }
+            Ok(RemoteImAutoSendExecutionOutcome::PreflightDeferred { error }) => {
+                let _ = remote_im_finalize_async_send_result(
+                    &state,
+                    &activation_source,
+                    false,
+                    &now_iso(),
+                    Some(&error),
+                );
+                runtime_log_warn(format!(
+                    "[远程IM][自动发送] 前置检查失败，正文未发送且批次已保留重排: conversation_id={}, channel_id={}, contact_id={}, error={}, elapsed_ms={}",
+                    conversation_id,
+                    activation_source.channel_id,
+                    activation_source.remote_contact_id,
+                    error,
+                    started.elapsed().as_millis()
+                ));
+            }
             Ok(RemoteImAutoSendExecutionOutcome::SkippedEmptyReply) => {
                 runtime_log_warn(format!(
                     "[远程IM][自动发送] 跳过: conversation_id={}, channel_id={}, contact_id={}, reason=empty_reply, elapsed_ms={}",
@@ -602,6 +853,14 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
                         conversation_id
                     ),
                 );
+                if let Some((contact_id, policy)) = group_dispatch.as_ref() {
+                    remote_im_group_reply_retry_after_dispatch_failure(
+                        &state,
+                        contact_id,
+                        policy.generation,
+                        "模型返回空回复",
+                    );
+                }
             }
             Ok(RemoteImAutoSendExecutionOutcome::SkippedMuted) => {
                 runtime_log_warn(format!(
@@ -620,6 +879,14 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
                         conversation_id
                     ),
                 );
+                if let Some((contact_id, policy)) = group_dispatch.as_ref() {
+                    remote_im_group_reply_retry_after_dispatch_failure(
+                        &state,
+                        contact_id,
+                        policy.generation,
+                        "发送时联系人处于闭嘴状态",
+                    );
+                }
             }
             Err(err) => {
                 let _ = remote_im_finalize_async_send_result(
@@ -637,6 +904,14 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
                     err,
                     started.elapsed().as_millis()
                 ));
+                if let Some((contact_id, policy)) = group_dispatch.as_ref() {
+                    remote_im_group_reply_retry_after_dispatch_failure(
+                        &state,
+                        contact_id,
+                        policy.generation,
+                        &format!("远程外发失败：{err}"),
+                    );
+                }
             }
         }
     });

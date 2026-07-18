@@ -1042,6 +1042,9 @@ mod terminal_workspace_tests {
             cached_runtime_state_mtime: Arc::new(Mutex::new(None)),
             cached_chat_index: Arc::new(Mutex::new(None)),
             cached_conversation_metadata: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            cached_conversation_field_metadata_ids: Arc::new(Mutex::new(
+                std::collections::HashSet::new(),
+            )),
             cached_conversation_mtimes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             cached_app_data: Arc::new(Mutex::new(None)),
             cached_app_data_signature: Arc::new(Mutex::new(None)),

@@ -1,0 +1,58 @@
+import { describe, expect, it } from "vitest";
+import {
+  DEFAULT_REMOTE_IM_GROUP_REPLY_PACING,
+  normalizeGroupReplyPacing,
+  parseSpaceSeparatedList,
+  resolveBehaviorDraftSave,
+} from "./helpers";
+
+describe("remote IM group behavior helpers", () => {
+  it("defaults legacy contacts and repairs invalid numeric values", () => {
+    expect(normalizeGroupReplyPacing(undefined)).toEqual(DEFAULT_REMOTE_IM_GROUP_REPLY_PACING);
+    const normalized = normalizeGroupReplyPacing({
+      assistantDebounceSeconds: 0,
+      secretaryInspectionSeconds: Number.NaN,
+      inspectionJitterRatio: 4,
+      maximumEnergy: -1,
+      negativeEnergyDelta: 5,
+      normalReplyMaxChars: 30,
+      focusReplyMaxChars: 10,
+    });
+    expect(normalized.assistantDebounceSeconds).toBe(1);
+    expect(normalized.secretaryInspectionSeconds).toBe(7);
+    expect(normalized.inspectionJitterRatio).toBe(1);
+    expect(normalized.maximumEnergy).toBe(0.01);
+    expect(normalized.negativeEnergyDelta).toBe(0);
+    expect(normalized.normalReplyMaxChars).toBe(30);
+    expect(normalized.focusReplyMaxChars).toBe(10);
+  });
+
+  it("parses space-separated phrases without copying runtime ledger state", () => {
+    expect(parseSpaceSeparatedList("谢谢  谢谢\n继续")).toEqual(["谢谢", "继续"]);
+  });
+
+  it("keeps dirty drafts after save failure and preserves edits made while saving", () => {
+    const submitted = { mute: "旧草稿", energy: 100 };
+    const submittedSnapshot = JSON.stringify(submitted);
+    const failed = resolveBehaviorDraftSave(
+      submitted,
+      JSON.stringify({ mute: "原值", energy: 100 }),
+      submittedSnapshot,
+      null,
+      new Error("disk busy"),
+    );
+    expect(failed.draft).toEqual(submitted);
+    expect(failed.savedSnapshot).toBe(JSON.stringify({ mute: "原值", energy: 100 }));
+    expect(failed.error).toContain("disk busy");
+
+    const editedWhileSaving = { mute: "请求期间的新编辑", energy: 100 };
+    const succeeded = resolveBehaviorDraftSave(
+      editedWhileSaving,
+      JSON.stringify({ mute: "原值", energy: 100 }),
+      submittedSnapshot,
+      { mute: "旧草稿", energy: 100 },
+    );
+    expect(succeeded.draft).toEqual(editedWhileSaving);
+    expect(succeeded.savedSnapshot).toBe(submittedSnapshot);
+  });
+});

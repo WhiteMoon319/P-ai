@@ -621,7 +621,7 @@ impl ConversationServiceV2 {
         .map(|page| page.selected_block_id);
         let compression_message_id = compression_message.id.clone();
         let now = now_iso();
-        let (conversation_meta, (), _) = state_update_conversation_meta_cached(
+        let (conversation_meta, (), _) = state_update_conversation_meta_cached_unlocked(
             state,
             &source.id,
             |cached| {
@@ -849,7 +849,7 @@ impl ConversationServiceV2 {
         if !already_archived {
             let previous_status = source_conversation.status.clone();
             let now = now_iso();
-            let (conversation, (), _) = state_update_conversation_metadata_cached(
+            let (conversation, (), _) = state_update_conversation_metadata_cached_unlocked(
                 state,
                 &source.id,
                 |conversation| {

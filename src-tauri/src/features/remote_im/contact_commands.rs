@@ -20,6 +20,293 @@ fn remote_im_list_contacts_inner(state: &AppState) -> Result<Vec<RemoteImContact
     Ok(contacts)
 }
 
+fn remote_im_mutate_contact<T>(
+    state: &AppState,
+    contact_id: &str,
+    mutate: impl FnOnce(&mut RemoteImContact) -> Result<T, String>,
+) -> Result<T, String> {
+    state_mutate_runtime_state_cached(state, |runtime| {
+        let contact = runtime
+            .remote_im_contacts
+            .iter_mut()
+            .find(|item| item.id == contact_id)
+            .ok_or_else(|| format!("未找到远程联系人：{contact_id}"))?;
+        mutate(contact)
+    })
+}
+
+#[derive(Clone)]
+struct RemoteImContactBindingSnapshot {
+    bound_department_id: Option<String>,
+    bound_agent_id: Option<String>,
+    bound_conversation_id: Option<String>,
+    route_mode: String,
+}
+
+fn remote_im_contact_binding_snapshot(
+    contact: &RemoteImContact,
+) -> RemoteImContactBindingSnapshot {
+    RemoteImContactBindingSnapshot {
+        bound_department_id: contact.bound_department_id.clone(),
+        bound_agent_id: contact.bound_agent_id.clone(),
+        bound_conversation_id: contact.bound_conversation_id.clone(),
+        route_mode: contact.route_mode.clone(),
+    }
+}
+
+fn remote_im_contact_binding_matches(
+    contact: &RemoteImContact,
+    snapshot: &RemoteImContactBindingSnapshot,
+) -> bool {
+    contact.bound_department_id == snapshot.bound_department_id
+        && contact.bound_agent_id == snapshot.bound_agent_id
+        && contact.bound_conversation_id == snapshot.bound_conversation_id
+        && contact.route_mode == snapshot.route_mode
+}
+
+fn remote_im_apply_contact_binding_snapshot(
+    contact: &mut RemoteImContact,
+    snapshot: &RemoteImContactBindingSnapshot,
+) {
+    contact.bound_department_id = snapshot.bound_department_id.clone();
+    contact.bound_agent_id = snapshot.bound_agent_id.clone();
+    contact.bound_conversation_id = snapshot.bound_conversation_id.clone();
+    contact.route_mode = snapshot.route_mode.clone();
+}
+
+fn remote_im_resolve_contact_session_target_atomic(
+    state: &AppState,
+    contact_id: &str,
+    mut candidate: RemoteImContact,
+) -> Result<(String, String, String, RemoteImContact), String> {
+    for attempt in 0..4 {
+        let baseline = remote_im_contact_binding_snapshot(&candidate);
+        let runtime_snapshot = load_runtime_organization_snapshot(state)?;
+        candidate.route_mode =
+            remote_im_resolve_effective_route_mode(&runtime_snapshot.config, &candidate);
+        let (department_id, agent_id) = resolve_department_agent_pair(
+            candidate.bound_department_id.as_deref(),
+            candidate.bound_agent_id.as_deref(),
+            &runtime_snapshot.config,
+        )?;
+        candidate.bound_department_id = Some(department_id.clone());
+        candidate.bound_agent_id = Some(agent_id.clone());
+        let route_resolved = remote_im_contact_binding_snapshot(&candidate);
+        let route_commit = state_mutate_runtime_state_cached(state, |runtime| {
+            let contact = runtime
+                .remote_im_contacts
+                .iter_mut()
+                .find(|item| item.id == contact_id)
+                .ok_or_else(|| format!("联系人不存在: {contact_id}"))?;
+            if !remote_im_contact_binding_matches(contact, &baseline) {
+                return Ok(Err(contact.clone()));
+            }
+            remote_im_apply_contact_binding_snapshot(contact, &route_resolved);
+            Ok(Ok(contact.clone()))
+        })?;
+        let committed = match route_commit {
+            Ok(contact) => contact,
+            Err(latest_contact) => {
+                runtime_log_warn(format!(
+                    "[远程IM] 联系人绑定并发变化，使用最新配置重新解析，contact_id={}，attempt={}",
+                    contact_id,
+                    attempt + 1
+                ));
+                candidate = latest_contact;
+                continue;
+            }
+        };
+        let conversation_baseline = remote_im_contact_binding_snapshot(&committed);
+        let mut resolved_contact = committed;
+        let conversation_id = ensure_remote_im_contact_conversation_id(
+            state,
+            &mut resolved_contact,
+        )?;
+        let conversation_resolved = remote_im_contact_binding_snapshot(&resolved_contact);
+        let conversation_commit = state_mutate_runtime_state_cached(state, |runtime| {
+            let contact = runtime
+                .remote_im_contacts
+                .iter_mut()
+                .find(|item| item.id == contact_id)
+                .ok_or_else(|| format!("联系人不存在: {contact_id}"))?;
+            if !remote_im_contact_binding_matches(contact, &conversation_baseline) {
+                return Ok(Err(contact.clone()));
+            }
+            remote_im_apply_contact_binding_snapshot(contact, &conversation_resolved);
+            Ok(Ok(contact.clone()))
+        })?;
+        match conversation_commit {
+            Ok(contact) => {
+                if let Err(err) = sync_remote_im_contact_conversation_binding(
+                    state,
+                    &contact,
+                    &conversation_id,
+                    &department_id,
+                    &agent_id,
+                ) {
+                    runtime_log_warn(format!(
+                        "[远程IM] 联系人路由已提交，会话绑定同步降级，contact_id={}，conversation_id={}，error={}",
+                        contact_id, conversation_id, err
+                    ));
+                }
+                return Ok((department_id, agent_id, conversation_id, contact));
+            }
+            Err(latest_contact) => {
+                runtime_log_warn(format!(
+                    "[远程IM] 联系人会话绑定并发变化，使用最新配置重新解析，contact_id={}，attempt={}",
+                    contact_id,
+                    attempt + 1
+                ));
+                candidate = latest_contact;
+            }
+        }
+    }
+    runtime_log_warn(format!(
+        "[远程IM] 联系人绑定持续变化，本次按最新快照继续路由且不覆盖配置，contact_id={}",
+        contact_id
+    ));
+    let latest_contact = state_read_runtime_state_cached(state)?
+        .remote_im_contacts
+        .into_iter()
+        .find(|item| item.id == contact_id)
+        .ok_or_else(|| format!("联系人不存在: {contact_id}"))?;
+    let mut fallback_contact = latest_contact;
+    let (department_id, agent_id, conversation_id) = resolve_contact_session_target(
+        state,
+        &mut RuntimeStateFile::default(),
+        &mut fallback_contact,
+    )?;
+    Ok((
+        department_id,
+        agent_id,
+        conversation_id,
+        fallback_contact,
+    ))
+}
+
+fn remote_im_resolve_contact_session_target_fail_soft(
+    state: &AppState,
+    input: &RemoteImEnqueueInput,
+    contact_id: &str,
+    candidate: RemoteImContact,
+) -> Option<(String, String, String, RemoteImContact)> {
+    match remote_im_resolve_contact_session_target_atomic(
+        state,
+        contact_id,
+        candidate.clone(),
+    ) {
+        Ok(resolved) => return Some(resolved),
+        Err(err) => runtime_log_warn(format!(
+            "[远程IM] 入站路由解析降级，contact_id={}，error={}",
+            contact_id, err
+        )),
+    }
+
+    let mut fallback_contact = candidate;
+    let department_id = fallback_contact
+        .bound_department_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            input
+                .session
+                .department_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+        })
+        .unwrap_or(REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID)
+        .to_string();
+    let agent_id = fallback_contact
+        .bound_agent_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            let value = input.session.agent_id.trim();
+            if value.is_empty() {
+                None
+            } else {
+                Some(value)
+            }
+        })
+        .unwrap_or(DEFAULT_AGENT_ID)
+        .to_string();
+    fallback_contact.bound_department_id = Some(department_id.clone());
+    fallback_contact.bound_agent_id = Some(agent_id.clone());
+    fallback_contact.route_mode = "dedicated_contact_conversation".to_string();
+    let conversation_id = fallback_contact
+        .bound_conversation_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            conversation_service_v2()
+                .create_remote_im_contact_conversation(
+                    state,
+                    &remote_im_contact_conversation_title(&fallback_contact),
+                    &department_id,
+                    &agent_id,
+                    &remote_im_contact_conversation_key(&fallback_contact),
+                )
+                .map(|conversation| conversation.id)
+                .map_err(|err| {
+                    runtime_log_warn(format!(
+                        "[远程IM] 入站专属会话创建降级，contact_id={}，error={}",
+                        contact_id, err
+                    ));
+                    err
+                })
+                .ok()
+        })
+        .or_else(|| {
+            input
+                .session
+                .conversation_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+        });
+    let Some(conversation_id) = conversation_id else {
+        runtime_log_error(format!(
+            "[远程IM] 跳过，任务=接收入站消息，contact_id={}，原因=无法取得可用会话",
+            contact_id
+        ));
+        return None;
+    };
+    fallback_contact.bound_conversation_id = Some(conversation_id.clone());
+    if let Err(err) = state_mutate_runtime_state_cached(state, |runtime| {
+        let Some(contact) = runtime
+            .remote_im_contacts
+            .iter_mut()
+            .find(|item| item.id == contact_id)
+        else {
+            return Ok(());
+        };
+        if contact.bound_department_id == fallback_contact.bound_department_id
+            && contact.bound_agent_id == fallback_contact.bound_agent_id
+        {
+            contact.bound_conversation_id = Some(conversation_id.clone());
+            contact.route_mode = fallback_contact.route_mode.clone();
+        }
+        Ok(())
+    }) {
+        runtime_log_warn(format!(
+            "[远程IM] 入站降级路由继续执行，联系人会话绑定未落盘，contact_id={}，conversation_id={}，error={}",
+            contact_id, conversation_id, err
+        ));
+    }
+    Some((
+        department_id,
+        agent_id,
+        conversation_id,
+        fallback_contact,
+    ))
+}
+
 #[tauri::command]
 fn remote_im_list_contacts(state: State<'_, AppState>) -> Result<Vec<RemoteImContact>, String> {
     remote_im_list_contacts_inner(state.inner())
@@ -34,17 +321,11 @@ fn remote_im_update_contact_allow_send_inner(
     state: &AppState,
     input: RemoteImContactAllowSendUpdateInput,
 ) -> Result<RemoteImContact, String> {
-    let mut runtime = state_read_runtime_state_cached(state)?;
-    let contact = runtime
-        .remote_im_contacts
-        .iter_mut()
-        .find(|item| item.id == input.contact_id)
-        .ok_or_else(|| format!("未找到远程联系人：{}", input.contact_id))?;
-    contact.allow_send = input.allow_send;
-    contact.allow_receive = input.allow_send;
-    let output = contact.clone();
-    state_write_runtime_state_cached(state, &runtime)?;
-    Ok(output)
+    remote_im_mutate_contact(state, &input.contact_id, |contact| {
+        contact.allow_send = input.allow_send;
+        contact.allow_receive = input.allow_send;
+        Ok(contact.clone())
+    })
 }
 
 #[tauri::command]
@@ -59,16 +340,10 @@ fn remote_im_update_contact_allow_send_files_inner(
     state: &AppState,
     input: RemoteImContactAllowSendFilesUpdateInput,
 ) -> Result<RemoteImContact, String> {
-    let mut runtime = state_read_runtime_state_cached(state)?;
-    let contact = runtime
-        .remote_im_contacts
-        .iter_mut()
-        .find(|item| item.id == input.contact_id)
-        .ok_or_else(|| format!("未找到远程联系人：{}", input.contact_id))?;
-    contact.allow_send_files = input.allow_send_files;
-    let output = contact.clone();
-    state_write_runtime_state_cached(state, &runtime)?;
-    Ok(output)
+    remote_im_mutate_contact(state, &input.contact_id, |contact| {
+        contact.allow_send_files = input.allow_send_files;
+        Ok(contact.clone())
+    })
 }
 
 #[tauri::command]
@@ -83,17 +358,11 @@ fn remote_im_update_contact_blocked_message_prefixes_inner(
     state: &AppState,
     input: RemoteImContactBlockedMessagePrefixesUpdateInput,
 ) -> Result<RemoteImContact, String> {
-    let mut runtime = state_read_runtime_state_cached(state)?;
-    let contact = runtime
-        .remote_im_contacts
-        .iter_mut()
-        .find(|item| item.id == input.contact_id)
-        .ok_or_else(|| format!("未找到远程联系人：{}", input.contact_id))?;
-    contact.blocked_message_prefixes =
-        normalize_contact_blocked_message_prefixes(&input.blocked_message_prefixes);
-    let output = contact.clone();
-    state_write_runtime_state_cached(state, &runtime)?;
-    Ok(output)
+    remote_im_mutate_contact(state, &input.contact_id, |contact| {
+        contact.blocked_message_prefixes =
+            normalize_contact_blocked_message_prefixes(&input.blocked_message_prefixes);
+        Ok(contact.clone())
+    })
 }
 
 #[tauri::command]
@@ -104,112 +373,111 @@ fn remote_im_update_contact_blocked_message_prefixes(
     remote_im_update_contact_blocked_message_prefixes_inner(state.inner(), input)
 }
 
-#[tauri::command]
-fn remote_im_update_contact_allow_receive(
-    input: RemoteImContactAllowReceiveUpdateInput,
-    state: State<'_, AppState>,
-) -> Result<RemoteImContact, String> {
-    let mut runtime = state_read_runtime_state_cached(&state)?;
-    let contact = runtime
-        .remote_im_contacts
-        .iter_mut()
-        .find(|item| item.id == input.contact_id)
-        .ok_or_else(|| format!("未找到远程联系人：{}", input.contact_id))?;
-    contact.allow_receive = input.allow_receive;
-    contact.allow_send = input.allow_receive;
-    let output = contact.clone();
-    state_write_runtime_state_cached(&state, &runtime)?;
-    Ok(output)
-}
-
-fn remote_im_update_contact_activation_inner(
-    state: &AppState,
-    input: RemoteImContactActivationUpdateInput,
-) -> Result<RemoteImContact, String> {
-    let mut runtime = state_read_runtime_state_cached(state)?;
-    let contact = runtime
-        .remote_im_contacts
-        .iter_mut()
-        .find(|item| item.id == input.contact_id)
-        .ok_or_else(|| format!("未找到远程联系人：{}", input.contact_id))?;
-    contact.activation_mode = normalize_contact_activation_mode(&input.activation_mode);
-    contact.activation_keywords = normalize_contact_activation_keywords(&input.activation_keywords);
-    contact.mute_keywords = normalize_contact_keyword_list(&input.mute_keywords);
-    contact.unmute_keywords = normalize_contact_keyword_list(&input.unmute_keywords);
-    contact.patience_seconds = input.patience_seconds;
-    contact.mute_duration_seconds = input.mute_duration_seconds;
-    contact.activation_cooldown_seconds = input.activation_cooldown_seconds;
-    if !remote_im_contact_is_private(contact) {
-        contact.response_strategy = normalize_contact_response_strategy(&input.response_strategy);
+fn validate_remote_im_group_reply_pacing(
+    pacing: &RemoteImGroupReplyPacing,
+) -> Result<(), String> {
+    if pacing.assistant_debounce_seconds < 1 {
+        return Err("助理防抖至少为 1 秒".to_string());
     }
-    contact.response_guidance = normalize_contact_response_guidance(&input.response_guidance);
-    let output = contact.clone();
-    state_write_runtime_state_cached(state, &runtime)?;
-    Ok(output)
+    if pacing.secretary_inspection_seconds < 1 {
+        return Err("秘书巡检周期至少为 1 秒".to_string());
+    }
+    if !pacing.inspection_jitter_ratio.is_finite()
+        || !(0.0..=1.0).contains(&pacing.inspection_jitter_ratio)
+    {
+        return Err("巡检波动比例必须在 0 到 1 之间".to_string());
+    }
+    let non_negative = [
+        ("最大能量", pacing.maximum_energy),
+        ("基础发言消耗", pacing.base_reply_energy_cost),
+        ("每字消耗", pacing.energy_cost_per_character),
+        ("每秒回能", pacing.energy_recovery_per_second),
+        ("正面词回能", pacing.positive_energy_delta),
+    ];
+    for (label, value) in non_negative {
+        if !value.is_finite() || value < 0.0 {
+            return Err(format!("{label}必须是非负有限数"));
+        }
+    }
+    if pacing.maximum_energy <= 0.0 {
+        return Err("最大能量必须大于 0".to_string());
+    }
+    if !pacing.negative_energy_delta.is_finite() || pacing.negative_energy_delta > 0.0 {
+        return Err("负面词能量变化必须是非正有限数".to_string());
+    }
+    if pacing.normal_reply_max_chars == 0 {
+        return Err("常规回复字数必须大于 0".to_string());
+    }
+    if pacing.focus_reply_max_chars < pacing.normal_reply_max_chars {
+        return Err("焦点回复字数不能小于常规回复字数".to_string());
+    }
+    Ok(())
 }
 
-#[tauri::command]
-fn remote_im_update_contact_activation(
-    input: RemoteImContactActivationUpdateInput,
-    state: State<'_, AppState>,
-) -> Result<RemoteImContact, String> {
-    remote_im_update_contact_activation_inner(state.inner(), input)
+fn normalize_remote_im_group_reply_pacing_lists(
+    mut pacing: RemoteImGroupReplyPacing,
+) -> RemoteImGroupReplyPacing {
+    pacing.positive_energy_phrases =
+        normalize_contact_keyword_list(&pacing.positive_energy_phrases);
+    pacing.negative_energy_phrases =
+        normalize_contact_keyword_list(&pacing.negative_energy_phrases);
+    pacing.focus_instructions = normalize_contact_keyword_list(&pacing.focus_instructions);
+    pacing
 }
 
-#[tauri::command]
-fn remote_im_update_contact_remark(
-    input: RemoteImContactRemarkUpdateInput,
-    state: State<'_, AppState>,
+fn remote_im_update_contact_behavior_inner(
+    state: &AppState,
+    input: RemoteImContactBehaviorUpdateInput,
 ) -> Result<RemoteImContact, String> {
-    let mut runtime = state_read_runtime_state_cached(&state)?;
-    let contact = runtime
-        .remote_im_contacts
-        .iter_mut()
-        .find(|item| item.id == input.contact_id)
-        .ok_or_else(|| format!("未找到远程联系人：{}", input.contact_id))?;
-    contact.remark_name = input.remark_name.trim().to_string();
-    let output = contact.clone();
-    state_write_runtime_state_cached(&state, &runtime)?;
-    Ok(output)
-}
-
-#[tauri::command]
-fn remote_im_update_contact_route_mode(
-    input: RemoteImContactRouteModeUpdateInput,
-    state: State<'_, AppState>,
-) -> Result<RemoteImContact, String> {
-    let config = state_read_config_cached(&state)?;
-    let mut runtime = state_read_runtime_state_cached(&state)?;
-    let contact = runtime
-        .remote_im_contacts
-        .iter_mut()
-        .find(|item| item.id == input.contact_id)
-        .ok_or_else(|| format!("未找到远程联系人：{}", input.contact_id))?;
-    let requested_mode = normalize_contact_route_mode(&input.route_mode);
-    let final_mode = remote_im_resolve_effective_route_mode(&config, contact);
-    if requested_mode != final_mode {
-        runtime_log_info(format!(
-            "[远程IM] 联系人路由模式已被约束修正: contact_id={}, requested={}, final={}",
-            contact.id, requested_mode, final_mode
+    let pacing = normalize_remote_im_group_reply_pacing_lists(input.group_reply_pacing);
+    let output = remote_im_mutate_contact(state, &input.contact_id, |contact| {
+        let is_private = remote_im_contact_is_private(contact);
+        if !is_private {
+            validate_remote_im_group_reply_pacing(&pacing)?;
+        }
+        contact.mute_keywords = normalize_contact_keyword_list(&input.mute_keywords);
+        contact.unmute_keywords = normalize_contact_keyword_list(&input.unmute_keywords);
+        contact.patience_seconds = input.patience_seconds;
+        contact.mute_duration_seconds = input.mute_duration_seconds;
+        contact.activation_cooldown_seconds = input.activation_cooldown_seconds;
+        contact.blocked_message_prefixes =
+            normalize_contact_blocked_message_prefixes(&input.blocked_message_prefixes);
+        if !is_private {
+            contact.group_reply_pacing = pacing;
+        }
+        Ok(contact.clone())
+    })?;
+    if let Err(err) = remote_im_group_reply_reconfigure_contact(state, &output) {
+        runtime_log_warn(format!(
+            "[群聊巡检] 配置保存后重排状态失败，contact_id={}，error={}，原批次保留在历史中并等待下一条消息恢复",
+            output.id, err
         ));
     }
-    contact.route_mode = final_mode;
-    let output = contact.clone();
-    state_write_runtime_state_cached(&state, &runtime)?;
     Ok(output)
 }
 
-fn remote_im_update_contact_department_binding_inner(
-    state: &AppState,
-    input: RemoteImContactDepartmentBindingUpdateInput,
+#[tauri::command]
+fn remote_im_update_contact_behavior(
+    input: RemoteImContactBehaviorUpdateInput,
+    state: State<'_, AppState>,
 ) -> Result<RemoteImContact, String> {
-    let runtime_snapshot = load_runtime_organization_snapshot(state)?;
-    let mut runtime = state_read_runtime_state_cached(state)?;
-    let contact = runtime
-        .remote_im_contacts
-        .iter_mut()
-        .find(|item| item.id == input.contact_id)
-        .ok_or_else(|| format!("未找到远程联系人：{}", input.contact_id))?;
+    remote_im_update_contact_behavior_inner(state.inner(), input)
+}
+
+fn remote_im_patch_contact_settings_inner(
+    state: &AppState,
+    input: RemoteImContactSettingsPatchInput,
+) -> Result<RemoteImContact, String> {
+    let runtime_snapshot = match load_runtime_organization_snapshot(state) {
+        Ok(snapshot) => Some(snapshot),
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[远程IM] 联系人完整设置读取组织配置失败，本次保存用户输入并延后校验，contact_id={}，error={}",
+                input.contact_id, err
+            ));
+            None
+        }
+    };
     let next_department_id = input
         .department_id
         .as_deref()
@@ -226,36 +494,296 @@ fn remote_im_update_contact_department_binding_inner(
         return Err("远程IM绑定部门和人格必须同时提供".to_string());
     }
     let next_pair = if let Some(department_id) = next_department_id.as_deref() {
-        let pair = resolve_department_agent_pair(
-            Some(department_id),
-            next_agent_id.as_deref(),
-            &runtime_snapshot.config,
-        )?;
-        if !runtime_snapshot
-            .agents
-            .iter()
-            .any(|agent| agent.id == pair.1 && !agent.is_built_in_user)
-        {
-            return Err(format!("路由人格不存在或不可用: {}", pair.1));
+        if let Some(runtime_snapshot) = runtime_snapshot.as_ref() {
+            let pair = resolve_department_agent_pair(
+                Some(department_id),
+                next_agent_id.as_deref(),
+                &runtime_snapshot.config,
+            )?;
+            if !runtime_snapshot
+                .agents
+                .iter()
+                .any(|agent| agent.id == pair.1 && !agent.is_built_in_user)
+            {
+                return Err(format!("路由人格不存在或不可用: {}", pair.1));
+            }
+            Some(pair)
+        } else {
+            Some((
+                department_id.to_string(),
+                next_agent_id.clone().unwrap_or_default(),
+            ))
         }
-        Some(pair)
     } else {
         None
     };
-    contact.bound_department_id = next_pair
-        .as_ref()
-        .map(|(department_id, _)| department_id.clone());
-    contact.bound_agent_id = next_pair.as_ref().map(|(_, agent_id)| agent_id.clone());
-    contact.route_mode =
-        remote_im_resolve_effective_route_mode(&runtime_snapshot.config, contact);
-    let conversation_id = ensure_remote_im_contact_conversation_id(state, contact)?;
-    let output = contact.clone();
-    state_write_runtime_state_cached(state, &runtime)?;
+    let pacing = normalize_remote_im_group_reply_pacing_lists(input.group_reply_pacing);
+    let output = remote_im_mutate_contact(state, &input.contact_id, |contact| {
+        let is_private = remote_im_contact_is_private(contact);
+        if !is_private {
+            validate_remote_im_group_reply_pacing(&pacing)?;
+        }
+        contact.bound_department_id = next_pair
+            .as_ref()
+            .map(|(department_id, _)| department_id.clone());
+        contact.bound_agent_id = next_pair.as_ref().map(|(_, agent_id)| agent_id.clone());
+        contact.route_mode = runtime_snapshot
+            .as_ref()
+            .map(|snapshot| remote_im_resolve_effective_route_mode(&snapshot.config, contact))
+            .unwrap_or_else(|| "dedicated_contact_conversation".to_string());
+        contact.processing_mode = normalize_contact_processing_mode(&input.processing_mode);
+        contact.blocked_message_prefixes =
+            normalize_contact_blocked_message_prefixes(&input.blocked_message_prefixes);
+        contact.mute_keywords = normalize_contact_keyword_list(&input.mute_keywords);
+        contact.unmute_keywords = normalize_contact_keyword_list(&input.unmute_keywords);
+        contact.patience_seconds = input.patience_seconds;
+        contact.mute_duration_seconds = input.mute_duration_seconds;
+        contact.activation_cooldown_seconds = input.activation_cooldown_seconds;
+        if is_private {
+            contact.activation_mode = "always".to_string();
+            contact.activation_keywords.clear();
+            contact.response_strategy = "always_reply".to_string();
+            contact.response_guidance.clear();
+        } else {
+            contact.activation_mode = normalize_contact_activation_mode(&input.activation_mode);
+            contact.activation_keywords =
+                normalize_contact_activation_keywords(&input.activation_keywords);
+            contact.response_strategy =
+                normalize_contact_response_strategy(&input.response_strategy);
+            contact.response_guidance =
+                normalize_contact_response_guidance(&input.response_guidance);
+            contact.group_reply_pacing = pacing;
+        }
+        let communication_enabled = input.allow_receive || input.allow_send;
+        contact.allow_receive = communication_enabled;
+        contact.allow_send = communication_enabled;
+        contact.allow_send_files = input.allow_send_files;
+        Ok(contact.clone())
+    })?;
+
+    if let Some(conversation_id) = output
+        .bound_conversation_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        let resolved_pair = runtime_snapshot.as_ref().map_or_else(
+            || {
+                Err(
+                    "组织配置暂时不可读，已保存联系人设置并延后同步会话路由"
+                        .to_string(),
+                )
+            },
+            |snapshot| {
+                resolve_department_agent_pair(
+                    output.bound_department_id.as_deref(),
+                    output.bound_agent_id.as_deref(),
+                    &snapshot.config,
+                )
+            },
+        );
+        match resolved_pair {
+            Ok((department_id, agent_id)) => {
+                if let Err(err) = sync_remote_im_contact_conversation_binding(
+                    state,
+                    &output,
+                    conversation_id,
+                    &department_id,
+                    &agent_id,
+                ) {
+                    runtime_log_warn(format!(
+                        "[远程IM] 联系人设置已保存，会话绑定同步降级，contact_id={}，conversation_id={}，error={}",
+                        output.id, conversation_id, err
+                    ));
+                }
+            }
+            Err(err) => runtime_log_warn(format!(
+                "[远程IM] 联系人设置已保存，会话路由解析降级，contact_id={}，error={}",
+                output.id, err
+            )),
+        }
+    }
+    if let Err(err) = remote_im_group_reply_reconfigure_contact(state, &output) {
+        runtime_log_warn(format!(
+            "[群聊巡检] 联系人设置已保存，运行中批次重排降级，contact_id={}，error={}",
+            output.id, err
+        ));
+    }
+    Ok(output)
+}
+
+#[tauri::command]
+fn remote_im_patch_contact_settings(
+    input: RemoteImContactSettingsPatchInput,
+    state: State<'_, AppState>,
+) -> Result<RemoteImContact, String> {
+    remote_im_patch_contact_settings_inner(state.inner(), input)
+}
+
+#[tauri::command]
+fn remote_im_update_contact_allow_receive(
+    input: RemoteImContactAllowReceiveUpdateInput,
+    state: State<'_, AppState>,
+) -> Result<RemoteImContact, String> {
+    remote_im_mutate_contact(state.inner(), &input.contact_id, |contact| {
+        contact.allow_receive = input.allow_receive;
+        contact.allow_send = input.allow_receive;
+        Ok(contact.clone())
+    })
+}
+
+fn remote_im_update_contact_activation_inner(
+    state: &AppState,
+    input: RemoteImContactActivationUpdateInput,
+) -> Result<RemoteImContact, String> {
+    remote_im_mutate_contact(state, &input.contact_id, |contact| {
+        contact.activation_mode = normalize_contact_activation_mode(&input.activation_mode);
+        contact.activation_keywords =
+            normalize_contact_activation_keywords(&input.activation_keywords);
+        contact.mute_keywords = normalize_contact_keyword_list(&input.mute_keywords);
+        contact.unmute_keywords = normalize_contact_keyword_list(&input.unmute_keywords);
+        contact.patience_seconds = input.patience_seconds;
+        contact.mute_duration_seconds = input.mute_duration_seconds;
+        contact.activation_cooldown_seconds = input.activation_cooldown_seconds;
+        if remote_im_contact_is_private(contact) {
+            contact.response_strategy = "always_reply".to_string();
+        } else {
+            contact.response_strategy =
+                normalize_contact_response_strategy(&input.response_strategy);
+        }
+        contact.response_guidance = normalize_contact_response_guidance(&input.response_guidance);
+        Ok(contact.clone())
+    })
+}
+
+#[tauri::command]
+fn remote_im_update_contact_activation(
+    input: RemoteImContactActivationUpdateInput,
+    state: State<'_, AppState>,
+) -> Result<RemoteImContact, String> {
+    remote_im_update_contact_activation_inner(state.inner(), input)
+}
+
+#[tauri::command]
+fn remote_im_update_contact_remark(
+    input: RemoteImContactRemarkUpdateInput,
+    state: State<'_, AppState>,
+) -> Result<RemoteImContact, String> {
+    remote_im_mutate_contact(state.inner(), &input.contact_id, |contact| {
+        contact.remark_name = input.remark_name.trim().to_string();
+        Ok(contact.clone())
+    })
+}
+
+#[tauri::command]
+fn remote_im_update_contact_route_mode(
+    input: RemoteImContactRouteModeUpdateInput,
+    state: State<'_, AppState>,
+) -> Result<RemoteImContact, String> {
+    let config = state_read_config_cached(&state)?;
+    remote_im_mutate_contact(state.inner(), &input.contact_id, |contact| {
+        let requested_mode = normalize_contact_route_mode(&input.route_mode);
+        let final_mode = remote_im_resolve_effective_route_mode(&config, contact);
+        if requested_mode != final_mode {
+            runtime_log_info(format!(
+                "[远程IM] 联系人路由模式已被约束修正: contact_id={}, requested={}, final={}",
+                contact.id, requested_mode, final_mode
+            ));
+        }
+        contact.route_mode = final_mode;
+        Ok(contact.clone())
+    })
+}
+
+fn remote_im_update_contact_department_binding_inner(
+    state: &AppState,
+    input: RemoteImContactDepartmentBindingUpdateInput,
+) -> Result<RemoteImContact, String> {
+    let runtime_snapshot = match load_runtime_organization_snapshot(state) {
+        Ok(snapshot) => Some(snapshot),
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[远程IM] 更新联系人处理部门时组织配置读取失败，本次保存原始绑定并延后校验，contact_id={}，error={}",
+                input.contact_id, err
+            ));
+            None
+        }
+    };
+    let next_department_id = input
+        .department_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    let next_agent_id = input
+        .agent_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    if next_department_id.is_some() != next_agent_id.is_some() {
+        return Err("远程IM绑定部门和人格必须同时提供".to_string());
+    }
+    let next_pair = if let Some(department_id) = next_department_id.as_deref() {
+        if let Some(runtime_snapshot) = runtime_snapshot.as_ref() {
+            let pair = resolve_department_agent_pair(
+                Some(department_id),
+                next_agent_id.as_deref(),
+                &runtime_snapshot.config,
+            )?;
+            if !runtime_snapshot
+                .agents
+                .iter()
+                .any(|agent| agent.id == pair.1 && !agent.is_built_in_user)
+            {
+                return Err(format!("路由人格不存在或不可用: {}", pair.1));
+            }
+            Some(pair)
+        } else {
+            Some((
+                department_id.to_string(),
+                next_agent_id.clone().unwrap_or_default(),
+            ))
+        }
+    } else {
+        None
+    };
+    let output = remote_im_mutate_contact(state, &input.contact_id, |contact| {
+        contact.bound_department_id = next_pair
+            .as_ref()
+            .map(|(department_id, _)| department_id.clone());
+        contact.bound_agent_id = next_pair.as_ref().map(|(_, agent_id)| agent_id.clone());
+        contact.route_mode = runtime_snapshot
+            .as_ref()
+            .map(|snapshot| remote_im_resolve_effective_route_mode(&snapshot.config, contact))
+            .unwrap_or_else(|| "dedicated_contact_conversation".to_string());
+        Ok(contact.clone())
+    })?;
+    let resolved = match remote_im_resolve_contact_session_target_atomic(
+        state,
+        &input.contact_id,
+        output.clone(),
+    ) {
+        Ok((_, _, _, resolved)) => resolved,
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[远程IM] 联系人处理部门已保存，会话绑定修复降级，contact_id={}，error={}",
+                input.contact_id, err
+            ));
+            return Ok(output);
+        }
+    };
+    let conversation_id = resolved
+        .bound_conversation_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("");
     runtime_log_info(format!(
         "[远程IM] 完成，任务=更新联系人处理部门，contact_id={}，conversation_id={}，department_id={}，agent_id={}",
-        output.id,
+        resolved.id,
         conversation_id,
-        output
+        resolved
             .bound_department_id
             .as_deref()
             .map(str::trim)
@@ -266,7 +794,7 @@ fn remote_im_update_contact_department_binding_inner(
             .map(|conversation| conversation.agent_id)
             .unwrap_or_default()
     ));
-    Ok(output)
+    Ok(resolved)
 }
 
 #[tauri::command]
@@ -281,16 +809,10 @@ fn remote_im_update_contact_processing_mode_inner(
     state: &AppState,
     input: RemoteImContactProcessingModeUpdateInput,
 ) -> Result<RemoteImContact, String> {
-    let mut runtime = state_read_runtime_state_cached(state)?;
-    let contact = runtime
-        .remote_im_contacts
-        .iter_mut()
-        .find(|item| item.id == input.contact_id)
-        .ok_or_else(|| format!("未找到远程联系人：{}", input.contact_id))?;
-    contact.processing_mode = normalize_contact_processing_mode(&input.processing_mode);
-    let output = contact.clone();
-    state_write_runtime_state_cached(state, &runtime)?;
-    Ok(output)
+    remote_im_mutate_contact(state, &input.contact_id, |contact| {
+        contact.processing_mode = normalize_contact_processing_mode(&input.processing_mode);
+        Ok(contact.clone())
+    })
 }
 
 #[tauri::command]
@@ -305,15 +827,10 @@ fn remote_im_update_contact_workspace_inner(
     state: &AppState,
     input: RemoteImContactWorkspaceUpdateInput,
 ) -> Result<RemoteImContact, String> {
-    let mut runtime = state_read_runtime_state_cached(state)?;
-    let contact = runtime
-        .remote_im_contacts
-        .iter_mut()
-        .find(|item| item.id == input.contact_id)
-        .ok_or_else(|| format!("未找到远程联系人：{}", input.contact_id))?;
-    contact.shell_workspaces = input.shell_workspaces;
-    let output = contact.clone();
-    state_write_runtime_state_cached(state, &runtime)?;
+    let output = remote_im_mutate_contact(state, &input.contact_id, |contact| {
+        contact.shell_workspaces = input.shell_workspaces;
+        Ok(contact.clone())
+    })?;
     if let Some(conversation_id) = output
         .bound_conversation_id
         .as_deref()
@@ -468,13 +985,36 @@ fn remote_im_delete_contact_inner(
     if contact_id.is_empty() {
         return Err("contact_id 为必填项。".to_string());
     }
-    let mut runtime = state_read_runtime_state_cached(state)?;
-    let before_contacts = runtime.remote_im_contacts.len();
-    runtime.remote_im_contacts
-        .retain(|item| item.id != contact_id);
-    let removed = runtime.remote_im_contacts.len() != before_contacts;
+    let removed = state_mutate_runtime_state_cached(state, |runtime| {
+        let before_contacts = runtime.remote_im_contacts.len();
+        runtime
+            .remote_im_contacts
+            .retain(|item| item.id != contact_id);
+        let removed = runtime.remote_im_contacts.len() != before_contacts;
+        if removed {
+            runtime
+                .remote_im_contact_checkpoints
+                .retain(|item| item.contact_id != contact_id);
+        }
+        Ok(removed)
+    })?;
     if removed {
-        state_write_runtime_state_cached(state, &runtime)?;
+        if let Err(err) = clear_remote_im_debounces_for_contact(state, contact_id) {
+            runtime_log_warn(format!(
+                "[群聊巡检] 删除联系人后清理状态失败，contact_id={}，error={}",
+                contact_id, err
+            ));
+        }
+        if let Err(err) = abort_remote_im_reply_delegates_for_contact(
+            state,
+            contact_id,
+            "远程联系人已删除",
+        ) {
+            runtime_log_warn(format!(
+                "[远程应答委托] 删除联系人后终止委托失败，contact_id={}，error={}",
+                contact_id, err
+            ));
+        }
     }
     Ok(removed)
 }
@@ -526,14 +1066,71 @@ fn remote_im_enqueue_message(
     remote_im_enqueue_message_internal(input, state.inner())
 }
 
+fn remote_im_stale_cached_config_best_effort(state: &AppState) -> Option<AppConfig> {
+    match state.cached_config.lock() {
+        Ok(cached) => cached.clone(),
+        Err(poisoned) => {
+            runtime_log_warn(
+                "[远程IM] 渠道配置缓存锁中毒，恢复锁但不使用不确定权限快照".to_string(),
+            );
+            state.cached_config.clear_poison();
+            drop(poisoned.into_inner());
+            None
+        }
+    }
+}
+
 /// 内部入队函数，供事件消费循环调用
 pub(crate) fn remote_im_enqueue_message_internal(
     input: RemoteImEnqueueInput,
     state: &AppState,
 ) -> Result<RemoteImEnqueueResult, String> {
-    let config = state_read_config_cached(state)?;
-    let mut runtime = state_read_runtime_state_cached(state)?;
-    let validated = validate_enqueue_input(&input, &config)?;
+    let validated = match state_read_config_cached(state) {
+        Ok(config) => validate_enqueue_input(&input, &config)?,
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[远程IM] 入站渠道配置读取失败，尝试使用最后可信快照，channel_id={}，error={}",
+                input.channel_id.trim(), err
+            ));
+            let Some(config) = remote_im_stale_cached_config_best_effort(state) else {
+                runtime_log_warn(format!(
+                    "[远程IM] 跳过，任务=接收入站消息，channel_id={}，原因=没有可信渠道权限快照",
+                    input.channel_id.trim()
+                ));
+                return Ok(RemoteImEnqueueResult {
+                    event_id: String::new(),
+                    conversation_id: String::new(),
+                    activate_assistant: false,
+                    contact_id: String::new(),
+                });
+            };
+            match validate_enqueue_input(&input, &config) {
+                Ok(validated) => validated,
+                Err(permission_err) => {
+                    runtime_log_warn(format!(
+                        "[远程IM] 跳过，任务=接收入站消息，channel_id={}，原因=最后可信权限快照拒绝，error={}",
+                        input.channel_id.trim(), permission_err
+                    ));
+                    return Ok(RemoteImEnqueueResult {
+                        event_id: String::new(),
+                        conversation_id: String::new(),
+                        activate_assistant: false,
+                        contact_id: String::new(),
+                    });
+                }
+            }
+        }
+    };
+    let runtime = match state_read_runtime_state_cached(state) {
+        Ok(runtime) => runtime,
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[远程IM] 入站联系人快照读取失败，跳过预过滤并尝试原子接入，channel_id={}，error={}",
+                input.channel_id.trim(), err
+            ));
+            RuntimeStateFile::default()
+        }
+    };
     let channel = validated.channel;
     let text = validated.text;
     let images = validated.images;
@@ -584,58 +1181,99 @@ pub(crate) fn remote_im_enqueue_message_internal(
     }
 
     let now = now_iso();
-    let contact_id = remote_im_upsert_contact_for_inbound(&mut runtime, &channel, &input, &now);
-    let contact_idx = runtime
-        .remote_im_contacts
-        .iter()
-        .position(|item| item.id == contact_id)
-        .ok_or_else(|| format!("联系人不存在: {contact_id}"))?;
-    let contact = runtime
-        .remote_im_contacts
-        .get_mut(contact_idx)
-        .ok_or_else(|| format!("联系人不存在: {contact_id}"))?;
-    let mut allow_receive = contact.allow_receive;
-    if !allow_receive
-        && matches!(channel.platform, RemoteImPlatform::Dingtalk)
-        && channel.activate_assistant
-    {
-        let looks_like_default_contact = !contact.allow_send
-            && !contact.allow_receive
-            && contact.activation_mode == "never"
-            && contact.activation_keywords.is_empty()
-            && contact.activation_cooldown_seconds == 0;
-        if looks_like_default_contact {
-            contact.allow_send = true;
-            contact.allow_receive = true;
-            runtime_log_info(format!(
-                "[远程IM] 自动开启收信: contact_id={}, contact_name={}, channel_id={}, platform={:?}, reason=matched_default_contact",
-                contact.id,
-                contact.remote_contact_name,
-                channel.id,
-                channel.platform
+    let persisted_contact = state_mutate_runtime_state_cached(state, |latest_runtime| {
+            let contact_id =
+                remote_im_upsert_contact_for_inbound(latest_runtime, &channel, &input, &now);
+            let contact = latest_runtime
+                .remote_im_contacts
+                .iter_mut()
+                .find(|item| item.id == contact_id)
+                .ok_or_else(|| format!("联系人不存在: {contact_id}"))?;
+            let mut allow_receive = contact.allow_receive;
+            if !allow_receive
+                && matches!(channel.platform, RemoteImPlatform::Dingtalk)
+                && channel.activate_assistant
+            {
+                let looks_like_default_contact = !contact.allow_send
+                    && !contact.allow_receive
+                    && contact.activation_mode == "never"
+                    && contact.activation_keywords.is_empty()
+                    && contact.activation_cooldown_seconds == 0;
+                if looks_like_default_contact {
+                    contact.allow_send = true;
+                    contact.allow_receive = true;
+                    runtime_log_info(format!(
+                        "[远程IM] 自动开启收信: contact_id={}, contact_name={}, channel_id={}, platform={:?}, reason=matched_default_contact",
+                        contact.id,
+                        contact.remote_contact_name,
+                        channel.id,
+                        channel.platform
+                    ));
+                    allow_receive = true;
+                }
+            }
+            Ok((contact_id, contact.clone(), allow_receive))
+        });
+    let (contact_id, detached_contact, allow_receive) = match persisted_contact {
+        Ok(result) => result,
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[远程IM] 入站联系人落盘失败，使用临时联系人继续接入，channel_id={}，remote_contact_id={}，error={}",
+                input.channel_id.trim(), input.remote_contact_id.trim(), err
             ));
-            allow_receive = true;
+            let mut fallback_runtime = runtime.clone();
+            let contact_id =
+                remote_im_upsert_contact_for_inbound(&mut fallback_runtime, &channel, &input, &now);
+            let Some(contact) = fallback_runtime
+                .remote_im_contacts
+                .into_iter()
+                .find(|item| item.id == contact_id)
+            else {
+                runtime_log_error(format!(
+                    "[远程IM] 跳过，任务=接收入站消息，channel_id={}，remote_contact_id={}，原因=临时联系人创建失败",
+                    input.channel_id.trim(), input.remote_contact_id.trim()
+                ));
+                return Ok(RemoteImEnqueueResult {
+                    event_id: String::new(),
+                    conversation_id: String::new(),
+                    activate_assistant: false,
+                    contact_id,
+                });
+            };
+            let allow_receive = contact.allow_receive;
+            (contact_id, contact, allow_receive)
         }
-    }
-    if !allow_receive {
-        state_write_runtime_state_cached(state, &runtime)?;
-        return Err(format!("联系人未开启收信，跳过: contact_id={contact_id}"));
-    }
-    let (department_id, agent_id, conversation_id) = {
-        let mut detached_contact = runtime
-            .remote_im_contacts
-            .get(contact_idx)
-            .cloned()
-            .ok_or_else(|| format!("联系人不存在: {contact_id}"))?;
-        let resolved = resolve_contact_session_target(state, &mut runtime, &mut detached_contact)?;
-        runtime.remote_im_contacts[contact_idx] = detached_contact;
-        resolved
     };
-    let contact_for_log = runtime
-        .remote_im_contacts
-        .get(contact_idx)
-        .cloned()
-        .ok_or_else(|| format!("联系人不存在: {contact_id}"))?;
+    if !allow_receive {
+        runtime_log_info(format!(
+            "[远程IM] 跳过，任务=接收入站消息，contact_id={}，原因=联系人未开启收信",
+            contact_id
+        ));
+        return Ok(RemoteImEnqueueResult {
+            event_id: String::new(),
+            conversation_id: detached_contact
+                .bound_conversation_id
+                .clone()
+                .unwrap_or_default(),
+            activate_assistant: false,
+            contact_id,
+        });
+    }
+    let Some((department_id, agent_id, conversation_id, contact_for_log)) =
+        remote_im_resolve_contact_session_target_fail_soft(
+            state,
+            &input,
+            &contact_id,
+            detached_contact,
+        )
+    else {
+        return Ok(RemoteImEnqueueResult {
+            event_id: String::new(),
+            conversation_id: String::new(),
+            activate_assistant: false,
+            contact_id,
+        });
+    };
     let sender_label = {
         let sender_name = input.sender_name.trim();
         let sender_id = input.sender_id.trim();
@@ -654,8 +1292,8 @@ pub(crate) fn remote_im_enqueue_message_internal(
         department_id,
         agent_id,
         conversation_id,
-        runtime.remote_im_contacts[contact_idx].route_mode,
-        runtime.remote_im_contacts[contact_idx].processing_mode
+        contact_for_log.route_mode,
+        contact_for_log.processing_mode
     ));
     runtime_log_info(format!(
         "[远程IM] 入站媒体摘要: contact_id={}, channel_id={}, text_len={}, image_count={}, image_mimes={:?}, audio_count={}, attachment_count={}, attachment_names={:?}",
@@ -689,14 +1327,24 @@ pub(crate) fn remote_im_enqueue_message_internal(
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        if remote_im_is_duplicate_platform_message(
+        let is_duplicate = match remote_im_is_duplicate_platform_message(
             state,
             &conversation_id,
             input.channel_id.trim(),
             input.remote_contact_type.trim(),
             input.remote_contact_id.trim(),
             platform_message_id,
-        )? {
+        ) {
+            Ok(is_duplicate) => is_duplicate,
+            Err(err) => {
+                runtime_log_warn(format!(
+                    "[远程IM] 入站去重读取失败，本次继续接入，contact_id={}，conversation_id={}，platform_message_id={}，error={}",
+                    contact_id, conversation_id, platform_message_id, err
+                ));
+                false
+            }
+        };
+        if is_duplicate {
             runtime_log_info(format!(
                 "[远程IM] 入站消息去重: channel_id={}, contact_id={}, conversation_id={}, platform_message_id={}",
                 input.channel_id.trim(),
@@ -715,7 +1363,6 @@ pub(crate) fn remote_im_enqueue_message_internal(
                     remote_im_preview_text(&text, 100)
                 ),
             );
-            state_write_runtime_state_cached(state, &runtime)?;
             return Ok(RemoteImEnqueueResult {
                 event_id: String::new(),
                 conversation_id,
@@ -727,7 +1374,7 @@ pub(crate) fn remote_im_enqueue_message_internal(
     let message = build_chat_message_from_input(
         &input,
         &conversation_id,
-        &runtime.remote_im_contacts[contact_idx],
+        &contact_for_log,
         &now,
         &text,
         &images,
@@ -735,11 +1382,17 @@ pub(crate) fn remote_im_enqueue_message_internal(
         &attachments,
         &state.data_path,
     );
-    let (activate_assistant, state_reason) = remote_im_prepare_enqueue_runtime_state(
-        state,
-        &runtime.remote_im_contacts[contact_idx],
-        &text,
-    )?;
+    let (activate_assistant, state_reason) =
+        match remote_im_prepare_enqueue_runtime_state(state, &contact_for_log, &text) {
+            Ok(result) => result,
+            Err(err) => {
+                runtime_log_warn(format!(
+                    "[远程IM] 入站状态机准备失败，本次消息仍入队但不自动激活，contact_id={}，conversation_id={}，error={}",
+                    contact_id, conversation_id, err
+                ));
+                (false, "runtime_state_degraded".to_string())
+            }
+        };
     runtime_log_info(format!(
         "[远程联系人状态机] 入站消息 接入: contact_id={}, conversation_id={}, activate_assistant={}, reason={}",
         contact_id, conversation_id, activate_assistant, state_reason
@@ -788,7 +1441,6 @@ pub(crate) fn remote_im_enqueue_message_internal(
             state_reason
         ),
     );
-    state_write_runtime_state_cached(state, &runtime)?;
     if should_trigger_guided_queue && matches!(&ingress, ChatEventIngress::Queued { .. }) {
         trigger_guided_queue_processing(state, &conversation_id);
     } else {

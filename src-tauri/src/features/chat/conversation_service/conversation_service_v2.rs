@@ -1129,7 +1129,7 @@ impl ConversationServiceV2 {
         state: &AppState,
         conversation_id: &str,
     ) -> Result<(), String> {
-        state_mark_conversation_metadata_cached_persisted(state, conversation_id)
+        state_mark_conversation_metadata_cached_persisted_unlocked(state, conversation_id)
     }
 
     fn increment_conversation_unread_count_if_background(
@@ -1137,6 +1137,7 @@ impl ConversationServiceV2 {
         state: &AppState,
         conversation: &mut Conversation,
         count: usize,
+        mutation_gate_already_held: bool,
     ) {
         if count == 0 {
             return;
@@ -1146,17 +1147,23 @@ impl ConversationServiceV2 {
         } else {
             increment_conversation_unread_count(conversation, count);
         }
-        if let Err(err) = state_update_conversation_metadata_cached(
-            state,
-            &conversation.id,
-            |cached| {
+        let updater = |cached: &mut Conversation| {
                 cached.unread_count = conversation.unread_count;
                 cached.updated_at = conversation.updated_at.clone();
                 cached.last_user_at = conversation.last_user_at.clone();
                 cached.last_assistant_at = conversation.last_assistant_at.clone();
                 Ok(())
-            },
-        ) {
+            };
+        let update_result = if mutation_gate_already_held {
+            state_update_conversation_metadata_cached_unlocked(
+                state,
+                &conversation.id,
+                updater,
+            )
+        } else {
+            state_update_conversation_metadata_cached(state, &conversation.id, updater)
+        };
+        if let Err(err) = update_result {
             runtime_log_warn(format!(
                 "[会话未读] 警告，任务=同步未读数metadata缓存，会话ID={}，unread_count={}，error={}",
                 conversation.id, conversation.unread_count, err
@@ -1190,7 +1197,7 @@ impl ConversationServiceV2 {
             })?;
         let updated_at = updated_message.created_at.clone();
         let last_assistant_at = Some(updated_at.clone());
-        let (updated_meta, (), _) = state_update_conversation_meta_cached(
+        let (updated_meta, (), _) = state_update_conversation_meta_cached_unlocked(
             state,
             conversation_id,
             |cached| {
@@ -1286,7 +1293,7 @@ impl ConversationServiceV2 {
                 &err,
             )
         })?;
-        let (conversation, (), _) = state_update_conversation_metadata_cached(
+        let (conversation, (), _) = state_update_conversation_metadata_cached_unlocked(
             state,
             normalized_conversation_id,
             |conversation| {
@@ -1362,13 +1369,27 @@ impl ConversationServiceV2 {
         state: &AppState,
         conversation_id: &str,
     ) -> Result<ConversationMetaView, String> {
-        let meta = state_read_conversation_metadata_cached(state, conversation_id).map_err(|_| {
-            ConversationServiceV2Error::new(
-                ConversationServiceV2ErrorCode::ConversationNotFound,
-                format!("conversationId={}", conversation_id.trim()),
-            )
-            .into_string()
-        })?;
+        let meta = match state_read_conversation_metadata_cached(state, conversation_id) {
+            Ok(meta) => meta,
+            // 仅当轻量 metadata 不可读时回退：待落盘/迁移中的会话可能仍有完整缓存快照，
+            // 此时若直接判定不存在会中断通知与入站业务；正常路径仍禁止整读消息正文。
+            Err(meta_err) => match state_read_conversation_cached(state, conversation_id) {
+                Ok(conversation) => {
+                    runtime_log_warn(format!(
+                        "[会话元数据] 轻量读取失败，使用会话缓存快照降级恢复，conversation_id={}，error={}",
+                        conversation_id.trim(), meta_err
+                    ));
+                    message_store::ConversationShardMeta::from_conversation(&conversation)
+                }
+                Err(_) => {
+                    return Err(ConversationServiceV2Error::new(
+                        ConversationServiceV2ErrorCode::ConversationNotFound,
+                        format!("conversationId={}", conversation_id.trim()),
+                    )
+                    .into_string())
+                }
+            },
+        };
         Ok(ConversationMetaView::from_meta(&meta))
     }
 
@@ -1603,7 +1624,7 @@ impl ConversationServiceV2 {
         } else {
             conversation_meta.unread_count.saturating_add(1)
         };
-        let (updated_meta, (), _) = state_update_conversation_meta_cached(
+        let (updated_meta, (), _) = state_update_conversation_meta_cached_unlocked(
             state,
             normalized_conversation_id,
             |cached| {
@@ -1688,7 +1709,7 @@ impl ConversationServiceV2 {
         } else {
             conversation_meta.unread_count.saturating_add(messages.len())
         };
-        let (updated_meta, (), _) = state_update_conversation_meta_cached(
+        let (updated_meta, (), _) = state_update_conversation_meta_cached_unlocked(
             state,
             normalized_conversation_id,
             |cached| {
@@ -1775,7 +1796,7 @@ impl ConversationServiceV2 {
         } else {
             conversation_meta.unread_count.saturating_add(1)
         };
-        let (updated_meta, (), _) = state_update_conversation_meta_cached(
+        let (updated_meta, (), _) = state_update_conversation_meta_cached_unlocked(
             state,
             conversation_id,
             |cached| {
@@ -1830,7 +1851,12 @@ impl ConversationServiceV2 {
         conversation: &mut Conversation,
         count: usize,
     ) {
-        self.increment_conversation_unread_count_if_background(state, conversation, count)
+        self.increment_conversation_unread_count_if_background(
+            state,
+            conversation,
+            count,
+            false,
+        )
     }
 
     fn enqueue_delegate_completion_notification(
@@ -1922,30 +1948,6 @@ impl ConversationServiceV2 {
             message.id
         ));
         Ok(())
-    }
-
-    fn set_routing(
-        &self,
-        state: &AppState,
-        conversation_id: &str,
-        department_id: Option<&str>,
-        agent_id: Option<&str>,
-        root_conversation_id: Option<Option<String>>,
-        conversation_kind: Option<&str>,
-    ) -> Result<Conversation, String> {
-        self.apply_external_metadata_patch(
-            state,
-            conversation_id,
-            "conversation_v2_set_routing",
-            ConversationExternalMetadataPatch {
-                routing_department_id: department_id.map(|value| value.trim().to_string()),
-                routing_agent_id: agent_id.map(|value| value.trim().to_string()),
-                routing_root_conversation_id: root_conversation_id,
-                routing_conversation_kind: conversation_kind
-                    .map(|value| value.trim().to_string()),
-                ..Default::default()
-            },
-        )
     }
 
     fn import_conversation_snapshot(

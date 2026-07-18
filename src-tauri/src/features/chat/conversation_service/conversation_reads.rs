@@ -198,6 +198,36 @@ impl ConversationServiceV2 {
         Ok(conversation)
     }
 
+    fn get_current_compaction_segment_messages_through(
+        &self,
+        state: &AppState,
+        conversation_id: &str,
+        end_message_id: &str,
+    ) -> Result<Vec<ChatMessage>, String> {
+        let normalized_conversation_id = conversation_id.trim();
+        if normalized_conversation_id.is_empty() {
+            return Err("conversationId is required.".to_string());
+        }
+        self.get_conversation_meta(state, normalized_conversation_id)?;
+        let store_paths =
+            message_store::message_store_paths(&state.data_path, normalized_conversation_id)?;
+        ensure_ready_message_store_from_legacy_conversation(
+            state,
+            normalized_conversation_id,
+            &store_paths,
+        )?;
+        let mut messages = message_store::read_ready_message_store_current_compaction_segment(&store_paths)?
+            .map(|segment| segment.messages)
+            .unwrap_or_default();
+        let end_message_id = end_message_id.trim();
+        let end_position = messages
+            .iter()
+            .position(|message| message.id == end_message_id)
+            .ok_or_else(|| format!("当前压缩段不包含目标消息：{end_message_id}"))?;
+        messages.truncate(end_position.saturating_add(1));
+        Ok(messages)
+    }
+
     fn get_conversation_snapshot(
         &self,
         state: &AppState,
@@ -549,4 +579,3 @@ impl ConversationServiceV2 {
     }
 
 }
-

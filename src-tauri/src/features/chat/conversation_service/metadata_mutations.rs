@@ -579,7 +579,7 @@ impl ConversationServiceV2 {
                 &err,
             )
         })?;
-        let (conversation, changed, _) = state_update_conversation_metadata_cached(
+        let (conversation, changed, _) = state_update_conversation_metadata_cached_unlocked(
             state,
             normalized_conversation_id,
             |conversation| {

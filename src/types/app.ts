@@ -333,6 +333,24 @@ export type RemoteImChannelConfig = {
   allowSendFiles: boolean;
 };
 
+export type RemoteImGroupReplyPacing = {
+  assistantDebounceSeconds: number;
+  secretaryInspectionSeconds: number;
+  replyCooldownSeconds: number;
+  inspectionJitterRatio: number;
+  maximumEnergy: number;
+  baseReplyEnergyCost: number;
+  energyCostPerCharacter: number;
+  energyRecoveryPerSecond: number;
+  positiveEnergyPhrases: string[];
+  negativeEnergyPhrases: string[];
+  positiveEnergyDelta: number;
+  negativeEnergyDelta: number;
+  normalReplyMaxChars: number;
+  focusReplyMaxChars: number;
+  focusInstructions: string[];
+};
+
 export type RemoteImContact = {
   id: string;
   channelId: string;
@@ -355,6 +373,7 @@ export type RemoteImContact = {
   responseStrategy?: "always_reply" | "smart_judge";
   responseGuidance?: string;
   blockedMessagePrefixes: string[];
+  groupReplyPacing?: RemoteImGroupReplyPacing;
   routeMode?: "main_session" | "dedicated_contact_conversation";
   boundDepartmentId?: string;
   boundAgentId?: string;

@@ -56,8 +56,13 @@ fn ensure_ready_message_store_from_legacy_conversation(
         let _guard = mutation_gate.lock().map_err(|err| {
             named_lock_error("conversation_mutation_gate", file!(), line!(), module_path!(), &err)
         })?;
-        if message_store::read_ready_message_store_status(store_paths)?.is_some() {
-            return Ok(());
+        match message_store::read_ready_message_store_status(store_paths) {
+            Ok(Some(_)) => return Ok(()),
+            Ok(None) => {}
+            Err(err) => runtime_log_warn(format!(
+                "[消息存储] ready 状态读取失败，尝试从会话缓存快照自愈，conversation_id={}，error={}",
+                normalized_conversation_id, err
+            )),
         }
         let conversation = read_legacy_conversation_snapshot_for_ready_store_recovery(
             state,

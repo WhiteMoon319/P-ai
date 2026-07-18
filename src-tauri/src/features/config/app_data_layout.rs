@@ -149,6 +149,8 @@ struct AgentsFile {
 struct RuntimeStateFile {
     version: u32,
     #[serde(default)]
+    runtime_revision: u64,
+    #[serde(default)]
     data_migration_version: u32,
     #[serde(default, alias = "messageStoreMigrationVersion")]
     message_store_migration_version: u32,
@@ -191,6 +193,7 @@ impl Default for RuntimeStateFile {
     fn default() -> Self {
         Self {
             version: APP_DATA_SCHEMA_VERSION,
+            runtime_revision: 0,
             data_migration_version: 0,
             message_store_migration_version: 0,
             assistant_department_agent_id: default_assistant_department_agent_id(),
@@ -332,6 +335,7 @@ fn ensure_system_notification_conversation_shard(path: &PathBuf) -> Result<bool,
 fn build_runtime_state_file(data: &AppData) -> RuntimeStateFile {
     let mut runtime = RuntimeStateFile {
         version: APP_DATA_SCHEMA_VERSION,
+        runtime_revision: 0,
         data_migration_version: data.data_migration_version,
         message_store_migration_version: data.message_store_migration_version,
         assistant_department_agent_id: data.assistant_department_agent_id.clone(),

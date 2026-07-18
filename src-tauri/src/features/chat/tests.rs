@@ -2744,6 +2744,7 @@
             response_strategy: default_remote_im_contact_response_strategy(),
             response_guidance: default_remote_im_contact_response_guidance(),
             blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
+            group_reply_pacing: RemoteImGroupReplyPacing::default(),
             last_activated_at: None,
             last_message_at: None,
             dingtalk_session_webhook: None,
@@ -2823,6 +2824,7 @@
                 &assistant_text,
                 Some(&assistant_message),
                 Some(&assistant_message_id),
+                None,
             ))
             .expect("auto send should succeed");
 
@@ -2855,6 +2857,19 @@
     }
 
     #[test]
+    fn remote_im_delegate_core_round_should_defer_auto_send_until_final_iteration() {
+        let runtime_context = RuntimeContext {
+            remote_im_reply_delegate_id: Some("delegate-a".to_string()),
+            remote_im_defer_auto_send: true,
+            ..RuntimeContext::default()
+        };
+        assert!(!remote_im_should_auto_send_after_core_round(&runtime_context));
+        assert!(remote_im_should_auto_send_after_core_round(
+            &RuntimeContext::default()
+        ));
+    }
+
+    #[test]
     fn remote_im_auto_send_and_record_decision_should_mark_send_failed_after_mock_error() {
         let (state, activation_source, conversation_id, assistant_message_id, assistant_text) =
             seed_remote_im_auto_send_test_state(serde_json::json!({
@@ -2876,6 +2891,7 @@
                 &assistant_text,
                 Some(&assistant_message),
                 Some(&assistant_message_id),
+                None,
             ))
             .expect_err("auto send should fail");
 
@@ -2902,6 +2918,231 @@
         assert_eq!(
             decision.get("error").and_then(Value::as_str),
             Some("mock remote send failed")
+        );
+    }
+
+    #[test]
+    fn remote_im_group_auto_send_uncertain_result_should_not_schedule_body_retry() {
+        let (state, mut activation_source, conversation_id, assistant_message_id, assistant_text) =
+            seed_remote_im_auto_send_test_state(serde_json::json!({
+                "mockSendError": "mock delivery timeout",
+                "mockSendErrorKind": "uncertain"
+            }));
+        activation_source.remote_contact_type = "group".to_string();
+        let mut runtime = state_read_runtime_state_cached(&state).expect("read runtime");
+        let contact = runtime
+            .remote_im_contacts
+            .iter_mut()
+            .find(|contact| contact.id == "contact-record-a")
+            .expect("contact");
+        contact.remote_contact_type = "group".to_string();
+        let contact = contact.clone();
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
+        let mut trigger = remote_im_test_group_user_message("user-a");
+        trigger.id = "group-trigger-a".to_string();
+        let event = create_pending_event(
+            "group-event-a".to_string(),
+            conversation_id.clone(),
+            vec![trigger],
+            true,
+            ChatSessionInfo {
+                department_id: "department-a".to_string(),
+                agent_id: "agent-a".to_string(),
+            },
+            RemoteImMessageSource {
+                channel_id: activation_source.channel_id.clone(),
+                platform: activation_source.platform.clone(),
+                im_name: "QQ".to_string(),
+                remote_contact_type: "group".to_string(),
+                remote_contact_id: activation_source.remote_contact_id.clone(),
+                remote_contact_name: activation_source.remote_contact_name.clone(),
+                sender_id: "user-a".to_string(),
+                sender_name: "user-a".to_string(),
+                sender_avatar_url: None,
+                platform_message_id: None,
+            },
+        );
+        let generation = 7001;
+        let state_key = remote_im_group_reply_state_key(&state, &contact.id);
+        lock_remote_im_group_reply_state_store().by_contact.insert(
+            state_key.clone(),
+            RemoteImGroupReplyState {
+                generation,
+                phase: RemoteImGroupReplyPhase::AssistantDispatching,
+                start_message_id: "group-trigger-a".to_string(),
+                end_message_id: "group-trigger-a".to_string(),
+                decision_end_message_id: Some("group-trigger-a".to_string()),
+                pending_start_message_id: None,
+                focus: false,
+                pending_focus: false,
+                event,
+                due_at: std::time::Instant::now(),
+                inspection_kind: RemoteImGroupReplyTimerKind::Mention,
+                pending_settlement: None,
+            },
+        );
+        let assistant_message = state_read_conversation_cached(&state, &conversation_id)
+            .expect("read conversation")
+            .messages
+            .iter()
+            .find(|message| message.id == assistant_message_id)
+            .cloned()
+            .expect("assistant message");
+
+        let outcome = test_runtime()
+            .block_on(remote_im_auto_send_and_record_decision(
+                &state,
+                &activation_source,
+                &conversation_id,
+                &assistant_text,
+                Some(&assistant_message),
+                Some(&assistant_message_id),
+                Some(RemoteImGroupReplyDispatchPolicy {
+                    generation,
+                    focus: false,
+                    max_chars: 200,
+                }),
+            ))
+            .expect("uncertain result should be handled without body retry");
+        assert!(matches!(
+            outcome,
+            RemoteImAutoSendExecutionOutcome::DeliveryUncertain { .. }
+        ));
+        assert!(!lock_remote_im_group_reply_state_store()
+            .by_contact
+            .contains_key(&state_key));
+        let checkpoint = state_read_runtime_state_cached(&state)
+            .expect("read runtime")
+            .remote_im_contact_checkpoints
+            .into_iter()
+            .find(|checkpoint| checkpoint.contact_id == contact.id)
+            .expect("checkpoint");
+        assert_eq!(
+            checkpoint.group_reply_delivery.as_ref().map(|marker| marker.status.as_str()),
+            Some("uncertain")
+        );
+        assert_eq!(
+            checkpoint.last_boundary_covers_message_id.as_deref(),
+            Some("group-trigger-a")
+        );
+        assert_eq!(checkpoint.last_success_reply_at, None);
+        assert!(checkpoint
+            .group_reply_delivery
+            .as_ref()
+            .map(|marker| marker.energy_applied)
+            .unwrap_or(false));
+        let decision =
+            read_remote_im_decision_for_message(&state, &conversation_id, &assistant_message_id);
+        assert_eq!(
+            decision.get("action").and_then(Value::as_str),
+            Some("delivery_uncertain")
+        );
+    }
+
+    #[test]
+    fn remote_im_group_auto_send_definite_preflight_failure_should_keep_batch_without_energy_cost() {
+        let (state, mut source, conversation_id, assistant_message_id, assistant_text) =
+            seed_remote_im_auto_send_test_state(serde_json::json!({
+                "mockSendError": "mock request rejected before send"
+            }));
+        source.remote_contact_type = "group".to_string();
+        let mut runtime = state_read_runtime_state_cached(&state).expect("read runtime");
+        let contact = runtime
+            .remote_im_contacts
+            .iter_mut()
+            .find(|contact| contact.id == "contact-record-a")
+            .expect("contact");
+        contact.remote_contact_type = "group".to_string();
+        let contact = contact.clone();
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
+        let generation = {
+            let mut store = lock_remote_im_group_reply_state_store();
+            let generation = remote_im_group_reply_next_generation(&mut store);
+            store.by_contact.insert(
+                remote_im_group_reply_state_key(&state, &contact.id),
+                RemoteImGroupReplyState {
+                    generation,
+                    phase: RemoteImGroupReplyPhase::AssistantDispatching,
+                    start_message_id: "group-preflight-a".to_string(),
+                    end_message_id: "group-preflight-a".to_string(),
+                    decision_end_message_id: Some("group-preflight-a".to_string()),
+                    pending_start_message_id: None,
+                    focus: false,
+                    pending_focus: false,
+                    event: create_pending_event(
+                        "group-preflight-event".to_string(),
+                        conversation_id.clone(),
+                        vec![remote_im_test_group_user_message("user-a")],
+                        true,
+                        ChatSessionInfo {
+                            department_id: "department-a".to_string(),
+                            agent_id: "agent-a".to_string(),
+                        },
+                        RemoteImMessageSource {
+                            channel_id: source.channel_id.clone(),
+                            platform: source.platform.clone(),
+                            im_name: "QQ".to_string(),
+                            remote_contact_type: "group".to_string(),
+                            remote_contact_id: source.remote_contact_id.clone(),
+                            remote_contact_name: source.remote_contact_name.clone(),
+                            sender_id: "user-a".to_string(),
+                            sender_name: "user-a".to_string(),
+                            sender_avatar_url: None,
+                            platform_message_id: None,
+                        },
+                    ),
+                    due_at: std::time::Instant::now(),
+                    inspection_kind: RemoteImGroupReplyTimerKind::Mention,
+                    pending_settlement: None,
+                },
+            );
+            generation
+        };
+        let assistant_message = state_read_conversation_cached(&state, &conversation_id)
+            .expect("read conversation")
+            .messages
+            .iter()
+            .find(|message| message.id == assistant_message_id)
+            .cloned()
+            .expect("assistant message");
+
+        let outcome = test_runtime()
+            .block_on(remote_im_auto_send_and_record_decision(
+                &state,
+                &source,
+                &conversation_id,
+                &assistant_text,
+                Some(&assistant_message),
+                Some(&assistant_message_id),
+                Some(RemoteImGroupReplyDispatchPolicy {
+                    generation,
+                    focus: false,
+                    max_chars: 200,
+                }),
+            ))
+            .expect("definite preflight failure should be deferred");
+        assert!(matches!(
+            outcome,
+            RemoteImAutoSendExecutionOutcome::PreflightDeferred { .. }
+        ));
+        let state_key = remote_im_group_reply_state_key(&state, &contact.id);
+        let mut store = lock_remote_im_group_reply_state_store();
+        let retry = store.by_contact.get(&state_key).expect("batch retained");
+        assert!(retry.generation > generation);
+        assert_eq!(retry.phase, RemoteImGroupReplyPhase::MentionScheduled);
+        store.by_contact.remove(&state_key);
+        drop(store);
+        let checkpoint = state_read_runtime_state_cached(&state)
+            .expect("read runtime")
+            .remote_im_contact_checkpoints
+            .into_iter()
+            .find(|checkpoint| checkpoint.contact_id == contact.id)
+            .expect("checkpoint");
+        assert_eq!(checkpoint.energy, None);
+        assert_eq!(checkpoint.last_success_reply_at, None);
+        assert_eq!(
+            checkpoint.group_reply_delivery.as_ref().map(|marker| marker.status.as_str()),
+            Some("preflight_failed")
         );
     }
 
@@ -3395,6 +3636,9 @@
             cached_runtime_state_mtime: Arc::new(Mutex::new(None)),
             cached_chat_index: Arc::new(Mutex::new(None)),
             cached_conversation_metadata: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            cached_conversation_field_metadata_ids: Arc::new(Mutex::new(
+                std::collections::HashSet::new(),
+            )),
             cached_conversation_mtimes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             cached_app_data: Arc::new(Mutex::new(None)),
             cached_app_data_signature: Arc::new(Mutex::new(None)),
@@ -3619,6 +3863,7 @@
             latest_user_meta_text: "meta".to_string(),
             latest_user_extra_text: String::new(),
             latest_user_extra_blocks: vec![
+                build_remote_im_group_reply_length_reminder(false, 20),
                 "[系统提醒]\n固定快照".to_string(),
                 "普通附加块".to_string(),
             ],
@@ -3626,7 +3871,13 @@
             latest_audios: Vec::new(),
         };
 
-        let expected = vec!["[系统提醒]\n固定快照", "meta", "触发消息", "普通附加块"];
+        let expected = vec![
+            "[系统提醒]\n请在 20 个字内进行回应。",
+            "[系统提醒]\n固定快照",
+            "meta",
+            "触发消息",
+            "普通附加块",
+        ];
         assert_eq!(prepared_prompt_latest_user_text_blocks(&prepared), expected);
 
         let first_messages = prepared_prompt_to_messages_json(&prepared);
@@ -4218,6 +4469,83 @@
         assert_ne!(
             cached.last_user_at.as_deref(),
             Some("2020-01-01T00:00:00Z")
+        );
+        assert_eq!(cached.messages.len(), 1);
+    }
+
+    #[test]
+    fn state_schedule_conversation_persist_should_preserve_metadata_newer_than_pending_full() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let conversation =
+            test_chat_conversation("conversation-pending-full-metadata", "active", &now);
+        state_schedule_conversation_persist(&state, &conversation)
+            .expect("schedule initial full persist");
+        conversation_service_v2()
+            .set_conversation_preferred_api_config_id(
+                &state,
+                &conversation.id,
+                Some("api-after-full".to_string()),
+            )
+            .expect("set preferred model after pending full");
+        let in_flight_batch = state
+            .conversation_persist_pending
+            .lock()
+            .expect("lock pending persist")
+            .take()
+            .expect("take pending batch to simulate worker in-flight");
+        assert!(in_flight_batch.conversations.contains_key(&conversation.id));
+
+        let mut stale_full_snapshot = conversation.clone();
+        stale_full_snapshot
+            .messages
+            .push(test_text_message("user", "new message", &now));
+        state_schedule_conversation_persist(&state, &stale_full_snapshot)
+            .expect("schedule stale full persist");
+
+        let cached = state_read_conversation_cached(&state, &conversation.id)
+            .expect("read cached conversation");
+        assert_eq!(
+            cached.preferred_api_config_id.as_deref(),
+            Some("api-after-full")
+        );
+        assert_eq!(cached.messages.len(), 1);
+    }
+
+    #[test]
+    fn state_schedule_conversation_persist_should_recover_poisoned_metadata_authority_lock() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let conversation =
+            test_chat_conversation("conversation-poisoned-metadata-authority", "active", &now);
+        write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
+        state_mark_conversation_direct_persisted(&state, &conversation)
+            .expect("mark persisted");
+        conversation_service_v2()
+            .set_conversation_preferred_api_config_id(
+                &state,
+                &conversation.id,
+                Some("api-before-poison".to_string()),
+            )
+            .expect("set preferred model");
+        let authority_ids = state.cached_conversation_field_metadata_ids.clone();
+        let _ = std::panic::catch_unwind(move || {
+            let _guard = authority_ids.lock().expect("lock authority ids");
+            panic!("poison metadata authority lock");
+        });
+
+        let mut stale_full_snapshot = conversation.clone();
+        stale_full_snapshot
+            .messages
+            .push(test_text_message("user", "new message", &now));
+        state_schedule_conversation_persist(&state, &stale_full_snapshot)
+            .expect("poisoned authority lock should recover");
+
+        let cached = state_read_conversation_cached(&state, &conversation.id)
+            .expect("read cached conversation");
+        assert_eq!(
+            cached.preferred_api_config_id.as_deref(),
+            Some("api-before-poison")
         );
         assert_eq!(cached.messages.len(), 1);
     }
@@ -6103,6 +6431,7 @@
             response_strategy: default_remote_im_contact_response_strategy(),
             response_guidance: default_remote_im_contact_response_guidance(),
             blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
+            group_reply_pacing: RemoteImGroupReplyPacing::default(),
             last_activated_at: None,
             last_message_at: Some(now),
             dingtalk_session_webhook: None,
@@ -6210,6 +6539,7 @@
             response_strategy: default_remote_im_contact_response_strategy(),
             response_guidance: default_remote_im_contact_response_guidance(),
             blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
+            group_reply_pacing: RemoteImGroupReplyPacing::default(),
             last_activated_at: None,
             last_message_at: Some(now.clone()),
             dingtalk_session_webhook: None,
@@ -6455,6 +6785,7 @@
             response_strategy: default_remote_im_contact_response_strategy(),
             response_guidance: default_remote_im_contact_response_guidance(),
             blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
+            group_reply_pacing: RemoteImGroupReplyPacing::default(),
             last_activated_at: None,
             last_message_at: Some(now.clone()),
             dingtalk_session_webhook: None,
@@ -6542,6 +6873,7 @@
             response_strategy: default_remote_im_contact_response_strategy(),
             response_guidance: default_remote_im_contact_response_guidance(),
             blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
+            group_reply_pacing: RemoteImGroupReplyPacing::default(),
             last_activated_at: None,
             last_message_at: Some(now.clone()),
             dingtalk_session_webhook: None,
@@ -7695,6 +8027,7 @@
             response_strategy: default_remote_im_contact_response_strategy(),
             response_guidance: default_remote_im_contact_response_guidance(),
             blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
+            group_reply_pacing: RemoteImGroupReplyPacing::default(),
             last_activated_at: None,
             last_message_at: None,
             dingtalk_session_webhook: None,
@@ -8794,6 +9127,7 @@
             response_strategy: default_remote_im_contact_response_strategy(),
             response_guidance: default_remote_im_contact_response_guidance(),
             blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
+            group_reply_pacing: RemoteImGroupReplyPacing::default(),
             last_activated_at: None,
             last_message_at: None,
             dingtalk_session_webhook: None,
@@ -8828,6 +9162,7 @@
             response_strategy: default_remote_im_contact_response_strategy(),
             response_guidance: default_remote_im_contact_response_guidance(),
             blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
+            group_reply_pacing: RemoteImGroupReplyPacing::default(),
             last_activated_at: None,
             last_message_at: None,
             dingtalk_session_webhook: None,

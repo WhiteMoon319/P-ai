@@ -359,18 +359,39 @@ async fn remote_im_build_text_content_items(
     })])
 }
 
-async fn remote_im_send_content_payload(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RemoteImSendContentErrorStage {
+    Preflight,
+    DeliveryAttempted,
+}
+
+#[derive(Debug, Clone)]
+struct RemoteImSendContentError {
+    stage: RemoteImSendContentErrorStage,
+    message: String,
+}
+
+async fn remote_im_send_content_payload_with_stage(
     state: &AppState,
     channel: &RemoteImChannelConfig,
     contact: &RemoteImContact,
     content: Vec<Value>,
     stop_tool_loop: bool,
     action: &str,
-) -> Result<Value, String> {
+) -> Result<Value, RemoteImSendContentError> {
     if content.is_empty() {
-        return Err("发送内容不能为空".to_string());
+        return Err(RemoteImSendContentError {
+            stage: RemoteImSendContentErrorStage::Preflight,
+            message: "发送内容不能为空".to_string(),
+        });
     }
-    if remote_im_contact_is_muted(state, &contact.id)? {
+    let muted = remote_im_contact_is_muted(state, &contact.id).map_err(|message| {
+        RemoteImSendContentError {
+            stage: RemoteImSendContentErrorStage::Preflight,
+            message,
+        }
+    })?;
+    if muted {
         remote_im_append_channel_log_async(
             &contact.channel_id,
             "info",
@@ -381,10 +402,13 @@ async fn remote_im_send_content_payload(
             ),
         )
         .await;
-        return Err(format!(
-            "联系人处于闭嘴状态，已拦截外发: contact_id={}",
-            contact.id
-        ));
+        return Err(RemoteImSendContentError {
+            stage: RemoteImSendContentErrorStage::Preflight,
+            message: format!(
+                "联系人处于闭嘴状态，已拦截外发: contact_id={}",
+                contact.id
+            ),
+        });
     }
     let content_digest = remote_im_outbound_content_digest(&content);
     let payload = serde_json::json!({
@@ -395,7 +419,12 @@ async fn remote_im_send_content_payload(
         "contact_id": contact.remote_contact_id,
         "content": content,
     });
-    let send_channel = remote_im_channel_with_effective_credentials(state, channel)?;
+    let send_channel = remote_im_channel_with_effective_credentials(state, channel).map_err(
+        |message| RemoteImSendContentError {
+            stage: RemoteImSendContentErrorStage::Preflight,
+            message,
+        },
+    )?;
     let platform_message_id = match remote_im_send_via_sdk(&send_channel, contact, &payload).await {
         Ok(value) => value,
         Err(err) => {
@@ -411,11 +440,21 @@ async fn remote_im_send_content_payload(
                     content_digest.file_count,
                     content_digest.other_count,
                     content_digest.text_preview,
-                    err
+                    err.message
                 ),
             )
             .await;
-            return Err(err);
+            return Err(RemoteImSendContentError {
+                stage: match err.kind {
+                    RemoteImSdkSendErrorKind::DefinitelyNotSent => {
+                        RemoteImSendContentErrorStage::Preflight
+                    }
+                    RemoteImSdkSendErrorKind::Uncertain => {
+                        RemoteImSendContentErrorStage::DeliveryAttempted
+                    }
+                },
+                message: err.message,
+            });
         }
     };
     remote_im_append_channel_log_async(
@@ -446,6 +485,27 @@ async fn remote_im_send_content_payload(
         "contact_type": contact.remote_contact_type,
         "platform_message_id": platform_message_id
     }))
+}
+
+
+async fn remote_im_send_content_payload(
+    state: &AppState,
+    channel: &RemoteImChannelConfig,
+    contact: &RemoteImContact,
+    content: Vec<Value>,
+    stop_tool_loop: bool,
+    action: &str,
+) -> Result<Value, String> {
+    remote_im_send_content_payload_with_stage(
+        state,
+        channel,
+        contact,
+        content,
+        stop_tool_loop,
+        action,
+    )
+    .await
+    .map_err(|err| err.message)
 }
 
 fn contact_tool_target_conversation_id(session_id: &str) -> Result<String, String> {

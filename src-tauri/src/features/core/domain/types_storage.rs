@@ -254,6 +254,8 @@ struct RemoteImContact {
     #[serde(default = "default_remote_im_contact_blocked_message_prefixes")]
     blocked_message_prefixes: Vec<String>,
     #[serde(default)]
+    group_reply_pacing: RemoteImGroupReplyPacing,
+    #[serde(default)]
     last_activated_at: Option<String>,
     #[serde(default)]
     last_message_at: Option<String>,
@@ -267,10 +269,90 @@ struct RemoteImContact {
     shell_workspaces: Vec<ShellWorkspaceConfig>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteImGroupReplyPacing {
+    #[serde(default = "default_remote_im_assistant_debounce_seconds")]
+    assistant_debounce_seconds: u64,
+    #[serde(default = "default_remote_im_secretary_inspection_seconds")]
+    secretary_inspection_seconds: u64,
+    #[serde(default = "default_remote_im_reply_cooldown_seconds")]
+    reply_cooldown_seconds: u64,
+    #[serde(default = "default_remote_im_inspection_jitter_ratio")]
+    inspection_jitter_ratio: f64,
+    #[serde(default = "default_remote_im_maximum_energy")]
+    maximum_energy: f64,
+    #[serde(default = "default_remote_im_base_reply_energy_cost")]
+    base_reply_energy_cost: f64,
+    #[serde(default = "default_remote_im_energy_cost_per_character")]
+    energy_cost_per_character: f64,
+    #[serde(default = "default_remote_im_energy_recovery_per_second")]
+    energy_recovery_per_second: f64,
+    #[serde(default)]
+    positive_energy_phrases: Vec<String>,
+    #[serde(default)]
+    negative_energy_phrases: Vec<String>,
+    #[serde(default = "default_remote_im_positive_energy_delta")]
+    positive_energy_delta: f64,
+    #[serde(default = "default_remote_im_negative_energy_delta")]
+    negative_energy_delta: f64,
+    #[serde(default = "default_remote_im_normal_reply_max_chars")]
+    normal_reply_max_chars: u32,
+    #[serde(default = "default_remote_im_focus_reply_max_chars")]
+    focus_reply_max_chars: u32,
+    #[serde(default)]
+    focus_instructions: Vec<String>,
+}
+
+impl Default for RemoteImGroupReplyPacing {
+    fn default() -> Self {
+        Self {
+            assistant_debounce_seconds: default_remote_im_assistant_debounce_seconds(),
+            secretary_inspection_seconds: default_remote_im_secretary_inspection_seconds(),
+            reply_cooldown_seconds: default_remote_im_reply_cooldown_seconds(),
+            inspection_jitter_ratio: default_remote_im_inspection_jitter_ratio(),
+            maximum_energy: default_remote_im_maximum_energy(),
+            base_reply_energy_cost: default_remote_im_base_reply_energy_cost(),
+            energy_cost_per_character: default_remote_im_energy_cost_per_character(),
+            energy_recovery_per_second: default_remote_im_energy_recovery_per_second(),
+            positive_energy_phrases: Vec::new(),
+            negative_energy_phrases: Vec::new(),
+            positive_energy_delta: default_remote_im_positive_energy_delta(),
+            negative_energy_delta: default_remote_im_negative_energy_delta(),
+            normal_reply_max_chars: default_remote_im_normal_reply_max_chars(),
+            focus_reply_max_chars: default_remote_im_focus_reply_max_chars(),
+            focus_instructions: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct RemoteImGroupReplyDeliveryMarker {
+    #[serde(default)]
+    generation: u64,
+    #[serde(default)]
+    boundary_message_id: String,
+    #[serde(default)]
+    outbound_key: String,
+    #[serde(default)]
+    final_text: String,
+    #[serde(default)]
+    status: String,
+    #[serde(default)]
+    platform_message_id: Option<String>,
+    #[serde(default)]
+    energy_applied: bool,
+    #[serde(default)]
+    updated_at: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct RemoteImContactCheckpoint {
     contact_id: String,
+    #[serde(default)]
+    atomic_revision: u64,
     #[serde(default)]
     latest_seen_message_id: Option<String>,
     #[serde(default)]
@@ -279,6 +361,14 @@ struct RemoteImContactCheckpoint {
     last_boundary_covers_message_id: Option<String>,
     #[serde(default)]
     updated_at: Option<String>,
+    #[serde(default)]
+    energy: Option<f64>,
+    #[serde(default)]
+    energy_updated_at: Option<String>,
+    #[serde(default)]
+    last_success_reply_at: Option<String>,
+    #[serde(default)]
+    group_reply_delivery: Option<RemoteImGroupReplyDeliveryMarker>,
 }
 
 fn default_assistant_department_agent_id() -> String {
@@ -326,6 +416,54 @@ fn default_remote_im_contact_response_guidance() -> String {
 
 fn default_remote_im_contact_blocked_message_prefixes() -> Vec<String> {
     vec!["#".to_string(), "/".to_string(), "%".to_string()]
+}
+
+fn default_remote_im_assistant_debounce_seconds() -> u64 {
+    1
+}
+
+fn default_remote_im_secretary_inspection_seconds() -> u64 {
+    7
+}
+
+fn default_remote_im_reply_cooldown_seconds() -> u64 {
+    10
+}
+
+fn default_remote_im_inspection_jitter_ratio() -> f64 {
+    0.2
+}
+
+fn default_remote_im_maximum_energy() -> f64 {
+    100.0
+}
+
+fn default_remote_im_base_reply_energy_cost() -> f64 {
+    14.0
+}
+
+fn default_remote_im_energy_cost_per_character() -> f64 {
+    0.12
+}
+
+fn default_remote_im_energy_recovery_per_second() -> f64 {
+    0.6
+}
+
+fn default_remote_im_positive_energy_delta() -> f64 {
+    6.0
+}
+
+fn default_remote_im_negative_energy_delta() -> f64 {
+    -15.0
+}
+
+fn default_remote_im_normal_reply_max_chars() -> u32 {
+    20
+}
+
+fn default_remote_im_focus_reply_max_chars() -> u32 {
+    200
 }
 
 fn default_user_alias() -> String {

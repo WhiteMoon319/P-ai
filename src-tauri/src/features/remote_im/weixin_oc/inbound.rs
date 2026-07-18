@@ -273,8 +273,9 @@ fn upsert_weixin_oc_contact(
         processing_mode: "continuous".to_string(),
         response_strategy: default_remote_im_contact_response_strategy(),
         response_guidance: default_remote_im_contact_response_guidance(),
-        blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
-        last_activated_at: None,
+            blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
+            group_reply_pacing: RemoteImGroupReplyPacing::default(),
+            last_activated_at: None,
         last_message_at: None,
         dingtalk_session_webhook: None,
         dingtalk_session_webhook_expired_time: None,
@@ -321,10 +322,13 @@ fn sync_weixin_oc_contact_from_user_id(
     if normalized_user_id.is_empty() {
         return Err("当前登录状态没有返回联系人 user_id，暂时无法补录联系人".to_string());
     }
-    let mut runtime = state_read_runtime_state_cached(state)?;
-    let result = upsert_weixin_oc_contact(&mut runtime, channel, normalized_user_id);
-    state_write_runtime_state_cached(state, &runtime)?;
-    Ok(result)
+    state_mutate_runtime_state_cached(state, |runtime| {
+        Ok(upsert_weixin_oc_contact(
+            runtime,
+            channel,
+            normalized_user_id,
+        ))
+    })
 }
 
 pub(crate) async fn weixin_oc_send_text_message(
@@ -332,7 +336,7 @@ pub(crate) async fn weixin_oc_send_text_message(
     to_user_id: &str,
     text: &str,
     context_token: Option<&str>,
-) -> Result<String, String> {
+) -> Result<String, RemoteImSdkSendError> {
     let item_list = vec![serde_json::json!({
         "type": WEIXIN_OC_TEXT_ITEM_TYPE,
         "text_item": {
@@ -347,8 +351,9 @@ pub(crate) async fn weixin_oc_send_message_items(
     to_user_id: &str,
     item_list: Vec<Value>,
     context_token: Option<&str>,
-) -> Result<String, String> {
-    let client = build_weixin_oc_http_client(credentials.normalized_api_timeout_ms())?;
+) -> Result<String, RemoteImSdkSendError> {
+    let client = build_weixin_oc_http_client(credentials.normalized_api_timeout_ms())
+        .map_err(RemoteImSdkSendError::definitely_not_sent)?;
     let client_id = Uuid::new_v4().simple().to_string();
     let body = serde_json::json!({
         "base_info": {
@@ -365,8 +370,13 @@ pub(crate) async fn weixin_oc_send_message_items(
         }
     });
     let body_text = serde_json::to_string(&body)
-        .map_err(|err| format!("序列化 sendmessage 请求失败: {err}"))?;
-    let headers = weixin_oc_request_headers(&body_text, Some(credentials.token.as_str()))?;
+        .map_err(|err| {
+            RemoteImSdkSendError::definitely_not_sent(format!(
+                "序列化 sendmessage 请求失败: {err}"
+            ))
+        })?;
+    let headers = weixin_oc_request_headers(&body_text, Some(credentials.token.as_str()))
+        .map_err(RemoteImSdkSendError::definitely_not_sent)?;
     let resp = client
         .post(format!(
             "{}/ilink/bot/sendmessage",
@@ -376,16 +386,28 @@ pub(crate) async fn weixin_oc_send_message_items(
         .body(body_text)
         .send()
         .await
-        .map_err(|err| format!("请求 sendmessage 失败: {err}"))?;
+        .map_err(|err| {
+            RemoteImSdkSendError::uncertain(format!("请求 sendmessage 失败: {err}"))
+        })?;
     let status_code = resp.status();
     if !status_code.is_success() {
         let body = resp.text().await.unwrap_or_default();
-        return Err(format!("请求 sendmessage 失败: status={} body={}", status_code, body));
+        return Err(remote_im_http_rejection_error(
+            status_code,
+            format!(
+                "请求 sendmessage 失败: status={} body={}",
+                status_code, body
+            ),
+        ));
     }
     let resp_body: serde_json::Value = resp
         .json()
         .await
-        .map_err(|err| format!("解析 sendmessage 响应失败: {err}"))?;
+        .map_err(|err| {
+            RemoteImSdkSendError::uncertain(format!(
+                "解析 sendmessage 响应失败: {err}"
+            ))
+        })?;
     let ret = resp_body
         .get("ret")
         .and_then(serde_json::Value::as_i64)
@@ -399,10 +421,10 @@ pub(crate) async fn weixin_oc_send_message_items(
             .get("errmsg")
             .and_then(serde_json::Value::as_str)
             .unwrap_or("");
-        return Err(format!(
+        return Err(RemoteImSdkSendError::definitely_not_sent(format!(
             "请求 sendmessage 失败: ret={} errcode={} errmsg={} resp={}",
             ret, errcode, errmsg, resp_body
-        ));
+        )));
     }
     Ok(client_id)
 }

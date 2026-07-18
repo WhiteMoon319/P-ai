@@ -2303,6 +2303,9 @@ mod storage_usage_tests {
             cached_runtime_state_mtime: Arc::new(Mutex::new(None)),
             cached_chat_index: Arc::new(Mutex::new(None)),
             cached_conversation_metadata: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            cached_conversation_field_metadata_ids: Arc::new(Mutex::new(
+                std::collections::HashSet::new(),
+            )),
             cached_conversation_mtimes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             cached_app_data: Arc::new(Mutex::new(None)),
             cached_app_data_signature: Arc::new(Mutex::new(None)),
@@ -2381,6 +2384,7 @@ mod storage_usage_tests {
             response_strategy: default_remote_im_contact_response_strategy(),
             response_guidance: default_remote_im_contact_response_guidance(),
             blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
+            group_reply_pacing: RemoteImGroupReplyPacing::default(),
             last_activated_at: None,
             last_message_at: Some(now_iso()),
             dingtalk_session_webhook: None,

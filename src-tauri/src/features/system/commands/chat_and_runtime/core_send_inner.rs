@@ -2449,23 +2449,41 @@ async fn send_chat_message_inner(
             .as_deref()
             .map(|delegate_id| !remote_im_reply_delegate_is_active(&state, delegate_id))
             .unwrap_or(false);
-    let remote_im_auto_send_source = resolve_remote_im_auto_send_source(
+    let remote_im_auto_send_source = match resolve_remote_im_auto_send_source(
         &state,
         &conversation_id,
         is_remote_im_contact_conversation,
         &runtime_context,
         &remote_im_activation_sources,
-    )?;
+    ) {
+        Ok(value) => value,
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[远程IM][自动发送] 目标解析失败，已降级为不自动发送，conversation_id={}，error={}",
+                conversation_id, err
+            ));
+            None
+        }
+    };
     let mut remote_im_reply_decision =
         remote_im_extract_reply_decision_from_tool_history(&tool_history_events);
-    let pending_remote_im_auto_send_target = resolve_remote_im_auto_send_target(
+    let pending_remote_im_auto_send_target = match resolve_remote_im_auto_send_target(
         &final_response_text,
         remote_im_auto_send_source
             .as_ref()
             .map(std::slice::from_ref)
             .unwrap_or(&[]),
         remote_im_auto_send_source.is_some(),
-    )?;
+    ) {
+        Ok(value) => value,
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[远程IM][自动发送] 发送判定失败，已降级为不自动发送，conversation_id={}，error={}",
+                conversation_id, err
+            ));
+            None
+        }
+    };
     if let Some(target) = pending_remote_im_auto_send_target.as_ref() {
         if remote_im_reply_decision.is_none() {
             remote_im_reply_decision = Some(RemoteImReplyDecisionSummary {
@@ -2619,7 +2637,7 @@ async fn send_chat_message_inner(
                 .auto_push_remote_contact_id
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty());
-            if let (Some(delegate_id), Some(trigger_message_id), Some(source)) = (
+            if let (Some(delegate_id), Some(trigger_message_id)) = (
                 runtime_context
                     .remote_im_reply_delegate_id
                     .as_deref()
@@ -2630,10 +2648,6 @@ async fn send_chat_message_inner(
                     .as_deref()
                     .map(str::trim)
                     .filter(|value| !value.is_empty()),
-                effective_bound_remote_im_activation_source(
-                    Some(&runtime_context),
-                    &remote_im_activation_sources,
-                ),
             ) {
                 if remote_im_reply_delegate_is_active(&state, delegate_id) {
                     let visible_texts = remote_im_reply_delegate_visible_texts(&assistant_request_messages);
@@ -2696,15 +2710,10 @@ async fn send_chat_message_inner(
                             message,
                         );
                     }
-                    spawn_remote_im_auto_send_contact_assistant_reply(
-                        state.clone(),
-                        source.clone(),
-                        conversation_id.clone(),
-                        text.clone(),
-                        message,
-                        Some(intermediate_message_id),
-                        Some(delegate_id.to_string()),
-                    );
+                    runtime_log_debug(format!(
+                        "[远程应答委托] 中间正文仅持久化，等待最终回复统一外发，delegate_id={}，message_id={}",
+                        delegate_id, intermediate_message_id
+                    ));
                     }
                 }
             }
@@ -2863,42 +2872,29 @@ async fn send_chat_message_inner(
         }
     }
 
-    if let Some(activation_source) = pending_remote_im_auto_send_target {
-        if runtime_context
-            .remote_im_reply_delegate_id
-            .as_deref()
-            .is_some_and(|delegate_id| !remote_im_reply_delegate_is_active(&state, delegate_id))
-        {
-            break Ok(SendChatResult {
-                conversation_id, latest_user_text, assistant_text, final_response_text,
-                archived_before_send: archived_before_send_any, assistant_message: persisted_assistant_message,
-                provider_prompt_tokens: trusted_input_tokens, estimated_prompt_tokens: Some(estimated_prompt_tokens),
-                effective_prompt_tokens: Some(effective_prompt_tokens), effective_prompt_source: Some(effective_prompt_source.to_string()),
-                context_window_tokens: Some(active_selected_api.context_window_tokens), max_output_tokens: active_resolved_api.max_output_tokens,
-                context_usage_percent: Some(context_usage_percent), remote_im_reply_decision: remote_im_reply_decision.as_ref().map(|item| item.action.clone()),
-                remote_im_reply_target: remote_im_reply_decision.and_then(|item| item.target),
+    if remote_im_should_auto_send_after_core_round(&runtime_context) {
+        if let Some(activation_source) = pending_remote_im_auto_send_target {
+            let final_auto_send_message = persisted_assistant_message.clone().filter(|message| {
+                message
+                    .parts
+                    .iter()
+                    .find_map(|part| match part {
+                        MessagePart::Text { text, .. } => Some(text.trim()),
+                        _ => None,
+                    })
+                    .map(|text| text == final_response_text.trim())
+                    .unwrap_or(false)
             });
+            spawn_remote_im_auto_send_contact_assistant_reply(
+                state.clone(),
+                activation_source,
+                conversation_id.clone(),
+                final_response_text.clone(),
+                final_auto_send_message.clone(),
+                persisted_assistant_message.as_ref().map(|message| message.id.clone()),
+                None,
+            );
         }
-        let final_auto_send_message = persisted_assistant_message.clone().filter(|message| {
-            message
-                .parts
-                .iter()
-                .find_map(|part| match part {
-                    MessagePart::Text { text, .. } => Some(text.trim()),
-                    _ => None,
-                })
-                .map(|text| text == final_response_text.trim())
-                .unwrap_or(false)
-        });
-        spawn_remote_im_auto_send_contact_assistant_reply(
-            state.clone(),
-            activation_source,
-            conversation_id.clone(),
-            final_response_text.clone(),
-            final_auto_send_message.clone(),
-            persisted_assistant_message.as_ref().map(|message| message.id.clone()),
-            runtime_context.remote_im_reply_delegate_id.clone(),
-        );
     }
 
         break Ok(SendChatResult {

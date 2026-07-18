@@ -636,7 +636,32 @@ fn delegate_runtime_thread_conversation_get_any(
     )
 }
 
-fn delegate_runtime_thread_conversation_update(
+fn delegate_runtime_thread_conversation_mutation_lock(
+    app_state: &AppState,
+    delegate_id: &str,
+) -> Arc<Mutex<()>> {
+    static LOCKS: std::sync::OnceLock<Mutex<std::collections::HashMap<String, Arc<Mutex<()>>>>> =
+        std::sync::OnceLock::new();
+    let key = format!(
+        "{}::{}",
+        app_state.data_path.to_string_lossy(),
+        delegate_id.trim()
+    );
+    let locks = LOCKS.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
+    let mut locks = match locks.lock() {
+        Ok(locks) => locks,
+        Err(poisoned) => {
+            runtime_log_warn("[委托会话] 变更锁表中毒，已恢复".to_string());
+            poisoned.into_inner()
+        }
+    };
+    locks
+        .entry(key)
+        .or_insert_with(|| Arc::new(Mutex::new(())))
+        .clone()
+}
+
+fn delegate_runtime_thread_conversation_update_unlocked(
     app_state: &AppState,
     delegate_id: &str,
     conversation: Conversation,
@@ -668,6 +693,56 @@ fn delegate_runtime_thread_conversation_update(
         thread.conversation = conversation;
     }
     Ok(())
+}
+
+fn delegate_runtime_thread_conversation_update(
+    app_state: &AppState,
+    delegate_id: &str,
+    conversation: Conversation,
+) -> Result<(), String> {
+    let mutation_lock = delegate_runtime_thread_conversation_mutation_lock(app_state, delegate_id);
+    let _guard = match mutation_lock.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            runtime_log_warn(format!(
+                "[委托会话] 变更锁中毒，已恢复，delegate_id={}",
+                delegate_id
+            ));
+            poisoned.into_inner()
+        }
+    };
+    delegate_runtime_thread_conversation_update_unlocked(app_state, delegate_id, conversation)
+}
+
+fn delegate_runtime_thread_conversation_append_if_absent(
+    app_state: &AppState,
+    delegate_id: &str,
+    message: ChatMessage,
+) -> Result<bool, String> {
+    // 委托线程当前以单个 Conversation 文档持久化，没有独立消息仓库可做 message-by-id append。
+    // 所有 update/append 共享同一个 per-delegate 变更锁，避免并发读改写互相覆盖。
+    let mutation_lock = delegate_runtime_thread_conversation_mutation_lock(app_state, delegate_id);
+    let _guard = match mutation_lock.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            runtime_log_warn(format!(
+                "[委托会话] 追加锁中毒，已恢复，delegate_id={}",
+                delegate_id
+            ));
+            poisoned.into_inner()
+        }
+    };
+    let Some(mut conversation) = delegate_runtime_thread_conversation_get_any(app_state, delegate_id)?
+    else {
+        return Err(format!("委托会话不存在，delegate_id={delegate_id}"));
+    };
+    if conversation.messages.iter().any(|item| item.id == message.id) {
+        return Ok(false);
+    }
+    conversation.messages.push(message);
+    conversation.updated_at = now_iso();
+    delegate_runtime_thread_conversation_update_unlocked(app_state, delegate_id, conversation)?;
+    Ok(true)
 }
 
 fn delegate_runtime_thread_conversation_delete(

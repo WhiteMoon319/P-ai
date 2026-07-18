@@ -127,6 +127,9 @@
                     cancelled: false,
                     terminal,
                     session_agent_id: "agent-a".to_string(),
+                    inspection_generation: None,
+                    group_reply_focus: false,
+                    group_reply_max_chars: None,
                 },
             );
         }
@@ -413,6 +416,7 @@
             response_strategy: default_remote_im_contact_response_strategy(),
             response_guidance: default_remote_im_contact_response_guidance(),
             blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
+            group_reply_pacing: RemoteImGroupReplyPacing::default(),
             last_activated_at: None,
             last_message_at: None,
             dingtalk_session_webhook: None,
@@ -569,6 +573,7 @@
             response_strategy: default_remote_im_contact_response_strategy(),
             response_guidance: default_remote_im_contact_response_guidance(),
             blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
+            group_reply_pacing: RemoteImGroupReplyPacing::default(),
             last_activated_at: None,
             last_message_at: None,
             dingtalk_session_webhook: None,
@@ -1003,6 +1008,9 @@
             cached_runtime_state_mtime: Arc::new(Mutex::new(None)),
             cached_chat_index: Arc::new(Mutex::new(None)),
             cached_conversation_metadata: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            cached_conversation_field_metadata_ids: Arc::new(Mutex::new(
+                std::collections::HashSet::new(),
+            )),
             cached_conversation_mtimes: Arc::new(Mutex::new(std::collections::HashMap::new())),
             cached_app_data: Arc::new(Mutex::new(None)),
             cached_app_data_signature: Arc::new(Mutex::new(None)),
@@ -1336,6 +1344,7 @@
             response_strategy: default_remote_im_contact_response_strategy(),
             response_guidance: default_remote_im_contact_response_guidance(),
             blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
+            group_reply_pacing: RemoteImGroupReplyPacing::default(),
             last_activated_at: None,
             last_message_at: None,
             dingtalk_session_webhook: None,
@@ -2038,6 +2047,1433 @@
     }
 
     #[test]
+    fn remote_im_legacy_contact_and_checkpoint_should_default_group_reply_fields() {
+        let contact = remote_im_test_contact("contact-legacy-pacing", "conversation-legacy-pacing");
+        let mut value = serde_json::to_value(contact).expect("serialize contact");
+        value
+            .as_object_mut()
+            .expect("contact json object")
+            .remove("groupReplyPacing");
+        let restored: RemoteImContact = serde_json::from_value(value).expect("deserialize contact");
+        assert_eq!(restored.group_reply_pacing, RemoteImGroupReplyPacing::default());
+
+        let checkpoint: RemoteImContactCheckpoint = serde_json::from_value(serde_json::json!({
+            "contactId": "contact-legacy-pacing"
+        }))
+        .expect("deserialize checkpoint");
+        assert_eq!(checkpoint.energy, None);
+        assert_eq!(checkpoint.energy_updated_at, None);
+        assert_eq!(checkpoint.last_success_reply_at, None);
+        assert_eq!(checkpoint.atomic_revision, 0);
+        assert!(checkpoint.group_reply_delivery.is_none());
+    }
+
+    #[test]
+    fn remote_im_update_contact_behavior_should_validate_and_persist_atomically() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact("contact-behavior", "conversation-behavior");
+        contact.remote_contact_type = "group".to_string();
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact);
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
+
+        let mut pacing = RemoteImGroupReplyPacing::default();
+        pacing.normal_reply_max_chars = 30;
+        pacing.focus_reply_max_chars = 120;
+        pacing.positive_energy_phrases = vec!["谢谢".to_string(), "谢谢".to_string()];
+        let updated = remote_im_update_contact_behavior_inner(
+            &state,
+            RemoteImContactBehaviorUpdateInput {
+                contact_id: "contact-behavior".to_string(),
+                mute_keywords: vec!["安静".to_string()],
+                unmute_keywords: vec!["继续".to_string()],
+                patience_seconds: 90,
+                mute_duration_seconds: 300,
+                activation_cooldown_seconds: 8,
+                blocked_message_prefixes: vec!["#".to_string(), "#".to_string()],
+                group_reply_pacing: pacing,
+            },
+        )
+        .expect("update behavior");
+        assert_eq!(updated.group_reply_pacing.normal_reply_max_chars, 30);
+        assert_eq!(updated.group_reply_pacing.positive_energy_phrases, vec!["谢谢"]);
+        assert_eq!(updated.blocked_message_prefixes, vec!["#"]);
+
+        let mut invalid = updated.group_reply_pacing.clone();
+        invalid.focus_reply_max_chars = 10;
+        let err = remote_im_update_contact_behavior_inner(
+            &state,
+            RemoteImContactBehaviorUpdateInput {
+                contact_id: "contact-behavior".to_string(),
+                mute_keywords: Vec::new(),
+                unmute_keywords: Vec::new(),
+                patience_seconds: 0,
+                mute_duration_seconds: 0,
+                activation_cooldown_seconds: 0,
+                blocked_message_prefixes: Vec::new(),
+                group_reply_pacing: invalid,
+            },
+        )
+        .expect_err("invalid length relation should fail");
+        assert!(err.contains("焦点回复字数"));
+        let persisted = state_read_runtime_state_cached(&state)
+            .expect("read runtime")
+            .remote_im_contacts
+            .into_iter()
+            .find(|item| item.id == "contact-behavior")
+            .expect("contact exists");
+        assert_eq!(persisted.group_reply_pacing.normal_reply_max_chars, 30);
+    }
+
+    #[test]
+    fn private_contact_behavior_save_should_ignore_invalid_group_only_pacing() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact("contact-private-behavior", "conversation-private-behavior");
+        contact.group_reply_pacing.normal_reply_max_chars = 40;
+        contact.group_reply_pacing.focus_reply_max_chars = 10;
+        let original_pacing = contact.group_reply_pacing.clone();
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact);
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
+
+        let updated = remote_im_update_contact_behavior_inner(
+            &state,
+            RemoteImContactBehaviorUpdateInput {
+                contact_id: "contact-private-behavior".to_string(),
+                mute_keywords: vec!["安静".to_string()],
+                unmute_keywords: vec!["继续".to_string()],
+                patience_seconds: 15,
+                mute_duration_seconds: 20,
+                activation_cooldown_seconds: 5,
+                blocked_message_prefixes: vec!["#".to_string()],
+                group_reply_pacing: RemoteImGroupReplyPacing {
+                    assistant_debounce_seconds: 0,
+                    ..RemoteImGroupReplyPacing::default()
+                },
+            },
+        )
+        .expect("private behavior save should ignore group-only pacing");
+        assert_eq!(updated.blocked_message_prefixes, vec!["#"]);
+        assert_eq!(updated.group_reply_pacing, original_pacing);
+    }
+
+    #[test]
+    fn remote_im_patch_contact_settings_should_not_partially_write_invalid_patch() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact("contact-patch", "conversation-patch");
+        contact.remote_contact_type = "group".to_string();
+        contact.processing_mode = "continuous".to_string();
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact);
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
+
+        let mut invalid_pacing = RemoteImGroupReplyPacing::default();
+        invalid_pacing.assistant_debounce_seconds = 0;
+        let err = remote_im_patch_contact_settings_inner(
+            &state,
+            RemoteImContactSettingsPatchInput {
+                contact_id: "contact-patch".to_string(),
+                department_id: None,
+                agent_id: None,
+                processing_mode: "qa".to_string(),
+                blocked_message_prefixes: vec!["#".to_string()],
+                activation_mode: "always".to_string(),
+                activation_keywords: vec!["唤醒".to_string()],
+                mute_keywords: vec!["安静".to_string()],
+                unmute_keywords: vec!["继续".to_string()],
+                patience_seconds: 10,
+                mute_duration_seconds: 20,
+                activation_cooldown_seconds: 30,
+                group_reply_pacing: invalid_pacing,
+                response_strategy: "always_reply".to_string(),
+                response_guidance: "请回复".to_string(),
+                allow_receive: false,
+                allow_send: false,
+                allow_send_files: true,
+            },
+        )
+        .expect_err("invalid patch should fail before writing");
+        assert!(err.contains("助理防抖"));
+        let persisted = state_read_runtime_state_cached(&state)
+            .expect("read runtime")
+            .remote_im_contacts
+            .into_iter()
+            .find(|item| item.id == "contact-patch")
+            .expect("contact exists");
+        assert_eq!(persisted.processing_mode, "continuous");
+        assert!(persisted.allow_receive);
+        assert!(persisted.allow_send);
+        assert!(!persisted.allow_send_files);
+    }
+
+    #[test]
+    fn remote_im_patch_contact_settings_should_filter_group_only_fields_for_private_contact() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact("contact-private-patch", "conversation-private-patch");
+        contact.group_reply_pacing.maximum_energy = 77.0;
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact);
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
+        let mut incoming_pacing = RemoteImGroupReplyPacing::default();
+        incoming_pacing.maximum_energy = 12.0;
+
+        let updated = remote_im_patch_contact_settings_inner(
+            &state,
+            RemoteImContactSettingsPatchInput {
+                contact_id: "contact-private-patch".to_string(),
+                department_id: None,
+                agent_id: None,
+                processing_mode: "qa".to_string(),
+                blocked_message_prefixes: vec!["[bot]".to_string()],
+                activation_mode: "never".to_string(),
+                activation_keywords: vec!["不应保留".to_string()],
+                mute_keywords: vec!["安静".to_string()],
+                unmute_keywords: vec!["继续".to_string()],
+                patience_seconds: 10,
+                mute_duration_seconds: 20,
+                activation_cooldown_seconds: 30,
+                group_reply_pacing: incoming_pacing,
+                response_strategy: "smart_judge".to_string(),
+                response_guidance: "不应保留".to_string(),
+                allow_receive: true,
+                allow_send: false,
+                allow_send_files: true,
+            },
+        )
+        .expect("patch private contact");
+        assert_eq!(updated.activation_mode, "always");
+        assert!(updated.activation_keywords.is_empty());
+        assert_eq!(updated.response_strategy, "always_reply");
+        assert!(updated.response_guidance.is_empty());
+        assert_eq!(updated.group_reply_pacing.maximum_energy, 77.0);
+        assert!(updated.allow_receive && updated.allow_send);
+    }
+
+    #[test]
+    fn remote_im_patch_contact_settings_should_save_when_organization_snapshot_is_unreadable() {
+        let state = remote_im_test_state();
+        std::fs::create_dir_all(&state.config_path).expect("make config path unreadable as file");
+        let contact = remote_im_test_contact(
+            "contact-full-patch-config-degraded",
+            "conversation-full-patch-config-degraded",
+        );
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact.clone());
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
+
+        let updated = remote_im_patch_contact_settings_inner(
+            &state,
+            RemoteImContactSettingsPatchInput {
+                contact_id: contact.id.clone(),
+                department_id: Some("department-config-degraded".to_string()),
+                agent_id: Some("agent-config-degraded".to_string()),
+                processing_mode: "qa".to_string(),
+                blocked_message_prefixes: vec!["[skip]".to_string()],
+                activation_mode: "never".to_string(),
+                activation_keywords: vec!["ignored-private".to_string()],
+                mute_keywords: vec!["安静".to_string()],
+                unmute_keywords: vec!["继续".to_string()],
+                patience_seconds: 10,
+                mute_duration_seconds: 20,
+                activation_cooldown_seconds: 30,
+                group_reply_pacing: RemoteImGroupReplyPacing::default(),
+                response_strategy: "smart_judge".to_string(),
+                response_guidance: "ignored-private".to_string(),
+                allow_receive: true,
+                allow_send: false,
+                allow_send_files: true,
+            },
+        )
+        .expect("full patch should save despite organization read failure");
+
+        assert_eq!(
+            updated.bound_department_id.as_deref(),
+            Some("department-config-degraded")
+        );
+        assert_eq!(
+            updated.bound_agent_id.as_deref(),
+            Some("agent-config-degraded")
+        );
+        assert_eq!(updated.processing_mode, "qa");
+        assert_eq!(updated.blocked_message_prefixes, vec!["[skip]"]);
+        assert!(updated.allow_receive && updated.allow_send);
+        assert!(updated.allow_send_files);
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn group_reply_settlement_should_be_idempotent_after_partial_write_result() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact("contact-settlement", "conversation-settlement");
+        contact.remote_contact_type = "group".to_string();
+        let outbound_key = "group-reply::contact-settlement::7::message-9".to_string();
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact.clone());
+        runtime.remote_im_contact_checkpoints.push(RemoteImContactCheckpoint {
+            contact_id: contact.id.clone(),
+            energy: Some(100.0),
+            energy_updated_at: Some(now_iso()),
+            group_reply_delivery: Some(RemoteImGroupReplyDeliveryMarker {
+                generation: 7,
+                boundary_message_id: "message-9".to_string(),
+                outbound_key: outbound_key.clone(),
+                final_text: "你好".to_string(),
+                status: "dispatching".to_string(),
+                platform_message_id: None,
+                energy_applied: false,
+                updated_at: Some(now_iso()),
+            }),
+            ..RemoteImContactCheckpoint::default()
+        });
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
+        let settlement = RemoteImGroupReplySettlement {
+            boundary_message_id: "message-9".to_string(),
+            final_text: Some("你好".to_string()),
+            outbound_key: Some(outbound_key),
+            platform_message_id: Some("platform-1".to_string()),
+            status: RemoteImGroupReplySettlementStatus::Delivered,
+        };
+
+        remote_im_persist_group_reply_settlement(&state, &contact, &settlement)
+            .expect("first settlement");
+        let first = state_read_runtime_state_cached(&state)
+            .expect("read first")
+            .remote_im_contact_checkpoints
+            .into_iter()
+            .find(|item| item.contact_id == contact.id)
+            .expect("checkpoint");
+        remote_im_persist_group_reply_settlement(&state, &contact, &settlement)
+            .expect("retry settlement");
+        let second = state_read_runtime_state_cached(&state)
+            .expect("read second")
+            .remote_im_contact_checkpoints
+            .into_iter()
+            .find(|item| item.contact_id == contact.id)
+            .expect("checkpoint");
+        assert_eq!(first.energy, second.energy);
+        assert_eq!(second.last_boundary_covers_message_id.as_deref(), Some("message-9"));
+        assert_eq!(
+            second.group_reply_delivery.as_ref().map(|marker| marker.status.as_str()),
+            Some("committed")
+        );
+    }
+
+    #[test]
+    fn uncertain_group_reply_should_charge_once_without_marking_success_then_allow_late_commit() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact(
+            "contact-uncertain-settlement",
+            "conversation-uncertain-settlement",
+        );
+        contact.remote_contact_type = "group".to_string();
+        let outbound_key =
+            "group-reply::contact-uncertain-settlement::8::message-10".to_string();
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact.clone());
+        runtime.remote_im_contact_checkpoints.push(RemoteImContactCheckpoint {
+            contact_id: contact.id.clone(),
+            energy: Some(100.0),
+            energy_updated_at: Some(now_iso()),
+            group_reply_delivery: Some(RemoteImGroupReplyDeliveryMarker {
+                generation: 8,
+                boundary_message_id: "message-10".to_string(),
+                outbound_key: outbound_key.clone(),
+                final_text: "可能已经送达".to_string(),
+                status: "dispatching".to_string(),
+                platform_message_id: None,
+                energy_applied: false,
+                updated_at: Some(now_iso()),
+            }),
+            ..RemoteImContactCheckpoint::default()
+        });
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
+
+        remote_im_persist_group_reply_settlement(
+            &state,
+            &contact,
+            &RemoteImGroupReplySettlement {
+                boundary_message_id: "message-10".to_string(),
+                final_text: Some("可能已经送达".to_string()),
+                outbound_key: Some(outbound_key.clone()),
+                platform_message_id: None,
+                status: RemoteImGroupReplySettlementStatus::Uncertain,
+            },
+        )
+        .expect("persist uncertain settlement");
+        let uncertain = state_read_runtime_state_cached(&state)
+            .expect("read uncertain runtime")
+            .remote_im_contact_checkpoints
+            .into_iter()
+            .find(|item| item.contact_id == contact.id)
+            .expect("uncertain checkpoint");
+        assert!(uncertain.energy.unwrap_or_default() < 100.0);
+        assert_eq!(uncertain.last_success_reply_at, None);
+        assert_eq!(
+            uncertain
+                .group_reply_delivery
+                .as_ref()
+                .map(|marker| (marker.status.as_str(), marker.energy_applied)),
+            Some(("uncertain", true))
+        );
+        let charged_energy = uncertain.energy;
+
+        remote_im_persist_group_reply_settlement(
+            &state,
+            &contact,
+            &RemoteImGroupReplySettlement {
+                boundary_message_id: "message-10".to_string(),
+                final_text: Some("可能已经送达".to_string()),
+                outbound_key: Some(outbound_key),
+                platform_message_id: Some("platform-late-commit".to_string()),
+                status: RemoteImGroupReplySettlementStatus::Delivered,
+            },
+        )
+        .expect("persist late delivered settlement");
+        let delivered = state_read_runtime_state_cached(&state)
+            .expect("read delivered runtime")
+            .remote_im_contact_checkpoints
+            .into_iter()
+            .find(|item| item.contact_id == contact.id)
+            .expect("delivered checkpoint");
+        assert_eq!(delivered.energy, charged_energy);
+        assert!(delivered.last_success_reply_at.is_some());
+        assert_eq!(
+            delivered
+                .group_reply_delivery
+                .as_ref()
+                .map(|marker| (marker.status.as_str(), marker.energy_applied)),
+            Some(("committed", true))
+        );
+    }
+
+    #[test]
+    fn atomic_runtime_mutation_should_preserve_parallel_group_delivery_markers() {
+        let state = remote_im_test_state();
+        state_write_runtime_state_cached(&state, &RuntimeStateFile::default())
+            .expect("initialize runtime");
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
+        let mut workers = Vec::new();
+        for index in 0..2_u64 {
+            let state = state.clone();
+            let barrier = barrier.clone();
+            workers.push(std::thread::spawn(move || {
+                let contact_id = format!("contact-parallel-{index}");
+                let outbound_key = format!("group-reply::{contact_id}::{index}");
+                barrier.wait();
+                state_mutate_runtime_state_cached(&state, |runtime| {
+                    let checkpoint = remote_im_contact_checkpoint_mut_in_list(
+                        &mut runtime.remote_im_contact_checkpoints,
+                        &contact_id,
+                    );
+                    std::thread::sleep(std::time::Duration::from_millis(25));
+                    checkpoint.group_reply_delivery = Some(RemoteImGroupReplyDeliveryMarker {
+                        generation: index,
+                        boundary_message_id: format!("message-{index}"),
+                        outbound_key,
+                        final_text: format!("reply-{index}"),
+                        status: "dispatching".to_string(),
+                        platform_message_id: None,
+                        energy_applied: false,
+                        updated_at: Some(now_iso()),
+                    });
+                    Ok(())
+                })
+                .expect("atomic runtime mutation");
+            }));
+        }
+        barrier.wait();
+        for worker in workers {
+            worker.join().expect("join mutation worker");
+        }
+
+        let checkpoints = state_read_runtime_state_cached(&state)
+            .expect("read runtime")
+            .remote_im_contact_checkpoints;
+        for index in 0..2_u64 {
+            let contact_id = format!("contact-parallel-{index}");
+            let expected_key = format!("group-reply::{contact_id}::{index}");
+            assert_eq!(
+                checkpoints
+                    .iter()
+                    .find(|checkpoint| checkpoint.contact_id == contact_id)
+                    .and_then(|checkpoint| checkpoint.group_reply_delivery.as_ref())
+                    .map(|marker| marker.outbound_key.as_str()),
+                Some(expected_key.as_str())
+            );
+        }
+    }
+
+    #[test]
+    fn stale_full_runtime_write_should_preserve_atomic_group_checkpoint_fields() {
+        let state = remote_im_test_state();
+        let contact = remote_im_test_contact(
+            "contact-stale-writer",
+            "conversation-stale-writer",
+        );
+        let mut initial = RuntimeStateFile::default();
+        initial.remote_im_contacts.push(contact.clone());
+        state_write_runtime_state_cached(&state, &initial).expect("write initial runtime");
+
+        let mut stale_runtime = state_read_runtime_state_cached(&state).expect("read stale runtime");
+        remote_im_update_checkpoint_latest_seen_in_list(
+            &mut stale_runtime.remote_im_contact_checkpoints,
+            &contact.id,
+            Some("message-new-inbound"),
+            &now_iso(),
+        );
+
+        state_mutate_runtime_state_cached(&state, |runtime| {
+            let checkpoint = remote_im_contact_checkpoint_mut_in_list(
+                &mut runtime.remote_im_contact_checkpoints,
+                &contact.id,
+            );
+            checkpoint.energy = Some(82.0);
+            checkpoint.energy_updated_at = Some(now_iso());
+            checkpoint.last_boundary_message_id = Some("message-settled".to_string());
+            checkpoint.last_boundary_covers_message_id = Some("message-settled".to_string());
+            checkpoint.group_reply_delivery = Some(RemoteImGroupReplyDeliveryMarker {
+                generation: 21,
+                boundary_message_id: "message-settled".to_string(),
+                outbound_key: "group-reply::atomic".to_string(),
+                final_text: "已发送".to_string(),
+                status: "committed".to_string(),
+                platform_message_id: Some("platform-atomic".to_string()),
+                energy_applied: true,
+                updated_at: Some(now_iso()),
+            });
+            Ok(())
+        })
+        .expect("atomic marker write");
+
+        state_write_runtime_state_cached(&state, &stale_runtime)
+            .expect("stale full write should merge protected fields");
+        let checkpoint = state_read_runtime_state_cached(&state)
+            .expect("read merged runtime")
+            .remote_im_contact_checkpoints
+            .into_iter()
+            .find(|checkpoint| checkpoint.contact_id == contact.id)
+            .expect("checkpoint");
+        assert_eq!(
+            checkpoint.latest_seen_message_id.as_deref(),
+            Some("message-new-inbound")
+        );
+        assert_eq!(checkpoint.energy, Some(82.0));
+        assert_eq!(
+            checkpoint.last_boundary_covers_message_id.as_deref(),
+            Some("message-settled")
+        );
+        assert_eq!(
+            checkpoint
+                .group_reply_delivery
+                .as_ref()
+                .map(|marker| (marker.outbound_key.as_str(), marker.status.as_str())),
+            Some(("group-reply::atomic", "committed"))
+        );
+    }
+
+    #[test]
+    fn atomic_checkpoint_reset_should_survive_stale_full_writer() {
+        let state = remote_im_test_state();
+        let contact = remote_im_test_contact(
+            "contact-reset-checkpoint",
+            "conversation-reset-checkpoint",
+        );
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact.clone());
+        runtime.remote_im_contact_checkpoints.push(RemoteImContactCheckpoint {
+            contact_id: contact.id.clone(),
+            energy: Some(55.0),
+            group_reply_delivery: Some(RemoteImGroupReplyDeliveryMarker {
+                generation: 2,
+                boundary_message_id: "message-old".to_string(),
+                outbound_key: "group-reply::reset".to_string(),
+                final_text: "旧回复".to_string(),
+                status: "committed".to_string(),
+                platform_message_id: Some("platform-old".to_string()),
+                energy_applied: true,
+                updated_at: Some(now_iso()),
+            }),
+            ..RemoteImContactCheckpoint::default()
+        });
+        state_write_runtime_state_cached(&state, &runtime).expect("seed checkpoint");
+        let stale_runtime = state_read_runtime_state_cached(&state).expect("read stale runtime");
+        let stale_revision = stale_runtime.remote_im_contact_checkpoints[0].atomic_revision;
+
+        state_mutate_runtime_state_cached(&state, |latest| {
+            remote_im_reset_contact_checkpoint_atomic_in_list(
+                &mut latest.remote_im_contact_checkpoints,
+                &contact.id,
+            );
+            Ok(())
+        })
+        .expect("reset checkpoint atomically");
+        state_write_runtime_state_cached(&state, &stale_runtime)
+            .expect("stale writer must not restore atomic fields");
+
+        let persisted = state_read_runtime_state_cached(&state).expect("read runtime");
+        assert!(persisted
+            .remote_im_contacts
+            .iter()
+            .any(|item| item.id == contact.id));
+        let checkpoint = persisted
+            .remote_im_contact_checkpoints
+            .iter()
+            .find(|checkpoint| checkpoint.contact_id == contact.id)
+            .expect("reset tombstone checkpoint");
+        assert!(checkpoint.atomic_revision > stale_revision);
+        assert_eq!(checkpoint.energy, None);
+        assert_eq!(checkpoint.last_boundary_message_id, None);
+        assert_eq!(checkpoint.last_boundary_covers_message_id, None);
+        assert_eq!(checkpoint.last_success_reply_at, None);
+        assert!(checkpoint.group_reply_delivery.is_none());
+    }
+
+    #[test]
+    fn stale_full_writer_should_not_restore_deleted_contact_or_rollback_contact_config() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact(
+            "contact-runtime-revision",
+            "conversation-runtime-revision",
+        );
+        contact.remark_name = "旧配置".to_string();
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact.clone());
+        runtime.remote_im_contact_checkpoints.push(RemoteImContactCheckpoint {
+            contact_id: contact.id.clone(),
+            energy: Some(66.0),
+            ..RemoteImContactCheckpoint::default()
+        });
+        state_write_runtime_state_cached(&state, &runtime).expect("seed contact");
+
+        let mut stale_before_update =
+            state_read_runtime_state_cached(&state).expect("read stale update snapshot");
+        state_mutate_runtime_state_cached(&state, |latest| {
+            let latest_contact = latest
+                .remote_im_contacts
+                .iter_mut()
+                .find(|item| item.id == contact.id)
+                .expect("contact");
+            latest_contact.remark_name = "新配置".to_string();
+            Ok(())
+        })
+        .expect("update contact atomically");
+        stale_before_update.user_alias = "stale-writer-unrelated-change".to_string();
+        state_write_runtime_state_cached(&state, &stale_before_update)
+            .expect("stale writer after update");
+        let after_update = state_read_runtime_state_cached(&state).expect("read updated contact");
+        assert_eq!(
+            after_update
+                .remote_im_contacts
+                .iter()
+                .find(|item| item.id == contact.id)
+                .map(|item| item.remark_name.as_str()),
+            Some("新配置")
+        );
+
+        let stale_before_delete = after_update.clone();
+        state_mutate_runtime_state_cached(&state, |latest| {
+            latest
+                .remote_im_contacts
+                .retain(|item| item.id != contact.id);
+            latest
+                .remote_im_contact_checkpoints
+                .retain(|checkpoint| checkpoint.contact_id != contact.id);
+            Ok(())
+        })
+        .expect("delete contact atomically");
+        state_write_runtime_state_cached(&state, &stale_before_delete)
+            .expect("stale writer after delete");
+        let after_delete = state_read_runtime_state_cached(&state).expect("read deleted contact");
+        assert!(!after_delete
+            .remote_im_contacts
+            .iter()
+            .any(|item| item.id == contact.id));
+        assert!(!after_delete
+            .remote_im_contact_checkpoints
+            .iter()
+            .any(|checkpoint| checkpoint.contact_id == contact.id));
+    }
+
+    #[test]
+    fn contact_command_should_persist_after_concurrent_checkpoint_revision() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact(
+            "contact-command-atomic",
+            "conversation-command-atomic",
+        );
+        contact.allow_send = false;
+        contact.allow_receive = false;
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact.clone());
+        state_write_runtime_state_cached(&state, &runtime).expect("seed contact");
+        state_mutate_runtime_state_cached(&state, |latest| {
+            let checkpoint = remote_im_contact_checkpoint_mut_in_list(
+                &mut latest.remote_im_contact_checkpoints,
+                &contact.id,
+            );
+            checkpoint.energy = Some(75.0);
+            checkpoint.energy_updated_at = Some(now_iso());
+            remote_im_bump_checkpoint_atomic_revision(checkpoint);
+            Ok(())
+        })
+        .expect("concurrent checkpoint update");
+
+        let updated = remote_im_update_contact_allow_send_inner(
+            &state,
+            RemoteImContactAllowSendUpdateInput {
+                contact_id: contact.id.clone(),
+                allow_send: true,
+            },
+        )
+        .expect("atomic contact update");
+        assert!(updated.allow_send && updated.allow_receive);
+        let persisted = state_read_runtime_state_cached(&state).expect("read runtime");
+        assert!(persisted
+            .remote_im_contacts
+            .iter()
+            .find(|item| item.id == contact.id)
+            .is_some_and(|item| item.allow_send && item.allow_receive));
+        assert_eq!(
+            persisted
+                .remote_im_contact_checkpoints
+                .iter()
+                .find(|checkpoint| checkpoint.contact_id == contact.id)
+                .and_then(|checkpoint| checkpoint.energy),
+            Some(75.0)
+        );
+    }
+
+    #[test]
+    fn stale_binding_resolution_should_not_overwrite_concurrent_user_binding() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact(
+            "contact-binding-cas",
+            "conversation-binding-old",
+        );
+        contact.bound_department_id = Some("department-old".to_string());
+        contact.bound_agent_id = Some("agent-old".to_string());
+        let baseline = remote_im_contact_binding_snapshot(&contact);
+        let mut stale_resolved = baseline.clone();
+        stale_resolved.bound_conversation_id = Some("conversation-resolved-old".to_string());
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact.clone());
+        state_write_runtime_state_cached(&state, &runtime).expect("seed contact");
+        remote_im_mutate_contact(&state, &contact.id, |latest| {
+            latest.bound_department_id = Some("department-new".to_string());
+            latest.bound_agent_id = Some("agent-new".to_string());
+            latest.bound_conversation_id = Some("conversation-new".to_string());
+            Ok(())
+        })
+        .expect("concurrent user binding");
+
+        let applied = state_mutate_runtime_state_cached(&state, |latest_runtime| {
+            let latest = latest_runtime
+                .remote_im_contacts
+                .iter_mut()
+                .find(|item| item.id == contact.id)
+                .expect("contact");
+            if !remote_im_contact_binding_matches(latest, &baseline) {
+                return Ok(false);
+            }
+            remote_im_apply_contact_binding_snapshot(latest, &stale_resolved);
+            Ok(true)
+        })
+        .expect("binding CAS");
+        assert!(!applied);
+        let persisted = state_read_runtime_state_cached(&state)
+            .expect("read runtime")
+            .remote_im_contacts
+            .into_iter()
+            .find(|item| item.id == contact.id)
+            .expect("contact");
+        assert_eq!(
+            persisted.bound_department_id.as_deref(),
+            Some("department-new")
+        );
+        assert_eq!(persisted.bound_agent_id.as_deref(), Some("agent-new"));
+        assert_eq!(
+            persisted.bound_conversation_id.as_deref(),
+            Some("conversation-new")
+        );
+    }
+
+    #[test]
+    fn ensure_contact_conversation_should_not_sync_routing_before_authoritative_commit() {
+        let state = remote_im_test_state();
+        write_config(&state.config_path, &AppConfig::default()).expect("write config");
+        let private_departments_dir = app_root_from_data_path(&state.data_path)
+            .join("llm-workspace")
+            .join("private-organization")
+            .join("departments");
+        std::fs::create_dir_all(&private_departments_dir)
+            .expect("create private departments dir");
+        std::fs::write(
+            private_departments_dir.join("dept-new.json"),
+            r#"{
+  "id": "dept-new",
+  "name": "新部门",
+  "agentIds": ["agent-new"]
+}"#,
+        )
+        .expect("write private department");
+        state_write_agents_cached(
+            &state,
+            &[
+                remote_im_test_agent(DEFAULT_AGENT_ID, "主助理"),
+                remote_im_test_agent("agent-new", "新助理"),
+                default_user_persona(),
+            ],
+        )
+        .expect("write agents");
+
+        let mut authoritative = remote_im_test_contact("contact-sync-order", "");
+        authoritative.bound_agent_id = Some(DEFAULT_AGENT_ID.to_string());
+        authoritative.bound_conversation_id = None;
+        let conversation_id = ensure_remote_im_contact_conversation_id(
+            &state,
+            &mut authoritative,
+        )
+        .expect("create original conversation");
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(authoritative.clone());
+        state_write_runtime_state_cached(&state, &runtime).expect("seed authoritative contact");
+        conversation_service_v2()
+            .set_preferred_api_config_id(
+                &state,
+                &conversation_id,
+                Some("legacy-provider".to_string()),
+            )
+            .expect("seed legacy preferred provider");
+
+        let mut candidate = authoritative.clone();
+        candidate.bound_department_id = Some("dept-new".to_string());
+        candidate.bound_agent_id = Some("agent-new".to_string());
+        ensure_remote_im_contact_conversation_id(&state, &mut candidate)
+            .expect("reuse conversation without side effect");
+        let before_commit = conversation_service_v2()
+            .get_conversation_meta(&state, &conversation_id)
+            .expect("read conversation before commit");
+        assert_eq!(
+            before_commit.department_id,
+            REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID
+        );
+        assert_eq!(before_commit.agent_id, DEFAULT_AGENT_ID);
+
+        remote_im_mutate_contact(&state, &authoritative.id, |contact| {
+            remote_im_apply_contact_binding_snapshot(
+                contact,
+                &remote_im_contact_binding_snapshot(&candidate),
+            );
+            Ok(())
+        })
+        .expect("commit authoritative binding");
+        sync_remote_im_contact_conversation_binding(
+            &state,
+            &candidate,
+            &conversation_id,
+            "dept-new",
+            "agent-new",
+        )
+        .expect("sync committed route");
+        let after_commit = conversation_service_v2()
+            .get_conversation_meta(&state, &conversation_id)
+            .expect("read conversation after commit");
+        assert_eq!(after_commit.department_id, "dept-new");
+        assert_eq!(after_commit.agent_id, "agent-new");
+        assert!(after_commit.preferred_api_config_id.is_none());
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn concurrent_department_updates_should_leave_conversation_on_authoritative_route() {
+        let state = remote_im_test_state();
+        write_config(&state.config_path, &AppConfig::default()).expect("write config");
+        let private_departments_dir = app_root_from_data_path(&state.data_path)
+            .join("llm-workspace")
+            .join("private-organization")
+            .join("departments");
+        std::fs::create_dir_all(&private_departments_dir)
+            .expect("create private departments dir");
+        for (department_id, agent_id) in [
+            ("dept-concurrent-a", "agent-concurrent-a"),
+            ("dept-concurrent-b", "agent-concurrent-b"),
+        ] {
+            std::fs::write(
+                private_departments_dir.join(format!("{department_id}.json")),
+                format!(
+                    "{{\n  \"id\": \"{department_id}\",\n  \"name\": \"并发部门\",\n  \"agentIds\": [\"{agent_id}\"]\n}}"
+                ),
+            )
+            .expect("write private department");
+        }
+        state_write_agents_cached(
+            &state,
+            &[
+                remote_im_test_agent(DEFAULT_AGENT_ID, "主助理"),
+                remote_im_test_agent("agent-concurrent-a", "并发助理甲"),
+                remote_im_test_agent("agent-concurrent-b", "并发助理乙"),
+                default_user_persona(),
+            ],
+        )
+        .expect("write agents");
+        let mut contact = remote_im_test_contact("contact-department-concurrent", "");
+        contact.bound_agent_id = Some(DEFAULT_AGENT_ID.to_string());
+        contact.bound_conversation_id = None;
+        let conversation_id = ensure_remote_im_contact_conversation_id(&state, &mut contact)
+            .expect("create contact conversation");
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact.clone());
+        state_write_runtime_state_cached(&state, &runtime).expect("seed contact");
+
+        let barrier = Arc::new(std::sync::Barrier::new(3));
+        let mut handles = Vec::new();
+        for (department_id, agent_id) in [
+            ("dept-concurrent-a", "agent-concurrent-a"),
+            ("dept-concurrent-b", "agent-concurrent-b"),
+        ] {
+            let state = state.clone();
+            let barrier = barrier.clone();
+            handles.push(std::thread::spawn(move || {
+                barrier.wait();
+                remote_im_update_contact_department_binding_inner(
+                    &state,
+                    RemoteImContactDepartmentBindingUpdateInput {
+                        contact_id: "contact-department-concurrent".to_string(),
+                        department_id: Some(department_id.to_string()),
+                        agent_id: Some(agent_id.to_string()),
+                    },
+                )
+            }));
+        }
+        barrier.wait();
+        for handle in handles {
+            handle
+                .join()
+                .expect("join concurrent update")
+                .expect("concurrent update should degrade instead of abort");
+        }
+
+        let persisted = state_read_runtime_state_cached(&state)
+            .expect("read runtime")
+            .remote_im_contacts
+            .into_iter()
+            .find(|item| item.id == contact.id)
+            .expect("contact");
+        let conversation = conversation_service_v2()
+            .get_conversation_meta(&state, &conversation_id)
+            .expect("read conversation");
+        assert_eq!(
+            conversation.department_id,
+            persisted.bound_department_id.unwrap_or_default()
+        );
+        assert_eq!(
+            conversation.agent_id,
+            persisted.bound_agent_id.unwrap_or_default()
+        );
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn binding_sync_rollback_should_restore_original_route_after_postwrite_failure() {
+        let state = remote_im_test_state();
+        write_config(&state.config_path, &AppConfig::default()).expect("write config");
+        let mut contact = remote_im_test_contact("contact-sync-rollback", "");
+        contact.bound_agent_id = Some(DEFAULT_AGENT_ID.to_string());
+        contact.bound_conversation_id = None;
+        let conversation_id = ensure_remote_im_contact_conversation_id(&state, &mut contact)
+            .expect("create conversation");
+        let original = conversation_service_v2()
+            .get_conversation_meta(&state, &conversation_id)
+            .expect("read original route");
+        let mut written_contact = contact.clone();
+        written_contact.bound_department_id = Some("stale-department".to_string());
+        written_contact.bound_agent_id = Some("stale-agent".to_string());
+        let stale_root = remote_im_contact_conversation_key(&written_contact);
+        state_update_conversation_metadata_cached(&state, &conversation_id, |conversation| {
+            conversation.department_id = "stale-department".to_string();
+            conversation.agent_id = "stale-agent".to_string();
+            conversation.root_conversation_id = Some(stale_root);
+            Ok(())
+        })
+        .expect("inject stale route");
+
+        restore_remote_im_contact_conversation_binding(
+            &state,
+            &conversation_id,
+            &original,
+            &written_contact,
+            "stale-department",
+            "stale-agent",
+        )
+        .expect("restore route");
+
+        let restored = conversation_service_v2()
+            .get_conversation_meta(&state, &conversation_id)
+            .expect("read restored route");
+        assert_eq!(restored.department_id, original.department_id);
+        assert_eq!(restored.agent_id, original.agent_id);
+        assert_eq!(restored.root_conversation_id, original.root_conversation_id);
+
+        state_update_conversation_metadata_cached(&state, &conversation_id, |conversation| {
+            conversation.department_id = "new-authoritative-department".to_string();
+            conversation.agent_id = "new-authoritative-agent".to_string();
+            conversation.root_conversation_id = Some("new-authoritative-root".to_string());
+            Ok(())
+        })
+        .expect("inject concurrent authoritative route");
+        restore_remote_im_contact_conversation_binding(
+            &state,
+            &conversation_id,
+            &original,
+            &written_contact,
+            "stale-department",
+            "stale-agent",
+        )
+        .expect("skip stale rollback");
+        let preserved = conversation_service_v2()
+            .get_conversation_meta(&state, &conversation_id)
+            .expect("read preserved route");
+        assert_eq!(preserved.department_id, "new-authoritative-department");
+        assert_eq!(preserved.agent_id, "new-authoritative-agent");
+        assert_eq!(
+            preserved.root_conversation_id.as_deref(),
+            Some("new-authoritative-root")
+        );
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn department_binding_should_persist_when_organization_snapshot_is_unreadable() {
+        let state = remote_im_test_state();
+        std::fs::create_dir_all(&state.config_path).expect("make config path unreadable as file");
+        let contact = remote_im_test_contact("contact-config-degraded", "conversation-existing");
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact.clone());
+        state_write_runtime_state_cached(&state, &runtime).expect("seed contact");
+
+        let updated = remote_im_update_contact_department_binding_inner(
+            &state,
+            RemoteImContactDepartmentBindingUpdateInput {
+                contact_id: contact.id.clone(),
+                department_id: Some("department-offline".to_string()),
+                agent_id: Some("agent-offline".to_string()),
+            },
+        )
+        .expect("save raw binding despite config read failure");
+
+        assert_eq!(
+            updated.bound_department_id.as_deref(),
+            Some("department-offline")
+        );
+        assert_eq!(updated.bound_agent_id.as_deref(), Some("agent-offline"));
+        let persisted = state_read_runtime_state_cached(&state)
+            .expect("read persisted contact")
+            .remote_im_contacts
+            .into_iter()
+            .find(|item| item.id == contact.id)
+            .expect("contact");
+        assert_eq!(
+            persisted.bound_department_id.as_deref(),
+            Some("department-offline")
+        );
+        assert_eq!(persisted.bound_agent_id.as_deref(), Some("agent-offline"));
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn inbound_should_use_safe_fallback_when_config_is_unreadable() {
+        let state = remote_im_test_state();
+        let mut config = AppConfig::default();
+        config.remote_im_channels.push(RemoteImChannelConfig {
+            id: "channel-config-degraded".to_string(),
+            name: "QQ".to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            enabled: true,
+            credentials: serde_json::json!({}),
+            activate_assistant: true,
+            receive_files: false,
+            streaming_send: false,
+            show_tool_calls: false,
+            filter_markdown: false,
+            allow_send_files: false,
+        });
+        state_write_config_cached(&state, &config).expect("seed trusted config cache");
+        std::fs::remove_file(&state.config_path).expect("remove config file");
+        std::fs::create_dir_all(&state.config_path).expect("make config path unreadable as file");
+        *state
+            .cached_config_mtime
+            .lock()
+            .expect("lock cached config mtime") = Some(std::time::SystemTime::UNIX_EPOCH);
+        state_write_runtime_state_cached(&state, &RuntimeStateFile::default())
+            .expect("seed runtime");
+        let input = RemoteImEnqueueInput {
+            channel_id: "channel-config-degraded".to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            im_name: "QQ".to_string(),
+            remote_contact_type: "private".to_string(),
+            remote_contact_id: "remote-config-degraded".to_string(),
+            remote_contact_name: Some("降级联系人".to_string()),
+            sender_id: "sender-config-degraded".to_string(),
+            sender_name: "联系人".to_string(),
+            sender_avatar_url: None,
+            platform_message_id: Some("message-config-degraded".to_string()),
+            dingtalk_session_webhook: None,
+            dingtalk_session_webhook_expired_time: None,
+            activate_assistant: Some(true),
+            session: SessionSelector {
+                api_config_id: None,
+                department_id: Some(REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID.to_string()),
+                agent_id: DEFAULT_AGENT_ID.to_string(),
+                conversation_id: None,
+            },
+            payload: ChatInputPayload {
+                text: Some("配置暂时读不到也要接收".to_string()),
+                display_text: None,
+                images: None,
+                audios: None,
+                attachments: None,
+                model: None,
+                extra_text_blocks: None,
+                mentions: None,
+                provider_meta: None,
+            },
+        };
+
+        let result = remote_im_enqueue_message_internal(input, &state)
+            .expect("config read failure should degrade instead of aborting");
+
+        assert!(!result.contact_id.is_empty());
+        assert!(!result.conversation_id.is_empty());
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn inbound_should_fail_closed_without_trusted_channel_snapshot() {
+        let state = remote_im_test_state();
+        std::fs::create_dir_all(&state.config_path).expect("make config path unreadable as file");
+        let input = RemoteImEnqueueInput {
+            channel_id: "unknown-channel".to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            im_name: "QQ".to_string(),
+            remote_contact_type: "private".to_string(),
+            remote_contact_id: "remote-unknown-channel".to_string(),
+            remote_contact_name: Some("未知联系人".to_string()),
+            sender_id: "sender-unknown-channel".to_string(),
+            sender_name: "联系人".to_string(),
+            sender_avatar_url: None,
+            platform_message_id: None,
+            dingtalk_session_webhook: None,
+            dingtalk_session_webhook_expired_time: None,
+            activate_assistant: Some(true),
+            session: SessionSelector {
+                api_config_id: None,
+                department_id: None,
+                agent_id: String::new(),
+                conversation_id: None,
+            },
+            payload: ChatInputPayload {
+                text: Some("不应绕过渠道白名单".to_string()),
+                display_text: None,
+                images: None,
+                audios: None,
+                attachments: None,
+                model: None,
+                extra_text_blocks: None,
+                mentions: None,
+                provider_meta: None,
+            },
+        };
+
+        let result = remote_im_enqueue_message_internal(input, &state)
+            .expect("permission snapshot failure should skip without aborting caller");
+
+        assert!(result.event_id.is_empty());
+        assert!(result.conversation_id.is_empty());
+        assert!(result.contact_id.is_empty());
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn runtime_commit_should_succeed_after_authoritative_write_when_caches_are_poisoned() {
+        let state = remote_im_test_state();
+        state_write_runtime_state_cached(&state, &RuntimeStateFile::default())
+            .expect("initialize runtime");
+        let cached_runtime = state.cached_runtime_state.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = cached_runtime.lock().expect("lock cached runtime");
+            panic!("poison cached runtime after lock");
+        })
+        .join();
+        let cached_app_data = state.cached_app_data.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = cached_app_data.lock().expect("lock cached app data");
+            panic!("poison cached app data after lock");
+        })
+        .join();
+
+        state_mutate_runtime_state_cached(&state, |runtime| {
+            let checkpoint = remote_im_contact_checkpoint_mut_in_list(
+                &mut runtime.remote_im_contact_checkpoints,
+                "contact-cache-recovery",
+            );
+            checkpoint.group_reply_delivery = Some(RemoteImGroupReplyDeliveryMarker {
+                generation: 4,
+                boundary_message_id: "message-cache-recovery".to_string(),
+                outbound_key: "group-reply::cache-recovery".to_string(),
+                final_text: "准备发送".to_string(),
+                status: "dispatching".to_string(),
+                platform_message_id: None,
+                energy_applied: false,
+                updated_at: Some(now_iso()),
+            });
+            Ok(())
+        })
+        .expect("authoritative write must not fail on cache maintenance");
+
+        let checkpoint = state_read_runtime_state_cached(&state)
+            .expect("cache poison should be cleared")
+            .remote_im_contact_checkpoints
+            .into_iter()
+            .find(|checkpoint| checkpoint.contact_id == "contact-cache-recovery")
+            .expect("checkpoint");
+        assert_eq!(
+            checkpoint
+                .group_reply_delivery
+                .as_ref()
+                .map(|marker| marker.outbound_key.as_str()),
+            Some("group-reply::cache-recovery")
+        );
+    }
+
+    #[test]
+    fn stale_group_settlement_should_not_overwrite_newer_delivery_marker() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact(
+            "contact-stale-settlement",
+            "conversation-stale-settlement",
+        );
+        contact.remote_contact_type = "group".to_string();
+        let newer_marker = RemoteImGroupReplyDeliveryMarker {
+            generation: 12,
+            boundary_message_id: "message-new".to_string(),
+            outbound_key: "group-reply::new".to_string(),
+            final_text: "新批次".to_string(),
+            status: "dispatching".to_string(),
+            platform_message_id: None,
+            energy_applied: false,
+            updated_at: Some(now_iso()),
+        };
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact.clone());
+        runtime.remote_im_contact_checkpoints.push(RemoteImContactCheckpoint {
+            contact_id: contact.id.clone(),
+            energy: Some(100.0),
+            energy_updated_at: Some(now_iso()),
+            group_reply_delivery: Some(newer_marker.clone()),
+            ..RemoteImContactCheckpoint::default()
+        });
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
+
+        remote_im_persist_group_reply_settlement(
+            &state,
+            &contact,
+            &RemoteImGroupReplySettlement {
+                boundary_message_id: "message-old".to_string(),
+                final_text: Some("旧批次迟到".to_string()),
+                outbound_key: Some("group-reply::old".to_string()),
+                platform_message_id: Some("platform-old".to_string()),
+                status: RemoteImGroupReplySettlementStatus::Delivered,
+            },
+        )
+        .expect("stale settlement should degrade without failure");
+
+        let checkpoint = state_read_runtime_state_cached(&state)
+            .expect("read runtime")
+            .remote_im_contact_checkpoints
+            .into_iter()
+            .find(|checkpoint| checkpoint.contact_id == contact.id)
+            .expect("checkpoint");
+        assert_eq!(checkpoint.energy, Some(100.0));
+        assert_eq!(checkpoint.last_success_reply_at, None);
+        let persisted_marker = checkpoint.group_reply_delivery.expect("newer marker");
+        assert_eq!(persisted_marker.outbound_key, newer_marker.outbound_key);
+        assert_eq!(persisted_marker.generation, newer_marker.generation);
+        assert_eq!(persisted_marker.status, "dispatching");
+    }
+
+    #[test]
+    fn active_group_delivery_should_not_be_recovered_as_uncertain_on_new_inbound() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact("contact-active-delivery", "conversation-active-delivery");
+        contact.remote_contact_type = "group".to_string();
+        let outbound_key =
+            "group-reply::contact-active-delivery::9::message-active".to_string();
+        let marker = RemoteImGroupReplyDeliveryMarker {
+            generation: 9,
+            boundary_message_id: "message-active".to_string(),
+            outbound_key: outbound_key.clone(),
+            final_text: "正在发送".to_string(),
+            status: "dispatching".to_string(),
+            platform_message_id: None,
+            energy_applied: false,
+            updated_at: Some(now_iso()),
+        };
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact.clone());
+        runtime.remote_im_contact_checkpoints.push(RemoteImContactCheckpoint {
+            contact_id: contact.id.clone(),
+            energy: Some(100.0),
+            energy_updated_at: Some(now_iso()),
+            group_reply_delivery: Some(marker.clone()),
+            ..RemoteImContactCheckpoint::default()
+        });
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
+        let event = create_pending_event(
+            "event-active-delivery".to_string(),
+            "conversation-active-delivery".to_string(),
+            vec![remote_im_test_group_user_message("user-a")],
+            true,
+            ChatSessionInfo {
+                department_id: "department-a".to_string(),
+                agent_id: "agent-a".to_string(),
+            },
+            RemoteImMessageSource {
+                channel_id: "channel-a".to_string(),
+                platform: RemoteImPlatform::OnebotV11,
+                im_name: "QQ".to_string(),
+                remote_contact_type: "group".to_string(),
+                remote_contact_id: "group-active".to_string(),
+                remote_contact_name: "活跃发送群".to_string(),
+                sender_id: "user-a".to_string(),
+                sender_name: "user-a".to_string(),
+                sender_avatar_url: None,
+                platform_message_id: None,
+            },
+        );
+        let state_key = remote_im_group_reply_state_key(&state, &contact.id);
+        lock_remote_im_group_reply_state_store().by_contact.insert(
+            state_key.clone(),
+            RemoteImGroupReplyState {
+                generation: 9,
+                phase: RemoteImGroupReplyPhase::AssistantDispatching,
+                start_message_id: "message-active".to_string(),
+                end_message_id: "message-active".to_string(),
+                decision_end_message_id: Some("message-active".to_string()),
+                pending_start_message_id: None,
+                focus: false,
+                pending_focus: false,
+                event,
+                due_at: std::time::Instant::now(),
+                inspection_kind: RemoteImGroupReplyTimerKind::Mention,
+                pending_settlement: None,
+            },
+        );
+
+        remote_im_recover_group_reply_delivery_marker(&state, &contact)
+            .expect("active delivery should be ignored by recovery");
+        let before_success = state_read_runtime_state_cached(&state)
+            .expect("read runtime")
+            .remote_im_contact_checkpoints
+            .into_iter()
+            .find(|checkpoint| checkpoint.contact_id == contact.id)
+            .expect("checkpoint");
+        assert_eq!(before_success.energy, Some(100.0));
+        assert_eq!(
+            before_success.group_reply_delivery.as_ref().map(|item| item.status.as_str()),
+            Some("dispatching")
+        );
+
+        remote_im_group_reply_complete_after_send(
+            &state,
+            &contact,
+            9,
+            marker,
+            Some("platform-active".to_string()),
+            RemoteImGroupReplySettlementStatus::Delivered,
+        );
+        let after_success = state_read_runtime_state_cached(&state)
+            .expect("read runtime")
+            .remote_im_contact_checkpoints
+            .into_iter()
+            .find(|checkpoint| checkpoint.contact_id == contact.id)
+            .expect("checkpoint");
+        assert!(after_success.energy.unwrap_or_default() < 100.0);
+        assert_eq!(
+            after_success.group_reply_delivery.as_ref().map(|item| item.status.as_str()),
+            Some("committed")
+        );
+        assert!(after_success
+            .group_reply_delivery
+            .as_ref()
+            .map(|item| item.energy_applied)
+            .unwrap_or(false));
+        lock_remote_im_group_reply_state_store()
+            .by_contact
+            .remove(&state_key);
+    }
+
+    #[test]
+    fn startup_group_delivery_recovery_should_not_wait_for_new_inbound() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact("contact-startup-recovery", "conversation-startup-recovery");
+        contact.remote_contact_type = "group".to_string();
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact.clone());
+        runtime.remote_im_contact_checkpoints.push(RemoteImContactCheckpoint {
+            contact_id: contact.id.clone(),
+            energy: Some(100.0),
+            energy_updated_at: Some(now_iso()),
+            group_reply_delivery: Some(RemoteImGroupReplyDeliveryMarker {
+                generation: 19,
+                boundary_message_id: "message-startup".to_string(),
+                outbound_key: "group-reply::startup::19".to_string(),
+                final_text: "启动恢复".to_string(),
+                status: "dispatching".to_string(),
+                platform_message_id: None,
+                energy_applied: false,
+                updated_at: Some(now_iso()),
+            }),
+            ..RemoteImContactCheckpoint::default()
+        });
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
+
+        assert_eq!(
+            remote_im_recover_all_group_reply_delivery_markers(&state)
+                .expect("startup recovery"),
+            (1, 0)
+        );
+        let checkpoint = state_read_runtime_state_cached(&state)
+            .expect("read runtime")
+            .remote_im_contact_checkpoints
+            .into_iter()
+            .find(|checkpoint| checkpoint.contact_id == contact.id)
+            .expect("checkpoint");
+        assert_eq!(
+            checkpoint.group_reply_delivery.as_ref().map(|marker| marker.status.as_str()),
+            Some("uncertain")
+        );
+        assert_eq!(
+            checkpoint.last_boundary_covers_message_id.as_deref(),
+            Some("message-startup")
+        );
+    }
+
+    #[test]
+    fn contact_runtime_state_lock_should_recover_after_poison() {
+        let state = remote_im_test_state();
+        let shared = state.remote_im_contact_runtime_states.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = shared.lock().expect("lock before poison");
+            panic!("poison contact runtime state lock");
+        })
+        .join();
+        let mut recovered = lock_remote_im_contact_runtime_states(&state)
+            .expect("poisoned lock should recover");
+        recovered.insert("contact-recovered".to_string(), RemoteImContactRuntimeState::default());
+        assert!(recovered.contains_key("contact-recovered"));
+    }
+
+    #[test]
     fn remote_im_list_contacts_inner_should_keep_canonical_sort_order() {
         let state = remote_im_test_state();
         let mut first = remote_im_test_contact("contact-b", "conversation-b");
@@ -2168,6 +3604,9 @@
                     cancelled: false,
                     terminal: false,
                     session_agent_id: "agent-a".to_string(),
+                    inspection_generation: None,
+                    group_reply_focus: false,
+                    group_reply_max_chars: None,
                 },
             );
 
@@ -2273,6 +3712,9 @@
                         cancelled: false,
                         terminal: false,
                         session_agent_id: "agent-a".to_string(),
+                        inspection_generation: None,
+                        group_reply_focus: false,
+                        group_reply_max_chars: None,
                     },
                 );
             delegate_id.to_string()
@@ -2296,6 +3738,7 @@
             &state,
             &delegate_id,
             remote_im_test_group_user_message("user-a"),
+            None,
         )
         .is_err());
 
@@ -2304,6 +3747,11 @@
             &state,
             &next_delegate_id,
             remote_im_test_group_user_message("user-b"),
+            Some(RemoteImGroupReplyDispatchPolicy {
+                generation: 42,
+                focus: false,
+                max_chars: 33,
+            }),
         )
         .expect("enqueue guidance before finish");
         let guidance = remote_im_reply_delegate_take_guidance_or_finish(&state, &next_delegate_id)
@@ -2313,6 +3761,16 @@
             _ => panic!("delegate should remain active for queued guidance"),
         };
         assert_eq!(guidance.len(), 1);
+        assert!(guidance[0]
+            .extra_text_blocks
+            .first()
+            .map(|block| block.contains("33"))
+            .unwrap_or(false));
+        assert!(guidance[0].extra_text_blocks.len() >= 2);
+        let (_, policy_snapshot) = remote_im_reply_delegate_group_policy(&state, &next_delegate_id)
+            .expect("group policy snapshot");
+        assert_eq!(policy_snapshot.generation, 42);
+        assert_eq!(policy_snapshot.max_chars, 33);
         assert_eq!(
             remote_im_reply_delegate_prompt_messages(&state, &next_delegate_id)
                 .expect("read prompt with consumed guidance")
@@ -2356,6 +3814,9 @@
                     cancelled: false,
                     terminal: false,
                     session_agent_id: "agent-a".to_string(),
+                    inspection_generation: None,
+                    group_reply_focus: false,
+                    group_reply_max_chars: None,
                 },
             );
 
@@ -2367,30 +3828,13 @@
     }
 
     #[test]
-    fn assistant_and_secretary_debounce_keys_should_enforce_cardinality() {
-        let state = remote_im_test_state();
-        let left = remote_im_assistant_debounce_key(&state, "contact-a", "user-a");
-        let left_again = remote_im_assistant_debounce_key(&state, "contact-a", "user-a");
-        let right = remote_im_assistant_debounce_key(&state, "contact-a", "user-b");
-        let secretary = remote_im_secretary_debounce_key(&state, "contact-a");
-        let secretary_again = remote_im_secretary_debounce_key(&state, "contact-a");
-        assert_eq!(left, left_again);
-        assert_ne!(left, right);
-        assert_eq!(secretary, secretary_again);
-        assert_ne!(left, secretary);
-    }
-
-    #[tokio::test]
-    async fn assistant_and_secretary_debounces_should_be_mutually_exclusive() {
+    fn group_reply_state_should_upgrade_non_mention_to_mention_without_losing_batch() {
         let state = remote_im_test_state();
         let mut contact = remote_im_test_contact("contact-a", "conversation-a");
         contact.activation_mode = "keyword".to_string();
         contact.activation_keywords = vec!["@助理".to_string()];
-        {
-            let mut states = lock_remote_im_contact_runtime_states(&state).expect("lock states");
-            remote_im_contact_runtime_state_mut(&mut states, &contact.id).presence_state =
-                RemoteImPresenceState::Present;
-        }
+        contact.group_reply_pacing.assistant_debounce_seconds = 3600;
+        contact.group_reply_pacing.secretary_inspection_seconds = 3600;
         let event = |id: &str, sender_id: &str, text: &str| {
             let mut message = remote_im_test_group_user_message(sender_id);
             message.id = format!("message-{id}");
@@ -2422,132 +3866,125 @@
             )
         };
 
-        observe_remote_im_persisted_event(&state, &contact, &event("normal", "user-a", "普通消息"))
-            .expect("create secretary debounce");
-        observe_remote_im_persisted_event(&state, &contact, &event("wake", "user-b", "@助理 看这里"))
-            .expect("accelerate secretary debounce");
+        observe_remote_im_persisted_event(&state, &contact, &event("normal", "user-a", "普通消息"));
+        let key = remote_im_group_reply_state_key(&state, &contact.id);
+        let (initial_generation, initial_due_at) = {
+            let store = remote_im_group_reply_state_store().lock().expect("lock group state");
+            let entry = store.by_contact.get(&key).expect("non mention scheduled");
+            assert_eq!(entry.phase, RemoteImGroupReplyPhase::NonMentionScheduled);
+            assert_eq!(entry.start_message_id, "message-normal");
+            (entry.generation, entry.due_at)
+        };
+        observe_remote_im_persisted_event(&state, &contact, &event("normal-2", "user-b", "普通跟话"));
         {
-            let debounces = remote_im_debounce_state().lock().expect("lock debounce state");
-            let assistant_prefix = format!(
-                "{}::{}::",
-                state.data_path.to_string_lossy(),
-                contact.id
-            );
-            assert!(!debounces
-                .assistant_by_sender
-                .keys()
-                .any(|key| key.starts_with(&assistant_prefix)));
-            let secretary = debounces
-                .secretary_by_contact
-                .get(&remote_im_secretary_debounce_key(&state, &contact.id))
-                .expect("secretary debounce exists");
-            assert!(secretary.must_reply);
+            let mut store = remote_im_group_reply_state_store().lock().expect("lock group state");
+            let entry = store.by_contact.get(&key).expect("same inspection");
+            assert_eq!(entry.generation, initial_generation);
+            assert_eq!(entry.due_at, initial_due_at);
+            assert_eq!(entry.end_message_id, "message-normal-2");
+            let entry = store.by_contact.get_mut(&key).expect("same inspection mutable");
+            entry.phase = RemoteImGroupReplyPhase::SecretaryJudging;
+            entry.decision_end_message_id = Some(entry.end_message_id.clone());
         }
-
-        clear_remote_im_debounces_for_contact(&state, &contact.id).expect("clear debounces");
-        observe_remote_im_persisted_event(&state, &contact, &event("wake-2", "user-a", "@助理 回答"))
-            .expect("create assistant debounce");
-        observe_remote_im_persisted_event(&state, &contact, &event("normal-2", "user-b", "普通跟话"))
-            .expect("observe while assistant debounce exists");
-        let debounces = remote_im_debounce_state().lock().expect("lock debounce state");
-        let assistant_prefix = format!(
-            "{}::{}::",
-            state.data_path.to_string_lossy(),
-            contact.id
-        );
-        assert_eq!(
-            debounces
-                .assistant_by_sender
-                .keys()
-                .filter(|key| key.starts_with(&assistant_prefix))
-                .count(),
-            1
-        );
-        assert!(!debounces
-            .secretary_by_contact
-            .contains_key(&remote_im_secretary_debounce_key(&state, &contact.id)));
+        observe_remote_im_persisted_event(&state, &contact, &event("wake", "user-b", "@助理 看这里"));
+        {
+            let store = remote_im_group_reply_state_store().lock().expect("lock group state");
+            let entry = store.by_contact.get(&key).expect("mention scheduled");
+            assert_eq!(entry.phase, RemoteImGroupReplyPhase::MentionScheduled);
+            assert!(entry.generation > initial_generation);
+            assert_eq!(entry.start_message_id, "message-normal");
+            assert_eq!(entry.end_message_id, "message-wake");
+        }
+        assert!(!remote_im_group_reply_generation_is_current(
+            &state,
+            &contact.id,
+            initial_generation,
+        ));
     }
 
-    #[tokio::test]
-    async fn secretary_debounce_should_reset_end_anchor_on_new_message() {
+    #[test]
+    fn group_reply_contact_read_failure_should_keep_batch_and_self_schedule_retry() {
         let state = remote_im_test_state();
-        {
-            let mut debounces = remote_im_debounce_state().lock().expect("lock debounce state");
-            debounces.assistant_by_sender.clear();
-            debounces.secretary_by_contact.clear();
-        }
-        let mut contact = remote_im_test_contact("contact-reset", "conversation-reset");
-        contact.activation_mode = "keyword".to_string();
-        contact.activation_keywords = vec!["@助理".to_string()];
-        {
-            let mut states = lock_remote_im_contact_runtime_states(&state).expect("lock states");
-            remote_im_contact_runtime_state_mut(&mut states, &contact.id).presence_state =
-                RemoteImPresenceState::Present;
-        }
-        let event = |id: &str, sender_id: &str, text: &str| {
-            let mut message = remote_im_test_group_user_message(sender_id);
-            message.id = format!("message-{id}");
-            message.parts = vec![MessagePart::Text {
-                text: text.to_string(),
-                reasoning_content: None,
-            }];
-            create_pending_event(
-                format!("event-{id}"),
-                "conversation-reset".to_string(),
-                vec![message],
-                true,
-                ChatSessionInfo {
-                    department_id: "department-a".to_string(),
-                    agent_id: "agent-a".to_string(),
-                },
-                RemoteImMessageSource {
-                    channel_id: "channel-a".to_string(),
-                    platform: RemoteImPlatform::OnebotV11,
-                    im_name: "QQ".to_string(),
-                    remote_contact_type: "group".to_string(),
-                    remote_contact_id: "group-reset".to_string(),
-                    remote_contact_name: "项目群".to_string(),
-                    sender_id: sender_id.to_string(),
-                    sender_name: sender_id.to_string(),
-                    sender_avatar_url: None,
-                    platform_message_id: None,
-                },
-            )
-        };
-
-        observe_remote_im_persisted_event(&state, &contact, &event("normal", "user-a", "普通消息"))
-            .expect("create secretary debounce");
-        let first_end_message_id = {
-            let debounces = remote_im_debounce_state().lock().expect("lock debounce state");
-            debounces
-                .secretary_by_contact
-                .get(&remote_im_secretary_debounce_key(&state, &contact.id))
-                .expect("secretary debounce exists")
-                .end_message_id
-                .clone()
-        };
-
-        observe_remote_im_persisted_event(&state, &contact, &event("normal-2", "user-b", "普通跟话"))
-            .expect("reset secretary debounce");
-        let debounces = remote_im_debounce_state().lock().expect("lock debounce state");
-        let secretary = debounces
-            .secretary_by_contact
-            .get(&remote_im_secretary_debounce_key(&state, &contact.id))
-            .expect("secretary debounce exists");
-        assert_ne!(secretary.end_message_id, first_end_message_id);
-        assert_eq!(secretary.end_message_id, "message-normal-2");
-        assert_eq!(
-            debounces
-                .secretary_by_contact
-                .keys()
-                .filter(|key| key.ends_with(&format!("::{}", contact.id)))
-                .count(),
-            1
+        let contact = remote_im_test_contact("contact-retry", "conversation-retry");
+        let mut message = remote_im_test_group_user_message("user-a");
+        message.id = "message-retry-start".to_string();
+        let event = create_pending_event(
+            "event-retry".to_string(),
+            "conversation-retry".to_string(),
+            vec![message],
+            true,
+            ChatSessionInfo {
+                department_id: "department-a".to_string(),
+                agent_id: "agent-a".to_string(),
+            },
+            RemoteImMessageSource {
+                channel_id: "channel-a".to_string(),
+                platform: RemoteImPlatform::OnebotV11,
+                im_name: "QQ".to_string(),
+                remote_contact_type: "group".to_string(),
+                remote_contact_id: "group-retry".to_string(),
+                remote_contact_name: "重试群".to_string(),
+                sender_id: "user-a".to_string(),
+                sender_name: "user-a".to_string(),
+                sender_avatar_url: None,
+                platform_message_id: None,
+            },
         );
+        let key = remote_im_group_reply_state_key(&state, &contact.id);
+        let generation = {
+            let mut store = lock_remote_im_group_reply_state_store();
+            let generation = remote_im_group_reply_next_generation(&mut store);
+            store.by_contact.insert(
+                key.clone(),
+                RemoteImGroupReplyState {
+                generation,
+                phase: RemoteImGroupReplyPhase::AssistantDispatching,
+                start_message_id: "message-retry-start".to_string(),
+                end_message_id: "message-retry-latest".to_string(),
+                decision_end_message_id: Some("message-retry-start".to_string()),
+                pending_start_message_id: Some("message-retry-pending".to_string()),
+                focus: false,
+                pending_focus: true,
+                event,
+                due_at: std::time::Instant::now(),
+                inspection_kind: RemoteImGroupReplyTimerKind::Mention,
+                pending_settlement: None,
+                },
+            );
+            generation
+        };
+        let cached_runtime = state.cached_runtime_state.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = cached_runtime.lock().expect("lock before poison");
+            panic!("poison cached runtime state");
+        })
+        .join();
+
+        remote_im_group_reply_retry_after_dispatch_failure(
+            &state,
+            &contact.id,
+            generation,
+            "故障注入：联系人读取失败",
+        );
+        let mut store = lock_remote_im_group_reply_state_store();
+        let retried = store.by_contact.get(&key).expect("batch should remain");
+        assert!(retried.generation > generation);
+        assert_eq!(retried.phase, RemoteImGroupReplyPhase::MentionScheduled);
+        assert_eq!(retried.start_message_id, "message-retry-start");
+        assert_eq!(
+            retried.decision_end_message_id.as_deref(),
+            Some("message-retry-start")
+        );
+        assert_eq!(
+            retried.pending_start_message_id.as_deref(),
+            Some("message-retry-pending")
+        );
+        assert!(retried.pending_focus);
+        store.by_contact.remove(&key);
     }
 
-    #[tokio::test]
-    async fn mute_should_clear_pending_remote_im_debounces() {
+    #[test]
+    fn mute_should_clear_pending_group_reply_state() {
         let state = remote_im_test_state();
         let mut contact = remote_im_test_contact("contact-a", "conversation-a");
         contact.activation_mode = "keyword".to_string();
@@ -2579,24 +4016,15 @@
                 platform_message_id: None,
             },
         );
-        observe_remote_im_persisted_event(&state, &contact, &event).expect("create debounce");
+        contact.group_reply_pacing.assistant_debounce_seconds = 3600;
+        observe_remote_im_persisted_event(&state, &contact, &event);
         {
             let mut states = lock_remote_im_contact_runtime_states(&state).expect("lock states");
             remote_im_contact_runtime_state_mut(&mut states, &contact.id).mute_until =
                 Some(remote_im_resolve_mute_until(now_utc(), 60));
         }
-        observe_remote_im_persisted_event(&state, &contact, &event).expect("clear muted debounce");
-        let debounces = remote_im_debounce_state().lock().expect("lock debounce state");
-        let assistant_prefix = format!(
-            "{}::{}::",
-            state.data_path.to_string_lossy(),
-            contact.id
-        );
-        assert!(!debounces
-            .assistant_by_sender
-            .keys()
-            .any(|key| key.starts_with(&assistant_prefix)));
-        assert!(!debounces
-            .secretary_by_contact
-            .contains_key(&remote_im_secretary_debounce_key(&state, &contact.id)));
+        observe_remote_im_persisted_event(&state, &contact, &event);
+        let key = remote_im_group_reply_state_key(&state, &contact.id);
+        let store = remote_im_group_reply_state_store().lock().expect("lock group state");
+        assert!(!store.by_contact.contains_key(&key));
     }

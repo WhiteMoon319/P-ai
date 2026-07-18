@@ -160,15 +160,6 @@ fn ensure_remote_im_contact_conversation_id(
         })
     {
         contact.bound_conversation_id = Some(bound_conversation_id.clone());
-        if let Some((department_id, agent_id)) = binding_pair.as_ref() {
-            sync_remote_im_contact_conversation_binding(
-                state,
-                contact,
-                &bound_conversation_id,
-                department_id,
-                agent_id,
-            )?;
-        }
         return Ok(bound_conversation_id);
     }
 
@@ -184,15 +175,6 @@ fn ensure_remote_im_contact_conversation_id(
         .map(|conversation_meta| conversation_meta.id.to_string())
     {
         contact.bound_conversation_id = Some(found_id.clone());
-        if let Some((department_id, agent_id)) = binding_pair.as_ref() {
-            sync_remote_im_contact_conversation_binding(
-                state,
-                contact,
-                &found_id,
-                department_id,
-                agent_id,
-            )?;
-        }
         return Ok(found_id);
     }
 
@@ -209,7 +191,266 @@ fn ensure_remote_im_contact_conversation_id(
     Ok(conversation_id)
 }
 
+fn remote_im_contact_conversation_sync_lock(
+    state: &AppState,
+    contact_id: &str,
+) -> std::sync::Arc<std::sync::Mutex<()>> {
+    static LOCKS: std::sync::OnceLock<
+        std::sync::Mutex<
+            std::collections::HashMap<String, std::sync::Arc<std::sync::Mutex<()>>>,
+        >,
+    > = std::sync::OnceLock::new();
+    let key = format!(
+        "{}::{}",
+        state.data_path.to_string_lossy(),
+        contact_id.trim()
+    );
+    let locks = LOCKS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+    let mut locks = match locks.lock() {
+        Ok(locks) => locks,
+        Err(poisoned) => {
+            runtime_log_warn("[远程IM] 联系人会话同步锁表中毒，已恢复".to_string());
+            poisoned.into_inner()
+        }
+    };
+    locks
+        .entry(key)
+        .or_insert_with(|| std::sync::Arc::new(std::sync::Mutex::new(())))
+        .clone()
+}
+
 fn sync_remote_im_contact_conversation_binding(
+    state: &AppState,
+    contact: &RemoteImContact,
+    conversation_id: &str,
+    _department_id: &str,
+    _agent_id: &str,
+) -> Result<(), String> {
+    let normalized_conversation_id = conversation_id.trim();
+    if normalized_conversation_id.is_empty() {
+        return Ok(());
+    }
+    let sync_lock = remote_im_contact_conversation_sync_lock(state, &contact.id);
+    let _sync_guard = match sync_lock.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            runtime_log_warn(format!(
+                "[远程IM] 联系人会话同步锁中毒，已恢复，contact_id={}",
+                contact.id
+            ));
+            poisoned.into_inner()
+        }
+    };
+    let original_meta = conversation_service_v2()
+        .get_conversation_meta(state, normalized_conversation_id)?;
+    let mut last_written = None::<(RemoteImContact, String, String)>;
+    for attempt in 0..4 {
+        let runtime = match state_read_runtime_state_cached(state) {
+            Ok(runtime) => runtime,
+            Err(err) => {
+                runtime_log_warn(format!(
+                    "[远程IM] 跳过，任务=同步联系人会话绑定，contact_id={}，conversation_id={}，原因=读取权威联系人失败，error={}",
+                    contact.id, normalized_conversation_id, err
+                ));
+                return Ok(());
+            }
+        };
+        let Some(authoritative_contact) = runtime
+            .remote_im_contacts
+            .into_iter()
+            .find(|item| item.id == contact.id)
+        else {
+            runtime_log_warn(format!(
+                "[远程IM] 跳过，任务=同步联系人会话绑定，contact_id={}，conversation_id={}，原因=联系人已删除",
+                contact.id, normalized_conversation_id
+            ));
+            return Ok(());
+        };
+        if authoritative_contact
+            .bound_conversation_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            != Some(normalized_conversation_id)
+        {
+            runtime_log_warn(format!(
+                "[远程IM] 跳过，任务=同步联系人会话绑定，contact_id={}，conversation_id={}，原因=会话绑定已变化",
+                contact.id, normalized_conversation_id
+            ));
+            return Ok(());
+        }
+        let runtime_snapshot = match load_runtime_organization_snapshot(state) {
+            Ok(snapshot) => snapshot,
+            Err(err) => {
+                runtime_log_warn(format!(
+                    "[远程IM] 跳过，任务=同步联系人会话绑定，contact_id={}，conversation_id={}，原因=读取组织配置失败，error={}",
+                    contact.id, normalized_conversation_id, err
+                ));
+                return Ok(());
+            }
+        };
+        let (department_id, agent_id) = match resolve_department_agent_pair(
+            authoritative_contact.bound_department_id.as_deref(),
+            authoritative_contact.bound_agent_id.as_deref(),
+            &runtime_snapshot.config,
+        ) {
+            Ok(pair) => pair,
+            Err(err) => {
+                runtime_log_warn(format!(
+                    "[远程IM] 跳过，任务=同步联系人会话绑定，contact_id={}，conversation_id={}，原因={} ",
+                    contact.id, normalized_conversation_id, err
+                ));
+                return Ok(());
+            }
+        };
+        let baseline = remote_im_contact_binding_snapshot(&authoritative_contact);
+        last_written = Some((
+            authoritative_contact.clone(),
+            department_id.clone(),
+            agent_id.clone(),
+        ));
+        if let Err(err) = sync_remote_im_contact_conversation_binding_unchecked(
+            state,
+            &authoritative_contact,
+            normalized_conversation_id,
+            &department_id,
+            &agent_id,
+        ) {
+            runtime_log_warn(format!(
+                "[远程IM] 会话绑定写入失败，尝试条件回滚，contact_id={}，conversation_id={}，error={}",
+                contact.id, normalized_conversation_id, err
+            ));
+            if let Err(rollback_err) = restore_remote_im_contact_conversation_binding(
+                state,
+                normalized_conversation_id,
+                &original_meta,
+                &authoritative_contact,
+                &department_id,
+                &agent_id,
+            ) {
+                runtime_log_warn(format!(
+                    "[远程IM] 会话绑定写入失败后的回滚降级，contact_id={}，conversation_id={}，error={}",
+                    contact.id, normalized_conversation_id, rollback_err
+                ));
+            }
+            return Err(err);
+        }
+        let latest = match state_read_runtime_state_cached(state) {
+            Ok(runtime) => runtime
+                .remote_im_contacts
+                .into_iter()
+                .find(|item| item.id == contact.id),
+            Err(err) => {
+                runtime_log_warn(format!(
+                    "[远程IM] 会话绑定写后复核失败，回滚本次路由变更，contact_id={}，conversation_id={}，error={}",
+                    contact.id, normalized_conversation_id, err
+                ));
+                restore_remote_im_contact_conversation_binding(
+                    state,
+                    normalized_conversation_id,
+                    &original_meta,
+                    &authoritative_contact,
+                    &department_id,
+                    &agent_id,
+                )?;
+                return Ok(());
+            }
+        };
+        let Some(latest) = latest else {
+            restore_remote_im_contact_conversation_binding(
+                state,
+                normalized_conversation_id,
+                &original_meta,
+                &authoritative_contact,
+                &department_id,
+                &agent_id,
+            )?;
+            return Ok(());
+        };
+        if remote_im_contact_binding_matches(&latest, &baseline) {
+            return Ok(());
+        }
+        runtime_log_warn(format!(
+            "[远程IM] 联系人绑定在会话同步期间变化，按最新配置重试，contact_id={}，conversation_id={}，attempt={}",
+            contact.id,
+            normalized_conversation_id,
+            attempt + 1
+        ));
+        if latest
+            .bound_conversation_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            != Some(normalized_conversation_id)
+        {
+            restore_remote_im_contact_conversation_binding(
+                state,
+                normalized_conversation_id,
+                &original_meta,
+                &authoritative_contact,
+                &department_id,
+                &agent_id,
+            )?;
+            return Ok(());
+        }
+    }
+    runtime_log_warn(format!(
+        "[远程IM] 联系人绑定持续变化，回滚本次会话路由变更，contact_id={}，conversation_id={}",
+        contact.id, normalized_conversation_id
+    ));
+    if let Some((written_contact, written_department_id, written_agent_id)) = last_written {
+        restore_remote_im_contact_conversation_binding(
+            state,
+            normalized_conversation_id,
+            &original_meta,
+            &written_contact,
+            &written_department_id,
+            &written_agent_id,
+        )?;
+    }
+    Ok(())
+}
+
+fn restore_remote_im_contact_conversation_binding(
+    state: &AppState,
+    conversation_id: &str,
+    original_meta: &ConversationMetaView,
+    written_contact: &RemoteImContact,
+    written_department_id: &str,
+    written_agent_id: &str,
+) -> Result<(), String> {
+    let expected_root = remote_im_contact_conversation_key(written_contact);
+    let (_, restored, _) = state_update_conversation_metadata_cached(
+        state,
+        conversation_id,
+        |conversation| {
+            if conversation.department_id.trim() != written_department_id.trim()
+                || conversation.agent_id.trim() != written_agent_id.trim()
+                || conversation.root_conversation_id.as_deref() != Some(expected_root.as_str())
+            {
+                return Ok(false);
+            }
+            conversation.department_id = original_meta.department_id.clone();
+            conversation.agent_id = original_meta.agent_id.clone();
+            conversation.root_conversation_id = original_meta.root_conversation_id.clone();
+            conversation.conversation_kind = original_meta.conversation_kind.clone();
+            if conversation.preferred_api_config_id.is_none() {
+                conversation.preferred_api_config_id =
+                    original_meta.preferred_api_config_id.clone();
+            }
+            Ok(true)
+        },
+    )?;
+    if !restored {
+        runtime_log_warn(format!(
+            "[远程IM] 跳过过期会话路由回滚，conversation_id={}，原因=路由已被其他操作更新",
+            conversation_id
+        ));
+    }
+    Ok(())
+}
+
+fn sync_remote_im_contact_conversation_binding_unchecked(
     state: &AppState,
     contact: &RemoteImContact,
     conversation_id: &str,
@@ -232,28 +473,20 @@ fn sync_remote_im_contact_conversation_binding(
     let department_changed = conversation_meta.department_id.trim() != department_id;
     let agent_changed = conversation_meta.agent_id.trim() != agent_id;
     let root_changed = conversation_meta.root_conversation_id.as_deref() != Some(target_key.as_str());
-    if department_changed || agent_changed || root_changed {
-        conversation_service_v2().set_routing(
-            state,
-            conversation_id,
-            Some(department_id),
-            Some(agent_id),
-            Some(Some(target_key)),
-            None,
-        )?;
-    }
     let preferred_api_changed = conversation_meta
         .preferred_api_config_id
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .is_some();
-    if preferred_api_changed {
-        conversation_service_v2().set_preferred_api_config_id(
-            state,
-            conversation_id,
-            None,
-        )?;
+    if department_changed || agent_changed || root_changed || preferred_api_changed {
+        state_update_conversation_metadata_cached(state, conversation_id, |conversation| {
+            conversation.department_id = department_id.to_string();
+            conversation.agent_id = agent_id.to_string();
+            conversation.root_conversation_id = Some(target_key);
+            conversation.preferred_api_config_id = None;
+            Ok(())
+        })?;
     }
     Ok(())
 }
@@ -286,6 +519,8 @@ fn resolve_contact_session_target(
         contact.bound_agent_id.as_deref(),
         &runtime_snapshot.config,
     )?;
+    contact.bound_department_id = Some(department_id.clone());
+    contact.bound_agent_id = Some(agent_id.clone());
     let conversation_id = ensure_remote_im_contact_conversation_id(state, contact)?;
     Ok((department_id, agent_id, conversation_id))
 }

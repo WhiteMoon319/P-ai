@@ -7,10 +7,27 @@ impl OnebotV11WsManager {
         params: Value,
         timeout_ms: u64,
     ) -> Result<Value, String> {
+        self.call_api_classified(channel_id, action, params, timeout_ms)
+            .await
+            .map_err(|err| err.message)
+    }
+
+    async fn call_api_classified(
+        &self,
+        channel_id: &str,
+        action: &str,
+        params: Value,
+        timeout_ms: u64,
+    ) -> Result<Value, RemoteImSdkSendError> {
         let connections = self.connections.read().await;
         let conn = connections
             .get(channel_id)
-            .ok_or_else(|| format!("渠道 {} 未连接", channel_id))?;
+            .ok_or_else(|| {
+                RemoteImSdkSendError::definitely_not_sent(format!(
+                    "渠道 {} 未连接",
+                    channel_id
+                ))
+            })?;
         let pending_responses = conn.pending_responses.clone();
 
         // 生成唯一 echo
@@ -27,13 +44,25 @@ impl OnebotV11WsManager {
             echo: Some(serde_json::json!(echo.clone())),
         };
 
-        let payload = serde_json::to_string(&request)
-            .map_err(|e| format!("序列化请求失败: {}", e))?;
+        let payload = match serde_json::to_string(&request) {
+            Ok(payload) => payload,
+            Err(err) => {
+                pending_responses.write().await.remove(&echo);
+                return Err(RemoteImSdkSendError::definitely_not_sent(format!(
+                    "序列化请求失败: {}",
+                    err
+                )));
+            }
+        };
 
         // 发送请求
-        conn.tx
-            .send(payload)
-            .map_err(|e| format!("发送失败: {}", e))?;
+        if let Err(err) = conn.tx.send(payload) {
+            pending_responses.write().await.remove(&echo);
+            return Err(RemoteImSdkSendError::definitely_not_sent(format!(
+                "发送失败: {}",
+                err
+            )));
+        }
 
         // 释放连接锁，等待响应
         drop(connections);
@@ -49,14 +78,20 @@ impl OnebotV11WsManager {
                 if response.status == "ok" {
                     Ok(response.data)
                 } else {
-                    Err(format!("API 调用失败: status={}, retcode={}", response.status, response.retcode))
+                    Err(RemoteImSdkSendError::definitely_not_sent(format!(
+                        "API 调用失败: status={}, retcode={}",
+                        response.status, response.retcode
+                    )))
                 }
             }
-            Ok(Err(_)) => Err("响应通道已关闭".to_string()),
+            Ok(Err(_)) => Err(RemoteImSdkSendError::uncertain("响应通道已关闭")),
             Err(_) => {
                 // 超时，清理 pending
                 pending_responses.write().await.remove(&echo);
-                Err(format!("API 调用超时 ({}ms)", timeout_ms))
+                Err(RemoteImSdkSendError::uncertain(format!(
+                    "API 调用超时 ({}ms)",
+                    timeout_ms
+                )))
             }
         }
     }

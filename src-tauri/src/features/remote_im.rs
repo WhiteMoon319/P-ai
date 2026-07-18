@@ -113,6 +113,66 @@ struct RemoteImContactBlockedMessagePrefixesUpdateInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct RemoteImContactBehaviorUpdateInput {
+    contact_id: String,
+    #[serde(default = "default_remote_im_contact_mute_keywords")]
+    mute_keywords: Vec<String>,
+    #[serde(default = "default_remote_im_contact_unmute_keywords")]
+    unmute_keywords: Vec<String>,
+    #[serde(default = "default_remote_im_contact_patience_seconds")]
+    patience_seconds: u64,
+    #[serde(default = "default_remote_im_contact_mute_duration_seconds")]
+    mute_duration_seconds: u64,
+    #[serde(default)]
+    activation_cooldown_seconds: u64,
+    #[serde(default = "default_remote_im_contact_blocked_message_prefixes")]
+    blocked_message_prefixes: Vec<String>,
+    #[serde(default)]
+    group_reply_pacing: RemoteImGroupReplyPacing,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteImContactSettingsPatchInput {
+    contact_id: String,
+    #[serde(default)]
+    department_id: Option<String>,
+    #[serde(default)]
+    agent_id: Option<String>,
+    #[serde(default = "default_remote_im_contact_processing_mode")]
+    processing_mode: String,
+    #[serde(default = "default_remote_im_contact_blocked_message_prefixes")]
+    blocked_message_prefixes: Vec<String>,
+    #[serde(default = "default_remote_im_contact_activation_mode")]
+    activation_mode: String,
+    #[serde(default)]
+    activation_keywords: Vec<String>,
+    #[serde(default = "default_remote_im_contact_mute_keywords")]
+    mute_keywords: Vec<String>,
+    #[serde(default = "default_remote_im_contact_unmute_keywords")]
+    unmute_keywords: Vec<String>,
+    #[serde(default = "default_remote_im_contact_patience_seconds")]
+    patience_seconds: u64,
+    #[serde(default = "default_remote_im_contact_mute_duration_seconds")]
+    mute_duration_seconds: u64,
+    #[serde(default)]
+    activation_cooldown_seconds: u64,
+    #[serde(default)]
+    group_reply_pacing: RemoteImGroupReplyPacing,
+    #[serde(default = "default_remote_im_contact_response_strategy")]
+    response_strategy: String,
+    #[serde(default = "default_remote_im_contact_response_guidance")]
+    response_guidance: String,
+    #[serde(default)]
+    allow_receive: bool,
+    #[serde(default)]
+    allow_send: bool,
+    #[serde(default)]
+    allow_send_files: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RemoteImContactActivationUpdateInput {
     contact_id: String,
     activation_mode: String,
@@ -306,6 +366,7 @@ fn remote_im_upsert_contact_for_inbound(
         ),
         response_guidance: default_remote_im_contact_response_guidance(),
         blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
+        group_reply_pacing: RemoteImGroupReplyPacing::default(),
         last_activated_at: None,
         last_message_at: Some(now.to_string()),
         dingtalk_session_webhook: if matches!(input.platform, RemoteImPlatform::Dingtalk) {
@@ -454,6 +515,12 @@ fn normalize_contact_response_guidance(value: &str) -> String {
         trimmed.to_string()
     }
 }
+
+include!("remote_im/group_reply_focus.rs");
+
+include!("remote_im/group_reply_energy.rs");
+
+include!("remote_im/group_reply_state.rs");
 
 include!("remote_im/reply_debounce.rs");
 
@@ -635,16 +702,11 @@ fn remote_im_prepare_enqueue_runtime_state(
                 ),
             );
             drop(runtime_states);
-            if let Err(err) = remote_im_enforce_mute_side_effects(
+            remote_im_enforce_mute_side_effects(
                 state,
                 &contact.id,
                 "命中闭嘴词，中止在途应答并拦截外发",
-            ) {
-                runtime_log_warn(format!(
-                    "[远程联系人状态机] 降级，任务=闭嘴善后，contact_id={}，error={}",
-                    contact.id, err
-                ));
-            }
+            );
             return Ok((false, reason));
         }
     }
@@ -684,16 +746,11 @@ fn remote_im_prepare_enqueue_runtime_state(
                 ),
             );
             drop(runtime_states);
-            if let Err(err) = remote_im_enforce_mute_side_effects(
+            remote_im_enforce_mute_side_effects(
                 state,
                 &contact.id,
                 "闭嘴期内重复拦截，继续中止在途应答",
-            ) {
-                runtime_log_warn(format!(
-                    "[远程联系人状态机] 降级，任务=闭嘴善后，contact_id={}，error={}",
-                    contact.id, err
-                ));
-            }
+            );
             return Ok((false, reason));
         }
     }
