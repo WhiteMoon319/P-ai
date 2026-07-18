@@ -2812,6 +2812,7 @@
             show_tool_calls: false,
             filter_markdown: false,
             allow_send_files: false,
+            behavior_settings: RemoteImChannelBehaviorSettings::default(),
         });
         write_config(&state.config_path, &config).expect("write config");
 
@@ -6648,6 +6649,7 @@
             show_tool_calls: false,
             filter_markdown: false,
             allow_send_files: false,
+            behavior_settings: RemoteImChannelBehaviorSettings::default(),
         });
         write_config(&state.config_path, &config).expect("write config");
 
@@ -6913,6 +6915,7 @@
             show_tool_calls: false,
             filter_markdown: false,
             allow_send_files: false,
+            behavior_settings: RemoteImChannelBehaviorSettings::default(),
         });
         write_config(&state.config_path, &config).expect("write config");
         let now = now_iso();
@@ -9228,6 +9231,7 @@
             show_tool_calls: false,
             filter_markdown: false,
             allow_send_files: true,
+            behavior_settings: RemoteImChannelBehaviorSettings::default(),
         });
         write_config(&state.config_path, &config).expect("write config");
         state_write_agents_cached(&state, &[agent.clone(), default_user_persona()])

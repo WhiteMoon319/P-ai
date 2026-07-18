@@ -1002,6 +1002,8 @@ struct RemoteImChannelConfig {
     filter_markdown: bool,
     #[serde(default)]
     allow_send_files: bool,
+    #[serde(default)]
+    behavior_settings: RemoteImChannelBehaviorSettings,
 }
 
 fn default_remote_im_channels() -> Vec<RemoteImChannelConfig> {

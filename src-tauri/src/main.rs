@@ -1202,6 +1202,7 @@ fn main() {
             remote_im_update_contact_allow_receive,
             remote_im_update_contact_blocked_message_prefixes,
             remote_im_update_contact_behavior,
+            remote_im_reconfigure_channel_behavior,
             remote_im_patch_contact_settings,
             remote_im_update_contact_activation,
             remote_im_update_contact_remark,

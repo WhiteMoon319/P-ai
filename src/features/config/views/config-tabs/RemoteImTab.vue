@@ -84,10 +84,10 @@
           <span class="badge badge-ghost badge-xs">{{ currentChannelContacts.length }}</span>
         </span>
         <div class="flex items-center gap-1">
-          <ContactBehaviorSettingsPopover
-            :contacts="currentChannelContacts"
-            @updated="onContactBehaviorUpdated"
-            @status="props.setStatusAction"
+          <ChannelBehaviorSettingsModal
+            :channel="selectedChannel"
+            :save-config-action="props.saveConfigAction"
+            :set-status-action="props.setStatusAction"
           />
           <button class="btn btn-square btn-ghost" :title="t('common.refresh')" @click="refreshContacts">
             <RefreshCw class="h-3.5 w-3.5" :class="contactsLoading ? 'animate-spin' : ''" />
@@ -624,21 +624,6 @@
                 </div>
               </li>
 
-              <li class="list-row flex items-start justify-between gap-3">
-                <div class="font-medium">{{ t("config.remoteIm.blockedMessagePrefixes") }}</div>
-                <div class="flex w-64 flex-col gap-2">
-                  <input
-                    type="text"
-                    class="input input-bordered input-sm w-full"
-                    :placeholder="t('config.remoteIm.blockedMessagePrefixesPlaceholder')"
-                    v-model="contactDraft.blockedMessagePrefixesText"
-                  />
-                  <span class="text-[11px] opacity-60">
-                    {{ t("config.remoteIm.blockedMessagePrefixesHint") }}
-                  </span>
-                </div>
-              </li>
-
               <li v-if="selectedContact" class="list-row flex items-start justify-between gap-3">
                 <div class="font-medium">{{ t("config.remoteIm.activateMode") }}</div>
                 <div class="flex w-64 flex-col gap-2">
@@ -662,58 +647,6 @@
                     :placeholder="t('config.remoteIm.activateKeywordsPlaceholder')"
                     v-model="contactDraft.activationKeywordsText"
                   />
-                </div>
-              </li>
-
-              <li
-                v-if="selectedContact && !isPrivateContact(selectedContact)"
-                class="list-row flex items-start justify-between gap-3"
-              >
-                <div class="font-medium">{{ t("config.remoteIm.muteKeywords") }}</div>
-                <div class="flex w-64 flex-col gap-2">
-                  <input
-                    type="text"
-                    class="input input-bordered input-sm w-full"
-                    :placeholder="t('config.remoteIm.muteKeywordsPlaceholder')"
-                    v-model="contactDraft.muteKeywordsText"
-                  />
-                  <span class="text-[11px] opacity-60">
-                    {{ t("config.remoteIm.muteKeywordsHint") }}
-                  </span>
-                </div>
-              </li>
-
-              <li
-                v-if="selectedContact && !isPrivateContact(selectedContact)"
-                class="list-row flex items-start justify-between gap-3"
-              >
-                <div class="font-medium">{{ t("config.remoteIm.unmuteKeywords") }}</div>
-                <div class="flex w-64 flex-col gap-2">
-                  <input
-                    type="text"
-                    class="input input-bordered input-sm w-full"
-                    :placeholder="t('config.remoteIm.unmuteKeywordsPlaceholder')"
-                    v-model="contactDraft.unmuteKeywordsText"
-                  />
-                  <span class="text-[11px] opacity-60">
-                    {{ t("config.remoteIm.unmuteKeywordsHint") }}
-                  </span>
-                </div>
-              </li>
-
-              <li
-                v-if="selectedContact && !isPrivateContact(selectedContact)"
-                class="list-row flex items-center justify-between gap-3"
-              >
-                <div class="font-medium">{{ t("config.remoteIm.muteDuration") }}</div>
-                <div class="flex w-64 items-center gap-2">
-                  <input
-                    type="number"
-                    class="input input-bordered input-sm w-20"
-                    v-model.number="contactDraft.muteDurationSeconds"
-                    min="0"
-                  />
-                  <span class="opacity-60">{{ t("config.remoteIm.seconds") }}</span>
                 </div>
               </li>
 
@@ -758,22 +691,6 @@
                   <span class="text-[11px] opacity-60">
                     {{ t("config.remoteIm.responseGuidanceHint") }}
                   </span>
-                </div>
-              </li>
-
-              <li
-                v-if="selectedContact && !isPrivateContact(selectedContact)"
-                class="list-row flex items-center justify-between gap-3"
-              >
-                <div class="font-medium">{{ t("config.remoteIm.patienceExit") }}</div>
-                <div class="flex w-64 items-center gap-2">
-                  <input
-                    type="number"
-                    class="input input-bordered input-sm w-20"
-                    v-model.number="contactDraft.patienceSeconds"
-                    min="0"
-                  />
-                  <span class="opacity-60">{{ t("config.remoteIm.seconds") }}</span>
                 </div>
               </li>
 
@@ -905,20 +822,18 @@ import { invokeTauri } from "../../../../services/tauri-api";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { AppConfig, DepartmentConfig, PersonaProfile, RemoteImChannelConfig, RemoteImContact, RemoteImPlatform, ShellWorkspace } from "../../../../types/app";
 import DepartmentPersonaSelect from "../../../shared/components/DepartmentPersonaSelect.vue";
-import ContactBehaviorSettingsPopover from "./remote-im/ContactBehaviorSettingsPopover.vue";
+import ChannelBehaviorSettingsModal from "./remote-im/ChannelBehaviorSettingsModal.vue";
 import type { ChannelConnectionStatus, ChannelLogEntry, WeixinLoginStatus } from "./remote-im/types";
 import { buildContactLogDisplayItem, type ContactLogDisplayItem } from "./remote-im/contact-log-display";
 import {
   contactCommunicationToggleClass,
   contactCommunicationToggleEnabled,
+  cloneChannelBehaviorSettings,
   formatLogTime,
   normalizeActivationMode,
-  normalizeGroupReplyPacing,
   normalizeProcessingMode,
   normalizeResponseStrategy,
   parseActivationKeywords,
-  parseBlockedMessagePrefixes,
-  parseKeywordList,
 } from "./remote-im/helpers";
 
 const props = defineProps<{
@@ -953,17 +868,10 @@ type ContactSettingsClipboard = {
   boundDepartmentId: string;
   boundAgentId: string;
   processingMode: "qa" | "continuous";
-  blockedMessagePrefixesText: string;
   activationMode: RemoteImContact["activationMode"];
   activationKeywordsText: string;
-  muteKeywordsText: string;
-  unmuteKeywordsText: string;
   responseStrategy: NonNullable<RemoteImContact["responseStrategy"]>;
   responseGuidance: string;
-  patienceSeconds: number;
-  muteDurationSeconds: number;
-  activationCooldownSeconds: number;
-  groupReplyPacing: NonNullable<RemoteImContact["groupReplyPacing"]>;
   allowReceive: boolean;
   allowSend: boolean;
   allowSendFiles: boolean;
@@ -1014,11 +922,6 @@ let channelStatusTimer: ReturnType<typeof setInterval> | null = null;
 const selectedChannel = computed(() =>
   channels.value.find((ch) => ch.id === selectedChannelId.value) ?? null,
 );
-
-function onContactBehaviorUpdated(updated: RemoteImContact) {
-  const index = contacts.value.findIndex((item) => item.id === updated.id);
-  if (index >= 0) contacts.value[index] = updated;
-}
 
 const weixinLoginState = computed(() => {
   const channelId = selectedChannel.value?.id || "";
@@ -1186,7 +1089,6 @@ const contactsDisabledReason = computed(() => {
   return "";
 });
 const contactsDisabled = computed(() => !!contactsDisabledReason.value);
-const DEFAULT_BLOCKED_MESSAGE_PREFIXES = ["#", "/", "%"];
 const contactActivationModeOrder: RemoteImContact["activationMode"][] = ["always", "keyword", "never"];
 
 type ContactGroup = { mode: "always" | "keyword" | "never"; label: string; items: typeof currentChannelContacts.value };
@@ -1224,15 +1126,10 @@ type ContactEditDraft = {
   boundDepartmentId: string;
   boundAgentId: string;
   processingMode: "qa" | "continuous";
-  blockedMessagePrefixesText: string;
   activationMode: RemoteImContact["activationMode"];
   activationKeywordsText: string;
-  muteKeywordsText: string;
-  unmuteKeywordsText: string;
   responseStrategy: NonNullable<RemoteImContact["responseStrategy"]>;
   responseGuidance: string;
-  patienceSeconds: number;
-  muteDurationSeconds: number;
   allowReceive: boolean;
   allowSend: boolean;
   allowSendFiles: boolean;
@@ -1293,17 +1190,10 @@ function buildContactDraftFromContact(item: RemoteImContact): ContactEditDraft {
     boundDepartmentId: String(item.boundDepartmentId || ""),
     boundAgentId: String(item.boundAgentId || ""),
     processingMode: normalizeProcessingMode(item.processingMode),
-    blockedMessagePrefixesText: (Array.isArray(item.blockedMessagePrefixes)
-      ? item.blockedMessagePrefixes
-      : DEFAULT_BLOCKED_MESSAGE_PREFIXES).join(" "),
     activationMode: isPrivateContact(item) ? "always" : normalizeActivationMode(item.activationMode || "never"),
     activationKeywordsText: item.activationKeywords.join(", "),
-    muteKeywordsText: (Array.isArray(item.muteKeywords) ? item.muteKeywords : [t("config.remoteIm.defaultMuteKeyword")]).join(", "),
-    unmuteKeywordsText: (Array.isArray(item.unmuteKeywords) ? item.unmuteKeywords : [t("config.remoteIm.defaultUnmuteKeyword")]).join(", "),
     responseStrategy: normalizeResponseStrategy(item.responseStrategy),
     responseGuidance: String(item.responseGuidance || "").trim(),
-    patienceSeconds: Math.max(0, Number(item.patienceSeconds || 60)),
-    muteDurationSeconds: Math.max(0, Number(item.muteDurationSeconds || 600)),
     allowReceive: !!item.allowReceive,
     allowSend: !!item.allowSend,
     allowSendFiles: !!item.allowSendFiles,
@@ -1336,23 +1226,10 @@ function buildContactSettingsClipboard(item: RemoteImContact): ContactSettingsCl
     boundDepartmentId: String(item.boundDepartmentId || ""),
     boundAgentId: String(item.boundAgentId || ""),
     processingMode: normalizeProcessingMode(item.processingMode),
-    blockedMessagePrefixesText: (Array.isArray(item.blockedMessagePrefixes)
-      ? item.blockedMessagePrefixes
-      : DEFAULT_BLOCKED_MESSAGE_PREFIXES).join(" "),
     activationMode: isPrivate ? "always" : normalizeActivationMode(item.activationMode || "never"),
     activationKeywordsText: isPrivate ? "" : (Array.isArray(item.activationKeywords) ? item.activationKeywords.join(", ") : ""),
-    muteKeywordsText: isPrivate
-      ? t("config.remoteIm.defaultMuteKeyword")
-      : (Array.isArray(item.muteKeywords) ? item.muteKeywords : [t("config.remoteIm.defaultMuteKeyword")]).join(", "),
-    unmuteKeywordsText: isPrivate
-      ? t("config.remoteIm.defaultUnmuteKeyword")
-      : (Array.isArray(item.unmuteKeywords) ? item.unmuteKeywords : [t("config.remoteIm.defaultUnmuteKeyword")]).join(", "),
     responseStrategy: isPrivate ? "always_reply" : normalizeResponseStrategy(item.responseStrategy),
     responseGuidance: isPrivate ? "" : String(item.responseGuidance || "").trim(),
-    patienceSeconds: isPrivate ? 0 : Math.max(0, Number(item.patienceSeconds || 60)),
-    muteDurationSeconds: isPrivate ? 0 : Math.max(0, Number(item.muteDurationSeconds || 600)),
-    activationCooldownSeconds: Math.max(0, Number(item.activationCooldownSeconds || 0)),
-    groupReplyPacing: normalizeGroupReplyPacing(item.groupReplyPacing),
     allowReceive: !!item.allowReceive,
     allowSend: !!item.allowSend,
     allowSendFiles: !!item.allowSendFiles,
@@ -1424,6 +1301,7 @@ function newChannel(platform: RemoteImPlatform = "onebot_v11"): RemoteImChannelC
     showToolCalls: false,
     filterMarkdown: false,
     allowSendFiles: false,
+    behaviorSettings: cloneChannelBehaviorSettings(),
   };
 }
 
@@ -1460,6 +1338,7 @@ function cloneRemoteImChannel(channel: RemoteImChannelConfig): RemoteImChannelCo
     credentials: channel.credentials && typeof channel.credentials === "object"
       ? { ...channel.credentials }
       : {},
+    behaviorSettings: cloneChannelBehaviorSettings(channel.behaviorSettings),
   };
 }
 
@@ -1750,11 +1629,6 @@ async function saveContactActivation(
       RemoteImContact,
       | "activationMode"
       | "activationKeywords"
-      | "muteKeywords"
-      | "unmuteKeywords"
-      | "patienceSeconds"
-      | "muteDurationSeconds"
-      | "activationCooldownSeconds"
       | "responseStrategy"
       | "responseGuidance"
     >
@@ -1763,26 +1637,10 @@ async function saveContactActivation(
   if (contactsDisabled.value) return;
   const oldMode = item.activationMode;
   const oldKeywords = [...item.activationKeywords];
-  const oldMuteKeywords = [...(Array.isArray(item.muteKeywords) ? item.muteKeywords : [])];
-  const oldUnmuteKeywords = [...(Array.isArray(item.unmuteKeywords) ? item.unmuteKeywords : [])];
-  const oldPatience = item.patienceSeconds;
-  const oldMuteDuration = item.muteDurationSeconds;
-  const oldCooldown = item.activationCooldownSeconds;
   const oldResponseStrategy = normalizeResponseStrategy(item.responseStrategy);
   const oldResponseGuidance = String(item.responseGuidance || "");
   if (patch?.activationMode) item.activationMode = patch.activationMode;
   if (patch?.activationKeywords) item.activationKeywords = [...patch.activationKeywords];
-  if (patch?.muteKeywords) item.muteKeywords = [...patch.muteKeywords];
-  if (patch?.unmuteKeywords) item.unmuteKeywords = [...patch.unmuteKeywords];
-  if (typeof patch?.patienceSeconds === "number") {
-    item.patienceSeconds = Math.max(0, Math.floor(patch.patienceSeconds));
-  }
-  if (typeof patch?.muteDurationSeconds === "number") {
-    item.muteDurationSeconds = Math.max(0, Math.floor(patch.muteDurationSeconds));
-  }
-  if (typeof patch?.activationCooldownSeconds === "number") {
-    item.activationCooldownSeconds = Math.max(0, Math.floor(patch.activationCooldownSeconds));
-  }
   if (patch?.responseStrategy) item.responseStrategy = normalizeResponseStrategy(patch.responseStrategy);
   if (typeof patch?.responseGuidance === "string") item.responseGuidance = patch.responseGuidance;
   try {
@@ -1791,11 +1649,6 @@ async function saveContactActivation(
         contactId: item.id,
         activationMode: item.activationMode,
         activationKeywords: item.activationKeywords,
-        muteKeywords: item.muteKeywords,
-        unmuteKeywords: item.unmuteKeywords,
-        patienceSeconds: item.patienceSeconds,
-        muteDurationSeconds: item.muteDurationSeconds,
-        activationCooldownSeconds: item.activationCooldownSeconds,
         responseStrategy: normalizeResponseStrategy(item.responseStrategy),
         responseGuidance: String(item.responseGuidance || ""),
       },
@@ -1804,11 +1657,6 @@ async function saveContactActivation(
   } catch (error) {
     item.activationMode = oldMode;
     item.activationKeywords = oldKeywords;
-    item.muteKeywords = oldMuteKeywords;
-    item.unmuteKeywords = oldUnmuteKeywords;
-    item.patienceSeconds = oldPatience;
-    item.muteDurationSeconds = oldMuteDuration;
-    item.activationCooldownSeconds = oldCooldown;
     item.responseStrategy = oldResponseStrategy;
     item.responseGuidance = oldResponseGuidance;
     props.setStatusAction(t("status.saveConfigFailed", { err: String(error) }));
@@ -1829,17 +1677,8 @@ function buildContactClipboardPatch(
     boundDepartmentId: clipboard.boundDepartmentId,
     boundAgentId: clipboard.boundAgentId,
     processingMode: clipboard.processingMode,
-    blockedMessagePrefixes: parseBlockedMessagePrefixes(clipboard.blockedMessagePrefixesText),
     activationMode: isPrivate ? "always" : clipboard.activationMode,
     activationKeywords: isPrivate ? [] : parseActivationKeywords(clipboard.activationKeywordsText),
-    muteKeywords: isPrivate ? [] : parseKeywordList(clipboard.muteKeywordsText),
-    unmuteKeywords: isPrivate ? [] : parseKeywordList(clipboard.unmuteKeywordsText),
-    patienceSeconds: isPrivate ? 0 : clipboard.patienceSeconds,
-    muteDurationSeconds: isPrivate ? 0 : clipboard.muteDurationSeconds,
-    activationCooldownSeconds: clipboard.activationCooldownSeconds,
-    groupReplyPacing: isPrivate
-      ? normalizeGroupReplyPacing(target.groupReplyPacing)
-      : normalizeGroupReplyPacing(clipboard.groupReplyPacing),
     responseStrategy: isPrivate ? "always_reply" : clipboard.responseStrategy,
     responseGuidance: isPrivate ? "" : clipboard.responseGuidance,
     allowReceive: clipboard.allowReceive,
@@ -1861,15 +1700,8 @@ async function pasteContactSettings(item: RemoteImContact) {
           departmentId: patch.boundDepartmentId || null,
           agentId: patch.boundDepartmentId && patch.boundAgentId ? patch.boundAgentId : null,
           processingMode: patch.processingMode,
-          blockedMessagePrefixes: patch.blockedMessagePrefixes,
           activationMode: patch.activationMode,
           activationKeywords: patch.activationKeywords,
-          muteKeywords: patch.muteKeywords,
-          unmuteKeywords: patch.unmuteKeywords,
-          patienceSeconds: patch.patienceSeconds,
-          muteDurationSeconds: patch.muteDurationSeconds,
-          activationCooldownSeconds: patch.activationCooldownSeconds,
-          groupReplyPacing: patch.groupReplyPacing,
           responseStrategy: patch.responseStrategy,
           responseGuidance: patch.responseGuidance,
           allowReceive: patch.allowReceive,
@@ -2277,27 +2109,9 @@ async function saveContactDraft() {
       await onContactProcessingModeChange(item, nextProcessingMode);
     }
 
-    const nextBlockedMessagePrefixes = parseBlockedMessagePrefixes(draft.blockedMessagePrefixesText);
-    const currentBlockedMessagePrefixes = Array.isArray(item.blockedMessagePrefixes)
-      ? item.blockedMessagePrefixes
-      : DEFAULT_BLOCKED_MESSAGE_PREFIXES;
-    if (JSON.stringify(nextBlockedMessagePrefixes) !== JSON.stringify(currentBlockedMessagePrefixes)) {
-      await invokeTauri<RemoteImContact>("remote_im_update_contact_blocked_message_prefixes", {
-        input: { contactId: item.id, blockedMessagePrefixes: nextBlockedMessagePrefixes },
-      });
-    }
-
     const nextKeywords = parseActivationKeywords(draft.activationKeywordsText);
-    const nextMuteKeywords = parseKeywordList(draft.muteKeywordsText);
-    const nextUnmuteKeywords = parseKeywordList(draft.unmuteKeywordsText);
     const currentKeywords = Array.isArray(item.activationKeywords) ? item.activationKeywords : [];
-    const currentMuteKeywords = Array.isArray(item.muteKeywords) ? item.muteKeywords : [t("config.remoteIm.defaultMuteKeyword")];
-    const currentUnmuteKeywords = Array.isArray(item.unmuteKeywords) ? item.unmuteKeywords : [t("config.remoteIm.defaultUnmuteKeyword")];
     const keywordsChanged = JSON.stringify(nextKeywords) !== JSON.stringify(currentKeywords);
-    const muteKeywordsChanged =
-      JSON.stringify(nextMuteKeywords) !== JSON.stringify(currentMuteKeywords);
-    const unmuteKeywordsChanged =
-      JSON.stringify(nextUnmuteKeywords) !== JSON.stringify(currentUnmuteKeywords);
     const nextActivationMode = normalizeActivationMode(draft.activationMode);
     const modeChanged = nextActivationMode !== normalizeActivationMode(item.activationMode || "never");
     const nextResponseStrategy = normalizeResponseStrategy(draft.responseStrategy);
@@ -2306,28 +2120,15 @@ async function saveContactDraft() {
     const nextResponseGuidance = String(draft.responseGuidance || "").trim();
     const currentResponseGuidance = String(item.responseGuidance || "").trim();
     const responseGuidanceChanged = nextResponseGuidance !== currentResponseGuidance;
-    const nextPatience = Math.max(0, Math.floor(Number(draft.patienceSeconds) || 0));
-    const patienceChanged = nextPatience !== Math.max(0, Math.floor(Number(item.patienceSeconds || 60)));
-    const nextMuteDuration = Math.max(0, Math.floor(Number(draft.muteDurationSeconds) || 0));
-    const muteDurationChanged =
-      nextMuteDuration !== Math.max(0, Math.floor(Number(item.muteDurationSeconds || 600)));
     if (
       modeChanged
       || keywordsChanged
-      || muteKeywordsChanged
-      || unmuteKeywordsChanged
-      || patienceChanged
-      || muteDurationChanged
       || responseStrategyChanged
       || responseGuidanceChanged
     ) {
       await saveContactActivation(item, {
         activationMode: nextActivationMode,
         activationKeywords: nextKeywords,
-        muteKeywords: nextMuteKeywords,
-        unmuteKeywords: nextUnmuteKeywords,
-        patienceSeconds: nextPatience,
-        muteDurationSeconds: nextMuteDuration,
         responseStrategy: nextResponseStrategy,
         responseGuidance: nextResponseGuidance,
       });
@@ -2516,14 +2317,9 @@ async function refreshContacts() {
     for (const item of contacts.value) {
       item.activationMode = normalizeActivationMode(item.activationMode || "never");
       item.activationKeywords = Array.isArray(item.activationKeywords) ? item.activationKeywords : [];
-      item.muteKeywords = Array.isArray(item.muteKeywords) && item.muteKeywords.length > 0 ? item.muteKeywords : [t("config.remoteIm.defaultMuteKeyword")];
-      item.unmuteKeywords =
-        Array.isArray(item.unmuteKeywords) && item.unmuteKeywords.length > 0 ? item.unmuteKeywords : [t("config.remoteIm.defaultUnmuteKeyword")];
-      item.activationCooldownSeconds = Math.max(0, Number(item.activationCooldownSeconds || 0));
       item.processingMode = normalizeProcessingMode(item.processingMode);
       item.responseStrategy = normalizeResponseStrategy(item.responseStrategy);
       item.responseGuidance = String(item.responseGuidance || "").trim();
-      item.muteDurationSeconds = Math.max(0, Number(item.muteDurationSeconds || 600));
       item.allowSendFiles = !!item.allowSendFiles;
       contactKeywordDrafts.value[item.id] = item.activationKeywords.join(", ");
     }

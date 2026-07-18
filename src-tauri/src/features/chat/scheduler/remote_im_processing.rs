@@ -363,7 +363,9 @@ async fn process_persisted_remote_im_events_individually_now(
                 contact.id, err
             ));
         }
-        if let Err(err) = remote_im_schedule_presence_timeout(state, &contact.id, contact.patience_seconds) {
+        let patience_seconds = remote_im_channel_behavior_settings_for_contact(state, &contact)
+            .patience_seconds;
+        if let Err(err) = remote_im_schedule_presence_timeout(state, &contact.id, patience_seconds) {
             runtime_log_warn(format!(
                 "[群聊巡检] 在场计时降级，contact_id={}，error={}",
                 contact.id, err
@@ -384,7 +386,7 @@ async fn process_persisted_remote_im_events_individually_now(
                 agent_id: current_assistant.agent_id.clone(),
             },
             source,
-            contact.patience_seconds,
+            patience_seconds,
             effective_remote_im_contact_response_strategy(&contact) == "smart_judge",
             force_memory_prompt_snapshot,
             dispatch_policy,

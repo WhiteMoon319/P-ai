@@ -9,10 +9,12 @@ struct RemoteImGroupReplyGate {
 }
 
 fn effective_remote_im_group_reply_pacing(
+    state: &AppState,
     contact: &RemoteImContact,
 ) -> RemoteImGroupReplyPacing {
     let defaults = RemoteImGroupReplyPacing::default();
-    let mut pacing = contact.group_reply_pacing.clone();
+    let mut pacing = remote_im_channel_behavior_settings_for_contact(state, contact)
+        .group_reply_pacing;
     pacing.assistant_debounce_seconds = pacing.assistant_debounce_seconds.max(1);
     pacing.secretary_inspection_seconds = pacing.secretary_inspection_seconds.max(1);
     pacing.inspection_jitter_ratio = if pacing.inspection_jitter_ratio.is_finite() {
@@ -147,7 +149,7 @@ fn remote_im_group_reply_gate(
         .remote_im_contact_checkpoints
         .iter()
         .find(|item| item.contact_id == contact.id);
-    let pacing = effective_remote_im_group_reply_pacing(contact);
+    let pacing = effective_remote_im_group_reply_pacing(state, contact);
     let now = now_utc();
     let energy = remote_im_group_energy_at(checkpoint, &pacing, now);
     if let Some(last_success_at) = checkpoint
@@ -247,7 +249,7 @@ fn remote_im_apply_inbound_group_energy(
     sender_id: &str,
     text: &str,
 ) -> Result<(), String> {
-    let pacing = effective_remote_im_group_reply_pacing(contact);
+    let pacing = effective_remote_im_group_reply_pacing(state, contact);
     let delta = remote_im_group_inbound_phrase_delta(text, &pacing);
     if delta.abs() <= f64::EPSILON {
         return Ok(());
@@ -411,7 +413,7 @@ fn remote_im_persist_group_reply_settlement(
         let mut energy_applied = energy_already_applied;
         if !energy_already_applied {
             if let Some(final_text) = settlement.final_text.as_deref() {
-                let pacing = effective_remote_im_group_reply_pacing(contact);
+                let pacing = effective_remote_im_group_reply_pacing(state, contact);
                 let before = remote_im_group_energy_at(Some(checkpoint), &pacing, now);
                 let char_count = effective_remote_im_group_reply_char_count(final_text) as f64;
                 let cost = pacing.base_reply_energy_cost

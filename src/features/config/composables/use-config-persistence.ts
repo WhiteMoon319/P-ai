@@ -171,6 +171,10 @@ function mapRemoteImChannel(item: unknown): RemoteImChannelConfig {
     showToolCalls: !!(item as { showToolCalls?: unknown })?.showToolCalls,
     filterMarkdown: !!(item as { filterMarkdown?: unknown })?.filterMarkdown,
     allowSendFiles: !!(item as { allowSendFiles?: unknown })?.allowSendFiles,
+    behaviorSettings: (item as { behaviorSettings?: unknown })?.behaviorSettings
+      && typeof (item as { behaviorSettings?: unknown }).behaviorSettings === "object"
+      ? { ...((item as { behaviorSettings?: Record<string, unknown> }).behaviorSettings || {}) } as RemoteImChannelConfig["behaviorSettings"]
+      : undefined,
   };
 }
 

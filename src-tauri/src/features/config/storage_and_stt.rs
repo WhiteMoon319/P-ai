@@ -884,6 +884,7 @@ fn normalize_remote_im_channels(config: &mut AppConfig) {
             show_tool_calls: raw.show_tool_calls,
             filter_markdown: raw.filter_markdown,
             allow_send_files: raw.allow_send_files,
+            behavior_settings: raw.behavior_settings.clone(),
         });
     }
     config.remote_im_channels = out;

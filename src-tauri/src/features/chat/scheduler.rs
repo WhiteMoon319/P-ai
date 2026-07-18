@@ -998,7 +998,8 @@ async fn process_conversation_batch(
                     remote_im_schedule_presence_timeout(
                         state,
                         &contact.id,
-                        contact.patience_seconds,
+                        remote_im_channel_behavior_settings_for_contact(state, &contact)
+                            .patience_seconds,
                     )?;
                     let trigger_message = conversation_service_v2()
                         .get_message_by_id_for_frontend_display_only(
@@ -1016,7 +1017,8 @@ async fn process_conversation_batch(
                             agent_id: current_assistant.agent_id.clone(),
                         },
                         source,
-                        contact.patience_seconds,
+                        remote_im_channel_behavior_settings_for_contact(state, &contact)
+                            .patience_seconds,
                         effective_remote_im_contact_response_strategy(&contact) == "smart_judge",
                         false,
                         None,

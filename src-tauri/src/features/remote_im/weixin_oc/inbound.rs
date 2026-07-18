@@ -297,6 +297,7 @@ mod weixin_oc_inbound_tests {
             show_tool_calls: false,
             filter_markdown: false,
             allow_send_files: false,
+            behavior_settings: RemoteImChannelBehaviorSettings::default(),
         };
 
         let display_name = weixin_oc_contact_display_name(&runtime, &channel, "wxid_123");

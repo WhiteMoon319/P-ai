@@ -1,4 +1,8 @@
-import type { RemoteImContact, RemoteImGroupReplyPacing } from "../../../../../types/app";
+import type {
+  RemoteImChannelBehaviorSettings,
+  RemoteImContact,
+  RemoteImGroupReplyPacing,
+} from "../../../../../types/app";
 
 export const DEFAULT_REMOTE_IM_GROUP_REPLY_PACING: RemoteImGroupReplyPacing = {
   assistantDebounceSeconds: 1,
@@ -16,6 +20,23 @@ export const DEFAULT_REMOTE_IM_GROUP_REPLY_PACING: RemoteImGroupReplyPacing = {
   normalReplyMaxChars: 20,
   focusReplyMaxChars: 200,
   focusInstructions: [],
+};
+
+export const DEFAULT_REMOTE_IM_CHANNEL_BEHAVIOR_SETTINGS: RemoteImChannelBehaviorSettings = {
+  blockedMessagePrefixes: ["#", "/", "%"],
+  muteKeywords: ["闭嘴"],
+  unmuteKeywords: ["张嘴"],
+  patienceSeconds: 60,
+  muteDurationSeconds: 600,
+  activationCooldownSeconds: 0,
+  groupReplyPacing: DEFAULT_REMOTE_IM_GROUP_REPLY_PACING,
+};
+
+type PartialChannelBehaviorSettings = Omit<
+  Partial<RemoteImChannelBehaviorSettings>,
+  "groupReplyPacing"
+> & {
+  groupReplyPacing?: Partial<RemoteImGroupReplyPacing> | null;
 };
 
 export function normalizeGroupReplyPacing(
@@ -43,6 +64,35 @@ export function normalizeGroupReplyPacing(
     focusReplyMaxChars: Math.max(1, Math.round(numberValue(value?.focusReplyMaxChars, defaults.focusReplyMaxChars))),
     focusInstructions: Array.isArray(value?.focusInstructions) ? [...value.focusInstructions] : [],
   };
+}
+
+export function normalizeChannelBehaviorSettings(
+  value?: PartialChannelBehaviorSettings | null,
+): RemoteImChannelBehaviorSettings {
+  const defaults = DEFAULT_REMOTE_IM_CHANNEL_BEHAVIOR_SETTINGS;
+  const numberValue = (candidate: unknown, fallback: number) => {
+    const parsed = Number(candidate);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  const normalizeList = (candidate: unknown, fallback: string[]) => {
+    const values = Array.isArray(candidate) ? candidate : fallback;
+    return parseSpaceSeparatedList(values.map((item) => String(item || "")).join(" "));
+  };
+  return {
+    blockedMessagePrefixes: normalizeList(value?.blockedMessagePrefixes, defaults.blockedMessagePrefixes),
+    muteKeywords: normalizeList(value?.muteKeywords, defaults.muteKeywords),
+    unmuteKeywords: normalizeList(value?.unmuteKeywords, defaults.unmuteKeywords),
+    patienceSeconds: Math.max(0, Math.round(numberValue(value?.patienceSeconds, defaults.patienceSeconds))),
+    muteDurationSeconds: Math.max(0, Math.round(numberValue(value?.muteDurationSeconds, defaults.muteDurationSeconds))),
+    activationCooldownSeconds: Math.max(0, Math.round(numberValue(value?.activationCooldownSeconds, defaults.activationCooldownSeconds))),
+    groupReplyPacing: normalizeGroupReplyPacing(value?.groupReplyPacing),
+  };
+}
+
+export function cloneChannelBehaviorSettings(
+  value?: PartialChannelBehaviorSettings | null,
+): RemoteImChannelBehaviorSettings {
+  return normalizeChannelBehaviorSettings(value);
 }
 
 export function parseSpaceSeparatedList(raw: string): string[] {

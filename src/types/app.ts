@@ -331,6 +331,7 @@ export type RemoteImChannelConfig = {
   showToolCalls: boolean;
   filterMarkdown: boolean;
   allowSendFiles: boolean;
+  behaviorSettings?: RemoteImChannelBehaviorSettings;
 };
 
 export type RemoteImGroupReplyPacing = {
@@ -349,6 +350,16 @@ export type RemoteImGroupReplyPacing = {
   normalReplyMaxChars: number;
   focusReplyMaxChars: number;
   focusInstructions: string[];
+};
+
+export type RemoteImChannelBehaviorSettings = {
+  blockedMessagePrefixes: string[];
+  muteKeywords: string[];
+  unmuteKeywords: string[];
+  patienceSeconds: number;
+  muteDurationSeconds: number;
+  activationCooldownSeconds: number;
+  groupReplyPacing: RemoteImGroupReplyPacing;
 };
 
 export type RemoteImContact = {

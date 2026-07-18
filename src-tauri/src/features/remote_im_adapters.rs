@@ -1601,6 +1601,7 @@ mod remote_im_adapter_tests {
             show_tool_calls: false,
             filter_markdown: false,
             allow_send_files: false,
+            behavior_settings: RemoteImChannelBehaviorSettings::default(),
         }
     }
 

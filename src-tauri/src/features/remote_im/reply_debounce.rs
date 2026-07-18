@@ -46,10 +46,14 @@ fn remote_im_event_hits_wake(contact: &RemoteImContact, event: &ChatPendingEvent
     remote_im_should_activate_while_away(contact, &render_message_content_for_model(message)).0
 }
 
-fn remote_im_event_hits_focus(contact: &RemoteImContact, event: &ChatPendingEvent) -> bool {
+fn remote_im_event_hits_focus(
+    state: &AppState,
+    contact: &RemoteImContact,
+    event: &ChatPendingEvent,
+) -> bool {
     remote_im_event_latest_user_message(event)
         .map(render_message_content_for_model)
-        .map(|text| remote_im_group_reply_focus_matches(contact, &text))
+        .map(|text| remote_im_group_reply_focus_matches(state, contact, &text))
         .unwrap_or(false)
 }
 
@@ -83,7 +87,7 @@ fn remote_im_group_reply_reconfigure_contact(
     contact: &RemoteImContact,
 ) -> Result<(), String> {
     let key = remote_im_group_reply_state_key(state, &contact.id);
-    let pacing = effective_remote_im_group_reply_pacing(contact);
+    let pacing = effective_remote_im_group_reply_pacing(state, contact);
     let mut store = lock_remote_im_group_reply_state_store();
     let Some(existing) = store.by_contact.get(&key).cloned() else {
         return Ok(());
@@ -193,7 +197,7 @@ fn remote_im_group_reply_reschedule_non_mention(
     reason: &str,
 ) {
     let key = remote_im_group_reply_state_key(state, &contact.id);
-    let pacing = effective_remote_im_group_reply_pacing(contact);
+    let pacing = effective_remote_im_group_reply_pacing(state, contact);
     let delay = remote_im_group_reply_inspection_delay(
         &pacing,
         remote_im_group_reply_random_sample(),
@@ -303,7 +307,7 @@ fn remote_im_group_reply_advance_after_settlement(
     generation: u64,
 ) {
     let key = remote_im_group_reply_state_key(state, &contact.id);
-    let pacing = effective_remote_im_group_reply_pacing(contact);
+    let pacing = effective_remote_im_group_reply_pacing(state, contact);
     let delay = remote_im_group_reply_inspection_delay(
         &pacing,
         remote_im_group_reply_random_sample(),
@@ -775,8 +779,8 @@ fn observe_remote_im_persisted_event(
         }
     }
     let hits_mention = remote_im_event_hits_wake(contact, event);
-    let hits_focus = remote_im_event_hits_focus(contact, event);
-    let pacing = effective_remote_im_group_reply_pacing(contact);
+    let hits_focus = remote_im_event_hits_focus(state, contact, event);
+    let pacing = effective_remote_im_group_reply_pacing(state, contact);
     let key = remote_im_group_reply_state_key(state, &contact.id);
     let mut action = None;
     {

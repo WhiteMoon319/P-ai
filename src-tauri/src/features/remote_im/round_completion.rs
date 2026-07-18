@@ -200,7 +200,10 @@ fn remote_im_finalize_round_completion(
                     let elapsed_seconds = parse_iso(last_success_at)
                         .map(|last| (now_utc() - last).whole_seconds().max(0) as u64)
                         .unwrap_or_default();
-                    if elapsed_seconds > contact.patience_seconds {
+                    if elapsed_seconds
+                        > remote_im_channel_behavior_settings_for_contact(state, contact)
+                            .patience_seconds
+                    {
                         runtime.presence_state = RemoteImPresenceState::Away;
                     } else {
                         runtime.presence_state = RemoteImPresenceState::Present;

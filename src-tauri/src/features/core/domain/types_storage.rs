@@ -326,6 +326,43 @@ impl Default for RemoteImGroupReplyPacing {
     }
 }
 
+/// 渠道统一的静态行为参数。
+///
+/// 联系人仅保留路由、应答策略和运行时账本；这里的值是该渠道全部联系人的
+/// 消息过滤、闭嘴、在场和群聊巡检策略的唯一真值。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteImChannelBehaviorSettings {
+    #[serde(default = "default_remote_im_contact_blocked_message_prefixes")]
+    blocked_message_prefixes: Vec<String>,
+    #[serde(default = "default_remote_im_contact_mute_keywords")]
+    mute_keywords: Vec<String>,
+    #[serde(default = "default_remote_im_contact_unmute_keywords")]
+    unmute_keywords: Vec<String>,
+    #[serde(default = "default_remote_im_contact_patience_seconds")]
+    patience_seconds: u64,
+    #[serde(default = "default_remote_im_contact_mute_duration_seconds")]
+    mute_duration_seconds: u64,
+    #[serde(default)]
+    activation_cooldown_seconds: u64,
+    #[serde(default)]
+    group_reply_pacing: RemoteImGroupReplyPacing,
+}
+
+impl Default for RemoteImChannelBehaviorSettings {
+    fn default() -> Self {
+        Self {
+            blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
+            mute_keywords: default_remote_im_contact_mute_keywords(),
+            unmute_keywords: default_remote_im_contact_unmute_keywords(),
+            patience_seconds: default_remote_im_contact_patience_seconds(),
+            mute_duration_seconds: default_remote_im_contact_mute_duration_seconds(),
+            activation_cooldown_seconds: 0,
+            group_reply_pacing: RemoteImGroupReplyPacing::default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct RemoteImGroupReplyDeliveryMarker {

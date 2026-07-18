@@ -380,6 +380,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
         showToolCalls: !!item.showToolCalls,
         filterMarkdown: !!item.filterMarkdown,
         allowSendFiles: !!item.allowSendFiles,
+        behaviorSettings: item.behaviorSettings ? { ...item.behaviorSettings } : undefined,
       })),
       apiProviders: (options.config.apiProviders || []).map((provider) => ({
         id: provider.id,

@@ -1,5 +1,9 @@
-fn remote_im_group_reply_focus_matches(contact: &RemoteImContact, text: &str) -> bool {
-    let pacing = effective_remote_im_group_reply_pacing(contact);
+fn remote_im_group_reply_focus_matches(
+    state: &AppState,
+    contact: &RemoteImContact,
+    text: &str,
+) -> bool {
+    let pacing = effective_remote_im_group_reply_pacing(state, contact);
     let normalized = text.to_lowercase();
     pacing
         .focus_instructions

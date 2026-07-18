@@ -12,6 +12,7 @@
             show_tool_calls: false,
             filter_markdown: false,
             allow_send_files: false,
+            behavior_settings: RemoteImChannelBehaviorSettings::default(),
         };
         let mut runtime = RuntimeStateFile::default();
         let input = RemoteImEnqueueInput {
@@ -213,6 +214,7 @@
             show_tool_calls: false,
             filter_markdown: false,
             allow_send_files: false,
+            behavior_settings: RemoteImChannelBehaviorSettings::default(),
         };
         assert!(!remote_im_resolve_inbound_activate(&channel, None));
         assert!(remote_im_resolve_inbound_activate(&channel, Some(true)));
@@ -1375,6 +1377,26 @@
         }
     }
 
+    fn remote_im_test_channel(
+        id: &str,
+        behavior_settings: RemoteImChannelBehaviorSettings,
+    ) -> RemoteImChannelConfig {
+        RemoteImChannelConfig {
+            id: id.to_string(),
+            name: id.to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            enabled: true,
+            credentials: serde_json::json!({}),
+            activate_assistant: true,
+            receive_files: true,
+            streaming_send: false,
+            show_tool_calls: false,
+            filter_markdown: false,
+            allow_send_files: false,
+            behavior_settings,
+        }
+    }
+
     #[test]
     fn remote_image_ingress_should_persist_original_bytes_as_one_canonical_absolute_path() {
         let state = remote_im_test_state();
@@ -2031,6 +2053,7 @@
             show_tool_calls: false,
             filter_markdown: false,
             allow_send_files: false,
+            behavior_settings: RemoteImChannelBehaviorSettings::default(),
         };
         let config = AppConfig {
             remote_im_channels: vec![channel],
@@ -2087,7 +2110,7 @@
     }
 
     #[test]
-    fn remote_im_blocked_message_prefixes_update_should_persist_custom_or_empty_list() {
+    fn legacy_contact_prefix_update_should_not_override_channel_behavior() {
         let state = remote_im_test_state();
         let contact = remote_im_test_contact("contact-prefixes", "conversation-prefixes");
         let mut runtime = RuntimeStateFile::default();
@@ -2101,8 +2124,11 @@
                 blocked_message_prefixes: vec!["! @".to_string(), " ! ".to_string(), "".to_string()],
             },
         )
-        .expect("update prefixes");
-        assert_eq!(updated.blocked_message_prefixes, vec!["!", "@"]);
+        .expect("legacy prefix update should be tolerated");
+        assert_eq!(
+            updated.blocked_message_prefixes,
+            default_remote_im_contact_blocked_message_prefixes()
+        );
 
         let restored = state_read_runtime_state_cached(&state)
             .expect("read runtime")
@@ -2110,7 +2136,10 @@
             .into_iter()
             .find(|item| item.id == "contact-prefixes")
             .expect("contact exists");
-        assert_eq!(restored.blocked_message_prefixes, vec!["!", "@"]);
+        assert_eq!(
+            restored.blocked_message_prefixes,
+            default_remote_im_contact_blocked_message_prefixes()
+        );
 
         let cleared = remote_im_update_contact_blocked_message_prefixes_inner(
             &state,
@@ -2119,8 +2148,11 @@
                 blocked_message_prefixes: Vec::new(),
             },
         )
-        .expect("clear prefixes");
-        assert!(cleared.blocked_message_prefixes.is_empty());
+        .expect("legacy prefix clear should be tolerated");
+        assert_eq!(
+            cleared.blocked_message_prefixes,
+            default_remote_im_contact_blocked_message_prefixes()
+        );
         let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
     }
 
@@ -2163,7 +2195,7 @@
     }
 
     #[test]
-    fn remote_im_update_contact_behavior_should_validate_and_persist_atomically() {
+    fn legacy_contact_behavior_update_should_not_override_channel_behavior() {
         let state = remote_im_test_state();
         let mut contact = remote_im_test_contact("contact-behavior", "conversation-behavior");
         contact.remote_contact_type = "group".to_string();
@@ -2188,14 +2220,16 @@
                 group_reply_pacing: pacing,
             },
         )
-        .expect("update behavior");
-        assert_eq!(updated.group_reply_pacing.normal_reply_max_chars, 30);
-        assert_eq!(updated.group_reply_pacing.positive_energy_phrases, vec!["谢谢"]);
-        assert_eq!(updated.blocked_message_prefixes, vec!["#"]);
+        .expect("legacy behavior update should be tolerated");
+        assert_eq!(updated.group_reply_pacing, RemoteImGroupReplyPacing::default());
+        assert_eq!(
+            updated.blocked_message_prefixes,
+            default_remote_im_contact_blocked_message_prefixes()
+        );
 
         let mut invalid = updated.group_reply_pacing.clone();
         invalid.focus_reply_max_chars = 10;
-        let err = remote_im_update_contact_behavior_inner(
+        remote_im_update_contact_behavior_inner(
             &state,
             RemoteImContactBehaviorUpdateInput {
                 contact_id: "contact-behavior".to_string(),
@@ -2208,15 +2242,14 @@
                 group_reply_pacing: invalid,
             },
         )
-        .expect_err("invalid length relation should fail");
-        assert!(err.contains("焦点回复字数"));
+        .expect("legacy invalid behavior update should be tolerated");
         let persisted = state_read_runtime_state_cached(&state)
             .expect("read runtime")
             .remote_im_contacts
             .into_iter()
             .find(|item| item.id == "contact-behavior")
             .expect("contact exists");
-        assert_eq!(persisted.group_reply_pacing.normal_reply_max_chars, 30);
+        assert_eq!(persisted.group_reply_pacing, RemoteImGroupReplyPacing::default());
     }
 
     #[test]
@@ -2252,7 +2285,7 @@
     }
 
     #[test]
-    fn remote_im_patch_contact_settings_should_not_partially_write_invalid_patch() {
+    fn remote_im_patch_contact_settings_should_ignore_legacy_behavior_fields() {
         let state = remote_im_test_state();
         let mut contact = remote_im_test_contact("contact-patch", "conversation-patch");
         contact.remote_contact_type = "group".to_string();
@@ -2263,7 +2296,7 @@
 
         let mut invalid_pacing = RemoteImGroupReplyPacing::default();
         invalid_pacing.assistant_debounce_seconds = 0;
-        let err = remote_im_patch_contact_settings_inner(
+        let updated = remote_im_patch_contact_settings_inner(
             &state,
             RemoteImContactSettingsPatchInput {
                 contact_id: "contact-patch".to_string(),
@@ -2286,18 +2319,18 @@
                 allow_send_files: true,
             },
         )
-        .expect_err("invalid patch should fail before writing");
-        assert!(err.contains("助理防抖"));
+        .expect("legacy behavior fields should not block contact settings save");
         let persisted = state_read_runtime_state_cached(&state)
             .expect("read runtime")
             .remote_im_contacts
             .into_iter()
             .find(|item| item.id == "contact-patch")
             .expect("contact exists");
-        assert_eq!(persisted.processing_mode, "continuous");
-        assert!(persisted.allow_receive);
-        assert!(persisted.allow_send);
-        assert!(!persisted.allow_send_files);
+        assert_eq!(updated.processing_mode, "qa");
+        assert_eq!(persisted.processing_mode, "qa");
+        assert!(!persisted.allow_receive);
+        assert!(!persisted.allow_send);
+        assert!(persisted.allow_send_files);
     }
 
     #[test]
@@ -2389,7 +2422,10 @@
             Some("agent-config-degraded")
         );
         assert_eq!(updated.processing_mode, "qa");
-        assert_eq!(updated.blocked_message_prefixes, vec!["[skip]"]);
+        assert_eq!(
+            updated.blocked_message_prefixes,
+            default_remote_im_contact_blocked_message_prefixes()
+        );
         assert!(updated.allow_receive && updated.allow_send);
         assert!(updated.allow_send_files);
         let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
@@ -3190,6 +3226,7 @@
             show_tool_calls: false,
             filter_markdown: false,
             allow_send_files: false,
+            behavior_settings: RemoteImChannelBehaviorSettings::default(),
         });
         state_write_config_cached(&state, &config).expect("seed trusted config cache");
         std::fs::remove_file(&state.config_path).expect("remove config file");
@@ -4123,4 +4160,170 @@
         let key = remote_im_group_reply_state_key(&state, &contact.id);
         let store = remote_im_group_reply_state_store().lock().expect("lock group state");
         assert!(!store.by_contact.contains_key(&key));
+    }
+
+    #[test]
+    fn channel_behavior_should_be_shared_per_channel_and_ignore_legacy_contact_values() {
+        let state = remote_im_test_state();
+        let mut behavior_a = RemoteImChannelBehaviorSettings::default();
+        behavior_a.group_reply_pacing.assistant_debounce_seconds = 31;
+        behavior_a.group_reply_pacing.maximum_energy = 73.0;
+        let mut behavior_b = RemoteImChannelBehaviorSettings::default();
+        behavior_b.group_reply_pacing.assistant_debounce_seconds = 47;
+        behavior_b.group_reply_pacing.maximum_energy = 29.0;
+        state_write_config_cached(
+            &state,
+            &AppConfig {
+                remote_im_channels: vec![
+                    remote_im_test_channel("channel-a", behavior_a),
+                    remote_im_test_channel("channel-b", behavior_b),
+                ],
+                ..AppConfig::default()
+            },
+        )
+        .expect("write channel behavior config");
+
+        let mut first = remote_im_test_contact("contact-a-1", "conversation-a-1");
+        first.remote_contact_type = "group".to_string();
+        first.group_reply_pacing.assistant_debounce_seconds = 1;
+        first.group_reply_pacing.maximum_energy = 1.0;
+        let mut second = remote_im_test_contact("contact-a-2", "conversation-a-2");
+        second.remote_contact_type = "group".to_string();
+        second.group_reply_pacing.assistant_debounce_seconds = 2;
+        second.group_reply_pacing.maximum_energy = 2.0;
+        let mut other_channel = remote_im_test_contact("contact-b-1", "conversation-b-1");
+        other_channel.channel_id = "channel-b".to_string();
+        other_channel.remote_contact_type = "group".to_string();
+
+        let first_pacing = effective_remote_im_group_reply_pacing(&state, &first);
+        let second_pacing = effective_remote_im_group_reply_pacing(&state, &second);
+        let other_pacing = effective_remote_im_group_reply_pacing(&state, &other_channel);
+        assert_eq!(first_pacing.assistant_debounce_seconds, 31);
+        assert_eq!(second_pacing.assistant_debounce_seconds, 31);
+        assert_eq!(first_pacing.maximum_energy, 73.0);
+        assert_eq!(other_pacing.assistant_debounce_seconds, 47);
+        assert_eq!(other_pacing.maximum_energy, 29.0);
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn channel_behavior_energy_ledger_should_remain_contact_scoped() {
+        let state = remote_im_test_state();
+        let mut behavior = RemoteImChannelBehaviorSettings::default();
+        behavior.group_reply_pacing.positive_energy_phrases = vec!["谢谢".to_string()];
+        behavior.group_reply_pacing.positive_energy_delta = 6.0;
+        state_write_config_cached(
+            &state,
+            &AppConfig {
+                remote_im_channels: vec![remote_im_test_channel("channel-a", behavior)],
+                ..AppConfig::default()
+            },
+        )
+        .expect("write channel behavior config");
+        let mut first = remote_im_test_contact("contact-energy-a", "conversation-energy-a");
+        first.remote_contact_type = "group".to_string();
+        let mut second = remote_im_test_contact("contact-energy-b", "conversation-energy-b");
+        second.remote_contact_type = "group".to_string();
+        state_write_runtime_state_cached(
+            &state,
+            &RuntimeStateFile {
+                remote_im_contacts: vec![first.clone(), second.clone()],
+                ..RuntimeStateFile::default()
+            },
+        )
+        .expect("write contacts");
+
+        remote_im_apply_inbound_group_energy(&state, &first, "sender-a", "谢谢")
+            .expect("settle first contact energy");
+        let runtime = state_read_runtime_state_cached(&state).expect("read runtime ledger");
+        let first_checkpoint = runtime
+            .remote_im_contact_checkpoints
+            .iter()
+            .find(|item| item.contact_id == first.id)
+            .expect("first checkpoint");
+        assert!(first_checkpoint.energy.is_some());
+        assert!(!runtime
+            .remote_im_contact_checkpoints
+            .iter()
+            .any(|item| item.contact_id == second.id));
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn unreadable_channel_behavior_config_should_fall_back_without_interrupting_group_processing() {
+        let state = remote_im_test_state();
+        let mut contact = remote_im_test_contact("contact-fallback", "conversation-fallback");
+        contact.remote_contact_type = "group".to_string();
+        contact.group_reply_pacing.maximum_energy = 1.0;
+        let pacing = effective_remote_im_group_reply_pacing(&state, &contact);
+        assert_eq!(pacing, RemoteImGroupReplyPacing::default());
+        assert!(!remote_im_group_reply_focus_matches(&state, &contact, "任意文本"));
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn remote_im_channel_behavior_save_should_invalidate_scheduled_group_generation() {
+        let state = remote_im_test_state();
+        let mut behavior = RemoteImChannelBehaviorSettings::default();
+        behavior.group_reply_pacing.assistant_debounce_seconds = 3600;
+        behavior.group_reply_pacing.secretary_inspection_seconds = 3600;
+        state_write_config_cached(
+            &state,
+            &AppConfig {
+                remote_im_channels: vec![remote_im_test_channel("channel-a", behavior)],
+                ..AppConfig::default()
+            },
+        )
+        .expect("write channel behavior config");
+        let mut contact = remote_im_test_contact("contact-reconfigure", "conversation-reconfigure");
+        contact.remote_contact_type = "group".to_string();
+        state_write_runtime_state_cached(
+            &state,
+            &RuntimeStateFile {
+                remote_im_contacts: vec![contact.clone()],
+                ..RuntimeStateFile::default()
+            },
+        )
+        .expect("write contact");
+        let mut message = remote_im_test_group_user_message("user-a");
+        message.id = "message-reconfigure".to_string();
+        let event = create_pending_event(
+            "event-reconfigure".to_string(),
+            "conversation-reconfigure".to_string(),
+            vec![message],
+            true,
+            ChatSessionInfo {
+                department_id: "department-a".to_string(),
+                agent_id: "agent-a".to_string(),
+            },
+            RemoteImMessageSource {
+                channel_id: "channel-a".to_string(),
+                platform: RemoteImPlatform::OnebotV11,
+                im_name: "QQ".to_string(),
+                remote_contact_type: "group".to_string(),
+                remote_contact_id: "group-reconfigure".to_string(),
+                remote_contact_name: "重排群".to_string(),
+                sender_id: "user-a".to_string(),
+                sender_name: "用户A".to_string(),
+                sender_avatar_url: None,
+                platform_message_id: None,
+            },
+        );
+        observe_remote_im_persisted_event(&state, &contact, &event);
+        let key = remote_im_group_reply_state_key(&state, &contact.id);
+        let previous_generation = lock_remote_im_group_reply_state_store()
+            .by_contact
+            .get(&key)
+            .map(|entry| entry.generation)
+            .expect("scheduled group state");
+
+        let result = remote_im_reconfigure_channel_behavior_inner(&state, "channel-a");
+        assert_eq!(result.reconfigured_contacts, 1);
+        assert_eq!(result.skipped_contacts, 0);
+        let mut store = lock_remote_im_group_reply_state_store();
+        let reconfigured = store.by_contact.get(&key).expect("reconfigured group state");
+        assert!(reconfigured.generation > previous_generation);
+        assert_eq!(reconfigured.phase, RemoteImGroupReplyPhase::NonMentionScheduled);
+        store.by_contact.remove(&key);
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
     }

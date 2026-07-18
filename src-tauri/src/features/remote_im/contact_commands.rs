@@ -35,6 +35,17 @@ fn remote_im_mutate_contact<T>(
     })
 }
 
+fn remote_im_get_contact_by_id(
+    state: &AppState,
+    contact_id: &str,
+) -> Result<RemoteImContact, String> {
+    state_read_runtime_state_cached(state)?
+        .remote_im_contacts
+        .into_iter()
+        .find(|contact| contact.id == contact_id)
+        .ok_or_else(|| format!("未找到远程联系人：{contact_id}"))
+}
+
 #[derive(Clone)]
 struct RemoteImContactBindingSnapshot {
     bound_department_id: Option<String>,
@@ -358,11 +369,12 @@ fn remote_im_update_contact_blocked_message_prefixes_inner(
     state: &AppState,
     input: RemoteImContactBlockedMessagePrefixesUpdateInput,
 ) -> Result<RemoteImContact, String> {
-    remote_im_mutate_contact(state, &input.contact_id, |contact| {
-        contact.blocked_message_prefixes =
-            normalize_contact_blocked_message_prefixes(&input.blocked_message_prefixes);
-        Ok(contact.clone())
-    })
+    let _ = input.blocked_message_prefixes;
+    runtime_log_warn(format!(
+        "[远程IM] 已忽略旧联系人消息头过滤保存，请改用渠道统一行为设置，contact_id={}",
+        input.contact_id
+    ));
+    remote_im_get_contact_by_id(state, &input.contact_id)
 }
 
 #[tauri::command]
@@ -373,87 +385,16 @@ fn remote_im_update_contact_blocked_message_prefixes(
     remote_im_update_contact_blocked_message_prefixes_inner(state.inner(), input)
 }
 
-fn validate_remote_im_group_reply_pacing(
-    pacing: &RemoteImGroupReplyPacing,
-) -> Result<(), String> {
-    if pacing.assistant_debounce_seconds < 1 {
-        return Err("助理防抖至少为 1 秒".to_string());
-    }
-    if pacing.secretary_inspection_seconds < 1 {
-        return Err("秘书巡检周期至少为 1 秒".to_string());
-    }
-    if !pacing.inspection_jitter_ratio.is_finite()
-        || !(0.0..=1.0).contains(&pacing.inspection_jitter_ratio)
-    {
-        return Err("巡检波动比例必须在 0 到 1 之间".to_string());
-    }
-    let non_negative = [
-        ("最大能量", pacing.maximum_energy),
-        ("基础发言消耗", pacing.base_reply_energy_cost),
-        ("每字消耗", pacing.energy_cost_per_character),
-        ("每秒回能", pacing.energy_recovery_per_second),
-        ("正面词回能", pacing.positive_energy_delta),
-    ];
-    for (label, value) in non_negative {
-        if !value.is_finite() || value < 0.0 {
-            return Err(format!("{label}必须是非负有限数"));
-        }
-    }
-    if pacing.maximum_energy <= 0.0 {
-        return Err("最大能量必须大于 0".to_string());
-    }
-    if !pacing.negative_energy_delta.is_finite() || pacing.negative_energy_delta > 0.0 {
-        return Err("负面词能量变化必须是非正有限数".to_string());
-    }
-    if pacing.normal_reply_max_chars == 0 {
-        return Err("常规回复字数必须大于 0".to_string());
-    }
-    if pacing.focus_reply_max_chars < pacing.normal_reply_max_chars {
-        return Err("焦点回复字数不能小于常规回复字数".to_string());
-    }
-    Ok(())
-}
-
-fn normalize_remote_im_group_reply_pacing_lists(
-    mut pacing: RemoteImGroupReplyPacing,
-) -> RemoteImGroupReplyPacing {
-    pacing.positive_energy_phrases =
-        normalize_contact_keyword_list(&pacing.positive_energy_phrases);
-    pacing.negative_energy_phrases =
-        normalize_contact_keyword_list(&pacing.negative_energy_phrases);
-    pacing.focus_instructions = normalize_contact_keyword_list(&pacing.focus_instructions);
-    pacing
-}
-
 fn remote_im_update_contact_behavior_inner(
     state: &AppState,
     input: RemoteImContactBehaviorUpdateInput,
 ) -> Result<RemoteImContact, String> {
-    let pacing = normalize_remote_im_group_reply_pacing_lists(input.group_reply_pacing);
-    let output = remote_im_mutate_contact(state, &input.contact_id, |contact| {
-        let is_private = remote_im_contact_is_private(contact);
-        if !is_private {
-            validate_remote_im_group_reply_pacing(&pacing)?;
-        }
-        contact.mute_keywords = normalize_contact_keyword_list(&input.mute_keywords);
-        contact.unmute_keywords = normalize_contact_keyword_list(&input.unmute_keywords);
-        contact.patience_seconds = input.patience_seconds;
-        contact.mute_duration_seconds = input.mute_duration_seconds;
-        contact.activation_cooldown_seconds = input.activation_cooldown_seconds;
-        contact.blocked_message_prefixes =
-            normalize_contact_blocked_message_prefixes(&input.blocked_message_prefixes);
-        if !is_private {
-            contact.group_reply_pacing = pacing;
-        }
-        Ok(contact.clone())
-    })?;
-    if let Err(err) = remote_im_group_reply_reconfigure_contact(state, &output) {
-        runtime_log_warn(format!(
-            "[群聊巡检] 配置保存后重排状态失败，contact_id={}，error={}，原批次保留在历史中并等待下一条消息恢复",
-            output.id, err
-        ));
-    }
-    Ok(output)
+    let contact_id = input.contact_id;
+    runtime_log_warn(format!(
+        "[远程IM] 已忽略旧联系人行为保存，请改用渠道统一行为设置，contact_id={}",
+        contact_id
+    ));
+    remote_im_get_contact_by_id(state, &contact_id)
 }
 
 #[tauri::command]
@@ -462,6 +403,76 @@ fn remote_im_update_contact_behavior(
     state: State<'_, AppState>,
 ) -> Result<RemoteImContact, String> {
     remote_im_update_contact_behavior_inner(state.inner(), input)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteImChannelBehaviorReconfigureResult {
+    reconfigured_contacts: usize,
+    skipped_contacts: usize,
+}
+
+fn remote_im_reconfigure_channel_behavior_inner(
+    state: &AppState,
+    channel_id: &str,
+) -> RemoteImChannelBehaviorReconfigureResult {
+    let channel_id = channel_id.trim();
+    if channel_id.is_empty() {
+        runtime_log_warn("[群聊巡检] 渠道行为重排跳过，原因=渠道ID为空".to_string());
+        return RemoteImChannelBehaviorReconfigureResult {
+            reconfigured_contacts: 0,
+            skipped_contacts: 0,
+        };
+    }
+    let runtime = match state_read_runtime_state_cached(state) {
+        Ok(runtime) => runtime,
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[群聊巡检] 渠道行为已保存，但联系人快照读取失败，跳过本次重排并保持业务继续，channel_id={}，error={}",
+                channel_id, err
+            ));
+            return RemoteImChannelBehaviorReconfigureResult {
+                reconfigured_contacts: 0,
+                skipped_contacts: 0,
+            };
+        }
+    };
+    let mut reconfigured_contacts = 0usize;
+    let mut skipped_contacts = 0usize;
+    for contact in runtime.remote_im_contacts.iter().filter(|contact| {
+        contact.channel_id == channel_id
+            && contact
+                .remote_contact_type
+                .trim()
+                .eq_ignore_ascii_case("group")
+    }) {
+        match remote_im_group_reply_reconfigure_contact(state, contact) {
+            Ok(()) => reconfigured_contacts = reconfigured_contacts.saturating_add(1),
+            Err(err) => {
+                skipped_contacts = skipped_contacts.saturating_add(1);
+                runtime_log_warn(format!(
+                    "[群聊巡检] 渠道行为保存后单联系人重排降级，channel_id={}，contact_id={}，error={}",
+                    channel_id, contact.id, err
+                ));
+            }
+        }
+    }
+    runtime_log_info(format!(
+        "[群聊巡检] 渠道行为重排完成，channel_id={}，reconfigured_contacts={}，skipped_contacts={}",
+        channel_id, reconfigured_contacts, skipped_contacts
+    ));
+    RemoteImChannelBehaviorReconfigureResult {
+        reconfigured_contacts,
+        skipped_contacts,
+    }
+}
+
+#[tauri::command]
+fn remote_im_reconfigure_channel_behavior(
+    channel_id: String,
+    state: State<'_, AppState>,
+) -> RemoteImChannelBehaviorReconfigureResult {
+    remote_im_reconfigure_channel_behavior_inner(state.inner(), &channel_id)
 }
 
 fn remote_im_patch_contact_settings_inner(
@@ -517,12 +528,8 @@ fn remote_im_patch_contact_settings_inner(
     } else {
         None
     };
-    let pacing = normalize_remote_im_group_reply_pacing_lists(input.group_reply_pacing);
     let output = remote_im_mutate_contact(state, &input.contact_id, |contact| {
         let is_private = remote_im_contact_is_private(contact);
-        if !is_private {
-            validate_remote_im_group_reply_pacing(&pacing)?;
-        }
         contact.bound_department_id = next_pair
             .as_ref()
             .map(|(department_id, _)| department_id.clone());
@@ -532,13 +539,6 @@ fn remote_im_patch_contact_settings_inner(
             .map(|snapshot| remote_im_resolve_effective_route_mode(&snapshot.config, contact))
             .unwrap_or_else(|| "dedicated_contact_conversation".to_string());
         contact.processing_mode = normalize_contact_processing_mode(&input.processing_mode);
-        contact.blocked_message_prefixes =
-            normalize_contact_blocked_message_prefixes(&input.blocked_message_prefixes);
-        contact.mute_keywords = normalize_contact_keyword_list(&input.mute_keywords);
-        contact.unmute_keywords = normalize_contact_keyword_list(&input.unmute_keywords);
-        contact.patience_seconds = input.patience_seconds;
-        contact.mute_duration_seconds = input.mute_duration_seconds;
-        contact.activation_cooldown_seconds = input.activation_cooldown_seconds;
         if is_private {
             contact.activation_mode = "always".to_string();
             contact.activation_keywords.clear();
@@ -552,7 +552,6 @@ fn remote_im_patch_contact_settings_inner(
                 normalize_contact_response_strategy(&input.response_strategy);
             contact.response_guidance =
                 normalize_contact_response_guidance(&input.response_guidance);
-            contact.group_reply_pacing = pacing;
         }
         let communication_enabled = input.allow_receive || input.allow_send;
         contact.allow_receive = communication_enabled;
@@ -603,12 +602,6 @@ fn remote_im_patch_contact_settings_inner(
             )),
         }
     }
-    if let Err(err) = remote_im_group_reply_reconfigure_contact(state, &output) {
-        runtime_log_warn(format!(
-            "[群聊巡检] 联系人设置已保存，运行中批次重排降级，contact_id={}，error={}",
-            output.id, err
-        ));
-    }
     Ok(output)
 }
 
@@ -640,11 +633,6 @@ fn remote_im_update_contact_activation_inner(
         contact.activation_mode = normalize_contact_activation_mode(&input.activation_mode);
         contact.activation_keywords =
             normalize_contact_activation_keywords(&input.activation_keywords);
-        contact.mute_keywords = normalize_contact_keyword_list(&input.mute_keywords);
-        contact.unmute_keywords = normalize_contact_keyword_list(&input.unmute_keywords);
-        contact.patience_seconds = input.patience_seconds;
-        contact.mute_duration_seconds = input.mute_duration_seconds;
-        contact.activation_cooldown_seconds = input.activation_cooldown_seconds;
         if remote_im_contact_is_private(contact) {
             contact.response_strategy = "always_reply".to_string();
         } else {
@@ -1138,9 +1126,8 @@ pub(crate) fn remote_im_enqueue_message_internal(
     let attachments = validated.attachments;
 
     let existing_contact = remote_im_find_contact_for_inbound(&runtime, &input);
-    let blocked_prefixes = existing_contact
-        .map(|contact| contact.blocked_message_prefixes.clone())
-        .unwrap_or_else(default_remote_im_contact_blocked_message_prefixes);
+    let channel_behavior = remote_im_channel_behavior_settings_from_channel(&channel);
+    let blocked_prefixes = channel_behavior.blocked_message_prefixes;
     if let Some(prefix) = remote_im_blocked_inbound_message_prefix(&text, &blocked_prefixes) {
         let contact_id = existing_contact
             .map(|contact| contact.id.clone())
@@ -1198,7 +1185,7 @@ pub(crate) fn remote_im_enqueue_message_internal(
                     && !contact.allow_receive
                     && contact.activation_mode == "never"
                     && contact.activation_keywords.is_empty()
-                    && contact.activation_cooldown_seconds == 0;
+                    && channel_behavior.activation_cooldown_seconds == 0;
                 if looks_like_default_contact {
                     contact.allow_send = true;
                     contact.allow_receive = true;

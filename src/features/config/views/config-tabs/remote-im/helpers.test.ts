@@ -1,12 +1,33 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_REMOTE_IM_CHANNEL_BEHAVIOR_SETTINGS,
   DEFAULT_REMOTE_IM_GROUP_REPLY_PACING,
+  cloneChannelBehaviorSettings,
+  normalizeChannelBehaviorSettings,
   normalizeGroupReplyPacing,
   parseSpaceSeparatedList,
   resolveBehaviorDraftSave,
 } from "./helpers";
 
 describe("remote IM group behavior helpers", () => {
+  it("uses channel defaults as the only source for legacy or incomplete channel behavior", () => {
+    expect(normalizeChannelBehaviorSettings(undefined)).toEqual(DEFAULT_REMOTE_IM_CHANNEL_BEHAVIOR_SETTINGS);
+    const normalized = normalizeChannelBehaviorSettings({
+      blockedMessagePrefixes: ["!", "!", " "],
+      patienceSeconds: -3,
+      muteDurationSeconds: Number.NaN,
+      groupReplyPacing: { assistantDebounceSeconds: 0 },
+    });
+    expect(normalized.blockedMessagePrefixes).toEqual(["!"]);
+    expect(normalized.patienceSeconds).toBe(0);
+    expect(normalized.muteDurationSeconds).toBe(600);
+    expect(normalized.groupReplyPacing.assistantDebounceSeconds).toBe(1);
+
+    const cloned = cloneChannelBehaviorSettings(normalized);
+    cloned.muteKeywords.push("新词");
+    expect(normalized.muteKeywords).not.toContain("新词");
+  });
+
   it("defaults legacy contacts and repairs invalid numeric values", () => {
     expect(normalizeGroupReplyPacing(undefined)).toEqual(DEFAULT_REMOTE_IM_GROUP_REPLY_PACING);
     const normalized = normalizeGroupReplyPacing({

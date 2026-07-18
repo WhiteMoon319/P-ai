@@ -597,7 +597,11 @@ fn remote_im_reschedule_presence_timeout_after_delegate(
         .iter()
         .find(|contact| contact.id == contact_id)
         .ok_or_else(|| format!("远程联系人不存在：{contact_id}"))?;
-    remote_im_schedule_presence_timeout(state, contact_id, contact.patience_seconds)
+    remote_im_schedule_presence_timeout(
+        state,
+        contact_id,
+        remote_im_channel_behavior_settings_for_contact(state, contact).patience_seconds,
+    )
 }
 
 fn abort_remote_im_reply_delegate(

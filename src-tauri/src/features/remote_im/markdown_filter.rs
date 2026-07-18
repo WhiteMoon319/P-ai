@@ -302,6 +302,7 @@ console.log(result);
             show_tool_calls: false,
             filter_markdown: true,
             allow_send_files: false,
+            behavior_settings: RemoteImChannelBehaviorSettings::default(),
         };
         let content = vec![
             serde_json::json!({ "type": "text", "text": "**hello**" }),

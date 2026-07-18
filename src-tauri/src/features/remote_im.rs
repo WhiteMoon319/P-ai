@@ -516,6 +516,52 @@ fn normalize_contact_response_guidance(value: &str) -> String {
     }
 }
 
+fn normalize_remote_im_channel_behavior_settings(
+    value: &RemoteImChannelBehaviorSettings,
+) -> RemoteImChannelBehaviorSettings {
+    let mut normalized = value.clone();
+    normalized.blocked_message_prefixes =
+        normalize_contact_blocked_message_prefixes(&normalized.blocked_message_prefixes);
+    normalized.mute_keywords = normalize_contact_keyword_list(&normalized.mute_keywords);
+    normalized.unmute_keywords = normalize_contact_keyword_list(&normalized.unmute_keywords);
+    normalized
+}
+
+fn remote_im_channel_behavior_settings_from_channel(
+    channel: &RemoteImChannelConfig,
+) -> RemoteImChannelBehaviorSettings {
+    normalize_remote_im_channel_behavior_settings(&channel.behavior_settings)
+}
+
+fn remote_im_channel_behavior_settings_for_contact(
+    state: &AppState,
+    contact: &RemoteImContact,
+) -> RemoteImChannelBehaviorSettings {
+    match state_read_config_cached(state) {
+        Ok(config) => match config
+            .remote_im_channels
+            .iter()
+            .find(|channel| channel.id == contact.channel_id)
+        {
+            Some(channel) => remote_im_channel_behavior_settings_from_channel(channel),
+            None => {
+                runtime_log_warn(format!(
+                    "[远程IM] 渠道行为配置缺失，已使用默认值继续处理，channel_id={}，contact_id={}",
+                    contact.channel_id, contact.id
+                ));
+                RemoteImChannelBehaviorSettings::default()
+            }
+        },
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[远程IM] 渠道行为配置读取失败，已使用默认值继续处理，channel_id={}，contact_id={}，error={}",
+                contact.channel_id, contact.id, err
+            ));
+            RemoteImChannelBehaviorSettings::default()
+        }
+    }
+}
+
 include!("remote_im/group_reply_focus.rs");
 
 include!("remote_im/group_reply_energy.rs");
@@ -646,6 +692,7 @@ fn remote_im_prepare_enqueue_runtime_state(
             "私聊禁用秘书与在场状态，消息直接调度绑定会话".to_string(),
         ));
     }
+    let behavior = remote_im_channel_behavior_settings_for_contact(state, contact);
     let mut runtime_states = lock_remote_im_contact_runtime_states(state)?;
     let runtime = remote_im_contact_runtime_state_mut(&mut runtime_states, &contact.id);
     let previous_presence = runtime.presence_state;
@@ -669,8 +716,8 @@ fn remote_im_prepare_enqueue_runtime_state(
         }
     }
     if supports_mute {
-        if let Some(keyword) = remote_im_find_matched_keyword(message_text, &contact.mute_keywords) {
-            let mute_until = remote_im_resolve_mute_until(now, contact.mute_duration_seconds);
+        if let Some(keyword) = remote_im_find_matched_keyword(message_text, &behavior.mute_keywords) {
+            let mute_until = remote_im_resolve_mute_until(now, behavior.mute_duration_seconds);
             runtime.mute_until = Some(mute_until.clone());
             let reason = format!(
                 "{}命中闭嘴词“{}”，进入闭嘴直到 {}，直接拦截后续判定",
@@ -711,7 +758,7 @@ fn remote_im_prepare_enqueue_runtime_state(
         }
     }
     if supports_mute && runtime.mute_until.is_some() {
-        if let Some(keyword) = remote_im_find_matched_keyword(message_text, &contact.unmute_keywords) {
+        if let Some(keyword) = remote_im_find_matched_keyword(message_text, &behavior.unmute_keywords) {
             runtime.mute_until = None;
             mute_prefix.push_str(&format!("命中张嘴词“{}”，解除闭嘴；", keyword));
         } else {
