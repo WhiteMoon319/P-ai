@@ -317,23 +317,45 @@ fn query_ide_context_references_internal(
     input: IdeContextWorkspaceQueryInput,
     ide_context_runtime: &IdeContextRuntime,
 ) -> Result<IdeContextQueryResultOutput, String> {
-    let workspaces: Vec<IdeContextWorkspaceInput> = input
+    let mut workspaces: Vec<IdeContextWorkspaceInput> = input
         .workspaces
         .into_iter()
         .filter(|workspace| !workspace.path.trim().is_empty())
         .collect();
-    if workspaces.is_empty() {
-        return Ok(IdeContextQueryResultOutput {
-            groups: Vec::new(),
-            updated_at: String::new(),
-        });
-    }
 
     let mut snapshots = ide_context_runtime
         .snapshots
         .lock()
         .map_err(|_| "Failed to lock ide context snapshots".to_string())?;
     ide_context_prune_expired_snapshots(&mut snapshots);
+
+    // Web 页面不会携带 VS Code 工作区；此时从仍有效的 VS Code 快照恢复工作区，
+    // 以便展示 IDE 桥同步的当前打开文件。
+    if workspaces.is_empty() {
+        let mut workspace_paths = snapshots
+            .values()
+            .filter(|snapshot| snapshot.editor.eq_ignore_ascii_case("vscode"))
+            .flat_map(|snapshot| snapshot.workspace_roots.iter())
+            .map(|path| ide_context_display_path(path))
+            .filter(|path| !path.trim().is_empty())
+            .collect::<Vec<_>>();
+        workspace_paths.sort_by(|left, right| {
+            ide_context_compare_key(left).cmp(&ide_context_compare_key(right))
+        });
+        workspace_paths.dedup_by(|left, right| {
+            ide_context_compare_key(left) == ide_context_compare_key(right)
+        });
+        workspaces = workspace_paths
+            .into_iter()
+            .map(|path| IdeContextWorkspaceInput { path, name: None })
+            .collect();
+    }
+    if workspaces.is_empty() {
+        return Ok(IdeContextQueryResultOutput {
+            groups: Vec::new(),
+            updated_at: String::new(),
+        });
+    }
 
     let mut groups = workspaces
         .iter()
@@ -412,4 +434,100 @@ fn query_ide_context_references_internal(
         groups,
         updated_at: latest_updated_at,
     })
+}
+
+#[cfg(test)]
+mod ide_context_query_tests {
+    use super::*;
+
+    fn upsert_test_snapshot(
+        runtime: &IdeContextRuntime,
+        client_id: &str,
+        workspace_root: &str,
+        file_path: &str,
+    ) {
+        let result = upsert_ide_context_snapshot_internal(
+            UpsertIdeContextSnapshotInput {
+                client_id: client_id.to_string(),
+                auth_token: None,
+                editor: "vscode".to_string(),
+                workspace_roots: vec![workspace_root.to_string()],
+                references: vec![IdeContextReferenceInput {
+                    id: "active".to_string(),
+                    file_path: file_path.to_string(),
+                    start_line: Some(1),
+                    end_line: Some(1),
+                    content: "const value = 1;".to_string(),
+                    language_id: Some("typescript".to_string()),
+                    source: "active_file".to_string(),
+                    captured_at: now_iso(),
+                }],
+                updated_at: Some(now_iso()),
+            },
+            runtime,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn empty_workspace_query_uses_active_vscode_snapshot_roots() {
+        let runtime = IdeContextRuntime::new();
+        upsert_test_snapshot(
+            &runtime,
+            "vscode-client",
+            "E:/repo",
+            "E:/repo/src/main.ts",
+        );
+
+        let result = query_ide_context_references_internal(
+            IdeContextWorkspaceQueryInput { workspaces: Vec::new() },
+            &runtime,
+        );
+
+        assert!(result.is_ok());
+        let result = match result {
+            Ok(value) => value,
+            Err(error) => panic!("query failed: {error}"),
+        };
+        assert_eq!(result.groups.len(), 1);
+        assert_eq!(result.groups[0].workspace_path, "E:/repo");
+        assert_eq!(result.groups[0].references.len(), 1);
+        assert_eq!(result.groups[0].references[0].file_path, "E:/repo/src/main.ts");
+    }
+
+    #[test]
+    fn explicit_workspace_query_stays_scoped_to_requested_workspace() {
+        let runtime = IdeContextRuntime::new();
+        upsert_test_snapshot(
+            &runtime,
+            "vscode-client-a",
+            "E:/repo-a",
+            "E:/repo-a/src/a.ts",
+        );
+        upsert_test_snapshot(
+            &runtime,
+            "vscode-client-b",
+            "E:/repo-b",
+            "E:/repo-b/src/b.ts",
+        );
+
+        let result = query_ide_context_references_internal(
+            IdeContextWorkspaceQueryInput {
+                workspaces: vec![IdeContextWorkspaceInput {
+                    path: "E:/repo-b".to_string(),
+                    name: Some("repo-b".to_string()),
+                }],
+            },
+            &runtime,
+        );
+
+        assert!(result.is_ok());
+        let result = match result {
+            Ok(value) => value,
+            Err(error) => panic!("query failed: {error}"),
+        };
+        assert_eq!(result.groups.len(), 1);
+        assert_eq!(result.groups[0].references.len(), 1);
+        assert_eq!(result.groups[0].references[0].file_path, "E:/repo-b/src/b.ts");
+    }
 }

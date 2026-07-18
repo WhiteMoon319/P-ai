@@ -19,6 +19,7 @@ type VisibleComposerContextGroupsInput = {
   ideBridgeGroups: IdeContextWorkspaceGroup[];
   sideFileTagsEnabled: boolean;
   ideBridgeFileTagsEnabled: boolean;
+  host?: "default" | "vscode";
 };
 
 const sideFileTagsEnabled = ref(readBooleanPreference(SIDE_FILE_TAGS_STORAGE_KEY));
@@ -90,14 +91,15 @@ export function visibleChatComposerContextGroups(
   input: VisibleComposerContextGroupsInput,
 ): IdeContextWorkspaceGroup[] {
   const groups: IdeContextWorkspaceGroup[] = [];
-  if (input.sideFileTagsEnabled && input.sideReferences.length > 0) {
+  const isVsCodeHost = input.host === "vscode";
+  if (!isVsCodeHost && input.sideFileTagsEnabled && input.sideReferences.length > 0) {
     groups.push({
       workspacePath: String(input.sideWorkspacePath || "").trim(),
       workspaceName: String(input.sideWorkspaceName || "").trim(),
       references: input.sideReferences,
     });
   }
-  if (input.ideBridgeFileTagsEnabled) {
+  if (isVsCodeHost || input.ideBridgeFileTagsEnabled) {
     groups.push(...input.ideBridgeGroups);
   }
   return groups;

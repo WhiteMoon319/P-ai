@@ -721,6 +721,7 @@ const emit = defineEmits<{
   (e: "captureContextReference", reference: IdeContextReferenceItem): void;
   (e: "addContextReference", reference: IdeContextReferenceItem): void;
   (e: "clearSelectionContextReference"): void;
+  (e: "clearContextReferences", paths?: string[]): void;
 }>();
 
 type FileReaderContextMenuTarget = {
@@ -1956,6 +1957,7 @@ function closeTabsByPaths(paths: string[], options?: { preferredActivePath?: str
   for (const removedPath of normalizedPaths) {
     clearFileBlockCaches(removedPath);
   }
+  emit("clearContextReferences", [...normalizedPaths]);
 
   if (activeWillRemain) return;
 
@@ -2592,6 +2594,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  emit("clearContextReferences");
   window.removeEventListener("resize", updateAddressScrollState);
   window.removeEventListener("pointerdown", handleGlobalPointerDown);
   window.removeEventListener("keydown", handleGlobalEscape);

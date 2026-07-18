@@ -44,4 +44,16 @@ describe("use-chat-composer-appearance", () => {
       ideBridgeFileTagsEnabled: true,
     }).map((group) => group.references[0]?.id)).toEqual(["ide-file"]);
   });
+
+  it("VS Code 宿主固定显示 IDE 桥标签并隐藏侧边文件标签", () => {
+    expect(visibleChatComposerContextGroups({
+      sideReferences: [sideReference],
+      sideWorkspacePath: "E:/repo",
+      sideWorkspaceName: "repo",
+      ideBridgeGroups: [ideBridgeGroup],
+      sideFileTagsEnabled: true,
+      ideBridgeFileTagsEnabled: false,
+      host: "vscode",
+    }).map((group) => group.references[0]?.id)).toEqual(["ide-file"]);
+  });
 });

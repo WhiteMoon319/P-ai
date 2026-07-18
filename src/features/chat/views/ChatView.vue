@@ -488,6 +488,7 @@
           @capture-context-reference="handleCaptureFileReaderContextReference"
           @add-context-reference="handleAddFileReaderContextReference"
           @clear-selection-context-reference="handleClearFileReaderSelectionContextReference"
+          @clear-context-references="clearFileReaderContextReferences"
         >
           <template #tabLeadingActions>
             <ChatRightPanelSwitcher
@@ -614,6 +615,7 @@ import { useChatScrollLayout } from "../composables/use-chat-scroll-layout";
 import type { TerminalApprovalConversationItem } from "../../shell/composables/use-terminal-approval";
 import { isAbsoluteLocalPath, normalizeLocalLinkHref, parseLocalFileReference } from "../utils/local-link";
 import { type ChatRenderItem, isRightAlignedMessage, canOpenInFileReader, fileExtensionFromPath } from "../utils/chat-render";
+import { clearFileReaderContextCandidates } from "../utils/file-reader-context-tags";
 import { useIdeContext } from "../composables/use-ide-context";
 import { useDelegateStatus } from "../composables/use-delegate-status";
 import { useChatVirtualList } from "../composables/use-chat-virtual-list";
@@ -971,6 +973,11 @@ const sidebarMode = computed(() => !!props.sidebarMode);
 const disableMarkdownRender = computed(() => props.disableMarkdownRender ?? sidebarMode.value);
 const bridgeMode = computed(() => !!props.bridgeMode);
 const openLocalFilesInHost = computed(() => !!props.openLocalFilesInHost);
+const composerContextHost = computed<"default" | "vscode">(() =>
+  typeof document !== "undefined" && document.documentElement.getAttribute("data-host") === "vscode"
+    ? "vscode"
+    : "default",
+);
 const tauriRuntimeAvailable = isTauriRuntimeAvailable();
 
 function canRegenerateBlock(block: ChatMessageBlock, blockIndex: number): boolean {
@@ -1143,6 +1150,7 @@ const mergedVisibleIdeContextGroups = computed<IdeContextWorkspaceGroup[]>(() =>
     ideBridgeGroups: baseGroups,
     sideFileTagsEnabled: sideFileTagsEnabled.value,
     ideBridgeFileTagsEnabled: ideBridgeFileTagsEnabled.value,
+    host: composerContextHost.value,
   });
 });
 
@@ -1163,6 +1171,15 @@ function handleAddFileReaderContextReference(reference: IdeContextReferenceItem)
 
 function handleClearFileReaderSelectionContextReference() {
   fileReaderSelectionContextReference.value = null;
+}
+
+function clearFileReaderContextReferences(paths?: string[]) {
+  const candidates = clearFileReaderContextCandidates({
+    visible: fileReaderVisibleContextReference.value,
+    selection: fileReaderSelectionContextReference.value,
+  }, paths);
+  fileReaderVisibleContextReference.value = candidates.visible;
+  fileReaderSelectionContextReference.value = candidates.selection;
 }
 
 watch(() => props.activeConversationId, () => {
@@ -1423,6 +1440,13 @@ const {
   onToolReviewPanelOpenChange: (open) => emit("toolReviewPanelOpenChange", open),
 });
 const effectiveToolReviewPanelOpen = computed(() => !sidebarMode.value && toolReviewPanelOpen.value);
+
+watch(
+  () => [effectiveToolReviewPanelOpen.value, props.chatRightPanelMode] as const,
+  ([panelOpen, mode]) => {
+    if (!panelOpen || mode !== "reader") clearFileReaderContextReferences();
+  },
+);
 
 async function openChatReaderDirectoryIfEmpty() {
   await nextTick();

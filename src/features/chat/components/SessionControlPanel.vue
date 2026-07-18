@@ -1,5 +1,5 @@
 <template>
-  <div class="flex min-w-0 items-center gap-0.5 overflow-hidden">
+  <div class="flex min-w-0 items-center gap-0.5 overflow-hidden" @contextmenu.prevent.stop="openFileTagsContextMenu">
     <button
       type="button"
       class="btn btn-ghost btn-sm h-8 min-h-8 min-w-0 gap-1.5 overflow-hidden px-2 transition-[max-width,background-color,color] duration-200 ease-out"
@@ -74,13 +74,47 @@
       </Transition>
     </div>
   </div>
+  <Teleport to="body">
+    <ul
+      v-if="fileTagsContextMenu"
+      ref="fileTagsContextMenuRef"
+      class="menu fixed z-[1200] w-64 rounded-box border border-base-300 bg-base-100 p-2 text-base-content shadow-xl"
+      :style="{ left: `${fileTagsContextMenu.x}px`, top: `${fileTagsContextMenu.y}px` }"
+      @contextmenu.prevent.stop
+      @pointerdown.stop
+    >
+      <li>
+        <label class="flex cursor-pointer items-center justify-between gap-3 px-2 py-2">
+          <span class="text-sm">{{ t("appearance.inputPanelIdeBridgeFileTags") }}</span>
+          <input
+            :checked="ideBridgeFileTagsEnabled"
+            type="checkbox"
+            class="toggle toggle-sm"
+            @change="setIdeBridgeFileTagsEnabled(($event.target as HTMLInputElement).checked)"
+          />
+        </label>
+      </li>
+      <li>
+        <label class="flex cursor-pointer items-center justify-between gap-3 px-2 py-2">
+          <span class="text-sm">{{ t("appearance.inputPanelSideFileTags") }}</span>
+          <input
+            :checked="sideFileTagsEnabled"
+            type="checkbox"
+            class="toggle toggle-sm"
+            @change="setSideFileTagsEnabled(($event.target as HTMLInputElement).checked)"
+          />
+        </label>
+      </li>
+    </ul>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { Coins, Eye, Footprints, Network, PanelRightOpen, ShieldCheck, ShieldOff, ShieldQuestion, Timer } from "@lucide/vue";
 import type { ConversationDelegateStatusSummary } from "../../../types/app";
+import { useChatComposerAppearance } from "../../shell/composables/use-chat-composer-appearance";
 
 const props = defineProps<{
   workspaceButtonLabel: string;
@@ -97,7 +131,15 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const {
+  sideFileTagsEnabled,
+  ideBridgeFileTagsEnabled,
+  setSideFileTagsEnabled,
+  setIdeBridgeFileTagsEnabled,
+} = useChatComposerAppearance();
 const expandedPanel = ref<"workspace" | "delegate">("workspace");
+const fileTagsContextMenu = ref<{ x: number; y: number } | null>(null);
+const fileTagsContextMenuRef = ref<HTMLElement | null>(null);
 const normalizedDelegates = computed(() => Array.isArray(props.delegates) ? props.delegates : []);
 const runningDelegates = computed(() => normalizedDelegates.value.filter(isDelegateRunning));
 const displayedDelegates = computed(() => runningDelegates.value.length > 0 ? runningDelegates.value : normalizedDelegates.value);
@@ -154,6 +196,24 @@ function handleDelegateClick() {
   emit("openDelegateSummary");
 }
 
+function openFileTagsContextMenu(event: MouseEvent) {
+  const menuWidth = 256;
+  const menuHeight = 108;
+  fileTagsContextMenu.value = {
+    x: Math.max(8, Math.min(event.clientX, window.innerWidth - menuWidth - 8)),
+    y: Math.max(8, Math.min(event.clientY, window.innerHeight - menuHeight - 8)),
+  };
+}
+
+function closeFileTagsContextMenu(event?: PointerEvent) {
+  if (event?.target instanceof Node && fileTagsContextMenuRef.value?.contains(event.target)) return;
+  fileTagsContextMenu.value = null;
+}
+
+function handleFileTagsContextMenuKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape") fileTagsContextMenu.value = null;
+}
+
 function sumBy(
   delegates: ConversationDelegateStatusSummary[],
   read: (delegate: ConversationDelegateStatusSummary) => number | undefined | null,
@@ -186,6 +246,16 @@ function formatElapsedMs(value: number) {
   if (minutes > 0) return `${minutes}分${seconds}秒`;
   return `${seconds}秒`;
 }
+
+onMounted(() => {
+  window.addEventListener("pointerdown", closeFileTagsContextMenu);
+  window.addEventListener("keydown", handleFileTagsContextMenuKeydown);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("pointerdown", closeFileTagsContextMenu);
+  window.removeEventListener("keydown", handleFileTagsContextMenuKeydown);
+});
 </script>
 
 <style scoped>
