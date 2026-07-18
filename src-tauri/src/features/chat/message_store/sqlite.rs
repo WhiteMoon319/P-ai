@@ -1968,6 +1968,35 @@ fn chat_metadata_store_read_block_messages_before(
     })
 }
 
+fn chat_metadata_store_count_block_messages_before(
+    paths: &MessageStorePaths,
+    before_message_id: &str,
+) -> Result<usize, String> {
+    chat_metadata_store_with_read_snapshot(paths, || {
+        let before_message_id = before_message_id.trim();
+        if before_message_id.is_empty() {
+            return Err("读取 SQLite block 消息计数失败：缺少触发消息 ID".to_string());
+        }
+        let anchor = chat_metadata_store_read_locator_by_id(paths, before_message_id)?
+            .ok_or_else(|| format!("Message not found: {before_message_id}"))?;
+        let selected_block_id = anchor.item.block_id.unwrap_or(0);
+        let conn = chat_metadata_store_open(&paths.data_path)?;
+        let count = conn
+            .query_row(
+                "SELECT COUNT(*) FROM message_locator
+                 WHERE conversation_id=?1 AND block_id=?2 AND sequence<?3",
+                rusqlite::params![
+                    paths.conversation_id,
+                    selected_block_id as i64,
+                    anchor.sequence,
+                ],
+                |row| row.get::<_, i64>(0),
+            )
+            .map_err(|err| format!("读取 SQLite block 消息计数失败: {err}"))?;
+        Ok(count.max(0) as usize)
+    })
+}
+
 fn chat_metadata_store_status(paths: &MessageStorePaths) -> Result<Option<MessageStoreStatus>, String> {
     let Some(meta) = chat_metadata_store_read_meta(paths)? else { return Ok(None); };
     let conn = chat_metadata_store_open(&paths.data_path)?;
@@ -2480,6 +2509,13 @@ fn v3_chat_metadata_block_reader_should_stop_at_block_boundary() {
         vec!["summary", "current-1"]
     );
     assert!(!page.has_more);
+
+    let block_message_count = chat_metadata_store_count_block_messages_before(
+        &paths,
+        "current-2",
+    )
+    .expect("count current SQLite block messages");
+    assert_eq!(block_message_count, 2);
     let _ = fs::remove_dir_all(root);
 }
 

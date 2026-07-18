@@ -1281,6 +1281,30 @@ pub(super) fn read_ready_message_store_block_messages_before(
         .map(Some)
 }
 
+/// 仅从索引计数触发消息之前、同一当前 block 的消息数。
+///
+/// 远程唤醒的触发消息是该 block 的最后一条；此值即为 block 消息总数减一。
+pub(super) fn read_ready_message_store_block_message_count_before(
+    paths: &MessageStorePaths,
+    before_message_id: &str,
+) -> Result<Option<usize>, String> {
+    if paths.is_v3_ready()? {
+        return Ok(Some(
+            chat_metadata_store_count_block_messages_before(paths, before_message_id)?,
+        ));
+    }
+    let Some(store) = ready_jsonl_snapshot_store(paths)? else {
+        return Ok(None);
+    };
+    let Some(index) = store.index()? else {
+        return Err(format!(
+            "读取 JSONL block 群消息计数失败：缺少消息索引，conversation_id={}",
+            paths.conversation_id
+        ));
+    };
+    count_jsonl_block_messages_before(&index, before_message_id).map(Some)
+}
+
 pub(super) fn read_message_store_current_compaction_segment_for_conversation(
     paths: &MessageStorePaths,
     conversation: &Conversation,
@@ -2095,6 +2119,24 @@ fn read_jsonl_block_messages_before(
         )?,
         has_more: start > 0,
     })
+}
+
+fn count_jsonl_block_messages_before(
+    index: &MessageStoreIndexFile,
+    before_message_id: &str,
+) -> Result<usize, String> {
+    let before_message_id = before_message_id.trim();
+    let anchor_position = find_index_item_position(index, before_message_id)
+        .ok_or_else(|| format!("Message not found: {before_message_id}"))?;
+    let selected_block_id = index
+        .items
+        .get(anchor_position)
+        .and_then(|item| item.block_id)
+        .unwrap_or(0);
+    Ok(index.items[..anchor_position]
+        .iter()
+        .filter(|item| item.block_id.unwrap_or(0) == selected_block_id)
+        .count())
 }
 
 fn read_jsonl_snapshot_messages_by_index_items(
@@ -3325,6 +3367,10 @@ mod message_store_reader_tests {
             vec!["c1", "current-1"]
         );
         assert!(!before.has_more);
+
+        let block_message_count = count_jsonl_block_messages_before(&index, "current-2")
+            .expect("count current block messages");
+        assert_eq!(block_message_count, 2);
         let _ = fs::remove_dir_all(root);
     }
 

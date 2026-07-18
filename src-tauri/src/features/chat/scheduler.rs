@@ -967,35 +967,42 @@ async fn process_conversation_batch(
                         effective_remote_im_contact_response_strategy(&contact) == "smart_judge"
                         && remote_im_contact_is_away(state, &contact.id)?;
                     if should_apply_dynamic_wake {
-                        if let Err(primary_err) = conversation_service_v2()
-                            .remote_im_apply_dynamic_wake_compaction(
-                                state,
-                                conversation_id,
-                                &trigger_message_id,
-                                true,
-                            )
-                        {
-                            runtime_log_error(format!(
-                                "[远程唤醒压缩] 失败，conversation_id={}，contact_id={}，error={}",
-                                conversation_id, contact.id, primary_err
-                            ));
-                            if let Err(fallback_err) = conversation_service_v2()
-                                .remote_im_apply_dynamic_wake_compaction(
-                                    state,
-                                    conversation_id,
-                                    &trigger_message_id,
-                                    false,
-                                )
-                            {
+                        match conversation_service_v2().remote_im_apply_dynamic_wake_compaction(
+                            state,
+                            conversation_id,
+                            &trigger_message_id,
+                            true,
+                        ) {
+                            Ok(RemoteImDynamicWakeCompactionOutcome::Applied) => {}
+                            Ok(RemoteImDynamicWakeCompactionOutcome::SkippedLowFrequency {
+                                block_message_count,
+                            }) => runtime_log_info(format!(
+                                "[远程唤醒压缩] 完成，任务=低频群跳过，conversation_id={}，contact_id={}，block_message_count={}",
+                                conversation_id, contact.id, block_message_count
+                            )),
+                            Err(primary_err) => {
                                 runtime_log_error(format!(
-                                    "[远程唤醒压缩] 失败，任务=空摘要降级，conversation_id={}，contact_id={}，error={}",
-                                    conversation_id, contact.id, fallback_err
+                                    "[远程唤醒压缩] 失败，conversation_id={}，contact_id={}，error={}",
+                                    conversation_id, contact.id, primary_err
                                 ));
-                            } else {
-                                runtime_log_warn(format!(
-                                    "[远程唤醒压缩] 完成，任务=空摘要降级，conversation_id={}，contact_id={}",
-                                    conversation_id, contact.id
-                                ));
+                                if let Err(fallback_err) = conversation_service_v2()
+                                    .remote_im_apply_dynamic_wake_compaction(
+                                        state,
+                                        conversation_id,
+                                        &trigger_message_id,
+                                        false,
+                                    )
+                                {
+                                    runtime_log_error(format!(
+                                        "[远程唤醒压缩] 失败，任务=空摘要降级，conversation_id={}，contact_id={}，error={}",
+                                        conversation_id, contact.id, fallback_err
+                                    ));
+                                } else {
+                                    runtime_log_warn(format!(
+                                        "[远程唤醒压缩] 完成，任务=空摘要降级，conversation_id={}，contact_id={}",
+                                        conversation_id, contact.id
+                                    ));
+                                }
                             }
                         }
                     }

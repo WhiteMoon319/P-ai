@@ -11581,6 +11581,13 @@
             if text.contains("broken.png") && text.contains("已跳过该附件并继续")));
     }
 
+    #[test]
+    fn remote_wake_compaction_should_skip_only_below_fourteen_block_messages() {
+        assert!(remote_im_wake_compaction_should_skip_for_low_frequency(0));
+        assert!(remote_im_wake_compaction_should_skip_for_low_frequency(13));
+        assert!(!remote_im_wake_compaction_should_skip_for_low_frequency(14));
+    }
+
     fn collect_rs_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
         let mut out = Vec::new();
         let Ok(entries) = std::fs::read_dir(root) else {

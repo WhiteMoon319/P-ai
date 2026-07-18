@@ -1,3 +1,15 @@
+const REMOTE_IM_WAKE_COMPACTION_MIN_BLOCK_MESSAGE_COUNT: usize = 14;
+
+#[derive(Debug, Clone)]
+enum RemoteImDynamicWakeCompactionOutcome {
+    Applied,
+    SkippedLowFrequency { block_message_count: usize },
+}
+
+fn remote_im_wake_compaction_should_skip_for_low_frequency(block_message_count: usize) -> bool {
+    block_message_count < REMOTE_IM_WAKE_COMPACTION_MIN_BLOCK_MESSAGE_COUNT
+}
+
 impl ConversationServiceV2 {
     fn list_archives(
         &self,
@@ -460,7 +472,7 @@ impl ConversationServiceV2 {
         conversation_id: &str,
         trigger_message_id: &str,
         include_history: bool,
-    ) -> Result<ChatMessage, String> {
+    ) -> Result<RemoteImDynamicWakeCompactionOutcome, String> {
         let conversation_id = conversation_id.trim();
         let trigger_message_id = trigger_message_id.trim();
         if conversation_id.is_empty() || trigger_message_id.is_empty() {
@@ -494,6 +506,36 @@ impl ConversationServiceV2 {
             trigger_message_id,
         )?
         .ok_or_else(|| format!("远程唤醒压缩失败：触发消息缺少序号，message_id={trigger_message_id}"))?;
+        if include_history {
+            match message_store::read_ready_message_store_block_message_count_before(
+                &store_paths,
+                trigger_message_id,
+            ) {
+                Ok(Some(block_message_count))
+                    if remote_im_wake_compaction_should_skip_for_low_frequency(block_message_count) =>
+                {
+                    runtime_log_info(format!(
+                        "[远程唤醒压缩] 跳过，任务=低频群入场，conversation_id={}，trigger_message_id={}，block_message_count={}，minimum_block_message_count={}",
+                        conversation_id,
+                        trigger_message_id,
+                        block_message_count,
+                        REMOTE_IM_WAKE_COMPACTION_MIN_BLOCK_MESSAGE_COUNT
+                    ));
+                    return Ok(RemoteImDynamicWakeCompactionOutcome::SkippedLowFrequency {
+                        block_message_count,
+                    });
+                }
+                Ok(Some(_)) => {}
+                Ok(None) => runtime_log_warn(format!(
+                    "[远程唤醒压缩] 降级，任务=低频群入场计数，conversation_id={}，trigger_message_id={}，reason=消息存储未就绪，继续原压缩路径",
+                    conversation_id, trigger_message_id
+                )),
+                Err(err) => runtime_log_warn(format!(
+                    "[远程唤醒压缩] 降级，任务=低频群入场计数，conversation_id={}，trigger_message_id={}，error={}，继续原压缩路径",
+                    conversation_id, trigger_message_id, err
+                )),
+            }
+        }
         let assistant_name = state_read_agents_cached(state)?
             .into_iter()
             .find(|agent| agent.id.trim() == conversation_meta.agent_id.trim())
@@ -553,7 +595,7 @@ impl ConversationServiceV2 {
                 "远程唤醒压缩写入校验失败：摘要和触发消息顺序错误，conversation_id={conversation_id}"
             ));
         }
-        Ok(summary)
+        Ok(RemoteImDynamicWakeCompactionOutcome::Applied)
     }
 
     fn persist_compaction_message(
