@@ -424,6 +424,23 @@ export type RemoteImContactConversationOption = {
   channelEnabled?: boolean;
 };
 
+export type RemoteImContactDashboardSnapshot = {
+  contactId: string;
+  energy: number;
+  maximumEnergy: number;
+  energyPercent: number;
+  energyRecoveryPerSecond: number;
+  presence: "away" | "present";
+  lastPresenceAt?: string;
+  watermark: string;
+  updatedAt: string;
+};
+
+export type RemoteImContactDashboardSyncResult = {
+  snapshot: RemoteImContactDashboardSnapshot;
+  changed: boolean;
+};
+
 export type McpDefinitionValidateResult = {
   ok: boolean;
   transport?: string;

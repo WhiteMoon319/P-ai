@@ -46,6 +46,249 @@ fn remote_im_get_contact_by_id(
         .ok_or_else(|| format!("未找到远程联系人：{contact_id}"))
 }
 
+// ========== 远程会话能量仪表盘 ==========
+
+const REMOTE_IM_CONTACT_DASHBOARD_UPDATED_EVENT: &str =
+    "easy-call:remote-im-contact-dashboard-updated";
+const REMOTE_IM_CONTACT_DASHBOARD_PUSH_INTERVAL_SECONDS: u64 = 3;
+
+#[derive(Default)]
+struct RemoteImContactDashboardSubscriptions {
+    contact_ids_by_window: std::collections::HashMap<String, String>,
+    push_worker_running: bool,
+}
+
+static REMOTE_IM_CONTACT_DASHBOARD_SUBSCRIPTIONS: OnceLock<
+    Mutex<RemoteImContactDashboardSubscriptions>,
+> = OnceLock::new();
+
+fn remote_im_contact_dashboard_subscriptions(
+) -> &'static Mutex<RemoteImContactDashboardSubscriptions> {
+    REMOTE_IM_CONTACT_DASHBOARD_SUBSCRIPTIONS
+        .get_or_init(|| Mutex::new(RemoteImContactDashboardSubscriptions::default()))
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteImContactDashboardSnapshot {
+    contact_id: String,
+    energy: f64,
+    maximum_energy: f64,
+    energy_percent: f64,
+    energy_recovery_per_second: f64,
+    presence: String,
+    last_presence_at: Option<String>,
+    watermark: String,
+    updated_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteImContactDashboardInput {
+    contact_id: String,
+    #[serde(default)]
+    known_watermark: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteImContactDashboardSyncResult {
+    snapshot: RemoteImContactDashboardSnapshot,
+    changed: bool,
+}
+
+fn remote_im_contact_dashboard_presence_label(state: RemoteImPresenceState) -> &'static str {
+    match state {
+        RemoteImPresenceState::Away => "away",
+        RemoteImPresenceState::Present => "present",
+    }
+}
+
+fn remote_im_contact_dashboard_snapshot_inner(
+    state: &AppState,
+    contact_id: &str,
+) -> Result<RemoteImContactDashboardSnapshot, String> {
+    let contact_id = contact_id.trim();
+    if contact_id.is_empty() {
+        return Err("远程联系人仪表盘读取失败：联系人ID为空".to_string());
+    }
+    let runtime = state_read_runtime_state_cached(state)?;
+    let contact = runtime
+        .remote_im_contacts
+        .iter()
+        .find(|item| item.id == contact_id)
+        .ok_or_else(|| format!("远程联系人仪表盘读取失败：未找到联系人：{contact_id}"))?;
+    let checkpoint = runtime
+        .remote_im_contact_checkpoints
+        .iter()
+        .find(|item| item.contact_id == contact_id);
+    let pacing = effective_remote_im_group_reply_pacing(state, contact);
+    let energy = remote_im_group_energy_at(checkpoint, &pacing, now_utc());
+    let presence_runtime = lock_remote_im_contact_runtime_states(state)?
+        .get(contact_id)
+        .cloned()
+        .unwrap_or_default();
+    let presence = remote_im_contact_dashboard_presence_label(presence_runtime.presence_state);
+    let checkpoint_revision = checkpoint.map(|item| item.atomic_revision).unwrap_or_default();
+    let last_presence_at = presence_runtime.last_presence_at.clone();
+    let watermark = format!(
+        "checkpoint:{checkpoint_revision}|presence:{presence}|at:{}|work:{:?}|pending:{}",
+        last_presence_at.as_deref().unwrap_or(""),
+        presence_runtime.work_state,
+        presence_runtime.has_pending,
+    );
+    let maximum_energy = pacing.maximum_energy;
+    let energy_percent = if maximum_energy > 0.0 {
+        energy / maximum_energy * 100.0
+    } else {
+        0.0
+    };
+    Ok(RemoteImContactDashboardSnapshot {
+        contact_id: contact_id.to_string(),
+        energy,
+        maximum_energy,
+        energy_percent,
+        energy_recovery_per_second: pacing.energy_recovery_per_second,
+        presence: presence.to_string(),
+        last_presence_at,
+        watermark,
+        updated_at: now_iso(),
+    })
+}
+
+fn remote_im_emit_contact_dashboard_snapshot(state: &AppState, contact_id: &str) {
+    let has_subscription = remote_im_contact_dashboard_subscriptions()
+        .lock()
+        .map(|subscriptions| subscriptions
+            .contact_ids_by_window
+            .values()
+            .any(|item| item == contact_id))
+        .unwrap_or(false);
+    if !has_subscription {
+        return;
+    }
+    let snapshot = match remote_im_contact_dashboard_snapshot_inner(state, contact_id) {
+        Ok(snapshot) => snapshot,
+        Err(err) => {
+            runtime_log_debug(format!(
+                "[远程会话仪表盘] 跳过，任务=构建推送快照，contact_id={}，error={}",
+                contact_id, err
+            ));
+            return;
+        }
+    };
+    let app_handle = match state.app_handle.lock() {
+        Ok(guard) => guard.as_ref().cloned(),
+        Err(_) => None,
+    };
+    let Some(app_handle) = app_handle else {
+        return;
+    };
+    if let Err(err) = app_handle.emit(REMOTE_IM_CONTACT_DASHBOARD_UPDATED_EVENT, snapshot) {
+        runtime_log_debug(format!(
+            "[远程会话仪表盘] 跳过，任务=推送快照，contact_id={}，error={}",
+            contact_id, err
+        ));
+    }
+}
+
+fn remote_im_start_contact_dashboard_push_worker(state: &AppState) {
+    let should_start = match remote_im_contact_dashboard_subscriptions().lock() {
+        Ok(mut subscriptions) => {
+            if subscriptions.push_worker_running {
+                false
+            } else {
+                subscriptions.push_worker_running = true;
+                true
+            }
+        }
+        Err(_) => false,
+    };
+    if !should_start {
+        return;
+    }
+    let state = state.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(
+                REMOTE_IM_CONTACT_DASHBOARD_PUSH_INTERVAL_SECONDS,
+            ))
+            .await;
+            let contact_ids = match remote_im_contact_dashboard_subscriptions().lock() {
+                Ok(mut subscriptions) => {
+                    if subscriptions.contact_ids_by_window.is_empty() {
+                        subscriptions.push_worker_running = false;
+                        return;
+                    }
+                    subscriptions
+                        .contact_ids_by_window
+                        .values()
+                        .cloned()
+                        .collect::<std::collections::HashSet<_>>()
+                }
+                Err(_) => return,
+            };
+            for contact_id in contact_ids {
+                remote_im_emit_contact_dashboard_snapshot(&state, &contact_id);
+            }
+        }
+    });
+}
+
+#[tauri::command]
+async fn remote_im_subscribe_contact_dashboard(
+    input: RemoteImContactDashboardInput,
+    state: State<'_, AppState>,
+    window: tauri::Window,
+) -> Result<RemoteImContactDashboardSnapshot, String> {
+    let contact_id = input.contact_id.trim().to_string();
+    let snapshot = remote_im_contact_dashboard_snapshot_inner(state.inner(), &contact_id)?;
+    let window_label = window.label().to_string();
+    {
+        let mut subscriptions = remote_im_contact_dashboard_subscriptions()
+            .lock()
+            .map_err(|_| "远程联系人仪表盘订阅锁不可用".to_string())?;
+        subscriptions
+            .contact_ids_by_window
+            .insert(window_label, contact_id);
+    }
+    remote_im_start_contact_dashboard_push_worker(state.inner());
+    Ok(snapshot)
+}
+
+#[tauri::command]
+async fn remote_im_sync_contact_dashboard(
+    input: RemoteImContactDashboardInput,
+    state: State<'_, AppState>,
+) -> Result<RemoteImContactDashboardSyncResult, String> {
+    let snapshot = remote_im_contact_dashboard_snapshot_inner(state.inner(), &input.contact_id)?;
+    let known = input.known_watermark.as_deref().unwrap_or("");
+    Ok(RemoteImContactDashboardSyncResult {
+        changed: known != snapshot.watermark,
+        snapshot,
+    })
+}
+
+#[tauri::command]
+async fn remote_im_unsubscribe_contact_dashboard(
+    input: RemoteImContactDashboardInput,
+    window: tauri::Window,
+) -> Result<(), String> {
+    let contact_id = input.contact_id.trim();
+    let window_label = window.label().to_string();
+    let mut subscriptions = remote_im_contact_dashboard_subscriptions()
+        .lock()
+        .map_err(|_| "远程联系人仪表盘订阅锁不可用".to_string())?;
+    if subscriptions
+        .contact_ids_by_window
+        .get(&window_label)
+        .is_some_and(|current| current == contact_id)
+    {
+        subscriptions.contact_ids_by_window.remove(&window_label);
+    }
+    Ok(())
+}
+
 #[derive(Clone)]
 struct RemoteImContactBindingSnapshot {
     bound_department_id: Option<String>,

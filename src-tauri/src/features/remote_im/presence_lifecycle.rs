@@ -12,6 +12,8 @@ fn remote_im_mark_contact_present(
         "[远程联系人在场] 完成，contact_id={}，reason={}",
         contact_id, reason
     ));
+    drop(states);
+    remote_im_emit_contact_dashboard_snapshot(state, contact_id);
     Ok(())
 }
 
@@ -83,6 +85,7 @@ fn remote_im_schedule_presence_timeout(
                 "[远程联系人在场] 完成，任务=耐心超时离场，contact_id={}，patience_seconds={}",
                 contact_id, patience_seconds
             ));
+            remote_im_emit_contact_dashboard_snapshot(&state_clone, &contact_id);
             if let Err(err) = spawn_remote_im_departure_reflection_delegate(
                 &state_clone,
                 &contact_id,

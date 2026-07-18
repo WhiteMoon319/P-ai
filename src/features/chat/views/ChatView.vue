@@ -248,6 +248,12 @@
         </Transition>
 
         <div ref="composerContainer" class="relative shrink-0 border-t border-base-300 bg-base-100 px-2 pt-2 pb-1.5">
+          <div
+            v-if="activeConversationIsRemoteContact"
+            class="absolute bottom-full left-1/2 z-20 mb-3 -translate-x-1/2"
+          >
+            <RemoteImContactEnergyDashboard :snapshot="remoteImContactDashboardSnapshot" />
+          </div>
           <Transition name="chat-status-banner">
             <div
               v-if="chatStatusBanner"
@@ -594,6 +600,7 @@ import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, Cha
 import ChatMessageItem from "../components/ChatMessageItem.vue";
 import ChatApprovalPanel from "../components/ChatApprovalPanel.vue";
 import ChatComposerPanel from "../components/ChatComposerPanel.vue";
+import RemoteImContactEnergyDashboard from "../components/RemoteImContactEnergyDashboard.vue";
 import DepartmentPersonaSelect from "../../shared/components/DepartmentPersonaSelect.vue";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import ChatConversationSidebar from "../components/ChatConversationSidebar.vue";
@@ -618,6 +625,7 @@ import { type ChatRenderItem, isRightAlignedMessage, canOpenInFileReader, fileEx
 import { clearFileReaderContextCandidates } from "../utils/file-reader-context-tags";
 import { useIdeContext } from "../composables/use-ide-context";
 import { useDelegateStatus } from "../composables/use-delegate-status";
+import { useRemoteImContactDashboard } from "../composables/use-remote-im-contact-dashboard";
 import { useChatVirtualList } from "../composables/use-chat-virtual-list";
 import { useChatVirtualScroll } from "../composables/use-chat-virtual-scroll";
 import { useChatPanes, PANE_WIDTH_LIMITS, type UseChatPanesOptions } from "../composables/use-chat-panes";
@@ -859,6 +867,15 @@ const activeConversationIsSystemNotification = computed(() =>
 const activeConversationIsRemoteContact = computed(() =>
   activeConversationSummary.value?.kind === 'remote_im_contact',
 );
+const remoteImContactDashboardContactId = computed(() =>
+  activeConversationIsRemoteContact.value
+    ? String(activeConversationSummary.value?.remoteContactId || "").trim()
+    : "",
+);
+const { snapshot: remoteImContactDashboardSnapshot } = useRemoteImContactDashboard({
+  contactId: remoteImContactDashboardContactId,
+  enabled: activeConversationIsRemoteContact,
+});
 const repairRecipientDepartmentId = ref("");
 const repairRecipientAgentId = ref("");
 const repairRecipientOptions = computed(() =>

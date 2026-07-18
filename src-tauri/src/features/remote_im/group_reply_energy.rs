@@ -234,6 +234,7 @@ fn remote_im_apply_group_energy_for_messages(
         "[群聊能量] 巡检范围词库结算：联系人={}，结算前={:.2}，变化={:.2}",
         remote_im_contact_log_label(contact), before, delta
     ));
+    remote_im_emit_contact_dashboard_snapshot(state, &contact.id);
     Ok(())
 }
 
@@ -466,6 +467,8 @@ fn remote_im_persist_group_reply_settlement(
             contact.id,
             settlement.outbound_key.as_deref().unwrap_or("")
         ));
+    } else {
+        remote_im_emit_contact_dashboard_snapshot(state, &contact.id);
     }
     Ok(())
 }

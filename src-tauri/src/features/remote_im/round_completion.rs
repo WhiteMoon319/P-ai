@@ -167,6 +167,7 @@ fn remote_im_finalize_round_completion(
     let mut runtime_states = lock_remote_im_contact_runtime_states(state)?;
     let mut follow_up_sources = Vec::<RemoteImActivationSource>::new();
     let mut presence_timeouts = std::collections::HashMap::<String, u64>::new();
+    let mut dashboard_contact_ids = std::collections::HashSet::<String>::new();
     for source in activated_sources {
         let Some(contact) =
             remote_im_contact_by_activation_source_in_runtime(&runtime.remote_im_contacts, source)
@@ -263,6 +264,7 @@ fn remote_im_finalize_round_completion(
                 remote_im_channel_behavior_settings_for_contact(state, contact).patience_seconds,
             );
         }
+        dashboard_contact_ids.insert(contact.id.clone());
         runtime_log_info(format!(
             "[远程联系人状态机] 轮次结束 完成: contact_id={}, decision={}, presence={:?}->{:?}, pending={}->{}, no_reply_count={}->{}, follow_up={}, last_success_reply_at={}",
             contact.id,
@@ -297,6 +299,9 @@ fn remote_im_finalize_round_completion(
         );
     }
     drop(runtime_states);
+    for contact_id in dashboard_contact_ids {
+        remote_im_emit_contact_dashboard_snapshot(state, &contact_id);
+    }
     for (contact_id, patience_seconds) in presence_timeouts {
         remote_im_schedule_presence_timeout(state, &contact_id, patience_seconds)?;
     }
@@ -354,6 +359,7 @@ fn remote_im_finalize_async_send_result(
         ),
     );
     drop(runtime_states);
+    remote_im_emit_contact_dashboard_snapshot(state, &contact.id);
     remote_im_schedule_presence_timeout(
         state,
         &contact.id,

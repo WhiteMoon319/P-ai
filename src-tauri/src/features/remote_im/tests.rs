@@ -4571,6 +4571,61 @@
     }
 
     #[test]
+    fn contact_dashboard_snapshot_should_use_backend_energy_presence_and_watermark() {
+        let state = remote_im_test_state();
+        let mut behavior = RemoteImChannelBehaviorSettings::default();
+        behavior.group_reply_pacing.maximum_energy = 100.0;
+        behavior.group_reply_pacing.energy_recovery_per_second = 0.0;
+        state_write_config_cached(
+            &state,
+            &AppConfig {
+                remote_im_channels: vec![remote_im_test_channel("channel-a", behavior)],
+                ..AppConfig::default()
+            },
+        )
+        .expect("write channel behavior config");
+        let mut contact = remote_im_test_contact("contact-dashboard", "conversation-dashboard");
+        contact.remote_contact_type = "group".to_string();
+        state_write_runtime_state_cached(
+            &state,
+            &RuntimeStateFile {
+                remote_im_contacts: vec![contact.clone()],
+                remote_im_contact_checkpoints: vec![RemoteImContactCheckpoint {
+                    contact_id: contact.id.clone(),
+                    atomic_revision: 7,
+                    energy: Some(-25.0),
+                    energy_updated_at: Some(now_iso()),
+                    ..RemoteImContactCheckpoint::default()
+                }],
+                ..RuntimeStateFile::default()
+            },
+        )
+        .expect("write dashboard runtime");
+        lock_remote_im_contact_runtime_states(&state)
+            .expect("lock dashboard runtime")
+            .insert(
+                contact.id.clone(),
+                RemoteImContactRuntimeState {
+                    presence_state: RemoteImPresenceState::Present,
+                    last_presence_at: Some("2026-07-19T00:00:00Z".to_string()),
+                    ..RemoteImContactRuntimeState::default()
+                },
+            );
+
+        let snapshot = remote_im_contact_dashboard_snapshot_inner(&state, &contact.id)
+            .expect("read dashboard snapshot");
+        assert_eq!(snapshot.contact_id, contact.id);
+        assert_eq!(snapshot.presence, "present");
+        assert_eq!(snapshot.energy, -25.0);
+        assert_eq!(snapshot.maximum_energy, 100.0);
+        assert_eq!(snapshot.energy_percent, -25.0);
+        assert!(snapshot.watermark.contains("checkpoint:7"));
+        assert!(snapshot.watermark.contains("presence:present"));
+
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
     fn unreadable_channel_behavior_config_should_fall_back_without_interrupting_group_processing() {
         let state = remote_im_test_state();
         let mut contact = remote_im_test_contact("contact-fallback", "conversation-fallback");
