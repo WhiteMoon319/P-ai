@@ -78,46 +78,6 @@ fn tool_failure_result_text(tool_name: &str, err_text: &str) -> String {
     format!("Tool failed: {tool_name}\nError: {err_text}")
 }
 
-fn tool_enabled(
-    selected_api: &ApiConfig,
-    _agent: &AgentProfile,
-    current_department: Option<&DepartmentConfig>,
-    id: &str,
-) -> bool {
-    if tool_restricted_by_department(current_department, id).is_some() {
-        return false;
-    }
-    if builtin_tool_is_fixed_system(id) {
-        return selected_api.enable_tools;
-    }
-    if builtin_tool_is_local_conversation_fixed(id) || builtin_tool_is_contact_only_hidden(id) {
-        return false;
-    }
-    if id == "screenshot" && !selected_api.enable_image {
-        return false;
-    }
-    if !selected_api.enable_tools {
-        return false;
-    }
-    if tool_forced_by_department(current_department, id) {
-        return true;
-    }
-    if !department_permission_allows_any_name(
-        current_department,
-        DepartmentPermissionCategory::BuiltinTool,
-        &[id],
-    ) {
-        return false;
-    }
-    if let Some(tool) = default_agent_tools().iter().find(|tool| tool.id == id) {
-        return tool.enabled;
-    }
-    if matches!(id, "write" | "delete" | "update" | "move") {
-        return true;
-    }
-    true
-}
-
 #[derive(Debug)]
 struct ToolInvokeError(String);
 
@@ -176,26 +136,4 @@ mod core_provider_utils_tests {
         assert!(serde_json::from_str::<Value>(&raw).is_err());
     }
 
-    #[test]
-    fn tool_enabled_should_use_system_defaults_instead_of_agent_specific_tool_flags() {
-        let mut api = AppConfig::default()
-            .api_configs
-            .into_iter()
-            .next()
-            .expect("default api config");
-        api.enable_tools = true;
-        api.enable_image = true;
-
-        let mut agent = default_agent();
-        if let Some(tool) = agent.tools.iter_mut().find(|tool| tool.id == "fetch") {
-            tool.enabled = false;
-        }
-        if let Some(tool) = agent.tools.iter_mut().find(|tool| tool.id == "plan") {
-            tool.enabled = true;
-        }
-
-        assert!(tool_enabled(&api, &agent, None, "fetch"));
-        assert!(!tool_enabled(&api, &agent, None, "plan"));
-        assert!(!tool_enabled(&api, &agent, None, "contact_reply"));
-    }
 }

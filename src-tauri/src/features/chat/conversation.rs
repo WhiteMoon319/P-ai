@@ -3022,21 +3022,17 @@ fn build_system_tools_rule_blocks(
     let current_department = department_by_id(&department_config, current_department_id);
     let mut blocks = Vec::<String>::new();
     let mut any_builtin_enabled = false;
-    for tool_id in ["delegate", "task", "exec"] {
-        if department_builtin_tool_enabled(&department_config, current_department, tool_id) {
+    for rule_id in ["delegate", "task", "exec", "file_edit"] {
+        let rule_enabled = builtin_tool_ids_for_prompt_rule(rule_id)
+            .into_iter()
+            .any(|tool_id| {
+                department_builtin_tool_enabled(&department_config, current_department, tool_id)
+            });
+        if rule_enabled {
             any_builtin_enabled = true;
-            if let Some(block) = build_builtin_tool_rule_block(tool_id) {
+            if let Some(block) = build_builtin_tool_rule_block(rule_id) {
                 blocks.push(block);
             }
-        }
-    }
-    if ["write", "delete", "update", "move"]
-        .into_iter()
-        .any(|tool_id| department_builtin_tool_enabled(&department_config, current_department, tool_id))
-    {
-        any_builtin_enabled = true;
-        if let Some(block) = build_builtin_tool_rule_block("file_edit") {
-            blocks.push(block);
         }
     }
     if any_builtin_enabled {
@@ -3048,23 +3044,16 @@ fn build_system_tools_rule_blocks(
 fn build_question_and_planning_rule_block(
     state: Option<&AppState>,
     conversation: &Conversation,
+    plan_tool_enabled: bool,
 ) -> String {
     let preferred_plan_dir = state
         .and_then(|app_state| {
             plan_preferred_directory_display_for_conversation(app_state, Some(conversation)).ok()
         })
         .unwrap_or_else(|| "{会话工作目录或助理空间}\\.pai\\plan".to_string());
-    prompt_xml_block(
-        "plan tool rule",
-        &format!(
-            "## 提问之法\n\
-             - **价值锚定**：只有缺失信息会显著影响方向、风险、成本或产出时，才向用户提问。\n\
-             - **前置分析**：提问前先检索上下文，形成初步逻辑模型。\n\
-             - **低通量**：首轮提问必须精准，避免堆砌问题清单。\n\
-             - **自主检索**：代码、配置、既有文档可自证时，先自己查。\n\
-             - **默认推进**：存在高概率、低风险默认假设时，带着假设推进并明确告知。\n\
-             - **拒绝外包**：自身职责内的分析、设计和决策，不转嫁给用户。\n\n\
-             ## 何时使用 plan\n\
+    let plan_tool_sections = if plan_tool_enabled {
+        format!(
+            "## 何时使用 plan\n\
              - 重构：大规模模块拆分、架构调整、技术栈迁移。\n\
              - 全新功能域设计：涉及多模块、跨前后端、接口协议或数据模型设计。\n\
              - 用户明确要求写计划。\n\
@@ -3089,7 +3078,26 @@ fn build_question_and_planning_rule_block(
              - 计划要约束需求边界，保持简洁。\n\
              - 遇到非显性分叉或明显成本差异，先和用户同步，再进入重度开发。\n\
              - 必须先得到用户明确确认后，才可进入实现阶段。\n\
-             - 新信息进入后及时修正计划。\n\n\
+             - 新信息进入后及时修正计划。"
+        )
+    } else {
+        String::new()
+    };
+    prompt_xml_block(
+        if plan_tool_enabled {
+            "plan tool rule"
+        } else {
+            "question and planning rule"
+        },
+        &format!(
+            "## 提问之法\n\
+             - **价值锚定**：只有缺失信息会显著影响方向、风险、成本或产出时，才向用户提问。\n\
+             - **前置分析**：提问前先检索上下文，形成初步逻辑模型。\n\
+             - **低通量**：首轮提问必须精准，避免堆砌问题清单。\n\
+             - **自主检索**：代码、配置、既有文档可自证时，先自己查。\n\
+             - **默认推进**：存在高概率、低风险默认假设时，带着假设推进并明确告知。\n\
+             - **拒绝外包**：自身职责内的分析、设计和决策，不转嫁给用户。\n\n\
+             {plan_tool_sections}\
              ## 核心逻辑\n\
              - 提问是为了破除需求、边界、风险或验收口径的核心不确定性。\n\
              - 计划是把当前认知转化为需求和边界契约。\n\

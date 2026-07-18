@@ -632,6 +632,22 @@ impl ConversationPromptService {
         let current_department = chat_overrides
             .and_then(|overrides| overrides.executor_department_id.as_deref())
             .and_then(|department_id| department_by_id(&department_config, department_id));
+        let prompt_origin_scope = chat_overrides
+            .and_then(|overrides| {
+                runtime_tool_origin_scope_from_activation_sources(
+                    &overrides.remote_im_activation_sources,
+                )
+            })
+            .or_else(|| {
+                state.map(|app_state| {
+                    runtime_tool_origin_scope_from_conversation(app_state, conversation)
+                })
+            })
+            .unwrap_or(RuntimeToolOriginScope::Unknown);
+        let mut prompt_runtime_policy = RuntimeToolPolicy::from_conversation(Some(conversation));
+        if prompt_origin_scope != RuntimeToolOriginScope::Unknown {
+            prompt_runtime_policy.origin_scope = prompt_origin_scope;
+        }
         let mut tool_rule_blocks = Vec::<String>::new();
         tool_rule_blocks.push(build_memory_rag_rule_block());
         let mut deferred_tool_blocks = Vec::<String>::new();
@@ -643,29 +659,64 @@ impl ConversationPromptService {
                 deferred_tool_blocks.push(block);
             }
         }
-        if let Some(task_block) = task_block {
-            tool_rule_blocks.push(task_block);
+        if builtin_tool_prompt_rule_allowed_in_runtime(
+            "task",
+            prompt_runtime_policy.origin_scope,
+            prompt_runtime_policy.conversation_resolved,
+            prompt_runtime_policy.local_conversation,
+            prompt_runtime_policy.delegate_conversation,
+            prompt_runtime_policy.remote_reply_delegate,
+            prompt_runtime_policy.contact_send_files_allowed,
+        ) {
+            if let Some(task_block) = task_block {
+                tool_rule_blocks.push(task_block);
+            }
         }
-        if let Some(goal_block) = build_builtin_tool_rule_block("goal") {
-            tool_rule_blocks.push(goal_block);
+        if builtin_tool_prompt_rule_allowed_in_origin("goal", prompt_origin_scope) {
+            if let Some(goal_block) = build_builtin_tool_rule_block("goal") {
+                tool_rule_blocks.push(goal_block);
+            }
         }
-        tool_rule_blocks.push(build_question_and_planning_rule_block(state, conversation));
-        if let Some(todo_block) = build_builtin_tool_rule_block("todo") {
-            tool_rule_blocks.push(todo_block);
+        let plan_tool_enabled = builtin_tool_prompt_rule_allowed_in_runtime(
+            "plan",
+            prompt_runtime_policy.origin_scope,
+            prompt_runtime_policy.conversation_resolved,
+            prompt_runtime_policy.local_conversation,
+            prompt_runtime_policy.delegate_conversation,
+            prompt_runtime_policy.remote_reply_delegate,
+            prompt_runtime_policy.contact_send_files_allowed,
+        );
+        tool_rule_blocks.push(build_question_and_planning_rule_block(
+            state,
+            conversation,
+            plan_tool_enabled,
+        ));
+        if builtin_tool_prompt_rule_allowed_in_origin("todo", prompt_origin_scope) {
+            if let Some(todo_block) = build_builtin_tool_rule_block("todo") {
+                tool_rule_blocks.push(todo_block);
+            }
         }
         tool_rule_blocks.extend(deferred_tool_blocks);
-        if department_builtin_tool_enabled(&department_config, current_department, "meme") {
+        let meme_rule_enabled = builtin_tool_ids_for_prompt_rule("meme")
+            .into_iter()
+            .any(|tool_id| {
+                department_builtin_tool_enabled(&department_config, current_department, tool_id)
+            });
+        if meme_rule_enabled
+            && builtin_tool_prompt_rule_allowed_in_origin("meme", prompt_origin_scope)
+        {
             if let Some(meme_block) = meme_prompt_rule_block(state).as_deref() {
                 tool_rule_blocks.push(meme_block.trim().to_string());
             }
         }
-        if conversation_is_remote_im_contact(conversation)
+        let contact_prompt_rule_enabled = (conversation_is_remote_im_contact(conversation)
             || chat_overrides
                 .and_then(|overrides| {
                     resolve_bound_remote_im_activation_source(&overrides.remote_im_activation_sources)
                 })
-                .is_some()
-        {
+                .is_some())
+            && builtin_tool_prompt_rule_allowed_in_origin("contact_tools", prompt_origin_scope);
+        if contact_prompt_rule_enabled {
             tool_rule_blocks.push(prompt_xml_block(
                 "contact tools rule",
                 "联系人专用工具仅对本轮绑定联系人生效。\n\

@@ -84,6 +84,16 @@ fn maybe_enqueue_goal_continue_after_idle(
         return Ok(false);
     };
     let conversation = conversation_service_v2().get_conversation_prompt_context(state, conversation_id)?;
+    if matches!(
+        runtime_tool_origin_scope_from_conversation(state, &conversation),
+        RuntimeToolOriginScope::RemoteGroup | RuntimeToolOriginScope::RemoteUnknown
+    ) {
+        runtime_log_warn(format!(
+            "[目标续跑] 跳过，任务=goal_continue，conversation_id={}，goal_id={}，原因=远程群聊及其来源会话禁止 Goal",
+            conversation_id, goal.goal_id
+        ));
+        return Ok(false);
+    }
     let goal_turn = goal_continue_turn_for_conversation(&conversation, &goal.goal_id);
     let now = now_iso();
     let prompt = render_goal_continuation_prompt(&goal.objective);
@@ -271,4 +281,3 @@ fn trigger_pending_guided_queue_processing(state: &AppState) {
         trigger_guided_queue_processing(state, &conversation_id);
     }
 }
-

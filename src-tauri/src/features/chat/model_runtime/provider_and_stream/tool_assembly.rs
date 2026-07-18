@@ -393,7 +393,9 @@ struct RuntimeToolPolicy {
     conversation_resolved: bool,
     local_conversation: bool,
     delegate_conversation: bool,
+    remote_reply_delegate: bool,
     contact_send_files_allowed: bool,
+    origin_scope: RuntimeToolOriginScope,
 }
 
 impl RuntimeToolPolicy {
@@ -405,29 +407,28 @@ impl RuntimeToolPolicy {
             conversation_resolved: true,
             local_conversation: conversation_is_local_normal_chat(conversation),
             delegate_conversation: conversation_is_delegate(conversation),
+            remote_reply_delegate: false,
             contact_send_files_allowed: false,
+            origin_scope: if conversation_is_local_normal_chat(conversation) {
+                RuntimeToolOriginScope::Local
+            } else if conversation_is_remote_im_contact(conversation) {
+                RuntimeToolOriginScope::RemoteUnknown
+            } else {
+                RuntimeToolOriginScope::Unknown
+            },
         }
     }
 
     fn tool_unavailable_reason(&self, tool_name: &str) -> Option<String> {
-        match tool_name.trim() {
-            "contact_reply" | "contact_no_reply" => {
-                Some("当前运行时不挂载该联系人内部工具".to_string())
-            }
-            "contact_send_files" if !self.contact_send_files_allowed => {
-                Some("本轮没有可发送文件的有效联系人绑定".to_string())
-            }
-            "task" if !self.conversation_resolved => {
-                Some("无法确认当前会话类型，任务工具已安全跳过".to_string())
-            }
-            "task" if self.delegate_conversation => {
-                Some("委托会话禁止再次创建任务".to_string())
-            }
-            "plan" if !self.local_conversation => {
-                Some("plan 仅在本地会话中可用".to_string())
-            }
-            _ => None,
-        }
+        builtin_tool_runtime_unavailable_reason(
+            tool_name,
+            self.origin_scope,
+            self.conversation_resolved,
+            self.local_conversation,
+            self.delegate_conversation,
+            self.remote_reply_delegate,
+            self.contact_send_files_allowed,
+        )
     }
 }
 
@@ -442,34 +443,96 @@ fn runtime_tool_policy_from_session(
     let Ok(conversation_id) = goal_tool_conversation_id(tool_session_id) else {
         return RuntimeToolPolicy::default();
     };
-    let mut policy = if let Ok(conversation_meta) =
+    let (mut policy, root_conversation_id) = if let Ok(conversation_meta) =
         conversation_service_v2().get_conversation_meta(state, &conversation_id)
     {
         let conversation_kind = conversation_meta.conversation_kind.trim();
-        RuntimeToolPolicy {
-            conversation_resolved: true,
-            local_conversation: matches!(
-                conversation_kind,
-                CONVERSATION_KIND_CHAT | CONVERSATION_KIND_SIDE_CHAT
-            ),
-            delegate_conversation: conversation_kind == CONVERSATION_KIND_DELEGATE,
-            contact_send_files_allowed: false,
-        }
+        (
+            RuntimeToolPolicy {
+                conversation_resolved: true,
+                local_conversation: matches!(
+                    conversation_kind,
+                    CONVERSATION_KIND_CHAT | CONVERSATION_KIND_SIDE_CHAT
+                ),
+                delegate_conversation: conversation_kind == CONVERSATION_KIND_DELEGATE,
+                remote_reply_delegate: delegate_session_is_remote_reply_delegate(tool_session_id)
+                    && conversation_kind == CONVERSATION_KIND_REMOTE_IM_CONTACT,
+                contact_send_files_allowed: false,
+                origin_scope: if matches!(
+                    conversation_kind,
+                    CONVERSATION_KIND_CHAT | CONVERSATION_KIND_SIDE_CHAT
+                ) {
+                    RuntimeToolOriginScope::Local
+                } else if conversation_kind == CONVERSATION_KIND_REMOTE_IM_CONTACT {
+                    RuntimeToolOriginScope::RemoteUnknown
+                } else {
+                    RuntimeToolOriginScope::Unknown
+                },
+            },
+            conversation_meta.root_conversation_id,
+        )
     } else {
         let conversation = delegate_runtime_thread_conversation_get(state, &conversation_id)
             .ok()
             .flatten();
-        RuntimeToolPolicy::from_conversation(conversation.as_ref())
-    };
-    if resolve_contact_send_files {
-        policy.contact_send_files_allowed = remote_im_bound_contact_context_from_runtime(
-            state,
-            tool_session_id,
+        (
+            RuntimeToolPolicy::from_conversation(conversation.as_ref()),
+            conversation.and_then(|conversation| conversation.root_conversation_id),
         )
-        .map(|(_channel, contact)| contact.allow_send && contact.allow_send_files)
-        .unwrap_or(false);
+    };
+    let bound_contact = remote_im_bound_contact_context_from_runtime(state, tool_session_id).ok();
+    if let Some((_channel, contact)) = bound_contact.as_ref() {
+        let resolved_scope = runtime_tool_origin_scope_from_contact_type(&contact.remote_contact_type);
+        policy.origin_scope = if resolved_scope == RuntimeToolOriginScope::Unknown
+            && policy.origin_scope == RuntimeToolOriginScope::RemoteUnknown
+        {
+            RuntimeToolOriginScope::RemoteUnknown
+        } else {
+            resolved_scope
+        };
+    } else if matches!(
+        policy.origin_scope,
+        RuntimeToolOriginScope::Unknown | RuntimeToolOriginScope::RemoteUnknown
+    ) {
+        let root_scope = runtime_tool_origin_scope_from_root_conversation_key(
+            root_conversation_id.as_deref(),
+        )
+        .unwrap_or(RuntimeToolOriginScope::Unknown);
+        if root_scope != RuntimeToolOriginScope::Unknown {
+            policy.origin_scope = root_scope;
+        }
+    }
+    if resolve_contact_send_files {
+        policy.contact_send_files_allowed = bound_contact
+            .as_ref()
+            .map(|(_channel, contact)| contact.allow_send && contact.allow_send_files)
+            .unwrap_or(false);
     }
     policy
+}
+
+fn runtime_tool_origin_scope_from_root_conversation_key(
+    root_conversation_id: Option<&str>,
+) -> Option<RuntimeToolOriginScope> {
+    let root = root_conversation_id?.trim();
+    let suffix = root.strip_prefix("remote_im_contact:")?;
+    let contact_type = suffix.split(':').nth(1)?;
+    Some(runtime_tool_origin_scope_from_contact_type(contact_type))
+}
+
+fn runtime_tool_origin_scope_from_conversation(
+    state: &AppState,
+    conversation: &Conversation,
+) -> RuntimeToolOriginScope {
+    let session_id = format!("{}::{}", conversation.agent_id, conversation.id);
+    let policy = runtime_tool_policy_from_session(Some(state), &session_id, false);
+    if policy.origin_scope != RuntimeToolOriginScope::Unknown {
+        return policy.origin_scope;
+    }
+    runtime_tool_origin_scope_from_root_conversation_key(
+        conversation.root_conversation_id.as_deref(),
+    )
+    .unwrap_or(RuntimeToolOriginScope::Unknown)
 }
 
 #[derive(Debug, Clone)]
@@ -625,7 +688,7 @@ fn runtime_builtin_tool_authorization_error(
     if let Some(reason) = runtime_policy.tool_unavailable_reason(tool_name) {
         return Some(reason);
     }
-    if !builtin_tool_is_department_controlled(tool_name) && tool_name != "task" {
+    if !builtin_tool_is_department_controlled(tool_name) {
         return None;
     }
     let app_config = match state_read_config_cached(state) {
@@ -633,9 +696,6 @@ fn runtime_builtin_tool_authorization_error(
         Err(err) => return Some(format!("读取最新权限失败，已跳过本工具：{err}")),
     };
     let current_department = department_by_id(&app_config, executor_department_id);
-    if tool_name == "task" && current_department.is_none() {
-        return Some("当前执行部门已不存在，任务工具已跳过".to_string());
-    }
     if tool_name == "delegate" {
         if let Some(reason) =
             delegate_builtin_tool_unavailable_reason(&app_config, current_department)
@@ -901,9 +961,7 @@ fn build_builtin_runtime_tool_executor(
         }),
         _ => return Err(format!("未知内置工具：{tool_name}")),
     };
-    if builtin_tool_is_department_controlled(tool_name)
-        || matches!(tool_name, "task" | "plan" | "contact_send_files")
-    {
+    if builtin_tool_requires_execution_reauthorization(tool_name) {
         return Ok(Box::new(AuthorizationCheckedRuntimeTool {
             inner: tool,
             app_state: state,
@@ -1136,6 +1194,22 @@ mod tool_assembly_permission_tests {
         api.id = "api-a".to_string();
         api.enable_tools = true;
         api
+    }
+
+    #[test]
+    fn runtime_builtin_schema_registry_should_have_explicit_policy_entries() {
+        let state = AppState::new().expect("create state for builtin policy coverage");
+        let missing = build_global_tool_schema_cache(&state)
+            .iter()
+            .filter(|tool| matches!(tool.source, CachedRuntimeToolSource::Builtin))
+            .map(|tool| tool.definition.name.clone())
+            .filter(|tool_name| !builtin_tool_policy_is_explicit(tool_name))
+            .collect::<Vec<_>>();
+
+        assert!(
+            missing.is_empty(),
+            "runtime builtins must have explicit policy entries: {missing:?}"
+        );
     }
 
     #[test]

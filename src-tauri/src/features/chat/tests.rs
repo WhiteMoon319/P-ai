@@ -188,6 +188,136 @@
     }
 
     #[test]
+    fn conversation_prompt_service_should_omit_goal_rule_for_remote_group_origin() {
+        let now = now_iso();
+        let agent = default_agent();
+        let conversation = test_active_conversation_with_messages(
+            vec![test_text_message("user", "群聊消息", &now)],
+            Some(now),
+        );
+        let group_source = RemoteImActivationSource {
+            channel_id: "channel-group".to_string(),
+            platform: RemoteImPlatform::OnebotV11,
+            remote_contact_type: "group".to_string(),
+            remote_contact_id: "group-1".to_string(),
+            remote_contact_name: "测试群".to_string(),
+        };
+
+        let group_snapshot = conversation_prompt_service().build_prompt_snapshot(
+            None,
+            "chat",
+            &conversation,
+            &agent,
+            &[],
+            "zh-CN",
+            None,
+            "固定系统提示词",
+            None,
+            None,
+            &[],
+            Some(&ChatPromptOverrides {
+                remote_im_activation_sources: vec![group_source],
+                ..Default::default()
+            }),
+        );
+        let local_snapshot = conversation_prompt_service().build_prompt_snapshot(
+            None,
+            "chat",
+            &conversation,
+            &agent,
+            &[],
+            "zh-CN",
+            None,
+            "固定系统提示词",
+            None,
+            None,
+            &[],
+            None,
+        );
+
+        assert!(!group_snapshot.department_prompt.contains("<goal tool rule>"));
+        assert!(local_snapshot.department_prompt.contains("<goal tool rule>"));
+    }
+
+    #[test]
+    fn conversation_prompt_service_should_align_task_and_plan_rules_with_conversation_scope() {
+        let now = now_iso();
+        let agent = default_agent();
+        let mut department = default_assistant_department("api-a");
+        department.id = "assistant-department".to_string();
+        let mut local = test_active_conversation_with_messages(
+            vec![test_text_message("user", "本地消息", &now)],
+            Some(now.clone()),
+        );
+        local.department_id = department.id.clone();
+        let mut delegate = local.clone();
+        delegate.conversation_kind = CONVERSATION_KIND_DELEGATE.to_string();
+        let mut remote_contact = local.clone();
+        remote_contact.conversation_kind = CONVERSATION_KIND_REMOTE_IM_CONTACT.to_string();
+        remote_contact.root_conversation_id = Some(
+            "remote_im_contact:channel-group:group:group-1".to_string(),
+        );
+        let overrides = ChatPromptOverrides {
+            executor_department_id: Some(department.id.clone()),
+            ..Default::default()
+        };
+
+        let local_snapshot = conversation_prompt_service().build_prompt_snapshot(
+            None,
+            "chat",
+            &local,
+            &agent,
+            &[department.clone()],
+            "zh-CN",
+            None,
+            "固定系统提示词",
+            None,
+            None,
+            &[],
+            Some(&overrides),
+        );
+        let delegate_snapshot = conversation_prompt_service().build_prompt_snapshot(
+            None,
+            "delegate",
+            &delegate,
+            &agent,
+            &[department.clone()],
+            "zh-CN",
+            None,
+            "固定系统提示词",
+            None,
+            None,
+            &[],
+            Some(&overrides),
+        );
+        let remote_contact_snapshot = conversation_prompt_service().build_prompt_snapshot(
+            None,
+            "chat",
+            &remote_contact,
+            &agent,
+            &[department],
+            "zh-CN",
+            None,
+            "固定系统提示词",
+            None,
+            None,
+            &[],
+            Some(&overrides),
+        );
+
+        assert!(local_snapshot.department_prompt.contains("<task tool rule>"));
+        assert!(local_snapshot.department_prompt.contains("<plan tool rule>"));
+        assert!(!delegate_snapshot.department_prompt.contains("<task tool rule>"));
+        assert!(!delegate_snapshot.department_prompt.contains("<plan tool rule>"));
+        assert!(remote_contact_snapshot
+            .department_prompt
+            .contains("<task tool rule>"));
+        assert!(!remote_contact_snapshot
+            .department_prompt
+            .contains("<plan tool rule>"));
+    }
+
+    #[test]
     fn build_core_system_prompt_text_should_append_user_profile_snapshot_into_user_settings() {
         let now = now_iso();
         let agent = default_agent();
@@ -3738,6 +3868,34 @@
         let _ = ingress_chat_event(&state, test_pending_event(conversation_id))
             .expect("ingress event");
         assert!(!goal_continue_is_suppressed(&state, conversation_id).expect("check cleared"));
+    }
+
+    #[test]
+    fn remote_group_active_goal_should_not_enqueue_goal_continuation() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let mut conversation = test_chat_conversation("conversation-group-goal", "active", &now);
+        conversation.conversation_kind = CONVERSATION_KIND_REMOTE_IM_CONTACT.to_string();
+        conversation.root_conversation_id = Some(
+            "remote_im_contact:channel-group:group:group-1".to_string(),
+        );
+        conversation.department_id = "assistant-department".to_string();
+        conversation.active_goal = Some(ConversationGoalState {
+            goal_id: "legacy-group-goal".to_string(),
+            status: "active".to_string(),
+            objective: "旧群聊目标不应续跑".to_string(),
+            started_at: now.clone(),
+            ended_at: None,
+            usage_start: ConversationCumulativeUsage::default(),
+            usage_end: None,
+        });
+        state_schedule_conversation_persist(&state, &conversation)
+            .expect("persist remote group conversation");
+
+        assert!(!maybe_enqueue_goal_continue_after_idle(&state, &conversation.id)
+            .expect("group goal continuation should fail soft"));
+        assert!(!conversation_has_pending_queue_events(&state, &conversation.id)
+            .expect("read group queue"));
     }
 
     fn test_chat_conversation(conversation_id: &str, status: &str, updated_at: &str) -> Conversation {
@@ -9048,6 +9206,9 @@
         department.id = "assistant-department".to_string();
         department.is_built_in_assistant = true;
         department.agent_ids = vec![agent.id.clone()];
+        department.permission_control.enabled = true;
+        department.permission_control.mode = "whitelist".to_string();
+        department.permission_control.builtin_tool_names = Vec::new();
 
         let mut config = AppConfig {
             departments: vec![department],
@@ -9320,6 +9481,14 @@
         assert_attached_sets_equal(&remote_private_contact_assembly);
 
         let remote_group_contact_assembly = assemble_for(&remote_group_contact.id);
+        assert!(!has_attached_schema(&remote_group_contact_assembly, "create_goal"));
+        assert!(!has_executor(&remote_group_contact_assembly, "create_goal"));
+        assert!(!has_definition(&remote_group_contact_assembly, "create_goal"));
+        assert!(!has_attached_schema(&remote_group_contact_assembly, "update_goal"));
+        assert!(!has_executor(&remote_group_contact_assembly, "update_goal"));
+        assert!(!has_definition(&remote_group_contact_assembly, "update_goal"));
+        assert!(has_attached_schema(&remote_group_contact_assembly, "task"));
+        assert!(has_executor(&remote_group_contact_assembly, "task"));
         assert!(!has_attached_schema(&remote_group_contact_assembly, "contact_reply"));
         assert!(!has_executor(&remote_group_contact_assembly, "contact_reply"));
         assert!(has_attached_schema(&remote_group_contact_assembly, "contact_send_files"));
@@ -9328,6 +9497,107 @@
         assert!(!has_executor(&remote_group_contact_assembly, "contact_no_reply"));
         assert!(!has_definition(&remote_group_contact_assembly, "contact_no_reply"));
         assert_attached_sets_equal(&remote_group_contact_assembly);
+
+        let remote_group_delegate_session = format!(
+            "{}::{}::remote_reply_delegate:delegate-a",
+            agent.id, remote_group_contact.id
+        );
+        let remote_group_delegate_assembly = test_runtime().block_on(assemble_runtime_tools(
+            &config,
+            &selected_api,
+            &agent,
+            Some(&state),
+            &remote_group_delegate_session,
+            Some("assistant-department"),
+        ));
+        assert!(!has_attached_schema(&remote_group_delegate_assembly, "create_goal"));
+        assert!(!has_executor(&remote_group_delegate_assembly, "create_goal"));
+        assert!(!has_attached_schema(&remote_group_delegate_assembly, "update_goal"));
+        assert!(!has_executor(&remote_group_delegate_assembly, "update_goal"));
+        assert!(has_attached_schema(&remote_group_delegate_assembly, "task"));
+        assert!(has_executor(&remote_group_delegate_assembly, "task"));
+        let created_contact_task = test_runtime()
+            .block_on(builtin_task(
+                &state,
+                &remote_group_delegate_session,
+                &selected_api.id,
+                "assistant-department",
+                &agent.id,
+                TaskToolArgsWire {
+                    action: "create".to_string(),
+                    task_id: None,
+                    goal: Some("跟进群聊事项".to_string()),
+                    todo: Some("等待下一次联系人会话调度".to_string()),
+                    how: None,
+                    why: Some("远程应答委托创建".to_string()),
+                    title: None,
+                    cause: None,
+                    flow: None,
+                    todos: None,
+                    status_summary: None,
+                    stage_key: None,
+                    append_note: None,
+                    completion_state: None,
+                    completion_conclusion: None,
+                    trigger: Some(TaskTriggerInputLocal {
+                        run_at: Some(now_iso()),
+                        cron_expression: None,
+                        end_at: None,
+                        legacy_every_minutes: None,
+                    }),
+                },
+            ))
+            .expect("remote reply delegate should create a contact task");
+        let task_id = created_contact_task
+            .get("taskId")
+            .and_then(Value::as_str)
+            .expect("created contact task id");
+        let stored_contact_task = task_store_get_task_record(&state.data_path, task_id)
+            .expect("read created contact task");
+        assert_eq!(
+            stored_contact_task.conversation_id.as_deref(),
+            Some(remote_group_contact.id.as_str())
+        );
+        assert_eq!(stored_contact_task.target_scope, TASK_TARGET_SCOPE_CONTACT);
+        assert_eq!(
+            runtime_builtin_tool_authorization_error(
+                &state,
+                "create_goal",
+                &remote_group_delegate_session,
+                "assistant-department",
+            )
+            .as_deref(),
+            Some("远程群聊及其来源委托禁止使用 Goal 工具")
+        );
+        assert_attached_sets_equal(&remote_group_delegate_assembly);
+
+        let mut disabled_channel_config = config.clone();
+        disabled_channel_config.remote_im_channels[0].enabled = false;
+        state_write_config_cached(&state, &disabled_channel_config)
+            .expect("disable remote channel in config cache");
+        let disabled_channel_assembly = test_runtime().block_on(assemble_runtime_tools(
+            &disabled_channel_config,
+            &selected_api,
+            &agent,
+            Some(&state),
+            &remote_group_delegate_session,
+            Some("assistant-department"),
+        ));
+        assert!(!has_attached_schema(&disabled_channel_assembly, "create_goal"));
+        assert!(!has_executor(&disabled_channel_assembly, "create_goal"));
+        assert!(!has_attached_schema(&disabled_channel_assembly, "update_goal"));
+        assert!(!has_executor(&disabled_channel_assembly, "update_goal"));
+        assert_eq!(
+            runtime_builtin_tool_authorization_error(
+                &state,
+                "create_goal",
+                &remote_group_delegate_session,
+                "assistant-department",
+            )
+            .as_deref(),
+            Some("远程群聊及其来源委托禁止使用 Goal 工具")
+        );
+        assert_attached_sets_equal(&disabled_channel_assembly);
 
         let delegate_assembly = assemble_for(&delegate_conversation.id);
         assert!(!has_attached_schema(&delegate_assembly, "task"));

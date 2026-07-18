@@ -1711,10 +1711,11 @@ async fn send_chat_message_inner(
         if let Some(canonical_latest_user_text) = canonical_latest_user_text {
             latest_user_text = canonical_latest_user_text;
         }
-        let current_department = department_by_id(&app_config, &effective_department_id)
-            .ok_or_else(|| format!("执行部门不存在：department_id={effective_department_id}"))?;
-        let todo_enabled =
-            tool_enabled(&selected_api, &current_agent, Some(current_department), "todo");
+        let todo_enabled = selected_api.enable_tools
+            && builtin_tool_prompt_rule_allowed_in_origin(
+                "todo",
+                RuntimeToolOriginScope::Unknown,
+            );
         let attachment_relative_paths = legacy_attachment_relative_paths_for_prompt(
             &input.payload,
             used_canonical_latest_user_text,

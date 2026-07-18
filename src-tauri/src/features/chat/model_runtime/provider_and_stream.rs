@@ -4,6 +4,9 @@ include!("provider_and_stream/types.rs");
 // ---- 截图缓存基础设施 ----
 include!("provider_and_stream/screenshot_cache.rs");
 
+// ---- 内置工具统一策略表 ----
+include!("provider_and_stream/tool_policy.rs");
+
 // ---- 流式收集 ----
 include!("provider_and_stream/stream_collect.rs");
 
