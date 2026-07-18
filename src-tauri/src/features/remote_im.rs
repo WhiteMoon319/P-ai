@@ -668,21 +668,21 @@ fn remote_im_is_mute_expired(mute_until: &str, now: time::OffsetDateTime) -> boo
     parse_iso(mute_until).map(|value| value <= now).unwrap_or(true)
 }
 
-fn remote_im_should_activate_while_away(
+fn remote_im_should_enter_group_inspection(
     contact: &RemoteImContact,
     message_text: &str,
 ) -> (bool, String) {
     match contact.activation_mode.trim().to_ascii_lowercase().as_str() {
-        "always" => (true, "away 命中 always，切换为在场".to_string()),
+        "always" => (true, "始终入场，允许开始本次巡检".to_string()),
         "keyword" => {
             let matched = remote_im_keyword_matched(contact, message_text);
             if matched {
-                (true, "away 命中 keyword，切换为在场".to_string())
+                (true, "命中点名词，允许开始本次巡检".to_string())
             } else {
-                (false, "away 未命中 keyword，仅记录消息".to_string())
+                (false, "未命中点名词，仅记录消息，不开始巡检".to_string())
             }
         }
-        _ => (false, "away 命中 never，仅记录消息".to_string()),
+        _ => (false, "不入场，仅记录消息，不开始巡检".to_string()),
     }
 }
 
@@ -810,21 +810,15 @@ fn remote_im_prepare_enqueue_runtime_state(
             return Ok((false, reason));
         }
     }
-    let (activate_assistant, reason) = match runtime.presence_state {
-        RemoteImPresenceState::Away => {
-            let (activate, reason) = remote_im_should_activate_while_away(contact, message_text);
-            (
-                activate,
-                format!("{mute_prefix}{reason}；消息先落库，等待秘书决定后才进入在场"),
-            )
-        }
-        RemoteImPresenceState::Present => {
-            (
-                true,
-                format!("{mute_prefix}present，消息先落库后交由秘书决定引导或新建并发委托"),
-            )
-        }
-    };
+    // 入场模式是新一轮巡检的唯一门槛，不能被“在场”状态绕过。
+    // 已经入场的批次只追加消息，后续消息也不再改变本批巡检等级。
+    let (activate_assistant, entry_reason) =
+        if remote_im_group_reply_has_active_batch(state, &contact.id) {
+            (true, "当前批次已入场，追加消息且保持原巡检等级".to_string())
+        } else {
+            remote_im_should_enter_group_inspection(contact, message_text)
+        };
+    let reason = format!("{mute_prefix}{entry_reason}");
     runtime_log_info(format!(
         "[远程联系人状态机] 入站判定 完成: contact_id={}, presence={:?}, work={:?}, pending={}, activate_assistant={}, reason={}",
         contact.id,

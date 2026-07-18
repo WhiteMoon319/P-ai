@@ -40,7 +40,7 @@ describe("remote IM group behavior helpers", () => {
       focusReplyMaxChars: 10,
     });
     expect(normalized.assistantDebounceSeconds).toBe(1);
-    expect(normalized.secretaryInspectionSeconds).toBe(7);
+    expect(normalized.secretaryInspectionSeconds).toBe(60);
     expect(normalized.inspectionJitterRatio).toBe(1);
     expect(normalized.maximumEnergy).toBe(0.01);
     expect(normalized.negativeEnergyDelta).toBe(0);

@@ -43,7 +43,7 @@ fn remote_im_event_hits_wake(contact: &RemoteImContact, event: &ChatPendingEvent
     let Some(message) = remote_im_event_latest_user_message(event) else {
         return false;
     };
-    remote_im_should_activate_while_away(contact, &render_message_content_for_model(message)).0
+    remote_im_keyword_matched(contact, &render_message_content_for_model(message))
 }
 
 fn remote_im_event_hits_focus(
@@ -801,74 +801,17 @@ fn observe_remote_im_persisted_event(
                     current.pending_focus |= hits_focus;
                 } else {
                     match current.phase {
-                    RemoteImGroupReplyPhase::NonMentionScheduled => {
+                    RemoteImGroupReplyPhase::NonMentionScheduled
+                    | RemoteImGroupReplyPhase::MentionScheduled => {
+                        // 巡检等级只由入场消息决定。批次已经入场后，后续点名
+                        // 只是一条普通追加消息，不能改写已排定的巡检路径或时间。
                         current.focus |= hits_focus;
-                        if hits_mention {
-                            let generation = remote_im_group_reply_next_generation(&mut store);
-                            if let Some(current) = store.by_contact.get_mut(&key) {
-                                current.generation = generation;
-                                current.phase = RemoteImGroupReplyPhase::MentionScheduled;
-                                current.due_at = std::time::Instant::now()
-                                    + std::time::Duration::from_secs(pacing.assistant_debounce_seconds);
-                                action = Some(RemoteImGroupReplyTimerAction {
-                                    state_key: key.clone(),
-                                    contact_id: contact.id.clone(),
-                                    generation,
-                                    kind: RemoteImGroupReplyTimerKind::Mention,
-                                    delay: std::time::Duration::from_secs(
-                                        pacing.assistant_debounce_seconds,
-                                    ),
-                                });
-                            }
-                        }
-                    }
-                    RemoteImGroupReplyPhase::MentionScheduled => {
-                        current.focus |= hits_focus;
-                        if hits_mention {
-                            let generation = remote_im_group_reply_next_generation(&mut store);
-                            if let Some(current) = store.by_contact.get_mut(&key) {
-                                current.generation = generation;
-                                current.due_at = std::time::Instant::now()
-                                    + std::time::Duration::from_secs(pacing.assistant_debounce_seconds);
-                                action = Some(RemoteImGroupReplyTimerAction {
-                                    state_key: key.clone(),
-                                    contact_id: contact.id.clone(),
-                                    generation,
-                                    kind: RemoteImGroupReplyTimerKind::Mention,
-                                    delay: std::time::Duration::from_secs(
-                                        pacing.assistant_debounce_seconds,
-                                    ),
-                                });
-                            }
-                        }
                     }
                     RemoteImGroupReplyPhase::SecretaryJudging => {
-                        if hits_mention {
-                            let generation = remote_im_group_reply_next_generation(&mut store);
-                            if let Some(current) = store.by_contact.get_mut(&key) {
-                                current.generation = generation;
-                                current.phase = RemoteImGroupReplyPhase::MentionScheduled;
-                                current.focus |= hits_focus;
-                                current.pending_start_message_id = None;
-                                current.pending_focus = false;
-                                current.due_at = std::time::Instant::now()
-                                    + std::time::Duration::from_secs(pacing.assistant_debounce_seconds);
-                                action = Some(RemoteImGroupReplyTimerAction {
-                                    state_key: key.clone(),
-                                    contact_id: contact.id.clone(),
-                                    generation,
-                                    kind: RemoteImGroupReplyTimerKind::Mention,
-                                    delay: std::time::Duration::from_secs(
-                                        pacing.assistant_debounce_seconds,
-                                    ),
-                                });
-                            }
-                        } else {
-                            current
-                                .pending_start_message_id
-                                .get_or_insert_with(|| message.id.clone());
-                            current.pending_focus |= hits_focus;
-                        }
+                        current
+                            .pending_start_message_id
+                            .get_or_insert_with(|| message.id.clone());
+                        current.pending_focus |= hits_focus;
                     }
                     RemoteImGroupReplyPhase::AssistantDispatching => {
                         current

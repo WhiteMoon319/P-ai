@@ -110,7 +110,14 @@ fn remote_im_event_requires_reply_delegate(event: &ChatPendingEvent) -> bool {
             .sender_info
             .as_ref()
             .map(|sender| sender.remote_contact_type.trim().eq_ignore_ascii_case("group"))
-            .unwrap_or(false)
+        .unwrap_or(false)
+}
+
+fn remote_im_event_should_observe_after_persistence(
+    event: &ChatPendingEvent,
+    should_activate: bool,
+) -> bool {
+    should_activate && remote_im_event_requires_reply_delegate(event)
 }
 
 /// 远程消息已经先统一落库，但不能把同一批的多条消息合并成一次秘书判断。
@@ -466,9 +473,8 @@ async fn process_persisted_remote_im_events_individually(
     _persisted_batch_messages: &[ChatMessage],
     _scheduler_agents: &[AgentProfile],
 ) {
-    let _ = event_activate_flags;
-    for event in events {
-        if !remote_im_event_requires_reply_delegate(event) {
+    for (event, should_activate) in events.iter().zip(event_activate_flags.iter().copied()) {
+        if !remote_im_event_should_observe_after_persistence(event, should_activate) {
             continue;
         }
         let Some(sender) = event.sender_info.as_ref() else {

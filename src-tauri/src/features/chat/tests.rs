@@ -2738,6 +2738,8 @@
 
         assert!(!remote_im_event_requires_reply_delegate(&private_event));
         assert!(remote_im_event_requires_reply_delegate(&group_event));
+        assert!(!remote_im_event_should_observe_after_persistence(&group_event, false));
+        assert!(remote_im_event_should_observe_after_persistence(&group_event, true));
     }
 
     #[test]

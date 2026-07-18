@@ -1992,6 +1992,7 @@
     fn remote_im_contact_activation_inner_should_preserve_private_response_strategy() {
         let state = remote_im_test_state();
         let contact = remote_im_test_contact("contact-private", "conversation-private");
+        let expected_response_guidance = contact.response_guidance.clone();
         let mut runtime = RuntimeStateFile::default();
         runtime.remote_im_contacts.push(contact);
         state_write_runtime_state_cached(&state, &runtime).expect("write runtime state");
@@ -2015,7 +2016,7 @@
 
         assert_eq!(updated.activation_mode, "always");
         assert_eq!(updated.response_strategy, "always_reply");
-        assert_eq!(updated.response_guidance, "测试指引");
+        assert_eq!(updated.response_guidance, expected_response_guidance);
         let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
     }
 
@@ -2338,6 +2339,7 @@
         let state = remote_im_test_state();
         let mut contact = remote_im_test_contact("contact-private-patch", "conversation-private-patch");
         contact.group_reply_pacing.maximum_energy = 77.0;
+        let expected_response_guidance = contact.response_guidance.clone();
         let mut runtime = RuntimeStateFile::default();
         runtime.remote_im_contacts.push(contact);
         state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
@@ -2371,7 +2373,7 @@
         assert_eq!(updated.activation_mode, "always");
         assert!(updated.activation_keywords.is_empty());
         assert_eq!(updated.response_strategy, "always_reply");
-        assert!(updated.response_guidance.is_empty());
+        assert_eq!(updated.response_guidance, expected_response_guidance);
         assert_eq!(updated.group_reply_pacing.maximum_energy, 77.0);
         assert!(updated.allow_receive && updated.allow_send);
     }
@@ -3779,10 +3781,12 @@
     }
 
     #[test]
-    fn remote_im_prepare_enqueue_runtime_state_should_activate_secretary_for_next_wave_when_present_idle() {
+    fn remote_im_prepare_enqueue_runtime_state_should_not_schedule_unmentioned_message_when_present() {
         let state = remote_im_test_state();
         let mut contact = remote_im_test_contact("contact-a", "conversation-a");
         contact.remote_contact_type = "group".to_string();
+        contact.activation_mode = "keyword".to_string();
+        contact.activation_keywords = vec!["@助理".to_string()];
         {
             let mut runtime_states =
                 lock_remote_im_contact_runtime_states(&state).expect("lock runtime states");
@@ -3797,8 +3801,8 @@
             remote_im_prepare_enqueue_runtime_state(&state, &contact, "普通新消息")
                 .expect("prepare runtime state");
 
-        assert!(activate_assistant);
-        assert!(reason.contains("先落库后交由秘书决定"));
+        assert!(!activate_assistant);
+        assert!(reason.contains("未命中点名词"));
         let runtime_states =
             lock_remote_im_contact_runtime_states(&state).expect("lock runtime states");
         let runtime = runtime_states.get("contact-a").expect("runtime exists");
@@ -3962,9 +3966,10 @@
     }
 
     #[test]
-    fn group_reply_state_should_upgrade_non_mention_to_mention_without_losing_batch() {
+    fn group_reply_state_should_keep_entry_inspection_level_for_later_messages() {
         let state = remote_im_test_state();
         let mut contact = remote_im_test_contact("contact-a", "conversation-a");
+        contact.remote_contact_type = "group".to_string();
         contact.activation_mode = "keyword".to_string();
         contact.activation_keywords = vec!["@助理".to_string()];
         contact.group_reply_pacing.assistant_debounce_seconds = 3600;
@@ -4009,27 +4014,30 @@
             assert_eq!(entry.start_message_id, "message-normal");
             (entry.generation, entry.due_at)
         };
+        let (activate_assistant, reason) =
+            remote_im_prepare_enqueue_runtime_state(&state, &contact, "未点名的后续消息")
+                .expect("prepare active batch");
+        assert!(activate_assistant);
+        assert!(reason.contains("当前批次已入场"), "reason={reason}");
         observe_remote_im_persisted_event(&state, &contact, &event("normal-2", "user-b", "普通跟话"));
         {
-            let mut store = remote_im_group_reply_state_store().lock().expect("lock group state");
+            let store = remote_im_group_reply_state_store().lock().expect("lock group state");
             let entry = store.by_contact.get(&key).expect("same inspection");
             assert_eq!(entry.generation, initial_generation);
             assert_eq!(entry.due_at, initial_due_at);
             assert_eq!(entry.end_message_id, "message-normal-2");
-            let entry = store.by_contact.get_mut(&key).expect("same inspection mutable");
-            entry.phase = RemoteImGroupReplyPhase::SecretaryJudging;
-            entry.decision_end_message_id = Some(entry.end_message_id.clone());
         }
         observe_remote_im_persisted_event(&state, &contact, &event("wake", "user-b", "@助理 看这里"));
         {
             let store = remote_im_group_reply_state_store().lock().expect("lock group state");
-            let entry = store.by_contact.get(&key).expect("mention scheduled");
-            assert_eq!(entry.phase, RemoteImGroupReplyPhase::MentionScheduled);
-            assert!(entry.generation > initial_generation);
+            let entry = store.by_contact.get(&key).expect("same inspection");
+            assert_eq!(entry.phase, RemoteImGroupReplyPhase::NonMentionScheduled);
+            assert_eq!(entry.generation, initial_generation);
+            assert_eq!(entry.due_at, initial_due_at);
             assert_eq!(entry.start_message_id, "message-normal");
             assert_eq!(entry.end_message_id, "message-wake");
         }
-        assert!(!remote_im_group_reply_generation_is_current(
+        assert!(remote_im_group_reply_generation_is_current(
             &state,
             &contact.id,
             initial_generation,

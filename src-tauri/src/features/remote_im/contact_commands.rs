@@ -1365,17 +1365,10 @@ pub(crate) fn remote_im_enqueue_message_internal(
         &audios,
         &attachments,
     );
-    let (activate_assistant, state_reason) =
-        match remote_im_prepare_enqueue_runtime_state(state, &contact_for_log, &text) {
-            Ok(result) => result,
-            Err(err) => {
-                runtime_log_warn(format!(
-                    "[远程IM] 入站状态机准备失败，本次消息仍入队但不自动激活，contact_id={}，conversation_id={}，error={}",
-                    contact_id, conversation_id, err
-                ));
-                (false, "runtime_state_degraded".to_string())
-            }
-        };
+    // 联系人入场判断必须发生在消息写入会话之后；这里仅保留渠道级开关，
+    // 让历史落地链路在持久化完成后决定是否启动群聊巡检。
+    let activate_assistant = channel.activate_assistant;
+    let state_reason = "等待历史落地后判定入场";
     runtime_log_info(format!(
         "[远程联系人状态机] 入站消息 接入: contact_id={}, conversation_id={}, activate_assistant={}, reason={}",
         contact_id, conversation_id, activate_assistant, state_reason

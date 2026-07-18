@@ -6,7 +6,7 @@ import type {
 
 export const DEFAULT_REMOTE_IM_GROUP_REPLY_PACING: RemoteImGroupReplyPacing = {
   assistantDebounceSeconds: 1,
-  secretaryInspectionSeconds: 7,
+  secretaryInspectionSeconds: 60,
   replyCooldownSeconds: 10,
   inspectionJitterRatio: 0.2,
   maximumEnergy: 100,
@@ -180,9 +180,9 @@ export function processingModeHint(item: RemoteImContact): string {
 
 export function contactActivationHint(item: RemoteImContact): string {
   const mode = normalizeActivationMode(item.activationMode);
-  if (mode === "always") return "始终入场：满足接待条件时，总是允许进入激活流程。";
-  if (mode === "keyword") return "关键词入场：消息命中关键词时，才允许进入激活流程。";
-  return "不入场：只记录消息，不进入激活流程。";
+  if (mode === "always") return "始终入场：消息入库后，总是开始本批巡检。";
+  if (mode === "keyword") return "点名入场：消息命中点名词时，才允许进入巡检流程。";
+  return "不入场：消息只入库，不开始巡检。";
 }
 
 export function contactResponseStrategyHint(item: RemoteImContact): string {

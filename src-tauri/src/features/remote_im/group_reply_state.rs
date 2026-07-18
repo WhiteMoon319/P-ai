@@ -142,6 +142,13 @@ fn remote_im_group_reply_generation_is_current(
         .unwrap_or(false)
 }
 
+fn remote_im_group_reply_has_active_batch(state: &AppState, contact_id: &str) -> bool {
+    let key = remote_im_group_reply_state_key(state, contact_id);
+    lock_remote_im_group_reply_state_store()
+        .by_contact
+        .contains_key(&key)
+}
+
 #[cfg(test)]
 mod remote_im_group_reply_state_tests {
     use super::*;

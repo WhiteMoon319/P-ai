@@ -60,7 +60,39 @@ fn remote_im_handle_persisted_event_after_history_flush_runtime(
         return Ok(false);
     }
 
-    let should_activate;
+    let message_text = event
+        .messages
+        .last()
+        .map(render_message_content_for_model)
+        .unwrap_or_default();
+    let (should_activate, entry_reason) = match remote_im_prepare_enqueue_runtime_state(
+        state,
+        &contact,
+        &message_text,
+    ) {
+        Ok(result) => result,
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[远程IM] 历史落地后入场判定失败，本次不启动巡检，contact_id={}, conversation_id={}, error={}",
+                contact.id, conversation.id, err
+            ));
+            (false, "入场判定失败，仅保留已入库消息".to_string())
+        }
+    };
+    if !should_activate {
+        remote_im_append_channel_log(
+            &contact.channel_id,
+            "info",
+            format!(
+                "[联系人状态] 历史落地: contact={}, conversation_id={}, activate=否, reason={}",
+                remote_im_contact_log_label(&contact),
+                conversation.id,
+                entry_reason
+            ),
+        );
+        return Ok(false);
+    }
+
     let (
         previous_presence,
         previous_work,
@@ -76,10 +108,13 @@ fn remote_im_handle_persisted_event_after_history_flush_runtime(
         let previous_work = runtime.work_state;
         let previous_pending = runtime.has_pending;
         let state_reason = match runtime.presence_state {
-            RemoteImPresenceState::Away => "persisted_await_secretary_wake".to_string(),
-            RemoteImPresenceState::Present => "persisted_await_secretary_present".to_string(),
+            RemoteImPresenceState::Away => {
+                format!("{}；已入场，开始首轮巡检", entry_reason)
+            }
+            RemoteImPresenceState::Present => {
+                format!("{}；已入场，开始在场巡检", entry_reason)
+            }
         };
-        should_activate = true;
         (
             previous_presence,
             previous_work,
@@ -92,8 +127,8 @@ fn remote_im_handle_persisted_event_after_history_flush_runtime(
     };
 
     if should_activate {
-        // 每个已落库远程事件都必须单独交给秘书判断；不能因同一批前一条
-        // 消息已经激活而跳过后续消息。
+        // 已入场的远程事件才会进入巡检；同一批后续消息由批次状态追加，
+        // 不会因为联系人仍处于在场状态而让新的未入场消息混入。
         activated_contacts_in_batch.insert(format!("{}:{}", contact.id, event.id));
         runtime_log_info(format!(
             "[远程联系人状态机] 激活调度 开始: contact_id={}, conversation_id={}",

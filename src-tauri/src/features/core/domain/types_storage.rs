@@ -464,7 +464,7 @@ fn default_remote_im_assistant_debounce_seconds() -> u64 {
 }
 
 fn default_remote_im_secretary_inspection_seconds() -> u64 {
-    7
+    60
 }
 
 fn default_remote_im_reply_cooldown_seconds() -> u64 {
@@ -921,6 +921,7 @@ mod types_storage_tests {
     #[test]
     fn remote_im_group_reply_pacing_should_use_demonstrative_phrase_defaults() {
         let defaults = RemoteImGroupReplyPacing::default();
+        assert_eq!(defaults.secretary_inspection_seconds, 60);
         assert_eq!(defaults.positive_energy_phrases, vec!["厉害", "像人"]);
         assert_eq!(defaults.negative_energy_phrases, vec!["够了", "烦", "串了"]);
         assert_eq!(
