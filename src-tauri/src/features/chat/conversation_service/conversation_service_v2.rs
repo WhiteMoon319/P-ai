@@ -172,7 +172,12 @@ mod preserved_conversation_reader_tests {
 
         assert_eq!(selected.len(), 1);
         assert_eq!(
-            build_remote_im_wake_preserved_dialogue(&selected, "遥酱"),
+            collect_block_preserved_dialogue(
+                &selected,
+                "远程联系人",
+                "遥酱",
+                PreservedDialogueBudget::Tokens(1_000),
+            ),
             "遥酱：我先核对群聊状态机。"
         );
     }
@@ -238,7 +243,12 @@ mod preserved_conversation_reader_tests {
             Some("群友甲")
         );
         assert_eq!(
-            build_remote_im_wake_preserved_dialogue(std::slice::from_ref(&remote_message), "遥酱"),
+            collect_block_preserved_dialogue(
+                std::slice::from_ref(&remote_message),
+                "远程联系人",
+                "遥酱",
+                PreservedDialogueBudget::Tokens(1_000),
+            ),
             "群友甲：查看这个计划"
         );
         let assistant_message = message(
@@ -248,9 +258,11 @@ mod preserved_conversation_reader_tests {
             "我看看",
         );
         assert_eq!(
-            build_remote_im_wake_preserved_dialogue(
+            collect_block_preserved_dialogue(
                 &[remote_message.clone(), assistant_message],
+                "远程联系人",
                 "遥酱",
+                PreservedDialogueBudget::Tokens(1_000),
             ),
             "群友甲：查看这个计划\n遥酱：我看看"
         );
@@ -282,11 +294,11 @@ mod preserved_conversation_reader_tests {
         );
         branch.parent_conversation_id = Some("source-conversation".to_string());
         branch.messages = vec![branch_copy];
-        let preserved = build_compaction_preserved_dialogue_block(
-            &branch,
+        let preserved = collect_block_preserved_dialogue(
+            &branch.messages,
             "本地昵称",
             "助理",
-            10_000,
+            PreservedDialogueBudget::Tokens(10_000),
         );
         assert_eq!(preserved, "群友甲：查看这个计划");
         assert!(!preserved.contains("用户："));

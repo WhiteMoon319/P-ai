@@ -213,6 +213,17 @@ async fn run_context_compaction_pipeline_inner(
         .read_archive_pipeline_cross_message_context(state, &source.id)
         .map_err(|err| format!("读取消息锚定压缩上下文失败：{}", err))?;
     let (owner_agent, owner_agent_id, user_alias) = resolve_archive_owner_context(state, source)?;
+    let preserved_dialogue = conversation_service_v2()
+        .read_block_preserved_dialogue(
+            state,
+            &source.id,
+            None,
+            None,
+            &user_alias,
+            &owner_agent.name,
+            ACTIVE_COMPACTION_PRESERVED_DIALOGUE_BUDGET,
+        )
+        .map_err(|err| format!("读取 block 保留对话失败：{}", err))?;
 
     runtime_log_debug(format!(
         "[{}] trace={} 开始，api={} model={} format={} conversation={} ownerAgent={}",
@@ -263,12 +274,7 @@ async fn run_context_compaction_pipeline_inner(
         &summary_with_pending_plan,
         Some(summary_draft.title.as_str()),
         compaction_reason,
-        Some(&build_compaction_preserved_dialogue_block(
-            &compaction_source,
-            &user_alias,
-            &owner_agent.name,
-            10_000,
-        )),
+        Some(&preserved_dialogue),
     );
     let persist_result = conversation_service_v2().persist_compaction_message(
         state,

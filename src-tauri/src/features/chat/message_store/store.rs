@@ -77,6 +77,13 @@ pub(super) struct MessageStoreBlockPage {
 }
 
 #[derive(Debug, Clone)]
+pub(super) struct MessageStoreBlockMessagePage {
+    pub(super) selected_block_id: u32,
+    pub(super) messages: Vec<ChatMessage>,
+    pub(super) has_more: bool,
+}
+
+#[derive(Debug, Clone)]
 pub(super) struct MessageStoreBranchSelection {
     pub(super) selected_messages: Vec<ChatMessage>,
     pub(super) first_selected_ordinal: usize,
@@ -1247,6 +1254,33 @@ pub(super) fn read_ready_message_store_block_page(
     }))
 }
 
+pub(super) fn read_ready_message_store_block_messages_before(
+    paths: &MessageStorePaths,
+    requested_block_id: Option<u32>,
+    before_message_id: Option<&str>,
+    limit: usize,
+) -> Result<Option<MessageStoreBlockMessagePage>, String> {
+    if paths.is_v3_ready()? {
+        return Ok(Some(chat_metadata_store_read_block_messages_before(
+            paths,
+            requested_block_id,
+            before_message_id,
+            limit,
+        )?));
+    }
+    let Some(store) = ready_jsonl_snapshot_store(paths)? else {
+        return Ok(None);
+    };
+    let Some(index) = store.index()? else {
+        return Err(format!(
+            "读取 JSONL block 保留对话失败：缺少消息索引，conversation_id={}",
+            paths.conversation_id
+        ));
+    };
+    read_jsonl_block_messages_before(paths, &index, requested_block_id, before_message_id, limit)
+        .map(Some)
+}
+
 pub(super) fn read_message_store_current_compaction_segment_for_conversation(
     paths: &MessageStorePaths,
     conversation: &Conversation,
@@ -1979,6 +2013,88 @@ fn find_index_item_position(index: &MessageStoreIndexFile, message_id: &str) -> 
         .items
         .iter()
         .position(|item| item.message_id.trim() == message_id)
+}
+
+fn read_jsonl_block_messages_before(
+    paths: &MessageStorePaths,
+    index: &MessageStoreIndexFile,
+    requested_block_id: Option<u32>,
+    before_message_id: Option<&str>,
+    limit: usize,
+) -> Result<MessageStoreBlockMessagePage, String> {
+    let before_message_id = before_message_id
+        .map(str::trim)
+        .filter(|message_id| !message_id.is_empty());
+    let before_position = before_message_id
+        .map(|message_id| {
+            find_index_item_position(index, message_id)
+                .ok_or_else(|| format!("Message not found: {message_id}"))
+        })
+        .transpose()?;
+    let anchor_block_id = before_position
+        .and_then(|position| index.items.get(position))
+        .map(|item| item.block_id.unwrap_or(0));
+    if let (Some(requested), Some(anchor)) = (requested_block_id, anchor_block_id) {
+        if requested != anchor {
+            return Err(format!(
+                "block 反向读取锚点不属于目标块：conversation_id={}，block_id={}，anchor_block_id={}",
+                paths.conversation_id, requested, anchor
+            ));
+        }
+    }
+    let selected_block_id = requested_block_id
+        .or(anchor_block_id)
+        .or_else(|| index.items.last().map(|item| item.block_id.unwrap_or(0)))
+        .unwrap_or(0);
+    let block_positions = index
+        .items
+        .iter()
+        .enumerate()
+        .filter_map(|(position, item)| {
+            (item.block_id.unwrap_or(0) == selected_block_id).then_some(position)
+        })
+        .collect::<Vec<_>>();
+    if block_positions.is_empty() {
+        if requested_block_id.is_some() {
+            return Err(format!(
+                "会话块不存在，conversation_id={}，block_id={selected_block_id}",
+                paths.conversation_id
+            ));
+        }
+        return Ok(MessageStoreBlockMessagePage {
+            selected_block_id,
+            messages: Vec::new(),
+            has_more: false,
+        });
+    }
+    let end = before_position
+        .map(|position| {
+            block_positions
+                .iter()
+                .position(|candidate| *candidate == position)
+                .ok_or_else(|| {
+                    format!(
+                        "block 反向读取锚点未进入目标块索引：conversation_id={}，block_id={selected_block_id}",
+                        paths.conversation_id
+                    )
+                })
+        })
+        .transpose()?
+        .unwrap_or(block_positions.len());
+    let limit = normalized_message_limit(limit);
+    let start = end.saturating_sub(limit);
+    let selected_items = block_positions[start..end]
+        .iter()
+        .filter_map(|position| index.items.get(*position).cloned())
+        .collect::<Vec<_>>();
+    Ok(MessageStoreBlockMessagePage {
+        selected_block_id,
+        messages: read_jsonl_snapshot_messages_by_index_items(
+            &paths.messages_file,
+            &selected_items,
+        )?,
+        has_more: start > 0,
+    })
 }
 
 fn read_jsonl_snapshot_messages_by_index_items(
@@ -3158,6 +3274,57 @@ mod message_store_reader_tests {
             previous.messages.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(),
             vec!["c1", "m2"]
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn message_store_jsonl_block_reader_should_stop_at_block_boundary() {
+        let messages = vec![
+            test_message("old", "user"),
+            test_compaction_message("c1", "context_compaction"),
+            test_message("current-1", "user"),
+            test_message("current-2", "assistant"),
+        ];
+        let (root, messages_file, index_file) = write_test_blocks_with_index(&messages);
+        let store = JsonlSnapshotMessageStore::with_index(messages_file.clone(), index_file);
+        let index = store.index().expect("read index").expect("index");
+        let paths = message_store_paths_for_shard_dir(
+            &root,
+            "conversation-reader",
+            messages_file.parent().expect("shard dir").to_path_buf(),
+            root.join("conversation.json"),
+        )
+        .expect("message store paths");
+
+        let latest = read_jsonl_block_messages_before(&paths, &index, None, None, 10)
+            .expect("read latest block");
+        assert_eq!(
+            latest
+                .messages
+                .iter()
+                .map(|message| message.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["c1", "current-1", "current-2"]
+        );
+        assert!(!latest.has_more);
+
+        let before = read_jsonl_block_messages_before(
+            &paths,
+            &index,
+            None,
+            Some("current-2"),
+            10,
+        )
+        .expect("read block before anchor");
+        assert_eq!(
+            before
+                .messages
+                .iter()
+                .map(|message| message.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["c1", "current-1"]
+        );
+        assert!(!before.has_more);
         let _ = fs::remove_dir_all(root);
     }
 

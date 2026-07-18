@@ -1,31 +1,3 @@
-fn build_remote_im_wake_preserved_dialogue(
-    messages: &[ChatMessage],
-    assistant_name: &str,
-) -> String {
-    messages
-        .iter()
-        .map(|message| {
-            let speaker = if message.role.trim().eq_ignore_ascii_case("assistant") {
-                let assistant = assistant_name.trim();
-                if assistant.is_empty() {
-                    "助手".to_string()
-                } else {
-                    assistant.to_string()
-                }
-            } else {
-                remote_im_sender_display_name(message)
-                    .unwrap_or_else(|| "远程联系人".to_string())
-            };
-            format!(
-                "{speaker}：{}",
-                render_preserved_conversation_message_text(message).trim()
-            )
-        })
-        .filter(|line| !line.trim().is_empty())
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 impl ConversationServiceV2 {
     fn list_archives(
         &self,
@@ -489,10 +461,6 @@ impl ConversationServiceV2 {
         trigger_message_id: &str,
         include_history: bool,
     ) -> Result<ChatMessage, String> {
-        const WINDOW_SECONDS: i64 = 60 * 60;
-        const WINDOW_MAX_CHARS: usize = 10_000;
-        const WINDOW_MIN_MESSAGES: usize = 7;
-
         let conversation_id = conversation_id.trim();
         let trigger_message_id = trigger_message_id.trim();
         if conversation_id.is_empty() || trigger_message_id.is_empty() {
@@ -526,29 +494,26 @@ impl ConversationServiceV2 {
             trigger_message_id,
         )?
         .ok_or_else(|| format!("远程唤醒压缩失败：触发消息缺少序号，message_id={trigger_message_id}"))?;
-        let selected = if include_history {
-            // 触发消息可能不是当前批次的最后一条。把它作为读取上界而不包含它，
-            // 触发后已落库的新消息会留在新 block，不能提前写进这次唤醒摘要。
-            self.read_preserved_conversation_messages(
-                state,
-                conversation_id,
-                Some(trigger_message_id),
-                false,
-                Some(WINDOW_SECONDS),
-                WINDOW_MIN_MESSAGES,
-                WINDOW_MAX_CHARS,
-            )?
-        } else {
-            Vec::new()
-        };
         let assistant_name = state_read_agents_cached(state)?
             .into_iter()
             .find(|agent| agent.id.trim() == conversation_meta.agent_id.trim())
             .map(|agent| agent.name.trim().to_string())
             .filter(|name| !name.is_empty())
             .unwrap_or_else(|| "助手".to_string());
-        let preserved_dialogue =
-            build_remote_im_wake_preserved_dialogue(&selected, &assistant_name);
+        let preserved_dialogue = if include_history {
+            // 触发消息作为结束锚点但不纳入保留对话；触发后新消息留在当前 block。
+            self.read_block_preserved_dialogue(
+                state,
+                conversation_id,
+                None,
+                Some(trigger_message_id),
+                "远程联系人",
+                &assistant_name,
+                ACTIVE_COMPACTION_PRESERVED_DIALOGUE_BUDGET,
+            )?
+        } else {
+            String::new()
+        };
         let summary = build_compaction_message(
             "",
             Some("远程唤醒上下文"),

@@ -1846,6 +1846,128 @@ fn chat_metadata_store_block_page(
     })
 }
 
+fn chat_metadata_store_query_block_locators_before(
+    conn: &rusqlite::Connection,
+    conversation_id: &str,
+    block_id: u32,
+    before_sequence: Option<i64>,
+    limit: usize,
+) -> Result<(Vec<ChatMetadataLocator>, bool), String> {
+    let normalized_limit = normalized_message_limit(limit);
+    let requested = normalized_limit.saturating_add(1) as i64;
+    let block_id_value = block_id as i64;
+    let (sql, values): (&str, Vec<&dyn rusqlite::ToSql>) =
+        if let Some(before_sequence) = before_sequence.as_ref() {
+            (
+                "SELECT sequence, message_id, block_id, byte_offset, byte_len, compaction_kind, role, created_at
+                 FROM message_locator
+                 WHERE conversation_id=?1 AND block_id=?2 AND sequence<?3
+                 ORDER BY sequence DESC LIMIT ?4",
+                vec![&conversation_id, &block_id_value, before_sequence, &requested],
+            )
+        } else {
+            (
+                "SELECT sequence, message_id, block_id, byte_offset, byte_len, compaction_kind, role, created_at
+                 FROM message_locator
+                 WHERE conversation_id=?1 AND block_id=?2
+                 ORDER BY sequence DESC LIMIT ?3",
+                vec![&conversation_id, &block_id_value, &requested],
+            )
+        };
+    let mut statement = conn
+        .prepare(sql)
+        .map_err(|err| format!("准备反向读取 SQLite block 消息失败: {err}"))?;
+    let rows = statement
+        .query_map(rusqlite::params_from_iter(values), |row| {
+            Ok(ChatMetadataLocator {
+                sequence: row.get(0)?,
+                item: MessageStoreIndexItem {
+                    message_id: row.get(1)?,
+                    block_id: Some(row.get::<_, i64>(2)? as u32),
+                    offset: row.get::<_, i64>(3)? as u64,
+                    byte_len: row.get::<_, i64>(4)? as u64,
+                    compaction_kind: row.get(5)?,
+                    role: row.get(6)?,
+                    created_at: row.get(7)?,
+                },
+            })
+        })
+        .map_err(|err| format!("反向读取 SQLite block 消息失败: {err}"))?;
+    let mut locators = rows
+        .map(|row| row.map_err(|err| format!("解析 SQLite block 消息失败: {err}")))
+        .collect::<Result<Vec<_>, _>>()?;
+    let has_more = locators.len() > normalized_limit;
+    locators.truncate(normalized_limit);
+    locators.reverse();
+    Ok((locators, has_more))
+}
+
+fn chat_metadata_store_read_block_messages_before(
+    paths: &MessageStorePaths,
+    requested_block_id: Option<u32>,
+    before_message_id: Option<&str>,
+    limit: usize,
+) -> Result<MessageStoreBlockMessagePage, String> {
+    chat_metadata_store_with_read_snapshot(paths, || {
+        let before_message_id = before_message_id
+            .map(str::trim)
+            .filter(|message_id| !message_id.is_empty());
+        let anchor = before_message_id
+            .map(|message_id| {
+                chat_metadata_store_read_locator_by_id(paths, message_id)?.ok_or_else(|| {
+                    format!("Message not found: {message_id}")
+                })
+            })
+            .transpose()?;
+        let anchor_block_id = anchor
+            .as_ref()
+            .and_then(|locator| locator.item.block_id);
+        if let (Some(requested), Some(anchor_block_id)) =
+            (requested_block_id, anchor_block_id)
+        {
+            if requested != anchor_block_id {
+                return Err(format!(
+                    "block 反向读取锚点不属于目标块：conversation_id={}，block_id={}，anchor_block_id={}",
+                    paths.conversation_id, requested, anchor_block_id
+                ));
+            }
+        }
+        let selected_block_id = requested_block_id
+            .or(anchor_block_id)
+            .or(chat_metadata_store_read_last_block_id(paths)?)
+            .unwrap_or(0);
+        let conn = chat_metadata_store_open(&paths.data_path)?;
+        if requested_block_id.is_some() {
+            let block_exists = conn
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM conversation_blocks WHERE conversation_id=?1 AND block_id=?2)",
+                    rusqlite::params![paths.conversation_id, selected_block_id as i64],
+                    |row| row.get::<_, bool>(0),
+                )
+                .map_err(|err| format!("确认 SQLite block 存在失败: {err}"))?;
+            if !block_exists {
+                return Err(format!(
+                    "SQLite 会话块不存在，conversation_id={}，block_id={selected_block_id}",
+                    paths.conversation_id
+                ));
+            }
+        }
+        let anchor_sequence = anchor.as_ref().map(|locator| locator.sequence);
+        let (locators, has_more) = chat_metadata_store_query_block_locators_before(
+            &conn,
+            &paths.conversation_id,
+            selected_block_id,
+            anchor_sequence,
+            limit,
+        )?;
+        Ok(MessageStoreBlockMessagePage {
+            selected_block_id,
+            messages: chat_metadata_store_read_messages_for_locators(paths, &locators, false)?,
+            has_more,
+        })
+    })
+}
+
 fn chat_metadata_store_status(paths: &MessageStorePaths) -> Result<Option<MessageStoreStatus>, String> {
     let Some(meta) = chat_metadata_store_read_meta(paths)? else { return Ok(None); };
     let conn = chat_metadata_store_open(&paths.data_path)?;
@@ -2319,6 +2441,45 @@ fn v3_chat_metadata_migration_should_recover_building_from_blocks_and_drop_bad_l
     let page = chat_metadata_store_read_recent_page(&paths, 10, false).expect("read recovered messages");
     assert_eq!(page.messages.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(), vec!["m1", "m2", "m3"]);
     assert!(!fs::read_to_string(&block_path).expect("read repaired block").contains("broken json line"));
+    let _ = fs::remove_dir_all(root);
+}
+
+
+#[cfg(test)]
+#[test]
+fn v3_chat_metadata_block_reader_should_stop_at_block_boundary() {
+    let root = std::env::temp_dir().join(format!("eca-chat-v3-block-reader-{}", Uuid::new_v4()));
+    let data_path = root.join("app_data.json");
+    let message = |id: &str, role: &str| ChatMessage {
+        id: id.to_string(), role: role.to_string(), created_at: now_iso(), speaker_agent_id: None,
+        parts: vec![MessagePart::Text { text: id.to_string(), reasoning_content: None }], extra_text_blocks: Vec::new(), provider_meta: None, tool_call: None, mcp_call: None, meme_annotations: None,
+    };
+    let mut compaction = message("summary", "user");
+    compaction.provider_meta = Some(serde_json::json!({
+        "message_meta": { "kind": "context_compaction" }
+    }));
+    let conversation = Conversation {
+        id: "conv-v3-block-reader".to_string(), title: "SQLite block reader".to_string(), agent_id: DEFAULT_AGENT_ID.to_string(), department_id: String::new(), bound_conversation_id: None, parent_conversation_id: None, child_conversation_ids: Vec::new(), fork_message_cursor: None, unread_count: 0, conversation_kind: CONVERSATION_KIND_CHAT.to_string(), root_conversation_id: None, delegate_id: None, created_at: now_iso(), updated_at: now_iso(), last_user_at: None, last_assistant_at: None, status: "active".to_string(), summary: String::new(), user_profile_snapshot: String::new(), shell_workspace_path: None, shell_workspaces: Vec::new(), shell_autonomous_mode: false, archived_at: None,
+        messages: vec![message("old", "user"), compaction, message("current-1", "user"), message("current-2", "assistant")],
+        fast_request_turns: Vec::new(), current_todos: Vec::new(), memory_recall_table: Vec::new(), plan_mode_enabled: false, preferred_api_config_id: None, auto_push_remote_contact_id: None, active_goal: None, cumulative_usage: ConversationCumulativeUsage::default(),
+    };
+    let paths = message_store_paths(&data_path, &conversation.id).expect("paths");
+    write_jsonl_snapshot_directory_shard(&paths, &conversation).expect("write v2 fixture");
+    chat_metadata_store_run_v3_migration(&data_path).expect("migrate v3");
+
+    let page = chat_metadata_store_read_block_messages_before(
+        &paths,
+        None,
+        Some("current-2"),
+        10,
+    )
+    .expect("read current block before anchor");
+
+    assert_eq!(
+        page.messages.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(),
+        vec!["summary", "current-1"]
+    );
+    assert!(!page.has_more);
     let _ = fs::remove_dir_all(root);
 }
 

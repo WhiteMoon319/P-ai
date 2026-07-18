@@ -5553,11 +5553,11 @@
                 .and_then(Value::as_str),
             Some("第一轮工具检查已经完成。")
         );
-        let preserved_dialogue = build_compaction_preserved_dialogue_block(
-            &compaction_source,
+        let preserved_dialogue = collect_block_preserved_dialogue(
+            &compaction_source.messages,
             "用户",
             "助手",
-            10_000,
+            PreservedDialogueBudget::Tokens(10_000),
         );
         assert!(preserved_dialogue.contains("助手：第一轮工具检查已经完成。"));
         assert!(!preserved_dialogue.contains("tool result"));

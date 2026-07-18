@@ -1182,12 +1182,15 @@ struct ArchiveDecision {
     usage_ratio: f64,
 }
 
-fn estimated_tokens_for_text(text: &str) -> f64 {
+fn cached_text_token_bpe() -> Option<&'static tiktoken_rs::CoreBPE> {
     static TOKEN_BPE: std::sync::OnceLock<Option<tiktoken_rs::CoreBPE>> = std::sync::OnceLock::new();
-    if let Some(bpe) = TOKEN_BPE
+    TOKEN_BPE
         .get_or_init(|| tiktoken_rs::cl100k_base().ok())
         .as_ref()
-    {
+}
+
+fn estimated_tokens_for_text(text: &str) -> f64 {
+    if let Some(bpe) = cached_text_token_bpe() {
         return bpe.encode_with_special_tokens(text).len() as f64;
     }
 
@@ -1208,6 +1211,31 @@ fn estimated_tokens_for_text(text: &str) -> f64 {
         }
     }
     zh_chars as f64 * 0.6 + other_chars as f64 * 0.3
+}
+
+fn truncate_text_to_token_limit(text: &str, token_limit: usize) -> String {
+    if text.is_empty() || token_limit == 0 {
+        return String::new();
+    }
+    if let Some(bpe) = cached_text_token_bpe() {
+        let tokens = bpe.encode_with_special_tokens(text);
+        if tokens.len() <= token_limit {
+            return text.to_string();
+        }
+        return bpe
+            .decode(&tokens[..token_limit])
+            .unwrap_or_else(|_| truncate_by_chars(text, token_limit));
+    }
+
+    let mut end = 0usize;
+    for (index, ch) in text.char_indices() {
+        let next_end = index.saturating_add(ch.len_utf8());
+        if estimated_tokens_for_text(&text[..next_end]).ceil() as usize > token_limit {
+            break;
+        }
+        end = next_end;
+    }
+    text[..end].to_string()
 }
 
 fn build_archive_decision_from_usage_ratio(

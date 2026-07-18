@@ -499,7 +499,11 @@
         let long_middle = "中间消息".repeat(200);
         let latest_user = "最后一条用户消息";
         let latest_assistant = "最后一条助手消息";
-        let budget = (estimated_tokens_for_text(latest_user) + estimated_tokens_for_text(latest_assistant)).ceil() as usize + 1;
+        let latest_user_line = format!("用户：{latest_user}");
+        let latest_assistant_line = format!("助手：{latest_assistant}");
+        let budget = estimated_tokens_for_text(&latest_user_line).ceil() as usize
+            + estimated_tokens_for_text(&latest_assistant_line).ceil() as usize
+            + estimated_tokens_for_text("\n").ceil() as usize;
         let conversation = Conversation {
             id: "conversation-token-budget".to_string(),
             title: "token budget".to_string(),
@@ -602,8 +606,12 @@
             cumulative_usage: ConversationCumulativeUsage::default(),
         };
 
-        let preserved =
-            build_compaction_preserved_dialogue_block(&conversation, "用户", "助手", budget);
+        let preserved = collect_block_preserved_dialogue(
+            &conversation.messages,
+            "用户",
+            "助手",
+            PreservedDialogueBudget::Tokens(budget),
+        );
 
         assert!(preserved.contains("用户：最后一条用户消息"));
         assert!(preserved.contains("助手：最后一条助手消息"));

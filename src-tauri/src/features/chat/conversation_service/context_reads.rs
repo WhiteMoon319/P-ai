@@ -74,7 +74,7 @@ impl ConversationServiceV2 {
         self.read_persisted_conversation(state, conversation_id)
     }
 
-    /// 普通 A 的压缩输入复用保留对话读取器，只是其边界为固定 10K 字符。
+    /// 摘要模型与归档反思继续使用原有跨消息输入；保留对话生成走独立的 block 读取器。
     fn read_archive_pipeline_cross_message_context(
         &self,
         state: &AppState,
@@ -97,11 +97,11 @@ impl ConversationServiceV2 {
         Ok(context)
     }
 
-    /// 从全局消息序列向前读取可保留的对话正文。读取不以 block 为边界：每页仅取四条，
+    /// 从全局消息序列向前读取摘要/反思所需正文。读取不以 block 为边界：每页仅取四条，
     /// 每条先过滤旧压缩消息、非 user/assistant 与空正文，随后才计算窗口。
     ///
-    /// `end_message_id` 为可选上界；传空时使用全局最新消息。远程唤醒在并发下会
-    /// 传入触发消息并排除该消息，防止把触发后到达的新消息提前写进旧摘要。
+    /// `end_message_id` 为可选上界；传空时使用全局最新消息。调用方可传入锚点并排除该消息，
+    /// 防止把锚点后的新消息提前写进摘要输入。
     fn read_preserved_conversation_messages(
         &self,
         state: &AppState,

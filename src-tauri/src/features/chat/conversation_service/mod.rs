@@ -9,6 +9,7 @@ include!("prompt_prepare.rs");
 include!("delegate_resolution.rs");
 include!("conversation_reads.rs");
 include!("context_reads.rs");
+include!("preserved_dialogue.rs");
 include!("foreground_lifecycle.rs");
 include!("metadata_mutations.rs");
 include!("persistence.rs");

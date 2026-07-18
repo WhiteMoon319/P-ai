@@ -672,6 +672,7 @@ fn build_summary_context_json_contract_block(scene: SummaryContextScene) -> Stri
         .replace("{{json_example}}", json_example)
 }
 
+#[cfg(test)]
 fn archive_pipeline_message_plain_text(message: &ChatMessage) -> String {
     let mut blocks = Vec::<String>::new();
     if message.role.trim().eq_ignore_ascii_case("assistant") {
@@ -709,81 +710,6 @@ fn archive_pipeline_message_plain_text(message: &ChatMessage) -> String {
         }
     }
     clean_text(blocks.join("\n").trim())
-}
-
-#[derive(Debug, Clone, PartialEq)]
-struct PreservedDialogueEntry {
-    role: String,
-    remote_speaker_label: Option<String>,
-    text: String,
-}
-
-fn archive_pipeline_preserved_dialogue_by_token_budget(
-    source: &Conversation,
-    full_max_tokens: usize,
-    compact_max_tokens: usize,
-    compact_max_chars: usize,
-) -> (Vec<PreservedDialogueEntry>, Vec<PreservedDialogueEntry>) {
-    let mut full_recent = Vec::<PreservedDialogueEntry>::new();
-    let mut compact_older = Vec::<PreservedDialogueEntry>::new();
-    let mut full_consumed_tokens = 0.0f64;
-    let mut compact_consumed_tokens = 0.0f64;
-    let full_budget = full_max_tokens as f64;
-    let compact_budget = compact_max_tokens as f64;
-    let mut filling_compact = full_max_tokens == 0;
-
-    for message in source.messages.iter().rev() {
-        let role = message.role.trim();
-        if role != "user" && role != "assistant" {
-            continue;
-        }
-        if archive_pipeline_is_context_compaction_message(message) {
-            continue;
-        }
-        let text = archive_pipeline_message_plain_text(message);
-        if text.is_empty() {
-            continue;
-        }
-
-        if !filling_compact {
-            let next_tokens = estimated_tokens_for_text(&text);
-            if full_recent.is_empty() || full_consumed_tokens + next_tokens <= full_budget {
-                full_consumed_tokens += next_tokens;
-                full_recent.push(PreservedDialogueEntry {
-                    role: role.to_string(),
-                    remote_speaker_label: remote_im_sender_display_name(message),
-                    text,
-                });
-                if full_consumed_tokens >= full_budget {
-                    filling_compact = true;
-                }
-                continue;
-            }
-            filling_compact = true;
-        }
-
-        if compact_max_tokens == 0 || compact_max_chars == 0 {
-            break;
-        }
-        let compact_text = truncate_by_chars(&text, compact_max_chars);
-        let compact_tokens = estimated_tokens_for_text(&compact_text);
-        if !compact_older.is_empty() && compact_consumed_tokens + compact_tokens > compact_budget {
-            break;
-        }
-        compact_consumed_tokens += compact_tokens;
-        compact_older.push(PreservedDialogueEntry {
-            role: role.to_string(),
-            remote_speaker_label: remote_im_sender_display_name(message),
-            text: compact_text,
-        });
-        if compact_consumed_tokens >= compact_budget {
-            break;
-        }
-    }
-
-    compact_older.reverse();
-    full_recent.reverse();
-    (compact_older, full_recent)
 }
 
 fn archive_pipeline_is_context_compaction_message(message: &ChatMessage) -> bool {
@@ -1216,52 +1142,6 @@ fn apply_summary_context_result(
         skipped_profile_memories: memory_stats.skipped_profile_memories,
         memory_feedback,
     })
-}
-
-fn build_compaction_preserved_dialogue_block(
-    source: &Conversation,
-    user_alias: &str,
-    assistant_name: &str,
-    max_tokens: usize,
-) -> String {
-    const OLDER_COMPACT_TOKEN_BUDGET: usize = 2_000;
-    const OLDER_COMPACT_MAX_CHARS: usize = 50;
-
-    let (compact_older, full_recent) = archive_pipeline_preserved_dialogue_by_token_budget(
-        source,
-        max_tokens,
-        OLDER_COMPACT_TOKEN_BUDGET,
-        OLDER_COMPACT_MAX_CHARS,
-    );
-    compact_older
-        .into_iter()
-        .chain(full_recent)
-        .map(|entry| {
-            let speaker = if entry.role.eq_ignore_ascii_case("assistant") {
-                assistant_name.trim()
-            } else if let Some(remote_speaker_label) = entry
-                .remote_speaker_label
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-            {
-                remote_speaker_label
-            } else {
-                user_alias.trim()
-            };
-            let speaker = if speaker.is_empty() {
-                if entry.role.eq_ignore_ascii_case("assistant") {
-                    "助手"
-                } else {
-                    "用户"
-                }
-            } else {
-                speaker
-            };
-            format!("{}：{}", speaker, entry.text)
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 async fn summarize_archive_summary_with_fallback(
@@ -2033,7 +1913,7 @@ mod archive_pipeline_tests {
     }
 
     #[test]
-    fn preserved_dialogue_should_keep_older_context_as_short_prefixes() {
+    fn preserved_dialogue_should_stop_at_latest_token_budget() {
         let mut source = test_conversation();
         source.messages = vec![
             test_message(
@@ -2053,12 +1933,23 @@ mod archive_pipeline_tests {
             ),
         ];
 
-        let block = build_compaction_preserved_dialogue_block(&source, "遥酱", "PAI", 1);
+        let latest_line = preserved_dialogue_message_line(
+            source.messages.last().expect("latest message"),
+            "遥酱",
+            "PAI",
+        )
+        .expect("latest preserved line");
+        let budget = estimated_tokens_for_text(&latest_line).ceil() as usize;
+        let block = collect_block_preserved_dialogue(
+            &source.messages,
+            "遥酱",
+            "PAI",
+            PreservedDialogueBudget::Tokens(budget),
+        );
 
-        assert!(block.contains("遥酱：这是更早的一条用户短消息"));
-        assert!(block.contains("PAI：这是更早的一条助手消息"));
-        assert!(block.contains("..."));
         assert!(block.contains("PAI：这是最近的一条超长助手回复"));
+        assert!(!block.contains("遥酱：这是更早的一条用户短消息"));
+        assert!(!block.contains("PAI：这是更早的一条助手消息"));
     }
 
     #[test]
