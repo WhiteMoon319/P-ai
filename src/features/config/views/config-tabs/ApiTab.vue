@@ -648,15 +648,15 @@ const capabilityDefaultProtocol: Record<ApiCapability, ApiRequestFormat> = {
 
 const providerPresets: ProviderPreset[] = [
   { id: "openai-official", name: "OpenAI", category: "official", urls: { auto: "https://api.openai.com/v1", openai: "https://api.openai.com/v1", openai_responses: "https://api.openai.com/v1", openai_stt: "https://api.openai.com/v1", openai_tts: "https://api.openai.com/v1/audio/speech", openai_embedding: "https://api.openai.com/v1", openai_rerank: "https://api.openai.com/v1" }, docsUrl: "https://platform.openai.com/docs/overview" },
-  { id: "xiaomi-mimo", name: "Xiaomi MiMo", category: "domestic", urls: { mimo: "https://api.xiaomimimo.com/v1", mimo_asr: "https://api.xiaomimimo.com/v1" }, docsUrl: "https://mimo.mi.com/docs/zh-CN/quick-start/usage-guide/audio/Speech-Recognition" },
-  { id: "xiaomi-mimo-token-plan", name: "Xiaomi MiMo Token Plan", category: "domestic", urls: { mimo: "https://token-plan-cn.xiaomimimo.com/v1", mimo_asr: "https://token-plan-cn.xiaomimimo.com/v1" }, docsUrl: "https://mimo.mi.com/docs/zh-CN/tokenplan/quick-access" },
+  { id: "xiaomi-mimo", name: "Xiaomi MiMo", category: "domestic", urls: { mimo: "https://api.xiaomimimo.com/v1", anthropic: "https://api.xiaomimimo.com/anthropic", mimo_asr: "https://api.xiaomimimo.com/v1" }, docsUrl: "https://mimo.mi.com/docs/zh-CN/quick-start/usage-guide/audio/Speech-Recognition" },
+  { id: "xiaomi-mimo-token-plan", name: "Xiaomi MiMo Token Plan", category: "domestic", urls: { mimo: "https://token-plan-cn.xiaomimimo.com/v1", anthropic: "https://token-plan-cn.xiaomimimo.com/anthropic", mimo_asr: "https://token-plan-cn.xiaomimimo.com/v1" }, docsUrl: "https://mimo.mi.com/docs/zh-CN/tokenplan/quick-access" },
   { id: "openai-codex", name: "OpenAI Codex", category: "official", urls: { codex: DEFAULT_CODEX_BASE_URL }, docsUrl: "https://chatgpt.com" },
   { id: "anthropic-official", name: "Anthropic", category: "official", urls: { anthropic: "https://api.anthropic.com" }, docsUrl: "https://docs.anthropic.com/en/api/overview" },
   { id: "google-gemini", name: "Google Gemini", category: "official", urls: { gemini: "https://generativelanguage.googleapis.com", gemini_embedding: "https://generativelanguage.googleapis.com" }, docsUrl: "https://ai.google.dev/gemini-api/docs", hasFreeQuota: true },
   { id: "deepseek", name: "DeepSeek", category: "domestic", urls: { auto: "https://api.deepseek.com/v1", deepseek: "https://api.deepseek.com/v1", anthropic: "https://api.deepseek.com/anthropic", openai: "https://api.deepseek.com/v1", openai_responses: "https://api.deepseek.com/v1" }, docsUrl: "https://api-docs.deepseek.com/" },
   { id: "moonshot-kimi", name: "Moonshot/Kimi", category: "domestic", urls: { auto: "https://api.moonshot.cn/v1", moonshot: "https://api.moonshot.cn/v1", anthropic: "https://api.kimi.com/coding/", openai: "https://api.moonshot.cn/v1", openai_responses: "https://api.moonshot.cn/v1" }, docsUrl: "https://platform.moonshot.cn/docs/api-reference" },
   { id: "aliyun-bailian-coding", name: "百炼编程", category: "domestic", urls: { anthropic: "https://coding.dashscope.aliyuncs.com/apps/anthropic/v1", openai: "https://coding.dashscope.aliyuncs.com/v1", openai_responses: "https://coding.dashscope.aliyuncs.com/v1" }, docsUrl: "https://help.aliyun.com/zh/model-studio/" },
-  { id: "aliyun-bailian", name: "百炼通用", category: "domestic", urls: { auto: "https://dashscope.aliyuncs.com/compatible-mode/v1", openai: "https://dashscope.aliyuncs.com/compatible-mode/v1", openai_responses: "https://dashscope.aliyuncs.com/compatible-mode/v1" }, docsUrl: "https://help.aliyun.com/zh/model-studio/" },
+  { id: "aliyun-bailian", name: "百炼通用", category: "domestic", urls: { auto: "https://dashscope.aliyuncs.com/compatible-mode/v1", anthropic: "https://dashscope.aliyuncs.com/apps/anthropic", openai: "https://dashscope.aliyuncs.com/compatible-mode/v1", openai_responses: "https://dashscope.aliyuncs.com/compatible-mode/v1" }, docsUrl: "https://help.aliyun.com/zh/model-studio/" },
   { id: "baidu-qianfan", name: "百度千帆", category: "domestic", urls: { baidu: "https://qianfan.baidubce.com/v2", openai: "https://qianfan.baidubce.com/v2", openai_responses: "https://qianfan.baidubce.com/v2" }, docsUrl: "https://cloud.baidu.com/doc/WENXINWORKSHOP/index.html" },
   { id: "zhipu-glm", name: "Zhipu GLM", category: "domestic", urls: { anthropic: "https://open.bigmodel.cn/api/anthropic", openai: "https://open.bigmodel.cn/api/paas/v4", openai_responses: "https://open.bigmodel.cn/api/paas/v4" }, docsUrl: "https://open.bigmodel.cn/dev/api", hasFreeQuota: true },
   { id: "minimax", name: "MiniMax", category: "domestic", urls: { minimax: "https://api.minimax.io/anthropic/v1", anthropic: "https://api.minimax.io/anthropic/v1", openai: "https://api.minimax.io/v1", openai_responses: "https://api.minimax.io/v1" }, docsUrl: "https://platform.minimax.io/docs" },
@@ -916,6 +916,8 @@ function isDeepSeekModelAdapter(adapter: string | undefined): boolean {
 function resolveAdapterLabelForModelName(modelName: string): Promise<string> {
   return invokeTauri<string>("resolve_model_adapter_kind", {
     modelName,
+    baseUrl: selectedProvider.value?.baseUrl || "",
+    requestFormat: selectedProtocol.value,
   });
 }
 
@@ -1563,6 +1565,8 @@ async function syncModelMetadata(modelCard: ApiModelConfigItem) {
     if (provider.requestFormat === "auto") {
       const adapter = await invokeTauri<string>("resolve_model_adapter_kind", {
         modelName: model,
+        baseUrl: provider.baseUrl,
+        requestFormat: provider.requestFormat,
       });
       resolvedAdapterByModelId.value = {
         ...resolvedAdapterByModelId.value,

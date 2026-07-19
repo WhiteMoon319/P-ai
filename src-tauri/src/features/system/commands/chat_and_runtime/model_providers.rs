@@ -255,23 +255,16 @@ fn push_unique_refresh_strategy(
 }
 
 fn inferred_model_refresh_strategy_from_base_url(base_url: &str) -> Option<ModelRefreshStrategy> {
-    let normalized = base_url.trim().to_ascii_lowercase();
-    if normalized.is_empty() {
-        return None;
-    }
-    if normalized.contains("chatgpt.com/backend-api/codex") {
-        return Some(ModelRefreshStrategy::CodexBuiltin);
-    }
-    if normalized.contains("generativelanguage.googleapis.com")
-        || normalized.contains("aistudio.google.com")
-        || normalized.contains("gemini")
-    {
-        return Some(ModelRefreshStrategy::GeminiNative);
-    }
-    if normalized.contains("api.anthropic.com") || normalized.contains("anthropic") {
-        return Some(ModelRefreshStrategy::AnthropicNative);
-    }
-    Some(ModelRefreshStrategy::OpenAi)
+    let adapter_kind = resolve_adapter_kind_from_base_url(base_url)?;
+    Some(match adapter_kind {
+        genai::adapter::AdapterKind::OpenAIResp => ModelRefreshStrategy::CodexBuiltin,
+        genai::adapter::AdapterKind::Gemini => ModelRefreshStrategy::GeminiNative,
+        genai::adapter::AdapterKind::Anthropic => ModelRefreshStrategy::AnthropicNative,
+        genai::adapter::AdapterKind::OpenAI | genai::adapter::AdapterKind::DeepSeek => {
+            ModelRefreshStrategy::OpenAi
+        }
+        adapter_kind => ModelRefreshStrategy::GenaiAdapter(adapter_kind),
+    })
 }
 
 fn model_refresh_strategies(input: &RefreshModelsInput) -> Vec<ModelRefreshStrategy> {
@@ -751,33 +744,32 @@ async fn quick_genai_chat_inner(
     Ok(text)
 }
 
-fn resolve_model_adapter_kind_label(model_name: &str) -> String {
-    let stripped = model_name
-        .split('/')
-        .last()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(model_name);
-    let adapter_probe = stripped.to_ascii_lowercase();
-    match genai::adapter::AdapterKind::from_model(&adapter_probe) {
-        // Ollama 在本应用里使用 OpenAI-compatible 接口刷新/调用模型。
-        Ok(genai::adapter::AdapterKind::Ollama) => genai::adapter::AdapterKind::OpenAI.to_string(),
-        Ok(kind) => kind.to_string(),
-        Err(err) => {
-            runtime_log_info(format!(
-                "[模型适配器] 状态=回退 模型={} 适配器={} 原因={:?}",
-                stripped,
-                genai::adapter::AdapterKind::OpenAI,
-                err
-            ));
-            genai::adapter::AdapterKind::OpenAI.to_string()
-        }
-    }
+fn resolve_model_adapter_kind_label(
+    request_format: RequestFormat,
+    base_url: &str,
+    model_name: &str,
+) -> String {
+    resolve_model_protocol(
+        request_format,
+        base_url,
+        model_name,
+        genai::adapter::AdapterKind::OpenAI,
+    )
+    .adapter_kind
+    .to_string()
 }
 
 #[tauri::command]
-async fn resolve_model_adapter_kind(model_name: String) -> Result<String, String> {
-    Ok(resolve_model_adapter_kind_label(&model_name))
+async fn resolve_model_adapter_kind(
+    model_name: String,
+    base_url: Option<String>,
+    request_format: Option<RequestFormat>,
+) -> Result<String, String> {
+    Ok(resolve_model_adapter_kind_label(
+        request_format.unwrap_or(RequestFormat::Auto),
+        base_url.as_deref().unwrap_or_default(),
+        &model_name,
+    ))
 }
 
 #[cfg(test)]
@@ -785,10 +777,23 @@ mod model_adapter_kind_tests {
     use super::*;
 
     #[test]
-    fn resolve_model_adapter_kind_label_should_keep_minimax_colon_suffix() {
-        assert_eq!(resolve_model_adapter_kind_label("minimax-m3:free"), "MiniMax");
-        assert_eq!(resolve_model_adapter_kind_label("minimax free/minimax-m3:free"), "MiniMax");
-        assert_eq!(resolve_model_adapter_kind_label("MINIMAX-M3:FREE"), "MiniMax");
+    fn resolve_model_adapter_kind_label_should_follow_auto_url_then_model() {
+        assert_eq!(
+            resolve_model_adapter_kind_label(
+                RequestFormat::Auto,
+                "https://opencode.ai/zen/go/v1",
+                "qwen3.7-plus",
+            ),
+            "OpenCodeGo"
+        );
+        assert_eq!(
+            resolve_model_adapter_kind_label(
+                RequestFormat::Auto,
+                "https://example.com/v1",
+                "minimax-m3:free",
+            ),
+            "MiniMax"
+        );
     }
 }
 

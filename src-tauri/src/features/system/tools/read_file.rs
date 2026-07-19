@@ -7,6 +7,7 @@ const READ_MEDIA_VIDEO_HTTP_TIMEOUT_SECS: u64 = 8 * 60;
 const GEMINI_INLINE_AUDIO_LIMIT_BYTES: usize = 20 * 1024 * 1024;
 const GEMINI_INLINE_VIDEO_LIMIT_BYTES: usize = 100 * 1024 * 1024;
 const OPENAI_FAMILY_VIDEO_DATA_URL_LIMIT_BYTES: usize = 50 * 1024 * 1024;
+const QWEN_MEDIA_DATA_URL_LIMIT_BYTES: usize = 50 * 1024 * 1024;
 const MIMO_VIDEO_BASE64_LIMIT_BYTES: usize = 50 * 1024 * 1024;
 const MINIMAX_VIDEO_BASE64_LIMIT_BYTES: usize = 50 * 1024 * 1024;
 
@@ -19,9 +20,25 @@ enum ReadMediaDetectedType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReadMediaRouteFamily {
+    Qwen,
     OpenAI,
     Gemini,
     Anthropic,
+    MiniMax,
+    Mimo,
+}
+
+impl ReadMediaRouteFamily {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Qwen => "Qwen",
+            Self::OpenAI => "OpenAI",
+            Self::Gemini => "Gemini",
+            Self::Anthropic => "Anthropic",
+            Self::MiniMax => "MiniMax",
+            Self::Mimo => "Mimo",
+        }
+    }
 }
 
 impl ReadMediaDetectedType {
@@ -34,42 +51,39 @@ impl ReadMediaDetectedType {
     }
 }
 
-fn detect_read_media_model_family(model_name: &str) -> Option<ReadMediaRouteFamily> {
-    let normalized = model_name.trim().to_ascii_lowercase();
-    if normalized.is_empty() {
-        return None;
-    }
-    if normalized.contains("gemini") || normalized.contains("gemma") {
-        return Some(ReadMediaRouteFamily::Gemini);
-    }
-    if normalized.contains("minimax") {
-        return Some(ReadMediaRouteFamily::Anthropic);
-    }
-    if normalized.contains("qwen")
-        || normalized.contains("mimo")
-        || normalized.contains("gpt")
-        || normalized.contains("doubao")
-    {
-        return Some(ReadMediaRouteFamily::OpenAI);
-    }
-    None
-}
-
-fn is_mimo_multimodal_model(model_name: &str) -> bool {
-    model_name.trim().to_ascii_lowercase().contains("mimo")
-}
-
 fn resolve_read_media_route_family(
     request_format: RequestFormat,
+    base_url: &str,
     model_name: &str,
 ) -> ReadMediaRouteFamily {
-    match request_format {
-        RequestFormat::Gemini => ReadMediaRouteFamily::Gemini,
-        RequestFormat::Anthropic => ReadMediaRouteFamily::Anthropic,
-        RequestFormat::Auto => detect_read_media_model_family(model_name)
-            .unwrap_or(ReadMediaRouteFamily::OpenAI),
+    let resolved_adapter = resolve_model_protocol(
+        request_format,
+        base_url,
+        model_name,
+        genai::adapter::AdapterKind::OpenAI,
+    )
+    .adapter_kind;
+    if should_use_opencode_qwen_read_media_compat(base_url, model_name) {
+        return ReadMediaRouteFamily::Anthropic;
+    }
+    if is_qwen_model_name(model_name)
+        && resolved_adapter != genai::adapter::AdapterKind::Anthropic
+    {
+        return ReadMediaRouteFamily::Qwen;
+    }
+    match resolved_adapter {
+        genai::adapter::AdapterKind::Gemini => ReadMediaRouteFamily::Gemini,
+        genai::adapter::AdapterKind::Anthropic => ReadMediaRouteFamily::Anthropic,
+        genai::adapter::AdapterKind::MiniMax => ReadMediaRouteFamily::MiniMax,
+        genai::adapter::AdapterKind::Mimo => ReadMediaRouteFamily::Mimo,
         _ => ReadMediaRouteFamily::OpenAI,
     }
+}
+
+fn should_use_opencode_qwen_read_media_compat(base_url: &str, model_name: &str) -> bool {
+    is_qwen_model_name(model_name)
+        && resolve_adapter_kind_from_base_url(base_url)
+            == Some(genai::adapter::AdapterKind::OpenCodeGo)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -849,17 +863,21 @@ async fn describe_openai_family_media_with_multimodal_api(
         ],
         "max_tokens": max_tokens
     });
-    let mut request_builder = state
+    let resolved_protocol = resolve_model_protocol(
+        request_api.request_format,
+        &request_api.base_url,
+        &selected_api.model,
+        genai::adapter::AdapterKind::OpenAI,
+    );
+    let request_builder = state
         .shared_http_client
         .post(&url)
         .header(reqwest::header::CONTENT_TYPE, "application/json");
-    if is_mimo_multimodal_model(&selected_api.model) {
-        let api_key_header = reqwest::header::HeaderValue::from_str(api_key.trim())
-            .map_err(|err| format!("构建 Mimo api-key 请求头失败: {err}"))?;
-        request_builder = request_builder.header("api-key", api_key_header);
-    } else {
-        request_builder = request_builder.bearer_auth(api_key.trim());
-    }
+    let request_builder = apply_provider_auth_scheme(
+        request_builder,
+        resolved_protocol.auth_scheme,
+        api_key.trim(),
+    )?;
     let response = apply_read_media_timeout(
         apply_extra_headers(request_builder, &request_api.extra_headers),
         media_type,
@@ -888,6 +906,8 @@ async fn describe_openai_family_media_with_multimodal_api(
     }
     Ok(text)
 }
+
+include!("read_media_qwen.rs");
 
 async fn describe_gemini_media_with_multimodal_api(
     state: &AppState,
@@ -1101,16 +1121,22 @@ async fn describe_mimo_video_with_multimodal_api(
         ],
         "max_completion_tokens": max_completion_tokens
     });
-    let api_key_header = reqwest::header::HeaderValue::from_str(api_key.trim())
-        .map_err(|err| format!("构建 Mimo api-key 请求头失败: {err}"))?;
-    let mut request_builder = state
+    let resolved_protocol = resolve_model_protocol(
+        request_api.request_format,
+        &request_api.base_url,
+        &selected_api.model,
+        genai::adapter::AdapterKind::Mimo,
+    );
+    let request_builder = state
         .shared_http_client
         .post(&url)
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .header("api-key", api_key_header);
-    for (key, value) in &request_api.extra_headers {
-        request_builder = request_builder.header(key, value);
-    }
+        .header(reqwest::header::CONTENT_TYPE, "application/json");
+    let request_builder = apply_provider_auth_scheme(
+        request_builder,
+        resolved_protocol.auth_scheme,
+        api_key.trim(),
+    )?;
+    let request_builder = apply_extra_headers(request_builder, &request_api.extra_headers);
     let response = apply_read_media_timeout(request_builder, ReadMediaDetectedType::Video)
         .json(&body)
         .send()
@@ -1245,8 +1271,42 @@ async fn builtin_read_media(
         }
         _ => {}
     }
-    let resolved_api = resolve_api_config(&app_config, Some(selected_api.id.as_str()))?;
-    let route_family = resolve_read_media_route_family(resolved_api.request_format, &selected_api.model);
+    let mut resolved_api = resolve_api_config(&app_config, Some(selected_api.id.as_str()))?;
+    let configured_request_format = resolved_api.request_format;
+    let use_opencode_qwen_compat = should_use_opencode_qwen_read_media_compat(
+        &resolved_api.base_url,
+        &selected_api.model,
+    );
+    if use_opencode_qwen_compat {
+        resolved_api.request_format = RequestFormat::Anthropic;
+    }
+    let route_family = resolve_read_media_route_family(
+        configured_request_format,
+        &resolved_api.base_url,
+        &selected_api.model,
+    );
+    let resolved_protocol = resolve_model_protocol(
+        resolved_api.request_format,
+        &resolved_api.base_url,
+        &selected_api.model,
+        genai::adapter::AdapterKind::OpenAI,
+    );
+    runtime_log_debug(format!(
+        "[read_media 路由] configured_request_format={:?}，effective_request_format={:?}，base_url={}，model={}，adapter={:?}，adapter_source={:?}，route_family={}",
+        configured_request_format,
+        resolved_api.request_format,
+        resolved_api.base_url,
+        selected_api.model,
+        resolved_protocol.adapter_kind,
+        resolved_protocol.source,
+        route_family.as_str(),
+    ));
+    if detected == ReadMediaDetectedType::Audio && use_opencode_qwen_compat {
+        return Err(
+            "OpenCode Go 的 Qwen 模型官方使用 Anthropic /messages 端点，该端点不支持 audio 模态；请改用支持音频输入的 Qwen-Omni/Audio 直连配置。"
+                .to_string(),
+        );
+    }
     let raw = tokio::fs::read(&path)
         .await
         .map_err(|err| format!("读取媒体文件失败: {err}"))?;
@@ -1279,19 +1339,45 @@ async fn builtin_read_media(
     }
     let text = match detected {
         ReadMediaDetectedType::Image => {
-            describe_media_with_multimodal_api(
-                state,
-                &resolved_api,
-                &selected_api,
-                detected,
-                &mime,
-                &content_base64,
-                Some(path.to_string_lossy().to_string()),
-                &description,
-            )
-            .await?
+            match route_family {
+                ReadMediaRouteFamily::Qwen => {
+                    describe_qwen_media_with_multimodal_api(
+                        state,
+                        &resolved_api,
+                        &selected_api,
+                        detected,
+                        &mime,
+                        &content_base64,
+                        &description,
+                    )
+                    .await?
+                }
+                _ => describe_media_with_multimodal_api(
+                    state,
+                    &resolved_api,
+                    &selected_api,
+                    detected,
+                    &mime,
+                    &content_base64,
+                    Some(path.to_string_lossy().to_string()),
+                    &description,
+                )
+                .await?,
+            }
         }
         ReadMediaDetectedType::Audio => match route_family {
+            ReadMediaRouteFamily::Qwen => {
+                describe_qwen_media_with_multimodal_api(
+                    state,
+                    &resolved_api,
+                    &selected_api,
+                    detected,
+                    &mime,
+                    &content_base64,
+                    &description,
+                )
+                .await?
+            }
             ReadMediaRouteFamily::OpenAI => {
                 describe_openai_family_media_with_multimodal_api(
                     state,
@@ -1316,12 +1402,36 @@ async fn builtin_read_media(
                 )
                 .await?
             }
-            ReadMediaRouteFamily::Anthropic => {
-                return Err("当前 MiniMax Anthropic 多模态链路暂不支持音频解析，请改用支持音频的 OpenAI 或 Gemini 多模态模型。".to_string());
+            ReadMediaRouteFamily::Mimo => {
+                describe_openai_family_media_with_multimodal_api(
+                    state,
+                    &resolved_api,
+                    &selected_api,
+                    detected,
+                    &mime,
+                    &content_base64,
+                    &description,
+                )
+                .await?
+            }
+            ReadMediaRouteFamily::Anthropic | ReadMediaRouteFamily::MiniMax => {
+                return Err("当前 Anthropic 兼容多模态链路暂不支持音频解析，请改用支持音频的 OpenAI 或 Gemini 多模态模型。".to_string());
             }
         },
         ReadMediaDetectedType::Video => match route_family {
-            ReadMediaRouteFamily::OpenAI if is_mimo_multimodal_model(&selected_api.model) => {
+            ReadMediaRouteFamily::Qwen => {
+                describe_qwen_media_with_multimodal_api(
+                    state,
+                    &resolved_api,
+                    &selected_api,
+                    detected,
+                    &mime,
+                    &content_base64,
+                    &description,
+                )
+                .await?
+            }
+            ReadMediaRouteFamily::Mimo => {
                 describe_mimo_video_with_multimodal_api(
                     state,
                     &resolved_api,
@@ -1356,7 +1466,7 @@ async fn builtin_read_media(
                 )
                 .await?
             }
-            ReadMediaRouteFamily::Anthropic => {
+            ReadMediaRouteFamily::MiniMax => {
                 describe_minimax_video_with_multimodal_api(
                     state,
                     &resolved_api,
@@ -1366,6 +1476,9 @@ async fn builtin_read_media(
                     &description,
                 )
                 .await?
+            }
+            ReadMediaRouteFamily::Anthropic => {
+                return Err("当前标准 Anthropic 多模态协议不支持直接解析视频；仅 MiniMax 的 Anthropic 兼容扩展支持该视频载荷。".to_string());
             }
         },
     };
@@ -1874,36 +1987,123 @@ fn read_media_timeout_should_follow_detected_type() {
 #[test]
 fn resolve_read_media_route_family_should_follow_request_format_or_auto_fallback() {
         assert_eq!(
-            resolve_read_media_route_family(RequestFormat::Gemini, "gemini-2.5-pro"),
+            resolve_read_media_route_family(
+                RequestFormat::Gemini,
+                "https://generativelanguage.googleapis.com/v1beta",
+                "gemini-2.5-pro",
+            ),
             ReadMediaRouteFamily::Gemini
         );
 
         assert_eq!(
-            resolve_read_media_route_family(RequestFormat::OpenAI, "mimo-v2.5"),
+            resolve_read_media_route_family(
+                RequestFormat::OpenAI,
+                "https://example.com/v1",
+                "mimo-v2.5",
+            ),
             ReadMediaRouteFamily::OpenAI
         );
 
         assert_eq!(
-            resolve_read_media_route_family(RequestFormat::Anthropic, "MiniMax-M3"),
+            resolve_read_media_route_family(
+                RequestFormat::Anthropic,
+                "https://api.anthropic.com/v1",
+                "MiniMax-M3",
+            ),
             ReadMediaRouteFamily::Anthropic
         );
 
         assert_eq!(
-            resolve_read_media_route_family(RequestFormat::Auto, "qwen3.7-plus"),
-            ReadMediaRouteFamily::OpenAI
+            resolve_read_media_route_family(
+                RequestFormat::MiniMax,
+                "https://api.minimax.io/anthropic/v1",
+                "MiniMax-M3",
+            ),
+            ReadMediaRouteFamily::MiniMax
         );
 
         assert_eq!(
-            resolve_read_media_route_family(RequestFormat::OpenAI, "doubao-seed-2.0-mini"),
-            ReadMediaRouteFamily::OpenAI
+            resolve_read_media_route_family(
+                RequestFormat::Auto,
+                "https://opencode.ai/zen/go/v1",
+                "qwen3.7-plus",
+            ),
+            ReadMediaRouteFamily::Anthropic
         );
 
-        assert!(
-            matches!(
-                resolve_read_media_route_family(RequestFormat::Auto, "unknown-model"),
-                ReadMediaRouteFamily::OpenAI
-            )
+        assert_eq!(
+            resolve_read_media_route_family(
+                RequestFormat::Auto,
+                "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "qwen3.7-plus",
+            ),
+            ReadMediaRouteFamily::Qwen
         );
+
+        assert_eq!(
+            resolve_read_media_route_family(
+                RequestFormat::Auto,
+                "https://dashscope.aliyuncs.com/apps/anthropic",
+                "qwen3.7-plus",
+            ),
+            ReadMediaRouteFamily::Anthropic
+        );
+
+        assert_eq!(
+            resolve_read_media_route_family(
+                RequestFormat::Aliyun,
+                "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "qwen3.7-plus",
+            ),
+            ReadMediaRouteFamily::Qwen
+        );
+
+        assert_eq!(
+            resolve_read_media_route_family(
+                RequestFormat::OpenCodeGo,
+                "https://opencode.ai/zen/go/v1",
+                "qwen3.7-plus",
+            ),
+            ReadMediaRouteFamily::Anthropic
+        );
+
+        assert_eq!(
+            resolve_read_media_route_family(
+                RequestFormat::Mimo,
+                "https://api.xiaomimimo.com/v1",
+                "mimo-v2.5",
+            ),
+            ReadMediaRouteFamily::Mimo
+        );
+}
+
+#[cfg(test)]
+#[test]
+fn build_qwen_media_block_should_use_qwen_media_payloads_for_all_media_types() {
+    let image = build_qwen_media_block(ReadMediaDetectedType::Image, "image/png", "AAAA")
+        .expect("build qwen image block");
+    assert_eq!(
+        image.pointer("/image_url/url").and_then(Value::as_str),
+        Some("data:image/png;base64,AAAA")
+    );
+
+    let audio = build_qwen_media_block(ReadMediaDetectedType::Audio, "audio/wav", "BBBB")
+        .expect("build qwen audio block");
+    assert_eq!(
+        audio.pointer("/input_audio/data").and_then(Value::as_str),
+        Some("BBBB")
+    );
+    assert_eq!(
+        audio.pointer("/input_audio/format").and_then(Value::as_str),
+        Some("wav")
+    );
+
+    let video = build_qwen_media_block(ReadMediaDetectedType::Video, "video/mp4", "CCCC")
+        .expect("build qwen video block");
+    assert_eq!(
+        video.pointer("/video_url/url").and_then(Value::as_str),
+        Some("data:video/mp4;base64,CCCC")
+    );
 }
 
 #[cfg(test)]

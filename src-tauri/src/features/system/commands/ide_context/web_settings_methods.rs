@@ -168,15 +168,32 @@ async fn ide_chat_test_voice_connection_for_web_settings(params: Value) -> Resul
 }
 
 fn ide_chat_resolve_model_adapter_kind_for_web_settings(params: Value) -> Result<Value, String> {
-    let model_name = match params {
-        Value::Object(mut map) => map
-            .remove("modelName")
-            .or_else(|| map.remove("model_name"))
-            .and_then(|value| value.as_str().map(ToOwned::to_owned))
-            .unwrap_or_default(),
-        _ => String::new(),
+    let (model_name, base_url, request_format) = match params {
+        Value::Object(mut map) => {
+            let model_name = map
+                .remove("modelName")
+                .or_else(|| map.remove("model_name"))
+                .and_then(|value| value.as_str().map(ToOwned::to_owned))
+                .unwrap_or_default();
+            let base_url = map
+                .remove("baseUrl")
+                .or_else(|| map.remove("base_url"))
+                .and_then(|value| value.as_str().map(ToOwned::to_owned))
+                .unwrap_or_default();
+            let request_format = map
+                .remove("requestFormat")
+                .or_else(|| map.remove("request_format"))
+                .and_then(|value| value.as_str().and_then(RequestFormat::from_str))
+                .unwrap_or(RequestFormat::Auto);
+            (model_name, base_url, request_format)
+        }
+        _ => (String::new(), String::new(), RequestFormat::Auto),
     };
-    ide_chat_serialize(resolve_model_adapter_kind_label(&model_name))
+    ide_chat_serialize(resolve_model_adapter_kind_label(
+        request_format,
+        &base_url,
+        &model_name,
+    ))
 }
 
 fn ide_chat_get_image_text_cache_stats_for_web_settings(state: &AppState) -> Result<Value, String> {

@@ -612,39 +612,18 @@ fn build_provider_genai_service_target(
     }
 }
 
-fn strip_model_namespace(model_name: &str) -> &str {
-    model_name
-        .split('/')
-        .last()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(model_name)
-}
-
-fn resolve_model_adapter_for_auto(model_name: &str) -> genai::adapter::AdapterKind {
-    let stripped = strip_model_namespace(model_name);
-    let adapter_probe = stripped.to_ascii_lowercase();
-    match genai::adapter::AdapterKind::from_model(&adapter_probe) {
-        // Ollama 在本应用里走 OpenAI-compatible 协议，由 base_url 指向 Ollama 服务。
-        Ok(genai::adapter::AdapterKind::Ollama) => genai::adapter::AdapterKind::OpenAI,
-        Ok(kind) => kind,
-        Err(_) => genai::adapter::AdapterKind::OpenAI,
-    }
-}
-
 fn resolve_provider_genai_adapter_kind(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     fallback_adapter_kind: genai::adapter::AdapterKind,
 ) -> genai::adapter::AdapterKind {
-    if api_config.request_format.is_auto() {
-        resolve_model_adapter_for_auto(model_name)
-    } else {
-        api_config
-            .request_format
-            .genai_adapter_kind()
-            .unwrap_or(fallback_adapter_kind)
-    }
+    resolve_model_protocol(
+        api_config.request_format,
+        &api_config.base_url,
+        model_name,
+        fallback_adapter_kind,
+    )
+    .adapter_kind
 }
 
 fn build_provider_genai_client_and_model_spec_from_target(
@@ -653,10 +632,13 @@ fn build_provider_genai_client_and_model_spec_from_target(
     request_api_key: String,
     service_target: genai::ServiceTarget,
 ) -> (genai::Client, genai::ModelSpec) {
-    let adapter_kind = api_config
-        .request_format
-        .genai_adapter_kind()
-        .or_else(|| api_config.request_format.is_auto().then(|| resolve_model_adapter_for_auto(model_name)));
+    let adapter_kind = (api_config.request_format.is_genai_chat()
+        || api_config.request_format.is_auto())
+        .then(|| resolve_provider_genai_adapter_kind(
+            api_config,
+            model_name,
+            service_target.model.adapter_kind,
+        ));
     if let Some(adapter_kind) = adapter_kind {
         let target = genai::ServiceTarget {
             endpoint: genai::resolver::Endpoint::from_owned(normalize_provider_genai_base_url(
@@ -1932,33 +1914,6 @@ mod openai_responses_genai_request_tests {
         assert_eq!(
             normalize_anthropic_genai_base_url("https://open.bigmodel.cn/api/anthropic/v1"),
             "https://open.bigmodel.cn/api/anthropic/v1/"
-        );
-    }
-
-    #[test]
-    fn strip_model_namespace_should_only_split_slash() {
-        assert_eq!(strip_model_namespace("openrouter/minimax-m3:free"), "minimax-m3:free");
-        assert_eq!(strip_model_namespace("minimax-m3:free"), "minimax-m3:free");
-        assert_eq!(strip_model_namespace("minimax::MiniMax-M3"), "minimax::MiniMax-M3");
-    }
-
-    #[test]
-    fn resolve_model_adapter_for_auto_should_keep_minimax_colon_suffix() {
-        assert_eq!(
-            resolve_model_adapter_for_auto("minimax-m3:free"),
-            genai::adapter::AdapterKind::MiniMax
-        );
-        assert_eq!(
-            resolve_model_adapter_for_auto("openrouter/minimax-m3:free"),
-            genai::adapter::AdapterKind::MiniMax
-        );
-        assert_eq!(
-            resolve_model_adapter_for_auto("OpenRouter/MiniMax-M3:free"),
-            genai::adapter::AdapterKind::MiniMax
-        );
-        assert_eq!(
-            resolve_model_adapter_for_auto("MINIMAX-M3:FREE"),
-            genai::adapter::AdapterKind::MiniMax
         );
     }
 
